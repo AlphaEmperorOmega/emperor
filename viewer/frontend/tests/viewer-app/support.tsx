@@ -3558,32 +3558,22 @@ export async function expandedTrainingDetails(user: ReturnType<typeof userEvent.
   return details;
 }
 
-export async function expandedTrainingDetailsWithConfig(user: ReturnType<typeof userEvent.setup>) {
+export async function expandedTrainingDetailsReady(user: ReturnType<typeof userEvent.setup>) {
   const details = await expandedTrainingDetails(user);
-  await waitFor(() =>
-    expect(trainingFullConfigButton(details)).toBeEnabled(),
-  );
+  await waitFor(() => {
+    expect(
+      within(details).getByRole("combobox", { name: /^training model$/i }),
+    ).toBeEnabled();
+    expect(within(details).getByText("Grid Search")).toBeInTheDocument();
+  });
   return details;
 }
 
-export function trainingFullConfigButton(details: HTMLElement) {
-  return within(details).getByRole("button", { name: /open full config/i });
-}
-
-export async function openTrainingFullConfig(
+export async function setTargetHiddenDimOverride(
   user: ReturnType<typeof userEvent.setup>,
-  details: HTMLElement,
-) {
-  await user.click(trainingFullConfigButton(details));
-  return screen.findByRole("dialog", { name: /full configuration/i });
-}
-
-export async function setTrainingHiddenDimOverride(
-  user: ReturnType<typeof userEvent.setup>,
-  details: HTMLElement,
   value: string,
 ) {
-  const dialog = await openTrainingFullConfig(user, details);
+  const dialog = await openFullConfig(user);
   await typeConfigFieldValue(user, dialog, /hidden dim/i, value);
   await user.click(within(dialog).getByRole("button", { name: /^close$/i }));
 }

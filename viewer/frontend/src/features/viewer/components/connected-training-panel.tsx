@@ -21,9 +21,6 @@ export function ConnectedTrainingPanel({
   const activeJob = useActiveTrainingJob();
   const activeJobProgress = useActiveTrainingJobProgressState();
   const history = useHistoricalRuns();
-  const canOpenFullConfig = Boolean(
-    target.selectedModel && target.selectedPreset && target.isSchemaReady,
-  );
   const viewModel = useTrainingPanelViewModel({
     models: target.models,
     presets: target.presets,
@@ -47,7 +44,6 @@ export function ConnectedTrainingPanel({
     trainingEnabled: target.capabilities.trainingEnabled,
     trainingLockedByHistoricalSelection: history.selectedLogRunId !== null,
     historicalTrainingLockExperiment: history.selectedHistoricalExperiment,
-    canOpenFullConfig,
     onSelectModelType: target.selectModelType,
     onSelectModel: target.selectModel,
     onSelectPreset: target.selectPreset,
@@ -63,8 +59,6 @@ export function ConnectedTrainingPanel({
     onToggleDataset: target.toggleDataset,
     onSelectAllDatasets: target.selectAllDatasets,
     onSelectFirstDataset: target.selectFirstDataset,
-    onResetOverrides: target.resetOverrides,
-    onOpenFullConfig,
     onRemoveConfigSnapshot: target.removeConfigSnapshot,
     onIncludeConfigSnapshot: target.includeConfigSnapshot,
     onExcludeConfigSnapshot: target.excludeConfigSnapshot,
@@ -95,7 +89,9 @@ export function ConnectedTrainingPanel({
         onOpenFullConfig("snapshotDraft");
       }
     },
-    onToggleMonitor: target.toggleMonitor,
+    onSetMonitors: target.setMonitorSelection,
+    onSelectAllMonitors: target.selectAllMonitors,
+    onClearMonitors: target.clearMonitors,
     onTrainingSearchChange: target.setTrainingSearch,
     activeTrainingJob: activeJob.activeTrainingJob,
     progressError: activeJobProgress.progressError,

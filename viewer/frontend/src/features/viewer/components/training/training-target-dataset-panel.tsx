@@ -1,7 +1,9 @@
 import { useId, useState } from "react";
 import {
+  Activity,
   Camera,
   Copy,
+  Cpu,
   Database,
   FilePlus2,
   Layers,
@@ -18,7 +20,8 @@ import { SectionHeading } from "@/features/viewer/components/shared/section-head
 import { StatChip } from "@/features/viewer/components/shared/stat-chip";
 import { TrainingFooterField } from "@/features/viewer/components/training/training-footer-field";
 import { ViewModeButton } from "@/features/viewer/components/view-mode-button";
-import { type Dataset } from "@/lib/api";
+import { viewerStatusCopy } from "@/features/viewer/components/shared/status-copy";
+import { type Dataset, type MonitorOption } from "@/lib/api";
 import { type ConfigSnapshot } from "@/lib/config-snapshots";
 
 type SelectOption = {
@@ -31,6 +34,8 @@ type TrainingConfigTab = "presets" | "snapshots";
 const footerIconClass = "h-[15px] w-[15px] text-violet";
 const defaultFieldLabelClass =
   "text-xs font-semibold tracking-[0.02em] text-ink-dim";
+const fieldLabelWithIconClass = `${defaultFieldLabelClass} inline-flex items-center gap-1.5`;
+const inlineFieldIconClass = "h-3.5 w-3.5 text-violet";
 
 function overrideCountLabel(count: number) {
   return `${count} override${count === 1 ? "" : "s"}`;
@@ -48,6 +53,9 @@ export function TrainingTargetDatasetPanel({
   selectedTrainingSnapshotIds = [],
   datasetOptions,
   selectedDatasets,
+  monitorOptions = [],
+  selectedMonitors = [],
+  monitorsLoading = false,
   onSelectModelType,
   onSelectModel,
   onSelectPreset,
@@ -61,6 +69,9 @@ export function TrainingTargetDatasetPanel({
   onToggleDataset,
   onSelectAllDatasets,
   onSelectFirstDataset,
+  onSetMonitors,
+  onSelectAllMonitors,
+  onClearMonitors,
   onCreatePresetSnapshot,
   onEditConfigSnapshot,
   onDuplicateConfigSnapshot,
@@ -79,6 +90,9 @@ export function TrainingTargetDatasetPanel({
   selectedTrainingSnapshotIds?: string[];
   datasetOptions: Dataset[];
   selectedDatasets: string[];
+  monitorOptions?: MonitorOption[];
+  selectedMonitors?: string[];
+  monitorsLoading?: boolean;
   onSelectModelType?: (modelType: string) => void;
   onSelectModel: (model: string) => void;
   onSelectPreset: (preset: string) => void;
@@ -92,6 +106,9 @@ export function TrainingTargetDatasetPanel({
   onToggleDataset?: (dataset: string) => void;
   onSelectAllDatasets: () => void;
   onSelectFirstDataset: () => void;
+  onSetMonitors?: (monitors: string[]) => void;
+  onSelectAllMonitors?: () => void;
+  onClearMonitors?: () => void;
   onCreatePresetSnapshot?: (preset: string) => void;
   onEditConfigSnapshot?: (snapshotId: string) => void;
   onDuplicateConfigSnapshot?: (snapshotId: string) => void;
@@ -109,6 +126,7 @@ export function TrainingTargetDatasetPanel({
   const presetsPanelId = `${trainingConfigTabsId}-presets-panel`;
   const snapshotsPanelId = `${trainingConfigTabsId}-snapshots-panel`;
   const datasetCount = `${selectedDatasets.length} / ${datasetOptions.length}`;
+  const monitorCount = `${selectedMonitors.length} / ${monitorOptions.length}`;
   const trainingPresetCount = `${selectedTrainingPresets.length} / ${presetOptions.length}`;
   const trainingSnapshotCount = `${selectedTrainingSnapshotIds.length} / ${configSnapshots.length}`;
   const trainingPresetDisabledValues =
@@ -185,6 +203,17 @@ export function TrainingTargetDatasetPanel({
       </span>
     ),
   }));
+  const trainingMonitorOptions = monitorOptions.map((monitor) => ({
+    value: monitor.name,
+    label: monitor.label,
+    description: monitor.description,
+    meta:
+      monitor.kinds.length > 0 ? (
+        <span>{monitor.kinds.join(" / ")}</span>
+      ) : undefined,
+  }));
+  const showMonitorField =
+    Boolean(onSetMonitors) || monitorOptions.length > 0 || monitorsLoading;
   function changeTrainingPresets(nextPresets: string[]) {
     if (onSetTrainingPresets) {
       onSetTrainingPresets(nextPresets);
@@ -227,6 +256,10 @@ export function TrainingTargetDatasetPanel({
     }
   }
 
+  function changeMonitors(nextMonitors: string[]) {
+    onSetMonitors?.(nextMonitors);
+  }
+
   const modelTypeControl =
     modelTypeOptions.length > 0 && onSelectModelType ? (
       <SelectOnlyDropdown
@@ -254,6 +287,24 @@ export function TrainingTargetDatasetPanel({
       ? "grid min-w-0 gap-2"
       : "grid min-w-0 grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] gap-2"
     : "grid min-w-0 gap-2";
+  const modelTypeLabel = (
+    <span className={fieldLabelWithIconClass}>
+      <Layers className={inlineFieldIconClass} aria-hidden />
+      Model Type
+    </span>
+  );
+  const modelNameLabel = (
+    <span className={fieldLabelWithIconClass}>
+      <Cpu className={inlineFieldIconClass} aria-hidden />
+      Model Name
+    </span>
+  );
+  const modelLabel = (
+    <span className={fieldLabelWithIconClass}>
+      <Cpu className={inlineFieldIconClass} aria-hidden />
+      Model
+    </span>
+  );
 
   const modelField = isFooterPresentation ? (
     <TrainingFooterField
@@ -264,51 +315,49 @@ export function TrainingTargetDatasetPanel({
       <div className={modelSelectorGridClass}>
         {modelTypeControl && (
           <div className="grid min-w-0 gap-1.5">
-            <span className={defaultFieldLabelClass}>Model type</span>
+            {modelTypeLabel}
             {modelTypeControl}
           </div>
         )}
         <div className="grid min-w-0 gap-1.5">
-          {modelTypeControl && (
-            <span className={defaultFieldLabelClass}>Model name</span>
-          )}
+          {modelTypeControl && modelNameLabel}
           {modelControl}
         </div>
       </div>
     </TrainingFooterField>
   ) : isSetupPresentation ? (
-    <div className="grid min-w-0 gap-2">
-      <div className="flex min-h-[28px] flex-wrap items-center justify-between gap-2">
-        <SectionHeading
-          icon={<Layers className={footerIconClass} aria-hidden />}
-          title="Target"
-        />
-      </div>
-      <div className={modelSelectorGridClass}>
-        {modelTypeControl && (
-          <div className="grid min-w-0 gap-1.5">
-            <span className={defaultFieldLabelClass}>Model type</span>
-            {modelTypeControl}
+    <div className={modelSelectorGridClass}>
+      {modelTypeControl && (
+        <div className="grid min-w-0 gap-2">
+          <div className="flex min-h-[28px] flex-wrap items-center justify-between gap-2">
+            <SectionHeading
+              icon={<Layers className={footerIconClass} aria-hidden />}
+              title="Model Type"
+            />
           </div>
-        )}
-        <div className="grid min-w-0 gap-1.5">
-          {modelTypeControl && (
-            <span className={defaultFieldLabelClass}>Model name</span>
-          )}
-          {modelControl}
+          {modelTypeControl}
         </div>
+      )}
+      <div className="grid min-w-0 gap-2">
+        <div className="flex min-h-[28px] flex-wrap items-center justify-between gap-2">
+          <SectionHeading
+            icon={<Cpu className={footerIconClass} aria-hidden />}
+            title={modelTypeControl ? "Model Name" : "Model"}
+          />
+        </div>
+        {modelControl}
       </div>
     </div>
   ) : (
     <div className={modelSelectorGridClass}>
       {modelTypeControl && (
         <div className="grid min-w-0 gap-1.5">
-          <span className={defaultFieldLabelClass}>Model type</span>
+          {modelTypeLabel}
           {modelTypeControl}
         </div>
       )}
       <div className="grid min-w-0 gap-1.5">
-        <span className={defaultFieldLabelClass}>Model</span>
+        {modelTypeControl ? modelNameLabel : modelLabel}
         {modelControl}
       </div>
     </div>
@@ -550,12 +599,88 @@ export function TrainingTargetDatasetPanel({
     </div>
   );
 
+  const monitorsControls = (
+    <>
+      <MultiSelectDropdown
+        label="Training monitors"
+        values={selectedMonitors}
+        options={trainingMonitorOptions}
+        onChange={changeMonitors}
+        disabled={disabled}
+        placeholder={`${monitorCount} selected`}
+        emptyMessage={viewerStatusCopy.empty.optionalMonitors}
+      />
+      {monitorsLoading && (
+        <InlineStatus compact>
+          {viewerStatusCopy.loading.monitorOptions}
+        </InlineStatus>
+      )}
+      {!monitorsLoading && monitorOptions.length === 0 && (
+        <InlineStatus compact>
+          {viewerStatusCopy.empty.optionalMonitors}
+        </InlineStatus>
+      )}
+      <div className="grid grid-cols-2 gap-2">
+        <Button
+          variant="secondary"
+          onClick={onSelectAllMonitors}
+          disabled={disabled || monitorOptions.length === 0 || !onSelectAllMonitors}
+          className="h-9 text-[13px]"
+        >
+          All
+        </Button>
+        <Button
+          variant="ghost"
+          onClick={onClearMonitors}
+          disabled={disabled || selectedMonitors.length === 0 || !onClearMonitors}
+          className="h-9 border border-line bg-white/[0.025] text-[13px]"
+        >
+          None
+        </Button>
+      </div>
+    </>
+  );
+
+  const monitorsField = !showMonitorField ? null : isFooterPresentation ? (
+    <TrainingFooterField
+      className="xl:min-h-0"
+      icon={<Activity className={footerIconClass} aria-hidden />}
+      label="Signals"
+      detail={<StatChip>{monitorCount}</StatChip>}
+    >
+      {monitorsControls}
+    </TrainingFooterField>
+  ) : isSetupPresentation ? (
+    <div className="grid min-w-0 gap-2">
+      <div className="flex min-h-[28px] flex-wrap items-center justify-between gap-2">
+        <SectionHeading
+          icon={<Activity className={footerIconClass} aria-hidden />}
+          title="Signals"
+        />
+        <StatChip>{monitorCount}</StatChip>
+      </div>
+      {monitorsControls}
+    </div>
+  ) : (
+    <div className="xl:min-h-0 grid gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <SectionHeading
+          icon={<Activity className="h-[15px] w-[15px] text-violet" aria-hidden />}
+          title="Signals"
+        />
+        <StatChip>{monitorCount}</StatChip>
+      </div>
+      {monitorsControls}
+    </div>
+  );
+
   if (isFooterPresentation) {
     return (
       <>
         {modelField}
         {presetsField}
         {datasetsField}
+        {monitorsField}
       </>
     );
   }
@@ -566,6 +691,7 @@ export function TrainingTargetDatasetPanel({
         {modelField}
         {presetsField}
         {datasetsField}
+        {monitorsField}
       </div>
     );
   }
@@ -578,6 +704,7 @@ export function TrainingTargetDatasetPanel({
       </div>
 
       {datasetsField}
+      {monitorsField}
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { ErrorPanel } from "@/features/viewer/components/error-panel";
+import { ConfigSummaryPanel } from "@/features/viewer/components/config/config-summary-panel";
 import { TargetPresetPanel } from "@/features/viewer/components/screen/target-preset-panel";
 import {
   useTargetQueryStatusState,
@@ -29,6 +30,7 @@ export function ViewerModelSidebar({
       )}
 
       <TargetPresetPanel onOpenFullConfig={onOpenFullConfig} />
+      <ConfigSummaryPanel onOpenFullConfig={() => onOpenFullConfig()} />
 
       {presetsQuery.isError && (
         <ErrorPanel

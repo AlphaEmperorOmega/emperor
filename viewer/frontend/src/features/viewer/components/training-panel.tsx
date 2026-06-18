@@ -1,15 +1,11 @@
 import {
-  Activity,
   ChevronDown,
   ChevronUp,
   CircleStop,
   FolderOpen,
   FolderPlus,
   Loader2,
-  Maximize2,
   Play,
-  RotateCcw,
-  SlidersHorizontal,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,13 +13,10 @@ import { Input } from "@/components/ui/input";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { TrainingSearchSetup } from "@/features/viewer/components/training-search-setup";
 import { ViewModeButton } from "@/features/viewer/components/view-mode-button";
-import { MultiSelectDropdown } from "@/features/viewer/components/screen/multi-select-dropdown";
 import { SelectOnlyDropdown } from "@/features/viewer/components/screen/select-only-dropdown";
 import { DialogShell } from "@/features/viewer/components/shared/dialog-shell";
 import { InlineStatus } from "@/features/viewer/components/shared/inline-status";
 import { SectionHeading } from "@/features/viewer/components/shared/section-heading";
-import { StatChip } from "@/features/viewer/components/shared/stat-chip";
-import { viewerStatusCopy } from "@/features/viewer/components/shared/status-copy";
 import { TrainingTargetDatasetPanel } from "@/features/viewer/components/training/training-target-dataset-panel";
 import { TrainingCompactRunList } from "@/features/viewer/components/training/training-compact-run-list";
 import { TrainingFooterRunSummary } from "@/features/viewer/components/training/training-footer-run-summary";
@@ -40,11 +33,10 @@ type TrainingPanelProps = {
 const footerIconClass = "h-[15px] w-[15px] text-violet";
 
 export function TrainingPanel({ viewModel }: TrainingPanelProps) {
-  const { actions, input, logFolder, options, request, status, training, ui } =
+  const { input, logFolder, options, request, status, training, ui } =
     viewModel;
   const {
     datasetOptions,
-    configSections,
     selectedModelType,
     selectedModel,
     selectedPreset,
@@ -60,7 +52,6 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
     searchAxes,
     searchLoading,
     trainingEnabled,
-    canOpenFullConfig,
     onSelectModelType,
     onSelectModel,
     onSelectPreset,
@@ -74,8 +65,9 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
     onToggleDataset,
     onSelectAllDatasets,
     onSelectFirstDataset,
-    onResetOverrides,
-    onOpenFullConfig,
+    onSetMonitors,
+    onSelectAllMonitors,
+    onClearMonitors,
     onRemoveConfigSnapshot,
     onExcludeConfigSnapshot,
     onExcludeDraftTrainingPreset,
@@ -84,7 +76,6 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
     onDuplicateConfigSnapshot,
     onTrainingSearchChange,
   } = input;
-  const { changeMonitors } = actions;
   const {
     existingHelp,
     existingValue: selectedExistingLogFolder,
@@ -97,19 +88,12 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
     setExistingValue: setSelectedExistingLogFolder,
     setNewValue: setNewLogFolder,
   } = logFolder;
-  const {
-    modelTypeOptions,
-    modelOptions,
-    presetOptions,
-    trainingMonitorOptions,
-  } = options;
+  const { modelTypeOptions, modelOptions, presetOptions } = options;
   const {
     activeConfigSnapshotCount,
     activeSearchAxisCount,
     canRequestTraining,
     effectiveTrainingSearch,
-    fieldCount,
-    overrideCount,
     searchConflictKeys,
     searchModeLabel,
     selectedTrainingPresetCount,
@@ -147,7 +131,6 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
     jobStatus,
     logFolderLabel,
     metricLabel: jobMetricLabel,
-    monitorCount,
     plannedRunLabel,
     presetCountLabel,
   } = status;
@@ -395,6 +378,12 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
                 onToggleDataset={onToggleDataset}
                 onSelectAllDatasets={onSelectAllDatasets}
                 onSelectFirstDataset={onSelectFirstDataset}
+                monitorOptions={monitorOptions}
+                selectedMonitors={selectedMonitors}
+                monitorsLoading={monitorsLoading}
+                onSetMonitors={onSetMonitors}
+                onSelectAllMonitors={onSelectAllMonitors}
+                onClearMonitors={onClearMonitors}
                 onCreatePresetSnapshot={onCreatePresetSnapshot}
                 onEditConfigSnapshot={onEditConfigSnapshot}
                 onDuplicateConfigSnapshot={onDuplicateConfigSnapshot}
@@ -402,92 +391,6 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
                 disabled={planChangingControlsDisabled}
                 presentation="setup"
               />
-
-              <section className="grid gap-2 border-t border-line-soft pt-3">
-                <div className="flex min-h-[28px] flex-wrap items-center justify-between gap-2">
-                  <SectionHeading
-                    icon={<Activity className={footerIconClass} aria-hidden />}
-                    title="Signals"
-                  />
-                  <StatChip>{monitorCount}</StatChip>
-                </div>
-                <MultiSelectDropdown
-                  label="Training monitors"
-                  values={selectedMonitors}
-                  options={trainingMonitorOptions}
-                  onChange={changeMonitors}
-                  disabled={planChangingControlsDisabled}
-                  placeholder="Select monitors"
-                  emptyMessage={viewerStatusCopy.empty.optionalMonitors}
-                />
-                {monitorsLoading && (
-                  <InlineStatus compact>
-                    {viewerStatusCopy.loading.monitorOptions}
-                  </InlineStatus>
-                )}
-                {!monitorsLoading && monitorOptions.length === 0 && (
-                  <InlineStatus compact>
-                    {viewerStatusCopy.empty.optionalMonitors}
-                  </InlineStatus>
-                )}
-              </section>
-
-              <section className="grid gap-2 border-t border-line-soft pt-3">
-                <div className="flex min-h-[28px] flex-wrap items-center justify-between gap-2">
-                  <SectionHeading
-                    icon={
-                      <SlidersHorizontal
-                        className={footerIconClass}
-                        aria-hidden
-                      />
-                    }
-                    title="Overrides"
-                  />
-                  <div className="flex flex-wrap gap-1.5">
-                    <Badge>{fieldCount} fields</Badge>
-                    <Badge
-                      className={
-                        overrideCount > 0
-                          ? "border-violet/30 bg-violet/15 text-violet"
-                          : undefined
-                      }
-                    >
-                      {overrideCount} overrides
-                    </Badge>
-                    {configSnapshotCount > 0 && (
-                      <Badge className="border-ok/30 bg-ok/10 text-ok">
-                        {configSnapshotCount} snapshots
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-                <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-                  <Button
-                    variant="primary"
-                    aria-label="Open Full Config"
-                    onClick={() => onOpenFullConfig()}
-                    disabled={!canOpenFullConfig || planChangingControlsDisabled}
-                    className="h-10 text-[13.5px]"
-                  >
-                    <Maximize2 className="h-4 w-4" aria-hidden />
-                    Config
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    onClick={onResetOverrides}
-                    disabled={planChangingControlsDisabled || overrideCount === 0}
-                    className="h-10 border border-line bg-white/[0.025] px-2.5 text-xs"
-                  >
-                    <RotateCcw className="h-3.5 w-3.5" aria-hidden />
-                    Reset
-                  </Button>
-                </div>
-                {configSections.length === 0 && (
-                  <InlineStatus compact>
-                    Select a model and preset to load config fields
-                  </InlineStatus>
-                )}
-              </section>
 
               <section className="grid gap-2 border-t border-line-soft pt-3">
                 <TrainingSearchSetup

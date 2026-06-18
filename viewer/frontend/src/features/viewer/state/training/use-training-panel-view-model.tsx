@@ -14,9 +14,6 @@ import {
 } from "@/lib/api";
 import { type ConfigSection, type OverrideValues } from "@/lib/config";
 import { type ConfigSnapshot } from "@/lib/config-snapshots";
-import {
-  type FullConfigDialogMode,
-} from "@/features/viewer/state/use-viewer-workspace-shell";
 import { buildClusterGrowth } from "@/lib/cluster-growth";
 import { type TrainingSearchState } from "@/lib/training-search";
 import { metricLabel } from "@/lib/training/summary";
@@ -48,8 +45,9 @@ export type TrainingPanelViewModelInput = {
   trainingEnabled: boolean;
   trainingLockedByHistoricalSelection: boolean;
   historicalTrainingLockExperiment: string;
-  canOpenFullConfig: boolean;
-  onToggleMonitor: (monitor: string) => void;
+  onSetMonitors: (monitors: string[]) => void;
+  onSelectAllMonitors: () => void;
+  onClearMonitors: () => void;
   onSelectModelType: (modelType: string) => void;
   onSelectModel: (model: string) => void;
   onSelectPreset: (preset: string) => void;
@@ -65,8 +63,6 @@ export type TrainingPanelViewModelInput = {
   onToggleDataset: (dataset: string) => void;
   onSelectAllDatasets: () => void;
   onSelectFirstDataset: () => void;
-  onResetOverrides: () => void;
-  onOpenFullConfig: (mode?: FullConfigDialogMode) => void;
   onRemoveConfigSnapshot: (snapshotId: string) => void;
   onIncludeConfigSnapshot: (snapshotId: string) => void;
   onExcludeConfigSnapshot: (snapshotId: string) => void;
@@ -103,8 +99,9 @@ export function useTrainingPanelViewModel({
   trainingEnabled,
   trainingLockedByHistoricalSelection,
   historicalTrainingLockExperiment,
-  canOpenFullConfig,
-  onToggleMonitor,
+  onSetMonitors,
+  onSelectAllMonitors,
+  onClearMonitors,
   onSelectModelType,
   onSelectModel,
   onSelectPreset,
@@ -120,8 +117,6 @@ export function useTrainingPanelViewModel({
   onToggleDataset,
   onSelectAllDatasets,
   onSelectFirstDataset,
-  onResetOverrides,
-  onOpenFullConfig,
   onRemoveConfigSnapshot,
   onIncludeConfigSnapshot,
   onExcludeConfigSnapshot,
@@ -226,21 +221,9 @@ export function useTrainingPanelViewModel({
     training.displayedRunCount === 1 ? "" : "s"
   }`;
 
-  function changeMonitors(nextMonitors: string[]) {
-    const changedMonitor = monitorOptions.find(
-      (monitor) =>
-        selectedMonitors.includes(monitor.name) !==
-        nextMonitors.includes(monitor.name),
-    );
-    if (changedMonitor) {
-      onToggleMonitor(changedMonitor.name);
-    }
-  }
-
   return {
     input: {
       datasetOptions,
-      configSections,
       selectedModelType,
       selectedModel,
       selectedPreset,
@@ -256,7 +239,6 @@ export function useTrainingPanelViewModel({
       searchAxes,
       searchLoading,
       trainingEnabled,
-      canOpenFullConfig,
       onSelectModelType,
       onSelectModel,
       onSelectPreset,
@@ -272,8 +254,9 @@ export function useTrainingPanelViewModel({
       onToggleDataset,
       onSelectAllDatasets,
       onSelectFirstDataset,
-      onResetOverrides,
-      onOpenFullConfig,
+      onSetMonitors,
+      onSelectAllMonitors,
+      onClearMonitors,
       onRemoveConfigSnapshot,
       onIncludeConfigSnapshot,
       onExcludeConfigSnapshot,
@@ -301,12 +284,8 @@ export function useTrainingPanelViewModel({
     },
     options,
     request: {
-      fieldCount: requestState.fieldCount,
-      overrideCount: requestState.overrideCount,
-      hasConfigSnapshots: requestState.hasConfigSnapshots,
       activeConfigSnapshotCount: requestState.activeConfigSnapshotCount,
       effectiveTrainingSearch: requestState.effectiveTrainingSearch,
-      selectedFieldSummary: requestState.selectedFieldSummary,
       searchConflictKeys: requestState.searchConflictKeys,
       trainingSearchValidation: requestState.trainingSearchValidation,
       selectedTrainingPresetCount: requestState.selectedTrainingPresetCount,
@@ -329,9 +308,6 @@ export function useTrainingPanelViewModel({
       monitorCount,
       datasetCountLabel,
       plannedRunLabel,
-    },
-    actions: {
-      changeMonitors,
     },
   };
 }

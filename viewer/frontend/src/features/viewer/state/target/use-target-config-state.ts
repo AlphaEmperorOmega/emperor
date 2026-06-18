@@ -1438,6 +1438,22 @@ export function useTargetConfigState({
     );
   }, []);
 
+  const setMonitorSelection = useCallback(
+    (monitorSelection: string[]) => {
+      const monitorNames = monitors.map((monitor) => monitor.name);
+      setSelectedMonitors(uniqueValidValues(monitorSelection, monitorNames));
+    },
+    [monitors],
+  );
+
+  const selectAllMonitors = useCallback(() => {
+    setSelectedMonitors(monitors.map((monitor) => monitor.name));
+  }, [monitors]);
+
+  const clearMonitors = useCallback(() => {
+    setSelectedMonitors([]);
+  }, []);
+
   const updatePreview = useCallback(() => {
     const previewDataset = selectedDatasets[0];
     if (!selectedModel || !selectedPreset || !previewDataset) {
@@ -1611,6 +1627,9 @@ export function useTargetConfigState({
       selectFirstDataset,
       selectedMonitors,
       toggleMonitor,
+      setMonitorSelection,
+      selectAllMonitors,
+      clearMonitors,
       overrides: overrides as OverrideValues,
       configSections,
       overrideCount,
@@ -1672,6 +1691,7 @@ export function useTargetConfigState({
       addConfigSnapshot,
       apiOnline,
       capabilities,
+      clearMonitors,
       clearTargetOverride,
       configSections,
       configSnapshotGroups,
@@ -1716,6 +1736,7 @@ export function useTargetConfigState({
       searchAxes,
       searchAxesLoading,
       selectAllDatasets,
+      selectAllMonitors,
       selectAllTrainingPresets,
       selectFirstDataset,
       selectModel,
@@ -1738,6 +1759,7 @@ export function useTargetConfigState({
       selectedTrainingSnapshotIds,
       selectedTrainingSnapshots,
       setDatasetSelection,
+      setMonitorSelection,
       setTrainingPresetSelection,
       setTrainingSnapshotSelection,
       toggleConfigSnapshotRunSelection,

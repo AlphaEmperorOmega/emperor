@@ -15,6 +15,10 @@ vi.mock("@/features/viewer/components/screen/target-preset-panel", () => ({
   TargetPresetPanel: () => null,
 }));
 
+vi.mock("@/features/viewer/components/config/config-summary-panel", () => ({
+  ConfigSummaryPanel: () => null,
+}));
+
 type FakeResponseInit = {
   ok?: boolean;
   status?: number;

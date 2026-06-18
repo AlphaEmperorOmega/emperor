@@ -33,7 +33,11 @@ vi.mock("@/features/viewer/state/target/use-config-snapshots", () => ({
   useConfigSnapshots: mocks.useConfigSnapshots,
 }));
 
-import { type ConfigSnapshotRecord, type LogRun } from "@/lib/api";
+import {
+  type ConfigSnapshotRecord,
+  type LogRun,
+  type MonitorOption,
+} from "@/lib/api";
 import {
   clearPersistedTargetSelection,
   writePersistedTargetSelection,
@@ -57,6 +61,7 @@ const capabilities = {
 };
 let snapshots: ConfigSnapshotRecord[] = [];
 let librarySnapshots: ConfigSnapshotRecord[] = [];
+let monitorOptions: MonitorOption[] = [];
 let configSnapshotsLoading = false;
 
 function query<TData>(data: TData) {
@@ -117,6 +122,7 @@ beforeEach(() => {
   clearPersistedTargetSelection();
   snapshots = [];
   librarySnapshots = [];
+  monitorOptions = [];
   configSnapshotsLoading = false;
   mocks.requestPreview.mockReset();
   mocks.clearPreview.mockReset();
@@ -170,7 +176,7 @@ beforeEach(() => {
         monitorsQuery: query({
           modelType: selectedModelType,
           model: selectedModel,
-          monitors: [],
+          monitors: selectedModel ? monitorOptions : [],
         }),
         schemaQuery: query({
           modelType: selectedModelType,
@@ -253,6 +259,66 @@ describe("useTargetConfigState", () => {
       });
     });
     expect(mocks.resetGraphSelectionAndExpansion).toHaveBeenCalled();
+  });
+
+  it("sets, selects all, clears, and prunes monitor selections", async () => {
+    monitorOptions = [
+      {
+        name: "linear",
+        label: "Linear layers",
+        description: "Layer activations",
+        kinds: ["scalar"],
+        defaultEnabled: false,
+      },
+      {
+        name: "sampler",
+        label: "Sampler usage",
+        description: "Sampler activity",
+        kinds: ["histogram"],
+        defaultEnabled: false,
+      },
+    ];
+    const { result, rerender } = renderTargetState();
+
+    await waitFor(() => {
+      expect(result.current.target.selectedModel).toBe("linear");
+    });
+
+    act(() => {
+      result.current.target.setMonitorSelection([
+        "sampler",
+        "unknown",
+        "linear",
+        "linear",
+      ]);
+    });
+    expect(result.current.target.selectedMonitors).toEqual([
+      "sampler",
+      "linear",
+    ]);
+
+    act(() => {
+      result.current.target.selectAllMonitors();
+    });
+    expect(result.current.target.selectedMonitors).toEqual([
+      "linear",
+      "sampler",
+    ]);
+
+    act(() => {
+      result.current.target.clearMonitors();
+    });
+    expect(result.current.target.selectedMonitors).toEqual([]);
+
+    act(() => {
+      result.current.target.setMonitorSelection(["linear", "sampler"]);
+    });
+    monitorOptions = monitorOptions.slice(0, 1);
+    rerender();
+
+    await waitFor(() => {
+      expect(result.current.target.selectedMonitors).toEqual(["linear"]);
+    });
   });
 
   it("syncs a selected historical run into the target without keeping overrides", async () => {
