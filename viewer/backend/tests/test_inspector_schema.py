@@ -81,8 +81,10 @@ class InspectorSchemaTests(unittest.TestCase):
         linear_fields = {
             field["key"]: field for field in config_schema("linears/linear")["fields"]
         }
-        self.assertEqual(linear_fields["hidden_dim"]["type"], "int")
-        self.assertEqual(linear_fields["hidden_dim"]["choices"], [])
+        self.assertEqual(linear_fields["stack_hidden_dim"]["type"], "int")
+        self.assertEqual(linear_fields["stack_hidden_dim"]["default"], 256)
+        self.assertEqual(linear_fields["stack_layer_norm_position"]["type"], "enum")
+        self.assertEqual(linear_fields["stack_bias_flag"]["type"], "bool")
         self.assertEqual(linear_fields["stack_num_layers"]["type"], "int")
         self.assertEqual(linear_fields["stack_num_layers"]["default"], 5)
         self.assertEqual(linear_fields["stack_num_layers"]["choices"], [])
@@ -102,12 +104,14 @@ class InspectorSchemaTests(unittest.TestCase):
         self.assertEqual(linear_fields["gate_activation"]["default"], "SIGMOID")
         self.assertTrue(linear_fields["gate_activation"]["nullable"])
         self.assertIn("TANH", linear_fields["gate_activation"]["choices"])
-        self.assertEqual(linear_fields["gate_hidden_dim"]["type"], "int")
-        self.assertIsNone(linear_fields["gate_hidden_dim"]["default"])
-        self.assertTrue(linear_fields["gate_hidden_dim"]["nullable"])
-        self.assertEqual(linear_fields["gate_bias_flag"]["type"], "bool")
-        self.assertTrue(linear_fields["gate_bias_flag"]["default"])
-        self.assertTrue(linear_fields["gate_bias_flag"]["nullable"])
+        self.assertEqual(linear_fields["gate_stack_independent_flag"]["type"], "bool")
+        self.assertFalse(linear_fields["gate_stack_independent_flag"]["default"])
+        self.assertEqual(linear_fields["gate_stack_hidden_dim"]["type"], "int")
+        self.assertIsNone(linear_fields["gate_stack_hidden_dim"]["default"])
+        self.assertTrue(linear_fields["gate_stack_hidden_dim"]["nullable"])
+        self.assertEqual(linear_fields["gate_stack_bias_flag"]["type"], "bool")
+        self.assertTrue(linear_fields["gate_stack_bias_flag"]["default"])
+        self.assertTrue(linear_fields["gate_stack_bias_flag"]["nullable"])
         self.assertEqual(
             linear_fields["gate_option"]["section"],
             "Gate Stack Options",
@@ -144,9 +148,19 @@ class InspectorSchemaTests(unittest.TestCase):
             "TANH",
             linear_fields["recurrent_gate_activation"]["choices"],
         )
-        self.assertEqual(linear_fields["recurrent_gate_hidden_dim"]["type"], "int")
-        self.assertIsNone(linear_fields["recurrent_gate_hidden_dim"]["default"])
-        self.assertTrue(linear_fields["recurrent_gate_hidden_dim"]["nullable"])
+        self.assertEqual(
+            linear_fields["recurrent_gate_stack_independent_flag"]["type"],
+            "bool",
+        )
+        self.assertFalse(
+            linear_fields["recurrent_gate_stack_independent_flag"]["default"],
+        )
+        self.assertEqual(
+            linear_fields["recurrent_gate_stack_hidden_dim"]["type"],
+            "int",
+        )
+        self.assertIsNone(linear_fields["recurrent_gate_stack_hidden_dim"]["default"])
+        self.assertTrue(linear_fields["recurrent_gate_stack_hidden_dim"]["nullable"])
         self.assertEqual(
             linear_fields["recurrent_gate_stack_num_layers"]["type"],
             "int",
@@ -211,7 +225,10 @@ class InspectorSchemaTests(unittest.TestCase):
             linear_fields["memory_test_time_training_num_inner_steps"]["type"],
             "int",
         )
-        self.assertEqual(linear_fields["hidden_dim"]["section"], "Layer Stack Options")
+        self.assertEqual(
+            linear_fields["stack_hidden_dim"]["section"],
+            "Layer Stack Options",
+        )
         self.assertEqual(linear_fields["memory_flag"]["section"], "Memory Options")
         self.assertEqual(
             linear_fields["recurrent_flag"]["section"],
@@ -249,7 +266,7 @@ class InspectorSchemaTests(unittest.TestCase):
             for field in config_schema("transformer_encoder/vit_linear")["fields"]
         }
 
-        self.assertEqual(linear_fields["hidden_dim"]["default"], 256)
+        self.assertEqual(linear_fields["stack_hidden_dim"]["default"], 256)
         self.assertEqual(linear_fields["stack_activation"]["default"], "GELU")
         self.assertEqual(
             vit_fields["positional_embedding_option"]["default"],
@@ -318,10 +335,12 @@ class InspectorSchemaTests(unittest.TestCase):
         self.assertEqual(fields["submodule_hidden_dim"]["type"], "int")
         self.assertFalse(fields["submodule_hidden_dim"]["nullable"])
 
-        self.assertEqual(fields["memory_hidden_dim"]["type"], "int")
-        self.assertIsNone(fields["memory_hidden_dim"]["default"])
-        self.assertTrue(fields["memory_hidden_dim"]["nullable"])
-        self.assertEqual(fields["memory_hidden_dim"]["choices"], [])
+        self.assertEqual(fields["memory_stack_independent_flag"]["type"], "bool")
+        self.assertFalse(fields["memory_stack_independent_flag"]["default"])
+        self.assertEqual(fields["memory_stack_hidden_dim"]["type"], "int")
+        self.assertIsNone(fields["memory_stack_hidden_dim"]["default"])
+        self.assertTrue(fields["memory_stack_hidden_dim"]["nullable"])
+        self.assertEqual(fields["memory_stack_hidden_dim"]["choices"], [])
         self.assertEqual(fields["memory_stack_dropout_probability"]["type"], "float")
         self.assertIsNone(fields["memory_stack_dropout_probability"]["default"])
         self.assertTrue(fields["memory_stack_dropout_probability"]["nullable"])
@@ -343,6 +362,15 @@ class InspectorSchemaTests(unittest.TestCase):
         self.assertEqual(fields["gate_stack_activation"]["default"], "TANH")
         self.assertTrue(fields["gate_stack_activation"]["nullable"])
         self.assertIn("TANH", fields["gate_stack_activation"]["choices"])
+        self.assertEqual(fields["halting_stack_independent_flag"]["type"], "bool")
+        self.assertFalse(fields["halting_stack_independent_flag"]["default"])
+        self.assertEqual(
+            fields["recurrent_halting_stack_independent_flag"]["type"],
+            "bool",
+        )
+        self.assertFalse(
+            fields["recurrent_halting_stack_independent_flag"]["default"],
+        )
         self.assertEqual(
             fields["halting_stack_last_layer_bias_option"]["default"],
             "DISABLED",
@@ -388,7 +416,7 @@ class InspectorSchemaTests(unittest.TestCase):
 
     def test_parse_config_value_supports_none_for_nullable_overrides(self) -> None:
         self.assertIsNone(
-            parse_config_value(linear_config, "MEMORY_HIDDEN_DIM", "None")
+            parse_config_value(linear_config, "MEMORY_STACK_HIDDEN_DIM", "None")
         )
         self.assertIsNone(
             parse_config_value(
@@ -456,14 +484,17 @@ class InspectorSchemaTests(unittest.TestCase):
         }
 
         self.assertIn("learning_rate", axes)
-        self.assertIn("hidden_dim", axes)
+        self.assertIn("stack_hidden_dim", axes)
         self.assertIn("stack_activation", axes)
-        self.assertEqual(axes["hidden_dim"]["section"], "Layer Stack Options")
-        self.assertEqual(axes["hidden_dim"]["type"], "int")
-        self.assertEqual(axes["hidden_dim"]["values"], [16, 32, 64, 128, 256, 512])
+        self.assertEqual(axes["stack_hidden_dim"]["section"], "Layer Stack Options")
+        self.assertEqual(axes["stack_hidden_dim"]["type"], "int")
+        self.assertEqual(
+            axes["stack_hidden_dim"]["values"],
+            [16, 32, 64, 128, 256, 512],
+        )
         self.assertEqual(axes["stack_activation"]["type"], "enum")
         self.assertIn("GELU", axes["stack_activation"]["values"])
-        self.assertFalse(axes["hidden_dim"]["locked"])
+        self.assertFalse(axes["stack_hidden_dim"]["locked"])
 
     def test_search_space_schema_serializes_axis_values(self) -> None:
         linear_axes = {
@@ -478,7 +509,7 @@ class InspectorSchemaTests(unittest.TestCase):
         }
 
         self.assertEqual(
-            linear_axes["hidden_dim"]["values"],
+            linear_axes["stack_hidden_dim"]["values"],
             [16, 32, 64, 128, 256, 512],
         )
         self.assertEqual(
@@ -496,9 +527,12 @@ class InspectorSchemaTests(unittest.TestCase):
             for axis in search_space_schema("linears/linear", "post-norm")["axes"]
         }
 
-        self.assertTrue(axes["layer_norm_position"]["locked"])
-        self.assertEqual(axes["layer_norm_position"]["lockedValue"], "AFTER")
-        self.assertIn("POST_NORM preset", axes["layer_norm_position"]["lockedReason"])
+        self.assertTrue(axes["stack_layer_norm_position"]["locked"])
+        self.assertEqual(axes["stack_layer_norm_position"]["lockedValue"], "AFTER")
+        self.assertIn(
+            "POST_NORM preset",
+            axes["stack_layer_norm_position"]["lockedReason"],
+        )
 
 
 if __name__ == "__main__":

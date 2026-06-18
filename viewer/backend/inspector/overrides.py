@@ -15,10 +15,37 @@ from viewer.backend.inspector.config_classes import abstract_config_class_error
 from viewer.backend.inspector.errors import InspectorError
 
 
+LEGACY_OVERRIDE_ALIASES = {
+    "bias_flag": "stack_bias_flag",
+    "hidden_dim": "stack_hidden_dim",
+    "layer_norm_position": "stack_layer_norm_position",
+    "gate_bias_flag": "gate_stack_bias_flag",
+    "gate_hidden_dim": "gate_stack_hidden_dim",
+    "gate_layer_norm_position": "gate_stack_layer_norm_position",
+    "halting_bias_flag": "halting_stack_bias_flag",
+    "halting_hidden_dim": "halting_stack_hidden_dim",
+    "halting_layer_norm_position": "halting_stack_layer_norm_position",
+    "memory_bias_flag": "memory_stack_bias_flag",
+    "memory_hidden_dim": "memory_stack_hidden_dim",
+    "memory_layer_norm_position": "memory_stack_layer_norm_position",
+    "recurrent_gate_bias_flag": "recurrent_gate_stack_bias_flag",
+    "recurrent_gate_hidden_dim": "recurrent_gate_stack_hidden_dim",
+    "recurrent_gate_layer_norm_position": "recurrent_gate_stack_layer_norm_position",
+    "recurrent_halting_bias_flag": "recurrent_halting_stack_bias_flag",
+    "recurrent_halting_hidden_dim": "recurrent_halting_stack_hidden_dim",
+    "recurrent_halting_layer_norm_position": (
+        "recurrent_halting_stack_layer_norm_position"
+    ),
+}
+
+
 def _legacy_override_alias(
     normalized_key: str,
     supported: Mapping[str, str],
 ) -> tuple[str | None, bool]:
+    alias = LEGACY_OVERRIDE_ALIASES.get(normalized_key)
+    if alias is not None:
+        return supported.get(alias), False
     if normalized_key.endswith("_residual_flag"):
         residual_option_key = (
             normalized_key.removesuffix("_residual_flag")
