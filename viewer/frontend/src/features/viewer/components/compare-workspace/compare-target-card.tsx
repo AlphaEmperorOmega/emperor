@@ -9,7 +9,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EdgeCard } from "@/components/ui/edge-card";
-import { Select } from "@/components/ui/select";
+import { SelectOnlyDropdown } from "@/features/viewer/components/screen/select-only-dropdown";
 import { InlineStatus } from "@/features/viewer/components/shared/inline-status";
 import { viewerStatusCopy } from "@/features/viewer/components/shared/status-copy";
 import { errorMessage } from "@/lib/utils";
@@ -42,6 +42,13 @@ export function CompareTargetCard({
 }) {
   const { entry } = entryData;
   const selectedModelOptionId = `${entry.modelType}/${entry.model}`;
+  const presetOptions =
+    entryData.presets.length === 0
+      ? [{ value: "", label: "No presets", disabled: true }]
+      : entryData.presets.map((preset) => ({
+          value: preset.name,
+          label: preset.name,
+        }));
   const parameterDelta =
     entryData.inspection && baselineParameterCount !== undefined
       ? entryData.inspection.parameterCount - baselineParameterCount
@@ -70,14 +77,20 @@ export function CompareTargetCard({
           </Button>
         </div>
 
-        <label className="grid min-w-0 gap-1.5">
+        <div className="grid min-w-0 gap-1.5">
           <span className="text-xs font-semibold text-ink-dim">Model</span>
-          <Select
+          <SelectOnlyDropdown
+            label="Model"
             className="min-w-0"
             value={selectedModelOptionId}
-            onChange={(event) => {
+            options={modelOptions.map((model) => ({
+              value: model.id,
+              label: model.label,
+              description: `${model.modelType} / ${model.model}`,
+            }))}
+            onChange={(nextValue) => {
               const selected = modelOptions.find(
-                (model) => model.id === event.target.value,
+                (model) => model.id === nextValue,
               );
               if (!selected) {
                 return;
@@ -88,34 +101,22 @@ export function CompareTargetCard({
                 preset: "",
               });
             }}
-          >
-            {modelOptions.map((model) => (
-              <option key={model.id} value={model.id}>
-                {model.label}
-              </option>
-            ))}
-          </Select>
-        </label>
+            placeholder="Select model"
+          />
+        </div>
 
-        <label className="grid min-w-0 gap-1.5">
+        <div className="grid min-w-0 gap-1.5">
           <span className="text-xs font-semibold text-ink-dim">Preset</span>
-          <Select
+          <SelectOnlyDropdown
+            label="Preset"
             className="min-w-0"
             value={entry.preset}
-            onChange={(event) => onUpdate(entry.id, { preset: event.target.value })}
+            options={presetOptions}
+            onChange={(nextValue) => onUpdate(entry.id, { preset: nextValue })}
             disabled={entryData.presets.length === 0}
-          >
-            {entryData.presets.length === 0 ? (
-              <option value="">No presets</option>
-            ) : (
-              entryData.presets.map((preset) => (
-                <option key={preset.name} value={preset.name}>
-                  {preset.name}
-                </option>
-              ))
-            )}
-          </Select>
-        </label>
+            placeholder="No presets"
+          />
+        </div>
 
         {Boolean(entryData.error) && (
           <InlineStatus tone="danger" compact role="alert">

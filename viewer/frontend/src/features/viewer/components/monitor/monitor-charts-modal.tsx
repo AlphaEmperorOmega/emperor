@@ -39,6 +39,7 @@ import {
   MonitorGroupAccordion,
   useMonitorGroupAccordion,
 } from "@/features/viewer/components/monitor/monitor-group-accordion";
+import { SelectOnlyDropdown } from "@/features/viewer/components/screen/select-only-dropdown";
 import { DialogShell } from "@/features/viewer/components/shared/dialog-shell";
 import { InlineStatus } from "@/features/viewer/components/shared/inline-status";
 import { viewerStatusCopy } from "@/features/viewer/components/shared/status-copy";
@@ -708,6 +709,26 @@ export function MonitorChartsModal({
     emptyMessage,
     refetch: refreshMonitorData,
   } = query;
+  const comparisonScopeSelectOptions = comparisonScopeOptions.map((option) => ({
+    value: option.value,
+    label: option.label,
+    disabled: comparisonCandidateGroups[option.value].length === 0,
+  }));
+  const comparisonPathOptions = [
+    { value: "", label: "No comparison" },
+    ...comparisonCandidates.map((candidate) => ({
+      value: candidate.path,
+      label: candidate.path,
+    })),
+  ];
+  const sourcePresetOptions = sourcePresets.map((sourcePreset) => ({
+    value: sourcePreset,
+    label: sourcePreset,
+  }));
+  const sourceDatasetOptions = sourceDatasets.map((sourceDataset) => ({
+    value: sourceDataset,
+    label: sourceDataset,
+  }));
 
   return (
     <DialogShell
@@ -753,79 +774,70 @@ export function MonitorChartsModal({
             {hasComparisonCandidates && (
               <LabeledField
                 label="Scope"
+                id="monitor-comparison-scope"
                 className="text-xs font-medium normal-case"
               >
-                <select
+                <SelectOnlyDropdown
+                  id="monitor-comparison-scope"
+                  label="Scope"
                   value={comparisonScope}
-                  onChange={(event) =>
-                    setComparisonScope(event.target.value as LinearMonitorComparisonScope)
+                  options={comparisonScopeSelectOptions}
+                  onChange={(nextScope) =>
+                    setComparisonScope(nextScope as LinearMonitorComparisonScope)
                   }
-                  className="h-9 min-w-36 rounded-[10px] border border-line bg-black/25 px-2 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-                >
-                  {comparisonScopeOptions.map((option) => (
-                    <option
-                      key={option.value}
-                      value={option.value}
-                      disabled={comparisonCandidateGroups[option.value].length === 0}
-                    >
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+                  className="min-w-36"
+                  triggerClassName="h-9 min-w-36 rounded-[10px] px-2 text-sm"
+                />
               </LabeledField>
             )}
             {hasComparisonCandidates && (
               <LabeledField
                 label="Compare"
+                id="monitor-comparison-target"
                 className="text-xs font-medium normal-case"
               >
-                <select
+                <SelectOnlyDropdown
+                  id="monitor-comparison-target"
+                  label="Compare"
                   value={comparisonPath}
-                  onChange={(event) => setComparisonPath(event.target.value)}
-                  className="h-9 min-w-44 rounded-[10px] border border-line bg-black/25 px-2 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-                >
-                  <option value="">No comparison</option>
-                  {comparisonCandidates.map((candidate) => (
-                    <option key={candidate.path} value={candidate.path}>
-                      {candidate.path}
-                    </option>
-                  ))}
-                </select>
+                  options={comparisonPathOptions}
+                  onChange={setComparisonPath}
+                  className="min-w-44"
+                  triggerClassName="h-9 min-w-44 rounded-[10px] px-2 text-sm"
+                />
               </LabeledField>
             )}
             {activeJob && sourcePresets.length > 1 && (
               <LabeledField
                 label="Preset"
+                id="monitor-source-preset"
                 className="text-xs font-medium normal-case"
               >
-                <select
+                <SelectOnlyDropdown
+                  id="monitor-source-preset"
+                  label="Preset"
                   value={preset}
-                  onChange={(event) => setPreset(event.target.value)}
-                  className="h-9 min-w-32 rounded-[10px] border border-line bg-black/25 px-2 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-                >
-                  {sourcePresets.map((sourcePreset) => (
-                    <option key={sourcePreset} value={sourcePreset}>
-                      {sourcePreset}
-                    </option>
-                  ))}
-                </select>
+                  options={sourcePresetOptions}
+                  onChange={setPreset}
+                  className="min-w-32"
+                  triggerClassName="h-9 min-w-32 rounded-[10px] px-2 text-sm"
+                />
               </LabeledField>
             )}
             <LabeledField
               label="Dataset"
+              id="monitor-source-dataset"
               className="text-xs font-medium normal-case"
             >
-              <select
+              <SelectOnlyDropdown
+                id="monitor-source-dataset"
+                label="Dataset"
                 value={dataset}
-                onChange={(event) => setDataset(event.target.value)}
-                className="h-9 min-w-32 rounded-[10px] border border-line bg-black/25 px-2 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-              >
-                {sourceDatasets.map((sourceDataset) => (
-                  <option key={sourceDataset} value={sourceDataset}>
-                    {sourceDataset}
-                  </option>
-                ))}
-              </select>
+                options={sourceDatasetOptions}
+                onChange={setDataset}
+                className="min-w-32"
+                triggerClassName="h-9 min-w-32 rounded-[10px] px-2 text-sm"
+              />
             </LabeledField>
             <Button
               variant="secondary"

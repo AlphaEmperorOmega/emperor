@@ -37,15 +37,18 @@ export function LabeledField({
     );
 
   return (
-    <label
-      htmlFor={id}
+    <div
       className={cn(
         "grid gap-1 text-[11px] font-bold uppercase text-ink-dim",
         className,
       )}
     >
-      {labelContent}
+      {id ? (
+        <label htmlFor={id}>{labelContent}</label>
+      ) : (
+        <span>{labelContent}</span>
+      )}
       {children}
-    </label>
+    </div>
   );
 }

@@ -42,6 +42,29 @@ function renderCompareWorkspace() {
   );
 }
 
+async function selectSearchableOption(
+  user: ReturnType<typeof userEvent.setup>,
+  control: HTMLElement,
+  optionName: string | RegExp,
+  searchText: string,
+) {
+  await user.click(control);
+  const root = control.parentElement;
+
+  if (!(root instanceof HTMLElement)) {
+    throw new Error("Expected dropdown root");
+  }
+
+  const search = within(root).getByRole("searchbox");
+  await user.clear(search);
+  await user.type(search, searchText);
+  const listbox = within(root).getByRole("listbox");
+  await user.click(within(listbox).getByRole("option", { name: optionName }));
+  await waitFor(() => {
+    expect(within(root).queryByRole("listbox")).not.toBeInTheDocument();
+  });
+}
+
 function modelKey(identity: { modelType: string; model: string }) {
   return `${identity.modelType}/${identity.model}`;
 }
@@ -264,6 +287,44 @@ describe("CompareWorkspace", () => {
     expect(selectModel).toHaveBeenCalledWith("experts_linear", "experts");
     expect(selectPreset).toHaveBeenCalledWith("expert-baseline");
     expect(onUseTarget).toHaveBeenCalled();
+  });
+
+  it("searches comparison model and preset selectors", async () => {
+    renderCompareWorkspace();
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByText("experts_linear")).toBeInTheDocument();
+    });
+
+    const targetCards = screen.getAllByText(/^Target \d$/).map((label) => {
+      const card = label.closest(".edge");
+      expect(card).toBeInstanceOf(HTMLElement);
+      return card as HTMLElement;
+    });
+    const firstTarget = targetCards[0];
+    const modelControl = within(firstTarget).getByRole("combobox", {
+      name: "Model",
+    });
+
+    await selectSearchableOption(user, modelControl, /experts_linear/i, "experts");
+
+    const presetControl = within(firstTarget).getByRole("combobox", {
+      name: "Preset",
+    });
+    await waitFor(() => {
+      expect(modelControl).toHaveTextContent("experts_linear");
+      expect(presetControl).toHaveTextContent("expert-baseline");
+    });
+
+    await selectSearchableOption(
+      user,
+      presetControl,
+      "expert-baseline",
+      "expert",
+    );
+
+    expect(presetControl).toHaveTextContent("expert-baseline");
   });
 
   it("adds, removes, and resets comparison targets around the four-target limit", async () => {

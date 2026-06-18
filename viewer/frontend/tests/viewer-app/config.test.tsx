@@ -19,6 +19,7 @@ import {
   resetViewerAppTestState,
   schemaResponse,
   scrollIntoViewMock,
+  selectSearchableDropdownOption,
   selectTargetOption,
   typeConfigFieldValue,
   waitForOpenFullConfigButton,
@@ -1095,11 +1096,9 @@ describe("ViewerApp Full Config", () => {
       name: /gate model stack section, 4 fields, 0 overrides/i,
     });
     const gateOption = within(gateDirectGrid).getByLabelText(/gate option/i);
-    expect(gateOption).toHaveValue("MULTIPLIER");
     expect(gateOption).toHaveTextContent("MULTIPLIER");
     const gateActivation = within(gateDirectGrid).getByLabelText(/gate activation/i);
-    expect(gateActivation).toHaveValue("SIGMOID");
-    expect(gateActivation).toHaveTextContent("TANH");
+    expect(gateActivation).toHaveTextContent("SIGMOID");
     expect(within(gateDirectGrid).queryByLabelText(/gate hidden dim/i))
       .not.toBeInTheDocument();
     expect(
@@ -1123,8 +1122,8 @@ describe("ViewerApp Full Config", () => {
       ),
     ).toBeInTheDocument();
 
-    await user.selectOptions(gateOption, "ADDITION");
-    expect(gateOption).toHaveValue("ADDITION");
+    await selectSearchableDropdownOption(user, gateOption, "ADDITION", "ADDITION");
+    expect(gateOption).toHaveTextContent("ADDITION");
 
     await user.click(
       within(dialog).getByRole("switch", { name: /^recurrent gate flag$/i }),
@@ -1148,10 +1147,8 @@ describe("ViewerApp Full Config", () => {
     const recurrentGateActivation = within(
       recurrentGateDirectGrid,
     ).getByLabelText(/recurrent gate activation/i);
-    expect(recurrentGateOption).toHaveValue("MULTIPLIER");
     expect(recurrentGateOption).toHaveTextContent("MULTIPLIER");
-    expect(recurrentGateActivation).toHaveValue("SIGMOID");
-    expect(recurrentGateActivation).toHaveTextContent("TANH");
+    expect(recurrentGateActivation).toHaveTextContent("SIGMOID");
     expect(
       within(recurrentGateDirectGrid).queryByLabelText(
         /recurrent gate hidden dim/i,
@@ -1473,18 +1470,24 @@ describe("ViewerApp Full Config", () => {
       name: /memory stack apply output pipeline flag/i,
     });
 
-    expect(nullableBoolean).toHaveValue("");
-    expect(within(nullableBoolean).getByRole("option", { name: "None" }))
-      .toHaveValue("");
-    expect(within(nullableBoolean).getByRole("option", { name: "Enabled" }))
-      .toHaveValue("true");
-    expect(within(nullableBoolean).getByRole("option", { name: "Off" }))
-      .toHaveValue("false");
+    expect(nullableBoolean).toHaveTextContent("None");
+    await user.click(nullableBoolean);
+    const nullableRoot = nullableBoolean.parentElement;
+    if (!(nullableRoot instanceof HTMLElement)) {
+      throw new Error("Expected nullable boolean dropdown root");
+    }
+    const nullableOptions = within(nullableRoot).getByRole("listbox");
+    expect(within(nullableOptions).getByRole("option", { name: "None" }))
+      .toHaveAttribute("aria-selected", "true");
+    expect(within(nullableOptions).getByRole("option", { name: "Enabled" }))
+      .toHaveAttribute("aria-selected", "false");
+    expect(within(nullableOptions).getByRole("option", { name: "Off" }))
+      .toHaveAttribute("aria-selected", "false");
 
-    await user.selectOptions(nullableBoolean, "true");
-    expect(nullableBoolean).toHaveValue("true");
-    await user.selectOptions(nullableBoolean, "");
-    expect(nullableBoolean).toHaveValue("");
+    await user.click(within(nullableOptions).getByRole("option", { name: "Enabled" }));
+    expect(nullableBoolean).toHaveTextContent("Enabled");
+    await selectSearchableDropdownOption(user, nullableBoolean, "None", "None");
+    expect(nullableBoolean).toHaveTextContent("None");
 
     const commandDialog = await openTrainingCommand(user, dialog);
     expect(commandField(commandDialog)).toHaveValue(
@@ -1809,10 +1812,16 @@ describe("ViewerApp Full Config", () => {
       name: /current value/i,
     });
 
-    await user.selectOptions(stackActivationSelect, "RELU");
+    await selectSearchableDropdownOption(
+      user,
+      stackActivationSelect,
+      "RELU",
+      "RELU",
+    );
 
     expect(stackActivationRow).toHaveTextContent(/current\s*RELU/i);
-    expect(within(dialog).getByLabelText(/stack activation/i)).toHaveValue("RELU");
+    expect(within(dialog).getByLabelText(/stack activation/i))
+      .toHaveTextContent("RELU");
 
     await user.click(within(dialog).getByRole("button", { name: /clear config search/i }));
     await user.type(search, "gate");
@@ -2344,7 +2353,12 @@ describe("ViewerApp Full Config", () => {
 
     const dialog = await openFullConfig(user);
     await typeConfigFieldValue(user, dialog, /hidden dim/i, "128");
-    await user.selectOptions(within(dialog).getByLabelText(/stack activation/i), "RELU");
+    await selectSearchableDropdownOption(
+      user,
+      within(dialog).getByLabelText(/stack activation/i),
+      "RELU",
+      "RELU",
+    );
     await user.click(within(dialog).getByRole("switch", { name: /gate flag/i }));
 
     const commandDialog = await openTrainingCommand(user, dialog);
@@ -2400,14 +2414,19 @@ describe("ViewerApp Full Config", () => {
 
     const dialog = await openFullConfig(user);
     const scheduleInput = within(dialog).getByLabelText(/dropout schedule/i);
-    await user.selectOptions(scheduleInput, "cosine decay");
+    await selectSearchableDropdownOption(
+      user,
+      scheduleInput,
+      "cosine decay",
+      "cosine decay",
+    );
     let commandDialog = await openTrainingCommand(user, dialog);
     expect(commandField(commandDialog)).toHaveValue(
       "source experiment.sh --model-type linears --model linear --preset baseline --config --dropout-schedule 'cosine decay'",
     );
 
     await user.click(within(commandDialog).getByRole("button", { name: /close training command/i }));
-    await user.selectOptions(scheduleInput, "");
+    await selectSearchableDropdownOption(user, scheduleInput, "None", "None");
     commandDialog = await openTrainingCommand(user, dialog);
 
     expect(commandField(commandDialog)).toHaveValue(

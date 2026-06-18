@@ -12,6 +12,7 @@ import {
   renderViewer,
   repeatedLayersInspectResponse,
   resetViewerAppTestState,
+  selectSearchableDropdownOption,
   selectNewTrainingLogFolder,
   selectTrainingMonitorOption,
   semanticMonitorPayload,
@@ -36,6 +37,23 @@ describe("ViewerApp Monitor Charts And Errors", () => {
         await screen.findByRole("listbox", { name: /^experiment run options$/i }),
       ).getByRole("option", { name: optionName }),
     );
+  }
+
+  async function openSearchableDropdown(
+    user: ReturnType<typeof userEvent.setup>,
+    control: HTMLElement,
+  ) {
+    await user.click(control);
+    const root = control.parentElement;
+
+    if (!(root instanceof HTMLElement)) {
+      throw new Error("Expected searchable dropdown root");
+    }
+
+    return {
+      root,
+      listbox: await within(root).findByRole("listbox"),
+    };
   }
 
   it("opens selected-node monitor charts for the active training job", async () => {
@@ -198,8 +216,13 @@ describe("ViewerApp Monitor Charts And Errors", () => {
     );
     await user.click(screen.getByRole("button", { name: /^monitor charts$/i }));
     const dialog = await screen.findByRole("dialog", { name: /monitor charts/i });
-    expect(within(dialog).getByLabelText(/^scope$/i)).toHaveValue("same-stack");
-    await user.selectOptions(within(dialog).getByLabelText(/^compare$/i), "main_model.1.model");
+    expect(within(dialog).getByLabelText(/^scope$/i)).toHaveTextContent("Same stack");
+    await selectSearchableDropdownOption(
+      user,
+      within(dialog).getByLabelText(/^compare$/i),
+      "main_model.1.model",
+      "main_model.1.model",
+    );
 
     await waitFor(() => {
       expect(monitorDataRequests).toEqual(
@@ -250,21 +273,31 @@ describe("ViewerApp Monitor Charts And Errors", () => {
     const scopeSelect = within(dialog).getByLabelText(/^scope$/i);
     const compareSelect = within(dialog).getByLabelText(/^compare$/i);
 
-    expect(scopeSelect).toHaveValue("same-stack");
-    expect(within(compareSelect).queryByRole("option", { name: "input_model.model" }))
-      .not.toBeInTheDocument();
-    expect(within(compareSelect).queryByRole("option", { name: "output_model.model" }))
-      .not.toBeInTheDocument();
+    expect(scopeSelect).toHaveTextContent("Same stack");
+    await selectSearchableDropdownOption(
+      user,
+      scopeSelect,
+      "All linear layers",
+      "all linear",
+    );
 
-    await user.selectOptions(scopeSelect, "all-layers");
-
-    expect(scopeSelect).toHaveValue("all-layers");
-    expect(within(compareSelect).getByRole("option", { name: "input_model.model" }))
+    expect(scopeSelect).toHaveTextContent("All linear layers");
+    let compareDropdown = await openSearchableDropdown(user, compareSelect);
+    expect(within(compareDropdown.listbox).getByRole("option", { name: "input_model.model" }))
       .toBeInTheDocument();
-    expect(within(compareSelect).getByRole("option", { name: "output_model.model" }))
+    expect(within(compareDropdown.listbox).getByRole("option", { name: "output_model.model" }))
       .toBeInTheDocument();
-
-    await user.selectOptions(compareSelect, "input_model.model");
+    await user.type(
+      within(compareDropdown.root).getByRole("searchbox", {
+        name: /^search compare$/i,
+      }),
+      "input_model.model",
+    );
+    await user.click(
+      within(compareDropdown.listbox).getByRole("option", {
+        name: "input_model.model",
+      }),
+    );
     await waitFor(() => {
       expect(monitorDataRequests).toEqual(
         expect.arrayContaining([
@@ -274,11 +307,27 @@ describe("ViewerApp Monitor Charts And Errors", () => {
       );
     });
 
-    await user.selectOptions(scopeSelect, "same-stack");
-    await waitFor(() => expect(compareSelect).toHaveValue(""));
+    await selectSearchableDropdownOption(user, scopeSelect, "Same stack", "same");
+    await waitFor(() => expect(compareSelect).toHaveTextContent("No comparison"));
 
-    await user.selectOptions(scopeSelect, "all-layers");
-    await user.selectOptions(compareSelect, "output_model.model");
+    await selectSearchableDropdownOption(
+      user,
+      scopeSelect,
+      "All linear layers",
+      "all linear",
+    );
+    compareDropdown = await openSearchableDropdown(user, compareSelect);
+    await user.type(
+      within(compareDropdown.root).getByRole("searchbox", {
+        name: /^search compare$/i,
+      }),
+      "output_model.model",
+    );
+    await user.click(
+      within(compareDropdown.listbox).getByRole("option", {
+        name: "output_model.model",
+      }),
+    );
     await waitFor(() => {
       expect(monitorDataRequests).toEqual(
         expect.arrayContaining([
@@ -307,7 +356,12 @@ describe("ViewerApp Monitor Charts And Errors", () => {
 
     const dialog = await screen.findByRole("dialog", { name: /monitor charts/i });
     expect(dialog).toBeInTheDocument();
-    await user.selectOptions(within(dialog).getByLabelText(/^compare$/i), "main_model.1.model");
+    await selectSearchableDropdownOption(
+      user,
+      within(dialog).getByLabelText(/^compare$/i),
+      "main_model.1.model",
+      "main_model.1.model",
+    );
     await waitFor(() => {
       expect(monitorDataRequests).toEqual(
         expect.arrayContaining([
@@ -340,11 +394,21 @@ describe("ViewerApp Monitor Charts And Errors", () => {
     const scopeSelect = within(dialog).getByLabelText(/^scope$/i);
     const compareSelect = within(dialog).getByLabelText(/^compare$/i);
 
-    expect(scopeSelect).toHaveValue("all-layers");
-    expect(within(compareSelect).getByRole("option", { name: "output_model.model" }))
+    expect(scopeSelect).toHaveTextContent("All linear layers");
+    const compareDropdown = await openSearchableDropdown(user, compareSelect);
+    expect(within(compareDropdown.listbox).getByRole("option", { name: "output_model.model" }))
       .toBeInTheDocument();
-
-    await user.selectOptions(compareSelect, "output_model.model");
+    await user.type(
+      within(compareDropdown.root).getByRole("searchbox", {
+        name: /^search compare$/i,
+      }),
+      "output_model.model",
+    );
+    await user.click(
+      within(compareDropdown.listbox).getByRole("option", {
+        name: "output_model.model",
+      }),
+    );
 
     await waitFor(() => {
       expect(monitorDataRequests).toEqual(
@@ -507,7 +571,12 @@ describe("ViewerApp Monitor Charts And Errors", () => {
     });
     await user.click(screen.getByRole("button", { name: /^monitor charts$/i }));
     const dialog = await screen.findByRole("dialog", { name: /monitor charts/i });
-    await user.selectOptions(within(dialog).getByLabelText(/^compare$/i), "main_model.1.model");
+    await selectSearchableDropdownOption(
+      user,
+      within(dialog).getByLabelText(/^compare$/i),
+      "main_model.1.model",
+      "main_model.1.model",
+    );
 
     await waitFor(() => {
       expect(logRunMonitorDataRequests).toEqual(

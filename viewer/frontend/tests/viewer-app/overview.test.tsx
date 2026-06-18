@@ -312,6 +312,14 @@ describe("ViewerApp Overview", () => {
       name: /^snapshot$/i,
     });
     await user.click(snapshotControl);
+    const snapshotRoot = snapshotControl.parentElement;
+    if (!(snapshotRoot instanceof HTMLElement)) {
+      throw new Error("Expected snapshot dropdown root");
+    }
+    await user.type(
+      within(snapshotRoot).getByRole("searchbox", { name: /^search snapshot$/i }),
+      "recurrent",
+    );
     await user.click(
       within(
         await screen.findByRole("listbox", { name: /^snapshot options$/i }),
@@ -675,6 +683,7 @@ describe("ViewerApp Overview", () => {
     const experimentsTab = await screen.findByRole("tab", { name: "Experiments" });
     await waitFor(() => expect(experimentsTab).not.toBeDisabled());
     await user.click(experimentsTab);
+    expect(experimentsTab).toHaveAttribute("aria-selected", "true");
 
     const experimentRunControl = await screen.findByRole("combobox", {
       name: /^experiment run$/i,
@@ -684,9 +693,6 @@ describe("ViewerApp Overview", () => {
     await user.click(experimentRunControl);
     const runOptions = await screen.findByRole("listbox", {
       name: /^experiment run options$/i,
-    });
-    const newestRun = within(runOptions).getByRole("option", {
-      name: "test_model_2 · BASELINE · Cifar10 · 2026-06-01 02:03:04",
     });
     expect(
       within(runOptions).getByRole("option", {
@@ -698,12 +704,29 @@ describe("ViewerApp Overview", () => {
         name: /bert_experiment/i,
       }),
     ).not.toBeInTheDocument();
+    const experimentRoot = experimentRunControl.parentElement;
+    if (!(experimentRoot instanceof HTMLElement)) {
+      throw new Error("Expected experiment run dropdown root");
+    }
+    await user.type(
+      within(experimentRoot).getByRole("searchbox", {
+        name: /^search experiment run$/i,
+      }),
+      "Cifar10",
+    );
+    const newestRun = within(runOptions).getByRole("option", {
+      name: "test_model_2 · BASELINE · Cifar10 · 2026-06-01 02:03:04",
+    });
 
     await user.click(newestRun);
     await waitFor(() =>
       expect(experimentRunControl).toHaveTextContent(
         "test_model_2 · BASELINE · Cifar10 · 2026-06-01 02:03:04",
       ),
+    );
+    expect(screen.getByRole("tab", { name: "Experiments" })).toHaveAttribute(
+      "aria-selected",
+      "true",
     );
     await waitFor(() => {
       expect(inspectBodies.at(-1)).toEqual({

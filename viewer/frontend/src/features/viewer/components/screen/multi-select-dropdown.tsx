@@ -2,6 +2,7 @@ import {
   type KeyboardEvent,
   type MouseEvent,
   type ReactNode,
+  isValidElement,
   useCallback,
   useEffect,
   useId,
@@ -10,6 +11,8 @@ import {
   useState,
 } from "react";
 import { Check, ChevronDown, Search } from "lucide-react";
+import { flushSync } from "react-dom";
+import { IconButton } from "@/components/ui/icon-button";
 import {
   checkboxCheckedClassName,
   checkboxIndicatorClassName,
@@ -20,16 +23,49 @@ import {
   selectTriggerActiveClassName,
 } from "@/components/ui/control-styles";
 import { DropdownShell } from "@/features/viewer/components/shared/dropdown-shell";
+import { HoverTooltip } from "@/features/viewer/components/shared/hover-tooltip";
 import { StatChip } from "@/features/viewer/components/shared/stat-chip";
 import { usePopupDismissal } from "@/features/viewer/components/shared/use-popup-dismissal";
 import { cn } from "@/lib/utils";
+
+export type MultiSelectDropdownOptionAction = {
+  label: string;
+  tooltip: string;
+  icon: ReactNode;
+  onAction: (value: string) => void;
+};
 
 export type MultiSelectDropdownOption = {
   value: string;
   label: string;
   description?: string;
   meta?: ReactNode;
+  actions?: MultiSelectDropdownOptionAction[];
 };
+
+function textFromReactNode(node: ReactNode): string {
+  if (node === null || node === undefined || typeof node === "boolean") {
+    return "";
+  }
+  if (typeof node === "string" || typeof node === "number") {
+    return String(node);
+  }
+  if (Array.isArray(node)) {
+    return node.map(textFromReactNode).filter(Boolean).join(" ");
+  }
+  if (isValidElement(node)) {
+    return textFromReactNode(
+      (node.props as { children?: ReactNode }).children,
+    );
+  }
+  return "";
+}
+
+function optionAccessibleName(option: MultiSelectDropdownOption) {
+  return [option.label, option.description, textFromReactNode(option.meta)]
+    .filter(Boolean)
+    .join(" ");
+}
 
 export function MultiSelectDropdown({
   id,
@@ -44,6 +80,7 @@ export function MultiSelectDropdown({
   searchPlaceholder,
   emptyMessage = "No options",
   noResultsMessage = "No matching options",
+  disabled: disabledProp = false,
   className,
 }: {
   id?: string;
@@ -58,6 +95,7 @@ export function MultiSelectDropdown({
   searchPlaceholder?: string;
   emptyMessage?: string;
   noResultsMessage?: string;
+  disabled?: boolean;
   className?: string;
 }) {
   const generatedId = useId();
@@ -73,7 +111,7 @@ export function MultiSelectDropdown({
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(-1);
 
-  const disabled = options.length === 0;
+  const disabled = disabledProp || options.length === 0;
   const selectedValueSet = useMemo(() => new Set(values), [values]);
   const disabledValueSet = useMemo(
     () => new Set(disabledValues),
@@ -274,6 +312,27 @@ export function MultiSelectDropdown({
     onPrimaryChange?.(value);
   }
 
+  function handleOptionActionMouseDown(event: MouseEvent<HTMLButtonElement>) {
+    event.stopPropagation();
+  }
+
+  function handleOptionActionClick(
+    event: MouseEvent<HTMLButtonElement>,
+    option: MultiSelectDropdownOption,
+    action: MultiSelectDropdownOptionAction,
+  ) {
+    event.preventDefault();
+    event.stopPropagation();
+    flushSync(() => closeDropdown());
+    action.onAction(option.value);
+  }
+
+  function handleOptionActionKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
+    if (event.key === "Enter" || event.key === " ") {
+      event.stopPropagation();
+    }
+  }
+
   return (
     <div
       ref={rootRef}
@@ -308,6 +367,7 @@ export function MultiSelectDropdown({
         className={cn(
           multiSelectTriggerClassName,
           isOpen && selectTriggerActiveClassName,
+          disabledProp && "cursor-not-allowed opacity-60",
         )}
       >
         <span className="grid min-w-0 gap-1">
@@ -382,23 +442,15 @@ export function MultiSelectDropdown({
               const isDisabled = disabledValueSet.has(option.value);
               const isPrimary = isSelected && primaryValue === option.value;
               const isActive = index === activeIndex;
+              const actions = option.actions ?? [];
               return (
                 <div
                   key={option.value}
-                  ref={(node) => {
-                    optionRefs.current[index] = node;
-                  }}
-                  id={`${listboxId}-option-${index}`}
-                  role="option"
-                  tabIndex={-1}
-                  aria-selected={isSelected}
-                  aria-disabled={isDisabled || undefined}
                   onMouseDown={(event) => event.preventDefault()}
                   onMouseEnter={() => setActiveIndex(index)}
                   onClick={() => toggleOption(option)}
-                  onKeyDown={(event) => handleOptionKeyDown(event, option)}
                   className={cn(
-                    "grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2",
+                    "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2",
                     dropdownOptionClassName,
                     dropdownOptionStateClassName({
                       active: isActive,
@@ -407,42 +459,83 @@ export function MultiSelectDropdown({
                     }),
                   )}
                 >
-                  <span
-                    className={cn(
-                      checkboxIndicatorClassName,
-                      isSelected
-                        ? checkboxCheckedClassName
-                        : checkboxUncheckedClassName,
-                    )}
-                    aria-hidden
+                  <div
+                    ref={(node) => {
+                      optionRefs.current[index] = node;
+                    }}
+                    id={`${listboxId}-option-${index}`}
+                    role="option"
+                    tabIndex={-1}
+                    aria-label={optionAccessibleName(option)}
+                    aria-selected={isSelected}
+                    aria-disabled={isDisabled || undefined}
+                    onKeyDown={(event) => handleOptionKeyDown(event, option)}
+                    className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                   >
-                    <Check
+                    <span
                       className={cn(
-                        "h-3 w-3 text-white transition",
-                        !isSelected && "opacity-0",
+                        checkboxIndicatorClassName,
+                        isSelected
+                          ? checkboxCheckedClassName
+                          : checkboxUncheckedClassName,
                       )}
-                    />
-                  </span>
-                  <span className="grid min-w-0 gap-0.5">
-                    <span className="truncate">{option.label}</span>
-                    {option.description && (
-                      <span className="truncate font-mono text-xs text-ink-dim">
-                        {option.description}
-                      </span>
-                    )}
-                  </span>
-                  <span className="flex shrink-0 items-center gap-1.5">
-                    {isPrimary && (
-                      <span className="rounded-[7px] border border-violet/35 bg-violet/12 px-2 py-0.5 font-mono text-[11px] uppercase tracking-[0.06em] text-violet">
-                        primary
-                      </span>
-                    )}
-                    {option.meta && (
-                      <span className="font-mono text-xs text-ink-dim">
-                        {option.meta}
-                      </span>
-                    )}
-                  </span>
+                      aria-hidden
+                    >
+                      <Check
+                        className={cn(
+                          "h-3 w-3 text-white transition",
+                          !isSelected && "opacity-0",
+                        )}
+                      />
+                    </span>
+                    <span className="grid min-w-0 gap-0.5">
+                      <span className="truncate">{option.label}</span>
+                      {option.description && (
+                        <span className="truncate font-mono text-xs text-ink-dim">
+                          {option.description}
+                        </span>
+                      )}
+                    </span>
+                    <span className="flex shrink-0 items-center gap-1.5">
+                      {isPrimary && (
+                        <span className="rounded-[7px] border border-violet/35 bg-violet/12 px-2 py-0.5 font-mono text-[11px] uppercase tracking-[0.06em] text-violet">
+                          primary
+                        </span>
+                      )}
+                      {option.meta && (
+                        <span className="font-mono text-xs text-ink-dim">
+                          {option.meta}
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                  {actions.length > 0 && (
+                    <span className="flex shrink-0 items-center gap-1.5">
+                      {actions.map((action) => (
+                        <HoverTooltip
+                          key={action.label}
+                          tooltip={action.tooltip}
+                          tooltipClassName="right-0"
+                        >
+                          {(triggerProps) => (
+                            <IconButton
+                              label={action.label}
+                              icon={action.icon}
+                              size="sm"
+                              variant="ghost"
+                              onMouseDown={handleOptionActionMouseDown}
+                              onClick={(event) =>
+                                handleOptionActionClick(event, option, action)
+                              }
+                              onKeyDown={handleOptionActionKeyDown}
+                              className="h-7 w-7 rounded-[7px] text-ink-faint hover:text-violet focus-visible:text-violet"
+                              {...triggerProps}
+                            />
+                          )}
+                        </HoverTooltip>
+                      ))}
+                    </span>
+                  )}
                 </div>
               );
             })}

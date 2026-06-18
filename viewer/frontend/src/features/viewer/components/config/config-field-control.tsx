@@ -1,8 +1,8 @@
 import { RotateCcw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { SelectOnlyDropdown } from "@/features/viewer/components/screen/select-only-dropdown";
 import { type ConfigField } from "@/lib/api";
 import {
   type OverrideValues,
@@ -48,6 +48,9 @@ export function ConfigFieldValueEditor({
   const isControlDisabled = isLocked || disabled;
   const isCompact = density === "compact";
   const isResetDisabled = !isModified || isControlDisabled;
+  const selectTriggerClassName = isCompact
+    ? "h-10 px-3 py-2 text-[13.5px]"
+    : undefined;
 
   return (
     <div
@@ -58,20 +61,20 @@ export function ConfigFieldValueEditor({
       )}
     >
       {field.type === "bool" && field.nullable ? (
-        <Select
+        <SelectOnlyDropdown
           id={controlId}
-          name={field.key}
-          aria-label={controlLabel}
-          autoComplete="off"
+          label={controlLabel ?? field.label}
           value={value}
+          options={[
+            { value: "", label: "None" },
+            { value: "true", label: "Enabled" },
+            { value: "false", label: "Off" },
+          ]}
+          onChange={(nextValue) => onChange(field.key, nextValue)}
           disabled={isControlDisabled}
-          onChange={(event) => onChange(field.key, event.target.value)}
-          className={isCompact ? "h-10 px-3 py-2 text-[13.5px]" : undefined}
-        >
-          <option value="">None</option>
-          <option value="true">Enabled</option>
-          <option value="false">Off</option>
-        </Select>
+          placeholder="None"
+          triggerClassName={selectTriggerClassName}
+        />
       ) : field.type === "bool" ? (
         <div
           className={cn(
@@ -91,23 +94,22 @@ export function ConfigFieldValueEditor({
           />
         </div>
       ) : choices.length > 0 ? (
-        <Select
+        <SelectOnlyDropdown
           id={controlId}
-          name={field.key}
-          aria-label={controlLabel}
-          autoComplete="off"
+          label={controlLabel ?? field.label}
           value={value}
+          options={[
+            ...(field.nullable ? [{ value: "", label: "None" }] : []),
+            ...choices.map((choice) => ({
+              value: String(choice),
+              label: String(choice),
+            })),
+          ]}
           disabled={isControlDisabled}
-          onChange={(event) => onChange(field.key, event.target.value)}
-          className={isCompact ? "h-10 px-3 py-2 text-[13.5px]" : undefined}
-        >
-          {field.nullable && <option value="">None</option>}
-          {choices.map((choice) => (
-            <option key={String(choice)} value={String(choice)}>
-              {String(choice)}
-            </option>
-          ))}
-        </Select>
+          onChange={(nextValue) => onChange(field.key, nextValue)}
+          placeholder="None"
+          triggerClassName={selectTriggerClassName}
+        />
       ) : field.type === "int" || field.type === "float" ? (
         <Input
           id={controlId}

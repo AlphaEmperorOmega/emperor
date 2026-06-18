@@ -297,28 +297,36 @@ function sectionWithFields(
 function deriveHaltingChildren(section: ConfigSection) {
   const haltingStackFields = stackScopedFields(section.fields, "halting_");
   return [
-    sectionWithFields("Halting Stack Options", haltingStackFields),
+    sectionWithFields("Halting Stack Options", haltingStackFields, {
+      controlFieldKey: "halting_stack_independent_flag",
+    }),
   ].filter((child): child is ConfigSection => Boolean(child));
 }
 
 function deriveMemoryChildren(section: ConfigSection) {
   const memoryStackFields = stackScopedFields(section.fields, "memory_");
   return [
-    sectionWithFields("Memory Stack Options", memoryStackFields),
+    sectionWithFields("Memory Stack Options", memoryStackFields, {
+      controlFieldKey: "memory_stack_independent_flag",
+    }),
   ].filter((child): child is ConfigSection => Boolean(child));
 }
 
 function deriveGateChildren(section: ConfigSection) {
   const gateStackFields = stackScopedFields(section.fields, "gate_");
   return [
-    sectionWithFields("Gate Model Stack", gateStackFields),
+    sectionWithFields("Gate Model Stack", gateStackFields, {
+      controlFieldKey: "gate_stack_independent_flag",
+    }),
   ].filter((child): child is ConfigSection => Boolean(child));
 }
 
 function deriveRecurrentGateChildren(fields: ConfigField[]) {
   const recurrentGateStackFields = stackScopedFields(fields, "recurrent_gate_");
   return [
-    sectionWithFields("Recurrent Gate Model Stack", recurrentGateStackFields),
+    sectionWithFields("Recurrent Gate Model Stack", recurrentGateStackFields, {
+      controlFieldKey: "recurrent_gate_stack_independent_flag",
+    }),
   ].filter((child): child is ConfigSection => Boolean(child));
 }
 
@@ -333,7 +341,9 @@ function deriveRecurrentChildren(section: ConfigSection) {
     "recurrent_halting_",
   );
   const recurrentHaltingChildren = [
-    sectionWithFields("Recurrent Halting Stack Options", recurrentHaltingStackFields),
+    sectionWithFields("Recurrent Halting Stack Options", recurrentHaltingStackFields, {
+      controlFieldKey: "recurrent_halting_stack_independent_flag",
+    }),
   ].filter((child): child is ConfigSection => Boolean(child));
 
   return [

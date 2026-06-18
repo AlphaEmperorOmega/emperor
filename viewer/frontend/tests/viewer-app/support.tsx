@@ -3356,12 +3356,62 @@ export async function openTargetDropdown(
   return { control, listbox };
 }
 
+export async function selectSearchableDropdownOption(
+  user: ReturnType<typeof userEvent.setup>,
+  control: HTMLElement,
+  optionName: string | RegExp,
+  searchText?: string,
+) {
+  const root = control.parentElement;
+
+  if (!(root instanceof HTMLElement)) {
+    throw new Error("Expected searchable dropdown control to have a root element");
+  }
+
+  await user.click(control);
+  let listbox = await waitFor(() => {
+    const openListbox = within(root).queryByRole("listbox");
+    if (!openListbox) {
+      throw new Error("Dropdown is not open yet");
+    }
+    return openListbox;
+  }, { timeout: 150 }).catch(() => null);
+
+  if (!listbox) {
+    control.focus();
+    await user.keyboard("{Enter}");
+    listbox = await within(root).findByRole("listbox");
+  }
+
+  if (searchText) {
+    const search = await within(root).findByRole("searchbox");
+    await user.type(search, searchText);
+  }
+
+  await user.click(within(listbox).getByRole("option", { name: optionName }));
+  await waitFor(() => {
+    expect(within(root).queryByRole("listbox")).not.toBeInTheDocument();
+  });
+}
+
 export async function selectTargetOption(
   user: ReturnType<typeof userEvent.setup>,
   label: TargetDropdownLabel,
   optionName: string,
 ) {
-  const { control, listbox } = await openTargetDropdown(user, label);
+  const { control } = await openTargetDropdown(user, label);
+  const root = control.parentElement;
+
+  if (!(root instanceof HTMLElement)) {
+    throw new Error("Expected target dropdown control to have a root element");
+  }
+
+  const search = within(root).getByRole("searchbox");
+  await user.clear(search);
+  await user.type(search, optionName);
+  const listbox = within(root).getByRole("listbox", {
+    name: targetListboxName(label),
+  });
   await user.click(within(listbox).getByRole("option", { name: optionName }));
   await waitFor(() => {
     expect(screen.queryByRole("listbox", { name: targetListboxName(label) }))
