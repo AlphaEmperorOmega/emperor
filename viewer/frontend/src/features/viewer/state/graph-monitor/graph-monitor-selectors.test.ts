@@ -320,6 +320,34 @@ describe("viewer state selectors", () => {
     expect(state.visibleHistoricalRuns).toEqual([]);
   });
 
+  it("keeps the selected model run visible while monitor tags are loading", () => {
+    const state = deriveDatasetSelectionState({
+      logRuns: [
+        run({
+          id: "selected-run",
+          experiment: "exp_a",
+          dataset: "Mnist",
+          preset: "baseline",
+        }),
+      ],
+      modelRunTags: undefined,
+      selectedModel: "linear",
+      selectedHistoricalPreset: "",
+      selectedLogRunId: "selected-run",
+    });
+
+    expect(state.historicalPresetOptions).toEqual([]);
+    expect(state.visibleHistoricalRuns.map((item) => item.id)).toEqual([
+      "selected-run",
+    ]);
+    expect(state.selectedLogRun?.id).toBe("selected-run");
+    expect(state.selectedHistoricalExperiment).toBe("exp_a");
+    expect(state.selectedHistoricalDataset).toBe("Mnist");
+    expect(state.selectedHistoricalRunPreset).toBe("baseline");
+    expect(state.filteredHistoricalRuns).toEqual([]);
+    expect(state.filteredHistoricalRunIds).toEqual([]);
+  });
+
   it("derives graph monitor targets, comparison groups, and tag availability", () => {
     const graph = monitorGraph();
     const layer0 = graph.nodes.find((item) => item.id === "layer-0");

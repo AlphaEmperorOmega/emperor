@@ -137,6 +137,7 @@ export function useHistoricalRunsState({
     ],
   );
   const {
+    modelLogRuns,
     historicalPresetOptions,
     visibleHistoricalRuns,
     selectedHistoricalExperiment,
@@ -169,12 +170,21 @@ export function useHistoricalRunsState({
       setSelectedLogRunId(null);
       return;
     }
+    if (logRunsQuery.isLoading && !logRunsQuery.data) {
+      return;
+    }
     setSelectedLogRunId((current) =>
-      current && visibleHistoricalRuns.some((run) => run.id === current)
+      current && modelLogRuns.some((run) => run.id === current)
         ? current
         : null,
     );
-  }, [selectedModel, setSelectedLogRunId, visibleHistoricalRuns]);
+  }, [
+    logRunsQuery.data,
+    logRunsQuery.isLoading,
+    modelLogRuns,
+    selectedModel,
+    setSelectedLogRunId,
+  ]);
 
   useEffect(() => {
     if (!selectedModel || !selectedLogRun) {

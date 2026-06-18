@@ -102,29 +102,43 @@ export function deriveDatasetSelectionState(
   const eligibleRuns = modelLogRuns.filter((run) =>
     layerMonitorExperiments.has(run.experiment),
   );
+  const selectedModelLogRun = input.selectedLogRunId
+    ? modelLogRuns.find((run) => run.id === input.selectedLogRunId)
+    : undefined;
   // The preset filter ("" = all presets) only controls which runs are listed; it is
   // independent of the build/training preset selected under the model.
   const historicalPresetOptions = buildHistoricalPresetOptions(eligibleRuns);
-  const visibleHistoricalRuns = eligibleRuns.filter(
+  const filteredVisibleHistoricalRuns = eligibleRuns.filter(
     (run) =>
       !input.selectedHistoricalPreset || run.preset === input.selectedHistoricalPreset,
   );
+  const visibleHistoricalRuns =
+    selectedModelLogRun &&
+    !filteredVisibleHistoricalRuns.some((run) => run.id === selectedModelLogRun.id)
+      ? sortLogRunsNewestFirst([
+          ...filteredVisibleHistoricalRuns,
+          selectedModelLogRun,
+        ])
+      : filteredVisibleHistoricalRuns;
   // Selection drives everything downstream: the experiment/dataset labels and the
-  // monitor run group are derived from the picked run, so with nothing selected the
-  // charts stay empty.
-  const selectedLogRun = visibleHistoricalRuns.find(
-    (run) => run.id === input.selectedLogRunId,
-  );
+  // monitor run group are derived from the picked run. A selected run remains
+  // canonical even when tag loading or a visible-list filter temporarily hides it.
+  const selectedLogRun = selectedModelLogRun;
   const selectedHistoricalExperiment = selectedLogRun?.experiment ?? "";
   const selectedHistoricalDataset = selectedLogRun?.dataset ?? "";
   const selectedHistoricalRunPreset = selectedLogRun?.preset ?? "";
+  const selectedLogRunIsMonitorEligible = selectedLogRun
+    ? eligibleRuns.some((run) => run.id === selectedLogRun.id)
+    : false;
   const filteredHistoricalRuns = selectedLogRun
-    ? filterHistoricalRuns(
-        eligibleRuns,
-        selectedHistoricalExperiment,
-        selectedHistoricalDataset,
-        selectedHistoricalRunPreset,
-      )
+    ? selectedLogRunIsMonitorEligible
+      ? filterHistoricalRuns(
+          eligibleRuns,
+          selectedHistoricalExperiment,
+          selectedHistoricalDataset,
+          selectedHistoricalRunPreset,
+        )
+      : []
     : [];
   const historicalMonitorRuns = latestHistoricalMonitorRuns(filteredHistoricalRuns);
   const filteredHistoricalRunIds = filteredHistoricalRuns.map((run) => run.id);

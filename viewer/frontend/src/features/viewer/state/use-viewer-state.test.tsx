@@ -1042,6 +1042,64 @@ describe("useViewerState", () => {
     expect(mocks.inspectModel.mock.calls.length).toBe(requestCount);
   });
 
+  it("keeps a selected experiment run canonical when it is outside the visible preset filter", async () => {
+    mocks.fetchLogRuns.mockResolvedValueOnce({
+      runs: [
+        logRun({
+          id: "baseline-history",
+          preset: "baseline",
+          dataset: "Mnist",
+          timestamp: "2026-06-01 01:02:03",
+        }),
+        logRun({
+          id: "fast-history",
+          preset: "fast",
+          dataset: "FashionMnist",
+          timestamp: "2026-06-02 01:02:03",
+        }),
+      ],
+    });
+    const { result } = renderViewerState();
+
+    await waitFor(() => {
+      expect(result.current.history.visibleHistoricalRuns.map((run) => run.id))
+        .toEqual(["fast-history", "baseline-history"]);
+    });
+
+    act(() => {
+      result.current.history.setSelectedHistoricalPreset("baseline");
+    });
+
+    await waitFor(() => {
+      expect(result.current.history.visibleHistoricalRuns.map((run) => run.id))
+        .toEqual(["baseline-history"]);
+    });
+
+    mocks.inspectModel.mockClear();
+    act(() => {
+      result.current.history.selectLogRun("fast-history");
+    });
+
+    await waitFor(() => {
+      expect(result.current.history.selectedLogRunId).toBe("fast-history");
+      expect(result.current.target.selectedTargetMode).toBe("experiment");
+      expect(result.current.target.selectedExperimentRunId).toBe("fast-history");
+      expect(result.current.target.selectedPreset).toBe("fast");
+      expect(result.current.target.selectedTrainingPresets).toEqual(["fast"]);
+      expect(result.current.target.selectedDatasets).toEqual(["FashionMnist"]);
+    });
+    expect(result.current.history.visibleHistoricalRuns.map((run) => run.id))
+      .toEqual(["fast-history", "baseline-history"]);
+    expect(mocks.inspectModel.mock.calls.map(([request]) => request))
+      .toContainEqual({
+        modelType: "linears",
+        model: "linear",
+        preset: "fast",
+        dataset: "FashionMnist",
+        overrides: {},
+      });
+  });
+
   it("switches from an experiment target back to a preset target with empty overrides", async () => {
     mocks.fetchLogRuns.mockResolvedValueOnce({
       runs: [
