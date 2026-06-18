@@ -289,6 +289,9 @@ export function useTrainingJobController({
       !createMutation.isPending,
   );
   const displayedRunCount = draftRunPlanSummary?.totalRuns ?? plannedRunCount;
+  const requiresLargeGridConfirmation =
+    trainingSearch.mode === "grid" &&
+    displayedRunCount > LARGE_GRID_RUN_THRESHOLD;
   const canResampleRunPlan = Boolean(
     trainingSearch.mode === "random" &&
       !submittedRunPlan &&
@@ -330,10 +333,7 @@ export function useTrainingJobController({
     if (!request) {
       return;
     }
-    if (
-      trainingSearch.mode === "grid" &&
-      displayedRunCount > LARGE_GRID_RUN_THRESHOLD
-    ) {
+    if (requiresLargeGridConfirmation) {
       setPendingTrainingRequest(request);
       return;
     }
@@ -378,6 +378,7 @@ export function useTrainingJobController({
     isStarting: createMutation.isPending,
     isCancelling: cancelMutation.isPending,
     trainingError,
+    requiresLargeGridConfirmation,
     showLargeGridConfirmation: pendingTrainingRequest !== null,
     startTraining,
     confirmLargeGridSearch,

@@ -1,0 +1,352 @@
+import { useMemo, useState } from "react";
+import { AlertTriangle, FolderOpen, RefreshCw, Terminal, X } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/icon-button";
+import { InlineStatus } from "@/features/viewer/components/shared/inline-status";
+import { TrainingRunActionDialogs } from "@/features/viewer/components/training/training-run-action-dialogs";
+import {
+  formatTrainingMetricsText,
+  getTrainingRunDraftRemoval,
+  trainingRunStatusMeta,
+} from "@/features/viewer/components/training/training-run-display";
+import { type TrainingRun, type TrainingRunPlan } from "@/lib/api";
+import { cn } from "@/lib/utils";
+
+const COMPACT_RUN_LIMIT = 160;
+const COMPACT_CHANGE_LIMIT = 4;
+
+function epochText(run: TrainingRun) {
+  return `${run.currentEpoch} / ${run.totalEpochs || "-"} epochs`;
+}
+
+function visibleRuns(runs: TrainingRun[]) {
+  const keep = new Set(runs.slice(0, COMPACT_RUN_LIMIT).map((run) => run.id));
+  for (const run of runs) {
+    if (
+      run.status === "Running" ||
+      run.status === "Failed" ||
+      run.status === "Cancelled"
+    ) {
+      keep.add(run.id);
+    }
+  }
+  return runs.filter((run) => keep.has(run.id));
+}
+
+function RunChangePills({ run }: { run: TrainingRun }) {
+  if (run.changes.length === 0) {
+    return <span className="font-mono text-xs text-ink-faint">No changes</span>;
+  }
+
+  const visibleChanges = run.changes.slice(0, COMPACT_CHANGE_LIMIT);
+  const hiddenCount = run.changes.length - visibleChanges.length;
+
+  return (
+    <div className="flex min-w-0 flex-wrap gap-1.5">
+      {visibleChanges.map((change) => (
+        <Badge
+          key={`${change.source}-${change.key}-${String(change.value)}`}
+          variant={change.source === "search" ? "violet" : "default"}
+          className="max-w-[11rem]"
+          title={`${change.label}: ${String(change.value)}`}
+        >
+          <span className="truncate">
+            {change.key}={String(change.value)}
+          </span>
+        </Badge>
+      ))}
+      {hiddenCount > 0 && <Badge>+{hiddenCount}</Badge>}
+    </div>
+  );
+}
+
+function RunStatus({ run }: { run: TrainingRun }) {
+  const meta = trainingRunStatusMeta[run.status];
+  const Icon = meta.icon;
+
+  return (
+    <span
+      className={cn(
+        "inline-flex h-7 items-center gap-1.5 rounded-[7px] border px-2 font-mono text-xs font-bold",
+        meta.className,
+      )}
+      title={meta.tooltip}
+    >
+      <Icon className={cn("h-3.5 w-3.5", meta.iconClassName)} aria-hidden />
+      {run.status}
+    </span>
+  );
+}
+
+function RunActions({
+  canManageDraftRuns,
+  onCommand,
+  onExcludePreset,
+  onExcludeSnapshot,
+  onFullError,
+  run,
+}: {
+  canManageDraftRuns: boolean;
+  onCommand: (run: TrainingRun) => void;
+  onFullError: (run: TrainingRun) => void;
+  onExcludePreset?: (preset: string) => void;
+  onExcludeSnapshot?: (snapshotId: string) => void;
+  run: TrainingRun;
+}) {
+  const fullError = run.errorTraceback || run.error;
+  const draftRemoval = getTrainingRunDraftRemoval({
+    run,
+    canManageDraftRuns,
+    onExcludePreset,
+    onExcludeSnapshot,
+  });
+
+  return (
+    <div className="flex shrink-0 items-center gap-1.5">
+      {run.logDir && (
+        <IconButton
+          label={`Copy log path for run ${run.index}`}
+          icon={<FolderOpen className="h-3.5 w-3.5" aria-hidden />}
+          size="sm"
+          variant="edge"
+          className="h-8 w-8 rounded-[7px] border-ok/30 bg-ok/10 text-ok hover:bg-ok/15"
+          onClick={() => {
+            void navigator.clipboard?.writeText(run.logDir ?? "");
+          }}
+        />
+      )}
+      {fullError && (
+        <IconButton
+          label={`Full error for run ${run.index}`}
+          icon={<AlertTriangle className="h-3.5 w-3.5" aria-hidden />}
+          size="sm"
+          variant="danger"
+          className="h-8 w-8 rounded-[7px]"
+          onClick={() => onFullError(run)}
+        />
+      )}
+      <IconButton
+        label={`Command for run ${run.index}`}
+        icon={<Terminal className="h-3.5 w-3.5" aria-hidden />}
+        size="sm"
+        variant="edge"
+        className="h-8 w-8 rounded-[7px]"
+        onClick={() => onCommand(run)}
+      />
+      {draftRemoval && (
+        <IconButton
+          label={draftRemoval.label}
+          icon={<X className="h-3.5 w-3.5" aria-hidden />}
+          size="sm"
+          variant="ghost"
+          className="h-8 w-8 rounded-[7px] text-ink-faint hover:border-danger-line hover:bg-danger-soft hover:text-danger-text"
+          onClick={draftRemoval.remove}
+        />
+      )}
+    </div>
+  );
+}
+
+function TrainingCompactRunRow({
+  canManageDraftRuns,
+  onCommand,
+  onExcludePreset,
+  onExcludeSnapshot,
+  onFullError,
+  run,
+}: {
+  canManageDraftRuns: boolean;
+  onCommand: (run: TrainingRun) => void;
+  onFullError: (run: TrainingRun) => void;
+  onExcludePreset?: (preset: string) => void;
+  onExcludeSnapshot?: (snapshotId: string) => void;
+  run: TrainingRun;
+}) {
+  const metrics = formatTrainingMetricsText(run.metrics, 3);
+  const snapshotLabel = run.snapshotName ?? run.snapshotId ?? "";
+
+  return (
+    <article className="grid min-w-0 gap-2 border-b border-line-soft px-3 py-2.5 last:border-b-0">
+      <div className="grid min-w-0 gap-2 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-start">
+        <div className="flex min-w-0 items-center gap-2">
+          <Badge className="shrink-0">#{run.index}</Badge>
+          <RunStatus run={run} />
+        </div>
+        <div className="grid min-w-0 gap-1">
+          <div className="grid min-w-0 gap-1 font-mono text-xs text-ink sm:grid-cols-[minmax(0,1.1fr)_minmax(0,0.95fr)]">
+            <span className="truncate" title={run.preset}>
+              {run.preset}
+            </span>
+            <span className="truncate text-ink-dim" title={run.dataset}>
+              {run.dataset}
+            </span>
+          </div>
+          {snapshotLabel && (
+            <span
+              className="truncate font-mono text-[11px] text-violet-muted"
+              title={snapshotLabel}
+            >
+              {snapshotLabel}
+            </span>
+          )}
+        </div>
+        <RunActions
+          run={run}
+          onCommand={onCommand}
+          onFullError={onFullError}
+          canManageDraftRuns={canManageDraftRuns}
+          onExcludePreset={onExcludePreset}
+          onExcludeSnapshot={onExcludeSnapshot}
+        />
+      </div>
+
+      <div className="grid min-w-0 gap-2 text-xs md:grid-cols-[minmax(0,1fr)_minmax(8rem,0.45fr)_minmax(0,0.85fr)] md:items-center">
+        <RunChangePills run={run} />
+        <span className="whitespace-nowrap font-mono text-violet-muted">
+          {epochText(run)}
+        </span>
+        <span className="truncate font-mono text-ink-dim" title={metrics}>
+          {metrics}
+        </span>
+      </div>
+
+      {run.error && (
+        <button
+          type="button"
+          onClick={() => onFullError(run)}
+          className="min-w-0 truncate rounded-[7px] border border-danger-line bg-danger-soft px-2 py-1 text-left text-xs font-semibold text-danger-text transition hover:bg-danger-hover/40 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          title={run.errorTraceback ?? run.error}
+        >
+          {run.error}
+        </button>
+      )}
+    </article>
+  );
+}
+
+export function TrainingCompactRunList({
+  plan,
+  isLoading = false,
+  error = "",
+  canResample = false,
+  isResampling = false,
+  onResample,
+  canManageDraftRuns = false,
+  onExcludePreset,
+  onExcludeSnapshot,
+}: {
+  plan?: TrainingRunPlan;
+  isLoading?: boolean;
+  error?: string;
+  canResample?: boolean;
+  isResampling?: boolean;
+  onResample?: () => void;
+  canManageDraftRuns?: boolean;
+  onExcludePreset?: (preset: string) => void;
+  onExcludeSnapshot?: (snapshotId: string) => void;
+}) {
+  const [commandRun, setCommandRun] = useState<TrainingRun | null>(null);
+  const [errorRun, setErrorRun] = useState<TrainingRun | null>(null);
+  const runs = useMemo(() => visibleRuns(plan?.runs ?? []), [plan?.runs]);
+  const hiddenRunCount = Math.max(0, (plan?.runs.length ?? 0) - runs.length);
+
+  return (
+    <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-[10px] border border-line bg-black/10">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-b border-line-soft px-3 py-2">
+        <div className="grid min-w-0 gap-0.5">
+          <h3 className="text-xs font-bold uppercase tracking-[0.08em] text-ink-faint">
+            Training Runs
+          </h3>
+          <span className="truncate font-mono text-xs text-ink-dim">
+            {plan?.model ?? "No model"}
+            {plan?.preset ? ` / ${plan.preset}` : ""}
+          </span>
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+          {canResample && (
+            <Button
+              variant="secondary"
+              onClick={onResample}
+              disabled={isResampling || !onResample}
+              className="h-8 px-2 text-xs"
+            >
+              <RefreshCw
+                className={
+                  isResampling ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"
+                }
+                aria-hidden
+              />
+              Resample
+            </Button>
+          )}
+          {plan ? (
+            <>
+              <Badge>{plan.summary.totalRuns} runs</Badge>
+              <Badge variant={plan.summary.runningRuns > 0 ? "violet" : "default"}>
+                {plan.summary.runningRuns} running
+              </Badge>
+              <Badge
+                variant={plan.summary.completedRuns > 0 ? "success" : "default"}
+              >
+                {plan.summary.completedRuns} done
+              </Badge>
+              {(plan.summary.failedRuns > 0 ||
+                plan.summary.cancelledRuns > 0) && (
+                <Badge variant="danger">
+                  {plan.summary.failedRuns + plan.summary.cancelledRuns} stopped
+                </Badge>
+              )}
+            </>
+          ) : (
+            <Badge>No plan</Badge>
+          )}
+        </div>
+      </div>
+
+      <div className="min-h-0 overflow-y-auto">
+        {error ? (
+          <InlineStatus tone="danger" compact role="alert" className="m-3">
+            {error}
+          </InlineStatus>
+        ) : isLoading ? (
+          <InlineStatus busy compact className="m-3">
+            Planning training runs
+          </InlineStatus>
+        ) : !plan || plan.runs.length === 0 ? (
+          <InlineStatus compact className="m-3">
+            No training runs planned
+          </InlineStatus>
+        ) : (
+          <>
+            {runs.map((run) => (
+              <TrainingCompactRunRow
+                key={run.id}
+                run={run}
+                onCommand={setCommandRun}
+                onFullError={setErrorRun}
+                canManageDraftRuns={canManageDraftRuns}
+                onExcludePreset={onExcludePreset}
+                onExcludeSnapshot={onExcludeSnapshot}
+              />
+            ))}
+            {hiddenRunCount > 0 && (
+              <div className="border-t border-line-soft px-3 py-3 text-center text-xs text-ink-faint">
+                Showing {runs.length} of {plan.runs.length} planned runs.
+                Running, failed, and cancelled rows stay visible.
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      <TrainingRunActionDialogs
+        plan={plan}
+        commandRun={commandRun}
+        errorRun={errorRun}
+        onCloseCommand={() => setCommandRun(null)}
+        onCloseError={() => setErrorRun(null)}
+      />
+    </div>
+  );
+}

@@ -3597,18 +3597,7 @@ export async function selectTrainingTargetOption(
   const control = within(details).getByRole("combobox", {
     name: new RegExp(`^training ${label}$`, "i"),
   });
-  await user.click(control);
-  const listbox = await within(details).findByRole("listbox", {
-    name: new RegExp(`^training ${label} options$`, "i"),
-  });
-  await user.click(within(listbox).getByRole("option", { name: optionName }));
-  await waitFor(() => {
-    expect(
-      within(details).queryByRole("listbox", {
-        name: new RegExp(`^training ${label} options$`, "i"),
-      }),
-    ).not.toBeInTheDocument();
-  });
+  await selectSearchableDropdownOption(user, control, optionName, optionName);
   return control;
 }
 
@@ -3691,7 +3680,35 @@ export async function selectExistingTrainingLogFolder(
   name = "test_model",
 ) {
   await expandTrainingPanel(user);
-  await user.selectOptions(screen.getByLabelText(/^log experiment folder$/i), name);
+  const control = screen.getByRole("combobox", {
+    name: /^log experiment folder$/i,
+  });
+  await user.click(control);
+  const listbox = await screen.findByRole("listbox", {
+    name: /^log experiment folder options$/i,
+  });
+  const root = control.parentElement;
+
+  if (!(root instanceof HTMLElement)) {
+    throw new Error("Expected log folder dropdown control to have a root element");
+  }
+
+  const search = within(root).getByRole("searchbox");
+  await user.clear(search);
+  await user.type(search, name);
+  const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  await user.click(
+    within(listbox).getByRole("option", {
+      name: new RegExp(`^${escapedName}\\s*\\(`),
+    }),
+  );
+  await waitFor(() => {
+    expect(
+      screen.queryByRole("listbox", {
+        name: /^log experiment folder options$/i,
+      }),
+    ).not.toBeInTheDocument();
+  });
 }
 
 export function fullConfigSectionGridFor(accordion: HTMLElement) {

@@ -145,6 +145,18 @@ async function waitForTargetTrainingInputs(onReady: () => void) {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+function trainingRunList(details: HTMLElement) {
+  return within(details).getByRole("main", {
+    name: "Training Run List",
+  });
+}
+
+async function findTrainingRunSummary(name: RegExp) {
+  return screen.findByRole("status", {
+    name,
+  });
+}
+
 describe("ViewerApp Training And Preview", () => {
   beforeEach(resetViewerAppTestState);
 
@@ -331,106 +343,56 @@ describe("ViewerApp Training And Preview", () => {
     ).toBeDisabled();
   });
 
-  it("expanded training panel shows the flattened setup flow in order", async () => {
+  it("expanded training panel shows the three-zone setup, run list, and status layout", async () => {
     installFetchMock();
     renderViewer();
     const user = userEvent.setup();
 
     const details = await expandedTrainingDetailsWithConfig(user);
-    const footerFieldBoxClasses = [
-      "grid",
-      "content-start",
-      "gap-1.5",
-      "rounded-[10px]",
-      "border",
-      "border-line",
-      "bg-white/[0.018]",
-      "px-2.5",
-      "py-2",
-    ];
-    const footerFieldGridClasses = [
-      "grid",
-      "gap-3",
-      "sm:grid-cols-2",
-      "xl:grid-cols-3",
-    ];
-    const footerFieldHeaderClasses = [
-      "flex",
-      "min-h-[38px]",
-      "flex-wrap",
-      "items-center",
-      "justify-between",
-      "gap-2",
-    ];
-    const footerIconClasses = ["h-[15px]", "w-[15px]", "text-violet"];
-    function expectBoxedField(element: HTMLElement) {
-      expect(element).toHaveClass(...footerFieldBoxClasses);
-    }
-    function expectFieldHeader(element: HTMLElement) {
-      const header = element.parentElement;
-      if (!(header instanceof HTMLElement)) {
-        throw new Error("Expected field heading to render inside a header row");
-      }
-      expect(header).toHaveClass(...footerFieldHeaderClasses);
-      return header;
-    }
-    function closestWithClasses(element: HTMLElement, classNames: string[]) {
-      let current: HTMLElement | null = element;
-      while (current && current !== details) {
-        const candidate = current;
-        if (
-          classNames.every((className) => candidate.classList.contains(className))
-        ) {
-          return candidate;
-        }
-        current = current.parentElement;
-      }
-      return null;
-    }
-    function closestFooterFieldBox(element: HTMLElement) {
-      const fieldBox = closestWithClasses(element, footerFieldBoxClasses);
-      if (!fieldBox) {
-        throw new Error("Expected control to render inside a footer field box");
-      }
-      return fieldBox;
-    }
-    function expectHeadingIcon(label: string) {
-      const heading = within(details)
-        .getAllByText(label)
-        .find((element) => element.className.includes("uppercase"));
-      if (!heading) {
-        throw new Error(`Expected ${label} heading to render`);
-      }
-      const icon = heading.querySelector("svg");
-      if (!(icon instanceof SVGElement)) {
-        throw new Error(`Expected ${label} heading to render an icon`);
-      }
-      expect(icon).toHaveClass(...footerIconClasses);
-      return heading;
-    }
 
-    const modelHeading = expectHeadingIcon("Model");
-    const presetsHeading = expectHeadingIcon("Presets");
-    const modelSelector = within(details).getByRole("combobox", {
+    const setupSidebar = within(details).getByRole("complementary", {
+      name: "Training Setup Sidebar",
+    });
+    const runList = within(details).getByRole("main", {
+      name: "Training Run List",
+    });
+    const statusSidebar = within(details).getByRole("complementary", {
+      name: "Training Status Sidebar",
+    });
+    expect(
+      within(details).queryByRole("tablist", {
+        name: "Training footer sections",
+      }),
+    ).not.toBeInTheDocument();
+
+    expect(within(setupSidebar).getByText("Log Folder")).toBeInTheDocument();
+    expect(within(setupSidebar).getByText("Target")).toBeInTheDocument();
+    expect(within(setupSidebar).getByText("Variants")).toBeInTheDocument();
+    expect(within(setupSidebar).getByText("Datasets")).toBeInTheDocument();
+    expect(within(setupSidebar).getByText("Signals")).toBeInTheDocument();
+    expect(within(setupSidebar).getByText("Overrides")).toBeInTheDocument();
+    expect(within(setupSidebar).getByText("Grid Search")).toBeInTheDocument();
+
+    const modelSelector = within(setupSidebar).getByRole("combobox", {
       name: /^training model$/i,
     });
-    const presetSelector = within(details).getByRole("combobox", {
+    const presetSelector = within(setupSidebar).getByRole("combobox", {
       name: /^presets\s+1\s*\/\s*2 selected$/i,
     });
-    const datasetsHeading = expectHeadingIcon("Datasets");
-    const monitorsHeading = expectHeadingIcon("Monitors");
-    const gridSearchHeading = expectHeadingIcon("Grid Search");
-    const searchModeControl = within(details).getByRole("tablist", {
+    const datasetSelector = within(setupSidebar).getByRole("combobox", {
+      name: /^training datasets\s+1\s*\/\s*2 selected$/i,
+    });
+    const monitorSelector = within(setupSidebar).getByRole("combobox", {
+      name: /^training monitors\s+0\s*\/\s*2 selected$/i,
+    });
+    const searchModeControl = within(setupSidebar).getByRole("tablist", {
       name: /training search mode/i,
     });
-    const logFolderSelect = within(details).getByLabelText("Log experiment folder");
-    const logFolderField = closestFooterFieldBox(logFolderSelect);
-    const logFolderModeControl = within(details).getByRole("tablist", {
-      name: /log folder mode/i,
+    const logFolderSelector = within(setupSidebar).getByRole("combobox", {
+      name: "Log experiment folder",
     });
-    const modelField = closestFooterFieldBox(modelSelector);
-    const presetField = closestFooterFieldBox(presetSelector);
-    const trainingConfigSelector = within(presetField).getByRole("tablist", {
+    expect(logFolderSelector.tagName).toBe("BUTTON");
+    const trainingConfigSelector = within(setupSidebar).getByRole("tablist", {
       name: /training config selector/i,
     });
     const presetsTab = within(trainingConfigSelector).getByRole("tab", {
@@ -441,118 +403,73 @@ describe("ViewerApp Training And Preview", () => {
     });
     expect(presetsTab).toHaveAttribute("aria-selected", "true");
     expect(snapshotsTab).toHaveAttribute("aria-selected", "false");
-    const trainingConfigPanel = within(presetField).getByRole("tabpanel", {
+    const trainingConfigPanel = within(setupSidebar).getByRole("tabpanel", {
       name: "Presets",
     });
-    const snapshotsTrainingConfigPanelId =
-      snapshotsTab.getAttribute("aria-controls");
-    if (!snapshotsTrainingConfigPanelId) {
-      throw new Error("Expected Snapshots tab to control a tabpanel");
-    }
-    const snapshotsTrainingConfigPanel = document.getElementById(
-      snapshotsTrainingConfigPanelId,
-    );
-    if (!(snapshotsTrainingConfigPanel instanceof HTMLElement)) {
-      throw new Error("Expected Snapshots tabpanel to render in the document");
-    }
-    expect(snapshotsTrainingConfigPanel).toHaveAttribute("role", "tabpanel");
     expect(presetsTab).toHaveAttribute(
       "aria-controls",
       trainingConfigPanel.id,
     );
-    expect(snapshotsTab).toHaveAttribute(
-      "aria-controls",
-      snapshotsTrainingConfigPanel.id,
-    );
-    const datasetSelector = within(details).getByRole("combobox", {
-      name: /^training datasets\s+1\s*\/\s*2 selected$/i,
-    });
-    const datasetBox = closestFooterFieldBox(datasetSelector);
-    const monitorSelector = within(details).getByRole("combobox", {
-      name: /^training monitors\s+0\s*\/\s*2 selected$/i,
-    });
-    const monitorBox = closestFooterFieldBox(monitorSelector);
-    const fullConfigButton = trainingFullConfigButton(details);
-    const configAction = closestFooterFieldBox(fullConfigButton);
-    const configHeading = within(configAction).getByText(/^Overrides$/);
-    const configHeadingIcon = configHeading.querySelector("svg");
-    if (!(configHeadingIcon instanceof SVGElement)) {
-      throw new Error("Expected Config action heading to render an icon");
-    }
-    expect(configHeadingIcon).toHaveClass(...footerIconClasses);
-    const resetButton = within(configAction).getByRole("button", { name: /^reset$/i });
-    const searchBox = closestFooterFieldBox(searchModeControl);
-    const fieldGrid = closestWithClasses(logFolderField, footerFieldGridClasses);
-    if (!fieldGrid) {
-      throw new Error("Expected setup fields to render inside the footer field grid");
-    }
-    const fieldGridItems = Array.from(fieldGrid.children);
+    const fullConfigButton = trainingFullConfigButton(setupSidebar);
+    const resetButton = within(setupSidebar).getByRole("button", { name: /^reset$/i });
 
-    function expectBefore(before: HTMLElement, after: HTMLElement) {
-      expect(
-        before.compareDocumentPosition(after) &
-          Node.DOCUMENT_POSITION_FOLLOWING,
-      ).toBeTruthy();
-    }
-
-    expectBefore(modelHeading, modelSelector);
-    expectBefore(modelSelector, presetSelector);
-    expectBefore(presetsHeading, presetSelector);
-    expectBefore(presetSelector, datasetsHeading);
-    expectBefore(datasetsHeading, monitorsHeading);
-    expectBefore(monitorsHeading, monitorSelector);
-    expectBefore(monitorSelector, configHeading);
-    expectBefore(configHeading, fullConfigButton);
-    expectBefore(fullConfigButton, gridSearchHeading);
-    expect(fieldGrid).toHaveClass(...footerFieldGridClasses);
-    expect(fieldGridItems).toHaveLength(6);
-    expect(fieldGridItems[0]).toContainElement(logFolderField);
-    expect(fieldGridItems[1]).toContainElement(modelSelector);
-    expect(fieldGridItems[2]).toContainElement(presetSelector);
-    expect(fieldGridItems[3]).toContainElement(datasetSelector);
-    expect(fieldGridItems[4]).toContainElement(monitorSelector);
-    expect(fieldGridItems[5]).toBe(configAction);
-    expect(configAction).toContainElement(fullConfigButton);
     expect(fullConfigButton).toHaveAttribute("aria-label", "Open Full Config");
     expect(fullConfigButton).toHaveTextContent(/^Config$/);
-    expectBoxedField(logFolderField);
-    expectBoxedField(modelField);
-    expectBoxedField(presetField);
-    expectBoxedField(datasetBox);
-    expectBoxedField(monitorBox);
-    expectBoxedField(configAction);
-    expectBoxedField(searchBox);
-    expectFieldHeader(modelHeading);
-    expectFieldHeader(presetsHeading);
-    expectFieldHeader(datasetsHeading);
-    expectFieldHeader(monitorsHeading);
-    expectFieldHeader(configHeading);
-    expectFieldHeader(gridSearchHeading);
-    expect(closestWithClasses(fullConfigButton, footerFieldBoxClasses)).toBe(configAction);
-    expect(searchBox).toContainElement(gridSearchHeading);
-    expect(searchBox).toContainElement(searchModeControl);
-    expect(fieldGrid).not.toContainElement(searchBox);
-    expect(closestFooterFieldBox(logFolderModeControl)).toBe(logFolderField);
-    expect(closestFooterFieldBox(trainingConfigSelector)).toBe(presetField);
-    expect(presetField).toContainElement(trainingConfigSelector);
-    expect(presetField).toContainElement(trainingConfigPanel);
-    expect(presetField).toContainElement(snapshotsTrainingConfigPanel);
-    expect(trainingConfigPanel).toContainElement(presetSelector);
-    expect(logFolderField).toContainElement(logFolderModeControl);
-    expect(logFolderField).toContainElement(
-      within(logFolderField).getByRole("combobox", {
-        name: "Log experiment folder",
-      }),
-    );
-    const activeLogFolderLabel = within(logFolderField).getByText("Existing folder", {
-      selector: "span",
+    expect(setupSidebar).toContainElement(searchModeControl);
+    expect(within(details).queryByText(/^Request$/)).not.toBeInTheDocument();
+    expect(await within(runList).findByText("Training Runs")).toBeInTheDocument();
+    expect(within(runList).getByText("#1")).toBeInTheDocument();
+    expect(within(runList).getAllByText("baseline").length).toBeGreaterThan(0);
+    expect(within(runList).getByText("Mnist")).toBeInTheDocument();
+    expect(
+      within(runList).getByRole("button", { name: /command for run 1/i }),
+    ).toBeInTheDocument();
+    expect(within(statusSidebar).getByText("Run Plan")).toBeInTheDocument();
+    expect(await within(statusSidebar).findByText("1 planned run"))
+      .toBeInTheDocument();
+    expect(within(statusSidebar).getByText("30 epochs")).toBeInTheDocument();
+    expect(within(statusSidebar).getByText("30 left")).toBeInTheDocument();
+    expect(within(statusSidebar).getByText("Next run")).toBeInTheDocument();
+    expect(
+      within(statusSidebar).queryByTitle(
+        "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist",
+      ),
+    ).not.toBeInTheDocument();
+    expect(within(statusSidebar).queryByText("Preview runs")).not.toBeInTheDocument();
+    expect(within(statusSidebar).getByText("Log Tail")).toBeInTheDocument();
+    expect(within(statusSidebar).getByText("0 lines")).toBeInTheDocument();
+    expect(within(statusSidebar).getByText("No log output yet")).toBeInTheDocument();
+
+    const logFolderDropdown = within(setupSidebar).getByRole("combobox", {
+      name: "Log experiment folder",
     });
-    const activeLogFolderIcon = activeLogFolderLabel.querySelector("svg");
-    if (!(activeLogFolderIcon instanceof SVGElement)) {
-      throw new Error("Expected active log folder field label to render an icon");
-    }
-    expect(activeLogFolderIcon).toHaveClass(...footerIconClasses);
-    expectFieldHeader(activeLogFolderLabel);
+    expect(logFolderDropdown).toBe(logFolderSelector);
+    expect(setupSidebar.querySelector("select[aria-label='Log experiment folder']"))
+      .not.toBeInTheDocument();
+    expect(logFolderDropdown).toHaveTextContent("Select folder");
+    await user.click(logFolderDropdown);
+    const logFolderList = await within(setupSidebar).findByRole("listbox", {
+      name: "Log experiment folder options",
+    });
+    expect(
+      within(logFolderList).getByRole("option", {
+        name: "test_model (1 runs)",
+      }),
+    ).toHaveAttribute("aria-selected", "false");
+    expect(
+      within(logFolderList).getByRole("option", {
+        name: "test_model_2 (1 runs)",
+      }),
+    ).toHaveAttribute("aria-selected", "false");
+    await user.keyboard("{Escape}");
+    await waitFor(() => {
+      expect(
+        within(setupSidebar).queryByRole("listbox", {
+          name: "Log experiment folder options",
+        }),
+      ).not.toBeInTheDocument();
+    });
+
     expect(within(details).queryByText("Experiment Setup")).not.toBeInTheDocument();
     expect(
       within(details).queryByRole("combobox", { name: /^training preset$/i }),
@@ -563,20 +480,23 @@ describe("ViewerApp Training And Preview", () => {
       within(details).getAllByRole("combobox", { name: /^presets\b/i }),
     ).toHaveLength(1);
     expect(datasetSelector).toHaveTextContent("Mnist");
-    expect(within(details).getByRole("button", { name: /^Primary only$/i }))
+    expect(within(setupSidebar).getByRole("button", { name: /^Primary only$/i }))
       .toBeInTheDocument();
-    expect(monitorBox).toContainElement(monitorSelector);
-    expect(within(monitorBox).getByText("0 / 2")).toBeInTheDocument();
-    expect(within(monitorBox).queryByRole("button", { name: /^(all|none)$/i }))
+    expect(setupSidebar).toContainElement(monitorSelector);
+    expect(within(setupSidebar).getByText("0 / 2")).toBeInTheDocument();
+    const signalsSection = monitorSelector.closest("section");
+    if (!(signalsSection instanceof HTMLElement)) {
+      throw new Error("Expected monitor selector to render inside Signals");
+    }
+    expect(within(signalsSection).queryByRole("button", { name: /^(all|none)$/i }))
       .not.toBeInTheDocument();
-    expect(within(details).queryByLabelText(/monitor Linear layers/i))
+    expect(within(setupSidebar).queryByLabelText(/monitor Linear layers/i))
       .not.toBeInTheDocument();
     expect(within(details).queryByText(/^Metrics$/)).not.toBeInTheDocument();
-    expect(within(details).queryByText(/^Runs$/)).not.toBeInTheDocument();
 
     const { listbox: datasetList } = await openTrainingMultiSelect(
       user,
-      details,
+      setupSidebar,
       "Training datasets",
     );
     expect(within(datasetList).getByRole("option", { name: /Mnist/i }))
@@ -585,26 +505,21 @@ describe("ViewerApp Training And Preview", () => {
       .toHaveAttribute("aria-selected", "false");
     await user.keyboard("{Escape}");
 
-    const allDatasetsButton = within(datasetBox).getByRole("button", { name: /^All$/i });
-    const firstDatasetButton = within(datasetBox).getByRole("button", {
+    const firstDatasetButton = within(setupSidebar).getByRole("button", {
       name: /^First$/i,
     });
-    expect(datasetBox).toContainElement(allDatasetsButton);
-    expect(datasetBox).toContainElement(firstDatasetButton);
+    const allDatasetsButton = within(setupSidebar)
+      .getAllByRole("button", { name: /^All$/i })
+      .find((button) => button.parentElement === firstDatasetButton.parentElement);
+    if (!(allDatasetsButton instanceof HTMLElement)) {
+      throw new Error("Expected dataset All button to render near First");
+    }
     expect(allDatasetsButton.parentElement).toBe(firstDatasetButton.parentElement);
     expect(allDatasetsButton.parentElement).toHaveClass("grid", "grid-cols-2", "gap-2");
-    expect(allDatasetsButton).toHaveClass("h-9", "text-[13px]");
-    expect(firstDatasetButton).toHaveClass(
-      "h-9",
-      "border",
-      "border-line",
-      "bg-white/[0.025]",
-      "text-[13px]",
-    );
     await user.click(allDatasetsButton);
     await waitFor(() => {
       expect(
-        within(details).getByRole("combobox", {
+        within(setupSidebar).getByRole("combobox", {
           name: /^training datasets\s+2\s*\/\s*2 selected$/i,
         }),
       ).toBeInTheDocument();
@@ -612,67 +527,46 @@ describe("ViewerApp Training And Preview", () => {
     await user.click(firstDatasetButton);
     await waitFor(() => {
       expect(
-        within(details).getByRole("combobox", {
+        within(setupSidebar).getByRole("combobox", {
           name: /^training datasets\s+1\s*\/\s*2 selected$/i,
         }),
       ).toBeInTheDocument();
     });
-    expect(within(details).getAllByText(/^Overrides$/)).toHaveLength(1);
-    expect(within(details).getAllByText("0 overrides").length).toBeGreaterThan(0);
-    expect(within(details).getAllByText("4 fields").length).toBeGreaterThan(0);
-    expect(configAction).toContainElement(configHeading);
-    expect(within(configAction).getByText("4 fields")).toBeInTheDocument();
-    expect(within(configAction).getByText("0 overrides")).toBeInTheDocument();
+    expect(within(setupSidebar).getAllByText(/^Overrides$/)).toHaveLength(1);
+    expect(within(setupSidebar).getAllByText("0 overrides").length)
+      .toBeGreaterThan(0);
+    expect(within(setupSidebar).getAllByText("4 fields").length)
+      .toBeGreaterThan(0);
     expect(resetButton).toBeDisabled();
     expect(fullConfigButton).toBeEnabled();
-    expect(closestWithClasses(resetButton, [
-      "edge",
-      "grid",
-      "gap-2",
-      "rounded-card",
-      "p-3",
-    ])).toBeNull();
-    expect(within(configAction).queryByText("Config fields")).not.toBeInTheDocument();
+    expect(within(setupSidebar).queryByText("Config fields")).not.toBeInTheDocument();
     expect(
-      within(details).queryByRole("combobox", { name: /search config fields/i }),
+      within(setupSidebar).queryByRole("combobox", { name: /search config fields/i }),
     ).not.toBeInTheDocument();
     expect(
-      within(details).queryByRole("navigation", { name: /training override sections/i }),
+      within(setupSidebar).queryByRole("navigation", { name: /training override sections/i }),
     ).not.toBeInTheDocument();
     expect(
-      within(details).queryByRole("button", {
+      within(setupSidebar).queryByRole("button", {
         name: /layer stack options section/i,
       }),
     ).not.toBeInTheDocument();
-    expect(within(details).queryByLabelText(/hidden dim/i)).not.toBeInTheDocument();
-    expect(within(details).getByRole("tab", { name: /new folder/i })).toBeInTheDocument();
-    await user.click(within(details).getByRole("tab", { name: /new folder/i }));
-    const newLogFolderModeControl = within(details).getByRole("tablist", {
+    expect(within(setupSidebar).queryByLabelText(/hidden dim/i)).not.toBeInTheDocument();
+    expect(within(setupSidebar).getByRole("tab", { name: /new folder/i }))
+      .toBeInTheDocument();
+    await user.click(within(setupSidebar).getByRole("tab", { name: /new folder/i }));
+    const newLogFolderModeControl = within(setupSidebar).getByRole("tablist", {
       name: /log folder mode/i,
     });
-    const newLogFolderField = closestFooterFieldBox(
-      within(details).getByLabelText("New log folder"),
-    );
-    expectBoxedField(newLogFolderField);
-    expect(closestFooterFieldBox(newLogFolderModeControl)).toBe(newLogFolderField);
-    expect(newLogFolderField).toContainElement(newLogFolderModeControl);
-    expect(newLogFolderField).toContainElement(
-      within(newLogFolderField).getByRole("textbox", {
+    expect(setupSidebar).toContainElement(newLogFolderModeControl);
+    expect(setupSidebar).toContainElement(
+      within(setupSidebar).getByRole("textbox", {
         name: "New log folder",
       }),
     );
-    const newLogFolderLabel = within(newLogFolderField).getByText("New folder", {
-      selector: "span",
-    });
-    const newLogFolderIcon = newLogFolderLabel.querySelector("svg");
-    if (!(newLogFolderIcon instanceof SVGElement)) {
-      throw new Error("Expected new log folder field label to render an icon");
-    }
-    expect(newLogFolderIcon).toHaveClass(...footerIconClasses);
-    expectFieldHeader(newLogFolderLabel);
     const { listbox: monitorList } = await openTrainingMultiSelect(
       user,
-      details,
+      setupSidebar,
       "Training monitors",
     );
     expect(within(monitorList).getByRole("option", { name: /Linear layers/i }))
@@ -865,70 +759,25 @@ describe("ViewerApp Training And Preview", () => {
     renderViewer();
     const user = userEvent.setup();
 
-    await expandedTrainingDetailsWithConfig(user);
-    const progressButton = await screen.findByRole("button", {
-      name: /0\s*\/\s*1 runs.*30 epochs left/i,
-    });
-    await user.click(progressButton);
+    const details = await expandedTrainingDetailsWithConfig(user);
+    await findTrainingRunSummary(
+      /0\s*\/\s*1 runs;\s*0\s*\/\s*30 epochs;\s*Next run #1 0\s*\/\s*30 epochs/i,
+    );
+    expect(screen.queryByRole("button", { name: /expand runs/i }))
+      .not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: /expanded run view/i }))
+      .not.toBeInTheDocument();
 
-    const progressDialog = await screen.findByRole("dialog", {
-      name: /training progress/i,
-    });
-    const progressOverlay = progressDialog.parentElement;
-    const progressHeader = progressDialog.querySelector("header");
-    const progressBody = progressDialog.querySelector(".full-config-dialog-body");
-
-    if (
-      !(progressOverlay instanceof HTMLElement) ||
-      !(progressHeader instanceof HTMLElement) ||
-      !(progressBody instanceof HTMLElement)
-    ) {
-      throw new Error("Expected training progress dialog chrome to render");
-    }
-
-    expect(progressOverlay).toHaveClass(
-      "fixed",
-      "inset-0",
-      "items-center",
-      "justify-center",
-      "bg-black/70",
-      "p-3",
-      "backdrop-blur-sm",
-      "sm:p-6",
-    );
-    expect(progressOverlay.parentElement).toBe(document.body);
-    expect(progressDialog).toHaveClass(
-      "edge",
-      "full-config-dialog-shell",
-      "w-full",
-      "max-w-[92rem]",
-      "rounded-card",
-      "max-h-[calc(100vh-1.5rem)]",
-      "sm:max-h-[calc(100vh-3rem)]",
-    );
-    expect(progressDialog).not.toHaveClass(
-      "h-full",
-      "max-w-none",
-      "rounded-none",
-    );
-    expect(progressDialog).not.toHaveClass("max-w-6xl");
-    expect(progressHeader).toHaveClass(
-      "full-config-dialog-chrome",
-      "full-config-dialog-header",
-    );
-    expect(progressBody).toHaveClass("full-config-dialog-body");
-    expect(progressDialog.querySelector("footer")).not.toBeInTheDocument();
+    const runList = trainingRunList(details);
     expect(
-      within(progressDialog).getByRole("img", {
-        name: "Run 1 status: Pending",
-      }),
+      within(runList).getByText("Pending"),
     ).toBeInTheDocument();
-    expect(within(progressDialog).getAllByText("baseline").length).toBeGreaterThan(0);
-    expect(within(progressDialog).getByText("Mnist")).toBeInTheDocument();
-    expect(within(progressDialog).getByText("0 / 30")).toBeInTheDocument();
+    expect(within(runList).getAllByText("baseline").length).toBeGreaterThan(0);
+    expect(within(runList).getByText("Mnist")).toBeInTheDocument();
+    expect(within(runList).getByText("0 / 30 epochs")).toBeInTheDocument();
 
     await user.click(
-      within(progressDialog).getByRole("button", { name: /command for run 1/i }),
+      within(runList).getByRole("button", { name: /command for run 1/i }),
     );
     const commandDialog = await screen.findByRole("dialog", {
       name: /training command/i,
@@ -981,9 +830,9 @@ describe("ViewerApp Training And Preview", () => {
     await selectNewTrainingLogFolder(user, "mixed_snapshots");
 
     expect(
-      await screen.findByRole("button", {
-        name: /0\s*\/\s*1 runs.*30 epochs left/i,
-      }),
+      await findTrainingRunSummary(
+        /0\s*\/\s*1 runs;\s*0\s*\/\s*30 epochs/i,
+      ),
     ).toBeInTheDocument();
 
     await user.click(
@@ -1017,29 +866,24 @@ describe("ViewerApp Training And Preview", () => {
       ).toBeInTheDocument();
     });
     expect(
-      await screen.findByRole("button", {
-        name: /0\s*\/\s*1 runs.*30 epochs left/i,
-      }),
+      await findTrainingRunSummary(
+        /0\s*\/\s*1 runs;\s*0\s*\/\s*30 epochs/i,
+      ),
     ).toBeInTheDocument();
 
     await user.click(snapshotOption);
     await user.keyboard("{Escape}");
 
-    const progressButton = await screen.findByRole("button", {
-      name: /0\s*\/\s*2 runs.*35 epochs left/i,
-    });
-    await user.click(progressButton);
-
-    const progressDialog = await screen.findByRole("dialog", {
-      name: /training progress/i,
-    });
-    expect(within(progressDialog).getByText("2 runs")).toBeInTheDocument();
-    expect(within(progressDialog).getByText("35 epochs left")).toBeInTheDocument();
-    expect(within(progressDialog).getByText("Wide snapshot")).toBeInTheDocument();
-    expect(within(progressDialog).getByText("hidden_dim=128")).toBeInTheDocument();
+    await findTrainingRunSummary(
+      /0\s*\/\s*2 runs;\s*0\s*\/\s*35 epochs/i,
+    );
+    const runList = trainingRunList(details);
+    expect(within(runList).getByText("2 runs")).toBeInTheDocument();
+    expect(within(runList).getByText("Wide snapshot")).toBeInTheDocument();
+    expect(within(runList).getByText("hidden_dim=128")).toBeInTheDocument();
 
     await user.click(
-      within(progressDialog).getByRole("button", { name: /command for run 1/i }),
+      within(runList).getByRole("button", { name: /command for run 1/i }),
     );
     let commandDialog = await screen.findByRole("dialog", {
       name: /training command/i,
@@ -1054,7 +898,7 @@ describe("ViewerApp Training And Preview", () => {
     );
 
     await user.click(
-      within(progressDialog).getByRole("button", { name: /command for run 2/i }),
+      within(runList).getByRole("button", { name: /command for run 2/i }),
     );
     commandDialog = await screen.findByRole("dialog", {
       name: /training command/i,
@@ -1065,11 +909,6 @@ describe("ViewerApp Training And Preview", () => {
     await user.click(
       within(commandDialog).getByRole("button", {
         name: /close training command/i,
-      }),
-    );
-    await user.click(
-      within(progressDialog).getByRole("button", {
-        name: /close training progress/i,
       }),
     );
 
@@ -1103,7 +942,183 @@ describe("ViewerApp Training And Preview", () => {
     );
   });
 
-  it("deselects a preset run from the progress popup and syncs the Presets tab", async () => {
+  it("opens snapshot draft config from a preset row action without changing preset inclusion", async () => {
+    installFetchMock();
+    renderViewer();
+    const user = userEvent.setup();
+
+    const details = await expandedTrainingDetailsWithConfig(user);
+    const { control, listbox } = await openTrainingMultiSelect(
+      user,
+      details,
+      "Presets",
+    );
+    const baselineOption = within(listbox).getByRole("option", {
+      name: /baseline/i,
+    });
+    const unselectedPresetOption = within(listbox).getByRole("option", {
+      name: /recurrent-gating-halting/i,
+    });
+    expect(baselineOption).toHaveAttribute("aria-selected", "true");
+    expect(baselineOption).toHaveAttribute("aria-disabled", "true");
+    expect(unselectedPresetOption).toHaveAttribute("aria-selected", "false");
+
+    await user.click(
+      within(listbox).getByRole("button", {
+        name: "Create snapshot from recurrent-gating-halting",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(
+        within(details).queryByRole("listbox", {
+          name: /presets options/i,
+        }),
+      ).not.toBeInTheDocument();
+    });
+    const fullConfigDialog = await screen.findByRole("dialog", {
+      name: /full configuration/i,
+    });
+    expect(
+      within(fullConfigDialog).getByRole("button", { name: "Save as Snapshot" }),
+    ).toBeInTheDocument();
+    expect(control).toHaveTextContent("1 / 2 selected");
+    expect(control).toHaveTextContent("baseline");
+    expect(control).not.toHaveTextContent("recurrent-gating-halting");
+
+    await user.click(
+      within(fullConfigDialog).getByRole("button", {
+        name: /close full config/i,
+      }),
+    );
+    const allPresetsButton = within(details)
+      .getAllByRole("button", { name: /^All$/i })
+      .find((button) =>
+        button.parentElement?.textContent?.includes("Primary only"),
+      );
+    if (!(allPresetsButton instanceof HTMLElement)) {
+      throw new Error("Expected preset All button to render near Primary only");
+    }
+    const primaryOnlyButton = within(details).getByRole("button", {
+      name: /^Primary only$/i,
+    });
+    await user.click(allPresetsButton);
+    await waitFor(() => {
+      expect(
+        within(details).getByRole("combobox", {
+          name: /^presets\s+2\s*\/\s*2 selected$/i,
+        }),
+      ).toBeInTheDocument();
+    });
+    await user.click(primaryOnlyButton);
+    await waitFor(() => {
+      expect(
+        within(details).getByRole("combobox", {
+          name: /^presets\s+1\s*\/\s*2 selected$/i,
+        }),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("opens edit and duplicate config from snapshot row actions without row toggles", async () => {
+    installFetchMock({
+      schemaResponse: {
+        ...schemaResponse,
+        fields: [
+          ...schemaResponse.fields,
+          {
+            key: "num_epochs",
+            configKey: "NUM_EPOCHS",
+            flag: "--num-epochs",
+            label: "num epochs",
+            section: "Training",
+            type: "int",
+            default: 30,
+            nullable: false,
+            choices: [],
+          },
+        ],
+      },
+      configSnapshotsResponse: {
+        modelType: "linears",
+        model: "linear",
+        snapshots: [
+          {
+            id: "snap-wide",
+            modelType: "linears",
+            model: "linear",
+            preset: "baseline",
+            name: "Wide snapshot",
+            overrides: { hidden_dim: "128", num_epochs: "5" },
+            createdAt: "2026-06-01T00:00:00.000Z",
+            updatedAt: "2026-06-01T00:00:00.000Z",
+          },
+        ],
+      },
+    });
+    renderViewer();
+    const user = userEvent.setup();
+
+    const details = await expandedTrainingDetailsWithConfig(user);
+    await user.click(
+      within(details).getByRole("tab", { name: /^snapshots$/i }),
+    );
+    let { control, listbox } = await openTrainingMultiSelect(
+      user,
+      details,
+      "Config snapshots",
+    );
+    const snapshotOption = within(listbox).getByRole("option", {
+      name: /wide snapshot/i,
+    });
+    expect(snapshotOption).toHaveAttribute("aria-selected", "false");
+    expect(control).toHaveAccessibleName("Config snapshots 0 / 1 selected");
+    expect(control).toHaveTextContent("Select snapshots");
+
+    await user.click(
+      within(listbox).getByRole("button", {
+        name: "Edit snapshot Wide snapshot",
+      }),
+    );
+
+    let fullConfigDialog = await screen.findByRole("dialog", {
+      name: /full configuration/i,
+    });
+    expect(
+      within(fullConfigDialog).getByRole("button", {
+        name: "Save Snapshot Changes",
+      }),
+    ).toBeInTheDocument();
+    expect(control).toHaveAccessibleName("Config snapshots 0 / 1 selected");
+    expect(control).not.toHaveTextContent("Wide snapshot");
+    await user.click(
+      within(fullConfigDialog).getByRole("button", {
+        name: /close full config/i,
+      }),
+    );
+
+    ({ control, listbox } = await openTrainingMultiSelect(
+      user,
+      details,
+      "Config snapshots",
+    ));
+    await user.click(
+      within(listbox).getByRole("button", {
+        name: "Duplicate snapshot Wide snapshot",
+      }),
+    );
+
+    fullConfigDialog = await screen.findByRole("dialog", {
+      name: /full configuration/i,
+    });
+    expect(
+      within(fullConfigDialog).getByRole("button", { name: "Save as Snapshot" }),
+    ).toBeInTheDocument();
+    expect(control).toHaveAccessibleName("Config snapshots 0 / 1 selected");
+    expect(control).not.toHaveTextContent("Wide snapshot");
+  });
+
+  it("deselects a preset run from the expanded footer run list and syncs setup variants", async () => {
     installFetchMock({
       schemaResponse: {
         ...schemaResponse,
@@ -1152,50 +1167,39 @@ describe("ViewerApp Training And Preview", () => {
       "Config snapshots",
       /wide snapshot/i,
     );
-    await user.click(
-      await screen.findByRole("button", {
-        name: /0\s*\/\s*2 runs.*35 epochs left/i,
-      }),
+    await findTrainingRunSummary(
+      /0\s*\/\s*2 runs;\s*0\s*\/\s*35 epochs/i,
     );
-
-    const progressDialog = await screen.findByRole("dialog", {
-      name: /training progress/i,
-    });
+    const runList = trainingRunList(details);
     await user.click(
-      within(progressDialog).getByRole("button", {
+      within(runList).getByRole("button", {
         name: "Remove preset baseline from this run plan",
       }),
     );
 
     await waitFor(() => {
-      expect(within(progressDialog).getByText("Wide snapshot")).toBeInTheDocument();
+      expect(within(runList).getByText("Wide snapshot")).toBeInTheDocument();
       expect(
-        within(progressDialog).getAllByRole("button", {
+        within(runList).getAllByRole("button", {
           name: /command for run/i,
         }),
       ).toHaveLength(1);
     });
 
-    await user.click(within(progressDialog).getByRole("tab", { name: "Presets" }));
-    const presetsPanel = within(progressDialog).getByRole("tabpanel", {
-      name: "Presets",
-    });
     expect(
-      within(presetsPanel).getByLabelText("Include preset baseline in training"),
-    ).not.toBeChecked();
-
-    await user.click(within(progressDialog).getByRole("tab", { name: "Snapshots" }));
-    const snapshotsPanel = within(progressDialog).getByRole("tabpanel", {
-      name: "Snapshots",
-    });
+      within(details).getByRole("combobox", {
+        name: /^config snapshots\s+1\s*\/\s*1 selected$/i,
+      }),
+    ).toBeInTheDocument();
+    await user.click(within(details).getByRole("tab", { name: "Presets" }));
     expect(
-      within(snapshotsPanel).getByLabelText(
-        "Include snapshot Wide snapshot in training",
-      ),
-    ).toBeChecked();
+      within(details).getByRole("combobox", {
+        name: /^presets\s+0\s*\/\s*2 selected$/i,
+      }),
+    ).toBeInTheDocument();
   });
 
-  it("deselects a snapshot run across datasets and syncs the Snapshots tab", async () => {
+  it("deselects a snapshot run across datasets and syncs setup variants", async () => {
     installFetchMock({
       schemaResponse: {
         ...schemaResponse,
@@ -1250,106 +1254,65 @@ describe("ViewerApp Training And Preview", () => {
       "Config snapshots",
       /wide snapshot/i,
     );
-    await user.click(
-      await screen.findByRole("button", {
-        name: /0\s*\/\s*4 runs.*70 epochs left/i,
-      }),
+    await findTrainingRunSummary(
+      /0\s*\/\s*4 runs;\s*0\s*\/\s*70 epochs/i,
     );
-
-    const progressDialog = await screen.findByRole("dialog", {
-      name: /training progress/i,
-    });
-    expect(within(progressDialog).getAllByText("Wide snapshot")).toHaveLength(2);
+    const runList = trainingRunList(details);
+    expect(within(runList).getAllByText("Wide snapshot")).toHaveLength(2);
 
     await user.click(
-      within(progressDialog).getAllByRole("button", {
+      within(runList).getAllByRole("button", {
         name: "Remove snapshot Wide snapshot from this run plan",
       })[0],
     );
 
     await waitFor(() => {
       expect(
-        within(progressDialog).queryByText("Wide snapshot"),
+        within(runList).queryByText("Wide snapshot"),
       ).not.toBeInTheDocument();
       expect(
-        within(progressDialog).getAllByRole("button", {
+        within(runList).getAllByRole("button", {
           name: /command for run/i,
         }),
       ).toHaveLength(2);
     });
 
-    await user.click(within(progressDialog).getByRole("tab", { name: "Snapshots" }));
-    const snapshotsPanel = within(progressDialog).getByRole("tabpanel", {
-      name: "Snapshots",
-    });
     expect(
-      within(snapshotsPanel).getByLabelText(
-        "Include snapshot Wide snapshot in training",
-      ),
-    ).not.toBeChecked();
-
-    await user.click(within(progressDialog).getByRole("tab", { name: "Presets" }));
-    const presetsPanel = within(progressDialog).getByRole("tabpanel", {
-      name: "Presets",
-    });
-    expect(
-      within(presetsPanel).getByLabelText("Include preset baseline in training"),
-    ).toBeChecked();
-  });
-
-  it("replaces the progress popup with snapshot draft config when editing a preset", async () => {
-    installFetchMock();
-    renderViewer();
-    const user = userEvent.setup();
-
-    await expandedTrainingDetailsWithConfig(user);
-    await user.click(
-      await screen.findByRole("button", {
-        name: /0\s*\/\s*1 runs.*30 epochs left/i,
+      within(details).getByRole("combobox", {
+        name: /^config snapshots\s+0\s*\/\s*1 selected$/i,
       }),
-    );
-
-    const progressDialog = await screen.findByRole("dialog", {
-      name: /training progress/i,
-    });
-    await user.click(within(progressDialog).getByRole("tab", { name: "Presets" }));
-    await user.click(
-      within(progressDialog).getAllByRole("button", {
-        name: "Edit as Snapshot",
-      })[0],
-    );
-
-    const fullConfigDialog = await screen.findByRole("dialog", {
-      name: /full configuration/i,
-    });
-    expect(
-      within(fullConfigDialog).getByRole("button", { name: "Save as Snapshot" }),
     ).toBeInTheDocument();
+
+    await user.click(within(details).getByRole("tab", { name: "Presets" }));
     expect(
-      screen.queryByRole("dialog", { name: /training progress/i }),
-    ).not.toBeInTheDocument();
+      within(details).getByRole("combobox", {
+        name: /^presets\s+1\s*\/\s*2 selected$/i,
+      }),
+    ).toBeInTheDocument();
   });
 
-  it("shows Resample in the progress popup for random search before start", async () => {
-    installFetchMock();
+  it("shows Resample in the expanded footer for random search before start", async () => {
+    const { fetchMock } = installFetchMock();
     renderViewer();
     const user = userEvent.setup();
 
     const details = await expandedTrainingDetailsWithConfig(user);
     await user.click(within(details).getByRole("tab", { name: /^random$/i }));
     await user.click(within(details).getByLabelText(/^search axis hidden_dim$/i));
-    await user.click(
-      await screen.findByRole("button", {
-        name: /0\s*\/\s*2 runs.*60 epochs left/i,
-      }),
+    await findTrainingRunSummary(
+      /0\s*\/\s*2 runs;\s*0\s*\/\s*60 epochs/i,
     );
 
-    const progressDialog = await screen.findByRole("dialog", {
-      name: /training progress/i,
+    const runPlanCallCount = trainingRunPlanCalls(fetchMock).length;
+    await user.click(
+      within(trainingRunList(details)).getByRole("button", { name: /^resample$/i }),
+    );
+
+    await waitFor(() => {
+      expect(trainingRunPlanCalls(fetchMock).length).toBeGreaterThan(
+        runPlanCallCount,
+      );
     });
-    expect(
-      within(progressDialog).getByRole("button", { name: /^resample$/i }),
-    ).toBeInTheDocument();
   });
 
   it("keeps completed job progress visible after the draft config changes", async () => {
@@ -1370,10 +1333,16 @@ describe("ViewerApp Training And Preview", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByRole("button", {
-          name: /2\s*\/\s*2 runs.*0 epochs left/i,
+        screen.getByRole("status", {
+          name: /2\s*\/\s*2 runs;\s*60\s*\/\s*60 epochs/i,
         }),
-      ).toBeEnabled();
+      ).toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(within(details).getByText("Results")).toBeInTheDocument();
+      expect(within(details).getByText("done")).toBeInTheDocument();
+      expect(within(details).getByText("1 line")).toBeInTheDocument();
+      expect(within(details).getByTitle("logs/completed_plan")).toBeInTheDocument();
     });
 
     await user.click(within(details).getByRole("button", { name: /^reset$/i }));
@@ -1396,26 +1365,17 @@ describe("ViewerApp Training And Preview", () => {
       ).toBeInTheDocument();
     });
 
-    const progressButton = await screen.findByRole("button", {
-      name: /2\s*\/\s*2 runs.*0 epochs left/i,
-    });
-    await user.click(progressButton);
-
-    const progressDialog = await screen.findByRole("dialog", {
-      name: /training progress/i,
-    });
+    await findTrainingRunSummary(
+      /2\s*\/\s*2 runs;\s*60\s*\/\s*60 epochs/i,
+    );
+    const runList = trainingRunList(details);
+    expect(within(runList).getAllByText("Completed")).toHaveLength(2);
+    expect(within(runList).getAllByText("hidden_dim=128")).toHaveLength(2);
+    expect(within(runList).getByText("Cifar10")).toBeInTheDocument();
+    expect(within(runList).getByText("Mnist")).toBeInTheDocument();
+    expect(within(runList).getByText("2 runs")).toBeInTheDocument();
     expect(
-      within(progressDialog).getAllByRole("img", {
-        name: /status: Completed$/,
-      }),
-    ).toHaveLength(2);
-    expect(within(progressDialog).getAllByText("hidden_dim=128")).toHaveLength(2);
-    expect(within(progressDialog).getByText("Cifar10")).toBeInTheDocument();
-    expect(within(progressDialog).getByText("Mnist")).toBeInTheDocument();
-    expect(within(progressDialog).getByText("2 runs")).toBeInTheDocument();
-    expect(within(progressDialog).getByText("0 epochs left")).toBeInTheDocument();
-    expect(
-      within(progressDialog).queryByRole("button", { name: /^resample$/i }),
+      within(runList).queryByRole("button", { name: /^resample$/i }),
     ).not.toBeInTheDocument();
   });
 
@@ -1432,10 +1392,10 @@ describe("ViewerApp Training And Preview", () => {
     await waitFor(() => {
       expect(trainingBodies).toHaveLength(1);
       expect(
-        screen.getByRole("button", {
-          name: /1\s*\/\s*1 runs.*0 epochs left/i,
+        screen.getByRole("status", {
+          name: /1\s*\/\s*1 runs;\s*30\s*\/\s*30 epochs/i,
         }),
-      ).toBeEnabled();
+      ).toBeInTheDocument();
     });
 
     await setTrainingHiddenDimOverride(user, details, "192");
@@ -1797,7 +1757,7 @@ describe("ViewerApp Training And Preview", () => {
     await user.click(within(details).getByRole("tab", { name: /^grid$/i }));
     await user.click(within(details).getByRole("button", { name: /^all axes$/i }));
 
-    expect(within(details).getByText("3 axes")).toBeInTheDocument();
+    expect(within(details).getAllByText("3 axes").length).toBeGreaterThan(0);
     expect(within(details).getByText("8 combinations")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /start training/i }));

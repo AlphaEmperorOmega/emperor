@@ -434,6 +434,49 @@ describe("useTargetConfigState", () => {
     ]);
   });
 
+  it("prepares a preset snapshot draft without re-adding an empty training preset selection", async () => {
+    snapshots = [
+      {
+        id: "snapshot-baseline",
+        name: "Baseline tuned",
+        modelType: "linears",
+        model: "linear",
+        preset: "baseline",
+        overrides: { hidden_size: "256" },
+        createdAt: "2026-06-01T00:00:00.000Z",
+        updatedAt: "2026-06-01T00:00:00.000Z",
+      },
+    ];
+    const { result } = renderTargetState();
+
+    await waitFor(() => {
+      expect(result.current.target.selectedTrainingPresets).toEqual(["baseline"]);
+    });
+
+    act(() => {
+      result.current.target.includeConfigSnapshot("snapshot-baseline");
+    });
+    act(() => {
+      result.current.target.setTrainingPresetSelection([]);
+    });
+    act(() => {
+      expect(
+        result.current.target.preparePresetSnapshotDraft("fast", {
+          includeTrainingPreset: false,
+        }),
+      ).toBe(true);
+    });
+
+    await waitFor(() => {
+      expect(result.current.target.selectedPreset).toBe("fast");
+      expect(result.current.target.selectedTrainingPresets).toEqual([]);
+    });
+    expect(result.current.target.selectedTrainingSnapshotIds).toEqual([
+      "snapshot-baseline",
+    ]);
+    expect(result.current.target.overrides).toEqual({});
+  });
+
   it("allows the progress draft to deselect the primary preset", async () => {
     const { result } = renderTargetState();
 

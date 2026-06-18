@@ -29,7 +29,7 @@ export function TrainingSearchAxisList({
   onToggleValue: (axis: SearchAxis, value: ConfigValue) => void;
 }) {
   return (
-    <div className="grid max-h-72 gap-2 overflow-y-auto pr-1 lg:grid-cols-2 2xl:grid-cols-3">
+    <div className="grid min-w-0 grid-cols-1 gap-2">
       {axes.map((axis) => {
         const selectedCount = selectedValueCount(axis, search);
         const axisSelected = selectedCount > 0;
@@ -37,7 +37,7 @@ export function TrainingSearchAxisList({
           <div
             key={axis.key}
             className={cn(
-              "grid content-start gap-2 rounded-[10px] border px-2.5 py-2 transition",
+              "grid min-w-0 content-start gap-2 rounded-[10px] border px-2.5 py-2 transition",
               axis.locked
                 ? "border-amber/35 bg-amber/[0.045] opacity-75"
                 : axisSelected
@@ -47,7 +47,7 @@ export function TrainingSearchAxisList({
           >
             <label
               className={cn(
-                "grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2",
+                "grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2",
                 axis.locked ? "cursor-not-allowed" : "cursor-pointer",
               )}
             >
@@ -72,10 +72,12 @@ export function TrainingSearchAxisList({
             </label>
 
             {axis.locked && axis.lockedReason && (
-              <div className="text-xs leading-4 text-ink-dim">{axis.lockedReason}</div>
+              <div className="text-xs leading-4 text-ink-dim [overflow-wrap:anywhere]">
+                {axis.lockedReason}
+              </div>
             )}
 
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex min-w-0 flex-wrap gap-1.5">
               {axis.values.map((value) => {
                 const checked = valueIsSelected(
                   search.selectedValues[axis.key] ?? [],
@@ -85,8 +87,9 @@ export function TrainingSearchAxisList({
                 return (
                   <label
                     key={`${axis.key}-${configValueKey(value)}`}
+                    title={label}
                     className={cn(
-                      "inline-flex min-h-8 max-w-full cursor-pointer items-center gap-1.5 rounded-[8px] border px-2 py-1 text-xs transition",
+                      "inline-flex min-h-8 min-w-0 max-w-full cursor-pointer items-center gap-1.5 overflow-hidden rounded-[8px] border px-2 py-1 text-xs transition",
                       checked
                         ? "border-violet/35 bg-violet/15 text-violet"
                         : "border-line bg-black/10 text-ink-dim hover:border-violet/25 hover:text-ink",

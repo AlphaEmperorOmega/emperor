@@ -1,5 +1,14 @@
 import { useId, useState } from "react";
-import { Camera, Database, Layers, SlidersHorizontal } from "lucide-react";
+import {
+  Camera,
+  Copy,
+  Database,
+  FilePlus2,
+  Layers,
+  Pencil,
+  SlidersHorizontal,
+  Trash2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { MultiSelectDropdown } from "@/features/viewer/components/screen/multi-select-dropdown";
@@ -52,6 +61,11 @@ export function TrainingTargetDatasetPanel({
   onToggleDataset,
   onSelectAllDatasets,
   onSelectFirstDataset,
+  onCreatePresetSnapshot,
+  onEditConfigSnapshot,
+  onDuplicateConfigSnapshot,
+  onDeleteConfigSnapshot,
+  disabled = false,
   presentation = "default",
 }: {
   modelTypeOptions?: SelectOption[];
@@ -78,9 +92,15 @@ export function TrainingTargetDatasetPanel({
   onToggleDataset?: (dataset: string) => void;
   onSelectAllDatasets: () => void;
   onSelectFirstDataset: () => void;
-  presentation?: "default" | "footer";
+  onCreatePresetSnapshot?: (preset: string) => void;
+  onEditConfigSnapshot?: (snapshotId: string) => void;
+  onDuplicateConfigSnapshot?: (snapshotId: string) => void;
+  onDeleteConfigSnapshot?: (snapshotId: string) => void;
+  disabled?: boolean;
+  presentation?: "default" | "footer" | "setup";
 }) {
   const isFooterPresentation = presentation === "footer";
+  const isSetupPresentation = presentation === "setup";
   const [activeTrainingConfigTab, setActiveTrainingConfigTab] =
     useState<TrainingConfigTab>("presets");
   const trainingConfigTabsId = useId();
@@ -101,6 +121,16 @@ export function TrainingTargetDatasetPanel({
     value: preset.value,
     label: preset.label,
     description: preset.value,
+    actions: onCreatePresetSnapshot && !disabled
+      ? [
+          {
+            label: `Create snapshot from ${preset.value}`,
+            tooltip: `Create a Config Snapshot from ${preset.value} defaults`,
+            icon: <FilePlus2 className="h-3.5 w-3.5" aria-hidden />,
+            onAction: onCreatePresetSnapshot,
+          },
+        ]
+      : undefined,
   }));
   const trainingSnapshotOptions = configSnapshots.map((snapshot) => {
     const overrideCount = Object.keys(snapshot.overrides).length;
@@ -109,6 +139,40 @@ export function TrainingTargetDatasetPanel({
       label: snapshot.name,
       description: `${snapshot.preset} · ${overrideCountLabel(overrideCount)}`,
       meta: <span>{snapshot.preset}</span>,
+      actions: disabled
+        ? undefined
+        : [
+            ...(onEditConfigSnapshot
+              ? [
+                  {
+                    label: `Edit snapshot ${snapshot.name}`,
+                    tooltip: "Edit this Config Snapshot",
+                    icon: <Pencil className="h-3.5 w-3.5" aria-hidden />,
+                    onAction: onEditConfigSnapshot,
+                  },
+                ]
+              : []),
+            ...(onDuplicateConfigSnapshot
+              ? [
+                  {
+                    label: `Duplicate snapshot ${snapshot.name}`,
+                    tooltip: "Duplicate this Config Snapshot",
+                    icon: <Copy className="h-3.5 w-3.5" aria-hidden />,
+                    onAction: onDuplicateConfigSnapshot,
+                  },
+                ]
+              : []),
+            ...(onDeleteConfigSnapshot
+              ? [
+                  {
+                    label: `Delete snapshot ${snapshot.name}`,
+                    tooltip: "Delete this Config Snapshot",
+                    icon: <Trash2 className="h-3.5 w-3.5" aria-hidden />,
+                    onAction: onDeleteConfigSnapshot,
+                  },
+                ]
+              : []),
+          ],
     };
   });
   const trainingDatasetOptions = datasetOptions.map((dataset) => ({
@@ -171,6 +235,7 @@ export function TrainingTargetDatasetPanel({
         options={modelTypeOptions}
         onChange={onSelectModelType}
         placeholder="Select type"
+        disabled={disabled}
       />
     ) : null;
 
@@ -181,10 +246,13 @@ export function TrainingTargetDatasetPanel({
       options={modelOptions}
       onChange={onSelectModel}
       placeholder="Select model"
+      disabled={disabled}
     />
   );
   const modelSelectorGridClass = modelTypeControl
-    ? "grid min-w-0 grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] gap-2"
+    ? isSetupPresentation
+      ? "grid min-w-0 gap-2"
+      : "grid min-w-0 grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] gap-2"
     : "grid min-w-0 gap-2";
 
   const modelField = isFooterPresentation ? (
@@ -208,6 +276,29 @@ export function TrainingTargetDatasetPanel({
         </div>
       </div>
     </TrainingFooterField>
+  ) : isSetupPresentation ? (
+    <div className="grid min-w-0 gap-2">
+      <div className="flex min-h-[28px] flex-wrap items-center justify-between gap-2">
+        <SectionHeading
+          icon={<Layers className={footerIconClass} aria-hidden />}
+          title="Target"
+        />
+      </div>
+      <div className={modelSelectorGridClass}>
+        {modelTypeControl && (
+          <div className="grid min-w-0 gap-1.5">
+            <span className={defaultFieldLabelClass}>Model type</span>
+            {modelTypeControl}
+          </div>
+        )}
+        <div className="grid min-w-0 gap-1.5">
+          {modelTypeControl && (
+            <span className={defaultFieldLabelClass}>Model name</span>
+          )}
+          {modelControl}
+        </div>
+      </div>
+    </div>
   ) : (
     <div className={modelSelectorGridClass}>
       {modelTypeControl && (
@@ -231,6 +322,7 @@ export function TrainingTargetDatasetPanel({
         options={trainingPresetOptions}
         onChange={changeTrainingPresets}
         disabledValues={trainingPresetDisabledValues}
+        disabled={disabled}
         primaryValue={selectedPreset}
         onPrimaryChange={makeTrainingPresetPrimary}
         placeholder="Select presets"
@@ -245,7 +337,7 @@ export function TrainingTargetDatasetPanel({
         <Button
           variant="secondary"
           onClick={onSelectAllTrainingPresets}
-          disabled={presetOptions.length === 0 || !onSelectAllTrainingPresets}
+          disabled={disabled || presetOptions.length === 0 || !onSelectAllTrainingPresets}
           className="h-9 text-[13px]"
         >
           All
@@ -253,7 +345,7 @@ export function TrainingTargetDatasetPanel({
         <Button
           variant="ghost"
           onClick={onSelectPrimaryTrainingPreset}
-          disabled={!selectedPreset || !onSelectPrimaryTrainingPreset}
+          disabled={disabled || !selectedPreset || !onSelectPrimaryTrainingPreset}
           className="h-9 border border-line bg-white/[0.025] text-[13px]"
         >
           Primary only
@@ -269,6 +361,7 @@ export function TrainingTargetDatasetPanel({
         values={selectedTrainingSnapshotIds}
         options={trainingSnapshotOptions}
         onChange={changeTrainingSnapshots}
+        disabled={disabled}
         placeholder="Select snapshots"
         emptyMessage="No config snapshots for this model"
       />
@@ -341,6 +434,41 @@ export function TrainingTargetDatasetPanel({
         {activeTrainingConfigTab === "snapshots" ? snapshotControls : null}
       </div>
     </TrainingFooterField>
+  ) : isSetupPresentation ? (
+    <div className="grid min-w-0 gap-2">
+      <div className="flex min-h-[28px] flex-wrap items-center justify-between gap-2">
+        <SectionHeading
+          icon={<SlidersHorizontal className={footerIconClass} aria-hidden />}
+          title="Variants"
+        />
+        <StatChip>
+          {activeTrainingConfigTab === "snapshots"
+            ? trainingSnapshotCount
+            : trainingPresetCount}
+        </StatChip>
+      </div>
+      {trainingConfigTabs}
+      <div
+        id={presetsPanelId}
+        role="tabpanel"
+        aria-labelledby={presetsTabId}
+        aria-label="Presets"
+        hidden={activeTrainingConfigTab !== "presets"}
+        className="grid gap-2"
+      >
+        {activeTrainingConfigTab === "presets" ? presetsControls : null}
+      </div>
+      <div
+        id={snapshotsPanelId}
+        role="tabpanel"
+        aria-labelledby={snapshotsTabId}
+        aria-label="Snapshots"
+        hidden={activeTrainingConfigTab !== "snapshots"}
+        className="grid gap-2"
+      >
+        {activeTrainingConfigTab === "snapshots" ? snapshotControls : null}
+      </div>
+    </div>
   ) : (
     <div className="grid min-w-0 gap-1.5">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -359,6 +487,7 @@ export function TrainingTargetDatasetPanel({
         options={trainingDatasetOptions}
         onChange={changeDatasets}
         disabledValues={datasetDisabledValues}
+        disabled={disabled}
         placeholder="Select datasets"
         emptyMessage="No datasets for this model"
       />
@@ -371,7 +500,7 @@ export function TrainingTargetDatasetPanel({
         <Button
           variant="secondary"
           onClick={onSelectAllDatasets}
-          disabled={datasetOptions.length === 0}
+          disabled={disabled || datasetOptions.length === 0}
           className="h-9 text-[13px]"
         >
           All
@@ -379,7 +508,7 @@ export function TrainingTargetDatasetPanel({
         <Button
           variant="ghost"
           onClick={onSelectFirstDataset}
-          disabled={datasetOptions.length === 0}
+          disabled={disabled || datasetOptions.length === 0}
           className="h-9 border border-line bg-white/[0.025] text-[13px]"
         >
           First
@@ -397,6 +526,17 @@ export function TrainingTargetDatasetPanel({
     >
       {datasetsControls}
     </TrainingFooterField>
+  ) : isSetupPresentation ? (
+    <div className="grid min-w-0 gap-2">
+      <div className="flex min-h-[28px] flex-wrap items-center justify-between gap-2">
+        <SectionHeading
+          icon={<Database className={footerIconClass} aria-hidden />}
+          title="Datasets"
+        />
+        <StatChip>{datasetCount}</StatChip>
+      </div>
+      {datasetsControls}
+    </div>
   ) : (
     <div className="xl:min-h-0 grid gap-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -417,6 +557,16 @@ export function TrainingTargetDatasetPanel({
         {presetsField}
         {datasetsField}
       </>
+    );
+  }
+
+  if (isSetupPresentation) {
+    return (
+      <div className="grid min-w-0 gap-3">
+        {modelField}
+        {presetsField}
+        {datasetsField}
+      </div>
     );
   }
 

@@ -68,13 +68,30 @@ export function ConnectedTrainingPanel({
     onRemoveConfigSnapshot: target.removeConfigSnapshot,
     onIncludeConfigSnapshot: target.includeConfigSnapshot,
     onExcludeConfigSnapshot: target.excludeConfigSnapshot,
-    onEditPresetAsSnapshot: (preset) => {
-      if (target.preparePresetSnapshotDraft(preset)) {
+    onCreatePresetSnapshot: (preset) => {
+      if (
+        target.preparePresetSnapshotDraft(preset, {
+          includeTrainingPreset: false,
+        })
+      ) {
         onOpenFullConfig("snapshotDraft");
       }
     },
-    onEditConfigSnapshotCopy: (snapshotId) => {
-      if (target.loadConfigSnapshot(snapshotId)) {
+    onEditConfigSnapshot: (snapshotId) => {
+      if (
+        target.prepareSelectedSnapshotEdit(snapshotId, {
+          includeTrainingSnapshot: false,
+        })
+      ) {
+        onOpenFullConfig("snapshotEdit");
+      }
+    },
+    onDuplicateConfigSnapshot: (snapshotId) => {
+      if (
+        target.prepareSelectedSnapshotEdit(snapshotId, {
+          includeTrainingSnapshot: false,
+        })
+      ) {
         onOpenFullConfig("snapshotDraft");
       }
     },

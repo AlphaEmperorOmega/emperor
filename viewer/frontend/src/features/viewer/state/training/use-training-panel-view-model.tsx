@@ -70,8 +70,9 @@ export type TrainingPanelViewModelInput = {
   onRemoveConfigSnapshot: (snapshotId: string) => void;
   onIncludeConfigSnapshot: (snapshotId: string) => void;
   onExcludeConfigSnapshot: (snapshotId: string) => void;
-  onEditPresetAsSnapshot: (preset: string) => void;
-  onEditConfigSnapshotCopy: (snapshotId: string) => void;
+  onCreatePresetSnapshot: (preset: string) => void;
+  onEditConfigSnapshot: (snapshotId: string) => void;
+  onDuplicateConfigSnapshot: (snapshotId: string) => void;
   onTrainingSearchChange: Dispatch<SetStateAction<TrainingSearchState>>;
   activeTrainingJob: TrainingJob | undefined;
   progressError: string;
@@ -124,8 +125,9 @@ export function useTrainingPanelViewModel({
   onRemoveConfigSnapshot,
   onIncludeConfigSnapshot,
   onExcludeConfigSnapshot,
-  onEditPresetAsSnapshot,
-  onEditConfigSnapshotCopy,
+  onCreatePresetSnapshot,
+  onEditConfigSnapshot,
+  onDuplicateConfigSnapshot,
   onTrainingSearchChange,
   activeTrainingJob,
   progressError,
@@ -133,7 +135,6 @@ export function useTrainingPanelViewModel({
   onJobChange,
 }: TrainingPanelViewModelInput) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [isProgressOpen, setIsProgressOpen] = useState(false);
   const logFolder = useTrainingLogFolderState({ enabled: isExpanded });
   const options = useTrainingPanelOptions({
     models,
@@ -224,13 +225,6 @@ export function useTrainingPanelViewModel({
   const plannedRunLabel = `${training.displayedRunCount} planned run${
     training.displayedRunCount === 1 ? "" : "s"
   }`;
-  const progressButtonLabel = training.isProgressPlanning
-    ? "Planning..."
-    : training.progressPlanError
-      ? "Plan error"
-      : training.progressRunPlanSummary
-        ? `${training.progressRunPlanSummary.completedRuns} / ${training.progressRunPlanSummary.totalRuns} runs · ${training.progressRunPlanSummary.remainingEpochs} epochs left`
-        : "Progress";
 
   function changeMonitors(nextMonitors: string[]) {
     const changedMonitor = monitorOptions.find(
@@ -283,16 +277,14 @@ export function useTrainingPanelViewModel({
       onRemoveConfigSnapshot,
       onIncludeConfigSnapshot,
       onExcludeConfigSnapshot,
-      onEditPresetAsSnapshot,
-      onEditConfigSnapshotCopy,
+      onCreatePresetSnapshot,
+      onEditConfigSnapshot,
+      onDuplicateConfigSnapshot,
       onTrainingSearchChange,
     },
     ui: {
       isExpanded,
       toggleExpanded: () => setIsExpanded((current) => !current),
-      isProgressOpen,
-      openProgress: () => setIsProgressOpen(true),
-      closeProgress: () => setIsProgressOpen(false),
     },
     logFolder: {
       mode: logFolder.mode,
@@ -337,7 +329,6 @@ export function useTrainingPanelViewModel({
       monitorCount,
       datasetCountLabel,
       plannedRunLabel,
-      progressButtonLabel,
     },
     actions: {
       changeMonitors,

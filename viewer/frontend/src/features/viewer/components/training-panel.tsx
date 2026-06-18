@@ -5,7 +5,6 @@ import {
   CircleStop,
   FolderOpen,
   FolderPlus,
-  ListChecks,
   Loader2,
   Maximize2,
   Play,
@@ -16,18 +15,20 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SegmentedControl } from "@/components/ui/segmented-control";
-import { Select } from "@/components/ui/select";
 import { TrainingSearchSetup } from "@/features/viewer/components/training-search-setup";
 import { ViewModeButton } from "@/features/viewer/components/view-mode-button";
 import { MultiSelectDropdown } from "@/features/viewer/components/screen/multi-select-dropdown";
+import { SelectOnlyDropdown } from "@/features/viewer/components/screen/select-only-dropdown";
 import { DialogShell } from "@/features/viewer/components/shared/dialog-shell";
 import { InlineStatus } from "@/features/viewer/components/shared/inline-status";
 import { SectionHeading } from "@/features/viewer/components/shared/section-heading";
 import { StatChip } from "@/features/viewer/components/shared/stat-chip";
 import { viewerStatusCopy } from "@/features/viewer/components/shared/status-copy";
 import { TrainingTargetDatasetPanel } from "@/features/viewer/components/training/training-target-dataset-panel";
-import { TrainingFooterField } from "@/features/viewer/components/training/training-footer-field";
-import { TrainingProgressDialog } from "@/features/viewer/components/training/training-progress-dialog";
+import { TrainingCompactRunList } from "@/features/viewer/components/training/training-compact-run-list";
+import { TrainingFooterRunSummary } from "@/features/viewer/components/training/training-footer-run-summary";
+import { TrainingLogTailCard } from "@/features/viewer/components/training/training-log-tail-card";
+import { TrainingRunPlanCard } from "@/features/viewer/components/training/training-run-plan-card";
 import {
   type TrainingPanelViewModel,
 } from "@/features/viewer/state/training/use-training-panel-view-model";
@@ -36,12 +37,7 @@ type TrainingPanelProps = {
   viewModel: TrainingPanelViewModel;
 };
 
-const footerFieldLabelClass =
-  "flex items-center gap-2 text-xs font-bold uppercase tracking-[0.08em] text-ink-faint";
 const footerIconClass = "h-[15px] w-[15px] text-violet";
-const TRAINING_REQUEST_FIELD_SUMMARY_LIMIT = 6;
-const TRAINING_LOG_TAIL_LINE_LIMIT = 200;
-const TRAINING_LOG_TAIL_CHAR_LIMIT = 20_000;
 
 export function TrainingPanel({ viewModel }: TrainingPanelProps) {
   const { actions, input, logFolder, options, request, status, training, ui } =
@@ -71,7 +67,6 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
     onSetTrainingPresets,
     onSetTrainingSnapshotSelection,
     onToggleTrainingPreset,
-    onToggleDraftTrainingPreset,
     onMakeTrainingPresetPrimary,
     onSelectAllTrainingPresets,
     onSelectPrimaryTrainingPreset,
@@ -82,11 +77,11 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
     onResetOverrides,
     onOpenFullConfig,
     onRemoveConfigSnapshot,
-    onIncludeConfigSnapshot,
     onExcludeConfigSnapshot,
     onExcludeDraftTrainingPreset,
-    onEditPresetAsSnapshot,
-    onEditConfigSnapshotCopy,
+    onCreatePresetSnapshot,
+    onEditConfigSnapshot,
+    onDuplicateConfigSnapshot,
     onTrainingSearchChange,
   } = input;
   const { changeMonitors } = actions;
@@ -114,11 +109,9 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
     canRequestTraining,
     effectiveTrainingSearch,
     fieldCount,
-    hasConfigSnapshots,
     overrideCount,
     searchConflictKeys,
     searchModeLabel,
-    selectedFieldSummary,
     selectedTrainingPresetCount,
     trainingSearchValidation,
   } = request;
@@ -135,6 +128,7 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
     isStarting,
     isCancelling,
     trainingError,
+    requiresLargeGridConfirmation,
     showLargeGridConfirmation,
     startTraining,
     confirmLargeGridSearch,
@@ -156,12 +150,17 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
     monitorCount,
     plannedRunLabel,
     presetCountLabel,
-    progressButtonLabel,
   } = status;
+  const planChangingControlsDisabled = isRunning;
+  const setupLockMessage = planChangingControlsDisabled
+    ? "Training setup is locked while the active job is running or queued."
+    : "";
+
   const logFolderModeControl = (
     <SegmentedControl aria-label="Log folder mode">
       <ViewModeButton
         active={logFolder.mode === "existing"}
+        disabled={planChangingControlsDisabled}
         onClick={() => logFolder.setMode("existing")}
       >
         <FolderOpen className="h-3.5 w-3.5" aria-hidden />
@@ -169,6 +168,7 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
       </ViewModeButton>
       <ViewModeButton
         active={logFolder.mode === "new"}
+        disabled={planChangingControlsDisabled}
         onClick={() => logFolder.setMode("new")}
       >
         <FolderPlus className="h-3.5 w-3.5" aria-hidden />
@@ -176,17 +176,10 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
       </ViewModeButton>
     </SegmentedControl>
   );
-  const visibleSelectedFieldSummary = selectedFieldSummary.slice(
-    0,
-    TRAINING_REQUEST_FIELD_SUMMARY_LIMIT,
-  );
-  const hiddenSelectedFieldCount =
-    selectedFieldSummary.length - visibleSelectedFieldSummary.length;
-  const logTailLines = job?.logTail.length ? job.logTail : ["No log output yet"];
-  const boundedLogTailLines = logTailLines.slice(-TRAINING_LOG_TAIL_LINE_LIMIT);
-  const boundedLogTailText = boundedLogTailLines
-    .join("\n")
-    .slice(-TRAINING_LOG_TAIL_CHAR_LIMIT);
+  const logFolderDropdownOptions = logFolderOptions.map((option) => ({
+    value: option.experiment,
+    label: `${option.experiment} (${option.runCount} runs)`,
+  }));
 
   return (
     <section className="border-t border-line bg-[linear-gradient(0deg,rgba(14,12,24,0.7),rgba(8,8,14,0.4))] backdrop-blur-xl">
@@ -263,22 +256,12 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
               Cancel
             </Button>
           )}
-          <Button
-            variant="secondary"
-            onClick={ui.openProgress}
-            disabled={
-              !trainingEnabled ||
-              (!progressRunPlan && !isProgressPlanning && !progressPlanError)
-            }
-            className="h-10 px-3 text-sm"
-          >
-            {isProgressPlanning ? (
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-            ) : (
-              <ListChecks className="h-4 w-4" aria-hidden />
-            )}
-            {progressButtonLabel}
-          </Button>
+          <TrainingFooterRunSummary
+            plan={progressRunPlan}
+            job={job}
+            isLoading={isProgressPlanning}
+            error={progressPlanError}
+          />
           <Button
             variant="primary"
             onClick={startTraining}
@@ -298,92 +281,94 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
       {ui.isExpanded && (
         <div
           id="training-panel-details"
-          className="grid max-h-[46vh] gap-3 overflow-y-auto border-t border-line bg-bg-2/90 px-4 py-3 sm:px-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]"
+          className="grid max-h-[52vh] min-h-[22rem] grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-x-auto overflow-y-hidden border-t border-line bg-bg-2/90 px-4 py-3 sm:px-5"
         >
           {!trainingEnabled && (
-            <InlineStatus tone="warning" compact className="lg:col-span-2">
+            <InlineStatus tone="warning" compact>
               Training is disabled by this backend.
             </InlineStatus>
           )}
           {historicalTrainingLockMessage && (
-            <InlineStatus tone="danger" compact className="lg:col-span-2">
+            <InlineStatus tone="danger" compact>
               {historicalTrainingLockMessage}
             </InlineStatus>
           )}
-          <div className="grid gap-3">
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              <div className="grid gap-2">
-                {logFolderMode === "existing" ? (
-                  <TrainingFooterField
-                    label={
-                      <span className={footerFieldLabelClass}>
+          <div className="grid min-h-0 min-w-[920px] gap-3 grid-cols-[minmax(300px,340px)_minmax(22rem,1fr)_minmax(280px,360px)]">
+            <aside
+              aria-label="Training Setup Sidebar"
+              className="grid min-h-0 content-start gap-4 overflow-y-auto pr-1"
+            >
+              {setupLockMessage && (
+                <InlineStatus tone="warning" compact>
+                  {setupLockMessage}
+                </InlineStatus>
+              )}
+
+              <section className="grid gap-2 border-b border-line-soft pb-3">
+                <div className="flex min-h-[28px] flex-wrap items-center justify-between gap-2">
+                  <SectionHeading
+                    icon={
+                      logFolderMode === "existing" ? (
                         <FolderOpen className={footerIconClass} aria-hidden />
-                        Existing folder
-                      </span>
-                    }
-                    actions={logFolderModeControl}
-                  >
-                    <Select
-                      value={selectedExistingLogFolder}
-                      onChange={(event) =>
-                        setSelectedExistingLogFolder(event.target.value)
-                      }
-                      disabled={
-                        logFoldersLoading || logFolderOptions.length === 0
-                      }
-                      aria-label="Log experiment folder"
-                    >
-                      <option value="">Select folder</option>
-                      {logFolderOptions.map((option) => (
-                        <option
-                          key={option.experiment}
-                          value={option.experiment}
-                        >
-                          {option.experiment} ({option.runCount} runs)
-                        </option>
-                      ))}
-                    </Select>
-                    <span className="text-xs text-ink-faint">
-                      {existingHelp}
-                    </span>
-                  </TrainingFooterField>
-                ) : (
-                  <TrainingFooterField
-                    label={
-                      <span className={footerFieldLabelClass}>
+                      ) : (
                         <FolderPlus className={footerIconClass} aria-hidden />
-                        New folder
-                      </span>
+                      )
                     }
-                    actions={logFolderModeControl}
-                  >
-                    <Input
-                      value={newLogFolder}
-                      onChange={(event) => setNewLogFolder(event.target.value)}
-                      placeholder="my_experiment"
-                      aria-label="New log folder"
-                      aria-invalid={
-                        newLogFolder.length > 0 && !newLogFolderValid
-                      }
-                      autoComplete="off"
-                    />
-                    <span
-                      className={
-                        newLogFolderError && newLogFolder.length > 0
-                          ? "text-xs text-danger-text"
-                          : "text-xs text-ink-faint"
-                      }
-                      role={
-                        newLogFolderError && newLogFolder.length > 0
-                          ? "alert"
-                          : undefined
-                      }
-                    >
-                      {newLogFolderError || "Folder name is valid"}
-                    </span>
-                  </TrainingFooterField>
-                )}
-              </div>
+                    title="Log Folder"
+                  />
+                  {logFolderModeControl}
+                </div>
+                <div className="grid min-h-[4rem] grid-rows-[2.5rem_1rem] gap-2">
+                  {logFolderMode === "existing" ? (
+                    <>
+                      <SelectOnlyDropdown
+                        label="Log experiment folder"
+                        value={selectedExistingLogFolder}
+                        options={logFolderDropdownOptions}
+                        onChange={setSelectedExistingLogFolder}
+                        disabled={
+                          planChangingControlsDisabled ||
+                          logFoldersLoading ||
+                          logFolderDropdownOptions.length === 0
+                        }
+                        placeholder="Select folder"
+                      />
+                      <span className="min-h-4 text-xs leading-4 text-ink-faint">
+                        {existingHelp}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <Input
+                        value={newLogFolder}
+                        onChange={(event) => setNewLogFolder(event.target.value)}
+                        placeholder="my_experiment"
+                        aria-label="New log folder"
+                        aria-invalid={
+                          newLogFolder.length > 0 && !newLogFolderValid
+                        }
+                        autoComplete="off"
+                        disabled={planChangingControlsDisabled}
+                        className="h-10"
+                      />
+                      <span
+                        className={
+                          newLogFolderError && newLogFolder.length > 0
+                            ? "min-h-4 text-xs leading-4 text-danger-text"
+                            : "min-h-4 text-xs leading-4 text-ink-faint"
+                        }
+                        role={
+                          newLogFolderError && newLogFolder.length > 0
+                            ? "alert"
+                            : undefined
+                        }
+                      >
+                        {newLogFolderError || "Folder name is valid"}
+                      </span>
+                    </>
+                  )}
+                </div>
+              </section>
 
               <TrainingTargetDatasetPanel
                 modelTypeOptions={modelTypeOptions}
@@ -410,19 +395,28 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
                 onToggleDataset={onToggleDataset}
                 onSelectAllDatasets={onSelectAllDatasets}
                 onSelectFirstDataset={onSelectFirstDataset}
-                presentation="footer"
+                onCreatePresetSnapshot={onCreatePresetSnapshot}
+                onEditConfigSnapshot={onEditConfigSnapshot}
+                onDuplicateConfigSnapshot={onDuplicateConfigSnapshot}
+                onDeleteConfigSnapshot={onRemoveConfigSnapshot}
+                disabled={planChangingControlsDisabled}
+                presentation="setup"
               />
 
-              <TrainingFooterField
-                icon={<Activity className={footerIconClass} aria-hidden />}
-                label="Monitors"
-                detail={<StatChip>{monitorCount}</StatChip>}
-              >
+              <section className="grid gap-2 border-t border-line-soft pt-3">
+                <div className="flex min-h-[28px] flex-wrap items-center justify-between gap-2">
+                  <SectionHeading
+                    icon={<Activity className={footerIconClass} aria-hidden />}
+                    title="Signals"
+                  />
+                  <StatChip>{monitorCount}</StatChip>
+                </div>
                 <MultiSelectDropdown
                   label="Training monitors"
                   values={selectedMonitors}
                   options={trainingMonitorOptions}
                   onChange={changeMonitors}
+                  disabled={planChangingControlsDisabled}
                   placeholder="Select monitors"
                   emptyMessage={viewerStatusCopy.empty.optionalMonitors}
                 />
@@ -436,15 +430,20 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
                     {viewerStatusCopy.empty.optionalMonitors}
                   </InlineStatus>
                 )}
-              </TrainingFooterField>
+              </section>
 
-              <TrainingFooterField
-                icon={
-                  <SlidersHorizontal className={footerIconClass} aria-hidden />
-                }
-                label="Overrides"
-                detail={
-                  <>
+              <section className="grid gap-2 border-t border-line-soft pt-3">
+                <div className="flex min-h-[28px] flex-wrap items-center justify-between gap-2">
+                  <SectionHeading
+                    icon={
+                      <SlidersHorizontal
+                        className={footerIconClass}
+                        aria-hidden
+                      />
+                    }
+                    title="Overrides"
+                  />
+                  <div className="flex flex-wrap gap-1.5">
                     <Badge>{fieldCount} fields</Badge>
                     <Badge
                       className={
@@ -460,217 +459,151 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
                         {configSnapshotCount} snapshots
                       </Badge>
                     )}
-                  </>
-                }
-                actions={
+                  </div>
+                </div>
+                <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+                  <Button
+                    variant="primary"
+                    aria-label="Open Full Config"
+                    onClick={() => onOpenFullConfig()}
+                    disabled={!canOpenFullConfig || planChangingControlsDisabled}
+                    className="h-10 text-[13.5px]"
+                  >
+                    <Maximize2 className="h-4 w-4" aria-hidden />
+                    Config
+                  </Button>
                   <Button
                     variant="ghost"
                     onClick={onResetOverrides}
-                    disabled={overrideCount === 0}
-                    className="h-8 border border-line bg-white/[0.025] px-2.5 text-xs"
+                    disabled={planChangingControlsDisabled || overrideCount === 0}
+                    className="h-10 border border-line bg-white/[0.025] px-2.5 text-xs"
                   >
                     <RotateCcw className="h-3.5 w-3.5" aria-hidden />
                     Reset
                   </Button>
-                }
-              >
-                <Button
-                  variant="primary"
-                  aria-label="Open Full Config"
-                  onClick={() => onOpenFullConfig()}
-                  disabled={!canOpenFullConfig}
-                  className="h-10 w-full text-[13.5px]"
-                >
-                  <Maximize2 className="h-4 w-4" aria-hidden />
-                  Config
-                </Button>
+                </div>
                 {configSections.length === 0 && (
                   <InlineStatus compact>
                     Select a model and preset to load config fields
                   </InlineStatus>
                 )}
-              </TrainingFooterField>
-            </div>
+              </section>
 
-            <TrainingFooterField label={null}>
-              <TrainingSearchSetup
-                axes={searchAxes}
-                search={effectiveTrainingSearch}
-                overrides={overrides}
-                selectedDatasetCount={selectedDatasets.length}
-                selectedPresetCount={selectedTrainingPresetCount}
-                isLoading={searchLoading}
-                disabledReason={
-                  activeConfigSnapshotCount > 0
-                    ? "Config snapshots train fixed variants; grid and random search are unavailable."
-                    : undefined
-                }
-                onChange={onTrainingSearchChange}
+              <section className="grid gap-2 border-t border-line-soft pt-3">
+                <TrainingSearchSetup
+                  axes={searchAxes}
+                  search={effectiveTrainingSearch}
+                  overrides={overrides}
+                  selectedDatasetCount={selectedDatasets.length}
+                  selectedPresetCount={selectedTrainingPresetCount}
+                  isLoading={searchLoading}
+                  disabledReason={
+                    setupLockMessage ||
+                    (activeConfigSnapshotCount > 0
+                      ? "Config snapshots train fixed variants; grid and random search are unavailable."
+                      : undefined)
+                  }
+                  onChange={onTrainingSearchChange}
+                />
+              </section>
+            </aside>
+
+            <main
+              aria-label="Training Run List"
+              className="grid min-h-0"
+            >
+              <TrainingCompactRunList
+                plan={progressRunPlan}
+                isLoading={isProgressPlanning}
+                error={progressPlanError}
+                canResample={canResampleRunPlan}
+                isResampling={isResampling}
+                onResample={resampleRunPlan}
+                canManageDraftRuns={!job}
+                onExcludePreset={onExcludeDraftTrainingPreset}
+                onExcludeSnapshot={onExcludeConfigSnapshot}
               />
-            </TrainingFooterField>
-          </div>
+            </main>
 
-          <aside className="grid gap-3">
-            <div className="edge grid gap-2 rounded-card p-3">
-              <SectionHeading title="Request" />
-              <div className="grid gap-1.5 text-xs text-ink-dim">
-                <div className="truncate font-mono">
-                  {selectedModel || "No model"}
-                </div>
-                <div className="truncate font-mono">
-                  {selectedPreset || "No preset"}
-                </div>
-                <div>{presetCountLabel}</div>
-                <div>{datasetCountLabel}</div>
-                <div>{selectedMonitors.length} monitors</div>
-                {hasConfigSnapshots && (
-                  <div>
-                    {activeConfigSnapshotCount} included / {configSnapshotCount}{" "}
-                    available config snapshots
-                  </div>
-                )}
-                <div>{selectedFieldSummary.length} effective overrides</div>
-                <div>{plannedRunLabel}</div>
-                {effectiveTrainingSearch.mode !== "off" && (
-                  <>
-                    <div>
-                      {searchModeLabel} search
-                    </div>
-                    <div>
-                      {activeSearchAxisCount} axes · {displayedRunCount} planned
-                      runs
-                    </div>
-                    {effectiveTrainingSearch.mode === "random" && (
-                      <div>{effectiveTrainingSearch.randomSamples} random samples</div>
-                    )}
-                  </>
-                )}
-                <div className="truncate font-mono">{logFolderLabel}</div>
-              </div>
-              {searchConflictKeys.length > 0 && (
-                <div className="rounded-[8px] border border-amber/30 bg-amber/[0.055] px-2 py-1 text-xs text-amber">
-                  {searchConflictKeys.length} override
-                  {searchConflictKeys.length === 1 ? "" : "s"} replaced by
-                  search.
-                </div>
-              )}
-              {effectiveTrainingSearch.mode !== "off" &&
-                !trainingSearchValidation.ready && (
-                  <div className="rounded-[8px] border border-danger-line bg-danger-soft px-2 py-1 text-xs text-danger-text">
-                    {trainingSearchValidation.message}
-                  </div>
-                )}
-              {selectedFieldSummary.length > 0 && (
-                <div className="grid max-h-24 gap-1 overflow-y-auto pr-1">
-                  {visibleSelectedFieldSummary.map((entry) => (
-                    <div
-                      key={entry.key}
-                      className="flex min-w-0 items-center justify-between gap-2 rounded-[8px] border border-violet/30 bg-violet/10 px-2 py-1 text-xs"
-                    >
-                      <span className="truncate text-ink">{entry.label}</span>
-                      <span className="max-w-[9rem] truncate font-mono text-violet">
-                        {entry.value}
-                      </span>
-                    </div>
-                  ))}
-                  {hiddenSelectedFieldCount > 0 && (
-                    <div className="rounded-[8px] border border-line bg-white/[0.025] px-2 py-1 text-xs text-ink-faint">
-                      +{hiddenSelectedFieldCount} more overrides
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+            <aside
+              aria-label="Training Status Sidebar"
+              aria-live="polite"
+              className="grid min-h-0 content-start gap-3 overflow-y-auto pr-1"
+            >
+              <TrainingRunPlanCard
+                plan={progressRunPlan}
+                job={job}
+                isPlanning={isProgressPlanning}
+                planError={progressPlanError}
+                trainingError={trainingError}
+                effectiveTrainingSearch={effectiveTrainingSearch}
+                searchModeLabel={searchModeLabel}
+                activeSearchAxisCount={activeSearchAxisCount}
+                searchConflictCount={searchConflictKeys.length}
+                trainingSearchValidation={trainingSearchValidation}
+                displayedRunCount={displayedRunCount}
+                requiresLargeGridConfirmation={requiresLargeGridConfirmation}
+                selectedMonitorCount={selectedMonitors.length}
+                presetCountLabel={presetCountLabel}
+                datasetCountLabel={datasetCountLabel}
+              />
 
-            {clusterGrowth.length > 0 && (
-              <div className="edge grid gap-2 rounded-card p-3">
-                <SectionHeading title="Cluster growth" />
-                <div className="grid gap-1.5">
-                  {clusterGrowth.map((summary) => (
-                    <div
-                      key={summary.node}
-                      className="grid gap-1.5 rounded-[10px] border border-line bg-white/[0.018] px-2.5 py-2 text-xs"
-                    >
-                      <div className="flex min-w-0 items-center justify-between gap-2">
-                        <span className="truncate font-mono text-ink">
-                          {summary.node}
-                        </span>
-                        <span className="font-mono text-violet-muted">
-                          {summary.count}
-                          {summary.capacityTotal
-                            ? ` / ${summary.capacityTotal}`
-                            : ""}{" "}
-                          neurons
-                          {summary.additionCount > 0
-                            ? ` · +${summary.additionCount}`
-                            : ""}
-                        </span>
-                      </div>
-                      {summary.additions.length > 0 && (
-                        <div className="flex flex-wrap gap-1">
-                          {summary.additions
-                            .slice(-12)
-                            .map((addition, index) => (
-                              <span
-                                key={`${addition.coord.join("-")}-${index}`}
-                                title={`added at ${addition.step !== null ? `step ${addition.step}` : "unknown step"}`}
-                                className="rounded-[6px] border border-violet/30 bg-violet/10 px-1.5 py-0.5 font-mono text-[11px] text-violet"
-                              >
-                                ({addition.coord.join(", ")})
-                                {addition.step !== null
-                                  ? ` @${addition.step}`
-                                  : ""}
-                              </span>
-                            ))}
+              {clusterGrowth.length > 0 && (
+                <div className="edge grid gap-2 rounded-card p-3">
+                  <SectionHeading title="Cluster growth" />
+                  <div className="grid gap-1.5">
+                    {clusterGrowth.map((summary) => (
+                      <div
+                        key={summary.node}
+                        className="grid gap-1.5 rounded-[10px] border border-line bg-white/[0.018] px-2.5 py-2 text-xs"
+                      >
+                        <div className="flex min-w-0 items-center justify-between gap-2">
+                          <span className="truncate font-mono text-ink">
+                            {summary.node}
+                          </span>
+                          <span className="font-mono text-violet-muted">
+                            {summary.count}
+                            {summary.capacityTotal
+                              ? ` / ${summary.capacityTotal}`
+                              : ""}{" "}
+                            neurons
+                            {summary.additionCount > 0
+                              ? ` · +${summary.additionCount}`
+                              : ""}
+                          </span>
                         </div>
-                      )}
-                    </div>
-                  ))}
+                        {summary.additions.length > 0 && (
+                          <div className="flex flex-wrap gap-1">
+                            {summary.additions
+                              .slice(-12)
+                              .map((addition, index) => (
+                                <span
+                                  key={`${addition.coord.join("-")}-${index}`}
+                                  title={`added at ${
+                                    addition.step !== null
+                                      ? `step ${addition.step}`
+                                      : "unknown step"
+                                  }`}
+                                  className="rounded-[6px] border border-violet/30 bg-violet/10 px-1.5 py-0.5 font-mono text-[11px] text-violet"
+                                >
+                                  ({addition.coord.join(", ")})
+                                  {addition.step !== null
+                                    ? ` @${addition.step}`
+                                    : ""}
+                                </span>
+                              ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            <div className="edge grid gap-2 rounded-card p-3">
-              <SectionHeading title="Log Tail" />
-              <pre className="max-h-36 overflow-y-auto whitespace-pre-wrap rounded-[10px] border border-line bg-black/25 p-2 font-mono text-xs leading-5 text-ink-dim">
-                {boundedLogTailText}
-              </pre>
-            </div>
-
-            {trainingError && (
-              <div className="rounded-[10px] border border-danger-line bg-danger-soft p-3 text-sm text-danger-text">
-                {trainingError}
-              </div>
-            )}
-          </aside>
+              <TrainingLogTailCard logTail={job?.logTail} />
+            </aside>
+          </div>
         </div>
-      )}
-      {ui.isProgressOpen && (
-        <TrainingProgressDialog
-          plan={progressRunPlan}
-          isLoading={isProgressPlanning}
-          error={progressPlanError}
-          canResample={canResampleRunPlan}
-          isResampling={isResampling}
-          onResample={resampleRunPlan}
-          canRemoveSnapshots={allConfigSnapshots.length > 0 && !job}
-          onRemoveSnapshot={onRemoveConfigSnapshot}
-          draftManagement={{
-            enabled: !job,
-            snapshots: allConfigSnapshots,
-            presetOptions,
-            selectedPreset,
-            selectedTrainingPresets,
-            selectedTrainingSnapshotIds,
-            onIncludeSnapshot: onIncludeConfigSnapshot,
-            onExcludeSnapshot: onExcludeConfigSnapshot,
-            onTogglePreset: onToggleDraftTrainingPreset,
-            onExcludePreset: onExcludeDraftTrainingPreset,
-            onEditPresetAsSnapshot,
-            onEditSnapshotCopy: onEditConfigSnapshotCopy,
-          }}
-          onClose={ui.closeProgress}
-        />
       )}
       {showLargeGridConfirmation && (
         <DialogShell
