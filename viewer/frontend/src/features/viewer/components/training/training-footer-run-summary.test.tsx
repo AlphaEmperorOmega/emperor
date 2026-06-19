@@ -118,6 +118,18 @@ function job(
   };
 }
 
+function expectStatusPill(label: string, value: string) {
+  const labelElement = screen.getByText(label);
+  const pill = labelElement.parentElement;
+  if (!(pill instanceof HTMLElement)) {
+    throw new Error(`Expected ${label} to render inside a status pill`);
+  }
+  expect(pill).toHaveClass("h-[34px]", "rounded-[9px]", "border-line");
+  expect(pill.querySelector("svg")).toBeInTheDocument();
+  expect(pill).toHaveTextContent(label);
+  expect(pill).toHaveTextContent(value);
+}
+
 describe("TrainingFooterRunSummary", () => {
   it("renders no-plan, loading, and plan-error states", () => {
     const { rerender } = render(<TrainingFooterRunSummary />);
@@ -125,19 +137,19 @@ describe("TrainingFooterRunSummary", () => {
     expect(screen.getByRole("status")).toHaveAccessibleName(
       "Training run summary: no run plan",
     );
-    expect(screen.getByText("No run plan")).toBeInTheDocument();
+    expectStatusPill("runs", "no plan");
 
     rerender(<TrainingFooterRunSummary isLoading />);
     expect(screen.getByRole("status")).toHaveAccessibleName(
       "Training run summary: planning training runs",
     );
-    expect(screen.getByText("Planning runs")).toBeInTheDocument();
+    expectStatusPill("runs", "planning");
 
     rerender(<TrainingFooterRunSummary error="Plan failed" />);
     expect(screen.getByRole("status")).toHaveAccessibleName(
       "Training run summary: plan error: Plan failed",
     );
-    expect(screen.getByText("Plan error")).toBeInTheDocument();
+    expectStatusPill("plan", "error");
   });
 
   it("shows zero completed draft counts and the next planned run", () => {
@@ -146,10 +158,12 @@ describe("TrainingFooterRunSummary", () => {
         plan={plan([run({ index: 1 }), run({ index: 2, dataset: "Cifar10" })])}
       />,
     );
+    const summary = screen.getByRole("status");
 
-    expect(screen.getByText("Runs 0 / 2")).toBeInTheDocument();
-    expect(screen.getByText("Epochs 0 / 60")).toBeInTheDocument();
-    expect(screen.getByText("Next run #1 0 / 30 epochs")).toBeInTheDocument();
+    expectStatusPill("runs", "0 / 2");
+    expectStatusPill("epochs", "0 / 60");
+    expectStatusPill("next run", "#1 0 / 30 epochs");
+    expect(summary).not.toHaveClass("rounded-[10px]", "border-line", "bg-white/[0.025]");
   });
 
   it("shows completed run and completed epoch counts", () => {
@@ -162,9 +176,9 @@ describe("TrainingFooterRunSummary", () => {
       />,
     );
 
-    expect(screen.getByText("Runs 2 / 2")).toBeInTheDocument();
-    expect(screen.getByText("Epochs 50 / 50")).toBeInTheDocument();
-    expect(screen.getByText("Result run #2 30 / 30 epochs")).toBeInTheDocument();
+    expectStatusPill("runs", "2 / 2");
+    expectStatusPill("epochs", "50 / 50");
+    expectStatusPill("result run", "#2 30 / 30 epochs");
   });
 
   it("uses the running run for current epoch progress", () => {
@@ -177,9 +191,9 @@ describe("TrainingFooterRunSummary", () => {
       />,
     );
 
-    expect(screen.getByText("Runs 1 / 2")).toBeInTheDocument();
-    expect(screen.getByText("Epochs 34 / 60")).toBeInTheDocument();
-    expect(screen.getByText("Active run #2 4 / 30 epochs")).toBeInTheDocument();
+    expectStatusPill("runs", "1 / 2");
+    expectStatusPill("epochs", "34 / 60");
+    expectStatusPill("active run", "#2 4 / 30 epochs");
   });
 
   it("selects failed and cancelled result runs for terminal jobs", () => {
@@ -195,7 +209,7 @@ describe("TrainingFooterRunSummary", () => {
       />,
     );
 
-    expect(screen.getByText("Result run #2 8 / 30 epochs")).toBeInTheDocument();
+    expectStatusPill("result run", "#2 8 / 30 epochs");
 
     const cancelledPlan = plan([
       run({ index: 1, status: "Completed", currentEpoch: 30 }),
@@ -208,6 +222,6 @@ describe("TrainingFooterRunSummary", () => {
       />,
     );
 
-    expect(screen.getByText("Result run #2 4 / 30 epochs")).toBeInTheDocument();
+    expectStatusPill("result run", "#2 4 / 30 epochs");
   });
 });

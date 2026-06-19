@@ -1,5 +1,5 @@
-import { AlertTriangle, ListChecks, Loader2 } from "lucide-react";
-import { StatChip, type StatChipTone } from "@/features/viewer/components/shared/stat-chip";
+import { AlertTriangle, ListChecks, Loader2, Play, Timer } from "lucide-react";
+import { StatusPill } from "@/features/viewer/components/status-pill";
 import {
   selectTrainingRunForDisplay,
   trainingRunDisplayLabel,
@@ -15,20 +15,17 @@ export type TrainingFooterRunSummaryProps = {
   className?: string;
 };
 
-function runTone(status: TrainingRun["status"]): StatChipTone {
+function runTone(status: TrainingRun["status"]): "neutral" | "good" | "warn" | "danger" {
   if (status === "Completed") {
-    return "success";
+    return "good";
   }
   if (status === "Failed" || status === "Cancelled") {
     return "danger";
   }
-  if (status === "Running") {
-    return "violet";
-  }
   if (status === "Skipped") {
-    return "warning";
+    return "warn";
   }
-  return "default";
+  return "neutral";
 }
 
 function summaryLabel({
@@ -74,57 +71,62 @@ export function TrainingFooterRunSummary({
       aria-label={ariaLabel}
       title={error || undefined}
       className={cn(
-        "flex min-w-[13rem] max-w-[34rem] flex-wrap items-center gap-1.5 rounded-[10px] border border-line bg-white/[0.025] px-2 py-1.5",
+        "flex min-w-[13rem] max-w-[34rem] flex-wrap items-center gap-1.5",
         className,
       )}
     >
       {isLoading ? (
-        <>
-          <Loader2 className="h-3.5 w-3.5 animate-spin text-violet" aria-hidden />
-          <StatChip tone="violet" size="xs">
-            Planning runs
-          </StatChip>
-        </>
+        <StatusPill
+          icon={<Loader2 className="h-4 w-4 animate-spin" />}
+          label="runs"
+          value="planning"
+          tone="warn"
+        />
       ) : error ? (
-        <>
-          <AlertTriangle className="h-3.5 w-3.5 text-danger-text" aria-hidden />
-          <StatChip tone="danger" size="xs">
-            Plan error
-          </StatChip>
-        </>
+        <StatusPill
+          icon={<AlertTriangle className="h-4 w-4" />}
+          label="plan"
+          value="error"
+          tone="danger"
+        />
       ) : plan ? (
         <>
-          <ListChecks className="h-3.5 w-3.5 text-violet" aria-hidden />
-          <StatChip
-            tone={plan.summary.completedRuns === plan.summary.totalRuns ? "success" : "default"}
-            size="xs"
-          >
-            Runs {plan.summary.completedRuns} / {plan.summary.totalRuns}
-          </StatChip>
-          <StatChip
+          <StatusPill
+            icon={<ListChecks className="h-4 w-4" />}
+            label="runs"
+            value={`${plan.summary.completedRuns} / ${plan.summary.totalRuns}`}
+            tone={
+              plan.summary.completedRuns === plan.summary.totalRuns ? "good" : "neutral"
+            }
+          />
+          <StatusPill
+            icon={<Timer className="h-4 w-4" />}
+            label="epochs"
+            value={`${plan.summary.completedEpochs} / ${plan.summary.totalEpochs}`}
             tone={
               plan.summary.completedEpochs === plan.summary.totalEpochs
-                ? "success"
-                : "default"
+                ? "good"
+                : "neutral"
             }
-            size="xs"
-          >
-            Epochs {plan.summary.completedEpochs} / {plan.summary.totalEpochs}
-          </StatChip>
+          />
           {run && (
-            <StatChip tone={runTone(run.status)} size="xs" className="max-w-full">
-              <span className="whitespace-nowrap">
-                {trainingRunDisplayLabel(run, job)} #{run.index}{" "}
-                {run.currentEpoch} / {run.totalEpochs || "-"} epochs
-              </span>
-            </StatChip>
+            <StatusPill
+              icon={<Play className="h-4 w-4" />}
+              label={trainingRunDisplayLabel(run, job).toLowerCase()}
+              value={`#${run.index} ${run.currentEpoch} / ${
+                run.totalEpochs || "-"
+              } epochs`}
+              tone={runTone(run.status)}
+              className="max-w-full"
+            />
           )}
         </>
       ) : (
-        <>
-          <ListChecks className="h-3.5 w-3.5 text-ink-faint" aria-hidden />
-          <StatChip size="xs">No run plan</StatChip>
-        </>
+        <StatusPill
+          icon={<ListChecks className="h-4 w-4" />}
+          label="runs"
+          value="no plan"
+        />
       )}
     </div>
   );
