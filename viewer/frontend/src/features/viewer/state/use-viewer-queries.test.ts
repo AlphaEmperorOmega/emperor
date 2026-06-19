@@ -20,14 +20,19 @@ vi.mock("@/lib/api", () => mocks);
 import { useViewerQueries } from "@/features/viewer/state/use-viewer-queries";
 import { type ModelIdentity } from "@/lib/api";
 
-function renderQueries(model: string, preset: string) {
+function renderQueries(
+  model: string,
+  preset: string,
+  trainingPresets: string[] = [],
+) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return renderHook(
-    ({ m, p }: { m: string; p: string }) => useViewerQueries("linears", m, p),
+    ({ m, p, presets }: { m: string; p: string; presets: string[] }) =>
+      useViewerQueries("linears", m, p, presets),
     {
-      initialProps: { m: model, p: preset },
+      initialProps: { m: model, p: preset, presets: trainingPresets },
       wrapper: ({ children }: { children: ReactNode }) =>
         createElement(QueryClientProvider, { client }, children),
     },
@@ -65,11 +70,10 @@ beforeEach(() => {
   mocks.fetchConfigSchema.mockReset().mockImplementation((identity: ModelIdentity) =>
     Promise.resolve({ ...identity, fields: [] }),
   );
-  mocks.fetchSearchSpace
-    .mockReset()
-    .mockImplementation((identity: ModelIdentity, preset: string) =>
+  mocks.fetchSearchSpace.mockReset().mockImplementation(
+    (identity: ModelIdentity, preset: string) =>
       Promise.resolve({ ...identity, preset, axes: [] }),
-    );
+  );
 });
 
 describe("useViewerQueries enabled gating", () => {
@@ -108,7 +112,7 @@ describe("useViewerQueries enabled gating", () => {
   });
 
   it("fires preset-scoped queries only when both model and preset are selected", async () => {
-    renderQueries("linear", "base");
+    renderQueries("linear", "base", ["base", "post-norm"]);
 
     await waitFor(() =>
       expect(mocks.fetchConfigSchema).toHaveBeenCalledWith(
@@ -119,6 +123,7 @@ describe("useViewerQueries enabled gating", () => {
     expect(mocks.fetchSearchSpace).toHaveBeenCalledWith(
       { modelType: "linears", model: "linear" },
       "base",
+      ["base", "post-norm"],
     );
   });
 });

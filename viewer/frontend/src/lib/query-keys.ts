@@ -154,7 +154,15 @@ export const viewerQueryKeys = {
     selectedModelType: string,
     selectedModel: string,
     selectedPreset: string,
-  ) => ["search-space", selectedModelType, selectedModel, selectedPreset] as const,
+    selectedTrainingPresets: StringList = [],
+  ) =>
+    [
+      "search-space",
+      selectedModelType,
+      selectedModel,
+      selectedPreset,
+      normalizedStringSet(selectedTrainingPresets),
+    ] as const,
   historicalSummaryInspection: (
     model: string,
     preset: string,

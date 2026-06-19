@@ -55,6 +55,8 @@ export const searchAxisSchema = z.object({
   locked: z.boolean().optional(),
   lockedValue: configValueSchema.optional(),
   lockedReason: z.string().optional(),
+  lockedByPresets: z.array(z.string()).optional(),
+  lockReasons: z.array(z.string()).optional(),
 });
 
 const modelsSchema = z.object({ models: z.array(modelIdentitySchema) });
@@ -121,8 +123,22 @@ export function fetchConfigSchema(identity: ModelIdentity, preset?: string) {
   );
 }
 
-export function fetchSearchSpace(identity: ModelIdentity, preset?: string) {
-  const query = preset ? `?preset=${encodeURIComponent(preset)}` : "";
+export function fetchSearchSpace(
+  identity: ModelIdentity,
+  preset?: string,
+  presets?: readonly string[],
+) {
+  const params = new URLSearchParams();
+  if (preset) {
+    params.set("preset", preset);
+  }
+  const selectedPresets = Array.from(
+    new Set((presets ?? []).filter((selectedPreset) => selectedPreset.length > 0)),
+  );
+  if (selectedPresets.length > 0) {
+    params.set("presets", selectedPresets.join(","));
+  }
+  const query = params.toString() ? `?${params.toString()}` : "";
   return requestJson(
     `/models/${modelPath(identity)}/search-space${query}`,
     searchSpaceSchema,

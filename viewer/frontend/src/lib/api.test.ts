@@ -1580,10 +1580,13 @@ describe("URL and query construction", () => {
       }),
     );
 
-    const result = await fetchSearchSpace(linearIdentity, "baseline/preset");
+    const result = await fetchSearchSpace(linearIdentity, "baseline/preset", [
+      "baseline/preset",
+      "post-norm",
+    ]);
 
     expect(fetchMock.mock.calls[0][0]).toBe(
-      `${BASE}/models/linears/linear/search-space?preset=baseline%2Fpreset`,
+      `${BASE}/models/linears/linear/search-space?preset=baseline%2Fpreset&presets=baseline%2Fpreset%2Cpost-norm`,
     );
     expect(result.axes[0]).toMatchObject({
       key: "hidden_dim",

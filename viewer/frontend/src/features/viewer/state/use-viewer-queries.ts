@@ -48,6 +48,7 @@ export function useViewerQueries(
   selectedModelType: string,
   selectedModel: string,
   selectedPreset: string,
+  selectedTrainingPresets: readonly string[] = [],
 ) {
   const selectedIdentity = {
     modelType: selectedModelType,
@@ -111,8 +112,16 @@ export function useViewerQueries(
       selectedModelType,
       selectedModel,
       selectedPreset,
+      selectedTrainingPresets,
     ),
-    queryFn: () => fetchSearchSpace(selectedIdentity, selectedPreset),
+    queryFn: () =>
+      fetchSearchSpace(
+        selectedIdentity,
+        selectedPreset,
+        selectedTrainingPresets.length > 0
+          ? selectedTrainingPresets
+          : [selectedPreset],
+      ),
     enabled: hasSelectedModel && selectedPreset.length > 0,
     retry: false,
     staleTime: STATIC_METADATA_STALE_TIME_MS,

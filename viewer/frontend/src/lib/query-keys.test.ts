@@ -121,11 +121,17 @@ describe("query key factories", () => {
       "linear",
       "baseline",
     ]);
-    expect(viewerQueryKeys.searchSpace("linears", "linear", "baseline")).toEqual([
+    expect(
+      viewerQueryKeys.searchSpace("linears", "linear", "baseline", [
+        "post-norm",
+        "baseline",
+      ]),
+    ).toEqual([
       "search-space",
       "linears",
       "linear",
       "baseline",
+      ["baseline", "post-norm"],
     ]);
     expect(
       viewerQueryKeys.historicalSummaryInspection("linear", "baseline", "Mnist"),
