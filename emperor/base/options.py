@@ -11,27 +11,27 @@ class BaseOptions(Enum):
         return name.lower().replace("_", "-")
 
     @classmethod
-    def has_option(cls, name: str) -> bool:
-        return cls._option_name(name) is not None
+    def has_member(cls, name: str) -> bool:
+        return cls._member_name(name) is not None
 
     @classmethod
-    def _option_name(cls, name: str | None) -> str | None:
+    def _member_name(cls, name: str | None) -> str | None:
         if name is None:
             return None
         normalized_name = cls.cli_name(name)
-        for option_name in cls.__members__:
-            if normalized_name in {option_name, cls.cli_name(option_name)}:
-                return option_name
+        for member_name in cls.__members__:
+            if normalized_name in {member_name, cls.cli_name(member_name)}:
+                return member_name
         return None
 
     @classmethod
-    def get_option(cls, name: str | None):
-        option_name = cls._option_name(name)
-        if option_name is None:
+    def get_member(cls, name: str | None):
+        member_name = cls._member_name(name)
+        if member_name is None:
             if name is None:
                 return None
             raise ValueError(f"Option '{name}' does not exist in {cls.__name__}.")
-        return cls[option_name]
+        return cls[member_name]
 
     @classmethod
     def cli_names(cls) -> list[str]:
@@ -44,14 +44,6 @@ class BaseOptions(Enum):
     @classmethod
     def display_names(cls) -> list[str]:
         return cls.cli_names()
-
-    @classmethod
-    def legacy_get_option(cls, name: str | None):
-        if name is None:
-            return None
-        if cls.has_option(name):
-            return cls.get_option(name)
-        raise ValueError(f"Option '{name}' does not exist in {cls.__name__}.")
 
 
 class ActivationOptions(BaseOptions):
