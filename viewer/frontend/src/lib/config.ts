@@ -1,6 +1,8 @@
-import { type ConfigField } from "@/lib/api";
+import { type ConfigField, type ConfigValue } from "@/lib/api";
 
 export type OverrideValues = Record<string, string>;
+
+export type ActiveOverrideScope = "preset" | "snapshot";
 
 export type ConfigSection = {
   title: string;
@@ -70,8 +72,96 @@ export function defaultLabel(field: ConfigField) {
   return field.default === null || field.default === undefined ? "None" : String(field.default);
 }
 
+function normalizePrimitiveConfigValue(value: ConfigValue | string) {
+  return value === null || value === undefined ? "" : String(value).trim();
+}
+
+export function normalizeConfigFieldValue(
+  field: ConfigField,
+  value: ConfigValue | string,
+) {
+  const raw = normalizePrimitiveConfigValue(value);
+  if (field.nullable && raw === "") {
+    return "null";
+  }
+  if (field.type === "bool") {
+    const lower = raw.toLowerCase();
+    if (lower === "true" || lower === "false") {
+      return lower;
+    }
+  }
+  if (field.type === "int") {
+    const numberValue = Number(raw);
+    if (Number.isInteger(numberValue)) {
+      return String(numberValue);
+    }
+  }
+  if (field.type === "float") {
+    const numberValue = Number(raw);
+    if (Number.isFinite(numberValue)) {
+      return String(numberValue);
+    }
+  }
+  return raw;
+}
+
+export function defaultConfigFieldValue(field: ConfigField) {
+  return normalizeConfigFieldValue(field, field.default);
+}
+
+export function overrideValueForConfigField(
+  field: ConfigField,
+  value: ConfigValue | string,
+) {
+  const normalizedValue = normalizeConfigFieldValue(field, value);
+  return field.nullable && normalizedValue === "null" ? "" : normalizedValue;
+}
+
+export function isDefaultConfigFieldValue(
+  field: ConfigField,
+  value: ConfigValue | string,
+) {
+  return normalizeConfigFieldValue(field, value) === defaultConfigFieldValue(field);
+}
+
 export function hasOverride(overrides: OverrideValues, key: string) {
   return Object.prototype.hasOwnProperty.call(overrides, key);
+}
+
+export function lockedOverrideKeys(
+  fields: ConfigField[],
+  overrides: OverrideValues,
+) {
+  const lockedKeys = new Set(
+    fields.filter((field) => field.locked).map((field) => field.key),
+  );
+  return Object.keys(overrides)
+    .filter((key) => lockedKeys.has(key))
+    .sort((left, right) => left.localeCompare(right));
+}
+
+export function effectivePresetOverrides(
+  fields: ConfigField[],
+  overrides: OverrideValues,
+): OverrideValues {
+  const inactiveKeys = new Set(lockedOverrideKeys(fields, overrides));
+  if (inactiveKeys.size === 0) {
+    return { ...overrides };
+  }
+  return Object.fromEntries(
+    Object.entries(overrides).filter(([key]) => !inactiveKeys.has(key)),
+  );
+}
+
+export function overrideDigest(overrides: OverrideValues) {
+  return Object.entries(overrides)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, value]) => `${key}=${value}`)
+    .join("\u0000");
+}
+
+export function activeOverrideScopeLabel(scope: ActiveOverrideScope) {
+  return scope === "snapshot" ? "Snapshot draft" : "Preset overrides";
 }
 
 export function modifiedCount(fields: ConfigField[], overrides: OverrideValues) {

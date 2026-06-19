@@ -1,8 +1,15 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  defaultConfigFieldValue,
   deriveNestedConfigSections,
   disabledConfigFieldReasons,
+  effectivePresetOverrides,
+  isDefaultConfigFieldValue,
+  lockedOverrideKeys,
+  normalizeConfigFieldValue,
+  overrideDigest,
+  overrideValueForConfigField,
   type ConfigSection,
 } from "@/lib/config";
 import { type ConfigField } from "@/lib/api";
@@ -15,7 +22,7 @@ function field(overrides: Partial<ConfigField> & Pick<ConfigField, "key">): Conf
     label: overrides.label ?? overrides.key,
     section: overrides.section ?? "Gate Stack Options",
     type: overrides.type ?? "int",
-    default: overrides.default ?? 0,
+    default: "default" in overrides ? overrides.default ?? null : 0,
     nullable: overrides.nullable ?? false,
     choices: overrides.choices ?? [],
     locked: overrides.locked ?? false,
@@ -23,6 +30,88 @@ function field(overrides: Partial<ConfigField> & Pick<ConfigField, "key">): Conf
     lockedReason: overrides.lockedReason,
   };
 }
+
+describe("config field value normalization", () => {
+  it("matches int defaults against equivalent string input", () => {
+    const intField = field({
+      key: "hidden_dim",
+      type: "int",
+      default: 256,
+    });
+
+    expect(normalizeConfigFieldValue(intField, "256")).toBe("256");
+    expect(isDefaultConfigFieldValue(intField, "256")).toBe(true);
+  });
+
+  it("matches float defaults against equivalent string input", () => {
+    const floatField = field({
+      key: "dropout",
+      type: "float",
+      default: 0.2,
+    });
+
+    expect(normalizeConfigFieldValue(floatField, "0.2")).toBe("0.2");
+    expect(isDefaultConfigFieldValue(floatField, "0.2")).toBe(true);
+  });
+
+  it("matches bool defaults against equivalent string input", () => {
+    const boolField = field({
+      key: "gate_flag",
+      type: "bool",
+      default: false,
+    });
+
+    expect(normalizeConfigFieldValue(boolField, "false")).toBe("false");
+    expect(isDefaultConfigFieldValue(boolField, "false")).toBe(true);
+  });
+
+  it("normalizes nullable null and empty UI values consistently", () => {
+    const nullableField = field({
+      key: "optional_hidden_dim",
+      type: "int",
+      default: null,
+      nullable: true,
+    });
+
+    expect(defaultConfigFieldValue(nullableField)).toBe("null");
+    expect(normalizeConfigFieldValue(nullableField, null)).toBe("null");
+    expect(normalizeConfigFieldValue(nullableField, "")).toBe("null");
+    expect(isDefaultConfigFieldValue(nullableField, "")).toBe(true);
+    expect(overrideValueForConfigField(nullableField, "")).toBe("");
+  });
+});
+
+describe("preset override helpers", () => {
+  it("filters locked fields from effective preset overrides without mutating the draft", () => {
+    const unlockedField = field({ key: "hidden_dim" });
+    const lockedField = field({
+      key: "layer_norm",
+      locked: true,
+      lockedValue: true,
+    });
+    const overrides = {
+      hidden_dim: "128",
+      layer_norm: "false",
+    };
+
+    expect(lockedOverrideKeys([unlockedField, lockedField], overrides)).toEqual([
+      "layer_norm",
+    ]);
+    expect(effectivePresetOverrides([unlockedField, lockedField], overrides)).toEqual({
+      hidden_dim: "128",
+    });
+    expect(overrides).toEqual({
+      hidden_dim: "128",
+      layer_norm: "false",
+    });
+  });
+
+  it("builds a stable digest independent of object insertion order", () => {
+    expect(overrideDigest({ b: "2", a: "1" })).toBe(
+      overrideDigest({ a: "1", b: "2" }),
+    );
+  });
+});
 
 describe("config section controls", () => {
   it("uses independent stack flags to enable controller stack fields", () => {
