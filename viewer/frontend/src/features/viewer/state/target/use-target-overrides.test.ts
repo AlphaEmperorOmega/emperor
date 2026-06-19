@@ -24,7 +24,7 @@ describe("useTargetOverridesState", () => {
     expect(result.current.overrides).toEqual({});
   });
 
-  it("selectPreset resets overrides but keeps the model", () => {
+  it("selectPreset preserves overrides and keeps the model", () => {
     const { result } = renderHook(() => useTargetOverridesState());
 
     act(() => result.current.selectModel("linear"));
@@ -33,7 +33,7 @@ describe("useTargetOverridesState", () => {
 
     expect(result.current.selectedModel).toBe("linear");
     expect(result.current.selectedPreset).toBe("p2");
-    expect(result.current.overrides).toEqual({});
+    expect(result.current.overrides).toEqual({ lr: "0.1" });
   });
 
   it("updateOverride merges keys, clearOverride removes one, clearOverrides empties", () => {

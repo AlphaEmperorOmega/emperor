@@ -14,6 +14,8 @@ export type PreviewInspectionRequest = {
   preset: string;
   dataset?: string;
   overrides: OverrideValues;
+  targetMode?: "preset" | "snapshot" | "experiment";
+  targetId?: string;
 };
 
 function previewInspectionRequestKey(request: PreviewInspectionRequest) {
@@ -27,7 +29,19 @@ function previewInspectionRequestKey(request: PreviewInspectionRequest) {
         left.localeCompare(right),
       ),
     ),
+    targetMode: request.targetMode ?? "preset",
+    targetId: request.targetId ?? request.preset,
   });
+}
+
+function previewInspectionPayload(request: PreviewInspectionRequest) {
+  return {
+    modelType: request.modelType,
+    model: request.model,
+    preset: request.preset,
+    dataset: request.dataset,
+    overrides: request.overrides,
+  };
 }
 
 function assertPreviewIdentity<
@@ -71,14 +85,17 @@ export function usePreviewInspectionState() {
     error,
   } = useMutation({
     mutationFn: async (request: PreviewInspectionRequest) =>
-      assertPreviewIdentity(request, await inspectModel(request)),
+      assertPreviewIdentity(request, await inspectModel(previewInspectionPayload(request))),
   });
   const {
     mutate: mutateOperationGraph,
     reset: resetOperationGraphMutation,
   } = useMutation({
     mutationFn: async (request: PreviewInspectionRequest) =>
-      assertPreviewIdentity(request, await inspectOperationGraph(request)),
+      assertPreviewIdentity(
+        request,
+        await inspectOperationGraph(previewInspectionPayload(request)),
+      ),
   });
 
   const clearPreview = useCallback(() => {

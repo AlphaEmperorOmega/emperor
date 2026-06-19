@@ -58,7 +58,7 @@ export function groupModelLogRunsByExperiment(
   }));
 }
 
-export function historicalExperimentOptions(runs: LogRun[]): HistoricalRunOption[] {
+export function historicalExperimentRunOptions(runs: LogRun[]): HistoricalRunOption[] {
   return groupModelLogRunsByExperiment(runs).map((group) => ({
     value: group.experiment,
     label: group.experiment,

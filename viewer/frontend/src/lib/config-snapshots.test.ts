@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildConfigSnapshotRunPlan,
+  configSnapshotOverrideEntries,
   createConfigSnapshot,
   validateConfigSnapshotCandidate,
   validateConfigSnapshotName,
@@ -109,6 +110,52 @@ describe("config snapshots", () => {
       ok: false,
       error: "Change at least one non-default field before adding a snapshot.",
     });
+  });
+
+  it("excludes normalized default-equivalent snapshot entries", () => {
+    const normalizationFields: ConfigField[] = [
+      {
+        ...fields[0],
+        default: 256,
+      },
+      {
+        ...fields[0],
+        key: "dropout",
+        configKey: "DROPOUT",
+        flag: "--dropout",
+        label: "Dropout",
+        type: "float",
+        default: 0.2,
+      },
+      {
+        ...fields[0],
+        key: "use_bias",
+        configKey: "USE_BIAS",
+        flag: "--use-bias",
+        label: "Use Bias",
+        type: "bool",
+        default: false,
+        choices: [true, false],
+      },
+      {
+        ...fields[0],
+        key: "optional_hidden_dim",
+        configKey: "OPTIONAL_HIDDEN_DIM",
+        flag: "--optional-hidden-dim",
+        label: "Optional Hidden Dim",
+        default: null,
+        nullable: true,
+      },
+    ];
+
+    expect(
+      configSnapshotOverrideEntries(normalizationFields, {
+        hidden_dim: "256",
+        dropout: "0.2",
+        use_bias: "false",
+        optional_hidden_dim: "",
+      }),
+    ).toEqual({ entries: [], lockedFields: [] });
   });
 
   it("rejects empty snapshot names", () => {
@@ -268,6 +315,7 @@ describe("config snapshots", () => {
       selectedDatasets: ["Mnist", "Cifar10"],
       snapshots,
       fields,
+      presetOverrides: { hidden_dim: "192" },
       logFolder: "snapshots",
     });
 
@@ -278,12 +326,22 @@ describe("config snapshots", () => {
       undefined,
       undefined,
     ]);
-    expect(plan?.runs.slice(0, 2).map((run) => run.overrides)).toEqual([{}, {}]);
+    expect(plan?.runs.slice(0, 2).map((run) => run.overrides)).toEqual([
+      { hidden_dim: "192" },
+      { hidden_dim: "192" },
+    ]);
     expect(plan?.runs[0]).not.toHaveProperty("snapshotId");
     expect(plan?.runs[0]).not.toHaveProperty("snapshotName");
-    expect(plan?.runs[0].changes).toEqual([]);
+    expect(plan?.runs[0].changes).toEqual([
+      {
+        key: "hidden_dim",
+        label: "Hidden Dim",
+        value: "192",
+        source: "override",
+      },
+    ]);
     expect(plan?.runs[0].command).toBe(
-      "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist --logdir snapshots",
+      "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist --logdir snapshots --config --hidden-dim 192",
     );
     expect(plan?.runs.map((run) => run.snapshotName)).toEqual([
       undefined,

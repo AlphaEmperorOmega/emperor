@@ -10,6 +10,7 @@ import {
   disabledConfigFieldReasons,
   filterConfigSectionsForSearch,
   flattenConfigSearchOptions,
+  isDefaultConfigFieldValue,
   modifiedCount,
   presetOwnedCount,
   sectionElementId,
@@ -50,8 +51,11 @@ export function FullConfigDialog({
     selectedPreset: preset,
     configSections: sections,
     fieldCount,
-    overrideCount,
     overrides,
+    snapshotEditorDraft,
+    activeOverrideScopeLabel,
+    inactiveLockedOverrideCount,
+    snapshotOverrideWarning,
     selectedConfigSnapshot,
     selectedTrainingSnapshotIds,
     selectedDatasets,
@@ -68,14 +72,18 @@ export function FullConfigDialog({
     toggleConfigSnapshotRunSelection,
     updateOverride,
     clearOverride,
+    updateSnapshotEditorDraftOverride,
+    clearSnapshotEditorDraftOverride,
+    resetSnapshotEditorDraft,
     resetOverrides,
-    resetOverridesPreservingTargetSelection,
     updatePreview: onUpdatePreview,
   } = useTargetConfig();
   const isLoading = schemaLoading;
   const isSnapshotDraftMode = mode === "snapshotDraft";
   const isSnapshotEditMode = mode === "snapshotEdit";
   const isSnapshotSaveMode = isSnapshotDraftMode || isSnapshotEditMode;
+  const dialogOverrides = isSnapshotSaveMode ? snapshotEditorDraft : overrides;
+  const dialogOverrideCount = Object.keys(dialogOverrides).length;
   const canUpdate = Boolean(model && preset && selectedDatasets.length > 0);
   const [isTrainingCommandOpen, setIsTrainingCommandOpen] = useState(false);
   const [isAddSnapshotOpen, setIsAddSnapshotOpen] = useState(false);
@@ -91,12 +99,16 @@ export function FullConfigDialog({
     [sections],
   );
   const searchOptions = useMemo(
-    () => flattenConfigSearchOptions(sections, overrides),
-    [sections, overrides],
+    () => flattenConfigSearchOptions(sections, dialogOverrides),
+    [sections, dialogOverrides],
   );
   const configFields = useMemo(
     () => sections.flatMap((section) => section.fields),
     [sections],
+  );
+  const configFieldsByKey = useMemo(
+    () => new Map(configFields.map((field) => [field.key, field])),
+    [configFields],
   );
   const visibleSections = useMemo(
     () =>
@@ -115,20 +127,20 @@ export function FullConfigDialog({
     [sections],
   );
   const disabledFieldReasons = useMemo(
-    () => disabledConfigFieldReasons(sections, overrides),
-    [sections, overrides],
+    () => disabledConfigFieldReasons(sections, dialogOverrides),
+    [sections, dialogOverrides],
   );
   const disabledSectionTitles = useMemo(() => {
     const titles = new Set<string>();
     for (const section of visibleSections) {
       const sourceSection = sectionsByTitle.get(section.title) ?? section;
-      const state = controlledSectionState(sourceSection, overrides);
+      const state = controlledSectionState(sourceSection, dialogOverrides);
       if (state.isControlled && !state.isEnabled) {
         titles.add(section.title);
       }
     }
     return titles;
-  }, [overrides, sectionsByTitle, visibleSections]);
+  }, [dialogOverrides, sectionsByTitle, visibleSections]);
   const searchOpenKey = isSearchActive
     ? `${selectedFieldKey ?? ""}\u0000${searchQuery.trim()}`
     : "all";
@@ -143,12 +155,12 @@ export function FullConfigDialog({
     }
     for (const section of visibleSections) {
       const sourceSection = sectionsByTitle.get(section.title) ?? section;
-      if (modifiedCount(sourceSection.fields, overrides) > 0) {
+      if (modifiedCount(sourceSection.fields, dialogOverrides) > 0) {
         titles.add(section.title);
       }
     }
     return Array.from(titles);
-  }, [isSearchActive, overrides, sectionsByTitle, visibleSections]);
+  }, [dialogOverrides, isSearchActive, sectionsByTitle, visibleSections]);
   const {
     openSectionTitles,
     sectionRefs,
@@ -184,9 +196,15 @@ export function FullConfigDialog({
   const trainingCommand = useMemo(
     () =>
       isTrainingCommandOpen
-        ? buildTrainingCommand({ modelType, model, preset, sections, overrides })
+        ? buildTrainingCommand({
+            modelType,
+            model,
+            preset,
+            sections,
+            overrides: dialogOverrides,
+          })
         : "",
-    [isTrainingCommandOpen, modelType, model, preset, sections, overrides],
+    [dialogOverrides, isTrainingCommandOpen, modelType, model, preset, sections],
   );
   const handleToggleAllSections = useCallback(() => {
     setOpenSections(
@@ -199,30 +217,50 @@ export function FullConfigDialog({
     useCopyToClipboard(trainingCommand);
   const handleFieldChange = useCallback(
     (key: string, value: string) => {
-      updateOverride(key, value, {
-        preserveTargetSelection: isSnapshotEditMode,
-      });
+      const field = configFieldsByKey.get(key);
+      if (field && isDefaultConfigFieldValue(field, value)) {
+        if (isSnapshotSaveMode) {
+          clearSnapshotEditorDraftOverride(key);
+          return;
+        }
+        clearOverride(key);
+        return;
+      }
+      if (isSnapshotSaveMode) {
+        updateSnapshotEditorDraftOverride(key, value);
+        return;
+      }
+      updateOverride(key, value);
     },
-    [isSnapshotEditMode, updateOverride],
+    [
+      clearOverride,
+      clearSnapshotEditorDraftOverride,
+      configFieldsByKey,
+      isSnapshotSaveMode,
+      updateOverride,
+      updateSnapshotEditorDraftOverride,
+    ],
   );
   const handleFieldReset = useCallback(
     (key: string) => {
-      clearOverride(key, {
-        preserveTargetSelection: isSnapshotEditMode,
-      });
+      if (isSnapshotSaveMode) {
+        clearSnapshotEditorDraftOverride(key);
+        return;
+      }
+      clearOverride(key);
     },
-    [clearOverride, isSnapshotEditMode],
+    [clearOverride, clearSnapshotEditorDraftOverride, isSnapshotSaveMode],
   );
   const handleResetOverrides = useCallback(() => {
-    if (isSnapshotEditMode) {
-      resetOverridesPreservingTargetSelection();
+    if (isSnapshotSaveMode) {
+      resetSnapshotEditorDraft();
       return;
     }
     resetOverrides();
   }, [
-    isSnapshotEditMode,
+    isSnapshotSaveMode,
     resetOverrides,
-    resetOverridesPreservingTargetSelection,
+    resetSnapshotEditorDraft,
   ]);
 
   function handleSearchQueryChange(query: string) {
@@ -268,11 +306,17 @@ export function FullConfigDialog({
                 tooltipPosition="bottom"
               />
               <ConfigMetricBadge
-                count={overrideCount}
+                count={dialogOverrideCount}
                 kind="overrides"
-                variant={overrideCount > 0 ? "override" : "default"}
+                variant={dialogOverrideCount > 0 ? "override" : "default"}
                 tooltipPosition="bottom"
               />
+              <Badge>{isSnapshotSaveMode ? "Snapshot draft" : activeOverrideScopeLabel}</Badge>
+              {inactiveLockedOverrideCount > 0 && !isSnapshotSaveMode && (
+                <Badge variant="preset">
+                  {inactiveLockedOverrideCount} inactive
+                </Badge>
+              )}
               {presetOwnedFieldCount > 0 && (
                 <Badge variant="preset">{presetOwnedFieldCount} preset</Badge>
               )}
@@ -298,7 +342,11 @@ export function FullConfigDialog({
             <Button
               variant="secondary"
               onClick={handleResetOverrides}
-              disabled={!model || overrideCount === 0}
+              disabled={
+                !model ||
+                (dialogOverrideCount === 0 &&
+                  (isSnapshotSaveMode || inactiveLockedOverrideCount === 0))
+              }
             >
               <RotateCcw className="h-4 w-4" aria-hidden />
               Reset Overrides
@@ -368,7 +416,7 @@ export function FullConfigDialog({
               model={model}
               preset={preset}
               fields={configFields}
-              overrides={overrides}
+              overrides={dialogOverrides}
               snapshots={allConfigSnapshots}
               title={
                 isSnapshotEditMode
@@ -392,8 +440,8 @@ export function FullConfigDialog({
               }
               onAdd={
                 isSnapshotEditMode
-                  ? updateSelectedConfigSnapshot
-                  : addConfigSnapshot
+                  ? (name) => updateSelectedConfigSnapshot(name, dialogOverrides)
+                  : (name) => addConfigSnapshot(name, dialogOverrides)
               }
               onClose={() => setIsAddSnapshotOpen(false)}
             />
@@ -412,13 +460,20 @@ export function FullConfigDialog({
           </InlineStatus>
         ) : (
           <div className="grid min-h-0 gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
+            {snapshotOverrideWarning && !isSnapshotSaveMode && (
+              <div className="lg:col-span-2">
+                <InlineStatus tone="warning" compact>
+                  {snapshotOverrideWarning}
+                </InlineStatus>
+              </div>
+            )}
             {allConfigSnapshotGroups.length > 0 && (
               <div className="lg:col-span-2">
                 <ConfigSnapshotsTray
                   groups={allConfigSnapshotGroups}
                   selectedPreset={preset}
                   selectedTrainingSnapshotIds={selectedTrainingSnapshotIds}
-                  overrides={overrides}
+                  overrides={dialogOverrides}
                   canManage={capabilities.configSnapshotsEnabled}
                   onLoad={loadConfigSnapshot}
                   onRename={renameConfigSnapshot}
@@ -432,7 +487,7 @@ export function FullConfigDialog({
                 options={searchOptions}
                 query={searchQuery}
                 selectedFieldKey={selectedFieldKey}
-                overrides={overrides}
+                overrides={dialogOverrides}
                 disabledFieldReasons={disabledFieldReasons}
                 onQueryChange={handleSearchQueryChange}
                 onClear={handleSearchClear}
@@ -443,7 +498,7 @@ export function FullConfigDialog({
             </div>
             <SectionNavigation
               sections={visibleSections}
-              overrides={overrides}
+              overrides={dialogOverrides}
               openSectionTitles={effectiveOpenSectionTitles}
               disabledSectionTitles={disabledSectionTitles}
               areAllSectionsOpen={areAllEnabledSectionsOpen}
@@ -459,7 +514,7 @@ export function FullConfigDialog({
                   const sourceSection = sectionsByTitle.get(section.title) ?? section;
                   const sectionState = controlledSectionState(
                     sourceSection,
-                    overrides,
+                    dialogOverrides,
                   );
                   const isSectionOpen = effectiveOpenSectionTitles.has(section.title);
                   return (
@@ -472,7 +527,7 @@ export function FullConfigDialog({
                       title={section.title}
                       fields={section.fields}
                       childSections={section.children}
-                      overrides={overrides}
+                      overrides={dialogOverrides}
                       isOpen={isSectionOpen}
                       controlField={sectionState.controlField}
                       disabledReason={sectionState.disabledReason}

@@ -37,6 +37,7 @@ export type TrainingPanelViewModelInput = {
   configSnapshotCount: number;
   selectedTrainingSnapshotIds: string[];
   monitorOptions: MonitorOption[];
+  snapshotOverrideWarning: string;
   selectedMonitors: string[];
   monitorsLoading: boolean;
   searchAxes: SearchAxis[];
@@ -91,6 +92,7 @@ export function useTrainingPanelViewModel({
   configSnapshotCount,
   selectedTrainingSnapshotIds,
   monitorOptions,
+  snapshotOverrideWarning,
   selectedMonitors,
   monitorsLoading,
   searchAxes,
@@ -234,6 +236,7 @@ export function useTrainingPanelViewModel({
       allConfigSnapshots,
       configSnapshotCount,
       monitorOptions,
+      snapshotOverrideWarning,
       selectedMonitors,
       monitorsLoading,
       searchAxes,
@@ -288,6 +291,7 @@ export function useTrainingPanelViewModel({
       effectiveTrainingSearch: requestState.effectiveTrainingSearch,
       searchConflictKeys: requestState.searchConflictKeys,
       trainingSearchValidation: requestState.trainingSearchValidation,
+      searchLockSummary: requestState.searchLockSummary,
       selectedTrainingPresetCount: requestState.selectedTrainingPresetCount,
       activeSearchAxisCount: requestState.activeSearchAxisCount,
       canRequestTraining: requestState.canRequestTraining,

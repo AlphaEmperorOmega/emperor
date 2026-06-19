@@ -197,6 +197,7 @@ describe("training requests", () => {
         }),
       ],
       fields: [field({ key: "hidden_size" }), field({ key: "dropout" })],
+      presetOverrides: { hidden_size: "192" },
       logFolder: "snapshots",
     });
 
@@ -228,7 +229,7 @@ describe("training requests", () => {
       "Dropout",
     ]);
     expect(request?.runPlan?.runs[0]).not.toHaveProperty("snapshotId");
-    expect(request?.runPlan?.runs[0].overrides).toEqual({});
+    expect(request?.runPlan?.runs[0].overrides).toEqual({ hidden_size: "192" });
     expect(request?.runPlan?.runs[4]).toMatchObject({
       snapshotId: "wide",
       snapshotName: "Wide",

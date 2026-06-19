@@ -5,6 +5,7 @@ type TargetOverridesInitialState = {
   selectedModel?: string;
   selectedPreset?: string;
   overrides?: OverrideValues;
+  presetOverrides?: OverrideValues;
 };
 
 export function useTargetOverridesState(
@@ -16,35 +17,34 @@ export function useTargetOverridesState(
   const [selectedPreset, setSelectedPreset] = useState(
     initialState.selectedPreset ?? "",
   );
-  const [overrides, setOverrides] = useState<OverrideValues>(
-    initialState.overrides ?? {},
+  const [presetOverrides, setPresetOverrides] = useState<OverrideValues>(
+    initialState.presetOverrides ?? initialState.overrides ?? {},
   );
 
   const selectModel = useCallback((model: string) => {
     setSelectedModel(model);
     setSelectedPreset("");
-    setOverrides({});
+    setPresetOverrides({});
   }, []);
 
   const selectPreset = useCallback((preset: string) => {
     setSelectedPreset(preset);
-    setOverrides({});
   }, []);
 
-  const updateOverride = useCallback((key: string, value: string) => {
-    setOverrides((current) => ({ ...current, [key]: value }));
+  const updatePresetOverride = useCallback((key: string, value: string) => {
+    setPresetOverrides((current) => ({ ...current, [key]: value }));
   }, []);
 
-  const clearOverride = useCallback((key: string) => {
-    setOverrides((current) => {
+  const clearPresetOverride = useCallback((key: string) => {
+    setPresetOverrides((current) => {
       const next = { ...current };
       delete next[key];
       return next;
     });
   }, []);
 
-  const clearOverrides = useCallback(() => {
-    setOverrides({});
+  const clearPresetOverrides = useCallback(() => {
+    setPresetOverrides({});
   }, []);
 
   return {
@@ -52,12 +52,17 @@ export function useTargetOverridesState(
     setSelectedModel,
     selectedPreset,
     setSelectedPreset,
-    overrides,
-    setOverrides,
+    presetOverrides,
+    setPresetOverrides,
+    overrides: presetOverrides,
+    setOverrides: setPresetOverrides,
     selectModel,
     selectPreset,
-    updateOverride,
-    clearOverride,
-    clearOverrides,
+    updatePresetOverride,
+    clearPresetOverride,
+    clearPresetOverrides,
+    updateOverride: updatePresetOverride,
+    clearOverride: clearPresetOverride,
+    clearOverrides: clearPresetOverrides,
   };
 }

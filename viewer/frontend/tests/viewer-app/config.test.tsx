@@ -505,12 +505,11 @@ describe("ViewerApp Full Config", () => {
   it("keeps full config controls out of the left sidebar", async () => {
     installFetchMock();
     renderViewer();
-    const user = userEvent.setup();
 
     expect(await screen.findByText("main_model.0")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /open full config/i }))
-      .not.toBeInTheDocument();
-    expect(await waitForOpenFullConfigButton(user)).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: /open full config/i }),
+    ).toBeEnabled();
     expect(screen.queryByText("Sections")).not.toBeInTheDocument();
     expect(screen.queryByText("Fields")).not.toBeInTheDocument();
     expect(screen.queryByText("Changed")).not.toBeInTheDocument();
@@ -1488,10 +1487,11 @@ describe("ViewerApp Full Config", () => {
     expect(nullableBoolean).toHaveTextContent("Enabled");
     await selectSearchableDropdownOption(user, nullableBoolean, "None", "None");
     expect(nullableBoolean).toHaveTextContent("None");
+    expect(within(dialog).getAllByLabelText("1 override").length).toBeGreaterThan(0);
 
     const commandDialog = await openTrainingCommand(user, dialog);
     expect(commandField(commandDialog)).toHaveValue(
-      "source experiment.sh --model-type linears --model linear --preset baseline --config --memory-flag true --memory-stack-apply-output-pipeline-flag None",
+      "source experiment.sh --model-type linears --model linear --preset baseline --config --memory-flag true",
     );
   });
 
@@ -1793,6 +1793,41 @@ describe("ViewerApp Full Config", () => {
         overrides: { hidden_dim: "128" },
       });
     });
+
+    await user.click(search);
+    const reopenedHiddenDimRow = fullConfigSearchResultRow(
+      fullConfigSearchPopup(dialog),
+      /hidden dim/i,
+    );
+    const reopenedHiddenDimSearchInput = within(reopenedHiddenDimRow).getByRole(
+      "spinbutton",
+      {
+        name: /current value/i,
+      },
+    );
+
+    await user.clear(reopenedHiddenDimSearchInput);
+    await user.type(reopenedHiddenDimSearchInput, "256");
+
+    expect(fullConfigSearchPopup(dialog)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(within(reopenedHiddenDimRow).queryByText("override")).not.toBeInTheDocument();
+    });
+    expect(reopenedHiddenDimRow).not.toHaveTextContent(/current\s*256/i);
+    expect(within(dialog).getByLabelText(/hidden dim/i)).toHaveValue(256);
+    expect(within(dialog).getAllByLabelText("0 overrides").length).toBeGreaterThan(0);
+
+    await user.click(within(dialog).getByRole("button", { name: /update preview/i }));
+
+    await waitFor(() => {
+      expect(inspectBodies.at(-1)).toEqual({
+        modelType: "linears",
+        model: "linear",
+        preset: "baseline",
+        dataset: "Mnist",
+        overrides: {},
+      });
+    });
   });
 
   it("edits enum and bool fields from full config search results", async () => {
@@ -1837,6 +1872,16 @@ describe("ViewerApp Full Config", () => {
     expect(within(dialog).getByRole("switch", { name: /gate flag/i }))
       .toHaveAttribute("aria-checked", "true");
     expect(within(dialog).getAllByLabelText("2 overrides").length).toBeGreaterThan(0);
+
+    await user.click(gateFlagSwitch);
+
+    await waitFor(() => {
+      expect(within(gateFlagRow).queryByText("override")).not.toBeInTheDocument();
+    });
+    expect(gateFlagRow).not.toHaveTextContent(/current\s*false/i);
+    expect(within(dialog).getByRole("switch", { name: /gate flag/i }))
+      .toHaveAttribute("aria-checked", "false");
+    expect(within(dialog).getAllByLabelText("1 override").length).toBeGreaterThan(0);
   });
 
   it("clears full config search and restores all sections and fields", async () => {
@@ -2213,6 +2258,76 @@ describe("ViewerApp Full Config", () => {
     expect(within(dialog).getAllByText("hidden dim")).toHaveLength(1);
   });
 
+  it("clears only the reverted popup field override when it returns to default", async () => {
+    installFetchMock();
+    renderViewer();
+    const user = userEvent.setup();
+
+    const dialog = await openFullConfig(user);
+    let hiddenDimInput = await typeConfigFieldValue(user, dialog, /hidden dim/i, "128");
+    const stackLayersInput = await typeConfigFieldValue(
+      user,
+      dialog,
+      /stack num layers/i,
+      "7",
+    );
+
+    expect(within(dialog).getAllByLabelText("2 overrides").length).toBeGreaterThan(0);
+
+    hiddenDimInput = await typeConfigFieldValue(user, dialog, /hidden dim/i, "256");
+    const hiddenDimRow = configFieldRowFor(hiddenDimInput);
+    const stackLayersRow = configFieldRowFor(stackLayersInput);
+
+    await waitFor(() => {
+      expect(within(hiddenDimRow).queryByText("override")).not.toBeInTheDocument();
+    });
+    expect(hiddenDimInput).toHaveValue(256);
+    expect(hiddenDimRow).not.toHaveClass("border-violet/40");
+    expect(stackLayersInput).toHaveValue(7);
+    expect(within(stackLayersRow).getByText("override")).toHaveClass("text-violet");
+    expect(stackLayersRow).toHaveClass("border-violet/40");
+    expect(within(dialog).getAllByLabelText("1 override").length).toBeGreaterThan(0);
+    expect(
+      within(dialog).getByRole("button", {
+        name: /layer stack options section, 3 fields, 1 override/i,
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("clears section-header boolean override styling when toggled back to default", async () => {
+    installFetchMock();
+    renderViewer();
+    const user = userEvent.setup();
+
+    const dialog = await openFullConfig(user);
+    const gateSwitch = within(dialog).getByRole("switch", { name: /^gate flag$/i });
+
+    await user.click(gateSwitch);
+
+    const enabledGateAccordion = within(dialog).getByRole("button", {
+      name: /gate stack options section, 1 field, 1 override/i,
+    });
+    const gateSection = fullConfigSectionFor(enabledGateAccordion);
+
+    expect(gateSwitch).toHaveAttribute("aria-checked", "true");
+    expect(within(gateSection).getByText("override")).toHaveClass("text-violet");
+    expect(within(gateSection).getByLabelText("1 override")).toHaveClass("text-violet");
+
+    await user.click(gateSwitch);
+
+    await waitFor(() => {
+      expect(
+        within(dialog).getByRole("button", {
+          name: /gate stack options section, 1 field, 0 overrides/i,
+        }),
+      ).toBeDisabled();
+    });
+    expect(gateSwitch).toHaveAttribute("aria-checked", "false");
+    expect(within(gateSection).queryByText("override")).not.toBeInTheDocument();
+    expect(within(gateSection).getByLabelText("0 overrides")).not.toHaveClass("text-violet");
+    expect(within(dialog).queryAllByLabelText("1 override")).toHaveLength(0);
+  });
+
   it("highlights a section gradient when it has an override and a preset-owned field", async () => {
     installFetchMock({
       schemaResponse: {
@@ -2389,7 +2504,7 @@ describe("ViewerApp Full Config", () => {
     );
   });
 
-  it("shell-quotes override values and serializes nullable empty overrides as None", async () => {
+  it("shell-quotes override values and omits default-equivalent nullable empty overrides", async () => {
     installFetchMock({
       schemaResponse: {
         ...schemaResponse,
@@ -2430,7 +2545,7 @@ describe("ViewerApp Full Config", () => {
     commandDialog = await openTrainingCommand(user, dialog);
 
     expect(commandField(commandDialog)).toHaveValue(
-      "source experiment.sh --model-type linears --model linear --preset baseline --config --dropout-schedule None",
+      "source experiment.sh --model-type linears --model linear --preset baseline",
     );
   });
 

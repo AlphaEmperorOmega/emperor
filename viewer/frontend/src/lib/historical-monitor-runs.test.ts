@@ -5,7 +5,7 @@ import {
   filterHistoricalRuns,
   groupModelLogRunsByExperiment,
   historicalDatasetOptions,
-  historicalExperimentOptions,
+  historicalExperimentRunOptions,
   historicalMonitorRunGroups,
   historicalPresetOptions,
   latestHistoricalMonitorRuns,
@@ -78,7 +78,7 @@ describe("historical monitor run helpers", () => {
       "exp_a",
       "exp_b",
     ]);
-    expect(historicalExperimentOptions(runs)).toEqual([
+    expect(historicalExperimentRunOptions(runs)).toEqual([
       { value: "exp_a", label: "exp_a", count: 3 },
       { value: "exp_b", label: "exp_b", count: 1 },
     ]);

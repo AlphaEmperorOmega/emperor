@@ -35,6 +35,7 @@ vi.mock("@/features/viewer/state/target/use-config-snapshots", () => ({
 }));
 
 import {
+  type ConfigField,
   type ConfigSnapshotRecord,
   type LogRun,
   type MonitorOption,
@@ -65,6 +66,7 @@ let snapshots: ConfigSnapshotRecord[] = [];
 let librarySnapshots: ConfigSnapshotRecord[] = [];
 let monitorOptions: MonitorOption[] = [];
 let configSnapshotsLoading = false;
+let schemaFieldsByPreset: Record<string, ConfigField[]> = {};
 
 function query<TData>(data: TData) {
   return {
@@ -109,6 +111,25 @@ function logRun(overrides: Partial<LogRun> & Pick<LogRun, "id">): LogRun {
   };
 }
 
+function configField(
+  overrides: Partial<ConfigField> & Pick<ConfigField, "key">,
+): ConfigField {
+  return {
+    key: overrides.key,
+    configKey: overrides.configKey ?? overrides.key.toUpperCase(),
+    flag: overrides.flag ?? `--${overrides.key.replace(/_/g, "-")}`,
+    label: overrides.label ?? overrides.key,
+    section: overrides.section ?? "Model",
+    type: overrides.type ?? "int",
+    default: overrides.default ?? 64,
+    nullable: overrides.nullable ?? false,
+    choices: overrides.choices ?? [],
+    locked: overrides.locked ?? false,
+    lockedValue: overrides.lockedValue,
+    lockedReason: overrides.lockedReason,
+  };
+}
+
 function renderTargetState() {
   return renderHook(() =>
     useTargetConfigState({
@@ -126,6 +147,7 @@ beforeEach(() => {
   librarySnapshots = [];
   monitorOptions = [];
   configSnapshotsLoading = false;
+  schemaFieldsByPreset = {};
   mocks.requestPreview.mockReset();
   mocks.clearPreview.mockReset();
   mocks.resetGraphSelectionAndExpansion.mockReset();
@@ -184,7 +206,7 @@ beforeEach(() => {
           modelType: selectedModelType,
           model: selectedModel,
           preset: selectedPreset,
-          fields: [],
+          fields: schemaFieldsByPreset[selectedPreset] ?? [],
         }),
         searchSpaceQuery: query({
           modelType: selectedModelType,
@@ -228,6 +250,8 @@ describe("useTargetConfigState", () => {
       preset: "baseline",
       dataset: "Mnist",
       overrides: {},
+      targetMode: "preset",
+      targetId: "baseline",
     });
   });
 
@@ -258,6 +282,8 @@ describe("useTargetConfigState", () => {
         preset: "baseline",
         dataset: "FashionMnist",
         overrides: {},
+        targetMode: "preset",
+        targetId: "baseline",
       });
     });
     expect(mocks.resetGraphSelectionAndExpansion).toHaveBeenCalled();
@@ -351,10 +377,12 @@ describe("useTargetConfigState", () => {
       preset: "fast",
       dataset: "FashionMnist",
       overrides: {},
+      targetMode: "experiment",
+      targetId: "run-fast",
     });
   });
 
-  it("selects another preset without auto-refreshing the preview", async () => {
+  it("selects another preset, preserves overrides, and refreshes the preview", async () => {
     const { result } = renderTargetState();
 
     await waitFor(() => {
@@ -368,13 +396,153 @@ describe("useTargetConfigState", () => {
     mocks.resetGraphSelectionAndExpansion.mockClear();
 
     act(() => {
-      result.current.target.selectPreset("fast");
+      result.current.target.updateOverride("hidden_size", "128");
+    });
+    mocks.requestPreview.mockClear();
+    mocks.resetGraphSelectionAndExpansion.mockClear();
+
+    act(() => {
+      result.current.target.selectTargetPreset("fast");
     });
 
     expect(result.current.target.selectedPreset).toBe("fast");
+    expect(result.current.target.overrides).toEqual({ hidden_size: "128" });
+    expect(mocks.requestPreview).toHaveBeenCalledWith({
+      modelType: "linears",
+      model: "linear",
+      preset: "fast",
+      dataset: "Mnist",
+      overrides: { hidden_size: "128" },
+      targetMode: "preset",
+      targetId: "fast",
+    });
+    expect(mocks.resetGraphSelectionAndExpansion).toHaveBeenCalled();
+  });
+
+  it("clears preset overrides when the model changes", async () => {
+    const { result } = renderTargetState();
+
+    await waitFor(() => {
+      expect(result.current.target.selectedModel).toBe("linear");
+    });
+
+    act(() => {
+      result.current.target.updateOverride("hidden_size", "128");
+    });
+    expect(result.current.target.presetOverrides).toEqual({ hidden_size: "128" });
+
+    act(() => {
+      result.current.target.selectModel("experts_linear", "experts");
+    });
+
+    await waitFor(() => {
+      expect(result.current.target.selectedModelType).toBe("experts");
+      expect(result.current.target.selectedModel).toBe("experts_linear");
+    });
+    expect(result.current.target.presetOverrides).toEqual({});
     expect(result.current.target.overrides).toEqual({});
-    expect(mocks.requestPreview).not.toHaveBeenCalled();
-    expect(mocks.resetGraphSelectionAndExpansion).not.toHaveBeenCalled();
+  });
+
+  it("keeps locked preset overrides in the draft but omits them from active preview overrides", async () => {
+    schemaFieldsByPreset = {
+      baseline: [configField({ key: "layer_width" })],
+      fast: [
+        configField({
+          key: "layer_width",
+          locked: true,
+          lockedValue: 96,
+          lockedReason: "Preset controlled",
+        }),
+      ],
+    };
+    const { result } = renderTargetState();
+
+    await waitFor(() => {
+      expect(result.current.target.selectedPreset).toBe("baseline");
+    });
+
+    act(() => {
+      result.current.target.updateOverride("layer_width", "128");
+    });
+    expect(result.current.target.overrides).toEqual({ layer_width: "128" });
+
+    mocks.requestPreview.mockClear();
+    act(() => {
+      result.current.target.selectPreset("fast");
+    });
+
+    await waitFor(() => {
+      expect(result.current.target.selectedPreset).toBe("fast");
+      expect(result.current.target.presetOverrides).toEqual({
+        layer_width: "128",
+      });
+      expect(result.current.target.overrides).toEqual({});
+      expect(result.current.target.inactiveLockedOverrideCount).toBe(1);
+    });
+    await waitFor(() => {
+      expect(mocks.requestPreview).toHaveBeenLastCalledWith({
+        modelType: "linears",
+        model: "linear",
+        preset: "fast",
+        dataset: "Mnist",
+        overrides: {},
+        targetMode: "preset",
+        targetId: "fast",
+      });
+    });
+  });
+
+  it("isolates snapshot editor drafts from preset overrides and restores preset overrides on return", async () => {
+    snapshots = [
+      {
+        id: "snapshot-baseline",
+        name: "Baseline tuned",
+        modelType: "linears",
+        model: "linear",
+        preset: "baseline",
+        overrides: { hidden_size: "256" },
+        createdAt: "2026-06-01T00:00:00.000Z",
+        updatedAt: "2026-06-01T00:00:00.000Z",
+      },
+    ];
+    const { result } = renderTargetState();
+
+    await waitFor(() => {
+      expect(result.current.target.selectedPreset).toBe("baseline");
+    });
+
+    act(() => {
+      result.current.target.updateOverride("hidden_size", "128");
+    });
+    act(() => {
+      expect(
+        result.current.target.prepareSelectedSnapshotEdit("snapshot-baseline", {
+          includeTrainingSnapshot: false,
+        }),
+      ).toBe(true);
+    });
+
+    expect(result.current.target.presetOverrides).toEqual({ hidden_size: "128" });
+    expect(result.current.target.snapshotEditorDraft).toEqual({
+      hidden_size: "256",
+    });
+    expect(result.current.target.overrides).toEqual({ hidden_size: "256" });
+
+    act(() => {
+      result.current.target.updateSnapshotEditorDraftOverride("hidden_size", "384");
+    });
+
+    expect(result.current.target.presetOverrides).toEqual({ hidden_size: "128" });
+    expect(result.current.target.snapshotEditorDraft).toEqual({
+      hidden_size: "384",
+    });
+
+    act(() => {
+      result.current.target.activateTargetPresetMode();
+    });
+
+    expect(result.current.target.selectedTargetMode).toBe("preset");
+    expect(result.current.target.overrides).toEqual({ hidden_size: "128" });
   });
 
   it("includes a snapshot from an unselected preset without selecting its preset", async () => {
@@ -500,6 +668,37 @@ describe("useTargetConfigState", () => {
     expect(result.current.target.selectedTrainingSnapshotIds).toEqual([
       "snapshot-baseline",
     ]);
+  });
+
+  it("warns that preset overrides do not apply to selected snapshots", async () => {
+    snapshots = [
+      {
+        id: "snapshot-baseline",
+        name: "Baseline tuned",
+        modelType: "linears",
+        model: "linear",
+        preset: "baseline",
+        overrides: { hidden_size: "256" },
+        createdAt: "2026-06-01T00:00:00.000Z",
+        updatedAt: "2026-06-01T00:00:00.000Z",
+      },
+    ];
+    const { result } = renderTargetState();
+
+    await waitFor(() => {
+      expect(result.current.target.selectedTrainingPresets).toEqual(["baseline"]);
+    });
+
+    act(() => {
+      result.current.target.updateOverride("hidden_size", "128");
+    });
+    act(() => {
+      result.current.target.includeConfigSnapshot("snapshot-baseline");
+    });
+
+    expect(result.current.target.snapshotOverrideWarning).toContain(
+      "Preset overrides apply only to preset rows",
+    );
   });
 
   it("prepares a preset snapshot draft without re-adding an empty training preset selection", async () => {

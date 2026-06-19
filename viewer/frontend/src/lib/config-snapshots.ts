@@ -5,7 +5,12 @@ import {
   type TrainingRunChange,
   type TrainingRunPlan,
 } from "@/lib/api";
-import { type OverrideValues } from "@/lib/config";
+import {
+  defaultConfigFieldValue,
+  normalizeConfigFieldValue,
+  overrideValueForConfigField,
+  type OverrideValues,
+} from "@/lib/config";
 
 export type ConfigSnapshot = {
   id: string;
@@ -37,44 +42,6 @@ function hasOwn(object: Record<string, unknown>, key: string) {
   return Object.prototype.hasOwnProperty.call(object, key);
 }
 
-function normalizePrimitive(value: ConfigValue | string) {
-  return value === null || value === undefined ? "" : String(value).trim();
-}
-
-function normalizeValueForField(field: ConfigField, value: ConfigValue | string) {
-  const raw = normalizePrimitive(value);
-  if (field.nullable && raw === "") {
-    return "null";
-  }
-  if (field.type === "bool") {
-    const lower = raw.toLowerCase();
-    if (lower === "true" || lower === "false") {
-      return lower;
-    }
-  }
-  if (field.type === "int") {
-    const numberValue = Number(raw);
-    if (Number.isInteger(numberValue)) {
-      return String(numberValue);
-    }
-  }
-  if (field.type === "float") {
-    const numberValue = Number(raw);
-    if (Number.isFinite(numberValue)) {
-      return String(numberValue);
-    }
-  }
-  return raw;
-}
-
-function overrideValueForField(field: ConfigField, normalizedValue: string) {
-  return field.nullable && normalizedValue === "null" ? "" : normalizedValue;
-}
-
-function defaultValueForField(field: ConfigField) {
-  return normalizeValueForField(field, field.default);
-}
-
 function displayValueForField(field: ConfigField, value: string) {
   return field.nullable && value === "" ? "None" : value;
 }
@@ -93,11 +60,11 @@ export function configSnapshotOverrideEntries(
     if (field.locked) {
       lockedFields.push(field);
     }
-    const normalizedValue = normalizeValueForField(field, overrides[field.key] ?? "");
-    if (normalizedValue === defaultValueForField(field)) {
+    const normalizedValue = normalizeConfigFieldValue(field, overrides[field.key] ?? "");
+    if (normalizedValue === defaultConfigFieldValue(field)) {
       continue;
     }
-    const value = overrideValueForField(field, normalizedValue);
+    const value = overrideValueForConfigField(field, normalizedValue);
     entries.push({
       key: field.key,
       label: field.label,
@@ -442,10 +409,10 @@ function configValueFromOverride(value: string): ConfigValue {
 }
 
 function snapshotRunChanges(
-  snapshot: ConfigSnapshot,
+  overrides: OverrideValues,
   fieldsByKey: Map<string, ConfigField>,
 ) {
-  return Object.entries(snapshot.overrides).map<TrainingRunChange>(
+  return Object.entries(overrides).map<TrainingRunChange>(
     ([key, value]) => ({
       key,
       label: fieldsByKey.get(key)?.label ?? key,
@@ -469,7 +436,14 @@ function snapshotEpochs(
   snapshot: ConfigSnapshot,
   fieldsByKey: Map<string, ConfigField>,
 ) {
-  const rawEpochs = snapshot.overrides.num_epochs;
+  return epochsFromOverrides(snapshot.overrides, fieldsByKey);
+}
+
+function epochsFromOverrides(
+  overrides: OverrideValues,
+  fieldsByKey: Map<string, ConfigField>,
+) {
+  const rawEpochs = overrides.num_epochs;
   const epochValue = rawEpochs === undefined ? epochDefault(fieldsByKey) : Number(rawEpochs);
   return Number.isFinite(epochValue) ? Math.max(0, Math.trunc(epochValue)) : 0;
 }
@@ -481,6 +455,7 @@ function baseRun({
   dataset,
   index,
   fieldsByKey,
+  overrides,
   logFolder,
 }: {
   modelType: string;
@@ -489,25 +464,27 @@ function baseRun({
   dataset: string;
   index: number;
   fieldsByKey: Map<string, ConfigField>;
+  overrides: OverrideValues;
   logFolder: string;
 }): TrainingRun {
+  const runOverrides = { ...overrides };
   return {
     id: `preset-${preset}-${dataset}-${index}`,
     index,
     status: "Pending",
     preset,
     dataset,
-    changes: [],
-    overrides: {},
+    changes: snapshotRunChanges(runOverrides, fieldsByKey),
+    overrides: runOverrides,
     command: trainingCommand({
       model,
       modelType,
       preset,
       dataset,
-      overrides: {},
+      overrides: runOverrides,
       logFolder,
     }),
-    totalEpochs: epochDefault(fieldsByKey),
+    totalEpochs: epochsFromOverrides(runOverrides, fieldsByKey),
     currentEpoch: 0,
     metrics: {},
     logDir: null,
@@ -540,6 +517,7 @@ export function buildConfigSnapshotRunPlan({
   selectedDatasets,
   snapshots,
   fields,
+  presetOverrides = {},
   logFolder,
 }: {
   modelType: string;
@@ -549,6 +527,7 @@ export function buildConfigSnapshotRunPlan({
   selectedDatasets: string[];
   snapshots: ConfigSnapshot[];
   fields: ConfigField[];
+  presetOverrides?: OverrideValues;
   logFolder: string;
 }): TrainingRunPlan | undefined {
   const selectedSnapshots = snapshots.filter(
@@ -574,6 +553,7 @@ export function buildConfigSnapshotRunPlan({
           dataset,
           index,
           fieldsByKey,
+          overrides: presetOverrides,
           logFolder,
         }),
       );
@@ -590,7 +570,7 @@ export function buildConfigSnapshotRunPlan({
         snapshotId: snapshot.id,
         snapshotName: snapshot.name,
         dataset,
-        changes: snapshotRunChanges(snapshot, fieldsByKey),
+        changes: snapshotRunChanges(snapshot.overrides, fieldsByKey),
         overrides: snapshot.overrides,
         command: trainingCommand({
           model,
