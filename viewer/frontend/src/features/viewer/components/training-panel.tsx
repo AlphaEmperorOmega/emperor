@@ -6,6 +6,7 @@ import {
   FolderPlus,
   Loader2,
   Play,
+  RotateCcw,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -106,6 +107,7 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
     isProgressPlanning,
     progressPlanError,
     isRunning,
+    canResetTraining,
     canStart,
     canResampleRunPlan,
     isResampling,
@@ -118,6 +120,7 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
     confirmLargeGridSearch,
     cancelLargeGridSearch,
     cancelTraining,
+    resetTraining,
     resampleRunPlan,
   } = training;
   const {
@@ -245,6 +248,17 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
             isLoading={isProgressPlanning}
             error={progressPlanError}
           />
+          {canResetTraining && (
+            <Button
+              variant="secondary"
+              onClick={resetTraining}
+              disabled={!trainingEnabled}
+              className="h-10 px-3 text-[13px]"
+            >
+              <RotateCcw className="h-4 w-4" aria-hidden />
+              Reset Training
+            </Button>
+          )}
           <Button
             variant="primary"
             onClick={startTraining}
@@ -260,6 +274,13 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
           </Button>
         </div>
       </div>
+      {trainingError && (
+        <div className="px-[22px] pb-3">
+          <InlineStatus tone="danger" compact role="alert">
+            {trainingError}
+          </InlineStatus>
+        </div>
+      )}
 
       {ui.isExpanded && (
         <div

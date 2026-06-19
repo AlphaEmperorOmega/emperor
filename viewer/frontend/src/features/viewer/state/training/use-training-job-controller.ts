@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   cancelTrainingJob,
   createTrainingJob,
@@ -35,6 +35,10 @@ type TrainingLogRefreshSnapshot = {
 };
 
 type TrainingLogRefreshAction = "none" | "lists" | "details";
+
+type TrainingMutationError =
+  | { action: "create"; message: string }
+  | { action: "cancel"; jobId: string; message: string };
 
 const emptyLogRefreshSnapshot: TrainingLogRefreshSnapshot = {
   jobId: null,
@@ -178,22 +182,45 @@ export function useTrainingJobController({
   const [planNonce, setPlanNonce] = useState(0);
   const [pendingTrainingRequest, setPendingTrainingRequest] =
     useState<TrainingJobCreateInput | null>(null);
+  const [mutationError, setMutationError] =
+    useState<TrainingMutationError | null>(null);
+  const queryClient = useQueryClient();
   const { refreshAfterMutation } = useLogQueryCache();
   const createMutation = useMutation({
     mutationFn: createTrainingJob,
+    onMutate: () => {
+      setMutationError(null);
+    },
     onSuccess: (job) => {
+      queryClient.setQueryData(trainingQueryKeys.job(job.id), job);
+      setMutationError(null);
       onActiveJobIdChange(job.id);
       onJobChange(job);
       onJobStarted();
       void refreshAfterMutation();
     },
+    onError: (error) => {
+      setMutationError({ action: "create", message: errorMessage(error) });
+    },
   });
   const cancelMutation = useMutation({
     mutationFn: cancelTrainingJob,
+    onMutate: () => {
+      setMutationError(null);
+    },
     onSuccess: (job) => {
+      queryClient.setQueryData(trainingQueryKeys.job(job.id), job);
+      setMutationError(null);
       onActiveJobIdChange(job.id);
       onJobChange(job);
       void refreshAfterMutation();
+    },
+    onError: (error, jobId) => {
+      setMutationError({
+        action: "cancel",
+        jobId,
+        message: errorMessage(error),
+      });
     },
   });
   const job = activeTrainingJob ?? createMutation.data ?? cancelMutation.data;
@@ -279,6 +306,7 @@ export function useTrainingJobController({
       : "";
   const isProgressPlanning = jobRunPlan ? false : isPlanning;
   const progressPlanError = jobRunPlan ? "" : planError;
+  const hasPendingMutation = createMutation.isPending || cancelMutation.isPending;
   const canStart = Boolean(
     canPlan &&
       hasValidLogFolder &&
@@ -286,7 +314,7 @@ export function useTrainingJobController({
       !isPlanning &&
       !planError &&
       !isRunning &&
-      !createMutation.isPending,
+      !hasPendingMutation,
   );
   const displayedRunCount = draftRunPlanSummary?.totalRuns ?? plannedRunCount;
   const requiresLargeGridConfirmation =
@@ -299,12 +327,13 @@ export function useTrainingJobController({
       !jobRunPlan &&
       draftRunPlan,
   );
-  const trainingError =
-    createMutation.isError || progressError || cancelMutation.isError
-      ? errorMessage(
-          createMutation.error ?? cancelMutation.error ?? progressError,
-        )
-      : "";
+  const mutationErrorMessage =
+    mutationError?.action === "create"
+      ? mutationError.message
+      : mutationError?.action === "cancel" && mutationError.jobId === job?.id
+        ? mutationError.message
+        : "";
+  const trainingError = mutationErrorMessage || progressError;
 
   function trainingRequest(): TrainingJobCreateInput | null {
     return buildTrainingJobRequest({
@@ -329,6 +358,7 @@ export function useTrainingJobController({
     if (!canStart) {
       return;
     }
+    setMutationError(null);
     const request = trainingRequest();
     if (!request) {
       return;
@@ -352,9 +382,21 @@ export function useTrainingJobController({
   }
 
   function cancelTraining() {
-    if (job?.id) {
+    if (job?.id && !cancelMutation.isPending) {
       cancelMutation.mutate(job.id);
     }
+  }
+
+  function resetTraining() {
+    if (hasPendingMutation) {
+      return;
+    }
+    setPendingTrainingRequest(null);
+    setMutationError(null);
+    createMutation.reset();
+    cancelMutation.reset();
+    onActiveJobIdChange(null);
+    onJobChange(undefined);
   }
 
   function resampleRunPlan() {
@@ -372,6 +414,9 @@ export function useTrainingJobController({
     isProgressPlanning,
     progressPlanError,
     isRunning,
+    canResetTraining: Boolean(
+      job && terminalStatuses.has(job.status) && !hasPendingMutation,
+    ),
     canStart,
     canResampleRunPlan,
     isResampling: runPlanQuery.isFetching,
@@ -384,6 +429,7 @@ export function useTrainingJobController({
     confirmLargeGridSearch,
     cancelLargeGridSearch,
     cancelTraining,
+    resetTraining,
     resampleRunPlan,
   };
 }

@@ -1,6 +1,8 @@
 import { useCallback, useMemo, useState } from "react";
 import { type TrainingJob } from "@/lib/api";
 
+const terminalStatuses = new Set(["completed", "failed", "cancelled"]);
+
 type ActiveTrainingJobStateInput = {
   onJobStarted?: (logFolder: string) => void;
 };
@@ -15,7 +17,18 @@ export function useActiveTrainingJobState({
 
   const handleTrainingJobChange = useCallback(
     (job: TrainingJob | undefined) => {
-      setActiveTrainingJob(job);
+      setActiveTrainingJob((current) => {
+        if (
+          current &&
+          job &&
+          current.id === job.id &&
+          terminalStatuses.has(current.status) &&
+          !terminalStatuses.has(job.status)
+        ) {
+          return current;
+        }
+        return job;
+      });
       if (job?.logFolder) {
         onJobStarted?.(job.logFolder);
       }

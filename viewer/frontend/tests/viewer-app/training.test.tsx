@@ -22,6 +22,7 @@ import {
   fullConfigSearchResultRow,
   inspectResponse,
   installFetchMock,
+  mockTrainingJobPayload,
   openFullConfig,
   openTrainingMultiSelect,
   renderViewer,
@@ -235,6 +236,89 @@ describe("ViewerApp Training And Preview", () => {
       expect(trainingJobPollCalls(fetchMock)).toHaveLength(1);
     });
     expect(screen.queryByRole("button", { name: /start training/i }))
+      .not.toBeInTheDocument();
+  });
+
+  it("keeps the running job cancellable when cancel fails", async () => {
+    const { fetchMock } = installFetchMock({
+      trainingJobStatus: "running",
+      cancelTrainingJobError:
+        "Training job 'job-1' process survived terminate and kill.",
+    });
+    renderWorkspaceOverlayHarness({
+      activeWorkspace: "model",
+      children: <SeedActiveJob jobId="job-1" />,
+    });
+    const user = userEvent.setup();
+
+    const cancelButton = await screen.findByRole("button", { name: /^cancel$/i });
+    expect(cancelButton).toBeEnabled();
+    const details = await expandedTrainingDetails(user);
+
+    await user.click(cancelButton);
+
+    await waitFor(() => {
+      expect(within(details).getByRole("alert")).toHaveTextContent(
+        /process survived terminate and kill/i,
+      );
+    });
+    expect(fetchMock.mock.calls.some(([input]) =>
+      String(input).endsWith("/training/jobs/job-1/cancel"),
+    )).toBe(true);
+    expect(screen.getByRole("button", { name: /^cancel$/i })).toBeEnabled();
+    expect(screen.getAllByText("running").length).toBeGreaterThan(0);
+  });
+
+  it("shows cancel errors while the training panel is collapsed", async () => {
+    installFetchMock({
+      trainingJobStatus: "running",
+      cancelTrainingJobError:
+        "Training job 'job-1' process survived terminate and kill.",
+    });
+    renderWorkspaceOverlayHarness({
+      activeWorkspace: "model",
+      children: <SeedActiveJob jobId="job-1" />,
+    });
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: /^cancel$/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /process survived terminate and kill/i,
+    );
+    expect(screen.getByRole("button", { name: /^cancel$/i })).toBeEnabled();
+  });
+
+  it("does not let stale running polls overwrite a cancelled mutation", async () => {
+    const stalePoll = deferred<unknown>();
+    const { fetchMock } = installFetchMock({
+      trainingJobResponseFactory: () => stalePoll.promise,
+    });
+    renderViewer();
+    const user = userEvent.setup();
+
+    await expandedTrainingDetailsReady(user);
+    await selectNewTrainingLogFolder(user, "stale_cancel_poll");
+    await user.click(screen.getByRole("button", { name: /start training/i }));
+    await waitFor(() => {
+      expect(trainingJobPollCalls(fetchMock)).toHaveLength(1);
+    });
+    await user.click(await screen.findByRole("button", { name: /^cancel$/i }));
+
+    await waitFor(() => {
+      expect(screen.getAllByText("cancelled").length).toBeGreaterThan(0);
+    });
+    stalePoll.resolve(
+      mockTrainingJobPayload(
+        { logFolder: "stale_cancel_poll", datasets: ["Mnist"] },
+        { status: "running" },
+      ),
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByText("cancelled").length).toBeGreaterThan(0);
+    });
+    expect(screen.queryByRole("button", { name: /^cancel$/i }))
       .not.toBeInTheDocument();
   });
 
@@ -1391,6 +1475,80 @@ describe("ViewerApp Training And Preview", () => {
     expect(
       within(runList).queryByRole("button", { name: /^resample$/i }),
     ).not.toBeInTheDocument();
+  });
+
+  it("resets completed training footer progress back to the current draft plan", async () => {
+    installFetchMock();
+    renderViewer();
+    const user = userEvent.setup();
+
+    const details = await expandedTrainingDetailsReady(user);
+    await setTargetHiddenDimOverride(user, "128");
+    await selectNewTrainingLogFolder(user, "completed_then_reset");
+    await user.click(screen.getByRole("button", { name: /start training/i }));
+
+    await findTrainingRunSummary(
+      /1\s*\/\s*1 runs;\s*30\s*\/\s*30 epochs/i,
+    );
+    expect(
+      screen.getByRole("button", { name: /^reset training$/i }),
+    ).toBeInTheDocument();
+
+    await setTargetHiddenDimOverride(user, "192");
+    await selectNewTrainingLogFolder(user, "after_reset");
+    await user.click(screen.getByRole("button", { name: /^reset training$/i }));
+
+    await findTrainingRunSummary(
+      /0\s*\/\s*1 runs;\s*0\s*\/\s*30 epochs;\s*Next run #1 0\s*\/\s*30 epochs/i,
+    );
+    expect(
+      screen.queryByRole("button", { name: /^reset training$/i }),
+    ).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /start training/i })).toBeEnabled();
+    });
+
+    const runList = trainingRunList(details);
+    expect(within(runList).queryByText("Completed")).not.toBeInTheDocument();
+    expect(within(runList).getByText("hidden_dim=192")).toBeInTheDocument();
+  });
+
+  it("hides reset training while the next run is being created", async () => {
+    let createCount = 0;
+    let latestRequest: Parameters<typeof mockTrainingJobPayload>[0] | undefined;
+    const pendingCreate = deferred<unknown>();
+    installFetchMock({
+      createTrainingJobResponseFactory: (request) => {
+        latestRequest = request as Parameters<typeof mockTrainingJobPayload>[0];
+        createCount += 1;
+        if (createCount === 2) {
+          return pendingCreate.promise;
+        }
+        return mockTrainingJobPayload(latestRequest, { status: "running" });
+      },
+    });
+    renderViewer();
+    const user = userEvent.setup();
+
+    await expandedTrainingDetailsReady(user);
+    await selectNewTrainingLogFolder(user, "completed_then_pending_next");
+    await user.click(screen.getByRole("button", { name: /start training/i }));
+    await findTrainingRunSummary(
+      /1\s*\/\s*1 runs;\s*30\s*\/\s*30 epochs/i,
+    );
+    expect(
+      screen.getByRole("button", { name: /^reset training$/i }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /start training/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: /^reset training$/i }))
+        .not.toBeInTheDocument();
+    });
+    pendingCreate.resolve(
+      mockTrainingJobPayload(latestRequest ?? {}, { status: "running" }),
+    );
   });
 
   it("starts the next training run from the changed draft plan after completion", async () => {

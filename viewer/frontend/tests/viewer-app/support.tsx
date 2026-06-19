@@ -2265,6 +2265,43 @@ export function mockTrainingRunPlan(request: MockTrainingPlanRequest) {
   };
 }
 
+type MockTrainingRunSummaryInput = Array<{
+  status: string;
+  totalEpochs: number;
+  currentEpoch: number;
+}>;
+
+function summarizeMockTrainingRuns(runs: MockTrainingRunSummaryInput) {
+  const totalEpochs = runs.reduce((total, run) => total + run.totalEpochs, 0);
+  const completedEpochs = runs.reduce((total, run) => {
+    if (run.status === "Completed") {
+      return total + run.totalEpochs;
+    }
+    if (["Running", "Failed", "Cancelled"].includes(run.status)) {
+      return total + Math.min(run.currentEpoch, run.totalEpochs);
+    }
+    return total;
+  }, 0);
+  const remainingEpochs = runs.reduce((total, run) => {
+    if (run.status === "Pending" || run.status === "Running") {
+      return total + Math.max(0, run.totalEpochs - run.currentEpoch);
+    }
+    return total;
+  }, 0);
+  return {
+    totalRuns: runs.length,
+    completedRuns: runs.filter((run) => run.status === "Completed").length,
+    runningRuns: runs.filter((run) => run.status === "Running").length,
+    pendingRuns: runs.filter((run) => run.status === "Pending").length,
+    failedRuns: runs.filter((run) => run.status === "Failed").length,
+    cancelledRuns: runs.filter((run) => run.status === "Cancelled").length,
+    skippedRuns: runs.filter((run) => run.status === "Skipped").length,
+    totalEpochs,
+    completedEpochs,
+    remainingEpochs,
+  };
+}
+
 export function completedMockTrainingRunPlan(request: MockTrainingPlanRequest) {
   const plan = mockTrainingRunPlan(request);
   const runs = plan.runs.map((run) => ({
@@ -2279,11 +2316,114 @@ export function completedMockTrainingRunPlan(request: MockTrainingPlanRequest) {
     runs,
     summary: {
       ...plan.summary,
-      completedRuns: runs.length,
-      pendingRuns: 0,
-      completedEpochs: plan.summary.totalEpochs,
-      remainingEpochs: 0,
+      ...summarizeMockTrainingRuns(runs),
     },
+  };
+}
+
+function cancelledMockTrainingRunPlan(request: MockTrainingPlanRequest) {
+  const plan = mockTrainingRunPlan(request);
+  const runs = plan.runs.map((run) => ({
+    ...run,
+    status: run.status === "Running" ? "Cancelled" : "Skipped",
+  }));
+  return {
+    ...plan,
+    runs,
+    summary: {
+      ...plan.summary,
+      ...summarizeMockTrainingRuns(runs),
+    },
+  };
+}
+
+function failedMockTrainingRunPlan(request: MockTrainingPlanRequest) {
+  const plan = mockTrainingRunPlan(request);
+  let failedSeen = false;
+  const runs = plan.runs.map((run) => {
+    if (!failedSeen) {
+      failedSeen = true;
+      return {
+        ...run,
+        status: "Failed",
+        error: "Training failed",
+      };
+    }
+    return { ...run, status: "Skipped" };
+  });
+  return {
+    ...plan,
+    runs,
+    summary: {
+      ...plan.summary,
+      ...summarizeMockTrainingRuns(runs),
+    },
+  };
+}
+
+type MockTrainingJobStatus =
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+export function mockTrainingJobPayload(
+  request: MockTrainingPlanRequest,
+  { status }: { status: MockTrainingJobStatus },
+) {
+  const logFolder = request.logFolder ?? "test_model";
+  const runPlan =
+    status === "completed"
+      ? completedMockTrainingRunPlan(request)
+      : status === "cancelled"
+        ? cancelledMockTrainingRunPlan(request)
+        : status === "failed"
+          ? failedMockTrainingRunPlan(request)
+      : mockTrainingRunPlan(request);
+  const isCompleted = status === "completed";
+  const isFailed = status === "failed";
+  const isCancelled = status === "cancelled";
+  return {
+    id: "job-1",
+    status,
+    modelType: request.modelType ?? "linears",
+    model: request.model ?? "linear",
+    preset: request.preset ?? "baseline",
+    presets: request.presets ?? ["baseline"],
+    datasets: request.datasets ?? ["Mnist"],
+    overrides: request.overrides ?? {},
+    runPlan,
+    monitors: [],
+    logFolder,
+    createdAt: "2026-06-01T00:00:00Z",
+    updatedAt: isCompleted
+      ? "2026-06-01T00:00:01Z"
+      : "2026-06-01T00:00:00Z",
+    exitCode: isCompleted ? 0 : isFailed ? 1 : isCancelled ? -15 : null,
+    pid: 123,
+    cancellationMode: "strict-cgroup",
+    currentPreset: request.preset ?? "baseline",
+    currentDataset: request.datasets?.[0] ?? "Mnist",
+    epoch: isCompleted ? 1 : 0,
+    step: isCompleted ? 4 : 0,
+    metrics: isCompleted ? { validation_accuracy: 0.9 } : {},
+    logDir: isCompleted ? `logs/${logFolder}` : null,
+    events: isCancelled ? [{ type: "cancelled", status: "cancelled" }] : [],
+    eventCount: isCancelled ? 1 : 0,
+    eventCounts: isCancelled ? { cancelled: 1 } : {},
+    eventsTruncated: false,
+    clusterGrowth: [],
+    logTail: isCompleted ? ["done"] : [],
+    resultLinks: isCompleted
+      ? [
+          {
+            preset: request.preset ?? "baseline",
+            dataset: "Mnist",
+            logDir: `logs/${logFolder}`,
+          },
+        ]
+      : [],
   };
 }
 
@@ -2534,6 +2674,17 @@ export function installFetchMock(
       logDir: string | null;
     }) => unknown;
     logParameterStatusResponse?: (context: { runIds: string[] }) => unknown;
+    trainingJobStatus?: MockTrainingJobStatus;
+    trainingJobResponseFactory?: (
+      requestIndex: number,
+    ) => unknown | Promise<unknown>;
+    createTrainingJobResponseFactory?: (
+      request: Record<string, unknown>,
+    ) => unknown | Promise<unknown>;
+    cancelTrainingJobResponseFactory?: (
+      request: Record<string, unknown> | undefined,
+    ) => unknown | Promise<unknown>;
+    cancelTrainingJobError?: string;
 	    configSnapshotsResponse?: {
 	      modelType: string;
 	      model: string;
@@ -2547,6 +2698,7 @@ export function installFetchMock(
   const inspectBodies: unknown[] = [];
   const operationGraphBodies: unknown[] = [];
   const trainingBodies: unknown[] = [];
+  let trainingJobPollRequestCount = 0;
   const logScalarRequests: Array<{
     runIds: string[];
     tags: string[];
@@ -2939,6 +3091,7 @@ export function installFetchMock(
     }
     if (url.endsWith("/training/jobs")) {
       latestTrainingRequest = JSON.parse(String(init?.body));
+      const trainingRequest = latestTrainingRequest as Record<string, unknown>;
       trainingBodies.push(latestTrainingRequest);
       const runPlan =
         (latestTrainingRequest?.runPlan as
@@ -2954,64 +3107,48 @@ export function installFetchMock(
           ],
         };
       }
-      return jsonResponse({
-        id: "job-1",
-        status: "running",
-        modelType: "linears",
-        model: "linear",
-        preset: "baseline",
-        presets: latestTrainingRequest?.presets ?? ["baseline"],
-        datasets: ["Mnist"],
-        overrides: {},
-        runPlan,
-        monitors: latestTrainingRequest?.monitors ?? [],
-        logFolder,
-        createdAt: "2026-06-01T00:00:00Z",
-        updatedAt: "2026-06-01T00:00:00Z",
-        exitCode: null,
-        pid: 123,
-        currentPreset: "baseline",
-        currentDataset: "Mnist",
-        epoch: 0,
-        step: 0,
-        metrics: {},
-        logDir: null,
-        events: [],
-        logTail: [],
-        resultLinks: [],
-      });
+      const responseBody = options.createTrainingJobResponseFactory
+        ? options.createTrainingJobResponseFactory(trainingRequest)
+        : {
+            ...mockTrainingJobPayload(
+              trainingRequest as MockTrainingPlanRequest,
+              {
+                status: "running",
+              },
+            ),
+            runPlan,
+            monitors: latestTrainingRequest?.monitors ?? [],
+          };
+      return Promise.resolve(responseBody).then((body) => jsonResponse(body));
+    }
+    if (url.endsWith("/training/jobs/job-1/cancel")) {
+      if (options.cancelTrainingJobError) {
+        return jsonResponse({ detail: options.cancelTrainingJobError }, 400);
+      }
+      const logFolder = String(latestTrainingRequest?.logFolder ?? "test_model");
+      const responseBody = options.cancelTrainingJobResponseFactory
+        ? options.cancelTrainingJobResponseFactory(latestTrainingRequest)
+        : mockTrainingJobPayload(
+            (latestTrainingRequest ?? { logFolder }) as MockTrainingPlanRequest,
+            { status: "cancelled" },
+          );
+      return Promise.resolve(responseBody).then((body) => jsonResponse(body));
     }
     if (url.endsWith("/training/jobs/job-1")) {
+      const requestIndex = trainingJobPollRequestCount;
+      trainingJobPollRequestCount += 1;
+      if (options.trainingJobResponseFactory) {
+        return Promise.resolve(
+          options.trainingJobResponseFactory(requestIndex),
+        ).then((body) => jsonResponse(body));
+      }
       const logFolder = String(latestTrainingRequest?.logFolder ?? "test_model");
-      const runPlan = completedMockTrainingRunPlan(
-        (latestTrainingRequest ?? { logFolder }) as MockTrainingPlanRequest,
+      return jsonResponse(
+        mockTrainingJobPayload(
+          (latestTrainingRequest ?? { logFolder }) as MockTrainingPlanRequest,
+          { status: options.trainingJobStatus ?? "completed" },
+        ),
       );
-      return jsonResponse({
-        id: "job-1",
-        status: "completed",
-        modelType: "linears",
-        model: "linear",
-        preset: "baseline",
-        presets: latestTrainingRequest?.presets ?? ["baseline"],
-        datasets: ["Mnist"],
-        overrides: {},
-        runPlan,
-        monitors: latestTrainingRequest?.monitors ?? [],
-        logFolder,
-        createdAt: "2026-06-01T00:00:00Z",
-        updatedAt: "2026-06-01T00:00:01Z",
-        exitCode: 0,
-        pid: 123,
-        currentPreset: "baseline",
-        currentDataset: "Mnist",
-        epoch: 1,
-        step: 4,
-        metrics: { validation_accuracy: 0.9 },
-        logDir: `logs/${logFolder}`,
-        events: [],
-        logTail: ["done"],
-        resultLinks: [{ preset: "baseline", dataset: "Mnist", logDir: `logs/${logFolder}` }],
-      });
     }
     if (url.includes("/training/jobs/job-1/monitor-data")) {
       const parsedUrl = new URL(url);
