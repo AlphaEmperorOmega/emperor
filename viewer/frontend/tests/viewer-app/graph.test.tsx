@@ -237,12 +237,12 @@ describe("ViewerApp Graph Workspace", () => {
     await waitFor(() =>
       expect(inspectBodies.length).toBeGreaterThan(initialRequestCount),
     );
-	    expect(inspectBodies.at(-1)).toEqual({
-	      modelType: "linears",
-	      model: "linear",
+    expect(inspectBodies.at(-1)).toEqual({
+      modelType: "linears",
+      model: "linear",
       preset: "recurrent-gating-halting",
       dataset: "Mnist",
-      overrides: {},
+      overrides: { hidden_dim: "128" },
     });
     const refreshedModelNode = await screen.findByTestId("node-model");
     expect(within(refreshedModelNode).getByTitle("2,097,152 bytes of parameter tensors"))

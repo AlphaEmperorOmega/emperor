@@ -2120,6 +2120,7 @@ export type MockTrainingPlanRequest = {
   presets?: string[];
   datasets?: string[];
   overrides?: Record<string, unknown>;
+  monitors?: string[];
   logFolder?: string;
   search?: {
     mode: "grid" | "random";
@@ -2394,7 +2395,7 @@ export function mockTrainingJobPayload(
     datasets: request.datasets ?? ["Mnist"],
     overrides: request.overrides ?? {},
     runPlan,
-    monitors: [],
+    monitors: request.monitors ?? [],
     logFolder,
     createdAt: "2026-06-01T00:00:00Z",
     updatedAt: isCompleted

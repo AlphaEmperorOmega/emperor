@@ -756,6 +756,7 @@ describe("useViewerState", () => {
     expect(mocks.fetchSearchSpace).toHaveBeenCalledWith(
       { modelType: "linears", model: "linear" },
       "baseline",
+      ["baseline"],
     );
     expect(mocks.inspectModel.mock.calls.map(([request]) => request))
       .toContainEqual({
@@ -1264,9 +1265,7 @@ describe("useViewerState", () => {
     });
 
     act(() => {
-      result.current.target.updateOverride("hidden_size", "512", {
-        preserveTargetSelection: true,
-      });
+      result.current.target.updateSnapshotEditorDraftOverride("hidden_size", "512");
     });
 
     expect(result.current.target.selectedTargetMode).toBe("snapshot");
