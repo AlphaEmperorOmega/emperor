@@ -48,6 +48,7 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
     allConfigSnapshots,
     configSnapshotCount,
     monitorOptions,
+    snapshotOverrideWarning,
     selectedMonitors,
     monitorsLoading,
     searchAxes,
@@ -96,6 +97,7 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
     canRequestTraining,
     effectiveTrainingSearch,
     searchConflictKeys,
+    searchLockSummary,
     searchModeLabel,
     selectedTrainingPresetCount,
     trainingSearchValidation,
@@ -325,20 +327,24 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
                 <div className="grid min-h-[4rem] grid-rows-[2.5rem_1rem] gap-2">
                   {logFolderMode === "existing" ? (
                     <>
-                      <SelectOnlyDropdown
-                        label="Log experiment folder"
-                        value={selectedExistingLogFolder}
-                        options={logFolderDropdownOptions}
-                        onChange={setSelectedExistingLogFolder}
-                        disabled={
-                          planChangingControlsDisabled ||
-                          logFoldersLoading ||
-                          logFolderDropdownOptions.length === 0
-                        }
-                        placeholder="Select folder"
-                      />
+                      <div className="h-10 min-h-10">
+                        <SelectOnlyDropdown
+                          label="Log experiment folder"
+                          value={selectedExistingLogFolder}
+                          options={logFolderDropdownOptions}
+                          onChange={setSelectedExistingLogFolder}
+                          disabled={
+                            planChangingControlsDisabled ||
+                            logFoldersLoading ||
+                            logFolderDropdownOptions.length === 0
+                          }
+                          placeholder="Select folder"
+                          className="h-10 min-h-10"
+                          triggerClassName="h-10"
+                        />
+                      </div>
                       <span className="min-h-4 text-xs leading-4 text-ink-faint">
-                        {existingHelp}
+                        {existingHelp || "\u00a0"}
                       </span>
                     </>
                   ) : (
@@ -358,8 +364,8 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
                       <span
                         className={
                           newLogFolderError && newLogFolder.length > 0
-                            ? "min-h-4 text-xs leading-4 text-danger-text"
-                            : "min-h-4 text-xs leading-4 text-ink-faint"
+                            ? "block min-h-4 text-xs leading-4 text-danger-text"
+                            : "block min-h-4 text-xs leading-4 text-ink-faint"
                         }
                         role={
                           newLogFolderError && newLogFolder.length > 0
@@ -373,6 +379,12 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
                   )}
                 </div>
               </section>
+
+              {snapshotOverrideWarning && (
+                <InlineStatus tone="warning" compact>
+                  {snapshotOverrideWarning}
+                </InlineStatus>
+              )}
 
               <TrainingTargetDatasetPanel
                 modelTypeOptions={modelTypeOptions}
@@ -421,6 +433,7 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
                   selectedDatasetCount={selectedDatasets.length}
                   selectedPresetCount={selectedTrainingPresetCount}
                   isLoading={searchLoading}
+                  searchLockSummary={searchLockSummary}
                   disabledReason={
                     setupLockMessage ||
                     (activeConfigSnapshotCount > 0
@@ -464,6 +477,7 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
                 searchModeLabel={searchModeLabel}
                 activeSearchAxisCount={activeSearchAxisCount}
                 searchConflictCount={searchConflictKeys.length}
+                searchLockSummary={searchLockSummary}
                 trainingSearchValidation={trainingSearchValidation}
                 displayedRunCount={displayedRunCount}
                 requiresLargeGridConfirmation={requiresLargeGridConfirmation}

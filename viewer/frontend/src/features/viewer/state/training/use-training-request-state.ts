@@ -1,6 +1,10 @@
 import { useMemo } from "react";
 import { type SearchAxis } from "@/lib/api";
-import { type ConfigSection, type OverrideValues } from "@/lib/config";
+import {
+  effectivePresetOverrides,
+  type ConfigSection,
+  type OverrideValues,
+} from "@/lib/config";
 import {
   buildConfigSnapshotRunPlan,
   type ConfigSnapshot,
@@ -9,6 +13,8 @@ import {
   DEFAULT_TRAINING_SEARCH_STATE,
   buildEffectiveOverrides,
   buildTrainingSearchPayload,
+  deriveTrainingSearchLockSummary,
+  effectiveUnlockedTrainingSearch,
   estimatePlannedRuns,
   searchOverrideConflictKeys,
   selectedSearchAxisCount,
@@ -61,30 +67,53 @@ export function useTrainingRequestState({
   );
   const fieldCount = configFields.length;
   const overrideCount = Object.keys(overrides).length;
+  const editablePresetOverrides = useMemo(
+    () => effectivePresetOverrides(configFields, overrides),
+    [configFields, overrides],
+  );
   const hasConfigSnapshots = configSnapshotCount > 0;
   const activeConfigSnapshotCount = selectedTrainingSnapshots.length;
   const hasActiveConfigSnapshots = activeConfigSnapshotCount > 0;
-  const effectiveTrainingSearch = hasActiveConfigSnapshots
+  const baseTrainingSearch = hasActiveConfigSnapshots
     ? DEFAULT_TRAINING_SEARCH_STATE
     : trainingSearch;
+  const searchLockSummary = useMemo(
+    () => deriveTrainingSearchLockSummary(baseTrainingSearch, searchAxes),
+    [baseTrainingSearch, searchAxes],
+  );
+  const effectiveTrainingSearch = useMemo(
+    () => effectiveUnlockedTrainingSearch(baseTrainingSearch, searchAxes),
+    [baseTrainingSearch, searchAxes],
+  );
   const effectiveOverrides = useMemo<OverrideValues>(
     () =>
       hasActiveConfigSnapshots
         ? {}
-        : buildEffectiveOverrides(overrides, effectiveTrainingSearch),
-    [effectiveTrainingSearch, hasActiveConfigSnapshots, overrides],
+        : buildEffectiveOverrides(editablePresetOverrides, effectiveTrainingSearch),
+    [
+      editablePresetOverrides,
+      effectiveTrainingSearch,
+      hasActiveConfigSnapshots,
+    ],
   );
   const selectedFieldSummary = useMemo(
     () => overrideSummary(configFields, effectiveOverrides),
     [configFields, effectiveOverrides],
   );
   const searchConflictKeys = useMemo(
-    () => searchOverrideConflictKeys(overrides, effectiveTrainingSearch),
-    [effectiveTrainingSearch, overrides],
+    () => searchOverrideConflictKeys(editablePresetOverrides, effectiveTrainingSearch),
+    [editablePresetOverrides, effectiveTrainingSearch],
   );
   const trainingSearchValidation = useMemo(
-    () => validateTrainingSearch(effectiveTrainingSearch, searchAxes),
-    [effectiveTrainingSearch, searchAxes],
+    () =>
+      validateTrainingSearch(effectiveTrainingSearch, searchAxes, {
+        allowEmptySelected: searchLockSummary.skippedSelectedAxisCount > 0,
+      }),
+    [
+      effectiveTrainingSearch,
+      searchAxes,
+      searchLockSummary.skippedSelectedAxisCount,
+    ],
   );
   const selectedTrainingPresetCount = selectedTrainingPresets.length;
   const activeSearchAxisCount = selectedSearchAxisCount(effectiveTrainingSearch);
@@ -113,6 +142,7 @@ export function useTrainingRequestState({
             selectedDatasets,
             snapshots: selectedTrainingSnapshots,
             fields: configFields,
+            presetOverrides: editablePresetOverrides,
             logFolder,
           })
         : undefined,
@@ -120,6 +150,7 @@ export function useTrainingRequestState({
       configFields,
       hasActiveConfigSnapshots,
       logFolder,
+      editablePresetOverrides,
       selectedDatasets,
       selectedTrainingSnapshots,
       selectedModelType,
@@ -135,9 +166,14 @@ export function useTrainingRequestState({
         effectiveTrainingSearch,
         selectedDatasets.length,
         selectedTrainingPresetCount,
+        {
+          emptySearchRunsAsBase:
+            searchLockSummary.skippedSelectedAxisCount > 0,
+        },
       ),
     [
       effectiveTrainingSearch,
+      searchLockSummary.skippedSelectedAxisCount,
       selectedDatasets.length,
       selectedTrainingPresetCount,
       snapshotRunPlan,
@@ -169,6 +205,7 @@ export function useTrainingRequestState({
     selectedFieldSummary,
     searchConflictKeys,
     trainingSearchValidation,
+    searchLockSummary,
     selectedTrainingPresetCount,
     activeSearchAxisCount,
     canRequestTraining,

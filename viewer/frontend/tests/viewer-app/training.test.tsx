@@ -29,6 +29,7 @@ import {
   resetViewerAppTestState,
   schemaResponse,
   searchSpaceResponse,
+  presetsResponse,
   selectExistingTrainingLogFolder,
   selectNewTrainingLogFolder,
   selectTargetOption,
@@ -60,6 +61,71 @@ function modelCatalogCalls(
   fetchMock: ReturnType<typeof installFetchMock>["fetchMock"],
 ) {
   return fetchMock.mock.calls.filter(([input]) => String(input).endsWith("/models"));
+}
+
+const layerNormSearchAxis = {
+  key: "stack_layer_norm_position",
+  configKey: "STACK_LAYER_NORM_POSITION",
+  searchKey: "SEARCH_SPACE_STACK_LAYER_NORM_POSITION",
+  label: "stack layer norm position",
+  section: "Layer Stack Options",
+  type: "enum",
+  values: ["BEFORE", "AFTER"],
+  locked: false,
+  lockedValue: null,
+  lockedReason: "",
+  lockedByPresets: [],
+  lockReasons: [],
+};
+
+const searchLockPresetsResponse = {
+  ...presetsResponse,
+  presets: [
+    ...presetsResponse.presets,
+    { name: "post-norm", label: "POST_NORM", description: "Post norm" },
+    { name: "gating", label: "GATING", description: "Gating" },
+  ],
+};
+
+function searchSpaceWithPresetLocks(url: string) {
+  const selectedPresets = new Set(
+    (new URL(url, "http://testserver").searchParams.get("presets") ?? "")
+      .split(",")
+      .filter(Boolean),
+  );
+  const hiddenLocked = selectedPresets.has("gating");
+  const layerNormLocked = selectedPresets.has("post-norm");
+  return {
+    ...searchSpaceResponse,
+    axes: [
+      {
+        ...searchSpaceResponse.axes[0],
+        locked: hiddenLocked,
+        lockedValue: hiddenLocked ? 128 : null,
+        lockedReason: hiddenLocked
+          ? "Locked by the GATING preset because this preset fixes hidden dim."
+          : "",
+        lockedByPresets: hiddenLocked ? ["GATING"] : [],
+        lockReasons: hiddenLocked
+          ? ["Locked by the GATING preset because this preset fixes hidden dim."]
+          : [],
+      },
+      {
+        ...layerNormSearchAxis,
+        locked: layerNormLocked,
+        lockedValue: layerNormLocked ? "AFTER" : null,
+        lockedReason: layerNormLocked
+          ? "Locked by the POST_NORM preset because this preset enables post-layer normalization."
+          : "",
+        lockedByPresets: layerNormLocked ? ["POST_NORM"] : [],
+        lockReasons: layerNormLocked
+          ? [
+              "Locked by the POST_NORM preset because this preset enables post-layer normalization.",
+            ]
+          : [],
+      },
+    ],
+  };
 }
 
 function renderWorkspaceOverlayHarness({
@@ -485,6 +551,8 @@ describe("ViewerApp Training And Preview", () => {
       name: "Log experiment folder",
     });
     expect(logFolderSelector.tagName).toBe("BUTTON");
+    expect(logFolderSelector).toHaveClass("h-10");
+    expect(logFolderSelector.parentElement).toHaveClass("h-10", "min-h-10");
     const trainingConfigSelector = within(setupSidebar).getByRole("tablist", {
       name: /training config selector/i,
     });
@@ -676,10 +744,14 @@ describe("ViewerApp Training And Preview", () => {
       name: /log folder mode/i,
     });
     expect(setupSidebar).toContainElement(newLogFolderModeControl);
-    expect(setupSidebar).toContainElement(
-      within(setupSidebar).getByRole("textbox", {
-        name: "New log folder",
-      }),
+    const newLogFolderInput = within(setupSidebar).getByRole("textbox", {
+      name: "New log folder",
+    });
+    expect(setupSidebar).toContainElement(newLogFolderInput);
+    expect(newLogFolderInput).toHaveClass("h-10");
+    expect(within(setupSidebar).getByText("Enter a folder name.")).toHaveClass(
+      "min-h-4",
+      "leading-4",
     );
     const { listbox: monitorList } = await openTrainingMultiSelect(
       user,
@@ -701,7 +773,7 @@ describe("ViewerApp Training And Preview", () => {
     });
   });
 
-  it("training setup selectors update shared target state and clear overrides", async () => {
+  it("training setup preset changes preserve overrides while model changes clear them", async () => {
     installFetchMock();
     renderViewer();
     const user = userEvent.setup();
@@ -730,11 +802,11 @@ describe("ViewerApp Training And Preview", () => {
 
     expect(await waitForTargetValue("preset", "recurrent-gating-halting"))
       .toHaveTextContent("recurrent-gating-halting");
-    expect(screen.getAllByText("0 overrides").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/1 overrides?/i).length).toBeGreaterThan(0);
     details = await expandedTrainingDetailsReady(user);
     let dialog = await openFullConfig(user);
     await waitFor(() => {
-      expect(within(dialog).getByLabelText(/hidden dim/i)).toHaveValue(256);
+      expect(within(dialog).getByLabelText(/hidden dim/i)).toHaveValue(128);
     });
     await user.click(within(dialog).getByRole("button", { name: /^close$/i }));
 
@@ -834,7 +906,11 @@ describe("ViewerApp Training And Preview", () => {
       /Cifar 10/i,
     );
 
-    expect(within(details).getByText("2 presets")).toBeInTheDocument();
+    expect(
+      await within(details).findByRole("combobox", {
+        name: /^presets\s+2\s*\/\s*2 selected$/i,
+      }),
+    ).toBeInTheDocument();
     expect(within(details).getByText("4 planned runs")).toBeInTheDocument();
 
     await selectNewTrainingLogFolder(user, "multi_preset");
@@ -1595,7 +1671,7 @@ describe("ViewerApp Training And Preview", () => {
     });
   });
 
-  it("making a selected preset primary updates the primary target and resets setup state", async () => {
+  it("making a selected preset primary updates the primary target and resets search state", async () => {
     const { inspectBodies } = installFetchMock();
     renderViewer();
     const user = userEvent.setup();
@@ -1614,7 +1690,11 @@ describe("ViewerApp Training And Preview", () => {
         name: /recurrent-gating-halting/i,
       }),
     );
-    expect(within(details).getByText("2 presets")).toBeInTheDocument();
+    expect(
+      await within(details).findByRole("combobox", {
+        name: /^presets\s+2\s*\/\s*2 selected$/i,
+      }),
+    ).toBeInTheDocument();
     expect(
       within(listbox).queryByRole("button", {
         name: /make recurrent-gating-halting primary/i,
@@ -1630,7 +1710,7 @@ describe("ViewerApp Training And Preview", () => {
 
     expect(await waitForTargetValue("preset", "recurrent-gating-halting"))
       .toHaveTextContent("recurrent-gating-halting");
-    expect(screen.getAllByText("0 overrides").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/1 overrides?/i).length).toBeGreaterThan(0);
     await waitFor(() => {
       expect(within(details).getByRole("tab", { name: /^off$/i }))
         .toHaveAttribute("aria-selected", "true");
@@ -1646,7 +1726,7 @@ describe("ViewerApp Training And Preview", () => {
       model: "linear",
       preset: "recurrent-gating-halting",
       dataset: "Mnist",
-      overrides: {},
+      overrides: { hidden_dim: "128" },
     });
     expect(
       within(details).getByRole("combobox", {
@@ -1920,6 +2000,119 @@ describe("ViewerApp Training And Preview", () => {
     });
   });
 
+  it("skips preset-owned axes when selecting all grid search axes", async () => {
+    const { trainingBodies } = installFetchMock({
+      presetsResponse: searchLockPresetsResponse,
+      searchSpaceResponseFactory: searchSpaceWithPresetLocks,
+    });
+    renderViewer();
+    const user = userEvent.setup();
+
+    const details = await expandedTrainingDetailsReady(user);
+    await selectNewTrainingLogFolder(user, "post_norm_search");
+    await setTrainingMultiSelectOption(user, details, "Presets", /post-norm/i);
+    await user.click(within(details).getByRole("tab", { name: /^grid$/i }));
+
+    expect(
+      (
+        await within(details).findAllByText(
+          /1 preset-owned axis will be skipped for POST_NORM: stack layer norm position/i,
+        )
+      ).length,
+    ).toBeGreaterThan(0);
+    expect(
+      within(details).getByLabelText(/^search axis stack_layer_norm_position$/i),
+    ).toBeDisabled();
+    expect(
+      within(details).getByText(/Locked value: AFTER by POST_NORM/i),
+    ).toBeInTheDocument();
+
+    await user.click(within(details).getByRole("button", { name: /^all axes$/i }));
+
+    expect(within(details).getAllByText("1 axes").length).toBeGreaterThan(0);
+    expect(within(details).getByText("2 combinations")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(
+        within(details).getAllByText(
+          /1 preset-owned axis will be skipped for POST_NORM/i,
+        ).length,
+      ).toBeGreaterThan(1);
+    });
+
+    await user.click(screen.getByRole("button", { name: /start training/i }));
+
+    await waitFor(() => {
+      expect(trainingBodies[0]).toMatchObject({
+        logFolder: "post_norm_search",
+        presets: ["baseline", "post-norm"],
+        search: {
+          mode: "grid",
+          values: {
+            hidden_dim: [64, 128],
+          },
+        },
+      });
+      expect(
+        Object.keys(
+          (trainingBodies[0] as { search?: { values?: Record<string, unknown[]> } })
+            .search?.values ?? {},
+        ),
+      ).not.toContain("stack_layer_norm_position");
+    });
+  });
+
+  it("skips an already selected axis when a new preset owns it", async () => {
+    const { trainingBodies } = installFetchMock({
+      presetsResponse: searchLockPresetsResponse,
+      searchSpaceResponseFactory: searchSpaceWithPresetLocks,
+    });
+    renderViewer();
+    const user = userEvent.setup();
+
+    const details = await expandedTrainingDetailsReady(user);
+    await selectNewTrainingLogFolder(user, "gating_search");
+    await user.click(within(details).getByRole("tab", { name: /^grid$/i }));
+    await user.click(within(details).getByLabelText(/^search axis hidden_dim$/i));
+    await user.click(
+      within(details).getByLabelText(/^search axis stack_layer_norm_position$/i),
+    );
+
+    expect(screen.getByRole("button", { name: /start training/i })).toBeEnabled();
+
+    await setTrainingMultiSelectOption(user, details, "Presets", /^gating\b/i);
+
+    expect(
+      (
+        await within(details).findAllByText(
+          /1 selected axis was skipped because a selected preset owns it/i,
+        )
+      ).length,
+    ).toBeGreaterThan(0);
+    expect(within(details).getAllByText("1 axes").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /start training/i })).toBeEnabled();
+
+    await user.click(screen.getByRole("button", { name: /start training/i }));
+
+    await waitFor(() => {
+      expect(trainingBodies[0]).toMatchObject({
+        logFolder: "gating_search",
+        presets: ["baseline", "gating"],
+        search: {
+          mode: "grid",
+          values: {
+            stack_layer_norm_position: ["BEFORE", "AFTER"],
+          },
+        },
+      });
+      expect(
+        Object.keys(
+          (trainingBodies[0] as { search?: { values?: Record<string, unknown[]> } })
+            .search?.values ?? {},
+        ),
+      ).not.toContain("hidden_dim");
+    });
+  });
+
   it("confirms large grid searches before posting", async () => {
     const largeSearchSpace = {
       ...searchSpaceResponse,
@@ -2119,7 +2312,7 @@ describe("ViewerApp Training And Preview", () => {
     await waitFor(() => expect(inspectBodies).toHaveLength(initialRequestCount + 2));
   });
 
-  it("changing the main-menu preset clears overrides and refreshes the preview", async () => {
+  it("changing the main-menu preset preserves overrides and refreshes the preview", async () => {
     const { inspectBodies } = installFetchMock();
     renderViewer();
     const user = userEvent.setup();
@@ -2131,7 +2324,7 @@ describe("ViewerApp Training And Preview", () => {
 
     await selectTargetOption(user, "preset", "recurrent-gating-halting");
 
-    expect(screen.getByText("0 overrides")).toBeInTheDocument();
+    expect(screen.getAllByText(/1 overrides?/i).length).toBeGreaterThan(0);
     expect(screen.queryByText("No overrides set")).not.toBeInTheDocument();
     await waitFor(() => expect(inspectBodies).toHaveLength(initialRequestCount + 1));
     expect(inspectBodies.at(-1)).toEqual({
@@ -2139,7 +2332,7 @@ describe("ViewerApp Training And Preview", () => {
       model: "linear",
       preset: "recurrent-gating-halting",
       dataset: "Mnist",
-      overrides: {},
+      overrides: { hidden_dim: "128" },
     });
   });
 

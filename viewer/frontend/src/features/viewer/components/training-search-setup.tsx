@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SectionHeading } from "@/features/viewer/components/shared/section-heading";
+import { InlineStatus } from "@/features/viewer/components/shared/inline-status";
 import { TrainingSearchAxisList } from "@/features/viewer/components/training-search-axis-list";
 import { ViewModeButton } from "@/features/viewer/components/view-mode-button";
 import {
@@ -20,7 +21,9 @@ import {
   estimatePlannedRuns,
   searchOverrideConflictKeys,
   selectedSearchAxisCount,
+  unlockedSearchAxes,
   type TrainingSearchMode,
+  type TrainingSearchLockSummary,
   type TrainingSearchState,
 } from "@/lib/training-search";
 
@@ -31,6 +34,7 @@ type TrainingSearchSetupProps = {
   selectedDatasetCount: number;
   selectedPresetCount?: number;
   isLoading?: boolean;
+  searchLockSummary?: TrainingSearchLockSummary;
   disabledReason?: string;
   onChange: Dispatch<SetStateAction<TrainingSearchState>>;
 };
@@ -56,22 +60,32 @@ export function TrainingSearchSetup({
   selectedDatasetCount,
   selectedPresetCount = 1,
   isLoading = false,
+  searchLockSummary,
   disabledReason,
   onChange,
 }: TrainingSearchSetupProps) {
   const isDisabled = Boolean(disabledReason);
+  const hasSkippedSelectedAxes =
+    (searchLockSummary?.skippedSelectedAxisCount ?? 0) > 0;
   const combinations = estimateGridCombinations(search.selectedValues);
   const plannedRuns = estimatePlannedRuns(
     search,
     selectedDatasetCount,
     selectedPresetCount,
+    { emptySearchRunsAsBase: hasSkippedSelectedAxes },
   );
   const activeAxisCount = selectedSearchAxisCount(search);
   const conflictKeys = searchOverrideConflictKeys(overrides, search);
   const unlockedAxes = useMemo(
-    () => axes.filter((axis) => !axis.locked && axis.values.length > 0),
+    () => unlockedSearchAxes(axes),
     [axes],
   );
+  const searchLockWarning = [
+    searchLockSummary?.lockedAxesMessage,
+    searchLockSummary?.skippedSelectedAxisMessage,
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   function setMode(mode: TrainingSearchMode) {
     if (isDisabled) {
@@ -187,6 +201,12 @@ export function TrainingSearchSetup({
 
       {search.mode !== "off" && (
         <>
+          {searchLockWarning && (
+            <InlineStatus tone="warning" compact className="px-2.5 py-2 text-xs">
+              {searchLockWarning}
+            </InlineStatus>
+          )}
+
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap gap-1.5">
               <Badge>{activeAxisCount} axes</Badge>

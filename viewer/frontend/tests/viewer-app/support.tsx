@@ -2658,8 +2658,10 @@ export function installFetchMock(
     deleteLogRunsError?: string;
     deleteLogRunsBlockers?: Array<{ id: string; logFolder: string; status: string }>;
     capabilitiesResponse?: typeof capabilitiesResponse;
+    presetsResponse?: typeof presetsResponse;
     schemaResponse?: unknown;
     searchSpaceResponse?: typeof searchSpaceResponse;
+    searchSpaceResponseFactory?: (url: string) => unknown;
     datasetsResponse?: typeof datasetsResponse;
     monitorDataResponse?: (
       context: MockMonitorRequestContext,
@@ -2968,7 +2970,7 @@ export function installFetchMock(
       });
     }
     if (endsWithAny(["/models/linear/presets", "/models/linears/linear/presets"])) {
-      return jsonResponse(presetsResponse);
+      return jsonResponse(options.presetsResponse ?? presetsResponse);
     }
     if (
       endsWithAny(["/models/linear/datasets", "/models/linears/linear/datasets"])
@@ -2994,7 +2996,10 @@ export function installFetchMock(
         "/models/linears/linear/search-space",
       ])
     ) {
-      return jsonResponse(options.searchSpaceResponse ?? searchSpaceResponse);
+      const searchPayload = options.searchSpaceResponseFactory
+        ? options.searchSpaceResponseFactory(url)
+        : options.searchSpaceResponse;
+      return jsonResponse(searchPayload ?? searchSpaceResponse);
     }
     if (
       endsWithAny([

@@ -11,7 +11,10 @@ import {
   trainingRunDisplayLabel,
 } from "@/features/viewer/components/training/training-run-display";
 import { type TrainingJob, type TrainingRun, type TrainingRunPlan } from "@/lib/api";
-import { type TrainingSearchState } from "@/lib/training-search";
+import {
+  type TrainingSearchLockSummary,
+  type TrainingSearchState,
+} from "@/lib/training-search";
 import { cn } from "@/lib/utils";
 
 export type TrainingRunPlanCardProps = {
@@ -24,6 +27,7 @@ export type TrainingRunPlanCardProps = {
   searchModeLabel: string;
   activeSearchAxisCount: number;
   searchConflictCount: number;
+  searchLockSummary?: TrainingSearchLockSummary;
   trainingSearchValidation: { ready: boolean; message: string };
   displayedRunCount: number;
   requiresLargeGridConfirmation: boolean;
@@ -251,6 +255,7 @@ function LogDirectory({ value }: { value: string }) {
 function Notices({
   effectiveTrainingSearch,
   searchConflictCount,
+  searchLockSummary,
   trainingSearchValidation,
   displayedRunCount,
   requiresLargeGridConfirmation,
@@ -261,6 +266,7 @@ function Notices({
   TrainingRunPlanCardProps,
   | "effectiveTrainingSearch"
   | "searchConflictCount"
+  | "searchLockSummary"
   | "trainingSearchValidation"
   | "displayedRunCount"
   | "requiresLargeGridConfirmation"
@@ -268,6 +274,12 @@ function Notices({
   | "planError"
   | "trainingError"
 >) {
+  const searchLockNotice =
+    effectiveTrainingSearch.mode !== "off"
+      ? searchLockSummary?.skippedSelectedAxisMessage ||
+        searchLockSummary?.lockedAxesMessage ||
+        ""
+      : "";
   return (
     <div className="grid gap-1.5">
       {planError && (
@@ -290,6 +302,11 @@ function Notices({
         <InlineStatus tone="warning" compact className="px-2.5 py-2 text-xs">
           {searchConflictCount} override
           {searchConflictCount === 1 ? "" : "s"} replaced by search.
+        </InlineStatus>
+      )}
+      {searchLockNotice && (
+        <InlineStatus tone="warning" compact className="px-2.5 py-2 text-xs">
+          {searchLockNotice}
         </InlineStatus>
       )}
       {requiresLargeGridConfirmation && (
@@ -316,6 +333,7 @@ export function TrainingRunPlanCard({
   searchModeLabel,
   activeSearchAxisCount,
   searchConflictCount,
+  searchLockSummary,
   trainingSearchValidation,
   displayedRunCount,
   requiresLargeGridConfirmation,
@@ -369,6 +387,7 @@ export function TrainingRunPlanCard({
         <Notices
           effectiveTrainingSearch={effectiveTrainingSearch}
           searchConflictCount={searchConflictCount}
+          searchLockSummary={searchLockSummary}
           trainingSearchValidation={trainingSearchValidation}
           displayedRunCount={displayedRunCount}
           requiresLargeGridConfirmation={requiresLargeGridConfirmation}

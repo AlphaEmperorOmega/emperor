@@ -107,7 +107,10 @@ describe("useTrainingRequestState", () => {
     expect(result.current.snapshotRunPlan?.runs[0]).not.toHaveProperty(
       "snapshotId",
     );
-    expect(result.current.snapshotRunPlan?.runs[0].overrides).toEqual({});
+    expect(result.current.snapshotRunPlan?.runs[0].overrides).toEqual({
+      hidden_dim: "192",
+      dropout: "0.2",
+    });
     expect(result.current.snapshotRunPlan?.runs[1]).toMatchObject({
       snapshotId: "wide",
       snapshotName: "Wide",

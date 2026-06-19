@@ -15,6 +15,19 @@ function selectedValueCount(axis: SearchAxis, search: TrainingSearchState) {
   return search.selectedValues[axis.key]?.length ?? 0;
 }
 
+function formatList(values: string[]) {
+  if (values.length === 0) {
+    return "";
+  }
+  if (values.length === 1) {
+    return values[0];
+  }
+  if (values.length === 2) {
+    return `${values[0]} and ${values[1]}`;
+  }
+  return `${values.slice(0, -1).join(", ")}, and ${values.at(-1)}`;
+}
+
 export function TrainingSearchAxisList({
   axes,
   search,
@@ -33,6 +46,17 @@ export function TrainingSearchAxisList({
       {axes.map((axis) => {
         const selectedCount = selectedValueCount(axis, search);
         const axisSelected = selectedCount > 0;
+        const lockedByPresets = axis.lockedByPresets ?? [];
+        const lockReasons =
+          axis.lockReasons && axis.lockReasons.length > 0
+            ? axis.lockReasons
+            : axis.lockedReason
+              ? [axis.lockedReason]
+              : [];
+        const hasLockedValue =
+          axis.locked &&
+          Object.prototype.hasOwnProperty.call(axis, "lockedValue") &&
+          axis.lockedValue !== undefined;
         return (
           <div
             key={axis.key}
@@ -71,9 +95,18 @@ export function TrainingSearchAxisList({
               </span>
             </label>
 
-            {axis.locked && axis.lockedReason && (
-              <div className="text-xs leading-4 text-ink-dim [overflow-wrap:anywhere]">
-                {axis.lockedReason}
+            {axis.locked && (
+              <div className="grid gap-1 text-xs leading-4 text-ink-dim [overflow-wrap:anywhere]">
+                <div>
+                  {hasLockedValue
+                    ? `Locked value: ${configValueLabel(axis.lockedValue ?? null)}`
+                    : "Preset-owned axis"}
+                  {lockedByPresets.length > 0
+                    ? ` by ${formatList(lockedByPresets)}`
+                    : ""}
+                  .
+                </div>
+                {lockReasons[0] && <div>{lockReasons[0]}</div>}
               </div>
             )}
 
