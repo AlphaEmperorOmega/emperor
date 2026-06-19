@@ -403,6 +403,7 @@ beforeEach(() => {
   mocks.fetchCapabilities.mockReset().mockResolvedValue({
     authMode: "none",
     trainingEnabled: true,
+    trainingCancellationCapability: "unsupported",
     logDeletionEnabled: true,
     configSnapshotsEnabled: true,
     historicalLogsEnabled: true,
@@ -657,6 +658,7 @@ describe("useViewerState", () => {
     mocks.fetchCapabilities.mockResolvedValueOnce({
       authMode: "bearer",
       trainingEnabled: false,
+      trainingCancellationCapability: "unsupported",
       logDeletionEnabled: false,
       configSnapshotsEnabled: false,
       historicalLogsEnabled: true,

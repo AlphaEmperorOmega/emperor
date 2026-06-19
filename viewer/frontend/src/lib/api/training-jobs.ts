@@ -247,6 +247,9 @@ export const trainingJobSchema = z.object({
   updatedAt: z.string(),
   exitCode: z.number().nullable(),
   pid: z.number(),
+  cancellationMode: z
+    .enum(["strict-cgroup", "process-group", "unsupported"])
+    .optional(),
   currentPreset: z.string().nullable().optional(),
   currentDataset: z.string().nullable(),
   epoch: z.number().nullable(),

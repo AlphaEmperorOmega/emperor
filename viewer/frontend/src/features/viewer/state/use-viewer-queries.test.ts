@@ -39,6 +39,7 @@ beforeEach(() => {
   mocks.fetchCapabilities.mockReset().mockResolvedValue({
     authMode: "none",
     trainingEnabled: true,
+    trainingCancellationCapability: "unsupported",
     logDeletionEnabled: true,
     configSnapshotsEnabled: true,
     historicalLogsEnabled: true,

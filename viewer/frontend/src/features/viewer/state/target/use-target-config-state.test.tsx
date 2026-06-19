@@ -15,6 +15,7 @@ vi.mock("@/features/viewer/state/use-viewer-queries", () => ({
   LOCAL_DEFAULT_CAPABILITIES: {
     authMode: "none",
     trainingEnabled: true,
+    trainingCancellationCapability: "unsupported",
     logDeletionEnabled: true,
     configSnapshotsEnabled: true,
     historicalLogsEnabled: true,
@@ -49,6 +50,7 @@ import {
 const capabilities = {
   authMode: "none",
   trainingEnabled: true,
+  trainingCancellationCapability: "unsupported",
   logDeletionEnabled: true,
   configSnapshotsEnabled: true,
   historicalLogsEnabled: true,

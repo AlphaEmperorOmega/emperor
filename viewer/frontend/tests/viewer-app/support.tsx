@@ -706,6 +706,7 @@ export const neuronMonitorsResponse = {
 export const capabilitiesResponse = {
   authMode: "none",
   trainingEnabled: true,
+  trainingCancellationCapability: "strict-cgroup",
   logDeletionEnabled: true,
   historicalLogsEnabled: true,
   liveMonitorDataEnabled: true,

@@ -58,6 +58,7 @@ const linearIdentity = { modelType: "linears", model: "linear" } as const;
 const capabilitiesResponse = {
   authMode: "none",
   trainingEnabled: true,
+  trainingCancellationCapability: "strict-cgroup",
   logDeletionEnabled: true,
   configSnapshotsEnabled: true,
   historicalLogsEnabled: true,
@@ -1464,6 +1465,7 @@ describe("requestJson error handling", () => {
           Promise.resolve({
             authMode: "none",
             trainingEnabled: "yes",
+            trainingCancellationCapability: "strict-cgroup",
             logDeletionEnabled: true,
             historicalLogsEnabled: true,
             liveMonitorDataEnabled: true,
@@ -1531,7 +1533,10 @@ describe("URL and query construction", () => {
 
     const result = await fetchCapabilities();
 
-    expect(result).toEqual(capabilitiesResponse);
+    expect(result).toEqual({
+      ...capabilitiesResponse,
+      trainingCancellationCapability: "unsupported",
+    });
   });
 
   it("encodes the preset query for fetchConfigSchema", async () => {
@@ -2695,6 +2700,7 @@ describe("POST requests", () => {
       updatedAt: "t",
       exitCode: null,
       pid: 1,
+      cancellationMode: "strict-cgroup",
       currentDataset: null,
       epoch: null,
       step: null,

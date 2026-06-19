@@ -9,6 +9,9 @@ const dataSourceCapabilityPlaceholderSchema = z.object({}).strict();
 const capabilitiesSchema = z.object({
   authMode: z.enum(["none", "bearer"]),
   trainingEnabled: z.boolean(),
+  trainingCancellationCapability: z
+    .enum(["strict-cgroup", "process-group", "unsupported"])
+    .default("unsupported"),
   logDeletionEnabled: z.boolean(),
   configSnapshotsEnabled: z.boolean().default(true),
   historicalLogsEnabled: z.boolean(),

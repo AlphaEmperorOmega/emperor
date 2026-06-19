@@ -15,6 +15,7 @@ import { viewerQueryKeys } from "@/lib/query-keys";
 export const LOCAL_DEFAULT_CAPABILITIES: Capabilities = {
   authMode: "none",
   trainingEnabled: true,
+  trainingCancellationCapability: "unsupported",
   logDeletionEnabled: true,
   configSnapshotsEnabled: true,
   historicalLogsEnabled: true,
