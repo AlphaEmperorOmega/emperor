@@ -38,7 +38,7 @@ class TrainingMonitorLocator:
         return None
 
     def event_preset_name(self, event: dict[str, Any]) -> str | None:
-        return normalize_preset_token(event.get("preset") or event.get("option"))
+        return normalize_preset_token(event.get("preset"))
 
     def event_matches_preset(
         self,

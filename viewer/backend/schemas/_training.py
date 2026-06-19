@@ -204,7 +204,7 @@ class TrainingProgressEventBaseResponse(ApiResponseModel):
     jobId: str | None = None
     dataset: str | None = None
     preset: str | None = None
-    option: str | None = None
+    presetKey: str | None = None
     logDir: str | None = None
     runId: str | None = None
     runIndex: int | None = None

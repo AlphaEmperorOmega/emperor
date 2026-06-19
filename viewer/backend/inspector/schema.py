@@ -250,7 +250,7 @@ def preset_locks(model_name: str, preset_name: str | None) -> dict[str, Any]:
     if preset_name is None:
         return {}
     try:
-        option = parts.experiment_options.get_option(preset_name)
+        preset = parts.experiment_preset_enum.get_member(preset_name)
     except Exception as exc:
         raise InspectorError(
             f"Unknown preset '{preset_name}' for model '{model_name}'."
@@ -258,7 +258,66 @@ def preset_locks(model_name: str, preset_name: str | None) -> dict[str, Any]:
     locked_fields = getattr(parts.presets, "locked_fields", None)
     if not callable(locked_fields):
         return {}
-    return locked_fields(option)
+    return locked_fields(preset)
+
+
+def _unique_presets(
+    preset_name: str | None,
+    preset_names: list[str] | None,
+) -> list[str]:
+    raw_names = preset_names if preset_names else ([preset_name] if preset_name else [])
+    names = []
+    seen = set()
+    for raw_name in raw_names:
+        name = raw_name.strip()
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        names.append(name)
+    return names
+
+
+def _preset_lock_details(
+    model_name: str,
+    preset_name: str | None,
+    preset_names: list[str] | None,
+) -> dict[str, list[dict[str, Any]]]:
+    parts = load_model_parts(model_name)
+    selected_presets = _unique_presets(preset_name, preset_names)
+    if not selected_presets:
+        return {}
+    locked_fields = getattr(parts.presets, "locked_fields", None)
+    if not callable(locked_fields):
+        return {}
+
+    details: dict[str, list[dict[str, Any]]] = {}
+    for selected_preset in selected_presets:
+        try:
+            preset = parts.experiment_preset_enum.get_member(selected_preset)
+        except Exception as exc:
+            raise InspectorError(
+                f"Unknown preset '{selected_preset}' for model '{model_name}'."
+            ) from exc
+        locks = locked_fields(preset)
+        for field, lock in locks.items():
+            details.setdefault(field, []).append(
+                {
+                    "preset": preset.name,
+                    "value": getattr(lock, "value", None),
+                    "reason": getattr(lock, "reason", ""),
+                }
+            )
+    return details
+
+
+def _shared_locked_value(lock_details: list[dict[str, Any]]) -> Any:
+    if not lock_details:
+        return None
+    values = [serialize_config_value(detail["value"]) for detail in lock_details]
+    first_value = values[0]
+    if all(value == first_value for value in values):
+        return first_value
+    return None
 
 
 def config_schema(model_name: str, preset_name: str | None = None) -> dict[str, Any]:
@@ -322,9 +381,14 @@ def _search_axis_kind(
 def search_space_schema(
     model_name: str,
     preset_name: str | None = None,
+    preset_names: list[str] | None = None,
 ) -> dict[str, Any]:
     parts = load_model_parts(model_name)
-    locks = preset_locks(model_name, preset_name)
+    lock_details_by_param = _preset_lock_details(
+        model_name,
+        preset_name,
+        preset_names,
+    )
     metadata = _source_metadata(parts.config_module, include_search_space=True)
     config_fields = {
         field["configKey"]: field
@@ -346,9 +410,19 @@ def search_space_schema(
         values = getattr(parts.config_module, search_key, [])
         field = config_fields.get(config_key)
         model_param = config_key_to_model_param(config_key)
-        lock = locks.get(model_param)
-        locked_value = getattr(lock, "value", None) if lock is not None else None
-        locked_reason = getattr(lock, "reason", "") if lock is not None else ""
+        lock_details = lock_details_by_param.get(model_param, [])
+        locked_value = _shared_locked_value(lock_details)
+        lock_reasons = [
+            str(detail["reason"])
+            for detail in lock_details
+            if str(detail["reason"])
+        ]
+        locked_reason = " ".join(lock_reasons)
+        locked_by_presets = [
+            str(detail["preset"])
+            for detail in lock_details
+            if str(detail["preset"])
+        ]
         axes.append(
             {
                 "key": normalize_key(config_key),
@@ -366,11 +440,11 @@ def search_space_schema(
                 ),
                 "type": _search_axis_kind(parts.config_module, config_key, values),
                 "values": [serialize_config_value(value) for value in values],
-                "locked": lock is not None,
-                "lockedValue": serialize_config_value(locked_value)
-                if lock is not None
-                else None,
+                "locked": len(lock_details) > 0,
+                "lockedValue": locked_value if lock_details else None,
                 "lockedReason": locked_reason,
+                "lockedByPresets": locked_by_presets,
+                "lockReasons": lock_reasons,
             }
         )
 

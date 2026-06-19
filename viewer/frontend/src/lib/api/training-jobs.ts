@@ -91,7 +91,7 @@ const trainingProgressEventBaseSchema = z
     jobId: z.string().nullable().optional(),
     dataset: z.string().nullable().optional(),
     preset: z.string().nullable().optional(),
-    option: z.string().nullable().optional(),
+    presetKey: z.string().nullable().optional(),
     logDir: z.string().nullable().optional(),
     runId: z.string().nullable().optional(),
     runIndex: z.number().nullable().optional(),

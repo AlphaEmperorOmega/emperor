@@ -143,7 +143,7 @@ def _normalize_preset_token(preset: str | None) -> str | None:
 
 
 def _event_preset_name(event: dict[str, Any]) -> str | None:
-    return _normalize_preset_token(event.get("preset") or event.get("option"))
+    return _normalize_preset_token(event.get("preset"))
 
 
 def _run_for_event(

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pydantic import Field
+
 from viewer.backend.schemas._base import ApiResponseModel, ConfigValue
 
 
@@ -85,6 +87,8 @@ class SearchAxisResponse(ApiResponseModel):
     locked: bool = False
     lockedValue: ConfigValue = None
     lockedReason: str = ""
+    lockedByPresets: list[str] = Field(default_factory=list)
+    lockReasons: list[str] = Field(default_factory=list)
 
 
 class SearchSpaceResponse(ApiResponseModel):

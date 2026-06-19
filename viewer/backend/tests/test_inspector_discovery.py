@@ -180,7 +180,13 @@ class InspectorDiscoveryTests(unittest.TestCase):
 
         self.assertEqual(
             [monitor["name"] for monitor in linear_monitors],
-            ["linear", "recurrent-layer", "layer-controller"],
+            [
+                "linear",
+                "recurrent-layer",
+                "layer-controller",
+                "halting",
+                "memory",
+            ],
         )
         for monitor in linear_monitors:
             self.assertFalse(monitor["defaultEnabled"])
@@ -191,6 +197,14 @@ class InspectorDiscoveryTests(unittest.TestCase):
         )
         self.assertEqual(
             linear_monitor_by_name["layer-controller"]["kinds"],
+            ["scalar"],
+        )
+        self.assertEqual(
+            linear_monitor_by_name["halting"]["kinds"],
+            ["scalar", "histogram", "image"],
+        )
+        self.assertEqual(
+            linear_monitor_by_name["memory"]["kinds"],
             ["scalar"],
         )
         self.assertEqual(

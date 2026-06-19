@@ -529,10 +529,45 @@ class InspectorSchemaTests(unittest.TestCase):
 
         self.assertTrue(axes["stack_layer_norm_position"]["locked"])
         self.assertEqual(axes["stack_layer_norm_position"]["lockedValue"], "AFTER")
+        self.assertEqual(
+            axes["stack_layer_norm_position"]["lockedByPresets"],
+            ["POST_NORM"],
+        )
+        self.assertEqual(len(axes["stack_layer_norm_position"]["lockReasons"]), 1)
         self.assertIn(
             "POST_NORM preset",
             axes["stack_layer_norm_position"]["lockedReason"],
         )
+
+    def test_search_space_schema_locks_union_of_selected_presets(self) -> None:
+        axes = {
+            axis["key"]: axis
+            for axis in search_space_schema(
+                "linears/linear_adaptive",
+                "baseline",
+                ["single-model-weight", "additive-bias"],
+            )["axes"]
+        }
+
+        self.assertTrue(axes["weight_option"]["locked"])
+        self.assertEqual(
+            axes["weight_option"]["lockedByPresets"],
+            ["SINGLE_MODEL_WEIGHT"],
+        )
+        self.assertEqual(
+            axes["weight_option"]["lockedValue"],
+            "SingleModelDynamicWeightConfig",
+        )
+        self.assertTrue(axes["bias_option"]["locked"])
+        self.assertEqual(
+            axes["bias_option"]["lockedByPresets"],
+            ["ADDITIVE_BIAS"],
+        )
+        self.assertEqual(
+            axes["bias_option"]["lockedValue"],
+            "AdditiveDynamicBiasConfig",
+        )
+        self.assertFalse(axes["hidden_dim"]["locked"])
 
 
 if __name__ == "__main__":

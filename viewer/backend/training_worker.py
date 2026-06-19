@@ -14,7 +14,7 @@ from models.catalog import model_id_from_payload, model_identity_payload_from_id
 
 from viewer.backend.inspector.discovery import (
     load_model_parts,
-    option_cli_name,
+    preset_cli_name,
     resolve_dataset,
     resolve_datasets,
     resolve_model_monitors,
@@ -54,14 +54,14 @@ def _resolve_payload_presets(parts, payload: dict) -> tuple[list[str], list]:
     for raw_preset in raw_presets:
         if not isinstance(raw_preset, str) or not raw_preset.strip():
             continue
-        option = parts.experiment_options.get_option(raw_preset)
-        if option.name in seen:
+        preset = parts.experiment_preset_enum.get_member(raw_preset)
+        if preset.name in seen:
             continue
-        seen.add(option.name)
-        selected.append((option_cli_name(parts.experiment_options, option), option))
+        seen.add(preset.name)
+        selected.append((preset_cli_name(parts.experiment_preset_enum, preset), preset))
     if not selected:
         raise ValueError("Training payload does not include any selected presets.")
-    return [name for name, _option in selected], [option for _name, option in selected]
+    return [name for name, _preset in selected], [preset for _name, preset in selected]
 
 
 def _materialized_runs_from_plan(parts, payload: dict) -> list[dict] | None:
@@ -90,19 +90,19 @@ def _materialized_run_from_row(
     index: int,
     run_total: int,
 ) -> dict:
-    preset = str(row.get("preset") or "")
-    option = parts.experiment_options.get_option(preset)
+    preset_name = str(row.get("preset") or "")
+    preset = parts.experiment_preset_enum.get_member(preset_name)
     dataset_type = resolve_dataset(parts, str(row.get("dataset") or ""))
     config_overrides = parse_override_mapping(
         parts.config_module,
         row.get("overrides") or {},
     )
-    reject_locked_overrides(_payload_model_id(payload), preset, config_overrides)
+    reject_locked_overrides(_payload_model_id(payload), preset_name, config_overrides)
     return {
         "id": str(row.get("id") or f"run-{index:04d}"),
         "index": int(row.get("index") or index),
         "run_total": run_total,
-        "option": option,
+        "preset": preset,
         "dataset_type": dataset_type,
         "config_overrides": config_overrides,
     }
@@ -141,7 +141,7 @@ def main() -> None:
             }
         )
         parts = load_model_parts(model_id)
-        selected_preset_names, selected_options = _resolve_payload_presets(
+        selected_preset_names, selected_presets = _resolve_payload_presets(
             parts, payload
         )
         selected_datasets = resolve_datasets(parts, payload["datasets"])
@@ -184,7 +184,7 @@ def main() -> None:
             else search_mode_from_parsed_search(parsed_search)
         )
         experiment_type = parts.presets_module.Experiment
-        experiment = experiment_type(selected_options[0])
+        experiment = experiment_type(selected_presets[0])
         experiment.train_model(
             search_mode=search_mode,
             log_folder=payload.get("logFolder"),
@@ -195,7 +195,7 @@ def main() -> None:
                 else None
             ),
             selected_datasets=selected_datasets,
-            selected_options=selected_options,
+            selected_presets=selected_presets,
             callbacks=[progress, growth, *monitor_callbacks],
             materialized_runs=materialized_runs,
         )

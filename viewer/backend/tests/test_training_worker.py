@@ -26,12 +26,12 @@ from viewer.backend.training_events import NeuronClusterGrowthCallback
 from viewer.backend.training_worker import search_mode_from_parsed_search
 
 
-class FakeExperimentOptions(Enum):
+class FakeExperimentPreset(Enum):
     BASELINE = "Baseline"
     WIDE = "Wide"
 
     @classmethod
-    def get_option(cls, name: str) -> FakeExperimentOptions:
+    def get_member(cls, name: str) -> FakeExperimentPreset:
         options = {
             "baseline": cls.BASELINE,
             "BASELINE": cls.BASELINE,
@@ -60,7 +60,7 @@ COMMON_PROGRESS_EVENT_KEYS = {
     "timestamp",
     "dataset",
     "preset",
-    "option",
+    "presetKey",
     "logDir",
     "runId",
     "runIndex",
@@ -77,8 +77,8 @@ class FakeExperiment:
     instances: list[FakeExperiment] = []
     training_error: Exception | None = None
 
-    def __init__(self, option: FakeExperimentOptions) -> None:
-        self.option = option
+    def __init__(self, preset: FakeExperimentPreset) -> None:
+        self.preset = preset
         self.train_calls: list[dict[str, object]] = []
         self.instances.append(self)
 
@@ -106,8 +106,8 @@ def fake_model_parts(*, locked_fields=None):
         config_module=config_module,
         presets_module=SimpleNamespace(Experiment=FakeExperiment),
         model_module=SimpleNamespace(),
-        experiment_options=FakeExperimentOptions,
-        presets=SimpleNamespace(locked_fields=locked_fields or (lambda option: {})),
+        experiment_preset_enum=FakeExperimentPreset,
+        presets=SimpleNamespace(locked_fields=locked_fields or (lambda preset: {})),
         model_type=object,
         dataset_options=[Mnist, Cifar10],
         dataset=Mnist,
@@ -239,7 +239,7 @@ class TrainingWorkerMaterializedRunConversionTests(unittest.TestCase):
         self.assertEqual(runs[0]["id"], "frontend-row-1")
         self.assertEqual(runs[0]["index"], 42)
         self.assertEqual(runs[0]["run_total"], 2)
-        self.assertIs(runs[0]["option"], FakeExperimentOptions.BASELINE)
+        self.assertIs(runs[0]["preset"], FakeExperimentPreset.BASELINE)
         self.assertIs(runs[0]["dataset_type"], Mnist)
         self.assertEqual(
             runs[0]["config_overrides"],
@@ -251,7 +251,7 @@ class TrainingWorkerMaterializedRunConversionTests(unittest.TestCase):
         self.assertEqual(runs[1]["id"], "run-0002")
         self.assertEqual(runs[1]["index"], 2)
         self.assertEqual(runs[1]["run_total"], 2)
-        self.assertIs(runs[1]["option"], FakeExperimentOptions.WIDE)
+        self.assertIs(runs[1]["preset"], FakeExperimentPreset.WIDE)
         self.assertIs(runs[1]["dataset_type"], Cifar10)
         self.assertEqual(runs[1]["config_overrides"], {})
 
@@ -328,8 +328,8 @@ class TrainingWorkerMaterializedRunConversionTests(unittest.TestCase):
                 self.assertIn(expected_message, str(context.exception))
 
     def test_materialized_runs_reject_locked_overrides(self) -> None:
-        def locked_fields(option):
-            if option is FakeExperimentOptions.WIDE:
+        def locked_fields(preset):
+            if preset is FakeExperimentPreset.WIDE:
                 return {
                     "stack_gate_flag": SimpleNamespace(
                         value=True,
@@ -409,7 +409,7 @@ class TrainingWorkerPayloadProgressTests(unittest.TestCase):
 
             self.assertEqual(len(FakeExperiment.instances), 1)
             experiment = FakeExperiment.instances[0]
-            self.assertIs(experiment.option, FakeExperimentOptions.BASELINE)
+            self.assertIs(experiment.preset, FakeExperimentPreset.BASELINE)
             self.assertEqual(len(experiment.train_calls), 1)
             train_call = experiment.train_calls[0]
             self.assertIsNone(train_call["search_mode"])
@@ -417,8 +417,8 @@ class TrainingWorkerPayloadProgressTests(unittest.TestCase):
             self.assertEqual(train_call["config_overrides"], {})
             self.assertIsNone(train_call["search_overrides"])
             self.assertEqual(
-                train_call["selected_options"],
-                [FakeExperimentOptions.BASELINE, FakeExperimentOptions.WIDE],
+                train_call["selected_presets"],
+                [FakeExperimentPreset.BASELINE, FakeExperimentPreset.WIDE],
             )
             self.assertEqual(train_call["selected_datasets"], [Mnist, Cifar10])
             self.assertIsNone(train_call["materialized_runs"])
@@ -557,8 +557,8 @@ class TrainingWorkerPayloadProgressTests(unittest.TestCase):
             self.assertEqual(materialized_runs[0]["index"], 7)
             self.assertEqual(materialized_runs[0]["run_total"], 1)
             self.assertIs(
-                materialized_runs[0]["option"],
-                FakeExperimentOptions.BASELINE,
+                materialized_runs[0]["preset"],
+                FakeExperimentPreset.BASELINE,
             )
             self.assertIs(materialized_runs[0]["dataset_type"], Mnist)
             self.assertEqual(

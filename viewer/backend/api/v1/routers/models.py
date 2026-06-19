@@ -120,7 +120,19 @@ async def search_space(
     model: str,
     service: Annotated[ModelCatalogService, Depends(get_model_catalog_service)],
     preset: str | None = None,
+    presets: str | None = None,
 ) -> SearchSpaceResponse:
+    selected_presets = (
+        [item.strip() for item in presets.split(",") if item.strip()]
+        if presets
+        else None
+    )
     return SearchSpaceResponse.model_validate(
-        await run_blocking_io(service.search_space_schema, modelType, model, preset)
+        await run_blocking_io(
+            service.search_space_schema,
+            modelType,
+            model,
+            preset,
+            selected_presets,
+        )
     )

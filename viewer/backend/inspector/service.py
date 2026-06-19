@@ -9,7 +9,7 @@ from models.catalog import model_identity_payload_from_id
 from viewer.backend.inspector.discovery import (
     ModelParts,
     load_model_parts,
-    option_cli_name,
+    preset_cli_name,
     resolve_dataset,
 )
 from viewer.backend.inspector.errors import InspectorError
@@ -21,7 +21,7 @@ from viewer.backend.inspector.schema import preset_locks
 @dataclass(frozen=True)
 class InspectionTarget:
     parts: ModelParts
-    option: Any
+    preset: Any
     cfg: Any
     model: Any
     dataset_type: type
@@ -49,14 +49,14 @@ def build_config(
     config_overrides: dict[str, Any] | None = None,
 ):
     parts = load_model_parts(model_name)
-    option, cfg, _dataset_type = _build_config_from_parts(
+    preset, cfg, _dataset_type = _build_config_from_parts(
         parts,
         model_name,
         preset_name,
         dataset_name=dataset_name,
         config_overrides=config_overrides,
     )
-    return parts, option, cfg
+    return parts, preset, cfg
 
 
 def _build_config_from_parts(
@@ -68,7 +68,7 @@ def _build_config_from_parts(
     config_overrides: dict[str, Any] | None = None,
 ) -> tuple[Any, Any, type]:
     try:
-        option = parts.experiment_options.get_option(preset_name)
+        preset = parts.experiment_preset_enum.get_member(preset_name)
     except Exception as exc:
         raise InspectorError(
             f"Unknown preset '{preset_name}' for model '{model_name}'."
@@ -77,7 +77,7 @@ def _build_config_from_parts(
     try:
         dataset = resolve_dataset(parts, dataset_name)
         configs = parts.presets.get_config(
-            option,
+            preset,
             dataset,
             config_overrides=config_overrides or {},
         )
@@ -90,7 +90,7 @@ def _build_config_from_parts(
         raise InspectorError(
             f"Preset '{preset_name}' for model '{model_name}' did not produce configs."
         )
-    return option, configs[0], dataset
+    return preset, configs[0], dataset
 
 
 def build_inspection_target(
@@ -108,7 +108,7 @@ def build_inspection_target(
         else parse_override_mapping(parts.config_module, overrides)
     )
     reject_locked_overrides(model_name, preset_name, config_overrides)
-    option, cfg, dataset_type = _build_config_from_parts(
+    preset, cfg, dataset_type = _build_config_from_parts(
         parts,
         model_name,
         preset_name,
@@ -125,7 +125,7 @@ def build_inspection_target(
 
     return InspectionTarget(
         parts=parts,
-        option=option,
+        preset=preset,
         cfg=cfg,
         model=model,
         dataset_type=dataset_type,
@@ -150,7 +150,7 @@ def inspect_model(
     nodes, edges = serialize_graph(target.model)
     return {
         **model_identity_payload_from_id(model_name),
-        "preset": option_cli_name(target.parts.experiment_options, target.option),
+        "preset": preset_cli_name(target.parts.experiment_preset_enum, target.preset),
         "parameterCount": nodes[0]["parameterCount"] if nodes else 0,
         "parameterSizeBytes": nodes[0]["parameterSizeBytes"] if nodes else 0,
         "nodes": nodes,

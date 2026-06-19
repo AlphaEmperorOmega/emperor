@@ -11,7 +11,7 @@ from models.config_overrides import config_key_to_model_param, normalize_key
 from viewer.backend.inspector.discovery import (
     dataset_name,
     load_model_parts,
-    option_cli_name,
+    preset_cli_name,
     resolve_datasets,
 )
 from viewer.backend.inspector.errors import InspectorError
@@ -97,7 +97,7 @@ def _build_training_command(
 class SelectedTrainingInputs:
     parts: Any
     selected_preset_names: list[str]
-    selected_options: list[Any]
+    selected_presets: list[Any]
     selected_datasets: list[type]
     parsed_searches: list[Any]
     parsed_search: Any | None
@@ -142,7 +142,7 @@ class TrainingRunPlanBuilder:
             raise InspectorError("Training requires at least one selected dataset.")
 
         parts = load_model_parts(model)
-        selected_preset_names, selected_options = self._resolve_presets(
+        selected_preset_names, selected_presets = self._resolve_presets(
             parts,
             model,
             preset,
@@ -174,7 +174,7 @@ class TrainingRunPlanBuilder:
         return SelectedTrainingInputs(
             parts=parts,
             selected_preset_names=selected_preset_names,
-            selected_options=selected_options,
+            selected_presets=selected_presets,
             selected_datasets=selected_datasets,
             parsed_searches=parsed_searches,
             parsed_search=parsed_search,
@@ -406,25 +406,25 @@ class TrainingRunPlanBuilder:
             if not isinstance(raw_preset, str) or not raw_preset.strip():
                 continue
             try:
-                option = parts.experiment_options.get_option(raw_preset)
+                preset_member = parts.experiment_preset_enum.get_member(raw_preset)
             except Exception:
                 unknown.append(raw_preset)
                 continue
-            if option.name in seen:
+            if preset_member.name in seen:
                 continue
-            seen.add(option.name)
+            seen.add(preset_member.name)
             selected.append(
                 (
-                    option_cli_name(parts.experiment_options, option),
-                    option,
+                    preset_cli_name(parts.experiment_preset_enum, preset_member),
+                    preset_member,
                 )
             )
         if unknown:
             raise InspectorError(f"Unknown preset '{unknown[0]}' for model '{model}'.")
         if not selected:
             raise InspectorError("Training requires at least one selected preset.")
-        return [name for name, _option in selected], [
-            option for _name, option in selected
+        return [name for name, _preset in selected], [
+            preset_member for _name, preset_member in selected
         ]
 
     def _field_maps(
@@ -437,9 +437,13 @@ class TrainingRunPlanBuilder:
         for field in fields:
             by_key[normalize_key(str(field["key"]))] = field
             by_key[normalize_key(str(field["configKey"]))] = field
+        for field in fields:
             by_key[
                 normalize_key(config_key_to_model_param(str(field["configKey"])))
-            ] = field
+            ] = by_key.get(
+                normalize_key(config_key_to_model_param(str(field["configKey"]))),
+                field,
+            )
         return fields, by_key
 
     def _ordered_override_changes(

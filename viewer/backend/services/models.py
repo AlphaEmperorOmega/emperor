@@ -56,10 +56,11 @@ class ModelCatalogService:
         model_type: str,
         model: str,
         preset: str | None,
+        presets: list[str] | None = None,
     ) -> dict[str, Any]:
         from viewer.backend.inspector.schema import search_space_schema
 
-        return search_space_schema(_model_id(model_type, model), preset)
+        return search_space_schema(_model_id(model_type, model), preset, presets)
 
 
 def identity_payload(model_id: str) -> dict[str, str]:

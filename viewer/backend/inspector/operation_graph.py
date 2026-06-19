@@ -13,7 +13,7 @@ from models.catalog import model_identity_payload_from_id
 from torch import Tensor
 from torch.nn import Module
 
-from viewer.backend.inspector.discovery import option_cli_name
+from viewer.backend.inspector.discovery import preset_cli_name
 from viewer.backend.inspector.service import build_inspection_target
 
 OPERATION_GRAPH_SOURCE = "torch-export"
@@ -47,7 +47,7 @@ def inspect_operation_graph(
         dataset=dataset,
         parsed_overrides=parsed_overrides,
     )
-    preset = option_cli_name(target.parts.experiment_options, target.option)
+    preset = preset_cli_name(target.parts.experiment_preset_enum, target.preset)
 
     try:
         target.model.cpu()

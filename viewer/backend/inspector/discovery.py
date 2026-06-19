@@ -37,7 +37,7 @@ class ModelParts:
     config_module: ModuleType
     presets_module: ModuleType
     model_module: ModuleType
-    experiment_options: type[Enum]
+    experiment_preset_enum: type[Enum]
     presets: Any
     model_type: type[Module]
     dataset_options: list[type]
@@ -70,12 +70,12 @@ def load_model_parts(model_name: str) -> ModelParts:
         ) from exc
 
     try:
-        experiment_options = presets_module.ExperimentOptions
+        experiment_preset_enum = presets_module.ExperimentPreset
         presets = presets_module.ExperimentPresets()
         model_type = model_module.Model
     except AttributeError as exc:
         raise InspectorError(
-            f"Model package '{model_name}' is missing ExperimentOptions, "
+            f"Model package '{model_name}' is missing ExperimentPreset, "
             "ExperimentPresets, or Model."
         ) from exc
 
@@ -90,7 +90,7 @@ def load_model_parts(model_name: str) -> ModelParts:
         config_module=config_module,
         presets_module=presets_module,
         model_module=model_module,
-        experiment_options=experiment_options,
+        experiment_preset_enum=experiment_preset_enum,
         presets=presets,
         model_type=model_type,
         dataset_options=list(dataset_options),
@@ -98,15 +98,15 @@ def load_model_parts(model_name: str) -> ModelParts:
     )
 
 
-def option_cli_name(experiment_options: type[Enum], option: Enum) -> str:
-    cli_name = getattr(experiment_options, "cli_name", None)
+def preset_cli_name(experiment_preset_enum: type[Enum], preset: Enum) -> str:
+    cli_name = getattr(experiment_preset_enum, "cli_name", None)
     if callable(cli_name):
-        return cli_name(option.name)
-    return option.name.lower().replace("_", "-")
+        return cli_name(preset.name)
+    return preset.name.lower().replace("_", "-")
 
 
-def option_description(option: Enum) -> str:
-    return option.value if isinstance(option.value, str) else ""
+def preset_description(preset: Enum) -> str:
+    return preset.value if isinstance(preset.value, str) else ""
 
 
 def resolve_dataset(parts: ModelParts, dataset: str | None) -> type:
@@ -236,9 +236,9 @@ def list_model_presets(model_name: str) -> list[dict[str, str]]:
     parts = load_model_parts(model_name)
     return [
         {
-            "name": option_cli_name(parts.experiment_options, option),
-            "label": option.name,
-            "description": option_description(option),
+            "name": preset_cli_name(parts.experiment_preset_enum, preset),
+            "label": preset.name,
+            "description": preset_description(preset),
         }
-        for option in parts.experiment_options
+        for preset in parts.experiment_preset_enum
     ]

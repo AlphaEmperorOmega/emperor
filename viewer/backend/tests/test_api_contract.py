@@ -357,6 +357,8 @@ SEARCH_AXIS_FIELDS = (
     "locked",
     "lockedValue",
     "lockedReason",
+    "lockedByPresets",
+    "lockReasons",
 )
 SEARCH_AXIS_REQUIRED_FIELDS = (
     "key",
