@@ -1,4 +1,5 @@
 import argparse
+from dataclasses import fields
 import unittest
 
 import models.transformer_encoder.bert_linear.config as bert_linear_config
@@ -16,60 +17,118 @@ from emperor.experiments.base import GridSearch
 from emperor.linears.core.config import AdaptiveLinearLayerConfig
 from lightning.pytorch.callbacks import EarlyStopping
 from models.config_overrides import iter_supported_config_keys
-from models.linears.linear_adaptive import ExperimentOptions
+from models.linears.linear_adaptive import ExperimentPreset
 from models.linears.linear_adaptive.presets import Experiment, ExperimentPresets
-from models.parser import get_experiment_parser, resolve_experiment_mode
+from models.parametric.parametric_vector import (
+    ExperimentPreset as ParametricVectorExperimentPreset,
+)
+from models.parser import ExperimentMode, get_experiment_parser, resolve_experiment_mode
 
 
 class ExperimentConfigOverrideTestCase:
     def make_parser(self):
         return get_experiment_parser(
-            ExperimentOptions.names(),
+            ExperimentPreset.names(),
             "models.linears.linear_adaptive",
         )
 
     def resolve_args(self, args):
-        return resolve_experiment_mode(args, ExperimentOptions)
+        return resolve_experiment_mode(args, ExperimentPreset)
 
 
 class TestExperimentConfigOverrideParsing(
     ExperimentConfigOverrideTestCase,
     unittest.TestCase,
 ):
-    def test_resolve_preset_returns_primary_without_selected_options(self):
+    def test_resolve_preset_returns_primary_without_selected_presets(self):
         args = self.make_parser().parse_args(["--preset", "single-model-weight"])
 
-        config_option, selected_options, search_mode, *_ = self.resolve_args(args)
+        self.assertEqual(args.preset, "single-model-weight")
+        self.assertFalse(hasattr(args, "opt" + "ion"))
 
-        self.assertIs(config_option, ExperimentOptions.SINGLE_MODEL_WEIGHT)
-        self.assertIsNone(selected_options)
-        self.assertIsNone(search_mode)
+        mode = self.resolve_args(args)
 
-    def test_resolve_presets_returns_primary_and_ordered_selected_options(self):
+        self.assertIsInstance(mode, ExperimentMode)
+        self.assertIs(mode.preset, ExperimentPreset.SINGLE_MODEL_WEIGHT)
+        self.assertIsNone(mode.selected_presets)
+        self.assertIsNone(mode.search_mode)
+
+    def test_resolve_presets_returns_primary_and_ordered_selected_presets(self):
         args = self.make_parser().parse_args(
             ["--presets", "single-model-weight", "dual-model-weight"]
         )
 
-        config_option, selected_options, search_mode, *_ = self.resolve_args(args)
+        self.assertEqual(args.presets, ["single-model-weight", "dual-model-weight"])
+        self.assertFalse(hasattr(args, "options"))
 
-        self.assertIs(config_option, ExperimentOptions.SINGLE_MODEL_WEIGHT)
+        mode = self.resolve_args(args)
+
+        self.assertIs(mode.preset, ExperimentPreset.SINGLE_MODEL_WEIGHT)
         self.assertEqual(
-            selected_options,
+            mode.selected_presets,
             [
-                ExperimentOptions.SINGLE_MODEL_WEIGHT,
-                ExperimentOptions.DUAL_MODEL_WEIGHT,
+                ExperimentPreset.SINGLE_MODEL_WEIGHT,
+                ExperimentPreset.DUAL_MODEL_WEIGHT,
             ],
         )
-        self.assertIsNone(search_mode)
+        self.assertIsNone(mode.search_mode)
 
-    def test_resolve_all_presets_preserves_all_options_mode(self):
+    def test_resolve_all_presets_preserves_all_presets_mode(self):
         args = self.make_parser().parse_args(["--all-presets"])
 
-        config_option, selected_options, search_mode, *_ = self.resolve_args(args)
+        self.assertTrue(args.all_presets)
+        self.assertFalse(hasattr(args, "all_" + "options"))
 
-        self.assertIsNone(config_option)
-        self.assertIsNone(selected_options)
-        self.assertIsNone(search_mode)
+        mode = self.resolve_args(args)
+
+        self.assertIsNone(mode.preset)
+        self.assertIsNone(mode.selected_presets)
+        self.assertIsNone(mode.search_mode)
+
+    def test_experiment_mode_fields_document_help_metadata(self):
+        expected_names = [
+            "preset",
+            "selected_presets",
+            "search_mode",
+            "search_keys",
+            "config_overrides",
+            "search_overrides",
+        ]
+
+        mode_fields = fields(ExperimentMode)
+
+        self.assertEqual(
+            [mode_field.name for mode_field in mode_fields],
+            expected_names,
+        )
+        for mode_field in mode_fields:
+            with self.subTest(field=mode_field.name):
+                self.assertIsInstance(mode_field.metadata["help"], str)
+                self.assertTrue(mode_field.metadata["help"])
+
+    def test_experiment_mode_does_not_support_tuple_unpacking(self):
+        args = self.make_parser().parse_args(["--preset", "single-model-weight"])
+        mode = self.resolve_args(args)
+
+        with self.assertRaises(TypeError):
+            (
+                preset,
+                selected_presets,
+                search_mode,
+                search_keys,
+                config_overrides,
+                search_overrides,
+            ) = mode
+            self.fail(
+                (
+                    preset,
+                    selected_presets,
+                    search_mode,
+                    search_keys,
+                    config_overrides,
+                    search_overrides,
+                )
+            )
 
     def test_named_config_flags_parse_supported_value_types(self):
         args = self.make_parser().parse_args(
@@ -101,29 +160,32 @@ class TestExperimentConfigOverrideParsing(
             ]
         )
 
-        _, _, _, _, overrides, search_overrides = self.resolve_args(args)
+        mode = self.resolve_args(args)
 
-        self.assertEqual(overrides["num_epochs"], 30)
-        self.assertEqual(overrides["callback_early_stopping_patience"], 0)
-        self.assertEqual(overrides["learning_rate"], 1e-4)
-        self.assertEqual(overrides["hidden_dim"], 128)
-        self.assertIs(overrides["stack_activation"], ActivationOptions.GELU)
-        self.assertIs(overrides["gate_option"], LayerGateOptions.ADDITION)
+        self.assertEqual(mode.config_overrides["num_epochs"], 30)
+        self.assertEqual(mode.config_overrides["callback_early_stopping_patience"], 0)
+        self.assertEqual(mode.config_overrides["learning_rate"], 1e-4)
+        self.assertEqual(mode.config_overrides["hidden_dim"], 128)
+        self.assertIs(mode.config_overrides["stack_activation"], ActivationOptions.GELU)
+        self.assertIs(mode.config_overrides["gate_option"], LayerGateOptions.ADDITION)
         self.assertIs(
-            overrides["recurrent_gate_option"],
+            mode.config_overrides["recurrent_gate_option"],
             LayerGateOptions.MULTIPLIER,
         )
-        self.assertIs(overrides["weight_option"], LowRankDynamicWeightConfig)
         self.assertIs(
-            overrides["input_layer_model_option"],
-            AdaptiveLinearLayerConfig,
-        )
-        self.assertIsNone(overrides["output_layer_model_option"])
-        self.assertIs(
-            overrides["input_layer_weight_option"],
+            mode.config_overrides["weight_option"],
             LowRankDynamicWeightConfig,
         )
-        self.assertEqual(search_overrides, {})
+        self.assertIs(
+            mode.config_overrides["input_layer_model_option"],
+            AdaptiveLinearLayerConfig,
+        )
+        self.assertIsNone(mode.config_overrides["output_layer_model_option"])
+        self.assertIs(
+            mode.config_overrides["input_layer_weight_option"],
+            LowRankDynamicWeightConfig,
+        )
+        self.assertEqual(mode.search_overrides, {})
 
     def test_named_config_flags_parse_bool_and_string_values(self):
         args = self.make_parser().parse_args(
@@ -137,11 +199,11 @@ class TestExperimentConfigOverrideParsing(
             ]
         )
 
-        _, _, _, _, overrides, search_overrides = self.resolve_args(args)
+        mode = self.resolve_args(args)
 
-        self.assertIs(overrides["bias_flag"], False)
-        self.assertEqual(overrides["trainer_accelerator"], "mps")
-        self.assertEqual(search_overrides, {})
+        self.assertIs(mode.config_overrides["bias_flag"], False)
+        self.assertEqual(mode.config_overrides["trainer_accelerator"], "mps")
+        self.assertEqual(mode.search_overrides, {})
 
     def test_config_marker_only_groups_overrides(self):
         plain_args = self.make_parser().parse_args(
@@ -166,15 +228,11 @@ class TestExperimentConfigOverrideParsing(
             ]
         )
 
-        _, _, _, _, plain_overrides, plain_search_overrides = self.resolve_args(
-            plain_args
-        )
-        _, _, _, _, grouped_overrides, grouped_search_overrides = self.resolve_args(
-            grouped_args
-        )
+        plain_mode = self.resolve_args(plain_args)
+        grouped_mode = self.resolve_args(grouped_args)
 
-        self.assertEqual(grouped_overrides, plain_overrides)
-        self.assertEqual(grouped_search_overrides, plain_search_overrides)
+        self.assertEqual(grouped_mode.config_overrides, plain_mode.config_overrides)
+        self.assertEqual(grouped_mode.search_overrides, plain_mode.search_overrides)
 
     def test_search_set_parses_lists_using_config_value_types(self):
         args = self.make_parser().parse_args(
@@ -199,38 +257,38 @@ class TestExperimentConfigOverrideParsing(
             ]
         )
 
-        _, _, search_mode, _, _, search_overrides = self.resolve_args(args)
+        mode = self.resolve_args(args)
 
-        self.assertIsInstance(search_mode, GridSearch)
-        self.assertEqual(search_overrides["hidden_dim"], [64, 128])
+        self.assertIsInstance(mode.search_mode, GridSearch)
+        self.assertEqual(mode.search_overrides["hidden_dim"], [64, 128])
         self.assertEqual(
-            search_overrides["stack_activation"],
+            mode.search_overrides["stack_activation"],
             [ActivationOptions.RELU, ActivationOptions.GELU],
         )
         self.assertEqual(
-            search_overrides["gate_option"],
+            mode.search_overrides["gate_option"],
             [
                 LayerGateOptions.MULTIPLIER,
                 LayerGateOptions.ADDITION,
             ],
         )
         self.assertEqual(
-            search_overrides["recurrent_gate_option"],
+            mode.search_overrides["recurrent_gate_option"],
             [
                 LayerGateOptions.MULTIPLIER,
                 LayerGateOptions.ADDITION,
             ],
         )
         self.assertEqual(
-            search_overrides["weight_option"],
+            mode.search_overrides["weight_option"],
             [None, LowRankDynamicWeightConfig],
         )
         self.assertEqual(
-            search_overrides["input_layer_model_option"],
+            mode.search_overrides["input_layer_model_option"],
             [None, AdaptiveLinearLayerConfig],
         )
         self.assertEqual(
-            search_overrides["input_layer_weight_option"],
+            mode.search_overrides["input_layer_weight_option"],
             [None, LowRankDynamicWeightConfig],
         )
 
@@ -246,6 +304,35 @@ class TestExperimentConfigOverrideParsing(
 
         with self.assertRaises(ValueError):
             self.resolve_args(args)
+
+    def test_explicit_no_search_presets_blocks_preset_search(self):
+        parser = get_experiment_parser(
+            ParametricVectorExperimentPreset.names(),
+            "models.parametric.parametric_vector",
+        )
+        args = parser.parse_args(["--preset", "preset", "--grid-search"])
+
+        with self.assertRaises(ValueError):
+            resolve_experiment_mode(
+                args,
+                ParametricVectorExperimentPreset,
+                no_search_presets=["PRESET"],
+            )
+
+    def test_preset_search_is_allowed_by_default(self):
+        parser = get_experiment_parser(
+            ParametricVectorExperimentPreset.names(),
+            "models.parametric.parametric_vector",
+        )
+        args = parser.parse_args(["--preset", "preset", "--grid-search"])
+
+        mode = resolve_experiment_mode(
+            args,
+            ParametricVectorExperimentPreset,
+        )
+
+        self.assertIs(mode.preset, ParametricVectorExperimentPreset.PRESET)
+        self.assertIsInstance(mode.search_mode, GridSearch)
 
     def test_malformed_search_set_raises_argument_error(self):
         args = self.make_parser().parse_args(
@@ -304,29 +391,29 @@ class TestExperimentConfigOverrideParsing(
 
 
 class TestExperimentConfigOverrideApplication(unittest.TestCase):
-    def test_cli_override_wins_over_selected_preset_default(self):
+    def test_unlocked_override_wins_but_preset_locked_override_raises(self):
         cfg = ExperimentPresets().get_config(
-            ExperimentOptions.SINGLE_MODEL_WEIGHT,
+            ExperimentPreset.SINGLE_MODEL_WEIGHT,
             Mnist,
             config_overrides={
                 "hidden_dim": 64,
-                "weight_option": LowRankDynamicWeightConfig,
             },
         )[0]
-        adaptive_config = (
-            cfg.experiment_config.model_config.layer_config.layer_model_config
-            .adaptive_augmentation_config
-        )
 
         self.assertEqual(cfg.hidden_dim, 64)
-        self.assertIsInstance(
-            adaptive_config.weight_config,
-            LowRankDynamicWeightConfig,
-        )
+
+        with self.assertRaisesRegex(ValueError, "SINGLE_MODEL_WEIGHT.*weight_option"):
+            ExperimentPresets().get_config(
+                ExperimentPreset.SINGLE_MODEL_WEIGHT,
+                Mnist,
+                config_overrides={
+                    "weight_option": LowRankDynamicWeightConfig,
+                },
+            )
 
     def test_search_overrides_create_expected_configs(self):
         configs = ExperimentPresets().get_config(
-            ExperimentOptions.SINGLE_MODEL_WEIGHT,
+            ExperimentPreset.SINGLE_MODEL_WEIGHT,
             Mnist,
             search_mode=GridSearch(),
             search_overrides={
@@ -346,7 +433,7 @@ class TestExperimentConfigOverrideApplication(unittest.TestCase):
         )
 
     def test_trainer_overrides_disable_early_stopping_without_static_monitors(self):
-        experiment = Experiment(ExperimentOptions.SINGLE_MODEL_WEIGHT)
+        experiment = Experiment(ExperimentPreset.SINGLE_MODEL_WEIGHT)
 
         trainer_config = experiment._load_trainer_config(
             {

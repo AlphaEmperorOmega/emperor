@@ -1,19 +1,61 @@
 import argparse
 import importlib
+from dataclasses import dataclass, field
 from emperor.base.options import BaseOptions
-from emperor.experiments.base import GridSearch, RandomSearch, SearchMode
 from models.catalog import public_id_for_module
+from models.dataset_naming import dataset_cli_name, dataset_name
+from emperor.experiments.base import GridSearch, RandomSearch, SearchMode
 from models.config_overrides import (
     add_config_override_arguments,
     extract_config_overrides,
     normalize_key,
     print_config_options,
 )
-from models.dataset_naming import dataset_cli_name, dataset_name
 
 
 class _ExperimentParser(argparse.ArgumentParser):
     pass
+
+
+@dataclass(frozen=True)
+class ExperimentMode:
+    preset: BaseOptions | None = field(
+        metadata={
+            "help": (
+                "Primary experiment preset selected from --preset/--presets, "
+                "or None when --all-presets is used."
+            )
+        }
+    )
+    selected_presets: list[BaseOptions] | None = field(
+        metadata={
+            "help": (
+                "Ordered preset list selected by --presets, or None when a "
+                "single preset/all presets mode is used."
+            )
+        }
+    )
+    search_mode: SearchMode = field(
+        metadata={
+            "help": "GridSearch, RandomSearch, or None depending on CLI search flags."
+        }
+    )
+    search_keys: list[str] | None = field(
+        metadata={
+            "help": (
+                "Normalized SEARCH_SPACE_* axis names requested by "
+                "--search-keys, or None for the full search space."
+            )
+        }
+    )
+    config_overrides: dict = field(
+        metadata={
+            "help": "Parsed fixed config override values from model config flags."
+        }
+    )
+    search_overrides: dict = field(
+        metadata={"help": "Parsed search-axis override values from --search-set."}
+    )
 
 
 def get_experiment_parser(
@@ -33,20 +75,20 @@ def get_experiment_parser(
             f"  {choice}" for choice in cli_config_choices
         )
 
-    option_group = parser.add_mutually_exclusive_group(required=True)
+    preset_group = parser.add_mutually_exclusive_group(required=True)
 
-    option_group.add_argument(
+    preset_group.add_argument(
         "--preset",
-        dest="option",
+        dest="preset",
         type=str,
         help="Name of the experiment preset to run." + choices_text,
         choices=cli_config_choices,
         metavar="PRESET_NAME",
     )
 
-    option_group.add_argument(
+    preset_group.add_argument(
         "--presets",
-        dest="options",
+        dest="presets",
         nargs="+",
         type=str,
         help="Names of experiment presets to run sequentially." + choices_text,
@@ -54,14 +96,14 @@ def get_experiment_parser(
         metavar="PRESET_NAME",
     )
 
-    option_group.add_argument(
+    preset_group.add_argument(
         "--all-presets",
-        dest="all_options",
+        dest="all_presets",
         action="store_true",
         help="Run all experiment presets sequentially.",
     )
 
-    option_group.add_argument(
+    preset_group.add_argument(
         "--list-config",
         action="store_true",
         help="Print overridable config flags and defaults, then exit.",
@@ -163,28 +205,23 @@ def resolve_dataset_names(
 
 def resolve_experiment_mode(
     args: argparse.Namespace,
-    options_enum: type[BaseOptions],
-    no_search_options: list[str] | None = None,
-) -> tuple[
-    BaseOptions | None,
-    list[BaseOptions] | None,
-    SearchMode,
-    list[str] | None,
-    dict,
-    dict,
-]:
+    preset_enum: type[BaseOptions],
+    no_search_presets: list[str] | None = None,
+) -> ExperimentMode:
     if getattr(args, "list_config", False):
         print_config_options(getattr(args, "_config_experiment", ""))
         raise SystemExit(0)
 
-    selected_options = None
-    if args.all_options:
-        config_option = None
-    elif getattr(args, "options", None):
-        selected_options = [options_enum.get_option(option) for option in args.options]
-        config_option = selected_options[0]
+    selected_presets = None
+    if args.all_presets:
+        preset = None
+    elif getattr(args, "presets", None):
+        selected_presets = [
+            preset_enum.get_member(preset_name) for preset_name in args.presets
+        ]
+        preset = selected_presets[0]
     else:
-        config_option = options_enum.get_option(args.option)
+        preset = preset_enum.get_member(args.preset)
 
     if args.random_search is not None:
         search_mode: SearchMode = RandomSearch(args.random_search)
@@ -192,23 +229,27 @@ def resolve_experiment_mode(
         search_mode = GridSearch()
     else:
         search_mode = None
-    no_search_option_names = set(no_search_options or ["PRESET"])
-    search_checked_options = selected_options or (
-        [config_option] if config_option is not None else []
+    no_search_preset_names = set(no_search_presets or [])
+    search_checked_presets = selected_presets or (
+        [preset] if preset is not None else []
     )
     if (
-        not args.all_options
+        not args.all_presets
         and search_mode is not None
-        and any(option.name in no_search_option_names for option in search_checked_options)
+        and any(
+            preset.name in no_search_preset_names for preset in search_checked_presets
+        )
     ):
-        blocked_options = [
-            option.name
-            for option in search_checked_options
-            if option.name in no_search_option_names
+        blocked_presets = [
+            preset.name
+            for preset in search_checked_presets
+            if preset.name in no_search_preset_names
         ]
-        blocked_cli_options = ", ".join(preset_name_to_cli(name) for name in blocked_options)
+        blocked_cli_presets = ", ".join(
+            preset_name_to_cli(name) for name in blocked_presets
+        )
         raise ValueError(
-            f"'{blocked_cli_options}' does not support --grid-search or --random-search. Use CONFIG instead."
+            f"'{blocked_cli_presets}' does not support --grid-search or --random-search. Use CONFIG instead."
         )
     if args.search_keys is not None and search_mode is None:
         raise ValueError("--search-keys requires --grid-search or --random-search.")
@@ -228,11 +269,11 @@ def resolve_experiment_mode(
             config_module,
             getattr(args, "_config_override_dests", {}),
         )
-    return (
-        config_option,
-        selected_options,
-        search_mode,
-        search_keys,
-        config_overrides,
-        search_overrides,
+    return ExperimentMode(
+        preset=preset,
+        selected_presets=selected_presets,
+        search_mode=search_mode,
+        search_keys=search_keys,
+        config_overrides=config_overrides,
+        search_overrides=search_overrides,
     )

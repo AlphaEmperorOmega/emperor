@@ -41,9 +41,34 @@ MODEL_PARAM_ALIASES = {
     "expert_weighted_parameters_flag": "weighted_parameters_flag",
     "expert_weighting_position_option": "weighting_position_option",
     "gate_flag": "stack_gate_flag",
+    "gate_stack_bias_flag": "gate_bias_flag",
+    "gate_stack_hidden_dim": "gate_hidden_dim",
+    "gate_stack_layer_norm_position": "gate_layer_norm_position",
     "halting_flag": "stack_halting_flag",
+    "halting_stack_bias_flag": "halting_bias_flag",
+    "halting_stack_hidden_dim": "halting_hidden_dim",
+    "halting_stack_layer_norm_position": "halting_layer_norm_position",
+    "memory_stack_bias_flag": "memory_bias_flag",
+    "memory_stack_hidden_dim": "memory_hidden_dim",
+    "memory_stack_layer_norm_position": "memory_layer_norm_position",
+    "recurrent_gate_stack_bias_flag": "recurrent_gate_bias_flag",
+    "recurrent_gate_stack_hidden_dim": "recurrent_gate_hidden_dim",
+    "recurrent_gate_stack_layer_norm_position": "recurrent_gate_layer_norm_position",
+    "recurrent_halting_stack_bias_flag": "recurrent_halting_bias_flag",
+    "recurrent_halting_stack_hidden_dim": "recurrent_halting_hidden_dim",
+    "recurrent_halting_stack_layer_norm_position": (
+        "recurrent_halting_layer_norm_position"
+    ),
+    "stack_bias_flag": "bias_flag",
+    "stack_hidden_dim": "hidden_dim",
     "stack_layer_norm_position": "layer_norm_position",
     "weight_generator_depth": "generator_depth",
+}
+
+LEGACY_CONFIG_KEY_ALIASES = {
+    "bias_flag": "stack_bias_flag",
+    "hidden_dim": "stack_hidden_dim",
+    "layer_norm_position": "stack_layer_norm_position",
 }
 
 
@@ -66,6 +91,11 @@ def config_key_to_model_param(key: str) -> str:
 
 def search_key_to_config_key(key: str) -> str:
     return "SEARCH_SPACE_" + normalize_key(key).upper()
+
+
+def canonical_config_key(key: str) -> str:
+    normalized_key = normalize_key(key)
+    return LEGACY_CONFIG_KEY_ALIASES.get(normalized_key, normalized_key).upper()
 
 
 def _is_supported_constant(value: Any) -> bool:
@@ -224,29 +254,31 @@ def parse_search_set(
             "--search-set values must use KEY=v1,v2 syntax"
         )
     raw_key, raw_values = raw_value.split("=", 1)
-    key = normalize_key(raw_key)
-    if not key:
+    raw_config_key = normalize_key(raw_key).upper()
+    if not raw_config_key:
         raise argparse.ArgumentTypeError("--search-set key cannot be empty")
     values = [value.strip() for value in raw_values.split(",") if value.strip()]
     if not values:
         raise argparse.ArgumentTypeError("--search-set requires at least one value")
 
-    search_config_key = search_key_to_config_key(key)
-    value_config_key = key.upper()
+    candidate_keys = list(dict.fromkeys([canonical_config_key(raw_key), raw_config_key]))
     supported_keys = set(iter_supported_config_keys(config_module))
-    if (
-        not hasattr(config_module, search_config_key)
-        and value_config_key not in supported_keys
-    ):
-        raise argparse.ArgumentTypeError(f"unknown config key '{raw_key}'")
-    parse_key = (
-        search_config_key
-        if hasattr(config_module, search_config_key)
-        else value_config_key
-    )
-    return config_key_to_model_param(value_config_key), [
-        parse_config_value(config_module, parse_key, value) for value in values
-    ]
+    for value_config_key in candidate_keys:
+        search_config_key = search_key_to_config_key(value_config_key)
+        if (
+            not hasattr(config_module, search_config_key)
+            and value_config_key not in supported_keys
+        ):
+            continue
+        parse_key = (
+            search_config_key
+            if hasattr(config_module, search_config_key)
+            else value_config_key
+        )
+        return config_key_to_model_param(value_config_key), [
+            parse_config_value(config_module, parse_key, value) for value in values
+        ]
+    raise argparse.ArgumentTypeError(f"unknown config key '{raw_key}'")
 
 
 def add_config_override_arguments(
@@ -254,16 +286,36 @@ def add_config_override_arguments(
     config_module: ModuleType,
 ) -> dict[str, str]:
     dest_to_key = {}
-    for key in iter_supported_config_keys(config_module):
+    supported_keys = iter_supported_config_keys(config_module)
+    registered_flags = set()
+    for key in supported_keys:
         dest = f"override_{key.lower()}"
+        flag = config_key_to_flag(key)
         parser.add_argument(
-            config_key_to_flag(key),
+            flag,
             dest=dest,
             default=None,
             metavar="VALUE",
             help=argparse.SUPPRESS,
         )
+        registered_flags.add(flag)
         dest_to_key[dest] = key
+    for legacy_key, canonical_key in LEGACY_CONFIG_KEY_ALIASES.items():
+        key = canonical_key.upper()
+        if key not in supported_keys:
+            continue
+        flag = config_key_to_flag(legacy_key)
+        if flag in registered_flags:
+            continue
+        dest = f"override_{key.lower()}"
+        parser.add_argument(
+            flag,
+            dest=dest,
+            default=None,
+            metavar="VALUE",
+            help=argparse.SUPPRESS,
+        )
+        registered_flags.add(flag)
     parser.add_argument(
         "--search-set",
         action="append",
@@ -417,7 +469,7 @@ def print_preset_options(experiment: str, models_dir: str = "models") -> None:
     print(f"Available presets for {_display_model_selector(experiment)}:")
 
     for node in tree.body:
-        if not isinstance(node, ast.ClassDef) or node.name != "ExperimentOptions":
+        if not isinstance(node, ast.ClassDef) or node.name != "ExperimentPreset":
             continue
         for item in node.body:
             key = None
@@ -438,7 +490,7 @@ def print_preset_options(experiment: str, models_dir: str = "models") -> None:
             print(f"  {config_key_to_flag(key)[2:]}{description}")
         return
 
-    raise SystemExit(f"ExperimentOptions not found in {presets_path}")
+    raise SystemExit(f"ExperimentPreset not found in {presets_path}")
 
 
 def main() -> None:
