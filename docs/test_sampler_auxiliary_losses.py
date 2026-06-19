@@ -1,4 +1,5 @@
 import unittest
+from unittest import mock
 
 import torch
 
@@ -13,13 +14,54 @@ from emperor.sampler.core.losses import (
 )
 
 
+def accelerator_device_is_usable(device: torch.device) -> bool:
+    try:
+        torch.ones(1, device=device).sum().item()
+    except (RuntimeError, AssertionError):
+        return False
+    return True
+
+
 def available_devices() -> list[torch.device]:
     devices = [torch.device("cpu")]
+    accelerator_devices = []
     if torch.cuda.is_available():
-        devices.append(torch.device("cuda"))
+        accelerator_devices.append(torch.device("cuda"))
     if torch.backends.mps.is_available():
-        devices.append(torch.device("mps"))
+        accelerator_devices.append(torch.device("mps"))
+    devices.extend(
+        device for device in accelerator_devices if accelerator_device_is_usable(device)
+    )
     return devices
+
+
+class TestAvailableDevices(unittest.TestCase):
+    def test_skips_cuda_when_tensor_probe_fails(self):
+        original_ones = torch.ones
+
+        def failing_ones(*args, **kwargs):
+            if torch.device(kwargs.get("device", "cpu")).type == "cuda":
+                raise RuntimeError("cudaErrorNoKernelImageForDevice")
+            return original_ones(*args, **kwargs)
+
+        with (
+            mock.patch("torch.cuda.is_available", return_value=True),
+            mock.patch("torch.backends.mps.is_available", return_value=False),
+            mock.patch("torch.ones", side_effect=failing_ones),
+        ):
+            devices = available_devices()
+
+        self.assertEqual(devices, [torch.device("cpu")])
+
+    def test_includes_cuda_when_tensor_probe_succeeds(self):
+        with (
+            mock.patch("torch.cuda.is_available", return_value=True),
+            mock.patch("torch.backends.mps.is_available", return_value=False),
+            mock.patch("torch.ones", return_value=torch.ones(1)),
+        ):
+            devices = available_devices()
+
+        self.assertEqual(devices, [torch.device("cpu"), torch.device("cuda")])
 
 
 class TestCoefficientOfVariationLoss(unittest.TestCase):
