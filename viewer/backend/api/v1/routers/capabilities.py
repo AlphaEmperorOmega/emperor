@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends
 from viewer.backend.core.config import ViewerApiSettings
 from viewer.backend.dependencies import get_viewer_settings
 from viewer.backend.schemas import CapabilitiesResponse
+from viewer.backend.training_cgroups import requested_cancellation_capability
 
 router = APIRouter(
     tags=["capabilities"],
@@ -24,4 +25,9 @@ router = APIRouter(
 async def capabilities(
     settings: Annotated[ViewerApiSettings, Depends(get_viewer_settings)],
 ) -> CapabilitiesResponse:
-    return CapabilitiesResponse(authMode=settings.auth_mode)
+    return CapabilitiesResponse(
+        authMode=settings.auth_mode,
+        trainingCancellationCapability=requested_cancellation_capability(
+            settings.training_cancellation_mode
+        ),
+    )

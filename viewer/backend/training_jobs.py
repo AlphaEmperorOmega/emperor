@@ -31,6 +31,11 @@ from viewer.backend.runtime.job_status import (
     is_live_process_job_status,
     is_terminal_job_status,
 )
+from viewer.backend.training_cgroups import (
+    CgroupV2Manager,
+    StrictCancellationUnavailable,
+    TrainingCancellationMode,
+)
 from viewer.backend.training_job_projector import (
     TRAINING_JOB_EVENT_TAIL_LIMIT,
     TrainingJobLiveProjection,
@@ -54,9 +59,11 @@ from viewer.backend.training_run_progress import (
     run_lookup_by_id,
 )
 from viewer.backend.training_worker_launcher import (
+    PersistedCgroupProcessHandle,
     ProcessHandle,
     ProcessRunner,
     SubprocessRunner,
+    TrainingProcessContainment,
     TrainingWorkerLauncher,
 )
 
@@ -195,13 +202,18 @@ class TrainingJobManager:
         worker_launcher: TrainingWorkerLauncher | None = None,
         job_projector: TrainingJobProjector | None = None,
         monitor_locator: TrainingMonitorLocator | None = None,
+        cancellation_mode: TrainingCancellationMode | None = None,
+        cgroup_manager: CgroupV2Manager | None = None,
     ) -> None:
         self.root = root or Path("/tmp/emperor-viewer-training")
         self.cwd = cwd or Path.cwd()
         self.logs_root = Path(logs_root)
+        self.cgroup_manager = cgroup_manager or CgroupV2Manager()
         self.worker_launcher = worker_launcher or TrainingWorkerLauncher(
             cwd=self.cwd,
             runner=runner,
+            cancellation_mode=cancellation_mode,
+            cgroup_manager=self.cgroup_manager,
         )
         self.runner = self.worker_launcher.runner
         self.monitor_reader = monitor_reader or TensorBoardMonitorReader()
@@ -297,10 +309,13 @@ class TrainingJobManager:
             materialized_run_plan=materialized_run_plan,
             validated_log_folder=validated_log_folder,
         )
-        launch = self.worker_launcher.launch(
-            job_root=job_root,
-            payload=payload,
-        )
+        try:
+            launch = self.worker_launcher.launch(
+                job_root=job_root,
+                payload=payload,
+            )
+        except StrictCancellationUnavailable as exc:
+            raise InspectorError(str(exc)) from exc
         try:
             job = self._register_job(
                 job_id=job_id,
@@ -311,6 +326,7 @@ class TrainingJobManager:
                 command=launch.command,
                 job_root=job_root,
                 process=launch.process,
+                containment=launch.containment,
             )
             self._write_event(
                 job,
@@ -445,6 +461,7 @@ class TrainingJobManager:
         command: list[str],
         job_root: Path,
         process: ProcessHandle,
+        containment: TrainingProcessContainment,
     ) -> TrainingJob:
         job = TrainingJob(
             id=job_id,
@@ -461,6 +478,10 @@ class TrainingJobManager:
             command=command,
             root=job_root,
             pid=process.pid,
+            cancellation_mode=containment.mode,
+            worker_pid=containment.worker_pid,
+            process_group_id=containment.process_group_id,
+            cgroup_path=containment.cgroup_path,
         )
         self.job_store.save(job)
         self._processes[job_id] = process
@@ -474,13 +495,18 @@ class TrainingJobManager:
 
     def cancel_job(self, job_id: str) -> dict[str, Any]:
         job = self._get_job_record(job_id)
-        process = self._processes.get(job_id)
+        process = self._process_for_job(job)
         if process is None and is_active_job_status(job.status):
             raise InspectorError(
                 f"Training job '{job_id}' has no live process handle."
             )
         reaped_exit_code: int | None = None
-        if is_live_process_job_status(job.status):
+        process_exit_code = process.poll() if process is not None else None
+        if process is not None and (
+            process_exit_code is None
+            or is_live_process_job_status(job.status)
+            or self._job_has_live_containment(job)
+        ):
             reaped_exit_code = self._terminate_and_reap_process(job_id, process)
         job.status = "cancelled"
         if reaped_exit_code is not None:
@@ -494,10 +520,7 @@ class TrainingJobManager:
     def active_jobs(self) -> list[dict[str, Any]]:
         active: list[dict[str, Any]] = []
         for job in self.job_store.list():
-            # Terminal jobs are final: `_refresh` can never move a terminal
-            # status back to active, so skip their progress-file read entirely.
-            # This keeps `active_jobs` cheap as terminal job history accumulates.
-            if is_terminal_job_status(job.status):
+            if is_terminal_job_status(job.status) and not self._job_has_live_containment(job):
                 continue
             snapshot = self.progress_store.read_snapshot(job)
             self._refresh(job, events=snapshot.events)
@@ -623,6 +646,36 @@ class TrainingJobManager:
                 f"Training job '{job_id}' process survived terminate and kill."
             ) from exc
 
+    def _process_for_job(self, job: TrainingJob) -> ProcessHandle | None:
+        process = self._processes.get(job.id)
+        if process is not None:
+            return process
+        process = self._rehydrate_process_handle(job)
+        if process is not None:
+            self._processes[job.id] = process
+        return process
+
+    def _rehydrate_process_handle(self, job: TrainingJob) -> ProcessHandle | None:
+        if job.cancellation_mode != "strict-cgroup":
+            return None
+        cgroup = self.cgroup_manager.from_existing(job.cgroup_path)
+        if cgroup is None or not cgroup.has_processes():
+            return None
+        return PersistedCgroupProcessHandle(
+            pid=job.worker_pid or job.pid,
+            cgroup=cgroup,
+            process_group_id=job.process_group_id,
+        )
+
+    def _job_has_live_containment(self, job: TrainingJob) -> bool:
+        if job.cancellation_mode != "strict-cgroup":
+            return False
+        process = self._processes.get(job.id)
+        if process is not None and process.poll() is None:
+            return True
+        cgroup = self.cgroup_manager.from_existing(job.cgroup_path)
+        return bool(cgroup and cgroup.has_processes())
+
     def _refresh(
         self,
         job: TrainingJob,
@@ -630,8 +683,9 @@ class TrainingJobManager:
         events: list[dict[str, Any]] | None = None,
     ) -> None:
         original_state = (job.status, job.exit_code, job.updated_at)
-        process = self._processes.get(job.id)
+        process = self._process_for_job(job)
         exit_code = process.poll() if process is not None else None
+        containment_live = process is not None and exit_code is None
         events = events if events is not None else self._events(job)
         latest_terminal = _latest_terminal_event(events)
         terminal_status = (
@@ -639,7 +693,7 @@ class TrainingJobManager:
             if latest_terminal is not None
             else None
         )
-        if latest_terminal is not None and terminal_status is not None:
+        if latest_terminal is not None and terminal_status is not None and not containment_live:
             job.status = terminal_status
             job.exit_code = _terminal_exit_code(
                 terminal_status,
@@ -647,6 +701,10 @@ class TrainingJobManager:
                 job.exit_code,
             )
             job.updated_at = str(latest_terminal.get("timestamp") or _now())
+        elif containment_live and is_terminal_job_status(job.status):
+            job.status = "running"
+            job.exit_code = None
+            job.updated_at = _now()
         elif process is None and is_live_process_job_status(job.status):
             job.status = "unknown"
             job.updated_at = _now()

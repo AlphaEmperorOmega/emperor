@@ -33,6 +33,9 @@ class ViewerApiSettings(BaseSettings):
     auth_mode: Literal["none", "bearer"] = "none"
     token: str | None = Field(default=None, repr=False)
     allow_unsafe_local_mutations: bool = False
+    training_cancellation_mode: Literal["strict-cgroup", "process-group"] = (
+        "strict-cgroup"
+    )
 
     model_config = SettingsConfigDict(env_prefix="VIEWER_API_")
 

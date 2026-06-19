@@ -3,21 +3,29 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import signal
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
+import viewer.backend.training_jobs as training_jobs
 from viewer.backend.inspector.errors import InspectorError
 from viewer.backend.job_store import InMemoryTrainingJobStore
+from viewer.backend.training_cgroups import (
+    CgroupV2Manager,
+    StrictCancellationUnavailable,
+)
 from viewer.backend.tests.helpers import (
     FakeProcess,
     FakeRunner,
     create_progress_test_job,
 )
 from viewer.backend.training_jobs import TrainingJobManager
+from viewer.backend.training_worker_launcher import TrainingWorkerLauncher
 
 
 class FailingTrainingJobStore(InMemoryTrainingJobStore):
@@ -25,7 +33,90 @@ class FailingTrainingJobStore(InMemoryTrainingJobStore):
         raise RuntimeError("job store failed")
 
 
+class FakeCgroup:
+    cgroup_path = "/sys/fs/cgroup/emperor-viewer-training/job-test"
+
+    def __init__(self, *, ignores_terminate: bool = False) -> None:
+        self.processes = True
+        self.terminated = False
+        self.killed = False
+        self.cleaned = False
+        self.ignores_terminate = ignores_terminate
+
+    def has_processes(self) -> bool:
+        return self.processes
+
+    def terminate(self) -> None:
+        self.terminated = True
+        if not self.ignores_terminate:
+            self.processes = False
+
+    def kill(self) -> None:
+        self.killed = True
+        self.processes = False
+
+    def wait_empty(self, timeout: float | None = None) -> None:
+        if self.processes:
+            raise TimeoutError("fake cgroup still has processes")
+
+    def cleanup_empty(self) -> None:
+        if not self.processes:
+            self.cleaned = True
+
+
+class FakeCgroupManager:
+    def __init__(self, cgroup: FakeCgroup | None = None) -> None:
+        self.cgroup = cgroup or FakeCgroup()
+
+    def from_existing(self, cgroup_path: str | None):
+        return self.cgroup if cgroup_path else None
+
+
 class TrainingJobTests(unittest.TestCase):
+    def _wait_for_pid_file(self, path: Path, *, timeout: float = 5.0) -> int:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if path.is_file():
+                text = path.read_text(encoding="utf-8").strip()
+                if text:
+                    return int(text)
+            time.sleep(0.05)
+        raise AssertionError(f"Timed out waiting for pid file: {path}")
+
+    def _process_is_alive(self, pid: int) -> bool:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+        stat_path = Path(f"/proc/{pid}/stat")
+        if stat_path.is_file():
+            try:
+                stat = stat_path.read_text(encoding="utf-8")
+            except OSError:
+                return True
+            fields = stat.split()
+            if len(fields) > 2 and fields[2] == "Z":
+                return False
+        return True
+
+    def _wait_for_process_exit(self, pid: int, *, timeout: float = 5.0) -> bool:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if not self._process_is_alive(pid):
+                return True
+            time.sleep(0.05)
+        return not self._process_is_alive(pid)
+
+    def _kill_leftover_process(self, pid: int) -> None:
+        if not self._process_is_alive(pid):
+            return
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            return
+
     def _create_progress_projection_job(
         self,
         root: Path,
@@ -207,6 +298,274 @@ class TrainingJobTests(unittest.TestCase):
         self.assertTrue(process.terminated)
         self.assertTrue(process.killed)
         self.assertEqual(cancelled["exitCode"], -9)
+
+    def test_cancel_job_failure_keeps_job_running(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            process = FakeProcess(ignores_terminate=True, ignores_kill=True)
+            manager = TrainingJobManager(
+                root=root / "jobs",
+                logs_root=root / "logs",
+                runner=FakeRunner(process),
+            )
+            payload = manager.create_job(
+                model="linears/linear",
+                preset="baseline",
+                datasets=["Mnist"],
+                overrides={},
+                log_folder="cancel_failure",
+                monitors=[],
+            )
+            job_id = str(payload["id"])
+
+            with self.assertRaisesRegex(
+                InspectorError,
+                "process survived terminate and kill",
+            ):
+                manager.cancel_job(job_id)
+            current = manager.get_job(job_id)
+
+        self.assertTrue(process.terminated)
+        self.assertTrue(process.killed)
+        self.assertEqual(current["status"], "running")
+        self.assertIsNone(current["exitCode"])
+        self.assertFalse(
+            any(event.get("type") == "cancelled" for event in current["events"])
+        )
+
+    def test_strict_cgroup_unavailable_fails_training_start(self) -> None:
+        class UnavailableCgroupManager:
+            def create_job_cgroup(self, job_id: str):
+                raise StrictCancellationUnavailable(
+                    "Strict training cancellation requires a writable cgroup."
+                )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manager = TrainingJobManager(
+                root=root / "jobs",
+                logs_root=root / "logs",
+                worker_launcher=TrainingWorkerLauncher(
+                    cwd=Path.cwd(),
+                    runner=FakeRunner(),
+                    cancellation_mode="strict-cgroup",
+                    cgroup_manager=UnavailableCgroupManager(),
+                ),
+            )
+
+            with self.assertRaisesRegex(
+                InspectorError,
+                "requires a writable cgroup",
+            ):
+                manager.create_job(
+                    model="linears/linear",
+                    preset="baseline",
+                    datasets=["Mnist"],
+                    overrides={},
+                    log_folder="strict_unavailable",
+                    monitors=[],
+                )
+
+    def test_terminal_progress_event_does_not_finish_live_process_scope(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            process = FakeProcess(exit_code=None)
+            manager = TrainingJobManager(
+                root=root / "jobs",
+                logs_root=root / "logs",
+                runner=FakeRunner(process),
+            )
+            payload = manager.create_job(
+                model="linears/linear",
+                preset="baseline",
+                datasets=["Mnist"],
+                overrides={},
+                log_folder="terminal_event_live_scope",
+                monitors=[],
+            )
+            job = manager.jobs[str(payload["id"])]
+            manager._write_event(job, {"type": "completed", "status": "completed"})
+
+            current = manager.get_job(str(payload["id"]))
+
+        self.assertEqual(current["status"], "running")
+        self.assertIsNone(current["exitCode"])
+
+    def test_restart_can_cancel_persisted_strict_cgroup_job(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manager = TrainingJobManager(
+                root=root / "jobs",
+                logs_root=root / "logs",
+                runner=FakeRunner(),
+            )
+            payload = manager.create_job(
+                model="linears/linear",
+                preset="baseline",
+                datasets=["Mnist"],
+                overrides={},
+                log_folder="restart_strict_cancel",
+                monitors=[],
+            )
+            job = manager.jobs[str(payload["id"])]
+            job.cancellation_mode = "strict-cgroup"
+            job.worker_pid = job.pid
+            job.process_group_id = job.pid
+            job.cgroup_path = FakeCgroup.cgroup_path
+            manager.job_store.save(job)
+
+            cgroup = FakeCgroup(ignores_terminate=True)
+            restarted = TrainingJobManager(
+                root=root / "jobs",
+                logs_root=root / "logs",
+                runner=FakeRunner(),
+                cgroup_manager=FakeCgroupManager(cgroup),
+            )
+
+            cancelled = restarted.cancel_job(str(payload["id"]))
+
+        self.assertEqual(cancelled["status"], "cancelled")
+        self.assertTrue(cgroup.terminated)
+        self.assertTrue(cgroup.killed)
+        self.assertTrue(cgroup.cleaned)
+
+    @unittest.skipIf(os.name != "posix", "process-group cancellation is POSIX-only")
+    def test_cancel_job_terminates_real_worker_child_processes(self) -> None:
+        parent_script = """
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+child = subprocess.Popen([
+    sys.executable,
+    "-c",
+    "import signal, time\\nsignal.signal(signal.SIGTERM, signal.SIG_IGN)\\nwhile True: time.sleep(1)",
+])
+Path(sys.argv[1]).write_text(str(child.pid), encoding="utf-8")
+"""
+
+        class ChildSpawningLauncher(TrainingWorkerLauncher):
+            def build_command(
+                self,
+                payload_path: Path,
+                progress_path: Path,
+            ) -> list[str]:
+                child_pid_path = payload_path.parent / "child.pid"
+                return [sys.executable, "-c", parent_script, str(child_pid_path)]
+
+        child_pid: int | None = None
+        original_grace_seconds = training_jobs.CANCEL_REAP_GRACE_SECONDS
+        training_jobs.CANCEL_REAP_GRACE_SECONDS = 0.2
+        with tempfile.TemporaryDirectory() as tmp:
+            try:
+                root = Path(tmp)
+                manager = TrainingJobManager(
+                    root=root / "jobs",
+                    logs_root=root / "logs",
+                    worker_launcher=ChildSpawningLauncher(
+                        cwd=Path.cwd(),
+                        cancellation_mode="process-group",
+                    ),
+                )
+                payload = manager.create_job(
+                    model="linears/linear",
+                    preset="baseline",
+                    datasets=["Mnist"],
+                    overrides={},
+                    log_folder="cancel_process_group",
+                    monitors=[],
+                )
+                child_pid_path = root / "jobs" / str(payload["id"]) / "child.pid"
+                child_pid = self._wait_for_pid_file(child_pid_path)
+                raw_process = getattr(
+                    manager._processes[str(payload["id"])],
+                    "process",
+                    None,
+                )
+                self.assertIsNotNone(raw_process)
+                self.assertEqual(raw_process.wait(timeout=1), 0)
+
+                self.assertTrue(self._process_is_alive(child_pid))
+                cancelled = manager.cancel_job(str(payload["id"]))
+                self.assertEqual(cancelled["status"], "cancelled")
+                self.assertTrue(
+                    self._wait_for_process_exit(child_pid),
+                    f"child process {child_pid} survived cancellation",
+                )
+            finally:
+                training_jobs.CANCEL_REAP_GRACE_SECONDS = original_grace_seconds
+                if child_pid is not None:
+                    self._kill_leftover_process(child_pid)
+
+    @unittest.skipIf(os.name != "posix", "cgroup cancellation is POSIX-only")
+    def test_cancel_job_terminates_escaped_session_child_with_cgroup(self) -> None:
+        if not CgroupV2Manager().is_available():
+            self.skipTest("writable/delegated cgroup v2 is unavailable")
+
+        parent_script = """
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+child = subprocess.Popen([
+    sys.executable,
+    "-c",
+    "import signal, time\\nsignal.signal(signal.SIGTERM, signal.SIG_IGN)\\nwhile True: time.sleep(1)",
+], start_new_session=True)
+Path(sys.argv[1]).write_text(str(child.pid), encoding="utf-8")
+while True:
+    time.sleep(1)
+"""
+
+        class EscapedChildLauncher(TrainingWorkerLauncher):
+            def build_command(
+                self,
+                payload_path: Path,
+                progress_path: Path,
+            ) -> list[str]:
+                child_pid_path = payload_path.parent / "escaped-child.pid"
+                return [sys.executable, "-c", parent_script, str(child_pid_path)]
+
+        child_pid: int | None = None
+        original_grace_seconds = training_jobs.CANCEL_REAP_GRACE_SECONDS
+        training_jobs.CANCEL_REAP_GRACE_SECONDS = 0.2
+        with tempfile.TemporaryDirectory() as tmp:
+            try:
+                root = Path(tmp)
+                manager = TrainingJobManager(
+                    root=root / "jobs",
+                    logs_root=root / "logs",
+                    worker_launcher=EscapedChildLauncher(
+                        cwd=Path.cwd(),
+                        cancellation_mode="strict-cgroup",
+                    ),
+                )
+                payload = manager.create_job(
+                    model="linears/linear",
+                    preset="baseline",
+                    datasets=["Mnist"],
+                    overrides={},
+                    log_folder="cancel_cgroup_escaped_child",
+                    monitors=[],
+                )
+                child_pid_path = (
+                    root / "jobs" / str(payload["id"]) / "escaped-child.pid"
+                )
+                child_pid = self._wait_for_pid_file(child_pid_path)
+
+                self.assertTrue(self._process_is_alive(child_pid))
+                cancelled = manager.cancel_job(str(payload["id"]))
+                self.assertEqual(cancelled["status"], "cancelled")
+                self.assertTrue(
+                    self._wait_for_process_exit(child_pid),
+                    f"escaped child process {child_pid} survived cancellation",
+                )
+            finally:
+                training_jobs.CANCEL_REAP_GRACE_SECONDS = original_grace_seconds
+                if child_pid is not None:
+                    self._kill_leftover_process(child_pid)
 
     def test_training_api_cancel_job_terminates_process(self) -> None:
         import httpx
@@ -1383,7 +1742,7 @@ class TrainingJobTests(unittest.TestCase):
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             manager, created_payload, job = self._create_progress_projection_job(
-                Path(tmp)
+                Path(tmp),
             )
             run = created_payload["runPlan"]["runs"][0]
             log_dir = "logs/progress_projection/linear/baseline/Mnist/version_0"
@@ -1487,7 +1846,7 @@ class TrainingJobTests(unittest.TestCase):
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             manager, created_payload, job = self._create_progress_projection_job(
-                Path(tmp)
+                Path(tmp),
             )
             run = created_payload["runPlan"]["runs"][0]
             log_dir = "logs/progress_projection/linear/baseline/Mnist/version_0"
@@ -1547,7 +1906,8 @@ class TrainingJobTests(unittest.TestCase):
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             manager, created_payload, job = self._create_progress_projection_job(
-                Path(tmp)
+                Path(tmp),
+                process=FakeProcess(exit_code=1),
             )
             run = created_payload["runPlan"]["runs"][0]
             log_dir = "logs/progress_projection/linear/baseline/Mnist/version_0"
@@ -1816,7 +2176,7 @@ class TrainingJobTests(unittest.TestCase):
                 overrides={},
                 search={
                     "mode": "grid",
-                    "values": {"layer_norm_position": ["BEFORE", "AFTER"]},
+                    "values": {"stack_layer_norm_position": ["BEFORE", "AFTER"]},
                 },
                 log_folder="locked_search",
             )

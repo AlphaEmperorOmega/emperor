@@ -344,6 +344,9 @@ class TrainingJobResponse(ApiResponseModel):
     updatedAt: str
     exitCode: int | None = None
     pid: int
+    cancellationMode: Literal["strict-cgroup", "process-group", "unsupported"] = (
+        "unsupported"
+    )
     currentPreset: str | None = None
     currentDataset: str | None = None
     epoch: int | None = None

@@ -34,6 +34,10 @@ class TrainingJobRecord:
     command: list[str]
     root: Path
     pid: int
+    cancellation_mode: str = "process-group"
+    worker_pid: int | None = None
+    process_group_id: int | None = None
+    cgroup_path: str | None = None
     status: str = "running"
     created_at: str = field(default_factory=_now)
     updated_at: str = field(default_factory=_now)
@@ -150,6 +154,10 @@ def _record_to_metadata(job: TrainingJobRecord) -> dict[str, Any]:
         "updated_at": job.updated_at,
         "status": job.status,
         "pid": job.pid,
+        "cancellation_mode": job.cancellation_mode,
+        "worker_pid": job.worker_pid,
+        "process_group_id": job.process_group_id,
+        "cgroup_path": job.cgroup_path,
         "exit_code": job.exit_code,
     }
 
@@ -181,6 +189,22 @@ def _record_from_metadata(
         command=[str(item) for item in payload["command"]],
         root=root,
         pid=int(payload["pid"]),
+        cancellation_mode=str(payload.get("cancellation_mode") or "process-group"),
+        worker_pid=(
+            int(payload["worker_pid"])
+            if payload.get("worker_pid") is not None
+            else int(payload["pid"])
+        ),
+        process_group_id=(
+            int(payload["process_group_id"])
+            if payload.get("process_group_id") is not None
+            else None
+        ),
+        cgroup_path=(
+            str(payload["cgroup_path"])
+            if payload.get("cgroup_path") is not None
+            else None
+        ),
         status=str(payload["status"]),
         created_at=str(payload["created_at"]),
         updated_at=str(payload["updated_at"]),

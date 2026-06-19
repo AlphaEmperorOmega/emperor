@@ -309,6 +309,7 @@ class TrainingJobView:
     updated_at: str
     exit_code: int | None
     pid: int
+    cancellation_mode: str
     current_preset: str | None
     current_dataset: str | None
     epoch: int | None
@@ -356,6 +357,9 @@ class TrainingJobView:
             updated_at=str(payload.get("updatedAt") or ""),
             exit_code=int(exit_code) if exit_code is not None else None,
             pid=int(payload.get("pid") or 0),
+            cancellation_mode=str(
+                payload.get("cancellationMode") or "process-group"
+            ),
             current_preset=(
                 str(current_preset) if current_preset is not None else None
             ),
@@ -401,6 +405,7 @@ class TrainingJobView:
             "updatedAt": self.updated_at,
             "exitCode": self.exit_code,
             "pid": self.pid,
+            "cancellationMode": self.cancellation_mode,
             "currentPreset": self.current_preset,
             "currentDataset": self.current_dataset,
             "epoch": self.epoch,

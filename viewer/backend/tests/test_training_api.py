@@ -43,6 +43,7 @@ EXPECTED_TRAINING_JOB_RESPONSE_FIELDS = (
     "updatedAt",
     "exitCode",
     "pid",
+    "cancellationMode",
     "currentPreset",
     "currentDataset",
     "epoch",

@@ -286,6 +286,7 @@ class SchemaParityCase:
 CAPABILITIES_FIELDS = (
     "authMode",
     "trainingEnabled",
+    "trainingCancellationCapability",
     "logDeletionEnabled",
     "configSnapshotsEnabled",
     "historicalLogsEnabled",
@@ -314,6 +315,10 @@ CAPABILITIES_FRONTEND_DEFAULT_FIELDS = {
         "capabilitiesSchema defaults data-source support off when omitted."
     ),
     "dataSources": "capabilitiesSchema defaults data-source placeholders to [].",
+    "trainingCancellationCapability": (
+        "capabilitiesSchema defaults strict cancellation support to unsupported "
+        "when omitted."
+    ),
 }
 
 CONFIG_FIELD_FIELDS = (
@@ -480,6 +485,7 @@ TRAINING_JOB_FIELDS = (
     "updatedAt",
     "exitCode",
     "pid",
+    "cancellationMode",
     "currentPreset",
     "currentDataset",
     "epoch",
@@ -1751,6 +1757,7 @@ class ApiSchemaContractTests(unittest.TestCase):
     ) -> None:
         capabilities = schemas.CapabilitiesResponse(authMode="none")
 
+        self.assertEqual(capabilities.trainingCancellationCapability, "unsupported")
         self.assertEqual(capabilities.uploadsEnabled, False)
         self.assertIsNone(capabilities.maxUploadSize)
         self.assertEqual(capabilities.dataSourcesEnabled, False)
@@ -1762,6 +1769,8 @@ class ApiIntegrationContractTests(unittest.TestCase):
         import httpx
 
         from viewer.backend.api import app
+        from viewer.backend.core.config import get_viewer_api_settings
+        from viewer.backend.training_cgroups import requested_cancellation_capability
 
         async def call_api() -> httpx.Response:
             transport = httpx.ASGITransport(app=app)
@@ -1780,6 +1789,9 @@ class ApiIntegrationContractTests(unittest.TestCase):
             {
                 "authMode": "none",
                 "trainingEnabled": True,
+                "trainingCancellationCapability": requested_cancellation_capability(
+                    get_viewer_api_settings().training_cancellation_mode
+                ),
                 "logDeletionEnabled": True,
                 "configSnapshotsEnabled": True,
                 "historicalLogsEnabled": True,

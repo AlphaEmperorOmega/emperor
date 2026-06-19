@@ -21,11 +21,13 @@ class FakeProcess:
         exit_code: int | None = None,
         *,
         ignores_terminate: bool = False,
+        ignores_kill: bool = False,
     ) -> None:
         self.exit_code = exit_code
         self.terminated = False
         self.killed = False
         self.ignores_terminate = ignores_terminate
+        self.ignores_kill = ignores_kill
 
     def poll(self) -> int | None:
         return self.exit_code
@@ -37,7 +39,8 @@ class FakeProcess:
 
     def kill(self) -> None:
         self.killed = True
-        self.exit_code = -9
+        if not self.ignores_kill:
+            self.exit_code = -9
 
     def wait(self, timeout: float | None = None) -> int:
         if self.exit_code is None:

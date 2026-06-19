@@ -16,6 +16,11 @@ class DataSourceCapabilityPlaceholder(ApiResponseModel):
 class CapabilitiesResponse(ApiResponseModel):
     authMode: Literal["none", "bearer"]
     trainingEnabled: bool = True
+    trainingCancellationCapability: Literal[
+        "strict-cgroup",
+        "process-group",
+        "unsupported",
+    ] = "unsupported"
     logDeletionEnabled: bool = True
     configSnapshotsEnabled: bool = True
     historicalLogsEnabled: bool = True

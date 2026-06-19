@@ -37,7 +37,10 @@ def create_app(
     training_manager: TrainingJobManager | None = None,
 ) -> FastAPI:
     api_settings = settings or get_viewer_api_settings()
-    jobs = training_manager or TrainingJobManager(logs_root=api_settings.logs_root)
+    jobs = training_manager or TrainingJobManager(
+        logs_root=api_settings.logs_root,
+        cancellation_mode=api_settings.training_cancellation_mode,
+    )
     log_runs = LogRunIndex(logs_root=api_settings.logs_root)
     snapshot_store = FileSystemConfigSnapshotStore(Path(api_settings.snapshots_root))
 
