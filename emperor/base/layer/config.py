@@ -1,3 +1,4 @@
+from .gate import GateConfig
 from dataclasses import dataclass
 from emperor.base.utils import ConfigBase, optional_field
 from emperor.base.options import (
@@ -6,7 +7,6 @@ from emperor.base.options import (
     LayerNormPositionOptions,
 )
 from .residual import ResidualConnectionOptions
-from .gate import GateConfig
 
 from typing import TYPE_CHECKING
 
