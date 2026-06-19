@@ -57,11 +57,11 @@ class FakeOption(Enum):
 class FakePresetGenerator(ExperimentPresetsBase):
     def __init__(self):
         self.seen_datasets = []
-        self.seen_options = []
+        self.seen_presets = []
 
     def get_config(
         self,
-        model_config_options,
+        model_config_preset,
         dataset,
         search_mode=None,
         log_folder=None,
@@ -69,7 +69,7 @@ class FakePresetGenerator(ExperimentPresetsBase):
         config_overrides=None,
         search_overrides=None,
     ):
-        self.seen_options.append(model_config_options.name)
+        self.seen_presets.append(model_config_preset.name)
         self.seen_datasets.append(dataset.__name__)
         return [FakeConfig()]
 
@@ -115,7 +115,7 @@ class CaptureTrainingCallback(Callback):
         dataset,
         log_dir=None,
         preset=None,
-        option=None,
+        preset_key=None,
         run_id=None,
         run_index=None,
         run_total=None,
@@ -126,7 +126,7 @@ class CaptureTrainingCallback(Callback):
                 "dataset": dataset,
                 "logDir": log_dir,
                 "preset": preset,
-                "option": option,
+                "presetKey": preset_key,
                 "runId": run_id,
                 "runIndex": run_index,
                 "runTotal": run_total,
@@ -151,7 +151,7 @@ class FakeExperiment(ExperimentBase):
     def _preset_generator_instance(self):
         return FakePresetGenerator()
 
-    def _experiment_enumeration(self):
+    def _experiment_preset_enum(self):
         return FakeOption
 
     def _load_trainer_config(self, config_overrides=None):
@@ -184,16 +184,16 @@ class TestExperimentTraining(unittest.TestCase):
             ["FakeDatasetB"],
         )
 
-    def test_selected_options_limit_training_loop_in_order(self):
+    def test_selected_presets_limit_training_loop_in_order(self):
         experiment = FakeExperiment()
 
         experiment.train_model(
             selected_datasets=[FakeDatasetA],
-            selected_options=[FakeOption.GATING, FakeOption.BASELINE],
+            selected_presets=[FakeOption.GATING, FakeOption.BASELINE],
         )
 
         self.assertEqual(
-            experiment.preset_generator.seen_options,
+            experiment.preset_generator.seen_presets,
             ["GATING", "BASELINE"],
         )
 
@@ -208,14 +208,14 @@ class TestExperimentTraining(unittest.TestCase):
                     "id": "run-from-plan",
                     "index": 7,
                     "run_total": 9,
-                    "option": FakeOption.HALTING,
+                    "preset": FakeOption.HALTING,
                     "dataset_type": FakeDatasetB,
                     "config_overrides": {"num_epochs": 3},
                 }
             ],
         )
 
-        self.assertEqual(experiment.preset_generator.seen_options, ["HALTING"])
+        self.assertEqual(experiment.preset_generator.seen_presets, ["HALTING"])
         self.assertEqual(experiment.preset_generator.seen_datasets, ["FakeDatasetB"])
         self.assertEqual(len(callback.contexts), 1)
         self.assertEqual(
@@ -224,7 +224,7 @@ class TestExperimentTraining(unittest.TestCase):
                 "dataset": "FakeDatasetB",
                 "logDir": callback.contexts[0]["logDir"],
                 "preset": "halting",
-                "option": "HALTING",
+                "presetKey": "HALTING",
                 "runId": "run-from-plan",
                 "runIndex": 7,
                 "runTotal": 9,
@@ -245,7 +245,7 @@ class TestExperimentTraining(unittest.TestCase):
         self.assertEqual(started["status"], "running")
         self.assertEqual(started["dataset"], "FakeDatasetB")
         self.assertEqual(started["preset"], "halting")
-        self.assertEqual(started["option"], "HALTING")
+        self.assertEqual(started["presetKey"], "HALTING")
         self.assertEqual(started["runId"], "run-from-plan")
         self.assertEqual(started["runIndex"], 7)
         self.assertEqual(started["runTotal"], 9)
@@ -329,7 +329,7 @@ class TestExperimentTraining(unittest.TestCase):
             self.assertEqual(event["status"], "running")
             self.assertEqual(event["dataset"], "FakeDatasetB")
             self.assertEqual(event["preset"], "baseline")
-            self.assertEqual(event["option"], "BASELINE")
+            self.assertEqual(event["presetKey"], "BASELINE")
             self.assertEqual(event["epoch"], 1)
             self.assertEqual(event["step"], 2)
             self.assertEqual(event["metrics"]["validation_accuracy"], 0.75)

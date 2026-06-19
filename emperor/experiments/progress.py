@@ -91,7 +91,7 @@ class JsonlTrainingProgressCallback(Callback):
         self.string_value_limit = max(0, int(string_value_limit))
         self.dataset: str | None = None
         self.preset: str | None = None
-        self.option: str | None = None
+        self.preset_key: str | None = None
         self.log_dir: str | None = None
         self.run_id: str | None = None
         self.run_index: int | None = None
@@ -103,7 +103,7 @@ class JsonlTrainingProgressCallback(Callback):
         dataset: str,
         log_dir: str | None = None,
         preset: str | None = None,
-        option: str | None = None,
+        preset_key: str | None = None,
         run_id: str | None = None,
         run_index: int | None = None,
         run_total: int | None = None,
@@ -112,7 +112,7 @@ class JsonlTrainingProgressCallback(Callback):
         self.dataset = dataset
         self.log_dir = log_dir
         self.preset = preset
-        self.option = option
+        self.preset_key = preset_key
         self.run_id = run_id
         self.run_index = run_index
         self.run_total = run_total
@@ -124,7 +124,7 @@ class JsonlTrainingProgressCallback(Callback):
             "timestamp": datetime.now(UTC).isoformat(),
             "dataset": self.dataset,
             "preset": self.preset,
-            "option": self.option,
+            "presetKey": self.preset_key,
             "logDir": self.log_dir,
             "runId": self.run_id,
             "runIndex": self.run_index,

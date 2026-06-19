@@ -7,6 +7,7 @@ import os
 import random
 import tempfile
 import traceback
+from enum import Enum
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
@@ -23,6 +24,7 @@ from emperor.datasets.image.classification.cifar_100 import Cifar100
 from lightning.pytorch.callbacks import Callback, EarlyStopping, ModelCheckpoint
 from emperor.datasets.image.classification.fashion_mnist import FashionMNIST
 from models.catalog import model_identity_payload_from_id, public_id_for_module
+from models.config_overrides import canonical_config_key, config_key_to_model_param
 from emperor.experiments.progress import sanitize_metric_payload
 
 DEFAULT_RESULT_METRIC_KEY_LIMIT = 512
@@ -45,12 +47,27 @@ class PresetLock:
     reason: str
 
 
+@dataclass(frozen=True)
+class _EffectivePresetLock:
+    field: str
+    lock: PresetLock
+
+
+@dataclass(frozen=True)
+class _PresetLockConflict:
+    field: str
+    source: str
+    attempted_key: str
+    attempted_value: object
+    lock: PresetLock
+
+
 SearchMode = GridSearch | RandomSearch | None
 
 
 @dataclass
 class _TrainingRun:
-    option: BaseOptions
+    preset: BaseOptions
     dataset_type: type
     config: ModelConfig
     config_overrides: dict
@@ -174,7 +191,7 @@ class ExperimentPresetsBase:
 
     def get_config(
         self,
-        model_config_options,
+        model_config_preset,
         dataset,
         search_mode: SearchMode = None,
         log_folder: str | None = None,
@@ -191,15 +208,15 @@ class ExperimentPresetsBase:
             "The method '_preset' must be implemented in the subclass."
         )
 
-    def locked_fields(self, model_config_options) -> dict[str, PresetLock]:
-        locks = self.PRESET_LOCKS.get(model_config_options, {})
+    def locked_fields(self, model_config_preset) -> dict[str, PresetLock]:
+        locks = self.PRESET_LOCKS.get(model_config_preset, {})
         return {
             key: value
             if isinstance(value, PresetLock)
             else PresetLock(
                 value=value,
                 reason=(
-                    f"Locked by the {model_config_options.name} preset because this "
+                    f"Locked by the {model_config_preset.name} preset because this "
                     "preset owns this model behavior."
                 ),
             )
@@ -209,18 +226,20 @@ class ExperimentPresetsBase:
     def _create_default_preset_configs(
         self,
         dataset: type = Mnist,
+        search_mode: SearchMode = None,
         search_keys: list[str] | None = None,
         config_overrides: dict | None = None,
         search_overrides: dict | None = None,
+        model_config_preset=None,
     ) -> list["ModelConfig"]:
-        base_config = {
-            **self._dataset_config(dataset),
-            **self._model_config_overrides(config_overrides),
-        }
-        return create_search_space(
+        return self._create_preset_search_space_configs(
+            dataset,
+            search_mode,
             self._preset,
-            base_config,
-            search_overrides or {},
+            search_keys,
+            config_overrides=config_overrides,
+            search_overrides=search_overrides,
+            model_config_preset=model_config_preset,
         )
 
     def _create_preset_search_space_configs(
@@ -231,16 +250,28 @@ class ExperimentPresetsBase:
         search_keys: list[str] | None = None,
         config_overrides: dict | None = None,
         search_overrides: dict | None = None,
+        model_config_preset=None,
     ) -> list["ModelConfig"]:
+        model_config_overrides = self._model_config_overrides(config_overrides)
+        self._validate_preset_config_overrides(
+            model_config_preset,
+            model_config_overrides,
+        )
+        self._validate_preset_search_overrides(
+            model_config_preset,
+            search_overrides or {},
+        )
         base_config = {
             **self._dataset_config(dataset),
-            **self._model_config_overrides(config_overrides),
+            **model_config_overrides,
         }
         if search_overrides and search_keys is None:
             search_space = {**search_overrides}
         else:
             search_space = self._extract_search_space_from_config(
-                search_mode, search_keys
+                search_mode,
+                search_keys,
+                model_config_preset=model_config_preset,
             )
             search_space.update(search_overrides or {})
         return create_search_space(
@@ -289,6 +320,7 @@ class ExperimentPresetsBase:
         self,
         search_mode: SearchMode = None,
         search_keys: list[str] | None = None,
+        model_config_preset=None,
     ) -> dict:
         if search_mode is None:
             return {}
@@ -300,25 +332,196 @@ class ExperimentPresetsBase:
             for key, value in vars(config).items()
             if key.startswith(prefix)
         }
-        if search_keys is None:
-            return full_space
-        unknown_keys = set(search_keys) - set(full_space)
-        if unknown_keys:
-            raise ValueError(
-                f"Unknown --search-keys: {sorted(unknown_keys)}. "
-                f"Valid keys: {sorted(full_space)}"
+        if search_keys is not None:
+            unknown_keys = set(search_keys) - set(full_space)
+            if unknown_keys:
+                raise ValueError(
+                    f"Unknown --search-keys: {sorted(unknown_keys)}. "
+                    f"Valid keys: {sorted(full_space)}"
+                )
+            self._validate_preset_search_keys(
+                model_config_preset,
+                search_keys,
+                full_space,
             )
-        return {key: full_space[key] for key in search_keys}
+            return {key: full_space[key] for key in search_keys}
+
+        full_space = self._dedupe_search_space_aliases(full_space)
+
+        locked_fields = self._effective_locked_fields(model_config_preset)
+        if not locked_fields:
+            return full_space
+        return {
+            key: value
+            for key, value in full_space.items()
+            if self._effective_model_param_name(key) not in locked_fields
+        }
+
+    def _effective_model_param_name(self, key: str) -> str:
+        return config_key_to_model_param(key)
+
+    def _dedupe_search_space_aliases(self, full_space: dict) -> dict:
+        selected: dict[str, object] = {}
+        selected_by_param: dict[str, tuple[str, int]] = {}
+        for key, value in full_space.items():
+            model_param = self._effective_model_param_name(key)
+            canonical_key = canonical_config_key(key).lower()
+            preference = 1 if canonical_key == key else 0
+            existing = selected_by_param.get(model_param)
+            if existing is None:
+                selected[key] = value
+                selected_by_param[model_param] = (key, preference)
+                continue
+            existing_key, existing_preference = existing
+            if preference <= existing_preference:
+                continue
+            del selected[existing_key]
+            selected[key] = value
+            selected_by_param[model_param] = (key, preference)
+        return selected
+
+    def _effective_locked_fields(
+        self,
+        model_config_preset,
+    ) -> dict[str, _EffectivePresetLock]:
+        return {
+            self._effective_model_param_name(field): _EffectivePresetLock(field, lock)
+            for field, lock in self.locked_fields(model_config_preset).items()
+        }
+
+    def _validate_preset_config_overrides(
+        self,
+        model_config_preset,
+        config_overrides: dict,
+    ) -> None:
+        locked_fields = self._effective_locked_fields(model_config_preset)
+        conflicts = []
+        for key, value in config_overrides.items():
+            locked = locked_fields.get(self._effective_model_param_name(key))
+            if locked is None or value == locked.lock.value:
+                continue
+            conflicts.append(
+                _PresetLockConflict(
+                    field=locked.field,
+                    source="config override",
+                    attempted_key=key,
+                    attempted_value=value,
+                    lock=locked.lock,
+                )
+            )
+        self._raise_preset_lock_conflicts(model_config_preset, conflicts)
+
+    def _validate_preset_search_overrides(
+        self,
+        model_config_preset,
+        search_overrides: dict,
+    ) -> None:
+        locked_fields = self._effective_locked_fields(model_config_preset)
+        conflicts = []
+        for key, values in search_overrides.items():
+            locked = locked_fields.get(self._effective_model_param_name(key))
+            if locked is None:
+                continue
+            attempted_values = self._search_values(values)
+            if all(value == locked.lock.value for value in attempted_values):
+                continue
+            conflicts.append(
+                _PresetLockConflict(
+                    field=locked.field,
+                    source="search override",
+                    attempted_key=key,
+                    attempted_value=attempted_values,
+                    lock=locked.lock,
+                )
+            )
+        self._raise_preset_lock_conflicts(model_config_preset, conflicts)
+
+    def _validate_preset_search_keys(
+        self,
+        model_config_preset,
+        search_keys: list[str],
+        full_space: dict,
+    ) -> None:
+        locked_fields = self._effective_locked_fields(model_config_preset)
+        conflicts = []
+        for key in search_keys:
+            locked = locked_fields.get(self._effective_model_param_name(key))
+            if locked is None:
+                continue
+            conflicts.append(
+                _PresetLockConflict(
+                    field=locked.field,
+                    source="search key",
+                    attempted_key=key,
+                    attempted_value=full_space[key],
+                    lock=locked.lock,
+                )
+            )
+        self._raise_preset_lock_conflicts(model_config_preset, conflicts)
+
+    def _search_values(self, values) -> list:
+        if isinstance(values, (list, tuple, set)):
+            return list(values)
+        return [values]
+
+    def _raise_preset_lock_conflicts(
+        self,
+        model_config_preset,
+        conflicts: list[_PresetLockConflict],
+    ) -> None:
+        if not conflicts:
+            return
+        preset_name = (
+            model_config_preset.name
+            if hasattr(model_config_preset, "name")
+            else str(model_config_preset)
+        )
+        messages = []
+        for conflict in conflicts:
+            messages.append(
+                f"{preset_name} locks {conflict.field}="
+                f"{self._format_preset_lock_value(conflict.lock.value)}. "
+                f"Cannot override it with {conflict.source} "
+                f"{conflict.attempted_key}="
+                f"{self._format_preset_lock_value(conflict.attempted_value)}. "
+                f"{conflict.lock.reason} "
+                "Remove that config/search override or choose a preset that owns "
+                "different behavior."
+            )
+        raise ValueError(" ".join(messages))
+
+    def _format_preset_lock_value(self, value: object) -> str:
+        if isinstance(value, list):
+            return (
+                "["
+                + ", ".join(self._format_preset_lock_value(v) for v in value)
+                + "]"
+            )
+        if isinstance(value, tuple):
+            return (
+                "("
+                + ", ".join(self._format_preset_lock_value(v) for v in value)
+                + ")"
+            )
+        if isinstance(value, set):
+            return "{" + ", ".join(
+                sorted(self._format_preset_lock_value(v) for v in value)
+            ) + "}"
+        if isinstance(value, Enum):
+            return value.name
+        if isinstance(value, type):
+            return value.__name__
+        return repr(value)
 
 
 class ExperimentBase:
-    def __init__(self, option: BaseOptions | None = None) -> None:
-        self.option = option
+    def __init__(self, preset: BaseOptions | None = None) -> None:
+        self.preset = preset
         self.num_epochs = self._num_epochs()
         self.dataset_options = self._dataset_options()
         self.model_type = self._model_type()
         self.preset_generator = self._preset_generator_instance()
-        self.options_enumeration = self._experiment_enumeration()
+        self.preset_enum = self._experiment_preset_enum()
 
     def _num_epochs(self) -> int:
         return 10
@@ -336,9 +539,9 @@ class ExperimentBase:
             "The method '_preset_generator_instance' must be implemented in the subclass."
         )
 
-    def _experiment_enumeration(self) -> type[BaseOptions]:
+    def _experiment_preset_enum(self) -> type[BaseOptions]:
         raise NotImplementedError(
-            "The method '_experiment_enumeration' must be implemented in the subclass."
+            "The method '_experiment_preset_enum' must be implemented in the subclass."
         )
 
     def _load_trainer_config(self, config_overrides: dict | None = None) -> dict:
@@ -460,7 +663,7 @@ class ExperimentBase:
         config_overrides: dict | None = None,
         search_overrides: dict | None = None,
         selected_datasets: list[type] | None = None,
-        selected_options: list[BaseOptions] | None = None,
+        selected_presets: list[BaseOptions] | None = None,
         callbacks: list[Callback] | None = None,
         materialized_runs: list[dict] | None = None,
     ) -> None:
@@ -476,7 +679,7 @@ class ExperimentBase:
             config_overrides=config_overrides,
             search_overrides=search_overrides,
             selected_datasets=selected_datasets,
-            selected_options=selected_options,
+            selected_presets=selected_presets,
             materialized_runs=materialized_runs,
         )
         for training_run in training_run_plan:
@@ -496,20 +699,20 @@ class ExperimentBase:
         config_overrides: dict,
         search_overrides: dict,
         selected_datasets: list[type] | None,
-        selected_options: list[BaseOptions] | None,
+        selected_presets: list[BaseOptions] | None,
         materialized_runs: list[dict] | None,
     ) -> list[_TrainingRun]:
-        options = (
-            selected_options
-            if selected_options is not None
-            else [self.option]
-            if self.option
-            else self.options_enumeration
+        presets = (
+            selected_presets
+            if selected_presets is not None
+            else [self.preset]
+            if self.preset
+            else self.preset_enum
         )
         dataset_options = selected_datasets or self.dataset_options
         if materialized_runs is None:
             return self._planned_training_runs(
-                options=options,
+                presets=presets,
                 dataset_options=dataset_options,
                 search_mode=search_mode,
                 log_folder=log_folder,
@@ -522,7 +725,7 @@ class ExperimentBase:
     def _planned_training_runs(
         self,
         *,
-        options,
+        presets,
         dataset_options: list[type],
         search_mode: SearchMode,
         log_folder: str | None,
@@ -531,12 +734,12 @@ class ExperimentBase:
         search_overrides: dict,
     ) -> list[_TrainingRun]:
         training_runs = []
-        for option in options:
+        for preset in presets:
             for dataset_type in dataset_options:
                 run_overrides = config_overrides
                 run_epochs = run_overrides.get("num_epochs", self.num_epochs)
                 for config in self.preset_generator.get_config(
-                    option,
+                    preset,
                     dataset_type,
                     search_mode,
                     log_folder,
@@ -546,7 +749,7 @@ class ExperimentBase:
                 ):
                     training_runs.append(
                         _TrainingRun(
-                            option=option,
+                            preset=preset,
                             dataset_type=dataset_type,
                             config=config,
                             config_overrides=run_overrides,
@@ -563,12 +766,12 @@ class ExperimentBase:
         training_runs = []
         run_total = len(materialized_runs)
         for run_index, run in enumerate(materialized_runs, start=1):
-            option = run["option"]
+            preset = run["preset"]
             dataset_type = run["dataset_type"]
             run_overrides = run.get("config_overrides") or {}
             run_epochs = run_overrides.get("num_epochs", self.num_epochs)
             for config in self.preset_generator.get_config(
-                option,
+                preset,
                 dataset_type,
                 None,
                 log_folder,
@@ -578,7 +781,7 @@ class ExperimentBase:
             ):
                 training_runs.append(
                     _TrainingRun(
-                        option=option,
+                        preset=preset,
                         dataset_type=dataset_type,
                         config=config,
                         config_overrides=run_overrides,
@@ -604,7 +807,7 @@ class ExperimentBase:
         logger = TensorBoardLogger(
             save_dir="logs",
             name=self._build_log_path(
-                training_run.option,
+                training_run.preset,
                 training_run.dataset_type,
                 training_run.config,
                 log_folder,
@@ -642,8 +845,8 @@ class ExperimentBase:
                 set_run_context(
                     training_run.dataset_type.__name__,
                     logger.log_dir,
-                    self._option_cli_name(training_run.option),
-                    training_run.option.name,
+                    self._preset_cli_name(training_run.preset),
+                    training_run.preset.name,
                     run_id=training_run.run_id,
                     run_index=training_run.run_index,
                     run_total=training_run.run_total,
@@ -705,8 +908,8 @@ class ExperimentBase:
     def _training_run_event_fields(self, training_run: _TrainingRun) -> dict:
         return {
             "dataset": training_run.dataset_type.__name__,
-            "preset": self._option_cli_name(training_run.option),
-            "option": training_run.option.name,
+            "preset": self._preset_cli_name(training_run.preset),
+            "presetKey": training_run.preset.name,
             "runId": training_run.run_id,
             "runIndex": training_run.run_index,
             "runTotal": training_run.run_total,
@@ -727,8 +930,8 @@ class ExperimentBase:
         return {
             **self._public_model_identity_payload(),
             "dataset": training_run.dataset_type.__name__,
-            "preset": self._option_cli_name(training_run.option),
-            "option": training_run.option.name,
+            "preset": self._preset_cli_name(training_run.preset),
+            "presetKey": training_run.preset.name,
             "params": training_run.config.get_custom_parameters(),
             **_result_metrics_payload(trainer.callback_metrics),
         }
@@ -739,11 +942,11 @@ class ExperimentBase:
             json.dumps(result, indent=2, default=str)
         )
 
-    def _option_cli_name(self, option: BaseOptions) -> str:
-        cli_name = getattr(type(option), "cli_name", None)
+    def _preset_cli_name(self, preset: BaseOptions) -> str:
+        cli_name = getattr(type(preset), "cli_name", None)
         if callable(cli_name):
-            return cli_name(option.name)
-        return option.name.lower().replace("_", "-")
+            return cli_name(preset.name)
+        return preset.name.lower().replace("_", "-")
 
     def _load_best_results(self, log_folder: str | None = None) -> dict:
         return _read_best_results_path(self._best_results_path(log_folder))
@@ -791,7 +994,7 @@ class ExperimentBase:
 
     def _build_log_path(
         self,
-        option: BaseOptions,
+        preset: BaseOptions,
         dataset_type: type,
         config: "ModelConfig",
         log_folder: str | None = None,
@@ -805,7 +1008,7 @@ class ExperimentBase:
         model_id = self._public_model_id()
         log_folder = _validate_log_folder(log_folder)
         folder = f"{log_folder}/{model_id}" if log_folder is not None else model_id
-        return f"{folder}/{option.name}/{dataset_type.__name__}/{param_id}_{timestamp}"
+        return f"{folder}/{preset.name}/{dataset_type.__name__}/{param_id}_{timestamp}"
 
     def _public_model_id(self) -> str:
         package = type(self).__module__.rsplit(".", 1)[0]
