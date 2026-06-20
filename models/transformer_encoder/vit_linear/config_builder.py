@@ -35,9 +35,9 @@ class VitLinearConfigBuilder:
         image_height: int = config.IMAGE_HEIGHT,
         patch_dropout_probability: float = config.PATCH_DROPOUT_PROBABILITY,
         patch_bias_flag: bool = config.PATCH_BIAS_FLAG,
-        transformer_num_layers: int = config.TRANSFORMER_NUM_LAYERS,
-        activation_function: ActivationOptions = config.ACTIVATION_FUNCTION,
-        dropout_probability: float = config.DROPOUT_PROBABILITY,
+        stack_num_layers: int = config.STACK_NUM_LAYERS,
+        stack_activation: ActivationOptions = config.STACK_ACTIVATION,
+        stack_dropout_probability: float = config.STACK_DROPOUT_PROBABILITY,
         layer_norm_position: LayerNormPositionOptions = config.LAYER_NORM_POSITION,
         positional_embedding_option: type[
             AbsolutePositionalEmbeddingConfig
@@ -65,9 +65,9 @@ class VitLinearConfigBuilder:
         self.image_height = image_height
         self.patch_dropout_probability = patch_dropout_probability
         self.patch_bias_flag = patch_bias_flag
-        self.transformer_num_layers = transformer_num_layers
-        self.activation_function = activation_function
-        self.dropout_probability = dropout_probability
+        self.stack_num_layers = stack_num_layers
+        self.stack_activation = stack_activation
+        self.stack_dropout_probability = stack_dropout_probability
         self.layer_norm_position = layer_norm_position
         self.positional_embedding_option = positional_embedding_option
         self.positional_embedding_padding_idx = positional_embedding_padding_idx
@@ -128,7 +128,7 @@ class VitLinearConfigBuilder:
                 num_layers=1,
                 bias_flag=self.patch_bias_flag,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
-                dropout_probability=self.dropout_probability,
+                dropout_probability=self.stack_dropout_probability,
                 apply_output_pipeline_flag=False,
             ),
         )
@@ -148,7 +148,7 @@ class VitLinearConfigBuilder:
             input_dim=self.hidden_dim,
             hidden_dim=self.hidden_dim,
             output_dim=self.hidden_dim,
-            num_layers=self.transformer_num_layers,
+            num_layers=self.stack_num_layers,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
             apply_output_pipeline_flag=True,
             layer_config=TransformerEncoderBlockLayerConfig(
@@ -166,7 +166,7 @@ class VitLinearConfigBuilder:
         return TransformerEncoderLayerConfig(
             embedding_dim=self.hidden_dim,
             layer_norm_position=self.layer_norm_position,
-            dropout_probability=self.dropout_probability,
+            dropout_probability=self.stack_dropout_probability,
             residual_connection_option=ResidualConnectionOptions.RESIDUAL,
             causal_attention_mask_flag=False,
             attention_config=self._build_attention_config(),
@@ -183,7 +183,7 @@ class VitLinearConfigBuilder:
             target_sequence_length=self.sequence_length,
             source_sequence_length=self.sequence_length,
             target_dtype=torch.float32,
-            dropout_probability=self.dropout_probability,
+            dropout_probability=self.stack_dropout_probability,
             zero_attention_flag=False,
             causal_attention_mask_flag=False,
             add_key_value_bias_flag=self.attn_add_key_value_bias_flag,
@@ -205,7 +205,7 @@ class VitLinearConfigBuilder:
                 num_layers=self.ff_num_layers,
                 bias_flag=self.ff_bias_flag,
                 layer_norm_position=LayerNormPositionOptions.BEFORE,
-                dropout_probability=self.dropout_probability,
+                dropout_probability=self.stack_dropout_probability,
             ),
         )
 
@@ -216,7 +216,7 @@ class VitLinearConfigBuilder:
             num_layers=self.output_num_layers,
             bias_flag=self.output_bias_flag,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
-            dropout_probability=self.dropout_probability,
+            dropout_probability=self.stack_dropout_probability,
             apply_output_pipeline_flag=False,
         )
 
@@ -239,7 +239,7 @@ class VitLinearConfigBuilder:
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
             apply_output_pipeline_flag=apply_output_pipeline_flag,
             layer_config=LayerConfig(
-                activation=self.activation_function,
+                activation=self.stack_activation,
                 layer_norm_position=layer_norm_position,
                 residual_connection_option=ResidualConnectionOptions.DISABLED,
                 dropout_probability=dropout_probability,

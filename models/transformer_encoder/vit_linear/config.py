@@ -70,9 +70,9 @@ PATCH_BIAS_FLAG: bool = True
 
 #########################################################################
 # MAIN ENCODER STACK (transformer encoder of self-attention + feed-forward)
-TRANSFORMER_NUM_LAYERS: int = 1
-ACTIVATION_FUNCTION: ActivationOptions = ActivationOptions.GELU
-DROPOUT_PROBABILITY: float = 0.1
+STACK_NUM_LAYERS: int = 1
+STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
+STACK_DROPOUT_PROBABILITY: float = 0.1
 LAYER_NORM_POSITION: LayerNormPositionOptions = LayerNormPositionOptions.BEFORE
 
 #########################################################################
@@ -107,13 +107,13 @@ OUTPUT_BIAS_FLAG: bool = True
 # HYPERPARAMETER SEARCH SPACE
 SEARCH_SPACE_LEARNING_RATE: list = [1e-4, 1e-3, 1e-2]
 SEARCH_SPACE_HIDDEN_DIM: list = [16, 32, 64, 128, 256, 512]
-SEARCH_SPACE_TRANSFORMER_NUM_LAYERS: list = [1, 2, 4, 8]
-SEARCH_SPACE_DROPOUT_PROBABILITY: list = [0.0, 0.1, 0.2, 0.3]
+SEARCH_SPACE_STACK_NUM_LAYERS: list = [1, 2, 4, 8]
+SEARCH_SPACE_STACK_DROPOUT_PROBABILITY: list = [0.0, 0.1, 0.2, 0.3]
 SEARCH_SPACE_LAYER_NORM_POSITION: list = [
     LayerNormPositionOptions.BEFORE,
     LayerNormPositionOptions.AFTER,
 ]
-SEARCH_SPACE_ACTIVATION_FUNCTION: list = [
+SEARCH_SPACE_STACK_ACTIVATION: list = [
     ActivationOptions.RELU,
     ActivationOptions.GELU,
     ActivationOptions.SILU,

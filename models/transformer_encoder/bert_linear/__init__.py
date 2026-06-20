@@ -1,3 +1,3 @@
-from models.transformer_encoder.bert_linear.presets import Experiment, ExperimentOptions
+from models.transformer_encoder.bert_linear.presets import Experiment, ExperimentPreset
 
-__all__ = ["Experiment", "ExperimentOptions"]
+__all__ = ["Experiment", "ExperimentPreset"]

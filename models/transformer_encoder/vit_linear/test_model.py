@@ -1,20 +1,29 @@
+import importlib
+import runpy
+import sys
 import unittest
+from unittest.mock import patch
 
 import torch
 import torch.nn as nn
 
 import models.transformer_encoder.vit_linear.config as config
 
-from emperor.base.options import LayerNormPositionOptions
+from emperor.base.options import ActivationOptions, LayerNormPositionOptions
 from emperor.embedding.absolute.core.config import (
     ImageLearnedPositionalEmbeddingConfig,
     ImageSinusoidalPositionalEmbeddingConfig,
 )
+from emperor.experiments.base import GridSearch, PresetLock
 from emperor.experiments.classifier import ClassifierExperiment
 from emperor.transformer import TransformerEncoderBlockLayer, TransformerEncoderLayer
 from models.transformer_encoder.vit_linear.config_builder import VitLinearConfigBuilder
 from models.transformer_encoder.vit_linear.model import Model
-from models.transformer_encoder.vit_linear.presets import ExperimentOptions, ExperimentPresets
+from models.transformer_encoder.vit_linear.presets import (
+    Experiment,
+    ExperimentPreset,
+    ExperimentPresets,
+)
 from models.training_test_utils import (
     RandomImageClassificationDataModule,
     tiny_cpu_trainer,
@@ -22,15 +31,106 @@ from models.training_test_utils import (
 
 
 class TestVitLinearModel(unittest.TestCase):
-    def test_all_options_forward_one_batch(self):
+    def test_public_imports_remain_available(self):
+        for module_name in (
+            "models.transformer_encoder.vit_linear.config",
+            "models.transformer_encoder.vit_linear.presets",
+            "models.transformer_encoder.vit_linear.model",
+            "models.transformer_encoder.vit_linear.config_builder",
+            "models.transformer_encoder.vit_linear.experiment_config",
+        ):
+            with self.subTest(module_name=module_name):
+                module = importlib.import_module(module_name)
+
+                self.assertEqual(module.__name__, module_name)
+
+    def test_experiment_public_model_id_remains_catalog_id(self):
+        self.assertEqual(
+            Experiment()._public_model_id(),
+            "transformer_encoder/vit_linear",
+        )
+
+    def test_module_entrypoint_resolves_cli_without_training(self):
+        with (
+            patch.object(sys, "argv", ["vit_linear", "--preset", "baseline"]),
+            patch(
+                "models.transformer_encoder.vit_linear.presets.Experiment.train_model",
+                autospec=True,
+            ) as train_model,
+        ):
+            runpy.run_module(
+                "models.transformer_encoder.vit_linear.__main__",
+                run_name="__main__",
+            )
+
+        train_model.assert_called_once()
+        experiment = train_model.call_args.args[0]
+        kwargs = train_model.call_args.kwargs
+
+        self.assertEqual(experiment.preset, ExperimentPreset.BASELINE)
+        self.assertIsNone(kwargs["search_mode"])
+        self.assertIsNone(kwargs["log_folder"])
+        self.assertIsNone(kwargs["search_keys"])
+        self.assertEqual(kwargs["config_overrides"], {})
+        self.assertEqual(kwargs["search_overrides"], {})
+        self.assertEqual(kwargs["selected_datasets"], config.DATASET_OPTIONS)
+        self.assertIsNone(kwargs["selected_presets"])
+
+    def test_modern_preset_contract_is_exposed(self):
+        expected_overrides = {
+            ExperimentPreset.BASELINE: {},
+            ExperimentPreset.POST_NORM: {
+                "layer_norm_position": LayerNormPositionOptions.AFTER,
+            },
+            ExperimentPreset.SINUSOIDAL: {
+                "positional_embedding_option": ImageSinusoidalPositionalEmbeddingConfig,
+            },
+            ExperimentPreset.ATTENTION_BIAS: {
+                "attn_bias_flag": True,
+                "attn_add_key_value_bias_flag": True,
+            },
+        }
+
+        self.assertEqual(ExperimentPresets.PRESET_OVERRIDES, expected_overrides)
+        for preset, overrides in expected_overrides.items():
+            if not overrides:
+                continue
+            with self.subTest(preset=preset.name):
+                self.assertEqual(
+                    {
+                        key: lock.value
+                        for key, lock in ExperimentPresets.PRESET_LOCKS[
+                            preset
+                        ].items()
+                    },
+                    overrides,
+                )
+
+    def test_preset_locks_are_exposed_with_reasons(self):
+        presets = ExperimentPresets()
+
+        for preset, expected_locks in presets.PRESET_LOCKS.items():
+            with self.subTest(preset=preset.name):
+                locks = presets.locked_fields(preset)
+
+                self.assertEqual(set(locks), set(expected_locks))
+                for field, lock in locks.items():
+                    expected = expected_locks[field]
+                    expected_value = (
+                        expected.value if isinstance(expected, PresetLock) else expected
+                    )
+                    self.assertEqual(lock.value, expected_value)
+                    self.assertIn(preset.name, lock.reason)
+
+    def test_all_presets_forward_one_batch(self):
         batch_size = 2
         presets = ExperimentPresets()
         dataset = config.DATASET_OPTIONS[0]
 
-        for option in ExperimentOptions:
-            with self.subTest(option=option.name):
+        for preset in ExperimentPreset:
+            with self.subTest(preset=preset.name):
                 cfg = presets.get_config(
-                    option,
+                    preset,
                     dataset,
                     config_overrides=self._test_overrides(batch_size),
                 )[0]
@@ -49,7 +149,7 @@ class TestVitLinearModel(unittest.TestCase):
         for dataset in config.DATASET_OPTIONS:
             with self.subTest(dataset=dataset.__name__):
                 cfg = presets.get_config(
-                    ExperimentOptions.BASELINE,
+                    ExperimentPreset.BASELINE,
                     dataset,
                     config_overrides=self._test_overrides(batch_size),
                 )[0]
@@ -66,10 +166,10 @@ class TestVitLinearModel(unittest.TestCase):
         presets = ExperimentPresets()
         dataset = config.DATASET_OPTIONS[0]
 
-        for option in ExperimentOptions:
-            with self.subTest(option=option.name):
+        for preset in ExperimentPreset:
+            with self.subTest(preset=preset.name):
                 cfg = presets.get_config(
-                    option,
+                    preset,
                     dataset,
                     config_overrides=self._test_overrides(batch_size),
                 )[0]
@@ -81,9 +181,103 @@ class TestVitLinearModel(unittest.TestCase):
 
                 tiny_cpu_trainer().fit(model, datamodule=datamodule)
 
+    def test_search_applies_stack_axes(self):
+        configs = ExperimentPresets().get_config(
+            ExperimentPreset.BASELINE,
+            config.DATASET_OPTIONS[0],
+            GridSearch(),
+            search_keys=["stack_num_layers"],
+            config_overrides=self._test_overrides(batch_size=2),
+        )
+
+        self.assertEqual(
+            len(configs),
+            len(config.SEARCH_SPACE_STACK_NUM_LAYERS),
+        )
+        self.assertEqual(
+            {
+                cfg.experiment_config.encoder_config.num_layers
+                for cfg in configs
+            },
+            set(config.SEARCH_SPACE_STACK_NUM_LAYERS),
+        )
+
+    def test_search_keys_unknown_axis_raises(self):
+        with self.assertRaises(ValueError) as ctx:
+            ExperimentPresets().get_config(
+                ExperimentPreset.BASELINE,
+                config.DATASET_OPTIONS[0],
+                GridSearch(),
+                search_keys=["bogus_axis"],
+                config_overrides=self._test_overrides(batch_size=2),
+            )
+
+        self.assertIn("Unknown", str(ctx.exception))
+
+    def test_unlocked_overrides_update_flat_and_nested_config(self):
+        cfg = ExperimentPresets().get_config(
+            ExperimentPreset.BASELINE,
+            config.DATASET_OPTIONS[0],
+            config_overrides={
+                "batch_size": 2,
+                "hidden_dim": 24,
+                "stack_num_layers": 2,
+                "stack_activation": ActivationOptions.RELU,
+                "stack_dropout_probability": 0.2,
+                "patch_dropout_probability": 0.3,
+                "attn_num_heads": 4,
+                "output_num_layers": 1,
+            },
+        )[0]
+
+        self.assertEqual(cfg.batch_size, 2)
+        self.assertEqual(cfg.hidden_dim, 24)
+        self.assertEqual(cfg.experiment_config.encoder_config.num_layers, 2)
+        self.assertEqual(self._encoder_layer_config(cfg).dropout_probability, 0.2)
+        self.assertEqual(self._attention_config(cfg).dropout_probability, 0.2)
+        self.assertEqual(cfg.experiment_config.patch_config.dropout_probability, 0.3)
+        self.assertEqual(cfg.experiment_config.output_config.num_layers, 1)
+        self.assertEqual(
+            cfg.experiment_config.output_config.layer_config.activation,
+            ActivationOptions.RELU,
+        )
+
+    def test_locked_preset_rejects_conflicting_overrides(self):
+        presets = ExperimentPresets()
+
+        with self.assertRaises(ValueError):
+            presets.get_config(
+                ExperimentPreset.POST_NORM,
+                config.DATASET_OPTIONS[0],
+                config_overrides={
+                    **self._test_overrides(batch_size=2),
+                    "layer_norm_position": LayerNormPositionOptions.BEFORE,
+                },
+            )
+
+        with self.assertRaises(ValueError):
+            presets.get_config(
+                ExperimentPreset.POST_NORM,
+                config.DATASET_OPTIONS[0],
+                GridSearch(),
+                search_keys=["layer_norm_position"],
+                config_overrides=self._test_overrides(batch_size=2),
+            )
+
+        with self.assertRaisesRegex(ValueError, "POST_NORM.*layer_norm_position"):
+            presets.get_config(
+                ExperimentPreset.POST_NORM,
+                config.DATASET_OPTIONS[0],
+                GridSearch(),
+                search_overrides={
+                    "layer_norm_position": [LayerNormPositionOptions.BEFORE],
+                },
+                config_overrides=self._test_overrides(batch_size=2),
+            )
+
     def test_model_inherits_classifier_experiment(self):
         cfg = ExperimentPresets().get_config(
-            ExperimentOptions.BASELINE,
+            ExperimentPreset.BASELINE,
             config.DATASET_OPTIONS[0],
             config_overrides=self._test_overrides(batch_size=2),
         )[0]
@@ -100,7 +294,7 @@ class TestVitLinearModel(unittest.TestCase):
         batch_size = 2
         dataset = config.DATASET_OPTIONS[0]
         cfg = ExperimentPresets().get_config(
-            ExperimentOptions.BASELINE,
+            ExperimentPreset.BASELINE,
             dataset,
             config_overrides=self._test_overrides(batch_size),
         )[0]
@@ -125,7 +319,7 @@ class TestVitLinearModel(unittest.TestCase):
 
     def test_class_token_positional_embedding_is_trainable(self):
         cfg = ExperimentPresets().get_config(
-            ExperimentOptions.BASELINE,
+            ExperimentPreset.BASELINE,
             config.DATASET_OPTIONS[0],
             config_overrides=self._test_overrides(batch_size=2),
         )[0]
@@ -138,7 +332,7 @@ class TestVitLinearModel(unittest.TestCase):
 
     def test_encoder_is_built_from_transformer_encoder_block_layers(self):
         cfg = ExperimentPresets().get_config(
-            ExperimentOptions.BASELINE,
+            ExperimentPreset.BASELINE,
             config.DATASET_OPTIONS[0],
             config_overrides=self._test_overrides(batch_size=2),
         )[0]
@@ -155,7 +349,7 @@ class TestVitLinearModel(unittest.TestCase):
         batch_size = 2
         dataset = config.DATASET_OPTIONS[0]
         cfg = ExperimentPresets().get_config(
-            ExperimentOptions.BASELINE,
+            ExperimentPreset.BASELINE,
             dataset,
             config_overrides=self._test_overrides(batch_size),
         )[0]
@@ -174,7 +368,7 @@ class TestVitLinearModel(unittest.TestCase):
         batch_size = 2
         dataset = config.DATASET_OPTIONS[0]
         cfg = ExperimentPresets().get_config(
-            ExperimentOptions.BASELINE,
+            ExperimentPreset.BASELINE,
             dataset,
             config_overrides=self._test_overrides(batch_size),
         )[0]
@@ -194,7 +388,7 @@ class TestVitLinearModel(unittest.TestCase):
         for dataset in config.DATASET_OPTIONS:
             with self.subTest(dataset=dataset.__name__):
                 cfg = presets.get_config(
-                    ExperimentOptions.BASELINE,
+                    ExperimentPreset.BASELINE,
                     dataset,
                     config_overrides=self._test_overrides(batch_size=2),
                 )[0]
@@ -217,7 +411,7 @@ class TestVitLinearModel(unittest.TestCase):
     def test_presets_wire_config_variants(self):
         presets = ExperimentPresets()
 
-        cfg = presets.get_config(ExperimentOptions.BASELINE)[0]
+        cfg = presets.get_config(ExperimentPreset.BASELINE)[0]
         self.assertIsInstance(
             cfg.experiment_config.positional_embedding_config,
             ImageLearnedPositionalEmbeddingConfig,
@@ -229,19 +423,19 @@ class TestVitLinearModel(unittest.TestCase):
         self.assertFalse(self._encoder_layer_config(cfg).causal_attention_mask_flag)
         self.assertFalse(self._attention_config(cfg).causal_attention_mask_flag)
 
-        cfg = presets.get_config(ExperimentOptions.POST_NORM)[0]
+        cfg = presets.get_config(ExperimentPreset.POST_NORM)[0]
         self.assertEqual(
             self._encoder_layer_config(cfg).layer_norm_position,
             LayerNormPositionOptions.AFTER,
         )
 
-        cfg = presets.get_config(ExperimentOptions.SINUSOIDAL)[0]
+        cfg = presets.get_config(ExperimentPreset.SINUSOIDAL)[0]
         self.assertIsInstance(
             cfg.experiment_config.positional_embedding_config,
             ImageSinusoidalPositionalEmbeddingConfig,
         )
 
-        cfg = presets.get_config(ExperimentOptions.ATTENTION_BIAS)[0]
+        cfg = presets.get_config(ExperimentPreset.ATTENTION_BIAS)[0]
         attention_cfg = self._attention_config(cfg)
         self.assertTrue(attention_cfg.add_key_value_bias_flag)
         self.assertTrue(
@@ -256,9 +450,9 @@ class TestVitLinearModel(unittest.TestCase):
         return {
             "batch_size": batch_size,
             "hidden_dim": 16,
-            "transformer_num_layers": 1,
+            "stack_num_layers": 1,
             "attn_num_heads": 4,
-            "dropout_probability": 0.0,
+            "stack_dropout_probability": 0.0,
             "output_num_layers": 1,
         }
 

@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from emperor.config import ModelConfig
 
 
-class ExperimentOptions(BaseOptions):
+class ExperimentPreset(BaseOptions):
     BASELINE = (
         "Vision Transformer classifier with linear patch embeddings, a trainable "
         "class token, learned image positional embeddings, and a pre-norm "
@@ -31,49 +31,58 @@ class ExperimentOptions(BaseOptions):
     ATTENTION_BIAS = "Vision Transformer classifier with biased attention projections."
 
 
-def _lock(option, value, behavior: str) -> PresetLock:
+def _lock(preset, value, behavior: str) -> PresetLock:
     return PresetLock(
         value=value,
         reason=(
-            f"Locked by the {option.name} preset because this preset enables "
+            f"Locked by the {preset.name} preset because this preset enables "
             f"{behavior}."
         ),
     )
 
 
-class ExperimentPresets(ExperimentPresetsBase):
-    PRESET_LOCKS = {
-        ExperimentOptions.POST_NORM: {
-            "layer_norm_position": _lock(
-                ExperimentOptions.POST_NORM,
-                LayerNormPositionOptions.AFTER,
-                "post-layer normalization",
-            ),
-        },
-        ExperimentOptions.SINUSOIDAL: {
-            "positional_embedding_option": _lock(
-                ExperimentOptions.SINUSOIDAL,
-                ImageSinusoidalPositionalEmbeddingConfig,
-                "fixed sinusoidal image positions",
-            ),
-        },
-        ExperimentOptions.ATTENTION_BIAS: {
-            "attn_bias_flag": _lock(
-                ExperimentOptions.ATTENTION_BIAS,
-                True,
-                "attention projection bias",
-            ),
-            "attn_add_key_value_bias_flag": _lock(
-                ExperimentOptions.ATTENTION_BIAS,
-                True,
-                "attention key/value bias",
-            ),
-        },
+def _preset_locks(
+    preset_overrides: dict[ExperimentPreset, dict[str, object]],
+) -> dict[ExperimentPreset, dict[str, PresetLock]]:
+    return {
+        preset: {
+            field: _lock(preset, value, _PRESET_LOCK_BEHAVIORS[field])
+            for field, value in overrides.items()
+        }
+        for preset, overrides in preset_overrides.items()
+        if overrides
     }
+
+
+_PRESET_LOCK_BEHAVIORS = {
+    "layer_norm_position": "post-layer normalization",
+    "positional_embedding_option": "fixed sinusoidal image positions",
+    "attn_bias_flag": "attention projection bias",
+    "attn_add_key_value_bias_flag": "attention key/value bias",
+}
+
+_PRESET_OVERRIDES = {
+    ExperimentPreset.BASELINE: {},
+    ExperimentPreset.POST_NORM: {
+        "layer_norm_position": LayerNormPositionOptions.AFTER,
+    },
+    ExperimentPreset.SINUSOIDAL: {
+        "positional_embedding_option": ImageSinusoidalPositionalEmbeddingConfig,
+    },
+    ExperimentPreset.ATTENTION_BIAS: {
+        "attn_bias_flag": True,
+        "attn_add_key_value_bias_flag": True,
+    },
+}
+
+
+class ExperimentPresets(ExperimentPresetsBase):
+    PRESET_OVERRIDES = _PRESET_OVERRIDES
+    PRESET_LOCKS = _preset_locks(PRESET_OVERRIDES)
 
     def get_config(
         self,
-        model_config_options: ExperimentOptions = ExperimentOptions.BASELINE,
+        model_config_preset: ExperimentPreset = ExperimentPreset.BASELINE,
         dataset: type = Mnist,
         search_mode: SearchMode = None,
         log_folder: str | None = None,
@@ -81,7 +90,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         config_overrides: dict | None = None,
         search_overrides: dict | None = None,
     ) -> list["ModelConfig"]:
-        preset_callback = self._preset_callback_for_option(model_config_options)
+        preset_callback = self._preset_callback_for_preset(model_config_preset)
         return self._create_preset_search_space_configs(
             dataset,
             search_mode,
@@ -89,6 +98,7 @@ class ExperimentPresets(ExperimentPresetsBase):
             search_keys,
             config_overrides=config_overrides,
             search_overrides=search_overrides,
+            model_config_preset=model_config_preset,
         )
 
     def _dataset_config(self, dataset: type) -> dict:
@@ -99,44 +109,21 @@ class ExperimentPresets(ExperimentPresetsBase):
             "output_dim": dataset.num_classes,
         }
 
-    def _preset_callback_for_option(self, option: ExperimentOptions):
-        callbacks = {
-            ExperimentOptions.BASELINE: self._baseline_preset,
-            ExperimentOptions.POST_NORM: self._post_norm_preset,
-            ExperimentOptions.SINUSOIDAL: self._sinusoidal_preset,
-            ExperimentOptions.ATTENTION_BIAS: self._attention_bias_preset,
-        }
-        if option not in callbacks:
+    def _preset_callback_for_preset(self, preset: ExperimentPreset):
+        if preset not in self.PRESET_OVERRIDES:
             raise ValueError(
-                "The specified option is not supported. Please choose a valid "
-                "`ExperimentOptions`."
+                "The specified preset is not supported. Please choose a valid "
+                "`ExperimentPreset`."
             )
-        return callbacks[option]
+        return lambda **kwargs: self._preset_for_preset(preset, **kwargs)
 
-    def _baseline_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(**kwargs)
-
-    def _post_norm_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(
-            **{"layer_norm_position": LayerNormPositionOptions.AFTER, **kwargs}
-        )
-
-    def _sinusoidal_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(
-            **{
-                "positional_embedding_option": ImageSinusoidalPositionalEmbeddingConfig,
-                **kwargs,
-            }
-        )
-
-    def _attention_bias_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(
-            **{
-                "attn_bias_flag": True,
-                "attn_add_key_value_bias_flag": True,
-                **kwargs,
-            }
-        )
+    def _preset_for_preset(
+        self,
+        preset: ExperimentPreset,
+        **kwargs,
+    ) -> "ModelConfig":
+        preset_overrides = self.PRESET_OVERRIDES[preset]
+        return self._preset(**{**kwargs, **preset_overrides})
 
     def _preset(self, **kwargs) -> "ModelConfig":
         return VitLinearConfigBuilder(**kwargs).build()
@@ -145,9 +132,9 @@ class ExperimentPresets(ExperimentPresetsBase):
 class Experiment(ExperimentBase):
     def __init__(
         self,
-        experiment_option: ExperimentOptions | None = None,
+        experiment_preset: ExperimentPreset | None = None,
     ) -> None:
-        super().__init__(experiment_option)
+        super().__init__(experiment_preset)
 
     def _num_epochs(self) -> int:
         return config.NUM_EPOCHS
@@ -161,5 +148,5 @@ class Experiment(ExperimentBase):
     def _preset_generator_instance(self) -> ExperimentPresetsBase:
         return ExperimentPresets()
 
-    def _experiment_enumeration(self) -> type[BaseOptions]:
-        return ExperimentOptions
+    def _experiment_preset_enum(self) -> type[BaseOptions]:
+        return ExperimentPreset

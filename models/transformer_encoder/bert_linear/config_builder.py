@@ -35,7 +35,6 @@ class BertLinearConfigBuilder:
         hidden_dim: int = config.HIDDEN_DIM,
         output_dim: int = config.OUTPUT_DIM,
         sequence_length: int = config.SEQUENCE_LENGTH,
-        bias_flag: bool = config.BIAS_FLAG,
         stack_num_layers: int = config.STACK_NUM_LAYERS,
         stack_activation: ActivationOptions = config.STACK_ACTIVATION,
         stack_dropout_probability: float = config.STACK_DROPOUT_PROBABILITY,
@@ -60,7 +59,6 @@ class BertLinearConfigBuilder:
         self.hidden_dim = hidden_dim
         self.output_dim = output_dim
         self.sequence_length = sequence_length
-        self.bias_flag = bias_flag
         self.stack_num_layers = stack_num_layers
         self.stack_activation = stack_activation
         self.stack_dropout_probability = stack_dropout_probability
