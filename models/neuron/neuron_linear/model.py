@@ -1,48 +1,14 @@
-from dataclasses import fields
-
 import torch
 
 from torch import Tensor
 from emperor.base.layer import Layer
-from emperor.base.utils import ConfigBase, Module
 from emperor.experiments.classifier import ClassifierExperiment
-from models.neuron.neuron_linear.experiment_config import ExperimentConfig, HiddenBlockConfig
+from models.neuron.neuron_linear.experiment_config import ExperimentConfig
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
-
-
-class HiddenBlockAdapter(Module):
-    def __init__(
-        self,
-        cfg: HiddenBlockConfig,
-        overrides: HiddenBlockConfig | None = None,
-    ) -> None:
-        super().__init__()
-        self.cfg: HiddenBlockConfig = self._override_config(cfg, overrides)
-        self.input_dim = self.cfg.input_dim
-        self.output_dim = self.cfg.output_dim
-        self.model_config: ConfigBase = self.cfg.model_config
-        self.model = self.model_config.build(
-            overrides=self._dimension_overrides(self.model_config)
-        )
-
-    def _dimension_overrides(self, model_config: ConfigBase):
-        declared_fields = {field.name for field in fields(model_config)}
-        overrides = {}
-        if "input_dim" in declared_fields:
-            overrides["input_dim"] = self.input_dim
-        if "output_dim" in declared_fields:
-            overrides["output_dim"] = self.output_dim
-        if not overrides:
-            return None
-        return type(model_config)(**overrides)
-
-    def forward(self, input: Tensor) -> Tensor:
-        state = Layer.run_model_returning_state(self.model, input)
-        return state.hidden
 
 
 class Model(ClassifierExperiment):

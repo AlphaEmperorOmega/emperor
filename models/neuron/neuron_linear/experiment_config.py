@@ -17,7 +17,7 @@ class HiddenBlockConfig(ConfigBase):
     )
 
     def _registry_owner(self) -> type:
-        from models.neuron.neuron_linear.model import HiddenBlockAdapter
+        from models.neuron.neuron_linear._controller_stack import HiddenBlockAdapter
 
         return HiddenBlockAdapter
 

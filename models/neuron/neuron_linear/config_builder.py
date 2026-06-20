@@ -1,29 +1,21 @@
-from emperor.base.layer.residual import ResidualConnectionOptions
-import copy
 from typing import Any
 
-from emperor.base.layer import LayerConfig, LayerStackConfig
 from emperor.base.layer.gate import GateConfig, LayerGateOptions
+from emperor.base.layer.residual import ResidualConnectionOptions
 from emperor.base.options import (
     ActivationOptions,
     LastLayerBiasOptions,
     LayerNormPositionOptions,
 )
 from emperor.config import ModelConfig
-from emperor.halting.config import StickBreakingConfig
 from emperor.halting.options import HaltingHiddenStateModeOptions
-from emperor.linears.core.config import LinearLayerConfig
-from emperor.neuron.core.config import NeuronClusterConfig, NeuronConfig
-from emperor.neuron.core.config import AxonsConfig, NucleusConfig, TerminalConfig
 from emperor.neuron.core.options import TerminalRangeOptions, TerminalZAxisOffsetOptions
-from emperor.sampler.core.config import RouterConfig, SamplerConfig
 
 import models.neuron.neuron_linear.config as config
-from models.linears.linear.config_builder import LinearConfigBuilder
-from models.neuron.neuron_linear.experiment_config import (
-    ExperimentConfig,
-    HiddenBlockConfig,
+from models.neuron.neuron_linear._control_config_factory import (
+    NeuronControlConfigFactory,
 )
+from models.neuron.neuron_linear.experiment_config import ExperimentConfig
 
 
 class NeuronLinearConfigBuilder:
@@ -230,6 +222,8 @@ class NeuronLinearConfigBuilder:
         self.cluster_halting_bias_flag = cluster_halting_bias_flag
 
     def build(self) -> ModelConfig:
+        from models.linears.linear.config_builder import LinearConfigBuilder
+
         source_kwargs = {
             **self._source_linear_defaults(),
             "gate_option": self.gate_option,
@@ -244,12 +238,8 @@ class NeuronLinearConfigBuilder:
         source_experiment_cfg = source_cfg.experiment_config
         self._validate_source_experiment_config(source_experiment_cfg)
 
-        hidden_block_config = self._build_hidden_block_config(
+        neuron_cluster_config = NeuronControlConfigFactory(self).build(
             source_experiment_cfg.model_config,
-            source_cfg.hidden_dim,
-        )
-        neuron_cluster_config = self._build_neuron_cluster_config(
-            hidden_block_config,
             source_cfg.hidden_dim,
         )
 
@@ -341,163 +331,3 @@ class NeuronLinearConfigBuilder:
                 "The linear source model must use the boundary_classifier "
                 f"experiment config fields. Missing: {missing_fields}"
             )
-
-    def _build_hidden_block_config(
-        self,
-        source_hidden_model_config,
-        hidden_dim: int,
-    ) -> HiddenBlockConfig:
-        return HiddenBlockConfig(
-            input_dim=hidden_dim,
-            output_dim=hidden_dim,
-            model_config=copy.deepcopy(source_hidden_model_config),
-        )
-
-    def _build_neuron_cluster_config(
-        self,
-        hidden_block_config: HiddenBlockConfig,
-        hidden_dim: int,
-    ) -> NeuronClusterConfig:
-        cluster_terminal_sampler_config = self._build_cluster_terminal_sampler_config(
-            hidden_dim
-        )
-        neuron_config = NeuronConfig(
-            nucleus_config=NucleusConfig(model_config=hidden_block_config),
-            axons_config=AxonsConfig(memory_config=None),
-            terminal_config=TerminalConfig(
-                input_dim=hidden_dim,
-                xy_axis_range=self.cluster_terminal_xy_axis_range,
-                z_axis_range=self.cluster_terminal_z_axis_range,
-                z_axis_offset=self.cluster_terminal_z_axis_offset,
-                sampler_config=cluster_terminal_sampler_config,
-            ),
-        )
-        return NeuronClusterConfig(
-            x_axis_total_neurons=self.cluster_x_axis_total_neurons,
-            y_axis_total_neurons=self.cluster_y_axis_total_neurons,
-            z_axis_total_neurons=self.cluster_z_axis_total_neurons,
-            initial_x_axis_total_neurons=self.cluster_initial_x_axis_total_neurons,
-            initial_y_axis_total_neurons=self.cluster_initial_y_axis_total_neurons,
-            initial_z_axis_total_neurons=self.cluster_initial_z_axis_total_neurons,
-            entry_sampler_config=None,
-            max_steps=self.cluster_max_steps,
-            growth_threshold=self.cluster_growth_threshold,
-            halting_config=self._build_cluster_halting_config(hidden_dim),
-            neuron_config=neuron_config,
-        )
-
-    def _build_cluster_terminal_sampler_config(self, hidden_dim: int) -> SamplerConfig:
-        num_experts = self._cluster_terminal_num_experts()
-        top_k = min(max(1, self.cluster_terminal_top_k), num_experts)
-        return SamplerConfig(
-            top_k=top_k,
-            threshold=self.cluster_terminal_sampler_threshold,
-            filter_above_threshold=self.cluster_terminal_sampler_filter_above_threshold,
-            num_topk_samples=min(self.cluster_terminal_sampler_num_topk_samples, top_k),
-            normalize_probabilities_flag=(
-                self.cluster_terminal_sampler_normalize_probabilities_flag
-            ),
-            noisy_topk_flag=self.cluster_terminal_sampler_noisy_topk_flag,
-            num_experts=num_experts,
-            coefficient_of_variation_loss_weight=(
-                self.cluster_terminal_sampler_coefficient_of_variation_loss_weight
-            ),
-            switch_loss_weight=self.cluster_terminal_sampler_switch_loss_weight,
-            zero_centred_loss_weight=(
-                self.cluster_terminal_sampler_zero_centred_loss_weight
-            ),
-            mutual_information_loss_weight=(
-                self.cluster_terminal_sampler_mutual_information_loss_weight
-            ),
-            router_config=self._build_router_config(hidden_dim, num_experts),
-        )
-
-    def _build_router_config(
-        self,
-        hidden_dim: int,
-        num_experts: int,
-    ) -> RouterConfig:
-        router_hidden_dim = self.cluster_terminal_router_hidden_dim or max(
-            hidden_dim,
-            num_experts,
-        )
-        return RouterConfig(
-            input_dim=hidden_dim,
-            num_experts=num_experts,
-            noisy_topk_flag=self.cluster_terminal_sampler_noisy_topk_flag,
-            model_config=LayerStackConfig(
-                input_dim=hidden_dim,
-                hidden_dim=router_hidden_dim,
-                output_dim=num_experts,
-                num_layers=self.cluster_terminal_router_num_layers,
-                last_layer_bias_option=(
-                    self.cluster_terminal_router_last_layer_bias_option
-                ),
-                apply_output_pipeline_flag=(
-                    self.cluster_terminal_router_apply_output_pipeline_flag
-                ),
-                layer_config=LayerConfig(
-                    activation=self.cluster_terminal_router_activation,
-                    residual_connection_option=self.cluster_terminal_router_residual_connection_option,
-                    dropout_probability=(
-                        self.cluster_terminal_router_dropout_probability
-                    ),
-                    layer_norm_position=(
-                        self.cluster_terminal_router_layer_norm_position
-                    ),
-                    gate_config=None,
-                    halting_config=None,
-                    memory_config=None,
-                    layer_model_config=LinearLayerConfig(
-                        bias_flag=self.cluster_terminal_router_bias_flag
-                    ),
-                ),
-            ),
-        )
-
-    def _build_cluster_halting_config(
-        self,
-        hidden_dim: int,
-    ) -> StickBreakingConfig | None:
-        if not self.cluster_halting_flag:
-            return None
-        return StickBreakingConfig(
-            input_dim=hidden_dim,
-            threshold=self.cluster_halting_threshold,
-            halting_dropout=self.cluster_halting_dropout,
-            hidden_state_mode=self.cluster_halting_hidden_state_mode,
-            halting_gate_config=LayerStackConfig(
-                input_dim=hidden_dim,
-                hidden_dim=self.cluster_halting_hidden_dim,
-                output_dim=self.cluster_halting_output_dim,
-                num_layers=self.cluster_halting_stack_num_layers,
-                last_layer_bias_option=(
-                    self.cluster_halting_stack_last_layer_bias_option
-                ),
-                apply_output_pipeline_flag=(
-                    self.cluster_halting_stack_apply_output_pipeline_flag
-                ),
-                layer_config=LayerConfig(
-                    activation=self.cluster_halting_stack_activation,
-                    residual_connection_option=self.cluster_halting_stack_residual_connection_option,
-                    dropout_probability=(
-                        self.cluster_halting_stack_dropout_probability
-                    ),
-                    layer_norm_position=self.cluster_halting_layer_norm_position,
-                    gate_config=None,
-                    halting_config=None,
-                    memory_config=None,
-                    layer_model_config=LinearLayerConfig(
-                        bias_flag=self.cluster_halting_bias_flag
-                    ),
-                ),
-            ),
-        )
-
-    def _cluster_terminal_num_experts(self) -> int:
-        xy_range = self._enum_or_int_value(self.cluster_terminal_xy_axis_range)
-        z_range = self._enum_or_int_value(self.cluster_terminal_z_axis_range)
-        return (xy_range * 2 + 1) ** 2 * (z_range + 1)
-
-    def _enum_or_int_value(self, value) -> int:
-        return int(value.value if hasattr(value, "value") else value)
