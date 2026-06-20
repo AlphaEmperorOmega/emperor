@@ -160,6 +160,22 @@ _Avoid_: Metrics when referring to planned run visibility
 The Viewer state describing a Training Run's lifecycle status and epoch completion.
 _Avoid_: Metrics when referring to run lifecycle state
 
+**Training Setup Sidebar**:
+The Viewer training area for choosing what will contribute to a Training Run Plan.
+_Avoid_: Main menu, footer menu
+
+**Training Run List**:
+The Viewer training area that presents Training Runs from a Training Run Plan as rows.
+_Avoid_: Runs window
+
+**Expanded Run View**:
+A larger Viewer training surface for inspecting the Training Run List without changing Training Run Plan inputs.
+_Avoid_: Training Progress popup when referring to setup controls
+
+**Training Status Sidebar**:
+The Viewer training area that summarizes Training Job state, Training Run Plan state, and training logs.
+_Avoid_: Right footer sidebar
+
 **Random Training Run Plan**:
 A Training Run Plan whose search combinations are sampled before a Training Job starts.
 _Avoid_: Unknown random runs
@@ -199,13 +215,20 @@ _Avoid_: Unknown random runs
 - A **Viewer** **Training Run** belongs to one selected preset, one selected dataset, and one generated config/search combination.
 - A **Training Command** may describe either the selected Viewer target or one **Training Run**.
 - A **Config Snapshot** belongs to exactly one selected preset.
+- A **Config Snapshot** can be drafted from a selected preset without inheriting the current override draft.
+- A **Config Snapshot** can be edited in place or duplicated into a separate draft.
 - A **Config Snapshot** is scoped to one Viewer session.
 - A **Config Snapshot** expands across selected datasets when it contributes to a **Training Run Plan**.
 - A **Config Snapshot** may contribute Training Runs to a **Training Run Plan**.
 - A **Training Run Plan** contains every **Training Run** planned for one **Training Job**.
 - A **Training Job** executes its **Training Run Plan** in the displayed order.
+- A **Training Job** does not change its **Training Run Plan** after it starts.
 - The **Viewer** presents at most one active **Training Job** in the Training panel.
 - **Training Run Progress** belongs to exactly one **Training Run**.
+- The **Training Setup Sidebar** selects inputs for a **Training Run Plan**.
+- The **Training Run List** displays the **Training Runs** in a **Training Run Plan**.
+- The **Expanded Run View** presents the **Training Run List** in a larger surface.
+- The **Training Status Sidebar** summarizes the current **Training Job** and **Training Run Plan**.
 - A **Random Training Run Plan** may be resampled before its **Training Job** starts.
 - A neuron cluster's `x/y/z_axis_total_neurons` describe **Maximum Grid Capacity**.
 - A neuron cluster's `initial_*_axis_total_neurons` describe the starting **Initialized Neuron Set**.
@@ -224,3 +247,4 @@ _Avoid_: Unknown random runs
 - "gate option" can mean either **Layer Gate Option** or **Recurrent Gate Option** — resolved: name the controller owner.
 - "input model" and "output model" were used for classifier boundary transforms — resolved: use **Input Boundary Projection** and **Output Boundary Projection**.
 - "custom config", "dynamic config", and "training config stack" were used for user-created Viewer training variants — resolved: use **Config Snapshot** for the saved variant and **Training Run Plan** for the executable list.
+- "create snapshot from preset" can mean either inheriting the current override draft or starting from preset defaults — resolved: a **Config Snapshot** drafted from a preset starts from that preset's defaults.
