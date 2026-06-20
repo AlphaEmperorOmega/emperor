@@ -120,7 +120,11 @@ Rules:
 - Keep dataset options and trainer defaults in this file.
 - Add monitor options here when the package exposes dashboard/logging callbacks.
 - Update `models/config_overrides.py` aliases only when a public constant does
-  not lower-case to the builder kwarg.
+  not lower-case to the builder kwarg. The alias must work for config
+  overrides, `--search-set`, `SEARCH_SPACE_*` extraction, and explicit
+  `search_keys`. Add a regression test whenever a public search axis maps to a
+  differently named builder kwarg, for example `WEIGHT_GENERATOR_DEPTH` mapping
+  to `generator_depth`.
 - For adaptive parameter packages, keep shared hidden-block generator defaults
   in `ADAPTIVE_STACK_*`. Put component-specific generator stack controls under
   their owning option sections (`WEIGHT_*`, `BIAS_*`, `DIAGONAL_*`, `MASK_*`),
@@ -340,6 +344,8 @@ Required coverage:
 - Shape checks use `dataset.num_classes`.
 - Search mode still creates configs.
 - Unknown search axes fail.
+- Search keys whose public config names require aliases reach the intended
+  builder kwargs and nested config fields.
 - Preset-owned behavior appears in `PRESET_LOCKS`.
 - Locked preset config/search overrides are rejected.
 - Unlocked overrides still work.
@@ -426,7 +432,7 @@ As of this guide, package status is:
 | Package | Status | Suggested action |
 | --- | --- | --- |
 | `linears/linear` | Canonical modern boundary classifier | Keep as archetype. |
-| `linears/linear_adaptive` | Modern boundary classifier | Keep adaptive hidden-block generator stack inheritance covered by tests. |
+| `linears/linear_adaptive` | Modern boundary classifier | Keep adaptive component flags, hidden-block generator stack inheritance, boundary projector semantics, and aliased search axes covered by tests. |
 | `experts/experts_linear` | Modern boundary classifier | Extract controller/router helpers and add `PRESET_OVERRIDES`. |
 | `experts/experts_linear_adaptive` | Modern boundary classifier | Extract helpers; preserve adaptive expert behavior. |
 | `neuron/neuron_linear` | Modern wrapper | Preserve wrapper semantics; mirror source presets/locks. |
@@ -445,6 +451,8 @@ A migration is complete when:
 - `ExperimentPresets.PRESET_OVERRIDES` exists.
 - `ExperimentPresets.PRESET_LOCKS` prevents contradictory preset overrides.
 - Builder kwargs are flat and backed by constants.
+- Public config/search aliases resolve to builder kwargs before configs are
+  constructed.
 - Boundary classifier task edges are outside hidden reusable blocks.
 - Every preset forwards one fake batch.
 - Baseline forwards every configured image dataset.
