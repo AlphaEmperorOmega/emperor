@@ -11,7 +11,6 @@ from pathlib import Path
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
 from emperor.base.options import ActivationOptions
-from emperor.linears.core.config import AdaptiveLinearLayerConfig
 
 from viewer.backend.inspector.errors import InspectorError
 from viewer.backend.inspector.search import parse_training_search
@@ -62,7 +61,7 @@ class TrainingRunPlanTests(unittest.TestCase):
                 "values": {
                     "hidden_dim": [64],
                     "stack_activation": ["RELU"],
-                    "input_layer_model_option": [None, "AdaptiveLinearLayerConfig"],
+                    "input_layer_adaptive_flag": [False, True],
                 },
             },
             dataset_count=1,
@@ -74,7 +73,7 @@ class TrainingRunPlanTests(unittest.TestCase):
             {
                 "hidden_dim": [64],
                 "stack_activation": ["RELU"],
-                "input_layer_model_option": [None, "AdaptiveLinearLayerConfig"],
+                "input_layer_adaptive_flag": [False, True],
             },
         )
         self.assertEqual(
@@ -84,7 +83,7 @@ class TrainingRunPlanTests(unittest.TestCase):
                 "values": {
                     "hidden_dim": [64],
                     "stack_activation": ["RELU"],
-                    "input_layer_model_option": [None, "AdaptiveLinearLayerConfig"],
+                    "input_layer_adaptive_flag": [False, True],
                 },
             },
         )
@@ -93,10 +92,9 @@ class TrainingRunPlanTests(unittest.TestCase):
             parsed.search_overrides["stack_activation"][0],
             ActivationOptions.RELU,
         )
-        self.assertIsNone(parsed.search_overrides["input_layer_model_option"][0])
-        self.assertIs(
-            parsed.search_overrides["input_layer_model_option"][1],
-            AdaptiveLinearLayerConfig,
+        self.assertEqual(
+            parsed.search_overrides["input_layer_adaptive_flag"],
+            [False, True],
         )
 
     def test_training_run_plan_materializes_grid_rows_and_commands(self) -> None:
@@ -321,7 +319,7 @@ class TrainingRunPlanTests(unittest.TestCase):
                 "values": {
                     "hidden_dim": [64],
                     "stack_activation": ["RELU"],
-                    "input_layer_model_option": [None, "AdaptiveLinearLayerConfig"],
+                    "input_layer_adaptive_flag": [False, True],
                 },
             },
             log_folder="serialization_plan",
@@ -334,21 +332,21 @@ class TrainingRunPlanTests(unittest.TestCase):
                 "values": {
                     "hidden_dim": [64],
                     "stack_activation": ["RELU"],
-                    "input_layer_model_option": [None, "AdaptiveLinearLayerConfig"],
+                    "input_layer_adaptive_flag": [False, True],
                 },
             },
         )
         self.assertEqual(plan["summary"]["totalRuns"], 2)
 
         runs_by_input_layer = {
-            run["overrides"]["input_layer_model_option"]: run for run in plan["runs"]
+            run["overrides"]["input_layer_adaptive_flag"]: run for run in plan["runs"]
         }
-        none_run = runs_by_input_layer[None]
-        class_run = runs_by_input_layer["AdaptiveLinearLayerConfig"]
+        false_run = runs_by_input_layer[False]
+        true_run = runs_by_input_layer[True]
 
         for run, input_layer_value, command_value in (
-            (none_run, None, "None"),
-            (class_run, "AdaptiveLinearLayerConfig", "AdaptiveLinearLayerConfig"),
+            (false_run, False, "false"),
+            (true_run, True, "true"),
         ):
             with self.subTest(input_layer_value=input_layer_value):
                 changes_by_key = {change["key"]: change for change in run["changes"]}
@@ -356,13 +354,13 @@ class TrainingRunPlanTests(unittest.TestCase):
                 self.assertEqual(run["overrides"]["hidden_dim"], 64)
                 self.assertEqual(run["overrides"]["stack_activation"], "RELU")
                 self.assertEqual(
-                    run["overrides"]["input_layer_model_option"],
+                    run["overrides"]["input_layer_adaptive_flag"],
                     input_layer_value,
                 )
                 self.assertEqual(changes_by_key["hidden_dim"]["value"], 64)
                 self.assertEqual(changes_by_key["stack_activation"]["value"], "RELU")
                 self.assertEqual(
-                    changes_by_key["input_layer_model_option"]["value"],
+                    changes_by_key["input_layer_adaptive_flag"]["value"],
                     input_layer_value,
                 )
                 self.assertTrue(
@@ -371,7 +369,7 @@ class TrainingRunPlanTests(unittest.TestCase):
                 self.assertIn("--hidden-dim 64", run["command"])
                 self.assertIn("--stack-activation RELU", run["command"])
                 self.assertIn(
-                    f"--input-layer-model-option {command_value}",
+                    f"--input-layer-adaptive-flag {command_value}",
                     run["command"],
                 )
 

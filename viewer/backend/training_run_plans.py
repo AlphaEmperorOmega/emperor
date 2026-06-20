@@ -41,6 +41,8 @@ def _command_value(value: Any) -> str:
     serialized = serialize_config_value(value)
     if serialized is None:
         return "None"
+    if isinstance(serialized, bool):
+        return str(serialized).lower()
     return str(serialized)
 
 
