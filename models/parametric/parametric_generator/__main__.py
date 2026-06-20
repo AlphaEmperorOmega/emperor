@@ -1,19 +1,25 @@
-from models.parser import get_experiment_parser, resolve_dataset_names, resolve_experiment_mode
-from models.parametric.parametric_generator import Experiment, ExperimentOptions
+from models.parser import (
+    get_experiment_parser,
+    resolve_dataset_names,
+    resolve_experiment_mode,
+)
+from models.parametric.parametric_generator import Experiment, ExperimentPreset
+
+EXPERIMENT_MODULE_PATH = "models.parametric.parametric_generator"
 
 if __name__ == "__main__":
-    parser = get_experiment_parser(ExperimentOptions.names(), "models.parametric.parametric_generator")
+    parser = get_experiment_parser(ExperimentPreset.names(), EXPERIMENT_MODULE_PATH)
     args = parser.parse_args()
-    config_option, selected_options, search_mode, search_keys, config_overrides, search_overrides = resolve_experiment_mode(
-        args, ExperimentOptions
-    )
-    experiment = Experiment(config_option)
+    mode = resolve_experiment_mode(args, ExperimentPreset)
+    experiment = Experiment(mode.preset)
     experiment.train_model(
-        search_mode=search_mode,
+        search_mode=mode.search_mode,
         log_folder=args.logdir,
-        search_keys=search_keys,
-        config_overrides=config_overrides,
-        search_overrides=search_overrides,
-        selected_datasets=resolve_dataset_names(experiment.dataset_options, args.datasets),
-        selected_options=selected_options,
+        search_keys=mode.search_keys,
+        config_overrides=mode.config_overrides,
+        search_overrides=mode.search_overrides,
+        selected_datasets=resolve_dataset_names(
+            experiment.dataset_options, args.datasets
+        ),
+        selected_presets=mode.selected_presets,
     )

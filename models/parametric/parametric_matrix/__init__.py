@@ -1,4 +1,4 @@
-from models.parametric.parametric_matrix.presets import Experiment, ExperimentOptions
+from models.parametric.parametric_matrix.presets import Experiment, ExperimentPreset
 
-__all__ = ["Experiment", "ExperimentOptions"]
+__all__ = ["Experiment", "ExperimentPreset"]
 

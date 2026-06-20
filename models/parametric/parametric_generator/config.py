@@ -1,10 +1,7 @@
 from emperor.base.layer.residual import ResidualConnectionOptions
-from dataclasses import dataclass, field
 
-from emperor.base.layer import LayerStackConfig
 from emperor.base.layer.monitor import LayerControllerMonitorCallback
 from emperor.base.options import ActivationOptions
-from emperor.base.utils import ConfigBase
 from emperor.datasets.image.classification.cifar_10 import Cifar10
 from emperor.datasets.image.classification.cifar_100 import Cifar100
 from emperor.datasets.image.classification.fashion_mnist import FashionMNIST
@@ -86,6 +83,7 @@ GENERATOR_STACK_DROPOUT_PROBABILITY: float = 0.0
 
 # Hyperparameter search space
 SEARCH_SPACE_LEARNING_RATE: list = [1e-4, 1e-3]
+SEARCH_SPACE_HIDDEN_DIM: list = [32, 64]
 SEARCH_SPACE_STACK_DROPOUT_PROBABILITY: list = [0.0, 0.1]
 SEARCH_SPACE_STACK_ACTIVATION: list = [
     ActivationOptions.RELU,
@@ -98,11 +96,3 @@ SEARCH_SPACE_ADAPTIVE_MIXTURE_CLIP_PARAMETER_OPTION: list = [
     ClipParameterOptions.BEFORE,
     ClipParameterOptions.AFTER,
 ]
-
-
-@dataclass
-class ExperimentConfig(ConfigBase):
-    model_config: "LayerStackConfig | None" = field(
-        default=None,
-        metadata={"help": "Parametric generator classifier stack."},
-    )

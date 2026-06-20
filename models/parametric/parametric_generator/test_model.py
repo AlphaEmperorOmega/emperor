@@ -1,5 +1,9 @@
 import os
+import importlib
+import runpy
+import sys
 import unittest
+from unittest.mock import patch
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp")
 
@@ -7,9 +11,11 @@ import torch
 
 import models.parametric.parametric_generator.config as config
 
-from emperor.experiments.base import RandomSearch
+from emperor.experiments.base import GridSearch, RandomSearch
+from emperor.base.layer import LayerConfig, LayerStackConfig
 from emperor.experts.core.config import MixtureOfExpertsConfig
 from emperor.experts.core.options import RoutingInitializationMode
+from emperor.linears.core.config import LinearLayerConfig
 from emperor.parametric import (
     AdaptiveRouterOptions,
     GeneratorBiasMixtureConfig,
@@ -17,8 +23,17 @@ from emperor.parametric import (
     ParametricLayerConfig,
     ParametricLayerHandlerConfig,
 )
+from models.parametric.parametric_generator.config_builder import (
+    ParametricGeneratorConfigBuilder,
+)
+from models.parametric.parametric_generator.experiment_config import ExperimentConfig
 from models.parametric.parametric_generator.model import Model
-from models.parametric.parametric_generator.presets import ExperimentOptions, ExperimentPresets
+from models.parametric.parametric_generator.presets import (
+    Experiment,
+    ExperimentPreset,
+    ExperimentPresets,
+    _preset_locks,
+)
 from models.training_test_utils import (
     RandomImageClassificationDataModule,
     tiny_cpu_trainer,
@@ -26,11 +41,130 @@ from models.training_test_utils import (
 
 
 class TestParametricGeneratorModel(unittest.TestCase):
+    def test_public_imports_remain_available(self):
+        for module_name in (
+            "models.parametric.parametric_generator.config",
+            "models.parametric.parametric_generator.presets",
+            "models.parametric.parametric_generator.model",
+            "models.parametric.parametric_generator.config_builder",
+            "models.parametric.parametric_generator.experiment_config",
+        ):
+            with self.subTest(module_name=module_name):
+                module = importlib.import_module(module_name)
+
+                self.assertEqual(module.__name__, module_name)
+
+    def test_experiment_public_model_id_remains_catalog_id(self):
+        self.assertEqual(
+            Experiment()._public_model_id(),
+            "parametric/parametric_generator",
+        )
+
+    def test_module_entrypoint_resolves_cli_without_training(self):
+        with (
+            patch.object(sys, "argv", ["parametric_generator", "--preset", "preset"]),
+            patch(
+                "models.parametric.parametric_generator.presets.Experiment.train_model",
+                autospec=True,
+            ) as train_model,
+        ):
+            runpy.run_module(
+                "models.parametric.parametric_generator.__main__",
+                run_name="__main__",
+            )
+
+        train_model.assert_called_once()
+        experiment = train_model.call_args.args[0]
+        kwargs = train_model.call_args.kwargs
+
+        self.assertEqual(experiment.preset, ExperimentPreset.PRESET)
+        self.assertIsNone(kwargs["search_mode"])
+        self.assertIsNone(kwargs["log_folder"])
+        self.assertIsNone(kwargs["search_keys"])
+        self.assertEqual(kwargs["config_overrides"], {})
+        self.assertEqual(kwargs["search_overrides"], {})
+        self.assertEqual(kwargs["selected_datasets"], config.DATASET_OPTIONS)
+        self.assertIsNone(kwargs["selected_presets"])
+
+    def test_modern_preset_contract_is_exposed(self):
+        self.assertEqual(
+            ExperimentPresets.PRESET_OVERRIDES,
+            {
+                ExperimentPreset.PRESET: {},
+                ExperimentPreset.CONFIG: {},
+            },
+        )
+        self.assertEqual(ExperimentPresets.PRESET_LOCKS, {})
+        self.assertEqual(
+            ExperimentPresets().locked_fields(ExperimentPreset.PRESET),
+            {},
+        )
+
+    def test_empty_overrides_generate_empty_locks_and_future_locks_reject(self):
+        self.assertEqual(_preset_locks(ExperimentPresets.PRESET_OVERRIDES), {})
+
+        locks = _preset_locks(
+            {
+                ExperimentPreset.PRESET: {
+                    "learning_rate": config.LEARNING_RATE,
+                },
+            }
+        )
+        original_locks = ExperimentPresets.PRESET_LOCKS
+        try:
+            ExperimentPresets.PRESET_LOCKS = locks
+            with self.assertRaisesRegex(ValueError, "PRESET.*learning_rate"):
+                ExperimentPresets().get_config(
+                    ExperimentPreset.PRESET,
+                    config.DATASET_OPTIONS[0],
+                    config_overrides={"learning_rate": config.LEARNING_RATE * 2},
+                )
+        finally:
+            ExperimentPresets.PRESET_LOCKS = original_locks
+
+    def test_builder_returns_boundary_style_experiment_config(self):
+        cfg = ParametricGeneratorConfigBuilder(
+            input_dim=8,
+            hidden_dim=4,
+            output_dim=3,
+        ).build()
+
+        self.assertIsInstance(cfg.experiment_config, ExperimentConfig)
+        self.assertIsNotNone(cfg.experiment_config.input_model_config)
+        self.assertIsNotNone(cfg.experiment_config.model_config)
+        self.assertIsNotNone(cfg.experiment_config.output_model_config)
+        self.assertIsInstance(cfg.experiment_config.input_model_config, LayerConfig)
+        self.assertIsInstance(cfg.experiment_config.model_config, LayerStackConfig)
+        self.assertIsInstance(cfg.experiment_config.output_model_config, LayerConfig)
+
+        model = Model(cfg)
+        self.assertEqual(model.input_model.input_dim, 8)
+        self.assertEqual(model.input_model.output_dim, 4)
+        self.assertEqual(model.model.input_dim, 4)
+        self.assertEqual(model.model.hidden_dim, 4)
+        self.assertEqual(model.model.output_dim, 4)
+        self.assertEqual(model.output_model.input_dim, 4)
+        self.assertEqual(model.output_model.output_dim, 3)
+
     def test_preset_builds_current_parametric_config(self):
-        cfg = ExperimentPresets()._preset(input_dim=8, hidden_dim=5, output_dim=3)
-        handler_config = cfg.experiment_config.model_config.layer_config
+        hidden_dim = 5
+        cfg = ExperimentPresets()._preset(
+            input_dim=8,
+            hidden_dim=hidden_dim,
+            output_dim=3,
+        )
+        stack_config = cfg.experiment_config.model_config
+        handler_config = stack_config.layer_config
         layer_model_config = handler_config.layer_model_config
 
+        self.assertIsInstance(
+            cfg.experiment_config.input_model_config.layer_model_config,
+            LinearLayerConfig,
+        )
+        self.assertIsInstance(
+            cfg.experiment_config.output_model_config.layer_model_config,
+            LinearLayerConfig,
+        )
         self.assertIsInstance(handler_config, ParametricLayerHandlerConfig)
         self.assertIsInstance(layer_model_config, ParametricLayerConfig)
         self.assertIsInstance(
@@ -41,6 +175,17 @@ class TestParametricGeneratorModel(unittest.TestCase):
         self.assertEqual(
             layer_model_config.routing_initialization_mode,
             AdaptiveRouterOptions.SHARED_ROUTER,
+        )
+        self.assertEqual(stack_config.input_dim, hidden_dim)
+        self.assertEqual(stack_config.hidden_dim, hidden_dim)
+        self.assertEqual(stack_config.output_dim, hidden_dim)
+        self.assertTrue(stack_config.apply_output_pipeline_flag)
+        self.assertEqual(layer_model_config.input_dim, hidden_dim)
+        self.assertEqual(layer_model_config.output_dim, hidden_dim)
+        self.assertEqual(layer_model_config.weight_mixture_config.input_dim, hidden_dim)
+        self.assertEqual(
+            layer_model_config.weight_mixture_config.output_dim,
+            hidden_dim,
         )
 
     def test_generator_weight_and_bias_configs_use_matching_moe_configs(self):
@@ -64,6 +209,18 @@ class TestParametricGeneratorModel(unittest.TestCase):
             with self.subTest(mixture=type(mixture_config).__name__):
                 generator_config = mixture_config.generator_config
                 self.assertIsInstance(generator_config, MixtureOfExpertsConfig)
+                self.assertEqual(mixture_config.input_dim, cfg.hidden_dim)
+                self.assertEqual(mixture_config.output_dim, cfg.hidden_dim)
+                self.assertEqual(generator_config.input_dim, cfg.hidden_dim)
+                self.assertEqual(generator_config.output_dim, cfg.hidden_dim)
+                self.assertEqual(
+                    generator_config.expert_model_config.input_dim,
+                    cfg.hidden_dim,
+                )
+                self.assertEqual(
+                    generator_config.expert_model_config.output_dim,
+                    cfg.hidden_dim,
+                )
                 self.assertEqual(generator_config.top_k, mixture_config.top_k)
                 self.assertEqual(
                     generator_config.num_experts,
@@ -80,7 +237,7 @@ class TestParametricGeneratorModel(unittest.TestCase):
 
         for dataset in config.DATASET_OPTIONS:
             with self.subTest(dataset=dataset.__name__):
-                cfg = presets.get_config(ExperimentOptions.PRESET, dataset)[0]
+                cfg = presets.get_config(ExperimentPreset.PRESET, dataset)[0]
                 model = Model(cfg)
                 model.eval()
                 X = self._fake_batch(dataset, batch_size)
@@ -95,14 +252,14 @@ class TestParametricGeneratorModel(unittest.TestCase):
         presets = ExperimentPresets()
         dataset = config.DATASET_OPTIONS[0]
 
-        for option in ExperimentOptions:
-            with self.subTest(option=option.name):
+        for preset in ExperimentPreset:
+            with self.subTest(preset=preset.name):
                 search_mode = (
                     RandomSearch(num_samples=1)
-                    if option == ExperimentOptions.CONFIG
+                    if preset == ExperimentPreset.CONFIG
                     else None
                 )
-                cfg = presets.get_config(option, dataset, search_mode)[0]
+                cfg = presets.get_config(preset, dataset, search_mode)[0]
                 model = Model(cfg)
                 datamodule = RandomImageClassificationDataModule(dataset)
 
@@ -110,7 +267,7 @@ class TestParametricGeneratorModel(unittest.TestCase):
 
     def test_config_search_space_builds_configs(self):
         configs = ExperimentPresets().get_config(
-            ExperimentOptions.CONFIG,
+            ExperimentPreset.CONFIG,
             config.DATASET_OPTIONS[0],
             RandomSearch(num_samples=2),
         )
@@ -133,6 +290,67 @@ class TestParametricGeneratorModel(unittest.TestCase):
                         GeneratorBiasMixtureConfig,
                     )
                 )
+
+    def test_search_keys_unknown_axis_raises(self):
+        with self.assertRaises(ValueError) as ctx:
+            ExperimentPresets().get_config(
+                ExperimentPreset.CONFIG,
+                config.DATASET_OPTIONS[0],
+                RandomSearch(num_samples=2),
+                search_keys=["bogus_axis"],
+            )
+
+        self.assertIn("Unknown", str(ctx.exception))
+
+    def test_preset_accepts_grid_search_over_unlocked_axis(self):
+        configs = ExperimentPresets().get_config(
+            ExperimentPreset.PRESET,
+            config.DATASET_OPTIONS[0],
+            GridSearch(),
+            search_keys=["learning_rate"],
+        )
+
+        self.assertEqual(len(configs), len(config.SEARCH_SPACE_LEARNING_RATE))
+        self.assertEqual(
+            {cfg.learning_rate for cfg in configs},
+            set(config.SEARCH_SPACE_LEARNING_RATE),
+        )
+
+    def test_config_search_sweeps_hidden_dim_axis(self):
+        configs = ExperimentPresets().get_config(
+            ExperimentPreset.CONFIG,
+            config.DATASET_OPTIONS[0],
+            GridSearch(),
+            search_keys=["hidden_dim"],
+        )
+
+        self.assertEqual(len(configs), len(config.SEARCH_SPACE_HIDDEN_DIM))
+        self.assertEqual(
+            {cfg.hidden_dim for cfg in configs},
+            set(config.SEARCH_SPACE_HIDDEN_DIM),
+        )
+
+    def test_config_search_applies_generator_specific_axes(self):
+        configs = ExperimentPresets().get_config(
+            ExperimentPreset.CONFIG,
+            config.DATASET_OPTIONS[0],
+            GridSearch(),
+            search_keys=["adaptive_bias_option"],
+        )
+
+        self.assertEqual(len(configs), len(config.SEARCH_SPACE_ADAPTIVE_BIAS_OPTION))
+        self.assertEqual(
+            {
+                type(
+                    cfg.experiment_config.model_config.layer_config.layer_model_config.bias_mixture_config
+                )
+                if cfg.experiment_config.model_config.layer_config.layer_model_config.bias_mixture_config
+                is not None
+                else None
+                for cfg in configs
+            },
+            {None, GeneratorBiasMixtureConfig},
+        )
 
     def test_model_step_accepts_tuple_output(self):
         batch_size = 2

@@ -1,4 +1,4 @@
-from models.parametric.parametric_generator.presets import Experiment, ExperimentOptions
+from models.parametric.parametric_generator.presets import Experiment, ExperimentPreset
 
-__all__ = ["Experiment", "ExperimentOptions"]
+__all__ = ["Experiment", "ExperimentPreset"]
 

@@ -1,10 +1,7 @@
 from emperor.base.layer.residual import ResidualConnectionOptions
-from dataclasses import dataclass, field
 
-from emperor.base.layer import LayerStackConfig
 from emperor.base.layer.monitor import LayerControllerMonitorCallback
 from emperor.base.options import ActivationOptions
-from emperor.base.utils import ConfigBase
 from emperor.datasets.image.classification.cifar_10 import Cifar10
 from emperor.datasets.image.classification.cifar_100 import Cifar100
 from emperor.datasets.image.classification.fashion_mnist import FashionMNIST
@@ -86,19 +83,3 @@ SEARCH_SPACE_STACK_ACTIVATION: list = [
     ActivationOptions.GELU,
 ]
 SEARCH_SPACE_ADAPTIVE_MIXTURE_NUM_EXPERTS: list = [2, 3]
-
-
-@dataclass
-class ExperimentConfig(ConfigBase):
-    input_model_config: "LayerStackConfig | None" = field(
-        default=None,
-        metadata={"help": "Feature projection stack before the vector mixture."},
-    )
-    model_config: "LayerStackConfig | None" = field(
-        default=None,
-        metadata={"help": "Parametric vector stack."},
-    )
-    output_model_config: "LayerStackConfig | None" = field(
-        default=None,
-        metadata={"help": "Classifier projection stack after the vector mixture."},
-    )
