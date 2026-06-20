@@ -6,6 +6,7 @@ import { type ConfigField } from "@/lib/api";
 import {
   type ConfigSection,
   type OverrideValues,
+  boundaryProjectorFieldGroups,
   controlledSectionState,
   fieldValue,
   hasOverride as fieldHasOverride,
@@ -148,6 +149,7 @@ export function ConfigSectionAccordion({
   const bodyFields = fields.filter(
     (field) => field.key !== controlField?.key && !childFieldKeys.has(field.key),
   );
+  const bodyFieldGroups = boundaryProjectorFieldGroups(title, bodyFields);
   const childSectionTitles = useMemo(
     () => childSections.map((section) => section.title),
     [childSections],
@@ -291,20 +293,52 @@ export function ConfigSectionAccordion({
             : "hidden"
         }
       >
-        {bodyFields.length > 0 && (
+        {bodyFields.length > 0 && bodyFieldGroups && bodyFieldGroups.length > 0 && (
+          <div className="grid gap-4">
+            {bodyFieldGroups.map((group) => (
+              <div
+                key={group.title}
+                className="grid gap-2.5"
+                data-config-field-group={group.title}
+              >
+                <div className="flex min-w-0 items-center gap-2">
+                  <h4 className="shrink-0 text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-ink-faint">
+                    {group.title}
+                  </h4>
+                  <span className="h-px min-w-4 flex-1 bg-line-soft" aria-hidden />
+                </div>
+                <div className="grid gap-x-3 gap-y-3 md:grid-cols-2 2xl:grid-cols-3">
+                  {isOpen &&
+                    group.fields.map((field) => (
+                      <ConfigFieldControl
+                        key={field.key}
+                        field={field}
+                        overrides={overrides}
+                        onChange={onFieldChange}
+                        onReset={onFieldReset}
+                        density="compact"
+                        idPrefix={`${id}-field`}
+                      />
+                    ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {bodyFields.length > 0 && (!bodyFieldGroups || bodyFieldGroups.length === 0) && (
           <div className="grid gap-x-3 gap-y-3 md:grid-cols-2 2xl:grid-cols-3">
             {isOpen &&
-            bodyFields.map((field) => (
-              <ConfigFieldControl
-                key={field.key}
-                field={field}
-                overrides={overrides}
-                onChange={onFieldChange}
-                onReset={onFieldReset}
-                density="compact"
-                idPrefix={`${id}-field`}
-              />
-            ))}
+              bodyFields.map((field) => (
+                <ConfigFieldControl
+                  key={field.key}
+                  field={field}
+                  overrides={overrides}
+                  onChange={onFieldChange}
+                  onReset={onFieldReset}
+                  density="compact"
+                  idPrefix={`${id}-field`}
+                />
+              ))}
           </div>
         )}
         {isOpen && childSections.length > 0 && (

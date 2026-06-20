@@ -51,6 +51,17 @@ function directFieldGridFor(accordion: HTMLElement) {
   return grid;
 }
 
+function configFieldGroupFor(accordion: HTMLElement, title: string) {
+  const panel = accordionPanelFor(accordion);
+  const group = panel.querySelector(`[data-config-field-group="${title}"]`);
+
+  if (!(group instanceof HTMLElement)) {
+    throw new Error(`Expected ${title} config field group to render`);
+  }
+
+  return group;
+}
+
 function expectHeaderControlBeforeMetric(
   section: HTMLElement,
   controlLabel: string,
@@ -495,6 +506,208 @@ function gateOptionSchemaResponse() {
         nullable: false,
         choices: [],
       },
+    ],
+  };
+}
+
+function adaptiveComponentSchemaResponse() {
+  const adaptiveField = (
+    key: string,
+    section: string,
+    type: "bool" | "class" | "int",
+    defaultValue: boolean | string | number | null,
+    choices: Array<boolean | string> = [],
+  ) => ({
+    key,
+    configKey: key.toUpperCase(),
+    flag: `--${key.replace(/_/g, "-")}`,
+    label: key.replace(/_/g, " "),
+    section,
+    type,
+    default: defaultValue,
+    nullable: defaultValue === null,
+    choices,
+  });
+
+  return {
+    ...schemaResponse,
+    fields: [
+      ...schemaResponse.fields,
+      adaptiveField("weight_option_flag", "Weight Options", "bool", false, [
+        true,
+        false,
+      ]),
+      adaptiveField("weight_option", "Weight Options", "class", null, [
+        "DualModelDynamicWeightConfig",
+      ]),
+      adaptiveField(
+        "weight_generator_stack_independent_flag",
+        "Weight Options",
+        "bool",
+        false,
+        [true, false],
+      ),
+      adaptiveField(
+        "weight_generator_stack_hidden_dim",
+        "Weight Options",
+        "int",
+        null,
+      ),
+      adaptiveField("bias_option_flag", "Bias Options", "bool", false, [
+        true,
+        false,
+      ]),
+      adaptiveField("bias_option", "Bias Options", "class", null, [
+        "AdditiveDynamicBiasConfig",
+      ]),
+      adaptiveField("diagonal_option_flag", "Diagonal Options", "bool", false, [
+        true,
+        false,
+      ]),
+      adaptiveField("diagonal_option", "Diagonal Options", "class", null, [
+        "CombinedDynamicDiagonalConfig",
+      ]),
+      adaptiveField("mask_option_flag", "Mask Options", "bool", false, [
+        true,
+        false,
+      ]),
+      adaptiveField("row_mask_option", "Mask Options", "class", null, [
+        "WeightInformedScoreAxisMaskConfig",
+      ]),
+      adaptiveField(
+        "mask_generator_stack_independent_flag",
+        "Mask Options",
+        "bool",
+        false,
+        [true, false],
+      ),
+      adaptiveField(
+        "mask_generator_stack_hidden_dim",
+        "Mask Options",
+        "int",
+        null,
+      ),
+      adaptiveField(
+        "adaptive_stack_hidden_dim",
+        "Adaptive Generator Stack Options",
+        "int",
+        256,
+      ),
+      adaptiveField(
+        "adaptive_stack_num_layers",
+        "Adaptive Generator Stack Options",
+        "int",
+        2,
+      ),
+    ],
+  };
+}
+
+function boundaryProjectorSchemaResponse() {
+  const boundaryField = (
+    key: string,
+    section: string,
+    type: "bool" | "class" | "int",
+    defaultValue: boolean | string | number | null,
+    choices: Array<boolean | string> = [],
+  ) => ({
+    key,
+    configKey: key.toUpperCase(),
+    flag: `--${key.replace(/_/g, "-")}`,
+    label: key.replace(/_/g, " "),
+    section,
+    type,
+    default: defaultValue,
+    nullable: defaultValue === null,
+    choices,
+  });
+
+  return {
+    ...schemaResponse,
+    fields: [
+      ...schemaResponse.fields,
+      boundaryField(
+        "input_layer_adaptive_flag",
+        "Input Boundary Projector Options",
+        "bool",
+        false,
+        [true, false],
+      ),
+      boundaryField(
+        "input_layer_weight_option",
+        "Input Boundary Projector Options",
+        "class",
+        null,
+        ["DualModelDynamicWeightConfig"],
+      ),
+      boundaryField(
+        "input_layer_bias_option",
+        "Input Boundary Projector Options",
+        "class",
+        null,
+        ["AdditiveDynamicBiasConfig"],
+      ),
+      boundaryField(
+        "input_layer_diagonal_option",
+        "Input Boundary Projector Options",
+        "class",
+        null,
+        ["CombinedDynamicDiagonalConfig"],
+      ),
+      boundaryField(
+        "input_layer_row_mask_option",
+        "Input Boundary Projector Options",
+        "class",
+        null,
+        ["WeightInformedScoreAxisMaskConfig"],
+      ),
+      boundaryField(
+        "input_layer_adaptive_generator_stack_hidden_dim",
+        "Input Boundary Projector Options",
+        "int",
+        256,
+      ),
+      boundaryField(
+        "output_layer_adaptive_flag",
+        "Output Boundary Projector Options",
+        "bool",
+        false,
+        [true, false],
+      ),
+      boundaryField(
+        "output_layer_weight_option",
+        "Output Boundary Projector Options",
+        "class",
+        null,
+        ["DualModelDynamicWeightConfig"],
+      ),
+      boundaryField(
+        "output_layer_bias_option",
+        "Output Boundary Projector Options",
+        "class",
+        null,
+        ["AdditiveDynamicBiasConfig"],
+      ),
+      boundaryField(
+        "output_layer_diagonal_option",
+        "Output Boundary Projector Options",
+        "class",
+        null,
+        ["CombinedDynamicDiagonalConfig"],
+      ),
+      boundaryField(
+        "output_layer_row_mask_option",
+        "Output Boundary Projector Options",
+        "class",
+        null,
+        ["WeightInformedScoreAxisMaskConfig"],
+      ),
+      boundaryField(
+        "output_layer_adaptive_generator_stack_hidden_dim",
+        "Output Boundary Projector Options",
+        "int",
+        256,
+      ),
     ],
   };
 }
@@ -1035,6 +1248,249 @@ describe("ViewerApp Full Config", () => {
     expect(within(dialog).getByLabelText(/gate hidden dim/i)).toBeInTheDocument();
     expect(within(dialog).getByLabelText(/halting threshold/i)).toBeInTheDocument();
     expect(within(dialog).getByLabelText(/recurrent max steps/i)).toBeInTheDocument();
+  });
+
+  it("uses adaptive option flags as section header controls", async () => {
+    installFetchMock({ schemaResponse: adaptiveComponentSchemaResponse() });
+    renderViewer();
+    const user = userEvent.setup();
+
+    const dialog = await openFullConfig(user);
+    const weightAccordion = within(dialog).getByRole("button", {
+      name: /^weight options section, 4 fields, 0 overrides/i,
+    });
+    const biasAccordion = within(dialog).getByRole("button", {
+      name: /^bias options section, 2 fields, 0 overrides/i,
+    });
+    const diagonalAccordion = within(dialog).getByRole("button", {
+      name: /^diagonal options section, 2 fields, 0 overrides/i,
+    });
+    const maskAccordion = within(dialog).getByRole("button", {
+      name: /^mask options section, 4 fields, 0 overrides/i,
+    });
+    const weightSection = fullConfigSectionFor(weightAccordion);
+    const biasSection = fullConfigSectionFor(biasAccordion);
+    const diagonalSection = fullConfigSectionFor(diagonalAccordion);
+    const maskSection = fullConfigSectionFor(maskAccordion);
+
+    expect(weightAccordion).toBeDisabled();
+    expect(biasAccordion).toBeDisabled();
+    expect(diagonalAccordion).toBeDisabled();
+    expect(maskAccordion).toBeDisabled();
+    expectHeaderControlBeforeMetric(
+      weightSection,
+      "weight option flag",
+      "4 fields",
+    );
+    expectHeaderControlBeforeMetric(biasSection, "bias option flag", "2 fields");
+    expectHeaderControlBeforeMetric(
+      diagonalSection,
+      "diagonal option flag",
+      "2 fields",
+    );
+    expectHeaderControlBeforeMetric(
+      maskSection,
+      "mask option flag",
+      "4 fields",
+    );
+    expect(within(dialog).queryByLabelText(/^weight option$/i))
+      .not.toBeInTheDocument();
+    expect(within(dialog).queryByLabelText(/^row mask option$/i))
+      .not.toBeInTheDocument();
+
+    await user.click(
+      within(dialog).getByRole("switch", { name: /^weight option flag$/i }),
+    );
+    await user.click(
+      within(dialog).getByRole("switch", { name: /^mask option flag$/i }),
+    );
+
+    const enabledWeightAccordion = within(dialog).getByRole("button", {
+      name: /^weight options section, 4 fields, 1 override/i,
+    });
+    const enabledMaskAccordion = within(dialog).getByRole("button", {
+      name: /^mask options section, 4 fields, 1 override/i,
+    });
+    const weightDirectGrid = directFieldGridFor(enabledWeightAccordion);
+    const maskDirectGrid = directFieldGridFor(enabledMaskAccordion);
+    const weightGeneratorAccordion = within(
+      fullConfigSectionFor(enabledWeightAccordion),
+    ).getByRole("button", {
+      name: /^weight generator stack options section, 2 fields, 0 overrides/i,
+    });
+    const maskGeneratorAccordion = within(
+      fullConfigSectionFor(enabledMaskAccordion),
+    ).getByRole("button", {
+      name: /^mask generator stack options section, 2 fields, 0 overrides/i,
+    });
+
+    expect(within(weightDirectGrid).getByLabelText(/^weight option$/i))
+      .toBeInTheDocument();
+    expect(within(maskDirectGrid).getByLabelText(/^row mask option$/i))
+      .toBeInTheDocument();
+    expect(weightGeneratorAccordion).toBeDisabled();
+    expect(maskGeneratorAccordion).toBeDisabled();
+    expectHeaderControlBeforeMetric(
+      fullConfigSectionFor(weightGeneratorAccordion),
+      "weight generator stack independent flag",
+      "2 fields",
+    );
+    expectHeaderControlBeforeMetric(
+      fullConfigSectionFor(maskGeneratorAccordion),
+      "mask generator stack independent flag",
+      "2 fields",
+    );
+
+    const adaptiveStackOptionsAccordion = within(dialog).getByRole("button", {
+      name: /^adaptive generator stack options section, 2 fields, 0 overrides/i,
+    });
+    await user.click(adaptiveStackOptionsAccordion);
+    const adaptiveStackAccordion = within(
+      fullConfigSectionFor(adaptiveStackOptionsAccordion),
+    ).getByRole("button", {
+      name: /^adaptive generator stack section, 2 fields, 0 overrides/i,
+    });
+
+    expect(adaptiveStackAccordion).toHaveAttribute("aria-expanded", "true");
+    expect(
+      within(accordionPanelFor(adaptiveStackAccordion)).getByLabelText(
+        /adaptive stack hidden dim/i,
+      ),
+    ).toBeInTheDocument();
+
+    await user.click(
+      within(fullConfigSectionFor(enabledMaskAccordion)).getByRole("switch", {
+        name: /^mask generator stack independent flag$/i,
+      }),
+    );
+    expect(
+      within(accordionPanelFor(maskGeneratorAccordion)).getByLabelText(
+        /mask generator stack hidden dim/i,
+      ),
+    ).toBeInTheDocument();
+
+    const search = within(dialog).getByRole("combobox", {
+      name: /search config fields/i,
+    });
+    await user.type(search, "weight generator stack hidden");
+    const hiddenDimRow = fullConfigSearchResultRow(
+      fullConfigSearchPopup(dialog),
+      /weight generator stack hidden dim/i,
+    );
+    expect(
+      within(hiddenDimRow).getByRole("spinbutton", {
+        name: /current value/i,
+      }),
+    ).toBeDisabled();
+    expect(hiddenDimRow).toHaveTextContent(
+      /enable weight generator stack independent flag before editing weight generator stack options/i,
+    );
+    await user.click(within(dialog).getByRole("button", { name: /clear config search/i }));
+
+    await user.click(
+      within(dialog).getByRole("switch", {
+        name: /^weight generator stack independent flag$/i,
+      }),
+    );
+
+    expect(
+      within(accordionPanelFor(weightGeneratorAccordion)).getByLabelText(
+        /weight generator stack hidden dim/i,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("uses adaptive flags and divider groups for boundary projector sections", async () => {
+    installFetchMock({ schemaResponse: boundaryProjectorSchemaResponse() });
+    renderViewer();
+    const user = userEvent.setup();
+
+    const dialog = await openFullConfig(user);
+    const inputAccordion = within(dialog).getByRole("button", {
+      name: /^input boundary projector options section, 6 fields, 0 overrides/i,
+    });
+    const outputAccordion = within(dialog).getByRole("button", {
+      name: /^output boundary projector options section, 6 fields, 0 overrides/i,
+    });
+    const inputSection = fullConfigSectionFor(inputAccordion);
+    const outputSection = fullConfigSectionFor(outputAccordion);
+
+    expect(inputAccordion).toBeDisabled();
+    expect(outputAccordion).toBeDisabled();
+    expectHeaderControlBeforeMetric(
+      inputSection,
+      "input layer adaptive flag",
+      "6 fields",
+    );
+    expectHeaderControlBeforeMetric(
+      outputSection,
+      "output layer adaptive flag",
+      "6 fields",
+    );
+
+    await user.click(
+      within(inputSection).getByRole("switch", {
+        name: /^input layer adaptive flag$/i,
+      }),
+    );
+    await user.click(
+      within(outputSection).getByRole("switch", {
+        name: /^output layer adaptive flag$/i,
+      }),
+    );
+
+    const enabledInputAccordion = within(dialog).getByRole("button", {
+      name: /^input boundary projector options section, 6 fields, 1 override/i,
+    });
+    const enabledOutputAccordion = within(dialog).getByRole("button", {
+      name: /^output boundary projector options section, 6 fields, 1 override/i,
+    });
+    const inputPanel = accordionPanelFor(enabledInputAccordion);
+
+    expectNoHeaderControlInAccordionBody(
+      enabledInputAccordion,
+      "input layer adaptive flag",
+    );
+    expectNoHeaderControlInAccordionBody(
+      enabledOutputAccordion,
+      "output layer adaptive flag",
+    );
+    expect(within(inputPanel).getByText("Weight")).toBeInTheDocument();
+    expect(within(inputPanel).getByText("Bias")).toBeInTheDocument();
+    expect(within(inputPanel).getByText("Diagonal")).toBeInTheDocument();
+    expect(within(inputPanel).getByText("Mask")).toBeInTheDocument();
+    expect(within(inputPanel).getByText("Adaptive Generator Stack"))
+      .toBeInTheDocument();
+    expect(
+      within(configFieldGroupFor(enabledInputAccordion, "Weight")).getByLabelText(
+        /^input layer weight option$/i,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(configFieldGroupFor(enabledInputAccordion, "Bias")).getByLabelText(
+        /^input layer bias option$/i,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(configFieldGroupFor(enabledInputAccordion, "Diagonal")).getByLabelText(
+        /^input layer diagonal option$/i,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(configFieldGroupFor(enabledInputAccordion, "Mask")).getByLabelText(
+        /^input layer row mask option$/i,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(
+        configFieldGroupFor(enabledInputAccordion, "Adaptive Generator Stack"),
+      ).getByText(/^input layer adaptive generator stack hidden dim$/i),
+    ).toBeInTheDocument();
+    expect(
+      within(configFieldGroupFor(enabledOutputAccordion, "Weight")).getByLabelText(
+        /^output layer weight option$/i,
+      ),
+    ).toBeInTheDocument();
   });
 
   it("renders gate option enum selects in controlled gate sections", async () => {
