@@ -1,3 +1,3 @@
-from models.experts.experts_linear_adaptive.presets import Experiment, ExperimentOptions
+from models.experts.experts_linear_adaptive.presets import Experiment, ExperimentPreset
 
-__all__ = ["Experiment", "ExperimentOptions"]
+__all__ = ["Experiment", "ExperimentPreset"]

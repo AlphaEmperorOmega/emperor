@@ -42,7 +42,7 @@ from models.experts.experts_linear_adaptive.config_builder import (
     ExpertsLinearAdaptiveConfigBuilder,
 )
 from models.experts.experts_linear_adaptive.model import Model
-from models.experts.experts_linear_adaptive.presets import ExperimentOptions, ExperimentPresets
+from models.experts.experts_linear_adaptive.presets import ExperimentPreset, ExperimentPresets
 from models.training_test_utils import (
     RandomImageClassificationDataModule,
     tiny_cpu_trainer,
@@ -50,14 +50,14 @@ from models.training_test_utils import (
 
 
 class TestExpertsLinearAdaptiveModel(unittest.TestCase):
-    def test_all_options_forward_one_mnist_batch(self):
+    def test_all_presets_forward_one_mnist_batch(self):
         batch_size = 2
         presets = ExperimentPresets()
         dataset = config.DATASET_OPTIONS[0]
 
-        for option in ExperimentOptions:
-            with self.subTest(option=option.name):
-                cfg = presets.get_config(option, dataset)[0]
+        for preset in ExperimentPreset:
+            with self.subTest(preset=preset.name):
+                cfg = presets.get_config(preset, dataset)[0]
                 model = Model(cfg)
                 X = self._fake_batch(dataset, batch_size)
 
@@ -72,7 +72,7 @@ class TestExpertsLinearAdaptiveModel(unittest.TestCase):
 
         for dataset in config.DATASET_OPTIONS:
             with self.subTest(dataset=dataset.__name__):
-                cfg = presets.get_config(ExperimentOptions.BASELINE, dataset)[0]
+                cfg = presets.get_config(ExperimentPreset.BASELINE, dataset)[0]
                 model = Model(cfg)
                 X = self._fake_batch(dataset, batch_size)
 
@@ -85,9 +85,9 @@ class TestExpertsLinearAdaptiveModel(unittest.TestCase):
         presets = ExperimentPresets()
         dataset = config.DATASET_OPTIONS[0]
 
-        for option in ExperimentOptions:
-            with self.subTest(option=option.name):
-                cfg = presets.get_config(option, dataset)[0]
+        for preset in ExperimentPreset:
+            with self.subTest(preset=preset.name):
+                cfg = presets.get_config(preset, dataset)[0]
                 model = Model(cfg)
                 datamodule = RandomImageClassificationDataModule(dataset)
 
@@ -133,7 +133,7 @@ class TestExpertsLinearAdaptiveModel(unittest.TestCase):
 
     def test_preset_accepts_search_flags(self):
         configs = ExperimentPresets().get_config(
-            ExperimentOptions.BASELINE,
+            ExperimentPreset.BASELINE,
             config.DATASET_OPTIONS[0],
             RandomSearch(num_samples=2),
         )
@@ -210,15 +210,15 @@ class TestExpertsLinearAdaptiveModel(unittest.TestCase):
 
     def test_recurrent_presets_wrap_full_moe_model(self):
         expected_controllers = {
-            ExperimentOptions.RECURRENT: (False, False),
-            ExperimentOptions.RECURRENT_GATING: (True, False),
-            ExperimentOptions.RECURRENT_HALTING: (False, True),
-            ExperimentOptions.RECURRENT_GATING_HALTING: (True, True),
+            ExperimentPreset.RECURRENT: (False, False),
+            ExperimentPreset.RECURRENT_GATING: (True, False),
+            ExperimentPreset.RECURRENT_HALTING: (False, True),
+            ExperimentPreset.RECURRENT_GATING_HALTING: (True, True),
         }
 
-        for option, (expected_gate, expected_halting) in expected_controllers.items():
-            with self.subTest(option=option.name):
-                cfg = ExperimentPresets().get_config(option)[0]
+        for preset, (expected_gate, expected_halting) in expected_controllers.items():
+            with self.subTest(preset=preset.name):
+                cfg = ExperimentPresets().get_config(preset)[0]
                 recurrent_cfg = cfg.experiment_config.model_config
 
                 self.assertIsInstance(recurrent_cfg, RecurrentLayerConfig)
@@ -241,7 +241,7 @@ class TestExpertsLinearAdaptiveModel(unittest.TestCase):
     def test_new_adaptive_moe_presets_wire_config(self):
         presets = ExperimentPresets()
 
-        cfg = presets.get_config(ExperimentOptions.ADAPTIVE_SHARED_ROUTER)[0]
+        cfg = presets.get_config(ExperimentPreset.ADAPTIVE_SHARED_ROUTER)[0]
         moe_model_cfg = cfg.experiment_config.model_config
         self.assertEqual(
             moe_model_cfg.routing_initialization_mode,
@@ -252,7 +252,7 @@ class TestExpertsLinearAdaptiveModel(unittest.TestCase):
             DualModelDynamicWeightConfig,
         )
 
-        cfg = presets.get_config(ExperimentOptions.ADAPTIVE_AFTER_WEIGHT)[0]
+        cfg = presets.get_config(ExperimentPreset.ADAPTIVE_AFTER_WEIGHT)[0]
         moe_layer_cfg = self._moe_layer_config(cfg)
         self.assertEqual(
             moe_layer_cfg.weighting_position_option,
@@ -263,7 +263,7 @@ class TestExpertsLinearAdaptiveModel(unittest.TestCase):
             DualModelDynamicWeightConfig,
         )
 
-        cfg = presets.get_config(ExperimentOptions.ADAPTIVE_TOP1_SWITCH)[0]
+        cfg = presets.get_config(ExperimentPreset.ADAPTIVE_TOP1_SWITCH)[0]
         moe_layer_cfg = self._moe_layer_config(cfg)
         self.assertEqual(moe_layer_cfg.top_k, 1)
         self.assertFalse(moe_layer_cfg.sampler_config.normalize_probabilities_flag)
@@ -273,7 +273,7 @@ class TestExpertsLinearAdaptiveModel(unittest.TestCase):
             DualModelDynamicWeightConfig,
         )
 
-        cfg = presets.get_config(ExperimentOptions.ADAPTIVE_FULL_SHARED)[0]
+        cfg = presets.get_config(ExperimentPreset.ADAPTIVE_FULL_SHARED)[0]
         moe_model_cfg = cfg.experiment_config.model_config
         self.assertEqual(
             moe_model_cfg.routing_initialization_mode,
@@ -283,7 +283,7 @@ class TestExpertsLinearAdaptiveModel(unittest.TestCase):
             self._expert_augmentation_config(cfg)
         )
 
-        cfg = presets.get_config(ExperimentOptions.ADAPTIVE_FULL_CAPACITY)[0]
+        cfg = presets.get_config(ExperimentPreset.ADAPTIVE_FULL_CAPACITY)[0]
         moe_layer_cfg = self._moe_layer_config(cfg)
         self.assertEqual(moe_layer_cfg.top_k, 1)
         self.assertEqual(moe_layer_cfg.capacity_factor, 1.0)
@@ -296,7 +296,7 @@ class TestExpertsLinearAdaptiveModel(unittest.TestCase):
             self._expert_augmentation_config(cfg)
         )
 
-        cfg = presets.get_config(ExperimentOptions.ADAPTIVE_BANK_ROUTER)[0]
+        cfg = presets.get_config(ExperimentPreset.ADAPTIVE_BANK_ROUTER)[0]
         moe_model_cfg = cfg.experiment_config.model_config
         router_augmentation_config = (
             moe_model_cfg.sampler_config.router_config.model_config.layer_config
@@ -315,7 +315,7 @@ class TestExpertsLinearAdaptiveModel(unittest.TestCase):
         batch_size = 2
         dataset = config.DATASET_OPTIONS[0]
         cfg = ExperimentPresets().get_config(
-            ExperimentOptions.ADAPTIVE_TOP1_SWITCH,
+            ExperimentPreset.ADAPTIVE_TOP1_SWITCH,
             dataset,
         )[0]
         model = Model(cfg)

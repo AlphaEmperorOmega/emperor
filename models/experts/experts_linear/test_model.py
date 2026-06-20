@@ -26,7 +26,7 @@ from emperor.experiments.base import RandomSearch
 from emperor.linears.core.config import LinearLayerConfig
 from models.experts.experts_linear.config_builder import ExpertsLinearConfigBuilder
 from models.experts.experts_linear.model import Model
-from models.experts.experts_linear.presets import ExperimentOptions, ExperimentPresets
+from models.experts.experts_linear.presets import ExperimentPreset, ExperimentPresets
 from models.training_test_utils import (
     RandomImageClassificationDataModule,
     tiny_cpu_trainer,
@@ -34,14 +34,14 @@ from models.training_test_utils import (
 
 
 class TestExpertsLinearModel(unittest.TestCase):
-    def test_all_options_forward_one_mnist_batch(self):
+    def test_all_presets_forward_one_mnist_batch(self):
         batch_size = 4
         presets = ExperimentPresets()
         dataset = config.DATASET_OPTIONS[0]
 
-        for option in ExperimentOptions:
-            with self.subTest(option=option.name):
-                cfg = presets.get_config(option, dataset)[0]
+        for preset in ExperimentPreset:
+            with self.subTest(preset=preset.name):
+                cfg = presets.get_config(preset, dataset)[0]
                 model = Model(cfg)
                 X = self._fake_batch(dataset, batch_size)
 
@@ -56,7 +56,7 @@ class TestExpertsLinearModel(unittest.TestCase):
 
         for dataset in config.DATASET_OPTIONS:
             with self.subTest(dataset=dataset.__name__):
-                cfg = presets.get_config(ExperimentOptions.BASELINE, dataset)[0]
+                cfg = presets.get_config(ExperimentPreset.BASELINE, dataset)[0]
                 model = Model(cfg)
                 X = self._fake_batch(dataset, batch_size)
 
@@ -69,9 +69,9 @@ class TestExpertsLinearModel(unittest.TestCase):
         presets = ExperimentPresets()
         dataset = config.DATASET_OPTIONS[0]
 
-        for option in ExperimentOptions:
-            with self.subTest(option=option.name):
-                cfg = presets.get_config(option, dataset)[0]
+        for preset in ExperimentPreset:
+            with self.subTest(preset=preset.name):
+                cfg = presets.get_config(preset, dataset)[0]
                 model = Model(cfg)
                 datamodule = RandomImageClassificationDataModule(dataset)
 
@@ -117,7 +117,7 @@ class TestExpertsLinearModel(unittest.TestCase):
 
     def test_preset_accepts_search_flags(self):
         configs = ExperimentPresets().get_config(
-            ExperimentOptions.BASELINE,
+            ExperimentPreset.BASELINE,
             config.DATASET_OPTIONS[0],
             RandomSearch(num_samples=2),
         )
@@ -192,15 +192,15 @@ class TestExpertsLinearModel(unittest.TestCase):
 
     def test_recurrent_presets_wrap_full_moe_model(self):
         expected_controllers = {
-            ExperimentOptions.RECURRENT: (False, False),
-            ExperimentOptions.RECURRENT_GATING: (True, False),
-            ExperimentOptions.RECURRENT_HALTING: (False, True),
-            ExperimentOptions.RECURRENT_GATING_HALTING: (True, True),
+            ExperimentPreset.RECURRENT: (False, False),
+            ExperimentPreset.RECURRENT_GATING: (True, False),
+            ExperimentPreset.RECURRENT_HALTING: (False, True),
+            ExperimentPreset.RECURRENT_GATING_HALTING: (True, True),
         }
 
-        for option, (expected_gate, expected_halting) in expected_controllers.items():
-            with self.subTest(option=option.name):
-                cfg = ExperimentPresets().get_config(option)[0]
+        for preset, (expected_gate, expected_halting) in expected_controllers.items():
+            with self.subTest(preset=preset.name):
+                cfg = ExperimentPresets().get_config(preset)[0]
                 recurrent_cfg = cfg.experiment_config.model_config
 
                 self.assertIsInstance(recurrent_cfg, RecurrentLayerConfig)
@@ -223,7 +223,7 @@ class TestExpertsLinearModel(unittest.TestCase):
     def test_new_moe_combination_presets_wire_config(self):
         presets = ExperimentPresets()
 
-        cfg = presets.get_config(ExperimentOptions.SHARED_ROUTER_AFTER_WEIGHT)[0]
+        cfg = presets.get_config(ExperimentPreset.SHARED_ROUTER_AFTER_WEIGHT)[0]
         moe_model_cfg = cfg.experiment_config.model_config
         moe_layer_cfg = moe_model_cfg.stack_config.layer_config.layer_model_config
         self.assertEqual(
@@ -239,13 +239,13 @@ class TestExpertsLinearModel(unittest.TestCase):
             ExpertWeightingPositionOptions.AFTER_EXPERTS,
         )
 
-        cfg = presets.get_config(ExperimentOptions.TOP1_SWITCH_AUX)[0]
+        cfg = presets.get_config(ExperimentPreset.TOP1_SWITCH_AUX)[0]
         moe_layer_cfg = self._moe_layer_config(cfg)
         self.assertEqual(moe_layer_cfg.top_k, 1)
         self.assertFalse(moe_layer_cfg.sampler_config.normalize_probabilities_flag)
         self.assertEqual(moe_layer_cfg.sampler_config.switch_loss_weight, 0.1)
 
-        cfg = presets.get_config(ExperimentOptions.TOP2_BALANCED_AUX)[0]
+        cfg = presets.get_config(ExperimentPreset.TOP2_BALANCED_AUX)[0]
         moe_layer_cfg = self._moe_layer_config(cfg)
         self.assertEqual(moe_layer_cfg.top_k, 2)
         self.assertEqual(
@@ -254,12 +254,12 @@ class TestExpertsLinearModel(unittest.TestCase):
         )
 
         expected_capacity = {
-            ExperimentOptions.CAPACITY_TOP1_ZERO: DroppedTokenOptions.ZEROS,
-            ExperimentOptions.CAPACITY_TOP1_IDENTITY: DroppedTokenOptions.IDENTITY,
+            ExperimentPreset.CAPACITY_TOP1_ZERO: DroppedTokenOptions.ZEROS,
+            ExperimentPreset.CAPACITY_TOP1_IDENTITY: DroppedTokenOptions.IDENTITY,
         }
-        for option, expected_dropped_behavior in expected_capacity.items():
-            with self.subTest(option=option.name):
-                cfg = presets.get_config(option)[0]
+        for preset, expected_dropped_behavior in expected_capacity.items():
+            with self.subTest(preset=preset.name):
+                cfg = presets.get_config(preset)[0]
                 moe_layer_cfg = self._moe_layer_config(cfg)
 
                 self.assertEqual(moe_layer_cfg.top_k, 1)
@@ -272,7 +272,7 @@ class TestExpertsLinearModel(unittest.TestCase):
                     expected_dropped_behavior,
                 )
 
-        cfg = presets.get_config(ExperimentOptions.NOISY_SHARED_ROUTER)[0]
+        cfg = presets.get_config(ExperimentPreset.NOISY_SHARED_ROUTER)[0]
         moe_model_cfg = cfg.experiment_config.model_config
         moe_layer_cfg = self._moe_layer_config(cfg)
         self.assertEqual(
@@ -284,7 +284,7 @@ class TestExpertsLinearModel(unittest.TestCase):
         self.assertTrue(moe_layer_cfg.sampler_config.noisy_topk_flag)
         self.assertTrue(moe_layer_cfg.sampler_config.router_config.noisy_topk_flag)
 
-        cfg = presets.get_config(ExperimentOptions.RESIDUAL_SHARED_ROUTER)[0]
+        cfg = presets.get_config(ExperimentPreset.RESIDUAL_SHARED_ROUTER)[0]
         moe_model_cfg = cfg.experiment_config.model_config
         layer_cfg = moe_model_cfg.stack_config.layer_config
         self.assertEqual(
@@ -295,7 +295,7 @@ class TestExpertsLinearModel(unittest.TestCase):
             layer_cfg.residual_connection_option, ResidualConnectionOptions.RESIDUAL
         )
 
-        cfg = presets.get_config(ExperimentOptions.POST_NORM_AFTER_WEIGHT)[0]
+        cfg = presets.get_config(ExperimentPreset.POST_NORM_AFTER_WEIGHT)[0]
         moe_model_cfg = cfg.experiment_config.model_config
         layer_cfg = moe_model_cfg.stack_config.layer_config
         moe_layer_cfg = layer_cfg.layer_model_config
@@ -313,12 +313,12 @@ class TestExpertsLinearModel(unittest.TestCase):
         dataset = config.DATASET_OPTIONS[0]
         presets = ExperimentPresets()
 
-        for option in (
-            ExperimentOptions.TOP1_SWITCH_AUX,
-            ExperimentOptions.TOP2_BALANCED_AUX,
+        for preset in (
+            ExperimentPreset.TOP1_SWITCH_AUX,
+            ExperimentPreset.TOP2_BALANCED_AUX,
         ):
-            with self.subTest(option=option.name):
-                cfg = presets.get_config(option, dataset)[0]
+            with self.subTest(preset=preset.name):
+                cfg = presets.get_config(preset, dataset)[0]
                 model = Model(cfg)
                 X = self._fake_batch(dataset, batch_size)
 

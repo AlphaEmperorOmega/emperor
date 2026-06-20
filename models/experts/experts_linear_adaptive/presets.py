@@ -31,7 +31,7 @@ if TYPE_CHECKING:
     from emperor.config import ModelConfig
 
 
-class ExperimentOptions(BaseOptions):
+class ExperimentPreset(BaseOptions):
     BASELINE = "Baseline mixture-of-experts with adaptive linear input, output, expert, and sampler stacks."
     GATING = "Mixture-of-experts stack with per-layer gating enabled."
     HALTING = "Mixture-of-experts stack with per-layer halting enabled."
@@ -67,211 +67,127 @@ class ExperimentOptions(BaseOptions):
     )
 
 
-def _lock(option, value, behavior: str) -> PresetLock:
+def _lock(preset, value, behavior: str) -> PresetLock:
     return PresetLock(
         value=value,
         reason=(
-            f"Locked by the {option.name} preset because this preset enables "
+            f"Locked by the {preset.name} preset because this preset enables "
             f"{behavior}."
         ),
     )
 
 
-class ExperimentPresets(ExperimentPresetsBase):
-    PRESET_LOCKS = {
-        ExperimentOptions.GATING: {
-            "stack_gate_flag": _lock(ExperimentOptions.GATING, True, "stack gating"),
-        },
-        ExperimentOptions.HALTING: {
-            "stack_halting_flag": _lock(ExperimentOptions.HALTING, True, "adaptive stack halting"),
-        },
-        ExperimentOptions.GATING_HALTING: {
-            "stack_gate_flag": _lock(ExperimentOptions.GATING_HALTING, True, "stack gating"),
-            "stack_halting_flag": _lock(
-                ExperimentOptions.GATING_HALTING,
-                True,
-                "adaptive stack halting",
-            ),
-        },
-        ExperimentOptions.RECURRENT: {
-            "recurrent_flag": _lock(ExperimentOptions.RECURRENT, True, "recurrent execution"),
-        },
-        ExperimentOptions.RECURRENT_GATING: {
-            "recurrent_flag": _lock(
-                ExperimentOptions.RECURRENT_GATING,
-                True,
-                "recurrent execution",
-            ),
-            "recurrent_gate_flag": _lock(
-                ExperimentOptions.RECURRENT_GATING,
-                True,
-                "recurrent gating",
-            ),
-        },
-        ExperimentOptions.RECURRENT_HALTING: {
-            "recurrent_flag": _lock(
-                ExperimentOptions.RECURRENT_HALTING,
-                True,
-                "recurrent execution",
-            ),
-            "recurrent_halting_flag": _lock(
-                ExperimentOptions.RECURRENT_HALTING,
-                True,
-                "adaptive recurrent halting",
-            ),
-        },
-        ExperimentOptions.RECURRENT_GATING_HALTING: {
-            "recurrent_flag": _lock(
-                ExperimentOptions.RECURRENT_GATING_HALTING,
-                True,
-                "recurrent execution",
-            ),
-            "recurrent_gate_flag": _lock(
-                ExperimentOptions.RECURRENT_GATING_HALTING,
-                True,
-                "recurrent gating",
-            ),
-            "recurrent_halting_flag": _lock(
-                ExperimentOptions.RECURRENT_GATING_HALTING,
-                True,
-                "adaptive recurrent halting",
-            ),
-        },
-        ExperimentOptions.ADAPTIVE_SHARED_ROUTER: {
-            "weight_option": _lock(
-                ExperimentOptions.ADAPTIVE_SHARED_ROUTER,
-                DualModelDynamicWeightConfig,
-                "dual-model dynamic weights",
-            ),
-            "routing_initialization_mode": _lock(
-                ExperimentOptions.ADAPTIVE_SHARED_ROUTER,
-                RoutingInitializationMode.SHARED,
-                "shared expert routing",
-            ),
-        },
-        ExperimentOptions.ADAPTIVE_AFTER_WEIGHT: {
-            "weight_option": _lock(
-                ExperimentOptions.ADAPTIVE_AFTER_WEIGHT,
-                DualModelDynamicWeightConfig,
-                "dual-model dynamic weights",
-            ),
-            "weighting_position_option": _lock(
-                ExperimentOptions.ADAPTIVE_AFTER_WEIGHT,
-                ExpertWeightingPositionOptions.AFTER_EXPERTS,
-                "expert weighting after experts",
-            ),
-        },
-        ExperimentOptions.ADAPTIVE_TOP1_SWITCH: {
-            "weight_option": _lock(
-                ExperimentOptions.ADAPTIVE_TOP1_SWITCH,
-                DualModelDynamicWeightConfig,
-                "dual-model dynamic weights",
-            ),
-            "top_k": _lock(
-                ExperimentOptions.ADAPTIVE_TOP1_SWITCH,
-                1,
-                "top-1 expert routing",
-            ),
-            "sampler_normalize_probabilities_flag": _lock(
-                ExperimentOptions.ADAPTIVE_TOP1_SWITCH,
-                False,
-                "switch-style routing probabilities",
-            ),
-            "sampler_switch_loss_weight": _lock(
-                ExperimentOptions.ADAPTIVE_TOP1_SWITCH,
-                0.1,
-                "switch auxiliary loss",
-            ),
-        },
-        ExperimentOptions.ADAPTIVE_FULL_SHARED: {
-            "weight_option": _lock(
-                ExperimentOptions.ADAPTIVE_FULL_SHARED,
-                DualModelDynamicWeightConfig,
-                "dual-model dynamic weights",
-            ),
-            "bias_option": _lock(
-                ExperimentOptions.ADAPTIVE_FULL_SHARED,
-                AdditiveDynamicBiasConfig,
-                "additive dynamic bias",
-            ),
-            "diagonal_option": _lock(
-                ExperimentOptions.ADAPTIVE_FULL_SHARED,
-                CombinedDynamicDiagonalConfig,
-                "combined dynamic diagonal",
-            ),
-            "row_mask_option": _lock(
-                ExperimentOptions.ADAPTIVE_FULL_SHARED,
-                WeightInformedScoreAxisMaskConfig,
-                "weight-informed row masking",
-            ),
-            "routing_initialization_mode": _lock(
-                ExperimentOptions.ADAPTIVE_FULL_SHARED,
-                RoutingInitializationMode.SHARED,
-                "shared expert routing",
-            ),
-        },
-        ExperimentOptions.ADAPTIVE_FULL_CAPACITY: {
-            "weight_option": _lock(
-                ExperimentOptions.ADAPTIVE_FULL_CAPACITY,
-                DualModelDynamicWeightConfig,
-                "dual-model dynamic weights",
-            ),
-            "bias_option": _lock(
-                ExperimentOptions.ADAPTIVE_FULL_CAPACITY,
-                AdditiveDynamicBiasConfig,
-                "additive dynamic bias",
-            ),
-            "diagonal_option": _lock(
-                ExperimentOptions.ADAPTIVE_FULL_CAPACITY,
-                CombinedDynamicDiagonalConfig,
-                "combined dynamic diagonal",
-            ),
-            "row_mask_option": _lock(
-                ExperimentOptions.ADAPTIVE_FULL_CAPACITY,
-                WeightInformedScoreAxisMaskConfig,
-                "weight-informed row masking",
-            ),
-            "top_k": _lock(
-                ExperimentOptions.ADAPTIVE_FULL_CAPACITY,
-                1,
-                "top-1 capacity routing",
-            ),
-            "capacity_factor": _lock(
-                ExperimentOptions.ADAPTIVE_FULL_CAPACITY,
-                1.0,
-                "expert capacity limiting",
-            ),
-            "dropped_token_behavior": _lock(
-                ExperimentOptions.ADAPTIVE_FULL_CAPACITY,
-                DroppedTokenOptions.ZEROS,
-                "zeroed dropped tokens",
-            ),
-            "sampler_normalize_probabilities_flag": _lock(
-                ExperimentOptions.ADAPTIVE_FULL_CAPACITY,
-                False,
-                "switch-style routing probabilities",
-            ),
-        },
-        ExperimentOptions.ADAPTIVE_BANK_ROUTER: {
-            "weight_option": _lock(
-                ExperimentOptions.ADAPTIVE_BANK_ROUTER,
-                LayeredWeightedBankDynamicWeightConfig,
-                "layered weighted-bank dynamic weights",
-            ),
-            "routing_initialization_mode": _lock(
-                ExperimentOptions.ADAPTIVE_BANK_ROUTER,
-                RoutingInitializationMode.SHARED,
-                "shared expert routing",
-            ),
-        },
+def _preset_locks(
+    preset_overrides: dict["ExperimentPreset", dict[str, object]],
+) -> dict["ExperimentPreset", dict[str, PresetLock]]:
+    return {
+        preset: {
+            field: _lock(preset, value, _PRESET_LOCK_BEHAVIORS[field])
+            for field, value in overrides.items()
+        }
+        for preset, overrides in preset_overrides.items()
+        if overrides
     }
+
+
+_FULL_ADAPTIVE_KWARGS = {
+    "weight_option": DualModelDynamicWeightConfig,
+    "bias_option": AdditiveDynamicBiasConfig,
+    "diagonal_option": CombinedDynamicDiagonalConfig,
+    "row_mask_option": WeightInformedScoreAxisMaskConfig,
+}
+
+
+_PRESET_LOCK_BEHAVIORS = {
+    "stack_gate_flag": "stack gating",
+    "stack_halting_flag": "adaptive stack halting",
+    "recurrent_flag": "recurrent execution",
+    "recurrent_gate_flag": "recurrent gating",
+    "recurrent_halting_flag": "adaptive recurrent halting",
+    "weight_option": "dynamic weights",
+    "bias_option": "dynamic bias",
+    "diagonal_option": "dynamic diagonal",
+    "row_mask_option": "adaptive row masking",
+    "routing_initialization_mode": "shared expert routing",
+    "weighting_position_option": "expert weighting after experts",
+    "top_k": "expert routing",
+    "sampler_normalize_probabilities_flag": "switch-style routing probabilities",
+    "sampler_switch_loss_weight": "switch auxiliary loss",
+    "capacity_factor": "expert capacity limiting",
+    "dropped_token_behavior": "dropped-token behavior",
+}
+
+
+_PRESET_OVERRIDES = {
+    ExperimentPreset.BASELINE: {},
+    ExperimentPreset.GATING: {
+        "stack_gate_flag": True,
+    },
+    ExperimentPreset.HALTING: {
+        "stack_halting_flag": True,
+    },
+    ExperimentPreset.GATING_HALTING: {
+        "stack_gate_flag": True,
+        "stack_halting_flag": True,
+    },
+    ExperimentPreset.RECURRENT: {
+        "recurrent_flag": True,
+    },
+    ExperimentPreset.RECURRENT_GATING: {
+        "recurrent_flag": True,
+        "recurrent_gate_flag": True,
+    },
+    ExperimentPreset.RECURRENT_HALTING: {
+        "recurrent_flag": True,
+        "recurrent_halting_flag": True,
+    },
+    ExperimentPreset.RECURRENT_GATING_HALTING: {
+        "recurrent_flag": True,
+        "recurrent_gate_flag": True,
+        "recurrent_halting_flag": True,
+    },
+    ExperimentPreset.ADAPTIVE_SHARED_ROUTER: {
+        "weight_option": DualModelDynamicWeightConfig,
+        "routing_initialization_mode": RoutingInitializationMode.SHARED,
+    },
+    ExperimentPreset.ADAPTIVE_AFTER_WEIGHT: {
+        "weight_option": DualModelDynamicWeightConfig,
+        "weighting_position_option": ExpertWeightingPositionOptions.AFTER_EXPERTS,
+    },
+    ExperimentPreset.ADAPTIVE_TOP1_SWITCH: {
+        "weight_option": DualModelDynamicWeightConfig,
+        "top_k": 1,
+        "sampler_normalize_probabilities_flag": False,
+        "sampler_switch_loss_weight": 0.1,
+    },
+    ExperimentPreset.ADAPTIVE_FULL_SHARED: {
+        **_FULL_ADAPTIVE_KWARGS,
+        "routing_initialization_mode": RoutingInitializationMode.SHARED,
+    },
+    ExperimentPreset.ADAPTIVE_FULL_CAPACITY: {
+        **_FULL_ADAPTIVE_KWARGS,
+        "top_k": 1,
+        "capacity_factor": 1.0,
+        "dropped_token_behavior": DroppedTokenOptions.ZEROS,
+        "sampler_normalize_probabilities_flag": False,
+    },
+    ExperimentPreset.ADAPTIVE_BANK_ROUTER: {
+        "weight_option": LayeredWeightedBankDynamicWeightConfig,
+        "routing_initialization_mode": RoutingInitializationMode.SHARED,
+    },
+}
+
+
+class ExperimentPresets(ExperimentPresetsBase):
+    PRESET_OVERRIDES = _PRESET_OVERRIDES
+    PRESET_LOCKS = _preset_locks(PRESET_OVERRIDES)
 
     def __init__(self) -> None:
         super().__init__()
 
     def get_config(
         self,
-        model_config_options: ExperimentOptions = ExperimentOptions.BASELINE,
+        model_config_preset: ExperimentPreset = ExperimentPreset.BASELINE,
         dataset: type = Mnist,
         search_mode: SearchMode = None,
         log_folder: str | None = None,
@@ -279,7 +195,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         config_overrides: dict | None = None,
         search_overrides: dict | None = None,
     ) -> list["ModelConfig"]:
-        preset_callback = self._preset_callback_for_option(model_config_options)
+        preset_callback = self._preset_callback_for_preset(model_config_preset)
         return self._create_preset_search_space_configs(
             dataset,
             search_mode,
@@ -287,142 +203,23 @@ class ExperimentPresets(ExperimentPresetsBase):
             search_keys,
             config_overrides=config_overrides,
             search_overrides=search_overrides,
+            model_config_preset=model_config_preset,
         )
 
-    def _preset_callback_for_option(self, option: ExperimentOptions):
-        callbacks = {
-            ExperimentOptions.BASELINE: self._baseline_preset,
-            ExperimentOptions.GATING: self._gating_preset,
-            ExperimentOptions.HALTING: self._halting_preset,
-            ExperimentOptions.GATING_HALTING: self._gating_halting_preset,
-            ExperimentOptions.RECURRENT: self._recurrent_preset,
-            ExperimentOptions.RECURRENT_GATING: self._recurrent_gating_preset,
-            ExperimentOptions.RECURRENT_HALTING: self._recurrent_halting_preset,
-            ExperimentOptions.RECURRENT_GATING_HALTING: self._recurrent_gating_halting_preset,
-            ExperimentOptions.ADAPTIVE_SHARED_ROUTER: self._adaptive_shared_router_preset,
-            ExperimentOptions.ADAPTIVE_AFTER_WEIGHT: self._adaptive_after_weight_preset,
-            ExperimentOptions.ADAPTIVE_TOP1_SWITCH: self._adaptive_top1_switch_preset,
-            ExperimentOptions.ADAPTIVE_FULL_SHARED: self._adaptive_full_shared_preset,
-            ExperimentOptions.ADAPTIVE_FULL_CAPACITY: self._adaptive_full_capacity_preset,
-            ExperimentOptions.ADAPTIVE_BANK_ROUTER: self._adaptive_bank_router_preset,
-        }
-        if option not in callbacks:
+    def _preset_callback_for_preset(self, preset: ExperimentPreset):
+        if preset not in self.PRESET_OVERRIDES:
             raise ValueError(
-                "The specified option is not supported. Please choose a valid `ExperimentOptions`."
+                "The specified preset is not supported. Please choose a valid `ExperimentPreset`."
             )
-        return callbacks[option]
+        return lambda **kwargs: self._preset_for_preset(preset, **kwargs)
 
-    def _baseline_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(**kwargs)
-
-    def _gating_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(**{"stack_gate_flag": True, **kwargs})
-
-    def _halting_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(**{"stack_halting_flag": True, **kwargs})
-
-    def _gating_halting_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(
-            **{"stack_gate_flag": True, "stack_halting_flag": True, **kwargs}
-        )
-
-    def _recurrent_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(**{"recurrent_flag": True, **kwargs})
-
-    def _recurrent_gating_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(
-            **{
-                "recurrent_flag": True,
-                "recurrent_gate_flag": True,
-                **kwargs,
-            },
-        )
-
-    def _recurrent_halting_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(
-            **{
-                "recurrent_flag": True,
-                "recurrent_halting_flag": True,
-                **kwargs,
-            },
-        )
-
-    def _recurrent_gating_halting_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(
-            **{
-                "recurrent_flag": True,
-                "recurrent_gate_flag": True,
-                "recurrent_halting_flag": True,
-                **kwargs,
-            },
-        )
-
-    def _full_adaptive_kwargs(self) -> dict:
-        return {
-            "weight_option": DualModelDynamicWeightConfig,
-            "bias_option": AdditiveDynamicBiasConfig,
-            "diagonal_option": CombinedDynamicDiagonalConfig,
-            "row_mask_option": WeightInformedScoreAxisMaskConfig,
-        }
-
-    def _adaptive_shared_router_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(
-            **{
-                "weight_option": DualModelDynamicWeightConfig,
-                "routing_initialization_mode": RoutingInitializationMode.SHARED,
-                **kwargs,
-            },
-        )
-
-    def _adaptive_after_weight_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(
-            **{
-                "weight_option": DualModelDynamicWeightConfig,
-                "weighting_position_option": ExpertWeightingPositionOptions.AFTER_EXPERTS,
-                **kwargs,
-            },
-        )
-
-    def _adaptive_top1_switch_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(
-            **{
-                "weight_option": DualModelDynamicWeightConfig,
-                "top_k": 1,
-                "sampler_normalize_probabilities_flag": False,
-                "sampler_switch_loss_weight": 0.1,
-                **kwargs,
-            },
-        )
-
-    def _adaptive_full_shared_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(
-            **{
-                **self._full_adaptive_kwargs(),
-                "routing_initialization_mode": RoutingInitializationMode.SHARED,
-                **kwargs,
-            },
-        )
-
-    def _adaptive_full_capacity_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(
-            **{
-                **self._full_adaptive_kwargs(),
-                "top_k": 1,
-                "capacity_factor": 1.0,
-                "dropped_token_behavior": DroppedTokenOptions.ZEROS,
-                "sampler_normalize_probabilities_flag": False,
-                **kwargs,
-            },
-        )
-
-    def _adaptive_bank_router_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(
-            **{
-                "weight_option": LayeredWeightedBankDynamicWeightConfig,
-                "routing_initialization_mode": RoutingInitializationMode.SHARED,
-                **kwargs,
-            },
-        )
+    def _preset_for_preset(
+        self,
+        preset: ExperimentPreset,
+        **kwargs,
+    ) -> "ModelConfig":
+        preset_overrides = self.PRESET_OVERRIDES[preset]
+        return self._preset(**{**kwargs, **preset_overrides})
 
     def _preset(self, **kwargs) -> "ModelConfig":
         return ExpertsLinearAdaptiveConfigBuilder(**kwargs).build()
@@ -431,9 +228,9 @@ class ExperimentPresets(ExperimentPresetsBase):
 class Experiment(ExperimentBase):
     def __init__(
         self,
-        experiment_option: ExperimentOptions | None = None,
+        experiment_preset: ExperimentPreset | None = None,
     ) -> None:
-        super().__init__(experiment_option)
+        super().__init__(experiment_preset)
 
     def _num_epochs(self) -> int:
         return config.NUM_EPOCHS
@@ -447,5 +244,5 @@ class Experiment(ExperimentBase):
     def _preset_generator_instance(self) -> ExperimentPresetsBase:
         return ExperimentPresets()
 
-    def _experiment_enumeration(self) -> type[BaseOptions]:
-        return ExperimentOptions
+    def _experiment_preset_enum(self) -> type[BaseOptions]:
+        return ExperimentPreset

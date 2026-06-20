@@ -8,24 +8,16 @@ from emperor.base.options import (
 )
 from emperor.base.layer.config import (
     LayerConfig,
-    LayerStackConfig,
-    RecurrentLayerConfig,
 )
 from emperor.base.layer.gate import GateConfig, LayerGateOptions
 from emperor.linears.core.config import LinearLayerConfig
-from emperor.experts.config import MixtureOfExpertsModelConfig
-from emperor.experts.core.config import (
-    MixtureOfExpertsConfig,
-    MixtureOfExpertsLayerConfig,
-)
 from emperor.experts.core.options import (
     DroppedTokenOptions,
     ExpertWeightingPositionOptions,
     RoutingInitializationMode,
 )
-from emperor.halting.config import StickBreakingConfig
 from emperor.halting.options import HaltingHiddenStateModeOptions
-from emperor.sampler.core.config import RouterConfig, SamplerConfig
+from models.experts.experts_linear._control_config_factory import ControlConfigFactory
 from models.experts.experts_linear.experiment_config import ExperimentConfig
 
 from typing import TYPE_CHECKING
@@ -236,7 +228,7 @@ class ExpertsLinearConfigBuilder:
             ),
         )
 
-        model_config = self._maybe_wrap_recurrent(self._build_main_model_config())
+        model_config = ControlConfigFactory(self).build()
 
         output_model_config = LayerConfig(
             activation=ActivationOptions.DISABLED,
@@ -260,221 +252,5 @@ class ExpertsLinearConfigBuilder:
                 input_model_config=input_model_config,
                 model_config=model_config,
                 output_model_config=output_model_config,
-            ),
-        )
-
-    def _build_main_model_config(self) -> MixtureOfExpertsModelConfig:
-        return MixtureOfExpertsModelConfig(
-            input_dim=self.hidden_dim,
-            output_dim=self.hidden_dim,
-            top_k=self.top_k,
-            routing_initialization_mode=self.routing_initialization_mode,
-            sampler_config=self._build_sampler_config(),
-            stack_config=self._build_main_stack_config(),
-        )
-
-    def _maybe_wrap_recurrent(
-        self,
-        block_config: MixtureOfExpertsModelConfig,
-    ) -> "MixtureOfExpertsModelConfig | RecurrentLayerConfig":
-        if not self.recurrent_flag:
-            return block_config
-        return RecurrentLayerConfig(
-            max_steps=self.recurrent_max_steps,
-            recurrent_layer_norm_position=self.recurrent_layer_norm_position,
-            block_config=block_config,
-            gate_config=self._build_recurrent_gate_config(),
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
-            halting_config=self._build_halting_config(self.recurrent_halting_flag),
-        )
-
-    def _build_main_stack_config(self) -> LayerStackConfig:
-        gate_config = self._build_gate_config()
-        self._validate_shared_gate_config(gate_config)
-        return LayerStackConfig(
-            input_dim=self.hidden_dim,
-            hidden_dim=self.hidden_dim,
-            output_dim=self.hidden_dim,
-            num_layers=self.stack_num_layers,
-            last_layer_bias_option=self.stack_last_layer_bias_option,
-            apply_output_pipeline_flag=self.stack_apply_output_pipeline_flag,
-            shared_gate_config=self.shared_gate_config,
-            layer_config=MixtureOfExpertsLayerConfig(
-                activation=self.stack_activation,
-                layer_norm_position=self.layer_norm_position,
-                residual_connection_option=self.stack_residual_connection_option,
-                dropout_probability=self.stack_dropout_probability,
-                gate_config=gate_config,
-                halting_config=self._build_halting_config(),
-                layer_model_config=self._build_mixture_of_experts_config(),
-            ),
-        )
-
-    def _validate_shared_gate_config(self, gate_config: GateConfig | None) -> None:
-        if self._is_active_gate_config(
-            self.shared_gate_config
-        ) and self._is_active_gate_config(gate_config):
-            raise ValueError(
-                "shared_gate_config cannot be provided when stack_gate_flag "
-                "enables per-layer gate_config."
-            )
-
-    @staticmethod
-    def _is_active_gate_config(gate_config: GateConfig | None) -> bool:
-        return gate_config is not None
-
-    def _build_mixture_of_experts_config(self) -> MixtureOfExpertsConfig:
-        return MixtureOfExpertsConfig(
-            input_dim=self.hidden_dim,
-            output_dim=self.hidden_dim,
-            top_k=self.top_k,
-            num_experts=self.num_experts,
-            capacity_factor=self.capacity_factor,
-            dropped_token_behavior=self.dropped_token_behavior,
-            compute_expert_mixture_flag=self.compute_expert_mixture_flag,
-            weighted_parameters_flag=self.weighted_parameters_flag,
-            weighting_position_option=self.weighting_position_option,
-            routing_initialization_mode=self.routing_initialization_mode,
-            sampler_config=self._build_sampler_config(),
-            expert_model_config=self._build_expert_model_config(),
-        )
-
-    def _build_gate_config(
-        self,
-        enabled: bool | None = None,
-    ) -> GateConfig | None:
-        if enabled is None:
-            enabled = self.stack_gate_flag
-        if not enabled:
-            return None
-        return GateConfig(
-            model_config=self._build_gate_model_config(enabled=enabled),
-            option=self.gate_option,
-            activation=self.gate_activation,
-        )
-
-    def _build_recurrent_gate_config(self) -> GateConfig | None:
-        if not self.recurrent_gate_flag:
-            return None
-        return GateConfig(
-            model_config=self._build_gate_model_config(
-                enabled=self.recurrent_gate_flag,
-            ),
-            option=self.recurrent_gate_option,
-            activation=self.recurrent_gate_activation,
-        )
-
-    def _build_gate_model_config(
-        self,
-        enabled: bool,
-    ) -> LayerStackConfig | None:
-        if not enabled:
-            return None
-        return LayerStackConfig(
-            hidden_dim=self.gate_hidden_dim,
-            num_layers=self.gate_stack_num_layers,
-            last_layer_bias_option=self.gate_stack_last_layer_bias_option,
-            apply_output_pipeline_flag=self.gate_stack_apply_output_pipeline_flag,
-            layer_config=LayerConfig(
-                activation=self.gate_stack_activation,
-                layer_norm_position=self.gate_layer_norm_position,
-                residual_connection_option=self.gate_stack_residual_connection_option,
-                dropout_probability=self.gate_stack_dropout_probability,
-                halting_config=None,
-                gate_config=None,
-                layer_model_config=LinearLayerConfig(
-                    bias_flag=self.gate_bias_flag,
-                ),
-            ),
-        )
-
-    def _build_halting_config(
-        self,
-        enabled: bool | None = None,
-    ) -> StickBreakingConfig | None:
-        if enabled is None:
-            enabled = self.stack_halting_flag
-        if not enabled:
-            return None
-        return StickBreakingConfig(
-            threshold=self.halting_threshold,
-            halting_dropout=self.halting_dropout,
-            hidden_state_mode=self.halting_hidden_state_mode,
-            halting_gate_config=LayerStackConfig(
-                hidden_dim=self.halting_hidden_dim or self.output_dim,
-                output_dim=self.halting_output_dim,
-                num_layers=self.halting_stack_num_layers,
-                last_layer_bias_option=self.halting_stack_last_layer_bias_option,
-                apply_output_pipeline_flag=self.halting_stack_apply_output_pipeline_flag,
-                layer_config=LayerConfig(
-                    activation=self.halting_stack_activation,
-                    layer_norm_position=self.halting_layer_norm_position,
-                    residual_connection_option=self.halting_stack_residual_connection_option,
-                    dropout_probability=self.halting_stack_dropout_probability,
-                    halting_config=None,
-                    gate_config=None,
-                    layer_model_config=LinearLayerConfig(
-                        bias_flag=self.halting_bias_flag,
-                    ),
-                ),
-            ),
-        )
-
-    def _build_expert_model_config(self) -> LayerStackConfig:
-        return LayerStackConfig(
-            hidden_dim=self.hidden_dim,
-            num_layers=self.expert_stack_num_layers,
-            last_layer_bias_option=self.expert_stack_last_layer_bias_option,
-            apply_output_pipeline_flag=self.expert_stack_apply_output_pipeline_flag,
-            layer_config=LayerConfig(
-                activation=self.expert_stack_activation,
-                layer_norm_position=self.expert_stack_layer_norm_position,
-                residual_connection_option=self.expert_stack_residual_connection_option,
-                dropout_probability=self.expert_stack_dropout_probability,
-                gate_config=None,
-                halting_config=None,
-                layer_model_config=LinearLayerConfig(
-                    bias_flag=self.expert_bias_flag,
-                ),
-            ),
-        )
-
-    def _build_sampler_config(self) -> SamplerConfig:
-        return SamplerConfig(
-            top_k=self.top_k,
-            threshold=self.sampler_threshold,
-            filter_above_threshold=self.sampler_filter_above_threshold,
-            num_topk_samples=self.sampler_num_topk_samples,
-            normalize_probabilities_flag=self.sampler_normalize_probabilities_flag,
-            noisy_topk_flag=self.sampler_noisy_topk_flag,
-            num_experts=self.num_experts,
-            coefficient_of_variation_loss_weight=self.sampler_coefficient_of_variation_loss_weight,
-            switch_loss_weight=self.sampler_switch_loss_weight,
-            zero_centred_loss_weight=self.sampler_zero_centred_loss_weight,
-            mutual_information_loss_weight=self.sampler_mutual_information_loss_weight,
-            router_config=self._build_router_config(),
-        )
-
-    def _build_router_config(self) -> RouterConfig:
-        return RouterConfig(
-            input_dim=self.hidden_dim,
-            num_experts=self.num_experts,
-            noisy_topk_flag=self.router_noisy_topk_flag,
-            model_config=LayerStackConfig(
-                hidden_dim=self.hidden_dim,
-                num_layers=self.sampler_stack_num_layers,
-                last_layer_bias_option=self.sampler_stack_last_layer_bias_option,
-                apply_output_pipeline_flag=self.sampler_stack_apply_output_pipeline_flag,
-                layer_config=LayerConfig(
-                    activation=self.sampler_stack_activation,
-                    layer_norm_position=self.sampler_stack_layer_norm_position,
-                    residual_connection_option=self.sampler_stack_residual_connection_option,
-                    dropout_probability=self.sampler_stack_dropout_probability,
-                    gate_config=None,
-                    halting_config=None,
-                    layer_model_config=LinearLayerConfig(
-                        bias_flag=self.sampler_bias_flag,
-                    ),
-                ),
             ),
         )
