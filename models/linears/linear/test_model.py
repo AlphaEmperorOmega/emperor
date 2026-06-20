@@ -1,5 +1,9 @@
 from emperor.base.layer.residual import ResidualConnectionOptions
+import importlib
+import runpy
+import sys
 import unittest
+from unittest.mock import patch
 
 import torch
 
@@ -16,7 +20,7 @@ from emperor.base.layer import (
     RecurrentLayerConfig,
 )
 from emperor.base.layer.gate import GateConfig, LayerGateOptions
-from emperor.experiments.base import PresetLock, RandomSearch
+from emperor.experiments.base import GridSearch, PresetLock, RandomSearch
 from emperor.halting.options import HaltingHiddenStateModeOptions
 from emperor.linears.core.config import LinearLayerConfig
 from emperor.memory.config import (
@@ -26,7 +30,12 @@ from emperor.memory.config import (
 from emperor.memory.options import MemoryPositionOptions
 from models.linears.linear.model import Model
 from models.linears.linear.config_builder import LinearConfigBuilder
-from models.linears.linear.presets import ExperimentOptions, ExperimentPresets
+from models.linears.linear.presets import (
+    Experiment,
+    ExperimentPreset,
+    ExperimentPresets,
+)
+from models.parser import get_experiment_parser, resolve_experiment_mode
 from models.training_test_utils import (
     RandomImageClassificationDataModule,
     tiny_cpu_trainer,
@@ -34,14 +43,147 @@ from models.training_test_utils import (
 
 
 class TestLinearModel(unittest.TestCase):
-    def test_all_options_forward_one_mnist_batch(self):
+    def test_model_preserves_full_model_config(self):
+        cfg = LinearConfigBuilder().build()
+        model = Model(cfg)
+
+        self.assertIs(model.cfg, cfg)
+        self.assertIs(model.model_cfg, cfg)
+        self.assertIs(model.exp_cfg, cfg.experiment_config)
+
+    def test_boundary_configs_are_separate_linear_layers(self):
+        cfg = LinearConfigBuilder(
+            stack_activation=ActivationOptions.MISH,
+            stack_gate_flag=True,
+            stack_halting_flag=True,
+            memory_flag=True,
+        ).build()
+        exp_cfg = cfg.experiment_config
+
+        self.assertIsNot(exp_cfg.input_model_config, exp_cfg.model_config)
+        self.assertIsNot(exp_cfg.output_model_config, exp_cfg.model_config)
+        self.assertIsNot(exp_cfg.input_model_config, exp_cfg.output_model_config)
+
+        cases = (
+            ("input", exp_cfg.input_model_config, ActivationOptions.MISH),
+            ("output", exp_cfg.output_model_config, ActivationOptions.DISABLED),
+        )
+        for label, boundary_cfg, expected_activation in cases:
+            with self.subTest(label=label):
+                self.assertIsInstance(boundary_cfg, LayerConfig)
+                self.assertEqual(boundary_cfg.activation, expected_activation)
+                self.assertEqual(
+                    boundary_cfg.layer_norm_position,
+                    LayerNormPositionOptions.DISABLED,
+                )
+                self.assertEqual(
+                    boundary_cfg.residual_connection_option,
+                    ResidualConnectionOptions.DISABLED,
+                )
+                self.assertEqual(boundary_cfg.dropout_probability, 0.0)
+                self.assertIsNone(boundary_cfg.gate_config)
+                self.assertIsNone(boundary_cfg.halting_config)
+                self.assertIsNone(boundary_cfg.memory_config)
+                self.assertIsInstance(
+                    boundary_cfg.layer_model_config,
+                    LinearLayerConfig,
+                )
+                self.assertTrue(boundary_cfg.layer_model_config.bias_flag)
+
+    def test_public_imports_remain_available(self):
+        for module_name in (
+            "models.linears.linear.config",
+            "models.linears.linear.presets",
+            "models.linears.linear.model",
+            "models.linears.linear.config_builder",
+            "models.linears.linear.experiment_config",
+        ):
+            with self.subTest(module_name=module_name):
+                module = importlib.import_module(module_name)
+
+                self.assertEqual(module.__name__, module_name)
+
+    def test_experiment_public_model_id_remains_catalog_id(self):
+        self.assertEqual(Experiment()._public_model_id(), "linears/linear")
+
+    def test_module_entrypoint_resolves_cli_without_training(self):
+        with (
+            patch.object(sys, "argv", ["linear", "--preset", "baseline"]),
+            patch(
+                "models.linears.linear.presets.Experiment.train_model",
+                autospec=True,
+            ) as train_model,
+        ):
+            runpy.run_module("models.linears.linear.__main__", run_name="__main__")
+
+        train_model.assert_called_once()
+        experiment = train_model.call_args.args[0]
+        kwargs = train_model.call_args.kwargs
+
+        self.assertEqual(experiment.preset, ExperimentPreset.BASELINE)
+        self.assertIsNone(kwargs["search_mode"])
+        self.assertIsNone(kwargs["log_folder"])
+        self.assertIsNone(kwargs["search_keys"])
+        self.assertEqual(kwargs["config_overrides"], {})
+        self.assertEqual(kwargs["search_overrides"], {})
+        self.assertEqual(kwargs["selected_datasets"], config.DATASET_OPTIONS)
+        self.assertIsNone(kwargs["selected_presets"])
+
+    def test_monitor_options_expose_callback_factories(self):
+        self.assertTrue(config.MONITOR_OPTIONS)
+
+        for option in config.MONITOR_OPTIONS:
+            with self.subTest(option=option.name):
+                self.assertTrue(option.name)
+                self.assertTrue(option.label)
+                self.assertTrue(option.kinds)
+                self.assertTrue(callable(option.callback_factory))
+                self.assertIsNotNone(option.callback_factory())
+
+    def test_cli_legacy_and_stack_alias_flags_remain_available(self):
+        parser = get_experiment_parser(
+            ExperimentPreset.names(),
+            "models.linears.linear",
+        )
+        cases = (
+            ("--bias-flag", "false", "bias_flag", False),
+            ("--stack-bias-flag", "false", "bias_flag", False),
+            ("--hidden-dim", "64", "hidden_dim", 64),
+            ("--stack-hidden-dim", "64", "hidden_dim", 64),
+            (
+                "--layer-norm-position",
+                "AFTER",
+                "layer_norm_position",
+                LayerNormPositionOptions.AFTER,
+            ),
+            (
+                "--stack-layer-norm-position",
+                "AFTER",
+                "layer_norm_position",
+                LayerNormPositionOptions.AFTER,
+            ),
+        )
+
+        for flag, value, override_key, expected_value in cases:
+            with self.subTest(flag=flag):
+                args = parser.parse_args(["--preset", "baseline", flag, value])
+
+                mode = resolve_experiment_mode(
+                    args,
+                    ExperimentPreset,
+                )
+
+                self.assertEqual(mode.config_overrides[override_key], expected_value)
+                self.assertEqual(mode.search_overrides, {})
+
+    def test_all_presets_forward_one_mnist_batch(self):
         batch_size = 4
         presets = ExperimentPresets()
         dataset = config.DATASET_OPTIONS[0]
 
-        for option in ExperimentOptions:
-            with self.subTest(option=option.name):
-                cfg = presets.get_config(option, dataset)[0]
+        for preset in ExperimentPreset:
+            with self.subTest(preset=preset.name):
+                cfg = presets.get_config(preset, dataset)[0]
                 model = Model(cfg)
                 X = self._fake_batch(dataset, batch_size)
 
@@ -56,7 +198,7 @@ class TestLinearModel(unittest.TestCase):
 
         for dataset in config.DATASET_OPTIONS:
             with self.subTest(dataset=dataset.__name__):
-                cfg = presets.get_config(ExperimentOptions.BASELINE, dataset)[0]
+                cfg = presets.get_config(ExperimentPreset.BASELINE, dataset)[0]
                 model = Model(cfg)
                 X = self._fake_batch(dataset, batch_size)
 
@@ -68,9 +210,9 @@ class TestLinearModel(unittest.TestCase):
         presets = ExperimentPresets()
         dataset = config.DATASET_OPTIONS[0]
 
-        for option in ExperimentOptions:
-            with self.subTest(option=option.name):
-                cfg = presets.get_config(option, dataset)[0]
+        for preset in ExperimentPreset:
+            with self.subTest(preset=preset.name):
+                cfg = presets.get_config(preset, dataset)[0]
                 model = Model(cfg)
                 datamodule = RandomImageClassificationDataModule(dataset)
 
@@ -116,7 +258,7 @@ class TestLinearModel(unittest.TestCase):
 
     def test_preset_accepts_search_flags(self):
         configs = ExperimentPresets().get_config(
-            ExperimentOptions.BASELINE,
+            ExperimentPreset.BASELINE,
             config.DATASET_OPTIONS[0],
             RandomSearch(num_samples=2),
         )
@@ -126,15 +268,16 @@ class TestLinearModel(unittest.TestCase):
     def test_non_baseline_options_accept_search_flags(self):
         presets = ExperimentPresets()
         searchable_options = [
-            ExperimentOptions.GATING,
-            ExperimentOptions.HALTING,
-            ExperimentOptions.GATING_HALTING,
+            ExperimentPreset.GATING,
+            ExperimentPreset.HALTING,
+            ExperimentPreset.MEMORY,
+            ExperimentPreset.GATING_HALTING,
         ]
 
-        for option in searchable_options:
-            with self.subTest(option=option.name):
+        for preset in searchable_options:
+            with self.subTest(preset=preset.name):
                 configs = presets.get_config(
-                    option,
+                    preset,
                     config.DATASET_OPTIONS[0],
                     RandomSearch(num_samples=2),
                 )
@@ -144,28 +287,37 @@ class TestLinearModel(unittest.TestCase):
     def test_controller_presets_wire_expected_layer_configs(self):
         presets = ExperimentPresets()
         cases = [
-            (ExperimentOptions.GATING, True, False),
-            (ExperimentOptions.HALTING, False, True),
-            (ExperimentOptions.GATING_HALTING, True, True),
+            (ExperimentPreset.GATING, True, False, False),
+            (ExperimentPreset.HALTING, False, True, False),
+            (ExperimentPreset.MEMORY, False, False, True),
+            (ExperimentPreset.GATING_HALTING, True, True, False),
+            (ExperimentPreset.GATING_MEMORY, True, False, True),
+            (ExperimentPreset.HALTING_MEMORY, False, True, True),
+            (ExperimentPreset.GATING_HALTING_MEMORY, True, True, True),
         ]
 
-        for option, expect_gate, expect_halting in cases:
-            with self.subTest(option=option.name):
-                cfg = presets.get_config(option)[0]
-                layer_config = cfg.experiment_config.model_config.layer_config
+        for preset, expect_gate, expect_halting, expect_memory in cases:
+            with self.subTest(preset=preset.name):
+                cfg = presets.get_config(preset)[0]
+                model_config = cfg.experiment_config.model_config
+                layer_config = model_config.layer_config
 
                 self.assertEqual(layer_config.gate_config is not None, expect_gate)
                 self.assertEqual(
                     layer_config.halting_config is not None,
                     expect_halting,
                 )
+                self.assertEqual(
+                    model_config.shared_memory_config is not None,
+                    expect_memory,
+                )
 
     def test_preset_locks_are_exposed_with_reasons(self):
         presets = ExperimentPresets()
 
-        for option, expected_locks in presets.PRESET_LOCKS.items():
-            with self.subTest(option=option.name):
-                locks = presets.locked_fields(option)
+        for preset, expected_locks in presets.PRESET_LOCKS.items():
+            with self.subTest(preset=preset.name):
+                locks = presets.locked_fields(preset)
 
                 self.assertEqual(set(locks), set(expected_locks))
                 for field, lock in locks.items():
@@ -174,12 +326,13 @@ class TestLinearModel(unittest.TestCase):
                         expected.value if isinstance(expected, PresetLock) else expected
                     )
                     self.assertEqual(lock.value, expected_value)
-                    self.assertIn(option.name, lock.reason)
+                    self.assertIn(preset.name, lock.reason)
 
     def test_gate_config_uses_builder_overrides(self):
         cfg = LinearConfigBuilder(
             stack_gate_flag=True,
             gate_option=LayerGateOptions.MULTIPLIER,
+            gate_stack_independent_flag=True,
             gate_hidden_dim=32,
             gate_layer_norm_position=LayerNormPositionOptions.AFTER,
             gate_stack_num_layers=3,
@@ -243,6 +396,7 @@ class TestLinearModel(unittest.TestCase):
             stack_halting_flag=True,
             halting_threshold=0.5,
             halting_dropout=0.2,
+            halting_stack_independent_flag=True,
             halting_hidden_dim=48,
             halting_output_dim=4,
             halting_layer_norm_position=LayerNormPositionOptions.BEFORE,
@@ -250,7 +404,7 @@ class TestLinearModel(unittest.TestCase):
             halting_stack_activation=ActivationOptions.MISH,
             halting_stack_residual_connection_option=ResidualConnectionOptions.DISABLED,
             halting_stack_dropout_probability=0.3,
-            halting_stack_last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
+            halting_stack_last_layer_bias_option=LastLayerBiasOptions.DISABLED,
             halting_stack_apply_output_pipeline_flag=True,
             halting_bias_flag=False,
         ).build()
@@ -264,7 +418,7 @@ class TestLinearModel(unittest.TestCase):
         self.assertEqual(halting_stack_cfg.output_dim, 4)
         self.assertEqual(halting_stack_cfg.num_layers, 5)
         self.assertEqual(
-            halting_stack_cfg.last_layer_bias_option, LastLayerBiasOptions.DEFAULT
+            halting_stack_cfg.last_layer_bias_option, LastLayerBiasOptions.DISABLED
         )
         self.assertTrue(halting_stack_cfg.apply_output_pipeline_flag)
         self.assertEqual(
@@ -281,7 +435,7 @@ class TestLinearModel(unittest.TestCase):
         self.assertEqual(halting_stack_cfg.layer_config.dropout_probability, 0.3)
         self.assertFalse(halting_stack_cfg.layer_config.layer_model_config.bias_flag)
 
-    def test_controller_stack_defaults_preserve_current_behavior(self):
+    def test_controller_stack_defaults_use_submodule_stack_options(self):
         cfg = LinearConfigBuilder(
             stack_gate_flag=True,
             stack_halting_flag=True,
@@ -293,12 +447,12 @@ class TestLinearModel(unittest.TestCase):
         halting_stack_cfg = model_cfg.layer_config.halting_config.halting_gate_config
         memory_stack_cfg = model_cfg.shared_memory_config.model_config
 
-        self.assertEqual(gate_cfg.hidden_dim, config.HIDDEN_DIM)
+        self.assertEqual(gate_cfg.hidden_dim, config.STACK_HIDDEN_DIM)
         self.assertEqual(gate_cfg.num_layers, 2)
-        self.assertEqual(gate_cfg.layer_config.activation, ActivationOptions.TANH)
+        self.assertEqual(gate_cfg.layer_config.activation, ActivationOptions.GELU)
         self.assertEqual(
             gate_cfg.layer_config.layer_norm_position,
-            config.LAYER_NORM_POSITION,
+            config.STACK_LAYER_NORM_POSITION,
         )
         self.assertEqual(
             gate_cfg.layer_config.residual_connection_option,
@@ -309,10 +463,10 @@ class TestLinearModel(unittest.TestCase):
             gate_cfg.last_layer_bias_option,
             LastLayerBiasOptions.DEFAULT,
         )
-        self.assertTrue(gate_cfg.apply_output_pipeline_flag)
+        self.assertFalse(gate_cfg.apply_output_pipeline_flag)
         self.assertTrue(gate_cfg.layer_config.layer_model_config.bias_flag)
 
-        self.assertEqual(halting_stack_cfg.hidden_dim, config.HIDDEN_DIM)
+        self.assertEqual(halting_stack_cfg.hidden_dim, config.STACK_HIDDEN_DIM)
         self.assertEqual(halting_stack_cfg.num_layers, 2)
         self.assertEqual(
             halting_stack_cfg.layer_config.activation,
@@ -320,7 +474,7 @@ class TestLinearModel(unittest.TestCase):
         )
         self.assertEqual(
             halting_stack_cfg.layer_config.layer_norm_position,
-            LayerNormPositionOptions.DISABLED,
+            config.STACK_LAYER_NORM_POSITION,
         )
         self.assertEqual(
             halting_stack_cfg.last_layer_bias_option,
@@ -331,7 +485,7 @@ class TestLinearModel(unittest.TestCase):
             halting_stack_cfg.layer_config.layer_model_config.bias_flag
         )
 
-        self.assertEqual(memory_stack_cfg.hidden_dim, config.HIDDEN_DIM)
+        self.assertEqual(memory_stack_cfg.hidden_dim, config.STACK_HIDDEN_DIM)
         self.assertEqual(memory_stack_cfg.num_layers, 2)
         self.assertEqual(
             memory_stack_cfg.layer_config.activation,
@@ -339,7 +493,7 @@ class TestLinearModel(unittest.TestCase):
         )
         self.assertEqual(
             memory_stack_cfg.layer_config.layer_norm_position,
-            config.LAYER_NORM_POSITION,
+            config.STACK_LAYER_NORM_POSITION,
         )
         self.assertEqual(
             memory_stack_cfg.last_layer_bias_option,
@@ -347,6 +501,27 @@ class TestLinearModel(unittest.TestCase):
         )
         self.assertFalse(memory_stack_cfg.apply_output_pipeline_flag)
         self.assertTrue(memory_stack_cfg.layer_config.layer_model_config.bias_flag)
+
+    def test_stack_defaults_match_submodule_defaults(self):
+        self.assertEqual(config.SUBMODULE_HIDDEN_DIM, config.STACK_HIDDEN_DIM)
+        self.assertEqual(
+            config.SUBMODULE_LAYER_NORM_POSITION,
+            config.STACK_LAYER_NORM_POSITION,
+        )
+        self.assertEqual(config.SUBMODULE_BIAS_FLAG, config.STACK_BIAS_FLAG)
+
+        cfg = LinearConfigBuilder().build()
+        model_cfg = cfg.experiment_config.model_config
+
+        self.assertEqual(cfg.hidden_dim, config.STACK_HIDDEN_DIM)
+        self.assertEqual(
+            model_cfg.layer_config.layer_norm_position,
+            config.STACK_LAYER_NORM_POSITION,
+        )
+        self.assertEqual(
+            model_cfg.layer_config.layer_model_config.bias_flag,
+            config.STACK_BIAS_FLAG,
+        )
 
     def test_controller_stacks_inherit_submodule_defaults_when_overrides_are_none(
         self,
@@ -366,11 +541,11 @@ class TestLinearModel(unittest.TestCase):
             submodule_stack_last_layer_bias_option=LastLayerBiasOptions.DISABLED,
             submodule_stack_apply_output_pipeline_flag=True,
             submodule_bias_flag=False,
-            gate_stack_activation=None,
-            gate_stack_apply_output_pipeline_flag=None,
-            gate_bias_flag=None,
-            halting_layer_norm_position=None,
-            halting_stack_last_layer_bias_option=None,
+            gate_stack_activation=ActivationOptions.TANH,
+            gate_stack_apply_output_pipeline_flag=False,
+            gate_bias_flag=True,
+            halting_layer_norm_position=LayerNormPositionOptions.DISABLED,
+            halting_stack_last_layer_bias_option=LastLayerBiasOptions.DISABLED,
         ).build()
 
         model_cfg = cfg.experiment_config.model_config
@@ -406,7 +581,7 @@ class TestLinearModel(unittest.TestCase):
                     stack_cfg.layer_config.layer_model_config.bias_flag
                 )
 
-    def test_controller_stack_overrides_win_over_submodule_defaults(self):
+    def test_controller_stack_overrides_require_independent_flags(self):
         cfg = LinearConfigBuilder(
             stack_gate_flag=True,
             stack_halting_flag=True,
@@ -417,6 +592,45 @@ class TestLinearModel(unittest.TestCase):
             gate_stack_activation=ActivationOptions.SILU,
             halting_hidden_dim=33,
             halting_stack_activation=ActivationOptions.MISH,
+            memory_hidden_dim=44,
+            memory_stack_activation=ActivationOptions.TANH,
+        ).build()
+
+        model_cfg = cfg.experiment_config.model_config
+
+        self.assertEqual(model_cfg.layer_config.gate_config.model_config.hidden_dim, 11)
+        self.assertEqual(
+            model_cfg.layer_config.gate_config.model_config.layer_config.activation,
+            ActivationOptions.RELU,
+        )
+        self.assertEqual(
+            model_cfg.layer_config.halting_config.halting_gate_config.hidden_dim,
+            11,
+        )
+        self.assertEqual(
+            model_cfg.layer_config.halting_config.halting_gate_config.layer_config.activation,
+            ActivationOptions.RELU,
+        )
+        self.assertEqual(model_cfg.shared_memory_config.model_config.hidden_dim, 11)
+        self.assertEqual(
+            model_cfg.shared_memory_config.model_config.layer_config.activation,
+            ActivationOptions.RELU,
+        )
+
+    def test_controller_stack_independent_flags_enable_controller_options(self):
+        cfg = LinearConfigBuilder(
+            stack_gate_flag=True,
+            stack_halting_flag=True,
+            memory_flag=True,
+            submodule_hidden_dim=11,
+            submodule_stack_activation=ActivationOptions.RELU,
+            gate_stack_independent_flag=True,
+            gate_hidden_dim=22,
+            gate_stack_activation=ActivationOptions.SILU,
+            halting_stack_independent_flag=True,
+            halting_hidden_dim=33,
+            halting_stack_activation=ActivationOptions.MISH,
+            memory_stack_independent_flag=True,
             memory_hidden_dim=44,
             memory_stack_activation=ActivationOptions.TANH,
         ).build()
@@ -444,22 +658,22 @@ class TestLinearModel(unittest.TestCase):
 
     def test_search_keys_restrict_sweep_to_subset_of_axes(self):
         configs = ExperimentPresets().get_config(
-            ExperimentOptions.BASELINE,
+            ExperimentPreset.BASELINE,
             config.DATASET_OPTIONS[0],
             RandomSearch(num_samples=20),
-            search_keys=["hidden_dim"],
+            search_keys=["stack_hidden_dim"],
         )
 
         learning_rates = {cfg.learning_rate for cfg in configs}
         hidden_dims = {cfg.hidden_dim for cfg in configs}
 
         self.assertEqual(len(learning_rates), 1)
-        self.assertEqual(hidden_dims, set(config.SEARCH_SPACE_HIDDEN_DIM))
+        self.assertEqual(hidden_dims, set(config.SEARCH_SPACE_STACK_HIDDEN_DIM))
 
     def test_search_keys_unknown_axis_raises(self):
         with self.assertRaises(ValueError) as ctx:
             ExperimentPresets().get_config(
-                ExperimentOptions.BASELINE,
+                ExperimentPreset.BASELINE,
                 config.DATASET_OPTIONS[0],
                 RandomSearch(num_samples=2),
                 search_keys=["bogus_axis"],
@@ -467,10 +681,87 @@ class TestLinearModel(unittest.TestCase):
 
         self.assertIn("Unknown", str(ctx.exception))
 
+    def test_gating_rejects_locked_config_override(self):
+        with self.assertRaisesRegex(ValueError, "GATING.*stack_gate_flag.*True.*False"):
+            ExperimentPresets().get_config(
+                ExperimentPreset.GATING,
+                config.DATASET_OPTIONS[0],
+                config_overrides={"stack_gate_flag": False},
+            )
+
+    def test_gating_allows_unlocked_config_override(self):
+        cfg = ExperimentPresets().get_config(
+            ExperimentPreset.GATING,
+            config.DATASET_OPTIONS[0],
+            config_overrides={"learning_rate": 2e-3},
+        )[0]
+
+        self.assertEqual(cfg.learning_rate, 2e-3)
+        self.assertIsNotNone(
+            cfg.experiment_config.model_config.layer_config.gate_config
+        )
+
+    def test_post_norm_rejects_explicit_search_key_for_locked_alias(self):
+        with self.assertRaisesRegex(
+            ValueError,
+            "POST_NORM.*layer_norm_position.*stack_layer_norm_position",
+        ):
+            ExperimentPresets().get_config(
+                ExperimentPreset.POST_NORM,
+                config.DATASET_OPTIONS[0],
+                GridSearch(),
+                search_keys=["stack_layer_norm_position"],
+            )
+
+    def test_post_norm_implicit_search_prunes_locked_layer_norm_axis(self):
+        original_search_spaces = {
+            "SEARCH_SPACE_LEARNING_RATE": config.SEARCH_SPACE_LEARNING_RATE,
+            "SEARCH_SPACE_STACK_HIDDEN_DIM": config.SEARCH_SPACE_STACK_HIDDEN_DIM,
+            "SEARCH_SPACE_STACK_NUM_LAYERS": config.SEARCH_SPACE_STACK_NUM_LAYERS,
+            "SEARCH_SPACE_STACK_DROPOUT_PROBABILITY": (
+                config.SEARCH_SPACE_STACK_DROPOUT_PROBABILITY
+            ),
+            "SEARCH_SPACE_STACK_LAYER_NORM_POSITION": (
+                config.SEARCH_SPACE_STACK_LAYER_NORM_POSITION
+            ),
+            "SEARCH_SPACE_STACK_ACTIVATION": config.SEARCH_SPACE_STACK_ACTIVATION,
+        }
+        try:
+            config.SEARCH_SPACE_LEARNING_RATE = [1e-4, 1e-3]
+            config.SEARCH_SPACE_STACK_HIDDEN_DIM = [16, 32]
+            config.SEARCH_SPACE_STACK_NUM_LAYERS = [2]
+            config.SEARCH_SPACE_STACK_DROPOUT_PROBABILITY = [0.0]
+            config.SEARCH_SPACE_STACK_LAYER_NORM_POSITION = [
+                LayerNormPositionOptions.DISABLED,
+                LayerNormPositionOptions.BEFORE,
+            ]
+            config.SEARCH_SPACE_STACK_ACTIVATION = [ActivationOptions.RELU]
+
+            configs = ExperimentPresets().get_config(
+                ExperimentPreset.POST_NORM,
+                config.DATASET_OPTIONS[0],
+                GridSearch(),
+            )
+        finally:
+            for key, value in original_search_spaces.items():
+                setattr(config, key, value)
+
+        self.assertEqual(len(configs), 4)
+        self.assertEqual({cfg.learning_rate for cfg in configs}, {1e-4, 1e-3})
+        self.assertEqual({cfg.hidden_dim for cfg in configs}, {16, 32})
+        self.assertEqual(
+            {
+                cfg.experiment_config.model_config.layer_config.layer_norm_position
+                for cfg in configs
+            },
+            {LayerNormPositionOptions.AFTER},
+        )
+
     def test_halting_hidden_dim_falls_back_to_output_dim(self):
         cfg = LinearConfigBuilder(
             output_dim=11,
             stack_halting_flag=True,
+            halting_stack_independent_flag=True,
             halting_hidden_dim=0,
         ).build()
 
@@ -508,6 +799,7 @@ class TestLinearModel(unittest.TestCase):
             memory_position_option=MemoryPositionOptions.BEFORE_AFFINE,
             memory_test_time_training_learning_rate=0.02,
             memory_test_time_training_num_inner_steps=2,
+            memory_stack_independent_flag=True,
             memory_hidden_dim=12,
             memory_layer_norm_position=LayerNormPositionOptions.AFTER,
             memory_stack_num_layers=3,
@@ -638,6 +930,7 @@ class TestLinearModel(unittest.TestCase):
             recurrent_flag=True,
             recurrent_gate_flag=True,
             recurrent_gate_option=LayerGateOptions.MULTIPLIER,
+            recurrent_gate_stack_independent_flag=True,
             recurrent_gate_hidden_dim=64,
             recurrent_gate_layer_norm_position=LayerNormPositionOptions.AFTER,
             recurrent_gate_stack_num_layers=4,
@@ -678,6 +971,7 @@ class TestLinearModel(unittest.TestCase):
             recurrent_halting_threshold=0.65,
             recurrent_halting_dropout=0.25,
             recurrent_halting_hidden_state_mode=HaltingHiddenStateModeOptions.ACCUMULATED,
+            recurrent_halting_stack_independent_flag=True,
             recurrent_halting_hidden_dim=72,
             recurrent_halting_output_dim=3,
             recurrent_halting_layer_norm_position=LayerNormPositionOptions.BEFORE,
@@ -685,7 +979,7 @@ class TestLinearModel(unittest.TestCase):
             recurrent_halting_stack_activation=ActivationOptions.MISH,
             recurrent_halting_stack_residual_connection_option=ResidualConnectionOptions.DISABLED,
             recurrent_halting_stack_dropout_probability=0.35,
-            recurrent_halting_stack_last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
+            recurrent_halting_stack_last_layer_bias_option=LastLayerBiasOptions.DISABLED,
             recurrent_halting_stack_apply_output_pipeline_flag=True,
             recurrent_halting_bias_flag=False,
         ).build()
@@ -705,7 +999,7 @@ class TestLinearModel(unittest.TestCase):
         self.assertEqual(halting_stack_cfg.output_dim, 3)
         self.assertEqual(halting_stack_cfg.num_layers, 4)
         self.assertEqual(
-            halting_stack_cfg.last_layer_bias_option, LastLayerBiasOptions.DEFAULT
+            halting_stack_cfg.last_layer_bias_option, LastLayerBiasOptions.DISABLED
         )
         self.assertTrue(halting_stack_cfg.apply_output_pipeline_flag)
         self.assertEqual(
@@ -727,6 +1021,7 @@ class TestLinearModel(unittest.TestCase):
             recurrent_flag=True,
             recurrent_gate_flag=True,
             recurrent_halting_flag=True,
+            gate_stack_independent_flag=True,
             gate_hidden_dim=31,
             gate_layer_norm_position=LayerNormPositionOptions.AFTER,
             gate_stack_num_layers=3,
@@ -736,13 +1031,14 @@ class TestLinearModel(unittest.TestCase):
             gate_stack_last_layer_bias_option=LastLayerBiasOptions.DISABLED,
             gate_stack_apply_output_pipeline_flag=False,
             gate_bias_flag=False,
+            halting_stack_independent_flag=True,
             halting_hidden_dim=41,
             halting_layer_norm_position=LayerNormPositionOptions.BEFORE,
             halting_stack_num_layers=4,
             halting_stack_activation=ActivationOptions.MISH,
             halting_stack_residual_connection_option=ResidualConnectionOptions.RESIDUAL,
             halting_stack_dropout_probability=0.21,
-            halting_stack_last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
+            halting_stack_last_layer_bias_option=LastLayerBiasOptions.DISABLED,
             halting_stack_apply_output_pipeline_flag=True,
             halting_bias_flag=False,
         ).build()
@@ -771,7 +1067,7 @@ class TestLinearModel(unittest.TestCase):
         self.assertEqual(halting_stack_cfg.num_layers, 4)
         self.assertEqual(
             halting_stack_cfg.last_layer_bias_option,
-            LastLayerBiasOptions.DEFAULT,
+            LastLayerBiasOptions.DISABLED,
         )
         self.assertTrue(halting_stack_cfg.apply_output_pipeline_flag)
         self.assertEqual(
@@ -793,12 +1089,16 @@ class TestLinearModel(unittest.TestCase):
         cfg = LinearConfigBuilder(
             recurrent_flag=True,
             stack_gate_flag=True,
+            gate_stack_independent_flag=True,
             gate_hidden_dim=32,
             recurrent_gate_flag=True,
+            recurrent_gate_stack_independent_flag=True,
             recurrent_gate_hidden_dim=64,
             stack_halting_flag=True,
+            halting_stack_independent_flag=True,
             halting_threshold=0.55,
             recurrent_halting_flag=True,
+            recurrent_halting_stack_independent_flag=True,
             recurrent_halting_threshold=0.75,
         ).build()
 
@@ -812,17 +1112,25 @@ class TestLinearModel(unittest.TestCase):
 
     def test_recurrent_presets_wire_optional_controllers(self):
         expected_controllers = {
-            ExperimentOptions.RECURRENT: (False, False),
-            ExperimentOptions.RECURRENT_GATING: (True, False),
-            ExperimentOptions.RECURRENT_HALTING: (False, True),
-            ExperimentOptions.RECURRENT_GATING_HALTING: (True, True),
-            ExperimentOptions.RECURRENT_RESIDUAL: (False, False),
-            ExperimentOptions.RECURRENT_POST_NORM: (False, False),
+            ExperimentPreset.RECURRENT: (False, False, False),
+            ExperimentPreset.RECURRENT_GATING: (True, False, False),
+            ExperimentPreset.RECURRENT_HALTING: (False, True, False),
+            ExperimentPreset.RECURRENT_MEMORY: (False, False, True),
+            ExperimentPreset.RECURRENT_GATING_HALTING: (True, True, False),
+            ExperimentPreset.RECURRENT_GATING_MEMORY: (True, False, True),
+            ExperimentPreset.RECURRENT_HALTING_MEMORY: (False, True, True),
+            ExperimentPreset.RECURRENT_GATING_HALTING_MEMORY: (True, True, True),
+            ExperimentPreset.RECURRENT_RESIDUAL: (False, False, False),
+            ExperimentPreset.RECURRENT_POST_NORM: (False, False, False),
         }
 
-        for option, (expected_gate, expected_halting) in expected_controllers.items():
-            with self.subTest(option=option.name):
-                cfg = ExperimentPresets().get_config(option)[0]
+        for preset, (
+            expected_gate,
+            expected_halting,
+            expected_memory,
+        ) in expected_controllers.items():
+            with self.subTest(preset=preset.name):
+                cfg = ExperimentPresets().get_config(preset)[0]
                 recurrent_cfg = cfg.experiment_config.model_config
 
                 self.assertIsInstance(recurrent_cfg, RecurrentLayerConfig)
@@ -831,32 +1139,44 @@ class TestLinearModel(unittest.TestCase):
                     recurrent_cfg.halting_config is not None,
                     expected_halting,
                 )
+                self.assertEqual(
+                    recurrent_cfg.block_config.shared_memory_config is not None,
+                    expected_memory,
+                )
 
     def test_new_combination_presets_wire_config(self):
         presets = ExperimentPresets()
 
-        cfg = presets.get_config(ExperimentOptions.RESIDUAL_POST_NORM)[0]
+        cfg = presets.get_config(ExperimentPreset.RESIDUAL_POST_NORM)[0]
         layer_cfg = cfg.experiment_config.model_config.layer_config
         self.assertEqual(
             layer_cfg.residual_connection_option, ResidualConnectionOptions.RESIDUAL
         )
         self.assertEqual(layer_cfg.layer_norm_position, LayerNormPositionOptions.AFTER)
 
-        cfg = presets.get_config(ExperimentOptions.RESIDUAL_GATING)[0]
+        cfg = presets.get_config(ExperimentPreset.RESIDUAL_GATING)[0]
         layer_cfg = cfg.experiment_config.model_config.layer_config
         self.assertEqual(
             layer_cfg.residual_connection_option, ResidualConnectionOptions.RESIDUAL
         )
         self.assertIsNotNone(layer_cfg.gate_config)
 
-        cfg = presets.get_config(ExperimentOptions.RESIDUAL_HALTING)[0]
+        cfg = presets.get_config(ExperimentPreset.RESIDUAL_HALTING)[0]
         layer_cfg = cfg.experiment_config.model_config.layer_config
         self.assertEqual(
             layer_cfg.residual_connection_option, ResidualConnectionOptions.RESIDUAL
         )
         self.assertIsNotNone(layer_cfg.halting_config)
 
-        cfg = presets.get_config(ExperimentOptions.RECURRENT_RESIDUAL)[0]
+        cfg = presets.get_config(ExperimentPreset.RESIDUAL_MEMORY)[0]
+        model_cfg = cfg.experiment_config.model_config
+        self.assertEqual(
+            model_cfg.layer_config.residual_connection_option,
+            ResidualConnectionOptions.RESIDUAL,
+        )
+        self.assertIsNotNone(model_cfg.shared_memory_config)
+
+        cfg = presets.get_config(ExperimentPreset.RECURRENT_RESIDUAL)[0]
         recurrent_cfg = cfg.experiment_config.model_config
         self.assertIsInstance(recurrent_cfg, RecurrentLayerConfig)
         self.assertEqual(
@@ -864,7 +1184,7 @@ class TestLinearModel(unittest.TestCase):
             ResidualConnectionOptions.RESIDUAL,
         )
 
-        cfg = presets.get_config(ExperimentOptions.RECURRENT_POST_NORM)[0]
+        cfg = presets.get_config(ExperimentPreset.RECURRENT_POST_NORM)[0]
         recurrent_cfg = cfg.experiment_config.model_config
         self.assertIsInstance(recurrent_cfg, RecurrentLayerConfig)
         self.assertEqual(

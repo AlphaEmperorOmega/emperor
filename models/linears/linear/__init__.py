@@ -1,3 +1,3 @@
-from models.linears.linear.presets import Experiment, ExperimentOptions
+from models.linears.linear.presets import Experiment, ExperimentPreset
 
-__all__ = ["Experiment", "ExperimentOptions"]
+__all__ = ["Experiment", "ExperimentPreset"]

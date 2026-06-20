@@ -14,193 +14,239 @@ if TYPE_CHECKING:
     from emperor.config import ModelConfig
 
 
-def _lock(option, value, behavior: str) -> PresetLock:
+def _lock(preset, value, behavior: str) -> PresetLock:
     return PresetLock(
         value=value,
         reason=(
-            f"Locked by the {option.name} preset because this preset enables "
+            f"Locked by the {preset.name} preset because this preset enables "
             f"{behavior}."
         ),
     )
 
 
-class ExperimentOptions(BaseOptions):
-    BASELINE = "Baseline linear stack preset; supports search-space flags."
-    GATING = "Linear stack with a learned gate applied to hidden-layer outputs."
-    HALTING = "Linear stack with adaptive computation halting enabled."
+def _preset_locks(
+    preset_overrides: dict["ExperimentPreset", dict[str, object]],
+) -> dict["ExperimentPreset", dict[str, PresetLock]]:
+    return {
+        preset: {
+            field: _lock(preset, value, _PRESET_LOCK_BEHAVIORS[field])
+            for field, value in overrides.items()
+        }
+        for preset, overrides in preset_overrides.items()
+        if overrides
+    }
+
+
+class ExperimentPreset(BaseOptions):
+    BASELINE = (
+        "Default config: a GELU hidden linear stack with pre-layer norm and dropout."
+    )
+    GATING = (
+        "Default config with per-layer gating enabled, so each hidden layer "
+        "output is modulated by a learned sigmoid gate."
+    )
+    HALTING = (
+        "Default config with stack halting enabled, so examples can stop early "
+        "as they move through the hidden stack."
+    )
+    MEMORY = (
+        "Default config with shared stack memory enabled across the hidden " "layers."
+    )
     GATING_HALTING = (
-        "Linear stack with both learned gating and adaptive computation halting."
+        "Default config with both per-layer gating and stack halting enabled."
     )
-    RESIDUAL = "Linear stack with residual (skip) connections on hidden layers."
-    POST_NORM = "Linear stack with layer norm applied after each layer (post-norm)."
+    GATING_MEMORY = (
+        "Default config with both per-layer gating and shared stack memory " "enabled."
+    )
+    HALTING_MEMORY = (
+        "Default config with both stack halting and shared stack memory enabled."
+    )
+    GATING_HALTING_MEMORY = (
+        "Default config with per-layer gating, stack halting, and shared stack "
+        "memory enabled."
+    )
+    RESIDUAL = (
+        "Default config with residual skip connections enabled between same-width "
+        "hidden layers."
+    )
+    POST_NORM = (
+        "Default config with layer norm applied after each layer instead of "
+        "before it."
+    )
     RESIDUAL_POST_NORM = (
-        "Linear stack with residual connections and post-layer normalization."
+        "Default config with residual skip connections and post-layer "
+        "normalization enabled."
     )
-    RESIDUAL_GATING = "Linear stack with residual connections and learned gating."
+    RESIDUAL_GATING = (
+        "Default config with residual skip connections and per-layer gating " "enabled."
+    )
     RESIDUAL_HALTING = (
-        "Linear stack with residual connections and adaptive computation halting."
+        "Default config with residual skip connections and stack halting enabled."
     )
-    RECURRENT = "Linear stack applied recurrently for a fixed number of steps."
-    RECURRENT_GATING = "Linear stack applied recurrently with a learned recurrent gate."
+    RESIDUAL_MEMORY = (
+        "Default config with residual skip connections and shared stack memory "
+        "enabled."
+    )
+    RECURRENT = (
+        "Default config wrapped in fixed-step recurrence, reusing the hidden "
+        "stack for each recurrent step."
+    )
+    RECURRENT_GATING = (
+        "Default recurrent config with step-level gating enabled after each "
+        "recurrent update."
+    )
     RECURRENT_HALTING = (
-        "Linear stack applied recurrently with adaptive recurrent halting."
+        "Default recurrent config with recurrent halting enabled, allowing early "
+        "stopping before the max step count."
+    )
+    RECURRENT_MEMORY = (
+        "Default recurrent config whose reused hidden stack has shared memory "
+        "enabled."
     )
     RECURRENT_GATING_HALTING = (
-        "Linear stack applied recurrently with both learned recurrent gating and "
-        "adaptive recurrent halting."
+        "Default recurrent config with both step-level gating and recurrent "
+        "halting enabled."
     )
-    RECURRENT_RESIDUAL = "Residual linear stack applied recurrently."
-    RECURRENT_POST_NORM = "Post-normalized linear stack applied recurrently."
+    RECURRENT_GATING_MEMORY = (
+        "Default recurrent config with step-level gating and shared memory in "
+        "the reused hidden stack."
+    )
+    RECURRENT_HALTING_MEMORY = (
+        "Default recurrent config with recurrent halting and shared memory in "
+        "the reused hidden stack."
+    )
+    RECURRENT_GATING_HALTING_MEMORY = (
+        "Default recurrent config with step-level gating, recurrent halting, "
+        "and shared memory in the reused hidden stack."
+    )
+    RECURRENT_RESIDUAL = (
+        "Default recurrent config using a residual hidden stack at each recurrent "
+        "step."
+    )
+    RECURRENT_POST_NORM = (
+        "Default recurrent config using a post-normalized hidden stack at each "
+        "recurrent step."
+    )
+
+
+_PRESET_LOCK_BEHAVIORS = {
+    "stack_gate_flag": "stack gating",
+    "stack_halting_flag": "adaptive stack halting",
+    "memory_flag": "shared stack memory",
+    "stack_residual_connection_option": "stack residuals",
+    "layer_norm_position": "post-layer normalization",
+    "recurrent_flag": "recurrent execution",
+    "recurrent_gate_flag": "recurrent gating",
+    "recurrent_halting_flag": "adaptive recurrent halting",
+}
+
+_PRESET_OVERRIDES = {
+    ExperimentPreset.BASELINE: {},
+    ExperimentPreset.GATING: {
+        "stack_gate_flag": True,
+    },
+    ExperimentPreset.HALTING: {
+        "stack_halting_flag": True,
+    },
+    ExperimentPreset.MEMORY: {
+        "memory_flag": True,
+    },
+    ExperimentPreset.GATING_HALTING: {
+        "stack_gate_flag": True,
+        "stack_halting_flag": True,
+    },
+    ExperimentPreset.GATING_MEMORY: {
+        "stack_gate_flag": True,
+        "memory_flag": True,
+    },
+    ExperimentPreset.HALTING_MEMORY: {
+        "stack_halting_flag": True,
+        "memory_flag": True,
+    },
+    ExperimentPreset.GATING_HALTING_MEMORY: {
+        "stack_gate_flag": True,
+        "stack_halting_flag": True,
+        "memory_flag": True,
+    },
+    ExperimentPreset.RESIDUAL: {
+        "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+    },
+    ExperimentPreset.POST_NORM: {
+        "layer_norm_position": LayerNormPositionOptions.AFTER,
+    },
+    ExperimentPreset.RESIDUAL_POST_NORM: {
+        "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+        "layer_norm_position": LayerNormPositionOptions.AFTER,
+    },
+    ExperimentPreset.RESIDUAL_GATING: {
+        "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+        "stack_gate_flag": True,
+    },
+    ExperimentPreset.RESIDUAL_HALTING: {
+        "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+        "stack_halting_flag": True,
+    },
+    ExperimentPreset.RESIDUAL_MEMORY: {
+        "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+        "memory_flag": True,
+    },
+    ExperimentPreset.RECURRENT: {
+        "recurrent_flag": True,
+    },
+    ExperimentPreset.RECURRENT_GATING: {
+        "recurrent_flag": True,
+        "recurrent_gate_flag": True,
+    },
+    ExperimentPreset.RECURRENT_HALTING: {
+        "recurrent_flag": True,
+        "recurrent_halting_flag": True,
+    },
+    ExperimentPreset.RECURRENT_MEMORY: {
+        "recurrent_flag": True,
+        "memory_flag": True,
+    },
+    ExperimentPreset.RECURRENT_GATING_HALTING: {
+        "recurrent_flag": True,
+        "recurrent_gate_flag": True,
+        "recurrent_halting_flag": True,
+    },
+    ExperimentPreset.RECURRENT_GATING_MEMORY: {
+        "recurrent_flag": True,
+        "recurrent_gate_flag": True,
+        "memory_flag": True,
+    },
+    ExperimentPreset.RECURRENT_HALTING_MEMORY: {
+        "recurrent_flag": True,
+        "recurrent_halting_flag": True,
+        "memory_flag": True,
+    },
+    ExperimentPreset.RECURRENT_GATING_HALTING_MEMORY: {
+        "recurrent_flag": True,
+        "recurrent_gate_flag": True,
+        "recurrent_halting_flag": True,
+        "memory_flag": True,
+    },
+    ExperimentPreset.RECURRENT_RESIDUAL: {
+        "recurrent_flag": True,
+        "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+    },
+    ExperimentPreset.RECURRENT_POST_NORM: {
+        "recurrent_flag": True,
+        "layer_norm_position": LayerNormPositionOptions.AFTER,
+    },
+}
 
 
 class ExperimentPresets(ExperimentPresetsBase):
-    PRESET_LOCKS = {
-        ExperimentOptions.GATING: {
-            "stack_gate_flag": _lock(ExperimentOptions.GATING, True, "stack gating"),
-        },
-        ExperimentOptions.HALTING: {
-            "stack_halting_flag": _lock(
-                ExperimentOptions.HALTING, True, "adaptive stack halting"
-            ),
-        },
-        ExperimentOptions.GATING_HALTING: {
-            "stack_gate_flag": _lock(
-                ExperimentOptions.GATING_HALTING, True, "stack gating"
-            ),
-            "stack_halting_flag": _lock(
-                ExperimentOptions.GATING_HALTING,
-                True,
-                "adaptive stack halting",
-            ),
-        },
-        ExperimentOptions.RESIDUAL: {
-            "stack_residual_connection_option": _lock(
-                ExperimentOptions.RESIDUAL,
-                ResidualConnectionOptions.RESIDUAL,
-                "stack residuals",
-            ),
-        },
-        ExperimentOptions.POST_NORM: {
-            "layer_norm_position": _lock(
-                ExperimentOptions.POST_NORM,
-                LayerNormPositionOptions.AFTER,
-                "post-layer normalization",
-            ),
-        },
-        ExperimentOptions.RESIDUAL_POST_NORM: {
-            "stack_residual_connection_option": _lock(
-                ExperimentOptions.RESIDUAL_POST_NORM,
-                ResidualConnectionOptions.RESIDUAL,
-                "stack residuals",
-            ),
-            "layer_norm_position": _lock(
-                ExperimentOptions.RESIDUAL_POST_NORM,
-                LayerNormPositionOptions.AFTER,
-                "post-layer normalization",
-            ),
-        },
-        ExperimentOptions.RESIDUAL_GATING: {
-            "stack_residual_connection_option": _lock(
-                ExperimentOptions.RESIDUAL_GATING,
-                ResidualConnectionOptions.RESIDUAL,
-                "stack residuals",
-            ),
-            "stack_gate_flag": _lock(
-                ExperimentOptions.RESIDUAL_GATING,
-                True,
-                "stack gating",
-            ),
-        },
-        ExperimentOptions.RESIDUAL_HALTING: {
-            "stack_residual_connection_option": _lock(
-                ExperimentOptions.RESIDUAL_HALTING,
-                ResidualConnectionOptions.RESIDUAL,
-                "stack residuals",
-            ),
-            "stack_halting_flag": _lock(
-                ExperimentOptions.RESIDUAL_HALTING,
-                True,
-                "adaptive stack halting",
-            ),
-        },
-        ExperimentOptions.RECURRENT: {
-            "recurrent_flag": _lock(
-                ExperimentOptions.RECURRENT, True, "recurrent execution"
-            ),
-        },
-        ExperimentOptions.RECURRENT_GATING: {
-            "recurrent_flag": _lock(
-                ExperimentOptions.RECURRENT_GATING,
-                True,
-                "recurrent execution",
-            ),
-            "recurrent_gate_flag": _lock(
-                ExperimentOptions.RECURRENT_GATING,
-                True,
-                "recurrent gating",
-            ),
-        },
-        ExperimentOptions.RECURRENT_HALTING: {
-            "recurrent_flag": _lock(
-                ExperimentOptions.RECURRENT_HALTING,
-                True,
-                "recurrent execution",
-            ),
-            "recurrent_halting_flag": _lock(
-                ExperimentOptions.RECURRENT_HALTING,
-                True,
-                "adaptive recurrent halting",
-            ),
-        },
-        ExperimentOptions.RECURRENT_GATING_HALTING: {
-            "recurrent_flag": _lock(
-                ExperimentOptions.RECURRENT_GATING_HALTING,
-                True,
-                "recurrent execution",
-            ),
-            "recurrent_gate_flag": _lock(
-                ExperimentOptions.RECURRENT_GATING_HALTING,
-                True,
-                "recurrent gating",
-            ),
-            "recurrent_halting_flag": _lock(
-                ExperimentOptions.RECURRENT_GATING_HALTING,
-                True,
-                "adaptive recurrent halting",
-            ),
-        },
-        ExperimentOptions.RECURRENT_RESIDUAL: {
-            "recurrent_flag": _lock(
-                ExperimentOptions.RECURRENT_RESIDUAL,
-                True,
-                "recurrent execution",
-            ),
-            "stack_residual_connection_option": _lock(
-                ExperimentOptions.RECURRENT_RESIDUAL,
-                ResidualConnectionOptions.RESIDUAL,
-                "stack residuals",
-            ),
-        },
-        ExperimentOptions.RECURRENT_POST_NORM: {
-            "recurrent_flag": _lock(
-                ExperimentOptions.RECURRENT_POST_NORM,
-                True,
-                "recurrent execution",
-            ),
-            "layer_norm_position": _lock(
-                ExperimentOptions.RECURRENT_POST_NORM,
-                LayerNormPositionOptions.AFTER,
-                "post-layer normalization",
-            ),
-        },
-    }
+    PRESET_OVERRIDES = _PRESET_OVERRIDES
+    PRESET_LOCKS = _preset_locks(PRESET_OVERRIDES)
 
     def __init__(self) -> None:
         super().__init__()
 
     def get_config(
         self,
-        model_config_options: ExperimentOptions = ExperimentOptions.BASELINE,
+        model_config_preset: ExperimentPreset = ExperimentPreset.BASELINE,
         dataset: type = Mnist,
         search_mode: SearchMode = None,
         log_folder: str | None = None,
@@ -208,7 +254,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         config_overrides: dict | None = None,
         search_overrides: dict | None = None,
     ) -> list["ModelConfig"]:
-        preset_callback = self._preset_callback_for_option(model_config_options)
+        preset_callback = self._preset_callback_for_preset(model_config_preset)
         return self._create_preset_search_space_configs(
             dataset,
             search_mode,
@@ -216,150 +262,23 @@ class ExperimentPresets(ExperimentPresetsBase):
             search_keys,
             config_overrides=config_overrides,
             search_overrides=search_overrides,
+            model_config_preset=model_config_preset,
         )
 
-    def _preset_callback_for_option(self, option: ExperimentOptions):
-        callbacks = {
-            ExperimentOptions.BASELINE: self._baseline_preset,
-            ExperimentOptions.GATING: self._gating_preset,
-            ExperimentOptions.HALTING: self._halting_preset,
-            ExperimentOptions.GATING_HALTING: self._gating_halting_preset,
-            ExperimentOptions.RESIDUAL: self._residual_preset,
-            ExperimentOptions.POST_NORM: self._post_norm_preset,
-            ExperimentOptions.RESIDUAL_POST_NORM: self._residual_post_norm_preset,
-            ExperimentOptions.RESIDUAL_GATING: self._residual_gating_preset,
-            ExperimentOptions.RESIDUAL_HALTING: self._residual_halting_preset,
-            ExperimentOptions.RECURRENT: self._recurrent_preset,
-            ExperimentOptions.RECURRENT_GATING: self._recurrent_gating_preset,
-            ExperimentOptions.RECURRENT_HALTING: self._recurrent_halting_preset,
-            ExperimentOptions.RECURRENT_GATING_HALTING: self._recurrent_gating_halting_preset,
-            ExperimentOptions.RECURRENT_RESIDUAL: self._recurrent_residual_preset,
-            ExperimentOptions.RECURRENT_POST_NORM: self._recurrent_post_norm_preset,
-        }
-        if option not in callbacks:
+    def _preset_callback_for_preset(self, preset: ExperimentPreset):
+        if preset not in self.PRESET_OVERRIDES:
             raise ValueError(
-                "The specified option is not supported. Please choose a valid `ExperimentOptions`."
+                "The specified preset is not supported. Please choose a valid `ExperimentPreset`."
             )
-        return callbacks[option]
+        return lambda **kwargs: self._preset_for_preset(preset, **kwargs)
 
-    def _baseline_preset(
+    def _preset_for_preset(
         self,
+        preset: ExperimentPreset,
         **kwargs,
     ) -> "ModelConfig":
-        return self._preset(**kwargs)
-
-    def _gating_preset(
-        self,
-        **kwargs,
-    ) -> "ModelConfig":
-        return self._preset(**{"stack_gate_flag": True, **kwargs})
-
-    def _halting_preset(
-        self,
-        **kwargs,
-    ) -> "ModelConfig":
-        return self._preset(**{"stack_halting_flag": True, **kwargs})
-
-    def _gating_halting_preset(
-        self,
-        **kwargs,
-    ) -> "ModelConfig":
-        return self._preset(
-            **{
-                "stack_gate_flag": True,
-                "stack_halting_flag": True,
-                **kwargs,
-            },
-        )
-
-    def _residual_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(
-            **{
-                "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
-                **kwargs,
-            }
-        )
-
-    def _post_norm_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(
-            **{"layer_norm_position": LayerNormPositionOptions.AFTER, **kwargs}
-        )
-
-    def _residual_post_norm_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(
-            **{
-                "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
-                "layer_norm_position": LayerNormPositionOptions.AFTER,
-                **kwargs,
-            },
-        )
-
-    def _residual_gating_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(
-            **{
-                "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
-                "stack_gate_flag": True,
-                **kwargs,
-            },
-        )
-
-    def _residual_halting_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(
-            **{
-                "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
-                "stack_halting_flag": True,
-                **kwargs,
-            },
-        )
-
-    def _recurrent_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(**{"recurrent_flag": True, **kwargs})
-
-    def _recurrent_gating_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(
-            **{
-                "recurrent_flag": True,
-                "recurrent_gate_flag": True,
-                **kwargs,
-            },
-        )
-
-    def _recurrent_halting_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(
-            **{
-                "recurrent_flag": True,
-                "recurrent_halting_flag": True,
-                **kwargs,
-            },
-        )
-
-    def _recurrent_gating_halting_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(
-            **{
-                "recurrent_flag": True,
-                "recurrent_gate_flag": True,
-                "recurrent_halting_flag": True,
-                **kwargs,
-            },
-        )
-
-    def _recurrent_residual_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(
-            **{
-                "recurrent_flag": True,
-                "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
-                **kwargs,
-            },
-        )
-
-    def _recurrent_post_norm_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(
-            **{
-                "recurrent_flag": True,
-                "layer_norm_position": LayerNormPositionOptions.AFTER,
-                **kwargs,
-            },
-        )
+        preset_overrides = self.PRESET_OVERRIDES[preset]
+        return self._preset(**{**kwargs, **preset_overrides})
 
     def _preset(self, **kwargs) -> "ModelConfig":
         return LinearConfigBuilder(**kwargs).build()
@@ -368,9 +287,9 @@ class ExperimentPresets(ExperimentPresetsBase):
 class Experiment(ExperimentBase):
     def __init__(
         self,
-        experiment_option: ExperimentOptions | None = None,
+        experiment_preset: ExperimentPreset | None = None,
     ) -> None:
-        super().__init__(experiment_option)
+        super().__init__(experiment_preset)
 
     def _num_epochs(self) -> int:
         return config.NUM_EPOCHS
@@ -384,5 +303,5 @@ class Experiment(ExperimentBase):
     def _preset_generator_instance(self) -> ExperimentPresetsBase:
         return ExperimentPresets()
 
-    def _experiment_enumeration(self) -> type[BaseOptions]:
-        return ExperimentOptions
+    def _experiment_preset_enum(self) -> type[BaseOptions]:
+        return ExperimentPreset

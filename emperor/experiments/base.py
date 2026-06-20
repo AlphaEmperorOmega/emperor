@@ -266,14 +266,16 @@ class ExperimentPresetsBase:
             **model_config_overrides,
         }
         if search_overrides and search_keys is None:
-            search_space = {**search_overrides}
+            search_space = self._search_space_for_model_params(search_overrides)
         else:
             search_space = self._extract_search_space_from_config(
                 search_mode,
                 search_keys,
                 model_config_preset=model_config_preset,
             )
-            search_space.update(search_overrides or {})
+            search_space.update(
+                self._search_space_for_model_params(search_overrides or {})
+            )
         return create_search_space(
             preset_callback or self._preset,
             base_config,
@@ -344,17 +346,27 @@ class ExperimentPresetsBase:
                 search_keys,
                 full_space,
             )
-            return {key: full_space[key] for key in search_keys}
+            return self._search_space_for_model_params(
+                {key: full_space[key] for key in search_keys}
+            )
 
         full_space = self._dedupe_search_space_aliases(full_space)
 
         locked_fields = self._effective_locked_fields(model_config_preset)
         if not locked_fields:
-            return full_space
+            return self._search_space_for_model_params(full_space)
+        return self._search_space_for_model_params(
+            {
+                key: value
+                for key, value in full_space.items()
+                if self._effective_model_param_name(key) not in locked_fields
+            }
+        )
+
+    def _search_space_for_model_params(self, search_space: dict) -> dict:
         return {
-            key: value
-            for key, value in full_space.items()
-            if self._effective_model_param_name(key) not in locked_fields
+            self._effective_model_param_name(key): value
+            for key, value in search_space.items()
         }
 
     def _effective_model_param_name(self, key: str) -> str:

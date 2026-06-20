@@ -14,7 +14,6 @@ from emperor.base.layer.gate import LayerGateOptions
 from emperor.base.options import ActivationOptions
 from emperor.datasets.image.classification.mnist import Mnist
 from emperor.experiments.base import GridSearch
-from emperor.linears.core.config import AdaptiveLinearLayerConfig
 from lightning.pytorch.callbacks import EarlyStopping
 from models.config_overrides import iter_supported_config_keys
 from models.linears.linear_adaptive import ExperimentPreset
@@ -151,10 +150,10 @@ class TestExperimentConfigOverrideParsing(
                 "MULTIPLIER",
                 "--weight-option",
                 "LowRankDynamicWeightConfig",
-                "--input-layer-model-option",
-                "AdaptiveLinearLayerConfig",
-                "--output-layer-model-option",
-                "None",
+                "--input-layer-adaptive-flag",
+                "true",
+                "--output-layer-adaptive-flag",
+                "false",
                 "--input-layer-weight-option",
                 "LowRankDynamicWeightConfig",
             ]
@@ -176,11 +175,8 @@ class TestExperimentConfigOverrideParsing(
             mode.config_overrides["weight_option"],
             LowRankDynamicWeightConfig,
         )
-        self.assertIs(
-            mode.config_overrides["input_layer_model_option"],
-            AdaptiveLinearLayerConfig,
-        )
-        self.assertIsNone(mode.config_overrides["output_layer_model_option"])
+        self.assertIs(mode.config_overrides["input_layer_adaptive_flag"], True)
+        self.assertIs(mode.config_overrides["output_layer_adaptive_flag"], False)
         self.assertIs(
             mode.config_overrides["input_layer_weight_option"],
             LowRankDynamicWeightConfig,
@@ -251,7 +247,7 @@ class TestExperimentConfigOverrideParsing(
                 "--search-set",
                 "weight_option=None,LowRankDynamicWeightConfig",
                 "--search-set",
-                "input_layer_model_option=None,AdaptiveLinearLayerConfig",
+                "input_layer_adaptive_flag=false,true",
                 "--search-set",
                 "input_layer_weight_option=None,LowRankDynamicWeightConfig",
             ]
@@ -284,8 +280,8 @@ class TestExperimentConfigOverrideParsing(
             [None, LowRankDynamicWeightConfig],
         )
         self.assertEqual(
-            mode.search_overrides["input_layer_model_option"],
-            [None, AdaptiveLinearLayerConfig],
+            mode.search_overrides["input_layer_adaptive_flag"],
+            [False, True],
         )
         self.assertEqual(
             mode.search_overrides["input_layer_weight_option"],
@@ -386,8 +382,15 @@ class TestExperimentConfigOverrideParsing(
         self.assertNotIn("HALTING_FLAG", bert_keys)
         self.assertNotIn("RECURRENT_FLAG", bert_keys)
         self.assertNotIn("BERT_PRETRAINING_TARGET_VOCAB_SIZE", bert_keys)
+        self.assertNotIn("BIAS_FLAG", bert_keys)
         self.assertNotIn("SEQUENCE_LENGTH", vit_keys)
         self.assertNotIn("BIAS_FLAG", vit_keys)
+        self.assertNotIn("TRANSFORMER_NUM_LAYERS", vit_keys)
+        self.assertNotIn("ACTIVATION_FUNCTION", vit_keys)
+        self.assertNotIn("DROPOUT_PROBABILITY", vit_keys)
+        self.assertIn("STACK_NUM_LAYERS", vit_keys)
+        self.assertIn("STACK_ACTIVATION", vit_keys)
+        self.assertIn("STACK_DROPOUT_PROBABILITY", vit_keys)
 
 
 class TestExperimentConfigOverrideApplication(unittest.TestCase):

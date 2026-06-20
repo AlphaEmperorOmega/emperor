@@ -1,13 +1,15 @@
-import torch
-
-from torch import Tensor
-from emperor.base.layer.config import LayerConfig, RecurrentLayerConfig
-from emperor.base.layer.layer import Layer
-from emperor.base.layer import LayerStack, LayerStackConfig
-from emperor.experiments.classifier import ClassifierExperiment
-from models.linears.linear.experiment_config import ExperimentConfig
-
 from typing import TYPE_CHECKING
+
+import torch
+from emperor.base.layer.config import (
+    LayerConfig,
+    LayerStackConfig,
+    RecurrentLayerConfig,
+)
+from emperor.base.layer.layer import Layer
+from emperor.base.utils import Module
+from emperor.experiments.classifier import ClassifierExperiment
+from torch import Tensor
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
@@ -19,64 +21,44 @@ class Model(ClassifierExperiment):
         cfg: "ModelConfig",
     ):
         super().__init__(cfg)
-        self.main_cfg = self.cfg
-        self.cfg: ExperimentConfig = self.cfg.experiment_config
+        self.model_cfg = cfg
+        self.exp_cfg = cfg.experiment_config
         self.input_model = self._build_input_model()
         self.main_model = self._build_model()
         self.output_model = self._build_output_model()
 
     def _build_input_model(self) -> Layer:
-        return self._build_layer(
-            self.cfg.input_model_config,
-            input_dim=self.main_cfg.input_dim,
-            output_dim=self.main_cfg.hidden_dim,
+        return self._build_from_experiment_config(
+            self.exp_cfg.input_model_config,
+            input_dim=self.model_cfg.input_dim,
+            output_dim=self.model_cfg.hidden_dim,
         )
 
-    def _build_model(self) -> "torch.nn.Module":
-        model_config = self.cfg.model_config
-        if isinstance(model_config, RecurrentLayerConfig):
-            return model_config.build(
-                overrides=RecurrentLayerConfig(
-                    input_dim=self.main_cfg.hidden_dim,
-                    output_dim=self.main_cfg.hidden_dim,
-                )
-            )
-        return self._build_layer_stack(
-            model_config,
-            input_dim=self.main_cfg.hidden_dim,
-            output_dim=self.main_cfg.hidden_dim,
+    def _build_model(self) -> Module:
+        return self._build_from_experiment_config(
+            self.exp_cfg.model_config,
+            input_dim=self.model_cfg.hidden_dim,
+            output_dim=self.model_cfg.hidden_dim,
         )
 
     def _build_output_model(self) -> Layer:
-        return self._build_layer(
-            self.cfg.output_model_config,
-            input_dim=self.main_cfg.hidden_dim,
-            output_dim=self.main_cfg.output_dim,
+        return self._build_from_experiment_config(
+            self.exp_cfg.output_model_config,
+            input_dim=self.model_cfg.hidden_dim,
+            output_dim=self.model_cfg.output_dim,
         )
 
-    def _build_layer(
+    def _build_from_experiment_config(
         self,
-        model_config: LayerConfig,
+        model_config: LayerConfig | LayerStackConfig | RecurrentLayerConfig,
         input_dim: int,
         output_dim: int,
-    ) -> Layer:
-        override = LayerConfig(
+    ) -> Module:
+        override = type(model_config)(
             input_dim=input_dim,
             output_dim=output_dim,
         )
-        return Layer(model_config, override)
-
-    def _build_layer_stack(
-        self,
-        model_config: LayerStackConfig,
-        input_dim: int,
-        output_dim: int,
-    ) -> "Layer | LayerStack":
-        override = LayerStackConfig(
-            input_dim=input_dim,
-            output_dim=output_dim,
-        )
-        return LayerStack(model_config, override)
+        return model_config.build(overrides=override)
 
     def forward(
         self,
