@@ -204,7 +204,7 @@ DATASET_OPTIONS: list = [Mnist, FashionMNIST, Cifar10, Cifar100]
 source experiment.sh --model-type linears --model linear_adaptive --all-presets
 ```
 
-Runs every preset in the model's `ExperimentOptions` sequentially across all datasets.
+Runs every preset in the model's `ExperimentPreset` sequentially across all datasets.
 
 ### Run grid search
 
