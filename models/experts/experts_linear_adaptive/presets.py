@@ -32,38 +32,60 @@ if TYPE_CHECKING:
 
 
 class ExperimentPreset(BaseOptions):
-    BASELINE = "Baseline mixture-of-experts with adaptive linear input, output, expert, and sampler stacks."
-    GATING = "Mixture-of-experts stack with per-layer gating enabled."
-    HALTING = "Mixture-of-experts stack with per-layer halting enabled."
-    GATING_HALTING = "Mixture-of-experts stack with both per-layer gating and halting enabled."
-    RECURRENT = "Mixture-of-experts model applied recurrently for a fixed number of steps."
+    BASELINE = (
+        "Default config: a mixture-of-experts classifier with adaptive linear "
+        "input, output, expert, and sampler stacks."
+    )
+    GATING = (
+        "Default config with per-layer gating enabled in the adaptive expert "
+        "stack."
+    )
+    HALTING = (
+        "Default config with stack halting enabled in the adaptive expert stack."
+    )
+    GATING_HALTING = (
+        "Default config with both per-layer gating and stack halting enabled in "
+        "the adaptive expert stack."
+    )
+    RECURRENT = (
+        "Default config wrapped in fixed-step recurrence, reusing the adaptive "
+        "expert stack for each recurrent step."
+    )
     RECURRENT_GATING = (
-        "Mixture-of-experts model applied recurrently with a learned recurrent gate."
+        "Default recurrent config with step-level gating enabled after each "
+        "recurrent update."
     )
     RECURRENT_HALTING = (
-        "Mixture-of-experts model applied recurrently with adaptive recurrent halting."
+        "Default recurrent config with recurrent halting enabled, allowing early "
+        "stopping before the max step count."
     )
     RECURRENT_GATING_HALTING = (
-        "Mixture-of-experts model applied recurrently with both learned recurrent "
-        "gating and adaptive recurrent halting."
+        "Default recurrent config with both step-level gating and recurrent "
+        "halting enabled."
     )
     ADAPTIVE_SHARED_ROUTER = (
-        "Adaptive mixture-of-experts model with dual-model dynamic weights and shared routing."
+        "Default adaptive config with dual-model dynamic weights and shared "
+        "expert routing."
     )
     ADAPTIVE_AFTER_WEIGHT = (
-        "Adaptive mixture-of-experts model with dual-model dynamic weights and weighting after experts."
+        "Default adaptive config with dual-model dynamic weights and expert "
+        "weighting after expert outputs."
     )
     ADAPTIVE_TOP1_SWITCH = (
-        "Adaptive mixture-of-experts model with top-1 routing and switch auxiliary loss."
+        "Default adaptive config with dual-model dynamic weights, top-1 switch "
+        "routing, and switch auxiliary loss enabled."
     )
     ADAPTIVE_FULL_SHARED = (
-        "Adaptive mixture-of-experts model with full adaptive augmentation and shared routing."
+        "Default adaptive config with dynamic weights, bias, diagonal, row mask, "
+        "and shared expert routing."
     )
     ADAPTIVE_FULL_CAPACITY = (
-        "Adaptive mixture-of-experts model with full adaptive augmentation and top-1 capacity limiting."
+        "Default adaptive config with dynamic weights, bias, diagonal, row mask, "
+        "top-1 capacity limiting, and dropped tokens zeroed."
     )
     ADAPTIVE_BANK_ROUTER = (
-        "Adaptive mixture-of-experts model with weighted-bank dynamic weights and shared routing."
+        "Default adaptive config with layered weighted-bank dynamic weights and "
+        "shared expert routing."
     )
 
 

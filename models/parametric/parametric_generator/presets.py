@@ -20,8 +20,14 @@ if TYPE_CHECKING:
 
 
 class ExperimentPreset(BaseOptions):
-    PRESET = "Default parametric generator classifier preset."
-    CONFIG = "Parametric generator classifier config/search preset."
+    PRESET = (
+        "Default config: a parametric generator classifier with a GELU linear "
+        "stack and top-1 adaptive mixture."
+    )
+    CONFIG = (
+        "Config/search preset for overriding parametric generator classifier "
+        "settings."
+    )
 
 
 def _lock(preset, value, field: str) -> PresetLock:

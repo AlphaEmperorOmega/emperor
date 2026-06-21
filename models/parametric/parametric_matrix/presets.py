@@ -20,8 +20,14 @@ if TYPE_CHECKING:
 
 
 class ExperimentPreset(BaseOptions):
-    PRESET = "Default parametric matrix classifier preset."
-    CONFIG = "Parametric matrix classifier config/search preset."
+    PRESET = (
+        "Default config: a parametric matrix classifier with a GELU linear stack "
+        "and top-1 adaptive mixture."
+    )
+    CONFIG = (
+        "Config/search preset for overriding parametric matrix classifier "
+        "settings."
+    )
 
 
 def _lock(preset, value, field: str) -> PresetLock:
