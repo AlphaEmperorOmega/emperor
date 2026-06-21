@@ -4,7 +4,6 @@ import {
   type LogScalarSeries,
   type LogTextSummary,
 } from "@/lib/api";
-import { type LogsWorkspaceState } from "@/features/viewer/state/logs/use-logs-workspace-state";
 
 export type ConfusionMatrixSplit = "train" | "validation";
 
@@ -25,6 +24,14 @@ export type ConfusionMatrixHeatmap = {
 
 export type LogValidationExampleImage = LogImageSummary & {
   textSummary?: LogTextSummary;
+};
+
+type LogTagsData = {
+  runs: Array<{
+    imageTags: string[];
+    textTags?: string[];
+    [key: string]: unknown;
+  }>;
 };
 
 const CONFUSION_MATRIX_TAG_RE =
@@ -140,7 +147,7 @@ export function buildConfusionMatrixHeatmaps({
 }
 
 export function selectValidationExampleMediaTags(
-  tagRuns: LogsWorkspaceState["tagsQuery"]["data"] | undefined,
+  tagRuns: LogTagsData | undefined,
 ) {
   const imageTags = new Set<string>();
   const textTags = new Set<string>();
