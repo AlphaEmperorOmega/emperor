@@ -55,6 +55,23 @@ describe("config field value normalization", () => {
     expect(isDefaultConfigFieldValue(floatField, "0.2")).toBe(true);
   });
 
+  it("preserves invalid numeric text as a raw override value", () => {
+    const intField = field({
+      key: "hidden_dim",
+      type: "int",
+      default: 256,
+    });
+    const floatField = field({
+      key: "dropout",
+      type: "float",
+      default: 0.2,
+    });
+
+    expect(normalizeConfigFieldValue(intField, "abc")).toBe("abc");
+    expect(isDefaultConfigFieldValue(intField, "abc")).toBe(false);
+    expect(overrideValueForConfigField(floatField, "abc")).toBe("abc");
+  });
+
   it("matches bool defaults against equivalent string input", () => {
     const boolField = field({
       key: "gate_flag",
