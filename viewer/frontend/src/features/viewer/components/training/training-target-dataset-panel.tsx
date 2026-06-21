@@ -425,9 +425,11 @@ export function TrainingTargetDatasetPanel({
   const trainingConfigTabs = (
     <SegmentedControl
       aria-label="Training config selector"
+      variant="tablist"
       className="grid w-full grid-cols-2"
     >
       <ViewModeButton
+        variant="tab"
         id={presetsTabId}
         controls={presetsPanelId}
         active={activeTrainingConfigTab === "presets"}
@@ -437,6 +439,7 @@ export function TrainingTargetDatasetPanel({
         Presets
       </ViewModeButton>
       <ViewModeButton
+        variant="tab"
         id={snapshotsTabId}
         controls={snapshotsPanelId}
         active={activeTrainingConfigTab === "snapshots"}

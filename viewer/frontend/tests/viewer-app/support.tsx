@@ -3688,7 +3688,7 @@ export function fullConfigSectionNavRowFor(sectionNav: HTMLElement, name: RegExp
 }
 
 export async function expandTrainingPanel(user: ReturnType<typeof userEvent.setup>) {
-  if (!screen.queryByRole("tab", { name: /new folder/i })) {
+  if (!screen.queryByRole("radio", { name: /new folder/i })) {
     await user.click(await screen.findByRole("button", { name: /^training/i }));
   }
 }
@@ -3803,7 +3803,7 @@ export async function selectNewTrainingLogFolder(
   name = "my_experiment",
 ) {
   await expandTrainingPanel(user);
-  await user.click(screen.getByRole("tab", { name: /new folder/i }));
+  await user.click(screen.getByRole("radio", { name: /new folder/i }));
   const input = screen.getByLabelText(/^new log folder$/i);
   await user.clear(input);
   await user.type(input, name);

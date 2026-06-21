@@ -175,14 +175,14 @@ describe("ViewerApp Overview", () => {
 
     await waitForTargetValue("preset", "baseline");
 
-    const presetsTab = screen.getByRole("tab", { name: "Presets" });
-    const snapshotsTab = screen.getByRole("tab", { name: "Snapshots" });
-    const experimentsTab = screen.getByRole("tab", { name: "Experiments" });
+    const presetsTab = screen.getByRole("radio", { name: "Presets" });
+    const snapshotsTab = screen.getByRole("radio", { name: "Snapshots" });
+    const experimentsTab = screen.getByRole("radio", { name: "Experiments" });
 
-    expect(presetsTab).toHaveAttribute("aria-selected", "true");
-    expect(snapshotsTab).toHaveAttribute("aria-selected", "false");
+    expect(presetsTab).toHaveAttribute("aria-checked", "true");
+    expect(snapshotsTab).toHaveAttribute("aria-checked", "false");
     expect(snapshotsTab).toBeDisabled();
-    expect(experimentsTab).toHaveAttribute("aria-selected", "false");
+    expect(experimentsTab).toHaveAttribute("aria-checked", "false");
     expect(screen.getByRole("combobox", { name: /^preset$/i }))
       .toHaveTextContent("baseline");
     expect(screen.queryByRole("combobox", { name: /^snapshot$/i }))
@@ -203,7 +203,7 @@ describe("ViewerApp Overview", () => {
 
     await waitForTargetValue("preset", "baseline");
 
-    const experimentsTab = screen.getByRole("tab", { name: "Experiments" });
+    const experimentsTab = screen.getByRole("radio", { name: "Experiments" });
     expect(experimentsTab).not.toBeDisabled();
 
     await user.click(experimentsTab);
@@ -247,7 +247,7 @@ describe("ViewerApp Overview", () => {
     const user = userEvent.setup();
 
     await waitForTargetValue("preset", "baseline");
-    await user.click(screen.getByRole("tab", { name: "Snapshots" }));
+    await user.click(screen.getByRole("radio", { name: "Snapshots" }));
     const snapshotControl = await screen.findByRole("combobox", {
       name: /^snapshot$/i,
     });
@@ -307,7 +307,7 @@ describe("ViewerApp Overview", () => {
     const user = userEvent.setup();
 
     await waitForTargetValue("preset", "baseline");
-    await user.click(screen.getByRole("tab", { name: "Snapshots" }));
+    await user.click(screen.getByRole("radio", { name: "Snapshots" }));
     const snapshotControl = await screen.findByRole("combobox", {
       name: /^snapshot$/i,
     });
@@ -382,9 +382,9 @@ describe("ViewerApp Overview", () => {
     await waitForTargetValue("model", "bert_linear");
     await waitForTargetValue("preset", "bert-baseline");
     await waitFor(() =>
-      expect(screen.getByRole("tab", { name: "Snapshots" })).toBeEnabled(),
+      expect(screen.getByRole("radio", { name: "Snapshots" })).toBeEnabled(),
     );
-    await user.click(screen.getByRole("tab", { name: "Snapshots" }));
+    await user.click(screen.getByRole("radio", { name: "Snapshots" }));
     expect(await screen.findByRole("combobox", { name: /^snapshot$/i }))
       .toHaveTextContent("Bert snapshot");
 	    await waitFor(() => {
@@ -403,8 +403,8 @@ describe("ViewerApp Overview", () => {
 
     expect(await waitForTargetValue("model", "bert_linear"))
       .toHaveTextContent("bert_linear");
-    expect(screen.getByRole("tab", { name: "Snapshots" }))
-      .toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("radio", { name: "Snapshots" }))
+      .toHaveAttribute("aria-checked", "true");
     expect(await screen.findByRole("combobox", { name: /^snapshot$/i }))
       .toHaveTextContent("Bert snapshot");
     await waitFor(() => {
@@ -441,7 +441,7 @@ describe("ViewerApp Overview", () => {
     const user = userEvent.setup();
 
     await waitForTargetValue("preset", "baseline");
-    await user.click(screen.getByRole("tab", { name: "Snapshots" }));
+    await user.click(screen.getByRole("radio", { name: "Snapshots" }));
     await waitFor(() => {
       expect(inspectBodies.at(-1)).toEqual({
         modelType: "linears",
@@ -452,7 +452,7 @@ describe("ViewerApp Overview", () => {
       });
     });
 
-    await user.click(screen.getByRole("tab", { name: "Presets" }));
+    await user.click(screen.getByRole("radio", { name: "Presets" }));
 
     await waitFor(() => {
       expect(inspectBodies.at(-1)).toEqual({
@@ -507,9 +507,9 @@ describe("ViewerApp Overview", () => {
     await waitForTargetValue("preset", "bert-baseline");
 
     await waitFor(() =>
-      expect(screen.getByRole("tab", { name: "Snapshots" })).toBeEnabled(),
+      expect(screen.getByRole("radio", { name: "Snapshots" })).toBeEnabled(),
     );
-    await user.click(screen.getByRole("tab", { name: "Snapshots" }));
+    await user.click(screen.getByRole("radio", { name: "Snapshots" }));
     const snapshotControl = await screen.findByRole("combobox", {
       name: /^snapshot$/i,
     });
@@ -680,10 +680,10 @@ describe("ViewerApp Overview", () => {
     renderViewer();
     const user = userEvent.setup();
 
-    const experimentsTab = await screen.findByRole("tab", { name: "Experiments" });
+    const experimentsTab = await screen.findByRole("radio", { name: "Experiments" });
     await waitFor(() => expect(experimentsTab).not.toBeDisabled());
     await user.click(experimentsTab);
-    expect(experimentsTab).toHaveAttribute("aria-selected", "true");
+    expect(experimentsTab).toHaveAttribute("aria-checked", "true");
 
     const experimentRunControl = await screen.findByRole("combobox", {
       name: /^experiment run$/i,
@@ -724,8 +724,8 @@ describe("ViewerApp Overview", () => {
         "test_model_2 · BASELINE · Cifar10 · 2026-06-01 02:03:04",
       ),
     );
-    expect(screen.getByRole("tab", { name: "Experiments" })).toHaveAttribute(
-      "aria-selected",
+    expect(screen.getByRole("radio", { name: "Experiments" })).toHaveAttribute(
+      "aria-checked",
       "true",
     );
     await waitFor(() => {
@@ -793,7 +793,7 @@ describe("ViewerApp Overview", () => {
     renderViewer();
     const user = userEvent.setup();
 
-    const experimentsTab = await screen.findByRole("tab", { name: "Experiments" });
+    const experimentsTab = await screen.findByRole("radio", { name: "Experiments" });
     await waitFor(() => expect(experimentsTab).not.toBeDisabled());
     await user.click(experimentsTab);
     const experimentRunControl = await screen.findByRole("combobox", {
@@ -818,7 +818,7 @@ describe("ViewerApp Overview", () => {
       expect(screen.getByRole("combobox", { name: /^model$/i }))
         .toHaveTextContent("bert_linear"),
     );
-    const refreshedExperimentsTab = screen.getByRole("tab", { name: "Experiments" });
+    const refreshedExperimentsTab = screen.getByRole("radio", { name: "Experiments" });
     await waitFor(() => expect(refreshedExperimentsTab).not.toBeDisabled());
     await user.click(refreshedExperimentsTab);
     const refreshedRunControl = await screen.findByRole("combobox", {
@@ -852,7 +852,7 @@ describe("ViewerApp Overview", () => {
     await user.click(within(dialog).getByRole("button", { name: /^close$/i }));
     expect(screen.getByText(/1 overrides?/i)).toBeInTheDocument();
 
-    const experimentsTab = await screen.findByRole("tab", { name: "Experiments" });
+    const experimentsTab = await screen.findByRole("radio", { name: "Experiments" });
     await waitFor(() => expect(experimentsTab).not.toBeDisabled());
     await user.click(experimentsTab);
     const experimentRunControl = await screen.findByRole("combobox", {

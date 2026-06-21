@@ -8,6 +8,7 @@ export function ViewModeButton({
   disabled = false,
   id,
   onClick,
+  variant = "radio",
 }: {
   active: boolean;
   children: ReactNode;
@@ -15,16 +16,21 @@ export function ViewModeButton({
   disabled?: boolean;
   id?: string;
   onClick: () => void;
+  variant?: "radio" | "tab";
 }) {
+  const isTab = variant === "tab";
+
   return (
     <button
       id={id}
       type="button"
-      role="tab"
-      aria-selected={active}
-      aria-controls={controls}
+      role={isTab ? "tab" : "radio"}
+      aria-selected={isTab ? active : undefined}
+      aria-checked={isTab ? undefined : active}
+      aria-controls={isTab ? controls : undefined}
       disabled={disabled}
       onClick={onClick}
+      tabIndex={isTab ? undefined : active ? 0 : -1}
       className={cn(
         "inline-flex h-[30px] items-center gap-2 rounded-control-sm px-3.5 text-[12.5px] font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-focus",
         active

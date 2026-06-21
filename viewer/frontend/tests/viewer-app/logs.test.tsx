@@ -588,41 +588,41 @@ describe("ViewerApp Logs Workspace", () => {
 
     const chart = await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i });
     const chartGrid = scalarChartGridFor(chart);
-    const layoutControl = screen.getByRole("tablist", { name: /scalar chart layout/i });
-    const fullTab = within(layoutControl).getByRole("tab", { name: /^full$/i });
-    const twoColumnTab = within(layoutControl).getByRole("tab", { name: /^2 col$/i });
-    const threeColumnTab = within(layoutControl).getByRole("tab", { name: /^3 col$/i });
+    const layoutControl = screen.getByRole("radiogroup", { name: /scalar chart layout/i });
+    const fullTab = within(layoutControl).getByRole("radio", { name: /^full$/i });
+    const twoColumnTab = within(layoutControl).getByRole("radio", { name: /^2 col$/i });
+    const threeColumnTab = within(layoutControl).getByRole("radio", { name: /^3 col$/i });
 
     await waitFor(() => {
       expect(logScalarRequests).toHaveLength(2);
     });
-    expect(fullTab).toHaveAttribute("aria-selected", "false");
-    expect(twoColumnTab).toHaveAttribute("aria-selected", "true");
-    expect(threeColumnTab).toHaveAttribute("aria-selected", "false");
+    expect(fullTab).toHaveAttribute("aria-checked", "false");
+    expect(twoColumnTab).toHaveAttribute("aria-checked", "true");
+    expect(threeColumnTab).toHaveAttribute("aria-checked", "false");
     expect(chartGrid).toHaveClass("grid", "gap-4");
     expect(chartGrid).toHaveClass("xl:grid-cols-2");
     expect(chartGrid).not.toHaveClass("2xl:grid-cols-3");
 
     await user.click(fullTab);
 
-    expect(fullTab).toHaveAttribute("aria-selected", "true");
-    expect(twoColumnTab).toHaveAttribute("aria-selected", "false");
+    expect(fullTab).toHaveAttribute("aria-checked", "true");
+    expect(twoColumnTab).toHaveAttribute("aria-checked", "false");
     expect(chartGrid).not.toHaveClass("xl:grid-cols-2");
     expect(chartGrid).not.toHaveClass("2xl:grid-cols-3");
     expect(logScalarRequests).toHaveLength(2);
 
     await user.click(twoColumnTab);
 
-    expect(fullTab).toHaveAttribute("aria-selected", "false");
-    expect(twoColumnTab).toHaveAttribute("aria-selected", "true");
+    expect(fullTab).toHaveAttribute("aria-checked", "false");
+    expect(twoColumnTab).toHaveAttribute("aria-checked", "true");
     expect(chartGrid).toHaveClass("xl:grid-cols-2");
     expect(chartGrid).not.toHaveClass("2xl:grid-cols-3");
     expect(logScalarRequests).toHaveLength(2);
 
     await user.click(threeColumnTab);
 
-    expect(twoColumnTab).toHaveAttribute("aria-selected", "false");
-    expect(threeColumnTab).toHaveAttribute("aria-selected", "true");
+    expect(twoColumnTab).toHaveAttribute("aria-checked", "false");
+    expect(threeColumnTab).toHaveAttribute("aria-checked", "true");
     expect(chartGrid).toHaveClass("xl:grid-cols-2", "2xl:grid-cols-3");
     expect(logScalarRequests).toHaveLength(2);
 

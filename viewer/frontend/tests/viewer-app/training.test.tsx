@@ -546,7 +546,7 @@ describe("ViewerApp Training And Preview", () => {
     const monitorSelector = within(setupSidebar).getByRole("combobox", {
       name: /^training monitors\s+0\s*\/\s*2 selected$/i,
     });
-    const searchModeControl = within(setupSidebar).getByRole("tablist", {
+    const searchModeControl = within(setupSidebar).getByRole("radiogroup", {
       name: /training search mode/i,
     });
     const logFolderSelector = within(setupSidebar).getByRole("combobox", {
@@ -739,10 +739,10 @@ describe("ViewerApp Training And Preview", () => {
       }),
     ).not.toBeInTheDocument();
     expect(within(setupSidebar).queryByLabelText(/hidden dim/i)).not.toBeInTheDocument();
-    expect(within(setupSidebar).getByRole("tab", { name: /new folder/i }))
+    expect(within(setupSidebar).getByRole("radio", { name: /new folder/i }))
       .toBeInTheDocument();
-    await user.click(within(setupSidebar).getByRole("tab", { name: /new folder/i }));
-    const newLogFolderModeControl = within(setupSidebar).getByRole("tablist", {
+    await user.click(within(setupSidebar).getByRole("radio", { name: /new folder/i }));
+    const newLogFolderModeControl = within(setupSidebar).getByRole("radiogroup", {
       name: /log folder mode/i,
     });
     expect(setupSidebar).toContainElement(newLogFolderModeControl);
@@ -1473,7 +1473,7 @@ describe("ViewerApp Training And Preview", () => {
     const user = userEvent.setup();
 
     const details = await expandedTrainingDetailsReady(user);
-    await user.click(within(details).getByRole("tab", { name: /^random$/i }));
+    await user.click(within(details).getByRole("radio", { name: /^random$/i }));
     await user.click(within(details).getByLabelText(/^search axis hidden_dim$/i));
     await findTrainingRunSummary(
       /0\s*\/\s*2 runs;\s*0\s*\/\s*60 epochs/i,
@@ -1680,7 +1680,7 @@ describe("ViewerApp Training And Preview", () => {
 
     const details = await expandedTrainingDetailsReady(user);
     await setTargetHiddenDimOverride(user, "128");
-    await user.click(within(details).getByRole("tab", { name: /^grid$/i }));
+    await user.click(within(details).getByRole("radio", { name: /^grid$/i }));
     await user.click(within(details).getByLabelText(/^search axis hidden_dim$/i));
     expect(within(details).getByText(/1 fixed override replaced by search axes/i))
       .toBeInTheDocument();
@@ -1714,8 +1714,8 @@ describe("ViewerApp Training And Preview", () => {
       .toHaveTextContent("recurrent-gating-halting");
     expect(screen.getAllByText(/1 overrides?/i).length).toBeGreaterThan(0);
     await waitFor(() => {
-      expect(within(details).getByRole("tab", { name: /^off$/i }))
-        .toHaveAttribute("aria-selected", "true");
+      expect(within(details).getByRole("radio", { name: /^off$/i }))
+        .toHaveAttribute("aria-checked", "true");
     });
     expect(inspectBodies).toHaveLength(initialInspectRequestCount);
 
@@ -1893,7 +1893,7 @@ describe("ViewerApp Training And Preview", () => {
       /Cifar 10/i,
     );
 
-    await user.click(within(details).getByRole("tab", { name: /^grid$/i }));
+    await user.click(within(details).getByRole("radio", { name: /^grid$/i }));
     await user.click(within(details).getByLabelText(/^search axis hidden_dim$/i));
 
     expect(within(details).getByText("3 combinations")).toBeInTheDocument();
@@ -1909,7 +1909,7 @@ describe("ViewerApp Training And Preview", () => {
     await setTargetHiddenDimOverride(user, "128");
     await selectNewTrainingLogFolder(user, "grid_search");
 
-    await user.click(within(details).getByRole("tab", { name: /^grid$/i }));
+    await user.click(within(details).getByRole("radio", { name: /^grid$/i }));
     expect(screen.getByRole("button", { name: /start training/i })).toBeDisabled();
 
     await user.click(within(details).getByLabelText(/^search axis hidden_dim$/i));
@@ -1951,7 +1951,7 @@ describe("ViewerApp Training And Preview", () => {
 
     const details = await expandedTrainingDetailsReady(user);
     await selectNewTrainingLogFolder(user, "random_search");
-    await user.click(within(details).getByRole("tab", { name: /^random$/i }));
+    await user.click(within(details).getByRole("radio", { name: /^random$/i }));
     expect(within(details).getByLabelText(/^random search samples$/i)).toHaveValue(10);
 
     await user.click(within(details).getByLabelText(/^search axis stack_activation$/i));
@@ -1979,7 +1979,7 @@ describe("ViewerApp Training And Preview", () => {
 
     const details = await expandedTrainingDetailsReady(user);
     await selectNewTrainingLogFolder(user, "all_axes_search");
-    await user.click(within(details).getByRole("tab", { name: /^grid$/i }));
+    await user.click(within(details).getByRole("radio", { name: /^grid$/i }));
     await user.click(within(details).getByRole("button", { name: /^all axes$/i }));
 
     expect(within(details).getAllByText("3 axes").length).toBeGreaterThan(0);
@@ -2013,7 +2013,7 @@ describe("ViewerApp Training And Preview", () => {
     const details = await expandedTrainingDetailsReady(user);
     await selectNewTrainingLogFolder(user, "post_norm_search");
     await setTrainingMultiSelectOption(user, details, "Presets", /post-norm/i);
-    await user.click(within(details).getByRole("tab", { name: /^grid$/i }));
+    await user.click(within(details).getByRole("radio", { name: /^grid$/i }));
 
     expect(
       (
@@ -2073,7 +2073,7 @@ describe("ViewerApp Training And Preview", () => {
 
     const details = await expandedTrainingDetailsReady(user);
     await selectNewTrainingLogFolder(user, "gating_search");
-    await user.click(within(details).getByRole("tab", { name: /^grid$/i }));
+    await user.click(within(details).getByRole("radio", { name: /^grid$/i }));
     await user.click(within(details).getByLabelText(/^search axis hidden_dim$/i));
     await user.click(
       within(details).getByLabelText(/^search axis stack_layer_norm_position$/i),
@@ -2137,7 +2137,7 @@ describe("ViewerApp Training And Preview", () => {
 
     const details = await expandedTrainingDetailsReady(user);
     await selectNewTrainingLogFolder(user, "large_grid_search");
-    await user.click(within(details).getByRole("tab", { name: /^grid$/i }));
+    await user.click(within(details).getByRole("radio", { name: /^grid$/i }));
     await user.click(within(details).getByRole("button", { name: /^all axes$/i }));
 
     expect(within(details).getAllByText("110 planned runs").length).toBeGreaterThan(0);
@@ -2198,7 +2198,7 @@ describe("ViewerApp Training And Preview", () => {
     expect(startButton).toBeDisabled();
 
     await expandTrainingPanel(user);
-    await user.click(screen.getByRole("tab", { name: /new folder/i }));
+    await user.click(screen.getByRole("radio", { name: /new folder/i }));
     const input = screen.getByLabelText(/^new log folder$/i);
 
     for (const value of [
@@ -2243,7 +2243,7 @@ describe("ViewerApp Training And Preview", () => {
     const details = await expandedTrainingDetails(user);
     expect(within(details).getByText(/training is disabled/i)).toBeInTheDocument();
 
-    await user.click(within(details).getByRole("tab", { name: /new folder/i }));
+    await user.click(within(details).getByRole("radio", { name: /new folder/i }));
     await user.type(within(details).getByLabelText(/^new log folder$/i), "hosted_disabled");
 
     expect(startButton).toBeDisabled();
@@ -2262,7 +2262,7 @@ describe("ViewerApp Training And Preview", () => {
     const details = await expandedTrainingDetails(user);
     expect(within(details).getByText("No datasets for this model")).toBeInTheDocument();
 
-    await user.click(within(details).getByRole("tab", { name: /new folder/i }));
+    await user.click(within(details).getByRole("radio", { name: /new folder/i }));
     await user.type(within(details).getByLabelText(/^new log folder$/i), "no_dataset_run");
 
     expect(screen.getByRole("button", { name: /start training/i })).toBeDisabled();

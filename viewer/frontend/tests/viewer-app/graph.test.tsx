@@ -53,7 +53,7 @@ describe("ViewerApp Graph Workspace", () => {
     expect(await screen.findByText("main_model.0")).toBeInTheDocument();
     expect(operationGraphBodies).toHaveLength(0);
 
-    await user.click(screen.getByRole("tab", { name: /operations/i }));
+    await user.click(screen.getByRole("radio", { name: /operations/i }));
 
     await waitFor(() => expect(operationGraphBodies).toHaveLength(1));
     expect(screen.getByTestId("flow")).toHaveAttribute(
@@ -71,7 +71,7 @@ describe("ViewerApp Graph Workspace", () => {
     expect(screen.getByText("main_model.0.model")).toBeInTheDocument();
     expect(screen.queryByText("aten.linear.default")).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("tablist", { name: /graph detail/i }),
+      screen.queryByRole("radiogroup", { name: /graph detail/i }),
     ).not.toBeInTheDocument();
 
     await user.click(
@@ -83,9 +83,9 @@ describe("ViewerApp Graph Workspace", () => {
     expect(await screen.findByText("aten.linear.default")).toBeInTheDocument();
     expect(screen.getByText("1 x 128")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: /^module$/i }));
+    await user.click(screen.getByRole("radio", { name: /^module$/i }));
     expect(await screen.findByText("main_model.0")).toBeInTheDocument();
-    await user.click(screen.getByRole("tab", { name: /operations/i }));
+    await user.click(screen.getByRole("radio", { name: /operations/i }));
     expect(operationGraphBodies).toHaveLength(1);
     expect(screen.getByText("aten.linear.default")).toBeInTheDocument();
   });
@@ -98,10 +98,10 @@ describe("ViewerApp Graph Workspace", () => {
     const user = userEvent.setup();
 
     expect(await screen.findByText("main_model.0")).toBeInTheDocument();
-    await user.click(screen.getByRole("tab", { name: /operations/i }));
+    await user.click(screen.getByRole("radio", { name: /operations/i }));
     await waitFor(() => expect(operationGraphBodies).toHaveLength(1));
 
-    await user.click(screen.getByRole("tab", { name: /parameters/i }));
+    await user.click(screen.getByRole("radio", { name: /parameters/i }));
     expect(
       await screen.findByRole("heading", { name: /node details/i }),
     ).toBeInTheDocument();
@@ -116,7 +116,7 @@ describe("ViewerApp Graph Workspace", () => {
     );
     expect(operationGraphBodies).toHaveLength(1);
 
-    await user.click(screen.getByRole("tab", { name: /^graph$/i }));
+    await user.click(screen.getByRole("radio", { name: /^graph$/i }));
     await waitFor(() => expect(operationGraphBodies).toHaveLength(2));
 	    expect(operationGraphBodies[1]).toEqual({
 	      modelType: "linears",
@@ -133,14 +133,14 @@ describe("ViewerApp Graph Workspace", () => {
     const user = userEvent.setup();
 
     expect(await screen.findByText("main_model.0")).toBeInTheDocument();
-    await user.click(screen.getByRole("tab", { name: /operations/i }));
+    await user.click(screen.getByRole("radio", { name: /operations/i }));
 
     expect(await screen.findByText("Operations unavailable")).toBeInTheDocument();
     expect(
       screen.getByText("torch.export.export failed: unsupported control flow"),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: /^module$/i }));
+    await user.click(screen.getByRole("radio", { name: /^module$/i }));
     expect(await screen.findByText("main_model.0")).toBeInTheDocument();
   });
 
@@ -317,7 +317,7 @@ describe("ViewerApp Graph Workspace", () => {
     expect(within(layerNode).queryByText("Dropout")).not.toBeInTheDocument();
     expect(within(layerNode).queryByText("LayerNorm")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: /full/i }));
+    await user.click(screen.getByRole("radio", { name: /full/i }));
 
     const fullLayerNode = screen.getByTestId("node-main_model.0");
     expect(within(fullLayerNode).getByText("Dropout")).toBeInTheDocument();
@@ -341,7 +341,7 @@ describe("ViewerApp Graph Workspace", () => {
     expect(within(screen.getByTestId("node-main_model.0")).getByText("activation"))
       .toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: /simple/i }));
+    await user.click(screen.getByRole("radio", { name: /simple/i }));
 
     const layerNode = await screen.findByTestId("node-main_model.0");
     expect(within(layerNode).getByText("Layer")).toBeInTheDocument();
@@ -362,7 +362,7 @@ describe("ViewerApp Graph Workspace", () => {
     expect(within(layerNode).queryByText("activation")).not.toBeInTheDocument();
     expect(screen.getByText("dims: 128 -> 128")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: /basic/i }));
+    await user.click(screen.getByRole("radio", { name: /basic/i }));
 
     const basicLayerNode = screen.getByTestId("node-main_model.0");
     expect(within(basicLayerNode).getByRole("button", { name: /details for main_model\.0/i }))
@@ -377,7 +377,7 @@ describe("ViewerApp Graph Workspace", () => {
     renderViewer();
     const user = userEvent.setup();
 
-    await user.click(await screen.findByRole("tab", { name: /simple/i }));
+    await user.click(await screen.findByRole("radio", { name: /simple/i }));
 
     const stackNode = await screen.findByTestId("node-main_model");
     expect(within(stackNode).getByText("Main Model")).toBeInTheDocument();
@@ -397,7 +397,7 @@ describe("ViewerApp Graph Workspace", () => {
     renderViewer();
     const user = userEvent.setup();
 
-    await user.click(await screen.findByRole("tab", { name: /simple/i }));
+    await user.click(await screen.findByRole("radio", { name: /simple/i }));
 
     const layerNode = await screen.findByTestId("node-main_model.0");
     await user.click(
@@ -598,7 +598,7 @@ describe("ViewerApp Graph Workspace", () => {
     renderViewer();
     const user = userEvent.setup();
 
-    await user.click(screen.getByRole("tab", { name: /full/i }));
+    await user.click(screen.getByRole("radio", { name: /full/i }));
     expect(await screen.findByTestId("node-loss_fn")).toBeInTheDocument();
 
     const layerNode = await screen.findByTestId("node-main_model.0");
@@ -741,7 +741,7 @@ describe("ViewerApp Graph Workspace", () => {
     expect(await screen.findByText("main_model.0")).toBeInTheDocument();
     expect(screen.queryByText("main_model.0.model")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: /entire/i }));
+    await user.click(screen.getByRole("radio", { name: /entire/i }));
     expect(await screen.findByText("main_model.0.model")).toBeInTheDocument();
     expect(await screen.findByText("main_model.0.processor.projection")).toBeInTheDocument();
     expect(
@@ -751,7 +751,7 @@ describe("ViewerApp Graph Workspace", () => {
     expect(screen.queryByText("LayerNorm")).not.toBeInTheDocument();
     expect(screen.queryByText("CrossEntropyLoss")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: /opened/i }));
+    await user.click(screen.getByRole("radio", { name: /opened/i }));
     expect(screen.queryByText("main_model.0.model")).not.toBeInTheDocument();
   });
 
@@ -761,12 +761,12 @@ describe("ViewerApp Graph Workspace", () => {
     const user = userEvent.setup();
 
     expect(await screen.findByText("main_model.0")).toBeInTheDocument();
-    await user.click(screen.getByRole("tab", { name: /entire/i }));
+    await user.click(screen.getByRole("radio", { name: /entire/i }));
 
     await user.click(await screen.findByRole("button", { name: /^select main_model\.0$/i }));
     expect(screen.getByText("dims: 128 -> 128")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: /opened/i }));
+    await user.click(screen.getByRole("radio", { name: /opened/i }));
     expect(screen.queryByText("main_model.0.model")).not.toBeInTheDocument();
   });
 
@@ -782,7 +782,7 @@ describe("ViewerApp Graph Workspace", () => {
     expect(screen.queryByText("Dropout")).not.toBeInTheDocument();
     expect(screen.queryByText("LayerNorm")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: /full/i }));
+    await user.click(screen.getByRole("radio", { name: /full/i }));
     expect(await screen.findByTestId("node-main_model.0.dropout_module")).toBeInTheDocument();
     expect(await screen.findByTestId("node-main_model.0.layer_norm_module")).toBeInTheDocument();
     expect(await screen.findByTestId("node-main_model.0.processor")).toBeInTheDocument();
@@ -791,7 +791,7 @@ describe("ViewerApp Graph Workspace", () => {
     ).not.toBeInTheDocument();
     expect(await screen.findByTestId("node-loss_fn")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: /basic/i }));
+    await user.click(screen.getByRole("radio", { name: /basic/i }));
     expect(screen.queryByText("Dropout")).not.toBeInTheDocument();
     expect(screen.queryByText("LayerNorm")).not.toBeInTheDocument();
     expect(screen.queryByText("SelfAttentionProcessor")).not.toBeInTheDocument();
@@ -803,13 +803,13 @@ describe("ViewerApp Graph Workspace", () => {
     renderViewer();
     const user = userEvent.setup();
 
-    await user.click(await screen.findByRole("tab", { name: /entire/i }));
+    await user.click(await screen.findByRole("radio", { name: /entire/i }));
     expect(await screen.findByText("main_model.0.model")).toBeInTheDocument();
     expect(screen.queryByText("Dropout")).not.toBeInTheDocument();
     expect(screen.queryByText("LayerNorm")).not.toBeInTheDocument();
     expect(screen.queryByText("CrossEntropyLoss")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: /full/i }));
+    await user.click(screen.getByRole("radio", { name: /full/i }));
     expect(await screen.findByTestId("node-main_model.0.dropout_module")).toBeInTheDocument();
     expect(await screen.findByTestId("node-main_model.0.layer_norm_module")).toBeInTheDocument();
     expect(await screen.findByTestId("node-loss_fn")).toBeInTheDocument();
@@ -825,12 +825,12 @@ describe("ViewerApp Graph Workspace", () => {
     await user.click(
       await screen.findByRole("button", { name: /select and expand main_model\.0/i }),
     );
-    await user.click(screen.getByRole("tab", { name: /full/i }));
+    await user.click(screen.getByRole("radio", { name: /full/i }));
     expect(await screen.findByTestId("node-main_model.0.dropout_module")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /collapse all/i }));
-    expect(screen.getByRole("tab", { name: /full/i })).toHaveAttribute(
-      "aria-selected",
+    expect(screen.getByRole("radio", { name: /full/i })).toHaveAttribute(
+      "aria-checked",
       "true",
     );
     expect(screen.queryByTestId("node-main_model.0.dropout_module")).not.toBeInTheDocument();
@@ -845,14 +845,14 @@ describe("ViewerApp Graph Workspace", () => {
     const user = userEvent.setup();
 
     expect(await screen.findByTestId("flow")).toBeInTheDocument();
-    expect(screen.queryByRole("tablist", { name: /visualization mode/i })).not.toBeInTheDocument();
-    const graphKindTabs = screen.getByRole("tablist", { name: /graph kind/i });
-    const graphDetailTabs = screen.getByRole("tablist", { name: /graph detail/i });
-    const graphScopeTabs = screen.getByRole("tablist", { name: /graph scope/i });
+    expect(screen.queryByRole("radiogroup", { name: /visualization mode/i })).not.toBeInTheDocument();
+    const graphKindTabs = screen.getByRole("radiogroup", { name: /graph kind/i });
+    const graphDetailTabs = screen.getByRole("radiogroup", { name: /graph detail/i });
+    const graphScopeTabs = screen.getByRole("radiogroup", { name: /graph scope/i });
     expect([
-      ...within(graphKindTabs).getAllByRole("tab"),
-      ...within(graphDetailTabs).getAllByRole("tab"),
-      ...within(graphScopeTabs).getAllByRole("tab"),
+      ...within(graphKindTabs).getAllByRole("radio"),
+      ...within(graphDetailTabs).getAllByRole("radio"),
+      ...within(graphScopeTabs).getAllByRole("radio"),
     ].map((tab) => tab.textContent)).toEqual([
       "Module",
       "Operations",
@@ -863,14 +863,14 @@ describe("ViewerApp Graph Workspace", () => {
       "Entire",
     ]);
     expect(graphKindTabs).toBeInTheDocument();
-    expect(within(graphKindTabs).getByRole("tab", { name: /module/i }))
-      .toHaveAttribute("aria-selected", "true");
+    expect(within(graphKindTabs).getByRole("radio", { name: /module/i }))
+      .toHaveAttribute("aria-checked", "true");
     expect(graphDetailTabs).toBeInTheDocument();
-    expect(within(graphDetailTabs).getByRole("tab", { name: /basic/i }))
-      .toHaveAttribute("aria-selected", "true");
+    expect(within(graphDetailTabs).getByRole("radio", { name: /basic/i }))
+      .toHaveAttribute("aria-checked", "true");
     expect(graphScopeTabs).toBeInTheDocument();
-    expect(within(graphScopeTabs).getByRole("tab", { name: /opened/i }))
-      .toHaveAttribute("aria-selected", "true");
+    expect(within(graphScopeTabs).getByRole("radio", { name: /opened/i }))
+      .toHaveAttribute("aria-checked", "true");
     expect(screen.queryByTestId("flow-panel-bottom-right")).not.toBeInTheDocument();
 
     await user.click(await screen.findByRole("button", { name: /^select model\.cluster$/i }));
@@ -1009,8 +1009,8 @@ describe("ViewerApp Graph Workspace", () => {
       }),
     );
 
-    expect(screen.getByRole("tab", { name: /full/i })).toHaveAttribute(
-      "aria-selected",
+    expect(screen.getByRole("radio", { name: /full/i })).toHaveAttribute(
+      "aria-checked",
       "true",
     );
     expect(await screen.findByTestId("node-model.cluster.neuron_1_1_1"))
@@ -1115,7 +1115,7 @@ describe("ViewerApp Graph Workspace", () => {
       }),
     ).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: /full/i }));
+    await user.click(screen.getByRole("radio", { name: /full/i }));
 
     await waitFor(() => {
       expect(
@@ -1173,10 +1173,10 @@ describe("ViewerApp Graph Workspace", () => {
 
     expect(await screen.findByTestId("flow")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: /^parameters$/i }));
+    await user.click(screen.getByRole("radio", { name: /^parameters$/i }));
 
-    expect(screen.getByRole("tab", { name: /^parameters$/i })).toHaveAttribute(
-      "aria-selected",
+    expect(screen.getByRole("radio", { name: /^parameters$/i })).toHaveAttribute(
+      "aria-checked",
       "true",
     );
     expect(screen.queryByTestId("flow")).not.toBeInTheDocument();
@@ -1188,7 +1188,7 @@ describe("ViewerApp Graph Workspace", () => {
     const user = userEvent.setup();
 
     expect(await screen.findByTestId("flow")).toBeInTheDocument();
-    await user.click(screen.getByRole("tab", { name: /^parameters$/i }));
+    await user.click(screen.getByRole("radio", { name: /^parameters$/i }));
 
     expect(await screen.findByTestId("parameter-browser-panel")).toBeInTheDocument();
     expect(screen.queryByTestId("parameter-treemap-panel")).not.toBeInTheDocument();
@@ -1200,7 +1200,7 @@ describe("ViewerApp Graph Workspace", () => {
     const user = userEvent.setup();
 
     expect(await screen.findByTestId("flow")).toBeInTheDocument();
-    await user.click(screen.getByRole("tab", { name: /^parameters$/i }));
+    await user.click(screen.getByRole("radio", { name: /^parameters$/i }));
 
     const panel = await screen.findByTestId("parameter-browser-panel");
     expect(within(panel).getByTestId("parameter-browser-focus")).toHaveTextContent(
@@ -1217,7 +1217,7 @@ describe("ViewerApp Graph Workspace", () => {
     const user = userEvent.setup();
 
     expect(await screen.findByTestId("flow")).toBeInTheDocument();
-    await user.click(screen.getByRole("tab", { name: /^parameters$/i }));
+    await user.click(screen.getByRole("radio", { name: /^parameters$/i }));
     await user.click(
       await screen.findByRole("button", { name: /^select component main_model\.0$/i }),
     );
@@ -1244,7 +1244,7 @@ describe("ViewerApp Graph Workspace", () => {
     const user = userEvent.setup();
 
     expect(await screen.findByTestId("flow")).toBeInTheDocument();
-    await user.click(screen.getByRole("tab", { name: /^parameters$/i }));
+    await user.click(screen.getByRole("radio", { name: /^parameters$/i }));
     await user.click(
       await screen.findByRole("button", { name: /^select component main_model\.0$/i }),
     );
@@ -1267,7 +1267,7 @@ describe("ViewerApp Graph Workspace", () => {
     const user = userEvent.setup();
 
     expect(await screen.findByTestId("flow")).toBeInTheDocument();
-    await user.click(screen.getByRole("tab", { name: /^parameters$/i }));
+    await user.click(screen.getByRole("radio", { name: /^parameters$/i }));
     await user.click(
       await screen.findByRole("button", { name: /^select component main_model\.0$/i }),
     );
@@ -1288,7 +1288,7 @@ describe("ViewerApp Graph Workspace", () => {
     const user = userEvent.setup();
 
     expect(await screen.findByTestId("flow")).toBeInTheDocument();
-    await user.click(screen.getByRole("tab", { name: /^parameters$/i }));
+    await user.click(screen.getByRole("radio", { name: /^parameters$/i }));
     await user.click(
       await screen.findByRole("button", { name: /^select component main_model\.0$/i }),
     );
@@ -1311,7 +1311,7 @@ describe("ViewerApp Graph Workspace", () => {
     const user = userEvent.setup();
 
     expect(await screen.findByTestId("flow")).toBeInTheDocument();
-    await user.click(screen.getByRole("tab", { name: /^parameters$/i }));
+    await user.click(screen.getByRole("radio", { name: /^parameters$/i }));
     await user.click(
       await screen.findByRole("button", { name: /^select component main_model\.0$/i }),
     );
@@ -1336,10 +1336,10 @@ describe("ViewerApp Graph Workspace", () => {
     const user = userEvent.setup();
 
     expect(await screen.findByTestId("flow")).toBeInTheDocument();
-    await user.click(screen.getByRole("tab", { name: /^parameters$/i }));
+    await user.click(screen.getByRole("radio", { name: /^parameters$/i }));
     expect(await screen.findByTestId("parameter-browser-panel")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: /^graph$/i }));
+    await user.click(screen.getByRole("radio", { name: /^graph$/i }));
 
     expect(await screen.findByTestId("flow")).toBeInTheDocument();
     expect(screen.queryByTestId("parameter-browser-panel")).not.toBeInTheDocument();
@@ -1351,7 +1351,7 @@ describe("ViewerApp Graph Workspace", () => {
     const user = userEvent.setup();
 
     expect(await screen.findByTestId("flow")).toBeInTheDocument();
-    await user.click(screen.getByRole("tab", { name: /^parameters$/i }));
+    await user.click(screen.getByRole("radio", { name: /^parameters$/i }));
     await user.click(
       await screen.findByRole("button", { name: /^select component main_model\.0$/i }),
     );
@@ -1360,7 +1360,7 @@ describe("ViewerApp Graph Workspace", () => {
         name: /^select component main_model\.0\.model$/i,
       }),
     );
-    await user.click(screen.getByRole("tab", { name: /^graph$/i }));
+    await user.click(screen.getByRole("radio", { name: /^graph$/i }));
 
     expect(await screen.findByTestId("node-main_model.0.model")).toBeInTheDocument();
   });
@@ -1371,7 +1371,7 @@ describe("ViewerApp Graph Workspace", () => {
     const user = userEvent.setup();
 
     expect(await screen.findByTestId("flow")).toBeInTheDocument();
-    await user.click(screen.getByRole("tab", { name: /^parameters$/i }));
+    await user.click(screen.getByRole("radio", { name: /^parameters$/i }));
     await user.click(
       await screen.findByRole("button", { name: /^select component main_model\.0$/i }),
     );
@@ -1382,7 +1382,7 @@ describe("ViewerApp Graph Workspace", () => {
       }),
     ).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: /^full$/i }));
+    await user.click(screen.getByRole("radio", { name: /^full$/i }));
 
     expect(
       await screen.findByRole("button", {
@@ -1396,12 +1396,12 @@ describe("ViewerApp Graph Workspace", () => {
     renderViewer();
     const user = userEvent.setup();
 
-    expect(await screen.findByRole("tablist", { name: /graph scope/i }))
+    expect(await screen.findByRole("radiogroup", { name: /graph scope/i }))
       .toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: /^parameters$/i }));
+    await user.click(screen.getByRole("radio", { name: /^parameters$/i }));
 
-    expect(screen.queryByRole("tablist", { name: /graph scope/i }))
+    expect(screen.queryByRole("radiogroup", { name: /graph scope/i }))
       .not.toBeInTheDocument();
   });
 
