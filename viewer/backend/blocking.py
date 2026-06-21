@@ -25,6 +25,15 @@ _blocking_work_limiters: weakref.WeakKeyDictionary[
 ] = weakref.WeakKeyDictionary()
 
 
+def _release_limiter_from_worker(
+    loop: asyncio.AbstractEventLoop,
+    limiter: asyncio.Semaphore,
+) -> None:
+    if loop.is_closed():
+        return
+    loop.call_soon_threadsafe(limiter.release)
+
+
 async def _await_thread_future(
     future: Future[ResultT],
     *,
@@ -64,7 +73,7 @@ async def run_blocking_io(
     acquired = False
     executor: ThreadPoolExecutor | None = None
     future: Future[ResultT] | None = None
-    timed_out = False
+    release_when_done = False
     try:
         await asyncio.wait_for(work_limiter.acquire(), timeout_seconds)
         acquired = True
@@ -75,15 +84,32 @@ async def run_blocking_io(
         future = executor.submit(call)
         return await _await_thread_future(future, deadline=deadline)
     except TimeoutError as exc:
-        timed_out = True
+        if future is not None and not future.done():
+            release_when_done = True
+            future.add_done_callback(
+                lambda _future: _release_limiter_from_worker(loop, work_limiter)
+            )
+            future.cancel()
+        elif future is not None:
+            future.cancel()
         raise ApiError(
             BLOCKING_WORK_TIMEOUT_MESSAGE,
             status_code=503,
         ) from exc
-    finally:
+    except asyncio.CancelledError:
         if future is not None and not future.done():
+            release_when_done = True
+            future.add_done_callback(
+                lambda _future: _release_limiter_from_worker(loop, work_limiter)
+            )
             future.cancel()
+        raise
+    finally:
         if executor is not None:
-            executor.shutdown(wait=not timed_out, cancel_futures=timed_out)
+            executor.shutdown(
+                wait=not release_when_done,
+                cancel_futures=release_when_done,
+            )
         if acquired:
-            work_limiter.release()
+            if not release_when_done:
+                work_limiter.release()

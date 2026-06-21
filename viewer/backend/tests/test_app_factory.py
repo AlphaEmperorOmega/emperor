@@ -213,6 +213,46 @@ class AppFactoryTests(unittest.TestCase):
         self.assertEqual(asyncio.run(run_many()), ["ok", "ok", "ok"])
         self.assertEqual(max_active, 1)
 
+    def test_blocking_io_timeout_holds_capacity_until_worker_finishes(
+        self,
+    ) -> None:
+        import threading
+
+        from viewer.backend.blocking import run_blocking_io
+
+        started = threading.Event()
+        release = threading.Event()
+
+        def slow_work() -> str:
+            started.set()
+            release.wait(timeout=1)
+            return "slow"
+
+        async def run_sequence() -> str:
+            limiter = asyncio.Semaphore(1)
+            with self.assertRaises(ApiError):
+                await run_blocking_io(
+                    slow_work,
+                    limiter=limiter,
+                    timeout_seconds=0.01,
+                )
+            self.assertTrue(started.wait(timeout=1))
+            with self.assertRaises(ApiError):
+                await run_blocking_io(
+                    lambda: "blocked",
+                    limiter=limiter,
+                    timeout_seconds=0.02,
+                )
+            release.set()
+            await asyncio.sleep(0.05)
+            return await run_blocking_io(
+                lambda: "available",
+                limiter=limiter,
+                timeout_seconds=1,
+            )
+
+        self.assertEqual(asyncio.run(run_sequence()), "available")
+
     def test_main_app_factory_imports_without_public_api_import_order(self) -> None:
         env = {
             **os.environ,
