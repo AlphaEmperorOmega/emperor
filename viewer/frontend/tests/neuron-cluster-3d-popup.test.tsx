@@ -88,14 +88,17 @@ describe("NeuronCluster 3D popup", () => {
     expect(await screen.findByTestId("mock-cluster-3d-scene"))
       .toHaveAttribute("data-visible-x", "1");
 
-    await user.click(
-      screen.getByRole("button", {
-        name: /3d coordinate \(1, 1, 1\) initial/i,
-      }),
-    );
+    const coordinateList = screen.getByRole("region", {
+      name: /3d cluster coordinates/i,
+    });
+    const coordinateButton = within(coordinateList).getByRole("button", {
+      name: /select coordinate \(1, 1, 1\) initial/i,
+    });
+    coordinateButton.focus();
+    await user.keyboard("{Enter}");
 
-    expect(screen.getByRole("tab", { name: /full/i })).toHaveAttribute(
-      "aria-selected",
+    expect(screen.getByRole("radio", { name: /full/i })).toHaveAttribute(
+      "aria-checked",
       "true",
     );
     expect(await screen.findByTestId("node-model.cluster.neuron_1_1_1"))
