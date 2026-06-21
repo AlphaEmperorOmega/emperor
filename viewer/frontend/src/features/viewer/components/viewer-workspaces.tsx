@@ -2,6 +2,7 @@ import dynamic from "next/dynamic";
 import { CompareWorkspace } from "@/features/viewer/components/compare-workspace";
 import { ConnectedMonitorChartsModal } from "@/features/viewer/components/monitor/connected-monitor-charts-modal";
 import { ConnectedTrainingPanel } from "@/features/viewer/components/connected-training-panel";
+import { ApiConnectionDialog } from "@/features/viewer/components/screen/api-connection-dialog";
 import { NodeDetailsPanel } from "@/features/viewer/components/screen/node-details-panel";
 import { PreviewPanel } from "@/features/viewer/components/screen/preview-panel";
 import { PreviewToolbar } from "@/features/viewer/components/screen/preview-toolbar";
@@ -127,10 +128,12 @@ export function ViewerWorkspaceOverlays({
   activeWorkspace,
   fullConfigDialog,
   featureListDialog,
+  apiConnectionDialog,
 }: {
   activeWorkspace: ViewerWorkspace;
   fullConfigDialog: FullConfigDialogControls;
   featureListDialog: ViewerDialogControls;
+  apiConnectionDialog: ViewerDialogControls;
 }) {
   const isModelWorkspace = activeWorkspace === "model";
   const { cluster3dNodeId } = useGraphView();
@@ -145,6 +148,9 @@ export function ViewerWorkspaceOverlays({
       )}
       {featureListDialog.isOpen && (
         <FeatureListDialog onClose={featureListDialog.close} />
+      )}
+      {apiConnectionDialog.isOpen && (
+        <ApiConnectionDialog onClose={apiConnectionDialog.close} />
       )}
       {isModelWorkspace && <ConnectedMonitorChartsModal />}
       {isModelWorkspace && cluster3dNodeId && <ConnectedNeuronCluster3DPopup />}

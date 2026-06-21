@@ -1,4 +1,8 @@
-export { isUnauthorizedApiError } from "@/lib/api/client";
+export {
+  isUnauthorizedApiError,
+  VIEWER_API_BASE_URL,
+  VIEWER_API_URL_ENV_NAME,
+} from "@/lib/api/client";
 export type { UnauthorizedApiError } from "@/lib/api/client";
 export * from "@/lib/api/config-snapshots";
 export * from "@/lib/api/deletion";

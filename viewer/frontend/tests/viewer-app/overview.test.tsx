@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   IMPLEMENTED_FEATURES,
   expandedTrainingDetails,
@@ -89,6 +89,62 @@ describe("ViewerApp Overview", () => {
     expect(presetLabel.nextElementSibling).toHaveTextContent("0");
     expect(within(header).queryByText(/^nodes$/i)).not.toBeInTheDocument();
     expect(within(header).queryByText(/^edges$/i)).not.toBeInTheDocument();
+  });
+
+  it("opens API connection settings with frontend and backend environment guidance", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    installFetchMock();
+    renderViewer();
+
+    const apiButton = screen.getByRole("button", {
+      name: /api connection settings/i,
+    });
+    expect(apiButton).toBeInTheDocument();
+
+    await user.click(apiButton);
+
+    const dialog = await screen.findByRole("dialog", {
+      name: /api connection/i,
+    });
+    const frontendOrigin = window.location.origin;
+    const apiBaseUrl = "http://127.0.0.1:9999";
+    const corsEnvValue = `VIEWER_API_CORS_ORIGINS='${JSON.stringify([
+      frontendOrigin,
+    ])}'`;
+    const frontendEnvValue = `NEXT_PUBLIC_VIEWER_API_URL=${apiBaseUrl}`;
+
+    expect(within(dialog).getByText(frontendOrigin)).toBeInTheDocument();
+    expect(within(dialog).getByText(apiBaseUrl)).toBeInTheDocument();
+    expect(
+      within(dialog).getByLabelText("Backend CORS environment variable"),
+    ).toHaveValue(corsEnvValue);
+    expect(
+      within(dialog).getByLabelText("Frontend API URL environment variable"),
+    ).toHaveValue(frontendEnvValue);
+    expect(dialog).toHaveTextContent(/backend deployment/i);
+    expect(dialog).toHaveTextContent(/browser frontend code cannot add/i);
+    expect(within(dialog).getByText(/bearer auth/i)).toBeInTheDocument();
+    expect(dialog).toHaveTextContent(/unsafe local mutation/i);
+    expect(dialog).toHaveTextContent(/training, log deletion, and config snapshots/i);
+
+    await user.click(
+      within(dialog).getByRole("button", {
+        name: /copy backend cors environment variable/i,
+      }),
+    );
+    await user.click(
+      within(dialog).getByRole("button", {
+        name: /copy frontend api url environment variable/i,
+      }),
+    );
+
+    expect(writeText).toHaveBeenNthCalledWith(1, corsEnvValue);
+    expect(writeText).toHaveBeenNthCalledWith(2, frontendEnvValue);
   });
 
   it("shows preset-owned field count in the top header", async () => {
