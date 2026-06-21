@@ -33,6 +33,28 @@ function markLineData(option: ReturnType<typeof buildScalarLineOption>) {
   }>;
 }
 
+function expectTooltipFormatter(
+  formatter: unknown,
+): asserts formatter is (params: unknown) => string {
+  expect(typeof formatter).toBe("function");
+}
+
+function axisTooltipFormatter(option: ReturnType<typeof buildScalarLineOption>) {
+  const tooltip = option.tooltip;
+  if (!tooltip || Array.isArray(tooltip) || typeof tooltip !== "object") {
+    throw new Error("Expected object tooltip option");
+  }
+  const formatter = tooltip.formatter;
+  expectTooltipFormatter(formatter);
+  return formatter;
+}
+
+function checkpointTooltipFormatter(option: ReturnType<typeof buildScalarLineOption>) {
+  const formatter = seriesOf(option)[0].markLine?.tooltip?.formatter;
+  expectTooltipFormatter(formatter);
+  return formatter;
+}
+
 describe("buildScalarLineOption", () => {
   it("uses a value x-axis in step mode and a time x-axis in wallTime mode", () => {
     expect(axis(buildScalarLineOption([multiPoint], { xMode: "step" }), "xAxis").type).toBe(
@@ -138,6 +160,44 @@ describe("buildScalarLineOption", () => {
     });
 
     expect(markLineData(option)).toHaveLength(0);
+  });
+
+  it("escapes untrusted axis tooltip labels before returning HTML", () => {
+    const formatter = axisTooltipFormatter(buildScalarLineOption([multiPoint]));
+    const html = formatter([
+      {
+        axisValueLabel: '<b data-unsafe="1">step</b>',
+        seriesName: '<img src=x onerror="alert(1)"> & run',
+        marker: "<span></span>",
+        value: [1, 2],
+      },
+    ]);
+
+    expect(html).toContain("&lt;b data-unsafe=&quot;1&quot;&gt;step&lt;/b&gt;");
+    expect(html).toContain("&lt;img src=x onerror=&quot;alert(1)&quot;&gt; &amp; run");
+    expect(html).not.toContain("<b data-unsafe");
+    expect(html).not.toContain("<img");
+  });
+
+  it("escapes untrusted checkpoint tooltip labels before returning HTML", () => {
+    const option = buildScalarLineOption([multiPoint], {
+      checkpointMarkers: [
+        {
+          runId: "run-a",
+          runLabel: '<img src=x onerror="alert(1)">',
+          filename: 'epoch=<script>alert("x")</script>.ckpt',
+          epoch: 0,
+          step: 2,
+        },
+      ],
+    });
+    const formatter = checkpointTooltipFormatter(option);
+    const html = formatter({ name: markLineData(option)[0].name });
+
+    expect(html).toContain("&lt;img src=x onerror=&quot;alert(1)&quot;&gt;");
+    expect(html).toContain("epoch=&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;.ckpt");
+    expect(html).not.toContain("<img");
+    expect(html).not.toContain("<script>");
   });
 
   it("downsamples large point arrays before building series data", () => {

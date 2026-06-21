@@ -43,6 +43,25 @@ export type ScalarLineOptions = {
 export const MAX_SCALAR_OPTION_POINTS = 100_000;
 export const SCALAR_OPTION_DOWNSAMPLE_THRESHOLD = 5_000;
 
+function escapeTooltipHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => {
+    switch (character) {
+      case "&":
+        return "&amp;";
+      case "<":
+        return "&lt;";
+      case ">":
+        return "&gt;";
+      case '"':
+        return "&quot;";
+      case "'":
+        return "&#39;";
+      default:
+        return character;
+    }
+  });
+}
+
 function toAxisX(point: ScalarLinePoint, xMode: ScalarXMode): number {
   // TensorBoard wall time is epoch seconds; the time axis expects milliseconds.
   return xMode === "wallTime" ? point.wallTime * 1000 : point.step;
@@ -62,7 +81,9 @@ function formatAxisTooltip(params: TooltipComponentFormatterCallbackParams): str
   if (items.length === 0) {
     return "";
   }
-  const header = items[0].axisValueLabel ?? String(items[0].axisValue ?? "");
+  const header = escapeTooltipHtml(
+    items[0].axisValueLabel ?? String(items[0].axisValue ?? ""),
+  );
   const seen = new Set<string>();
   const rows: string[] = [];
   for (const item of items) {
@@ -72,7 +93,9 @@ function formatAxisTooltip(params: TooltipComponentFormatterCallbackParams): str
     }
     seen.add(name);
     const raw = Array.isArray(item.value) ? item.value[1] : item.value;
-    rows.push(`${item.marker ?? ""}${name}&nbsp;&nbsp;${formatNumber(Number(raw))}`);
+    rows.push(
+      `${item.marker ?? ""}${escapeTooltipHtml(name)}&nbsp;&nbsp;${formatNumber(Number(raw))}`,
+    );
   }
   return [header, ...rows].join("<br/>");
 }
@@ -107,7 +130,7 @@ function formatCheckpointTooltip(params: unknown): string {
     typeof params === "object" && params !== null && "name" in params
       ? String((params as { name?: unknown }).name ?? "")
       : "";
-  return name.split("\n").join("<br/>");
+  return name.split("\n").map(escapeTooltipHtml).join("<br/>");
 }
 
 function downsamplePoints(
