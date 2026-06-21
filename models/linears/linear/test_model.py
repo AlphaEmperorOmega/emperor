@@ -1,4 +1,3 @@
-from emperor.base.layer.residual import ResidualConnectionOptions
 import importlib
 import runpy
 import sys
@@ -6,20 +5,18 @@ import unittest
 from unittest.mock import patch
 
 import torch
-
-import models.linears.linear.config as config
-
-from emperor.base.options import (
-    ActivationOptions,
-    LastLayerBiasOptions,
-    LayerNormPositionOptions,
-)
 from emperor.base.layer import (
     LayerConfig,
     LayerStackConfig,
     RecurrentLayerConfig,
 )
 from emperor.base.layer.gate import GateConfig, LayerGateOptions
+from emperor.base.layer.residual import ResidualConnectionOptions
+from emperor.base.options import (
+    ActivationOptions,
+    LastLayerBiasOptions,
+    LayerNormPositionOptions,
+)
 from emperor.experiments.base import GridSearch, PresetLock, RandomSearch
 from emperor.halting.options import HaltingHiddenStateModeOptions
 from emperor.linears.core.config import LinearLayerConfig
@@ -28,8 +25,10 @@ from emperor.memory.config import (
     WeightedDynamicMemoryConfig,
 )
 from emperor.memory.options import MemoryPositionOptions
-from models.linears.linear.model import Model
+
+import models.linears.linear.config as config
 from models.linears.linear.config_builder import LinearConfigBuilder
+from models.linears.linear.model import Model
 from models.linears.linear.presets import (
     Experiment,
     ExperimentPreset,
@@ -263,28 +262,28 @@ class TestLinearModel(unittest.TestCase):
     def shared_gate_config(self, dim: int = 16) -> GateConfig:
         return GateConfig(
             model_config=LayerStackConfig(
-            input_dim=dim,
-            hidden_dim=dim,
-            output_dim=dim,
-            num_layers=1,
-            last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-            apply_output_pipeline_flag=False,
-            layer_config=LayerConfig(
                 input_dim=dim,
+                hidden_dim=dim,
                 output_dim=dim,
-                activation=ActivationOptions.DISABLED,
-                residual_connection_option=ResidualConnectionOptions.DISABLED,
-                dropout_probability=0.0,
-                layer_norm_position=LayerNormPositionOptions.DISABLED,
-                gate_config=None,
-                halting_config=None,
-                memory_config=None,
-                layer_model_config=LinearLayerConfig(
+                num_layers=1,
+                last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
+                apply_output_pipeline_flag=False,
+                layer_config=LayerConfig(
                     input_dim=dim,
                     output_dim=dim,
-                    bias_flag=True,
+                    activation=ActivationOptions.DISABLED,
+                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    dropout_probability=0.0,
+                    layer_norm_position=LayerNormPositionOptions.DISABLED,
+                    gate_config=None,
+                    halting_config=None,
+                    memory_config=None,
+                    layer_model_config=LinearLayerConfig(
+                        input_dim=dim,
+                        output_dim=dim,
+                        bias_flag=True,
+                    ),
                 ),
-            ),
             ),
             option=LayerGateOptions.MULTIPLIER,
             activation=ActivationOptions.SIGMOID,
@@ -515,9 +514,7 @@ class TestLinearModel(unittest.TestCase):
             LastLayerBiasOptions.DISABLED,
         )
         self.assertFalse(halting_stack_cfg.apply_output_pipeline_flag)
-        self.assertTrue(
-            halting_stack_cfg.layer_config.layer_model_config.bias_flag
-        )
+        self.assertTrue(halting_stack_cfg.layer_config.layer_model_config.bias_flag)
 
         self.assertEqual(memory_stack_cfg.hidden_dim, config.STACK_HIDDEN_DIM)
         self.assertEqual(memory_stack_cfg.num_layers, 2)
@@ -611,9 +608,7 @@ class TestLinearModel(unittest.TestCase):
                     ResidualConnectionOptions.RESIDUAL,
                 )
                 self.assertEqual(stack_cfg.layer_config.dropout_probability, 0.12)
-                self.assertFalse(
-                    stack_cfg.layer_config.layer_model_config.bias_flag
-                )
+                self.assertFalse(stack_cfg.layer_config.layer_model_config.bias_flag)
 
     def test_controller_stack_overrides_require_independent_flags(self):
         cfg = LinearConfigBuilder(

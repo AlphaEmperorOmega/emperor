@@ -1,4 +1,4 @@
-import models.linears.linear_adaptive.config as config
+from typing import TYPE_CHECKING
 
 from emperor.augmentations.adaptive_parameters.core.bias import (
     AdditiveDynamicBiasConfig,
@@ -42,10 +42,10 @@ from emperor.experiments.base import (
     PresetLock,
     SearchMode,
 )
+
+import models.linears.linear_adaptive.config as config
 from models.linears.linear_adaptive.config_builder import LinearAdaptiveConfigBuilder
 from models.linears.linear_adaptive.model import Model
-
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
@@ -53,16 +53,14 @@ if TYPE_CHECKING:
 
 class ExperimentPreset(BaseOptions):
     BASELINE = (
-        "Default config: a GELU adaptive linear stack with pre-layer norm and "
-        "dropout."
+        "Default config: a GELU adaptive linear stack with pre-layer norm and dropout."
     )
     SINGLE_MODEL_WEIGHT = (
         "Default adaptive config with the single-model dynamic weight generator "
         "enabled."
     )
     DUAL_MODEL_WEIGHT = (
-        "Default adaptive config with the dual-model dynamic weight generator "
-        "enabled."
+        "Default adaptive config with the dual-model dynamic weight generator enabled."
     )
     LOW_RANK_WEIGHT = (
         "Default adaptive config with the low-rank dynamic weight generator enabled."
@@ -82,9 +80,7 @@ class ExperimentPreset(BaseOptions):
     AFFINE_TRANSFORM_BIAS = (
         "Default adaptive config with affine-transform dynamic bias enabled."
     )
-    ADDITIVE_BIAS = (
-        "Default adaptive config with additive dynamic bias enabled."
-    )
+    ADDITIVE_BIAS = "Default adaptive config with additive dynamic bias enabled."
     GENERATOR_BIAS = (
         "Default adaptive config with generator-based dynamic bias enabled."
     )
@@ -94,18 +90,14 @@ class ExperimentPreset(BaseOptions):
     SIGMOID_GATED_BIAS = (
         "Default adaptive config with sigmoid-gated dynamic bias enabled."
     )
-    TANH_GATED_BIAS = (
-        "Default adaptive config with tanh-gated dynamic bias enabled."
-    )
+    TANH_GATED_BIAS = "Default adaptive config with tanh-gated dynamic bias enabled."
     WEIGHTED_BANK_BIAS = (
         "Default adaptive config with weighted-bank dynamic bias enabled."
     )
     STANDARD_DIAGONAL = (
         "Default adaptive config with standard dynamic diagonal enabled."
     )
-    ANTI_DIAGONAL = (
-        "Default adaptive config with anti dynamic diagonal enabled."
-    )
+    ANTI_DIAGONAL = "Default adaptive config with anti dynamic diagonal enabled."
     COMBINED_DIAGONAL = (
         "Default adaptive config with combined dynamic diagonal enabled."
     )
@@ -122,8 +114,7 @@ class ExperimentPreset(BaseOptions):
         "Default adaptive config with top-slice axis row masking enabled."
     )
     WEIGHT_INFORMED_SCORE_MASK = (
-        "Default adaptive config with weight-informed score axis row masking "
-        "enabled."
+        "Default adaptive config with weight-informed score axis row masking enabled."
     )
     SINGLE_MODEL_WEIGHT_ADDITIVE_BIAS_COMBINED_DIAGONAL = (
         "Default adaptive config with single-model dynamic weights, additive "
@@ -374,56 +365,72 @@ _PRESET_OVERRIDES = {
             "row_mask_option": WeightInformedScoreAxisMaskConfig,
         }
     ),
-    ExperimentPreset.SINGLE_MODEL_WEIGHT_ADDITIVE_BIAS_COMBINED_DIAGONAL: _with_adaptive_option_flags(
+    (
+        ExperimentPreset.SINGLE_MODEL_WEIGHT_ADDITIVE_BIAS_COMBINED_DIAGONAL
+    ): _with_adaptive_option_flags(
         {
             "weight_option": SingleModelDynamicWeightConfig,
             "bias_option": AdditiveDynamicBiasConfig,
             "diagonal_option": CombinedDynamicDiagonalConfig,
         }
     ),
-    ExperimentPreset.DUAL_MODEL_WEIGHT_ADDITIVE_BIAS_COMBINED_DIAGONAL: _with_adaptive_option_flags(
+    (
+        ExperimentPreset.DUAL_MODEL_WEIGHT_ADDITIVE_BIAS_COMBINED_DIAGONAL
+    ): _with_adaptive_option_flags(
         {
             "weight_option": DualModelDynamicWeightConfig,
             "bias_option": AdditiveDynamicBiasConfig,
             "diagonal_option": CombinedDynamicDiagonalConfig,
         }
     ),
-    ExperimentPreset.LAYERED_WEIGHTED_BANK_WEIGHT_ADDITIVE_BIAS_COMBINED_DIAGONAL: _with_adaptive_option_flags(
+    (
+        ExperimentPreset.LAYERED_WEIGHTED_BANK_WEIGHT_ADDITIVE_BIAS_COMBINED_DIAGONAL
+    ): _with_adaptive_option_flags(
         {
             "weight_option": LayeredWeightedBankDynamicWeightConfig,
             "bias_option": AdditiveDynamicBiasConfig,
             "diagonal_option": CombinedDynamicDiagonalConfig,
         }
     ),
-    ExperimentPreset.LOW_RANK_WEIGHT_ADDITIVE_BIAS_COMBINED_DIAGONAL: _with_adaptive_option_flags(
+    (
+        ExperimentPreset.LOW_RANK_WEIGHT_ADDITIVE_BIAS_COMBINED_DIAGONAL
+    ): _with_adaptive_option_flags(
         {
             "weight_option": LowRankDynamicWeightConfig,
             "bias_option": AdditiveDynamicBiasConfig,
             "diagonal_option": CombinedDynamicDiagonalConfig,
         }
     ),
-    ExperimentPreset.SINGLE_MODEL_WEIGHT_ADDITIVE_BIAS_STANDARD_DIAGONAL: _with_adaptive_option_flags(
+    (
+        ExperimentPreset.SINGLE_MODEL_WEIGHT_ADDITIVE_BIAS_STANDARD_DIAGONAL
+    ): _with_adaptive_option_flags(
         {
             "weight_option": SingleModelDynamicWeightConfig,
             "bias_option": AdditiveDynamicBiasConfig,
             "diagonal_option": StandardDynamicDiagonalConfig,
         }
     ),
-    ExperimentPreset.DUAL_MODEL_WEIGHT_ADDITIVE_BIAS_STANDARD_DIAGONAL: _with_adaptive_option_flags(
+    (
+        ExperimentPreset.DUAL_MODEL_WEIGHT_ADDITIVE_BIAS_STANDARD_DIAGONAL
+    ): _with_adaptive_option_flags(
         {
             "weight_option": DualModelDynamicWeightConfig,
             "bias_option": AdditiveDynamicBiasConfig,
             "diagonal_option": StandardDynamicDiagonalConfig,
         }
     ),
-    ExperimentPreset.LAYERED_WEIGHTED_BANK_WEIGHT_ADDITIVE_BIAS_STANDARD_DIAGONAL: _with_adaptive_option_flags(
+    (
+        ExperimentPreset.LAYERED_WEIGHTED_BANK_WEIGHT_ADDITIVE_BIAS_STANDARD_DIAGONAL
+    ): _with_adaptive_option_flags(
         {
             "weight_option": LayeredWeightedBankDynamicWeightConfig,
             "bias_option": AdditiveDynamicBiasConfig,
             "diagonal_option": StandardDynamicDiagonalConfig,
         }
     ),
-    ExperimentPreset.LOW_RANK_WEIGHT_ADDITIVE_BIAS_STANDARD_DIAGONAL: _with_adaptive_option_flags(
+    (
+        ExperimentPreset.LOW_RANK_WEIGHT_ADDITIVE_BIAS_STANDARD_DIAGONAL
+    ): _with_adaptive_option_flags(
         {
             "weight_option": LowRankDynamicWeightConfig,
             "bias_option": AdditiveDynamicBiasConfig,
@@ -551,7 +558,8 @@ class ExperimentPresets(ExperimentPresetsBase):
     def _preset_callback_for_preset(self, preset: ExperimentPreset):
         if preset not in self.PRESET_OVERRIDES:
             raise ValueError(
-                "The specified preset is not supported. Please choose a valid `ExperimentPreset`."
+                "The specified preset is not supported. Please choose a valid "
+                "`ExperimentPreset`."
             )
         return lambda **kwargs: self._preset_for_preset(preset, **kwargs)
 

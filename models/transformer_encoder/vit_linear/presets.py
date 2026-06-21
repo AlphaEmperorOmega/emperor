@@ -1,4 +1,4 @@
-import models.transformer_encoder.vit_linear.config as config
+from typing import TYPE_CHECKING
 
 from emperor.base.options import BaseOptions, LayerNormPositionOptions
 from emperor.datasets.image.classification.mnist import Mnist
@@ -11,10 +11,10 @@ from emperor.experiments.base import (
     PresetLock,
     SearchMode,
 )
+
+import models.transformer_encoder.vit_linear.config as config
 from models.transformer_encoder.vit_linear.config_builder import VitLinearConfigBuilder
 from models.transformer_encoder.vit_linear.model import Model
-
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
@@ -27,12 +27,9 @@ class ExperimentPreset(BaseOptions):
         "pre-norm bidirectional encoder."
     )
     POST_NORM = (
-        "Default config with layer normalization applied after each encoder "
-        "sub-block."
+        "Default config with layer normalization applied after each encoder sub-block."
     )
-    SINUSOIDAL = (
-        "Default config with fixed sinusoidal image positional embeddings."
-    )
+    SINUSOIDAL = "Default config with fixed sinusoidal image positional embeddings."
     ATTENTION_BIAS = (
         "Default config with attention projection bias and key/value bias enabled."
     )

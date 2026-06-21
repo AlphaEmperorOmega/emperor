@@ -1,7 +1,5 @@
 from typing import TYPE_CHECKING
 
-import models.parametric.parametric_matrix.config as config
-
 from emperor.base.options import BaseOptions
 from emperor.datasets.image.classification.mnist import Mnist
 from emperor.experiments.base import (
@@ -10,6 +8,8 @@ from emperor.experiments.base import (
     PresetLock,
     SearchMode,
 )
+
+import models.parametric.parametric_matrix.config as config
 from models.parametric.parametric_matrix.config_builder import (
     ParametricMatrixConfigBuilder,
 )
@@ -25,8 +25,7 @@ class ExperimentPreset(BaseOptions):
         "and top-1 adaptive mixture."
     )
     CONFIG = (
-        "Config/search preset for overriding parametric matrix classifier "
-        "settings."
+        "Config/search preset for overriding parametric matrix classifier settings."
     )
 
 

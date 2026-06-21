@@ -1,9 +1,9 @@
+from models.linears.linear import Experiment, ExperimentPreset
 from models.parser import (
     get_experiment_parser,
     resolve_dataset_names,
     resolve_experiment_mode,
 )
-from models.linears.linear import Experiment, ExperimentPreset
 
 EXPERIMENT_MODULE_PATH = "models.linears.linear"
 
