@@ -18,7 +18,7 @@ import { SelectOnlyDropdown } from "@/features/viewer/components/screen/select-o
 import { InlineStatus } from "@/features/viewer/components/shared/inline-status";
 import { SectionHeading } from "@/features/viewer/components/shared/section-heading";
 import { StatChip } from "@/features/viewer/components/shared/stat-chip";
-import { TrainingFooterField } from "@/features/viewer/components/training/training-footer-field";
+import { SurfacePanel } from "@/features/viewer/components/shared/surface-panel";
 import { ViewModeButton } from "@/features/viewer/components/view-mode-button";
 import { viewerStatusCopy } from "@/features/viewer/components/shared/status-copy";
 import { type Dataset, type MonitorOption } from "@/lib/api";
@@ -307,10 +307,10 @@ export function TrainingTargetDatasetPanel({
   );
 
   const modelField = isFooterPresentation ? (
-    <TrainingFooterField
+    <SurfacePanel
       className="min-w-0"
       icon={<Layers className={footerIconClass} aria-hidden />}
-      label="Model"
+      title="Model"
     >
       <div className={modelSelectorGridClass}>
         {modelTypeControl && (
@@ -324,7 +324,7 @@ export function TrainingTargetDatasetPanel({
           {modelControl}
         </div>
       </div>
-    </TrainingFooterField>
+    </SurfacePanel>
   ) : isSetupPresentation ? (
     <div className={modelSelectorGridClass}>
       {modelTypeControl && (
@@ -452,10 +452,10 @@ export function TrainingTargetDatasetPanel({
   );
 
   const presetsField = isFooterPresentation ? (
-    <TrainingFooterField
+    <SurfacePanel
       className="min-w-0"
       icon={<SlidersHorizontal className={footerIconClass} aria-hidden />}
-      label="Presets"
+      title="Presets"
       detail={
         <StatChip>
           {activeTrainingConfigTab === "snapshots"
@@ -485,7 +485,7 @@ export function TrainingTargetDatasetPanel({
       >
         {activeTrainingConfigTab === "snapshots" ? snapshotControls : null}
       </div>
-    </TrainingFooterField>
+    </SurfacePanel>
   ) : isSetupPresentation ? (
     <div className="grid min-w-0 gap-2">
       <div className="flex min-h-[28px] flex-wrap items-center justify-between gap-2">
@@ -570,14 +570,14 @@ export function TrainingTargetDatasetPanel({
   );
 
   const datasetsField = isFooterPresentation ? (
-    <TrainingFooterField
+    <SurfacePanel
       className="xl:min-h-0"
       icon={<Database className={footerIconClass} aria-hidden />}
-      label="Datasets"
+      title="Datasets"
       detail={<StatChip>{datasetCount}</StatChip>}
     >
       {datasetsControls}
-    </TrainingFooterField>
+    </SurfacePanel>
   ) : isSetupPresentation ? (
     <div className="grid min-w-0 gap-2">
       <div className="flex min-h-[28px] flex-wrap items-center justify-between gap-2">
@@ -645,14 +645,14 @@ export function TrainingTargetDatasetPanel({
   );
 
   const monitorsField = !showMonitorField ? null : isFooterPresentation ? (
-    <TrainingFooterField
+    <SurfacePanel
       className="xl:min-h-0"
       icon={<Activity className={footerIconClass} aria-hidden />}
-      label="Signals"
+      title="Signals"
       detail={<StatChip>{monitorCount}</StatChip>}
     >
       {monitorsControls}
-    </TrainingFooterField>
+    </SurfacePanel>
   ) : isSetupPresentation ? (
     <div className="grid min-w-0 gap-2">
       <div className="flex min-h-[28px] flex-wrap items-center justify-between gap-2">
