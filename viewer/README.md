@@ -125,6 +125,15 @@ source experiment.sh --model-type linears --model linear --preset baseline --pri
 python -m viewer.backend.cli --model-type linears --model linear --preset baseline --format json
 ```
 
+Monitor discovery is available for terminal training runs:
+
+```bash
+source experiment.sh --model-type linears --model linear --list-monitors
+source experiment.sh --model-type linears --model linear --preset baseline --datasets mnist --monitors linear halting
+```
+
+`--monitors` applies to training runs and cannot be combined with `--print-model`.
+
 Training from the CLI can also run selected preset batches:
 
 ```bash
