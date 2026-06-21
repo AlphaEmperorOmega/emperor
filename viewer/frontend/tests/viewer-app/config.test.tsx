@@ -948,7 +948,14 @@ describe("ViewerApp Full Config", () => {
       throw new Error("Expected full config dialog chrome to render");
     }
 
-    expect(dialog).toHaveClass("edge", "full-config-dialog-shell");
+    expect(dialog).toHaveClass(
+      "full-config-dialog-shell",
+      "rounded-[10px]",
+      "border",
+      "border-line",
+      "bg-panel",
+    );
+    expect(dialog).not.toHaveClass("edge", "rounded-card", "bg-white/[0.018]");
     expect(dialogHeader).toHaveClass(
       "full-config-dialog-chrome",
       "full-config-dialog-header",
@@ -981,21 +988,33 @@ describe("ViewerApp Full Config", () => {
     expect(layerAccordion).toHaveClass("overflow-hidden", "bg-white/[0.055]");
     expect(gateAccordion).toHaveClass("overflow-hidden", "bg-white/[0.025]");
     expect(layerSection).toHaveClass(
+      "grid",
+      "content-start",
+      "gap-1.5",
       "overflow-hidden",
-      "rounded-[12px]",
+      "rounded-[10px]",
       "border",
       "border-line",
-      "bg-panel/80",
+      "bg-white/[0.018]",
+      "px-0",
+      "py-0",
       "shadow-[0_16px_40px_-30px_rgba(0,0,0,0.95)]",
     );
+    expect(layerSection).not.toHaveClass("rounded-[12px]", "bg-panel/80");
     expect(gateSection).toHaveClass(
+      "grid",
+      "content-start",
+      "gap-1.5",
       "overflow-hidden",
-      "rounded-[12px]",
+      "rounded-[10px]",
       "border",
       "border-line-soft",
-      "bg-panel/70",
+      "bg-white/[0.012]",
+      "px-0",
+      "py-0",
       "shadow-[0_10px_28px_-26px_rgba(0,0,0,0.9)]",
     );
+    expect(gateSection).not.toHaveClass("rounded-[12px]", "bg-panel/70");
     expect(layerNavToggle).toHaveAttribute("aria-expanded", "true");
     expect(layerNavToggle).toHaveAttribute("aria-controls");
     expect(gateNavToggle).toHaveAttribute("aria-expanded", "false");
@@ -2646,9 +2665,9 @@ describe("ViewerApp Full Config", () => {
     expect(layerPanel).toHaveAttribute("hidden");
     expect(layerPanel).not.toHaveClass("grid", "px-3", "py-3");
     expect(layerAccordion.closest("section")).toHaveClass(
-      "rounded-[12px]",
+      "rounded-[10px]",
       "border-line-soft",
-      "bg-panel/70",
+      "bg-white/[0.012]",
     );
     expect(within(dialog).queryByLabelText(/hidden dim/i)).not.toBeInTheDocument();
     expect(within(dialog).queryByLabelText(/stack activation/i)).not.toBeInTheDocument();

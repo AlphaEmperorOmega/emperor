@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { ConfigFieldValueEditor } from "@/features/viewer/components/config/config-field-control";
+import { surfacePanelClassName } from "@/features/viewer/components/shared/surface-panel";
 import {
   type ConfigSearchOption,
   type OverrideValues,
@@ -44,7 +45,8 @@ function ConfigSearchResultItem({
       aria-label="Config search result"
       data-config-search-result={option.key}
       className={cn(
-        "grid min-w-0 gap-2 rounded-[10px] border px-3 py-2.5 transition",
+        surfacePanelClassName,
+        "min-w-0 gap-2 px-3 py-2.5 transition",
         isPresetOwned ? "border-amber/35 bg-amber/[0.055]" : "border-line-soft bg-black/15",
         isSelected && "border-violet/45 bg-violet/10",
         isActive ? "ring-1 ring-violet/45" : "hover:border-line hover:bg-white/[0.035]",
@@ -124,7 +126,16 @@ export function ConfigSearchResults({
   onFieldReset: (key: string) => void;
 }) {
   if (visibleOptions.length === 0) {
-    return <div className="px-3 py-2.5 text-sm text-ink-dim">No matching fields</div>;
+    return (
+      <div
+        className={cn(
+          surfacePanelClassName,
+          "border-dashed border-line-soft bg-black/15 px-3 py-2.5 text-sm text-ink-dim",
+        )}
+      >
+        No matching fields
+      </div>
+    );
   }
 
   return (

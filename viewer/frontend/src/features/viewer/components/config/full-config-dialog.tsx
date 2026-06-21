@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { FilePlus2, RotateCcw, Terminal, X } from "lucide-react";
+import { FilePlus2, RotateCcw, SlidersHorizontal, Terminal, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
@@ -27,6 +27,7 @@ import {
 } from "@/features/viewer/components/config/config-snapshots-tray";
 import { DialogShell } from "@/features/viewer/components/shared/dialog-shell";
 import { InlineStatus } from "@/features/viewer/components/shared/inline-status";
+import { surfacePanelClassName } from "@/features/viewer/components/shared/surface-panel";
 import {
   configFieldsNoMatchCopy,
   viewerStatusCopy,
@@ -37,6 +38,7 @@ import { useTargetConfig } from "@/features/viewer/providers/viewer-providers";
 import {
   type FullConfigDialogMode,
 } from "@/features/viewer/state/use-viewer-workspace-shell";
+import { cn } from "@/lib/utils";
 
 export function FullConfigDialog({
   mode = "default",
@@ -282,6 +284,7 @@ export function FullConfigDialog({
   return (
     <DialogShell
       size="fullscreen"
+      panelVariant="surface"
       titleId="full-config-title"
       onClose={onClose}
       panelClassName="full-config-dialog-shell"
@@ -289,7 +292,14 @@ export function FullConfigDialog({
         <header className="full-config-dialog-chrome full-config-dialog-header sticky top-0 z-10 border-b border-line-soft px-4 py-3 backdrop-blur sm:px-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
-              <h2 id="full-config-title" className="text-base font-semibold text-ink">
+              <h2
+                id="full-config-title"
+                className="flex items-center gap-2 text-base font-semibold text-ink"
+              >
+                <SlidersHorizontal
+                  className="h-[15px] w-[15px] text-violet"
+                  aria-hidden
+                />
                 Full Configuration
               </h2>
               <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 text-xs text-ink-faint">
@@ -539,7 +549,12 @@ export function FullConfigDialog({
                   );
                 })
               ) : (
-                <div className="rounded-[12px] border border-dashed border-line-soft bg-black/20 px-4 py-6 text-sm text-ink-dim">
+                <div
+                  className={cn(
+                    surfacePanelClassName,
+                    "border-dashed border-line-soft bg-black/20 px-4 py-6 text-sm text-ink-dim",
+                  )}
+                >
                   {configFieldsNoMatchCopy(searchQuery.trim())}
                 </div>
               )}

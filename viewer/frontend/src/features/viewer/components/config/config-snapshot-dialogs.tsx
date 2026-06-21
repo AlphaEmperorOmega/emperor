@@ -17,6 +17,7 @@ export function SnapshotRestoreDialog({
     <DialogShell
       titleId="load-config-snapshot-title"
       size="sm"
+      panelVariant="surface"
       onClose={onCancel}
       closeOnEscape={!busy}
       className="z-[60] grid place-items-center bg-black/65 p-4 sm:p-4"
