@@ -126,6 +126,8 @@ def _parse_args() -> argparse.Namespace:
 def main() -> None:
     args = _parse_args()
     parts = load_model_parts(args.model_id)
+    if getattr(args, "monitors", None):
+        raise SystemExit("--print-model inspection does not support --monitors.")
     mode = resolve_experiment_mode(args, parts.experiment_preset_enum)
     if (
         mode.search_mode is not None
