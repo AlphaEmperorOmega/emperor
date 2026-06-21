@@ -1314,15 +1314,9 @@ export function useTargetConfigState({
           : presetNames[0] ?? "";
       const nextPrimary = validPresets.includes(selectedPreset)
         ? selectedPreset
-        : validPresets[0] ?? fallbackPreset;
-
-      if (nextPrimary && nextPrimary !== selectedPreset) {
-        suppressAutomaticPreviewForPreset(nextPrimary);
-        setSelectedTargetMode("preset");
-        setSelectedSnapshotId("");
-        setSelectedExperimentRunId("");
-        selectPreset(nextPrimary);
-      }
+        : validPresets.length > 0
+          ? validPresets[0]
+          : fallbackPreset;
 
       allowEmptyTrainingPresetDraftRef.current = false;
       setSelectedTrainingPresets(
@@ -1335,10 +1329,8 @@ export function useTargetConfigState({
     },
     [
       presetNames,
-      selectPreset,
       selectedPreset,
       selectedTrainingSnapshotIds.length,
-      suppressAutomaticPreviewForPreset,
     ],
   );
 
