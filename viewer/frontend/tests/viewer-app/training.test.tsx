@@ -149,6 +149,11 @@ function renderWorkspaceOverlayHarness({
     open: vi.fn(),
     close: vi.fn(),
   };
+  const apiConnectionDialog = {
+    isOpen: false,
+    open: vi.fn(),
+    close: vi.fn(),
+  };
 
   return render(
     <QueryClientProvider client={queryClient}>
@@ -159,6 +164,7 @@ function renderWorkspaceOverlayHarness({
             activeWorkspace={activeWorkspace}
             fullConfigDialog={fullConfigDialog}
             featureListDialog={featureListDialog}
+            apiConnectionDialog={apiConnectionDialog}
           />
         </LogsWorkspaceProvider>
       </ViewerProviders>

@@ -21,6 +21,7 @@ export type ViewerScreenShell = {
   onChangeWorkspace: (workspace: ViewerWorkspace) => void;
   fullConfigDialog: FullConfigDialogControls;
   featureListDialog: ViewerDialogControls;
+  apiConnectionDialog: ViewerDialogControls;
 };
 
 export function useViewerWorkspaceShell() {
@@ -29,6 +30,7 @@ export function useViewerWorkspaceShell() {
   const [fullConfigMode, setFullConfigMode] =
     useState<FullConfigDialogMode>("default");
   const [isFeatureListOpen, setIsFeatureListOpen] = useState(false);
+  const [isApiConnectionOpen, setIsApiConnectionOpen] = useState(false);
 
   const changeWorkspace = useCallback((workspace: ViewerWorkspace) => {
     setActiveWorkspace(workspace);
@@ -43,6 +45,8 @@ export function useViewerWorkspaceShell() {
   const closeFullConfig = useCallback(() => setIsFullConfigOpen(false), []);
   const openFeatureList = useCallback(() => setIsFeatureListOpen(true), []);
   const closeFeatureList = useCallback(() => setIsFeatureListOpen(false), []);
+  const openApiConnection = useCallback(() => setIsApiConnectionOpen(true), []);
+  const closeApiConnection = useCallback(() => setIsApiConnectionOpen(false), []);
 
   const screen: ViewerScreenShell = {
     activeWorkspace,
@@ -57,6 +61,11 @@ export function useViewerWorkspaceShell() {
       isOpen: isFeatureListOpen,
       open: openFeatureList,
       close: closeFeatureList,
+    },
+    apiConnectionDialog: {
+      isOpen: isApiConnectionOpen,
+      open: openApiConnection,
+      close: closeApiConnection,
     },
   };
 

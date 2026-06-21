@@ -2,8 +2,10 @@ import { z } from "zod";
 
 import { getSessionAuthToken } from "@/lib/auth-token";
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_VIEWER_API_URL ?? "http://127.0.0.1:9999";
+export const VIEWER_API_URL_ENV_NAME = "NEXT_PUBLIC_VIEWER_API_URL";
+export const DEFAULT_VIEWER_API_BASE_URL = "http://127.0.0.1:9999";
+export const VIEWER_API_BASE_URL =
+  process.env.NEXT_PUBLIC_VIEWER_API_URL ?? DEFAULT_VIEWER_API_BASE_URL;
 
 const errorBodySchema = z.object({ detail: z.unknown() }).partial();
 
@@ -29,7 +31,9 @@ class ApiError extends Error {
 
   constructor({ status, method, path, detail }: ApiErrorInit) {
     const messageDetail = detail || "Request failed";
-    super(`${method} ${path} from ${API_BASE_URL} failed with ${status}: ${messageDetail}`);
+    super(
+      `${method} ${path} from ${VIEWER_API_BASE_URL} failed with ${status}: ${messageDetail}`,
+    );
     this.name = "ApiError";
     this.status = status;
     this.method = method;
@@ -98,7 +102,7 @@ export async function requestJson<TSchema extends z.ZodTypeAny>(
     ...init,
     headers: requestHeaders(init?.headers),
   };
-  const response = await fetch(`${API_BASE_URL}${path}`, request);
+  const response = await fetch(`${VIEWER_API_BASE_URL}${path}`, request);
   if (!response.ok) {
     let detail = response.statusText;
     try {
@@ -120,7 +124,7 @@ export async function requestJson<TSchema extends z.ZodTypeAny>(
   const parsed = schema.safeParse(payload);
   if (!parsed.success) {
     throw new Error(
-      `Invalid API response for ${method} ${path} from ${API_BASE_URL}: ${formatZodIssues(
+      `Invalid API response for ${method} ${path} from ${VIEWER_API_BASE_URL}: ${formatZodIssues(
         parsed.error.issues,
       )}`,
     );

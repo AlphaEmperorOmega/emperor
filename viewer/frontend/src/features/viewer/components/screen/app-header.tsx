@@ -2,6 +2,7 @@ import {
   Layers,
   ListChecks,
   Lock,
+  Plug,
   RefreshCw,
   RotateCcw,
   SlidersHorizontal,
@@ -17,9 +18,11 @@ import { type ViewerWorkspace } from "@/types/viewer";
 export function AppHeader({
   activeWorkspace,
   onOpenFeatureList,
+  onOpenApiConnection,
 }: {
   activeWorkspace: ViewerWorkspace;
   onOpenFeatureList: () => void;
+  onOpenApiConnection: () => void;
 }) {
   const {
     selectedModel,
@@ -69,6 +72,15 @@ export function AppHeader({
           tone={presetOwnedFieldCount > 0 ? "warn" : "neutral"}
         />
         <div className="mx-1 hidden h-6 w-px bg-line xl:block" />
+        <Button
+          variant="secondary"
+          aria-label="API connection settings"
+          onClick={onOpenApiConnection}
+          className="h-9 px-3 sm:h-9 sm:px-4"
+        >
+          <Plug className="h-[15px] w-[15px]" aria-hidden />
+          <span className="hidden sm:inline">Connection</span>
+        </Button>
         <Button
           variant="secondary"
           aria-label="Features"
