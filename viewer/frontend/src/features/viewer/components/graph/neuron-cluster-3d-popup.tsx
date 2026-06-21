@@ -252,6 +252,72 @@ function Fallback2DPanel({
   );
 }
 
+function CoordinateList({
+  scene,
+  selectedKey,
+  visibleX,
+  visibleY,
+  visibleZ,
+  onSelectCell,
+}: {
+  scene: Cluster3DSceneModel;
+  selectedKey: string | null;
+  visibleX: Set<number>;
+  visibleY: Set<number>;
+  visibleZ: Set<number>;
+  onSelectCell: (cell: Cluster3DCell) => void;
+}) {
+  const visibleCells = scene.activeCells.filter((cell) =>
+    cellVisible(cell, visibleX, visibleY, visibleZ),
+  );
+
+  return (
+    <section aria-label="3D cluster coordinates" className="grid gap-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-mono text-[11px] font-bold uppercase text-ink-faint">
+          Coordinates
+        </span>
+        <span className="font-mono text-[11px] text-ink-faint">
+          {visibleCells.length}/{scene.activeCells.length}
+        </span>
+      </div>
+      <div className="grid max-h-44 gap-1.5 overflow-auto pr-1">
+        {visibleCells.length === 0 ? (
+          <div className="rounded-[7px] border border-line bg-black/20 px-2.5 py-2 text-xs text-ink-faint">
+            No active coordinates are visible with the current slice filters.
+          </div>
+        ) : (
+          visibleCells.map((cell) => {
+            const isSelected = cell.key === selectedKey;
+            return (
+              <button
+                key={cell.key}
+                type="button"
+                aria-pressed={isSelected}
+                aria-label={`Select coordinate ${coordinateLabel(cell.coordinate)} ${cell.category}`}
+                onClick={() => onSelectCell(cell)}
+                className={cn(
+                  "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-[7px] border px-2.5 py-2 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-focus",
+                  isSelected
+                    ? "border-amber-200/70 bg-amber-300/[0.16] text-amber-50"
+                    : "border-line bg-white/[0.035] text-ink-dim hover:border-cyan-200/35 hover:text-ink",
+                )}
+              >
+                <span className="font-mono text-[11px] font-bold">
+                  {coordinateLabel(cell.coordinate)}
+                </span>
+                <span className="rounded-[6px] border border-line-soft px-1.5 py-0.5 text-[10px] uppercase">
+                  {cell.category}
+                </span>
+              </button>
+            );
+          })
+        )}
+      </div>
+    </section>
+  );
+}
+
 function NeuronCluster3DPopup({
   scene,
   onClose,
@@ -420,6 +486,15 @@ function NeuronCluster3DPopup({
           <AxisSliceControls axis="x" controls={axisControls.x} />
           <AxisSliceControls axis="y" controls={axisControls.y} />
           <AxisSliceControls axis="z" controls={axisControls.z} />
+
+          <CoordinateList
+            scene={scene}
+            selectedKey={selectedKey}
+            visibleX={visibleX}
+            visibleY={visibleY}
+            visibleZ={visibleZ}
+            onSelectCell={handleSelectCell}
+          />
 
           <div className="flex items-center gap-2 rounded-[8px] border border-line bg-white/[0.025] p-2 text-xs text-ink-faint">
             {scene.renderGhostCells ? (
