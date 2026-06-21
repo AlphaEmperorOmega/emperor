@@ -316,9 +316,7 @@ def main() -> None:
     if args.list:
         if args.model_type:
             if not model_type_exists(args.model_type):
-                raise SystemExit(
-                    f"Unknown model type: --model-type {args.model_type}"
-                )
+                raise SystemExit(f"Unknown model type: --model-type {args.model_type}")
             for identity in discover_model_identities_for_type(args.model_type):
                 print(f"--model {identity.model}")
             return

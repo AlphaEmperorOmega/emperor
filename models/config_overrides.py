@@ -263,7 +263,9 @@ def parse_search_set(
     if not values:
         raise argparse.ArgumentTypeError("--search-set requires at least one value")
 
-    candidate_keys = list(dict.fromkeys([canonical_config_key(raw_key), raw_config_key]))
+    candidate_keys = list(
+        dict.fromkeys([canonical_config_key(raw_key), raw_config_key])
+    )
     supported_keys = set(iter_supported_config_keys(config_module))
     for value_config_key in candidate_keys:
         search_config_key = search_key_to_config_key(value_config_key)

@@ -1,16 +1,22 @@
-import models.transformer_encoder.bert_linear.config as config
+from typing import TYPE_CHECKING
 
-from models.transformer_encoder.bert_linear.config_builder import BertLinearConfigBuilder
-from models.transformer_encoder.bert_linear.model import Model
-from emperor.experiments.base import SearchMode
-from emperor.datasets.text.bert_pretraining import PennTreebankBertPretraining
-from emperor.experiments.base import ExperimentBase, ExperimentPresetsBase, PresetLock
 from emperor.base.options import BaseOptions, LayerNormPositionOptions
+from emperor.datasets.text.bert_pretraining import PennTreebankBertPretraining
 from emperor.embedding.absolute.core.config import (
     TextSinusoidalPositionalEmbeddingConfig,
 )
+from emperor.experiments.base import (
+    ExperimentBase,
+    ExperimentPresetsBase,
+    PresetLock,
+    SearchMode,
+)
 
-from typing import TYPE_CHECKING
+import models.transformer_encoder.bert_linear.config as config
+from models.transformer_encoder.bert_linear.config_builder import (
+    BertLinearConfigBuilder,
+)
+from models.transformer_encoder.bert_linear.model import Model
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
@@ -23,16 +29,12 @@ class ExperimentPreset(BaseOptions):
         "bidirectional attention."
     )
     PRE_NORM = (
-        "Default config with layer normalization applied before each encoder "
-        "sub-block."
+        "Default config with layer normalization applied before each encoder sub-block."
     )
     POST_NORM = (
-        "Default config with layer normalization applied after each encoder "
-        "sub-block."
+        "Default config with layer normalization applied after each encoder sub-block."
     )
-    SINUSOIDAL = (
-        "Default config with fixed sinusoidal positional embeddings."
-    )
+    SINUSOIDAL = "Default config with fixed sinusoidal positional embeddings."
     CAUSAL = (
         "Default config with causal attention masking enabled for autoregressive "
         "modeling."
@@ -131,7 +133,8 @@ class ExperimentPresets(ExperimentPresetsBase):
     def _preset_callback_for_preset(self, preset: ExperimentPreset):
         if preset not in self.PRESET_OVERRIDES:
             raise ValueError(
-                "The specified preset is not supported. Please choose a valid `ExperimentPreset`."
+                "The specified preset is not supported. Please choose a valid "
+                "`ExperimentPreset`."
             )
         return lambda **kwargs: self._preset_for_preset(preset, **kwargs)
 

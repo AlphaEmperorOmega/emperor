@@ -2,17 +2,19 @@ import argparse
 import importlib
 from dataclasses import dataclass, field
 from types import ModuleType
+
 from emperor.base.options import BaseOptions
-from models.catalog import public_id_for_module
-from models.dataset_naming import dataset_cli_name, dataset_name
 from emperor.experiments.base import GridSearch, RandomSearch, SearchMode
 from emperor.experiments.monitors import MonitorOption
+
+from models.catalog import public_id_for_module
 from models.config_overrides import (
     add_config_override_arguments,
     extract_config_overrides,
     normalize_key,
     print_config_options,
 )
+from models.dataset_naming import dataset_cli_name, dataset_name
 
 
 class _ExperimentParser(argparse.ArgumentParser):
@@ -138,14 +140,22 @@ def get_experiment_parser(
         type=str,
         default=None,
         metavar="KEY",
-        help="Restrict sweep to named SEARCH_SPACE_* axes (e.g. HIDDEN_DIM STACK_NUM_LAYERS).\nRequires --grid-search or --random-search.",
+        help=(
+            "Restrict sweep to named SEARCH_SPACE_* axes "
+            "(e.g. HIDDEN_DIM STACK_NUM_LAYERS).\n"
+            "Requires --grid-search or --random-search."
+        ),
     )
 
     parser.add_argument(
         "--logdir",
         type=str,
         default=None,
-        help="Custom folder name for storing experiment logs. If not provided, the model file name is used.\nUse the same folder across models to compare them in TensorBoard.",
+        help=(
+            "Custom folder name for storing experiment logs. If not provided, "
+            "the model file name is used.\n"
+            "Use the same folder across models to compare them in TensorBoard."
+        ),
     )
 
     parser.add_argument(
@@ -154,7 +164,10 @@ def get_experiment_parser(
         nargs="+",
         default=None,
         metavar="DATASET",
-        help="Restrict training to one or more lowercase dataset names, e.g. mnist cifar10.",
+        help=(
+            "Restrict training to one or more lowercase dataset names, "
+            "e.g. mnist cifar10."
+        ),
     )
 
     parser.add_argument(
@@ -331,7 +344,8 @@ def resolve_experiment_mode(
             preset_name_to_cli(name) for name in blocked_presets
         )
         raise ValueError(
-            f"'{blocked_cli_presets}' does not support --grid-search or --random-search. Use CONFIG instead."
+            f"'{blocked_cli_presets}' does not support --grid-search or "
+            "--random-search. Use CONFIG instead."
         )
     if args.search_keys is not None and search_mode is None:
         raise ValueError("--search-keys requires --grid-search or --random-search.")

@@ -1,19 +1,23 @@
-import models.experts.experts_linear.config as config
+from typing import TYPE_CHECKING
 
-from models.experts.experts_linear.config_builder import ExpertsLinearConfigBuilder
-from models.experts.experts_linear.model import Model
-from emperor.experiments.base import SearchMode
-from emperor.datasets.image.classification.mnist import Mnist
-from emperor.experiments.base import ExperimentBase, ExperimentPresetsBase, PresetLock
 from emperor.base.layer.residual import ResidualConnectionOptions
 from emperor.base.options import BaseOptions, LayerNormPositionOptions
+from emperor.datasets.image.classification.mnist import Mnist
+from emperor.experiments.base import (
+    ExperimentBase,
+    ExperimentPresetsBase,
+    PresetLock,
+    SearchMode,
+)
 from emperor.experts.core.options import (
     DroppedTokenOptions,
     ExpertWeightingPositionOptions,
     RoutingInitializationMode,
 )
 
-from typing import TYPE_CHECKING
+import models.experts.experts_linear.config as config
+from models.experts.experts_linear.config_builder import ExpertsLinearConfigBuilder
+from models.experts.experts_linear.model import Model
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
@@ -24,12 +28,8 @@ class ExperimentPreset(BaseOptions):
         "Default config: a mixture-of-experts classifier with linear expert and "
         "sampler stacks."
     )
-    GATING = (
-        "Default config with per-layer gating enabled in the expert stack."
-    )
-    HALTING = (
-        "Default config with stack halting enabled in the expert stack."
-    )
+    GATING = "Default config with per-layer gating enabled in the expert stack."
+    HALTING = "Default config with stack halting enabled in the expert stack."
     GATING_HALTING = (
         "Default config with both per-layer gating and stack halting enabled in "
         "the expert stack."
@@ -55,8 +55,7 @@ class ExperimentPreset(BaseOptions):
         "expert outputs."
     )
     TOP1_SWITCH_AUX = (
-        "Default config with top-1 switch routing and switch auxiliary loss "
-        "enabled."
+        "Default config with top-1 switch routing and switch auxiliary loss enabled."
     )
     TOP2_BALANCED_AUX = (
         "Default config with top-2 routing and balance auxiliary loss enabled."
@@ -69,8 +68,7 @@ class ExperimentPreset(BaseOptions):
         "by identity."
     )
     NOISY_SHARED_ROUTER = (
-        "Default config with shared noisy top-k routing enabled for sampler and "
-        "router."
+        "Default config with shared noisy top-k routing enabled for sampler and router."
     )
     RESIDUAL_SHARED_ROUTER = (
         "Default config with residual expert stack connections and shared expert "
@@ -226,7 +224,8 @@ class ExperimentPresets(ExperimentPresetsBase):
     def _preset_callback_for_preset(self, preset: ExperimentPreset):
         if preset not in self.PRESET_OVERRIDES:
             raise ValueError(
-                "The specified preset is not supported. Please choose a valid `ExperimentPreset`."
+                "The specified preset is not supported. Please choose a valid "
+                "`ExperimentPreset`."
             )
         return lambda **kwargs: self._preset_for_preset(preset, **kwargs)
 
