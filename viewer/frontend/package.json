@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "next dev -p ${PORT:-9000}",
     "build": "next build",
+    "start": "next start -p ${PORT:-9000}",
     "lint": "eslint . --max-warnings 0",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "VITE_CJS_IGNORE_WARNING=true vitest run"

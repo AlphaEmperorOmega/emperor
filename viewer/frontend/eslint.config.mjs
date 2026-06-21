@@ -1,8 +1,9 @@
 import { FlatCompat } from "@eslint/eslintrc";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
-// import.meta.dirname is available on Node.js >= 20.11
 const compat = new FlatCompat({
-  baseDirectory: import.meta.dirname,
+  baseDirectory: dirname(fileURLToPath(import.meta.url)),
 });
 
 const eslintConfig = [
