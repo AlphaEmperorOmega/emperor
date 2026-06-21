@@ -1,10 +1,12 @@
 import argparse
 import importlib
 from dataclasses import dataclass, field
+from types import ModuleType
 from emperor.base.options import BaseOptions
 from models.catalog import public_id_for_module
 from models.dataset_naming import dataset_cli_name, dataset_name
 from emperor.experiments.base import GridSearch, RandomSearch, SearchMode
+from emperor.experiments.monitors import MonitorOption
 from models.config_overrides import (
     add_config_override_arguments,
     extract_config_overrides,
@@ -55,6 +57,12 @@ class ExperimentMode:
     )
     search_overrides: dict = field(
         metadata={"help": "Parsed search-axis override values from --search-set."}
+    )
+    monitor_names: list[str] = field(
+        metadata={"help": "Deduplicated monitor names selected by --monitors."}
+    )
+    monitor_callbacks: list = field(
+        metadata={"help": "Monitor callback instances selected for this terminal run."}
     )
 
 
@@ -146,7 +154,15 @@ def get_experiment_parser(
         nargs="+",
         default=None,
         metavar="DATASET",
-        help="Restrict training to one or more dataset class names, e.g. Mnist Cifar10.",
+        help="Restrict training to one or more lowercase dataset names, e.g. mnist cifar10.",
+    )
+
+    parser.add_argument(
+        "--monitors",
+        nargs="+",
+        default=None,
+        metavar="MONITOR",
+        help="Enable one or more monitor callbacks for this training run.",
     )
 
     parser.add_argument(
@@ -198,9 +214,75 @@ def resolve_dataset_names(
         seen.add(dataset_name(dataset))
         resolved.append(dataset)
     if unknown:
-        valid = ", ".join(dataset_name(dataset) for dataset in dataset_options)
+        valid = ", ".join(dataset_cli_name(dataset) for dataset in dataset_options)
         raise ValueError(f"Unknown --datasets: {unknown}. Valid datasets: {valid}")
     return resolved
+
+
+def model_monitor_options(config_module: ModuleType | None) -> list[MonitorOption]:
+    if config_module is None:
+        return []
+    raw_options = getattr(config_module, "MONITOR_OPTIONS", [])
+    if raw_options is None:
+        return []
+    options = list(raw_options)
+    invalid_options = [
+        type(option).__name__
+        for option in options
+        if not isinstance(option, MonitorOption)
+    ]
+    if invalid_options:
+        raise ValueError(
+            f"Model config '{config_module.__name__}' has invalid MONITOR_OPTIONS "
+            f"entries: {', '.join(invalid_options)}."
+        )
+    option_names = [option.name for option in options]
+    duplicate_names = sorted(
+        name for name in set(option_names) if option_names.count(name) > 1
+    )
+    if duplicate_names:
+        raise ValueError(
+            f"Model config '{config_module.__name__}' has duplicate monitor "
+            f"options: {', '.join(duplicate_names)}."
+        )
+    return options
+
+
+def resolve_monitor_options(
+    config_module: ModuleType | None,
+    monitor_names: list[str] | None,
+) -> list[MonitorOption]:
+    if not monitor_names:
+        return []
+    options_by_name = {
+        option.name: option for option in model_monitor_options(config_module)
+    }
+    selected = []
+    unknown = []
+    seen = set()
+    for name in monitor_names:
+        if name in seen:
+            continue
+        seen.add(name)
+        option = options_by_name.get(name)
+        if option is None:
+            unknown.append(name)
+            continue
+        selected.append(option)
+    if unknown:
+        valid = ", ".join(sorted(options_by_name)) or "none"
+        raise ValueError(f"Unknown --monitors: {unknown}. Valid monitors: {valid}")
+    return selected
+
+
+def resolve_monitor_callbacks(
+    config_module: ModuleType | None,
+    monitor_names: list[str] | None,
+) -> list:
+    return [
+        option.build_callback()
+        for option in resolve_monitor_options(config_module, monitor_names)
+    ]
 
 
 def resolve_experiment_mode(
@@ -269,6 +351,10 @@ def resolve_experiment_mode(
             config_module,
             getattr(args, "_config_override_dests", {}),
         )
+    monitor_options = resolve_monitor_options(
+        config_module,
+        getattr(args, "monitors", None),
+    )
     return ExperimentMode(
         preset=preset,
         selected_presets=selected_presets,
@@ -276,4 +362,6 @@ def resolve_experiment_mode(
         search_keys=search_keys,
         config_overrides=config_overrides,
         search_overrides=search_overrides,
+        monitor_names=[option.name for option in monitor_options],
+        monitor_callbacks=[option.build_callback() for option in monitor_options],
     )

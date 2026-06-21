@@ -17,4 +17,5 @@ if __name__ == "__main__":
         search_overrides=mode.search_overrides,
         selected_datasets=resolve_dataset_names(experiment.dataset_options, args.datasets),
         selected_presets=mode.selected_presets,
+        callbacks=mode.monitor_callbacks,
     )
