@@ -2,6 +2,19 @@ import { z } from "zod";
 
 export const configValueSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
 export const configOverridesSchema = z.record(configValueSchema);
+export const imageMimeTypeSchema = z.enum([
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/gif",
+]);
+export const imageDataUrlSchema = z.union([
+  z.literal(""),
+  z.string().regex(
+    /^data:image\/(?:png|jpeg|webp|gif);base64,(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/,
+    "Expected a base64 data URL for png, jpeg, webp, or gif image data",
+  ),
+]);
 
 export type JsonValue =
   | string

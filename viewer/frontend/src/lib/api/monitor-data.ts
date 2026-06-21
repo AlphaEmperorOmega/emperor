@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { requestJson } from "@/lib/api/client";
+import { imageDataUrlSchema, imageMimeTypeSchema } from "@/lib/api/schemas";
 
 type ApiRequestOptions = {
   signal?: AbortSignal;
@@ -62,8 +63,8 @@ export const monitorDataSchema = z.object({
       tag: z.string(),
       step: z.number(),
       wallTime: z.number(),
-      mimeType: z.string(),
-      dataUrl: z.string(),
+      mimeType: imageMimeTypeSchema,
+      dataUrl: imageDataUrlSchema,
       eventBytes: z.number().optional().nullable(),
       sourceItemCount: z.number().optional().nullable(),
       returnedItemCount: z.number().optional().nullable(),
@@ -122,7 +123,7 @@ export function fetchMonitorData(input: {
     params.set("dataset", input.dataset);
   }
   return requestJson(
-    `/training/jobs/${input.jobId}/monitor-data?${params.toString()}`,
+    `/training/jobs/${encodeURIComponent(input.jobId)}/monitor-data?${params.toString()}`,
     monitorDataSchema,
     { signal: options.signal },
   );
@@ -142,7 +143,7 @@ export function fetchMonitorParameterStatus(input: {
   }
   const query = params.toString();
   return requestJson(
-    `/training/jobs/${input.jobId}/monitor-parameter-status${query ? `?${query}` : ""}`,
+    `/training/jobs/${encodeURIComponent(input.jobId)}/monitor-parameter-status${query ? `?${query}` : ""}`,
     parameterStatusSchema,
     { signal: options.signal },
   );

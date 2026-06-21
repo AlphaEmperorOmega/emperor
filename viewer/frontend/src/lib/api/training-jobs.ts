@@ -83,6 +83,36 @@ const trainingProgressStatusSchema = z.enum([
   "cancelled",
 ]);
 
+export const trainingJobStatusSchema = z.enum([
+  "queued",
+  "running",
+  "unknown",
+  "completed",
+  "failed",
+  "cancelled",
+]);
+
+const knownTrainingProgressEventTypes = [
+  "job_started",
+  "started",
+  "completed",
+  "cancelled",
+  "error",
+  "dataset_started",
+  "dataset_completed",
+  "epoch_started",
+  "step",
+  "validation",
+  "fit_completed",
+  "test_completed",
+  "cluster_initialized",
+  "neuron_added",
+  "neurons_added",
+] as const;
+const knownTrainingProgressEventTypeSet: ReadonlySet<string> = new Set(
+  knownTrainingProgressEventTypes,
+);
+
 const trainingProgressEventBaseSchema = z
   .object({
     type: z.string(),
@@ -141,7 +171,7 @@ const trainingDatasetStartedEventSchema = trainingProgressEventBaseSchema.extend
 
 const trainingDatasetCompletedEventSchema = trainingProgressEventBaseSchema.extend({
   type: z.literal("dataset_completed"),
-  status: z.literal("running").nullable().optional(),
+  status: z.enum(["running", "completed"]).nullable().optional(),
   metrics: jsonObjectSchema.nullable().optional(),
 });
 
@@ -193,6 +223,14 @@ const trainingNeuronsAddedEventSchema = trainingProgressEventBaseSchema.extend({
   step: z.number().nullable().optional(),
 });
 
+const futureTrainingProgressEventSchema = trainingProgressEventBaseSchema.refine(
+  (event) => !knownTrainingProgressEventTypeSet.has(event.type),
+  {
+    path: ["type"],
+    message: "Known training progress events must match their event schema",
+  },
+);
+
 export const trainingProgressEventSchema = z.union([
   trainingJobStartedEventSchema,
   trainingWorkerStartedEventSchema,
@@ -205,7 +243,7 @@ export const trainingProgressEventSchema = z.union([
   trainingClusterInitializedEventSchema,
   trainingNeuronAddedEventSchema,
   trainingNeuronsAddedEventSchema,
-  trainingProgressEventBaseSchema,
+  futureTrainingProgressEventSchema,
 ]);
 
 export const trainingClusterGrowthAdditionSchema = z.object({
@@ -224,7 +262,7 @@ export const trainingClusterGrowthSchema = z.object({
 
 export const trainingJobSchema = z.object({
   id: z.string(),
-  status: z.string(),
+  status: trainingJobStatusSchema,
   modelType: z.string(),
   model: z.string(),
   preset: z.string(),
@@ -393,7 +431,7 @@ export function fetchTrainingRunPlan(input: TrainingRunPlanCreateInput) {
 }
 
 export function fetchTrainingJob(id: string) {
-  return requestJson(`/training/jobs/${id}`, trainingJobSchema);
+  return requestJson(`/training/jobs/${encodeURIComponent(id)}`, trainingJobSchema);
 }
 
 export function fetchTrainingJobEvents(
@@ -409,13 +447,13 @@ export function fetchTrainingJobEvents(
   }
   const query = params.toString();
   return requestJson(
-    `/training/jobs/${id}/events${query ? `?${query}` : ""}`,
+    `/training/jobs/${encodeURIComponent(id)}/events${query ? `?${query}` : ""}`,
     trainingJobEventsSchema,
   );
 }
 
 export function cancelTrainingJob(id: string) {
-  return requestJson(`/training/jobs/${id}/cancel`, trainingJobSchema, {
+  return requestJson(`/training/jobs/${encodeURIComponent(id)}/cancel`, trainingJobSchema, {
     method: "POST",
   });
 }
