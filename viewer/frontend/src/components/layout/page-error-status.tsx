@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { StatusCard } from "@/features/viewer/components/shared/status-card";
+import { StatusCard } from "@/components/ui/status-card";
 
 export function FullPageError({
   message,
