@@ -12,6 +12,8 @@ logs
 !viewer/frontend/src/components/features/viewer/logs/**
 !viewer/frontend/src/lib/logs/
 !viewer/frontend/src/lib/logs/**
+!viewer/frontend/src/features/viewer/state/logs/
+!viewer/frontend/src/features/viewer/state/logs/**
 lightning_logs/
 node_modules/
 emperor.egg-info
