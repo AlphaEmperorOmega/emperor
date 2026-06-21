@@ -14,7 +14,6 @@ from models.config_overrides import (
 from viewer.backend.inspector.config_classes import abstract_config_class_error
 from viewer.backend.inspector.errors import InspectorError
 
-
 LEGACY_OVERRIDE_ALIASES = {
     "bias_flag": "stack_bias_flag",
     "hidden_dim": "stack_hidden_dim",

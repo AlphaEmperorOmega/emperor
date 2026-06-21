@@ -8,9 +8,10 @@ import signal
 import subprocess
 import sys
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Protocol
+from typing import Any, Protocol
 
 from viewer.backend.training_cgroups import (
     CgroupV2Job,
@@ -153,7 +154,9 @@ class CgroupProcessHandle:
     def wait(self, timeout: float | None = None) -> int:
         deadline = None if timeout is None else time.monotonic() + timeout
         exit_code = self.process.wait(timeout=timeout)
-        cgroup_timeout = None if deadline is None else max(0.0, deadline - time.monotonic())
+        cgroup_timeout = (
+            None if deadline is None else max(0.0, deadline - time.monotonic())
+        )
         try:
             self.cgroup.wait_empty(timeout=cgroup_timeout)
         except TimeoutError as exc:
