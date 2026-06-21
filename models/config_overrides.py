@@ -7,10 +7,12 @@ from types import ModuleType, UnionType
 from typing import Any, Union, get_args, get_origin
 
 from models.catalog import model_identity_payload_from_id, module_path_for_model_id
+from models.dataset_naming import dataset_class_name_to_cli_name
 
 SKIP_CONFIG_KEYS = {
     "CONFIG_OVERRIDE_SKIP_KEYS",
     "DATASET_OPTIONS",
+    "MONITOR_OPTIONS",
 }
 
 MODEL_PARAM_ALIASES = {
@@ -493,6 +495,100 @@ def print_preset_options(experiment: str, models_dir: str = "models") -> None:
     raise SystemExit(f"ExperimentPreset not found in {presets_path}")
 
 
+def _dataset_option_name(item: ast.AST) -> str | None:
+    if isinstance(item, ast.Name):
+        return item.id
+    if isinstance(item, ast.Attribute):
+        return item.attr
+    return None
+
+
+def print_dataset_options(experiment: str, models_dir: str = "models") -> None:
+    config_path = _catalog_source_path(experiment, "config.py", models_dir)
+    if not config_path.exists():
+        raise SystemExit(f"Config file not found: {config_path}")
+
+    source = config_path.read_text()
+    tree = ast.parse(source)
+
+    for node in tree.body:
+        key = None
+        value_node = None
+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            key = node.target.id
+            value_node = node.value
+        elif isinstance(node, ast.Assign) and len(node.targets) == 1:
+            target = node.targets[0]
+            if isinstance(target, ast.Name):
+                key = target.id
+                value_node = node.value
+
+        if key != "DATASET_OPTIONS" or not isinstance(
+            value_node,
+            ast.List | ast.Tuple,
+        ):
+            continue
+
+        dataset_names = [
+            name
+            for item in value_node.elts
+            if (name := _dataset_option_name(item)) is not None
+        ]
+        if not dataset_names:
+            raise SystemExit(f"No DATASET_OPTIONS found for {experiment}")
+        for dataset_name in dataset_names:
+            print(dataset_class_name_to_cli_name(dataset_name))
+        return
+
+    raise SystemExit(f"No DATASET_OPTIONS found for {experiment}")
+
+
+def _monitor_option_name(item: ast.AST) -> str | None:
+    if not isinstance(item, ast.Call):
+        return None
+    for keyword in item.keywords:
+        if keyword.arg != "name":
+            continue
+        try:
+            value = ast.literal_eval(keyword.value)
+        except (SyntaxError, ValueError):
+            return None
+        return value if isinstance(value, str) else None
+    return None
+
+
+def print_monitor_options(experiment: str, models_dir: str = "models") -> None:
+    config_path = _catalog_source_path(experiment, "config.py", models_dir)
+    if not config_path.exists():
+        raise SystemExit(f"Config file not found: {config_path}")
+
+    source = config_path.read_text()
+    tree = ast.parse(source)
+
+    for node in tree.body:
+        key = None
+        value_node = None
+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            key = node.target.id
+            value_node = node.value
+        elif isinstance(node, ast.Assign) and len(node.targets) == 1:
+            target = node.targets[0]
+            if isinstance(target, ast.Name):
+                key = target.id
+                value_node = node.value
+
+        if key != "MONITOR_OPTIONS":
+            continue
+        if not isinstance(value_node, ast.List | ast.Tuple):
+            return
+
+        for item in value_node.elts:
+            name = _monitor_option_name(item)
+            if name is not None:
+                print(name)
+        return
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
@@ -500,14 +596,29 @@ def main() -> None:
         )
     )
     parser.add_argument("experiment", help="Experiment package under models/.")
-    parser.add_argument(
+    list_group = parser.add_mutually_exclusive_group()
+    list_group.add_argument(
         "--presets",
         action="store_true",
         help="Print experiment presets instead of config options.",
     )
+    list_group.add_argument(
+        "--datasets",
+        action="store_true",
+        help="Print experiment datasets instead of config options.",
+    )
+    list_group.add_argument(
+        "--monitors",
+        action="store_true",
+        help="Print experiment monitor option names instead of config options.",
+    )
     args = parser.parse_args()
     if args.presets:
         print_preset_options(args.experiment)
+    elif args.datasets:
+        print_dataset_options(args.experiment)
+    elif args.monitors:
+        print_monitor_options(args.experiment)
     else:
         print_config_options(args.experiment)
 

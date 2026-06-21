@@ -178,10 +178,30 @@ def discover_model_ids() -> list[str]:
     return sorted(MODEL_CATALOG)
 
 
+def discover_model_types() -> list[str]:
+    return sorted({entry.model_type for entry in MODEL_CATALOG.values()})
+
+
+def model_type_exists(model_type: str) -> bool:
+    if not is_safe_model_segment(model_type):
+        return False
+    return model_type in discover_model_types()
+
+
 def discover_model_identities() -> list[ModelIdentity]:
     return [
         ModelIdentity(MODEL_CATALOG[key].model_type, MODEL_CATALOG[key].model)
         for key in discover_model_ids()
+    ]
+
+
+def discover_model_identities_for_type(model_type: str) -> list[ModelIdentity]:
+    if not model_type_exists(model_type):
+        return []
+    return [
+        identity
+        for identity in discover_model_identities()
+        if identity.model_type == model_type
     ]
 
 
@@ -272,6 +292,11 @@ def _parse_args() -> argparse.Namespace:
     action = parser.add_mutually_exclusive_group(required=True)
     action.add_argument("--list", action="store_true", help="Print public model flags.")
     action.add_argument(
+        "--list-types",
+        action="store_true",
+        help="Print available model types.",
+    )
+    action.add_argument(
         "--module",
         action="store_true",
         help="Print a model module path.",
@@ -283,7 +308,21 @@ def _parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = _parse_args()
+    if args.list_types:
+        for model_type in discover_model_types():
+            print(model_type)
+        return
+
     if args.list:
+        if args.model_type:
+            if not model_type_exists(args.model_type):
+                raise SystemExit(
+                    f"Unknown model type: --model-type {args.model_type}"
+                )
+            for identity in discover_model_identities_for_type(args.model_type):
+                print(f"--model {identity.model}")
+            return
+
         for identity in discover_model_identities():
             print(f"--model-type {identity.model_type} --model {identity.model}")
         return
