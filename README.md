@@ -1,305 +1,525 @@
 # Emperor
 
-> **Work in Progress (Pre-release)** — This project is under active development and has not reached v1.0. Features, APIs, and configurations may change.
+**Current package version:** `0.1.0`
 
-## Vision
+Emperor is a personal PyTorch research framework for building experimental neural
+network models from reusable, inspectable components. The repository combines:
 
-Emperor is a personal research framework for quickly building experimental neural network models from reusable components. It is designed for trying architecture ideas, combining them with existing building blocks, and testing them on preset datasets without rebuilding the same training, dataset, logging, and visualization plumbing every time.
+- `emperor/` - core neural modules, controller primitives, datasets, training
+  helpers, and monitor callbacks.
+- `models/` - reference experiment packages that compose the core modules into
+  runnable architectures.
+- `viewer/` - a local browser-based Model Visualizer for inspecting presets,
+  editing config overrides, planning training runs, launching local jobs, and
+  reviewing live or historical monitor data.
 
-The project exists to make model experimentation easier to repeat and easier to inspect. Models are built through hierarchical configuration, so pieces such as layer stacks, gates, recurrent wrappers, halting controllers, memory modules, and other experimental components can be reused and recombined across different ideas.
-
-The main goal is understanding: build small models, compare variants, watch what happens during training, and use those observations to decide which ideas are worth exploring further.
-
----
-
-## Quick Start
-
-This path uses `linears/linear`, the currently stable end-to-end model. The
-first training command is intentionally small: one preset, one dataset, and one
-epoch.
-
-```bash
-# 1. Set up Python, install dependencies, activate ./torchenv, and start Viewer
-source env.sh
-
-# 2. Confirm the model catalog and available presets
-source experiment.sh --list-models
-source experiment.sh --model-type linears --model linear --list-presets
-
-# 3. Inspect the baseline model without training
-source experiment.sh --model-type linears --model linear --preset baseline --print-model
-
-# 4. Run a smoke training job
-source experiment.sh --model-type linears --model linear \
-  --preset baseline \
-  --datasets Mnist \
-  --logdir quickstart \
-  --config --num-epochs 1
-
-# 5. Open the TensorBoard logs
-tensorboard --logdir logs/quickstart
-```
-
-After `source env.sh`, the browser Viewer is available at
-`http://localhost:9000`, backed by the local API on port `9999`.
-
-The smoke run builds the `baseline` preset, trains it on `Mnist` for one epoch,
-and writes TensorBoard events plus a `result.json`. The first run may also
-download the dataset.
-
-Logs for the smoke run are written under
-`logs/quickstart/linears/linear/BASELINE/Mnist/<parameter-id>_<timestamp>/version_*/`.
-Each completed run gets a `result.json`, and the best results summary is kept at
-`logs/quickstart/linears/linear/best_results.json`.
-
-Important scaling rules:
-
-- Without `--datasets`, the command trains once for every dataset in
-  `models/linears/linear/config.py`.
-- Without `--config --num-epochs 1`, the command uses the model's configured
-  epoch count.
-- `--config` marks the following flags as model-config overrides.
-- Runs multiply by selected presets, selected datasets, and search samples.
-
-Once the smoke run works, compare small variants:
-
-```bash
-# Compare two presets on one dataset for one epoch each
-source experiment.sh --model-type linears --model linear \
-  --presets baseline gating \
-  --datasets Mnist \
-  --logdir comparison \
-  --config --num-epochs 1
-
-# Sample 10 random configs for one preset on one dataset
-source experiment.sh --model-type linears --model linear \
-  --preset baseline \
-  --datasets Mnist \
-  --random-search 10 \
-  --logdir search_test \
-  --config --num-epochs 1
-```
-
-For example, `--presets baseline gating --datasets Mnist Cifar10 --random-search 10`
-creates `2 x 2 x 10` training runs.
+The main goal is repeatable model experimentation: build small models, compare
+variants, watch what happens during training, and use the results to decide
+which ideas are worth exploring next.
 
 ## Environment Setup
 
-**Requirements:** Python 3.13 (pinned in `mise.toml`). The package itself supports Python 3.11–3.13.
+**Requirements:** the recommended setup uses `mise.toml`, which pins Python
+3.13 and Node 24. You do not need to pre-install Python 3.13 yourself when using
+`env.sh`; the script installs `mise` if needed and lets `mise` provision the
+pinned Python and Node versions. `pyproject.toml` accepts manual Python installs
+from 3.11 through 3.13 (`>=3.11,<3.14`), but the bootstrap/dev environment is
+pinned to 3.13.
 
-**Note:** Windows users must use [WSL](https://learn.microsoft.com/en-us/windows/wsl/install) to run the setup scripts.
+**Windows:** run the setup scripts from WSL.
 
-### Using env.sh (recommended)
+Set up the repository:
 
 ```bash
 source env.sh
 ```
 
-On first run, `env.sh` installs `mise` (if missing), uses it to provision the Python version pinned in `mise.toml`, creates a `./torchenv` virtualenv, installs the project from `pyproject.toml`, activates the environment, and starts the browser model viewer in the background. On subsequent runs it re-activates and reuses the already-running viewer servers when possible. The script is short and readable — open [`env.sh`](env.sh) if you want to see the exact sequence or adapt it.
+On first run, `env.sh` installs `mise` if needed, provisions the pinned Python
+and Node versions, creates `./torchenv`, installs the project from
+`pyproject.toml`, installs Viewer frontend dependencies, activates the
+virtualenv, and starts the Viewer backend and frontend in the background.
 
-Viewer logs and PID files are written under `viewer/.runtime/`. By default, the backend uses port `9999` and the frontend uses port `9000`. Stop or inspect the viewer with:
+On later runs, it reuses the virtualenv and already-running Viewer servers when
+possible. Runtime logs and PID files are written under `viewer/.runtime/`.
+
+After `source env.sh`, the Viewer is available at:
+
+```text
+http://localhost:9000
+```
+
+The local Viewer API defaults to:
+
+```text
+http://127.0.0.1:9999
+```
+
+Stop or inspect Viewer servers:
 
 ```bash
 source env.sh --viewer-stop
 source env.sh --viewer-status
 ```
 
-Running `source env.sh` again is safe: it reuses live PID files and also checks whether ports `9999` or `9000` are already listening before starting another server.
+Default ports can be overridden with:
+
+```bash
+export VIEWER_BACKEND_PORT=9999
+export VIEWER_FRONTEND_PORT=9000
+export NEXT_PUBLIC_VIEWER_API_URL=http://127.0.0.1:9999
+```
+
+## Current State
+
+Use this command to validate the full local setup:
+
+```bash
+source experiment.sh \
+  --model-type linears \
+  --model linear \
+  --preset baseline
+```
+
+`linears/linear` is the recommended smoke-test model. It currently exposes
+baseline, gating, halting, memory, residual, post-norm, and recurrent preset
+families. The other cataloged model packages are research/reference
+implementations for adaptive parameters, experts, neuron clusters, and
+transformer experiments. Before using one for a long run, verify the exact
+preset with `--print-model` and a small one-epoch run.
+
+The Viewer has grown into a local experiment workbench with three workspaces:
+
+- **Model** - choose a model/preset/dataset, inspect module and operation
+  graphs, review parameters, create config snapshots, and start training.
+- **Compare** - compare selected model targets and reuse a target in the Model
+  workspace.
+- **Logs** - browse historical TensorBoard runs, inspect saved graphs, and
+  review monitor data from completed runs.
+
+## Quick Start
+
+After `source env.sh`, use this path to inspect the stable model and run one
+short training job.
+
+```bash
+# 1. Confirm the model categories.
+source experiment.sh --list-model-types
+
+# 2. Confirm the available linear models.
+source experiment.sh \
+  --model-type linears \
+  --list-models
+
+# 3. Confirm the available linear presets.
+source experiment.sh \
+  --model-type linears \
+  --model linear \
+  --list-presets
+
+# 4. Inspect the baseline model without training.
+source experiment.sh \
+  --model-type linears \
+  --model linear \
+  --preset baseline \
+  --print-model
+
+# 5. Check optional monitor callbacks for training runs.
+source experiment.sh \
+  --model-type linears \
+  --model linear \
+  --list-monitors
+
+# 6. Run a one-epoch smoke training job.
+source experiment.sh \
+  --model-type linears \
+  --model linear \
+  --preset baseline \
+  --datasets mnist \
+  --logdir quickstart \
+  --config --num-epochs 1
+
+# 7. Open TensorBoard logs if you want the raw event view.
+tensorboard --logdir logs/quickstart
+```
+
+The smoke run builds the `baseline` preset, trains it on `mnist` for one epoch,
+and may download the dataset on first use.
+
+Each training run writes a Lightning/TensorBoard run directory under:
+
+```text
+logs/quickstart/linears/linear/BASELINE/Mnist/<parameter-id>_<timestamp>/version_*/
+```
+
+That `version_*` folder contains TensorBoard event files such as
+`events.out.tfevents.*`, Lightning metadata such as `hparams.yaml`, and
+Emperor's `result.json` with the final parameters and metrics. Checkpoint files
+appear there only when checkpointing is enabled.
+
+Important scaling rules:
+
+- Without `--datasets`, a command trains once for every dataset in the model's
+  `DATASET_OPTIONS`.
+- Without `--config --num-epochs 1`, a command uses the model's configured epoch
+  count.
+- `--config` marks the following flags as model-config overrides.
+- Runs multiply by selected presets, selected datasets, and search samples.
+
+For example:
+
+```bash
+source experiment.sh \
+  --model-type linears \
+  --model linear \
+  --presets baseline gating \
+  --datasets mnist cifar10 \
+  --random-search 10 \
+  --logdir comparison \
+  --config --num-epochs 1
+```
+
+That creates `2 x 2 x 10` planned training runs.
+
+Before choosing overrides, print every overridable field and its default value
+for the selected model:
+
+```bash
+source experiment.sh \
+  --model-type linears \
+  --model linear \
+  --list-config
+```
+
+Common `config` override examples:
+
+```bash
+# Smaller/faster hidden stack.
+source experiment.sh \
+  --model-type linears \
+  --model linear \
+  --preset baseline \
+  --datasets mnist \
+  --config --hidden-dim 64 --stack-num-layers 2 --stack-dropout-probability 0.0
+
+# Training hyperparameters.
+source experiment.sh \
+  --model-type linears \
+  --model linear \
+  --preset baseline \
+  --datasets mnist \
+  --config --batch-size 64 --learning-rate 0.0003 --trainer-gradient-clip-val 0.5
+```
 
 ## Running Experiments
 
-Use `experiment.sh` to train a model. The general form is:
+Use `experiment.sh` from the repository root:
 
 ```bash
-source experiment.sh --model-type <type> --model <name> [options]
+source experiment.sh \
+  --model-type <type> \
+  --model <name> \
+  [options]
 ```
 
-Run `source experiment.sh` with no arguments to print the full list of flags.
-
-### List available models
+Run with no arguments to print the full flag list:
 
 ```bash
-source experiment.sh --list-models
+source experiment.sh
 ```
 
-```
-Available models:
-  --model-type experts --model experts_linear
-  --model-type experts --model experts_linear_adaptive
-  --model-type linears --model linear
-  --model-type linears --model linear_adaptive
-  --model-type neuron --model neuron_linear
-  --model-type parametric --model parametric_generator
-  --model-type parametric --model parametric_matrix
-  --model-type parametric --model parametric_vector
-  --model-type transformer_encoder --model bert_linear
-  --model-type transformer_encoder --model vit_linear
-```
-
-### List a model's presets
-
-Each model exposes its own set of named presets. List them with `--list-presets`:
+List available model types:
 
 ```bash
-source experiment.sh --model-type linears --model linear --list-presets
+source experiment.sh --list-model-types
 ```
 
-```
-Available presets for --model-type linears --model linear:
-  baseline  --  Baseline linear stack preset; supports search-space flags.
-  gating  --  Linear stack with a learned gate applied to hidden-layer outputs.
-  halting  --  Linear stack with adaptive computation halting enabled.
-  gating-halting  --  Linear stack with both learned gating and adaptive computation halting.
-```
-
-Every preset supports the search-space flags (`--grid-search`, `--random-search`).
-
-### Run a preset
+List models within a type:
 
 ```bash
-source experiment.sh --model-type linears --model linear --preset baseline
-source experiment.sh --model-type linears --model linear --preset gating-halting
+source experiment.sh \
+  --model-type linears \
+  --list-models
 ```
 
-`--preset` selects which preset to run. Exactly one of `--preset`, `--presets`, `--all-presets`, or `--list-config` is required.
+`--list-models` without `--model-type` still prints the full catalog.
 
-### Run selected presets
+List a model's presets:
 
 ```bash
-source experiment.sh --model-type linears --model linear --presets baseline gating
-source experiment.sh --model-type linears --model linear --presets baseline gating --grid-search
+source experiment.sh \
+  --model-type linears \
+  --model linear \
+  --list-presets
 ```
 
-`--presets` runs a selected subset of presets sequentially in one invocation. The first preset is the primary preset for compatibility with the existing `preset` field in viewer training jobs, and each selected preset is trained across the selected datasets before the command exits.
+List a model's monitor callbacks:
 
-### Reference Architectures
+```bash
+source experiment.sh \
+  --model-type linears \
+  --model linear \
+  --list-monitors
+```
 
-- **linears/linear** — Fully-connected classifier with configurable depth, activation, and dropout
-- **linears/linear_adaptive** — Fully-connected classifier where a generator network produces auxiliary parameters (diagonal weights, bias, memory) that are combined with the default layer parameters at each layer
-- **experts/experts_linear** — Mixture of Experts architecture with learned routing between specialized linear sub-networks
-- **experts/experts_linear_adaptive** — Mixture of Experts whose experts use adaptive (generator-produced) parameters
-- **transformer_encoder/vit_linear** — Vision Transformer classifier with linear patch embeddings, a trainable class token, and configurable linear transformer sub-stacks
-- **parametric/parametric_generator** — Adaptive parameter layer where expert weights are generated by a generator network
-- **parametric/parametric_matrix** — Adaptive parameter layer where expert weights are mixed as full matrices via a shared router
-- **parametric/parametric_vector** — Adaptive parameter layer where expert weights are mixed as vectors via independent routers with configurable layer stack options
-- **neuron/neuron_linear** — Linear model wrapped with neuron hidden-block adaptation
-- **transformer_encoder/bert_linear** — BERT pretraining model with MLM/NSP heads, token type embeddings, tied MLM decoder weights, and configurable linear transformer sub-stacks
+Run one preset:
 
-> [!WARNING]
-> The following reference architectures are currently broken on `main` and will fail to run until the next update: `linears/linear_adaptive`, `experts/experts_linear`, `experts/experts_linear_adaptive`, `transformer_encoder/vit_linear`, `parametric/parametric_generator`, `parametric/parametric_matrix`, `parametric/parametric_vector`, `transformer_encoder/bert_linear`. Only `linears/linear` is known to work end-to-end right now.
+```bash
+source experiment.sh \
+  --model-type linears \
+  --model linear \
+  --preset baseline
+```
 
-Run `source experiment.sh --model-type <type> --model <name> --list-presets` to discover any extra ablation presets a model exposes.
+Run selected presets sequentially:
+
+```bash
+source experiment.sh \
+  --model-type linears \
+  --model linear \
+  --presets baseline gating memory \
+  --datasets mnist \
+  --config --num-epochs 1
+```
+
+Run every preset for a model:
+
+```bash
+source experiment.sh \
+  --model-type linears \
+  --model linear \
+  --all-presets
+```
+
+Print a model structure instead of training:
+
+```bash
+source experiment.sh \
+  --model-type linears \
+  --model linear \
+  --preset baseline \
+  --print-model
+```
+
+Monitor callbacks apply to training runs, not `--print-model`.
+
+Run one preset with selected monitors:
+
+```bash
+source experiment.sh \
+  --model-type linears \
+  --model linear \
+  --preset baseline \
+  --datasets mnist \
+  --monitors linear halting
+```
+
+Use a custom log folder:
+
+```bash
+source experiment.sh \
+  --model-type linears \
+  --model linear \
+  --preset baseline \
+  --logdir comparison_run
+```
+
+Use the same `--logdir` across runs to group TensorBoard logs for comparison.
 
 ### Datasets
 
-Each run trains one checkpoint per selected preset and per entry in the model's `DATASET_OPTIONS` list (in `config.py`), sequentially. A single `--preset` invocation produces `len(DATASET_OPTIONS)` checkpoints, `--presets p1 p2` produces `2 × len(DATASET_OPTIONS)` checkpoints, and a search flag multiplies that count. Add or remove dataset classes to change the targets; the full catalog lives under `emperor/datasets/`:
+Each model package defines a `DATASET_OPTIONS` list in its `config.py`. For
+`linears/linear`, the default image-classification datasets are:
 
 ```python
 DATASET_OPTIONS: list = [Mnist, FashionMNIST, Cifar10, Cifar100]
 ```
 
-### Run all presets
+List available datasets for a model:
 
 ```bash
-source experiment.sh --model-type linears --model linear_adaptive --all-presets
+source experiment.sh \
+  --model-type linears \
+  --model linear \
+  --list-datasets
 ```
 
-Runs every preset in the model's `ExperimentPreset` sequentially across all datasets.
-
-### Run grid search
+Restrict a run to one or more datasets:
 
 ```bash
-source experiment.sh --model-type linears --model linear --preset baseline --grid-search
-source experiment.sh --model-type linears --model linear_adaptive --all-presets --grid-search
+source experiment.sh \
+  --model-type linears \
+  --model linear \
+  --preset baseline \
+  --datasets mnist fashion-mnist
 ```
 
-Exhaustively runs every combination in the search space across all datasets.
+### Config Overrides
 
-The search space is defined in each model's `config.py` as variables prefixed with `SEARCH_SPACE_`:
-
-```python
-# models/linears/linear/config.py
-SEARCH_SPACE_LEARNING_RATE = [1e-4, 1e-3, 1e-2]
-SEARCH_SPACE_HIDDEN_DIM = [64, 128, 256]
-SEARCH_SPACE_STACK_ACTIVATION = [RELU, SILU, GELU, MISH]
-...
-```
-
-Restrict a sweep to specific axes with `--search-keys`, or supply values directly on the command line with `--search-set`:
+Use `--config` to override model config values without editing `config.py`:
 
 ```bash
-source experiment.sh --model-type linears --model linear --preset baseline --grid-search --search-keys HIDDEN_DIM STACK_NUM_LAYERS
-source experiment.sh --model-type linears --model linear --preset baseline --grid-search --search-set hidden_dim=64,128
+source experiment.sh \
+  --model-type linears \
+  --model linear \
+  --preset baseline \
+  --config --num-epochs 30 --callback-early-stopping-patience 0
 ```
 
-### Run random search
+More examples:
 
 ```bash
-source experiment.sh --model-type linears --model linear --preset baseline --random-search 10
-source experiment.sh --model-type linears --model linear_adaptive --all-presets --random-search 10
+# Change optimization and batch size.
+source experiment.sh \
+  --model-type linears \
+  --model linear \
+  --preset baseline \
+  --datasets mnist \
+  --config --batch-size 64 --learning-rate 0.0003
+
+# Make the hidden stack smaller for fast iteration.
+source experiment.sh \
+  --model-type linears \
+  --model linear \
+  --preset baseline \
+  --datasets mnist \
+  --config --hidden-dim 64 --stack-num-layers 2
+
+# Try a different activation and dropout value.
+source experiment.sh \
+  --model-type linears \
+  --model linear \
+  --preset baseline \
+  --datasets mnist \
+  --config --stack-activation RELU --stack-dropout-probability 0.1
+
+# Override controller settings when the selected preset enables that controller.
+source experiment.sh \
+  --model-type linears \
+  --model linear \
+  --preset recurrent-halting \
+  --datasets mnist \
+  --config --recurrent-max-steps 6 --recurrent-halting-threshold 0.95
 ```
 
-Randomly samples 10 configurations from the search space. `--grid-search` and `--random-search` are mutually exclusive and can be combined with `--preset`, `--presets`, or `--all-presets`.
-
-### Override config values
-
-Use `--config` to override values from the model's `config.py` without editing the file (for example epochs or callbacks):
+List overridable fields:
 
 ```bash
-source experiment.sh --model-type linears --model linear --preset baseline --config --num-epochs 30 --callback-early-stopping-patience 0
+source experiment.sh \
+  --model-type linears \
+  --model linear \
+  --list-config
 ```
 
-Run `source experiment.sh --model-type linears --model linear --list-config` to see every overridable flag and its default.
+### Search
 
-### Inspect a model
-
-Print the model structure instead of training it (requires `--preset`):
+Run a grid search:
 
 ```bash
-source experiment.sh --model-type linears --model linear --preset baseline --print-model
+source experiment.sh \
+  --model-type linears \
+  --model linear \
+  --preset baseline \
+  --grid-search
 ```
 
-For browser-based preset inspection and graph visualization, see [`viewer/README.md`](viewer/README.md).
-
-### Custom log folder
+Run a random search:
 
 ```bash
-source experiment.sh --model-type linears --model linear --preset baseline --logdir comparison_run
-source experiment.sh --model-type linears --model linear --preset gating --logdir comparison_run
+source experiment.sh \
+  --model-type linears \
+  --model linear \
+  --preset baseline \
+  --random-search 10
 ```
 
-Use the same `--logdir` across different models or presets to group their TensorBoard logs together for comparison.
+Restrict a sweep to selected axes:
 
-### Viewing results
+```bash
+source experiment.sh \
+  --model-type linears \
+  --model linear \
+  --preset baseline \
+  --grid-search \
+  --search-keys HIDDEN_DIM STACK_NUM_LAYERS
+```
 
-Training metrics are logged to `logs/`. Launch TensorBoard to visualize them:
+Supply command-line search values:
+
+```bash
+source experiment.sh \
+  --model-type linears \
+  --model linear \
+  --preset baseline \
+  --grid-search \
+  --search-set hidden_dim=64,128
+```
+
+`--grid-search` and `--random-search` are mutually exclusive and can be combined
+with `--preset`, `--presets`, or `--all-presets`.
+
+## Viewer
+
+The Viewer is the local workbench for model experiments. Use it when you want to
+pick a model, preset, and dataset visually; inspect what a preset builds before
+training; adjust config overrides without assembling a long terminal command;
+start or monitor local training jobs; and compare historical runs after the
+experiment finishes.
+
+It is meant for the human loop around training: understanding the model shape,
+checking planned runs, watching monitor signals while a job is active, and
+reviewing logs once there are results to compare. The terminal CLI remains the
+simpler path for scripted or repeatable runs.
+
+See [`viewer/README.md`](viewer/README.md) for the focused Viewer guide.
+
+Hosted or non-local deployments should configure explicit CORS origins in the
+Viewer backend environment:
+
+```bash
+export VIEWER_API_CORS_ORIGINS='["https://viewer.example.com"]'
+```
+
+Bearer auth can be enabled with:
+
+```bash
+export VIEWER_API_AUTH_MODE=bearer
+export VIEWER_API_TOKEN=<token>
+```
+
+## Results and Logs
+
+Training metrics are logged under `logs/`. Launch TensorBoard with:
 
 ```bash
 tensorboard --logdir logs/
 ```
 
-### Search results
+## Test and Quality Commands
 
-When running `--grid-search` or `--random-search`, two additional files are written:
+Use `run_test.sh` from the repository root for the normal unit-test workflow.
+It runs the docs unittest suite with fail-fast enabled, which is the quickest
+way to see whether the core unit tests pass while fixing failures.
 
-- **`result.json`** — saved inside each run's log directory with the exact parameters and final metrics for that run
-- **`best_results.json`** — saved at `logs/{category}/{model}/best_results.json`, updated after every run that makes the top 5
-
-`best_results.json` tracks the top 5 configurations per dataset ranked by `val_accuracy`:
-
-```json
-{
-  "Mnist": [
-    {"rank": 1, "option": "CONFIG", "params": {"learning_rate": "0.001", ...}, "metrics": {"val_accuracy": 0.984, "val_loss": 0.051, ...}},
-    {"rank": 2, ...},
-    ...
-  ],
-  "Cifar10": [...]
-}
+```bash
+bash run_test.sh
 ```
 
-The file is updated in place as the search runs — if the process is interrupted, the top 5 found so far is preserved.
+Target a specific docs test module, class, or test method when iterating on a
+failure:
 
-### License
+```bash
+bash run_test.sh layer
+bash run_test.sh layer TestLayer
+bash run_test.sh layer TestLayer test_forward_shape
+```
 
-[CC BY-NC 4.0](LICENSE) — free to use and modify for non-commercial purposes with attribution.
+The script maps the first argument to `docs/test_<name>.py` and then passes any
+class or method name through to `python3 -m unittest -f`.
+
+For Viewer-specific changes, run the relevant backend or frontend checks from
+the package being changed after the unit suite is green.
+
+## License
+
+[CC BY-NC 4.0](LICENSE) - free to use and modify for non-commercial purposes
+with attribution.
