@@ -70,7 +70,7 @@ describe("GraphNodeView", () => {
   it("keeps explicit bottom padding around the card contents", () => {
     renderGraphNode();
 
-    expect(screen.getByRole("button", { name: /select and expand main_model\.0/i })).toHaveClass(
+    expect(screen.getByTestId("graph-node-card-main_model.0")).toHaveClass(
       "nodrag",
       "nopan",
       "edge",
@@ -1111,7 +1111,7 @@ describe("GraphNodeView", () => {
       height: SIMPLE_NODE_HEIGHT,
     });
 
-    const card = screen.getByRole("button", { name: /select and expand main_model\.0/i });
+    const card = screen.getByTestId("graph-node-card-main_model.0");
     expect(within(card).getByText("Layer")).toBeInTheDocument();
     expect(within(card).getByTitle("33,024 parameters")).toHaveTextContent("33K params");
     expect(within(card).getByTitle("input/output: 128 -> 128")).toHaveTextContent(
@@ -1161,7 +1161,7 @@ describe("GraphNodeView", () => {
       height: SIMPLE_NODE_HEIGHT,
     });
 
-    const card = screen.getByRole("button", { name: /select and expand main_model/i });
+    const card = screen.getByTestId("graph-node-card-main_model");
     expect(within(card).getByTitle("65,792 parameters")).toHaveTextContent("65.8K params");
     expect(within(card).getByTitle("input/output: 256 -> 10")).toHaveTextContent("256 -> 10");
     expect(screen.queryByTestId("stack-diagram-main_model")).not.toBeInTheDocument();
@@ -1183,7 +1183,7 @@ describe("GraphNodeView", () => {
       height: SIMPLE_NODE_HEIGHT,
     });
 
-    const card = screen.getByRole("button", { name: /select and expand main_model\.0/i });
+    const card = screen.getByTestId("graph-node-card-main_model.0");
     const title = within(card).getByText(longLabel);
     const params = within(card).getByTitle("1,234,567 parameters");
     const dims = within(card).getByTitle("input/output: 256 -> 512");

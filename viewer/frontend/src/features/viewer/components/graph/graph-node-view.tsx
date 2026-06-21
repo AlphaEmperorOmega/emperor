@@ -1,4 +1,11 @@
-import { createContext, memo, useContext, type ReactNode } from "react";
+import {
+  createContext,
+  memo,
+  useContext,
+  type KeyboardEvent,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 import { ChevronRight, LineChart } from "lucide-react";
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import { GraphIconButton } from "@/features/viewer/components/graph/graph-icon-button";
@@ -56,6 +63,13 @@ const GraphNodeView = memo(function GraphNodeView({
   const handleActivate = () => {
     data.onActivateNode();
   };
+  const handleSelectClick = (event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    handleActivate();
+  };
+  const handleSelectKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+  };
 
   if (isViewportMoving) {
     return (
@@ -103,65 +117,67 @@ const GraphNodeView = memo(function GraphNodeView({
 
   return (
     <div
-      role="button"
-      tabIndex={0}
-      aria-label={activateLabel}
-      aria-expanded={data.canToggleExpansion ? data.isExpanded : undefined}
+      role="group"
+      aria-label={data.path}
+      data-testid={`graph-node-card-${data.nodeId}`}
       onClick={handleActivate}
-      onKeyDown={(event) => {
-        if (event.key !== "Enter" && event.key !== " ") {
-          return;
-        }
-        event.preventDefault();
-        handleActivate();
-      }}
       className={cn(
-        "nodrag nopan edge flex w-full flex-col overflow-hidden rounded-card px-8 pb-4 pt-4 shadow-[0_18px_40px_-28px_rgba(0,0,0,0.95)] transition focus:outline-none focus-visible:ring-2 focus-visible:ring-focus",
+        "nodrag nopan edge relative flex w-full flex-col overflow-hidden rounded-card px-8 pb-4 pt-4 shadow-[0_18px_40px_-28px_rgba(0,0,0,0.95)] transition",
         selected ? "edge-sel" : "hover:brightness-110",
       )}
       style={{ height: data.height }}
     >
-      <Handle type="target" position={Position.Left} />
-      <GraphNodeHeader
-        nodeId={data.nodeId}
-        label={data.label}
-        subtitle={data.subtitle}
-        graphDetailMode={data.graphDetailMode}
-        parameterCount={data.parameterCount}
-        parameterSizeBytes={data.parameterSizeBytes}
-        modelSizeText={modelSizeText}
-        childCount={data.childCount}
-        simpleParameterText={simpleParamText}
-        simpleDimsText={simpleDimsText}
-        expansionButton={expansionButton}
-        parameterIndicators={parameterIndicators}
-        monitorButton={monitorButton}
+      <button
+        type="button"
+        aria-label={activateLabel}
+        aria-expanded={data.canToggleExpansion ? data.isExpanded : undefined}
+        onClick={handleSelectClick}
+        onKeyDown={handleSelectKeyDown}
+        className="absolute inset-0 z-0 rounded-card focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
       />
-      {!isSimpleMode && parameterShapes.length > 0 && (
-        <GraphNodeParameterShapes nodeId={data.nodeId} entries={parameterShapes} />
-      )}
-      {!isSimpleMode && data.clusterDiagram ? (
-        <ClusterDiagramView diagram={data.clusterDiagram} nodeId={data.nodeId} />
-      ) : !isSimpleMode && data.stackDiagram ? (
-        <StackDiagramView diagram={data.stackDiagram} nodeId={data.nodeId} />
-      ) : !isSimpleMode && data.expertDiagram ? (
-        <ExpertDiagramView diagram={data.expertDiagram} nodeId={data.nodeId} />
-      ) : !isSimpleMode ? (
-        <GraphNodeChildSummaries
+      <Handle type="target" position={Position.Left} />
+      <div className="relative z-10 flex h-full w-full flex-col">
+        <GraphNodeHeader
           nodeId={data.nodeId}
-          summaries={data.childSummaries}
+          label={data.label}
+          subtitle={data.subtitle}
+          graphDetailMode={data.graphDetailMode}
+          parameterCount={data.parameterCount}
+          parameterSizeBytes={data.parameterSizeBytes}
+          modelSizeText={modelSizeText}
+          childCount={data.childCount}
+          simpleParameterText={simpleParamText}
+          simpleDimsText={simpleDimsText}
+          expansionButton={expansionButton}
+          parameterIndicators={parameterIndicators}
+          monitorButton={monitorButton}
         />
-      ) : null}
-      {!isSimpleMode && hasMetadata && (
-        <GraphNodeDetails
-          detailsId={detailsId}
-          toggleLabel={detailToggleLabel}
-          path={data.path}
-          entries={entries}
-          isExpanded={data.isDetailsExpanded}
-          onToggleDetails={data.onToggleDetails}
-        />
-      )}
+        {!isSimpleMode && parameterShapes.length > 0 && (
+          <GraphNodeParameterShapes nodeId={data.nodeId} entries={parameterShapes} />
+        )}
+        {!isSimpleMode && data.clusterDiagram ? (
+          <ClusterDiagramView diagram={data.clusterDiagram} nodeId={data.nodeId} />
+        ) : !isSimpleMode && data.stackDiagram ? (
+          <StackDiagramView diagram={data.stackDiagram} nodeId={data.nodeId} />
+        ) : !isSimpleMode && data.expertDiagram ? (
+          <ExpertDiagramView diagram={data.expertDiagram} nodeId={data.nodeId} />
+        ) : !isSimpleMode ? (
+          <GraphNodeChildSummaries
+            nodeId={data.nodeId}
+            summaries={data.childSummaries}
+          />
+        ) : null}
+        {!isSimpleMode && hasMetadata && (
+          <GraphNodeDetails
+            detailsId={detailsId}
+            toggleLabel={detailToggleLabel}
+            path={data.path}
+            entries={entries}
+            isExpanded={data.isDetailsExpanded}
+            onToggleDetails={data.onToggleDetails}
+          />
+        )}
+      </div>
       <Handle type="source" position={Position.Right} />
     </div>
   );
