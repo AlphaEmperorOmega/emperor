@@ -8,8 +8,8 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 import models.linears.linear.config as linear_config
 import models.neuron.neuron_linear.config as neuron_linear_config
 import models.transformer_encoder.vit_linear.config as vit_linear_config
-from emperor.base.options import LayerNormPositionOptions
 from emperor.base.layer.gate import LayerGateOptions
+from emperor.base.options import LayerNormPositionOptions
 
 from viewer.backend.inspector.errors import InspectorError
 from viewer.backend.inspector.overrides import parse_override_mapping

@@ -13,7 +13,6 @@ from unittest.mock import patch
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
 import models.linears.linear.config as linear_config
-import models.linears.linear_adaptive.config as linear_adaptive_config
 from emperor.base.layer.gate import LayerGateOptions
 from emperor.base.options import ActivationOptions
 from emperor.memory.config import WeightedDynamicMemoryConfig

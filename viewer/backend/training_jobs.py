@@ -520,7 +520,10 @@ class TrainingJobManager:
     def active_jobs(self) -> list[dict[str, Any]]:
         active: list[dict[str, Any]] = []
         for job in self.job_store.list():
-            if is_terminal_job_status(job.status) and not self._job_has_live_containment(job):
+            if (
+                is_terminal_job_status(job.status)
+                and not self._job_has_live_containment(job)
+            ):
                 continue
             snapshot = self.progress_store.read_snapshot(job)
             self._refresh(job, events=snapshot.events)
@@ -693,7 +696,11 @@ class TrainingJobManager:
             if latest_terminal is not None
             else None
         )
-        if latest_terminal is not None and terminal_status is not None and not containment_live:
+        if (
+            latest_terminal is not None
+            and terminal_status is not None
+            and not containment_live
+        ):
             job.status = terminal_status
             job.exit_code = _terminal_exit_code(
                 terminal_status,

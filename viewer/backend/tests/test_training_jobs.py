@@ -15,14 +15,14 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 import viewer.backend.training_jobs as training_jobs
 from viewer.backend.inspector.errors import InspectorError
 from viewer.backend.job_store import InMemoryTrainingJobStore
-from viewer.backend.training_cgroups import (
-    CgroupV2Manager,
-    StrictCancellationUnavailable,
-)
 from viewer.backend.tests.helpers import (
     FakeProcess,
     FakeRunner,
     create_progress_test_job,
+)
+from viewer.backend.training_cgroups import (
+    CgroupV2Manager,
+    StrictCancellationUnavailable,
 )
 from viewer.backend.training_jobs import TrainingJobManager
 from viewer.backend.training_worker_launcher import TrainingWorkerLauncher
@@ -437,10 +437,15 @@ import sys
 import time
 from pathlib import Path
 
+child_command = (
+    "import signal, time\\n"
+    "signal.signal(signal.SIGTERM, signal.SIG_IGN)\\n"
+    "while True: time.sleep(1)"
+)
 child = subprocess.Popen([
     sys.executable,
     "-c",
-    "import signal, time\\nsignal.signal(signal.SIGTERM, signal.SIG_IGN)\\nwhile True: time.sleep(1)",
+    child_command,
 ])
 Path(sys.argv[1]).write_text(str(child.pid), encoding="utf-8")
 """
@@ -509,10 +514,15 @@ import sys
 import time
 from pathlib import Path
 
+child_command = (
+    "import signal, time\\n"
+    "signal.signal(signal.SIGTERM, signal.SIG_IGN)\\n"
+    "while True: time.sleep(1)"
+)
 child = subprocess.Popen([
     sys.executable,
     "-c",
-    "import signal, time\\nsignal.signal(signal.SIGTERM, signal.SIG_IGN)\\nwhile True: time.sleep(1)",
+    child_command,
 ], start_new_session=True)
 Path(sys.argv[1]).write_text(str(child.pid), encoding="utf-8")
 while True:
