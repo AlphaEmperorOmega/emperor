@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import importlib
 import os
+import subprocess
+import sys
 import tempfile
 import time
 import unittest
@@ -210,6 +212,29 @@ class AppFactoryTests(unittest.TestCase):
 
         self.assertEqual(asyncio.run(run_many()), ["ok", "ok", "ok"])
         self.assertEqual(max_active, 1)
+
+    def test_main_app_factory_imports_without_public_api_import_order(self) -> None:
+        env = {
+            **os.environ,
+            "MPLCONFIGDIR": os.environ.get("MPLCONFIGDIR", "/tmp/matplotlib"),
+        }
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "from viewer.backend.main import create_app; "
+                    "print(create_app().title)"
+                ),
+            ],
+            check=False,
+            env=env,
+            text=True,
+            capture_output=True,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Emperor Model Viewer API", result.stdout)
 
     def test_public_api_app_reexports_main_asgi_target(self) -> None:
         api = importlib.import_module("viewer.backend.api")
