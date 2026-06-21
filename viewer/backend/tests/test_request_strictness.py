@@ -154,6 +154,39 @@ class RequestStrictnessTests(unittest.TestCase):
                     self.assertEqual(response.status_code, 422)
                     self.assert_extra_forbidden(response, unexpected_field)
 
+    def test_log_fanout_request_limits_reject_overlarge_lists(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = Path(tmp) / "logs"
+            test_app = create_app(ViewerApiSettings(logs_root=str(logs_root)))
+
+            async def call_api() -> tuple[httpx.Response, httpx.Response]:
+                transport = httpx.ASGITransport(app=test_app)
+                async with httpx.AsyncClient(
+                    transport=transport,
+                    base_url="http://testserver",
+                ) as client:
+                    run_ids = [f"run-{index}" for index in range(51)]
+                    parameter_status_response = await client.post(
+                        "/logs/parameter-status",
+                        json={"runIds": run_ids},
+                    )
+                    delete_filter_response = await client.post(
+                        "/logs/runs/delete-plan",
+                        json={
+                            "experiments": [],
+                            "datasets": [],
+                            "models": [],
+                            "presets": [],
+                            "runIds": run_ids,
+                        },
+                    )
+                    return parameter_status_response, delete_filter_response
+
+            parameter_status_response, delete_filter_response = asyncio.run(call_api())
+
+        self.assertEqual(parameter_status_response.status_code, 422)
+        self.assertEqual(delete_filter_response.status_code, 422)
+
     async def _post_with_extra_field(
         self,
         test_app,
