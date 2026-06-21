@@ -3,7 +3,6 @@ import {
   ListChecks,
   Lock,
   Plug,
-  RefreshCw,
   RotateCcw,
   SlidersHorizontal,
 } from "lucide-react";
@@ -31,11 +30,8 @@ export function AppHeader({
     overrideCount,
     presetOwnedFieldCount,
     resetOverrides: onResetOverrides,
-    updatePreview: onUpdatePreview,
   } = useTargetHeaderState();
   const canResetOverrides = activeWorkspace === "model" && Boolean(selectedModel);
-  const canUpdatePreview =
-    activeWorkspace === "model" && Boolean(selectedModel && selectedPreset);
   return (
     <header className="flex h-[60px] min-h-0 items-center justify-between gap-3 border-b border-line bg-[linear-gradient(180deg,rgba(16,14,28,0.7),rgba(8,8,14,0.5))] px-[22px] backdrop-blur-xl">
       <div className="flex min-w-0 items-center gap-3">
@@ -98,15 +94,6 @@ export function AppHeader({
         >
           <RotateCcw className="h-[15px] w-[15px]" aria-hidden />
           Reset Overrides
-        </Button>
-        <Button
-          variant="primary"
-          onClick={onUpdatePreview}
-          disabled={!canUpdatePreview}
-          className="h-9 px-3 sm:h-9 sm:px-4"
-        >
-          <RefreshCw className="h-[15px] w-[15px]" aria-hidden />
-          <span className="hidden sm:inline">Update Preview</span>
         </Button>
       </div>
     </header>
