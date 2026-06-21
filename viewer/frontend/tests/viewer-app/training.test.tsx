@@ -1743,7 +1743,7 @@ describe("ViewerApp Training And Preview", () => {
     ).toHaveTextContent("recurrent-gating-halting");
   });
 
-  it("removing the current primary preset promotes another selected preset", async () => {
+  it("removing the current primary preset keeps the target preset unchanged", async () => {
     installFetchMock();
     renderViewer();
     const user = userEvent.setup();
@@ -1761,8 +1761,7 @@ describe("ViewerApp Training And Preview", () => {
     expect(currentPrimary).not.toHaveAttribute("aria-disabled", "true");
     await user.click(currentPrimary);
 
-    expect(await waitForTargetValue("preset", "recurrent-gating-halting"))
-      .toHaveTextContent("recurrent-gating-halting");
+    expect(await waitForTargetValue("preset", "baseline")).toHaveTextContent("baseline");
     await waitFor(() => {
       expect(
         within(details).getByRole("combobox", {

@@ -637,6 +637,22 @@ describe("useTargetConfigState", () => {
     ]);
   });
 
+  it("keeps the selected target preset when Training Job presets change", async () => {
+    const { result } = renderTargetState();
+
+    await waitFor(() => {
+      expect(result.current.target.selectedPreset).toBe("baseline");
+      expect(result.current.target.selectedTrainingPresets).toEqual(["baseline"]);
+    });
+
+    act(() => {
+      result.current.target.setTrainingPresetSelection(["fast"]);
+    });
+
+    expect(result.current.target.selectedPreset).toBe("baseline");
+    expect(result.current.target.selectedTrainingPresets).toEqual(["fast"]);
+  });
+
   it("allows empty base preset selection after a snapshot is selected", async () => {
     snapshots = [
       {
