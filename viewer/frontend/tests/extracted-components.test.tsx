@@ -12,6 +12,7 @@ import { KeyValueRow } from "@/features/viewer/components/shared/key-value-row";
 import { MetricCard } from "@/features/viewer/components/shared/metric-card";
 import { SectionHeading } from "@/features/viewer/components/shared/section-heading";
 import { StatChip } from "@/features/viewer/components/shared/stat-chip";
+import { SurfacePanel } from "@/features/viewer/components/shared/surface-panel";
 import { ViewerWorkspaceNav } from "@/features/viewer/components/viewer-workspace-nav";
 import { IMPLEMENTED_FEATURES } from "@/lib/feature-catalog";
 
@@ -236,6 +237,27 @@ describe("DialogShell", () => {
     expect(onChildClose).toHaveBeenCalledTimes(1);
     expect(onParentClose).not.toHaveBeenCalled();
   });
+
+  it("can render the subtle surface panel variant", () => {
+    render(
+      <DialogShell
+        titleId="surface-dialog-title"
+        panelVariant="surface"
+        header={<h2 id="surface-dialog-title">Surface Dialog</h2>}
+      >
+        <button type="button">Inside surface</button>
+      </DialogShell>,
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Surface Dialog" });
+    expect(dialog).toHaveClass(
+      "rounded-[10px]",
+      "border",
+      "border-line",
+      "bg-panel",
+    );
+    expect(dialog).not.toHaveClass("edge", "rounded-card", "bg-white/[0.018]");
+  });
 });
 
 describe("InlineStatus", () => {
@@ -415,10 +437,49 @@ describe("StatChip", () => {
   });
 });
 
+describe("SurfacePanel", () => {
+  it("renders the shared surface base, header slots, and merged classes", () => {
+    render(
+      <SurfacePanel
+        icon={<span data-testid="surface-icon" aria-hidden />}
+        title="Run Plan"
+        detail={<span>3 runs</span>}
+        actions={<button type="button">Refresh</button>}
+        className="custom-surface py-3"
+        headerClassName="custom-header min-h-0"
+      >
+        <span>Surface body</span>
+      </SurfacePanel>,
+    );
+
+    const panel = screen.getByText("Surface body").closest(".custom-surface");
+    expect(panel).toHaveClass(
+      "grid",
+      "content-start",
+      "gap-1.5",
+      "rounded-[10px]",
+      "border",
+      "border-line",
+      "bg-white/[0.018]",
+      "px-2.5",
+      "py-3",
+    );
+    expect(panel).not.toHaveClass("py-2");
+    expect(screen.getByTestId("surface-icon")).toBeInTheDocument();
+    expect(screen.getByText("Run Plan")).toBeInTheDocument();
+    expect(screen.getByText("3 runs")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Refresh" })).toBeInTheDocument();
+    expect(screen.getByText("Run Plan").closest(".custom-header")).toHaveClass(
+      "min-h-0",
+    );
+  });
+});
+
 describe("MetricCard", () => {
   it("renders label, value, detail, and caller classes", () => {
     render(
       <MetricCard
+        icon={<span data-testid="metric-icon" aria-hidden />}
         label="Runs"
         value="42"
         valueTitle="42 runs"
@@ -429,9 +490,22 @@ describe("MetricCard", () => {
       />,
     );
 
-    const card = screen.getByText("Runs").closest(".edge");
-    expect(card).toHaveClass("rounded-[12px]", "px-3", "py-2.5", "custom-card");
+    const card = screen.getByText("Runs").closest(".custom-card");
+    expect(screen.getByTestId("metric-icon")).toBeInTheDocument();
+    expect(card).toHaveClass(
+      "rounded-[10px]",
+      "border",
+      "border-line",
+      "bg-white/[0.018]",
+      "px-2.5",
+      "py-2.5",
+      "custom-card",
+    );
+    expect(card).not.toHaveClass("edge", "rounded-[12px]", "py-2");
     expect(screen.getByText("Runs")).toHaveClass(
+      "flex",
+      "items-center",
+      "gap-2",
       "text-xs",
       "font-bold",
       "uppercase",

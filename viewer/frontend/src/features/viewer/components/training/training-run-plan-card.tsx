@@ -2,7 +2,7 @@ import { ListChecks } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { InlineStatus } from "@/features/viewer/components/shared/inline-status";
 import { StatChip, type StatChipTone } from "@/features/viewer/components/shared/stat-chip";
-import { TrainingFooterField } from "@/features/viewer/components/training/training-footer-field";
+import { SurfacePanel } from "@/features/viewer/components/shared/surface-panel";
 import {
   formatTrainingMetricValue,
   formatTrainingMetricsText,
@@ -346,9 +346,9 @@ export function TrainingRunPlanCard({
   const directory = logDirectory(job, selectedRun);
 
   return (
-    <TrainingFooterField
+    <SurfacePanel
       icon={<ListChecks className={footerIconClass} aria-hidden />}
-      label={cardTitle(job)}
+      title={cardTitle(job)}
       detail={headerDetail({ isPlanning, job, plan })}
     >
       <div className={cn("grid gap-2", isPlanning && "opacity-90")}>
@@ -396,6 +396,6 @@ export function TrainingRunPlanCard({
           trainingError={trainingError}
         />
       </div>
-    </TrainingFooterField>
+    </SurfacePanel>
   );
 }

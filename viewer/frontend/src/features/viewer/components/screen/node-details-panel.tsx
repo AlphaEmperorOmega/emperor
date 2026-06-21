@@ -1,7 +1,9 @@
+import { Hash, Workflow } from "lucide-react";
 import { SelectedNodeDetails } from "@/features/viewer/components/graph/selected-node-details";
 import { InlineStatus } from "@/features/viewer/components/shared/inline-status";
 import { MetricCard } from "@/features/viewer/components/shared/metric-card";
 import { SidePanel } from "@/features/viewer/components/shared/side-panel";
+import { SurfacePanel } from "@/features/viewer/components/shared/surface-panel";
 import {
   useActiveTrainingJob,
   useGraphView,
@@ -38,6 +40,7 @@ export function NodeDetailsPanel() {
           operationGraph ? (
             <div className="grid gap-[9px]">
               <MetricCard
+                icon={<Workflow className="h-[15px] w-[15px] text-violet" aria-hidden />}
                 label="Ops"
                 value={formatCompactCount(operationGraph.nodes.length)}
                 valueTitle={`${formatExactCount(operationGraph.nodes.length)} operations`}
@@ -59,6 +62,7 @@ export function NodeDetailsPanel() {
         graph ? (
           <div className="grid gap-[9px]">
             <MetricCard
+              icon={<Hash className="h-[15px] w-[15px] text-violet" aria-hidden />}
               label="Params"
               value={formatCompactCount(graph.parameterCount)}
               valueTitle={`${formatExactCount(graph.parameterCount)} parameters`}
@@ -127,17 +131,14 @@ function OperationNodeDetails({
       </div>
       <div className="grid gap-2">
         {rows.map(([label, value]) => (
-          <div
-            key={label}
-            className="rounded-[8px] border border-line bg-white/[0.025] p-3"
-          >
+          <SurfacePanel key={label}>
             <div className="text-[11px] font-bold uppercase tracking-[0.09em] text-ink-faint">
               {label}
             </div>
             <div className="mt-1 break-words font-mono text-[12px] text-ink">
               {String(value)}
             </div>
-          </div>
+          </SurfacePanel>
         ))}
       </div>
     </div>
