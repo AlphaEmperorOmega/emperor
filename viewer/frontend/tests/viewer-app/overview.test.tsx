@@ -34,6 +34,9 @@ describe("ViewerApp Overview", () => {
 
     expect(model).toHaveTextContent("linear");
     expect(preset).toHaveTextContent("baseline");
+    expect(
+      screen.queryByRole("button", { name: /update preview/i }),
+    ).not.toBeInTheDocument();
     expect(model).toHaveAttribute("aria-expanded", "false");
     expect(preset).toHaveAttribute("aria-expanded", "false");
 
@@ -681,7 +684,8 @@ describe("ViewerApp Overview", () => {
       /Mnist/i,
       false,
     );
-    await user.click(screen.getByRole("button", { name: /update preview/i }));
+    const dialog = await openFullConfig(user);
+    await user.click(within(dialog).getByRole("button", { name: /update preview/i }));
 
     await waitFor(() => {
       expect(inspectBodies.at(-1)).toMatchObject({ dataset: "Cifar10" });

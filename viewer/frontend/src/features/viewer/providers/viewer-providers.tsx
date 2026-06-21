@@ -62,7 +62,6 @@ export function useTargetHeaderState() {
     overrideCount,
     presetOwnedFieldCount,
     resetOverrides,
-    updatePreview,
   } = useTargetConfig();
 
   return {
@@ -73,7 +72,6 @@ export function useTargetHeaderState() {
     overrideCount,
     presetOwnedFieldCount,
     resetOverrides,
-    updatePreview,
   };
 }
 

@@ -1725,7 +1725,8 @@ describe("ViewerApp Training And Preview", () => {
     });
     expect(inspectBodies).toHaveLength(initialInspectRequestCount);
 
-    await user.click(screen.getByRole("button", { name: /update preview/i }));
+    const dialog = await openFullConfig(user);
+    await user.click(within(dialog).getByRole("button", { name: /update preview/i }));
     await waitFor(() =>
       expect(inspectBodies).toHaveLength(initialInspectRequestCount + 1),
     );
@@ -2304,18 +2305,22 @@ describe("ViewerApp Training And Preview", () => {
     expect(await screen.findByLabelText("Experiments fresh_run")).toBeChecked();
   });
 
-  it("Update Preview sends a new inspect request for the same selection", async () => {
+  it("Full config Update Preview sends a new inspect request for the same selection", async () => {
     const { inspectBodies } = installFetchMock();
     renderViewer();
     const user = userEvent.setup();
 
     expect(await screen.findByText("main_model.0")).toBeInTheDocument();
     const initialRequestCount = inspectBodies.length;
+    const dialog = await openFullConfig(user);
+    const updatePreviewButton = within(dialog).getByRole("button", {
+      name: /update preview/i,
+    });
 
-    await user.click(screen.getByRole("button", { name: /update preview/i }));
+    await user.click(updatePreviewButton);
     await waitFor(() => expect(inspectBodies).toHaveLength(initialRequestCount + 1));
 
-    await user.click(screen.getByRole("button", { name: /update preview/i }));
+    await user.click(updatePreviewButton);
     await waitFor(() => expect(inspectBodies).toHaveLength(initialRequestCount + 2));
   });
 
@@ -2375,7 +2380,8 @@ describe("ViewerApp Training And Preview", () => {
     const user = userEvent.setup();
 
     expect(await screen.findByText("main_model.0")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /update preview/i }));
+    const dialog = await openFullConfig(user);
+    await user.click(within(dialog).getByRole("button", { name: /update preview/i }));
 
     await waitFor(() => {
       expect(screen.queryByText("main_model.0")).not.toBeInTheDocument();
