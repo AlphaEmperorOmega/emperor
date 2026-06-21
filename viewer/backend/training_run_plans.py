@@ -24,6 +24,7 @@ from viewer.backend.inspector.search import (
 from viewer.backend.inspector.service import reject_locked_overrides
 from viewer.backend.inspector.values import serialize_config_value
 from viewer.backend.log_runs import is_valid_log_experiment_name
+from viewer.backend.training_limits import MAX_TRAINING_PLANNED_RUNS
 
 
 def _shell_quote(value: str) -> str:
@@ -278,6 +279,26 @@ class TrainingRunPlanBuilder:
             "remainingEpochs": remaining_epochs,
         }
 
+    def _planned_run_count(self, selected: SelectedTrainingInputs) -> int:
+        dataset_count = len(selected.selected_datasets)
+        total = 0
+        for parsed_search in selected.parsed_searches:
+            total += (
+                parsed_search.planned_run_count
+                if parsed_search is not None
+                else dataset_count
+            )
+        return total
+
+    def _reject_overlarge_plan(self, selected: SelectedTrainingInputs) -> None:
+        planned_run_count = self._planned_run_count(selected)
+        if planned_run_count > MAX_TRAINING_PLANNED_RUNS:
+            raise InspectorError(
+                "Training run plan is too large: "
+                f"{planned_run_count} planned runs exceeds "
+                f"{MAX_TRAINING_PLANNED_RUNS}."
+            )
+
     def create(
         self,
         *,
@@ -285,6 +306,7 @@ class TrainingRunPlanBuilder:
         selected: SelectedTrainingInputs,
         log_folder: str,
     ) -> dict[str, Any]:
+        self._reject_overlarge_plan(selected)
         total_epochs = self._total_epochs(selected.parts, selected.parsed_overrides)
         runs: list[dict[str, Any]] = []
         for selected_preset, selected_search in zip(
@@ -338,8 +360,15 @@ class TrainingRunPlanBuilder:
         valid_datasets = {
             dataset_name(dataset) for dataset in selected.selected_datasets
         }
+        submitted_runs = run_plan.get("runs") or []
+        if len(submitted_runs) > MAX_TRAINING_PLANNED_RUNS:
+            raise InspectorError(
+                "Submitted run plan is too large: "
+                f"{len(submitted_runs)} submitted runs exceeds "
+                f"{MAX_TRAINING_PLANNED_RUNS}."
+            )
         runs = []
-        for index, row in enumerate(run_plan.get("runs") or [], start=1):
+        for index, row in enumerate(submitted_runs, start=1):
             preset = str(row.get("preset") or "")
             dataset = str(row.get("dataset") or "")
             if preset not in valid_presets:
@@ -518,12 +547,20 @@ class TrainingRunPlanBuilder:
                 ]
             )
 
-        combinations = list(itertools.product(*indexed_values))
         if parsed_search.mode == "random":
-            combinations = self._random.sample(
-                combinations,
-                min(parsed_search.random_samples or 10, len(combinations)),
+            sample_count = min(
+                parsed_search.random_samples or 10,
+                parsed_search.combination_count,
             )
+            combinations = (
+                self._search_combination_at_index(indexed_values, index)
+                for index in self._random_search_indices(
+                    population_count=parsed_search.combination_count,
+                    sample_count=sample_count,
+                )
+            )
+        else:
+            combinations = itertools.product(*indexed_values)
 
         materialized = []
         for combination in combinations:
@@ -543,6 +580,36 @@ class TrainingRunPlanBuilder:
                 )
             materialized.append((changes, overrides))
         return materialized
+
+    def _random_search_indices(
+        self,
+        *,
+        population_count: int,
+        sample_count: int,
+    ) -> list[int]:
+        try:
+            return self._random.sample(range(population_count), sample_count)
+        except OverflowError:
+            selected: list[int] = []
+            seen: set[int] = set()
+            while len(selected) < sample_count:
+                index = self._random.randrange(population_count)
+                if index in seen:
+                    continue
+                seen.add(index)
+                selected.append(index)
+            return selected
+
+    def _search_combination_at_index(
+        self,
+        indexed_values: list[list[tuple[str, str, Any, Any]]],
+        index: int,
+    ) -> tuple[tuple[str, str, Any, Any], ...]:
+        combination = []
+        for values in reversed(indexed_values):
+            index, offset = divmod(index, len(values))
+            combination.append(values[offset])
+        return tuple(reversed(combination))
 
     def _training_command(
         self,
