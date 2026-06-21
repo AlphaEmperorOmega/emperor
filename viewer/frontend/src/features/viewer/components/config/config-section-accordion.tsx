@@ -19,6 +19,7 @@ import {
 import { cn } from "@/lib/utils";
 import { ConfigFieldControl } from "@/features/viewer/components/config/config-field-control";
 import { ConfigMetricBadge } from "@/features/viewer/components/config/config-metric-badge";
+import { surfacePanelClassName } from "@/features/viewer/components/shared/surface-panel";
 
 const EMPTY_CONFIG_SECTIONS: ConfigSection[] = [];
 
@@ -200,10 +201,10 @@ export function ConfigSectionAccordion({
     <section
       ref={refCallback}
       className={cn(
-        "overflow-hidden rounded-[12px] border shadow-[0_16px_40px_-30px_rgba(0,0,0,0.95)] transition duration-150 hover:-translate-y-px hover:border-line hover:shadow-[0_20px_44px_-32px_rgba(0,0,0,0.95)] focus-within:-translate-y-px focus-within:ring-2 focus-within:ring-focus motion-reduce:transform-none",
-        isOpen
-          ? "border-line bg-panel/80"
-          : "border-line-soft bg-panel/70 shadow-[0_10px_28px_-26px_rgba(0,0,0,0.9)]",
+        surfacePanelClassName,
+        "overflow-hidden px-0 py-0 shadow-[0_16px_40px_-30px_rgba(0,0,0,0.95)] transition duration-150 hover:-translate-y-px hover:border-line hover:shadow-[0_20px_44px_-32px_rgba(0,0,0,0.95)] focus-within:-translate-y-px focus-within:ring-2 focus-within:ring-focus motion-reduce:transform-none",
+        !isOpen &&
+          "border-line-soft bg-white/[0.012] shadow-[0_10px_28px_-26px_rgba(0,0,0,0.9)]",
         isDisabled && "hover:translate-y-0",
         stateContainerClass,
       )}

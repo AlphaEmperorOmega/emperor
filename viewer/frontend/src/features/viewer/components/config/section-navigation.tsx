@@ -1,4 +1,4 @@
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, ListTree } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   type ConfigSection,
@@ -9,6 +9,8 @@ import {
 } from "@/lib/config";
 import { cn } from "@/lib/utils";
 import { ConfigMetricBadge } from "@/features/viewer/components/config/config-metric-badge";
+import { SectionHeading } from "@/features/viewer/components/shared/section-heading";
+import { surfacePanelClassName } from "@/features/viewer/components/shared/surface-panel";
 
 export function SectionNavigation({
   sections,
@@ -45,16 +47,19 @@ export function SectionNavigation({
     <nav
       aria-label={ariaLabel}
       className={cn(
+        surfacePanelClassName,
         "min-w-0 p-2",
         isInline
-          ? "rounded-[10px] border border-line-soft bg-black/15"
-          : "edge rounded-card lg:sticky lg:top-0 lg:self-start",
+          ? "border-line-soft bg-black/15"
+          : "lg:sticky lg:top-0 lg:self-start",
       )}
     >
       <div className="mb-2 flex min-w-0 items-center justify-between gap-2 px-1">
-        <div className="min-w-0 truncate text-xs font-bold uppercase tracking-[0.09em] text-ink-dim">
-          {title}
-        </div>
+        <SectionHeading
+          className="min-w-0 truncate"
+          icon={<ListTree className="h-[15px] w-[15px] text-violet" aria-hidden />}
+          title={title}
+        />
         <button
           type="button"
           onClick={onToggleAllSections}
@@ -71,7 +76,12 @@ export function SectionNavigation({
         )}
       >
         {sections.length === 0 && (
-          <div className="rounded-[10px] border border-dashed border-line-soft bg-black/20 px-3 py-2 text-sm text-ink-dim">
+          <div
+            className={cn(
+              surfacePanelClassName,
+              "min-w-[13rem] border-dashed border-line-soft bg-black/20 px-3 py-2 text-sm text-ink-dim",
+            )}
+          >
             {emptyMessage ?? "No sections"}
           </div>
         )}

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { ListChecks, PencilLine, type LucideIcon } from "lucide-react";
 import { badgeVariantClassNames } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -31,6 +31,7 @@ export function ConfigMetricBadge({
   tooltipPosition?: TooltipPosition;
 }) {
   const [isTooltipVisible, setIsTooltipVisible] = useState(false);
+  const tooltipId = useId();
   const Icon = metricIcons[kind];
   const label = metricLabels[kind];
   const accessibleLabel = `${count} ${label.noun}${count === 1 ? "" : "s"}`;
@@ -38,6 +39,7 @@ export function ConfigMetricBadge({
   return (
     <span
       aria-label={accessibleLabel}
+      aria-describedby={isTooltipVisible ? tooltipId : undefined}
       tabIndex={focusable ? 0 : undefined}
       onBlur={() => setIsTooltipVisible(false)}
       onFocus={() => setIsTooltipVisible(true)}
@@ -52,6 +54,7 @@ export function ConfigMetricBadge({
       <span>{count}</span>
       {isTooltipVisible && (
         <span
+          id={tooltipId}
           role="tooltip"
           className={cn(
             "pointer-events-none absolute left-1/2 z-30 -translate-x-1/2 rounded-[7px] border border-line-soft bg-panel px-2 py-1 font-sans text-[11px] font-bold leading-none text-ink shadow-panel",

@@ -22,9 +22,10 @@ export function TrainingCommandDialog({
   return (
     <DialogShell
       titleId="training-command-title"
+      panelVariant="surface"
       onClose={onClose}
       className="absolute inset-0 z-20 flex items-center justify-center bg-black/55 p-3 backdrop-blur-sm sm:p-6"
-      panelClassName="edge grid max-h-none w-full max-w-3xl gap-4 overflow-visible rounded-card p-4 shadow-[0_20px_70px_rgba(0,0,0,0.55)] sm:max-h-none sm:p-5"
+      panelClassName="grid max-h-none w-full max-w-3xl gap-4 overflow-visible p-4 sm:max-h-none sm:p-5"
       header={
         <header className="flex items-start justify-between gap-3">
           <div className="min-w-0">
