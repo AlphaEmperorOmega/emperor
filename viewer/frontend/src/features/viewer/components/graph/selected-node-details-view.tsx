@@ -1,8 +1,8 @@
 import { LineChart } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { EdgeCard } from "@/components/ui/edge-card";
 import { KeyValueRow } from "@/features/viewer/components/shared/key-value-row";
+import { SurfacePanel } from "@/features/viewer/components/shared/surface-panel";
 import { type GraphNode } from "@/lib/api";
 import {
   type TerminalReachGrid,
@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 
 function TerminalReachView({ grid }: { grid: TerminalReachGrid }) {
   return (
-    <EdgeCard className="rounded-card p-4">
+    <SurfacePanel>
       <div className="flex items-center justify-between gap-2 text-xs">
         <span className="font-semibold text-ink">Sampler reach</span>
         <span className="font-mono text-ink-dim">{grid.total} connections</span>
@@ -61,7 +61,7 @@ function TerminalReachView({ grid }: { grid: TerminalReachGrid }) {
       {grid.hasOverflow && (
         <div className="mt-2 text-[11px] text-ink-dim">reach truncated for display</div>
       )}
-    </EdgeCard>
+    </SurfacePanel>
   );
 }
 
@@ -85,7 +85,7 @@ export function SelectedNodeDetailsView({
 
   return (
     <div className="grid gap-4">
-      <EdgeCard className="rounded-card p-4">
+      <SurfacePanel>
         <div className="grid min-w-0 gap-2">
           <div className="min-w-0">
             <div className="truncate text-[18px] font-bold text-ink">{node.typeName}</div>
@@ -123,7 +123,7 @@ export function SelectedNodeDetailsView({
           <LineChart className="h-4 w-4" aria-hidden />
           Monitor charts
         </Button>
-      </EdgeCard>
+      </SurfacePanel>
       {reachGrid && <TerminalReachView grid={reachGrid} />}
       {(hasParameters || entries.length > 0) && (
         <div className="grid gap-0">

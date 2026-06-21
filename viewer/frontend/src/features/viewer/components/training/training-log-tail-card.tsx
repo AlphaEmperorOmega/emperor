@@ -1,6 +1,6 @@
 import { Terminal } from "lucide-react";
 import { StatChip } from "@/features/viewer/components/shared/stat-chip";
-import { TrainingFooterField } from "@/features/viewer/components/training/training-footer-field";
+import { SurfacePanel } from "@/features/viewer/components/shared/surface-panel";
 
 export const TRAINING_LOG_TAIL_LINE_LIMIT = 200;
 export const TRAINING_LOG_TAIL_CHAR_LIMIT = 20_000;
@@ -23,14 +23,14 @@ export function TrainingLogTailCard({ logTail = [] }: { logTail?: string[] }) {
   );
 
   return (
-    <TrainingFooterField
+    <SurfacePanel
       icon={<Terminal className={footerIconClass} aria-hidden />}
-      label="Log Tail"
+      title="Log Tail"
       detail={<StatChip>{lineCountLabel(displayedLineCount)}</StatChip>}
     >
       <pre className="max-h-36 overflow-y-auto overflow-x-hidden whitespace-pre-wrap rounded-[10px] border border-line bg-black/25 p-2 font-mono text-xs leading-5 text-ink-dim [overflow-wrap:anywhere]">
         {boundedLogTailText}
       </pre>
-    </TrainingFooterField>
+    </SurfacePanel>
   );
 }

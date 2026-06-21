@@ -7,6 +7,7 @@ export type DialogShellProps = {
   ariaLabel?: string;
   describedBy?: string;
   size?: "sm" | "md" | "lg" | "fullscreen";
+  panelVariant?: "edge" | "surface";
   header?: ReactNode;
   footer?: ReactNode;
   overlayChildren?: ReactNode;
@@ -21,11 +22,21 @@ const dialogOverlayClassName =
   "fixed inset-0 z-50 flex items-center justify-center overscroll-contain bg-black/70 p-3 backdrop-blur-sm sm:p-6";
 
 const dialogPanelClassNames: Record<NonNullable<DialogShellProps["size"]>, string> = {
-  sm: "edge flex max-h-[calc(100vh-1.5rem)] w-full max-w-lg flex-col overflow-hidden rounded-card shadow-[0_24px_80px_rgba(0,0,0,0.58)] sm:max-h-[calc(100vh-3rem)]",
-  md: "edge flex max-h-[calc(100vh-1.5rem)] w-full max-w-3xl flex-col overflow-hidden rounded-card shadow-[0_24px_80px_rgba(0,0,0,0.58)] sm:max-h-[calc(100vh-3rem)]",
-  lg: "edge flex max-h-[calc(100vh-1.5rem)] w-full max-w-4xl flex-col overflow-hidden rounded-card shadow-[0_24px_80px_rgba(0,0,0,0.58)] sm:max-h-[calc(100vh-3rem)]",
+  sm: "flex max-h-[calc(100vh-1.5rem)] w-full max-w-lg flex-col overflow-hidden sm:max-h-[calc(100vh-3rem)]",
+  md: "flex max-h-[calc(100vh-1.5rem)] w-full max-w-3xl flex-col overflow-hidden sm:max-h-[calc(100vh-3rem)]",
+  lg: "flex max-h-[calc(100vh-1.5rem)] w-full max-w-4xl flex-col overflow-hidden sm:max-h-[calc(100vh-3rem)]",
   fullscreen:
-    "edge flex max-h-[calc(100vh-1.5rem)] w-full max-w-[92rem] flex-col overflow-hidden rounded-card shadow-[0_24px_80px_rgba(0,0,0,0.58)] sm:max-h-[calc(100vh-3rem)]",
+    "flex max-h-[calc(100vh-1.5rem)] w-full max-w-[92rem] flex-col overflow-hidden sm:max-h-[calc(100vh-3rem)]",
+};
+
+const dialogPanelVariantClassNames: Record<
+  NonNullable<DialogShellProps["panelVariant"]>,
+  string
+> = {
+  edge:
+    "edge rounded-card shadow-[0_24px_80px_rgba(0,0,0,0.58)]",
+  surface:
+    "rounded-[10px] border border-line bg-panel shadow-[0_24px_80px_rgba(0,0,0,0.58)]",
 };
 
 const focusableSelector = [
@@ -103,6 +114,7 @@ export function DialogShell({
   ariaLabel,
   describedBy,
   size = "lg",
+  panelVariant = "edge",
   header,
   footer,
   overlayChildren,
@@ -216,7 +228,11 @@ export function DialogShell({
         aria-labelledby={labelledBy ?? titleId}
         aria-describedby={describedBy}
         tabIndex={-1}
-        className={cn(dialogPanelClassNames[size], panelClassName)}
+        className={cn(
+          dialogPanelClassNames[size],
+          dialogPanelVariantClassNames[panelVariant],
+          panelClassName,
+        )}
       >
         {header}
         {children}

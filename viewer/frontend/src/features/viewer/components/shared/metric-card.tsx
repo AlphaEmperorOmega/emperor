@@ -1,8 +1,9 @@
 import { type ReactNode } from "react";
-import { EdgeCard } from "@/components/ui/edge-card";
+import { SurfacePanel } from "@/features/viewer/components/shared/surface-panel";
 import { cn } from "@/lib/utils";
 
 export type MetricCardProps = {
+  icon?: ReactNode;
   label: ReactNode;
   value: ReactNode;
   detail?: ReactNode;
@@ -13,6 +14,7 @@ export type MetricCardProps = {
 };
 
 export function MetricCard({
+  icon,
   label,
   value,
   detail,
@@ -22,8 +24,9 @@ export function MetricCard({
   detailClassName,
 }: MetricCardProps) {
   return (
-    <EdgeCard className={cn("rounded-[12px] px-3 py-3", className)}>
-      <div className="text-xs font-bold uppercase tracking-[0.08em] text-ink-dim">
+    <SurfacePanel className={className}>
+      <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.08em] text-ink-dim">
+        {icon}
         {label}
       </div>
       <div
@@ -37,6 +40,6 @@ export function MetricCard({
           {detail}
         </div>
       )}
-    </EdgeCard>
+    </SurfacePanel>
   );
 }
