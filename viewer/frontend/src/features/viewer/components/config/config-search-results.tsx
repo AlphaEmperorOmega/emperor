@@ -90,7 +90,6 @@ function ConfigSearchResultItem({
         resetLabel="Reset search result override"
         resetTitle={`Reset ${option.label} override`}
         density="compact"
-        hideDisabledReset={false}
         disabled={Boolean(disabledReason)}
         className="mt-0"
       />

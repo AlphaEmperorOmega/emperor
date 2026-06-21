@@ -487,8 +487,10 @@ describe("ViewerApp Training And Preview", () => {
     expect(searchPresetBadge).toHaveClass("text-amber");
     expect(searchGateSwitch).toBeDisabled();
     expect(
-      within(gateSearchRow).getByRole("button", { name: /reset search result override/i }),
-    ).toBeDisabled();
+      within(gateSearchRow).queryByRole("button", {
+        name: /reset search result override/i,
+      }),
+    ).not.toBeInTheDocument();
   });
 
   it("expanded training panel shows the three-zone setup, run list, and status layout", async () => {
@@ -806,7 +808,7 @@ describe("ViewerApp Training And Preview", () => {
     details = await expandedTrainingDetailsReady(user);
     let dialog = await openFullConfig(user);
     await waitFor(() => {
-      expect(within(dialog).getByLabelText(/hidden dim/i)).toHaveValue(128);
+      expect(within(dialog).getByLabelText(/hidden dim/i)).toHaveValue("128");
     });
     await user.click(within(dialog).getByRole("button", { name: /^close$/i }));
 
@@ -827,7 +829,7 @@ describe("ViewerApp Training And Preview", () => {
     });
     dialog = await openFullConfig(user);
     await waitFor(() => {
-      expect(within(dialog).getByLabelText(/hidden dim/i)).toHaveValue(256);
+      expect(within(dialog).getByLabelText(/hidden dim/i)).toHaveValue("256");
     });
     await user.click(within(dialog).getByRole("button", { name: /^close$/i }));
     expect(

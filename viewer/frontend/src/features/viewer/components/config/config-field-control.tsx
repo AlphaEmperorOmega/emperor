@@ -1,5 +1,6 @@
 import { RotateCcw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { SelectOnlyDropdown } from "@/features/viewer/components/screen/select-only-dropdown";
@@ -21,10 +22,9 @@ export function ConfigFieldValueEditor({
   onReset,
   controlId,
   controlLabel,
-  resetLabel = "Reset field override",
+  resetLabel,
   resetTitle,
   density = "comfortable",
-  hideDisabledReset = true,
   disabled = false,
   className,
 }: {
@@ -37,7 +37,6 @@ export function ConfigFieldValueEditor({
   resetLabel?: string;
   resetTitle?: string;
   density?: ConfigFieldControlDensity;
-  hideDisabledReset?: boolean;
   disabled?: boolean;
   className?: string;
 }) {
@@ -47,16 +46,23 @@ export function ConfigFieldValueEditor({
   const isLocked = field.locked;
   const isControlDisabled = isLocked || disabled;
   const isCompact = density === "compact";
-  const isResetDisabled = !isModified || isControlDisabled;
+  const showResetButton = isModified;
+  const resolvedResetLabel = resetLabel ?? "Reset field override";
+  const resetInsetClassName = isCompact ? "right-1" : "right-0.5";
+  const resetPaddingClassName = showResetButton ? "pr-11" : undefined;
   const selectTriggerClassName = isCompact
-    ? "h-10 px-3 py-2 text-[13.5px]"
-    : undefined;
+    ? cn("h-10 px-3 py-2 text-[13.5px]", resetPaddingClassName)
+    : resetPaddingClassName;
+  const inputClassName = cn(
+    isCompact ? "h-10 px-3 py-2 text-[13.5px]" : undefined,
+    resetPaddingClassName,
+  );
 
   return (
     <div
       className={cn(
-        "grid items-center gap-2",
-        isCompact ? "mt-1 grid-cols-[minmax(0,1fr)_40px]" : "mt-2 grid-cols-[minmax(0,1fr)_32px]",
+        "relative grid min-w-0 items-center",
+        isCompact ? "mt-1" : "mt-2",
         className,
       )}
     >
@@ -80,6 +86,7 @@ export function ConfigFieldValueEditor({
           className={cn(
             "flex items-center justify-between rounded-[10px] border border-line bg-black/25",
             isCompact ? "h-10 px-3" : "h-9 px-2.5",
+            resetPaddingClassName,
           )}
         >
           <span className={cn("text-ink", isCompact ? "text-[13px]" : "text-sm")}>
@@ -115,13 +122,13 @@ export function ConfigFieldValueEditor({
           id={controlId}
           name={field.key}
           aria-label={controlLabel}
-          type="number"
-          step={field.type === "float" ? "any" : "1"}
+          type="text"
+          inputMode={field.type === "float" ? "decimal" : "numeric"}
           autoComplete="off"
           value={value}
           disabled={isControlDisabled}
           onChange={(event) => onChange(field.key, event.target.value)}
-          className={isCompact ? "h-10 px-3 py-2 text-[13.5px]" : undefined}
+          className={inputClassName}
         />
       ) : (
         <Input
@@ -132,25 +139,24 @@ export function ConfigFieldValueEditor({
           value={value}
           disabled={isControlDisabled}
           onChange={(event) => onChange(field.key, event.target.value)}
-          className={isCompact ? "h-10 px-3 py-2 text-[13.5px]" : undefined}
+          className={inputClassName}
         />
       )}
-      <button
-        type="button"
-        aria-label={resetLabel}
-        title={resetTitle ?? resetLabel}
-        disabled={isResetDisabled}
-        onClick={() => onReset(field.key)}
-        className={cn(
-          "flex items-center justify-center rounded-[10px] border border-line bg-white/[0.035] text-ink-faint transition hover:bg-white/[0.07] hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:hover:bg-white/[0.035] disabled:hover:text-ink-faint",
-          isCompact ? "h-10 w-10" : "h-8 w-8",
-          hideDisabledReset && isResetDisabled
-            ? "pointer-events-none opacity-0"
-            : isResetDisabled && "opacity-45",
-        )}
-      >
-        <RotateCcw className="h-3.5 w-3.5" aria-hidden />
-      </button>
+      {showResetButton && (
+        <IconButton
+          label={resolvedResetLabel}
+          title={resetTitle ?? resolvedResetLabel}
+          size="sm"
+          variant="edge"
+          disabled={isControlDisabled}
+          onClick={() => onReset(field.key)}
+          icon={<RotateCcw className="h-3.5 w-3.5" aria-hidden />}
+          className={cn(
+            "absolute top-1/2 z-40 -translate-y-1/2 rounded-[8px] border-line bg-white/[0.055] text-ink-faint shadow-[0_8px_18px_-14px_rgba(0,0,0,0.95)] hover:bg-white/[0.09] hover:text-ink",
+            resetInsetClassName,
+          )}
+        />
+      )}
     </div>
   );
 }

@@ -1207,7 +1207,7 @@ describe("ViewerApp Full Config", () => {
       /gate hidden dim/i,
     );
     expect(
-      within(gateHiddenSearchRow).getByRole("spinbutton", {
+      within(gateHiddenSearchRow).getByRole("textbox", {
         name: /current value/i,
       }),
     ).toBeDisabled();
@@ -1378,7 +1378,7 @@ describe("ViewerApp Full Config", () => {
       /weight generator stack hidden dim/i,
     );
     expect(
-      within(hiddenDimRow).getByRole("spinbutton", {
+      within(hiddenDimRow).getByRole("textbox", {
         name: /current value/i,
       }),
     ).toBeDisabled();
@@ -1969,7 +1969,7 @@ describe("ViewerApp Full Config", () => {
     );
 
     expect(
-      within(recurrentGateRow).getByRole("spinbutton", {
+      within(recurrentGateRow).getByRole("textbox", {
         name: /current value/i,
       }),
     ).toBeDisabled();
@@ -1986,7 +1986,7 @@ describe("ViewerApp Full Config", () => {
       /recurrent gate hidden dim/i,
     );
     expect(
-      within(recurrentGateRow).getByRole("spinbutton", {
+      within(recurrentGateRow).getByRole("textbox", {
         name: /current value/i,
       }),
     ).toBeDisabled();
@@ -2085,8 +2085,8 @@ describe("ViewerApp Full Config", () => {
     expect(within(hiddenDimRow).getByRole("button", { name: /hidden dim/i }))
       .toBeInTheDocument();
     expect(
-      within(hiddenDimRow).getByRole("spinbutton", { name: /current value/i }),
-    ).toHaveValue(256);
+      within(hiddenDimRow).getByRole("textbox", { name: /current value/i }),
+    ).toHaveValue("256");
   });
 
   it("filters full config cards and sidebar sections while typing", async () => {
@@ -2221,7 +2221,7 @@ describe("ViewerApp Full Config", () => {
     await user.type(search, "hidden");
     const searchPopup = fullConfigSearchPopup(dialog);
     const hiddenDimRow = fullConfigSearchResultRow(searchPopup, /hidden dim/i);
-    const hiddenDimSearchInput = within(hiddenDimRow).getByRole("spinbutton", {
+    const hiddenDimSearchInput = within(hiddenDimRow).getByRole("textbox", {
       name: /current value/i,
     });
 
@@ -2236,7 +2236,7 @@ describe("ViewerApp Full Config", () => {
     expect(hiddenDimRow).toHaveTextContent(/default\s*256/i);
     expect(within(hiddenDimRow).getByText("override")).toHaveClass("text-violet");
     expect(within(dialog).getAllByLabelText("1 override").length).toBeGreaterThan(0);
-    expect(within(dialog).getByLabelText(/hidden dim/i)).toHaveValue(128);
+    expect(within(dialog).getByLabelText(/hidden dim/i)).toHaveValue("128");
 
     await user.click(within(dialog).getByRole("button", { name: /update preview/i }));
 
@@ -2256,7 +2256,7 @@ describe("ViewerApp Full Config", () => {
       /hidden dim/i,
     );
     const reopenedHiddenDimSearchInput = within(reopenedHiddenDimRow).getByRole(
-      "spinbutton",
+      "textbox",
       {
         name: /current value/i,
       },
@@ -2270,7 +2270,7 @@ describe("ViewerApp Full Config", () => {
       expect(within(reopenedHiddenDimRow).queryByText("override")).not.toBeInTheDocument();
     });
     expect(reopenedHiddenDimRow).not.toHaveTextContent(/current\s*256/i);
-    expect(within(dialog).getByLabelText(/hidden dim/i)).toHaveValue(256);
+    expect(within(dialog).getByLabelText(/hidden dim/i)).toHaveValue("256");
     expect(within(dialog).getAllByLabelText("0 overrides").length).toBeGreaterThan(0);
 
     await user.click(within(dialog).getByRole("button", { name: /update preview/i }));
@@ -2338,6 +2338,60 @@ describe("ViewerApp Full Config", () => {
     expect(within(dialog).getByRole("switch", { name: /gate flag/i }))
       .toHaveAttribute("aria-checked", "false");
     expect(within(dialog).getAllByLabelText("1 override").length).toBeGreaterThan(0);
+  });
+
+  it("resets a modified select field from full config search results", async () => {
+    installFetchMock();
+    renderViewer();
+    const user = userEvent.setup();
+
+    const dialog = await openFullConfig(user);
+    const search = within(dialog).getByRole("combobox", {
+      name: /search config fields/i,
+    });
+
+    await user.type(search, "activation");
+    const searchPopup = fullConfigSearchPopup(dialog);
+    const stackActivationRow = fullConfigSearchResultRow(searchPopup, /stack activation/i);
+    const stackActivationSelect = within(stackActivationRow).getByRole("combobox", {
+      name: /current value/i,
+    });
+    const selectRoot = stackActivationSelect.parentElement;
+
+    if (!(selectRoot instanceof HTMLElement)) {
+      throw new Error("Expected stack activation select root");
+    }
+
+    await selectSearchableDropdownOption(
+      user,
+      stackActivationSelect,
+      "RELU",
+      "RELU",
+    );
+
+    const resetButton = within(stackActivationRow).getByRole("button", {
+      name: /reset search result override/i,
+    });
+
+    expect(stackActivationRow).toHaveTextContent(/current\s*RELU/i);
+    expect(stackActivationSelect).toHaveTextContent("RELU");
+    expect(selectRoot).toHaveClass("z-20");
+    expect(resetButton).toHaveClass("absolute", "right-1", "z-40");
+
+    await user.click(resetButton);
+
+    await waitFor(() => {
+      expect(within(stackActivationRow).queryByText("override")).not.toBeInTheDocument();
+    });
+    expect(stackActivationRow).not.toHaveTextContent(/current\s*GELU/i);
+    expect(stackActivationSelect).toHaveTextContent("GELU");
+    expect(within(dialog).getByLabelText(/stack activation/i)).toHaveTextContent("GELU");
+    expect(
+      within(stackActivationRow).queryByRole("button", {
+        name: /reset search result override/i,
+      }),
+    ).not.toBeInTheDocument();
+    expect(within(dialog).getAllByLabelText("0 overrides").length).toBeGreaterThan(0);
   });
 
   it("clears full config search and restores all sections and fields", async () => {
@@ -2737,9 +2791,9 @@ describe("ViewerApp Full Config", () => {
     await waitFor(() => {
       expect(within(hiddenDimRow).queryByText("override")).not.toBeInTheDocument();
     });
-    expect(hiddenDimInput).toHaveValue(256);
+    expect(hiddenDimInput).toHaveValue("256");
     expect(hiddenDimRow).not.toHaveClass("border-violet/40");
-    expect(stackLayersInput).toHaveValue(7);
+    expect(stackLayersInput).toHaveValue("7");
     expect(within(stackLayersRow).getByText("override")).toHaveClass("text-violet");
     expect(stackLayersRow).toHaveClass("border-violet/40");
     expect(within(dialog).getAllByLabelText("1 override").length).toBeGreaterThan(0);
@@ -2842,7 +2896,7 @@ describe("ViewerApp Full Config", () => {
     expect(within(layerNavRow).getByText("1 preset")).toHaveClass("text-amber");
   });
 
-  it("renders stack layer count as an editable numeric default", async () => {
+  it("renders stack layer count as an editable text input with inline reset", async () => {
     installFetchMock();
     renderViewer();
     const user = userEvent.setup();
@@ -2852,15 +2906,85 @@ describe("ViewerApp Full Config", () => {
       name: /layer stack options section, 3 fields, 0 overrides/i,
     });
     const stackLayersInput = within(dialog).getByLabelText(/stack num layers/i);
+    const stackLayersRow = configFieldRowFor(stackLayersInput);
 
     expect(layerAccordion).toHaveAttribute("aria-expanded", "true");
-    expect(stackLayersInput).toHaveAttribute("type", "number");
-    expect(stackLayersInput).toHaveValue(5);
+    expect(stackLayersInput).toHaveAttribute("type", "text");
+    expect(stackLayersInput).toHaveAttribute("inputmode", "numeric");
+    expect(stackLayersInput).toHaveValue("5");
+    expect(
+      within(stackLayersRow).queryByRole("button", {
+        name: /reset field override/i,
+      }),
+    ).not.toBeInTheDocument();
 
     await user.clear(stackLayersInput);
     await user.type(stackLayersInput, "7");
 
-    expect(stackLayersInput).toHaveValue(7);
+    const resetButton = within(stackLayersRow).getByRole("button", {
+      name: /reset field override/i,
+    });
+
+    expect(stackLayersInput).toHaveValue("7");
+    expect(stackLayersInput).toHaveClass("pr-11");
+    expect(resetButton).toBeEnabled();
+    expect(resetButton).toHaveClass("absolute", "right-1", "top-1/2");
+    resetButton.focus();
+    expect(resetButton).toHaveFocus();
+    await user.keyboard("{Enter}");
+
+    expect(stackLayersInput).toHaveValue("5");
+    expect(
+      within(stackLayersRow).queryByRole("button", {
+        name: /reset field override/i,
+      }),
+    ).not.toBeInTheDocument();
+    expect(within(dialog).getAllByLabelText("0 overrides").length).toBeGreaterThan(0);
+  });
+
+  it("inline field reset restores only one modified popup field", async () => {
+    installFetchMock();
+    renderViewer();
+    const user = userEvent.setup();
+
+    const dialog = await openFullConfig(user);
+    const hiddenDimInput = await typeConfigFieldValue(
+      user,
+      dialog,
+      /hidden dim/i,
+      "128",
+    );
+    const stackLayersInput = await typeConfigFieldValue(
+      user,
+      dialog,
+      /stack num layers/i,
+      "7",
+    );
+    const hiddenDimRow = configFieldRowFor(hiddenDimInput);
+    const stackLayersRow = configFieldRowFor(stackLayersInput);
+    const hiddenResetButton = within(hiddenDimRow).getByRole("button", {
+      name: /reset field override/i,
+    });
+
+    expect(within(dialog).getAllByLabelText("2 overrides").length).toBeGreaterThan(0);
+    expect(
+      within(stackLayersRow).getByRole("button", {
+        name: /reset field override/i,
+      }),
+    ).toBeEnabled();
+
+    await user.click(hiddenResetButton);
+
+    expect(hiddenDimInput).toHaveValue("256");
+    expect(stackLayersInput).toHaveValue("7");
+    expect(
+      within(hiddenDimRow).queryByRole("button", { name: /reset field override/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(stackLayersRow).getByRole("button", {
+        name: /reset field override/i,
+      }),
+    ).toBeEnabled();
     expect(within(dialog).getAllByLabelText("1 override").length).toBeGreaterThan(0);
   });
 
@@ -2936,6 +3060,39 @@ describe("ViewerApp Full Config", () => {
 
     expect(commandField(commandDialog)).toHaveValue(
       "source experiment.sh --model-type linears --model linear --preset baseline --config --hidden-dim 128 --stack-activation RELU --gate-flag true",
+    );
+  });
+
+  it("keeps invalid numeric text as a draft override for preview and command generation", async () => {
+    const { inspectBodies } = installFetchMock();
+    renderViewer();
+    const user = userEvent.setup();
+
+    const dialog = await openFullConfig(user);
+    const hiddenDimInput = within(dialog).getByLabelText(/hidden dim/i);
+
+    await user.clear(hiddenDimInput);
+    await user.type(hiddenDimInput, "abc");
+
+    expect(hiddenDimInput).toHaveValue("abc");
+    expect(within(dialog).getAllByLabelText("1 override").length).toBeGreaterThan(0);
+
+    await user.click(within(dialog).getByRole("button", { name: /update preview/i }));
+
+    await waitFor(() => {
+      expect(inspectBodies.at(-1)).toEqual({
+        modelType: "linears",
+        model: "linear",
+        preset: "baseline",
+        dataset: "Mnist",
+        overrides: { hidden_dim: "abc" },
+      });
+    });
+
+    const commandDialog = await openTrainingCommand(user, dialog);
+
+    expect(commandField(commandDialog)).toHaveValue(
+      "source experiment.sh --model-type linears --model linear --preset baseline --config --hidden-dim abc",
     );
   });
 
@@ -3051,11 +3208,11 @@ describe("ViewerApp Full Config", () => {
 
     await user.clear(hiddenInput);
     await user.type(hiddenInput, "128");
-    expect(hiddenInput).toHaveValue(128);
+    expect(hiddenInput).toHaveValue("128");
 
     await user.click(within(dialog).getByRole("button", { name: /reset overrides/i }));
 
-    expect(hiddenInput).toHaveValue(256);
+    expect(hiddenInput).toHaveValue("256");
     expect(within(dialog).getAllByLabelText("0 overrides").length).toBeGreaterThan(0);
     expect(screen.queryByText("No overrides set")).not.toBeInTheDocument();
   });
