@@ -2,6 +2,7 @@ import argparse
 from dataclasses import fields
 import unittest
 
+import models.linears.linear.config as linear_config
 import models.transformer_encoder.bert_linear.config as bert_linear_config
 import models.transformer_encoder.vit_linear.config as vit_linear_config
 from emperor.augmentations.adaptive_parameters.core.monitor import (
@@ -16,12 +17,18 @@ from emperor.datasets.image.classification.mnist import Mnist
 from emperor.experiments.base import GridSearch
 from lightning.pytorch.callbacks import EarlyStopping
 from models.config_overrides import iter_supported_config_keys
+from models.linears.linear import ExperimentPreset as LinearExperimentPreset
 from models.linears.linear_adaptive import ExperimentPreset
 from models.linears.linear_adaptive.presets import Experiment, ExperimentPresets
 from models.parametric.parametric_vector import (
     ExperimentPreset as ParametricVectorExperimentPreset,
 )
-from models.parser import ExperimentMode, get_experiment_parser, resolve_experiment_mode
+from models.parser import (
+    ExperimentMode,
+    get_experiment_parser,
+    resolve_experiment_mode,
+    resolve_monitor_callbacks,
+)
 
 
 class ExperimentConfigOverrideTestCase:
@@ -92,6 +99,8 @@ class TestExperimentConfigOverrideParsing(
             "search_keys",
             "config_overrides",
             "search_overrides",
+            "monitor_names",
+            "monitor_callbacks",
         ]
 
         mode_fields = fields(ExperimentMode)
@@ -117,6 +126,8 @@ class TestExperimentConfigOverrideParsing(
                 search_keys,
                 config_overrides,
                 search_overrides,
+                monitor_names,
+                monitor_callbacks,
             ) = mode
             self.fail(
                 (
@@ -126,6 +137,8 @@ class TestExperimentConfigOverrideParsing(
                     search_keys,
                     config_overrides,
                     search_overrides,
+                    monitor_names,
+                    monitor_callbacks,
                 )
             )
 
@@ -229,6 +242,75 @@ class TestExperimentConfigOverrideParsing(
 
         self.assertEqual(grouped_mode.config_overrides, plain_mode.config_overrides)
         self.assertEqual(grouped_mode.search_overrides, plain_mode.search_overrides)
+
+    def test_monitor_resolver_builds_callbacks_for_valid_names(self):
+        callbacks = resolve_monitor_callbacks(
+            linear_config,
+            ["linear", "halting"],
+        )
+
+        self.assertEqual(
+            [type(callback) for callback in callbacks],
+            [
+                linear_config.LinearMonitorCallback,
+                linear_config.HaltingMonitorCallback,
+            ],
+        )
+
+    def test_monitor_resolver_deduplicates_repeated_names(self):
+        callbacks = resolve_monitor_callbacks(
+            linear_config,
+            ["linear", "linear", "halting", "linear"],
+        )
+
+        self.assertEqual(
+            [type(callback) for callback in callbacks],
+            [
+                linear_config.LinearMonitorCallback,
+                linear_config.HaltingMonitorCallback,
+            ],
+        )
+
+    def test_monitor_resolver_rejects_unknown_names_with_valid_monitors(self):
+        with self.assertRaisesRegex(
+            ValueError,
+            (
+                r"Unknown --monitors: \['does-not-exist'\]\. "
+                r"Valid monitors: halting, layer-controller, linear, memory, "
+                r"recurrent-layer"
+            ),
+        ):
+            resolve_monitor_callbacks(
+                linear_config,
+                ["linear", "does-not-exist"],
+            )
+
+    def test_cli_monitor_names_are_deduplicated_on_experiment_mode(self):
+        parser = get_experiment_parser(
+            LinearExperimentPreset.names(),
+            "models.linears.linear",
+        )
+        args = parser.parse_args(
+            [
+                "--preset",
+                "baseline",
+                "--monitors",
+                "linear",
+                "halting",
+                "linear",
+            ]
+        )
+
+        mode = resolve_experiment_mode(args, LinearExperimentPreset)
+
+        self.assertEqual(mode.monitor_names, ["linear", "halting"])
+        self.assertEqual(
+            [type(callback) for callback in mode.monitor_callbacks],
+            [
+                linear_config.LinearMonitorCallback,
+                linear_config.HaltingMonitorCallback,
+            ],
+        )
 
     def test_search_set_parses_lists_using_config_value_types(self):
         args = self.make_parser().parse_args(
