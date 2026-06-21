@@ -282,6 +282,235 @@ class TrainingApiLifecycleTests(unittest.TestCase):
         self.assertEqual(response.status_code, 422)
         self.assertIn("overrides", response.text)
 
+    def test_training_run_plan_rejects_overlarge_search_axis(self) -> None:
+        import httpx
+
+        with tempfile.TemporaryDirectory() as tmp:
+            app, _manager = self._create_test_app(Path(tmp))
+
+            async def call_api() -> httpx.Response:
+                transport = httpx.ASGITransport(app=app)
+                async with httpx.AsyncClient(
+                    transport=transport,
+                    base_url="http://testserver",
+                ) as client:
+                    return await client.post(
+                        "/training/run-plan",
+                        json={
+                            "modelType": "linears",
+                            "model": "linear",
+                            "preset": "baseline",
+                            "datasets": ["Mnist"],
+                            "overrides": {},
+                            "logFolder": "search_limit",
+                            "search": {
+                                "mode": "grid",
+                                "values": {
+                                    "stack_hidden_dim": [128 for _ in range(51)]
+                                },
+                            },
+                        },
+                    )
+
+            response = asyncio.run(call_api())
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("accepts at most 50", response.text)
+
+    def test_training_run_plan_rejects_overlarge_grid_plan(self) -> None:
+        import httpx
+
+        with tempfile.TemporaryDirectory() as tmp:
+            app, _manager = self._create_test_app(Path(tmp))
+
+            async def call_api() -> httpx.Response:
+                transport = httpx.ASGITransport(app=app)
+                async with httpx.AsyncClient(
+                    transport=transport,
+                    base_url="http://testserver",
+                ) as client:
+                    return await client.post(
+                        "/training/run-plan",
+                        json={
+                            "modelType": "linears",
+                            "model": "linear",
+                            "preset": "baseline",
+                            "datasets": ["Mnist"],
+                            "overrides": {},
+                            "logFolder": "search_limit",
+                            "search": {
+                                "mode": "grid",
+                                "values": {
+                                    "learning_rate": [0.0001, 0.001, 0.01],
+                                    "stack_hidden_dim": [16, 32, 64, 128, 256, 512],
+                                    "stack_num_layers": [2, 4, 8, 16, 32],
+                                    "stack_dropout_probability": [
+                                        0.0,
+                                        0.1,
+                                        0.2,
+                                        0.3,
+                                        0.4,
+                                        0.5,
+                                    ],
+                                    "stack_layer_norm_position": [
+                                        "DISABLED",
+                                        "DEFAULT",
+                                        "BEFORE",
+                                        "AFTER",
+                                    ],
+                                },
+                            },
+                        },
+                    )
+
+            response = asyncio.run(call_api())
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("planned runs exceeds 2000", response.text)
+
+    def test_training_run_plan_deduplicates_search_values(self) -> None:
+        import httpx
+
+        with tempfile.TemporaryDirectory() as tmp:
+            app, _manager = self._create_test_app(Path(tmp))
+
+            async def call_api() -> httpx.Response:
+                transport = httpx.ASGITransport(app=app)
+                async with httpx.AsyncClient(
+                    transport=transport,
+                    base_url="http://testserver",
+                ) as client:
+                    return await client.post(
+                        "/training/run-plan",
+                        json={
+                            "modelType": "linears",
+                            "model": "linear",
+                            "preset": "baseline",
+                            "datasets": ["Mnist"],
+                            "overrides": {},
+                            "logFolder": "search_limit",
+                            "search": {
+                                "mode": "grid",
+                                "values": {"stack_hidden_dim": [128, 128, 128]},
+                            },
+                        },
+                    )
+
+            response = asyncio.run(call_api())
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["summary"]["totalRuns"], 1)
+        self.assertEqual(response.json()["search"]["values"]["stack_hidden_dim"], [128])
+
+    def test_training_random_search_samples_without_rejecting_large_grid(
+        self,
+    ) -> None:
+        import httpx
+
+        with tempfile.TemporaryDirectory() as tmp:
+            app, _manager = self._create_test_app(Path(tmp))
+
+            async def call_api() -> httpx.Response:
+                transport = httpx.ASGITransport(app=app)
+                async with httpx.AsyncClient(
+                    transport=transport,
+                    base_url="http://testserver",
+                ) as client:
+                    return await client.post(
+                        "/training/run-plan",
+                        json={
+                            "modelType": "linears",
+                            "model": "linear",
+                            "preset": "baseline",
+                            "datasets": ["Mnist"],
+                            "overrides": {},
+                            "logFolder": "search_limit",
+                            "search": {
+                                "mode": "random",
+                                "randomSamples": 3,
+                                "values": {
+                                    "learning_rate": [0.0001, 0.001, 0.01],
+                                    "stack_hidden_dim": [16, 32, 64, 128, 256, 512],
+                                    "stack_num_layers": [2, 4, 8, 16, 32],
+                                    "stack_dropout_probability": [
+                                        0.0,
+                                        0.1,
+                                        0.2,
+                                        0.3,
+                                        0.4,
+                                        0.5,
+                                    ],
+                                    "stack_layer_norm_position": [
+                                        "DISABLED",
+                                        "DEFAULT",
+                                        "BEFORE",
+                                        "AFTER",
+                                    ],
+                                },
+                            },
+                        },
+                    )
+
+            response = asyncio.run(call_api())
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["summary"]["totalRuns"], 3)
+
+    def test_training_run_plan_rejects_overlarge_aggregate_plan(
+        self,
+    ) -> None:
+        import httpx
+
+        with tempfile.TemporaryDirectory() as tmp:
+            app, _manager = self._create_test_app(Path(tmp))
+
+            async def call_api() -> httpx.Response:
+                transport = httpx.ASGITransport(app=app)
+                async with httpx.AsyncClient(
+                    transport=transport,
+                    base_url="http://testserver",
+                ) as client:
+                    return await client.post(
+                        "/training/run-plan",
+                        json={
+                            "modelType": "linears",
+                            "model": "linear",
+                            "preset": "baseline",
+                            "presets": ["baseline", "gating"],
+                            "datasets": ["Mnist", "Cifar10"],
+                            "overrides": {},
+                            "logFolder": "search_limit",
+                            "search": {
+                                "mode": "random",
+                                "randomSamples": 1000,
+                                "values": {
+                                    "learning_rate": [0.0001, 0.001, 0.01],
+                                    "stack_hidden_dim": [16, 32, 64, 128, 256, 512],
+                                    "stack_num_layers": [2, 4, 8, 16, 32],
+                                    "stack_dropout_probability": [
+                                        0.0,
+                                        0.1,
+                                        0.2,
+                                        0.3,
+                                        0.4,
+                                        0.5,
+                                    ],
+                                    "stack_layer_norm_position": [
+                                        "DISABLED",
+                                        "DEFAULT",
+                                        "BEFORE",
+                                        "AFTER",
+                                    ],
+                                },
+                            },
+                        },
+                    )
+
+            response = asyncio.run(call_api())
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("4000 planned runs exceeds 2000", response.text)
+
     def test_training_responses_reject_nested_override_objects(self) -> None:
         summary = {
             "totalRuns": 0,

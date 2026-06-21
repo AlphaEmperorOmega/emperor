@@ -13,9 +13,10 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 from emperor.base.options import ActivationOptions
 
 from viewer.backend.inspector.errors import InspectorError
-from viewer.backend.inspector.search import parse_training_search
+from viewer.backend.inspector.search import ParsedTrainingSearch, parse_training_search
 from viewer.backend.tests.helpers import FakeRunner
 from viewer.backend.training_jobs import TrainingJobManager
+from viewer.backend.training_limits import MAX_TRAINING_PLANNED_RUNS
 from viewer.backend.training_run_plans import TrainingRunPlanBuilder
 
 
@@ -433,6 +434,39 @@ class TrainingRunPlanTests(unittest.TestCase):
             all("--logdir random_search" in run["command"] for run in plan["runs"])
         )
 
+    def test_training_run_plan_random_search_handles_huge_product(self) -> None:
+        axis_values = {
+            f"synthetic_axis_{index}": list(range(50)) for index in range(16)
+        }
+        parsed_search = ParsedTrainingSearch(
+            mode="random",
+            values=axis_values,
+            search_overrides={
+                f"synthetic_param_{index}": values
+                for index, values in enumerate(axis_values.values())
+            },
+            axis_keys=set(axis_values),
+            model_params={
+                f"synthetic_param_{index}" for index in range(len(axis_values))
+            },
+            combination_count=50**16,
+            planned_run_count=3,
+            random_samples=3,
+        )
+        builder = TrainingRunPlanBuilder(random_source=random.Random(17))
+
+        combinations = builder._search_combinations(
+            model="linears/linear",
+            preset="baseline",
+            parsed_search=parsed_search,
+        )
+
+        self.assertEqual(len(combinations), 3)
+        for changes, overrides in combinations:
+            with self.subTest(overrides=overrides):
+                self.assertEqual(len(changes), 16)
+                self.assertEqual(len(overrides), 16)
+
     def test_training_job_random_search_uses_seeded_materialized_run_plan(
         self,
     ) -> None:
@@ -714,6 +748,36 @@ class TrainingRunPlanTests(unittest.TestCase):
                         )
 
                     self.assertIn(expected_message, str(context.exception))
+
+    def test_training_run_plan_rejects_overlarge_submitted_run_plan(self) -> None:
+        builder = TrainingRunPlanBuilder()
+        selected = builder.resolve_inputs(
+            model="linears/linear",
+            preset="baseline",
+            presets=None,
+            datasets=["Mnist"],
+            overrides={},
+            search=None,
+        )
+        plan = builder.create(
+            model="linears/linear",
+            selected=selected,
+            log_folder="submitted_limit",
+        )
+        plan["runs"] = [
+            {**plan["runs"][0], "id": f"frontend-row-{index}"}
+            for index in range(MAX_TRAINING_PLANNED_RUNS + 1)
+        ]
+
+        with self.assertRaises(InspectorError) as context:
+            builder.from_submitted(
+                model="linears/linear",
+                selected=selected,
+                run_plan=plan,
+                log_folder="submitted_limit",
+            )
+
+        self.assertIn("submitted runs exceeds 2000", str(context.exception))
 
     def test_training_job_rejects_locked_submitted_run_plan_override(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

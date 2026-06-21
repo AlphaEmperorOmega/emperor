@@ -17,6 +17,10 @@ from viewer.backend.inspector.discovery import load_model_parts
 from viewer.backend.inspector.errors import InspectorError
 from viewer.backend.inspector.schema import search_space_schema
 from viewer.backend.inspector.values import serialize_config_value
+from viewer.backend.training_limits import (
+    MAX_TRAINING_PLANNED_RUNS,
+    MAX_TRAINING_SEARCH_AXIS_VALUES,
+)
 
 
 @dataclass(frozen=True)
@@ -63,6 +67,22 @@ def _parse_search_value(config_module, axis: Mapping[str, Any], raw_value: Any) 
         raise InspectorError(
             f"Invalid search value for axis '{axis['key']}': {raw_value!r}. {exc}"
         ) from exc
+
+
+def _deduplicate_axis_values(
+    parsed_values: list[Any],
+) -> tuple[list[Any], list[Any]]:
+    deduplicated_parsed: list[Any] = []
+    deduplicated_serialized: list[Any] = []
+    seen: set[Any] = set()
+    for parsed_value in parsed_values:
+        serialized_value = serialize_config_value(parsed_value)
+        if serialized_value in seen:
+            continue
+        seen.add(serialized_value)
+        deduplicated_parsed.append(parsed_value)
+        deduplicated_serialized.append(serialized_value)
+    return deduplicated_parsed, deduplicated_serialized
 
 
 def parse_training_search(
@@ -112,6 +132,11 @@ def parse_training_search(
             raise InspectorError(
                 f"Search axis '{axis['key']}' requires at least one selected value."
             )
+        if len(raw_values) > MAX_TRAINING_SEARCH_AXIS_VALUES:
+            raise InspectorError(
+                f"Search axis '{axis['key']}' accepts at most "
+                f"{MAX_TRAINING_SEARCH_AXIS_VALUES} selected values."
+            )
 
         allowed_values = {
             serialize_config_value(value) for value in axis.get("values", [])
@@ -120,9 +145,10 @@ def parse_training_search(
             _parse_search_value(parts.config_module, axis, raw_value)
             for raw_value in raw_values
         ]
-        serialized_axis_values = [
-            serialize_config_value(value) for value in parsed_axis_values
-        ]
+        (
+            parsed_axis_values,
+            serialized_axis_values,
+        ) = _deduplicate_axis_values(parsed_axis_values)
         invalid_values = [
             value for value in serialized_axis_values if value not in allowed_values
         ]
@@ -143,6 +169,13 @@ def parse_training_search(
     run_count = combination_count
     if random_samples is not None:
         run_count = min(random_samples, combination_count)
+    planned_run_count = run_count * dataset_count
+    if planned_run_count > MAX_TRAINING_PLANNED_RUNS:
+        raise InspectorError(
+            "Training run plan is too large: "
+            f"{planned_run_count} planned runs exceeds "
+            f"{MAX_TRAINING_PLANNED_RUNS}."
+        )
 
     return ParsedTrainingSearch(
         mode=str(mode),
@@ -151,7 +184,7 @@ def parse_training_search(
         axis_keys=set(serialized_values),
         model_params=model_params,
         combination_count=combination_count,
-        planned_run_count=run_count * dataset_count,
+        planned_run_count=planned_run_count,
         random_samples=random_samples,
     )
 
