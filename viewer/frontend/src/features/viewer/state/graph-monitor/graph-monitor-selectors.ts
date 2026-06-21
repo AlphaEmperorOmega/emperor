@@ -7,15 +7,7 @@ import {
   type ParameterChannelStatus,
   type ParameterStatus,
 } from "@/lib/api";
-import {
-  anyLogRunTagsMatchNodePath,
-  experimentsWithLayerMonitorData,
-  filterHistoricalRuns,
-  historicalPresetOptions as buildHistoricalPresetOptions,
-  latestHistoricalMonitorRuns,
-  sortLogRunsNewestFirst,
-  type HistoricalRunOption,
-} from "@/lib/historical-monitor-runs";
+import { anyLogRunTagsMatchNodePath } from "@/lib/historical-monitor-runs";
 import {
   buildMonitorComparisonCandidateGroups,
   createMonitorTargetResolver,
@@ -32,26 +24,11 @@ import {
 import { expectedLinearParameterChannels } from "@/lib/parameter-summary";
 import { type ActiveMonitorJob, type MonitorChartsSource } from "@/types/monitor";
 
-export type DatasetSelectionInput = {
-  logRuns?: LogRun[];
-  modelRunTags?: LogRunTags[];
-  selectedModel: string;
-  selectedHistoricalPreset: string;
-  selectedLogRunId: string | null;
-};
-
-export type DatasetSelectionState = {
-  modelLogRuns: LogRun[];
-  historicalPresetOptions: HistoricalRunOption[];
-  visibleHistoricalRuns: LogRun[];
-  selectedHistoricalExperiment: string;
-  selectedHistoricalDataset: string;
-  selectedHistoricalRunPreset: string;
-  filteredHistoricalRuns: LogRun[];
-  historicalMonitorRuns: LogRun[];
-  filteredHistoricalRunIds: string[];
-  selectedLogRun: LogRun | undefined;
-};
+export {
+  deriveDatasetSelectionState,
+  type DatasetSelectionInput,
+  type DatasetSelectionState,
+} from "@/features/viewer/state/logs/historical-run-selection";
 
 export type MonitorSourceInput = {
   graph?: InspectResponse;
@@ -85,77 +62,6 @@ export type ParameterActivityInput = {
   status?: ParameterStatus | LogParameterStatusResponse;
   linearMonitorTargetResolver?: LinearMonitorTargetResolver;
 };
-
-export function deriveDatasetSelectionState(
-  input: DatasetSelectionInput,
-): DatasetSelectionState {
-  const modelLogRuns = sortLogRunsNewestFirst(
-    (input.logRuns ?? []).filter((run) => run.model === input.selectedModel),
-  );
-  // Only surface experiments that carry per-layer monitor data; model-performance
-  // metrics remain available in the Logs workspace. Until tags load this set is
-  // empty, so the panel shows a loading state instead of an unfiltered list.
-  const layerMonitorExperiments = experimentsWithLayerMonitorData(
-    modelLogRuns,
-    input.modelRunTags,
-  );
-  const eligibleRuns = modelLogRuns.filter((run) =>
-    layerMonitorExperiments.has(run.experiment),
-  );
-  const selectedModelLogRun = input.selectedLogRunId
-    ? modelLogRuns.find((run) => run.id === input.selectedLogRunId)
-    : undefined;
-  // The preset filter ("" = all presets) only controls which runs are listed; it is
-  // independent of the build/training preset selected under the model.
-  const historicalPresetOptions = buildHistoricalPresetOptions(eligibleRuns);
-  const filteredVisibleHistoricalRuns = eligibleRuns.filter(
-    (run) =>
-      !input.selectedHistoricalPreset || run.preset === input.selectedHistoricalPreset,
-  );
-  const visibleHistoricalRuns =
-    selectedModelLogRun &&
-    !filteredVisibleHistoricalRuns.some((run) => run.id === selectedModelLogRun.id)
-      ? sortLogRunsNewestFirst([
-          ...filteredVisibleHistoricalRuns,
-          selectedModelLogRun,
-        ])
-      : filteredVisibleHistoricalRuns;
-  // Selection drives everything downstream: the experiment/dataset labels and the
-  // monitor run group are derived from the picked run. A selected run remains
-  // canonical even when tag loading or a visible-list filter temporarily hides it.
-  const selectedLogRun = selectedModelLogRun;
-  const selectedHistoricalExperiment = selectedLogRun?.experiment ?? "";
-  const selectedHistoricalDataset = selectedLogRun?.dataset ?? "";
-  const selectedHistoricalRunPreset = selectedLogRun?.preset ?? "";
-  const selectedLogRunIsMonitorEligible = selectedLogRun
-    ? eligibleRuns.some((run) => run.id === selectedLogRun.id)
-    : false;
-  const filteredHistoricalRuns = selectedLogRun
-    ? selectedLogRunIsMonitorEligible
-      ? filterHistoricalRuns(
-          eligibleRuns,
-          selectedHistoricalExperiment,
-          selectedHistoricalDataset,
-          selectedHistoricalRunPreset,
-        )
-      : []
-    : [];
-  const historicalMonitorRuns = latestHistoricalMonitorRuns(filteredHistoricalRuns);
-  const filteredHistoricalRunIds = filteredHistoricalRuns.map((run) => run.id);
-
-  return {
-    modelLogRuns,
-    historicalPresetOptions,
-    visibleHistoricalRuns,
-    selectedHistoricalExperiment,
-    selectedHistoricalDataset,
-    selectedHistoricalRunPreset,
-    filteredHistoricalRuns,
-    historicalMonitorRuns,
-    filteredHistoricalRunIds,
-    selectedLogRun,
-  };
-}
 
 export function deriveMonitorSource(input: MonitorSourceInput): MonitorSourceState {
   const activeTrainingJob = input.activeTrainingJob;
