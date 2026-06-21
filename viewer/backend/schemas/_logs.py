@@ -7,13 +7,16 @@ from typing import Literal
 from pydantic import Field
 
 from viewer.backend.schemas._base import ApiResponseModel, JsonObject
+from viewer.backend.schemas._limits import (
+    DEFAULT_LOG_SCALAR_MAX_POINTS,
+    MAX_LOG_DELETE_FILTER_VALUES,
+    MAX_LOG_MEDIA_TAGS,
+    MAX_LOG_REQUEST_RUN_IDS,
+    MAX_LOG_SCALAR_MAX_POINTS,
+    MAX_LOG_SCALAR_TAGS,
+)
 from viewer.backend.schemas._monitor_data import ScalarPointResponse
 
-MAX_LOG_REQUEST_RUN_IDS = 50
-MAX_LOG_SCALAR_TAGS = 50
-MAX_LOG_MEDIA_TAGS = 20
-DEFAULT_LOG_SCALAR_MAX_POINTS = 500
-MAX_LOG_SCALAR_MAX_POINTS = 2000
 LogScalarSampling = Literal["tail"]
 
 
@@ -122,11 +125,26 @@ class LogRunModelFilterRequest(ApiResponseModel):
 
 
 class LogRunDeleteFiltersRequest(ApiResponseModel):
-    experiments: list[str] = Field(default_factory=list)
-    datasets: list[str] = Field(default_factory=list)
-    models: list[LogRunModelFilterRequest] = Field(default_factory=list)
-    presets: list[str] = Field(default_factory=list)
-    runIds: list[str] = Field(default_factory=list)
+    experiments: list[str] = Field(
+        default_factory=list,
+        max_length=MAX_LOG_DELETE_FILTER_VALUES,
+    )
+    datasets: list[str] = Field(
+        default_factory=list,
+        max_length=MAX_LOG_DELETE_FILTER_VALUES,
+    )
+    models: list[LogRunModelFilterRequest] = Field(
+        default_factory=list,
+        max_length=MAX_LOG_DELETE_FILTER_VALUES,
+    )
+    presets: list[str] = Field(
+        default_factory=list,
+        max_length=MAX_LOG_DELETE_FILTER_VALUES,
+    )
+    runIds: list[str] = Field(
+        default_factory=list,
+        max_length=MAX_LOG_DELETE_FILTER_VALUES,
+    )
 
 
 class LogRunDeleteCandidateResponse(ApiResponseModel):

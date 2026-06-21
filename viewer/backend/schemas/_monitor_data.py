@@ -7,6 +7,7 @@ from typing import Literal
 from pydantic import Field
 
 from viewer.backend.schemas._base import ApiResponseModel
+from viewer.backend.schemas._limits import MAX_LOG_REQUEST_RUN_IDS
 
 
 def _is_none(value: object) -> bool:
@@ -107,7 +108,10 @@ class ParameterStatusResponse(ApiResponseModel):
 
 
 class LogParameterStatusRequest(ApiResponseModel):
-    runIds: list[str] = Field(default_factory=list)
+    runIds: list[str] = Field(
+        default_factory=list,
+        max_length=MAX_LOG_REQUEST_RUN_IDS,
+    )
 
 
 class LogParameterStatusResponse(ApiResponseModel):
