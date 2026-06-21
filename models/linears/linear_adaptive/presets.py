@@ -53,112 +53,170 @@ if TYPE_CHECKING:
 
 class ExperimentPreset(BaseOptions):
     BASELINE = (
-        "[BASELINE] Baseline adaptive linear stack preset; supports search-space flags."
+        "Default config: a GELU adaptive linear stack with pre-layer norm and "
+        "dropout."
     )
     SINGLE_MODEL_WEIGHT = (
-        "[WEIGHT] Adaptive linear stack with the single-model dynamic weight generator."
+        "Default adaptive config with the single-model dynamic weight generator "
+        "enabled."
     )
     DUAL_MODEL_WEIGHT = (
-        "[WEIGHT] Adaptive linear stack with the dual-model dynamic weight generator."
+        "Default adaptive config with the dual-model dynamic weight generator "
+        "enabled."
     )
     LOW_RANK_WEIGHT = (
-        "[WEIGHT] Adaptive linear stack with the low-rank dynamic weight generator."
+        "Default adaptive config with the low-rank dynamic weight generator enabled."
     )
     HYPERNETWORK_WEIGHT = (
-        "[WEIGHT] Adaptive linear stack with the hypernetwork dynamic weight generator."
+        "Default adaptive config with the hypernetwork dynamic weight generator "
+        "enabled."
     )
-    LAYERED_WEIGHTED_BANK_WEIGHT = "[WEIGHT] Adaptive linear stack with the layered weighted bank dynamic weight generator."
-    SOFT_WEIGHTED_BANK_WEIGHT = "[WEIGHT] Adaptive linear stack with the soft weighted bank dynamic weight generator."
+    LAYERED_WEIGHTED_BANK_WEIGHT = (
+        "Default adaptive config with the layered weighted-bank dynamic weight "
+        "generator enabled."
+    )
+    SOFT_WEIGHTED_BANK_WEIGHT = (
+        "Default adaptive config with the soft weighted-bank dynamic weight "
+        "generator enabled."
+    )
     AFFINE_TRANSFORM_BIAS = (
-        "[BIAS] Adaptive linear stack with the affine-transform dynamic bias generator."
+        "Default adaptive config with affine-transform dynamic bias enabled."
     )
     ADDITIVE_BIAS = (
-        "[BIAS] Adaptive linear stack with the additive dynamic bias generator."
+        "Default adaptive config with additive dynamic bias enabled."
     )
     GENERATOR_BIAS = (
-        "[BIAS] Adaptive linear stack with the generator-based dynamic bias."
+        "Default adaptive config with generator-based dynamic bias enabled."
     )
     MULTIPLICATIVE_BIAS = (
-        "[BIAS] Adaptive linear stack with the multiplicative dynamic bias generator."
+        "Default adaptive config with multiplicative dynamic bias enabled."
     )
     SIGMOID_GATED_BIAS = (
-        "[BIAS] Adaptive linear stack with the sigmoid-gated dynamic bias generator."
+        "Default adaptive config with sigmoid-gated dynamic bias enabled."
     )
     TANH_GATED_BIAS = (
-        "[BIAS] Adaptive linear stack with the tanh-gated dynamic bias generator."
+        "Default adaptive config with tanh-gated dynamic bias enabled."
     )
     WEIGHTED_BANK_BIAS = (
-        "[BIAS] Adaptive linear stack with the weighted bank dynamic bias generator."
+        "Default adaptive config with weighted-bank dynamic bias enabled."
     )
     STANDARD_DIAGONAL = (
-        "[DIAGONAL] Adaptive linear stack with the standard dynamic diagonal generator."
+        "Default adaptive config with standard dynamic diagonal enabled."
     )
     ANTI_DIAGONAL = (
-        "[DIAGONAL] Adaptive linear stack with the anti dynamic diagonal generator."
+        "Default adaptive config with anti dynamic diagonal enabled."
     )
     COMBINED_DIAGONAL = (
-        "[DIAGONAL] Adaptive linear stack with the combined dynamic diagonal generator."
+        "Default adaptive config with combined dynamic diagonal enabled."
     )
     DIAGONAL_AXIS_MASK = (
-        "[MASK] Adaptive linear stack with the diagonal-axis row mask generator."
+        "Default adaptive config with diagonal-axis row masking enabled."
     )
     OUTER_PRODUCT_MASK = (
-        "[MASK] Adaptive linear stack with the outer-product row mask generator."
+        "Default adaptive config with outer-product row masking enabled."
     )
     PER_AXIS_SCORE_MASK = (
-        "[MASK] Adaptive linear stack with the per-axis score row mask generator."
+        "Default adaptive config with per-axis score row masking enabled."
     )
     TOP_SLICE_AXIS_MASK = (
-        "[MASK] Adaptive linear stack with the top-slice axis row mask generator."
+        "Default adaptive config with top-slice axis row masking enabled."
     )
-    WEIGHT_INFORMED_SCORE_MASK = "[MASK] Adaptive linear stack with the weight-informed score axis row mask generator."
-    SINGLE_MODEL_WEIGHT_ADDITIVE_BIAS_COMBINED_DIAGONAL = "[WEIGHT+BIAS+DIAGONAL] Single-model weight + additive bias + combined diagonal."
+    WEIGHT_INFORMED_SCORE_MASK = (
+        "Default adaptive config with weight-informed score axis row masking "
+        "enabled."
+    )
+    SINGLE_MODEL_WEIGHT_ADDITIVE_BIAS_COMBINED_DIAGONAL = (
+        "Default adaptive config with single-model dynamic weights, additive "
+        "bias, and combined dynamic diagonal enabled."
+    )
     DUAL_MODEL_WEIGHT_ADDITIVE_BIAS_COMBINED_DIAGONAL = (
-        "[WEIGHT+BIAS+DIAGONAL] Dual-model weight + additive bias + combined diagonal."
+        "Default adaptive config with dual-model dynamic weights, additive bias, "
+        "and combined dynamic diagonal enabled."
     )
-    LAYERED_WEIGHTED_BANK_WEIGHT_ADDITIVE_BIAS_COMBINED_DIAGONAL = "[WEIGHT+BIAS+DIAGONAL] Layered weighted bank weight + additive bias + combined diagonal."
+    LAYERED_WEIGHTED_BANK_WEIGHT_ADDITIVE_BIAS_COMBINED_DIAGONAL = (
+        "Default adaptive config with layered weighted-bank dynamic weights, "
+        "additive bias, and combined dynamic diagonal enabled."
+    )
     LOW_RANK_WEIGHT_ADDITIVE_BIAS_COMBINED_DIAGONAL = (
-        "[WEIGHT+BIAS+DIAGONAL] Low-rank weight + additive bias + combined diagonal."
+        "Default adaptive config with low-rank dynamic weights, additive bias, "
+        "and combined dynamic diagonal enabled."
     )
-    SINGLE_MODEL_WEIGHT_ADDITIVE_BIAS_STANDARD_DIAGONAL = "[WEIGHT+BIAS+DIAGONAL] Single-model weight + additive bias + standard diagonal."
+    SINGLE_MODEL_WEIGHT_ADDITIVE_BIAS_STANDARD_DIAGONAL = (
+        "Default adaptive config with single-model dynamic weights, additive "
+        "bias, and standard dynamic diagonal enabled."
+    )
     DUAL_MODEL_WEIGHT_ADDITIVE_BIAS_STANDARD_DIAGONAL = (
-        "[WEIGHT+BIAS+DIAGONAL] Dual-model weight + additive bias + standard diagonal."
+        "Default adaptive config with dual-model dynamic weights, additive bias, "
+        "and standard dynamic diagonal enabled."
     )
-    LAYERED_WEIGHTED_BANK_WEIGHT_ADDITIVE_BIAS_STANDARD_DIAGONAL = "[WEIGHT+BIAS+DIAGONAL] Layered weighted bank weight + additive bias + standard diagonal."
+    LAYERED_WEIGHTED_BANK_WEIGHT_ADDITIVE_BIAS_STANDARD_DIAGONAL = (
+        "Default adaptive config with layered weighted-bank dynamic weights, "
+        "additive bias, and standard dynamic diagonal enabled."
+    )
     LOW_RANK_WEIGHT_ADDITIVE_BIAS_STANDARD_DIAGONAL = (
-        "[WEIGHT+BIAS+DIAGONAL] Low-rank weight + additive bias + standard diagonal."
+        "Default adaptive config with low-rank dynamic weights, additive bias, "
+        "and standard dynamic diagonal enabled."
     )
-    DECAY_EXPONENTIAL_WEIGHT = "[DECAY] Dual-model weight that decays exponentially toward a static linear layer."
-    NORM_L2_WEIGHT = "[NORM] Dual-model weight with L2-scale weight normalization."
+    DECAY_EXPONENTIAL_WEIGHT = (
+        "Default adaptive config with dual-model dynamic weights decaying "
+        "exponentially toward a static linear layer."
+    )
+    NORM_L2_WEIGHT = (
+        "Default adaptive config with dual-model dynamic weights and L2-scale "
+        "weight normalization."
+    )
     DEEP_GENERATOR = (
-        "[CAPACITY] Dual-model weight produced by a depth-8 generator network."
+        "Default adaptive config with dual-model dynamic weights produced by a "
+        "depth-8 generator network."
     )
-    FULL_STACK = "[WEIGHT+BIAS+DIAGONAL+MASK] Dual-model weight + additive bias + combined diagonal + weight-informed mask."
+    FULL_STACK = (
+        "Default adaptive config with dual-model dynamic weights, additive bias, "
+        "combined dynamic diagonal, and weight-informed row masking enabled."
+    )
     ADAPTIVE_HALTING = (
-        "[ADAPTIVE+ACT] Dual-model weight with adaptive computation halting enabled."
+        "Default adaptive config with dual-model dynamic weights and stack "
+        "halting enabled."
     )
     DUAL_WEIGHT_GATING = (
-        "[WEIGHT+GATE] Dual-model dynamic weight with learned stack gating."
+        "Default adaptive config with dual-model dynamic weights and per-layer "
+        "gating enabled."
     )
     DUAL_WEIGHT_HALTING = (
-        "[WEIGHT+HALT] Dual-model dynamic weight with adaptive computation halting."
+        "Default adaptive config with dual-model dynamic weights and stack "
+        "halting enabled."
     )
     FULL_STACK_GATING = (
-        "[WEIGHT+BIAS+DIAGONAL+MASK+GATE] Full adaptive stack with learned gating."
+        "Default adaptive config with full adaptive parameter controls and "
+        "per-layer gating enabled."
     )
     FULL_STACK_RECURRENT = (
-        "[WEIGHT+BIAS+DIAGONAL+MASK+RECURRENT] Full adaptive stack applied recurrently."
+        "Default adaptive config with full adaptive parameter controls wrapped "
+        "in fixed-step recurrence."
     )
     BANK_WEIGHT_MASK = (
-        "[WEIGHT+MASK] Layered weighted-bank dynamic weight with weight-informed mask."
+        "Default adaptive config with layered weighted-bank dynamic weights and "
+        "weight-informed row masking enabled."
     )
     LOW_RANK_POST_NORM = (
-        "[WEIGHT+NORM] Low-rank dynamic weight with post-layer normalization."
+        "Default adaptive config with low-rank dynamic weights and post-layer "
+        "normalization enabled."
     )
-    RECURRENT = "[RECURRENT] Adaptive linear stack applied recurrently for a fixed number of steps."
-    RECURRENT_GATING = "[RECURRENT+GATE] Adaptive linear stack applied recurrently with a learned recurrent gate."
-    RECURRENT_HALTING = "[RECURRENT+HALT] Adaptive linear stack applied recurrently with adaptive recurrent halting."
-    RECURRENT_GATING_HALTING = "[RECURRENT+GATE+HALT] Adaptive linear stack applied recurrently with both learned recurrent gating and adaptive recurrent halting."
+    RECURRENT = (
+        "Default adaptive config wrapped in fixed-step recurrence, reusing the "
+        "adaptive linear stack for each recurrent step."
+    )
+    RECURRENT_GATING = (
+        "Default recurrent adaptive config with step-level gating enabled after "
+        "each recurrent update."
+    )
+    RECURRENT_HALTING = (
+        "Default recurrent adaptive config with recurrent halting enabled, "
+        "allowing early stopping before the max step count."
+    )
+    RECURRENT_GATING_HALTING = (
+        "Default recurrent adaptive config with both step-level gating and "
+        "recurrent halting enabled."
+    )
 
 
 def _lock(preset, value, field: str) -> PresetLock:

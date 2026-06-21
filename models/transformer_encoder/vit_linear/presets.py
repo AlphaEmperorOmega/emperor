@@ -22,13 +22,20 @@ if TYPE_CHECKING:
 
 class ExperimentPreset(BaseOptions):
     BASELINE = (
-        "Vision Transformer classifier with linear patch embeddings, a trainable "
-        "class token, learned image positional embeddings, and a pre-norm "
-        "bidirectional encoder."
+        "Default config: a Vision Transformer classifier with linear patch "
+        "embeddings, a trainable class token, learned image positions, and a "
+        "pre-norm bidirectional encoder."
     )
-    POST_NORM = "Vision Transformer classifier with post-norm encoder sub-blocks."
-    SINUSOIDAL = "Vision Transformer classifier with fixed sinusoidal image positions."
-    ATTENTION_BIAS = "Vision Transformer classifier with biased attention projections."
+    POST_NORM = (
+        "Default config with layer normalization applied after each encoder "
+        "sub-block."
+    )
+    SINUSOIDAL = (
+        "Default config with fixed sinusoidal image positional embeddings."
+    )
+    ATTENTION_BIAS = (
+        "Default config with attention projection bias and key/value bias enabled."
+    )
 
 
 def _lock(preset, value, behavior: str) -> PresetLock:

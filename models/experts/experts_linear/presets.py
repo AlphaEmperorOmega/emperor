@@ -20,39 +20,66 @@ if TYPE_CHECKING:
 
 
 class ExperimentPreset(BaseOptions):
-    BASELINE = "Baseline mixture-of-experts with linear expert and sampler stacks."
-    GATING = "Mixture-of-experts stack with per-layer gating enabled."
-    HALTING = "Mixture-of-experts stack with per-layer halting enabled."
+    BASELINE = (
+        "Default config: a mixture-of-experts classifier with linear expert and "
+        "sampler stacks."
+    )
+    GATING = (
+        "Default config with per-layer gating enabled in the expert stack."
+    )
+    HALTING = (
+        "Default config with stack halting enabled in the expert stack."
+    )
     GATING_HALTING = (
-        "Mixture-of-experts stack with both per-layer gating and halting enabled."
+        "Default config with both per-layer gating and stack halting enabled in "
+        "the expert stack."
     )
     RECURRENT = (
-        "Mixture-of-experts model applied recurrently for a fixed number of steps."
+        "Default config wrapped in fixed-step recurrence, reusing the expert "
+        "stack for each recurrent step."
     )
     RECURRENT_GATING = (
-        "Mixture-of-experts model applied recurrently with a learned recurrent gate."
+        "Default recurrent config with step-level gating enabled after each "
+        "recurrent update."
     )
     RECURRENT_HALTING = (
-        "Mixture-of-experts model applied recurrently with adaptive recurrent halting."
+        "Default recurrent config with recurrent halting enabled, allowing early "
+        "stopping before the max step count."
     )
     RECURRENT_GATING_HALTING = (
-        "Mixture-of-experts model applied recurrently with both learned recurrent "
-        "gating and adaptive recurrent halting."
+        "Default recurrent config with both step-level gating and recurrent "
+        "halting enabled."
     )
-    SHARED_ROUTER_AFTER_WEIGHT = "Mixture-of-experts model with shared routing and expert weighting after experts."
+    SHARED_ROUTER_AFTER_WEIGHT = (
+        "Default config with shared expert routing and expert weighting after "
+        "expert outputs."
+    )
     TOP1_SWITCH_AUX = (
-        "Top-1 mixture-of-experts routing with switch auxiliary loss enabled."
+        "Default config with top-1 switch routing and switch auxiliary loss "
+        "enabled."
     )
     TOP2_BALANCED_AUX = (
-        "Top-2 mixture-of-experts routing with balance auxiliary loss enabled."
+        "Default config with top-2 routing and balance auxiliary loss enabled."
     )
-    CAPACITY_TOP1_ZERO = "Top-1 mixture-of-experts routing with capacity limiting and zeroed dropped tokens."
-    CAPACITY_TOP1_IDENTITY = "Top-1 mixture-of-experts routing with capacity limiting and identity dropped tokens."
-    NOISY_SHARED_ROUTER = "Mixture-of-experts model with shared noisy top-k routing."
+    CAPACITY_TOP1_ZERO = (
+        "Default config with top-1 capacity limiting and dropped tokens zeroed."
+    )
+    CAPACITY_TOP1_IDENTITY = (
+        "Default config with top-1 capacity limiting and dropped tokens preserved "
+        "by identity."
+    )
+    NOISY_SHARED_ROUTER = (
+        "Default config with shared noisy top-k routing enabled for sampler and "
+        "router."
+    )
     RESIDUAL_SHARED_ROUTER = (
-        "Mixture-of-experts model with residual outer layers and shared routing."
+        "Default config with residual expert stack connections and shared expert "
+        "routing."
     )
-    POST_NORM_AFTER_WEIGHT = "Mixture-of-experts model with post-layer norm and expert weighting after experts."
+    POST_NORM_AFTER_WEIGHT = (
+        "Default config with post-layer normalization and expert weighting after "
+        "expert outputs."
+    )
 
 
 def _lock(preset, value, behavior: str) -> PresetLock:

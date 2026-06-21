@@ -18,23 +18,27 @@ if TYPE_CHECKING:
 
 class ExperimentPreset(BaseOptions):
     BASELINE = (
-        "Transformer encoder language model with linear attention and feed-forward "
-        "sub-stacks, learned positional embeddings, and bidirectional attention."
+        "Default config: a BERT-style pretraining encoder with linear attention "
+        "and feed-forward sub-stacks, learned positional embeddings, and "
+        "bidirectional attention."
     )
     PRE_NORM = (
-        "Transformer encoder with layer normalization applied before each sub-block."
+        "Default config with layer normalization applied before each encoder "
+        "sub-block."
     )
     POST_NORM = (
-        "Transformer encoder with layer normalization applied after each sub-block."
+        "Default config with layer normalization applied after each encoder "
+        "sub-block."
     )
     SINUSOIDAL = (
-        "Transformer encoder with fixed sinusoidal positional embeddings."
+        "Default config with fixed sinusoidal positional embeddings."
     )
     CAUSAL = (
-        "Transformer encoder with a causal attention mask for autoregressive modeling."
+        "Default config with causal attention masking enabled for autoregressive "
+        "modeling."
     )
     ATTENTION_BIAS = (
-        "Transformer encoder with biased attention projections and key/value bias."
+        "Default config with attention projection bias and key/value bias enabled."
     )
 
 
