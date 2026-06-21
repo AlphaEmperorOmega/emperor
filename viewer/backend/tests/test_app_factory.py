@@ -43,6 +43,9 @@ EXPECTED_ASYNC_BOUNDARY_ROUTE_PAIRS = {
     ("GET", "/logs/runs"),
     ("GET", "/logs/experiments"),
     ("POST", "/logs/checkpoints"),
+    ("DELETE", "/logs/experiments/{experiment}"),
+    ("POST", "/logs/runs/delete"),
+    ("POST", "/logs/runs/delete-plan"),
     ("POST", "/logs/tags"),
     ("POST", "/logs/scalars"),
     ("POST", "/logs/media"),
@@ -182,6 +185,82 @@ class AppFactoryTests(unittest.TestCase):
         self.assertEqual(health_response.status_code, 200)
         self.assertEqual(health_response.json(), {"status": "ok"})
         self.assertEqual(scalar_response.status_code, 200)
+
+    def test_health_responds_while_log_delete_is_blocked(self) -> None:
+        from viewer.backend.api import ViewerApiSettings, create_app
+        from viewer.backend.dependencies import (
+            get_log_run_service,
+            get_training_job_service,
+        )
+
+        class FakeLogRunService:
+            def delete_experiment(
+                self,
+                experiment: str,
+                *,
+                active_jobs: list[dict[str, str]],
+            ) -> dict[str, object]:
+                del active_jobs
+                time.sleep(0.2)
+                return {
+                    "experiment": experiment,
+                    "deletedRunIds": [],
+                    "deletedRunCount": 0,
+                    "deletedRelativePath": experiment,
+                }
+
+        class FakeTrainingJobService:
+            def active_jobs(self) -> list[object]:
+                return []
+
+        async def call_api() -> tuple[httpx.Response, httpx.Response, float]:
+            with tempfile.TemporaryDirectory() as tmp:
+                test_app = create_app(
+                    ViewerApiSettings(
+                        logs_root=str(Path(tmp) / "logs"),
+                        allow_unsafe_local_mutations=True,
+                    )
+                )
+
+                async def override_log_run_service() -> FakeLogRunService:
+                    return FakeLogRunService()
+
+                async def override_training_job_service() -> FakeTrainingJobService:
+                    return FakeTrainingJobService()
+
+                test_app.dependency_overrides[get_log_run_service] = (
+                    override_log_run_service
+                )
+                test_app.dependency_overrides[get_training_job_service] = (
+                    override_training_job_service
+                )
+
+                transport = httpx.ASGITransport(app=test_app)
+                async with httpx.AsyncClient(
+                    transport=transport,
+                    base_url="http://testserver",
+                ) as delete_client, httpx.AsyncClient(
+                    transport=transport,
+                    base_url="http://testserver",
+                ) as health_client:
+                    started_at = time.perf_counter()
+                    delete_task = asyncio.create_task(
+                        delete_client.delete("/logs/experiments/slow")
+                    )
+                    await asyncio.sleep(0.02)
+                    health_response = await asyncio.wait_for(
+                        health_client.get("/health"),
+                        1,
+                    )
+                    health_elapsed = time.perf_counter() - started_at
+                    delete_response = await delete_task
+                    return health_response, delete_response, health_elapsed
+
+        health_response, delete_response, health_elapsed = asyncio.run(call_api())
+
+        self.assertLess(health_elapsed, 0.15)
+        self.assertEqual(health_response.status_code, 200)
+        self.assertEqual(delete_response.status_code, 200)
 
     def test_blocking_io_capacity_limiter_bounds_parallel_work(self) -> None:
         import threading

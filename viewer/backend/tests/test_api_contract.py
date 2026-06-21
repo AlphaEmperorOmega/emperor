@@ -1757,7 +1757,11 @@ class ApiSchemaContractTests(unittest.TestCase):
     def test_capabilities_schema_defaults_data_source_and_upload_placeholders(
         self,
     ) -> None:
-        capabilities = schemas.CapabilitiesResponse(authMode="none")
+        capabilities = schemas.CapabilitiesResponse(
+            authMode="none",
+            trainingEnabled=False,
+            logDeletionEnabled=False,
+        )
 
         self.assertEqual(capabilities.trainingCancellationCapability, "unsupported")
         self.assertEqual(capabilities.uploadsEnabled, False)
@@ -1790,12 +1794,12 @@ class ApiIntegrationContractTests(unittest.TestCase):
             response.json(),
             {
                 "authMode": "none",
-                "trainingEnabled": True,
+                "trainingEnabled": False,
                 "trainingCancellationCapability": requested_cancellation_capability(
                     get_viewer_api_settings().training_cancellation_mode
                 ),
-                "logDeletionEnabled": True,
-                "configSnapshotsEnabled": True,
+                "logDeletionEnabled": False,
+                "configSnapshotsEnabled": False,
                 "historicalLogsEnabled": True,
                 "liveMonitorDataEnabled": True,
                 "historicalMonitorDataEnabled": True,
@@ -1805,6 +1809,28 @@ class ApiIntegrationContractTests(unittest.TestCase):
                 "dataSources": [],
             },
         )
+
+    def test_capabilities_endpoint_reports_local_mutation_features(self) -> None:
+        import httpx
+
+        from viewer.backend.api import ViewerApiSettings, create_app
+
+        app = create_app(ViewerApiSettings(allow_unsafe_local_mutations=True))
+
+        async def call_api() -> httpx.Response:
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(
+                transport=transport,
+                base_url="http://testserver",
+            ) as client:
+                return await client.get("/capabilities")
+
+        response = asyncio.run(call_api())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["trainingEnabled"])
+        self.assertTrue(response.json()["logDeletionEnabled"])
+        self.assertTrue(response.json()["configSnapshotsEnabled"])
 
     def test_model_dataset_endpoint_exposes_path_free_dataset_metadata(self) -> None:
         import httpx

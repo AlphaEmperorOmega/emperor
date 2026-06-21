@@ -8,8 +8,12 @@ from fastapi import APIRouter, Depends, Query
 from models.catalog import model_id_from_parts
 
 from viewer.backend.blocking import run_blocking_io
-from viewer.backend.core.security import require_bearer_auth
-from viewer.backend.dependencies import get_training_job_service
+from viewer.backend.core.config import ViewerApiSettings
+from viewer.backend.core.security import (
+    require_bearer_auth,
+    require_local_mutations_allowed,
+)
+from viewer.backend.dependencies import get_training_job_service, get_viewer_settings
 from viewer.backend.inspector.errors import InspectorError
 from viewer.backend.schemas import (
     MonitorDataResponse,
@@ -53,7 +57,9 @@ def _model_id(model_type: str, model: str) -> str:
 async def create_training_job(
     request: TrainingJobCreateRequest,
     service: Annotated[TrainingJobService, Depends(get_training_job_service)],
+    settings: Annotated[ViewerApiSettings, Depends(get_viewer_settings)],
 ) -> TrainingJobResponse:
+    require_local_mutations_allowed(settings)
     model_id = _model_id(request.modelType, request.model)
     command = CreateTrainingJobCommand(
         model=model_id,
@@ -200,7 +206,9 @@ async def training_job_monitor_parameter_status(
 async def cancel_training_job(
     job_id: str,
     service: Annotated[TrainingJobService, Depends(get_training_job_service)],
+    settings: Annotated[ViewerApiSettings, Depends(get_viewer_settings)],
 ) -> TrainingJobResponse:
+    require_local_mutations_allowed(settings)
     return TrainingJobResponse.model_validate(
         (await run_blocking_io(service.cancel_job, job_id)).to_api_payload()
     )

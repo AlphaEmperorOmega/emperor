@@ -27,7 +27,10 @@ async def capabilities(
 ) -> CapabilitiesResponse:
     return CapabilitiesResponse(
         authMode=settings.auth_mode,
+        trainingEnabled=settings.allow_unsafe_local_mutations,
         trainingCancellationCapability=requested_cancellation_capability(
             settings.training_cancellation_mode
         ),
+        logDeletionEnabled=settings.allow_unsafe_local_mutations,
+        configSnapshotsEnabled=settings.allow_unsafe_local_mutations,
     )

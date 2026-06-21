@@ -1192,7 +1192,12 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                 httpx.Response, httpx.Response, httpx.Response
             ]:
                 transport = httpx.ASGITransport(
-                    app=create_app(ViewerApiSettings(logs_root=str(logs_root)))
+                    app=create_app(
+                        ViewerApiSettings(
+                            logs_root=str(logs_root),
+                            allow_unsafe_local_mutations=True,
+                        )
+                    )
                 )
                 async with httpx.AsyncClient(
                     transport=transport,
@@ -1234,7 +1239,12 @@ class LogRunIndexAndApiTests(unittest.TestCase):
 
             async def call_api() -> httpx.Response:
                 transport = httpx.ASGITransport(
-                    app=create_app(ViewerApiSettings(logs_root=str(logs_root)))
+                    app=create_app(
+                        ViewerApiSettings(
+                            logs_root=str(logs_root),
+                            allow_unsafe_local_mutations=True,
+                        )
+                    )
                 )
                 async with httpx.AsyncClient(
                     transport=transport,
@@ -1340,7 +1350,10 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                     ) -> httpx.Response:
                         transport = httpx.ASGITransport(
                             app=create_app(
-                                ViewerApiSettings(logs_root=str(logs_root)),
+                                ViewerApiSettings(
+                                    logs_root=str(logs_root),
+                                    allow_unsafe_local_mutations=True,
+                                ),
                                 training_manager=manager,
                             )
                         )
@@ -1453,7 +1466,10 @@ class LogRunIndexAndApiTests(unittest.TestCase):
             async def call_api() -> httpx.Response:
                 transport = httpx.ASGITransport(
                     app=create_app(
-                        ViewerApiSettings(logs_root=str(logs_root)),
+                        ViewerApiSettings(
+                            logs_root=str(logs_root),
+                            allow_unsafe_local_mutations=True,
+                        ),
                         training_manager=fresh_manager,
                     )
                 )
@@ -1545,7 +1561,10 @@ class LogRunIndexAndApiTests(unittest.TestCase):
             async def create_plan() -> httpx.Response:
                 transport = httpx.ASGITransport(
                     app=create_app(
-                        ViewerApiSettings(logs_root=str(logs_root)),
+                        ViewerApiSettings(
+                            logs_root=str(logs_root),
+                            allow_unsafe_local_mutations=True,
+                        ),
                         training_manager=fresh_manager,
                     )
                 )
@@ -1577,7 +1596,10 @@ class LogRunIndexAndApiTests(unittest.TestCase):
             async def delete_runs() -> httpx.Response:
                 transport = httpx.ASGITransport(
                     app=create_app(
-                        ViewerApiSettings(logs_root=str(logs_root)),
+                        ViewerApiSettings(
+                            logs_root=str(logs_root),
+                            allow_unsafe_local_mutations=True,
+                        ),
                         training_manager=fresh_manager,
                     )
                 )
@@ -1653,7 +1675,10 @@ class LogRunIndexAndApiTests(unittest.TestCase):
             async def call_api() -> httpx.Response:
                 transport = httpx.ASGITransport(
                     app=create_app(
-                        ViewerApiSettings(logs_root=str(logs_root)),
+                        ViewerApiSettings(
+                            logs_root=str(logs_root),
+                            allow_unsafe_local_mutations=True,
+                        ),
                         training_manager=fresh_manager,
                     )
                 )
@@ -1710,7 +1735,10 @@ class LogRunIndexAndApiTests(unittest.TestCase):
             async def call_api() -> tuple[httpx.Response, httpx.Response]:
                 transport = httpx.ASGITransport(
                     app=create_app(
-                        ViewerApiSettings(logs_root=str(logs_root)),
+                        ViewerApiSettings(
+                            logs_root=str(logs_root),
+                            allow_unsafe_local_mutations=True,
+                        ),
                         training_manager=manager,
                     )
                 )

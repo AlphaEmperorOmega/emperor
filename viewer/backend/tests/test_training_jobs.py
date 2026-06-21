@@ -193,7 +193,10 @@ class TrainingJobTests(unittest.TestCase):
             async def call_api() -> httpx.Response:
                 transport = httpx.ASGITransport(
                     app=create_app(
-                        ViewerApiSettings(logs_root=str(logs_root)),
+                        ViewerApiSettings(
+                            logs_root=str(logs_root),
+                            allow_unsafe_local_mutations=True,
+                        ),
                         training_manager=manager,
                     )
                 )
@@ -592,7 +595,10 @@ while True:
                 runner=FakeRunner(process),
             )
             test_app = create_app(
-                ViewerApiSettings(logs_root=str(logs_root)),
+                ViewerApiSettings(
+                    logs_root=str(logs_root),
+                    allow_unsafe_local_mutations=True,
+                ),
                 training_manager=manager,
             )
 
@@ -669,7 +675,10 @@ while True:
                 runner=runner,
             )
             test_app = create_app(
-                ViewerApiSettings(logs_root=str(logs_root)),
+                ViewerApiSettings(
+                    logs_root=str(logs_root),
+                    allow_unsafe_local_mutations=True,
+                ),
                 training_manager=manager,
             )
 
@@ -1499,7 +1508,10 @@ while True:
             async def call_api() -> tuple[httpx.Response, httpx.Response]:
                 transport = httpx.ASGITransport(
                     app=create_app(
-                        ViewerApiSettings(logs_root=str(logs_root)),
+                        ViewerApiSettings(
+                            logs_root=str(logs_root),
+                            allow_unsafe_local_mutations=True,
+                        ),
                         training_manager=manager,
                     )
                 )
@@ -1545,7 +1557,10 @@ while True:
             async def call_api() -> httpx.Response:
                 transport = httpx.ASGITransport(
                     app=create_app(
-                        ViewerApiSettings(logs_root=str(logs_root)),
+                        ViewerApiSettings(
+                            logs_root=str(logs_root),
+                            allow_unsafe_local_mutations=True,
+                        ),
                         training_manager=manager,
                     )
                 )
