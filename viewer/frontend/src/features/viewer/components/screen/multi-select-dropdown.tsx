@@ -446,9 +446,7 @@ export function MultiSelectDropdown({
               return (
                 <div
                   key={option.value}
-                  onMouseDown={(event) => event.preventDefault()}
-                  onMouseEnter={() => setActiveIndex(index)}
-                  onClick={() => toggleOption(option)}
+                  role="presentation"
                   className={cn(
                     "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2",
                     dropdownOptionClassName,
@@ -469,8 +467,14 @@ export function MultiSelectDropdown({
                     aria-label={optionAccessibleName(option)}
                     aria-selected={isSelected}
                     aria-disabled={isDisabled || undefined}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onMouseEnter={() => setActiveIndex(index)}
+                    onClick={() => toggleOption(option)}
                     onKeyDown={(event) => handleOptionKeyDown(event, option)}
-                    className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                    className={cn(
+                      "grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-[7px] focus:outline-none focus-visible:ring-2 focus-visible:ring-focus",
+                      isDisabled ? "cursor-default" : "cursor-pointer",
+                    )}
                   >
                     <span
                       className={cn(
