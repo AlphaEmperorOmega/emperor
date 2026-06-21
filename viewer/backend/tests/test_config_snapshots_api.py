@@ -71,6 +71,7 @@ class ConfigSnapshotApiTests(unittest.TestCase):
                 logs_root=str(root / "logs"),
                 snapshots_root=str(root / "snapshots"),
                 auth_mode="none",
+                allow_unsafe_local_mutations=True,
             )
         )
         self.app = app

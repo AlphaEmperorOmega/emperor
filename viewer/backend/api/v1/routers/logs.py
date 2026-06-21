@@ -8,8 +8,16 @@ from fastapi import APIRouter, Depends, Query
 from models.catalog import model_id_from_parts
 
 from viewer.backend.blocking import run_blocking_io
-from viewer.backend.core.security import require_bearer_auth
-from viewer.backend.dependencies import get_log_run_service, get_training_job_service
+from viewer.backend.core.config import ViewerApiSettings
+from viewer.backend.core.security import (
+    require_bearer_auth,
+    require_local_mutations_allowed,
+)
+from viewer.backend.dependencies import (
+    get_log_run_service,
+    get_training_job_service,
+    get_viewer_settings,
+)
 from viewer.backend.inspector.errors import InspectorError
 from viewer.backend.schemas import (
     LogCheckpointResponse,
@@ -200,12 +208,18 @@ async def delete_log_experiment(
         TrainingJobService,
         Depends(get_training_job_service),
     ],
+    settings: Annotated[ViewerApiSettings, Depends(get_viewer_settings)],
 ) -> LogExperimentDeleteResponse:
-    return LogExperimentDeleteResponse.model_validate(
-        service.delete_experiment(
+    require_local_mutations_allowed(settings)
+
+    def delete_experiment() -> dict[str, object]:
+        return service.delete_experiment(
             experiment,
             active_jobs=active_job_payloads(training_service),
         )
+
+    return LogExperimentDeleteResponse.model_validate(
+        await run_blocking_io(delete_experiment)
     )
 
 
@@ -223,8 +237,8 @@ async def log_run_delete_plan(
         Depends(get_training_job_service),
     ],
 ) -> LogRunDeletePlanResponse:
-    return LogRunDeletePlanResponse.model_validate(
-        service.create_delete_plan(
+    def create_delete_plan() -> dict[str, object]:
+        return service.create_delete_plan(
             experiments=request.experiments,
             datasets=request.datasets,
             models=_model_filter_ids(request),
@@ -232,6 +246,9 @@ async def log_run_delete_plan(
             run_ids=request.runIds,
             active_jobs=active_job_payloads(training_service),
         )
+
+    return LogRunDeletePlanResponse.model_validate(
+        await run_blocking_io(create_delete_plan)
     )
 
 
@@ -248,9 +265,12 @@ async def delete_log_runs(
         TrainingJobService,
         Depends(get_training_job_service),
     ],
+    settings: Annotated[ViewerApiSettings, Depends(get_viewer_settings)],
 ) -> LogRunDeleteResponse:
-    return LogRunDeleteResponse.model_validate(
-        service.delete_runs(
+    require_local_mutations_allowed(settings)
+
+    def delete_runs() -> dict[str, object]:
+        return service.delete_runs(
             experiments=request.experiments,
             datasets=request.datasets,
             models=_model_filter_ids(request),
@@ -258,6 +278,9 @@ async def delete_log_runs(
             run_ids=request.runIds,
             active_jobs=active_job_payloads(training_service),
         )
+
+    return LogRunDeleteResponse.model_validate(
+        await run_blocking_io(delete_runs)
     )
 
 

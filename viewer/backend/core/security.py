@@ -13,6 +13,7 @@ from viewer.backend.dependencies import get_viewer_settings
 
 UNAUTHORIZED_DETAIL = "Missing or invalid bearer credentials"
 WWW_AUTHENTICATE_HEADER = "Bearer"
+LOCAL_MUTATION_DISABLED_DETAIL = "Local mutation endpoints are disabled"
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -44,8 +45,20 @@ async def require_bearer_auth(
         )
 
 
+def require_local_mutations_allowed(settings: ViewerApiSettings) -> None:
+    """Fail closed for endpoints that mutate local files or processes."""
+
+    if settings.allow_unsafe_local_mutations:
+        return
+    raise HTTPException(
+        status_code=403,
+        detail=LOCAL_MUTATION_DISABLED_DETAIL,
+    )
+
+
 __all__ = [
     "WWW_AUTHENTICATE_HEADER",
     "bearer_scheme",
+    "require_local_mutations_allowed",
     "require_bearer_auth",
 ]

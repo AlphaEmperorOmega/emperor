@@ -107,7 +107,10 @@ class TrainingApiLifecycleTests(unittest.TestCase):
             runner=FakeRunner(process),
         )
         app = create_app(
-            ViewerApiSettings(logs_root=str(logs_root)),
+            ViewerApiSettings(
+                logs_root=str(logs_root),
+                allow_unsafe_local_mutations=True,
+            ),
             training_manager=manager,
         )
         return app, manager

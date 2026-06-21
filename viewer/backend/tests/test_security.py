@@ -9,7 +9,11 @@ from pathlib import Path
 from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 
-from viewer.backend.core.security import require_bearer_auth
+from viewer.backend.core.security import (
+    LOCAL_MUTATION_DISABLED_DETAIL,
+    require_bearer_auth,
+    require_local_mutations_allowed,
+)
 from viewer.backend.settings import ViewerApiSettings
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
@@ -119,6 +123,18 @@ class SecurityDependencyTests(unittest.TestCase):
 
         asyncio.run(require_bearer_auth(settings, bearer_credentials("server-secret")))
 
+    def test_local_mutation_guard_rejects_default_settings(self) -> None:
+        with self.assertRaises(HTTPException) as raised:
+            require_local_mutations_allowed(ViewerApiSettings())
+
+        self.assertEqual(raised.exception.status_code, 403)
+        self.assertEqual(raised.exception.detail, LOCAL_MUTATION_DISABLED_DETAIL)
+
+    def test_local_mutation_guard_accepts_explicit_opt_in(self) -> None:
+        require_local_mutations_allowed(
+            ViewerApiSettings(allow_unsafe_local_mutations=True)
+        )
+
 
 class RouteAuthIntegrationTests(unittest.TestCase):
     async def request(
@@ -146,7 +162,13 @@ class RouteAuthIntegrationTests(unittest.TestCase):
                 kwargs["json"] = payload
             return await client.request(method, path, **kwargs)
 
-    def create_test_app(self, root: Path, *, auth_mode: str = "bearer"):
+    def create_test_app(
+        self,
+        root: Path,
+        *,
+        auth_mode: str = "bearer",
+        allow_unsafe_local_mutations: bool = True,
+    ):
         from viewer.backend.api import create_app
         from viewer.backend.dependencies import (
             get_inspection_service,
@@ -321,6 +343,7 @@ class RouteAuthIntegrationTests(unittest.TestCase):
                 snapshots_root=str(root / "snapshots"),
                 auth_mode=auth_mode,
                 token=token,
+                allow_unsafe_local_mutations=allow_unsafe_local_mutations,
             )
         )
         model_catalog_service = FakeModelCatalogService()
@@ -467,6 +490,42 @@ class RouteAuthIntegrationTests(unittest.TestCase):
                     )
 
                     self.assertEqual(response.status_code, 200, response.text)
+
+    def test_local_mutation_routes_reject_when_not_explicitly_enabled(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            app = self.create_test_app(
+                Path(tmp),
+                auth_mode="none",
+                allow_unsafe_local_mutations=False,
+            )
+
+            response = asyncio.run(
+                self.request(
+                    app,
+                    "POST",
+                    "/training/jobs",
+                    payload={
+                        "modelType": "linears",
+                        "model": "linear",
+                        "preset": "baseline",
+                        "presets": ["baseline"],
+                        "datasets": ["Mnist"],
+                        "overrides": {"hidden_dim": "128"},
+                        "logFolder": "mutation_guard",
+                        "monitors": [],
+                        "search": None,
+                        "runPlan": None,
+                    },
+                )
+            )
+
+        self.assertEqual(response.status_code, 403, response.text)
+        self.assertEqual(
+            response.json(),
+            {"detail": LOCAL_MUTATION_DISABLED_DETAIL},
+        )
 
 
 if __name__ == "__main__":

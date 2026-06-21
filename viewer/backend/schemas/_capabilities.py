@@ -15,13 +15,13 @@ class DataSourceCapabilityPlaceholder(ApiResponseModel):
 
 class CapabilitiesResponse(ApiResponseModel):
     authMode: Literal["none", "bearer"]
-    trainingEnabled: bool = True
+    trainingEnabled: bool
     trainingCancellationCapability: Literal[
         "strict-cgroup",
         "process-group",
         "unsupported",
     ] = "unsupported"
-    logDeletionEnabled: bool = True
+    logDeletionEnabled: bool
     configSnapshotsEnabled: bool = True
     historicalLogsEnabled: bool = True
     liveMonitorDataEnabled: bool = True
