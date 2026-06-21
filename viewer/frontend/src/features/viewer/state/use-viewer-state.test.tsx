@@ -1549,7 +1549,7 @@ describe("useViewerState", () => {
     renderTargetPresetPanel(onOpenFullConfig);
     const user = userEvent.setup();
 
-    const snapshotsButton = await screen.findByRole("tab", {
+    const snapshotsButton = await screen.findByRole("radio", {
       name: /snapshots/i,
     });
     await waitFor(() => expect(snapshotsButton).toBeEnabled());
@@ -1581,7 +1581,7 @@ describe("useViewerState", () => {
     renderTargetPresetPanel();
     const user = userEvent.setup();
 
-    const experimentsButton = await screen.findByRole("tab", {
+    const experimentsButton = await screen.findByRole("radio", {
       name: /experiments/i,
     });
     await waitFor(() => expect(experimentsButton).toBeEnabled());
@@ -1708,7 +1708,7 @@ describe("useViewerState", () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: /^training/i }));
-    await user.click(screen.getByRole("tab", { name: /new folder/i }));
+    await user.click(screen.getByRole("radio", { name: /new folder/i }));
     await user.type(screen.getByLabelText(/^new log folder$/i), "scratch_run");
 
     await waitFor(() => {
@@ -1716,7 +1716,7 @@ describe("useViewerState", () => {
         .toBeEnabled();
     });
 
-    await user.click(await screen.findByRole("tab", { name: "Experiments" }));
+    await user.click(await screen.findByRole("radio", { name: "Experiments" }));
     const experimentRunControl = await screen.findByRole("combobox", {
       name: /^experiment run$/i,
     });

@@ -225,16 +225,30 @@ describe("Checkbox", () => {
 });
 
 describe("SegmentedControl", () => {
-  it("renders a labelled tablist containing its segment buttons", () => {
+  it("renders a labelled radiogroup containing its segment buttons by default", () => {
     render(
       <SegmentedControl aria-label="Graph detail">
-        <button type="button" role="tab">
+        <button type="button" role="radio" aria-checked="true">
           Simple
         </button>
       </SegmentedControl>,
     );
-    const tablist = screen.getByRole("tablist", { name: "Graph detail" });
-    expect(tablist).toContainElement(screen.getByRole("tab", { name: "Simple" }));
+    const group = screen.getByRole("radiogroup", { name: "Graph detail" });
+    expect(group).toContainElement(screen.getByRole("radio", { name: "Simple" }));
+  });
+
+  it("can render tablist semantics for real tab panels", () => {
+    render(
+      <SegmentedControl aria-label="Training config selector" variant="tablist">
+        <button type="button" role="tab">
+          Presets
+        </button>
+      </SegmentedControl>,
+    );
+    const tablist = screen.getByRole("tablist", {
+      name: "Training config selector",
+    });
+    expect(tablist).toContainElement(screen.getByRole("tab", { name: "Presets" }));
   });
 });
 

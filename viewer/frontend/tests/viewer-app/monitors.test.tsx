@@ -25,7 +25,7 @@ describe("ViewerApp Monitor Charts And Errors", () => {
     user: ReturnType<typeof userEvent.setup>,
     optionName: string | RegExp,
   ) {
-    const experimentsTab = await screen.findByRole("tab", { name: "Experiments" });
+    const experimentsTab = await screen.findByRole("radio", { name: "Experiments" });
     await waitFor(() => expect(experimentsTab).not.toBeDisabled());
     await user.click(experimentsTab);
     const experimentRunControl = await screen.findByRole("combobox", {

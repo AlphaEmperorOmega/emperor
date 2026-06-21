@@ -807,7 +807,7 @@ describe("ViewerApp Full Config", () => {
     renderViewer();
     const user = userEvent.setup();
 
-    const snapshotsButton = await screen.findByRole("tab", {
+    const snapshotsButton = await screen.findByRole("radio", {
       name: /snapshots/i,
     });
     await waitFor(() => expect(snapshotsButton).toBeEnabled());
@@ -871,7 +871,7 @@ describe("ViewerApp Full Config", () => {
     renderViewer();
     const user = userEvent.setup();
 
-    const snapshotsButton = await screen.findByRole("tab", {
+    const snapshotsButton = await screen.findByRole("radio", {
       name: /snapshots/i,
     });
     await waitFor(() => expect(snapshotsButton).toBeEnabled());

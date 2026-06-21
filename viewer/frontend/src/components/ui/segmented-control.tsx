@@ -1,13 +1,64 @@
-import { type HTMLAttributes } from "react";
+import { type HTMLAttributes, type KeyboardEvent } from "react";
 import { cn } from "@/lib/utils";
 
-// Styled `role="tablist"` container for a row of segmented tab buttons. Pass the
-// group label via `aria-label` and the segment buttons (e.g. ViewModeButton) as
-// children.
-export function SegmentedControl({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
+type SegmentedControlProps = Omit<HTMLAttributes<HTMLDivElement>, "role"> & {
+  variant?: "radiogroup" | "tablist";
+};
+
+const radioNavigationKeys = new Set([
+  "ArrowDown",
+  "ArrowLeft",
+  "ArrowRight",
+  "ArrowUp",
+  "End",
+  "Home",
+]);
+
+export function SegmentedControl({
+  className,
+  onKeyDown,
+  variant = "radiogroup",
+  ...props
+}: SegmentedControlProps) {
+  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    onKeyDown?.(event);
+    if (
+      event.defaultPrevented ||
+      variant !== "radiogroup" ||
+      !radioNavigationKeys.has(event.key)
+    ) {
+      return;
+    }
+
+    const options = Array.from(
+      event.currentTarget.querySelectorAll<HTMLButtonElement>(
+        'button[role="radio"]',
+      ),
+    ).filter((option) => !option.disabled);
+    if (options.length === 0) {
+      return;
+    }
+
+    event.preventDefault();
+    const currentIndex = options.indexOf(document.activeElement as HTMLButtonElement);
+    const startIndex = currentIndex >= 0 ? currentIndex : 0;
+    const nextIndex =
+      event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? options.length - 1
+          : event.key === "ArrowLeft" || event.key === "ArrowUp"
+            ? (startIndex - 1 + options.length) % options.length
+            : (startIndex + 1) % options.length;
+    const nextOption = options[nextIndex];
+    nextOption?.focus();
+    nextOption?.click();
+  }
+
   return (
     <div
-      role="tablist"
+      role={variant}
+      onKeyDown={handleKeyDown}
       className={cn(
         "inline-flex rounded-control border border-line bg-control-subtle p-[3px]",
         className,
