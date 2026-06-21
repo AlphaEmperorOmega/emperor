@@ -77,9 +77,9 @@ http://localhost:9000
 
 ## Hosted Backend Settings
 
-Hosted deployments should configure explicit frontend origins when the backend
-is reachable outside loopback. `VIEWER_API_CORS_ORIGINS` uses JSON array
-syntax:
+Hosted deployments should configure explicit frontend origins in the backend
+environment when the API is reachable outside loopback.
+`VIEWER_API_CORS_ORIGINS` uses JSON array syntax:
 
 ```bash
 export VIEWER_API_CORS_ORIGINS='["https://viewer.example.com","https://admin.example.com"]'
@@ -88,6 +88,16 @@ export VIEWER_API_CORS_ORIGINS='["https://viewer.example.com","https://admin.exa
 When bearer auth is enabled, keep origins specific to the deployed frontend
 hosts. Do not use wildcard origins such as `["*"]` for authenticated hosted
 deployments.
+
+For manual or hosted read-only deployments, leave local mutation endpoints
+disabled. Backend mutation actions such as training, log deletion, and config
+snapshot creation, rename, and deletion require explicit backend-side unsafe
+local mutation opt-in only when you intentionally allow the API to mutate local
+files or processes:
+
+```bash
+export VIEWER_API_ALLOW_UNSAFE_LOCAL_MUTATIONS=true
+```
 
 ## Test
 
