@@ -128,6 +128,40 @@ class TestLinearModel(unittest.TestCase):
         self.assertEqual(kwargs["search_overrides"], {})
         self.assertEqual(kwargs["selected_datasets"], config.DATASET_OPTIONS)
         self.assertIsNone(kwargs["selected_presets"])
+        self.assertEqual(kwargs["callbacks"], [])
+
+    def test_module_entrypoint_resolves_monitor_callbacks_without_training(self):
+        with (
+            patch.object(
+                sys,
+                "argv",
+                [
+                    "linear",
+                    "--preset",
+                    "baseline",
+                    "--monitors",
+                    "linear",
+                    "halting",
+                    "linear",
+                ],
+            ),
+            patch(
+                "models.linears.linear.presets.Experiment.train_model",
+                autospec=True,
+            ) as train_model,
+        ):
+            runpy.run_module("models.linears.linear.__main__", run_name="__main__")
+
+        train_model.assert_called_once()
+        kwargs = train_model.call_args.kwargs
+
+        self.assertEqual(
+            [type(callback) for callback in kwargs["callbacks"]],
+            [
+                config.LinearMonitorCallback,
+                config.HaltingMonitorCallback,
+            ],
+        )
 
     def test_monitor_options_expose_callback_factories(self):
         self.assertTrue(config.MONITOR_OPTIONS)

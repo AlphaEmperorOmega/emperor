@@ -22,4 +22,5 @@ if __name__ == "__main__":
             experiment.dataset_options, args.datasets
         ),
         selected_presets=mode.selected_presets,
+        callbacks=mode.monitor_callbacks,
     )
