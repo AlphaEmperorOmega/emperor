@@ -39,7 +39,7 @@ export function CompareWorkspace({
   }
 
   return (
-    <div className="min-h-0 overflow-y-auto bg-bg-2/60 p-4 lg:p-5">
+    <div className="h-full min-h-0 overflow-y-auto bg-bg-2/60 p-4 lg:p-5">
       <div className="mx-auto grid max-w-[1480px] gap-4">
         <EdgeCard className="rounded-card p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">

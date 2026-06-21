@@ -229,6 +229,18 @@ beforeEach(() => {
 });
 
 describe("CompareWorkspace", () => {
+  it("constrains the compare content to a shell scrollport", async () => {
+    renderCompareWorkspace();
+
+    const heading = await screen.findByRole("heading", {
+      name: /model comparison/i,
+    });
+    const scrollRoot = heading.closest(".overflow-y-auto");
+
+    expect(scrollRoot).toBeInstanceOf(HTMLElement);
+    expect(scrollRoot).toHaveClass("h-full", "min-h-0", "overflow-y-auto");
+  });
+
   it("compares selected model/preset targets with split public model identity", async () => {
     renderCompareWorkspace();
 
@@ -290,41 +302,58 @@ describe("CompareWorkspace", () => {
   });
 
   it("searches comparison model and preset selectors", async () => {
+    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
     renderCompareWorkspace();
     const user = userEvent.setup();
 
-    await waitFor(() => {
-      expect(screen.getByText("experts_linear")).toBeInTheDocument();
-    });
+    try {
+      await waitFor(() => {
+        expect(screen.getByText("experts_linear")).toBeInTheDocument();
+      });
 
-    const targetCards = screen.getAllByText(/^Target \d$/).map((label) => {
-      const card = label.closest(".edge");
-      expect(card).toBeInstanceOf(HTMLElement);
-      return card as HTMLElement;
-    });
-    const firstTarget = targetCards[0];
-    const modelControl = within(firstTarget).getByRole("combobox", {
-      name: "Model",
-    });
+      const targetCards = screen.getAllByText(/^Target \d$/).map((label) => {
+        const card = label.closest(".edge");
+        expect(card).toBeInstanceOf(HTMLElement);
+        return card as HTMLElement;
+      });
+      const firstTarget = targetCards[0];
+      const modelControl = within(firstTarget).getByRole("combobox", {
+        name: "Model",
+      });
 
-    await selectSearchableOption(user, modelControl, /experts_linear/i, "experts");
+      await selectSearchableOption(user, modelControl, /experts_linear/i, "experts");
 
-    const presetControl = within(firstTarget).getByRole("combobox", {
-      name: "Preset",
-    });
-    await waitFor(() => {
-      expect(modelControl).toHaveTextContent("experts_linear");
+      const presetControl = within(firstTarget).getByRole("combobox", {
+        name: "Preset",
+      });
+      await waitFor(() => {
+        expect(modelControl).toHaveTextContent("experts_linear");
+        expect(presetControl).toHaveTextContent("expert-baseline");
+      });
+
+      await selectSearchableOption(
+        user,
+        presetControl,
+        "expert-baseline",
+        "expert",
+      );
+
       expect(presetControl).toHaveTextContent("expert-baseline");
-    });
 
-    await selectSearchableOption(
-      user,
-      presetControl,
-      "expert-baseline",
-      "expert",
-    );
-
-    expect(presetControl).toHaveTextContent("expert-baseline");
+      const consoleMessages = [...consoleWarn.mock.calls, ...consoleError.mock.calls]
+        .flat()
+        .map(String);
+      expect(
+        consoleMessages.some((message) =>
+          message.includes("[QueriesObserver]: Duplicate Queries found"),
+        ),
+      ).toBe(false);
+    } finally {
+      consoleWarn.mockRestore();
+      consoleError.mockRestore();
+    }
   });
 
   it("adds, removes, and resets comparison targets around the four-target limit", async () => {
