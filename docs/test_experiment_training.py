@@ -471,5 +471,5 @@ class TestExperimentTraining(unittest.TestCase):
             resolve_dataset_names([FakeDatasetA], ["UnknownDataset"])
         self.assertEqual(
             str(error.exception),
-            "Unknown --datasets: ['UnknownDataset']. Valid datasets: FakeDatasetA",
+            "Unknown --datasets: ['UnknownDataset']. Valid datasets: fake-dataset-a",
         )
