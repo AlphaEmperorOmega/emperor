@@ -10,7 +10,7 @@ import { type LogRun, type LogRunTags } from "@/lib/api";
 import { useLogRunsQuery, useLogTagsQuery } from "@/features/viewer/state/logs/use-log-queries";
 import {
   deriveDatasetSelectionState,
-} from "@/features/viewer/state/graph-monitor/graph-monitor-selectors";
+} from "@/features/viewer/state/logs/historical-run-selection";
 import { logQueryKeys } from "@/lib/query-keys";
 
 type HistoricalRunSelectionState = {
