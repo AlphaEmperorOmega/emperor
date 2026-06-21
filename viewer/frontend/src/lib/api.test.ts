@@ -37,6 +37,8 @@ import {
   isUnauthorizedApiError,
   jsonObjectSchema,
   jsonValueSchema,
+  logImageSummarySchema,
+  monitorDataSchema,
   operationGraphResponseSchema,
   renameConfigSnapshot,
   trainingJobSchema,
@@ -194,6 +196,29 @@ describe("shared API value schemas", () => {
     });
     expect(() =>
       trainingProgressEventSchema.parse({ status: "running" }),
+    ).toThrow();
+    expect(() =>
+      trainingProgressEventSchema.parse({
+        type: "validation",
+        status: "completed",
+      }),
+    ).toThrow();
+    expect(() =>
+      trainingProgressEventSchema.parse({
+        type: "cluster_initialized",
+        node: "main.cluster",
+        count: 2,
+        coordinates: [[0, 0, 0]],
+      }),
+    ).toThrow();
+    expect(() =>
+      trainingProgressEventSchema.parse({
+        type: "neurons_added",
+        node: "main.cluster",
+        coordinates: [[0, 0, 0]],
+        coordinateCount: 1,
+        count: 3,
+      }),
     ).toThrow();
   });
 });
@@ -1027,6 +1052,44 @@ describe("successful API fixtures", () => {
     expect(trainingJobEventsSchema.parse(result).nextOffset).toBe(12);
   });
 
+  it("accepts completed dataset events in training job and event history payloads", async () => {
+    const completedDatasetEvent = {
+      type: "dataset_completed",
+      status: "completed",
+      dataset: "Mnist",
+      preset: "baseline",
+      runId: "run-1",
+      epoch: 2,
+      metrics: { "train/loss": 0.1 },
+      logDir: "logs/collaborator",
+    };
+
+    const jobResult = await validateSuccessfulFixture(
+      {
+        ...successfulTrainingJobFixture,
+        events: [completedDatasetEvent],
+        eventCounts: { dataset_completed: 1 },
+      },
+      () => fetchTrainingJob("job-123"),
+    );
+
+    expect(jobResult.events[0]?.status).toBe("completed");
+
+    const eventsResult = await validateSuccessfulFixture(
+      {
+        jobId: "job-123",
+        offset: 0,
+        limit: 1,
+        totalCount: 1,
+        nextOffset: null,
+        events: [completedDatasetEvent],
+      },
+      () => fetchTrainingJobEvents("job-123", { offset: 0, limit: 1 }),
+    );
+
+    expect(eventsResult.events[0]?.status).toBe("completed");
+  });
+
   it("rejects nested training job response override objects", () => {
     expect(() =>
       trainingJobSchema.parse({
@@ -1036,6 +1099,21 @@ describe("successful API fixtures", () => {
             name: "cosine",
           },
         },
+      }),
+    ).toThrow();
+  });
+
+  it("accepts backend training job lifecycle statuses and rejects unsupported ones", () => {
+    expect(
+      trainingJobSchema.parse({
+        ...successfulTrainingJobFixture,
+        status: "unknown",
+      }).status,
+    ).toBe("unknown");
+    expect(() =>
+      trainingJobSchema.parse({
+        ...successfulTrainingJobFixture,
+        status: "finished",
       }),
     ).toThrow();
   });
@@ -1065,6 +1143,41 @@ describe("successful API fixtures", () => {
 
     expect(result.histograms[0].buckets).toHaveLength(2);
     expect(result.images[0].mimeType).toBe("image/png");
+  });
+
+  it("rejects unsafe image URLs in monitor and log media payloads", () => {
+    expect(() =>
+      monitorDataSchema.parse({
+        ...successfulMonitorDataFixture,
+        images: [
+          {
+            ...successfulMonitorDataFixture.images[0],
+            mimeType: "text/html",
+            dataUrl: "data:text/html;base64,PHNjcmlwdD4=",
+          },
+        ],
+      }),
+    ).toThrow();
+    expect(() =>
+      logImageSummarySchema.parse({
+        runId: "run-1",
+        tag: "validation/examples",
+        step: 1,
+        wallTime: 1000,
+        mimeType: "image/png",
+        dataUrl: "http://127.0.0.1/image.png",
+      }),
+    ).toThrow();
+    expect(
+      logImageSummarySchema.parse({
+        runId: "run-1",
+        tag: "validation/examples",
+        step: 1,
+        wallTime: 1000,
+        mimeType: "image/png",
+        dataUrl: "",
+      }).dataUrl,
+    ).toBe("");
   });
 
   it("accepts a historical monitor-data response fixture", async () => {
@@ -1646,6 +1759,49 @@ describe("URL and query construction", () => {
 
     expect(fetchMock.mock.calls[0][0]).toBe(
       `${BASE}/training/jobs/j1/monitor-data?nodePath=root.block&preset=baseline&dataset=mnist`,
+    );
+  });
+
+  it("encodes active training job ids in monitor URLs", async () => {
+    const monitorFetchMock = stubFetch(
+      fakeResponse({
+        json: () =>
+          Promise.resolve({
+            jobId: "job/a?b",
+            nodePath: "root.block",
+            dataset: null,
+            logDir: null,
+            scalarSeries: [],
+            histograms: [],
+            images: [],
+          }),
+      }),
+    );
+
+    await fetchMonitorData({
+      jobId: "job/a?b",
+      nodePath: "root.block",
+    });
+
+    expect(monitorFetchMock.mock.calls[0][0]).toBe(
+      `${BASE}/training/jobs/job%2Fa%3Fb/monitor-data?nodePath=root.block`,
+    );
+
+    const statusFetchMock = stubFetch(
+      fakeResponse({
+        json: () =>
+          Promise.resolve({
+            sourceId: "job/a?b",
+            logDir: null,
+            nodes: [],
+          }),
+      }),
+    );
+
+    await fetchMonitorParameterStatus({ jobId: "job/a?b" });
+
+    expect(statusFetchMock.mock.calls[0][0]).toBe(
+      `${BASE}/training/jobs/job%2Fa%3Fb/monitor-parameter-status`,
     );
   });
 
@@ -2720,6 +2876,67 @@ describe("POST requests", () => {
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe(`${BASE}/training/jobs/j1/cancel`);
     expect((init as RequestInit).method).toBe("POST");
+  });
+
+  it("encodes training job ids in job, event, and cancel paths", async () => {
+    const job = {
+      id: "job/a?b",
+      status: "running",
+      modelType: "linears",
+      model: "linear",
+      preset: "base",
+      datasets: [],
+      overrides: {},
+      monitors: [],
+      logFolder: "test_model",
+      createdAt: "t",
+      updatedAt: "t",
+      exitCode: null,
+      pid: 1,
+      currentDataset: null,
+      epoch: null,
+      step: null,
+      metrics: {},
+      logDir: null,
+      events: [],
+      logTail: [],
+      resultLinks: [],
+    };
+    const jobFetchMock = stubFetch(fakeResponse({ json: () => Promise.resolve(job) }));
+
+    await fetchTrainingJob("job/a?b");
+
+    expect(jobFetchMock.mock.calls[0][0]).toBe(
+      `${BASE}/training/jobs/job%2Fa%3Fb`,
+    );
+
+    const eventsFetchMock = stubFetch(
+      fakeResponse({
+        json: () =>
+          Promise.resolve({
+            jobId: "job/a?b",
+            offset: 1,
+            limit: 2,
+            totalCount: 3,
+            nextOffset: 3,
+            events: [],
+          }),
+      }),
+    );
+
+    await fetchTrainingJobEvents("job/a?b", { offset: 1, limit: 2 });
+
+    expect(eventsFetchMock.mock.calls[0][0]).toBe(
+      `${BASE}/training/jobs/job%2Fa%3Fb/events?offset=1&limit=2`,
+    );
+
+    const cancelFetchMock = stubFetch(fakeResponse({ json: () => Promise.resolve(job) }));
+
+    await cancelTrainingJob("job/a?b");
+
+    expect(cancelFetchMock.mock.calls[0][0]).toBe(
+      `${BASE}/training/jobs/job%2Fa%3Fb/cancel`,
+    );
   });
 
   it("preserves backend detail on delete experiment failure", async () => {

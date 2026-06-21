@@ -116,7 +116,7 @@ function monitorGraphWithoutBias(): InspectResponse {
 function trainingJob(overrides: Partial<TrainingJob> = {}): TrainingJob {
   return {
     id: overrides.id ?? "job-1",
-    status: overrides.status ?? "Running",
+    status: overrides.status ?? "running",
     modelType: overrides.modelType ?? "linears",
     model: overrides.model ?? "linear",
     preset: overrides.preset ?? "baseline",

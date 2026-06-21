@@ -3,7 +3,11 @@ import { z } from "zod";
 import { requestJson } from "@/lib/api/client";
 import { mapWithConcurrency } from "@/lib/api/concurrency";
 import { type ModelIdentity } from "@/lib/api/models";
-import { jsonObjectSchema } from "@/lib/api/schemas";
+import {
+  imageDataUrlSchema,
+  imageMimeTypeSchema,
+  jsonObjectSchema,
+} from "@/lib/api/schemas";
 
 type ApiRequestOptions = {
   signal?: AbortSignal;
@@ -85,8 +89,8 @@ export const logImageSummarySchema = z.object({
   tag: z.string(),
   step: z.number(),
   wallTime: z.number(),
-  mimeType: z.string(),
-  dataUrl: z.string(),
+  mimeType: imageMimeTypeSchema,
+  dataUrl: imageDataUrlSchema,
   ...responseMetadataSchema.shape,
 });
 
