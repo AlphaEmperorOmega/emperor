@@ -111,6 +111,9 @@ class TensorBoardMonitorReader:
             if key and key[0] in roots:
                 self._cache.pop(key, None)
 
+    def clear_cache(self) -> None:
+        self._cache.clear()
+
     def read(
         self,
         *,
@@ -322,6 +325,9 @@ class TensorBoardParameterStatusReader:
         for key in list(self._cache):
             if key and key[0] in roots:
                 self._cache.pop(key, None)
+
+    def clear_cache(self) -> None:
+        self._cache.clear()
 
     def read(
         self,

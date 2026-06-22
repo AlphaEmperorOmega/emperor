@@ -42,6 +42,7 @@ EXPECTED_ASYNC_BOUNDARY_ROUTE_PAIRS = {
     ("POST", "/inspect/operation-graph"),
     ("GET", "/logs/runs"),
     ("GET", "/logs/experiments"),
+    ("POST", "/logs/import"),
     ("POST", "/logs/checkpoints"),
     ("DELETE", "/logs/experiments/{experiment}"),
     ("POST", "/logs/runs/delete"),

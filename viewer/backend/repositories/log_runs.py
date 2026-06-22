@@ -51,6 +51,21 @@ class LogRunRepository:
     ) -> LogRunDeleteResult:
         return self._index.delete_runs(filters, active_jobs=active_jobs)
 
+    def import_archive(
+        self,
+        *,
+        archive: bytes,
+        filename: str,
+        max_upload_size: int,
+        max_extracted_size: int,
+    ) -> dict[str, object]:
+        return self._index.import_archive(
+            archive=archive,
+            filename=filename,
+            max_upload_size=max_upload_size,
+            max_extracted_size=max_extracted_size,
+        )
+
     def tags_for_runs(self, run_ids: list[str]) -> list[dict[str, Any]]:
         return self._index.tags_for_runs(run_ids)
 

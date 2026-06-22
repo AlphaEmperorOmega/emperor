@@ -472,6 +472,23 @@ class RouteAuthIntegrationTests(unittest.TestCase):
             with self.subTest(route=route_name):
                 operation = openapi["paths"][path.split("?")[0]][method.lower()]
                 self.assertIn({"HTTPBearer": []}, operation["security"])
+        self.assertIn(
+            {"HTTPBearer": []},
+            openapi["paths"]["/logs/import"]["post"]["security"],
+        )
+
+    def test_bearer_mode_rejects_missing_token_on_log_import(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            app = self.create_test_app(Path(tmp), auth_mode="bearer")
+
+            response = asyncio.run(self.request(app, "POST", "/logs/import"))
+
+        self.assertEqual(response.status_code, 401, response.text)
+        self.assertEqual(response.headers["www-authenticate"], "Bearer")
+        self.assertEqual(
+            response.json(),
+            {"detail": "Missing or invalid bearer credentials"},
+        )
 
     def test_local_default_auth_mode_allows_non_health_routes_without_token(
         self,
@@ -520,6 +537,22 @@ class RouteAuthIntegrationTests(unittest.TestCase):
                     },
                 )
             )
+
+        self.assertEqual(response.status_code, 403, response.text)
+        self.assertEqual(
+            response.json(),
+            {"detail": LOCAL_MUTATION_DISABLED_DETAIL},
+        )
+
+    def test_log_import_rejects_when_local_mutations_are_disabled(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            app = self.create_test_app(
+                Path(tmp),
+                auth_mode="none",
+                allow_unsafe_local_mutations=False,
+            )
+
+            response = asyncio.run(self.request(app, "POST", "/logs/import"))
 
         self.assertEqual(response.status_code, 403, response.text)
         self.assertEqual(
