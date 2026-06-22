@@ -5,17 +5,29 @@ import { DialogShell } from "@/features/viewer/components/shared/dialog-shell";
 import { type CopyStatus } from "@/hooks/use-copy-to-clipboard";
 
 export function TrainingCommandDialog({
+  title = "Training Command",
   model,
   preset,
   trainingCommand,
   copyStatus,
+  copyButtonLabel = "Copy Command",
+  copiedMessage = "Command copied",
+  commandAriaLabel = "Training command",
+  closeButtonLabel = "Close training command",
+  rows = 3,
   onCopy,
   onClose,
 }: {
+  title?: string;
   model: string;
   preset: string;
   trainingCommand: string;
   copyStatus: CopyStatus;
+  copyButtonLabel?: string;
+  copiedMessage?: string;
+  commandAriaLabel?: string;
+  closeButtonLabel?: string;
+  rows?: number;
   onCopy: () => void;
   onClose: () => void;
 }) {
@@ -30,14 +42,14 @@ export function TrainingCommandDialog({
         <header className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h2 id="training-command-title" className="text-base font-semibold text-ink">
-              Training Command
+              {title}
             </h2>
             <div className="mt-1 truncate font-mono text-xs text-ink-faint">
               {model || "No model"} {preset ? `/ ${preset}` : ""}
             </div>
           </div>
           <IconButton
-            label="Close training command"
+            label={closeButtonLabel}
             onClick={onClose}
             variant="edge"
             icon={<X className="h-4 w-4" aria-hidden />}
@@ -50,12 +62,12 @@ export function TrainingCommandDialog({
             role={copyStatus === "failed" ? "alert" : "status"}
             className="min-h-5 text-xs font-medium text-ink-faint"
           >
-            {copyStatus === "copied" && "Command copied"}
+            {copyStatus === "copied" && copiedMessage}
             {copyStatus === "failed" && "Clipboard copy failed"}
           </div>
           <Button variant="primary" onClick={onCopy}>
             <Copy className="h-4 w-4" aria-hidden />
-            Copy Command
+            {copyButtonLabel}
           </Button>
         </footer>
       }
@@ -66,9 +78,9 @@ export function TrainingCommandDialog({
         </span>
         <textarea
           readOnly
-          aria-label="Training command"
+          aria-label={commandAriaLabel}
           value={trainingCommand}
-          rows={3}
+          rows={rows}
           className="min-h-24 w-full resize-none rounded-[10px] border border-line bg-black/25 px-3 py-2.5 font-mono text-sm leading-6 text-ink outline-none focus-visible:border-violet/60 focus-visible:ring-2 focus-visible:ring-focus"
         />
       </label>

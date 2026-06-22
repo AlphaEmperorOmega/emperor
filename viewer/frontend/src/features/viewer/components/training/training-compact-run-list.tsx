@@ -1,8 +1,16 @@
 import { useMemo, useState } from "react";
-import { AlertTriangle, FolderOpen, RefreshCw, Terminal, X } from "lucide-react";
+import {
+  AlertTriangle,
+  Copy,
+  FolderOpen,
+  RefreshCw,
+  Terminal,
+  X,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
+import { TrainingCommandDialog } from "@/features/viewer/components/config/training-command-dialog";
 import { InlineStatus } from "@/features/viewer/components/shared/inline-status";
 import { TrainingRunActionDialogs } from "@/features/viewer/components/training/training-run-action-dialogs";
 import {
@@ -10,6 +18,7 @@ import {
   getTrainingRunDraftRemoval,
   trainingRunStatusMeta,
 } from "@/features/viewer/components/training/training-run-display";
+import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { type TrainingRun, type TrainingRunPlan } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -32,6 +41,50 @@ function visibleRuns(runs: TrainingRun[]) {
     }
   }
   return runs.filter((run) => keep.has(run.id));
+}
+
+function runnableTrainingCommands(plan?: TrainingRunPlan) {
+  return (plan?.runs ?? []).flatMap((run) => {
+    const command = typeof run.command === "string" ? run.command : "";
+    return command.trim() ? [command] : [];
+  });
+}
+
+function trainingCommandBlock(commands: string[]) {
+  return ["(", "  set -e", ...commands.map((command) => `  ${command}`), ")"].join(
+    "\n",
+  );
+}
+
+function AllTrainingCommandsDialog({
+  model,
+  preset,
+  trainingCommand,
+  onClose,
+}: {
+  model: string;
+  preset: string;
+  trainingCommand: string;
+  onClose: () => void;
+}) {
+  const { status, copy } = useCopyToClipboard(trainingCommand);
+
+  return (
+    <TrainingCommandDialog
+      title="Training Commands"
+      model={model}
+      preset={preset}
+      trainingCommand={trainingCommand}
+      copyStatus={status}
+      copyButtonLabel="Copy Commands"
+      copiedMessage="Commands copied"
+      commandAriaLabel="Training commands"
+      closeButtonLabel="Close training commands"
+      rows={Math.min(12, Math.max(5, trainingCommand.split("\n").length))}
+      onCopy={copy}
+      onClose={onClose}
+    />
+  );
 }
 
 function RunChangePills({ run }: { run: TrainingRun }) {
@@ -248,7 +301,14 @@ export function TrainingCompactRunList({
 }) {
   const [commandRun, setCommandRun] = useState<TrainingRun | null>(null);
   const [errorRun, setErrorRun] = useState<TrainingRun | null>(null);
+  const [isAllCommandsOpen, setIsAllCommandsOpen] = useState(false);
   const runs = useMemo(() => visibleRuns(plan?.runs ?? []), [plan?.runs]);
+  const runnableCommands = useMemo(() => runnableTrainingCommands(plan), [plan]);
+  const allTrainingCommandsBlock = useMemo(
+    () => trainingCommandBlock(runnableCommands),
+    [runnableCommands],
+  );
+  const canCopyAllCommands = runnableCommands.length > 0;
   const hiddenRunCount = Math.max(0, (plan?.runs.length ?? 0) - runs.length);
 
   return (
@@ -264,6 +324,17 @@ export function TrainingCompactRunList({
           </span>
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+          {canCopyAllCommands && (
+            <Button
+              variant="secondary"
+              onClick={() => setIsAllCommandsOpen(true)}
+              className="h-8 px-2 text-xs sm:px-3"
+              title="Review training commands"
+            >
+              <Copy className="h-3.5 w-3.5" aria-hidden />
+              Commands
+            </Button>
+          )}
           {canResample && (
             <Button
               variant="secondary"
@@ -347,6 +418,14 @@ export function TrainingCompactRunList({
         onCloseCommand={() => setCommandRun(null)}
         onCloseError={() => setErrorRun(null)}
       />
+      {isAllCommandsOpen && canCopyAllCommands && (
+        <AllTrainingCommandsDialog
+          model={plan?.model ?? ""}
+          preset={plan?.preset ?? ""}
+          trainingCommand={allTrainingCommandsBlock}
+          onClose={() => setIsAllCommandsOpen(false)}
+        />
+      )}
     </div>
   );
 }
