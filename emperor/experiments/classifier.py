@@ -71,7 +71,7 @@ class ClassifierExperiment(LightningModule):
         if isinstance(output, tuple):
             logits, auxiliary_loss = output[0], output[-1]
             loss = self.loss_fn(logits, Y)
-            if auxiliary_loss is not None and auxiliary_loss.item() != 0.0:
+            if auxiliary_loss is not None:
                 loss = loss + auxiliary_loss
         else:
             logits = output

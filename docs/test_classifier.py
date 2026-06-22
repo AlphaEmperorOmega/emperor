@@ -17,6 +17,23 @@ class HealthProbeClassifier(ClassifierExperiment):
         return torch.zeros(X.size(0), self.num_classes, device=X.device)
 
 
+class AuxiliaryLossProbeClassifier(ClassifierExperiment):
+    def __init__(self):
+        super().__init__(ModelConfig(input_dim=1, output_dim=2))
+        self.auxiliary_loss = torch.tensor(0.25)
+
+        def fail_item():
+            raise AssertionError("auxiliary loss should stay as a tensor")
+
+        self.auxiliary_loss.item = fail_item
+
+    def forward(self, X):
+        return (
+            torch.zeros(X.size(0), self.num_classes, device=X.device),
+            self.auxiliary_loss.to(X.device),
+        )
+
+
 class FakeTensorBoardExperiment:
     def __init__(self):
         self.images = []
@@ -384,6 +401,22 @@ class TestClassifierMetricsLogger(unittest.TestCase):
             metrics["gradients/inf_count"],
             torch.tensor(1.0),
         )
+
+    def test_model_step_adds_auxiliary_loss_without_scalar_sync(self):
+        model = AuxiliaryLossProbeClassifier()
+        loss, logits, targets = model._model_step(
+            (
+                torch.ones(2, 1),
+                torch.tensor([0, 1]),
+            )
+        )
+
+        torch.testing.assert_close(
+            loss,
+            torch.tensor(0.9431471824645996),
+        )
+        torch.testing.assert_close(logits, torch.zeros(2, 2))
+        torch.testing.assert_close(targets, torch.tensor([0, 1]))
 
     def _discard_log(self, payload, **kwargs):
         pass
