@@ -1,5 +1,7 @@
 import argparse
+import contextlib
 from dataclasses import fields
+import io
 import unittest
 
 import models.linears.linear.config as linear_config
@@ -17,7 +19,7 @@ from emperor.base.options import ActivationOptions
 from emperor.datasets.image.classification.mnist import Mnist
 from emperor.experiments.base import GridSearch
 from lightning.pytorch.callbacks import EarlyStopping
-from models.config_overrides import iter_supported_config_keys
+from models.config_overrides import iter_supported_config_keys, print_config_options
 from models.linears.linear import ExperimentPreset as LinearExperimentPreset
 from models.linears.linear_adaptive import ExperimentPreset
 from models.linears.linear_adaptive.presets import Experiment, ExperimentPresets
@@ -318,6 +320,17 @@ class TestExperimentConfigOverrideParsing(
                 linear_config.HaltingMonitorCallback,
             ],
         )
+
+    def test_list_config_prints_shared_runtime_options(self):
+        output = io.StringIO()
+
+        with contextlib.redirect_stdout(output):
+            print_config_options("linears/linear")
+
+        rendered = output.getvalue()
+        self.assertIn("--data-num-workers", rendered)
+        self.assertIn("--run-test-after-fit", rendered)
+        self.assertIn("--trainer-profiler", rendered)
 
     def test_search_set_parses_lists_using_config_value_types(self):
         args = self.make_parser().parse_args(
