@@ -32,20 +32,27 @@ import {
   fetchTrainingJob,
   fetchTrainingJobEvents,
   fetchTrainingRunPlan,
+  getViewerApiBaseUrl,
+  importLogArchive,
   inspectOperationGraph,
   inspectModel,
   isUnauthorizedApiError,
   jsonObjectSchema,
   jsonValueSchema,
   logImageSummarySchema,
+  logArchiveImportSchema,
   monitorDataSchema,
+  normalizeViewerApiBaseUrl,
   operationGraphResponseSchema,
   renameConfigSnapshot,
+  resetViewerApiBaseUrl,
+  setViewerApiBaseUrl,
   trainingJobSchema,
   trainingJobEventsSchema,
   trainingProgressEventSchema,
   trainingRunPlanSchema,
   updateConfigSnapshot,
+  VIEWER_API_BASE_URL_STORAGE_KEY,
 } from "@/lib/api";
 import { mapWithConcurrency } from "@/lib/api/concurrency";
 import { setSessionAuthToken } from "@/lib/auth-token";
@@ -115,6 +122,8 @@ async function flushAsyncWork() {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  resetViewerApiBaseUrl();
+  window.localStorage.clear();
   window.sessionStorage.clear();
 });
 
@@ -828,6 +837,12 @@ const successfulLogScalarsResponse = {
   ],
 };
 
+const successfulLogArchiveImportResponse = {
+  extractedFileCount: 2,
+  skippedFileCount: 1,
+  destinationRoot: "/workspace/logs",
+};
+
 describe("successful API fixtures", () => {
   it("accepts a health response fixture", async () => {
     const result = await validateSuccessfulFixture({ status: "ok" }, fetchHealth);
@@ -842,6 +857,12 @@ describe("successful API fixtures", () => {
     );
 
     expect(result).toEqual(capabilitiesResponse);
+  });
+
+  it("accepts a log archive import response fixture", () => {
+    expect(
+      logArchiveImportSchema.parse(successfulLogArchiveImportResponse),
+    ).toEqual(successfulLogArchiveImportResponse);
   });
 
   it("accepts a models response fixture", async () => {
@@ -1331,6 +1352,117 @@ describe("requestJson success", () => {
     expect(headers.get("content-type")).toBe("application/json");
   });
 
+  it("uses the runtime API URL at request time", async () => {
+    const fetchMock = stubFetch(
+      fakeResponse({ json: () => Promise.resolve({ status: "ok" }) }),
+    );
+
+    setViewerApiBaseUrl(" https://api.example.test/viewer/// ");
+    await fetchHealth();
+    setViewerApiBaseUrl("http://127.0.0.1:7777");
+    await fetchHealth();
+
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      "https://api.example.test/viewer/health",
+      "http://127.0.0.1:7777/health",
+    ]);
+  });
+
+  it("falls back to the configured default API URL when no runtime URL is set", async () => {
+    const fetchMock = stubFetch(
+      fakeResponse({ json: () => Promise.resolve({ status: "ok" }) }),
+    );
+
+    resetViewerApiBaseUrl();
+
+    expect(getViewerApiBaseUrl()).toBe(BASE);
+    await fetchHealth();
+
+    expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/health`);
+  });
+
+  it("uses a valid stored runtime API URL before an in-memory switch", async () => {
+    const fetchMock = stubFetch(
+      fakeResponse({ json: () => Promise.resolve({ status: "ok" }) }),
+    );
+    window.localStorage.setItem(
+      VIEWER_API_BASE_URL_STORAGE_KEY,
+      "https://stored-api.example.test/viewer",
+    );
+
+    expect(getViewerApiBaseUrl()).toBe("https://stored-api.example.test/viewer");
+    await fetchHealth();
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "https://stored-api.example.test/viewer/health",
+    );
+  });
+
+  it("ignores invalid stored runtime API URLs", async () => {
+    const fetchMock = stubFetch(
+      fakeResponse({ json: () => Promise.resolve({ status: "ok" }) }),
+    );
+    window.localStorage.setItem(VIEWER_API_BASE_URL_STORAGE_KEY, "ftp://api.invalid");
+
+    expect(getViewerApiBaseUrl()).toBe(BASE);
+    await fetchHealth();
+
+    expect(window.localStorage.getItem(VIEWER_API_BASE_URL_STORAGE_KEY)).toBeNull();
+    expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/health`);
+  });
+
+  it("prefers a runtime API URL switch when storage persistence throws", async () => {
+    const fetchMock = stubFetch(
+      fakeResponse({ json: () => Promise.resolve({ status: "ok" }) }),
+    );
+    window.localStorage.setItem(
+      VIEWER_API_BASE_URL_STORAGE_KEY,
+      "https://stored-api.example.test",
+    );
+    vi.spyOn(window.localStorage, "setItem").mockImplementation(() => {
+      throw new Error("storage locked");
+    });
+
+    setViewerApiBaseUrl("https://runtime-api.example.test");
+
+    expect(getViewerApiBaseUrl()).toBe("https://runtime-api.example.test");
+    await fetchHealth();
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "https://runtime-api.example.test/health",
+    );
+  });
+
+  it("prefers a runtime API URL reset when storage clearing throws", async () => {
+    const fetchMock = stubFetch(
+      fakeResponse({ json: () => Promise.resolve({ status: "ok" }) }),
+    );
+    window.localStorage.setItem(
+      VIEWER_API_BASE_URL_STORAGE_KEY,
+      "https://stored-api.example.test",
+    );
+    vi.spyOn(window.localStorage, "removeItem").mockImplementation(() => {
+      throw new Error("storage locked");
+    });
+
+    resetViewerApiBaseUrl();
+
+    expect(window.localStorage.getItem(VIEWER_API_BASE_URL_STORAGE_KEY)).toBe(
+      "https://stored-api.example.test",
+    );
+    expect(getViewerApiBaseUrl()).toBe(BASE);
+    await fetchHealth();
+    expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/health`);
+  });
+
+  it("rejects runtime API URLs with query strings or fragments", () => {
+    expect(normalizeViewerApiBaseUrl("https://api.example.test?debug=true"))
+      .toBeNull();
+    expect(normalizeViewerApiBaseUrl("https://api.example.test/viewer#status"))
+      .toBeNull();
+    expect(() => setViewerApiBaseUrl("https://api.example.test?debug=true"))
+      .toThrow(/without a query string or fragment/i);
+  });
+
   it("preserves POST request init fields when attaching the bearer token", async () => {
     const fetchMock = stubFetch(
       fakeResponse({
@@ -1363,6 +1495,35 @@ describe("requestJson success", () => {
     expect(request.method).toBe("POST");
     expect(request.body).toBe(JSON.stringify(input));
     expect(headers.get("Authorization")).toBe("Bearer hosted-secret");
+  });
+});
+
+describe("requestMultipartJson success", () => {
+  it("uploads log archives as multipart form data without forcing content-type", async () => {
+    const fetchMock = stubFetch(
+      fakeResponse({
+        json: () => Promise.resolve(successfulLogArchiveImportResponse),
+      }),
+    );
+    setSessionAuthToken("hosted-secret");
+
+    const file = new File(["zip-bytes"], "logs.zip", {
+      type: "application/zip",
+    });
+    const result = await importLogArchive(file);
+
+    expect(result).toEqual(successfulLogArchiveImportResponse);
+    const [url, init] = fetchMock.mock.calls[0];
+    const request = init as RequestInit;
+    const headers = new Headers(request.headers);
+    expect(url).toBe(`${BASE}/logs/import`);
+    expect(request.method).toBe("POST");
+    expect(request.body).toBeInstanceOf(FormData);
+    expect(headers.get("Authorization")).toBe("Bearer hosted-secret");
+    expect(headers.has("content-type")).toBe(false);
+    const archive = (request.body as FormData).get("archive");
+    expect(archive).toBeInstanceOf(File);
+    expect((archive as File).name).toBe("logs.zip");
   });
 });
 
@@ -2977,6 +3138,26 @@ describe("POST requests", () => {
       }),
     ).rejects.toThrow(
       `POST /logs/runs/delete from ${BASE} failed with 400: A training job is still writing to this log folder.`,
+    );
+  });
+
+  it("preserves backend detail on log archive import failure", async () => {
+    stubFetch(
+      fakeResponse({
+        ok: false,
+        status: 400,
+        statusText: "Bad Request",
+        json: () =>
+          Promise.resolve({
+            detail: "Unsafe archive path contains traversal: ../escaped.txt",
+          }),
+      }),
+    );
+
+    await expect(
+      importLogArchive(new File(["zip-bytes"], "logs.zip")),
+    ).rejects.toThrow(
+      `POST /logs/import from ${BASE} failed with 400: Unsafe archive path contains traversal: ../escaped.txt`,
     );
   });
 

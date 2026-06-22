@@ -17,6 +17,57 @@ if (typeof window !== "undefined") {
   });
 }
 
+function createStorageMock() {
+  const values = new Map<string, string>();
+  return {
+    get length() {
+      return values.size;
+    },
+    clear: vi.fn(() => values.clear()),
+    getItem: vi.fn((key: string) => values.get(key) ?? null),
+    key: vi.fn((index: number) => Array.from(values.keys())[index] ?? null),
+    removeItem: vi.fn((key: string) => {
+      values.delete(key);
+    }),
+    setItem: vi.fn((key: string, value: string) => {
+      values.set(key, String(value));
+    }),
+  } as unknown as Storage;
+}
+
+function hasStorageMethods(storage: unknown): storage is Storage {
+  const candidate = storage as Storage | undefined;
+  return (
+    typeof candidate?.clear === "function" &&
+    typeof candidate.getItem === "function" &&
+    typeof candidate.removeItem === "function" &&
+    typeof candidate.setItem === "function"
+  );
+}
+
+function ensureWindowStorage(storageName: "localStorage" | "sessionStorage") {
+  if (typeof window === "undefined") {
+    return;
+  }
+  let storage: Storage | undefined;
+  try {
+    storage = window[storageName];
+  } catch {
+    storage = undefined;
+  }
+  if (hasStorageMethods(storage)) {
+    return;
+  }
+  Object.defineProperty(window, storageName, {
+    configurable: true,
+    writable: true,
+    value: createStorageMock(),
+  });
+}
+
+ensureWindowStorage("localStorage");
+ensureWindowStorage("sessionStorage");
+
 type MockEChartDataItem = {
   name?: unknown;
   nodeId?: unknown;

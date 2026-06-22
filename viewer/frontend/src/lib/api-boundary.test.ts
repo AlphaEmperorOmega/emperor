@@ -39,6 +39,10 @@ const BACKEND_CONTACT_EXCEPTIONS: BackendContactException[] = [
     reason: "Logs API module owns its backend route paths.",
   },
   {
+    relativePath: "src/lib/api/log-import.ts",
+    reason: "Log archive import API module owns its multipart upload route path.",
+  },
+  {
     relativePath: "src/lib/api/monitor-data.ts",
     reason: "Monitor data API module owns its backend route paths.",
   },
