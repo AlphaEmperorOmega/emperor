@@ -2,6 +2,7 @@ import { type ReactNode } from "react";
 import {
   useViewerState,
   type ActiveTrainingJobContextValue,
+  type ApiConnectionContextValue,
   type GraphViewContextValue,
   type GraphMonitorContextValue,
   type HistoricalRunsContextValue,
@@ -28,6 +29,8 @@ const [ActiveTrainingJobProgressProvider, useActiveTrainingJobProgressState] =
   );
 const [GraphMonitorProvider, useGraphMonitor] =
   createViewerContext<GraphMonitorContextValue>("GraphMonitorContext");
+const [ApiConnectionProvider, useApiConnection] =
+  createViewerContext<ApiConnectionContextValue>("ApiConnectionContext");
 
 export {
   useTargetConfig,
@@ -36,6 +39,7 @@ export {
   useActiveTrainingJob,
   useActiveTrainingJobProgressState,
   useGraphMonitor,
+  useApiConnection,
 };
 
 function ActiveTrainingJobProgressController({
@@ -256,10 +260,11 @@ export function ViewerProviders({
   onJobStarted,
   children,
 }: ViewerProvidersProps) {
-  const { target, graph, history, activeJob, graphMonitor } = useViewerState({
-    activeWorkspace,
-    onJobStarted,
-  });
+  const { target, graph, history, activeJob, graphMonitor, apiConnection } =
+    useViewerState({
+      activeWorkspace,
+      onJobStarted,
+    });
   return (
     <TargetConfigProvider value={target}>
       <GraphViewProvider value={graph}>
@@ -267,7 +272,9 @@ export function ViewerProviders({
           <ActiveTrainingJobProvider value={activeJob}>
             <ActiveTrainingJobProgressController>
               <GraphMonitorProvider value={graphMonitor}>
-                {children}
+                <ApiConnectionProvider value={apiConnection}>
+                  {children}
+                </ApiConnectionProvider>
               </GraphMonitorProvider>
             </ActiveTrainingJobProgressController>
           </ActiveTrainingJobProvider>

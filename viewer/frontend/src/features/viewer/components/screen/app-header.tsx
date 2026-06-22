@@ -5,6 +5,7 @@ import {
   Plug,
   RotateCcw,
   SlidersHorizontal,
+  Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusDot } from "@/components/ui/status-dot";
@@ -18,10 +19,12 @@ export function AppHeader({
   activeWorkspace,
   onOpenFeatureList,
   onOpenApiConnection,
+  onOpenImportLogs,
 }: {
   activeWorkspace: ViewerWorkspace;
   onOpenFeatureList: () => void;
   onOpenApiConnection: () => void;
+  onOpenImportLogs: () => void;
 }) {
   const {
     selectedModel,
@@ -76,6 +79,15 @@ export function AppHeader({
         >
           <Plug className="h-[15px] w-[15px]" aria-hidden />
           <span className="hidden sm:inline">Connection</span>
+        </Button>
+        <Button
+          variant="secondary"
+          aria-label="Import logs"
+          onClick={onOpenImportLogs}
+          className="h-9 px-3 sm:h-9 sm:px-4"
+        >
+          <Upload className="h-[15px] w-[15px]" aria-hidden />
+          <span className="hidden sm:inline">Import Logs</span>
         </Button>
         <Button
           variant="secondary"

@@ -4,6 +4,7 @@ import {
   LOG_ARTIFACTS_QUERY_KEY,
   LOG_CHECKPOINTS_QUERY_KEY,
   LOG_EXPERIMENTS_QUERY_KEY,
+  LOG_MEDIA_QUERY_KEY,
   LOG_RUNS_QUERY_KEY,
   LOG_SCALARS_QUERY_KEY,
   LOG_TAGS_QUERY_KEY,
@@ -80,6 +81,9 @@ export function useLogQueryCache() {
       );
       queryClient.removeQueries(
         runScopedRemovalFilter({ root: LOG_ARTIFACTS_QUERY_KEY[0], runIds }),
+      );
+      queryClient.removeQueries(
+        runScopedRemovalFilter({ root: LOG_MEDIA_QUERY_KEY[0], runIds }),
       );
       return Promise.resolve();
     },

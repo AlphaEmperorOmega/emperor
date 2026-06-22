@@ -7,6 +7,7 @@ import {
   LOG_ARTIFACTS_QUERY_KEY,
   LOG_CHECKPOINTS_QUERY_KEY,
   LOG_EXPERIMENTS_QUERY_KEY,
+  LOG_MEDIA_QUERY_KEY,
   LOG_RUNS_QUERY_KEY,
   LOG_SCALARS_QUERY_KEY,
   LOG_TAGS_QUERY_KEY,
@@ -32,6 +33,7 @@ describe("useLogQueryCache", () => {
     client.setQueryData([...LOG_TAGS_QUERY_KEY, ["run-2"]], "run-2-tags");
     client.setQueryData([...LOG_CHECKPOINTS_QUERY_KEY, ["run-1"]], "run-1-checkpoints");
     client.setQueryData([...LOG_ARTIFACTS_QUERY_KEY, "run-1"], "run-1-artifacts");
+    client.setQueryData([...LOG_MEDIA_QUERY_KEY, ["run-1"], ["image"], []], "run-1-media");
     client.setQueryData([...LOG_SCALARS_QUERY_KEY, ["run-1"], ["loss"]], "run-1-loss");
     client.setQueryData([...LOG_SCALARS_QUERY_KEY, ["run-2"], ["loss"]], "run-2-loss");
 
@@ -46,10 +48,13 @@ describe("useLogQueryCache", () => {
     expect(invalidateSpy).toHaveBeenNthCalledWith(2, {
       queryKey: LOG_RUNS_QUERY_KEY,
     });
-    expect(removeSpy).toHaveBeenCalledTimes(4);
+    expect(removeSpy).toHaveBeenCalledTimes(5);
     expect(client.getQueryData([...LOG_TAGS_QUERY_KEY, ["run-1"]])).toBeUndefined();
     expect(client.getQueryData([...LOG_CHECKPOINTS_QUERY_KEY, ["run-1"]])).toBeUndefined();
     expect(client.getQueryData([...LOG_ARTIFACTS_QUERY_KEY, "run-1"])).toBeUndefined();
+    expect(
+      client.getQueryData([...LOG_MEDIA_QUERY_KEY, ["run-1"], ["image"], []]),
+    ).toBeUndefined();
     expect(
       client.getQueryData([...LOG_SCALARS_QUERY_KEY, ["run-1"], ["loss"]]),
     ).toBeUndefined();

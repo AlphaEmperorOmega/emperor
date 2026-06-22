@@ -13,6 +13,7 @@ export function ViewerScreen({ shell }: { shell: ViewerScreenShell }) {
     fullConfigDialog,
     featureListDialog,
     apiConnectionDialog,
+    importLogsDialog,
   } = shell;
 
   return (
@@ -27,6 +28,7 @@ export function ViewerScreen({ shell }: { shell: ViewerScreenShell }) {
         activeWorkspace={activeWorkspace}
         onOpenFeatureList={featureListDialog.open}
         onOpenApiConnection={apiConnectionDialog.open}
+        onOpenImportLogs={importLogsDialog.open}
       />
 
       <section
@@ -50,6 +52,7 @@ export function ViewerScreen({ shell }: { shell: ViewerScreenShell }) {
         fullConfigDialog={fullConfigDialog}
         featureListDialog={featureListDialog}
         apiConnectionDialog={apiConnectionDialog}
+        importLogsDialog={importLogsDialog}
       />
     </main>
   );
