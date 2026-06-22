@@ -24,6 +24,10 @@ const mocks = vi.hoisted(() => ({
   fetchLogTags: vi.fn(),
   inspectModel: vi.fn(),
   inspectOperationGraph: vi.fn(),
+  getViewerApiBaseUrl: vi.fn(),
+  normalizeViewerApiBaseUrl: vi.fn(),
+  setViewerApiBaseUrl: vi.fn(),
+  resetViewerApiBaseUrl: vi.fn(),
   fetchTrainingRunPlan: vi.fn(),
   createTrainingJob: vi.fn(),
   fetchTrainingJob: vi.fn(),
@@ -47,6 +51,8 @@ import {
   type ModelIdentity,
   type TrainingJob,
 } from "@/lib/api";
+
+const DEFAULT_VIEWER_API_BASE_URL = "http://127.0.0.1:9999";
 
 function renderViewerState(options: Parameters<typeof useViewerState>[0] = {}) {
   const client = new QueryClient({
@@ -101,6 +107,19 @@ function renderTrainingPanelWithExperiments() {
       </ViewerProviders>
     </QueryClientProvider>,
   );
+}
+
+type Deferred<T> = {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+};
+
+function deferred<T>(): Deferred<T> {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve;
+  });
+  return { promise, resolve };
 }
 
 function logRun(overrides: Partial<LogRun> & Pick<LogRun, "id">): LogRun {
@@ -398,6 +417,38 @@ function mockPublicModelCatalog() {
 }
 
 beforeEach(() => {
+  let viewerApiBaseUrl = DEFAULT_VIEWER_API_BASE_URL;
+  mocks.normalizeViewerApiBaseUrl.mockReset().mockImplementation((url: string) => {
+    const trimmedUrl = url.trim();
+    if (!trimmedUrl) {
+      return null;
+    }
+    try {
+      const parsedUrl = new URL(trimmedUrl);
+      if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+        return null;
+      }
+      if (parsedUrl.search || parsedUrl.hash) {
+        return null;
+      }
+    } catch {
+      return null;
+    }
+    return trimmedUrl.replace(/\/+$/, "");
+  });
+  mocks.getViewerApiBaseUrl.mockReset().mockImplementation(() => viewerApiBaseUrl);
+  mocks.setViewerApiBaseUrl.mockReset().mockImplementation((url: string) => {
+    const normalizedUrl = mocks.normalizeViewerApiBaseUrl(url);
+    if (!normalizedUrl) {
+      throw new Error("Invalid API base URL");
+    }
+    viewerApiBaseUrl = normalizedUrl;
+    return viewerApiBaseUrl;
+  });
+  mocks.resetViewerApiBaseUrl.mockReset().mockImplementation(() => {
+    viewerApiBaseUrl = DEFAULT_VIEWER_API_BASE_URL;
+    return viewerApiBaseUrl;
+  });
   clearPersistedTargetSelection();
   mocks.fetchHealth.mockReset().mockResolvedValue({ status: "ok" });
   mocks.fetchCapabilities.mockReset().mockResolvedValue({
@@ -870,6 +921,72 @@ describe("useViewerState", () => {
     expect(
       latestNodeTypes.some((typeName) => typeName.startsWith("MixtureOfExperts")),
     ).toBe(false);
+  });
+
+  it("clears and re-requests the current preview when switching API base URLs", async () => {
+    type PreviewRequest = {
+      modelType: string;
+      model: string;
+      preset: string;
+    };
+    const previewResponses: Array<
+      Deferred<InspectResponse> & { request: PreviewRequest }
+    > = [];
+    mocks.inspectModel.mockReset().mockImplementation((request: PreviewRequest) => {
+      const response = deferred<InspectResponse>();
+      previewResponses.push({ ...response, request });
+      return response.promise;
+    });
+    const previewGraph = (request: PreviewRequest, label: string): InspectResponse => ({
+      modelType: request.modelType,
+      model: request.model,
+      preset: request.preset,
+      parameterCount: 0,
+      parameterSizeBytes: 0,
+      nodes: [graphNode(label, "model", "PreviewSource", { label })],
+      edges: [],
+    });
+    const { result } = renderViewerState({ activeWorkspace: "model" });
+
+    await waitFor(() => expect(previewResponses).toHaveLength(1));
+
+    act(() => {
+      result.current.apiConnection.setApiBaseUrl("https://api-alt.example.test");
+    });
+
+    expect(result.current.graph.graph).toBeUndefined();
+    await waitFor(() => expect(previewResponses.length).toBeGreaterThanOrEqual(2));
+    expect(previewResponses[1]?.request).toEqual(previewResponses[0]?.request);
+
+    const firstPreviewResponse = previewResponses[0];
+    if (!firstPreviewResponse) {
+      throw new Error("Expected an initial preview response");
+    }
+    await act(async () => {
+      firstPreviewResponse.resolve(
+        previewGraph(firstPreviewResponse.request, "old backend"),
+      );
+      await firstPreviewResponse.promise;
+    });
+    expect(result.current.graph.graph).toBeUndefined();
+
+    const latestPreviewResponse = previewResponses.at(-1);
+    if (!latestPreviewResponse) {
+      throw new Error("Expected a re-requested preview response");
+    }
+    await act(async () => {
+      latestPreviewResponse.resolve(
+        previewGraph(latestPreviewResponse.request, "new backend"),
+      );
+      await latestPreviewResponse.promise;
+    });
+
+    await waitFor(() => {
+      expect(result.current.apiConnection.apiBaseUrl).toBe(
+        "https://api-alt.example.test",
+      );
+      expect(result.current.graph.graph?.nodes[0]?.label).toBe("new backend");
+    });
   });
 
   it("clears historical run selection when switching model type", async () => {

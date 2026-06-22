@@ -13,6 +13,9 @@ import {
 import {
   useActiveTrainingJobState,
 } from "@/features/viewer/state/training/use-active-training-job-state";
+import {
+  useViewerApiConnectionSwitch,
+} from "@/features/viewer/state/use-viewer-api-connection";
 import { type ViewerWorkspace } from "@/types/viewer";
 
 type GraphPreviewControllerState = ReturnType<typeof useGraphPreviewController>;
@@ -105,6 +108,7 @@ export function useViewerState(options: ViewerStateOptions = {}) {
     syncSelectedLogRun: targetConfig.syncSelectedLogRun,
     selection: historicalRunSelection,
   });
+  const apiConnection = useViewerApiConnectionSwitch(graphPreview);
   const graphPreviewInput = useMemo(
     () =>
       graphPreviewCompositionInput({
@@ -138,9 +142,11 @@ export function useViewerState(options: ViewerStateOptions = {}) {
       history,
       activeJob,
       graphMonitor,
+      apiConnection,
     }),
     [
       activeJob,
+      apiConnection,
       graphMonitor,
       graphPreviewState.graph,
       history,
@@ -155,3 +161,4 @@ export type GraphViewContextValue = ViewerState["graph"];
 export type HistoricalRunsContextValue = ViewerState["history"];
 export type ActiveTrainingJobContextValue = ViewerState["activeJob"];
 export type GraphMonitorContextValue = ViewerState["graphMonitor"];
+export type ApiConnectionContextValue = ViewerState["apiConnection"];

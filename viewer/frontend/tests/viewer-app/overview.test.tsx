@@ -3,9 +3,11 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   IMPLEMENTED_FEATURES,
+  capabilitiesResponse,
   expandedTrainingDetails,
   installFetchMock,
   inspectResponse,
+  jsonResponse,
   logRunsResponse,
   openFullConfig,
   openTrainingMultiSelect,
@@ -20,6 +22,18 @@ import {
 import {
   readPersistedTargetSelection,
 } from "@/features/viewer/state/target/target-selection-storage";
+import {
+  setViewerApiBaseUrl,
+  VIEWER_API_BASE_URL_STORAGE_KEY,
+} from "@/lib/api";
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve;
+  });
+  return { promise, resolve };
+}
 
 describe("ViewerApp Overview", () => {
   beforeEach(resetViewerAppTestState);
@@ -129,6 +143,7 @@ describe("ViewerApp Overview", () => {
     expect(
       within(dialog).getByLabelText("Frontend API URL environment variable"),
     ).toHaveValue(frontendEnvValue);
+    expect(within(dialog).getByLabelText("API base URL")).toHaveValue(apiBaseUrl);
     expect(dialog).toHaveTextContent(/backend deployment/i);
     expect(dialog).toHaveTextContent(/browser frontend code cannot add/i);
     expect(within(dialog).getByText(/bearer auth/i)).toBeInTheDocument();
@@ -148,6 +163,304 @@ describe("ViewerApp Overview", () => {
 
     expect(writeText).toHaveBeenNthCalledWith(1, corsEnvValue);
     expect(writeText).toHaveBeenNthCalledWith(2, frontendEnvValue);
+  });
+
+  it("renders Import Logs next to Connection in the top nav", async () => {
+    installFetchMock();
+    renderViewer();
+
+    const header = document.querySelector("header");
+    if (!header) {
+      throw new Error("Expected app header to render");
+    }
+    const buttons = within(header).getAllByRole("button");
+    const connectionIndex = buttons.findIndex(
+      (button) => button.getAttribute("aria-label") === "API connection settings",
+    );
+    const importIndex = buttons.findIndex(
+      (button) => button.getAttribute("aria-label") === "Import logs",
+    );
+
+    expect(connectionIndex).toBeGreaterThanOrEqual(0);
+    expect(importIndex).toBe(connectionIndex + 1);
+  });
+
+  it("imports a selected zip through the configured API base URL", async () => {
+    const user = userEvent.setup();
+    setViewerApiBaseUrl("https://api.example.test/viewer");
+    const { fetchMock, logImportRequests } = installFetchMock({
+      capabilitiesResponse: {
+        ...capabilitiesResponse,
+        uploadsEnabled: true,
+        maxUploadSize: null,
+      },
+      logImportResponse: {
+        extractedFileCount: 2,
+        skippedFileCount: 1,
+        destinationRoot: "/workspace/logs",
+      },
+    });
+    renderViewer();
+
+    await user.click(screen.getByRole("button", { name: /import logs/i }));
+
+    const dialog = await screen.findByRole("dialog", { name: /import logs/i });
+    const fileInput = within(dialog).getByLabelText(/log archive zip file/i);
+    await waitFor(() => expect(fileInput).toBeEnabled());
+
+    const file = new File(["zip"], "logs.zip", { type: "application/zip" });
+    await user.upload(fileInput, file);
+
+    expect(within(dialog).getByText("logs.zip")).toBeInTheDocument();
+    expect(within(dialog).getByText("3 B")).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole("button", { name: /^import logs$/i }));
+
+    await waitFor(() => expect(logImportRequests).toHaveLength(1));
+    expect(
+      fetchMock.mock.calls.some(
+        ([url]) => String(url) === "https://api.example.test/viewer/logs/import",
+      ),
+    ).toBe(true);
+    const request = logImportRequests[0];
+    expect(request.body).toBeInstanceOf(FormData);
+    const headers = new Headers(request.headers);
+    expect(headers.has("content-type")).toBe(false);
+    expect(within(dialog).getByRole("status")).toHaveTextContent(
+      /2 files extracted; 1 existing file skipped/i,
+    );
+    await waitFor(() => {
+      expect((fileInput as HTMLInputElement).files).toHaveLength(0);
+    });
+    expect(within(dialog).getByText("No file selected")).toBeInTheDocument();
+  });
+
+  it("shows loading and success states while importing logs", async () => {
+    const user = userEvent.setup();
+    const importResponse = deferred<{
+      extractedFileCount: number;
+      skippedFileCount: number;
+      destinationRoot: string;
+    }>();
+    const importResult = {
+      extractedFileCount: 1,
+      skippedFileCount: 0,
+      destinationRoot: "/workspace/logs",
+    };
+    installFetchMock({
+      capabilitiesResponse: {
+        ...capabilitiesResponse,
+        uploadsEnabled: true,
+        maxUploadSize: null,
+      },
+      logImportResponseFactory: () => importResponse.promise,
+    });
+    renderViewer();
+
+    await user.click(screen.getByRole("button", { name: /import logs/i }));
+    const dialog = await screen.findByRole("dialog", { name: /import logs/i });
+    const fileInput = within(dialog).getByLabelText(/log archive zip file/i);
+    await waitFor(() => expect(fileInput).toBeEnabled());
+    await user.upload(
+      fileInput,
+      new File(["zip"], "logs.zip", { type: "application/zip" }),
+    );
+    await user.click(within(dialog).getByRole("button", { name: /^import logs$/i }));
+
+    expect(within(dialog).getByRole("button", { name: /importing/i }))
+      .toBeDisabled();
+    expect(fileInput).toBeDisabled();
+
+    importResponse.resolve(importResult);
+
+    expect(await within(dialog).findByRole("status")).toHaveTextContent(
+      /1 file extracted; 0 existing files skipped/i,
+    );
+  });
+
+  it("shows an import error from the backend", async () => {
+    const user = userEvent.setup();
+    installFetchMock({
+      capabilitiesResponse: {
+        ...capabilitiesResponse,
+        uploadsEnabled: true,
+        maxUploadSize: null,
+      },
+      logImportError: "Invalid zip archive.",
+    });
+    renderViewer();
+
+    await user.click(screen.getByRole("button", { name: /import logs/i }));
+    const dialog = await screen.findByRole("dialog", { name: /import logs/i });
+    const fileInput = within(dialog).getByLabelText(/log archive zip file/i);
+    await waitFor(() => expect(fileInput).toBeEnabled());
+    await user.upload(
+      fileInput,
+      new File(["not a zip"], "logs.zip", { type: "application/zip" }),
+    );
+    await user.click(within(dialog).getByRole("button", { name: /^import logs$/i }));
+
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+      /invalid zip archive/i,
+    );
+  });
+
+  it("shows disabled state when the backend does not expose upload capability", async () => {
+    const user = userEvent.setup();
+    installFetchMock({
+      capabilitiesResponse: {
+        ...capabilitiesResponse,
+        uploadsEnabled: false,
+        maxUploadSize: null,
+      },
+    });
+    renderViewer();
+
+    await user.click(screen.getByRole("button", { name: /import logs/i }));
+    const dialog = await screen.findByRole("dialog", { name: /import logs/i });
+
+    expect(dialog).toHaveTextContent(/log imports are disabled by this backend/i);
+    expect(within(dialog).getByLabelText(/log archive zip file/i)).toBeDisabled();
+    expect(within(dialog).getByRole("button", { name: /^import logs$/i }))
+      .toBeDisabled();
+  });
+
+  it("uses and resets a runtime API URL from the existing connection dialog", async () => {
+    const user = userEvent.setup();
+    const { fetchMock } = installFetchMock();
+    renderViewer();
+
+    await user.click(screen.getByRole("button", { name: /api connection settings/i }));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: /api connection/i,
+    });
+    const input = within(dialog).getByLabelText("API base URL");
+
+    await user.clear(input);
+    await user.type(input, " https://api.example.test/viewer/// ");
+    await user.click(within(dialog).getByRole("button", { name: /^use$/i }));
+
+    await waitFor(() => {
+      expect(input).toHaveValue("https://api.example.test/viewer");
+    });
+    expect(window.localStorage.getItem(VIEWER_API_BASE_URL_STORAGE_KEY)).toBe(
+      "https://api.example.test/viewer",
+    );
+    expect(within(dialog).getByText("https://api.example.test/viewer"))
+      .toBeInTheDocument();
+    expect(
+      within(dialog).getByLabelText("Frontend API URL environment variable"),
+    ).toHaveValue("NEXT_PUBLIC_VIEWER_API_URL=https://api.example.test/viewer");
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(
+          ([url]) => String(url) === "https://api.example.test/viewer/health",
+        ),
+      ).toBe(true);
+      expect(
+        fetchMock.mock.calls.some(
+          ([url]) => String(url) === "https://api.example.test/viewer/inspect",
+        ),
+      ).toBe(true);
+    });
+
+    const requestCountBeforeReset = fetchMock.mock.calls.length;
+    await user.click(within(dialog).getByRole("button", { name: /^reset$/i }));
+
+    await waitFor(() => {
+      expect(input).toHaveValue("http://127.0.0.1:9999");
+    });
+    expect(window.localStorage.getItem(VIEWER_API_BASE_URL_STORAGE_KEY)).toBeNull();
+    expect(
+      within(dialog).getByLabelText("Frontend API URL environment variable"),
+    ).toHaveValue("NEXT_PUBLIC_VIEWER_API_URL=http://127.0.0.1:9999");
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.length).toBeGreaterThan(requestCountBeforeReset);
+      expect(
+        fetchMock.mock.calls
+          .slice(requestCountBeforeReset)
+          .some(([url]) => String(url) === "http://127.0.0.1:9999/health"),
+      ).toBe(true);
+      expect(
+        fetchMock.mock.calls
+          .slice(requestCountBeforeReset)
+          .some(([url]) => String(url) === "http://127.0.0.1:9999/inspect"),
+      ).toBe(true);
+    });
+  });
+
+  it("shows an inline validation error for invalid runtime API URLs", async () => {
+    const user = userEvent.setup();
+    const { fetchMock } = installFetchMock();
+    renderViewer();
+
+    await user.click(screen.getByRole("button", { name: /api connection settings/i }));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: /api connection/i,
+    });
+    const input = within(dialog).getByLabelText("API base URL");
+    const requestCount = fetchMock.mock.calls.length;
+
+    await user.clear(input);
+    await user.type(input, "https://api.example.test?debug=true");
+    await user.click(within(dialog).getByRole("button", { name: /^use$/i }));
+
+    expect(within(dialog).getByRole("alert")).toHaveTextContent(
+      /without a query string or fragment/i,
+    );
+    expect(window.localStorage.getItem(VIEWER_API_BASE_URL_STORAGE_KEY)).toBeNull();
+    expect(fetchMock.mock.calls).toHaveLength(requestCount);
+  });
+
+  it("refetches active API status queries after switching backends", async () => {
+    const user = userEvent.setup();
+    const { fetchMock } = installFetchMock();
+    const defaultFetch = fetchMock.getMockImplementation();
+    fetchMock.mockImplementation((input, init) => {
+      const url = String(input);
+      if (url.endsWith("/health")) {
+        if (url === "https://api-online.example.test/health") {
+          return jsonResponse({ status: "ok" });
+        }
+        return jsonResponse({ detail: "offline" }, 503);
+      }
+      if (!defaultFetch) {
+        throw new Error("Expected default fetch mock implementation");
+      }
+      return defaultFetch(input, init);
+    });
+    renderViewer();
+
+    const header = document.querySelector("header");
+    if (!header) {
+      throw new Error("Expected app header to render");
+    }
+    expect(await within(header).findByText("offline")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /api connection settings/i }));
+    const dialog = await screen.findByRole("dialog", {
+      name: /api connection/i,
+    });
+    const input = within(dialog).getByLabelText("API base URL");
+    await user.clear(input);
+    await user.type(input, "https://api-online.example.test");
+    await user.click(within(dialog).getByRole("button", { name: /^use$/i }));
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(
+          ([url]) => String(url) === "https://api-online.example.test/health",
+        ),
+      ).toBe(true);
+    });
+    expect(await within(header).findByText("online")).toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(
+        ([url]) => String(url) === "https://api-online.example.test/models",
+      ),
+    ).toBe(true);
   });
 
   it("shows preset-owned field count in the top header", async () => {

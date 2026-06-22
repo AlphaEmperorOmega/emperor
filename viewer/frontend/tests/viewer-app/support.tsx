@@ -6,6 +6,7 @@ import { ViewerApp } from "@/features/viewer/components/viewer-app";
 import {
   clearPersistedTargetSelection,
 } from "@/features/viewer/state/target/target-selection-storage";
+import { resetViewerApiBaseUrl } from "@/lib/api";
 export { IMPLEMENTED_FEATURES } from "@/lib/feature-catalog";
 
 type MockModelIdentity = { modelType: string; model: string };
@@ -2658,6 +2659,15 @@ export function installFetchMock(
     deleteLogExperimentError?: string;
     deleteLogRunsError?: string;
     deleteLogRunsBlockers?: Array<{ id: string; logFolder: string; status: string }>;
+    logImportError?: string;
+    logImportResponse?: {
+      extractedFileCount: number;
+      skippedFileCount: number;
+      destinationRoot: string;
+    };
+    logImportResponseFactory?: (
+      requestIndex: number,
+    ) => unknown | Promise<unknown>;
     capabilitiesResponse?: typeof capabilitiesResponse;
     presetsResponse?: typeof presetsResponse;
     schemaResponse?: unknown;
@@ -2744,6 +2754,7 @@ export function installFetchMock(
 	    presets: string[];
 	    runIds: string[];
 	  }> = [];
+  const logImportRequests: RequestInit[] = [];
   const monitorDataRequests: Array<{
     jobId: string;
     nodePath: string | null;
@@ -3262,6 +3273,23 @@ export function installFetchMock(
         deletedRelativePaths: plan.candidates.map((run) => run.relativePath),
       });
     }
+    if (url.endsWith("/logs/import")) {
+      logImportRequests.push(init ?? {});
+      if (options.logImportError) {
+        return jsonResponse({ detail: options.logImportError }, 400);
+      }
+      const requestIndex = logImportRequests.length - 1;
+      const responseBody = options.logImportResponseFactory
+        ? options.logImportResponseFactory(requestIndex)
+        : options.logImportResponse;
+      return Promise.resolve(
+        responseBody ?? {
+          extractedFileCount: 2,
+          skippedFileCount: 0,
+          destinationRoot: "/workspace/logs",
+        },
+      ).then((body) => jsonResponse(body));
+    }
     if (url.endsWith("/logs/runs") || url.includes("/logs/runs?")) {
       const parsedUrl = new URL(url, "http://testserver");
       const selectedExperiments = parsedUrl.searchParams.getAll("experiment");
@@ -3472,6 +3500,7 @@ export function installFetchMock(
     deleteExperimentRequests,
     deleteRunPlanRequests,
     deleteRunRequests,
+    logImportRequests,
     monitorDataRequests,
     logRunMonitorDataRequests,
   };
@@ -3940,6 +3969,7 @@ export let scrollIntoViewMock: ReturnType<typeof vi.fn>;
 
 export function resetViewerAppTestState() {
   vi.restoreAllMocks();
+  resetViewerApiBaseUrl();
   clearPersistedTargetSelection();
   try {
     window.localStorage?.clear?.();
