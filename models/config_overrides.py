@@ -365,15 +365,7 @@ def _source_value(source: str, node: ast.AST) -> str:
     return " ".join(value.split())
 
 
-def _iter_config_assignments(
-    config_path: Path,
-) -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
-    source = config_path.read_text()
-    tree = ast.parse(source)
-    config_options = []
-    search_options = []
-    module_skip_keys = set()
-
+def _iter_assignment_nodes(tree: ast.Module):
     for node in tree.body:
         key = None
         value_node = None
@@ -385,7 +377,19 @@ def _iter_config_assignments(
             if isinstance(target, ast.Name):
                 key = target.id
                 value_node = node.value
+        if key is not None and value_node is not None:
+            yield key, value_node
 
+
+def _config_assignment_rows_from_source(
+    source: str,
+) -> tuple[dict[str, str], dict[str, str]]:
+    tree = ast.parse(source)
+    config_options: dict[str, str] = {}
+    search_options: dict[str, str] = {}
+    module_skip_keys = set()
+
+    for key, value_node in _iter_assignment_nodes(tree):
         if key != "CONFIG_OVERRIDE_SKIP_KEYS" or value_node is None:
             continue
         try:
@@ -399,30 +403,53 @@ def _iter_config_assignments(
 
     skip_keys = SKIP_CONFIG_KEYS | module_skip_keys
 
-    for node in tree.body:
-        key = None
-        value_node = None
-        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-            key = node.target.id
-            value_node = node.value
-        elif isinstance(node, ast.Assign) and len(node.targets) == 1:
-            target = node.targets[0]
-            if isinstance(target, ast.Name):
-                key = target.id
-                value_node = node.value
-
-        if key is None or value_node is None:
-            continue
+    for key, value_node in _iter_assignment_nodes(tree):
         if not key.isupper() or key in skip_keys:
             continue
 
         default = _source_value(source, value_node)
         if key.startswith("SEARCH_SPACE_"):
-            search_options.append((key[len("SEARCH_SPACE_") :], default))
+            search_options[key[len("SEARCH_SPACE_") :]] = default
         else:
-            config_options.append((key, default))
+            config_options[key] = default
 
     return config_options, search_options
+
+
+def _imports_shared_trainer_config(tree: ast.Module) -> bool:
+    for node in tree.body:
+        if not isinstance(node, ast.ImportFrom):
+            continue
+        if node.module != "models.trainer_config":
+            continue
+        if any(alias.name == "*" for alias in node.names):
+            return True
+    return False
+
+
+def _iter_config_assignments(
+    config_path: Path,
+) -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
+    source = config_path.read_text()
+    tree = ast.parse(source)
+    config_options: dict[str, str] = {}
+    search_options: dict[str, str] = {}
+
+    if _imports_shared_trainer_config(tree):
+        shared_source = Path(__file__).with_name("trainer_config.py").read_text()
+        shared_config_options, shared_search_options = (
+            _config_assignment_rows_from_source(shared_source)
+        )
+        config_options.update(shared_config_options)
+        search_options.update(shared_search_options)
+
+    local_config_options, local_search_options = _config_assignment_rows_from_source(
+        source
+    )
+    config_options.update(local_config_options)
+    search_options.update(local_search_options)
+
+    return list(config_options.items()), list(search_options.items())
 
 
 def _catalog_source_path(
