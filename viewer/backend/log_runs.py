@@ -24,6 +24,7 @@ from viewer.backend.monitor_data import (
     TensorBoardMonitorReader,
     TensorBoardParameterStatusReader,
 )
+from viewer.backend.services.log_import import import_log_archive
 from viewer.backend.tensorboard_reader import (
     TENSORBOARD_TAG_SIZE_GUIDANCE,
     event_dirs,
@@ -797,6 +798,8 @@ class LogRunQueryService:
     def clear_cache(self) -> None:
         self._tags_cache.clear()
         self._scalar_cache.clear()
+        self.monitor_reader.clear_cache()
+        self.parameter_status_reader.clear_cache()
 
     def clear_run_caches(self, run_paths: list[Path]) -> None:
         roots = {path.as_posix() for path in run_paths}
@@ -1537,6 +1540,25 @@ class LogRunIndex:
         result = self.deletion_executor.delete_runs(plan)
         self.scanner.clear_cache()
         self.query_service.clear_run_caches(affected_run_paths)
+        return result
+
+    def import_archive(
+        self,
+        *,
+        archive: bytes,
+        filename: str,
+        max_upload_size: int,
+        max_extracted_size: int,
+    ) -> dict[str, object]:
+        result = import_log_archive(
+            archive=archive,
+            filename=filename,
+            logs_root=self.logs_root,
+            max_upload_size=max_upload_size,
+            max_extracted_size=max_extracted_size,
+        )
+        self.scanner.clear_cache()
+        self.query_service.clear_cache()
         return result
 
     def _resolved_root(self) -> Path:

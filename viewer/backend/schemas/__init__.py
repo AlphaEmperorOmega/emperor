@@ -35,6 +35,7 @@ from viewer.backend.schemas._inspection import (
     OperationGraphResponse,
 )
 from viewer.backend.schemas._logs import (
+    LogArchiveImportResponse,
     LogCheckpointResponse,
     LogCheckpointsRequest,
     LogCheckpointsResponse,
@@ -184,6 +185,7 @@ __all__ = [
     "LogExperimentResponse",
     "LogExperimentsResponse",
     "LogExperimentDeleteResponse",
+    "LogArchiveImportResponse",
     "LogMediaRequest",
     "LogImageSummaryResponse",
     "LogTextSummaryResponse",

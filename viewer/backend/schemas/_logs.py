@@ -119,6 +119,12 @@ class LogExperimentDeleteResponse(ApiResponseModel):
     deletedRelativePath: str
 
 
+class LogArchiveImportResponse(ApiResponseModel):
+    extractedFileCount: int = Field(ge=0)
+    skippedFileCount: int = Field(ge=0)
+    destinationRoot: str
+
+
 class LogRunModelFilterRequest(ApiResponseModel):
     modelType: str
     model: str

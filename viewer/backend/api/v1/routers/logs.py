@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from models.catalog import model_id_from_parts
 
 from viewer.backend.blocking import run_blocking_io
 from viewer.backend.core.config import ViewerApiSettings
+from viewer.backend.core.errors import ApiError
 from viewer.backend.core.security import (
     require_bearer_auth,
     require_local_mutations_allowed,
@@ -20,6 +21,7 @@ from viewer.backend.dependencies import (
 )
 from viewer.backend.inspector.errors import InspectorError
 from viewer.backend.schemas import (
+    LogArchiveImportResponse,
     LogCheckpointResponse,
     LogCheckpointsRequest,
     LogCheckpointsResponse,
@@ -46,6 +48,9 @@ from viewer.backend.schemas import (
     MonitorDataResponse,
     ParameterStatusResponse,
 )
+from viewer.backend.services.log_import import (
+    parse_multipart_log_archive_upload,
+)
 from viewer.backend.services.logs import LogRunService
 from viewer.backend.services.training import TrainingJobService
 
@@ -60,6 +65,28 @@ router = APIRouter(
 DEFAULT_LOG_PAGE_LIMIT = 500
 MAX_LOG_PAGE_LIMIT = 2000
 LOG_METADATA_RESPONSE_LIMIT = 500
+
+
+def _upload_too_large_error(limit: int) -> ApiError:
+    return ApiError(
+        f"Log archive upload exceeds the {limit} byte limit.",
+        status_code=413,
+    )
+
+
+async def _read_upload_body_with_limit(
+    request: Request,
+    *,
+    max_upload_size: int,
+) -> bytes:
+    chunks: list[bytes] = []
+    total_size = 0
+    async for chunk in request.stream():
+        total_size += len(chunk)
+        if total_size > max_upload_size:
+            raise _upload_too_large_error(max_upload_size)
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 
 def _bounded_metadata_response(items: list[object], *, label: str) -> dict[str, object]:
@@ -164,6 +191,50 @@ async def logs_experiments(
 ) -> LogExperimentsResponse:
     return LogExperimentsResponse.model_validate(
         await run_blocking_io(service.list_experiments, limit=limit, offset=offset)
+    )
+
+
+@router.post(
+    "/import",
+    response_model=LogArchiveImportResponse,
+    summary="Import log archive",
+    response_description="Extracted log archive import summary.",
+)
+async def import_log_archive(
+    request: Request,
+    service: Annotated[LogRunService, Depends(get_log_run_service)],
+    settings: Annotated[ViewerApiSettings, Depends(get_viewer_settings)],
+) -> LogArchiveImportResponse:
+    require_local_mutations_allowed(settings)
+
+    content_length = request.headers.get("content-length")
+    if content_length is not None:
+        try:
+            upload_size = int(content_length)
+        except ValueError:
+            upload_size = 0
+        if upload_size > settings.max_upload_size:
+            raise _upload_too_large_error(settings.max_upload_size)
+
+    upload = parse_multipart_log_archive_upload(
+        content_type=request.headers.get("content-type", ""),
+        body=await _read_upload_body_with_limit(
+            request,
+            max_upload_size=settings.max_upload_size,
+        ),
+        max_upload_size=settings.max_upload_size,
+    )
+
+    def extract_archive() -> dict[str, object]:
+        return service.import_archive(
+            archive=upload.content,
+            filename=upload.filename,
+            max_upload_size=settings.max_upload_size,
+            max_extracted_size=settings.max_log_archive_extracted_size,
+        )
+
+    return LogArchiveImportResponse.model_validate(
+        await run_blocking_io(extract_archive)
     )
 
 
