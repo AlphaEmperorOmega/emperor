@@ -494,6 +494,33 @@ Training metrics are logged under `logs/`. Launch TensorBoard with:
 tensorboard --logdir logs/
 ```
 
+Run the download script from the project directory to archive the contents of
+`./logs` directly from the filesystem:
+
+```bash
+bash download_logs.sh
+bash download_logs.sh my_experiment
+bash download_logs.sh logs/my_experiment
+```
+
+When a specific experiment folder is selected, the archive keeps that folder
+prefix so importing it restores files under the same `logs/<experiment>/` path.
+
+By default, the archive is written in the current directory. Pass an explicit
+second argument to choose the zip path:
+
+```bash
+bash download_logs.sh logs emperor_logs.zip
+bash download_logs.sh logs /tmp/emperor_logs.zip
+```
+
+To restore that archive into another local project, start the Viewer backend
+with local mutations enabled
+(`VIEWER_API_ALLOW_UNSAFE_LOCAL_MUTATIONS=true`), open the Viewer, choose
+**Import Logs** in the top navigation, and select the produced `.zip` file. The
+import extracts into that project's server-side `logs/` directory and skips
+files that already exist.
+
 ## Test and Quality Commands
 
 Use `run_test.sh` from the repository root for the normal unit-test workflow.
