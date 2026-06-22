@@ -9,6 +9,11 @@ from typing import Literal, Self
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from viewer.backend.core.limits import (
+    DEFAULT_MAX_LOG_ARCHIVE_EXTRACTED_SIZE,
+    DEFAULT_MAX_UPLOAD_SIZE,
+)
+
 LOCAL_FRONTEND_ORIGINS = [
     "http://localhost:9000",
     "http://127.0.0.1:9000",
@@ -33,6 +38,11 @@ class ViewerApiSettings(BaseSettings):
     auth_mode: Literal["none", "bearer"] = "none"
     token: str | None = Field(default=None, repr=False)
     allow_unsafe_local_mutations: bool = False
+    max_upload_size: int = Field(default=DEFAULT_MAX_UPLOAD_SIZE, ge=1)
+    max_log_archive_extracted_size: int = Field(
+        default=DEFAULT_MAX_LOG_ARCHIVE_EXTRACTED_SIZE,
+        ge=1,
+    )
     training_cancellation_mode: Literal["strict-cgroup", "process-group"] = (
         "strict-cgroup"
     )
