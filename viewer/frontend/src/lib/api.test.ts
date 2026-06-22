@@ -1436,22 +1436,43 @@ describe("requestJson success", () => {
     const fetchMock = stubFetch(
       fakeResponse({ json: () => Promise.resolve({ status: "ok" }) }),
     );
-    window.localStorage.setItem(
-      VIEWER_API_BASE_URL_STORAGE_KEY,
-      "https://stored-api.example.test",
-    );
-    vi.spyOn(window.localStorage, "removeItem").mockImplementation(() => {
-      throw new Error("storage locked");
+    const originalStorage = Object.getOwnPropertyDescriptor(window, "localStorage");
+    const storedValues = new Map<string, string>([
+      [VIEWER_API_BASE_URL_STORAGE_KEY, "https://stored-api.example.test"],
+    ]);
+    const lockedStorage = {
+      get length() {
+        return storedValues.size;
+      },
+      clear: vi.fn(() => storedValues.clear()),
+      getItem: vi.fn((key: string) => storedValues.get(key) ?? null),
+      key: vi.fn((index: number) => Array.from(storedValues.keys())[index] ?? null),
+      removeItem: vi.fn(() => {
+        throw new Error("storage locked");
+      }),
+      setItem: vi.fn((key: string, value: string) => {
+        storedValues.set(key, String(value));
+      }),
+    } as unknown as Storage;
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      value: lockedStorage,
     });
 
-    resetViewerApiBaseUrl();
+    try {
+      resetViewerApiBaseUrl();
 
-    expect(window.localStorage.getItem(VIEWER_API_BASE_URL_STORAGE_KEY)).toBe(
-      "https://stored-api.example.test",
-    );
-    expect(getViewerApiBaseUrl()).toBe(BASE);
-    await fetchHealth();
-    expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/health`);
+      expect(window.localStorage.getItem(VIEWER_API_BASE_URL_STORAGE_KEY)).toBe(
+        "https://stored-api.example.test",
+      );
+      expect(getViewerApiBaseUrl()).toBe(BASE);
+      await fetchHealth();
+      expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/health`);
+    } finally {
+      if (originalStorage) {
+        Object.defineProperty(window, "localStorage", originalStorage);
+      }
+    }
   });
 
   it("rejects runtime API URLs with query strings or fragments", () => {
