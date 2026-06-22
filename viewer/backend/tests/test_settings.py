@@ -21,6 +21,8 @@ SETTINGS_ENV_NAMES = (
     "VIEWER_API_CORS_ORIGINS",
     "VIEWER_API_SNAPSHOTS_ROOT",
     "VIEWER_API_ALLOW_UNSAFE_LOCAL_MUTATIONS",
+    "VIEWER_API_MAX_UPLOAD_SIZE",
+    "VIEWER_API_MAX_LOG_ARCHIVE_EXTRACTED_SIZE",
 )
 
 
@@ -109,6 +111,16 @@ class ViewerApiSettingsTests(unittest.TestCase):
             settings = ViewerApiSettings()
 
         self.assertIs(settings.allow_unsafe_local_mutations, True)
+
+    def test_env_parses_log_upload_size_limits(self) -> None:
+        with isolated_settings_env(
+            VIEWER_API_MAX_UPLOAD_SIZE="1024",
+            VIEWER_API_MAX_LOG_ARCHIVE_EXTRACTED_SIZE="2048",
+        ):
+            settings = ViewerApiSettings()
+
+        self.assertEqual(settings.max_upload_size, 1024)
+        self.assertEqual(settings.max_log_archive_extracted_size, 2048)
 
     def test_env_parses_cors_origins_json_array(self) -> None:
         origins = [
