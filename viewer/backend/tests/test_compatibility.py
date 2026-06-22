@@ -81,6 +81,7 @@ EXPECTED_SCHEMA_EXPORTS = [
     "LogExperimentResponse",
     "LogExperimentsResponse",
     "LogExperimentDeleteResponse",
+    "LogArchiveImportResponse",
     "LogMediaRequest",
     "LogImageSummaryResponse",
     "LogTextSummaryResponse",
