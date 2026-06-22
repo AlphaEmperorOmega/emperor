@@ -18,6 +18,10 @@ TRAINER_LOG_EVERY_N_STEPS: int = 50
 TRAINER_ENABLE_PROGRESS_BAR: bool = False
 TRAINER_PROFILER: str | None = None
 
+# Run/data configuration
+DATA_NUM_WORKERS: int = 4
+RUN_TEST_AFTER_FIT: bool = True
+
 # Callback configuration
 CALLBACK_EARLY_STOPPING_PATIENCE: int = 0
 CALLBACK_EARLY_STOPPING_METRIC: str = "validation/accuracy"

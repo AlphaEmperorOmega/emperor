@@ -290,7 +290,7 @@ class ExperimentPresetsBase:
         }
 
     def _model_config_overrides(self, config_overrides: dict | None = None) -> dict:
-        ignored_prefixes = ("trainer_", "callback_")
+        ignored_prefixes = ("trainer_", "callback_", "data_", "run_")
         ignored_keys = {"num_epochs"}
         return {
             key: value
@@ -649,6 +649,32 @@ class ExperimentBase:
     def _trainer_config_value(self, config, config_overrides: dict, key: str, default=None):
         return config_overrides.get(key.lower(), getattr(config, key, default))
 
+    def _load_runtime_config(self, config_overrides: dict | None = None) -> dict:
+        package = type(self.preset_generator).__module__.rsplit(".", 1)[0]
+        try:
+            config = importlib.import_module(f"{package}.config")
+        except ModuleNotFoundError as exc:
+            if exc.name != f"{package}.config":
+                raise
+            config = None
+        config_overrides = config_overrides or {}
+
+        def runtime_value(key: str, default):
+            if config is None:
+                return config_overrides.get(key.lower(), default)
+            return self._trainer_config_value(config, config_overrides, key, default)
+
+        return {
+            "data_num_workers": runtime_value("DATA_NUM_WORKERS", None),
+            "run_test_after_fit": runtime_value("RUN_TEST_AFTER_FIT", True),
+        }
+
+    def _configure_dataset(self, dataset, runtime_config: dict) -> None:
+        data_num_workers = runtime_config.get("data_num_workers")
+        if data_num_workers is None or not hasattr(dataset, "num_workers"):
+            return
+        dataset.num_workers = int(data_num_workers)
+
     def _trainer_args(self, config, config_overrides: dict) -> dict:
         trainer_args = {}
         for key, value in vars(config).items():
@@ -814,7 +840,9 @@ class ExperimentBase:
         best_results: dict,
     ) -> None:
         trainer_config = self._load_trainer_config(training_run.config_overrides)
+        runtime_config = self._load_runtime_config(training_run.config_overrides)
         dataset = training_run.dataset_type(batch_size=training_run.config.batch_size)
+        self._configure_dataset(dataset, runtime_config)
         model = self.model_type(cfg=training_run.config)
         logger = TensorBoardLogger(
             save_dir="logs",
@@ -835,7 +863,8 @@ class ExperimentBase:
         )
         try:
             trainer.fit(model, datamodule=dataset)
-            trainer.test(model, datamodule=dataset)
+            if runtime_config["run_test_after_fit"]:
+                trainer.test(model, datamodule=dataset)
         except Exception as exc:
             self._emit_training_error(training_run, exc, callbacks)
             raise

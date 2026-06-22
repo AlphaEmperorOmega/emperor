@@ -38,6 +38,7 @@ class FakeDatasetA:
 
     def __init__(self, batch_size):
         self.batch_size = batch_size
+        self.num_workers = 4
 
 
 class FakeDatasetB:
@@ -46,6 +47,7 @@ class FakeDatasetB:
 
     def __init__(self, batch_size):
         self.batch_size = batch_size
+        self.num_workers = 4
 
 
 class FakeOption(Enum):
@@ -85,6 +87,8 @@ class FakeLogger:
 
 
 class FakeTrainer:
+    instances = []
+
     def __init__(self, max_epochs, logger, callbacks, **kwargs):
         self.max_epochs = max_epochs
         self.logger = logger
@@ -92,6 +96,7 @@ class FakeTrainer:
         self.callback_metrics = {"validation_accuracy": FakeMetric(0.75)}
         self.current_epoch = 1
         self.global_step = 2
+        type(self).instances.append(self)
 
     def fit(self, model, datamodule):
         self.model = model
@@ -163,6 +168,7 @@ class TestExperimentTraining(unittest.TestCase):
         self.tempdir = tempfile.TemporaryDirectory()
         self.original_cwd = os.getcwd()
         os.chdir(self.tempdir.name)
+        FakeTrainer.instances.clear()
         self.original_trainer = experiments_base.Trainer
         self.original_logger = experiments_base.TensorBoardLogger
         experiments_base.Trainer = FakeTrainer
@@ -195,6 +201,36 @@ class TestExperimentTraining(unittest.TestCase):
         self.assertEqual(
             experiment.preset_generator.seen_presets,
             ["GATING", "BASELINE"],
+        )
+
+    def test_data_num_workers_override_updates_datamodule(self):
+        experiment = FakeExperiment(FakeOption.BASELINE)
+
+        experiment.train_model(
+            selected_datasets=[FakeDatasetA],
+            config_overrides={"data_num_workers": 0},
+        )
+
+        self.assertEqual(FakeTrainer.instances[0].fit_datamodule.num_workers, 0)
+
+    def test_run_test_after_fit_override_skips_test_phase(self):
+        experiment = FakeExperiment(FakeOption.BASELINE)
+
+        experiment.train_model(
+            selected_datasets=[FakeDatasetA],
+            config_overrides={"run_test_after_fit": False},
+        )
+
+        self.assertFalse(hasattr(FakeTrainer.instances[0], "test_datamodule"))
+
+    def test_run_test_after_fit_defaults_to_enabled(self):
+        experiment = FakeExperiment(FakeOption.BASELINE)
+
+        experiment.train_model(selected_datasets=[FakeDatasetA])
+
+        self.assertIs(
+            FakeTrainer.instances[0].test_datamodule,
+            FakeTrainer.instances[0].fit_datamodule,
         )
 
     def test_materialized_run_sets_progress_context_and_events(self):

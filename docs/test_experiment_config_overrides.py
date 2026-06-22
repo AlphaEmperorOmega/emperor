@@ -3,6 +3,7 @@ from dataclasses import fields
 import unittest
 
 import models.linears.linear.config as linear_config
+import models.linears.linear_adaptive.config as linear_adaptive_config
 import models.transformer_encoder.bert_linear.config as bert_linear_config
 import models.transformer_encoder.vit_linear.config as vit_linear_config
 from emperor.augmentations.adaptive_parameters.core.monitor import (
@@ -205,6 +206,10 @@ class TestExperimentConfigOverrideParsing(
                 "false",
                 "--trainer-accelerator",
                 "mps",
+                "--data-num-workers",
+                "0",
+                "--run-test-after-fit",
+                "false",
             ]
         )
 
@@ -212,6 +217,8 @@ class TestExperimentConfigOverrideParsing(
 
         self.assertIs(mode.config_overrides["bias_flag"], False)
         self.assertEqual(mode.config_overrides["trainer_accelerator"], "mps")
+        self.assertEqual(mode.config_overrides["data_num_workers"], 0)
+        self.assertIs(mode.config_overrides["run_test_after_fit"], False)
         self.assertEqual(mode.search_overrides, {})
 
     def test_config_marker_only_groups_overrides(self):
@@ -531,6 +538,40 @@ class TestExperimentConfigOverrideApplication(unittest.TestCase):
         self.assertNotIn(EarlyStopping, callback_types)
         self.assertNotIn(AdaptiveParameterMonitorCallback, callback_types)
         self.assertEqual(trainer_config["trainer_args"]["devices"], 1)
+
+    def test_runtime_overrides_are_not_passed_to_model_builder(self):
+        cfg = ExperimentPresets().get_config(
+            ExperimentPreset.SINGLE_MODEL_WEIGHT,
+            Mnist,
+            config_overrides={
+                "data_num_workers": 0,
+                "run_test_after_fit": False,
+            },
+        )[0]
+
+        self.assertIsNotNone(cfg.experiment_config)
+
+    def test_runtime_config_reads_defaults_and_overrides(self):
+        experiment = Experiment(ExperimentPreset.SINGLE_MODEL_WEIGHT)
+
+        defaults = experiment._load_runtime_config({})
+        overrides = experiment._load_runtime_config(
+            {
+                "data_num_workers": 0,
+                "run_test_after_fit": False,
+            }
+        )
+
+        self.assertEqual(
+            defaults["data_num_workers"],
+            linear_adaptive_config.DATA_NUM_WORKERS,
+        )
+        self.assertIs(
+            defaults["run_test_after_fit"],
+            linear_adaptive_config.RUN_TEST_AFTER_FIT,
+        )
+        self.assertEqual(overrides["data_num_workers"], 0)
+        self.assertIs(overrides["run_test_after_fit"], False)
 
 
 if __name__ == "__main__":
