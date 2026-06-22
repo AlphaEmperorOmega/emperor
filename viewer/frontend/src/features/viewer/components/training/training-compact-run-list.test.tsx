@@ -77,6 +77,12 @@ function plan(runs: TrainingRun[]): TrainingRunPlan {
   };
 }
 
+function commandBlock(commands: string[]) {
+  return ["(", "  set -e", ...commands.map((command) => `  ${command}`), ")"].join(
+    "\n",
+  );
+}
+
 describe("TrainingCompactRunList", () => {
   it("renders draft, running, completed, failed, and cancelled states", () => {
     render(
@@ -120,15 +126,21 @@ describe("TrainingCompactRunList", () => {
     ).toBeInTheDocument();
   });
 
-  it("opens command and full-error dialogs", async () => {
+  it("opens and copies per-run command and full-error dialogs", async () => {
     const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    const trainingCommand = "source experiment.sh --model linear --preset baseline";
     render(
       <TrainingCompactRunList
         plan={plan([
           run({
             index: 1,
             status: "Failed",
-            command: "source experiment.sh --model linear --preset baseline",
+            command: trainingCommand,
             error: "training failed",
             errorTraceback: "Traceback\nRuntimeError: training failed",
           }),
@@ -141,7 +153,15 @@ describe("TrainingCompactRunList", () => {
       name: "Training Command",
     });
     expect(within(commandDialog).getByLabelText("Training command"))
-      .toHaveValue("source experiment.sh --model linear --preset baseline");
+      .toHaveValue(trainingCommand);
+
+    await user.click(
+      within(commandDialog).getByRole("button", { name: "Copy Command" }),
+    );
+    expect(writeText).toHaveBeenCalledWith(trainingCommand);
+    expect(within(commandDialog).getByRole("status")).toHaveTextContent(
+      "Command copied",
+    );
 
     await user.click(
       within(commandDialog).getByRole("button", {
@@ -153,6 +173,120 @@ describe("TrainingCompactRunList", () => {
     const errorDialog = screen.getByRole("dialog", { name: "Training Error" });
     expect(within(errorDialog).getByText(/RuntimeError: training failed/))
       .toBeInTheDocument();
+  });
+
+  it("shows a visible header button for all training commands", () => {
+    render(<TrainingCompactRunList plan={plan([run()])} />);
+
+    const title = screen.getByText("Training Runs");
+    const header = title.closest("div")?.parentElement;
+    if (!(header instanceof HTMLElement)) {
+      throw new Error("Expected Training Runs header");
+    }
+
+    const commandsButton = within(header).getByRole("button", {
+      name: "Commands",
+    });
+
+    expect(commandsButton).toBeInTheDocument();
+    expect(commandsButton).toHaveTextContent("Commands");
+    expect(
+      within(header).queryByRole("button", {
+        name: "Copy all training commands",
+      }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens an all-commands dialog with runnable commands in order", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    const firstCommand =
+      "source experiment.sh --model linear --preset baseline --datasets Mnist";
+    const secondCommand =
+      "source experiment.sh --model linear --preset wide --datasets Cifar10";
+
+    render(
+      <TrainingCompactRunList
+        plan={plan([
+          run({ index: 1, command: firstCommand }),
+          run({ index: 2, command: "" }),
+          run({ index: 3, command: "   " }),
+          run({ index: 4, command: secondCommand }),
+        ])}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Commands" }));
+
+    expect(writeText).not.toHaveBeenCalled();
+    const dialog = screen.getByRole("dialog", { name: "Training Commands" });
+    const expected = commandBlock([firstCommand, secondCommand]);
+    expect(within(dialog).getByLabelText("Training commands")).toHaveValue(expected);
+
+    await user.click(
+      within(dialog).getByRole("button", { name: "Copy Commands" }),
+    );
+
+    expect(writeText).toHaveBeenCalledTimes(1);
+    expect(writeText).toHaveBeenCalledWith(expected);
+    expect(within(dialog).getByRole("status")).toHaveTextContent(
+      "Commands copied",
+    );
+  });
+
+  it("includes planned commands even when their rows are hidden by the compact limit", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    const hiddenCommand =
+      "source experiment.sh --model linear --preset hidden --datasets HeldOut";
+    const runs = Array.from({ length: 161 }, (_, index) =>
+      run({
+        index: index + 1,
+        command:
+          index === 160
+            ? hiddenCommand
+            : `source experiment.sh --model linear --preset visible-${index + 1}`,
+      }),
+    );
+
+    render(<TrainingCompactRunList plan={plan(runs)} />);
+
+    await user.click(screen.getByRole("button", { name: "Commands" }));
+
+    expect(screen.getByText(/Showing 160 of 161 planned runs/)).toBeInTheDocument();
+    const dialog = screen.getByRole("dialog", { name: "Training Commands" });
+    expect(
+      (within(dialog).getByLabelText("Training commands") as HTMLTextAreaElement).value,
+    ).toContain(hiddenCommand);
+
+    await user.click(
+      within(dialog).getByRole("button", { name: "Copy Commands" }),
+    );
+
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining(hiddenCommand));
+  });
+
+  it("omits the copy-all action when there are no runnable commands", () => {
+    render(
+      <TrainingCompactRunList
+        plan={plan([
+          run({ index: 1, command: "" }),
+          run({ index: 2, command: undefined as unknown as string }),
+        ])}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: "Commands" }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows draft remove actions only when valid", async () => {
