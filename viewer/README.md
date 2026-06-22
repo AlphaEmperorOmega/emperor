@@ -99,6 +99,19 @@ files or processes:
 export VIEWER_API_ALLOW_UNSAFE_LOCAL_MUTATIONS=true
 ```
 
+## Import Logs
+
+Use `download_logs.sh` from a project directory to create a log archive, then
+open the Viewer and choose **Import Logs** in the top navigation. The backend
+extracts the archive into that project's `logs/` root and skips files that
+already exist.
+
+Importing logs is a local file mutation, so hosted or read-only backends keep it
+disabled unless `VIEWER_API_ALLOW_UNSAFE_LOCAL_MUTATIONS=true` is set. The
+backend advertises upload support and the maximum upload size through
+`/capabilities`; adjust `VIEWER_API_MAX_UPLOAD_SIZE` only when larger local
+archives are intentionally allowed.
+
 ## Test
 
 Backend:
