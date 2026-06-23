@@ -85,7 +85,7 @@ function graphPreviewCompositionInput({
  * Cross-slice cascade rules are named here; domain state stays in extracted hooks.
  */
 export function useViewerState(options: ViewerStateOptions = {}) {
-  const { activeWorkspace = "model", onJobStarted } = options;
+  const { onJobStarted } = options;
 
   const graphPreview = useGraphPreviewController();
   const historicalRunSelection = useHistoricalRunSelectionState();
@@ -99,7 +99,6 @@ export function useViewerState(options: ViewerStateOptions = {}) {
 
   const activeTrainingJobState = useActiveTrainingJobState({ onJobStarted });
   const historicalTagsEnabled =
-    activeWorkspace === "logs" ||
     targetConfig.target.selectedTargetMode === "experiment" ||
     historicalRunSelection.selectedLogRunId !== null;
   const historicalRuns = useHistoricalRunsState({

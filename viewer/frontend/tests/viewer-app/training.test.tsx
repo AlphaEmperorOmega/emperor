@@ -2308,7 +2308,15 @@ describe("ViewerApp Training And Preview", () => {
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
 
-    expect(await screen.findByLabelText("Experiments fresh_run")).toBeChecked();
+    await user.click(await screen.findByRole("combobox", { name: /^experiments\b/i }));
+    const experimentsList = await screen.findByRole("listbox", {
+      name: "Experiments options",
+    });
+    expect(
+      await within(experimentsList).findByRole("option", {
+        name: /^fresh_run\b/i,
+      }),
+    ).toHaveAttribute("aria-selected", "true");
   });
 
   it("Full config Update Preview sends a new inspect request for the same selection", async () => {

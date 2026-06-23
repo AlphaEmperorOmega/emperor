@@ -132,6 +132,7 @@ export function countGroupedLogScalarSeries(
 
 export function deriveLogsChartEmptyState({
   expandedSelectedTagCount,
+  confusionMatrixTagCount,
   hasEventFiles,
   runsLoading,
   scalarLoading,
@@ -139,9 +140,11 @@ export function deriveLogsChartEmptyState({
   selectedTagCount,
   tagOptionCount,
   tagsLoading,
+  tagsRefreshing,
   visibleRunCount,
 }: {
   expandedSelectedTagCount: number;
+  confusionMatrixTagCount: number;
   hasEventFiles: boolean;
   runsLoading: boolean;
   scalarLoading: boolean;
@@ -149,10 +152,12 @@ export function deriveLogsChartEmptyState({
   selectedTagCount: number;
   tagOptionCount: number;
   tagsLoading: boolean;
+  tagsRefreshing: boolean;
   visibleRunCount: number;
 }): LogsChartEmptyState | null {
   let title = "";
   let detail = "";
+  const hasConfusionMatrixTags = confusionMatrixTagCount > 0;
 
   if (runsLoading) {
     title = "Scanning logs";
@@ -163,10 +168,13 @@ export function deriveLogsChartEmptyState({
   } else if (tagsLoading) {
     title = "Reading TensorBoard tags";
     detail = "Collecting scalar tags from the selected runs.";
-  } else if (tagOptionCount === 0) {
+  } else if (tagsRefreshing && selectedSeriesCount === 0) {
+    title = "Refreshing TensorBoard tags";
+    detail = "Collecting scalar tags from the selected runs.";
+  } else if (tagOptionCount === 0 && !hasConfusionMatrixTags) {
     title = "No TensorBoard scalars";
     detail = "The selected runs do not contain scalar event data.";
-  } else if (selectedTagCount === 0) {
+  } else if (selectedTagCount === 0 && !hasConfusionMatrixTags) {
     title = "No scalar tags selected";
     detail = "Select one or more scalar tags to draw historical charts.";
   } else if (expandedSelectedTagCount === 0) {
@@ -189,7 +197,7 @@ export function deriveLogsChartEmptyState({
   return {
     title,
     detail,
-    busy: runsLoading || tagsLoading || scalarLoading,
+    busy: runsLoading || tagsLoading || tagsRefreshing || scalarLoading,
   };
 }
 
@@ -228,6 +236,8 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
   const [yScale, setYScale] = useState<ScalarYScale>("linear");
   const [isValidationExamplesCollapsed, setIsValidationExamplesCollapsed] =
     useState(true);
+  const [isConfusionMatrixCollapsed, setIsConfusionMatrixCollapsed] =
+    useState(true);
   const [validationExamplesVisible, setValidationExamplesVisible] = useState(false);
   const toggleValidationExamples = useCallback(() => {
     if (isValidationExamplesCollapsed) {
@@ -237,6 +247,10 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
   }, [isValidationExamplesCollapsed]);
   const markValidationExamplesVisible = useCallback(
     () => setValidationExamplesVisible(true),
+    [],
+  );
+  const toggleConfusionMatrix = useCallback(
+    () => setIsConfusionMatrixCollapsed((previous) => !previous),
     [],
   );
   const selectedTagsByGroup = useMemo(
@@ -300,6 +314,20 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
       visibleRunIds: state.visibleRunIds,
     }),
   );
+  const confusionMatrixScalarQueryActive =
+    state.enabled &&
+    !tagsAreRefreshing &&
+    !isConfusionMatrixCollapsed &&
+    state.visibleRunIds.length > 0 &&
+    state.confusionMatrixRateTags.length > 0;
+  const confusionMatrixScalarQuery = useLogScalarsQuery(
+    buildLogScalarQueryInput({
+      enabled: confusionMatrixScalarQueryActive,
+      group: "confusion-matrix",
+      selectedTagList: state.confusionMatrixRateTags,
+      visibleRunIds: state.visibleRunIds,
+    }),
+  );
   const scalarQueryEntries = [
     {
       query: trainScalarQuery,
@@ -331,6 +359,12 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
   const activeScalarQueries = scalarQueryEntries
     .filter((entry) => entry.active)
     .map((entry) => entry.query);
+  const confusionMatrixQueryState = scopedScalarQueryState(
+    scalarQuerySnapshot(
+      confusionMatrixScalarQuery,
+      confusionMatrixScalarQueryActive,
+    ),
+  );
   const mediaTags = useMemo(
     () => selectValidationExampleMediaTags(state.tagsQuery.data),
     [state.tagsQuery.data],
@@ -371,6 +405,10 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
     () => groupLogScalarSeriesByTag(scalarSeries ?? []),
     [scalarSeries],
   );
+  const confusionMatrixSeriesByTag = useMemo(
+    () => groupLogScalarSeriesByTag(confusionMatrixScalarQuery.data?.series ?? []),
+    [confusionMatrixScalarQuery.data?.series],
+  );
   const visibleRunsById = useMemo(
     () => runsById(state.visibleRuns),
     [state.visibleRuns],
@@ -408,12 +446,17 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
   const confusionHeatmaps = useMemo(
     () =>
       buildConfusionMatrixHeatmaps({
-        selectedTagList: state.selectedTagList,
-        seriesByTag,
+        matrixTagList: state.confusionMatrixRateTags,
+        seriesByTag: confusionMatrixSeriesByTag,
         runsById: visibleRunsById,
         runOrder: state.visibleRunIds,
       }),
-    [seriesByTag, state.selectedTagList, state.visibleRunIds, visibleRunsById],
+    [
+      confusionMatrixSeriesByTag,
+      state.confusionMatrixRateTags,
+      state.visibleRunIds,
+      visibleRunsById,
+    ],
   );
   const validationMedia = useMemo(
     () =>
@@ -425,13 +468,18 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
   );
   const emptyState = deriveLogsChartEmptyState({
     expandedSelectedTagCount,
+    confusionMatrixTagCount: state.confusionMatrixRateTags.length,
     hasEventFiles: state.visibleRuns.some((run) => run.eventFileCount > 0),
     runsLoading: state.runsQuery.isLoading,
     scalarLoading: activeScalarQueries.some((query) => query.isLoading),
     selectedSeriesCount: expandedSelectedSeriesCount,
     selectedTagCount: state.selectedTagList.length,
     tagOptionCount: state.tagOptions.length,
-    tagsLoading: state.tagsQuery.isLoading && state.tagOptions.length === 0,
+    tagsLoading:
+      state.tagsQuery.isLoading &&
+      state.tagOptions.length === 0 &&
+      state.confusionMatrixRateTags.length === 0,
+    tagsRefreshing: tagsAreRefreshing,
     visibleRunCount: state.visibleRuns.length,
   });
 
@@ -446,9 +494,17 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
     visibleRunCount: state.visibleRuns.length,
     selectedTagCount: state.selectedTagList.length,
     scalarQueryStates,
+    hasConfusionMatrixTags: state.confusionMatrixRateTags.length > 0,
+    isConfusionMatrixCollapsed,
+    isConfusionMatrixLoaded:
+      confusionMatrixScalarQueryActive && confusionMatrixScalarQuery.isSuccess,
+    isConfusionMatrixLoading: confusionMatrixQueryState.isInitialLoading,
+    isConfusionMatrixError: confusionMatrixQueryState.isError,
+    confusionMatrixError: confusionMatrixQueryState.error,
+    onToggleConfusionMatrix: toggleConfusionMatrix,
     isTagRefreshLoading:
       state.tagsQuery.isFetching &&
-      state.tagOptions.length > 0 &&
+      (state.tagOptions.length > 0 || state.confusionMatrixRateTags.length > 0) &&
       state.visibleRunIds.length > 0,
     collapsedMetricGroups: state.collapsedMetricGroups,
     onToggleMetricGroup: state.toggleMetricGroup,
@@ -462,15 +518,22 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
     onYScaleChange: setYScale,
     isFetching:
       activeScalarQueries.some((query) => query.isFetching) ||
+      confusionMatrixQueryState.isFetching ||
       checkpointQuery.isFetching ||
       mediaQuery.isFetching,
-    isRefreshDisabled: !activeScalarQueries.some(
-      (query) => query.isSuccess || query.isError,
-    ),
+    isRefreshDisabled:
+      !activeScalarQueries.some((query) => query.isSuccess || query.isError) &&
+      !(
+        confusionMatrixScalarQueryActive &&
+        (confusionMatrixScalarQuery.isSuccess || confusionMatrixScalarQuery.isError)
+      ),
     onRefresh: () => {
       activeScalarQueries.forEach((query) => {
         void query.refetch();
       });
+      if (confusionMatrixScalarQueryActive) {
+        void confusionMatrixScalarQuery.refetch();
+      }
       if (hasExpandedCheckpointChart) {
         void checkpointQuery.refetch();
       }

@@ -21,13 +21,12 @@ import {
 import { useLogQueryCache } from "@/features/viewer/state/logs/use-log-query-cache";
 import { logQueryKeys } from "@/lib/query-keys";
 import {
-  COMMON_SCALAR_TAGS,
   buildCountOptions,
   buildExperimentOptions,
+  buildLogScalarTagOptions,
   buildModelCountOptions,
   isDefaultScalarTag,
   type LogMetricGroupKey,
-  runOption,
   selectedOptionsSet,
   setAllValues,
   setNoValues,
@@ -35,27 +34,55 @@ import {
 import {
   addValueToInitializedSelection,
   addValuesToInitializedSelection,
-  buildInitialExperimentSelection,
+  buildExperimentFacetSeedSelections,
+  buildExperimentScalarTagSeedSelection,
   buildInitialRunFacetSelection,
-  buildInitialRunIdSelection,
   buildLogRunDeleteFilters,
   filterVisibleLogRuns,
   nextSelectedDetailRunId,
+  pruneSelectionToAvailableValues,
   pruneDeletedDetailRunId,
   removeStartedExperiment,
   removeValueFromSelection,
-  removeValuesFromSelection,
+  selectionSetOrDefault,
   startedRunSelections,
 } from "@/features/viewer/state/logs/logs-selection-state";
 
 const TARGET_LOG_RUN_LIMIT = 5;
 const CUSTOM_LOG_RUN_LIMIT = 500;
-const LOG_SELECT_ALL_RUN_LIMIT = 100;
 const LOG_SELECT_ALL_TAG_LIMIT = 100;
 const DEFAULT_COLLAPSED_METRIC_GROUPS = new Set<LogMetricGroupKey>([
   "test",
   "other",
 ]);
+
+function emptySelection() {
+  return new Set<string>();
+}
+
+function addPendingExperimentSeed(
+  pendingExperiments: Set<string>,
+  experiment: string,
+) {
+  if (pendingExperiments.has(experiment)) {
+    return pendingExperiments;
+  }
+  const next = new Set(pendingExperiments);
+  next.add(experiment);
+  return next;
+}
+
+function removePendingExperimentSeed(
+  pendingExperiments: Set<string>,
+  experiment: string,
+) {
+  if (!pendingExperiments.has(experiment)) {
+    return pendingExperiments;
+  }
+  const next = new Set(pendingExperiments);
+  next.delete(experiment);
+  return next;
+}
 
 function logDeletionDisabledError() {
   return new Error("Log deletion is disabled by backend capabilities.");
@@ -121,12 +148,22 @@ export function useLogsWorkspaceState({
   const [appliedTargetScopeKey, setAppliedTargetScopeKey] =
     useState(targetScopeKey);
   const [startedExperiments, setStartedExperiments] = useState<Set<string>>(new Set());
-  const [selectedExperiments, setSelectedExperiments] = useState<Set<string> | null>(null);
+  const [selectedExperiments, setSelectedExperiments] = useState<Set<string> | null>(
+    emptySelection,
+  );
   const [selectedDatasets, setSelectedDatasets] = useState<Set<string> | null>(null);
   const [selectedModels, setSelectedModels] = useState<Set<string> | null>(null);
   const [selectedPresets, setSelectedPresets] = useState<Set<string> | null>(null);
-  const [selectedRunIds, setSelectedRunIds] = useState<Set<string> | null>(null);
   const [selectedTags, setSelectedTags] = useState<Set<string> | null>(null);
+  const [pendingExperimentFacetSeeds, setPendingExperimentFacetSeeds] = useState<
+    Set<string>
+  >(new Set());
+  const [pendingExperimentTagSeeds, setPendingExperimentTagSeeds] = useState<
+    Set<string>
+  >(new Set());
+  const [pendingTagSelection, setPendingTagSelection] = useState<"all" | null>(
+    null,
+  );
   const [selectedDetailRunId, setSelectedDetailRunId] = useState<string | null>(null);
   const [collapsedMetricGroups, setCollapsedMetricGroups] = useState<
     Set<LogMetricGroupKey>
@@ -157,8 +194,9 @@ export function useLogsWorkspaceState({
     ],
   );
   const isTargetScopeMode = scopeMode === "target";
+  const canQueryRuns = enabled && (!isTargetScopeMode || hasTargetScope);
   const runsQuery = useLogRunsQuery({
-    enabled,
+    enabled: canQueryRuns,
     filters: isTargetScopeMode ? targetRunFilters : undefined,
     pagination: {
       limit: isTargetScopeMode ? TARGET_LOG_RUN_LIMIT : CUSTOM_LOG_RUN_LIMIT,
@@ -191,12 +229,14 @@ export function useLogsWorkspaceState({
   }, []);
 
   const resetLogSelections = useCallback(() => {
-    setSelectedExperiments(null);
+    setSelectedExperiments(emptySelection());
     setSelectedDatasets(null);
     setSelectedModels(null);
     setSelectedPresets(null);
-    setSelectedRunIds(null);
     setSelectedTags(null);
+    setPendingExperimentFacetSeeds(new Set());
+    setPendingExperimentTagSeeds(new Set());
+    setPendingTagSelection(null);
     setSelectedDetailRunId(null);
     setCollapsedMetricGroups(new Set(DEFAULT_COLLAPSED_METRIC_GROUPS));
   }, []);
@@ -249,16 +289,49 @@ export function useLogsWorkspaceState({
     setSelectedPresets((previous) => {
       return addValuesToInitializedSelection(previous, startedSelections.presets);
     });
-    setSelectedRunIds((previous) => {
-      return addValuesToInitializedSelection(previous, startedSelections.runIds);
-    });
   }, [runs, startedExperiments]);
 
+  useEffect(() => {
+    if (pendingExperimentFacetSeeds.size === 0 || runs.length === 0) {
+      return;
+    }
+    const facetSeeds = buildExperimentFacetSeedSelections({
+      runs,
+      pendingExperiments: pendingExperimentFacetSeeds,
+      selectedDatasets,
+      selectedModels,
+      selectedPresets,
+    });
+    if (facetSeeds.loadedExperiments.size === 0) {
+      return;
+    }
+    setSelectedDatasets((previous) => {
+      return addValuesToInitializedSelection(previous, facetSeeds.datasets);
+    });
+    setSelectedModels((previous) => {
+      return addValuesToInitializedSelection(previous, facetSeeds.models);
+    });
+    setSelectedPresets((previous) => {
+      return addValuesToInitializedSelection(previous, facetSeeds.presets);
+    });
+    setPendingExperimentFacetSeeds((previous) => {
+      const next = new Set(previous);
+      for (const experiment of facetSeeds.loadedExperiments) {
+        next.delete(experiment);
+      }
+      return next.size === previous.size ? previous : next;
+    });
+  }, [
+    pendingExperimentFacetSeeds,
+    runs,
+    selectedDatasets,
+    selectedModels,
+    selectedPresets,
+  ]);
+
   const experimentSet = useMemo(
-    () =>
-      selectedExperiments ??
-      buildInitialExperimentSelection({ experimentOptions, startedExperiments }),
-    [experimentOptions, selectedExperiments, startedExperiments],
+    () => selectedExperiments ?? emptySelection(),
+    [selectedExperiments],
   );
   const experimentRuns = useMemo(
     () => runs.filter((run) => experimentSet.has(run.experiment)),
@@ -276,7 +349,6 @@ export function useLogsWorkspaceState({
     () => buildCountOptions(experimentRuns, "preset"),
     [experimentRuns],
   );
-  const runOptions = useMemo(() => experimentRuns.map(runOption), [experimentRuns]);
 
   const datasetSet = useMemo(
     () => selectedDatasets ?? buildInitialRunFacetSelection(runs, "dataset"),
@@ -290,10 +362,6 @@ export function useLogsWorkspaceState({
     () => selectedPresets ?? buildInitialRunFacetSelection(runs, "preset"),
     [runs, selectedPresets],
   );
-  const runIdSet = useMemo(
-    () => selectedRunIds ?? buildInitialRunIdSelection(runs),
-    [runs, selectedRunIds],
-  );
 
   const visibleRuns = useMemo(
     () =>
@@ -302,9 +370,8 @@ export function useLogsWorkspaceState({
         datasets: datasetSet,
         models: modelSet,
         presets: presetSet,
-        runIds: runIdSet,
       }),
-    [datasetSet, experimentSet, modelSet, presetSet, runIdSet, runs],
+    [datasetSet, experimentSet, modelSet, presetSet, runs],
   );
 
   const visibleRunIds = useMemo(() => visibleRuns.map((run) => run.id), [visibleRuns]);
@@ -314,26 +381,16 @@ export function useLogsWorkspaceState({
     queryKey: logQueryKeys.tagsForRuns(visibleRunIds),
   });
 
-  const tagOptions = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const runTags of tagsQuery.data?.runs ?? []) {
-      for (const tag of runTags.scalarTags) {
-        counts.set(tag, (counts.get(tag) ?? 0) + 1);
-      }
-    }
-    return Array.from(counts, ([value, count]) => ({
-      value,
-      label: value,
-      count,
-    })).sort((a, b) => {
-      const commonA = COMMON_SCALAR_TAGS.indexOf(a.value);
-      const commonB = COMMON_SCALAR_TAGS.indexOf(b.value);
-      if (commonA >= 0 || commonB >= 0) {
-        return (commonA >= 0 ? commonA : 999) - (commonB >= 0 ? commonB : 999);
-      }
-      return a.value.localeCompare(b.value);
-    });
-  }, [tagsQuery.data]);
+  const scalarTagOptions = useMemo(
+    () => buildLogScalarTagOptions(tagsQuery.data?.runs),
+    [tagsQuery.data],
+  );
+  const tagOptions = scalarTagOptions.tagOptions;
+  const confusionMatrixRateTags = scalarTagOptions.confusionMatrixRateTags;
+  const tagOptionValues = useMemo(
+    () => tagOptions.map((option) => option.value),
+    [tagOptions],
+  );
 
   const defaultSelectedTags = useMemo(
     () =>
@@ -345,9 +402,65 @@ export function useLogsWorkspaceState({
     [tagOptions],
   );
   const selectedTagsSet = useMemo(
-    () => selectedTags ?? defaultSelectedTags,
+    () => selectionSetOrDefault(selectedTags, defaultSelectedTags),
     [defaultSelectedTags, selectedTags],
   );
+  const tagDataNeedsFreshOptions =
+    tagsQuery.isFetching ||
+    tagsQuery.isLoading ||
+    Boolean(tagsQuery.isPlaceholderData);
+
+  useEffect(() => {
+    if (
+      pendingExperimentTagSeeds.size === 0 ||
+      visibleRuns.length === 0 ||
+      tagDataNeedsFreshOptions
+    ) {
+      return;
+    }
+    const tagSeeds = buildExperimentScalarTagSeedSelection({
+      visibleRuns,
+      tagRuns: tagsQuery.data?.runs,
+      pendingExperiments: pendingExperimentTagSeeds,
+      selectedTags,
+      tagOptionValues,
+      selectAllLimit: LOG_SELECT_ALL_TAG_LIMIT,
+    });
+    if (tagSeeds.loadedExperiments.size === 0) {
+      return;
+    }
+    if (tagSeeds.selectedTags !== selectedTags) {
+      setSelectedTags(tagSeeds.selectedTags);
+    }
+    setPendingExperimentTagSeeds((previous) => {
+      const next = new Set(previous);
+      for (const experiment of tagSeeds.loadedExperiments) {
+        next.delete(experiment);
+      }
+      return next.size === previous.size ? previous : next;
+    });
+  }, [
+    pendingExperimentTagSeeds,
+    selectedTags,
+    tagDataNeedsFreshOptions,
+    tagOptionValues,
+    tagsQuery.data?.runs,
+    visibleRuns,
+  ]);
+
+  useEffect(() => {
+    if (tagDataNeedsFreshOptions) {
+      return;
+    }
+    if (pendingTagSelection === "all") {
+      setSelectedTags(new Set(tagOptionValues.slice(0, LOG_SELECT_ALL_TAG_LIMIT)));
+      setPendingTagSelection(null);
+      return;
+    }
+    setSelectedTags((previous) =>
+      pruneSelectionToAvailableValues(previous, tagOptionValues),
+    );
+  }, [pendingTagSelection, tagDataNeedsFreshOptions, tagOptionValues]);
 
   useEffect(() => {
     const nextDetailRunId = nextSelectedDetailRunId(selectedDetailRunId, visibleRuns);
@@ -376,15 +489,8 @@ export function useLogsWorkspaceState({
   }, []);
   const selectedRun = visibleRuns.find((run) => run.id === selectedDetailRunId);
   const runDeleteFilters: LogRunDeleteFilters = useMemo(
-    () =>
-      buildLogRunDeleteFilters({
-        experiments: experimentSet,
-        datasets: datasetSet,
-        models: modelSet,
-        presets: presetSet,
-        runIds: runIdSet,
-      }),
-    [datasetSet, experimentSet, modelSet, presetSet, runIdSet],
+    () => buildLogRunDeleteFilters(visibleRuns),
+    [visibleRuns],
   );
   const deleteExperimentMutation = useMutation({
     mutationFn: deleteLogExperiment,
@@ -397,13 +503,6 @@ export function useLogsWorkspaceState({
           value: result.experiment,
         });
       });
-      setSelectedRunIds((previous) => {
-        return removeValuesFromSelection({
-          selection: previous,
-          fallbackValues: runs.map((run) => run.id),
-          values: deletedRunIds,
-        });
-      });
       setSelectedDetailRunId((previous) =>
         pruneDeletedDetailRunId({
           selectedDetailRunId: previous,
@@ -412,6 +511,12 @@ export function useLogsWorkspaceState({
       );
       setStartedExperiments((previous) => {
         return removeStartedExperiment(previous, result.experiment);
+      });
+      setPendingExperimentFacetSeeds((previous) => {
+        return removePendingExperimentSeed(previous, result.experiment);
+      });
+      setPendingExperimentTagSeeds((previous) => {
+        return removePendingExperimentSeed(previous, result.experiment);
       });
       void refreshAfterMutation({ runIds: result.deletedRunIds });
     },
@@ -423,13 +528,6 @@ export function useLogsWorkspaceState({
     mutationFn: deleteLogRuns,
     onSuccess: (result) => {
       const deletedRunIds = new Set(result.deletedRunIds);
-      setSelectedRunIds((previous) => {
-        return removeValuesFromSelection({
-          selection: previous,
-          fallbackValues: runs.map((run) => run.id),
-          values: deletedRunIds,
-        });
-      });
       setSelectedDetailRunId((previous) =>
         pruneDeletedDetailRunId({
           selectedDetailRunId: previous,
@@ -451,15 +549,14 @@ export function useLogsWorkspaceState({
     experimentOptions,
     modelOptions,
     presetOptions,
-    runOptions,
     tagOptions,
+    confusionMatrixRateTags,
     visibleRuns,
     visibleRunIds,
     selectedDatasets: datasetSet,
     selectedExperiments: experimentSet,
     selectedModels: modelSet,
     selectedPresets: presetSet,
-    selectedRunIds: runIdSet,
     selectedTags: selectedTagsSet,
     selectedTagList,
     collapsedMetricGroups,
@@ -506,9 +603,22 @@ export function useLogsWorkspaceState({
     showAllRuns,
     toggleExperiment: (value: string) => {
       markCustomScope();
+      const experimentFallbackValues = experimentOptions.map((option) => option.value);
+      const currentSelection = selectedExperiments ?? new Set(experimentFallbackValues);
+      const isSelectingExperiment = !currentSelection.has(value);
+      setPendingExperimentFacetSeeds((previous) => {
+        return isSelectingExperiment
+          ? addPendingExperimentSeed(previous, value)
+          : removePendingExperimentSeed(previous, value);
+      });
+      setPendingExperimentTagSeeds((previous) => {
+        return isSelectingExperiment
+          ? addPendingExperimentSeed(previous, value)
+          : removePendingExperimentSeed(previous, value);
+      });
       toggleSetValueWithFallback(
         setSelectedExperiments,
-        experimentOptions.map((option) => option.value),
+        experimentFallbackValues,
         value,
       );
     },
@@ -536,29 +646,40 @@ export function useLogsWorkspaceState({
         value,
       );
     },
-    toggleRun: (value: string) => {
-      markCustomScope();
-      toggleSetValueWithFallback(
-        setSelectedRunIds,
-        runOptions.map((option) => option.value),
-        value,
-      );
-    },
-    toggleTag: (value: string) =>
+    toggleTag: (value: string) => {
+      setPendingTagSelection(null);
       toggleSetValueWithFallback(
         setSelectedTags,
         Array.from(defaultSelectedTags),
         value,
-      ),
+      );
+    },
     selectAllExperiments: () => {
       markCustomScope();
+      const experimentValues = experimentOptions.map((option) => option.value);
+      setPendingExperimentFacetSeeds((previous) => {
+        const next = new Set(previous);
+        for (const experiment of experimentValues) {
+          next.add(experiment);
+        }
+        return next;
+      });
+      setPendingExperimentTagSeeds((previous) => {
+        const next = new Set(previous);
+        for (const experiment of experimentValues) {
+          next.add(experiment);
+        }
+        return next;
+      });
       setAllValues(
         setSelectedExperiments,
-        experimentOptions.map((option) => option.value),
+        experimentValues,
       );
     },
     selectNoExperiments: () => {
       markCustomScope();
+      setPendingExperimentFacetSeeds(new Set());
+      setPendingExperimentTagSeeds(new Set());
       setNoValues(setSelectedExperiments);
     },
     selectAllDatasets: () => {
@@ -585,23 +706,20 @@ export function useLogsWorkspaceState({
       markCustomScope();
       setNoValues(setSelectedPresets);
     },
-    selectAllRuns: () => {
-      markCustomScope();
-      setAllValues(
-        setSelectedRunIds,
-        runOptions.slice(0, LOG_SELECT_ALL_RUN_LIMIT).map((option) => option.value),
-      );
-    },
-    selectNoRuns: () => {
-      markCustomScope();
-      setNoValues(setSelectedRunIds);
-    },
-    selectAllTags: () =>
+    selectAllTags: () => {
+      if (tagDataNeedsFreshOptions) {
+        setPendingTagSelection("all");
+        return;
+      }
       setAllValues(
         setSelectedTags,
-        tagOptions.slice(0, LOG_SELECT_ALL_TAG_LIMIT).map((option) => option.value),
-      ),
-    selectNoTags: () => setNoValues(setSelectedTags),
+        tagOptionValues.slice(0, LOG_SELECT_ALL_TAG_LIMIT),
+      );
+    },
+    selectNoTags: () => {
+      setPendingTagSelection(null);
+      setNoValues(setSelectedTags);
+    },
   };
 }
 

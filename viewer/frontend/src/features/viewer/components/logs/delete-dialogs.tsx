@@ -14,7 +14,7 @@ import {
 import { type ChecklistOption } from "@/features/viewer/state/logs/logs-selectors";
 import { errorMessage } from "@/lib/utils";
 
-export type SubsetDeleteKind = "dataset" | "preset";
+export type SubsetDeleteKind = "preset";
 
 export type SubsetDeleteTarget = {
   kind: SubsetDeleteKind;
@@ -177,7 +177,7 @@ export function DeleteSubsetRunsDialog({
   onClose: () => void;
   onConfirm: () => Promise<void>;
 }) {
-  const targetLabel = target.kind === "dataset" ? "Dataset" : "Preset";
+  const targetLabel = "Preset";
   const title = `Delete ${targetLabel}`;
   const runCount = plan?.candidateCount ?? 0;
   const previewCandidates = plan?.candidates.slice(0, 8) ?? [];

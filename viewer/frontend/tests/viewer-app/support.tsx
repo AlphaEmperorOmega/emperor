@@ -1048,6 +1048,111 @@ export function buildLargeLogFixture(count = 64) {
   };
 }
 
+export function buildKaggleLinearLogFixture() {
+  const normalRun = {
+    ...logRunsResponse.runs[0],
+    id: "normal-linear",
+    group: "normal_linear",
+    experiment: "normal_linear",
+    dataset: "Mnist",
+    preset: "BASELINE",
+    runName: "normal_linear_20260601_010203",
+    timestamp: "2026-06-01 01:02:03",
+    relativePath:
+      "normal_linear/linear/BASELINE/Mnist/normal_linear_20260601_010203/version_0",
+    metrics: { "test/accuracy": 0.82 },
+  };
+  const kaggleRuns = [
+    {
+      ...logRunsResponse.runs[0],
+      id: "kaggle-linear-fold-0",
+      group: "kaggle_linear",
+      experiment: "kaggle_linear",
+      dataset: "KaggleDigits",
+      preset: "KAGGLE_LINEAR",
+      runName: "kaggle_linear_fold_0_20260601_020304",
+      timestamp: "2026-06-01 02:03:04",
+      relativePath:
+        "kaggle_linear/linear/KAGGLE_LINEAR/KaggleDigits/kaggle_linear_fold_0_20260601_020304/version_0",
+      metrics: { "test/accuracy": 0.88 },
+    },
+    {
+      ...logRunsResponse.runs[0],
+      id: "kaggle-linear-fold-1",
+      group: "kaggle_linear",
+      experiment: "kaggle_linear",
+      dataset: "KaggleDigits",
+      preset: "KAGGLE_LINEAR",
+      runName: "kaggle_linear_fold_1_20260601_030405",
+      timestamp: "2026-06-01 03:04:05",
+      relativePath:
+        "kaggle_linear/linear/KAGGLE_LINEAR/KaggleDigits/kaggle_linear_fold_1_20260601_030405/version_0",
+      metrics: { "test/accuracy": 0.9 },
+    },
+  ];
+  const runs = [normalRun, ...kaggleRuns];
+  const kaggleTags = ["train/kaggle_logloss", "validation/kaggle_auc"];
+
+  return {
+    kaggleRunIds: kaggleRuns.map((run) => run.id),
+    kaggleTags,
+    normalRunId: normalRun.id,
+    normalTags: ["train/loss", "validation/accuracy"],
+    logRunsResponse: { runs },
+    logExperimentsResponse: {
+      experiments: [
+        { experiment: "normal_linear", runCount: 1, relativePath: "normal_linear" },
+        { experiment: "kaggle_linear", runCount: 2, relativePath: "kaggle_linear" },
+      ],
+    },
+    logTagsByRun: {
+      [normalRun.id]: ["train/loss", "validation/accuracy"],
+      [kaggleRuns[0].id]: kaggleTags,
+      [kaggleRuns[1].id]: kaggleTags,
+    } as Record<string, MockLogTags>,
+    logScalarSeries: [
+      {
+        runId: normalRun.id,
+        tag: "train/loss",
+        points: [
+          { step: 1, wallTime: 1780000000, value: 0.8 },
+          { step: 2, wallTime: 1780000100, value: 0.4 },
+        ],
+      },
+      {
+        runId: normalRun.id,
+        tag: "validation/accuracy",
+        points: [
+          { step: 1, wallTime: 1780000000, value: 0.5 },
+          { step: 2, wallTime: 1780000100, value: 0.72 },
+        ],
+      },
+      ...kaggleRuns.flatMap((run, runIndex) =>
+        kaggleTags.map((tag, tagIndex) => ({
+          runId: run.id,
+          tag,
+          points: [
+            {
+              step: 1,
+              wallTime: 1780000200 + runIndex * 10 + tagIndex,
+              value: tag === "train/kaggle_logloss"
+                ? 0.6 - runIndex / 20
+                : 0.7 + runIndex / 10,
+            },
+            {
+              step: 2,
+              wallTime: 1780000300 + runIndex * 10 + tagIndex,
+              value: tag === "train/kaggle_logloss"
+                ? 0.3 - runIndex / 20
+                : 0.84 + runIndex / 10,
+            },
+          ],
+        })),
+      ),
+    ],
+  };
+}
+
 export function buildSubsetDeleteFixture() {
   const runs = [
     {
@@ -2739,6 +2844,16 @@ export function installFetchMock(
   }> = [];
   const logCheckpointRequests: Array<{ runIds: string[] }> = [];
   const logArtifactRequests: string[] = [];
+  const logRunRequests: Array<{
+    experiments: string[];
+    modelTypes: string[];
+    models: string[];
+    presets: string[];
+    datasets: string[];
+    hasEventFiles: string | null;
+    limit: number;
+    offset: number;
+  }> = [];
   const deleteExperimentRequests: string[] = [];
 	  const deleteRunPlanRequests: Array<{
 	    experiments: string[];
@@ -3293,6 +3408,7 @@ export function installFetchMock(
     if (url.endsWith("/logs/runs") || url.includes("/logs/runs?")) {
       const parsedUrl = new URL(url, "http://testserver");
       const selectedExperiments = parsedUrl.searchParams.getAll("experiment");
+      const selectedModelTypes = parsedUrl.searchParams.getAll("modelType");
       const selectedModels = parsedUrl.searchParams.getAll("model");
       const selectedPresets = parsedUrl.searchParams.getAll("preset");
       const selectedDatasets = parsedUrl.searchParams.getAll("dataset");
@@ -3301,10 +3417,26 @@ export function installFetchMock(
       const limit = Number(
         parsedUrl.searchParams.get("limit") ?? logResponse.runs.length,
       );
+      logRunRequests.push({
+        experiments: selectedExperiments,
+        modelTypes: selectedModelTypes,
+        models: selectedModels,
+        presets: selectedPresets,
+        datasets: selectedDatasets,
+        hasEventFiles,
+        limit,
+        offset,
+      });
       const filteredRuns = logResponse.runs.filter((run) => {
         if (
           selectedExperiments.length > 0 &&
           !selectedExperiments.includes(run.experiment)
+        ) {
+          return false;
+        }
+        if (
+          selectedModelTypes.length > 0 &&
+          !selectedModelTypes.includes(run.modelType)
         ) {
           return false;
         }
@@ -3497,6 +3629,7 @@ export function installFetchMock(
     logMediaRequests,
     logCheckpointRequests,
     logArtifactRequests,
+    logRunRequests,
     deleteExperimentRequests,
     deleteRunPlanRequests,
     deleteRunRequests,
@@ -3910,29 +4043,24 @@ export function commandField(dialog: HTMLElement) {
 }
 
 export function expectLogsChecklistRowSizing(control: HTMLElement) {
-  const label = control.closest("label");
-  const row = label?.parentElement;
-  const optionList = row?.parentElement;
+  const row = control.closest('[role="presentation"]');
+  const optionList = control.closest('[role="listbox"]');
 
   if (
-    !(label instanceof HTMLElement) ||
     !(row instanceof HTMLElement) ||
     !(optionList instanceof HTMLElement)
   ) {
-    throw new Error("Expected the logs checklist option to render in a grid row");
+    throw new Error("Expected the logs filter option to render in a grid row");
   }
 
   expect(Array.from(optionList.classList)).toEqual(
     expect.arrayContaining([
-      "grid",
-      "max-h-64",
-      "auto-rows-max",
-      "content-start",
+      "min-h-0",
       "overflow-y-auto",
     ]),
   );
-  expect(row).toHaveClass("min-h-[44px]");
-  expect(label).toHaveClass("min-h-[44px]");
+  expect(row).toHaveClass("grid", "grid-cols-[minmax(0,1fr)_auto]");
+  expect(control).toHaveClass("grid", "min-w-0");
 }
 
 export function scalarChartGridFor(chart: HTMLElement) {

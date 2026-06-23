@@ -1,7 +1,8 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  buildKaggleLinearLogFixture,
   buildLargeLogFixture,
   buildSubsetDeleteFixture,
   capabilitiesResponse,
@@ -17,21 +18,204 @@ import {
   scalarChartGridFor,
 } from "./support";
 
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function logOptionName(label: string) {
+  return new RegExp(`^${escapeRegExp(label)}(?:\\b|$)`, "i");
+}
+
+async function openLogFilter(user: ReturnType<typeof userEvent.setup>, title: string) {
+  const trigger = await screen.findByRole("combobox", {
+    name: new RegExp(`^${escapeRegExp(title)}\\b`, "i"),
+  });
+  if (trigger.getAttribute("aria-expanded") !== "true") {
+    await user.click(trigger);
+  }
+  return screen.findByRole("listbox", { name: `${title} options` });
+}
+
+function logFilterSection(title: string) {
+  const trigger = screen.getByRole("combobox", {
+    name: new RegExp(`^${escapeRegExp(title)}\\b`, "i"),
+  });
+  const section = trigger.closest("section");
+  if (!(section instanceof HTMLElement)) {
+    throw new Error(`Expected ${title} filter to render inside a section`);
+  }
+  return section;
+}
+
+async function findLogOption(
+  user: ReturnType<typeof userEvent.setup>,
+  title: string,
+  label: string,
+) {
+  const listbox = await openLogFilter(user, title);
+  return within(listbox).findByRole("option", { name: logOptionName(label) });
+}
+
+function queryOpenLogOption(title: string, label: string) {
+  const listbox = screen.queryByRole("listbox", { name: `${title} options` });
+  return listbox
+    ? within(listbox).queryByRole("option", { name: logOptionName(label) })
+    : null;
+}
+
+function expectLogOptionSelected(option: HTMLElement, selected = true) {
+  expect(option).toHaveAttribute("aria-selected", selected ? "true" : "false");
+}
+
+async function expectLogFilterSelection(
+  user: ReturnType<typeof userEvent.setup>,
+  title: string,
+  label: string,
+  selected: boolean,
+) {
+  expectLogOptionSelected(await findLogOption(user, title, label), selected);
+}
+
+async function clickLogOption(
+  user: ReturnType<typeof userEvent.setup>,
+  title: string,
+  label: string,
+) {
+  const option = await findLogOption(user, title, label);
+  await user.click(option);
+  return option;
+}
+
+function makeScrollable(element: HTMLElement) {
+  Object.defineProperty(element, "clientHeight", {
+    configurable: true,
+    value: 180,
+  });
+  Object.defineProperty(element, "scrollHeight", {
+    configurable: true,
+    value: 900,
+  });
+  element.scrollTop = 760;
+}
+
+async function selectAllLogExperiments(user: ReturnType<typeof userEvent.setup>) {
+  await screen.findByRole("combobox", { name: /^Experiments\b/i });
+  const section = logFilterSection("Experiments");
+  await user.click(within(section).getByRole("button", { name: /^all$/i }));
+}
+
+async function selectLogExperiments(
+  user: ReturnType<typeof userEvent.setup>,
+  experiments: string[],
+) {
+  for (const experiment of experiments) {
+    const option = await findLogOption(user, "Experiments", experiment);
+    if (option.getAttribute("aria-selected") !== "true") {
+      await user.click(option);
+    }
+  }
+}
+
 describe("ViewerApp Logs Workspace", () => {
   beforeEach(resetViewerAppTestState);
 
-  it("opens logs scoped to the current target and broadens only through All runs", async () => {
-    const { logScalarRequests } = installFetchMock();
+  it("opens logs without selecting runs or loading TensorBoard data", async () => {
+    const { logScalarRequests, logTagRequests } = installFetchMock();
     renderViewer();
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
 
     expect(await screen.findByText("Historical Scalars")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /current target/i })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /all runs/i })).toBeEnabled();
-    expect(screen.getByLabelText("Experiments test_model")).toBeChecked();
-    expect(screen.getByLabelText("Experiments test_model_2")).toBeChecked();
+    await expectLogFilterSelection(user, "Experiments", "test_model", false);
+    expect(await screen.findByRole("combobox", { name: /^Datasets\b/i }))
+      .toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: /^Runs\b/i })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Datasets Mnist")).not.toBeInTheDocument();
+    expect(await screen.findByText("No runs selected")).toBeInTheDocument();
+    expect(logTagRequests).toHaveLength(0);
+    expect(logScalarRequests).toHaveLength(0);
+
+    await user.click(screen.getByRole("button", { name: /all runs/i }));
+
+    await expectLogFilterSelection(user, "Experiments", "test_model", false);
+    await expectLogFilterSelection(user, "Experiments", "test_model_2", false);
+    expect(screen.getByRole("combobox", { name: /^Datasets\b/i })).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: /^Runs\b/i })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Datasets Mnist")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Datasets Cifar10")).not.toBeInTheDocument();
+    expect(logTagRequests).toHaveLength(0);
+    expect(logScalarRequests).toHaveLength(0);
+  });
+
+  it("keeps log scope controls inside Experiments without summary cards", async () => {
+    installFetchMock();
+    renderViewer();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+    await screen.findByRole("combobox", { name: /^Experiments\b/i });
+
+    const experimentSection = logFilterSection("Experiments");
+    const currentTargetButton = within(experimentSection).getByRole("button", {
+      name: /current target/i,
+    });
+    const allRunsButton = within(experimentSection).getByRole("button", {
+      name: /all runs/i,
+    });
+
+    expect(currentTargetButton).toBeDisabled();
+    expect(allRunsButton).toBeEnabled();
+    expect(screen.queryByText(/^Runs$/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Tags$/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^linear · BASELINE · Mnist$/)).not.toBeInTheDocument();
+
+    await user.click(allRunsButton);
+
+    await waitFor(() => {
+      expect(
+        within(logFilterSection("Experiments")).getByRole("button", {
+          name: /current target/i,
+        }),
+      ).toBeEnabled();
+    });
+  });
+
+  it("opens logs scoped to the current target dataset and broadens through All runs", async () => {
+    const { logRunRequests, logScalarRequests } = installFetchMock();
+    renderViewer();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+
+    expect(await screen.findByText("Historical Scalars")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(logRunRequests).toEqual(
+        expect.arrayContaining([
+          {
+            experiments: [],
+            modelTypes: ["linears"],
+            models: ["linear"],
+            presets: ["BASELINE"],
+            datasets: ["Mnist"],
+            hasEventFiles: "true",
+            limit: 5,
+            offset: 0,
+          },
+        ]),
+      );
+    });
+    const experimentSection = logFilterSection("Experiments");
+    const currentTargetButton = within(experimentSection).getByRole("button", {
+      name: /current target/i,
+    });
+    const allRunsButton = within(experimentSection).getByRole("button", {
+      name: /all runs/i,
+    });
+    expect(currentTargetButton).toBeDisabled();
+    expect(allRunsButton).toBeEnabled();
+    await expectLogFilterSelection(user, "Experiments", "test_model", false);
+    await selectLogExperiments(user, ["test_model"]);
     expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
       .toBeInTheDocument();
     expect(logMetricGroupToggle("Train")).toHaveAttribute("aria-expanded", "true");
@@ -59,7 +243,19 @@ describe("ViewerApp Logs Workspace", () => {
     expect(screen.queryByRole("img", { name: /test\/accuracy scalar chart/i }))
       .not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /all runs/i }));
+    await user.click(allRunsButton);
+    await selectAllLogExperiments(user);
+    await waitFor(() => {
+      expect(logRunRequests).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            datasets: [],
+            limit: 500,
+            offset: 0,
+          }),
+        ]),
+      );
+    });
     await user.click(
       await screen.findByRole("button", { name: /^Test\s+\d+\s+metrics?$/i }),
     );
@@ -90,6 +286,120 @@ describe("ViewerApp Logs Workspace", () => {
     expect(within(detailsPanel as HTMLElement).getByText("test_model_2")).toBeInTheDocument();
     expect(screen.getAllByText("No result.json").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: /start training/i }))
+      .not.toBeInTheDocument();
+  });
+
+  it("filters logs by dataset across tags, scalars, charts, and details", async () => {
+    const runs = [
+      {
+        ...logRunsResponse.runs[0],
+        id: "multi-mnist",
+        group: "multi_dataset",
+        experiment: "multi_dataset",
+        dataset: "Mnist",
+        runName: "multi_mnist_20260601_010203",
+        timestamp: "2026-06-01 01:02:03",
+        relativePath:
+          "multi_dataset/linear/BASELINE/Mnist/multi_mnist_20260601_010203/version_0",
+        metrics: { "test/accuracy": 0.91 },
+      },
+      {
+        ...logRunsResponse.runs[0],
+        id: "multi-cifar",
+        group: "multi_dataset",
+        experiment: "multi_dataset",
+        dataset: "Cifar10",
+        runName: "multi_cifar_20260601_020304",
+        timestamp: "2026-06-01 02:03:04",
+        relativePath:
+          "multi_dataset/linear/BASELINE/Cifar10/multi_cifar_20260601_020304/version_0",
+        metrics: { "test/accuracy": 0.73 },
+      },
+    ];
+    const { logScalarRequests, logTagRequests } = installFetchMock({
+      logRunsResponse: { runs },
+      logExperimentsResponse: {
+        experiments: [
+          { experiment: "multi_dataset", runCount: 2, relativePath: "multi_dataset" },
+        ],
+      },
+      logTagsByRun: {
+        "multi-mnist": ["train/loss", "validation/accuracy"],
+        "multi-cifar": ["train/loss", "validation/accuracy"],
+      },
+      logScalarSeries: [
+        {
+          runId: "multi-mnist",
+          tag: "train/loss",
+          points: [{ step: 1, wallTime: 1780000000, value: 0.44 }],
+        },
+        {
+          runId: "multi-mnist",
+          tag: "validation/accuracy",
+          points: [{ step: 1, wallTime: 1780000000, value: 0.81 }],
+        },
+        {
+          runId: "multi-cifar",
+          tag: "train/loss",
+          points: [{ step: 1, wallTime: 1780000100, value: 0.66 }],
+        },
+        {
+          runId: "multi-cifar",
+          tag: "validation/accuracy",
+          points: [{ step: 1, wallTime: 1780000100, value: 0.59 }],
+        },
+      ],
+    });
+    renderViewer();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+    await user.click(await screen.findByRole("button", { name: /all runs/i }));
+    await selectAllLogExperiments(user);
+
+    expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
+      .toBeInTheDocument();
+    expect(within(logFilterSection("Datasets")).getByText("2 / 2")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(logTagRequests.at(-1)).toEqual({
+        runIds: ["multi-mnist", "multi-cifar"],
+      });
+    });
+
+    await clickLogOption(user, "Datasets", "Mnist");
+
+    await waitFor(() => {
+      expect(logTagRequests.at(-1)).toEqual({ runIds: ["multi-cifar"] });
+    });
+    await waitFor(() => {
+      expect(logScalarRequests).toContainEqual({
+        runIds: ["multi-cifar"],
+        tags: ["validation/accuracy"],
+        maxPoints: 500,
+        sampling: "tail",
+      });
+      expect(logScalarRequests).toContainEqual({
+        runIds: ["multi-cifar"],
+        tags: ["train/loss"],
+        maxPoints: 500,
+        sampling: "tail",
+      });
+    });
+    expect(within(logFilterSection("Datasets")).getByText("1 / 2")).toBeInTheDocument();
+    expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
+      .toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByText(/multi_mnist_20260601_010203/))
+        .not.toBeInTheDocument();
+    });
+    expect(screen.getAllByText(/multi_dataset · Cifar10 · linear · linears · BASELINE/).length)
+      .toBeGreaterThan(0);
+
+    const detailsPanel = screen.getByRole("heading", { name: "Run Details" }).closest("aside");
+    expect(detailsPanel).not.toBeNull();
+    expect(within(detailsPanel as HTMLElement).getByTitle("multi_cifar_20260601_020304"))
+      .toBeInTheDocument();
+    expect(within(detailsPanel as HTMLElement).queryByTitle("multi_mnist_20260601_010203"))
       .not.toBeInTheDocument();
   });
 
@@ -129,6 +439,7 @@ describe("ViewerApp Logs Workspace", () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+    await selectLogExperiments(user, ["test_model"]);
     expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
       .toBeInTheDocument();
 
@@ -157,12 +468,85 @@ describe("ViewerApp Logs Workspace", () => {
     expect(screen.getByText("cat -> dog")).toBeInTheDocument();
   });
 
+  it("loads confusion matrix scalars lazily from hidden matrix rate tags", async () => {
+    const matrixRateTags = [
+      "validation/confusion_matrix/true_class_0/predicted_class_0/rate",
+      "validation/confusion_matrix/true_class_0/predicted_class_1/rate",
+      "validation/confusion_matrix/true_class_1/predicted_class_0/rate",
+      "validation/confusion_matrix/true_class_1/predicted_class_1/rate",
+    ];
+    const matrixCountTags = [
+      "validation/confusion_matrix/true_class_0/predicted_class_0/count",
+      "validation/confusion_matrix/true_class_0/predicted_class_1/count",
+      "validation/confusion_matrix/true_class_1/predicted_class_0/count",
+      "validation/confusion_matrix/true_class_1/predicted_class_1/count",
+    ];
+    const { logScalarRequests } = installFetchMock({
+      logTagsByRun: {
+        "log-mnist": {
+          scalarTags: [...matrixRateTags, ...matrixCountTags],
+          histogramTags: [],
+          imageTags: [],
+          textTags: [],
+        },
+      },
+      logScalarSeries: matrixRateTags.map((tag, index) => ({
+        runId: "log-mnist",
+        tag,
+        points: [
+          {
+            step: 4,
+            wallTime: 1780000010 + index,
+            value: [0.8, 0.2, 0.1, 0.9][index],
+          },
+        ],
+      })),
+    });
+    renderViewer();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+    await selectLogExperiments(user, ["test_model"]);
+
+    const matrixToggle = await screen.findByRole("button", {
+      name: /^Confusion Matrix\s+Available$/i,
+    });
+    expect(matrixToggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("No scalar tags selected")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(`Scalar Tags ${matrixRateTags[0]}`))
+      .not.toBeInTheDocument();
+    expect(screen.queryByLabelText(`Scalar Tags ${matrixCountTags[0]}`))
+      .not.toBeInTheDocument();
+    expect(logScalarRequests).toHaveLength(0);
+
+    await user.click(matrixToggle);
+
+    await waitFor(() => {
+      expect(logScalarRequests).toHaveLength(1);
+    });
+    expect(logScalarRequests[0]).toEqual({
+      runIds: ["log-mnist"],
+      tags: [...matrixRateTags].sort((a, b) => a.localeCompare(b)),
+      maxPoints: 500,
+      sampling: "tail",
+    });
+    expect(
+      await screen.findByRole("img", {
+        name: /validation confusion matrix for aaa_20260601_010203/i,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: /^Confusion Matrix\s+1 matrix$/i }),
+    ).toHaveAttribute("aria-expanded", "true");
+  });
+
   it("collapses logs metric groups without changing selected tags or refetching scalars", async () => {
     const { logScalarRequests } = installFetchMock();
     renderViewer();
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+    await selectLogExperiments(user, ["test_model"]);
 
     expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
       .toBeInTheDocument();
@@ -179,7 +563,7 @@ describe("ViewerApp Logs Workspace", () => {
     });
     expect(screen.queryByRole("img", { name: /train\/loss scalar chart/i }))
       .not.toBeInTheDocument();
-    expect(screen.getByLabelText("Scalar Tags train/loss")).toBeChecked();
+    await expectLogFilterSelection(user, "Scalar Tags", "train/loss", true);
     expect(logScalarRequests).toHaveLength(2);
 
     await user.click(logMetricGroupToggle("Test"));
@@ -189,7 +573,7 @@ describe("ViewerApp Logs Workspace", () => {
     });
     expect(await screen.findByRole("table", { name: /test\/accuracy test leaderboard/i }))
       .toBeInTheDocument();
-    expect(screen.getByLabelText("Scalar Tags test/accuracy")).toBeChecked();
+    await expectLogFilterSelection(user, "Scalar Tags", "test/accuracy", true);
     await waitFor(() => {
       expect(logScalarRequests).toHaveLength(3);
     });
@@ -222,6 +606,7 @@ describe("ViewerApp Logs Workspace", () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+    await selectLogExperiments(user, ["test_model"]);
     expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
       .toBeInTheDocument();
 
@@ -309,10 +694,14 @@ describe("ViewerApp Logs Workspace", () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+    await openLogFilter(user, "Experiments");
+    await user.type(await screen.findByLabelText(/^search experiments$/i), "test_model");
+    await selectLogExperiments(user, ["test_model"]);
     expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
       .toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /all runs/i }));
+    await selectAllLogExperiments(user);
 
     await waitFor(() => {
       expect(
@@ -337,6 +726,7 @@ describe("ViewerApp Logs Workspace", () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+    await selectLogExperiments(user, ["test_model"]);
 
     const detailsPanel = screen.getByRole("heading", { name: "Run Details" }).closest("aside");
     expect(detailsPanel).not.toBeNull();
@@ -443,7 +833,8 @@ describe("ViewerApp Logs Workspace", () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
-    await user.click(screen.getByRole("button", { name: /all runs/i }));
+    await user.click(await screen.findByRole("button", { name: /all runs/i }));
+    await selectAllLogExperiments(user);
 
     const detailsPanel = screen.getByRole("heading", { name: "Run Details" }).closest("aside");
     expect(detailsPanel).not.toBeNull();
@@ -492,11 +883,16 @@ describe("ViewerApp Logs Workspace", () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+    await selectLogExperiments(user, ["test_model"]);
     expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
       .toBeInTheDocument();
 
-    const otherTag = screen.getByLabelText("Scalar Tags main_model.0.model/weights/mean");
-    expect(otherTag).not.toBeChecked();
+    const otherTag = await findLogOption(
+      user,
+      "Scalar Tags",
+      "main_model.0.model/weights/mean",
+    );
+    expectLogOptionSelected(otherTag, false);
     await user.click(otherTag);
 
     const otherToggle = await screen.findByRole("button", {
@@ -519,6 +915,7 @@ describe("ViewerApp Logs Workspace", () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+    await selectLogExperiments(user, ["test_model"]);
     expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
       .toBeInTheDocument();
     expect(await screen.findByRole("img", { name: /train\/loss scalar chart/i }))
@@ -537,7 +934,7 @@ describe("ViewerApp Logs Workspace", () => {
     expect(trainToggle).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByRole("img", { name: /train\/loss scalar chart/i }))
       .not.toBeInTheDocument();
-    expect(screen.getByLabelText("Scalar Tags train/loss")).toBeChecked();
+    await expectLogFilterSelection(user, "Scalar Tags", "train/loss", true);
   });
 
   it("sorts test loss leaderboards ascending", async () => {
@@ -564,6 +961,7 @@ describe("ViewerApp Logs Workspace", () => {
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
     await user.click(screen.getByRole("button", { name: /all runs/i }));
+    await selectAllLogExperiments(user);
     await user.click(logMetricGroupToggle("Test"));
 
     const lossLeaderboard = await screen.findByRole("table", {
@@ -585,6 +983,7 @@ describe("ViewerApp Logs Workspace", () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+    await selectLogExperiments(user, ["test_model"]);
 
     const chart = await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i });
     const chartGrid = scalarChartGridFor(chart);
@@ -640,6 +1039,7 @@ describe("ViewerApp Logs Workspace", () => {
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
     await user.click(screen.getByRole("button", { name: /all runs/i }));
+    await selectAllLogExperiments(user);
     expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
       .toBeInTheDocument();
     expect(await screen.findByRole("img", { name: /train\/loss scalar chart/i }))
@@ -652,21 +1052,21 @@ describe("ViewerApp Logs Workspace", () => {
       screen.getAllByText(/test_model_2 · Cifar10 · linear · linears · BASELINE · 2026-06-01 02:03:04/).length,
     ).toBeGreaterThan(0);
 
-    await user.click(screen.getByLabelText("Experiments test_model"));
+    await clickLogOption(user, "Experiments", "test_model");
 
     await waitFor(() => {
       expect(screen.queryByText(/test_model · Mnist · linear · linears · BASELINE · 2026-06-01 01:02:03/))
         .not.toBeInTheDocument();
     });
-    const datasetSection = screen.getByLabelText("Datasets Cifar10").closest("section");
-    expect(datasetSection).not.toBeNull();
-    expect(within(datasetSection as HTMLElement).getByText("1 / 1")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Datasets Mnist")).not.toBeInTheDocument();
+    const datasetSection = logFilterSection("Datasets");
+    expect(within(datasetSection).getByText("1 / 1")).toBeInTheDocument();
+    await expectLogFilterSelection(user, "Datasets", "Cifar10", true);
+    expect(queryOpenLogOption("Datasets", "Mnist")).not.toBeInTheDocument();
     expect(
       screen.getAllByText(/test_model_2 · Cifar10 · linear · linears · BASELINE · 2026-06-01 02:03:04/).length,
     ).toBeGreaterThan(0);
 
-    await user.click(screen.getByLabelText("Scalar Tags validation/accuracy"));
+    await clickLogOption(user, "Scalar Tags", "validation/accuracy");
 
     await waitFor(() => {
       expect(screen.queryByRole("img", { name: /validation\/accuracy scalar chart/i }))
@@ -675,16 +1075,15 @@ describe("ViewerApp Logs Workspace", () => {
     expect(screen.getByRole("img", { name: /train\/loss scalar chart/i }))
       .toBeInTheDocument();
 
-    await user.click(screen.getByLabelText("Scalar Tags test/accuracy"));
+    await clickLogOption(user, "Scalar Tags", "test/accuracy");
 
     await waitFor(() => {
       expect(screen.queryByRole("table", { name: /test\/accuracy test leaderboard/i }))
         .not.toBeInTheDocument();
     });
 
-    const experimentSection = screen.getByLabelText("Experiments test_model_2").closest("section");
-    expect(experimentSection).not.toBeNull();
-    await user.click(within(experimentSection as HTMLElement).getByRole("button", { name: /^none$/i }));
+    const experimentSection = logFilterSection("Experiments");
+    await user.click(within(experimentSection).getByRole("button", { name: /^none$/i }));
 
     expect(await screen.findByText("No runs selected")).toBeInTheDocument();
   });
@@ -730,6 +1129,7 @@ describe("ViewerApp Logs Workspace", () => {
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
     await user.click(screen.getByRole("button", { name: /all runs/i }));
+    await selectAllLogExperiments(user);
 
     await waitFor(() => {
       expect(logCheckpointRequests.at(-1)).toEqual({
@@ -737,7 +1137,7 @@ describe("ViewerApp Logs Workspace", () => {
       });
     });
 
-    await user.click(screen.getByLabelText("Experiments test_model"));
+    await clickLogOption(user, "Experiments", "test_model");
 
     await waitFor(() => {
       expect(logCheckpointRequests.at(-1)).toEqual({ runIds: ["log-cifar"] });
@@ -752,8 +1152,9 @@ describe("ViewerApp Logs Workspace", () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
-    expect(await screen.findByLabelText("Experiments test_model")).toBeChecked();
+    await expectLogFilterSelection(user, "Experiments", "test_model", false);
 
+    await openLogFilter(user, "Experiments");
     await user.click(
       screen.getByRole("button", { name: /^delete experiment test_model$/i }),
     );
@@ -782,11 +1183,15 @@ describe("ViewerApp Logs Workspace", () => {
       String(url).endsWith("/logs/experiments/test_model"),
     );
     expect(deleteCall?.[1]?.method).toBe("DELETE");
-    expect(screen.queryByLabelText("Experiments test_model")).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Experiments test_model_2")).toBeChecked();
+    await openLogFilter(user, "Experiments");
+    expect(queryOpenLogOption("Experiments", "test_model")).not.toBeInTheDocument();
+    expectLogOptionSelected(
+      await findLogOption(user, "Experiments", "test_model_2"),
+      false,
+    );
 
     expect(await screen.findByText("No runs selected")).toBeInTheDocument();
-    expect(logScalarRequests.at(-1)?.runIds).toEqual(["log-mnist"]);
+    expect(logScalarRequests).toHaveLength(0);
   });
 
   it("does not render the sidebar-level delete visible runs action", async () => {
@@ -815,113 +1220,25 @@ describe("ViewerApp Logs Workspace", () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
-    expect(await screen.findByLabelText("Experiments test_model")).toBeChecked();
+    await expectLogFilterSelection(user, "Experiments", "test_model", false);
 
     expect(
       screen.queryByRole("button", { name: /^delete experiment test_model$/i }),
     ).not.toBeInTheDocument();
 
-    await user.click(screen.getByLabelText("Experiments test_model_2"));
+    await clickLogOption(user, "Experiments", "test_model_2");
 
     await waitFor(() => {
       expect(screen.queryByRole("button", { name: /^delete dataset/i }))
         .not.toBeInTheDocument();
     });
+    await openLogFilter(user, "Presets");
     expect(screen.queryByRole("button", { name: /^delete preset/i }))
       .not.toBeInTheDocument();
     expect(screen.getByText(/log deletion is disabled/i)).toBeInTheDocument();
     expect(deleteExperimentRequests).toHaveLength(0);
     expect(deleteRunPlanRequests).toHaveLength(0);
     expect(deleteRunRequests).toHaveLength(0);
-  });
-
-  it("shows dataset row delete actions only for a single selected experiment", async () => {
-    installFetchMock();
-    renderViewer();
-    const user = userEvent.setup();
-
-    await user.click(await screen.findByRole("button", { name: /^logs$/i }));
-    expect(await screen.findByLabelText("Datasets Mnist")).toBeChecked();
-    expect(screen.queryByRole("button", { name: /^delete dataset/i }))
-      .not.toBeInTheDocument();
-
-    await user.click(screen.getByLabelText("Experiments test_model_2"));
-
-    expect(
-      await screen.findByRole("button", {
-        name: /^delete dataset Mnist from experiment test_model$/i,
-      }),
-    ).toBeInTheDocument();
-
-    const experimentSection = screen.getByLabelText("Experiments test_model").closest("section");
-    expect(experimentSection).not.toBeNull();
-    await user.click(
-      within(experimentSection as HTMLElement).getByRole("button", { name: /^none$/i }),
-    );
-
-    await waitFor(() => {
-      expect(screen.queryByRole("button", { name: /^delete dataset/i }))
-        .not.toBeInTheDocument();
-    });
-  });
-
-  it("deletes dataset row runs without typed confirmation using the target run set", async () => {
-    const { deleteRunPlanRequests, deleteRunRequests } = installFetchMock(
-      buildSubsetDeleteFixture(),
-    );
-    renderViewer();
-    const user = userEvent.setup();
-
-    await user.click(await screen.findByRole("button", { name: /^logs$/i }));
-    await user.click(await screen.findByLabelText("Experiments test_model_2"));
-
-    await user.click(screen.getByRole("button", { name: /presets\s+2\s*\/\s*2/i }));
-    await user.click(screen.getByLabelText("Presets ALT"));
-    expect(screen.getByLabelText("Presets ALT")).not.toBeChecked();
-
-    await user.click(
-      await screen.findByRole("button", {
-        name: /^delete dataset Mnist from experiment test_model$/i,
-      }),
-    );
-
-    const dialog = await screen.findByRole("dialog", { name: /^delete dataset$/i });
-    expect(await within(dialog).findByText(/2 matched runs/i)).toBeInTheDocument();
-    expect(within(dialog).getAllByText("test_model").length).toBeGreaterThan(0);
-    expect(within(dialog).getAllByText("Mnist").length).toBeGreaterThan(0);
-    expect(within(dialog).getByText("ALT")).toBeInTheDocument();
-    expect(within(dialog).getByText("BASELINE")).toBeInTheDocument();
-    expect(
-      within(dialog).getByText(
-        "test_model/linear/BASELINE/Mnist/mnist_baseline_20260601_010203/version_0",
-      ),
-    ).toBeInTheDocument();
-    expect(within(dialog).getByText("version_*")).toBeInTheDocument();
-    expect(within(dialog).queryByLabelText(/type/i)).not.toBeInTheDocument();
-
-    const deleteButton = within(dialog).getByRole("button", {
-      name: /^delete dataset$/i,
-    });
-    expect(deleteButton).toBeEnabled();
-    await user.click(deleteButton);
-
-    await waitFor(() => {
-      expect(screen.queryByRole("dialog", { name: /^delete dataset$/i }))
-        .not.toBeInTheDocument();
-    });
-    expect(deleteRunPlanRequests).toEqual([
-      {
-        experiments: ["test_model"],
-        datasets: ["Mnist"],
-        models: [{ modelType: "linears", model: "linear" }],
-        presets: ["ALT", "BASELINE"],
-        runIds: ["log-mnist-alt", "log-mnist-baseline"],
-      },
-    ]);
-    expect(deleteRunRequests).toEqual(deleteRunPlanRequests);
-    await waitFor(() => {
-      expect(screen.queryByLabelText("Datasets Mnist")).not.toBeInTheDocument();
-    });
   });
 
   it("deletes preset row runs using the target experiment and preset", async () => {
@@ -932,11 +1249,9 @@ describe("ViewerApp Logs Workspace", () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
-    await user.click(await screen.findByLabelText("Experiments test_model_2"));
-    await user.click(screen.getByLabelText("Datasets Cifar10"));
-    expect(screen.getByLabelText("Datasets Cifar10")).not.toBeChecked();
+    await clickLogOption(user, "Experiments", "test_model");
 
-    await user.click(screen.getByRole("button", { name: /presets\s+2\s*\/\s*2/i }));
+    await openLogFilter(user, "Presets");
     await user.click(
       await screen.findByRole("button", {
         name: /^delete preset BASELINE from experiment test_model$/i,
@@ -968,8 +1283,9 @@ describe("ViewerApp Logs Workspace", () => {
     expect(deleteRunRequests).toEqual(deleteRunPlanRequests);
   });
 
-  it("blocks dataset row deletion when an active training job uses an affected folder", async () => {
+  it("blocks preset row deletion when an active training job uses an affected folder", async () => {
     const { deleteRunRequests } = installFetchMock({
+      ...buildSubsetDeleteFixture(),
       deleteLogRunsBlockers: [
         { id: "job-1", logFolder: "test_model", status: "running" },
       ],
@@ -978,14 +1294,15 @@ describe("ViewerApp Logs Workspace", () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
-    await user.click(await screen.findByLabelText("Experiments test_model_2"));
+    await clickLogOption(user, "Experiments", "test_model");
+    await openLogFilter(user, "Presets");
     await user.click(
       await screen.findByRole("button", {
-        name: /^delete dataset Mnist from experiment test_model$/i,
+        name: /^delete preset BASELINE from experiment test_model$/i,
       }),
     );
 
-    const dialog = await screen.findByRole("dialog", { name: /^delete dataset$/i });
+    const dialog = await screen.findByRole("dialog", { name: /^delete preset$/i });
     expect(
       await within(dialog).findByText(
         /A training job is still writing to this log folder/i,
@@ -993,12 +1310,12 @@ describe("ViewerApp Logs Workspace", () => {
     ).toBeInTheDocument();
     expect(within(dialog).getByText(/job-1 · logs\/test_model/i)).toBeInTheDocument();
     expect(
-      within(dialog).getByRole("button", { name: /^delete dataset$/i }),
+      within(dialog).getByRole("button", { name: /^delete preset$/i }),
     ).toBeDisabled();
     expect(deleteRunRequests).toHaveLength(0);
   });
 
-  it("keeps logs sidebar checklist rows full-height with many options", async () => {
+  it("lazy-loads logs sidebar filters with many options", async () => {
     const fixture = buildLargeLogFixture();
     const { deleteExperimentRequests, logScalarRequests } = installFetchMock(fixture);
     renderViewer();
@@ -1006,30 +1323,47 @@ describe("ViewerApp Logs Workspace", () => {
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
     await user.click(screen.getByRole("button", { name: /all runs/i }));
+    await selectAllLogExperiments(user);
 
-    const firstExperiment = await screen.findByLabelText("Experiments experiment_01");
-    const experimentsSection = firstExperiment.closest("section");
-    if (!(experimentsSection instanceof HTMLElement)) {
-      throw new Error("Expected experiments checklist to render inside a section");
-    }
-    expect(firstExperiment).toBeChecked();
+    let experimentsList = await openLogFilter(user, "Experiments");
+    const firstExperiment = await within(experimentsList).findByRole("option", {
+      name: logOptionName("experiment_01"),
+    });
+    expectLogOptionSelected(firstExperiment);
     expectLogsChecklistRowSizing(firstExperiment);
-    expectLogsChecklistRowSizing(screen.getByLabelText("Experiments experiment_42"));
-    expect(screen.queryByLabelText("Experiments experiment_64")).not.toBeInTheDocument();
-    expect(within(experimentsSection).getByText(/Showing 50 of 64\. Search to narrow\./i))
-      .toBeInTheDocument();
+    expectLogsChecklistRowSizing(
+      within(experimentsList).getByRole("option", {
+        name: logOptionName("experiment_42"),
+      }),
+    );
+    expect(
+      within(experimentsList).queryByRole("option", {
+        name: logOptionName("experiment_64"),
+      }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/Showing 50 of 64\. Search to narrow\./i))
+      .not.toBeInTheDocument();
 
-    const experimentSearch = screen.getByLabelText(/^search experiments$/i);
-    await user.type(experimentSearch, "64");
-    const lastExperiment = screen.getByLabelText("Experiments experiment_64");
-    expect(lastExperiment).toBeChecked();
+    makeScrollable(experimentsList);
+    fireEvent.scroll(experimentsList);
+    expect(
+      within(experimentsList).getByRole("status", {
+        name: /loading more experiments/i,
+      }),
+    ).toBeInTheDocument();
+    const lastExperiment = await within(experimentsList).findByRole("option", {
+      name: logOptionName("experiment_64"),
+    });
+    expectLogOptionSelected(lastExperiment);
     expectLogsChecklistRowSizing(lastExperiment);
-    await user.clear(experimentSearch);
 
-    const tagOption = await screen.findByLabelText("Scalar Tags custom/tag-42");
+    const tagList = await openLogFilter(user, "Scalar Tags");
+    const tagOption = await within(tagList).findByRole("option", {
+      name: logOptionName("custom/tag-42"),
+    });
     expectLogsChecklistRowSizing(tagOption);
     await user.click(tagOption);
-    expect(tagOption).toBeChecked();
+    expectLogOptionSelected(tagOption);
     await user.click(
       await screen.findByRole("button", { name: /^Other\s+1\s+metric$/i }),
     );
@@ -1043,16 +1377,27 @@ describe("ViewerApp Logs Workspace", () => {
       });
     });
 
+    await openLogFilter(user, "Scalar Tags");
     await user.type(screen.getByLabelText(/^search scalar tags$/i), "tag-42");
 
-    const filteredTagOption = screen.getByLabelText("Scalar Tags custom/tag-42");
-    expect(filteredTagOption).toBeChecked();
+    const filteredTagList = screen.getByRole("listbox", {
+      name: "Scalar Tags options",
+    });
+    const filteredTagOption = within(filteredTagList).getByRole("option", {
+      name: logOptionName("custom/tag-42"),
+    });
+    expectLogOptionSelected(filteredTagOption);
     expectLogsChecklistRowSizing(filteredTagOption);
-    expect(screen.queryByLabelText("Scalar Tags custom/tag-01")).not.toBeInTheDocument();
+    expect(
+      within(filteredTagList).queryByRole("option", {
+        name: logOptionName("custom/tag-01"),
+      }),
+    ).not.toBeInTheDocument();
 
     await user.click(filteredTagOption);
-    expect(filteredTagOption).not.toBeChecked();
+    expectLogOptionSelected(filteredTagOption, false);
 
+    await openLogFilter(user, "Experiments");
     await user.click(
       screen.getByRole("button", { name: /^delete experiment experiment_01$/i }),
     );
@@ -1070,14 +1415,25 @@ describe("ViewerApp Logs Workspace", () => {
         .not.toBeInTheDocument();
     });
     expect(deleteExperimentRequests).toEqual(["experiment_01"]);
-    expect(screen.queryByLabelText("Experiments experiment_01")).not.toBeInTheDocument();
+    experimentsList = await openLogFilter(user, "Experiments");
+    expect(
+      within(experimentsList).queryByRole("option", {
+        name: logOptionName("experiment_01"),
+      }),
+    ).not.toBeInTheDocument();
 
-    const secondExperiment = screen.getByLabelText("Experiments experiment_02");
-    expect(secondExperiment).toBeChecked();
+    const secondExperiment = within(experimentsList).getByRole("option", {
+      name: logOptionName("experiment_02"),
+    });
+    expectLogOptionSelected(secondExperiment);
     expectLogsChecklistRowSizing(secondExperiment);
     await user.click(secondExperiment);
-    expect(secondExperiment).not.toBeChecked();
-    expect(screen.getByLabelText("Experiments experiment_42")).toBeChecked();
+    expectLogOptionSelected(secondExperiment, false);
+    expectLogOptionSelected(
+      within(experimentsList).getByRole("option", {
+        name: logOptionName("experiment_42"),
+      }),
+    );
   });
 
   it("does not delete a log experiment when the dialog is cancelled", async () => {
@@ -1086,6 +1442,7 @@ describe("ViewerApp Logs Workspace", () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+    await openLogFilter(user, "Experiments");
     await user.click(
       screen.getByRole("button", { name: /^delete experiment test_model$/i }),
     );
@@ -1097,6 +1454,7 @@ describe("ViewerApp Logs Workspace", () => {
         .not.toBeInTheDocument();
     });
 
+    await openLogFilter(user, "Experiments");
     await user.click(
       screen.getByRole("button", { name: /^delete experiment test_model$/i }),
     );
@@ -1106,7 +1464,7 @@ describe("ViewerApp Logs Workspace", () => {
     );
 
     expect(deleteExperimentRequests).toHaveLength(0);
-    expect(screen.getByLabelText("Experiments test_model")).toBeChecked();
+    await expectLogFilterSelection(user, "Experiments", "test_model", false);
   });
 
   it("keeps the delete dialog open and shows backend errors", async () => {
@@ -1117,6 +1475,7 @@ describe("ViewerApp Logs Workspace", () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+    await openLogFilter(user, "Experiments");
     await user.click(
       screen.getByRole("button", { name: /^delete experiment test_model$/i }),
     );
@@ -1131,7 +1490,7 @@ describe("ViewerApp Logs Workspace", () => {
       await within(dialog).findByText(/refusing to delete symlink log experiment/i),
     ).toBeInTheDocument();
     expect(deleteExperimentRequests).toEqual(["test_model"]);
-    expect(screen.getByLabelText("Experiments test_model")).toBeChecked();
+    expect(dialog).toBeInTheDocument();
   });
 
   it("omits stale scalar tags from chart requests after experiment filtering", async () => {
@@ -1146,6 +1505,7 @@ describe("ViewerApp Logs Workspace", () => {
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
     await user.click(screen.getByRole("button", { name: /all runs/i }));
+    await selectAllLogExperiments(user);
 
     await waitFor(() => {
       expect(logScalarRequests).toContainEqual({
@@ -1162,7 +1522,7 @@ describe("ViewerApp Logs Workspace", () => {
       });
     });
 
-    await user.click(screen.getByLabelText("Experiments test_model"));
+    await clickLogOption(user, "Experiments", "test_model");
 
     await waitFor(() => {
       expect(logScalarRequests).toContainEqual({
@@ -1176,12 +1536,341 @@ describe("ViewerApp Logs Workspace", () => {
     expect(screen.queryByRole("img", { name: /validation\/accuracy scalar chart/i }))
       .not.toBeInTheDocument();
 
-    await user.click(screen.getByLabelText("Experiments test_model"));
+    await clickLogOption(user, "Experiments", "test_model");
 
     await waitFor(() => {
       expect(screen.getByText(/2 runs · 2 selected tags/i)).toBeInTheDocument();
     });
     expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
+      .toBeInTheDocument();
+  });
+
+  it("recovers scalar tags when selecting Kaggle after a stale monitor tag", async () => {
+    const priorRun = {
+      ...logRunsResponse.runs[0],
+      id: "prior-monitor",
+      group: "prior_monitor",
+      experiment: "prior_monitor",
+      dataset: "Mnist",
+      preset: "BASELINE",
+      runName: "prior_monitor_20260601_010203",
+      timestamp: "2026-06-01 01:02:03",
+      relativePath:
+        "prior_monitor/linear/BASELINE/Mnist/prior_monitor_20260601_010203/version_0",
+      metrics: { "test/accuracy": 0.82 },
+    };
+    const kaggleRunIds = ["kaggle-linear-all-fold-0", "kaggle-linear-all-fold-1"];
+    const kaggleRuns = kaggleRunIds.map((id, index) => ({
+      ...logRunsResponse.runs[0],
+      id,
+      group: "kaggle_linear_all",
+      experiment: "kaggle_linear_all",
+      preset: "KAGGLE_LINEAR",
+      dataset: "KaggleDigits",
+      runName: `kaggle_linear_all_fold_${index}_20260601_030405`,
+      timestamp: `2026-06-01 0${index + 3}:04:05`,
+      relativePath:
+        `kaggle_linear_all/linear/KAGGLE_LINEAR/KaggleDigits/kaggle_linear_all_fold_${index}_20260601_030405/version_0`,
+      metrics: { "test/accuracy": 0.88 + index / 100 },
+    }));
+    const runs = [priorRun, ...kaggleRuns];
+    const monitorTag = "main_model.0.model/weights/mean";
+    const { logScalarRequests, logTagRequests } = installFetchMock({
+      logRunsResponse: { runs },
+      logExperimentsResponse: {
+        experiments: [
+          { experiment: "prior_monitor", runCount: 1, relativePath: "prior_monitor" },
+          {
+            experiment: "kaggle_linear_all",
+            runCount: kaggleRuns.length,
+            relativePath: "kaggle_linear_all",
+          },
+        ],
+      },
+      logTagsByRun: {
+        [priorRun.id]: ["train/loss", "validation/accuracy", monitorTag],
+        ...Object.fromEntries(
+          kaggleRuns.map((run) => [
+            run.id,
+            ["train/loss", "validation/accuracy"],
+          ]),
+        ),
+      },
+      logScalarSeries: [
+        {
+          runId: priorRun.id,
+          tag: "train/loss",
+          points: [{ step: 1, wallTime: 1780000000, value: 0.7 }],
+        },
+        {
+          runId: priorRun.id,
+          tag: "validation/accuracy",
+          points: [{ step: 1, wallTime: 1780000000, value: 0.81 }],
+        },
+        {
+          runId: priorRun.id,
+          tag: monitorTag,
+          points: [{ step: 1, wallTime: 1780000000, value: 0.01 }],
+        },
+        ...kaggleRuns.flatMap((run, index) => [
+          {
+            runId: run.id,
+            tag: "train/loss",
+            points: [
+              { step: 1, wallTime: 1780000100 + index, value: 0.6 - index / 100 },
+            ],
+          },
+          {
+            runId: run.id,
+            tag: "validation/accuracy",
+            points: [
+              { step: 1, wallTime: 1780000100 + index, value: 0.76 + index / 100 },
+            ],
+          },
+        ]),
+      ],
+    });
+    renderViewer();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+    await screen.findByText("Historical Scalars");
+    await user.click(await screen.findByRole("button", { name: /all runs/i }));
+    await selectLogExperiments(user, ["prior_monitor"]);
+    expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
+      .toBeInTheDocument();
+
+    await clickLogOption(user, "Scalar Tags", "train/loss");
+    await clickLogOption(user, "Scalar Tags", "validation/accuracy");
+    await clickLogOption(user, "Scalar Tags", monitorTag);
+    await expectLogFilterSelection(user, "Scalar Tags", monitorTag, true);
+    await expectLogFilterSelection(user, "Scalar Tags", "train/loss", false);
+    await expectLogFilterSelection(user, "Scalar Tags", "validation/accuracy", false);
+
+    await clickLogOption(user, "Experiments", "prior_monitor");
+    await clickLogOption(user, "Experiments", "kaggle_linear_all");
+
+    await waitFor(() => {
+      expect(logTagRequests.at(-1)).toEqual({ runIds: kaggleRunIds });
+    });
+    await waitFor(() => {
+      expect(logScalarRequests).toContainEqual({
+        runIds: kaggleRunIds,
+        tags: ["validation/accuracy"],
+        maxPoints: 500,
+        sampling: "tail",
+      });
+      expect(logScalarRequests).toContainEqual({
+        runIds: kaggleRunIds,
+        tags: ["train/loss"],
+        maxPoints: 500,
+        sampling: "tail",
+      });
+    });
+    const staleKaggleRequests = logScalarRequests.filter(
+      (request) =>
+        request.runIds.length === kaggleRunIds.length &&
+        kaggleRunIds.every((runId) => request.runIds.includes(runId)) &&
+        request.tags.includes(monitorTag),
+    );
+    expect(staleKaggleRequests).toEqual([]);
+    expect(screen.queryByText("No scalar points for selection")).not.toBeInTheDocument();
+    expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
+      .toBeInTheDocument();
+    expect(await screen.findByRole("img", { name: /train\/loss scalar chart/i }))
+      .toBeInTheDocument();
+  });
+
+  it("widens stale preset facets when selecting a newly loaded experiment", async () => {
+    const priorBaselineRun = {
+      ...logRunsResponse.runs[0],
+      id: "prior-linear-baseline",
+      group: "prior_linear",
+      experiment: "prior_linear",
+      preset: "BASELINE",
+      dataset: "Mnist",
+      runName: "prior_linear_baseline_20260601_010203",
+      timestamp: "2026-06-01 01:02:03",
+      relativePath:
+        "prior_linear/linear/BASELINE/Mnist/prior_linear_baseline_20260601_010203/version_0",
+      metrics: { "test/accuracy": 0.82 },
+    };
+    const priorLegacyRun = {
+      ...priorBaselineRun,
+      id: "prior-linear-legacy",
+      preset: "LEGACY_ONLY",
+      runName: "prior_linear_legacy_20260601_020304",
+      timestamp: "2026-06-01 02:03:04",
+      relativePath:
+        "prior_linear/linear/LEGACY_ONLY/Mnist/prior_linear_legacy_20260601_020304/version_0",
+      metrics: { "test/accuracy": 0.84 },
+    };
+    const kaggleRunIds = ["kaggle-linear-all-fold-0", "kaggle-linear-all-fold-1"];
+    const kaggleRuns = kaggleRunIds.map((id, index) => ({
+      ...logRunsResponse.runs[0],
+      id,
+      group: "kaggle_linear_all",
+      experiment: "kaggle_linear_all",
+      preset: "KAGGLE_LINEAR",
+      dataset: "KaggleDigits",
+      runName: `kaggle_linear_all_fold_${index}_20260601_030405`,
+      timestamp: `2026-06-01 0${index + 3}:04:05`,
+      relativePath:
+        `kaggle_linear_all/linear/KAGGLE_LINEAR/KaggleDigits/kaggle_linear_all_fold_${index}_20260601_030405/version_0`,
+      metrics: { "test/accuracy": 0.88 + index / 100 },
+    }));
+    const runs = [priorBaselineRun, priorLegacyRun, ...kaggleRuns];
+    const { logScalarRequests, logTagRequests } = installFetchMock({
+      logRunsResponse: { runs },
+      logExperimentsResponse: {
+        experiments: [
+          { experiment: "prior_linear", runCount: 2, relativePath: "prior_linear" },
+          {
+            experiment: "kaggle_linear_all",
+            runCount: kaggleRuns.length,
+            relativePath: "kaggle_linear_all",
+          },
+        ],
+      },
+      logTagsByRun: Object.fromEntries(
+        runs.map((run) => [run.id, ["train/loss", "validation/accuracy"]]),
+      ),
+      logScalarSeries: runs.flatMap((run, index) => [
+        {
+          runId: run.id,
+          tag: "train/loss",
+          points: [
+            { step: 1, wallTime: 1780000000 + index, value: 0.7 - index / 100 },
+          ],
+        },
+        {
+          runId: run.id,
+          tag: "validation/accuracy",
+          points: [
+            { step: 1, wallTime: 1780000000 + index, value: 0.7 + index / 100 },
+          ],
+        },
+      ]),
+    });
+    renderViewer();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+    await screen.findByText("Historical Scalars");
+    await user.click(await screen.findByRole("button", { name: /all runs/i }));
+    await selectLogExperiments(user, ["prior_linear"]);
+    expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
+      .toBeInTheDocument();
+
+    await clickLogOption(user, "Presets", "LEGACY_ONLY");
+    await expectLogFilterSelection(user, "Presets", "BASELINE", true);
+    await expectLogFilterSelection(user, "Presets", "LEGACY_ONLY", false);
+    await clickLogOption(user, "Experiments", "prior_linear");
+    await clickLogOption(user, "Experiments", "kaggle_linear_all");
+
+    await waitFor(() => {
+      expect(logTagRequests.at(-1)).toEqual({ runIds: kaggleRunIds });
+    });
+    await waitFor(() => {
+      expect(logScalarRequests).toContainEqual({
+        runIds: kaggleRunIds,
+        tags: ["validation/accuracy"],
+        maxPoints: 500,
+        sampling: "tail",
+      });
+      expect(logScalarRequests).toContainEqual({
+        runIds: kaggleRunIds,
+        tags: ["train/loss"],
+        maxPoints: 500,
+        sampling: "tail",
+      });
+    });
+    expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
+      .toBeInTheDocument();
+  });
+
+  it("renders Kaggle linear scalars after All tags is clicked during tag refresh", async () => {
+    const fixture = buildKaggleLinearLogFixture();
+    const kaggleTagsResponse = deferred<{
+      runs: Array<{
+        runId: string;
+        scalarTags: string[];
+        histogramTags: string[];
+        imageTags: string[];
+        textTags: string[];
+      }>;
+    }>();
+    const { logScalarRequests, logTagRequests } = installFetchMock({
+      logRunsResponse: fixture.logRunsResponse,
+      logExperimentsResponse: fixture.logExperimentsResponse,
+      logTagsByRun: fixture.logTagsByRun,
+      logScalarSeries: fixture.logScalarSeries,
+      logTagsResponseFactory: (body) => {
+        if (
+          body.runIds.length === fixture.kaggleRunIds.length &&
+          fixture.kaggleRunIds.every((runId) => body.runIds.includes(runId))
+        ) {
+          return kaggleTagsResponse.promise;
+        }
+        return undefined;
+      },
+    });
+    renderViewer();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+    await screen.findByText("Historical Scalars");
+    await user.click(await screen.findByRole("button", { name: /all runs/i }));
+    await selectLogExperiments(user, ["normal_linear"]);
+    expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
+      .toBeInTheDocument();
+
+    await clickLogOption(user, "Experiments", "normal_linear");
+    await clickLogOption(user, "Experiments", "kaggle_linear");
+
+    await waitFor(() => {
+      expect(logTagRequests.at(-1)).toEqual({ runIds: fixture.kaggleRunIds });
+    });
+    await user.click(
+      within(logFilterSection("Scalar Tags")).getByRole("button", { name: /^all$/i }),
+    );
+    expect(screen.queryByText("No scalar points for selection")).not.toBeInTheDocument();
+
+    kaggleTagsResponse.resolve({
+      runs: fixture.kaggleRunIds.map((runId) => ({
+        runId,
+        scalarTags: fixture.kaggleTags,
+        histogramTags: [],
+        imageTags: [],
+        textTags: [],
+      })),
+    });
+
+    await waitFor(() => {
+      expect(logScalarRequests).toContainEqual({
+        runIds: fixture.kaggleRunIds,
+        tags: ["train/kaggle_logloss"],
+        maxPoints: 500,
+        sampling: "tail",
+      });
+      expect(logScalarRequests).toContainEqual({
+        runIds: fixture.kaggleRunIds,
+        tags: ["validation/kaggle_auc"],
+        maxPoints: 500,
+        sampling: "tail",
+      });
+    });
+    const staleKaggleRequests = logScalarRequests.filter(
+      (request) =>
+        request.runIds.length === fixture.kaggleRunIds.length &&
+        fixture.kaggleRunIds.every((runId) => request.runIds.includes(runId)) &&
+        request.tags.some((tag) => fixture.normalTags.includes(tag)),
+    );
+    expect(staleKaggleRequests).toEqual([]);
+    expect(screen.queryByText("No scalar points for selection")).not.toBeInTheDocument();
+    expect(await screen.findByRole("img", { name: /train\/kaggle_logloss scalar chart/i }))
+      .toBeInTheDocument();
+    expect(await screen.findByRole("img", { name: /validation\/kaggle_auc scalar chart/i }))
       .toBeInTheDocument();
   });
 
@@ -1205,6 +1894,7 @@ describe("ViewerApp Logs Workspace", () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+    await selectLogExperiments(user, ["test_model"]);
 
     expect(await screen.findByText("No TensorBoard scalars")).toBeInTheDocument();
     expect(

@@ -8,7 +8,10 @@ import {
   toggleSetValue as toggleSelectionSetValue,
   uniqueValidValues,
 } from "@/lib/selection";
-import { isConfusionMatrixHeatmapTag } from "@/features/viewer/state/logs/log-diagnostics";
+import {
+  isConfusionMatrixHeatmapTag,
+  isConfusionMatrixScalarTag,
+} from "@/features/viewer/state/logs/log-diagnostics";
 
 export { formatNumber };
 
@@ -67,6 +70,10 @@ export type RenderableLogMetric = {
 export type LogMetricsByGroup = Record<LogMetricGroupKey, RenderableLogMetric[]>;
 export type LogMetricTagsByGroup = Record<LogMetricGroupKey, string[]>;
 
+type LogScalarTagRun = {
+  scalarTags: string[];
+};
+
 export function buildCountOptions(
   runs: LogRun[],
   key: keyof Pick<LogRun, "experiment" | "dataset" | "model" | "preset">,
@@ -115,17 +122,50 @@ export function buildExperimentOptions(experiments: LogExperiment[]) {
     .sort((a, b) => a.label.localeCompare(b.label));
 }
 
-export function runOption(run: LogRun): ChecklistOption {
+function sortScalarTagOptions(options: ChecklistOption[]) {
+  return options.sort((a, b) => {
+    const commonA = COMMON_SCALAR_TAGS.indexOf(a.value);
+    const commonB = COMMON_SCALAR_TAGS.indexOf(b.value);
+    if (commonA >= 0 || commonB >= 0) {
+      return (commonA >= 0 ? commonA : 999) - (commonB >= 0 ? commonB : 999);
+    }
+    return a.value.localeCompare(b.value);
+  });
+}
+
+export function buildLogScalarTagOptions(tagRuns: LogScalarTagRun[] | undefined) {
+  const scalarCounts = new Map<string, number>();
+  const confusionMatrixRateCounts = new Map<string, number>();
+
+  for (const runTags of tagRuns ?? []) {
+    for (const tag of runTags.scalarTags) {
+      if (isConfusionMatrixScalarTag(tag)) {
+        if (isConfusionMatrixHeatmapTag(tag)) {
+          confusionMatrixRateCounts.set(
+            tag,
+            (confusionMatrixRateCounts.get(tag) ?? 0) + 1,
+          );
+        }
+        continue;
+      }
+      scalarCounts.set(tag, (scalarCounts.get(tag) ?? 0) + 1);
+    }
+  }
+
+  const tagOptions = sortScalarTagOptions(
+    Array.from(scalarCounts, ([value, count]) => ({
+      value,
+      label: value,
+      count,
+    })),
+  );
+  const confusionMatrixRateTags = Array.from(confusionMatrixRateCounts.keys()).sort(
+    (a, b) => a.localeCompare(b),
+  );
+
   return {
-    value: run.id,
-    label: run.runName,
-    detail: [
-      run.experiment,
-      run.dataset,
-      `${run.model} · ${run.modelType}`,
-      run.preset,
-      run.timestamp ?? run.version,
-    ].join(" · "),
+    tagOptions,
+    confusionMatrixRateTags,
   };
 }
 
@@ -184,7 +224,7 @@ export function groupRenderableLogMetrics({
   };
 
   for (const tag of selectedTagList) {
-    if (isConfusionMatrixHeatmapTag(tag)) {
+    if (isConfusionMatrixScalarTag(tag)) {
       continue;
     }
     const series = seriesByTag.get(tag) ?? [];
@@ -205,6 +245,9 @@ export function groupLogMetricTags(tags: string[]): LogMetricTagsByGroup {
     other: [],
   };
   for (const tag of tags) {
+    if (isConfusionMatrixScalarTag(tag)) {
+      continue;
+    }
     groups[metricGroupForTag(tag)].push(tag);
   }
   return groups;
