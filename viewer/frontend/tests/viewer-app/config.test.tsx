@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -91,6 +91,18 @@ function expectNoHeaderControlInAccordionBody(
   expect(within(panel).queryByRole("switch", { name: controlLabel }))
     .not.toBeInTheDocument();
   expect(within(panel).queryByText(controlLabel)).not.toBeInTheDocument();
+}
+
+function makeScrollable(element: HTMLElement) {
+  Object.defineProperty(element, "clientHeight", {
+    configurable: true,
+    value: 180,
+  });
+  Object.defineProperty(element, "scrollHeight", {
+    configurable: true,
+    value: 900,
+  });
+  element.scrollTop = 760;
 }
 
 function nestedControlledSchemaResponse() {
@@ -2106,6 +2118,47 @@ describe("ViewerApp Full Config", () => {
     expect(
       within(hiddenDimRow).getByRole("textbox", { name: /current value/i }),
     ).toHaveValue("256");
+  });
+
+  it("lazy-loads full config field search results instead of showing a hidden-count footer", async () => {
+    installFetchMock({ schemaResponse: gateOptionSchemaResponse() });
+    renderViewer();
+    const user = userEvent.setup();
+
+    const dialog = await openFullConfig(user);
+    const search = within(dialog).getByRole("combobox", {
+      name: /search config fields/i,
+    });
+
+    await user.type(search, "gate");
+
+    const searchPopup = fullConfigSearchPopup(dialog);
+    expect(
+      within(searchPopup).getAllByRole("group", {
+        name: /config search result/i,
+      }),
+    ).toHaveLength(8);
+    expect(
+      within(searchPopup).queryByRole("button", {
+        name: /recurrent gate hidden dim/i,
+      }),
+    ).not.toBeInTheDocument();
+    expect(within(searchPopup).queryByText(/more matches/i)).not.toBeInTheDocument();
+
+    makeScrollable(searchPopup);
+    fireEvent.scroll(searchPopup);
+
+    expect(
+      within(searchPopup).getByRole("status", {
+        name: /loading more config matches/i,
+      }),
+    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(
+        fullConfigSearchResultRow(searchPopup, /recurrent gate hidden dim/i),
+      ).toBeInTheDocument();
+    });
+    expect(within(searchPopup).queryByText(/more matches/i)).not.toBeInTheDocument();
   });
 
   it("filters full config cards and sidebar sections while typing", async () => {

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ConfigSearchResults } from "@/features/viewer/components/config/config-search-results";
 import { DropdownShell } from "@/features/viewer/components/shared/dropdown-shell";
+import { useIncrementalVisibleOptions } from "@/features/viewer/components/shared/use-incremental-visible-options";
 import {
   type ConfigSearchOption,
   type OverrideValues,
@@ -39,6 +40,7 @@ export function ConfigFieldSearch({
   const inputId = `${generatedId}-config-field-search`;
   const popupId = `${inputId}-results`;
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const pendingActiveIndexRef = useRef<number | null>(null);
   const [hasFocusWithin, setHasFocusWithin] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -50,15 +52,45 @@ export function ConfigFieldSearch({
         : [],
     [options, trimmedQuery],
   );
-  const visibleOptions = matchingOptions.slice(0, RESULT_LIMIT);
-  const hiddenResultCount = Math.max(matchingOptions.length - visibleOptions.length, 0);
+  const {
+    scrollContainerRef,
+    visibleOptions,
+    hasMore,
+    isLoadingMore,
+    loadMore,
+    handleScroll,
+  } = useIncrementalVisibleOptions({
+    options: matchingOptions,
+    initialVisibleCount: RESULT_LIMIT,
+    pageSize: RESULT_LIMIT,
+  });
   const isPopupOpen = hasFocusWithin && isOpen && trimmedQuery.length > 0;
   const activeOption =
     isPopupOpen && visibleOptions.length > 0 ? visibleOptions[activeIndex] : undefined;
 
   useEffect(() => {
-    setActiveIndex(visibleOptions.length > 0 ? 0 : -1);
-  }, [trimmedQuery, visibleOptions.length]);
+    setActiveIndex(matchingOptions.length > 0 ? 0 : -1);
+  }, [matchingOptions]);
+
+  useEffect(() => {
+    const pendingIndex = pendingActiveIndexRef.current;
+    if (pendingIndex === null || pendingIndex >= visibleOptions.length) {
+      return;
+    }
+    pendingActiveIndexRef.current = null;
+    setActiveIndex(pendingIndex);
+  }, [visibleOptions.length]);
+
+  useEffect(() => {
+    if (activeIndex < visibleOptions.length) {
+      return;
+    }
+    setActiveIndex(visibleOptions.length > 0 ? visibleOptions.length - 1 : -1);
+  }, [activeIndex, visibleOptions.length]);
+
+  useEffect(() => {
+    pendingActiveIndexRef.current = null;
+  }, [matchingOptions]);
 
   function updateQuery(value: string) {
     onQueryChange(value);
@@ -84,7 +116,12 @@ export function ConfigFieldSearch({
     setIsOpen(true);
     setActiveIndex((current) => {
       if (current < 0) {
-        return 0;
+        return direction === 1 ? 0 : visibleOptions.length - 1;
+      }
+      if (direction === 1 && current >= visibleOptions.length - 1 && hasMore) {
+        pendingActiveIndexRef.current = visibleOptions.length;
+        loadMore();
+        return current;
       }
       return (current + direction + visibleOptions.length) % visibleOptions.length;
     });
@@ -166,15 +203,17 @@ export function ConfigFieldSearch({
 
       {isPopupOpen && (
         <DropdownShell
+          ref={scrollContainerRef}
           id={popupId}
           role="dialog"
           ariaLabel="Matching config fields"
+          onScroll={handleScroll}
           className="max-h-[min(34rem,calc(100vh-14rem))] overflow-y-auto p-2"
         >
           <ConfigSearchResults
             popupId={popupId}
             visibleOptions={visibleOptions}
-            hiddenResultCount={hiddenResultCount}
+            isLoadingMore={isLoadingMore}
             activeIndex={activeIndex}
             selectedFieldKey={selectedFieldKey}
             overrides={overrides}
