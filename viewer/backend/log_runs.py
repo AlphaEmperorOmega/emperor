@@ -850,6 +850,32 @@ class LogRunQueryService:
             sampling,
         )
 
+    def _copy_scalar_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "points": [dict(point) for point in payload["points"]],
+            "sourcePointCount": payload["sourcePointCount"],
+            "truncated": payload["truncated"],
+        }
+
+    def _scalar_payload_from_points(
+        self,
+        points: list[dict[str, Any]],
+        *,
+        point_limit: int,
+        sampling: str,
+    ) -> dict[str, Any]:
+        points.sort(key=lambda point: (point["step"], point["wallTime"]))
+        source_point_count = len(points)
+        if sampling == "tail":
+            sampled_points = points[-point_limit:]
+        else:
+            sampled_points = points[-point_limit:]
+        return {
+            "points": [dict(point) for point in sampled_points],
+            "sourcePointCount": source_point_count,
+            "truncated": source_point_count > len(sampled_points),
+        }
+
     def tags_for_runs(self, run_ids: list[str]) -> list[dict[str, Any]]:
         runs = self.scanner.resolve_runs(run_ids)
         return [
@@ -891,15 +917,17 @@ class LogRunQueryService:
                 if cached_tags is not None
                 else self.read_tags(run.path)["scalars"],
             )
+            available_tags = [tag for tag in requested_tags if tag in run_tags]
+            scalar_series_by_tag = self.read_scalar_series_batch(
+                run.path,
+                available_tags,
+                max_points=max_points,
+                sampling=sampling,
+            )
             for tag in requested_tags:
-                if tag not in run_tags:
+                scalar_series = scalar_series_by_tag.get(tag)
+                if scalar_series is None:
                     continue
-                scalar_series = self.read_scalar_series(
-                    run.path,
-                    tag,
-                    max_points=max_points,
-                    sampling=sampling,
-                )
                 if scalar_series["points"]:
                     series.append(
                         {
@@ -1190,6 +1218,65 @@ class LogRunQueryService:
         self._cache_set(self._tags_cache, cache_key, result)
         return self._copy_tags_payload(result)
 
+    def read_scalar_series_batch(
+        self,
+        run_dir: Path,
+        tags: list[str],
+        *,
+        max_points: int | None = None,
+        sampling: str = "tail",
+    ) -> dict[str, dict[str, Any]]:
+        point_limit = max_points if max_points is not None else self.scalar_point_limit
+        requested_tags = list(dict.fromkeys(tags))
+        results: dict[str, dict[str, Any]] = {}
+        uncached_tags: list[str] = []
+        for tag in requested_tags:
+            cache_key = self._scalar_cache_key(
+                run_dir,
+                tag=tag,
+                max_points=point_limit,
+                sampling=sampling,
+            )
+            cached = self._cache_get(self._scalar_cache, cache_key)
+            if cached is None:
+                uncached_tags.append(tag)
+            else:
+                results[tag] = self._copy_scalar_payload(cached)
+
+        if uncached_tags:
+            points_by_tag: dict[str, list[dict[str, Any]]] = {
+                tag: [] for tag in uncached_tags
+            }
+            for event_dir in event_dirs(run_dir):
+                accumulator = load_event_accumulator(event_dir)
+                if accumulator is None:
+                    continue
+                for tag in uncached_tags:
+                    try:
+                        points_by_tag[tag].extend(scalar_points(accumulator, tag, None))
+                    except Exception:
+                        continue
+
+            for tag in uncached_tags:
+                result = self._scalar_payload_from_points(
+                    points_by_tag[tag],
+                    point_limit=point_limit,
+                    sampling=sampling,
+                )
+                self._cache_set(
+                    self._scalar_cache,
+                    self._scalar_cache_key(
+                        run_dir,
+                        tag=tag,
+                        max_points=point_limit,
+                        sampling=sampling,
+                    ),
+                    result,
+                )
+                results[tag] = self._copy_scalar_payload(result)
+
+        return {tag: results[tag] for tag in requested_tags if tag in results}
+
     def read_scalar_series(
         self,
         run_dir: Path,
@@ -1198,48 +1285,12 @@ class LogRunQueryService:
         max_points: int | None = None,
         sampling: str = "tail",
     ) -> dict[str, Any]:
-        point_limit = max_points if max_points is not None else self.scalar_point_limit
-        cache_key = self._scalar_cache_key(
+        return self.read_scalar_series_batch(
             run_dir,
-            tag=tag,
-            max_points=point_limit,
+            [tag],
+            max_points=max_points,
             sampling=sampling,
-        )
-        cached = self._cache_get(self._scalar_cache, cache_key)
-        if cached is not None:
-            return {
-                "points": [dict(point) for point in cached["points"]],
-                "sourcePointCount": cached["sourcePointCount"],
-                "truncated": cached["truncated"],
-            }
-
-        points: list[dict[str, Any]] = []
-        for event_dir in event_dirs(run_dir):
-            accumulator = load_event_accumulator(event_dir)
-            if accumulator is None:
-                continue
-            try:
-                points.extend(scalar_points(accumulator, tag, None))
-            except Exception:
-                continue
-
-        points.sort(key=lambda point: (point["step"], point["wallTime"]))
-        source_point_count = len(points)
-        if sampling == "tail":
-            sampled_points = points[-point_limit:]
-        else:
-            sampled_points = points[-point_limit:]
-        result = {
-            "points": sampled_points,
-            "sourcePointCount": source_point_count,
-            "truncated": source_point_count > len(sampled_points),
-        }
-        self._cache_set(self._scalar_cache, cache_key, result)
-        return {
-            "points": [dict(point) for point in sampled_points],
-            "sourcePointCount": result["sourcePointCount"],
-            "truncated": result["truncated"],
-        }
+        )[tag]
 
     def read_scalar_points(
         self,

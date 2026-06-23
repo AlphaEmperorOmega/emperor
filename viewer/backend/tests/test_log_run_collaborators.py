@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 from viewer.backend.inspector.errors import InspectorError
 from viewer.backend.log_runs import (
@@ -134,8 +135,80 @@ class StubLogRunQueryService(LogRunQueryService):
             "truncated": False,
         }
 
+    def read_scalar_series_batch(
+        self,
+        run_dir: Path,
+        tags: list[str],
+        *,
+        max_points: int | None = None,
+        sampling: str = "tail",
+    ) -> dict[str, dict[str, Any]]:
+        return {
+            tag: self.read_scalar_series(
+                run_dir,
+                tag,
+                max_points=max_points,
+                sampling=sampling,
+            )
+            for tag in tags
+        }
+
 
 class LogRunQueryServiceTests(unittest.TestCase):
+    def test_scalars_for_runs_batches_scalar_reads_per_event_dir(self) -> None:
+        class ScalarEvent:
+            def __init__(self, step: int, value: float) -> None:
+                self.step = step
+                self.value = value
+                self.wall_time = float(step)
+
+        class BatchAccumulator:
+            def Tags(self) -> dict[str, list[str]]:
+                return {
+                    "scalars": ["accuracy", "loss"],
+                    "histograms": [],
+                    "images": [],
+                    "tensors": [],
+                }
+
+            def Scalars(self, tag: str) -> list[ScalarEvent]:
+                return [ScalarEvent(step=1, value=0.5 if tag == "loss" else 0.8)]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp) / "run-1"
+            run_dir.mkdir()
+            (run_dir / "events.out.tfevents.batch").write_text(
+                "event",
+                encoding="utf-8",
+            )
+            scanner = StaticLogRunScanner([_log_run("run-1", path=run_dir)])
+            service = LogRunQueryService(scanner=scanner)
+            load_calls: list[Path] = []
+
+            def load_accumulator(
+                event_dir: Path,
+                **_kwargs: Any,
+            ) -> BatchAccumulator:
+                load_calls.append(event_dir)
+                return BatchAccumulator()
+
+            with patch(
+                "viewer.backend.log_runs.load_event_accumulator",
+                load_accumulator,
+            ):
+                service.read_tags(run_dir)
+                load_calls.clear()
+                scalars = service.scalars_for_runs(
+                    run_ids=["run-1"],
+                    tags=["loss", "accuracy"],
+                )
+
+        self.assertEqual(load_calls, [run_dir])
+        self.assertEqual(
+            [(series["tag"], series["points"][0]["value"]) for series in scalars],
+            [("loss", 0.5), ("accuracy", 0.8)],
+        )
+
     def test_read_only_queries_use_scanner_and_readers_without_delete_flow(
         self,
     ) -> None:
