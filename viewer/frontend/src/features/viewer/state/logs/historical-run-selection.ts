@@ -11,6 +11,7 @@ import {
 export type DatasetSelectionInput = {
   logRuns?: LogRun[];
   modelRunTags?: LogRunTags[];
+  includeRunsWithoutMonitorTags?: boolean;
   selectedModel: string;
   selectedHistoricalPreset: string;
   selectedLogRunId: string | null;
@@ -36,11 +37,11 @@ export function deriveDatasetSelectionState(
     (input.logRuns ?? []).filter((run) => run.model === input.selectedModel),
   );
   const layerMonitorExperiments =
-    input.modelRunTags === undefined
+    input.modelRunTags === undefined && input.includeRunsWithoutMonitorTags
       ? new Set(modelLogRuns.map((run) => run.experiment))
       : experimentsWithLayerMonitorData(
           modelLogRuns,
-          input.modelRunTags,
+          input.modelRunTags ?? [],
         );
   const eligibleRuns = modelLogRuns.filter((run) =>
     layerMonitorExperiments.has(run.experiment),

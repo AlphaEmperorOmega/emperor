@@ -124,6 +124,7 @@ export function useHistoricalRunsState({
       deriveDatasetSelectionState({
         logRuns: logRunsQuery.data?.runs,
         modelRunTags: modelRunTagsQuery.data?.runs,
+        includeRunsWithoutMonitorTags: !tagsEnabled,
         selectedModel,
         selectedHistoricalPreset,
         selectedLogRunId,
@@ -134,6 +135,7 @@ export function useHistoricalRunsState({
       selectedHistoricalPreset,
       selectedLogRunId,
       selectedModel,
+      tagsEnabled,
     ],
   );
   const {
