@@ -1,21 +1,16 @@
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import {
-  ChevronDown,
-  ChevronRight,
   Cpu,
   Database,
-  FileText,
   FolderTree,
   Layers,
   LineChart,
   Loader2,
   RefreshCw,
-  Search,
   Tag,
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { IconButton } from "@/components/ui/icon-button";
 import { ErrorPanel } from "@/features/viewer/components/error-panel";
 import {
@@ -25,9 +20,13 @@ import {
   type SubsetDeleteTarget,
 } from "@/features/viewer/components/logs/delete-dialogs";
 import { InlineStatus } from "@/features/viewer/components/shared/inline-status";
-import { MetricCard } from "@/features/viewer/components/shared/metric-card";
 import { SectionHeading } from "@/features/viewer/components/shared/section-heading";
 import { StatChip } from "@/features/viewer/components/shared/stat-chip";
+import {
+  MultiSelectDropdown,
+  type MultiSelectDropdownOption,
+  type MultiSelectDropdownOptionAction,
+} from "@/features/viewer/components/screen/multi-select-dropdown";
 import { type LogsWorkspaceState } from "@/features/viewer/state/logs/use-logs-workspace-state";
 import { type LogRun, type ModelIdentity } from "@/lib/api";
 import {
@@ -36,11 +35,8 @@ import {
 } from "@/features/viewer/state/logs/logs-selectors";
 import { cn, errorMessage } from "@/lib/utils";
 
-const CHECKLIST_OPTION_RENDER_LIMIT = 50;
-
 export type LogsSidebarProps = {
   runs: LogRun[];
-  visibleRuns: LogRun[];
   runsQuery: LogsWorkspaceState["runsQuery"];
   experimentsQuery: LogsWorkspaceState["experimentsQuery"];
   tagsQuery: LogsWorkspaceState["tagsQuery"];
@@ -49,23 +45,19 @@ export type LogsSidebarProps = {
   datasetOptions: ChecklistOption[];
   modelOptions: ChecklistOption[];
   presetOptions: ChecklistOption[];
-  runOptions: ChecklistOption[];
   tagOptions: ChecklistOption[];
   selectedExperiments: Set<string>;
   selectedDatasets: Set<string>;
   selectedModels: Set<string>;
   selectedPresets: Set<string>;
-  selectedRunIds: Set<string>;
   selectedTags: Set<string>;
   scopeMode: LogsWorkspaceState["scopeMode"];
-  targetScope: LogsWorkspaceState["targetScope"];
   onUseCurrentTarget: LogsWorkspaceState["useCurrentTargetScope"];
   onShowAllRuns: LogsWorkspaceState["showAllRuns"];
   toggleExperiment: LogsWorkspaceState["toggleExperiment"];
   toggleDataset: LogsWorkspaceState["toggleDataset"];
   toggleModel: LogsWorkspaceState["toggleModel"];
   togglePreset: LogsWorkspaceState["togglePreset"];
-  toggleRun: LogsWorkspaceState["toggleRun"];
   toggleTag: LogsWorkspaceState["toggleTag"];
   selectAllExperiments: LogsWorkspaceState["selectAllExperiments"];
   selectNoExperiments: LogsWorkspaceState["selectNoExperiments"];
@@ -75,8 +67,6 @@ export type LogsSidebarProps = {
   selectNoModels: LogsWorkspaceState["selectNoModels"];
   selectAllPresets: LogsWorkspaceState["selectAllPresets"];
   selectNoPresets: LogsWorkspaceState["selectNoPresets"];
-  selectAllRuns: LogsWorkspaceState["selectAllRuns"];
-  selectNoRuns: LogsWorkspaceState["selectNoRuns"];
   selectAllTags: LogsWorkspaceState["selectAllTags"];
   selectNoTags: LogsWorkspaceState["selectNoTags"];
   refreshLogLists: LogsWorkspaceState["refreshLogLists"];
@@ -126,7 +116,7 @@ function buildSubsetDeleteTarget({
     if (run.experiment !== experiment) {
       return false;
     }
-    return kind === "dataset" ? run.dataset === value : run.preset === value;
+    return run.preset === value;
   });
 
   if (targetRuns.length === 0) {
@@ -150,7 +140,13 @@ function buildSubsetDeleteTarget({
   };
 }
 
-function ChecklistSection({
+function selectedValuesForOptions(selected: Set<string>, options: ChecklistOption[]) {
+  return options
+    .filter((option) => selected.has(option.value))
+    .map((option) => option.value);
+}
+
+function LogFilterSection({
   title,
   icon,
   options,
@@ -158,9 +154,8 @@ function ChecklistSection({
   onToggle,
   onAll,
   onNone,
-  search,
-  defaultOpen = true,
-  renderOptionAction,
+  optionActions,
+  beforeDropdown,
 }: {
   title: string;
   icon: ReactNode;
@@ -169,140 +164,72 @@ function ChecklistSection({
   onToggle: (value: string) => void;
   onAll: () => void;
   onNone: () => void;
-  search?: boolean;
-  defaultOpen?: boolean;
-  renderOptionAction?: (option: ChecklistOption) => ReactNode;
+  optionActions?: (
+    option: ChecklistOption,
+  ) => MultiSelectDropdownOptionAction[] | undefined;
+  beforeDropdown?: ReactNode;
 }) {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
-  const [query, setQuery] = useState("");
-  const showSearch = search || options.length > CHECKLIST_OPTION_RENDER_LIMIT;
-  const filteredOptions = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    if (!needle) {
-      return options;
-    }
-    return options.filter(
-      (option) =>
-        option.label.toLowerCase().includes(needle) ||
-        option.detail?.toLowerCase().includes(needle),
+  const selectedValues = useMemo(
+    () => selectedValuesForOptions(selected, options),
+    [options, selected],
+  );
+  const dropdownOptions = useMemo<MultiSelectDropdownOption[]>(
+    () =>
+      options.map((option) => ({
+        value: option.value,
+        label: option.label,
+        description: option.detail,
+        meta:
+          option.count === undefined ? undefined : (
+            <StatChip size="xs" className="shrink-0">
+              {option.count} runs
+            </StatChip>
+          ),
+        actions: optionActions?.(option),
+      })),
+    [optionActions, options],
+  );
+
+  function changeSelection(nextValues: string[]) {
+    const nextSelected = new Set(nextValues);
+    const changedOption = options.find(
+      (option) => selected.has(option.value) !== nextSelected.has(option.value),
     );
-  }, [options, query]);
-  const visibleOptions = filteredOptions.slice(0, CHECKLIST_OPTION_RENDER_LIMIT);
-  const hiddenOptionCount = filteredOptions.length - visibleOptions.length;
+    if (changedOption) {
+      onToggle(changedOption.value);
+    }
+  }
 
   return (
-    <section className="rounded-[13px] border border-line-soft bg-white/[0.018]">
-      <button
-        type="button"
-        className="grid min-h-[44px] w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-3 text-left transition hover:bg-white/[0.03] focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-        aria-expanded={isOpen}
-        onClick={() => setIsOpen((open) => !open)}
-      >
-        <span className="grid h-7 w-7 place-items-center rounded-[8px] border border-line bg-white/[0.035] text-violet">
-          {icon}
-        </span>
-        <span className="min-w-0">
-          <span className="block truncate text-xs font-bold uppercase tracking-[0.08em] text-ink-dim">
-            {title}
-          </span>
-          <span className="mt-0.5 block font-mono text-[11px] text-ink-faint">
-            {selected.size} / {options.length}
-          </span>
-        </span>
-        {isOpen ? (
-          <ChevronDown className="h-4 w-4 text-ink-faint" aria-hidden />
-        ) : (
-          <ChevronRight className="h-4 w-4 text-ink-faint" aria-hidden />
-        )}
-      </button>
-
-      {isOpen && (
-        <div className="grid gap-2 border-t border-line-soft p-2.5">
-          {showSearch && (
-            <label className="relative block">
-              <Search
-                className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint"
-                aria-hidden
-              />
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder={search ? "Search tags" : `Search ${title.toLowerCase()}`}
-                aria-label={`Search ${title.toLowerCase()}`}
-                autoComplete="off"
-                className="h-9 w-full rounded-[10px] border border-line bg-black/25 pl-8 pr-2.5 font-mono text-xs text-ink outline-none transition placeholder:text-ink-faint focus-visible:border-violet/60 focus-visible:ring-2 focus-visible:ring-focus"
-              />
-            </label>
-          )}
-
-          <div className="grid max-h-64 auto-rows-max content-start gap-1.5 overflow-y-auto pr-1">
-            {filteredOptions.length === 0 ? (
-              <InlineStatus className="border-line-soft bg-transparent p-0 px-3 py-4 text-center text-xs">
-                No options
-              </InlineStatus>
-            ) : (
-              visibleOptions.map((option) => {
-                const checked = selected.has(option.value);
-                return (
-                  <div
-                    key={option.value}
-                    className={cn(
-                      "grid min-h-[44px] grid-cols-[minmax(0,1fr)_auto] items-center overflow-hidden rounded-[10px] border transition",
-                      checked
-                        ? "border-violet/40 bg-[linear-gradient(135deg,rgba(146,113,255,0.1),rgba(111,168,255,0.05))]"
-                        : "border-line-soft bg-white/[0.012] hover:border-line hover:bg-white/[0.03]",
-                    )}
-                  >
-                    <label className="grid min-h-[44px] min-w-0 cursor-pointer grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-2.5 py-2">
-                      <Checkbox
-                        checked={checked}
-                        onCheckedChange={() => onToggle(option.value)}
-                        aria-label={`${title} ${option.label}`}
-                      />
-                      <span className="min-w-0">
-                        <span className="block truncate text-[13px] font-semibold text-ink">
-                          {option.label}
-                        </span>
-                        {option.detail && (
-                          <span className="mt-0.5 block truncate font-mono text-[11px] text-ink-faint">
-                            {option.detail}
-                          </span>
-                        )}
-                      </span>
-                      {option.count !== undefined && (
-                        <StatChip size="xs" className="shrink-0">
-                          {option.count} runs
-                        </StatChip>
-                      )}
-                    </label>
-                    {renderOptionAction && (
-                      <div className="pr-1.5">{renderOptionAction(option)}</div>
-                    )}
-                  </div>
-                );
-              })
-            )}
-            {hiddenOptionCount > 0 && (
-              <InlineStatus className="border-line-soft bg-transparent p-0 px-3 py-3 text-center text-xs">
-                Showing {visibleOptions.length} of {filteredOptions.length}. Search to narrow.
-              </InlineStatus>
-            )}
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <Button variant="secondary" className="h-8 text-xs" onClick={onAll}>
-              All
-            </Button>
-            <Button
-              variant="ghost"
-              className="h-8 border border-line bg-white/[0.025] text-xs"
-              onClick={onNone}
-            >
-              None
-            </Button>
-          </div>
-        </div>
-      )}
+    <section className="grid gap-2 rounded-[13px] border border-line-soft bg-white/[0.018] p-2.5">
+      <div className="flex min-h-[28px] flex-wrap items-center justify-between gap-2">
+        <SectionHeading icon={icon} title={title} />
+        <StatChip>
+          {selectedValues.length} / {options.length}
+        </StatChip>
+      </div>
+      {beforeDropdown}
+      <MultiSelectDropdown
+        label={title}
+        values={selectedValues}
+        options={dropdownOptions}
+        onChange={changeSelection}
+        placeholder={`Select ${title.toLowerCase()}`}
+        emptyMessage="No options"
+        noResultsMessage="No options"
+      />
+      <div className="grid grid-cols-2 gap-2">
+        <Button variant="secondary" className="h-8 text-xs" onClick={onAll}>
+          All
+        </Button>
+        <Button
+          variant="ghost"
+          className="h-8 border border-line bg-white/[0.025] text-xs"
+          onClick={onNone}
+        >
+          None
+        </Button>
+      </div>
     </section>
   );
 }
@@ -329,7 +256,6 @@ function SidebarStatus({
 
 export function LogsSidebar({
   runs,
-  visibleRuns,
   runsQuery,
   experimentsQuery,
   tagsQuery,
@@ -338,23 +264,19 @@ export function LogsSidebar({
   datasetOptions,
   modelOptions,
   presetOptions,
-  runOptions,
   tagOptions,
   selectedExperiments,
   selectedDatasets,
   selectedModels,
   selectedPresets,
-  selectedRunIds,
   selectedTags,
   scopeMode,
-  targetScope,
   onUseCurrentTarget,
   onShowAllRuns,
   toggleExperiment,
   toggleDataset,
   toggleModel,
   togglePreset,
-  toggleRun,
   toggleTag,
   selectAllExperiments,
   selectNoExperiments,
@@ -364,8 +286,6 @@ export function LogsSidebar({
   selectNoModels,
   selectAllPresets,
   selectNoPresets,
-  selectAllRuns,
-  selectNoRuns,
   selectAllTags,
   selectNoTags,
   refreshLogLists,
@@ -395,13 +315,6 @@ export function LogsSidebar({
     selectedExperimentOptions.size === 1
       ? Array.from(selectedExperimentOptions)[0]
       : null;
-  const targetScopeLabel = [
-    targetScope.model,
-    targetScope.preset,
-    targetScope.datasets.join(", "),
-  ]
-    .filter(Boolean)
-    .join(" · ");
 
   useEffect(() => {
     if (!subsetDeleteTarget || singleSelectedExperiment === subsetDeleteTarget.experiment) {
@@ -487,30 +400,27 @@ export function LogsSidebar({
     }
   }
 
-  function renderSubsetDeleteAction(kind: SubsetDeleteKind, option: ChecklistOption) {
+  function subsetDeleteActions(
+    kind: SubsetDeleteKind,
+    option: ChecklistOption,
+  ): MultiSelectDropdownOptionAction[] | undefined {
     if (!logDeletionEnabled || !singleSelectedExperiment) {
-      return null;
+      return undefined;
     }
-    return (
-      <IconButton
-        label={`Delete ${kind} ${option.label} from experiment ${singleSelectedExperiment}`}
-        size="sm"
-        variant="danger"
-        className="rounded-[10px] active:translate-y-px"
-        onClick={() => openSubsetDeleteDialog(kind, option)}
-        icon={<Trash2 className="h-4 w-4" aria-hidden />}
-      />
-    );
+    const label = `Delete ${kind} ${option.label} from experiment ${singleSelectedExperiment}`;
+    return [
+      {
+        label,
+        tooltip: label,
+        icon: <Trash2 className="h-4 w-4" aria-hidden />,
+        onAction: () => openSubsetDeleteDialog(kind, option),
+      },
+    ];
   }
 
-  const renderDatasetDeleteAction = singleSelectedExperiment && logDeletionEnabled
-    ? function renderDatasetDeleteAction(option: ChecklistOption) {
-        return renderSubsetDeleteAction("dataset", option);
-      }
-    : undefined;
-  const renderPresetDeleteAction = singleSelectedExperiment && logDeletionEnabled
+  const presetDeleteActions = singleSelectedExperiment && logDeletionEnabled
     ? function renderPresetDeleteAction(option: ChecklistOption) {
-        return renderSubsetDeleteAction("preset", option);
+        return subsetDeleteActions("preset", option);
       }
     : undefined;
 
@@ -538,42 +448,6 @@ export function LogsSidebar({
               />
             }
           />
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <MetricCard
-            label="Runs"
-            value={visibleRuns.length}
-            className="py-2.5"
-          />
-          <MetricCard
-            label="Tags"
-            value={selectedOptionsSet(selectedTags, tagOptions).size}
-            className="py-2.5"
-          />
-        </div>
-        <div className="grid gap-2 rounded-[13px] border border-line-soft bg-white/[0.018] p-2.5">
-          <div className="grid grid-cols-2 gap-2">
-            <Button
-              variant={scopeMode === "target" ? "secondary" : "ghost"}
-              className="h-8 border border-line bg-white/[0.025] text-xs"
-              onClick={onUseCurrentTarget}
-              disabled={scopeMode === "target"}
-            >
-              Current target
-            </Button>
-            <Button
-              variant={scopeMode === "custom" ? "secondary" : "ghost"}
-              className="h-8 border border-line bg-white/[0.025] text-xs"
-              onClick={onShowAllRuns}
-            >
-              All runs
-            </Button>
-          </div>
-          {targetScopeLabel && (
-            <div className="truncate font-mono text-[11px] text-ink-faint">
-              {targetScopeLabel}
-            </div>
-          )}
         </div>
       </section>
 
@@ -605,7 +479,7 @@ export function LogsSidebar({
         />
       ) : (
         <>
-          <ChecklistSection
+          <LogFilterSection
             title="Experiments"
             icon={<FolderTree className="h-4 w-4" aria-hidden />}
             options={experimentOptions}
@@ -613,18 +487,38 @@ export function LogsSidebar({
             onToggle={toggleExperiment}
             onAll={selectAllExperiments}
             onNone={selectNoExperiments}
-            renderOptionAction={
+            beforeDropdown={
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  variant={scopeMode === "target" ? "secondary" : "ghost"}
+                  className="h-8 border border-line bg-white/[0.025] text-xs"
+                  onClick={onUseCurrentTarget}
+                  disabled={scopeMode === "target"}
+                >
+                  Current target
+                </Button>
+                <Button
+                  variant={scopeMode === "custom" ? "secondary" : "ghost"}
+                  className="h-8 border border-line bg-white/[0.025] text-xs"
+                  onClick={onShowAllRuns}
+                >
+                  All runs
+                </Button>
+              </div>
+            }
+            optionActions={
               logDeletionEnabled
-                ? (option) => (
-                    <IconButton
-                      label={`Delete experiment ${option.label}`}
-                      size="sm"
-                      variant="danger"
-                      className="rounded-[10px] active:translate-y-px"
-                      onClick={() => openDeleteDialog(option)}
-                      icon={<Trash2 className="h-4 w-4" aria-hidden />}
-                    />
-                  )
+                ? (option) => {
+                    const label = `Delete experiment ${option.label}`;
+                    return [
+                      {
+                        label,
+                        tooltip: label,
+                        icon: <Trash2 className="h-4 w-4" aria-hidden />,
+                        onAction: () => openDeleteDialog(option),
+                      },
+                    ];
+                  }
                 : undefined
             }
           />
@@ -635,7 +529,7 @@ export function LogsSidebar({
             />
           ) : (
             <>
-              <ChecklistSection
+              <LogFilterSection
                 title="Datasets"
                 icon={<Database className="h-4 w-4" aria-hidden />}
                 options={datasetOptions}
@@ -643,9 +537,8 @@ export function LogsSidebar({
                 onToggle={toggleDataset}
                 onAll={selectAllDatasets}
                 onNone={selectNoDatasets}
-                renderOptionAction={renderDatasetDeleteAction}
               />
-              <ChecklistSection
+              <LogFilterSection
                 title="Models"
                 icon={<Cpu className="h-4 w-4" aria-hidden />}
                 options={modelOptions}
@@ -654,7 +547,7 @@ export function LogsSidebar({
                 onAll={selectAllModels}
                 onNone={selectNoModels}
               />
-              <ChecklistSection
+              <LogFilterSection
                 title="Presets"
                 icon={<Layers className="h-4 w-4" aria-hidden />}
                 options={presetOptions}
@@ -662,23 +555,12 @@ export function LogsSidebar({
                 onToggle={togglePreset}
                 onAll={selectAllPresets}
                 onNone={selectNoPresets}
-                defaultOpen={false}
-                renderOptionAction={renderPresetDeleteAction}
-              />
-              <ChecklistSection
-                title="Runs"
-                icon={<FileText className="h-4 w-4" aria-hidden />}
-                options={runOptions}
-                selected={selectedOptionsSet(selectedRunIds, runOptions)}
-                onToggle={toggleRun}
-                onAll={selectAllRuns}
-                onNone={selectNoRuns}
-                defaultOpen={false}
+                optionActions={presetDeleteActions}
               />
               {tagsQuery.isError && (
                 <ErrorPanel title="Tag read failed" message={errorMessage(tagsQuery.error)} />
               )}
-              <ChecklistSection
+              <LogFilterSection
                 title="Scalar Tags"
                 icon={<Tag className="h-4 w-4" aria-hidden />}
                 options={tagOptions}
@@ -686,7 +568,6 @@ export function LogsSidebar({
                 onToggle={toggleTag}
                 onAll={selectAllTags}
                 onNone={selectNoTags}
-                search
               />
             </>
           )}

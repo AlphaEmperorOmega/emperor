@@ -35,10 +35,13 @@ export function deriveDatasetSelectionState(
   const modelLogRuns = sortLogRunsNewestFirst(
     (input.logRuns ?? []).filter((run) => run.model === input.selectedModel),
   );
-  const layerMonitorExperiments = experimentsWithLayerMonitorData(
-    modelLogRuns,
-    input.modelRunTags,
-  );
+  const layerMonitorExperiments =
+    input.modelRunTags === undefined
+      ? new Set(modelLogRuns.map((run) => run.experiment))
+      : experimentsWithLayerMonitorData(
+          modelLogRuns,
+          input.modelRunTags,
+        );
   const eligibleRuns = modelLogRuns.filter((run) =>
     layerMonitorExperiments.has(run.experiment),
   );

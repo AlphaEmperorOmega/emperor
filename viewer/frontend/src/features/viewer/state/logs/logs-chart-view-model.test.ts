@@ -6,6 +6,7 @@ import {
   groupLogScalarSeriesByTag,
 } from "@/features/viewer/state/logs/logs-chart-view-model";
 import {
+  buildLogScalarTagOptions,
   isDefaultScalarTag,
   groupRenderableLogMetrics,
 } from "@/features/viewer/state/logs/logs-selectors";
@@ -160,7 +161,29 @@ describe("logs chart view model", () => {
     expect(isDefaultScalarTag("main_model.0.model/weights/mean")).toBe(false);
   });
 
-  it("routes confusion-matrix rates to heatmaps and counts to scalar groups", () => {
+  it("splits confusion-matrix tags out of normal scalar tag options", () => {
+    const confusionRateTag =
+      "validation/confusion_matrix/true_class_0/predicted_class_1/rate";
+    const confusionCountTag =
+      "validation/confusion_matrix/true_class_0/predicted_class_1/count";
+
+    const tagOptions = buildLogScalarTagOptions([
+      {
+        scalarTags: ["validation/accuracy", confusionRateTag, confusionCountTag],
+      },
+      {
+        scalarTags: ["train/loss", confusionRateTag],
+      },
+    ]);
+
+    expect(tagOptions.tagOptions.map((option) => option.value)).toEqual([
+      "train/loss",
+      "validation/accuracy",
+    ]);
+    expect(tagOptions.confusionMatrixRateTags).toEqual([confusionRateTag]);
+  });
+
+  it("routes confusion-matrix rates to heatmaps and hides raw cells from scalar groups", () => {
     const confusionRateTag =
       "validation/confusion_matrix/true_class_0/predicted_class_1/rate";
     const confusionCountTag =
@@ -185,14 +208,14 @@ describe("logs chart view model", () => {
       seriesByTag,
     });
     const heatmaps = buildConfusionMatrixHeatmaps({
-      selectedTagList,
+      matrixTagList: [confusionRateTag],
       seriesByTag,
       runsById: new Map([["run-1", logRun({ id: "run-1" })]]),
       runOrder: ["run-1"],
     });
 
     expect(groups.train.map((metric) => metric.tag)).toEqual(["train/loss"]);
-    expect(groups.validation.map((metric) => metric.tag)).toEqual([confusionCountTag]);
+    expect(groups.validation).toEqual([]);
     expect(heatmaps).toHaveLength(1);
     expect(heatmaps[0]).toMatchObject({
       split: "validation",
@@ -206,6 +229,7 @@ describe("logs chart view model", () => {
     expect(
       deriveLogsChartEmptyState({
         expandedSelectedTagCount: 0,
+        confusionMatrixTagCount: 0,
         hasEventFiles: true,
         runsLoading: false,
         scalarLoading: false,
@@ -213,6 +237,7 @@ describe("logs chart view model", () => {
         selectedTagCount: 0,
         tagOptionCount: 2,
         tagsLoading: false,
+        tagsRefreshing: false,
         visibleRunCount: 1,
       }),
     ).toMatchObject({ title: "No scalar tags selected", busy: false });
@@ -220,6 +245,7 @@ describe("logs chart view model", () => {
     expect(
       deriveLogsChartEmptyState({
         expandedSelectedTagCount: 1,
+        confusionMatrixTagCount: 0,
         hasEventFiles: true,
         runsLoading: false,
         scalarLoading: false,
@@ -227,6 +253,7 @@ describe("logs chart view model", () => {
         selectedTagCount: 1,
         tagOptionCount: 2,
         tagsLoading: false,
+        tagsRefreshing: false,
         visibleRunCount: 1,
       }),
     ).toMatchObject({ title: "No scalar points for selection", busy: false });
@@ -234,6 +261,7 @@ describe("logs chart view model", () => {
     expect(
       deriveLogsChartEmptyState({
         expandedSelectedTagCount: 1,
+        confusionMatrixTagCount: 0,
         hasEventFiles: true,
         runsLoading: false,
         scalarLoading: true,
@@ -241,15 +269,51 @@ describe("logs chart view model", () => {
         selectedTagCount: 1,
         tagOptionCount: 2,
         tagsLoading: false,
+        tagsRefreshing: true,
+        visibleRunCount: 1,
+      }),
+    ).toMatchObject({ title: "Refreshing TensorBoard tags", busy: true });
+
+    expect(
+      deriveLogsChartEmptyState({
+        expandedSelectedTagCount: 1,
+        confusionMatrixTagCount: 0,
+        hasEventFiles: true,
+        runsLoading: false,
+        scalarLoading: true,
+        selectedSeriesCount: 0,
+        selectedTagCount: 1,
+        tagOptionCount: 2,
+        tagsLoading: false,
+        tagsRefreshing: false,
         visibleRunCount: 1,
       }),
     ).toMatchObject({ title: "Loading scalar points", busy: true });
+  });
+
+  it("allows the confusion matrix accordion when no normal scalar tags are selected", () => {
+    expect(
+      deriveLogsChartEmptyState({
+        expandedSelectedTagCount: 0,
+        confusionMatrixTagCount: 4,
+        hasEventFiles: true,
+        runsLoading: false,
+        scalarLoading: false,
+        selectedSeriesCount: 0,
+        selectedTagCount: 0,
+        tagOptionCount: 0,
+        tagsLoading: false,
+        tagsRefreshing: false,
+        visibleRunCount: 1,
+      }),
+    ).toBeNull();
   });
 
   it("does not show a global scalar loading state when loaded chart data remains visible", () => {
     expect(
       deriveLogsChartEmptyState({
         expandedSelectedTagCount: 2,
+        confusionMatrixTagCount: 0,
         hasEventFiles: true,
         runsLoading: false,
         scalarLoading: true,
@@ -257,6 +321,7 @@ describe("logs chart view model", () => {
         selectedTagCount: 2,
         tagOptionCount: 2,
         tagsLoading: false,
+        tagsRefreshing: false,
         visibleRunCount: 1,
       }),
     ).toBeNull();
@@ -266,6 +331,7 @@ describe("logs chart view model", () => {
     expect(
       deriveLogsChartEmptyState({
         expandedSelectedTagCount: 1,
+        confusionMatrixTagCount: 0,
         hasEventFiles: true,
         runsLoading: false,
         scalarLoading: false,
@@ -273,6 +339,7 @@ describe("logs chart view model", () => {
         selectedTagCount: 1,
         tagOptionCount: 2,
         tagsLoading: false,
+        tagsRefreshing: false,
         visibleRunCount: 1,
       }),
     ).toBeNull();

@@ -120,7 +120,7 @@ describe("log diagnostics", () => {
     ]);
 
     const heatmaps = buildConfusionMatrixHeatmaps({
-      selectedTagList: [rateTag, countTag, trainRateTag],
+      matrixTagList: [rateTag, trainRateTag],
       seriesByTag,
       runsById: new Map([
         ["run-a", logRun("run-a")],

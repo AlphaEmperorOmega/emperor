@@ -1,18 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { type LogRun } from "@/lib/api";
+import { type LogRun, type LogRunTags } from "@/lib/api";
 import {
   addValueToInitializedSelection,
   addValuesToInitializedSelection,
+  buildExperimentFacetSeedSelections,
+  buildExperimentScalarTagSeedSelection,
   buildInitialExperimentSelection,
   buildInitialRunFacetSelection,
-  buildInitialRunIdSelection,
   buildLogRunDeleteFilters,
   filterVisibleLogRuns,
   nextSelectedDetailRunId,
+  pruneSelectionToAvailableValues,
   pruneDeletedDetailRunId,
   removeStartedExperiment,
   removeValueFromSelection,
   removeValuesFromSelection,
+  selectionSetOrDefault,
   startedRunSelections,
 } from "@/features/viewer/state/logs/logs-selection-state";
 
@@ -47,6 +50,20 @@ function values(set: Set<string> | null) {
   return set ? Array.from(set).sort() : null;
 }
 
+function orderedValues(set: Set<string> | null) {
+  return set ? Array.from(set) : null;
+}
+
+function logRunTags(runId: string, scalarTags: string[]): LogRunTags {
+  return {
+    runId,
+    scalarTags,
+    histogramTags: [],
+    imageTags: [],
+    textTags: [],
+  };
+}
+
 const runs = [
   logRun({ id: "run-a", experiment: "exp_a", dataset: "Mnist" }),
   logRun({ id: "run-b", experiment: "exp_b", dataset: "Cifar10" }),
@@ -70,7 +87,6 @@ describe("logs selection state", () => {
       "Cifar10",
       "Mnist",
     ]);
-    expect(values(buildInitialRunIdSelection(runs))).toEqual(["run-a", "run-b", "run-c"]);
   });
 
   it("adds started run facets only after selections have initialized", () => {
@@ -81,20 +97,198 @@ describe("logs selection state", () => {
 
     expect(startedSelections.hasStartedRuns).toBe(true);
     expect(values(startedSelections.datasets)).toEqual(["Cifar10", "Mnist"]);
-    expect(addValuesToInitializedSelection(null, startedSelections.datasets)).toBeNull();
-    expect(values(addValuesToInitializedSelection(new Set(["Mnist"]), startedSelections.datasets)))
-      .toEqual(["Cifar10", "Mnist"]);
+    expect(values(startedSelections.presets)).toEqual(["baseline", "wide"]);
+    expect(addValuesToInitializedSelection(null, startedSelections.presets)).toBeNull();
+    expect(
+      values(addValuesToInitializedSelection(new Set(["baseline"]), startedSelections.presets)),
+    ).toEqual(["baseline", "wide"]);
     expect(values(addValueToInitializedSelection(new Set(["exp_a"]), "exp_b")))
       .toEqual(["exp_a", "exp_b"]);
   });
 
-  it("filters visible runs and keeps detail selection valid", () => {
+  it("widens stale run facets when a pending experiment would show no runs", () => {
+    const seedSelections = buildExperimentFacetSeedSelections({
+      runs: [
+        logRun({ id: "baseline", experiment: "prior", dataset: "Mnist" }),
+        logRun({
+          id: "kaggle",
+          experiment: "kaggle_linear_all",
+          dataset: "KaggleDigits",
+          model: "wide-linear",
+          preset: "KAGGLE_LINEAR",
+        }),
+      ],
+      pendingExperiments: new Set(["kaggle_linear_all"]),
+      selectedDatasets: new Set(["Mnist"]),
+      selectedModels: new Set(["linears/linear"]),
+      selectedPresets: new Set(["BASELINE"]),
+    });
+
+    expect(values(seedSelections.loadedExperiments)).toEqual(["kaggle_linear_all"]);
+    expect(values(seedSelections.datasets)).toEqual(["KaggleDigits"]);
+    expect(values(seedSelections.models)).toEqual(["linears/wide-linear"]);
+    expect(values(seedSelections.presets)).toEqual(["KAGGLE_LINEAR"]);
+    expect(
+      values(
+        addValuesToInitializedSelection(
+          new Set(["BASELINE"]),
+          seedSelections.presets,
+        ),
+      ),
+    ).toEqual(["BASELINE", "KAGGLE_LINEAR"]);
+  });
+
+  it("preserves matching run facets for a pending experiment", () => {
+    const seedSelections = buildExperimentFacetSeedSelections({
+      runs: [
+        logRun({
+          id: "kaggle-mnist",
+          experiment: "kaggle_linear_all",
+          dataset: "Mnist",
+          preset: "BASELINE",
+        }),
+        logRun({
+          id: "kaggle-digits",
+          experiment: "kaggle_linear_all",
+          dataset: "KaggleDigits",
+          preset: "KAGGLE_LINEAR",
+        }),
+      ],
+      pendingExperiments: new Set(["kaggle_linear_all"]),
+      selectedDatasets: new Set(["Mnist"]),
+      selectedModels: new Set(["linears/linear"]),
+      selectedPresets: new Set(["BASELINE"]),
+    });
+
+    expect(values(seedSelections.loadedExperiments)).toEqual(["kaggle_linear_all"]);
+    expect(values(seedSelections.datasets)).toEqual([]);
+    expect(values(seedSelections.models)).toEqual([]);
+    expect(values(seedSelections.presets)).toEqual([]);
+  });
+
+  it("keeps null run facet selections as all-values fallbacks", () => {
+    const seedSelections = buildExperimentFacetSeedSelections({
+      runs: [
+        logRun({
+          id: "kaggle",
+          experiment: "kaggle_linear_all",
+          dataset: "KaggleDigits",
+          preset: "KAGGLE_LINEAR",
+        }),
+      ],
+      pendingExperiments: new Set(["kaggle_linear_all"]),
+      selectedDatasets: null,
+      selectedModels: new Set(["linears/wide-linear"]),
+      selectedPresets: null,
+    });
+
+    expect(values(seedSelections.datasets)).toEqual(["KaggleDigits"]);
+    expect(addValuesToInitializedSelection(null, seedSelections.datasets)).toBeNull();
+    expect(addValuesToInitializedSelection(null, seedSelections.presets)).toBeNull();
+  });
+
+  it("replaces stale checked scalar tags for a pending experiment", () => {
+    const kaggleRuns = [
+      logRun({ id: "kaggle-a", experiment: "kaggle_linear_all" }),
+      logRun({ id: "kaggle-b", experiment: "kaggle_linear_all" }),
+    ];
+    const seedSelection = buildExperimentScalarTagSeedSelection({
+      visibleRuns: kaggleRuns,
+      tagRuns: kaggleRuns.map((run) =>
+        logRunTags(run.id, ["train/loss", "validation/accuracy"]),
+      ),
+      pendingExperiments: new Set(["kaggle_linear_all"]),
+      selectedTags: new Set(["main_model.0.model/weights/mean"]),
+      tagOptionValues: ["train/loss", "validation/accuracy"],
+      selectAllLimit: 100,
+    });
+
+    expect(values(seedSelection.loadedExperiments)).toEqual(["kaggle_linear_all"]);
+    expect(orderedValues(seedSelection.selectedTags)).toEqual([
+      "train/loss",
+      "validation/accuracy",
+    ]);
+  });
+
+  it("preserves matching checked scalar tags for a pending experiment", () => {
+    const selectedTags = new Set(["validation/accuracy"]);
+    const seedSelection = buildExperimentScalarTagSeedSelection({
+      visibleRuns: [logRun({ id: "kaggle", experiment: "kaggle_linear_all" })],
+      tagRuns: [
+        logRunTags("kaggle", ["train/loss", "validation/accuracy"]),
+      ],
+      pendingExperiments: new Set(["kaggle_linear_all"]),
+      selectedTags,
+      tagOptionValues: ["train/loss", "validation/accuracy"],
+      selectAllLimit: 100,
+    });
+
+    expect(values(seedSelection.loadedExperiments)).toEqual(["kaggle_linear_all"]);
+    expect(seedSelection.selectedTags).toBe(selectedTags);
+  });
+
+  it("leaves default scalar tag selection unset for a pending experiment", () => {
+    const seedSelection = buildExperimentScalarTagSeedSelection({
+      visibleRuns: [logRun({ id: "kaggle", experiment: "kaggle_linear_all" })],
+      tagRuns: [
+        logRunTags("kaggle", ["train/loss", "validation/accuracy"]),
+      ],
+      pendingExperiments: new Set(["kaggle_linear_all"]),
+      selectedTags: null,
+      tagOptionValues: ["train/loss", "validation/accuracy"],
+      selectAllLimit: 100,
+    });
+
+    expect(values(seedSelection.loadedExperiments)).toEqual(["kaggle_linear_all"]);
+    expect(seedSelection.selectedTags).toBeNull();
+  });
+
+  it("waits for visible run tag payloads before scalar tag seeding", () => {
+    const selectedTags = new Set(["main_model.0.model/weights/mean"]);
+    const seedSelection = buildExperimentScalarTagSeedSelection({
+      visibleRuns: [
+        logRun({ id: "kaggle-a", experiment: "kaggle_linear_all" }),
+        logRun({ id: "kaggle-b", experiment: "kaggle_linear_all" }),
+      ],
+      tagRuns: [
+        logRunTags("kaggle-a", ["train/loss", "validation/accuracy"]),
+      ],
+      pendingExperiments: new Set(["kaggle_linear_all"]),
+      selectedTags,
+      tagOptionValues: ["train/loss", "validation/accuracy"],
+      selectAllLimit: 100,
+    });
+
+    expect(values(seedSelection.loadedExperiments)).toEqual([]);
+    expect(seedSelection.selectedTags).toBe(selectedTags);
+  });
+
+  it("falls back to available scalar tags for non-standard pending experiments", () => {
+    const seedSelection = buildExperimentScalarTagSeedSelection({
+      visibleRuns: [logRun({ id: "custom", experiment: "custom_experiment" })],
+      tagRuns: [
+        logRunTags("custom", [
+          "custom/first",
+          "validation/confusion_matrix/true_class_0/predicted_class_0/rate",
+          "custom/second",
+        ]),
+      ],
+      pendingExperiments: new Set(["custom_experiment"]),
+      selectedTags: new Set(["main_model.0.model/weights/mean"]),
+      tagOptionValues: ["custom/first", "custom/second"],
+      selectAllLimit: 1,
+    });
+
+    expect(values(seedSelection.loadedExperiments)).toEqual(["custom_experiment"]);
+    expect(orderedValues(seedSelection.selectedTags)).toEqual(["custom/first"]);
+  });
+
+  it("filters visible runs by dataset and keeps detail selection valid", () => {
     const visibleRuns = filterVisibleLogRuns(runs, {
-	      experiments: new Set(["exp_b"]),
-	      datasets: new Set(["Mnist"]),
-	      models: new Set(["linears/linear"]),
-      presets: new Set(["wide"]),
-      runIds: new Set(["run-a", "run-b", "run-c"]),
+      experiments: new Set(["exp_b"]),
+      datasets: new Set(["Mnist"]),
+      models: new Set(["linears/linear"]),
+      presets: new Set(["baseline", "wide"]),
     });
 
     expect(visibleRuns.map((run) => run.id)).toEqual(["run-c"]);
@@ -134,19 +328,37 @@ describe("logs selection state", () => {
       .toEqual(["exp_b"]);
   });
 
+  it("prunes manual scalar tag selections but preserves default fallback", () => {
+    expect(
+      values(
+        pruneSelectionToAvailableValues(
+          new Set(["train/loss", "validation/accuracy", "validation/kaggle_auc"]),
+          ["validation/kaggle_auc", "train/kaggle_logloss"],
+        ),
+      ),
+    ).toEqual(["validation/kaggle_auc"]);
+    expect(pruneSelectionToAvailableValues(null, ["validation/kaggle_auc"]))
+      .toBeNull();
+    expect(
+      values(
+        selectionSetOrDefault(
+          null,
+          new Set(["train/kaggle_logloss", "validation/kaggle_auc"]),
+        ),
+      ),
+    ).toEqual(["train/kaggle_logloss", "validation/kaggle_auc"]);
+    expect(
+      values(selectionSetOrDefault(new Set(["train/loss"]), new Set(["other"]))),
+    ).toEqual(["train/loss"]);
+  });
+
   it("builds sorted delete filters from active selections", () => {
     expect(
-      buildLogRunDeleteFilters({
-        experiments: new Set(["exp_b", "exp_a"]),
-        datasets: new Set(["Mnist"]),
-	        models: new Set(["linears/linear"]),
-        presets: new Set(["wide", "baseline"]),
-        runIds: new Set(["run-c", "run-a"]),
-      }),
+      buildLogRunDeleteFilters([runs[2], runs[0]]),
     ).toEqual({
       experiments: ["exp_a", "exp_b"],
       datasets: ["Mnist"],
-	      models: [{ modelType: "linears", model: "linear" }],
+      models: [{ modelType: "linears", model: "linear" }],
       presets: ["baseline", "wide"],
       runIds: ["run-a", "run-c"],
     });

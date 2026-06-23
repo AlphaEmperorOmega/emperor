@@ -78,6 +78,24 @@ function mediaCountLabel(imageCount: number, textCount: number, isLoading: boole
   return `${count} ${count === 1 ? "item" : "items"}`;
 }
 
+function matrixCountLabel({
+  heatmapCount,
+  isLoaded,
+  isLoading,
+}: {
+  heatmapCount: number;
+  isLoaded: boolean;
+  isLoading: boolean;
+}) {
+  if (isLoading && !isLoaded) {
+    return "Loading";
+  }
+  if (!isLoaded) {
+    return "Available";
+  }
+  return `${heatmapCount} ${heatmapCount === 1 ? "matrix" : "matrices"}`;
+}
+
 function LogsAccordionHeader({
   label,
   badge,
@@ -172,6 +190,13 @@ export function LogsChartPanel({
   visibleRunCount,
   selectedTagCount,
   scalarQueryStates,
+  hasConfusionMatrixTags,
+  isConfusionMatrixCollapsed,
+  isConfusionMatrixLoaded,
+  isConfusionMatrixLoading,
+  isConfusionMatrixError,
+  confusionMatrixError,
+  onToggleConfusionMatrix,
   isTagRefreshLoading,
   collapsedMetricGroups,
   onToggleMetricGroup,
@@ -205,6 +230,13 @@ export function LogsChartPanel({
   visibleRunCount: number;
   selectedTagCount: number;
   scalarQueryStates: LogMetricGroupScalarQueryStates;
+  hasConfusionMatrixTags: boolean;
+  isConfusionMatrixCollapsed: boolean;
+  isConfusionMatrixLoaded: boolean;
+  isConfusionMatrixLoading: boolean;
+  isConfusionMatrixError: boolean;
+  confusionMatrixError: unknown;
+  onToggleConfusionMatrix: () => void;
   isTagRefreshLoading: boolean;
   collapsedMetricGroups: Set<LogMetricGroupKey>;
   onToggleMetricGroup: (group: LogMetricGroupKey) => void;
@@ -345,7 +377,45 @@ export function LogsChartPanel({
                 )}
               </section>
             )}
-            <LogConfusionMatrixHeatmaps heatmaps={confusionHeatmaps} />
+            {hasConfusionMatrixTags && (
+              <section className="grid gap-3">
+                <LogsAccordionHeader
+                  label="Confusion Matrix"
+                  badge={matrixCountLabel({
+                    heatmapCount: confusionHeatmaps.length,
+                    isLoaded: isConfusionMatrixLoaded,
+                    isLoading: isConfusionMatrixLoading,
+                  })}
+                  isCollapsed={isConfusionMatrixCollapsed}
+                  controlsId="logs-confusion-matrix"
+                  onToggle={onToggleConfusionMatrix}
+                />
+                {!isConfusionMatrixCollapsed && (
+                  <div id="logs-confusion-matrix" className="grid gap-3">
+                    {isConfusionMatrixError && (
+                      <ErrorPanel
+                        title="Confusion matrix read failed"
+                        message={errorMessage(confusionMatrixError)}
+                      />
+                    )}
+                    {isConfusionMatrixLoading && confusionHeatmaps.length === 0 && (
+                      <InlineStatus busy compact role="status">
+                        Loading confusion matrix scalar points
+                      </InlineStatus>
+                    )}
+                    {!isConfusionMatrixLoading &&
+                      !isConfusionMatrixError &&
+                      isConfusionMatrixLoaded &&
+                      confusionHeatmaps.length === 0 && (
+                        <InlineStatus compact>
+                          No confusion matrix points for the selected runs.
+                        </InlineStatus>
+                      )}
+                    <LogConfusionMatrixHeatmaps heatmaps={confusionHeatmaps} />
+                  </div>
+                )}
+              </section>
+            )}
             {LOG_METRIC_GROUPS.map((group) => {
               const metrics = metricsByGroup[group.key];
               const selectedGroupTags = selectedTagsByGroup[group.key];

@@ -8,7 +8,6 @@ export function LogsSidebarPanel({ state }: { state: LogsWorkspaceState }) {
   return (
     <LogsSidebar
       runs={state.runs}
-      visibleRuns={state.visibleRuns}
       runsQuery={state.runsQuery}
       experimentsQuery={state.experimentsQuery}
       tagsQuery={state.tagsQuery}
@@ -17,23 +16,19 @@ export function LogsSidebarPanel({ state }: { state: LogsWorkspaceState }) {
       datasetOptions={state.datasetOptions}
       modelOptions={state.modelOptions}
       presetOptions={state.presetOptions}
-      runOptions={state.runOptions}
       tagOptions={state.tagOptions}
       selectedExperiments={state.selectedExperiments}
       selectedDatasets={state.selectedDatasets}
       selectedModels={state.selectedModels}
       selectedPresets={state.selectedPresets}
-      selectedRunIds={state.selectedRunIds}
       selectedTags={state.selectedTags}
       scopeMode={state.scopeMode}
-      targetScope={state.targetScope}
       onUseCurrentTarget={state.useCurrentTargetScope}
       onShowAllRuns={state.showAllRuns}
       toggleExperiment={state.toggleExperiment}
       toggleDataset={state.toggleDataset}
       toggleModel={state.toggleModel}
       togglePreset={state.togglePreset}
-      toggleRun={state.toggleRun}
       toggleTag={state.toggleTag}
       selectAllExperiments={state.selectAllExperiments}
       selectNoExperiments={state.selectNoExperiments}
@@ -43,8 +38,6 @@ export function LogsSidebarPanel({ state }: { state: LogsWorkspaceState }) {
       selectNoModels={state.selectNoModels}
       selectAllPresets={state.selectAllPresets}
       selectNoPresets={state.selectNoPresets}
-      selectAllRuns={state.selectAllRuns}
-      selectNoRuns={state.selectNoRuns}
       selectAllTags={state.selectAllTags}
       selectNoTags={state.selectNoTags}
       refreshLogLists={state.refreshLogLists}

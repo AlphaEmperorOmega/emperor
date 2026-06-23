@@ -89,12 +89,12 @@ export function isDefaultDiagnosticScalarTag(tag: string) {
 }
 
 export function buildConfusionMatrixHeatmaps({
-  selectedTagList,
+  matrixTagList,
   seriesByTag,
   runsById,
   runOrder,
 }: {
-  selectedTagList: string[];
+  matrixTagList: string[];
   seriesByTag: Map<string, LogScalarSeries[]>;
   runsById: Map<string, LogRun>;
   runOrder: string[];
@@ -102,7 +102,7 @@ export function buildConfusionMatrixHeatmaps({
   const heatmaps = new Map<string, ConfusionMatrixHeatmap>();
   const runIndex = new Map(runOrder.map((runId, index) => [runId, index]));
 
-  for (const tag of selectedTagList) {
+  for (const tag of matrixTagList) {
     const parsedTag = parseConfusionMatrixTag(tag);
     if (!parsedTag || parsedTag.valueKind !== "rate") {
       continue;
