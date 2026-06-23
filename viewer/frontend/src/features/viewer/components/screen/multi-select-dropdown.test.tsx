@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { MultiSelectDropdown } from "@/features/viewer/components/screen/multi-select-dropdown";
@@ -24,6 +24,29 @@ const options = [
     description: "wide",
   },
 ];
+
+function manyOptions(count: number) {
+  return Array.from({ length: count }, (_, index) => {
+    const number = String(index + 1).padStart(2, "0");
+    return {
+      value: `target-${number}`,
+      label: `Target ${number}`,
+      description: `target-${number}`,
+    };
+  });
+}
+
+function setScrollable(element: HTMLElement) {
+  Object.defineProperty(element, "clientHeight", {
+    configurable: true,
+    value: 120,
+  });
+  Object.defineProperty(element, "scrollHeight", {
+    configurable: true,
+    value: 800,
+  });
+  element.scrollTop = 700;
+}
 
 function renderDropdown({
   disabledValues = [],
@@ -52,6 +75,21 @@ function renderDropdown({
     />,
   );
   return { onAction, onChange };
+}
+
+function renderLazyDropdown() {
+  const onChange = vi.fn();
+  render(
+    <MultiSelectDropdown
+      label="Targets"
+      values={[]}
+      options={manyOptions(18)}
+      onChange={onChange}
+      initialVisibleCount={5}
+      pageSize={5}
+    />,
+  );
+  return { onChange };
 }
 
 async function openDropdown(user: ReturnType<typeof userEvent.setup>) {
@@ -198,5 +236,97 @@ describe("MultiSelectDropdown", () => {
 
     expect(onAction).toHaveBeenCalledWith("baseline");
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("renders the first lazy page before scrolling", async () => {
+    const user = userEvent.setup();
+    renderLazyDropdown();
+
+    const listbox = await openDropdown(user);
+
+    expect(within(listbox).getAllByRole("option")).toHaveLength(5);
+    expect(
+      within(listbox).getByRole("option", { name: /target 05/i }),
+    ).toBeInTheDocument();
+    expect(
+      within(listbox).queryByRole("option", { name: /target 06/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("loads the next lazy page when the listbox scrolls near the bottom", async () => {
+    const user = userEvent.setup();
+    renderLazyDropdown();
+
+    const listbox = await openDropdown(user);
+    setScrollable(listbox);
+    fireEvent.scroll(listbox);
+
+    expect(
+      within(listbox).getByRole("status", { name: /loading more targets/i }),
+    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(
+        within(listbox).getByRole("option", { name: /target 10/i }),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("resets the lazy window after searching and can append filtered rows", async () => {
+    const user = userEvent.setup();
+    renderLazyDropdown();
+
+    let listbox = await openDropdown(user);
+    setScrollable(listbox);
+    fireEvent.scroll(listbox);
+    await waitFor(() => {
+      expect(
+        within(listbox).getByRole("option", { name: /target 10/i }),
+      ).toBeInTheDocument();
+    });
+
+    await user.type(screen.getByLabelText("Search Targets"), "Target 1");
+
+    listbox = screen.getByRole("listbox", { name: "Targets options" });
+    expect(
+      within(listbox).getByRole("option", { name: /target 10/i }),
+    ).toBeInTheDocument();
+    expect(
+      within(listbox).queryByRole("option", { name: /target 15/i }),
+    ).not.toBeInTheDocument();
+
+    setScrollable(listbox);
+    fireEvent.scroll(listbox);
+    await waitFor(() => {
+      expect(
+        within(listbox).getByRole("option", { name: /target 15/i }),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("loads another page when keyboard navigation moves past the last rendered row", async () => {
+    const user = userEvent.setup();
+    renderLazyDropdown();
+
+    const listbox = await openDropdown(user);
+    await user.keyboard("{ArrowDown}");
+    await waitFor(() => {
+      expect(
+        within(listbox).getByRole("option", { name: /target 01/i }),
+      ).toHaveFocus();
+    });
+
+    await user.keyboard("{End}");
+    await waitFor(() => {
+      expect(
+        within(listbox).getByRole("option", { name: /target 05/i }),
+      ).toHaveFocus();
+    });
+    await user.keyboard("{ArrowDown}");
+
+    await waitFor(() => {
+      expect(
+        within(listbox).getByRole("option", { name: /target 06/i }),
+      ).toHaveFocus();
+    });
   });
 });

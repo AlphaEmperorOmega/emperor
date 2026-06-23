@@ -1,3 +1,4 @@
+import { Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ConfigFieldValueEditor } from "@/features/viewer/components/config/config-field-control";
 import { surfacePanelClassName } from "@/features/viewer/components/shared/surface-panel";
@@ -105,7 +106,7 @@ function ConfigSearchResultItem({
 export function ConfigSearchResults({
   popupId,
   visibleOptions,
-  hiddenResultCount,
+  isLoadingMore,
   activeIndex,
   selectedFieldKey,
   overrides,
@@ -116,7 +117,7 @@ export function ConfigSearchResults({
 }: {
   popupId: string;
   visibleOptions: ConfigSearchOption[];
-  hiddenResultCount: number;
+  isLoadingMore: boolean;
   activeIndex: number;
   selectedFieldKey: string | null;
   overrides: OverrideValues;
@@ -154,9 +155,14 @@ export function ConfigSearchResults({
           onFieldReset={onFieldReset}
         />
       ))}
-      {hiddenResultCount > 0 && (
-        <div className="px-3 py-2 text-xs text-ink-dim">
-          {hiddenResultCount} more matches
+      {isLoadingMore && (
+        <div
+          role="status"
+          aria-label="Loading more config matches"
+          className="flex items-center justify-center gap-2 px-3 py-3 text-xs font-semibold text-ink-dim"
+        >
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-violet" aria-hidden />
+          Loading more matches
         </div>
       )}
     </>

@@ -1,6 +1,7 @@
 import {
   type AriaRole,
   type CSSProperties,
+  type UIEventHandler,
   forwardRef,
   type ReactNode,
 } from "react";
@@ -14,6 +15,7 @@ export type DropdownShellProps = {
   searchSlot?: ReactNode;
   children: ReactNode;
   className?: string;
+  onScroll?: UIEventHandler<HTMLDivElement>;
   style?: CSSProperties;
 };
 
@@ -30,6 +32,7 @@ export const DropdownShell = forwardRef<HTMLDivElement, DropdownShellProps>(
       searchSlot,
       children,
       className,
+      onScroll,
       style,
     },
     ref,
@@ -40,6 +43,7 @@ export const DropdownShell = forwardRef<HTMLDivElement, DropdownShellProps>(
       role={role}
       aria-labelledby={labelledBy}
       aria-label={ariaLabel}
+      onScroll={onScroll}
       style={style}
       className={cn(dropdownShellClassName, className)}
     >

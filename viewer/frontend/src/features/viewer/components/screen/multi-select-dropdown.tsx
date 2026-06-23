@@ -10,7 +10,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Check, ChevronDown, Search } from "lucide-react";
+import { Check, ChevronDown, Loader2, Search } from "lucide-react";
 import { flushSync } from "react-dom";
 import { IconButton } from "@/components/ui/icon-button";
 import {
@@ -25,6 +25,7 @@ import {
 import { DropdownShell } from "@/features/viewer/components/shared/dropdown-shell";
 import { HoverTooltip } from "@/features/viewer/components/shared/hover-tooltip";
 import { StatChip } from "@/features/viewer/components/shared/stat-chip";
+import { useIncrementalVisibleOptions } from "@/features/viewer/components/shared/use-incremental-visible-options";
 import { usePopupDismissal } from "@/features/viewer/components/shared/use-popup-dismissal";
 import { cn } from "@/lib/utils";
 
@@ -82,6 +83,8 @@ export function MultiSelectDropdown({
   noResultsMessage = "No matching options",
   disabled: disabledProp = false,
   className,
+  initialVisibleCount = 50,
+  pageSize = initialVisibleCount,
 }: {
   id?: string;
   label: string;
@@ -97,6 +100,8 @@ export function MultiSelectDropdown({
   noResultsMessage?: string;
   disabled?: boolean;
   className?: string;
+  initialVisibleCount?: number;
+  pageSize?: number;
 }) {
   const generatedId = useId();
   const triggerId = id ?? `${generatedId}-multiselect`;
@@ -110,6 +115,7 @@ export function MultiSelectDropdown({
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(-1);
+  const pendingKeyboardIndexRef = useRef<number | null>(null);
 
   const disabled = disabledProp || options.length === 0;
   const selectedValueSet = useMemo(() => new Set(values), [values]);
@@ -136,13 +142,29 @@ export function MultiSelectDropdown({
         .includes(normalizedQuery),
     );
   }, [normalizedQuery, options]);
+  const filteredOptionsKey = useMemo(
+    () => filteredOptions.map((option) => option.value).join("\u0000"),
+    [filteredOptions],
+  );
+  const {
+    scrollContainerRef,
+    visibleOptions,
+    hasMore,
+    isLoadingMore,
+    loadMore,
+    handleScroll,
+  } = useIncrementalVisibleOptions({
+    options: filteredOptions,
+    initialVisibleCount,
+    pageSize,
+  });
   const selectedCount = values.length;
   const countSummary = `${selectedCount} / ${options.length} selected`;
   const visibleChips = selectedOptions.slice(0, 2);
   const hiddenChipCount = Math.max(0, selectedOptions.length - visibleChips.length);
   const activeOptionId =
     isOpen && activeIndex >= 0 ? `${listboxId}-option-${activeIndex}` : undefined;
-  const activeOption = activeIndex >= 0 ? filteredOptions[activeIndex] : undefined;
+  const activeOption = activeIndex >= 0 ? visibleOptions[activeIndex] : undefined;
   const canMakeActiveOptionPrimary = Boolean(
     activeOption &&
       selectedValueSet.has(activeOption.value) &&
@@ -176,18 +198,27 @@ export function MultiSelectDropdown({
 
   const moveActiveOption = useCallback(
     (direction: 1 | -1) => {
-      if (filteredOptions.length === 0) {
+      if (visibleOptions.length === 0) {
         return;
       }
       setActiveIndex((current) => {
         const startIndex = current >= 0 ? current : 0;
+        if (
+          direction === 1 &&
+          startIndex >= visibleOptions.length - 1 &&
+          hasMore
+        ) {
+          pendingKeyboardIndexRef.current = visibleOptions.length;
+          loadMore();
+          return current;
+        }
         const nextIndex =
-          (startIndex + direction + filteredOptions.length) % filteredOptions.length;
+          (startIndex + direction + visibleOptions.length) % visibleOptions.length;
         focusOption(nextIndex);
         return nextIndex;
       });
     },
-    [filteredOptions.length, focusOption],
+    [focusOption, hasMore, loadMore, visibleOptions.length],
   );
 
   const toggleOption = useCallback(
@@ -215,7 +246,28 @@ export function MultiSelectDropdown({
       return;
     }
     setActiveIndex(filteredOptions.length > 0 ? 0 : -1);
-  }, [filteredOptions.length, isOpen]);
+  }, [filteredOptions.length, filteredOptionsKey, isOpen]);
+
+  useEffect(() => {
+    const pendingIndex = pendingKeyboardIndexRef.current;
+    if (pendingIndex === null || pendingIndex >= visibleOptions.length) {
+      return;
+    }
+    pendingKeyboardIndexRef.current = null;
+    setActiveIndex(pendingIndex);
+    focusOption(pendingIndex);
+  }, [focusOption, visibleOptions.length]);
+
+  useEffect(() => {
+    if (activeIndex < visibleOptions.length) {
+      return;
+    }
+    setActiveIndex(visibleOptions.length > 0 ? visibleOptions.length - 1 : -1);
+  }, [activeIndex, visibleOptions.length]);
+
+  useEffect(() => {
+    pendingKeyboardIndexRef.current = null;
+  }, [filteredOptionsKey]);
 
   usePopupDismissal({
     open: isOpen,
@@ -257,7 +309,7 @@ export function MultiSelectDropdown({
       closeDropdown(true);
       return;
     }
-    if (event.key === "ArrowDown" && filteredOptions.length > 0) {
+    if (event.key === "ArrowDown" && visibleOptions.length > 0) {
       event.preventDefault();
       const nextIndex = activeIndex >= 0 ? activeIndex : 0;
       setActiveIndex(nextIndex);
@@ -284,15 +336,15 @@ export function MultiSelectDropdown({
       moveActiveOption(-1);
       return;
     }
-    if (event.key === "Home" && filteredOptions.length > 0) {
+    if (event.key === "Home" && visibleOptions.length > 0) {
       event.preventDefault();
       setActiveIndex(0);
       focusOption(0);
       return;
     }
-    if (event.key === "End" && filteredOptions.length > 0) {
+    if (event.key === "End" && visibleOptions.length > 0) {
       event.preventDefault();
-      const lastIndex = filteredOptions.length - 1;
+      const lastIndex = visibleOptions.length - 1;
       setActiveIndex(lastIndex);
       focusOption(lastIndex);
       return;
@@ -431,13 +483,15 @@ export function MultiSelectDropdown({
           }
         >
           <div
+            ref={scrollContainerRef}
             id={listboxId}
             role="listbox"
             aria-label={`${label} options`}
             aria-multiselectable="true"
+            onScroll={handleScroll}
             className="min-h-0 overflow-y-auto"
           >
-            {filteredOptions.map((option, index) => {
+            {visibleOptions.map((option, index) => {
               const isSelected = selectedValueSet.has(option.value);
               const isDisabled = disabledValueSet.has(option.value);
               const isPrimary = isSelected && primaryValue === option.value;
@@ -469,7 +523,10 @@ export function MultiSelectDropdown({
                     aria-disabled={isDisabled || undefined}
                     onMouseDown={(event) => event.preventDefault()}
                     onMouseEnter={() => setActiveIndex(index)}
-                    onClick={() => toggleOption(option)}
+                    onClick={() => {
+                      setActiveIndex(index);
+                      toggleOption(option);
+                    }}
                     onKeyDown={(event) => handleOptionKeyDown(event, option)}
                     className={cn(
                       "grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-[7px] focus:outline-none focus-visible:ring-2 focus-visible:ring-focus",
@@ -546,6 +603,16 @@ export function MultiSelectDropdown({
             {filteredOptions.length === 0 && (
               <div className="px-3 py-4 text-sm text-ink-faint">
                 {options.length === 0 ? emptyMessage : noResultsMessage}
+              </div>
+            )}
+            {isLoadingMore && (
+              <div
+                role="status"
+                aria-label={`Loading more ${label.toLowerCase()}`}
+                className="flex items-center justify-center gap-2 px-3 py-3 text-xs font-semibold text-ink-dim"
+              >
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-violet" aria-hidden />
+                Loading more
               </div>
             )}
           </div>
