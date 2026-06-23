@@ -2576,7 +2576,7 @@ describe("POST requests", () => {
     expect(scalars.series[0].points[0].value).toBe(0.25);
   });
 
-  it("chunks oversized log tag requests with bounded concurrency", async () => {
+  it("chunks oversized log tag requests sequentially", async () => {
     const pending: Array<{
       body: { runIds: string[] };
       resolved: boolean;
@@ -2625,19 +2625,23 @@ describe("POST requests", () => {
 
     const tagsPromise = fetchLogTags({ runIds });
 
-    expect(pending).toHaveLength(2);
-    resolveRequest(0);
-    await flushAsyncWork();
-    expect(pending).toHaveLength(3);
-    pending.forEach((_, index) => resolveRequest(index));
+    for (let index = 0; index < 7; index += 1) {
+      expect(pending).toHaveLength(index + 1);
+      resolveRequest(index);
+      await flushAsyncWork();
+    }
     const tags = await tagsPromise;
 
-    expect(tagFetchMock).toHaveBeenCalledTimes(3);
-    expect(maxActive).toBe(2);
+    expect(tagFetchMock).toHaveBeenCalledTimes(7);
+    expect(maxActive).toBe(1);
     expect(pending.map((request) => request.body.runIds.length)).toEqual([
-      50,
-      50,
-      26,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      6,
     ]);
     expect(tags.runs).toHaveLength(126);
   });

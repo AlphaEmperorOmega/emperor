@@ -176,9 +176,10 @@ export type LogRunArtifacts = z.infer<typeof logRunArtifactsSchema>;
 
 const DEFAULT_LOG_PAGE_LIMIT = 500;
 export const DEFAULT_LOG_SCALAR_MAX_POINTS = 500;
-export const LOG_TAG_RUN_REQUEST_LIMIT = 50;
+export const LOG_TAG_RUN_REQUEST_LIMIT = 20;
 export const LOG_SCALAR_TAG_REQUEST_LIMIT = 50;
 export const LOG_MEDIA_TAG_REQUEST_LIMIT = 20;
+export const LOG_TAG_REQUEST_CONCURRENCY = 1;
 export const LOG_TENSORBOARD_REQUEST_CONCURRENCY = 2;
 export const LOG_SCALAR_SAMPLING = "tail";
 
@@ -371,7 +372,7 @@ export async function fetchLogTags(
 
   const pages = await mapWithConcurrency(
     runIdChunks,
-    LOG_TENSORBOARD_REQUEST_CONCURRENCY,
+    LOG_TAG_REQUEST_CONCURRENCY,
     (runIds) =>
       requestJson("/logs/tags", logTagsSchema, {
         method: "POST",
