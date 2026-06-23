@@ -136,6 +136,10 @@ _Avoid_: Training dashboard, TensorBoard replacement
 The repository area that owns the Model Visualizer product without becoming part of the Emperor algorithm library.
 _Avoid_: Model package, algorithm component
 
+**Log Archive**:
+A portable snapshot of a Viewer's historical log folders that can be imported into another Viewer backend.
+_Avoid_: Archived logs, log bundle
+
 **Training Run**:
 A single Viewer-planned or Viewer-executed training unit for one preset, one dataset, and one generated config/search combination.
 _Avoid_: Experiment when referring to a table row in Viewer training progress
@@ -147,6 +151,10 @@ _Avoid_: Experiment when referring to one Start Training action
 **Training Command**:
 A Viewer-displayed shell command that describes how to launch a target or Training Run from the command line.
 _Avoid_: Script when referring to the displayed command text
+
+**Training Command Block**:
+A pasteable ordered sequence of Training Commands for one Training Run Plan.
+_Avoid_: Batch script
 
 **Config Snapshot**:
 A user-created Viewer training configuration derived from one preset and a set of config overrides.
@@ -212,8 +220,10 @@ _Avoid_: Unknown random runs
 - A **Model Visualizer** inspects experiment presets and config overrides without training a model.
 - A **Viewer** may depend on **Emperor** and model packages, but **Emperor** does not depend on the **Viewer**.
 - The **Viewer** dependency direction is enforced by backend architecture tests; core packages expose contracts instead of importing Viewer APIs.
+- A **Log Archive** belongs to the **Viewer** historical log workflow.
 - A **Viewer** **Training Run** belongs to one selected preset, one selected dataset, and one generated config/search combination.
 - A **Training Command** may describe either the selected Viewer target or one **Training Run**.
+- A **Training Command Block** contains the runnable **Training Commands** from one **Training Run Plan** in display order.
 - A **Config Snapshot** belongs to exactly one selected preset.
 - A **Config Snapshot** can be drafted from a selected preset without inheriting the current override draft.
 - A **Config Snapshot** can be edited in place or duplicated into a separate draft.
