@@ -182,6 +182,7 @@ export const LOG_SCALAR_TAG_REQUEST_LIMIT = 50;
 export const LOG_MEDIA_TAG_REQUEST_LIMIT = 20;
 export const LOG_TAG_REQUEST_CONCURRENCY = 1;
 export const LOG_TENSORBOARD_REQUEST_CONCURRENCY = 2;
+export const LOG_SCALAR_REQUEST_CONCURRENCY = 1;
 export const LOG_SCALAR_SAMPLING = "tail";
 
 type PaginatedPage = {
@@ -214,6 +215,15 @@ type FetchPaginatedResult<TPage, TItem> = {
   limit: number;
   offset: number;
 };
+
+let pendingLogScalarRequest: Promise<unknown> = Promise.resolve();
+
+function queueLogScalarRequest<TResponse>(request: () => Promise<TResponse>) {
+  // TensorBoard scalar reads are disk-heavy; keep chart queries from piling them up.
+  const queuedRequest = pendingLogScalarRequest.then(request, request);
+  pendingLogScalarRequest = queuedRequest.catch(() => undefined);
+  return queuedRequest;
+}
 
 function paginatedPath(
   endpoint: string,
@@ -410,26 +420,30 @@ export function fetchLogScalars(input: {
   );
 
   if (requests.length <= 1) {
-    return requestJson("/logs/scalars", logScalarsSchema, {
-      method: "POST",
-      signal: options.signal,
-      body: JSON.stringify(request),
-    });
+    return queueLogScalarRequest(() =>
+      requestJson("/logs/scalars", logScalarsSchema, {
+        method: "POST",
+        signal: options.signal,
+        body: JSON.stringify(request),
+      }),
+    );
   }
 
   return mapWithConcurrency(
     requests,
-    LOG_TENSORBOARD_REQUEST_CONCURRENCY,
+    LOG_SCALAR_REQUEST_CONCURRENCY,
     ({ runIds, tags }) =>
-      requestJson("/logs/scalars", logScalarsSchema, {
-        method: "POST",
-        signal: options.signal,
-        body: JSON.stringify({
-          ...request,
-          runIds,
-          tags,
+      queueLogScalarRequest(() =>
+        requestJson("/logs/scalars", logScalarsSchema, {
+          method: "POST",
+          signal: options.signal,
+          body: JSON.stringify({
+            ...request,
+            runIds,
+            tags,
+          }),
         }),
-      }),
+      ),
   ).then((pages) => ({
     series: pages.flatMap((page) => page.series),
   }));
