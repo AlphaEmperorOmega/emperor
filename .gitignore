@@ -10,6 +10,8 @@ CONTEXT.md
 logs
 !viewer/frontend/src/components/features/viewer/logs/
 !viewer/frontend/src/components/features/viewer/logs/**
+!viewer/frontend/src/features/viewer/components/logs/
+!viewer/frontend/src/features/viewer/components/logs/**
 !viewer/frontend/src/lib/logs/
 !viewer/frontend/src/lib/logs/**
 !viewer/frontend/src/features/viewer/state/logs/
