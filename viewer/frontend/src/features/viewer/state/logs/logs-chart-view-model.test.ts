@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildLogScalarQueryInput,
+  defaultLogBestRunMetricTag,
   deriveLogMetricGroupScalarQueryStates,
   deriveLogsChartEmptyState,
   groupLogScalarSeriesByTag,
@@ -181,6 +182,25 @@ describe("logs chart view model", () => {
       "validation/accuracy",
     ]);
     expect(tagOptions.confusionMatrixRateTags).toEqual([confusionRateTag]);
+  });
+
+  it("prefers validation accuracy for the best-run default metric", () => {
+    expect(
+      defaultLogBestRunMetricTag([
+        { value: "train/loss", label: "train/loss", count: 2 },
+        { value: "test/accuracy", label: "test/accuracy", count: 2 },
+        { value: "validation/accuracy", label: "validation/accuracy", count: 2 },
+      ]),
+    ).toBe("validation/accuracy");
+    expect(
+      defaultLogBestRunMetricTag([
+        { value: "test/accuracy", label: "test/accuracy", count: 2 },
+        { value: "train/accuracy", label: "train/accuracy", count: 2 },
+      ]),
+    ).toBe("test/accuracy");
+    expect(defaultLogBestRunMetricTag([{ value: "custom", label: "custom" }]))
+      .toBe("custom");
+    expect(defaultLogBestRunMetricTag([])).toBeNull();
   });
 
   it("routes confusion-matrix rates to heatmaps and hides raw cells from scalar groups", () => {

@@ -16,6 +16,7 @@ import { logQueryKeys } from "@/lib/query-keys";
 import { type LogsWorkspaceState } from "@/features/viewer/state/logs/use-logs-workspace-state";
 import {
   LOG_METRIC_GROUPS,
+  type ChecklistOption,
   type LogMetricGroupKey,
   groupLogMetricTags,
   groupRenderableLogMetrics,
@@ -26,6 +27,15 @@ import {
   pairValidationExampleMedia,
   selectValidationExampleMediaTags,
 } from "@/features/viewer/state/logs/log-diagnostics";
+import {
+  DEFAULT_LOG_METRIC_DIRECTION,
+  DEFAULT_LOG_METRIC_POINT_POLICY,
+  buildLogMetricDatasetRankingRows,
+  inferLogMetricDirection,
+  type LogMetricDatasetRankingRow,
+  type LogMetricDirection,
+  type LogMetricPointPolicy,
+} from "@/features/viewer/state/logs/log-metric-ranking";
 
 export type LogsChartEmptyState = {
   title: string;
@@ -34,6 +44,11 @@ export type LogsChartEmptyState = {
 };
 
 export type ScalarChartGridMode = "full" | "two" | "three";
+export type {
+  LogMetricDatasetRankingRow,
+  LogMetricDirection,
+  LogMetricPointPolicy,
+};
 
 export type LogScalarQueryInput = {
   runIds: string[];
@@ -54,6 +69,23 @@ export type LogMetricGroupScalarQueryStates = Record<
   LogMetricGroupKey,
   LogMetricGroupScalarQueryState
 >;
+
+export type LogBestRunViewModel = {
+  metricTagOptions: ChecklistOption[];
+  selectedMetricTag: string | null;
+  selectedDirection: LogMetricDirection;
+  selectedPointPolicy: LogMetricPointPolicy;
+  rows: LogMetricDatasetRankingRow[];
+  visibleRunCount: number;
+  hasMoreRuns: boolean;
+  isLoading: boolean;
+  isFetching: boolean;
+  isError: boolean;
+  error: unknown;
+  onMetricTagChange: (tag: string) => void;
+  onDirectionChange: (direction: LogMetricDirection) => void;
+  onPointPolicyChange: (policy: LogMetricPointPolicy) => void;
+};
 
 export function buildLogScalarQueryInput({
   enabled,
@@ -127,6 +159,21 @@ export function countGroupedLogScalarSeries(
   return Array.from(seriesByTag.values()).reduce(
     (total, series) => total + series.length,
     0,
+  );
+}
+
+const BEST_RUN_DEFAULT_TAGS = [
+  "validation/accuracy",
+  "test/accuracy",
+  "train/accuracy",
+];
+
+export function defaultLogBestRunMetricTag(tagOptions: ChecklistOption[]) {
+  const availableTags = new Set(tagOptions.map((option) => option.value));
+  return (
+    BEST_RUN_DEFAULT_TAGS.find((tag) => availableTags.has(tag)) ??
+    tagOptions[0]?.value ??
+    null
   );
 }
 
@@ -234,6 +281,13 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
   const [smoothing, setSmoothing] = useState(0);
   const [xMode, setXMode] = useState<ScalarXMode>("step");
   const [yScale, setYScale] = useState<ScalarYScale>("linear");
+  const [selectedBestRunMetricTag, setSelectedBestRunMetricTag] = useState<
+    string | null
+  >(null);
+  const [selectedBestRunDirection, setSelectedBestRunDirection] =
+    useState<LogMetricDirection | null>(null);
+  const [selectedBestRunPointPolicy, setSelectedBestRunPointPolicy] =
+    useState<LogMetricPointPolicy>(DEFAULT_LOG_METRIC_POINT_POLICY);
   const [isValidationExamplesCollapsed, setIsValidationExamplesCollapsed] =
     useState(true);
   const [isConfusionMatrixCollapsed, setIsConfusionMatrixCollapsed] =
@@ -257,6 +311,24 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
     () => groupLogMetricTags(state.selectedTagList),
     [state.selectedTagList],
   );
+  const bestRunMetricTagValues = useMemo(
+    () => new Set(state.tagOptions.map((option) => option.value)),
+    [state.tagOptions],
+  );
+  const defaultBestRunMetricTag = useMemo(
+    () => defaultLogBestRunMetricTag(state.tagOptions),
+    [state.tagOptions],
+  );
+  const effectiveBestRunMetricTag =
+    selectedBestRunMetricTag !== null &&
+    bestRunMetricTagValues.has(selectedBestRunMetricTag)
+      ? selectedBestRunMetricTag
+      : defaultBestRunMetricTag;
+  const inferredBestRunDirection = effectiveBestRunMetricTag
+    ? inferLogMetricDirection(effectiveBestRunMetricTag)
+    : DEFAULT_LOG_METRIC_DIRECTION;
+  const effectiveBestRunDirection =
+    selectedBestRunDirection ?? inferredBestRunDirection;
   const tagsAreRefreshing = Boolean(state.tagsQuery.isPlaceholderData);
   const trainScalarQueryActive =
     state.enabled &&
@@ -325,6 +397,19 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
       enabled: confusionMatrixScalarQueryActive,
       group: "confusion-matrix",
       selectedTagList: state.confusionMatrixRateTags,
+      visibleRunIds: state.visibleRunIds,
+    }),
+  );
+  const bestRunScalarQueryActive =
+    state.enabled &&
+    !tagsAreRefreshing &&
+    state.visibleRunIds.length > 0 &&
+    Boolean(effectiveBestRunMetricTag);
+  const bestRunScalarQuery = useLogScalarsQuery(
+    buildLogScalarQueryInput({
+      enabled: bestRunScalarQueryActive,
+      group: "best-run",
+      selectedTagList: effectiveBestRunMetricTag ? [effectiveBestRunMetricTag] : [],
       visibleRunIds: state.visibleRunIds,
     }),
   );
@@ -416,6 +501,63 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
   const visibleCheckpointsByRunId = useMemo(
     () => checkpointsByRunId(checkpoints ?? []),
     [checkpoints],
+  );
+  const bestRunRows = useMemo(
+    () =>
+      buildLogMetricDatasetRankingRows({
+        direction: effectiveBestRunDirection,
+        pointPolicy: selectedBestRunPointPolicy,
+        runOrder: state.visibleRunIds,
+        runs: state.visibleRuns,
+        series: bestRunScalarQuery.data?.series ?? [],
+        tag: effectiveBestRunMetricTag,
+      }),
+    [
+      bestRunScalarQuery.data?.series,
+      effectiveBestRunDirection,
+      effectiveBestRunMetricTag,
+      selectedBestRunPointPolicy,
+      state.visibleRunIds,
+      state.visibleRuns,
+    ],
+  );
+  const bestRun = useMemo<LogBestRunViewModel>(
+    () => ({
+      metricTagOptions: state.tagOptions,
+      selectedMetricTag: effectiveBestRunMetricTag,
+      selectedDirection: effectiveBestRunDirection,
+      selectedPointPolicy: selectedBestRunPointPolicy,
+      rows: bestRunRows,
+      visibleRunCount: state.visibleRuns.length,
+      hasMoreRuns: Boolean(state.runsQuery.data?.hasMore),
+      isLoading: bestRunScalarQueryActive && bestRunScalarQuery.isLoading,
+      isFetching: bestRunScalarQueryActive && bestRunScalarQuery.isFetching,
+      isError: bestRunScalarQueryActive && bestRunScalarQuery.isError,
+      error:
+        bestRunScalarQueryActive && bestRunScalarQuery.isError
+          ? bestRunScalarQuery.error
+          : null,
+      onMetricTagChange: (tag) => {
+        setSelectedBestRunMetricTag(tag);
+        setSelectedBestRunDirection(null);
+      },
+      onDirectionChange: setSelectedBestRunDirection,
+      onPointPolicyChange: setSelectedBestRunPointPolicy,
+    }),
+    [
+      bestRunRows,
+      bestRunScalarQuery.error,
+      bestRunScalarQuery.isError,
+      bestRunScalarQuery.isFetching,
+      bestRunScalarQuery.isLoading,
+      bestRunScalarQueryActive,
+      effectiveBestRunDirection,
+      effectiveBestRunMetricTag,
+      selectedBestRunPointPolicy,
+      state.runsQuery.data?.hasMore,
+      state.tagOptions,
+      state.visibleRuns.length,
+    ],
   );
   const expandedSelectedTagCount = LOG_METRIC_GROUPS.reduce((total, group) => {
     if (state.collapsedMetricGroups.has(group.key)) {
@@ -518,11 +660,16 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
     onYScaleChange: setYScale,
     isFetching:
       activeScalarQueries.some((query) => query.isFetching) ||
+      (bestRunScalarQueryActive && bestRunScalarQuery.isFetching) ||
       confusionMatrixQueryState.isFetching ||
       checkpointQuery.isFetching ||
       mediaQuery.isFetching,
     isRefreshDisabled:
       !activeScalarQueries.some((query) => query.isSuccess || query.isError) &&
+      !(
+        bestRunScalarQueryActive &&
+        (bestRunScalarQuery.isSuccess || bestRunScalarQuery.isError)
+      ) &&
       !(
         confusionMatrixScalarQueryActive &&
         (confusionMatrixScalarQuery.isSuccess || confusionMatrixScalarQuery.isError)
@@ -531,6 +678,9 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
       activeScalarQueries.forEach((query) => {
         void query.refetch();
       });
+      if (bestRunScalarQueryActive) {
+        void bestRunScalarQuery.refetch();
+      }
       if (confusionMatrixScalarQueryActive) {
         void confusionMatrixScalarQuery.refetch();
       }
@@ -548,6 +698,7 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
     isValidationExamplesCollapsed,
     onToggleValidationExamples: toggleValidationExamples,
     onValidationExamplesVisible: markValidationExamplesVisible,
+    bestRun,
     onSelectRun: state.setSelectedDetailRunId,
   };
 }
