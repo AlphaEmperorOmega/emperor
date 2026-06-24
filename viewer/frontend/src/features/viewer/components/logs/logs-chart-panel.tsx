@@ -13,6 +13,7 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 import { ErrorPanel } from "@/features/viewer/components/error-panel";
 import { ViewModeButton } from "@/features/viewer/components/view-mode-button";
 import { InlineStatus } from "@/features/viewer/components/shared/inline-status";
+import { LogBestRunPanel } from "@/features/viewer/components/logs/log-best-run-panel";
 import { LogConfusionMatrixHeatmaps } from "@/features/viewer/components/logs/log-confusion-matrix-heatmap";
 import { LazyLogScalarChart } from "@/features/viewer/components/logs/log-scalar-chart";
 import { LogTestLeaderboardTable } from "@/features/viewer/components/logs/log-test-leaderboard-table";
@@ -30,7 +31,10 @@ import {
   type LogMetricGroupKey,
   isTestMetricTag,
 } from "@/features/viewer/state/logs/logs-selectors";
-import { type LogMetricGroupScalarQueryStates } from "@/features/viewer/state/logs/logs-chart-view-model";
+import {
+  type LogBestRunViewModel,
+  type LogMetricGroupScalarQueryStates,
+} from "@/features/viewer/state/logs/logs-chart-view-model";
 import {
   type ConfusionMatrixHeatmap,
   type LogValidationExampleImage,
@@ -212,6 +216,7 @@ export function LogsChartPanel({
   isRefreshDisabled,
   onRefresh,
   emptyState,
+  bestRun,
   onSelectRun,
 }: {
   metricsByGroup: LogMetricsByGroup;
@@ -252,6 +257,7 @@ export function LogsChartPanel({
   isRefreshDisabled: boolean;
   onRefresh: () => void;
   emptyState: LogsChartEmptyState | null;
+  bestRun: LogBestRunViewModel;
   onSelectRun: (runId: string) => void;
 }) {
   return (
@@ -341,10 +347,12 @@ export function LogsChartPanel({
       </div>
 
       <div className="min-h-0 overflow-y-auto p-4">
-        {emptyState ? (
-          <ChartEmptyState {...emptyState} />
-        ) : (
-          <div className="grid gap-5">
+        <div className="grid gap-5">
+          <LogBestRunPanel bestRun={bestRun} onSelectRun={onSelectRun} />
+          {emptyState ? (
+            <ChartEmptyState {...emptyState} />
+          ) : (
+            <>
             {isTagRefreshLoading && (
               <InlineStatus busy compact role="status">
                 Refreshing TensorBoard tags
@@ -500,8 +508,9 @@ export function LogsChartPanel({
                 </section>
               );
             })}
-          </div>
-        )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

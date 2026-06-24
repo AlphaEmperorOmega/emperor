@@ -222,7 +222,7 @@ describe("ViewerApp Logs Workspace", () => {
     expect(logMetricGroupToggle("Validation")).toHaveAttribute("aria-expanded", "true");
     expect(logMetricGroupToggle("Test")).toHaveAttribute("aria-expanded", "false");
     await waitFor(() => {
-      expect(logScalarRequests).toHaveLength(2);
+      expect(logScalarRequests).toHaveLength(3);
       expect(logScalarRequests).toEqual(expect.arrayContaining([
         {
           runIds: ["log-mnist"],
@@ -287,6 +287,64 @@ describe("ViewerApp Logs Workspace", () => {
     expect(screen.getAllByText("No result.json").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: /start training/i }))
       .not.toBeInTheDocument();
+  });
+
+  it("ranks best runs independently from selected scalar chart tags", async () => {
+    installFetchMock();
+    renderViewer();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+    await user.click(screen.getByRole("button", { name: /all runs/i }));
+    await selectAllLogExperiments(user);
+
+    const bestRunHeading = await screen.findByRole("heading", { name: "Best Run" });
+    const bestRunPanel = bestRunHeading.closest("section");
+    expect(bestRunPanel).toBeInstanceOf(HTMLElement);
+    const panel = bestRunPanel as HTMLElement;
+    expect(within(panel).getByText(/best run per visible dataset/i))
+      .toBeInTheDocument();
+    expect(within(panel).queryByRole("combobox", { name: /best run dataset/i }))
+      .not.toBeInTheDocument();
+
+    const bestRunTable = await within(panel).findByRole("table", {
+      name: /validation\/accuracy best run leaderboard/i,
+    });
+    expect(within(bestRunTable).getByRole("columnheader", { name: "Dataset" }))
+      .toBeInTheDocument();
+    expect(within(bestRunTable).queryByRole("columnheader", { name: "Rank" }))
+      .not.toBeInTheDocument();
+    expect(within(bestRunTable).getByText("Mnist")).toBeInTheDocument();
+    expect(within(bestRunTable).getByText("Cifar10")).toBeInTheDocument();
+    expect(within(bestRunTable).getByText("0.8")).toBeInTheDocument();
+    expect(within(bestRunTable).getByText("aaa_20260601_010203"))
+      .toBeInTheDocument();
+    expect(within(bestRunTable).getByText("0.55")).toBeInTheDocument();
+    expect(within(bestRunTable).getByText("bbb_20260601_020304"))
+      .toBeInTheDocument();
+
+    await clickLogOption(user, "Scalar Tags", "validation/accuracy");
+
+    await waitFor(() => {
+      expect(screen.queryByRole("img", { name: /validation\/accuracy scalar chart/i }))
+        .not.toBeInTheDocument();
+    });
+    expect(
+      within(panel).getByRole("table", {
+        name: /validation\/accuracy best run leaderboard/i,
+      }),
+    ).toBeInTheDocument();
+
+    await user.click(
+      within(panel).getAllByRole("button", {
+        name: /open details for test_model_2 · Cifar10/i,
+      })[0],
+    );
+
+    const detailsPanel = screen.getByRole("heading", { name: "Run Details" }).closest("aside");
+    expect(detailsPanel).not.toBeNull();
+    expect(within(detailsPanel as HTMLElement).getByText("test_model_2"))
+      .toBeInTheDocument();
   });
 
   it("filters logs by dataset across tags, scalars, charts, and details", async () => {
@@ -553,7 +611,7 @@ describe("ViewerApp Logs Workspace", () => {
     expect(await screen.findByRole("img", { name: /train\/loss scalar chart/i }))
       .toBeInTheDocument();
     await waitFor(() => {
-      expect(logScalarRequests).toHaveLength(2);
+      expect(logScalarRequests).toHaveLength(3);
     });
 
     await user.click(logMetricGroupToggle("Train"));
@@ -564,7 +622,7 @@ describe("ViewerApp Logs Workspace", () => {
     expect(screen.queryByRole("img", { name: /train\/loss scalar chart/i }))
       .not.toBeInTheDocument();
     await expectLogFilterSelection(user, "Scalar Tags", "train/loss", true);
-    expect(logScalarRequests).toHaveLength(2);
+    expect(logScalarRequests).toHaveLength(3);
 
     await user.click(logMetricGroupToggle("Test"));
 
@@ -575,9 +633,9 @@ describe("ViewerApp Logs Workspace", () => {
       .toBeInTheDocument();
     await expectLogFilterSelection(user, "Scalar Tags", "test/accuracy", true);
     await waitFor(() => {
-      expect(logScalarRequests).toHaveLength(3);
+      expect(logScalarRequests).toHaveLength(4);
     });
-    expect(logScalarRequests[2]).toMatchObject({
+    expect(logScalarRequests[3]).toMatchObject({
       runIds: ["log-mnist"],
       tags: ["test/accuracy"],
     });
@@ -589,7 +647,7 @@ describe("ViewerApp Logs Workspace", () => {
     });
     expect(screen.queryByRole("table", { name: /test\/accuracy test leaderboard/i }))
       .not.toBeInTheDocument();
-    expect(logScalarRequests).toHaveLength(3);
+    expect(logScalarRequests).toHaveLength(4);
   });
 
   it("keeps loaded scalar groups visible while the default-open Train group loads", async () => {
@@ -611,7 +669,7 @@ describe("ViewerApp Logs Workspace", () => {
       .toBeInTheDocument();
 
     await waitFor(() => {
-      expect(logScalarRequests).toHaveLength(2);
+      expect(logScalarRequests).toHaveLength(3);
     });
     expect(screen.getByRole("img", { name: /validation\/accuracy scalar chart/i }))
       .toBeInTheDocument();
@@ -993,7 +1051,7 @@ describe("ViewerApp Logs Workspace", () => {
     const threeColumnTab = within(layoutControl).getByRole("radio", { name: /^3 col$/i });
 
     await waitFor(() => {
-      expect(logScalarRequests).toHaveLength(2);
+      expect(logScalarRequests).toHaveLength(3);
     });
     expect(fullTab).toHaveAttribute("aria-checked", "false");
     expect(twoColumnTab).toHaveAttribute("aria-checked", "true");
@@ -1008,7 +1066,7 @@ describe("ViewerApp Logs Workspace", () => {
     expect(twoColumnTab).toHaveAttribute("aria-checked", "false");
     expect(chartGrid).not.toHaveClass("xl:grid-cols-2");
     expect(chartGrid).not.toHaveClass("2xl:grid-cols-3");
-    expect(logScalarRequests).toHaveLength(2);
+    expect(logScalarRequests).toHaveLength(3);
 
     await user.click(twoColumnTab);
 
@@ -1016,19 +1074,19 @@ describe("ViewerApp Logs Workspace", () => {
     expect(twoColumnTab).toHaveAttribute("aria-checked", "true");
     expect(chartGrid).toHaveClass("xl:grid-cols-2");
     expect(chartGrid).not.toHaveClass("2xl:grid-cols-3");
-    expect(logScalarRequests).toHaveLength(2);
+    expect(logScalarRequests).toHaveLength(3);
 
     await user.click(threeColumnTab);
 
     expect(twoColumnTab).toHaveAttribute("aria-checked", "false");
     expect(threeColumnTab).toHaveAttribute("aria-checked", "true");
     expect(chartGrid).toHaveClass("xl:grid-cols-2", "2xl:grid-cols-3");
-    expect(logScalarRequests).toHaveLength(2);
+    expect(logScalarRequests).toHaveLength(3);
 
     await user.click(screen.getByRole("button", { name: /refresh scalar charts/i }));
 
     await waitFor(() => {
-      expect(logScalarRequests).toHaveLength(4);
+      expect(logScalarRequests).toHaveLength(6);
     });
   });
 

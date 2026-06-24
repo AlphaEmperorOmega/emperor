@@ -8,23 +8,13 @@ import {
   formatNumber,
   formatRunLabel,
 } from "@/features/viewer/state/logs/logs-selectors";
-
-type TestLeaderboardSortDirection = "ascending" | "descending";
-
-type TestLeaderboardRow = {
-  runId: string;
-  run: LogRun;
-  value: number;
-  step: number;
-  visibleIndex: number;
-  sourceIndex: number;
-};
+import {
+  buildLogMetricRankingRows,
+  inferLogMetricDirection,
+  type LogMetricDirection,
+} from "@/features/viewer/state/logs/log-metric-ranking";
 
 const TEST_LEADERBOARD_ROW_LIMIT = 100;
-
-function testMetricSortDirection(tag: string): TestLeaderboardSortDirection {
-  return tag.toLowerCase().includes("loss") ? "ascending" : "descending";
-}
 
 export function buildTestLeaderboardRows({
   tag,
@@ -37,44 +27,18 @@ export function buildTestLeaderboardRows({
   runsById: Map<string, LogRun>;
   runOrder: string[];
 }) {
-  const runPositions = new Map(runOrder.map((runId, index) => [runId, index]));
-  const direction = testMetricSortDirection(tag);
-
-  return series
-    .flatMap<TestLeaderboardRow>((entry, sourceIndex) => {
-      if (entry.tag !== tag || entry.points.length === 0) {
-        return [];
-      }
-
-      const run = runsById.get(entry.runId);
-      const latest = entry.points.at(-1);
-      if (!run || !latest) {
-        return [];
-      }
-
-      return [
-        {
-          runId: entry.runId,
-          run,
-          value: latest.value,
-          step: latest.step,
-          visibleIndex: runPositions.get(entry.runId) ?? runOrder.length + sourceIndex,
-          sourceIndex,
-        },
-      ];
-    })
-    .sort((left, right) => {
-      const valueDelta =
-        direction === "ascending" ? left.value - right.value : right.value - left.value;
-      if (valueDelta !== 0) {
-        return valueDelta;
-      }
-      return left.visibleIndex - right.visibleIndex || left.sourceIndex - right.sourceIndex;
-    });
+  return buildLogMetricRankingRows({
+    direction: inferLogMetricDirection(tag),
+    pointPolicy: "latest",
+    runOrder,
+    runs: Array.from(runsById.values()),
+    series,
+    tag,
+  });
 }
 
-function directionLabel(direction: TestLeaderboardSortDirection) {
-  return direction === "ascending" ? "ascending (lower first)" : "descending (higher first)";
+function directionLabel(direction: LogMetricDirection) {
+  return direction === "lower" ? "ascending (lower first)" : "descending (higher first)";
 }
 
 function MetadataCell({ value }: { value: string }) {
@@ -100,7 +64,7 @@ export function LogTestLeaderboardTable({
   runOrder: string[];
   onSelectRun: (runId: string) => void;
 }) {
-  const direction = testMetricSortDirection(tag);
+  const direction = inferLogMetricDirection(tag);
   const rows = useMemo(
     () => buildTestLeaderboardRows({ tag, series, runsById, runOrder }),
     [tag, series, runsById, runOrder],
@@ -163,7 +127,7 @@ export function LogTestLeaderboardTable({
                       {index + 1}
                     </td>
                     <td className="border-b border-line-soft px-3 py-2.5 font-mono tabular-nums text-ink">
-                      {formatNumber(row.value)}
+                      {formatNumber(row.score)}
                     </td>
                     <MetadataCell value={row.run.experiment} />
                     <MetadataCell value={row.run.dataset} />
