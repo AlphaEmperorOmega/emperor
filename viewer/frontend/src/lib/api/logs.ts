@@ -177,6 +177,7 @@ export type LogRunArtifacts = z.infer<typeof logRunArtifactsSchema>;
 const DEFAULT_LOG_PAGE_LIMIT = 500;
 export const DEFAULT_LOG_SCALAR_MAX_POINTS = 500;
 export const LOG_TAG_RUN_REQUEST_LIMIT = 20;
+export const LOG_SCALAR_RUN_REQUEST_LIMIT = 50;
 export const LOG_SCALAR_TAG_REQUEST_LIMIT = 50;
 export const LOG_MEDIA_TAG_REQUEST_LIMIT = 20;
 export const LOG_TAG_REQUEST_CONCURRENCY = 1;
@@ -396,16 +397,19 @@ export function fetchLogScalars(input: {
     sampling: LOG_SCALAR_SAMPLING,
     ...input,
   };
-  const tagChunks = Array.from(
-    { length: Math.ceil(input.tags.length / LOG_SCALAR_TAG_REQUEST_LIMIT) },
-    (_, index) =>
-      input.tags.slice(
-        index * LOG_SCALAR_TAG_REQUEST_LIMIT,
-        (index + 1) * LOG_SCALAR_TAG_REQUEST_LIMIT,
-      ),
+  const runIdChunks = chunkListForRequestDimension(
+    input.runIds,
+    LOG_SCALAR_RUN_REQUEST_LIMIT,
+  );
+  const tagChunks = chunkListForRequestDimension(
+    input.tags,
+    LOG_SCALAR_TAG_REQUEST_LIMIT,
+  );
+  const requests = runIdChunks.flatMap((runIds) =>
+    tagChunks.map((tags) => ({ runIds, tags })),
   );
 
-  if (tagChunks.length <= 1) {
+  if (requests.length <= 1) {
     return requestJson("/logs/scalars", logScalarsSchema, {
       method: "POST",
       signal: options.signal,
@@ -414,14 +418,15 @@ export function fetchLogScalars(input: {
   }
 
   return mapWithConcurrency(
-    tagChunks,
+    requests,
     LOG_TENSORBOARD_REQUEST_CONCURRENCY,
-    (tags) =>
+    ({ runIds, tags }) =>
       requestJson("/logs/scalars", logScalarsSchema, {
         method: "POST",
         signal: options.signal,
         body: JSON.stringify({
           ...request,
+          runIds,
           tags,
         }),
       }),
@@ -496,6 +501,11 @@ function chunkList<TItem>(items: TItem[], chunkSize: number) {
     { length: Math.ceil(items.length / chunkSize) },
     (_, index) => items.slice(index * chunkSize, (index + 1) * chunkSize),
   );
+}
+
+function chunkListForRequestDimension<TItem>(items: TItem[], chunkSize: number) {
+  const chunks = chunkList(items, chunkSize);
+  return chunks.length > 0 ? chunks : [items];
 }
 
 export function fetchLogCheckpoints(
