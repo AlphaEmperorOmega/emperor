@@ -2646,7 +2646,7 @@ describe("POST requests", () => {
     expect(tags.runs).toHaveLength(126);
   });
 
-  it("chunks oversized log scalar tag requests to match backend limits", async () => {
+  it("chunks oversized log scalar tag requests sequentially to match backend limits", async () => {
     const pending: Array<{
       body: { tags: string[] };
       resolved: boolean;
@@ -2692,15 +2692,15 @@ describe("POST requests", () => {
       tags,
     });
 
-    expect(pending).toHaveLength(2);
-    resolveRequest(0);
-    await flushAsyncWork();
-    expect(pending).toHaveLength(3);
-    pending.forEach((_, index) => resolveRequest(index));
+    for (let index = 0; index < 3; index += 1) {
+      await flushAsyncWork();
+      expect(pending).toHaveLength(index + 1);
+      resolveRequest(index);
+    }
     await scalarsPromise;
 
     expect(scalarFetchMock).toHaveBeenCalledTimes(3);
-    expect(maxActive).toBe(2);
+    expect(maxActive).toBe(1);
     expect(pending.map((request) => request.body.tags.length)).toEqual([
       50,
       50,
@@ -2720,7 +2720,7 @@ describe("POST requests", () => {
     }
   });
 
-  it("chunks oversized log scalar run requests to match backend limits", async () => {
+  it("chunks oversized log scalar run requests sequentially to match backend limits", async () => {
     const pending: Array<{
       body: { runIds: string[]; tags: string[] };
       signal: AbortSignal | null | undefined;
@@ -2774,12 +2774,15 @@ describe("POST requests", () => {
       { signal: controller.signal },
     );
 
-    await flushAsyncWork();
-    pending.forEach((_, index) => resolveRequest(index));
+    for (let index = 0; index < 2; index += 1) {
+      await flushAsyncWork();
+      expect(pending).toHaveLength(index + 1);
+      resolveRequest(index);
+    }
     await scalarsPromise;
 
     expect(scalarFetchMock).toHaveBeenCalledTimes(2);
-    expect(maxActive).toBe(2);
+    expect(maxActive).toBe(1);
     expect(pending.map((request) => request.body.runIds.length)).toEqual([50, 44]);
     for (const request of pending) {
       expect(request.signal).toBe(controller.signal);
@@ -2844,7 +2847,7 @@ describe("POST requests", () => {
     await scalarsPromise;
 
     expect(scalarFetchMock).toHaveBeenCalledTimes(6);
-    expect(maxActive).toBe(2);
+    expect(maxActive).toBe(1);
     expect(
       pending.map((request) => [
         request.body.runIds.length,
@@ -2909,6 +2912,82 @@ describe("POST requests", () => {
       { runId: "run-0", tag: "validation/tag-50", value: 50.01 },
       { runId: "run-50", tag: "validation/tag-0", value: 1.5 },
       { runId: "run-50", tag: "validation/tag-50", value: 1.01 },
+    ]);
+  });
+
+  it("serializes log scalar requests across concurrent callers", async () => {
+    const pending: Array<{
+      body: { runIds: string[]; tags: string[] };
+      resolved: boolean;
+      resolve: (response: Response) => void;
+    }> = [];
+    let active = 0;
+    let maxActive = 0;
+    const scalarFetchMock = vi.fn<FetchFn>((_input, init) => {
+      const response = createDeferred<Response>();
+      const body = JSON.parse(String((init as RequestInit).body)) as {
+        runIds: string[];
+        tags: string[];
+      };
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      pending.push({
+        body,
+        resolved: false,
+        resolve: response.resolve,
+      });
+      return response.promise;
+    });
+    vi.stubGlobal("fetch", scalarFetchMock);
+    const resolveRequest = (index: number) => {
+      const request = pending[index];
+      if (!request || request.resolved) {
+        return;
+      }
+      request.resolved = true;
+      active -= 1;
+      request.resolve(
+        fakeResponse({
+          json: () =>
+            Promise.resolve({
+              series: [],
+            }),
+        }),
+      );
+    };
+
+    const firstScalars = fetchLogScalars({
+      runIds: ["run-a"],
+      tags: ["train/loss"],
+    });
+    const secondScalars = fetchLogScalars({
+      runIds: ["run-b"],
+      tags: ["validation/accuracy"],
+    });
+
+    await flushAsyncWork();
+    expect(pending).toHaveLength(1);
+    resolveRequest(0);
+    await flushAsyncWork();
+    expect(pending).toHaveLength(2);
+    resolveRequest(1);
+    await Promise.all([firstScalars, secondScalars]);
+
+    expect(scalarFetchMock).toHaveBeenCalledTimes(2);
+    expect(maxActive).toBe(1);
+    expect(pending.map((request) => request.body)).toEqual([
+      {
+        maxPoints: 500,
+        sampling: "tail",
+        runIds: ["run-a"],
+        tags: ["train/loss"],
+      },
+      {
+        maxPoints: 500,
+        sampling: "tail",
+        runIds: ["run-b"],
+        tags: ["validation/accuracy"],
+      },
     ]);
   });
 
