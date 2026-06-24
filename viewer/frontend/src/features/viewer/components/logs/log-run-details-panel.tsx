@@ -1,11 +1,11 @@
 import { type ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
-import { EdgeCard } from "@/components/ui/edge-card";
 import { InlineStatus } from "@/features/viewer/components/shared/inline-status";
 import { KeyValueRow } from "@/features/viewer/components/shared/key-value-row";
 import { MetricCard } from "@/features/viewer/components/shared/metric-card";
 import { SectionHeading } from "@/features/viewer/components/shared/section-heading";
 import { SidePanel } from "@/features/viewer/components/shared/side-panel";
+import { SurfacePanel } from "@/features/viewer/components/shared/surface-panel";
 import { useLogsWorkspace } from "@/features/viewer/providers/logs-workspace-provider";
 import { useLogRunArtifactsQuery } from "@/features/viewer/state/logs/use-log-queries";
 import { formatMetricValue } from "@/features/viewer/state/logs/logs-selectors";
@@ -134,12 +134,12 @@ export function LogRunDetailsPanel({
       }
     >
       {!run ? (
-        <div className="edge rounded-card p-4 text-sm text-ink-faint">
+        <SurfacePanel padding="roomy" className="text-sm text-ink-faint">
           Select a visible run to inspect its metadata.
-        </div>
+        </SurfacePanel>
       ) : (
         <div className="grid gap-4">
-          <EdgeCard className="rounded-[12px] px-3 py-3">
+          <SurfacePanel padding="roomy" className="min-w-0">
             <div className="min-w-0">
               <div
                 className="min-w-0 truncate text-sm font-semibold text-ink"
@@ -154,7 +154,7 @@ export function LogRunDetailsPanel({
                 {run.relativePath}
               </div>
             </div>
-          </EdgeCard>
+          </SurfacePanel>
 
           <div className="grid grid-cols-2 gap-[9px]">
             <MetricCard

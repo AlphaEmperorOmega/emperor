@@ -124,12 +124,24 @@ describe("LogBestRunPanel", () => {
     const panel = screen.getByRole("heading", { name: "Best Run" }).closest("section");
     expect(panel).toBeInstanceOf(HTMLElement);
     const section = panel as HTMLElement;
+    expect(section).toHaveClass(
+      "rounded-[10px]",
+      "border",
+      "border-line",
+      "bg-white/[0.018]",
+      "p-4",
+    );
+    expect(section).not.toHaveClass("edge", "rounded-card");
     expect(within(section).getByText(/best run per visible dataset/i))
       .toBeInTheDocument();
     expect(within(section).getByText(/exclude unloaded runs/i)).toBeInTheDocument();
     expect(within(section).queryByRole("combobox", { name: /best run dataset/i }))
       .not.toBeInTheDocument();
     expect(within(section).queryByRole("article")).not.toBeInTheDocument();
+    const metricDropdown = within(section).getByRole("combobox", {
+      name: "Best run metric",
+    });
+    expect(metricDropdown).toBeInTheDocument();
 
     const table = within(section).getByRole("table", {
       name: /validation\/accuracy best run leaderboard/i,
@@ -146,9 +158,13 @@ describe("LogBestRunPanel", () => {
     expect(within(table).getByRole("button", { name: /no details for cifar10/i }))
       .toBeDisabled();
 
-    await user.selectOptions(
-      within(section).getByRole("combobox", { name: /best run metric/i }),
-      "test/accuracy",
+    await user.click(metricDropdown);
+    const metricOptions = screen.getByRole("listbox", {
+      name: "Best run metric options",
+    });
+    expect(within(metricOptions).getAllByText("2 runs")).toHaveLength(2);
+    await user.click(
+      within(metricOptions).getByRole("option", { name: /test\/accuracy/i }),
     );
     await user.click(within(section).getByRole("radio", { name: "Latest" }));
     await user.click(within(section).getByRole("radio", { name: "Lower" }));

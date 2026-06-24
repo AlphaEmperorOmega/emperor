@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { SurfacePanel } from "@/features/viewer/components/shared/surface-panel";
 import {
   formatGroupCount,
   monitorGroupPanelId,
@@ -28,7 +29,7 @@ export function MonitorGroupAccordion({
   const panelId = monitorGroupPanelId(idPrefix, group);
 
   return (
-    <section className="edge overflow-hidden rounded-card">
+    <SurfacePanel as="section" padding="none" className="overflow-hidden">
       <h3>
         <button
           type="button"
@@ -57,7 +58,7 @@ export function MonitorGroupAccordion({
           {children}
         </div>
       )}
-    </section>
+    </SurfacePanel>
   );
 }
 

@@ -1,3 +1,4 @@
+import { createRef } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +11,8 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Select } from "@/components/ui/select";
 import { StatusDot } from "@/components/ui/status-dot";
 import { Switch } from "@/components/ui/switch";
+import { MetricCard } from "@/features/viewer/components/shared/metric-card";
+import { SurfacePanel } from "@/features/viewer/components/shared/surface-panel";
 
 // Render + role/behaviour smoke tests for the shared primitives, pinning the
 // current public contract before they are reused more widely in Phase 1.
@@ -259,6 +262,81 @@ describe("StatusDot", () => {
 
     rerender(<StatusDot online={false} />);
     expect(container.firstChild).toHaveClass("bg-danger");
+  });
+});
+
+describe("SurfacePanel", () => {
+  it("renders default compact surface classes", () => {
+    render(<SurfacePanel>Surface body</SurfacePanel>);
+
+    expect(screen.getByText("Surface body")).toHaveClass(
+      "grid",
+      "content-start",
+      "rounded-[10px]",
+      "border",
+      "border-line",
+      "bg-white/[0.018]",
+      "gap-1.5",
+      "px-2.5",
+      "py-2",
+    );
+  });
+
+  it("renders semantic sections with aria-labelledby", () => {
+    render(
+      <SurfacePanel as="section" aria-labelledby="primitive-surface-title">
+        <h2 id="primitive-surface-title">Primitive Surface</h2>
+      </SurfacePanel>,
+    );
+
+    const section = screen.getByRole("region", { name: "Primitive Surface" });
+    expect(section.tagName).toBe("SECTION");
+    expect(section).toHaveAttribute("aria-labelledby", "primitive-surface-title");
+  });
+
+  it("forwards refs to the rendered element", () => {
+    const ref = createRef<HTMLElement>();
+
+    render(
+      <SurfacePanel ref={ref} as="section">
+        Ref surface
+      </SurfacePanel>,
+    );
+
+    expect(ref.current).toBeInstanceOf(HTMLElement);
+    expect(ref.current?.tagName).toBe("SECTION");
+    expect(ref.current).toHaveTextContent("Ref surface");
+  });
+
+  it.each([
+    ["roomy", "gap-3", "p-3"],
+    ["spacious", "gap-4", "p-4"],
+    ["none", "gap-0", "p-0"],
+  ] as const)("applies the %s padding variant", (padding, ...classes) => {
+    render(<SurfacePanel padding={padding}>{padding}</SurfacePanel>);
+
+    expect(screen.getByText(padding)).toHaveClass(...classes);
+  });
+});
+
+describe("MetricCard", () => {
+  it("renders label, value, and detail on the compact surface", () => {
+    render(<MetricCard label="Runs" value="42" detail="complete" />);
+
+    const card = screen.getByText("42").parentElement;
+    if (!(card instanceof HTMLElement)) {
+      throw new Error("Expected metric value to render inside a card");
+    }
+    expect(card).toHaveClass(
+      "rounded-[10px]",
+      "border-line",
+      "bg-white/[0.018]",
+      "px-2.5",
+      "py-2",
+    );
+    expect(card).not.toHaveClass("edge", "rounded-card");
+    expect(screen.getByText("42")).toHaveClass("font-mono");
+    expect(screen.getByText("complete")).toBeInTheDocument();
   });
 });
 

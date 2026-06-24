@@ -288,8 +288,16 @@ describe("CompareWorkspace", () => {
     });
 
     const targetCards = screen.getAllByText(/^Target \d$/).map((label) => {
-      const card = label.closest(".edge");
+      const card = label.closest("article");
       expect(card).toBeInstanceOf(HTMLElement);
+      expect(card).toHaveClass(
+        "rounded-[10px]",
+        "border",
+        "border-line",
+        "bg-white/[0.018]",
+        "p-4",
+      );
+      expect(card).not.toHaveClass("edge", "rounded-card");
       return card as HTMLElement;
     });
     await user.click(
@@ -314,8 +322,10 @@ describe("CompareWorkspace", () => {
       });
 
       const targetCards = screen.getAllByText(/^Target \d$/).map((label) => {
-        const card = label.closest(".edge");
+        const card = label.closest("article");
         expect(card).toBeInstanceOf(HTMLElement);
+        expect(card).toHaveClass("rounded-[10px]", "border-line", "bg-white/[0.018]");
+        expect(card).not.toHaveClass("edge", "rounded-card");
         return card as HTMLElement;
       });
       const firstTarget = targetCards[0];

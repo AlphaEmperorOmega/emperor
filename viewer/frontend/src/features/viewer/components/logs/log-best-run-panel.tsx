@@ -5,7 +5,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { ErrorPanel } from "@/features/viewer/components/error-panel";
+import {
+  SelectOnlyDropdown,
+  type SelectOnlyDropdownOption,
+} from "@/features/viewer/components/screen/select-only-dropdown";
 import { InlineStatus } from "@/features/viewer/components/shared/inline-status";
+import { SurfacePanel } from "@/features/viewer/components/shared/surface-panel";
 import { ViewModeButton } from "@/features/viewer/components/view-mode-button";
 import {
   type LogBestRunViewModel,
@@ -30,47 +35,6 @@ function directionLabel(direction: LogMetricDirection) {
 
 function pointPolicyLabel(policy: LogMetricPointPolicy) {
   return policy === "best" ? "best point" : "latest point";
-}
-
-function SelectControl({
-  disabled,
-  label,
-  onChange,
-  options,
-  value,
-}: {
-  disabled?: boolean;
-  label: string;
-  onChange: (value: string) => void;
-  options: Array<{ value: string; label: string; count?: number }>;
-  value: string | null;
-}) {
-  return (
-    <label className="grid min-w-0 gap-1.5">
-      <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-ink-faint">
-        {label}
-      </span>
-      <select
-        aria-label={`Best run ${label.toLowerCase()}`}
-        className="h-9 min-w-0 rounded-[9px] border border-line-soft bg-bg-2 px-2.5 text-sm font-semibold text-ink shadow-inner outline-none transition hover:border-line focus:border-focus focus:ring-2 focus:ring-focus/30 disabled:cursor-not-allowed disabled:opacity-50"
-        value={value ?? ""}
-        disabled={disabled || options.length === 0}
-        onChange={(event) => onChange(event.currentTarget.value)}
-      >
-        {options.length === 0 ? (
-          <option value="">None</option>
-        ) : (
-          options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.count === undefined
-                ? option.label
-                : `${option.label} (${option.count})`}
-            </option>
-          ))
-        )}
-      </select>
-    </label>
-  );
 }
 
 function MetadataCell({ value }: { value: string }) {
@@ -193,10 +157,20 @@ export function LogBestRunPanel({
   const hasAnyBestRun = bestRun.rows.some((row) => row.best !== null);
   const controlsDisabled =
     bestRun.visibleRunCount === 0 || bestRun.metricTagOptions.length === 0;
+  const metricOptions: SelectOnlyDropdownOption[] = bestRun.metricTagOptions.map(
+    (option) => ({
+      value: option.value,
+      label: option.label,
+      description:
+        option.count === undefined ? undefined : countLabel(option.count, "run"),
+    }),
+  );
 
   return (
-    <section
-      className="edge grid min-w-0 gap-4 rounded-card p-4"
+    <SurfacePanel
+      as="section"
+      padding="spacious"
+      className="min-w-0"
       aria-labelledby="logs-best-run-title"
     >
       <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
@@ -228,13 +202,19 @@ export function LogBestRunPanel({
       )}
 
       <div className="grid gap-3 md:grid-cols-[minmax(240px,1fr)_auto_auto]">
-        <SelectControl
-          label="Metric"
-          options={bestRun.metricTagOptions}
-          value={bestRun.selectedMetricTag}
-          disabled={controlsDisabled}
-          onChange={bestRun.onMetricTagChange}
-        />
+        <div className="grid min-w-0 gap-1.5">
+          <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-ink-faint">
+            Metric
+          </span>
+          <SelectOnlyDropdown
+            label="Best run metric"
+            options={metricOptions}
+            value={bestRun.selectedMetricTag ?? ""}
+            disabled={controlsDisabled}
+            onChange={bestRun.onMetricTagChange}
+            placeholder="None"
+          />
+        </div>
         <div className="grid gap-1.5">
           <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-ink-faint">
             Point
@@ -303,6 +283,6 @@ export function LogBestRunPanel({
           No selected metric points for any visible dataset.
         </InlineStatus>
       )}
-    </section>
+    </SurfacePanel>
   );
 }

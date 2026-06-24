@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { InlineStatus } from "@/features/viewer/components/shared/inline-status";
+import { SurfacePanel } from "@/features/viewer/components/shared/surface-panel";
 import {
   compareHeader,
   type CompareEntryData,
@@ -27,7 +28,7 @@ export function ComparisonTable({
   }
 
   return (
-    <section className="overflow-hidden rounded-[12px] border border-line-soft bg-black/16">
+    <SurfacePanel as="section" padding="none" className="overflow-hidden">
       <div className="flex items-center justify-between gap-3 border-b border-line-soft px-3 py-2">
         <h3 className="text-xs font-bold uppercase tracking-[0.09em] text-ink-dim">
           {title}
@@ -72,7 +73,7 @@ export function ComparisonTable({
           </tbody>
         </table>
       </div>
-    </section>
+    </SurfacePanel>
   );
 }
 
@@ -92,7 +93,7 @@ export function ConfigDiffTable({
   }
 
   return (
-    <section className="overflow-hidden rounded-[12px] border border-line-soft bg-black/16">
+    <SurfacePanel as="section" padding="none" className="overflow-hidden">
       <div className="flex items-center justify-between gap-3 border-b border-line-soft px-3 py-2">
         <h3 className="text-xs font-bold uppercase tracking-[0.09em] text-ink-dim">
           Changed Config Values
@@ -135,6 +136,6 @@ export function ConfigDiffTable({
           </tbody>
         </table>
       </div>
-    </section>
+    </SurfacePanel>
   );
 }
