@@ -9,6 +9,7 @@ import {
   deferred,
   expectLogsChecklistRowSizing,
   installFetchMock,
+  logTagsByRun,
   logMetricGroupToggle,
   logValidationExamplesToggle,
   logRunsResponse,
@@ -65,6 +66,29 @@ function queryOpenLogOption(title: string, label: string) {
 
 function expectLogOptionSelected(option: HTMLElement, selected = true) {
   expect(option).toHaveAttribute("aria-selected", selected ? "true" : "false");
+}
+
+function scalarChartSection(name: RegExp) {
+  const chart = screen.getByRole("img", { name });
+  const section = chart.closest("section");
+  if (!(section instanceof HTMLElement)) {
+    throw new Error(`Expected ${name} scalar chart to render inside a section`);
+  }
+  return section;
+}
+
+function logScalarLegendButton(card: HTMLElement, runLabel: RegExp) {
+  return within(card).getByRole("button", { name: runLabel });
+}
+
+function expectLegendOpacity(button: HTMLElement, opacity: "normal" | "dimmed") {
+  if (opacity === "dimmed") {
+    expect(button).toHaveClass("opacity-30");
+    expect(button).not.toHaveClass("opacity-100");
+    return;
+  }
+  expect(button).toHaveClass("opacity-100");
+  expect(button).not.toHaveClass("opacity-30");
 }
 
 async function expectLogFilterSelection(
@@ -1087,6 +1111,92 @@ describe("ViewerApp Logs Workspace", () => {
 
     await waitFor(() => {
       expect(logScalarRequests).toHaveLength(6);
+    });
+  });
+
+  it("links scalar legend hover across charts in the same metric accordion", async () => {
+    const trainAccuracySeries = logRunsResponse.runs.map((run, index) => ({
+      runId: run.id,
+      tag: "train/accuracy",
+      points: [
+        { step: 1, wallTime: 1780000000 + index, value: 0.51 + index / 10 },
+        { step: 2, wallTime: 1780000001 + index, value: 0.71 + index / 10 },
+      ],
+    }));
+    installFetchMock({
+      logTagsByRun: Object.fromEntries(
+        Object.entries(logTagsByRun).map(([runId, tags]) => [
+          runId,
+          Array.isArray(tags)
+            ? [...tags, "train/accuracy"]
+            : {
+                ...tags,
+                scalarTags: [...(tags.scalarTags ?? []), "train/accuracy"],
+              },
+        ]),
+      ),
+      logScalarSeries: [...logScalarSeries, ...trainAccuracySeries],
+    });
+    renderViewer();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+    await user.click(screen.getByRole("button", { name: /all runs/i }));
+    await selectAllLogExperiments(user);
+
+    expect(await screen.findByRole("img", { name: /train\/loss scalar chart/i }))
+      .toBeInTheDocument();
+    expect(await screen.findByRole("img", { name: /train\/accuracy scalar chart/i }))
+      .toBeInTheDocument();
+    expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
+      .toBeInTheDocument();
+
+    const mnistRun = /test_model · Mnist · linear · linears · BASELINE · 2026-06-01 01:02:03/i;
+    const cifarRun = /test_model_2 · Cifar10 · linear · linears · BASELINE · 2026-06-01 02:03:04/i;
+    const trainLossCard = scalarChartSection(/train\/loss scalar chart/i);
+    const trainAccuracyCard = scalarChartSection(/train\/accuracy scalar chart/i);
+    const validationCard = scalarChartSection(/validation\/accuracy scalar chart/i);
+    const mnistLoss = logScalarLegendButton(trainLossCard, mnistRun);
+    const cifarLoss = logScalarLegendButton(trainLossCard, cifarRun);
+    const mnistTrainAccuracy = logScalarLegendButton(trainAccuracyCard, mnistRun);
+    const cifarTrainAccuracy = logScalarLegendButton(trainAccuracyCard, cifarRun);
+    const mnistValidation = logScalarLegendButton(validationCard, mnistRun);
+    const cifarValidation = logScalarLegendButton(validationCard, cifarRun);
+
+    fireEvent.pointerEnter(mnistLoss);
+
+    await waitFor(() => {
+      expectLegendOpacity(cifarLoss, "dimmed");
+      expectLegendOpacity(cifarTrainAccuracy, "dimmed");
+    });
+    expectLegendOpacity(mnistLoss, "normal");
+    expectLegendOpacity(mnistTrainAccuracy, "normal");
+    expectLegendOpacity(mnistValidation, "normal");
+    expectLegendOpacity(cifarValidation, "normal");
+
+    fireEvent.pointerLeave(mnistLoss);
+
+    await waitFor(() => {
+      expectLegendOpacity(cifarLoss, "normal");
+      expectLegendOpacity(cifarTrainAccuracy, "normal");
+    });
+
+    fireEvent.focus(cifarTrainAccuracy);
+
+    await waitFor(() => {
+      expectLegendOpacity(mnistLoss, "dimmed");
+      expectLegendOpacity(mnistTrainAccuracy, "dimmed");
+    });
+    expectLegendOpacity(cifarLoss, "normal");
+    expectLegendOpacity(cifarTrainAccuracy, "normal");
+    expectLegendOpacity(mnistValidation, "normal");
+    expectLegendOpacity(cifarValidation, "normal");
+
+    fireEvent.blur(cifarTrainAccuracy);
+
+    await waitFor(() => {
+      expectLegendOpacity(mnistLoss, "normal");
+      expectLegendOpacity(mnistTrainAccuracy, "normal");
     });
   });
 

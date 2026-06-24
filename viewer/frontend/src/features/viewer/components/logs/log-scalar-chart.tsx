@@ -19,6 +19,7 @@ import {
   formatNumber,
   formatRunLabel,
 } from "@/features/viewer/state/logs/logs-selectors";
+import { cn } from "@/lib/utils";
 
 type LogScalarChartProps = {
   tag: string;
@@ -27,6 +28,8 @@ type LogScalarChartProps = {
   checkpointsByRunId: Map<string, LogCheckpoint[]>;
   runOrder: string[];
   onSelectRun: (runId: string) => void;
+  highlightedRunId?: string | null;
+  onHoverRunChange?: (runId: string | null) => void;
   xMode?: ScalarXMode;
   yScale?: ScalarYScale;
   smoothing?: number;
@@ -79,6 +82,8 @@ export function LogScalarChart({
   checkpointsByRunId,
   runOrder,
   onSelectRun,
+  highlightedRunId = null,
+  onHoverRunChange,
   xMode = "step",
   yScale = "linear",
   smoothing = 0,
@@ -138,6 +143,11 @@ export function LogScalarChart({
         .filter((entry): entry is NonNullable<typeof entry> => entry !== null),
     [colorFor, runsById, series],
   );
+  const chartHighlightedRunId = legendEntries.some(
+    (entry) => entry.runId === highlightedRunId,
+  )
+    ? highlightedRunId
+    : null;
   const rangeLabel = `${formatNumber(scalarBounds.minValue)} to ${formatNumber(
     scalarBounds.maxValue,
   )}`;
@@ -167,6 +177,7 @@ export function LogScalarChart({
       xMode,
       yScale,
       smoothing,
+      highlightedLineId: chartHighlightedRunId,
       dataZoom: true,
       checkpointMarkers,
     });
@@ -178,6 +189,7 @@ export function LogScalarChart({
     xMode,
     yScale,
     smoothing,
+    chartHighlightedRunId,
   ]);
 
   return (
@@ -212,12 +224,23 @@ export function LogScalarChart({
 
       <div className="grid gap-1.5 sm:grid-cols-2 xl:grid-cols-3">
         {legendEntries.map((entry) => {
+          const hasHighlightedRun = chartHighlightedRunId !== null;
+          const isHighlightedRun = entry.runId === chartHighlightedRunId;
           return (
             <button
               key={entry.runId}
               type="button"
-              className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-[9px] border border-line-soft bg-black/20 px-2 py-1.5 text-left text-xs transition hover:border-line hover:bg-white/[0.035] focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+              className={cn(
+                "grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-[9px] border border-line-soft bg-black/20 px-2 py-1.5 text-left text-xs transition hover:border-line hover:bg-white/[0.035] focus:outline-none focus-visible:ring-2 focus-visible:ring-focus",
+                hasHighlightedRun && !isHighlightedRun
+                  ? "opacity-30"
+                  : "opacity-100",
+              )}
               onClick={() => onSelectRun(entry.runId)}
+              onPointerEnter={() => onHoverRunChange?.(entry.runId)}
+              onPointerLeave={() => onHoverRunChange?.(null)}
+              onFocus={() => onHoverRunChange?.(entry.runId)}
+              onBlur={() => onHoverRunChange?.(null)}
             >
               <span
                 className="h-2.5 w-2.5 rounded-full"

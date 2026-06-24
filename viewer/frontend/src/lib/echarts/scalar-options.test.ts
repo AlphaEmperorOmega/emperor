@@ -10,10 +10,20 @@ function lineWith(points: ScalarLine["points"]): ScalarLine {
   return { id: "run-a", name: "Run A", color: "#7c6dff", points };
 }
 
+function namedLine(id: string, name: string, points: ScalarLine["points"]): ScalarLine {
+  return { id, name, color: id === "run-a" ? "#7c6dff" : "#19c37d", points };
+}
+
 const multiPoint = lineWith([
   { step: 0, wallTime: 100, value: 1 },
   { step: 1, wallTime: 101, value: 2 },
   { step: 2, wallTime: 102, value: 3 },
+]);
+
+const secondMultiPoint = namedLine("run-b", "Run B", [
+  { step: 0, wallTime: 100, value: 4 },
+  { step: 1, wallTime: 101, value: 5 },
+  { step: 2, wallTime: 102, value: 6 },
 ]);
 
 function axis(option: ReturnType<typeof buildScalarLineOption>, key: "xAxis" | "yAxis") {
@@ -23,6 +33,14 @@ function axis(option: ReturnType<typeof buildScalarLineOption>, key: "xAxis" | "
 
 function seriesOf(option: ReturnType<typeof buildScalarLineOption>): LineSeriesOption[] {
   return (option.series ?? []) as LineSeriesOption[];
+}
+
+function lineOpacity(series: LineSeriesOption) {
+  return (series.lineStyle as { opacity?: number } | undefined)?.opacity;
+}
+
+function itemOpacity(series: LineSeriesOption) {
+  return (series.itemStyle as { opacity?: number } | undefined)?.opacity;
 }
 
 function markLineData(option: ReturnType<typeof buildScalarLineOption>) {
@@ -76,10 +94,42 @@ describe("buildScalarLineOption", () => {
     expect(seriesOf(buildScalarLineOption([multiPoint]))).toHaveLength(1);
   });
 
+  it("keeps existing series opacity when no line is highlighted", () => {
+    const series = seriesOf(buildScalarLineOption([multiPoint, secondMultiPoint]));
+
+    expect(series.map(lineOpacity)).toEqual([undefined, undefined]);
+    expect(series.map(itemOpacity)).toEqual([undefined, undefined]);
+  });
+
+  it("dims non-highlighted lines to the default opacity", () => {
+    const series = seriesOf(
+      buildScalarLineOption([multiPoint, secondMultiPoint], {
+        highlightedLineId: "run-a",
+      }),
+    );
+
+    expect(lineOpacity(series[0])).toBeUndefined();
+    expect(itemOpacity(series[0])).toBeUndefined();
+    expect(lineOpacity(series[1])).toBe(0.1);
+    expect(itemOpacity(series[1])).toBe(0.1);
+  });
+
   it("renders a raw + smoothed pair per multi-point line when smoothing is on", () => {
     const series = seriesOf(buildScalarLineOption([multiPoint], { smoothing: 0.6 }));
     expect(series).toHaveLength(2);
     expect(series.every((entry) => entry.name === "Run A")).toBe(true);
+  });
+
+  it("keeps highlighted smoothed pairs at their existing opacity", () => {
+    const series = seriesOf(
+      buildScalarLineOption([multiPoint, secondMultiPoint], {
+        highlightedLineId: "run-a",
+        smoothing: 0.6,
+      }),
+    );
+
+    expect(series.map((entry) => entry.name)).toEqual(["Run A", "Run A", "Run B", "Run B"]);
+    expect(series.map(lineOpacity)).toEqual([undefined, 0.25, 0.1, 0.1]);
   });
 
   it("does not duplicate single-point lines even with smoothing", () => {
@@ -87,6 +137,23 @@ describe("buildScalarLineOption", () => {
     const series = seriesOf(buildScalarLineOption([single], { smoothing: 0.6 }));
     expect(series).toHaveLength(1);
     expect(series[0].showSymbol).toBe(true);
+  });
+
+  it("dims single-point symbols when the run is not highlighted", () => {
+    const firstSingle = namedLine("run-a", "Run A", [
+      { step: 5, wallTime: 200, value: 9 },
+    ]);
+    const secondSingle = namedLine("run-b", "Run B", [
+      { step: 5, wallTime: 200, value: 7 },
+    ]);
+    const series = seriesOf(
+      buildScalarLineOption([firstSingle, secondSingle], {
+        highlightedLineId: "run-a",
+      }),
+    );
+
+    expect(series[1].showSymbol).toBe(true);
+    expect(itemOpacity(series[1])).toBe(0.1);
   });
 
   it("scales wallTime seconds to milliseconds on the time axis", () => {

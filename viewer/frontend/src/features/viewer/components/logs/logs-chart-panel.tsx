@@ -7,6 +7,7 @@ import {
   RefreshCw,
   RectangleHorizontal,
 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
@@ -60,6 +61,13 @@ const SCALAR_CHART_GRID_FULL_SPAN_CLASSES: Record<ScalarChartGridMode, string> =
 // up every metric at once, TensorBoard-style.
 const LOGS_SCALAR_GROUP = "logs-scalars";
 const LOG_METRIC_GROUP_RENDER_LIMIT = 100;
+
+const EMPTY_HIGHLIGHTED_RUNS_BY_GROUP: Record<LogMetricGroupKey, string | null> = {
+  train: null,
+  validation: null,
+  test: null,
+  other: null,
+};
 
 export type LogsChartEmptyState = {
   title: string;
@@ -260,6 +268,34 @@ export function LogsChartPanel({
   bestRun: LogBestRunViewModel;
   onSelectRun: (runId: string) => void;
 }) {
+  const [highlightedRunsByGroup, setHighlightedRunsByGroup] = useState<
+    Record<LogMetricGroupKey, string | null>
+  >(() => ({ ...EMPTY_HIGHLIGHTED_RUNS_BY_GROUP }));
+  const visibleRunIds = useMemo(() => new Set(runOrder), [runOrder]);
+  const setHighlightedRunForGroup = useCallback(
+    (group: LogMetricGroupKey, runId: string | null) => {
+      setHighlightedRunsByGroup((current) =>
+        current[group] === runId ? current : { ...current, [group]: runId },
+      );
+    },
+    [],
+  );
+
+  useEffect(() => {
+    setHighlightedRunsByGroup((current) => {
+      let didChange = false;
+      const next = { ...current };
+      for (const group of LOG_METRIC_GROUPS) {
+        const highlightedRunId = next[group.key];
+        if (highlightedRunId !== null && !visibleRunIds.has(highlightedRunId)) {
+          next[group.key] = null;
+          didChange = true;
+        }
+      }
+      return didChange ? next : current;
+    });
+  }, [visibleRunIds]);
+
   return (
     <div className="grid min-h-0 grid-rows-[56px_minmax(0,1fr)]">
       <div className="flex min-w-0 items-center justify-between gap-3 border-b border-line bg-panel/45 px-4">
@@ -489,6 +525,10 @@ export function LogsChartPanel({
                               checkpointsByRunId={checkpointsByRunId}
                               runOrder={runOrder}
                               onSelectRun={onSelectRun}
+                              highlightedRunId={highlightedRunsByGroup[group.key]}
+                              onHoverRunChange={(runId) =>
+                                setHighlightedRunForGroup(group.key, runId)
+                              }
                               group={LOGS_SCALAR_GROUP}
                               xMode={xMode}
                               yScale={yScale}
