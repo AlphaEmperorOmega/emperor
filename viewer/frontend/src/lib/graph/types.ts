@@ -2,7 +2,6 @@ import { type GraphNode } from "@/lib/api";
 
 export type GraphDetailMode = "simple" | "basic" | "full";
 export type GraphScope = "opened" | "entire";
-export type PreviewVisualizationMode = "graph" | "parameters";
 export type GraphCoordinate = [number, number, number];
 export type GraphParameterActivityStatus =
   | "updated"

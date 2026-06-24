@@ -1,11 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { type GraphNode, type InspectResponse } from "@/lib/api";
-import { fallbackParameterFocusNodeId } from "@/lib/echarts/parameter-treemap-options";
 import {
   type GraphDetailMode,
   type GraphParameterActivity,
   type GraphScope,
-  type PreviewVisualizationMode,
   ancestorNodeIds,
   buildChildSummaries,
   buildClusterDiagrams,
@@ -43,15 +41,10 @@ export function useGraphViewState(
   } = options;
   const [graphDetailMode, setGraphDetailMode] = useState<GraphDetailMode>("basic");
   const [graphScope, setGraphScope] = useState<GraphScope>("opened");
-  const [previewVisualizationMode, setPreviewVisualizationMode] =
-    useState<PreviewVisualizationMode>("graph");
   const [expandedGraphNodeIds, setExpandedGraphNodeIds] = useState<Set<string>>(new Set());
   const [expandedDetailNodeIds, setExpandedDetailNodeIds] = useState<Set<string>>(new Set());
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [cluster3dNodeId, setCluster3dNodeId] = useState<string | null>(null);
-  const [parameterFocusNodeId, setParameterFocusNodeId] =
-    useState<string | null>(null);
-  const previousGraphRef = useRef<InspectResponse | undefined>(graph);
 
   const fullGraphNavigation = useMemo(() => buildGraphNavigation(graph), [graph]);
   const fullNodeIds = useMemo(
@@ -356,25 +349,6 @@ export function useGraphViewState(
     }
   }, [cluster3dNodeId, fullClusterNodeIds, fullGraphNavigation, selectedNodeId]);
 
-  useEffect(() => {
-    if (previousGraphRef.current !== graph) {
-      previousGraphRef.current = graph;
-      setParameterFocusNodeId(null);
-      return;
-    }
-    if (!parameterFocusNodeId) {
-      return;
-    }
-    const fallbackFocusNodeId = fallbackParameterFocusNodeId(
-      parameterFocusNodeId,
-      graphForDetail,
-      graph,
-    );
-    if (fallbackFocusNodeId !== parameterFocusNodeId) {
-      setParameterFocusNodeId(fallbackFocusNodeId);
-    }
-  }, [graph, graphForDetail, parameterFocusNodeId]);
-
   const collapseGraphNodes = useCallback(() => {
     setExpandedGraphNodeIds(new Set());
     setSelectedNodeId(null);
@@ -389,15 +363,12 @@ export function useGraphViewState(
   const resetGraphSelectionAndExpansion = useCallback(() => {
     setSelectedNodeId(null);
     setCluster3dNodeId(null);
-    setParameterFocusNodeId(null);
     resetGraphExpansion();
   }, [resetGraphExpansion]);
 
   return {
     graphDetailMode,
     setGraphDetailMode,
-    previewVisualizationMode,
-    setPreviewVisualizationMode,
     graphScope,
     setGraphScope,
     expandedGraphNodeIds,
@@ -406,10 +377,6 @@ export function useGraphViewState(
     cluster3dNodeId,
     openCluster3d,
     closeCluster3d,
-    parameterFocusNodeId,
-    setParameterFocusNodeId: setParameterFocusNodeId as (
-      nodeId: string | null
-    ) => void,
     graphForDetail,
     nodes,
     edges,

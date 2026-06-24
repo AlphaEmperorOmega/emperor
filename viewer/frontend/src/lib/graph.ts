@@ -13,7 +13,6 @@ export type {
   GraphParameterActivitySource,
   GraphParameterActivityStatus,
   GraphScope,
-  PreviewVisualizationMode,
   HierarchyNode,
   StackDiagram,
   StackDiagramCell,

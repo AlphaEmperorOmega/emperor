@@ -744,9 +744,12 @@ describe("ViewerApp Graph Workspace", () => {
     const user = userEvent.setup();
 
     expect(await screen.findByTestId("flow")).toBeInTheDocument();
-    const previewVisualizationTabs = screen.getByRole("radiogroup", {
-      name: /preview visualization/i,
-    });
+    expect(
+      screen.queryByRole("radiogroup", { name: /preview visualization/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("radio", { name: /^parameters$/i }),
+    ).not.toBeInTheDocument();
     const graphDetailTabs = screen.getByRole("radiogroup", { name: /graph detail/i });
     const graphScopeTabs = screen.getByRole("radiogroup", { name: /graph scope/i });
     expect(
@@ -756,21 +759,15 @@ describe("ViewerApp Graph Workspace", () => {
       screen.queryByRole("radio", { name: /^operations$/i }),
     ).not.toBeInTheDocument();
     expect([
-      ...within(previewVisualizationTabs).getAllByRole("radio"),
       ...within(graphDetailTabs).getAllByRole("radio"),
       ...within(graphScopeTabs).getAllByRole("radio"),
     ].map((tab) => tab.textContent)).toEqual([
-      "Graph",
-      "Parameters",
       "Simple",
       "Basic",
       "Full",
       "Opened",
       "Entire",
     ]);
-    expect(previewVisualizationTabs).toBeInTheDocument();
-    expect(within(previewVisualizationTabs).getByRole("radio", { name: /^graph$/i }))
-      .toHaveAttribute("aria-checked", "true");
     expect(graphDetailTabs).toBeInTheDocument();
     expect(within(graphDetailTabs).getByRole("radio", { name: /basic/i }))
       .toHaveAttribute("aria-checked", "true");
@@ -1070,245 +1067,6 @@ describe("ViewerApp Graph Workspace", () => {
     expect(screen.getByText("dims: 128 -> 128")).toBeInTheDocument();
     expect(screen.getByText("33,024")).toBeInTheDocument();
     expect(screen.getByText("BEFORE")).toBeInTheDocument();
-  });
-
-  it("switches from Graph to Parameters preview mode", async () => {
-    installFetchMock();
-    renderViewer();
-    const user = userEvent.setup();
-
-    expect(await screen.findByTestId("flow")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("radio", { name: /^parameters$/i }));
-
-    expect(screen.getByRole("radio", { name: /^parameters$/i })).toHaveAttribute(
-      "aria-checked",
-      "true",
-    );
-    expect(screen.queryByTestId("flow")).not.toBeInTheDocument();
-  });
-
-  it("renders the Parameters browser container", async () => {
-    installFetchMock();
-    renderViewer();
-    const user = userEvent.setup();
-
-    expect(await screen.findByTestId("flow")).toBeInTheDocument();
-    await user.click(screen.getByRole("radio", { name: /^parameters$/i }));
-
-    expect(await screen.findByTestId("parameter-browser-panel")).toBeInTheDocument();
-    expect(screen.queryByTestId("parameter-treemap-panel")).not.toBeInTheDocument();
-  });
-
-  it("opens Parameters at the root overview with an inspector child list", async () => {
-    installFetchMock();
-    renderViewer();
-    const user = userEvent.setup();
-
-    expect(await screen.findByTestId("flow")).toBeInTheDocument();
-    await user.click(screen.getByRole("radio", { name: /^parameters$/i }));
-
-    const panel = await screen.findByTestId("parameter-browser-panel");
-    expect(within(panel).getByTestId("parameter-browser-focus")).toHaveTextContent(
-      "model: Model",
-    );
-    expect(
-      within(panel).getByRole("button", { name: /^select component main_model\.0$/i }),
-    ).toBeInTheDocument();
-  });
-
-  it("clicking a Parameters module drills into its components", async () => {
-    installFetchMock();
-    renderViewer();
-    const user = userEvent.setup();
-
-    expect(await screen.findByTestId("flow")).toBeInTheDocument();
-    await user.click(screen.getByRole("radio", { name: /^parameters$/i }));
-    await user.click(
-      await screen.findByRole("button", { name: /^select component main_model\.0$/i }),
-    );
-
-    const panel = await screen.findByTestId("parameter-browser-panel");
-    expect(within(panel).getByTestId("parameter-browser-focus")).toHaveTextContent(
-      "0: Layer",
-    );
-    expect(
-      within(panel).getByRole("button", {
-        name: /^select component main_model\.0\.model$/i,
-      }),
-    ).toBeInTheDocument();
-    expect(
-      within(panel).getByRole("button", {
-        name: /^select component main_model\.0\.gate_model$/i,
-      }),
-    ).toBeInTheDocument();
-  });
-
-  it("breadcrumb Root navigation returns Parameters to the root focus", async () => {
-    installFetchMock();
-    renderViewer();
-    const user = userEvent.setup();
-
-    expect(await screen.findByTestId("flow")).toBeInTheDocument();
-    await user.click(screen.getByRole("radio", { name: /^parameters$/i }));
-    await user.click(
-      await screen.findByRole("button", { name: /^select component main_model\.0$/i }),
-    );
-
-    let panel = await screen.findByTestId("parameter-browser-panel");
-    expect(within(panel).getByTestId("parameter-browser-focus")).toHaveTextContent(
-      "0: Layer",
-    );
-    await user.click(within(panel).getByRole("button", { name: /^root$/i }));
-
-    panel = await screen.findByTestId("parameter-browser-panel");
-    expect(within(panel).getByTestId("parameter-browser-focus")).toHaveTextContent(
-      "model: Model",
-    );
-  });
-
-  it("updates node details when a Parameters leaf is clicked", async () => {
-    installFetchMock();
-    renderViewer();
-    const user = userEvent.setup();
-
-    expect(await screen.findByTestId("flow")).toBeInTheDocument();
-    await user.click(screen.getByRole("radio", { name: /^parameters$/i }));
-    await user.click(
-      await screen.findByRole("button", { name: /^select component main_model\.0$/i }),
-    );
-    await user.click(
-      await screen.findByRole("button", {
-        name: /^select component main_model\.0\.model$/i,
-      }),
-    );
-
-    expect(screen.getAllByText("LinearLayer").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("main_model.0.model").length).toBeGreaterThan(0);
-    expect(screen.getByText("16,512")).toBeInTheDocument();
-  });
-
-  it("clicking a Parameters leaf selects it without leaving the current focus", async () => {
-    installFetchMock();
-    renderViewer();
-    const user = userEvent.setup();
-
-    expect(await screen.findByTestId("flow")).toBeInTheDocument();
-    await user.click(screen.getByRole("radio", { name: /^parameters$/i }));
-    await user.click(
-      await screen.findByRole("button", { name: /^select component main_model\.0$/i }),
-    );
-    await user.click(
-      await screen.findByRole("button", {
-        name: /^select component main_model\.0\.model$/i,
-      }),
-    );
-
-    const panel = await screen.findByTestId("parameter-browser-panel");
-    expect(within(panel).getByTestId("parameter-browser-focus")).toHaveTextContent(
-      "0: Layer",
-    );
-    expect(screen.getAllByText("main_model.0.model").length).toBeGreaterThan(0);
-  });
-
-  it("shows zero-parameter children in the inspector and lets them be selected", async () => {
-    installFetchMock();
-    renderViewer();
-    const user = userEvent.setup();
-
-    expect(await screen.findByTestId("flow")).toBeInTheDocument();
-    await user.click(screen.getByRole("radio", { name: /^parameters$/i }));
-    await user.click(
-      await screen.findByRole("button", { name: /^select component main_model\.0$/i }),
-    );
-
-    const panel = await screen.findByTestId("parameter-browser-panel");
-    await user.click(
-      within(panel).getByRole("button", {
-        name: /^select component main_model\.0\.gate_model$/i,
-      }),
-    );
-
-    expect(screen.getAllByText("Sequential").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("main_model.0.gate_model").length).toBeGreaterThan(0);
-    expect(within(panel).getByTestId("parameter-browser-focus")).toHaveTextContent(
-      "0: Layer",
-    );
-  });
-
-  it("restores the React Flow graph after switching back from Parameters", async () => {
-    installFetchMock();
-    renderViewer();
-    const user = userEvent.setup();
-
-    expect(await screen.findByTestId("flow")).toBeInTheDocument();
-    await user.click(screen.getByRole("radio", { name: /^parameters$/i }));
-    expect(await screen.findByTestId("parameter-browser-panel")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("radio", { name: /^graph$/i }));
-
-    expect(await screen.findByTestId("flow")).toBeInTheDocument();
-    expect(screen.queryByTestId("parameter-browser-panel")).not.toBeInTheDocument();
-  });
-
-  it("reveals a Parameters-selected node when switching back to Graph", async () => {
-    installFetchMock();
-    renderViewer();
-    const user = userEvent.setup();
-
-    expect(await screen.findByTestId("flow")).toBeInTheDocument();
-    await user.click(screen.getByRole("radio", { name: /^parameters$/i }));
-    await user.click(
-      await screen.findByRole("button", { name: /^select component main_model\.0$/i }),
-    );
-    await user.click(
-      await screen.findByRole("button", {
-        name: /^select component main_model\.0\.model$/i,
-      }),
-    );
-    await user.click(screen.getByRole("radio", { name: /^graph$/i }));
-
-    expect(await screen.findByTestId("node-main_model.0.model")).toBeInTheDocument();
-  });
-
-  it("uses graph detail mode as the Parameters browser input", async () => {
-    installFetchMock();
-    renderViewer();
-    const user = userEvent.setup();
-
-    expect(await screen.findByTestId("flow")).toBeInTheDocument();
-    await user.click(screen.getByRole("radio", { name: /^parameters$/i }));
-    await user.click(
-      await screen.findByRole("button", { name: /^select component main_model\.0$/i }),
-    );
-
-    expect(
-      screen.queryByRole("button", {
-        name: /^select component main_model\.0\.layer_norm_module$/i,
-      }),
-    ).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("radio", { name: /^full$/i }));
-
-    expect(
-      await screen.findByRole("button", {
-        name: /^select component main_model\.0\.layer_norm_module$/i,
-      }),
-    ).toBeInTheDocument();
-  });
-
-  it("hides graph scope controls in Parameters preview mode", async () => {
-    installFetchMock();
-    renderViewer();
-    const user = userEvent.setup();
-
-    expect(await screen.findByRole("radiogroup", { name: /graph scope/i }))
-      .toBeInTheDocument();
-
-    await user.click(screen.getByRole("radio", { name: /^parameters$/i }));
-
-    expect(screen.queryByRole("radiogroup", { name: /graph scope/i }))
-      .not.toBeInTheDocument();
   });
 
 });

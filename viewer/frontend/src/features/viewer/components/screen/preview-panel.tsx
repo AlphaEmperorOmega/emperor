@@ -2,7 +2,6 @@ import dynamic from "next/dynamic";
 import { GitBranch, RefreshCw } from "lucide-react";
 import { EmptyState } from "@/features/viewer/components/empty-state";
 import { ErrorPanel } from "@/features/viewer/components/error-panel";
-import { ParameterBrowserPanel } from "@/features/viewer/components/screen/parameter-browser-panel";
 import { viewerStatusCopy } from "@/features/viewer/components/shared/status-copy";
 import { StatusPill } from "@/features/viewer/components/status-pill";
 import {
@@ -32,13 +31,10 @@ export function PreviewPanel() {
   const {
     graph,
     graphForDetail,
-    previewVisualizationMode,
     nodes,
     edges,
     selectedNodeId,
-    parameterFocusNodeId,
     previewInspection,
-    setParameterFocusNodeId,
     setSelectedNodeId: onSelectNode,
     revealGraphNode: onRevealNode,
     openCluster3d,
@@ -75,27 +71,17 @@ export function PreviewPanel() {
         </div>
       )}
       <div className="relative h-full min-h-0 overflow-hidden">
-        {hasPreviewGraph && previewVisualizationMode === "parameters" ? (
-          <ParameterBrowserPanel
-            graph={graphForDetail}
-            selectedNodeId={selectedNodeId}
-            focusNodeId={parameterFocusNodeId}
-            onFocusNode={setParameterFocusNodeId}
-            onRevealNode={onRevealNode}
-          />
-        ) : (
-          <GraphPreviewPanel
-            graph={graphForDetail}
-            nodes={nodes}
-            edges={edges}
-            selectedNodeId={selectedNodeId}
-            hasSelectedClusterNode={hasSelectedClusterNode}
-            cluster3dNodeId={cluster3dNodeId}
-            onSelectNode={onSelectNode}
-            onRevealNode={onRevealNode}
-            onOpenCluster3d={openCluster3d}
-          />
-        )}
+        <GraphPreviewPanel
+          graph={graphForDetail}
+          nodes={nodes}
+          edges={edges}
+          selectedNodeId={selectedNodeId}
+          hasSelectedClusterNode={hasSelectedClusterNode}
+          cluster3dNodeId={cluster3dNodeId}
+          onSelectNode={onSelectNode}
+          onRevealNode={onRevealNode}
+          onOpenCluster3d={openCluster3d}
+        />
         {!hasPreviewGraph && !isPreviewBuilding && !isPreviewError && (
           <EmptyState
             title={viewerStatusCopy.empty.graph}

@@ -1,6 +1,5 @@
 import {
   useCallback,
-  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -188,15 +187,6 @@ export function useGraphPreviewOrchestration({
     resetGraphExpansion,
     resetGraphSelectionAndExpansion,
   } = graphState;
-  const { closeCluster3d, previewVisualizationMode } = graphState;
-
-  useEffect(() => {
-    if (previewVisualizationMode === "graph") {
-      return;
-    }
-    closeCluster3d();
-  }, [closeCluster3d, previewVisualizationMode]);
-
   useLayoutEffect(() => {
     bindGraphResetHandlers({
       resetGraphSelectionAndExpansion: () => {
@@ -230,8 +220,6 @@ export function useGraphPreviewOrchestration({
       graphForDetail: graphState.graphForDetail,
       nodes: graphState.nodes,
       edges: graphState.edges,
-      previewVisualizationMode,
-      setPreviewVisualizationMode: graphState.setPreviewVisualizationMode,
       graphDetailMode: graphState.graphDetailMode,
       setGraphDetailMode: graphState.setGraphDetailMode,
       graphScope: graphState.graphScope,
@@ -242,8 +230,6 @@ export function useGraphPreviewOrchestration({
       cluster3dNodeId: graphState.cluster3dNodeId,
       openCluster3d: graphState.openCluster3d,
       closeCluster3d: graphState.closeCluster3d,
-      parameterFocusNodeId: graphState.parameterFocusNodeId,
-      setParameterFocusNodeId: graphState.setParameterFocusNodeId,
       selectedNode: graphState.selectedNode,
       selectedMonitorNode,
       selectedMonitorComparisonCandidateGroups,
@@ -264,19 +250,15 @@ export function useGraphPreviewOrchestration({
       graphState.graphScope,
       graphState.nodes,
       graphState.openCluster3d,
-      graphState.parameterFocusNodeId,
       graphState.revealGraphNode,
       graphState.revealGraphNodeInFull,
       graphState.selectedNode,
       graphState.selectedNodeId,
       graphState.setGraphDetailMode,
       graphState.setGraphScope,
-      graphState.setParameterFocusNodeId,
-      graphState.setPreviewVisualizationMode,
       graphState.setSelectedNodeId,
       isParameterStatusPartiallyLoading,
       previewInspection,
-      previewVisualizationMode,
       selectedMonitorComparisonCandidateGroups,
       selectedMonitorNode,
       targetGraph,

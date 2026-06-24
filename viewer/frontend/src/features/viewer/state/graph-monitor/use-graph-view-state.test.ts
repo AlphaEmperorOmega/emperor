@@ -17,13 +17,6 @@ function node(id: string): GraphNode {
   };
 }
 
-function roleNode(id: string, graphRole: GraphNode["graphRole"]): GraphNode {
-  return {
-    ...node(id),
-    graphRole,
-  };
-}
-
 // Root n0 with child n1; both architecture so they survive basic-mode filtering
 // and opened-scope expansion (root reveals its children).
 const graph: InspectResponse = {
@@ -37,16 +30,6 @@ const graph: InspectResponse = {
 };
 
 describe("useGraphViewState selection", () => {
-  it("defaults to graph visualization and can switch to parameters", () => {
-    const { result } = renderHook(() => useGraphViewState(graph));
-
-    expect(result.current.previewVisualizationMode).toBe("graph");
-
-    act(() => result.current.setPreviewVisualizationMode("parameters"));
-
-    expect(result.current.previewVisualizationMode).toBe("parameters");
-  });
-
   it("applies selection without relayout (non-selected nodes keep their reference)", async () => {
     const { result } = renderHook(() => useGraphViewState(graph));
 
@@ -75,72 +58,5 @@ describe("useGraphViewState selection", () => {
     expect(n1After.selected).toBe(true);
     // Edges are produced by the structural pass and stay untouched.
     expect(result.current.edges).toBe(edgesBefore);
-  });
-
-  it("preserves parameter focus across preview tab switches", () => {
-    const { result } = renderHook(() => useGraphViewState(graph));
-
-    act(() => {
-      result.current.setParameterFocusNodeId("n1");
-      result.current.setPreviewVisualizationMode("parameters");
-    });
-
-    expect(result.current.parameterFocusNodeId).toBe("n1");
-
-    act(() => result.current.setPreviewVisualizationMode("graph"));
-
-    expect(result.current.parameterFocusNodeId).toBe("n1");
-  });
-
-  it("resets parameter focus when the inspected graph changes", async () => {
-    const nextGraph: InspectResponse = {
-      ...graph,
-      preset: "next",
-      nodes: [node("next-root")],
-      edges: [],
-    };
-    const { result, rerender } = renderHook(
-      ({ inputGraph }: { inputGraph: InspectResponse }) => useGraphViewState(inputGraph),
-      { initialProps: { inputGraph: graph } },
-    );
-
-    act(() => result.current.setParameterFocusNodeId("n1"));
-    expect(result.current.parameterFocusNodeId).toBe("n1");
-
-    rerender({ inputGraph: nextGraph });
-
-    await waitFor(() => {
-      expect(result.current.parameterFocusNodeId).toBeNull();
-    });
-  });
-
-  it("falls parameter focus back to a visible ancestor on detail changes", async () => {
-    const fullGraph: InspectResponse = {
-      modelType: "linears",
-      model: "m",
-      preset: "p",
-      parameterCount: 0,
-      parameterSizeBytes: 0,
-      nodes: [
-        roleNode("model", "architecture"),
-        roleNode("internal", "internal"),
-        roleNode("leaf", "architecture"),
-      ],
-      edges: [
-        { id: "model-internal", source: "model", target: "internal" },
-        { id: "internal-leaf", source: "internal", target: "leaf" },
-      ],
-    };
-    const { result } = renderHook(() => useGraphViewState(fullGraph));
-
-    act(() => result.current.setGraphDetailMode("full"));
-    act(() => result.current.setParameterFocusNodeId("internal"));
-    expect(result.current.parameterFocusNodeId).toBe("internal");
-
-    act(() => result.current.setGraphDetailMode("basic"));
-
-    await waitFor(() => {
-      expect(result.current.parameterFocusNodeId).toBe("model");
-    });
   });
 });
