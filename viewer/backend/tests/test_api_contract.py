@@ -1963,6 +1963,36 @@ class ApiIntegrationContractTests(unittest.TestCase):
         self.assertIn("filesystem path", raised.exception.detail)
         self.assertIn("server-known dataset name", raised.exception.detail)
 
+    def test_log_scalars_rejects_more_than_max_request_run_ids(self) -> None:
+        import httpx
+
+        from viewer.backend.api import app
+
+        async def call_api() -> httpx.Response:
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(
+                transport=transport,
+                base_url="http://testserver",
+            ) as client:
+                return await client.post(
+                    "/logs/scalars",
+                    json={
+                        "runIds": [f"run-{index}" for index in range(94)],
+                        "tags": ["train/loss"],
+                        "maxPoints": 500,
+                        "sampling": "tail",
+                    },
+                )
+
+        response = asyncio.run(call_api())
+
+        self.assertEqual(response.status_code, 422)
+        detail = response.json()["detail"][0]
+        self.assertEqual(detail["type"], "too_long")
+        self.assertEqual(detail["loc"], ["body", "runIds"])
+        self.assertEqual(detail["ctx"]["max_length"], 50)
+        self.assertEqual(detail["ctx"]["actual_length"], 94)
+
     def test_api_dependency_overrides_can_replace_route_services(self) -> None:
         import httpx
 

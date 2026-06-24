@@ -2720,6 +2720,198 @@ describe("POST requests", () => {
     }
   });
 
+  it("chunks oversized log scalar run requests to match backend limits", async () => {
+    const pending: Array<{
+      body: { runIds: string[]; tags: string[] };
+      signal: AbortSignal | null | undefined;
+      resolved: boolean;
+      resolve: (response: Response) => void;
+    }> = [];
+    let active = 0;
+    let maxActive = 0;
+    const scalarFetchMock = vi.fn<FetchFn>((_input, init) => {
+      const response = createDeferred<Response>();
+      const requestInit = init as RequestInit;
+      const body = JSON.parse(String(requestInit.body)) as {
+        runIds: string[];
+        tags: string[];
+      };
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      pending.push({
+        body,
+        signal: requestInit.signal,
+        resolved: false,
+        resolve: response.resolve,
+      });
+      return response.promise;
+    });
+    vi.stubGlobal("fetch", scalarFetchMock);
+    const resolveRequest = (index: number) => {
+      const request = pending[index];
+      if (!request || request.resolved) {
+        return;
+      }
+      request.resolved = true;
+      active -= 1;
+      request.resolve(
+        fakeResponse({
+          json: () =>
+            Promise.resolve({
+              series: [],
+            }),
+        }),
+      );
+    };
+    const runIds = Array.from({ length: 94 }, (_, index) => `run-${index}`);
+    const controller = new AbortController();
+
+    const scalarsPromise = fetchLogScalars(
+      {
+        runIds,
+        tags: ["validation/accuracy"],
+      },
+      { signal: controller.signal },
+    );
+
+    await flushAsyncWork();
+    pending.forEach((_, index) => resolveRequest(index));
+    await scalarsPromise;
+
+    expect(scalarFetchMock).toHaveBeenCalledTimes(2);
+    expect(maxActive).toBe(2);
+    expect(pending.map((request) => request.body.runIds.length)).toEqual([50, 44]);
+    for (const request of pending) {
+      expect(request.signal).toBe(controller.signal);
+      expect(request.body.runIds.length).toBeLessThanOrEqual(50);
+      expect(request.body.tags).toEqual(["validation/accuracy"]);
+    }
+  });
+
+  it("chunks oversized log scalar run and tag requests across both dimensions", async () => {
+    const pending: Array<{
+      body: { runIds: string[]; tags: string[] };
+      resolved: boolean;
+      resolve: (response: Response) => void;
+    }> = [];
+    let active = 0;
+    let maxActive = 0;
+    const scalarFetchMock = vi.fn<FetchFn>((_input, init) => {
+      const response = createDeferred<Response>();
+      const body = JSON.parse(String((init as RequestInit).body)) as {
+        runIds: string[];
+        tags: string[];
+      };
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      pending.push({
+        body,
+        resolved: false,
+        resolve: response.resolve,
+      });
+      return response.promise;
+    });
+    vi.stubGlobal("fetch", scalarFetchMock);
+    const resolveRequest = (index: number) => {
+      const request = pending[index];
+      if (!request || request.resolved) {
+        return;
+      }
+      request.resolved = true;
+      active -= 1;
+      request.resolve(
+        fakeResponse({
+          json: () =>
+            Promise.resolve({
+              series: [],
+            }),
+        }),
+      );
+    };
+    const runIds = Array.from({ length: 94 }, (_, index) => `run-${index}`);
+    const tags = Array.from({ length: 146 }, (_, index) => `validation/tag-${index}`);
+
+    const scalarsPromise = fetchLogScalars({ runIds, tags });
+
+    let settled = false;
+    scalarsPromise.finally(() => {
+      settled = true;
+    });
+    while (!settled) {
+      await flushAsyncWork();
+      pending.forEach((_, index) => resolveRequest(index));
+    }
+    await scalarsPromise;
+
+    expect(scalarFetchMock).toHaveBeenCalledTimes(6);
+    expect(maxActive).toBe(2);
+    expect(
+      pending.map((request) => [
+        request.body.runIds.length,
+        request.body.tags.length,
+      ]),
+    ).toEqual([
+      [50, 50],
+      [50, 50],
+      [50, 46],
+      [44, 50],
+      [44, 50],
+      [44, 46],
+    ]);
+    for (const request of pending) {
+      expect(request.body.runIds.length).toBeLessThanOrEqual(50);
+      expect(request.body.tags.length).toBeLessThanOrEqual(50);
+    }
+  });
+
+  it("merges log scalar series from multiple chunk responses", async () => {
+    const scalarFetchMock = vi.fn<FetchFn>((_input, init) => {
+      const body = JSON.parse(String((init as RequestInit).body)) as {
+        runIds: string[];
+        tags: string[];
+      };
+      return Promise.resolve(
+        fakeResponse({
+          json: () =>
+            Promise.resolve({
+              series: [
+                {
+                  runId: body.runIds[0],
+                  tag: body.tags[0],
+                  points: [
+                    {
+                      step: 1,
+                      wallTime: 1000,
+                      value: body.runIds.length + body.tags.length / 100,
+                    },
+                  ],
+                },
+              ],
+            }),
+        }),
+      );
+    });
+    vi.stubGlobal("fetch", scalarFetchMock);
+    const runIds = Array.from({ length: 51 }, (_, index) => `run-${index}`);
+    const tags = Array.from({ length: 51 }, (_, index) => `validation/tag-${index}`);
+
+    const scalars = await fetchLogScalars({ runIds, tags });
+
+    expect(scalarFetchMock).toHaveBeenCalledTimes(4);
+    expect(
+      scalars.series.map((series) => ({
+        runId: series.runId,
+        tag: series.tag,
+        value: series.points[0].value,
+      })),
+    ).toEqual([
+      { runId: "run-0", tag: "validation/tag-0", value: 50.5 },
+      { runId: "run-0", tag: "validation/tag-50", value: 50.01 },
+      { runId: "run-50", tag: "validation/tag-0", value: 1.5 },
+      { runId: "run-50", tag: "validation/tag-50", value: 1.01 },
+    ]);
+  });
+
   it("posts log media requests as JSON", async () => {
     const mediaFetchMock = stubFetch(
       fakeResponse({
