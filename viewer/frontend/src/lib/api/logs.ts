@@ -216,13 +216,36 @@ type FetchPaginatedResult<TPage, TItem> = {
   offset: number;
 };
 
-let pendingLogScalarRequest: Promise<unknown> = Promise.resolve();
+const LOG_SCALAR_GLOBAL_REQUEST_CONCURRENCY = 2;
+let activeLogScalarRequestCount = 0;
+const pendingLogScalarRequests: Array<() => void> = [];
 
 function queueLogScalarRequest<TResponse>(request: () => Promise<TResponse>) {
-  // TensorBoard scalar reads are disk-heavy; keep chart queries from piling them up.
-  const queuedRequest = pendingLogScalarRequest.then(request, request);
-  pendingLogScalarRequest = queuedRequest.catch(() => undefined);
-  return queuedRequest;
+  // TensorBoard scalar reads are disk-heavy, but one slow metric group should not
+  // block already-visible groups from loading. Keep a small global queue.
+  return new Promise<TResponse>((resolve, reject) => {
+    const run = () => {
+      activeLogScalarRequestCount += 1;
+      Promise.resolve()
+        .then(request)
+        .then(resolve, reject)
+        .finally(() => {
+          activeLogScalarRequestCount = Math.max(
+            0,
+            activeLogScalarRequestCount - 1,
+          );
+          const next = pendingLogScalarRequests.shift();
+          next?.();
+        });
+    };
+
+    if (activeLogScalarRequestCount < LOG_SCALAR_GLOBAL_REQUEST_CONCURRENCY) {
+      run();
+      return;
+    }
+
+    pendingLogScalarRequests.push(run);
+  });
 }
 
 function paginatedPath(
