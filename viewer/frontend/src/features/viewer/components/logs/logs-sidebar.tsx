@@ -156,6 +156,7 @@ function LogFilterSection({
   onNone,
   optionActions,
   beforeDropdown,
+  divided = false,
 }: {
   title: string;
   icon: ReactNode;
@@ -168,6 +169,7 @@ function LogFilterSection({
     option: ChecklistOption,
   ) => MultiSelectDropdownOptionAction[] | undefined;
   beforeDropdown?: ReactNode;
+  divided?: boolean;
 }) {
   const selectedValues = useMemo(
     () => selectedValuesForOptions(selected, options),
@@ -201,7 +203,7 @@ function LogFilterSection({
   }
 
   return (
-    <section className="grid gap-2 rounded-[13px] border border-line-soft bg-white/[0.018] p-2.5">
+    <section className={cn("grid gap-2", divided && "border-t border-line-soft pt-3")}>
       <div className="flex min-h-[28px] flex-wrap items-center justify-between gap-2">
         <SectionHeading icon={icon} title={title} />
         <StatChip>
@@ -537,6 +539,7 @@ export function LogsSidebar({
                 onToggle={toggleDataset}
                 onAll={selectAllDatasets}
                 onNone={selectNoDatasets}
+                divided
               />
               <LogFilterSection
                 title="Models"
@@ -546,6 +549,7 @@ export function LogsSidebar({
                 onToggle={toggleModel}
                 onAll={selectAllModels}
                 onNone={selectNoModels}
+                divided
               />
               <LogFilterSection
                 title="Presets"
@@ -556,6 +560,7 @@ export function LogsSidebar({
                 onAll={selectAllPresets}
                 onNone={selectNoPresets}
                 optionActions={presetDeleteActions}
+                divided
               />
               {tagsQuery.isError && (
                 <ErrorPanel title="Tag read failed" message={errorMessage(tagsQuery.error)} />
@@ -568,6 +573,7 @@ export function LogsSidebar({
                 onToggle={toggleTag}
                 onAll={selectAllTags}
                 onNone={selectNoTags}
+                divided
               />
             </>
           )}
