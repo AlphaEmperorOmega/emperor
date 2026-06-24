@@ -7,7 +7,6 @@ export type {
   ExpertDiagram,
   ExpertDiagramCell,
   GraphDetailMode,
-  GraphKind,
   GraphNavigation,
   GraphParameterActivity,
   GraphParameterActivityChannel,
@@ -23,7 +22,6 @@ export type {
   TerminalReachLocationSummary,
   TerminalReachPlane,
   ViewerNodeData,
-  OperationFlowNodeData,
   ClusterLocationSummary,
   GraphCoordinate,
   GraphLocationSummary,
@@ -80,11 +78,9 @@ export {
 } from "@/lib/graph/terminal-reach";
 export { buildGraphLocationSummaries } from "@/lib/graph/locations";
 export { buildCluster3DSceneModel } from "@/lib/graph/cluster-3d";
-// `layoutGraph` / `layoutOperationGraph` are intentionally NOT re-exported here:
-// they pull in `dagre`, and re-exporting them keeps `dagre` in the first-load
-// bundle even when unused. Consumers dynamically import the leaf layout modules
-// instead. Only the dagre-free node-id prefix is re-exported.
-export { OPERATION_GROUP_NODE_PREFIX } from "@/lib/graph/operation-graph-constants";
+// `layoutGraph` is intentionally NOT re-exported here: it pulls in `dagre`, and
+// re-exporting it keeps `dagre` in the first-load bundle even when unused.
+// Consumers dynamically import the leaf layout module instead.
 export {
   buildMonitorComparisonCandidateGroups,
   buildMonitorComparisonCandidates,

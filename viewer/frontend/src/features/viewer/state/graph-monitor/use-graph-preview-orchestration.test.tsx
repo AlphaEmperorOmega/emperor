@@ -6,7 +6,7 @@ import {
   useGraphPreviewController,
   useGraphPreviewOrchestration,
 } from "@/features/viewer/state/graph-monitor/use-graph-preview-orchestration";
-import { type InspectResponse, type OperationGraphResponse } from "@/lib/api";
+import { type InspectResponse } from "@/lib/api";
 
 type GraphPreviewControllerState = ReturnType<typeof useGraphPreviewController>;
 
@@ -46,43 +46,16 @@ function graph(model: string, preset = "baseline"): InspectResponse {
   };
 }
 
-function operationGraph(
-  model: string,
-  preset = "baseline",
-): OperationGraphResponse {
-  return {
-    modelType: "linears",
-    model,
-    preset,
-    source: "torch-export",
-    status: "ok",
-    nodes: [],
-    edges: [],
-    warnings: [],
-  };
-}
-
 function controller(
   overrides: Partial<GraphPreviewControllerState>,
 ): GraphPreviewControllerState {
   return {
     graph: undefined,
-    operationGraph: undefined,
     previewRequest: null,
     previewRequestKey: null,
-    operationGraphRequestKey: null,
-    operationGraphInFlightRequestKey: null,
-    operationGraphFailedRequestKey: null,
     clearPreview: vi.fn(),
     requestPreview: vi.fn(),
-    requestOperationGraph: vi.fn(),
-    resetOperationGraphFailure: vi.fn(),
     previewInspection: {
-      isBuilding: false,
-      isError: false,
-      error: null,
-    },
-    operationInspection: {
       isBuilding: false,
       isError: false,
       error: null,
@@ -113,14 +86,11 @@ describe("useGraphPreviewOrchestration", () => {
       ...baseInput,
       controller: controller({
         graph: graph("experts/experts_linear"),
-        operationGraph: operationGraph("experts/experts_linear"),
       }),
     });
 
     expect(result.current.graph.graph).toBeUndefined();
-    expect(result.current.graph.operationGraph).toBeUndefined();
     expect(result.current.graph.nodes).toEqual([]);
-    expect(result.current.graph.operationNodes).toEqual([]);
   });
 
   it("exposes the graph when its identity matches the target", async () => {

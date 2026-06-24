@@ -64,37 +64,6 @@ export type MockNodeData = {
   onToggleDetails: () => void;
 };
 
-export type MockOperationNodeData =
-  | {
-      kind: "group";
-      groupId: string;
-      label: string;
-      subtitle: string;
-      operationCount: number;
-      height: number;
-      isExpanded: boolean;
-      onActivateNode: () => void;
-      onToggleExpansion: () => void;
-    }
-  | {
-      kind: "operation";
-      nodeId: string;
-      label: string;
-      opKind: string;
-      target: string;
-      modulePath?: string | null;
-      groupId?: string | null;
-      details: Record<string, unknown>;
-      height: number;
-      onActivateNode: () => void;
-    };
-
-function isOperationNodeData(
-  data: MockNodeData | MockOperationNodeData,
-): data is MockOperationNodeData {
-  return "kind" in data;
-}
-
 export type MockConfigSnapshot = {
   id: string;
   modelType: string;
@@ -279,7 +248,7 @@ vi.mock("@xyflow/react", () => ({
       id: string;
       position: { x: number; y: number };
       style?: { height?: number };
-      data: MockNodeData | MockOperationNodeData;
+      data: MockNodeData;
     }>;
     edges: Array<{ id: string; source: string; target: string }>;
     onNodeClick?: (event: unknown, node: { id: string }) => void;
@@ -317,59 +286,6 @@ vi.mock("@xyflow/react", () => ({
           >
             {(() => {
               const data = node.data;
-
-              if (isOperationNodeData(data)) {
-                if (data.kind === "group") {
-                  return (
-                    <div
-                      role="button"
-                      tabIndex={0}
-                      aria-label={`Expand operation group ${data.subtitle}`}
-                      onClick={() => {
-                        data.onActivateNode();
-                        onNodeClick?.({}, node);
-                      }}
-                    >
-                      <span>{data.label}</span>
-                      <span>{data.subtitle}</span>
-                      <span>
-                        {data.operationCount}{" "}
-                        {data.operationCount === 1 ? "op" : "ops"}
-                      </span>
-                    </div>
-                  );
-                }
-
-                return (
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    aria-label={`Select operation ${data.nodeId}`}
-                    onClick={() => {
-                      data.onActivateNode();
-                      onNodeClick?.({}, node);
-                    }}
-                  >
-                    <span>{data.label}</span>
-                    <span>{data.opKind}</span>
-                    <span>{data.target}</span>
-                    {data.modulePath && <span>{data.modulePath}</span>}
-                    {data.details.shape ? (
-                      <span>
-                        {Array.isArray(data.details.shape)
-                          ? data.details.shape.join(" x ")
-                          : String(data.details.shape)}
-                      </span>
-                    ) : null}
-                    {data.details.dtype ? (
-                      <span>{String(data.details.dtype)}</span>
-                    ) : null}
-                    {data.details.inputKind ? (
-                      <span>{String(data.details.inputKind)}</span>
-                    ) : null}
-                  </div>
-                );
-              }
 
               const moduleData = data;
               const isSimpleMode = moduleData.graphDetailMode === "simple";
@@ -1502,80 +1418,6 @@ export const inspectResponse = {
       target: "main_model.0.processor.projection",
     },
   ],
-};
-
-export const operationGraphResponse = {
-  modelType: "linears",
-  model: "linear",
-  preset: "baseline",
-  source: "torch-export",
-  status: "ok",
-  warnings: [],
-  nodes: [
-    {
-      id: "op_0000",
-      label: "input x",
-      opKind: "placeholder",
-      target: "x",
-      modulePath: null,
-      groupId: "__inputs__",
-      details: {
-        inputKind: "user_input",
-        shape: [1, 1, 28, 28],
-        dtype: "float32",
-      },
-    },
-    {
-      id: "op_0001",
-      label: "parameter weight",
-      opKind: "placeholder",
-      target: "p_main_model_0_model_weight",
-      modulePath: "main_model.0.model",
-      groupId: "main_model.0.model",
-      details: {
-        inputKind: "parameter",
-        targetPath: "main_model.0.model.weight",
-        shape: [128, 128],
-        dtype: "float32",
-      },
-    },
-    {
-      id: "op_0002",
-      label: "linear",
-      opKind: "call_function",
-      target: "aten.linear.default",
-      modulePath: "main_model.0.model",
-      groupId: "main_model.0.model",
-      details: {
-        shape: [1, 128],
-        dtype: "float32",
-      },
-    },
-    {
-      id: "op_0003",
-      label: "output",
-      opKind: "output",
-      target: "output",
-      modulePath: null,
-      groupId: "__outputs__",
-      details: {
-        outputKinds: ["user_output"],
-      },
-    },
-  ],
-  edges: [
-    { id: "op_0000-op_0002", source: "op_0000", target: "op_0002" },
-    { id: "op_0001-op_0002", source: "op_0001", target: "op_0002" },
-    { id: "op_0002-op_0003", source: "op_0002", target: "op_0003" },
-  ],
-};
-
-export const unsupportedOperationGraphResponse = {
-  ...operationGraphResponse,
-  status: "unsupported",
-  nodes: [],
-  edges: [],
-  warnings: ["torch.export.export failed: unsupported control flow"],
 };
 
 export const parameterShapeInspectResponse = {
@@ -2725,10 +2567,6 @@ export function installFetchMock(
     inspectError?: boolean;
     inspectResponse?: unknown;
     inspectResponseFactory?: (requestIndex: number) => unknown | Promise<unknown>;
-    operationGraphResponse?: unknown;
-    operationGraphResponseFactory?: (
-      requestIndex: number,
-    ) => unknown | Promise<unknown>;
     modelsResponse?: typeof modelsResponse;
     logRunsResponse?: typeof logRunsResponse;
     logExperimentsResponse?: typeof logExperimentsResponse;
@@ -2814,7 +2652,6 @@ export function installFetchMock(
   } = {},
 ) {
   const inspectBodies: unknown[] = [];
-  const operationGraphBodies: unknown[] = [];
   const trainingBodies: unknown[] = [];
   let trainingJobPollRequestCount = 0;
   const logScalarRequests: Array<{
@@ -3189,20 +3026,6 @@ export function installFetchMock(
     if (url.endsWith("/training/run-plan")) {
       const request = JSON.parse(String(init?.body)) as MockTrainingPlanRequest;
       return jsonResponse(mockTrainingRunPlan(request));
-    }
-    if (url.endsWith("/inspect/operation-graph")) {
-      const operationGraphRequest = JSON.parse(String(init?.body)) as {
-        model?: unknown;
-        preset?: unknown;
-      };
-      operationGraphBodies.push(operationGraphRequest);
-      const requestIndex = operationGraphBodies.length - 1;
-      const responseBody = options.operationGraphResponseFactory
-        ? options.operationGraphResponseFactory(requestIndex)
-        : options.operationGraphResponse;
-      return Promise.resolve(responseBody ?? operationGraphResponse).then((body) =>
-        jsonResponse(withPreviewIdentity(body, operationGraphRequest)),
-      );
     }
     if (url.endsWith("/inspect")) {
       const inspectRequest = JSON.parse(String(init?.body)) as {
@@ -3620,7 +3443,6 @@ export function installFetchMock(
   return {
     fetchMock,
     inspectBodies,
-    operationGraphBodies,
     trainingBodies,
     configSnapshotCreateRequests,
     configSnapshotUpdateRequests,

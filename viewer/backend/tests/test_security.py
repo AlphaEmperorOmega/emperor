@@ -35,18 +35,6 @@ PROTECTED_ROUTE_CASES = (
         },
     ),
     (
-        "operation_inspection",
-        "POST",
-        "/inspect/operation-graph",
-        {
-            "modelType": "linears",
-            "model": "linear",
-            "preset": "baseline",
-            "dataset": "Mnist",
-            "overrides": {"hidden_dim": "128"},
-        },
-    ),
-    (
         "training",
         "POST",
         "/training/run-plan",
@@ -215,26 +203,6 @@ class RouteAuthIntegrationTests(unittest.TestCase):
                         }
                     ],
                     "edges": [],
-                }
-
-            def inspect_operation_graph(
-                self,
-                *,
-                model_type: str,
-                model: str,
-                preset: str,
-                overrides: dict[str, object],
-                dataset: str | None,
-            ) -> dict[str, object]:
-                return {
-                    "modelType": model_type,
-                    "model": model,
-                    "preset": preset,
-                    "source": "torch-export",
-                    "status": "unsupported",
-                    "nodes": [],
-                    "edges": [],
-                    "warnings": ["fake operation graph"],
                 }
 
         class FakeTrainingJobService:

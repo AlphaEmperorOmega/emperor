@@ -4,7 +4,6 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
-  useState,
 } from "react";
 import {
   type LogRun,
@@ -15,9 +14,6 @@ import { useGraphViewState } from "@/features/viewer/state/graph-monitor/use-gra
 import {
   usePreviewInspectionState,
 } from "@/features/viewer/state/graph-monitor/use-preview-inspection";
-import {
-  useOperationGraphViewState,
-} from "@/features/viewer/state/graph-monitor/use-operation-graph-view-state";
 import {
   useMonitorSourceOrchestration,
 } from "@/features/viewer/state/graph-monitor/use-monitor-source-orchestration";
@@ -95,18 +91,11 @@ function useStableActiveMonitorJob(job: TrainingJob | undefined) {
 export function useGraphPreviewController() {
   const {
     graph,
-    operationGraph,
     previewRequest,
     previewRequestKey,
-    operationGraphRequestKey,
-    operationGraphInFlightRequestKey,
-    operationGraphFailedRequestKey,
     clearPreview,
     requestPreview,
-    requestOperationGraph,
-    resetOperationGraphFailure,
     previewInspection,
-    operationInspection,
   } = usePreviewInspectionState();
   const graphResetHandlersRef = useRef<GraphResetHandlers>({
     resetGraphSelectionAndExpansion: () => {},
@@ -125,18 +114,11 @@ export function useGraphPreviewController() {
   return useMemo(
     () => ({
       graph,
-      operationGraph,
       previewRequest,
       previewRequestKey,
-      operationGraphRequestKey,
-      operationGraphInFlightRequestKey,
-      operationGraphFailedRequestKey,
       clearPreview,
       requestPreview,
-      requestOperationGraph,
-      resetOperationGraphFailure,
       previewInspection,
-      operationInspection,
       resetGraphSelectionAndExpansion,
       resetGraphExpansion,
       bindGraphResetHandlers,
@@ -145,19 +127,12 @@ export function useGraphPreviewController() {
       bindGraphResetHandlers,
       clearPreview,
       graph,
-      operationGraph,
-      operationGraphFailedRequestKey,
-      operationGraphInFlightRequestKey,
-      operationGraphRequestKey,
-      operationInspection,
       previewInspection,
       previewRequest,
       previewRequestKey,
-      requestOperationGraph,
       requestPreview,
       resetGraphExpansion,
       resetGraphSelectionAndExpansion,
-      resetOperationGraphFailure,
     ],
   );
 }
@@ -176,28 +151,10 @@ export function useGraphPreviewOrchestration({
   targetDatasets,
 }: GraphPreviewOrchestrationInput) {
   const { graph, previewInspection, bindGraphResetHandlers } = controller;
-  const {
-    operationGraph,
-    previewRequest,
-    previewRequestKey,
-    operationGraphRequestKey,
-    operationGraphInFlightRequestKey,
-    operationGraphFailedRequestKey,
-    requestOperationGraph,
-    resetOperationGraphFailure,
-    operationInspection,
-  } = controller;
   const targetGraph =
     graph && graph.model === targetModel && graph.preset === targetPreset
       ? graph
       : undefined;
-  const targetOperationGraph =
-    operationGraph &&
-    operationGraph.model === targetModel &&
-    operationGraph.preset === targetPreset
-      ? operationGraph
-      : undefined;
-  const [graphKind, setGraphKind] = useState<"module" | "operation">("module");
   const activeMonitorJob = useStableActiveMonitorJob(activeTrainingJob);
   const monitorSource = useMonitorSourceOrchestration({
     graph: targetGraph,
@@ -228,80 +185,31 @@ export function useGraphPreviewOrchestration({
     parameterActivityByNodePath,
   });
   const {
-    closeCluster3d,
-    previewVisualizationMode,
-  } = graphState;
-  const isOperationMode =
-    previewVisualizationMode === "graph" && graphKind === "operation";
-  const operationGraphState = useOperationGraphViewState(targetOperationGraph);
-  const {
     resetGraphExpansion,
     resetGraphSelectionAndExpansion,
   } = graphState;
-  const {
-    resetOperationGraphSelectionAndExpansion,
-  } = operationGraphState;
+  const { closeCluster3d, previewVisualizationMode } = graphState;
 
   useEffect(() => {
-    if (previewVisualizationMode === "graph" && graphKind === "module") {
+    if (previewVisualizationMode === "graph") {
       return;
     }
     closeCluster3d();
-  }, [closeCluster3d, graphKind, previewVisualizationMode]);
+  }, [closeCluster3d, previewVisualizationMode]);
 
-  useEffect(() => {
-    if (!isOperationMode || !previewRequest || !previewRequestKey) {
-      return;
-    }
-    if (operationGraphRequestKey === previewRequestKey) {
-      return;
-    }
-    if (operationGraphInFlightRequestKey === previewRequestKey) {
-      return;
-    }
-    if (operationGraphFailedRequestKey === previewRequestKey) {
-      return;
-    }
-    if (operationInspection.isBuilding) {
-      return;
-    }
-    requestOperationGraph(previewRequest);
-  }, [
-    isOperationMode,
-    operationGraphFailedRequestKey,
-    operationGraphInFlightRequestKey,
-    operationGraphRequestKey,
-    operationInspection.isBuilding,
-    previewRequest,
-    previewRequestKey,
-    requestOperationGraph,
-  ]);
-  useEffect(() => {
-    if (isOperationMode || !operationGraphFailedRequestKey) {
-      return;
-    }
-    resetOperationGraphFailure(operationGraphFailedRequestKey);
-  }, [
-    isOperationMode,
-    operationGraphFailedRequestKey,
-    resetOperationGraphFailure,
-  ]);
   useLayoutEffect(() => {
     bindGraphResetHandlers({
       resetGraphSelectionAndExpansion: () => {
         resetGraphSelectionAndExpansion();
-        resetOperationGraphSelectionAndExpansion();
       },
       resetGraphExpansion: () => {
         resetGraphExpansion();
-        resetOperationGraphSelectionAndExpansion();
       },
     });
   }, [
     bindGraphResetHandlers,
     resetGraphExpansion,
     resetGraphSelectionAndExpansion,
-    resetOperationGraphSelectionAndExpansion,
   ]);
 
   const monitorSourceState = useMemo(
@@ -319,48 +227,33 @@ export function useGraphPreviewOrchestration({
   const graphSlice = useMemo(
     () => ({
       graph: targetGraph,
-      graphKind,
-      setGraphKind,
-      operationGraph: targetOperationGraph,
-      operationInspection,
       graphForDetail: graphState.graphForDetail,
       nodes: graphState.nodes,
       edges: graphState.edges,
-      operationNodes: operationGraphState.operationNodes,
-      operationEdges: operationGraphState.operationEdges,
       previewVisualizationMode,
       setPreviewVisualizationMode: graphState.setPreviewVisualizationMode,
       graphDetailMode: graphState.graphDetailMode,
       setGraphDetailMode: graphState.setGraphDetailMode,
       graphScope: graphState.graphScope,
       setGraphScope: graphState.setGraphScope,
-      operationGraphScope: operationGraphState.operationGraphScope,
-      setOperationGraphScope: operationGraphState.setOperationGraphScope,
       expandedGraphNodeIds: graphState.expandedGraphNodeIds,
-      expandedOperationGroupIds: operationGraphState.expandedOperationGroupIds,
       selectedNodeId: graphState.selectedNodeId,
       setSelectedNodeId: graphState.setSelectedNodeId,
       cluster3dNodeId: graphState.cluster3dNodeId,
       openCluster3d: graphState.openCluster3d,
       closeCluster3d: graphState.closeCluster3d,
-      selectedOperationNodeId: operationGraphState.selectedOperationNodeId,
-      setSelectedOperationNodeId: operationGraphState.setSelectedOperationNodeId,
       parameterFocusNodeId: graphState.parameterFocusNodeId,
       setParameterFocusNodeId: graphState.setParameterFocusNodeId,
       selectedNode: graphState.selectedNode,
-      selectedOperationNode: operationGraphState.selectedOperationNode,
       selectedMonitorNode,
       selectedMonitorComparisonCandidateGroups,
       isParameterStatusPartiallyLoading,
       collapseGraphNodes: graphState.collapseGraphNodes,
-      collapseOperationGraphNodes:
-        operationGraphState.collapseOperationGraphNodes,
       revealGraphNode: graphState.revealGraphNode,
       revealGraphNodeInFull: graphState.revealGraphNodeInFull,
       previewInspection,
     }),
     [
-      graphKind,
       graphState.cluster3dNodeId,
       graphState.closeCluster3d,
       graphState.collapseGraphNodes,
@@ -382,22 +275,11 @@ export function useGraphPreviewOrchestration({
       graphState.setPreviewVisualizationMode,
       graphState.setSelectedNodeId,
       isParameterStatusPartiallyLoading,
-      operationGraphState.collapseOperationGraphNodes,
-      operationGraphState.expandedOperationGroupIds,
-      operationGraphState.operationEdges,
-      operationGraphState.operationGraphScope,
-      operationGraphState.operationNodes,
-      operationGraphState.selectedOperationNode,
-      operationGraphState.selectedOperationNodeId,
-      operationGraphState.setOperationGraphScope,
-      operationGraphState.setSelectedOperationNodeId,
-      operationInspection,
       previewInspection,
       previewVisualizationMode,
       selectedMonitorComparisonCandidateGroups,
       selectedMonitorNode,
       targetGraph,
-      targetOperationGraph,
     ],
   );
   const historySlice = useMemo(
