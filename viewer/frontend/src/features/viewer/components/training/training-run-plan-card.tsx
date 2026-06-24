@@ -1,8 +1,11 @@
-import { ListChecks } from "lucide-react";
+import { useState } from "react";
+import { Info, ListChecks } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { IconButton } from "@/components/ui/icon-button";
 import { InlineStatus } from "@/features/viewer/components/shared/inline-status";
 import { StatChip, type StatChipTone } from "@/features/viewer/components/shared/stat-chip";
 import { SurfacePanel } from "@/features/viewer/components/shared/surface-panel";
+import { TrainingMetricInfoDialog } from "@/features/viewer/components/shared/training-metric-info-dialog";
 import {
   formatTrainingMetricValue,
   formatTrainingMetricsText,
@@ -214,6 +217,10 @@ function RunRow({ run, job }: { run: TrainingRun; job?: TrainingJob }) {
 }
 
 function MetricSummary({ job, run }: { job?: TrainingJob; run?: TrainingRun }) {
+  const [selectedMetric, setSelectedMetric] = useState<{
+    key: string;
+    value: unknown;
+  } | null>(null);
   const entries = latestMetricEntries(job, run);
   if (entries.length === 0) {
     return (
@@ -226,18 +233,43 @@ function MetricSummary({ job, run }: { job?: TrainingJob; run?: TrainingRun }) {
   const text = formatTrainingMetricsText(Object.fromEntries(entries), 3);
 
   return (
-    <div className="grid gap-1 rounded-[8px] border border-line-soft bg-white/[0.018] px-2.5 py-2 text-xs">
-      <span className="font-semibold text-ink-dim">Latest metrics</span>
-      <div className="flex min-w-0 flex-wrap gap-1.5" title={text}>
-        {visibleEntries.map(([key, value]) => (
-          <Badge key={key} className="max-w-full">
-            <span className="truncate">
-              {key}={formatTrainingMetricValue(value)}
+    <>
+      <div className="grid gap-1 rounded-[8px] border border-line-soft bg-white/[0.018] px-2.5 py-2 text-xs">
+        <span className="font-semibold text-ink-dim">Latest metrics</span>
+        <div className="flex min-w-0 flex-wrap gap-1.5" title={text}>
+          {visibleEntries.map(([key, value]) => (
+            <span
+              key={key}
+              className="inline-flex max-w-full min-w-0 items-center gap-0.5"
+            >
+              <Badge className="max-w-[calc(100%-1.375rem)]">
+                <span className="truncate">
+                  {key}={formatTrainingMetricValue(value)}
+                </span>
+              </Badge>
+              <IconButton
+                label={`Explain metric ${key}`}
+                title={`Explain ${key}`}
+                size="sm"
+                variant="ghost"
+                aria-haspopup="dialog"
+                aria-expanded={selectedMetric?.key === key ? true : undefined}
+                className="h-5 w-5 shrink-0 rounded-[6px] border border-line-soft bg-white/[0.018] text-ink-faint hover:border-violet/40 hover:bg-violet/10 hover:text-violet focus-visible:ring-2 focus-visible:ring-focus"
+                icon={<Info className="h-3.5 w-3.5" aria-hidden />}
+                onClick={() => setSelectedMetric({ key, value })}
+              />
             </span>
-          </Badge>
-        ))}
+          ))}
+        </div>
       </div>
-    </div>
+      {selectedMetric && (
+        <TrainingMetricInfoDialog
+          metricKey={selectedMetric.key}
+          valueLabel={formatTrainingMetricValue(selectedMetric.value)}
+          onClose={() => setSelectedMetric(null)}
+        />
+      )}
+    </>
   );
 }
 

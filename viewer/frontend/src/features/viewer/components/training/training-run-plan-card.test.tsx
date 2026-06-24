@@ -1,4 +1,5 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { TrainingLogTailCard } from "@/features/viewer/components/training/training-log-tail-card";
 import { TrainingRunPlanCard } from "@/features/viewer/components/training/training-run-plan-card";
@@ -200,6 +201,103 @@ describe("TrainingRunPlanCard", () => {
     expect(screen.getByText("loss=1.235")).toBeInTheDocument();
     expect(screen.getByText("phase=fit")).toBeInTheDocument();
     expect(screen.getByTitle("logs/active-job")).toBeInTheDocument();
+  });
+
+  it("explains visible latest metrics in an accessible dialog", async () => {
+    const user = userEvent.setup();
+    const runPlan = plan([
+      run({ index: 1, status: "Completed", currentEpoch: 30 }),
+      run({
+        index: 2,
+        status: "Running",
+        preset: "recurrent-gating-halting",
+        dataset: "Cifar10",
+        currentEpoch: 4,
+      }),
+    ]);
+
+    renderCard({
+      plan: runPlan,
+      job: job(runPlan, {
+        status: "running",
+        metrics: {
+          validation_accuracy: 0.987654,
+          loss: 1.23456,
+          custom_signal: 42,
+        },
+      }),
+    });
+
+    expect(screen.getByText("validation_accuracy=0.9877")).toBeInTheDocument();
+    expect(screen.getByText("loss=1.235")).toBeInTheDocument();
+    expect(screen.getByText("custom_signal=42")).toBeInTheDocument();
+
+    const validationInfoButton = screen.getByRole("button", {
+      name: "Explain metric validation_accuracy",
+    });
+    expect(validationInfoButton).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Explain metric loss" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Explain metric custom_signal" }),
+    ).toBeInTheDocument();
+
+    await user.click(validationInfoButton);
+
+    const validationDialog = await screen.findByRole("dialog", {
+      name: "validation_accuracy",
+    });
+    expect(within(validationDialog).getByText("Validation accuracy"))
+      .toBeInTheDocument();
+    expect(within(validationDialog).getByText("Current value"))
+      .toBeInTheDocument();
+    expect(within(validationDialog).getByText("0.9877")).toBeInTheDocument();
+    expect(within(validationDialog).getByText("What it tracks"))
+      .toBeInTheDocument();
+    expect(within(validationDialog).getByText(/validation examples/i))
+      .toBeInTheDocument();
+    expect(within(validationDialog).getByText("Why it matters"))
+      .toBeInTheDocument();
+    expect(within(validationDialog).getByText("Interpretation"))
+      .toBeInTheDocument();
+
+    await waitFor(() =>
+      expect(
+        within(validationDialog).getByRole("button", {
+          name: "Close metric info",
+        }),
+      ).toHaveFocus(),
+    );
+    await user.keyboard("{Escape}");
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "validation_accuracy" }),
+      ).not.toBeInTheDocument(),
+    );
+    await waitFor(() => expect(validationInfoButton).toHaveFocus());
+
+    const customInfoButton = screen.getByRole("button", {
+      name: "Explain metric custom_signal",
+    });
+    await user.click(customInfoButton);
+
+    const customDialog = await screen.findByRole("dialog", {
+      name: "custom_signal",
+    });
+    expect(within(customDialog).getByText("custom signal")).toBeInTheDocument();
+    expect(within(customDialog).getByText(/custom metric reported/i))
+      .toBeInTheDocument();
+
+    await user.click(within(customDialog).getByRole("button", { name: "Close" }));
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "custom_signal" }),
+      ).not.toBeInTheDocument(),
+    );
+    await waitFor(() => expect(customInfoButton).toHaveFocus());
   });
 
   it("shows the first pending run as next when a running job has not marked a run active yet", () => {
