@@ -1,8 +1,7 @@
 import { useState } from "react";
-import { Activity, Box, GitBranch } from "lucide-react";
+import { Box, GitBranch } from "lucide-react";
 import { Background, Controls, Panel, ReactFlow } from "@xyflow/react";
 import { IconButton } from "@/components/ui/icon-button";
-import { EmptyState } from "@/features/viewer/components/empty-state";
 import { GraphLocationsCard } from "@/features/viewer/components/graph/graph-locations-card";
 import {
   GraphNodeRenderModeProvider,
@@ -11,107 +10,7 @@ import {
 import { GraphStructurePanel } from "@/features/viewer/components/screen/graph-structure-panel";
 import { useGraphView } from "@/features/viewer/providers/viewer-providers";
 import { type InspectResponse } from "@/lib/api";
-import { cn, errorMessage } from "@/lib/utils";
-
-export function OperationPreviewPanel({
-  operationGraph,
-  nodes,
-  edges,
-  selectedNodeId,
-  isLoading,
-  isError,
-  error,
-  onSelectNode,
-}: {
-  operationGraph: ReturnType<typeof useGraphView>["operationGraph"];
-  nodes: ReturnType<typeof useGraphView>["operationNodes"];
-  edges: ReturnType<typeof useGraphView>["operationEdges"];
-  selectedNodeId: string | null;
-  isLoading: boolean;
-  isError: boolean;
-  error: unknown;
-  onSelectNode: (nodeId: string | null) => void;
-}) {
-  if (isError) {
-    return (
-      <EmptyState
-        title="Operations failed"
-        detail={errorMessage(error)}
-        icon={<Activity className="h-4 w-4" aria-hidden />}
-      />
-    );
-  }
-
-  if (!operationGraph) {
-    return (
-      <EmptyState
-        title={isLoading ? "Operations are loading" : "Operations are not loaded"}
-        detail={
-          isLoading
-            ? "The operation graph is being traced with torch.export."
-            : "The operation graph is traced when this mode is opened."
-        }
-        icon={<Activity className="h-4 w-4" aria-hidden />}
-      />
-    );
-  }
-
-  if (operationGraph.status === "unsupported") {
-    return (
-      <EmptyState
-        title="Operations unavailable"
-        detail={
-          operationGraph.warnings[0] ??
-          "This model cannot currently be traced with torch.export."
-        }
-        icon={<Activity className="h-4 w-4" aria-hidden />}
-      />
-    );
-  }
-
-  if (operationGraph.nodes.length === 0) {
-    return (
-      <EmptyState
-        title="No operations"
-        detail="torch.export returned an empty graph for this target."
-        icon={<Activity className="h-4 w-4" aria-hidden />}
-      />
-    );
-  }
-
-  return (
-    <ReactFlow
-      nodes={nodes}
-      edges={edges}
-      nodeTypes={nodeTypes}
-      fitView
-      minZoom={0.45}
-      maxZoom={1.6}
-      fitViewOptions={{ padding: 0.14, minZoom: 0.85, maxZoom: 1 }}
-      onNodeClick={(_, node) => onSelectNode(node.id)}
-      nodesDraggable={false}
-      nodesConnectable={false}
-      elementsSelectable={false}
-      nodesFocusable={false}
-      onlyRenderVisibleElements
-      nodeClickDistance={4}
-    >
-      <Background gap={26} color="rgba(255,255,255,0.05)" />
-      <Controls showInteractive={false} position="bottom-left" />
-      {selectedNodeId && (
-        <Panel
-          position="top-right"
-          className="nodrag nopan"
-          style={{ right: 18, top: 18 }}
-        >
-          <div className="rounded-[8px] border border-line bg-[rgba(8,8,14,0.82)] px-3 py-2 font-mono text-[11px] text-ink-dim shadow-[0_14px_34px_rgba(0,0,0,0.32)] backdrop-blur">
-            {selectedNodeId}
-          </div>
-        </Panel>
-      )}
-    </ReactFlow>
-  );
-}
+import { cn } from "@/lib/utils";
 
 export function GraphPreviewPanel({
   graph,

@@ -10,7 +10,6 @@ import {
   mechanismMetadataInspectResponse,
   neuronModelsResponse,
   openFullConfig,
-  operationGraphResponse,
   parameterShapeInspectResponse,
   renderViewer,
   repeatedLayersInspectResponse,
@@ -19,7 +18,6 @@ import {
   stackContainerInspectResponse,
   tallSummaryInspectResponse,
   typeConfigFieldValue,
-  unsupportedOperationGraphResponse,
 } from "./support";
 
 describe("ViewerApp Graph Workspace", () => {
@@ -43,105 +41,6 @@ describe("ViewerApp Graph Workspace", () => {
     expect(screen.queryByText("Dropout")).not.toBeInTheDocument();
     expect(screen.queryByText("LayerNorm")).not.toBeInTheDocument();
     expect(screen.queryByText("CrossEntropyLoss")).not.toBeInTheDocument();
-  });
-
-  it("lazy-loads operation graphs and expands operation groups independently", async () => {
-    const { operationGraphBodies } = installFetchMock({ operationGraphResponse });
-    renderViewer();
-    const user = userEvent.setup();
-
-    expect(await screen.findByText("main_model.0")).toBeInTheDocument();
-    expect(operationGraphBodies).toHaveLength(0);
-
-    await user.click(screen.getByRole("radio", { name: /operations/i }));
-
-    await waitFor(() => expect(operationGraphBodies).toHaveLength(1));
-    expect(screen.getByTestId("flow")).toHaveAttribute(
-      "data-only-render-visible-elements",
-      "true",
-    );
-	    expect(operationGraphBodies[0]).toEqual({
-	      modelType: "linears",
-	      model: "linear",
-      preset: "baseline",
-      dataset: "Mnist",
-      overrides: {},
-    });
-    expect(screen.getByText("Inputs")).toBeInTheDocument();
-    expect(screen.getByText("main_model.0.model")).toBeInTheDocument();
-    expect(screen.queryByText("aten.linear.default")).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("radiogroup", { name: /graph detail/i }),
-    ).not.toBeInTheDocument();
-
-    await user.click(
-      screen.getAllByRole("button", {
-        name: /^expand operation group main_model\.0\.model$/i,
-      })[0],
-    );
-
-    expect(await screen.findByText("aten.linear.default")).toBeInTheDocument();
-    expect(screen.getByText("1 x 128")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("radio", { name: /^module$/i }));
-    expect(await screen.findByText("main_model.0")).toBeInTheDocument();
-    await user.click(screen.getByRole("radio", { name: /operations/i }));
-    expect(operationGraphBodies).toHaveLength(1);
-    expect(screen.getByText("aten.linear.default")).toBeInTheDocument();
-  });
-
-  it("does not fetch operations while the Parameters view is visible", async () => {
-    const { inspectBodies, operationGraphBodies } = installFetchMock({
-      operationGraphResponse,
-    });
-    renderViewer();
-    const user = userEvent.setup();
-
-    expect(await screen.findByText("main_model.0")).toBeInTheDocument();
-    await user.click(screen.getByRole("radio", { name: /operations/i }));
-    await waitFor(() => expect(operationGraphBodies).toHaveLength(1));
-
-    await user.click(screen.getByRole("radio", { name: /parameters/i }));
-    expect(
-      await screen.findByRole("heading", { name: /node details/i }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("heading", { name: /operation details/i }),
-    ).not.toBeInTheDocument();
-
-    const inspectCountBeforeTargetChange = inspectBodies.length;
-    await selectTargetOption(user, "preset", "recurrent-gating-halting");
-    await waitFor(() =>
-      expect(inspectBodies.length).toBeGreaterThan(inspectCountBeforeTargetChange),
-    );
-    expect(operationGraphBodies).toHaveLength(1);
-
-    await user.click(screen.getByRole("radio", { name: /^graph$/i }));
-    await waitFor(() => expect(operationGraphBodies).toHaveLength(2));
-	    expect(operationGraphBodies[1]).toEqual({
-	      modelType: "linears",
-	      model: "linear",
-      preset: "recurrent-gating-halting",
-      dataset: "Mnist",
-      overrides: {},
-    });
-  });
-
-  it("renders unsupported operation graphs without breaking the module graph", async () => {
-    installFetchMock({ operationGraphResponse: unsupportedOperationGraphResponse });
-    renderViewer();
-    const user = userEvent.setup();
-
-    expect(await screen.findByText("main_model.0")).toBeInTheDocument();
-    await user.click(screen.getByRole("radio", { name: /operations/i }));
-
-    expect(await screen.findByText("Operations unavailable")).toBeInTheDocument();
-    expect(
-      screen.getByText("torch.export.export failed: unsupported control flow"),
-    ).toBeInTheDocument();
-
-    await user.click(screen.getByRole("radio", { name: /^module$/i }));
-    expect(await screen.findByText("main_model.0")).toBeInTheDocument();
   });
 
   it("shows child count beside the graph card title", async () => {
@@ -845,25 +744,32 @@ describe("ViewerApp Graph Workspace", () => {
     const user = userEvent.setup();
 
     expect(await screen.findByTestId("flow")).toBeInTheDocument();
-    expect(screen.queryByRole("radiogroup", { name: /visualization mode/i })).not.toBeInTheDocument();
-    const graphKindTabs = screen.getByRole("radiogroup", { name: /graph kind/i });
+    const previewVisualizationTabs = screen.getByRole("radiogroup", {
+      name: /preview visualization/i,
+    });
     const graphDetailTabs = screen.getByRole("radiogroup", { name: /graph detail/i });
     const graphScopeTabs = screen.getByRole("radiogroup", { name: /graph scope/i });
+    expect(
+      screen.queryByRole("radiogroup", { name: /graph kind/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("radio", { name: /^operations$/i }),
+    ).not.toBeInTheDocument();
     expect([
-      ...within(graphKindTabs).getAllByRole("radio"),
+      ...within(previewVisualizationTabs).getAllByRole("radio"),
       ...within(graphDetailTabs).getAllByRole("radio"),
       ...within(graphScopeTabs).getAllByRole("radio"),
     ].map((tab) => tab.textContent)).toEqual([
-      "Module",
-      "Operations",
+      "Graph",
+      "Parameters",
       "Simple",
       "Basic",
       "Full",
       "Opened",
       "Entire",
     ]);
-    expect(graphKindTabs).toBeInTheDocument();
-    expect(within(graphKindTabs).getByRole("radio", { name: /module/i }))
+    expect(previewVisualizationTabs).toBeInTheDocument();
+    expect(within(previewVisualizationTabs).getByRole("radio", { name: /^graph$/i }))
       .toHaveAttribute("aria-checked", "true");
     expect(graphDetailTabs).toBeInTheDocument();
     expect(within(graphDetailTabs).getByRole("radio", { name: /basic/i }))

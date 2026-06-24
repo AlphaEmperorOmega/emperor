@@ -22,13 +22,6 @@ const GraphPreviewPanel = dynamic(
     ),
   { ssr: false },
 );
-const OperationPreviewPanel = dynamic(
-  () =>
-    import("@/features/viewer/components/screen/graph-canvas").then(
-      (module) => module.OperationPreviewPanel,
-    ),
-  { ssr: false },
-);
 
 function isNeuronModelType(modelType: string) {
   return modelType === "neuron" || modelType === "neurons";
@@ -38,31 +31,21 @@ export function PreviewPanel() {
   const { selectedModelType } = useTargetConfig();
   const {
     graph,
-    graphKind,
-    operationGraph,
     graphForDetail,
     previewVisualizationMode,
     nodes,
     edges,
-    operationNodes,
-    operationEdges,
     selectedNodeId,
-    selectedOperationNodeId,
     parameterFocusNodeId,
     previewInspection,
-    operationInspection,
     setParameterFocusNodeId,
     setSelectedNodeId: onSelectNode,
-    setSelectedOperationNodeId: onSelectOperationNode,
     revealGraphNode: onRevealNode,
     openCluster3d,
   } = useGraphView();
   const isPreviewBuilding = previewInspection.isBuilding;
   const isPreviewError = previewInspection.isError;
   const previewError = previewInspection.error;
-  const isOperationBuilding = operationInspection.isBuilding;
-  const isOperationError = operationInspection.isError;
-  const operationError = operationInspection.error;
   const hasSelectedClusterNode = Boolean(
     selectedNodeId &&
       graphForDetail?.nodes.some(
@@ -73,8 +56,6 @@ export function PreviewPanel() {
     ? graph?.nodes.find((node) => node.typeName === "NeuronCluster")?.id ?? null
     : null;
   const hasPreviewGraph = Boolean(graph);
-  const isOperationMode =
-    previewVisualizationMode === "graph" && graphKind === "operation";
 
   return (
     <div className="relative h-full min-h-0 overflow-hidden bg-transparent">
@@ -102,17 +83,6 @@ export function PreviewPanel() {
             onFocusNode={setParameterFocusNodeId}
             onRevealNode={onRevealNode}
           />
-        ) : isOperationMode ? (
-          <OperationPreviewPanel
-            operationGraph={operationGraph}
-            nodes={operationNodes}
-            edges={operationEdges}
-            selectedNodeId={selectedOperationNodeId}
-            isLoading={isOperationBuilding}
-            isError={isOperationError}
-            error={operationError}
-            onSelectNode={onSelectOperationNode}
-          />
         ) : (
           <GraphPreviewPanel
             graph={graphForDetail}
@@ -126,7 +96,7 @@ export function PreviewPanel() {
             onOpenCluster3d={openCluster3d}
           />
         )}
-        {!hasPreviewGraph && !isPreviewBuilding && !isPreviewError && !isOperationMode && (
+        {!hasPreviewGraph && !isPreviewBuilding && !isPreviewError && (
           <EmptyState
             title={viewerStatusCopy.empty.graph}
             detail={viewerStatusCopy.empty.graphDetail}

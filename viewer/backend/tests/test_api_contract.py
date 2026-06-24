@@ -47,7 +47,6 @@ EXPECTED_BUSINESS_ROUTES = [
     (("PATCH",), "/config-snapshots/{snapshot_id}"),
     (("POST",), "/config-snapshots"),
     (("POST",), "/inspect"),
-    (("POST",), "/inspect/operation-graph"),
     (("POST",), "/logs/checkpoints"),
     (("POST",), "/logs/import"),
     (("POST",), "/logs/media"),
@@ -202,12 +201,6 @@ ENDPOINT_SCHEMA_MAPPINGS: dict[RouteKey, EndpointSchemaMapping] = {
         backend_response_schema=schemas.InspectResponse,
         frontend_api_function="inspectModel",
         frontend_response_schema="inspectResponseSchema",
-    ),
-    (("POST",), "/inspect/operation-graph"): EndpointSchemaMapping(
-        backend_body_request_schemas=(schemas.InspectRequest,),
-        backend_response_schema=schemas.OperationGraphResponse,
-        frontend_api_function="inspectOperationGraph",
-        frontend_response_schema="operationGraphResponseSchema",
     ),
     (("POST",), "/logs/checkpoints"): EndpointSchemaMapping(
         backend_body_request_schemas=(schemas.LogCheckpointsRequest,),
@@ -395,25 +388,6 @@ GRAPH_NODE_FIELDS = (
     "parameterSizeBytes",
     "details",
     "config",
-)
-OPERATION_GRAPH_NODE_FIELDS = (
-    "id",
-    "label",
-    "opKind",
-    "target",
-    "modulePath",
-    "groupId",
-    "details",
-)
-OPERATION_GRAPH_RESPONSE_FIELDS = (
-    "modelType",
-    "model",
-    "preset",
-    "source",
-    "status",
-    "nodes",
-    "edges",
-    "warnings",
 )
 TRAINING_SEARCH_FIELDS = ("mode", "values", "randomSamples")
 TRAINING_SEARCH_REQUIRED_FIELDS = ("mode", "values")
@@ -872,24 +846,6 @@ SCHEMA_PARITY_CASES = (
             "nodes",
             "edges",
         ),
-    ),
-    SchemaParityCase(
-        schemas.OperationGraphNodeResponse,
-        "operationGraphNodeSchema",
-        OPERATION_GRAPH_NODE_FIELDS,
-        OPERATION_GRAPH_NODE_FIELDS,
-    ),
-    SchemaParityCase(
-        schemas.OperationGraphEdgeResponse,
-        "operationGraphEdgeSchema",
-        ("id", "source", "target"),
-        ("id", "source", "target"),
-    ),
-    SchemaParityCase(
-        schemas.OperationGraphResponse,
-        "operationGraphResponseSchema",
-        OPERATION_GRAPH_RESPONSE_FIELDS,
-        OPERATION_GRAPH_RESPONSE_FIELDS,
     ),
     SchemaParityCase(
         schemas.TrainingJobCreateRequest,
@@ -1640,7 +1596,6 @@ class ApiSchemaContractTests(unittest.TestCase):
         expected_refs = {
             ("GraphConfigFieldResponse", "value"): "JsonValue-Output",
             ("GraphNodeResponse", "details"): "JsonObject-Output",
-            ("OperationGraphNodeResponse", "details"): "JsonObject-Output",
             ("LogRunResponse", "metrics"): "JsonObject-Output",
             ("LogRunArtifactsResponse", "params"): "JsonObject-Output",
             ("LogRunArtifactsResponse", "metrics"): "JsonObject-Output",

@@ -34,7 +34,6 @@ import {
   fetchTrainingRunPlan,
   getViewerApiBaseUrl,
   importLogArchive,
-  inspectOperationGraph,
   inspectModel,
   isUnauthorizedApiError,
   jsonObjectSchema,
@@ -43,7 +42,6 @@ import {
   logArchiveImportSchema,
   monitorDataSchema,
   normalizeViewerApiBaseUrl,
-  operationGraphResponseSchema,
   renameConfigSnapshot,
   resetViewerApiBaseUrl,
   setViewerApiBaseUrl,
@@ -448,51 +446,6 @@ const successfulInspectResponse = {
     },
   ],
   edges: [{ id: "input-classifier", source: "input", target: "classifier" }],
-};
-
-const successfulOperationGraphResponse = {
-  modelType: "linears",
-  model: "linear",
-  preset: "baseline",
-  source: "torch-export",
-  status: "ok",
-  nodes: [
-    {
-      id: "op_0000",
-      label: "input x",
-      opKind: "placeholder",
-      target: "x",
-      modulePath: null,
-      groupId: "__inputs__",
-      details: {
-        inputKind: "user_input",
-        shape: [1, 1, 28, 28],
-        dtype: "float32",
-      },
-    },
-    {
-      id: "op_0001",
-      label: "linear",
-      opKind: "call_function",
-      target: "aten.linear.default",
-      modulePath: "classifier",
-      groupId: "classifier",
-      details: {
-        shape: [1, 10],
-        dtype: "float32",
-      },
-    },
-  ],
-  edges: [{ id: "op_0000-op_0001", source: "op_0000", target: "op_0001" }],
-  warnings: [],
-};
-
-const unsupportedOperationGraphResponse = {
-  ...successfulOperationGraphResponse,
-  status: "unsupported",
-  nodes: [],
-  edges: [],
-  warnings: ["torch.export.export failed: unsupported fixture"],
 };
 
 const successfulTrainingRunFixture = {
@@ -944,52 +897,6 @@ describe("successful API fixtures", () => {
     );
 
     expect(result.nodes[1].config?.fields).toHaveLength(2);
-  });
-
-  it("accepts operation graph success and unsupported fixtures", async () => {
-    const result = await validateSuccessfulFixture(
-      successfulOperationGraphResponse,
-      () =>
-        inspectOperationGraph({
-          model: "linear",
-          modelType: "linears",
-          preset: "baseline",
-          overrides: {},
-          dataset: "Mnist",
-        }),
-    );
-
-    expect(result.status).toBe("ok");
-    expect(result.nodes[1].target).toBe("aten.linear.default");
-    expect(operationGraphResponseSchema.parse(unsupportedOperationGraphResponse))
-      .toMatchObject({
-        status: "unsupported",
-        warnings: ["torch.export.export failed: unsupported fixture"],
-      });
-  });
-
-  it("rejects extra operation graph contract fields", () => {
-    const node = successfulOperationGraphResponse.nodes[0];
-    const edge = successfulOperationGraphResponse.edges[0];
-
-    expect(() =>
-      operationGraphResponseSchema.parse({
-        ...successfulOperationGraphResponse,
-        extra: true,
-      }),
-    ).toThrow();
-    expect(() =>
-      operationGraphResponseSchema.parse({
-        ...successfulOperationGraphResponse,
-        nodes: [{ ...node, extra: true }],
-      }),
-    ).toThrow();
-    expect(() =>
-      operationGraphResponseSchema.parse({
-        ...successfulOperationGraphResponse,
-        edges: [{ ...edge, extra: true }],
-      }),
-    ).toThrow();
   });
 
   it("accepts a training job creation response fixture", async () => {
@@ -2491,28 +2398,6 @@ describe("POST requests", () => {
 
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe(`${BASE}/inspect`);
-    expect((init as RequestInit).method).toBe("POST");
-    expect((init as RequestInit).body).toBe(JSON.stringify(input));
-  });
-
-  it("posts the operation graph inspect body as JSON", async () => {
-    const fetchMock = stubFetch(
-      fakeResponse({
-        json: () => Promise.resolve(unsupportedOperationGraphResponse),
-      }),
-    );
-
-    const input = {
-      modelType: "linears",
-      model: "linear",
-      preset: "base",
-      overrides: {},
-      dataset: "mnist",
-    };
-    await inspectOperationGraph(input);
-
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe(`${BASE}/inspect/operation-graph`);
     expect((init as RequestInit).method).toBe("POST");
     expect((init as RequestInit).body).toBe(JSON.stringify(input));
   });

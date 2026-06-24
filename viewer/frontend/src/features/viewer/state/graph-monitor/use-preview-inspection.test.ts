@@ -5,13 +5,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 // inspectModel is mocked so we control resolution order and exercise the
 // stale-response race guard (requestIdRef) in usePreviewInspectionState.
-const { inspectModelMock, inspectOperationGraphMock } = vi.hoisted(() => ({
+const { inspectModelMock } = vi.hoisted(() => ({
   inspectModelMock: vi.fn(),
-  inspectOperationGraphMock: vi.fn(),
 }));
 vi.mock("@/lib/api", () => ({
   inspectModel: inspectModelMock,
-  inspectOperationGraph: inspectOperationGraphMock,
 }));
 
 import { usePreviewInspectionState } from "@/features/viewer/state/graph-monitor/use-preview-inspection";
@@ -51,7 +49,6 @@ const request = (model: string) => ({
 
 afterEach(() => {
   inspectModelMock.mockReset();
-  inspectOperationGraphMock.mockReset();
 });
 
 describe("usePreviewInspectionState", () => {
@@ -147,212 +144,33 @@ describe("usePreviewInspectionState", () => {
     );
   });
 
-  it("rejects operation graph responses whose identity does not match the request", async () => {
-    inspectModelMock.mockImplementation(
-      (input: { modelType: string; model: string; preset: string }) => {
-      return Promise.resolve({
-        modelType: input.modelType,
-        model: input.model,
-        preset: input.preset,
-        parameterCount: 0,
-        parameterSizeBytes: 0,
-        nodes: [],
-        edges: [],
-      });
-    });
-    inspectOperationGraphMock.mockResolvedValueOnce({
-      modelType: "linears",
-      model: "B",
-      preset: "p",
-      source: "torch-export",
-      status: "ok",
-      nodes: [],
-      edges: [],
-      warnings: [],
-    });
-
-    const { result } = renderPreview();
-    act(() => result.current.requestPreview(request("A")));
-    await waitFor(() => expect(result.current.graph?.model).toBe("A"));
-    act(() => result.current.requestOperationGraph(request("A")));
-
-    await waitFor(() => expect(result.current.operationInspection.isError).toBe(true));
-    expect(result.current.operationGraph).toBeUndefined();
-    expect(result.current.operationGraphRequestKey).toBeNull();
-    expect(result.current.operationGraphFailedRequestKey).not.toBeNull();
-    expect(result.current.operationInspection.error).toBeInstanceOf(Error);
-    expect(String(result.current.operationInspection.error)).toContain(
-      "requested linears/A/p, received linears/B/p",
-    );
-  });
-
   it("clears preview state and ignores in-flight responses", async () => {
-    const operation = deferred<unknown>();
-    inspectModelMock.mockImplementation(
-      (input: { modelType: string; model: string; preset: string }) => {
-      return Promise.resolve({
-        modelType: input.modelType,
-        model: input.model,
-        preset: input.preset,
-        parameterCount: 0,
-        parameterSizeBytes: 0,
-        nodes: [],
-        edges: [],
-      });
-    });
-    inspectOperationGraphMock.mockReturnValueOnce(operation.promise);
-    const operationA = {
+    const pending = deferred<unknown>();
+    inspectModelMock.mockReturnValueOnce(pending.promise);
+    const graphA = {
       modelType: "linears",
       model: "A",
       preset: "p",
-      source: "torch-export",
-      status: "ok",
+      parameterCount: 0,
+      parameterSizeBytes: 0,
       nodes: [],
       edges: [],
-      warnings: [],
     };
 
     const { result } = renderPreview();
     act(() => result.current.requestPreview(request("A")));
-    await waitFor(() => expect(result.current.graph?.model).toBe("A"));
-    act(() => result.current.requestOperationGraph(request("A")));
-    await waitFor(() =>
-      expect(result.current.operationInspection.isBuilding).toBe(true),
-    );
+    await waitFor(() => expect(result.current.previewInspection.isBuilding).toBe(true));
 
     act(() => result.current.clearPreview());
 
     expect(result.current.graph).toBeUndefined();
-    expect(result.current.operationGraph).toBeUndefined();
     expect(result.current.previewRequest).toBeNull();
     expect(result.current.previewRequestKey).toBeNull();
-    expect(result.current.operationGraphRequestKey).toBeNull();
-    expect(result.current.operationGraphInFlightRequestKey).toBeNull();
-    expect(result.current.operationGraphFailedRequestKey).toBeNull();
-    expect(result.current.operationInspection.isError).toBe(false);
 
     await act(async () => {
-      operation.resolve(operationA);
-      await operation.promise;
+      pending.resolve(graphA);
+      await pending.promise;
     });
-    await waitFor(() => expect(result.current.operationGraph).toBeUndefined());
-  });
-
-  it("clears and guards operation graph responses independently", async () => {
-    const first = deferred<unknown>();
-    const second = deferred<unknown>();
-    inspectModelMock.mockImplementation(
-      (input: { modelType: string; model: string; preset: string }) => {
-      return Promise.resolve({
-        modelType: input.modelType,
-        model: input.model,
-        preset: input.preset,
-        parameterCount: 0,
-        parameterSizeBytes: 0,
-        nodes: [],
-        edges: [],
-      });
-    });
-    inspectOperationGraphMock
-      .mockReturnValueOnce(first.promise)
-      .mockReturnValueOnce(second.promise);
-    const operationA = {
-      modelType: "linears",
-      model: "A",
-      preset: "p",
-      source: "torch-export",
-      status: "ok",
-      nodes: [],
-      edges: [],
-      warnings: [],
-    };
-    const operationA2 = {
-      ...operationA,
-      warnings: ["latest"],
-    };
-    const { result } = renderPreview();
-    act(() => result.current.requestPreview(request("A")));
-    await waitFor(() => expect(result.current.graph?.model).toBe("A"));
-    act(() => result.current.requestOperationGraph(request("A")));
-    act(() => result.current.requestOperationGraph(request("A")));
-
-    await act(async () => {
-      second.resolve(operationA2);
-      await second.promise;
-    });
-    await waitFor(() => expect(result.current.operationGraph).toEqual(operationA2));
-
-    await act(async () => {
-      first.resolve(operationA);
-      await first.promise;
-    });
-    await waitFor(() => expect(result.current.operationGraph).toEqual(operationA2));
-
-    act(() => result.current.requestOperationGraph(request("B")));
-    expect(inspectOperationGraphMock).toHaveBeenCalledTimes(2);
-    expect(result.current.operationGraph).toEqual(operationA2);
-
-    act(() => result.current.requestPreview(request("C")));
-    expect(result.current.operationGraph).toBeUndefined();
-    expect(result.current.operationGraphRequestKey).toBeNull();
-    await waitFor(() => expect(result.current.graph?.model).toBe("C"));
-  });
-
-  it("marks failed operation graph requests retryable for the current preview", async () => {
-    const failed = deferred<unknown>();
-    const retry = deferred<unknown>();
-    inspectModelMock.mockImplementation(
-      (input: { modelType: string; model: string; preset: string }) => {
-      return Promise.resolve({
-        modelType: input.modelType,
-        model: input.model,
-        preset: input.preset,
-        parameterCount: 0,
-        parameterSizeBytes: 0,
-        nodes: [],
-        edges: [],
-      });
-    });
-    inspectOperationGraphMock
-      .mockReturnValueOnce(failed.promise)
-      .mockReturnValueOnce(retry.promise);
-    const operationA = {
-      modelType: "linears",
-      model: "A",
-      preset: "p",
-      source: "torch-export",
-      status: "ok",
-      nodes: [],
-      edges: [],
-      warnings: [],
-    };
-
-    const { result } = renderPreview();
-    act(() => result.current.requestPreview(request("A")));
-    await waitFor(() => expect(result.current.graph?.model).toBe("A"));
-    act(() => result.current.requestOperationGraph(request("A")));
-
-    await act(async () => {
-      failed.reject(new Error("trace failed"));
-      await failed.promise.catch(() => undefined);
-    });
-    await waitFor(() =>
-      expect(result.current.operationInspection.isError).toBe(true),
-    );
-    expect(result.current.operationGraphFailedRequestKey).not.toBeNull();
-    expect(result.current.operationGraphRequestKey).toBeNull();
-
-    act(() => result.current.requestOperationGraph(request("A")));
-    await waitFor(() =>
-      expect(result.current.operationInspection.isError).toBe(false),
-    );
-    await waitFor(() => expect(inspectOperationGraphMock).toHaveBeenCalledTimes(2));
-
-    await act(async () => {
-      retry.resolve(operationA);
-      await retry.promise;
-    });
-    await waitFor(() => expect(result.current.operationGraph).toEqual(operationA));
-    expect(result.current.operationGraphFailedRequestKey).toBeNull();
+    await waitFor(() => expect(result.current.graph).toBeUndefined());
   });
 });

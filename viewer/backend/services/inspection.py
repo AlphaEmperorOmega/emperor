@@ -36,21 +36,3 @@ class InspectionService:
             overrides,
             dataset=dataset,
         )
-
-    def inspect_operation_graph(
-        self,
-        *,
-        model_type: str,
-        model: str,
-        preset: str,
-        overrides: dict[str, Any],
-        dataset: str | None,
-    ) -> dict[str, Any]:
-        from viewer.backend.inspector.operation_graph import inspect_operation_graph
-
-        return inspect_operation_graph(
-            _model_id(model_type, model),
-            preset,
-            overrides,
-            dataset=dataset,
-        )

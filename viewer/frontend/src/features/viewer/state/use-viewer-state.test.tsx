@@ -23,7 +23,6 @@ const mocks = vi.hoisted(() => ({
   fetchLogExperiments: vi.fn(),
   fetchLogTags: vi.fn(),
   inspectModel: vi.fn(),
-  inspectOperationGraph: vi.fn(),
   getViewerApiBaseUrl: vi.fn(),
   normalizeViewerApiBaseUrl: vi.fn(),
   setViewerApiBaseUrl: vi.fn(),
@@ -401,19 +400,6 @@ function mockPublicModelCatalog() {
         edges: [],
       }),
   );
-  mocks.inspectOperationGraph.mockImplementation(
-    (request: { modelType: string; model: string; preset: string }) =>
-      Promise.resolve({
-        modelType: request.modelType,
-        model: request.model,
-        preset: request.preset,
-        source: "torch-export",
-        status: "unsupported",
-        nodes: [],
-        edges: [],
-        warnings: [],
-      }),
-  );
 }
 
 beforeEach(() => {
@@ -608,15 +594,6 @@ beforeEach(() => {
     parameterSizeBytes: 0,
     nodes: [],
     edges: [],
-  });
-  mocks.inspectOperationGraph.mockReset().mockResolvedValue({
-    model: "linear",
-    preset: "baseline",
-    source: "torch-export",
-    status: "unsupported",
-    nodes: [],
-    edges: [],
-    warnings: [],
   });
   mocks.fetchTrainingRunPlan.mockReset().mockImplementation((request) =>
     Promise.resolve({

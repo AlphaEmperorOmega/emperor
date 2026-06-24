@@ -30,9 +30,6 @@ from viewer.backend.schemas._inspection import (
     GraphNodeResponse,
     InspectRequest,
     InspectResponse,
-    OperationGraphEdgeResponse,
-    OperationGraphNodeResponse,
-    OperationGraphResponse,
 )
 from viewer.backend.schemas._logs import (
     LogArchiveImportResponse,
@@ -144,9 +141,6 @@ __all__ = [
     "GraphEdgeResponse",
     "InspectRequest",
     "InspectResponse",
-    "OperationGraphNodeResponse",
-    "OperationGraphEdgeResponse",
-    "OperationGraphResponse",
     "TrainingJobCreateRequest",
     "TrainingRunPlanCreateRequest",
     "TrainingSearchResponse",

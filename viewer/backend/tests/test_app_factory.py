@@ -24,7 +24,6 @@ EXPECTED_ROOT_ROUTE_PAIRS = {
     ("GET", "/health"),
     ("GET", "/models"),
     ("POST", "/inspect"),
-    ("POST", "/inspect/operation-graph"),
     ("GET", "/logs/runs"),
     ("POST", "/logs/tags"),
     ("POST", "/training/jobs"),
@@ -39,7 +38,6 @@ CORS_PREFLIGHT_ALLOWED_HEADERS = {"authorization", "content-type"}
 # test environment.
 EXPECTED_ASYNC_BOUNDARY_ROUTE_PAIRS = {
     ("POST", "/inspect"),
-    ("POST", "/inspect/operation-graph"),
     ("GET", "/logs/runs"),
     ("GET", "/logs/experiments"),
     ("POST", "/logs/import"),

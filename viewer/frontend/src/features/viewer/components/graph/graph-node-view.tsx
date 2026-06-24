@@ -19,7 +19,6 @@ import {
   StackDiagramView,
 } from "@/features/viewer/components/graph/graph-node-diagrams";
 import { GraphNodeParameterShapes } from "@/features/viewer/components/graph/graph-node-parameter-shapes";
-import { OperationGraphNodeView } from "@/features/viewer/components/graph/operation-graph-node-view";
 import {
   type ViewerNodeData,
   formatModelSize,
@@ -247,5 +246,4 @@ function MovingGraphNodeShell({
 
 export const nodeTypes = {
   viewerNode: GraphNodeView,
-  operationNode: OperationGraphNodeView,
 };
