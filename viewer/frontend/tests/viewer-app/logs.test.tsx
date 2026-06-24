@@ -1536,9 +1536,20 @@ describe("ViewerApp Logs Workspace", () => {
       await screen.findByRole("button", { name: /^Other\s+1\s+metric$/i }),
     );
 
+    const expectedRunIds = fixture.logRunsResponse.runs.map((run) => run.id);
     await waitFor(() => {
-      expect(logScalarRequests.at(-1)).toEqual({
-        runIds: fixture.logRunsResponse.runs.map((run) => run.id),
+      const selectedTagRequests = logScalarRequests.filter(
+        (request) =>
+          request.tags.length === 1 && request.tags[0] === "custom/tag-42",
+      );
+      expect(selectedTagRequests.at(-2)).toEqual({
+        runIds: expectedRunIds.slice(0, 50),
+        tags: ["custom/tag-42"],
+        maxPoints: 500,
+        sampling: "tail",
+      });
+      expect(selectedTagRequests.at(-1)).toEqual({
+        runIds: expectedRunIds.slice(50),
         tags: ["custom/tag-42"],
         maxPoints: 500,
         sampling: "tail",
