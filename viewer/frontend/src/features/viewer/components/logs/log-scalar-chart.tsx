@@ -5,6 +5,7 @@ import { Info } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { IconButton } from "@/components/ui/icon-button";
 import { EChart } from "@/features/viewer/components/charts/echart";
+import { SurfacePanel } from "@/features/viewer/components/shared/surface-panel";
 import { TrainingMetricInfoDialog } from "@/features/viewer/components/shared/training-metric-info-dialog";
 import { type LogCheckpoint, type LogRun, type LogScalarSeries } from "@/lib/api";
 import { scalarSeriesColors } from "@/lib/charts";
@@ -64,9 +65,11 @@ export function LazyLogScalarChart(props: LogScalarChartProps) {
 
   if (!hasEnteredView) {
     return (
-      <section
+      <SurfacePanel
+        as="section"
+        padding="spacious"
         ref={chartRef}
-        className="edge min-h-[350px] rounded-card p-4"
+        className="min-h-[350px]"
         aria-label={`${props.tag} scalar chart placeholder`}
       />
     );
@@ -193,7 +196,7 @@ export function LogScalarChart({
   ]);
 
   return (
-    <section className="edge grid min-w-0 gap-3 rounded-card p-4">
+    <SurfacePanel as="section" padding="spacious" className="min-w-0">
       <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="truncate text-sm font-bold text-ink">{tag}</h2>
@@ -222,7 +225,7 @@ export function LogScalarChart({
         <EChart option={option} group={group} />
       </div>
 
-      <div className="grid gap-1.5 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="grid max-h-48 min-h-0 gap-1.5 overflow-y-auto pr-1 sm:grid-cols-2 xl:grid-cols-3">
         {legendEntries.map((entry) => {
           const hasHighlightedRun = chartHighlightedRunId !== null;
           const isHighlightedRun = entry.runId === chartHighlightedRunId;
@@ -267,6 +270,6 @@ export function LogScalarChart({
           onClose={() => setIsInfoOpen(false)}
         />
       )}
-    </section>
+    </SurfacePanel>
   );
 }

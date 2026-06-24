@@ -1,7 +1,6 @@
 import { AlertTriangle, GitCompare, Plus, RotateCcw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { EdgeCard } from "@/components/ui/edge-card";
 import { CompareTargetCard } from "@/features/viewer/components/compare-workspace/compare-target-card";
 import {
   ComparisonTable,
@@ -11,6 +10,7 @@ import { useCompareWorkspaceState } from "@/features/viewer/components/compare-w
 import { InlineStatus } from "@/features/viewer/components/shared/inline-status";
 import { SectionHeading } from "@/features/viewer/components/shared/section-heading";
 import { viewerStatusCopy } from "@/features/viewer/components/shared/status-copy";
+import { SurfacePanel } from "@/features/viewer/components/shared/surface-panel";
 import { errorMessage } from "@/lib/utils";
 
 export function CompareWorkspace({
@@ -41,7 +41,7 @@ export function CompareWorkspace({
   return (
     <div className="h-full min-h-0 overflow-y-auto bg-bg-2/60 p-4 lg:p-5">
       <div className="mx-auto grid max-w-[1480px] gap-4">
-        <EdgeCard className="rounded-card p-4">
+        <SurfacePanel padding="spacious">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <SectionHeading
               as="h2"
@@ -69,7 +69,7 @@ export function CompareWorkspace({
               </Button>
             </div>
           </div>
-        </EdgeCard>
+        </SurfacePanel>
 
         <div className="grid items-start gap-3 xl:grid-cols-2 min-[1900px]:grid-cols-4">
           {comparison.entries.map((entry, index) => (

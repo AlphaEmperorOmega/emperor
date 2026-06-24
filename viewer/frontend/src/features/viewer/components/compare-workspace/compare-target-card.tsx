@@ -8,10 +8,10 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { EdgeCard } from "@/components/ui/edge-card";
 import { SelectOnlyDropdown } from "@/features/viewer/components/screen/select-only-dropdown";
 import { InlineStatus } from "@/features/viewer/components/shared/inline-status";
 import { viewerStatusCopy } from "@/features/viewer/components/shared/status-copy";
+import { SurfacePanel } from "@/features/viewer/components/shared/surface-panel";
 import { errorMessage } from "@/lib/utils";
 import {
   formatInteger,
@@ -55,7 +55,7 @@ export function CompareTargetCard({
       : undefined;
 
   return (
-    <EdgeCard className="min-w-0 rounded-card p-4">
+    <SurfacePanel as="article" padding="spacious" className="min-w-0">
       <div className="grid gap-3">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -194,6 +194,6 @@ export function CompareTargetCard({
           Use as Target
         </Button>
       </div>
-    </EdgeCard>
+    </SurfacePanel>
   );
 }

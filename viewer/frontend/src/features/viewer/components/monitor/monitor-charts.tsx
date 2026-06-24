@@ -4,6 +4,7 @@ import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
 import { ChartFrame } from "@/features/viewer/components/monitor/chart-frame";
 import { EChart } from "@/features/viewer/components/charts/echart";
+import { SurfacePanel } from "@/features/viewer/components/shared/surface-panel";
 import { buildScalarLineOption } from "@/lib/echarts/scalar-options";
 import { buildHistogramBarOption } from "@/lib/echarts/histogram-options";
 import { multiRunLineColors } from "@/lib/charts";
@@ -231,13 +232,13 @@ export function MonitorEmptyState({
   busy?: boolean;
 }) {
   return (
-    <div className="edge grid min-h-40 place-items-center rounded-card p-5 text-center">
+    <SurfacePanel padding="spacious" className="min-h-40 place-items-center text-center">
       <div className="grid justify-items-center gap-2">
         {busy && <Loader2 className="h-5 w-5 animate-spin text-violet" aria-hidden />}
         <div className="text-sm font-semibold text-ink">{title}</div>
         <div className="max-w-md text-sm text-ink-faint">{detail}</div>
       </div>
-    </div>
+    </SurfacePanel>
   );
 }
 

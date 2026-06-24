@@ -1,7 +1,11 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { LogScalarChart } from "@/features/viewer/components/logs/log-scalar-chart";
+import {
+  LazyLogScalarChart,
+  LogScalarChart,
+} from "@/features/viewer/components/logs/log-scalar-chart";
+import { formatRunLabel } from "@/features/viewer/state/logs/logs-selectors";
 import { type LogRun, type LogScalarSeries } from "@/lib/api";
 
 function logRun(overrides: Partial<LogRun> = {}): LogRun {
@@ -54,6 +58,116 @@ function renderScalarChart(tag: string) {
 }
 
 describe("LogScalarChart", () => {
+  it("renders lazy charts immediately when IntersectionObserver is unavailable", async () => {
+    const originalObserver = globalThis.IntersectionObserver;
+    Reflect.deleteProperty(globalThis, "IntersectionObserver");
+
+    try {
+      render(
+        <LazyLogScalarChart
+          tag="validation/accuracy"
+          series={[scalarSeries({ tag: "validation/accuracy" })]}
+          runsById={new Map([["run-1", logRun()]])}
+          checkpointsByRunId={new Map()}
+          runOrder={["run-1"]}
+          onSelectRun={vi.fn()}
+        />,
+      );
+
+      expect(
+        await screen.findByRole("img", {
+          name: /validation\/accuracy scalar chart/i,
+        }),
+      ).toBeInTheDocument();
+    } finally {
+      if (originalObserver) {
+        Object.defineProperty(globalThis, "IntersectionObserver", {
+          configurable: true,
+          writable: true,
+          value: originalObserver,
+        });
+      }
+    }
+  });
+
+  it("bounds the run legend without removing chart or selection behavior", async () => {
+    const user = userEvent.setup();
+    const runs = Array.from({ length: 18 }, (_, index) =>
+      logRun({
+        id: `run-${index}`,
+        runName: `run-${index}`,
+        timestamp: null,
+      }),
+    );
+    const series = runs.map((run, index) =>
+      scalarSeries({
+        runId: run.id,
+        tag: "train/loss",
+        points: [
+          { step: 1, wallTime: 1780000000 + index, value: index + 0.25 },
+          { step: 2, wallTime: 1780000100 + index, value: index + 0.75 },
+        ],
+      }),
+    );
+    const onSelectRun = vi.fn();
+
+    render(
+      <LogScalarChart
+        tag="train/loss"
+        series={series}
+        runsById={new Map(runs.map((run) => [run.id, run]))}
+        checkpointsByRunId={new Map()}
+        runOrder={runs.map((run) => run.id)}
+        onSelectRun={onSelectRun}
+      />,
+    );
+
+    expect(
+      screen.getByRole("img", { name: /train\/loss scalar chart/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("echart")).toBeInTheDocument();
+    const chartCard = screen
+      .getByRole("img", { name: /train\/loss scalar chart/i })
+      .closest("section");
+    if (!(chartCard instanceof HTMLElement)) {
+      throw new Error("Expected scalar chart to render inside a surface section");
+    }
+    expect(chartCard).toHaveClass(
+      "rounded-[10px]",
+      "border",
+      "border-line",
+      "bg-white/[0.018]",
+      "p-4",
+    );
+    expect(chartCard).not.toHaveClass("edge", "rounded-card");
+
+    const selectedRun = runs[12];
+    const selectedRunLabel = formatRunLabel(selectedRun);
+    const selectedRunButton = screen.getByText(selectedRunLabel).closest("button");
+    if (!(selectedRunButton instanceof HTMLButtonElement)) {
+      throw new Error("Expected formatted run label to render inside a legend button");
+    }
+
+    const legend = selectedRunButton.parentElement;
+    if (!(legend instanceof HTMLElement)) {
+      throw new Error("Expected legend button to render inside a legend container");
+    }
+
+    expect(legend).toHaveClass(
+      "grid",
+      "max-h-48",
+      "min-h-0",
+      "overflow-y-auto",
+      "pr-1",
+      "sm:grid-cols-2",
+      "xl:grid-cols-3",
+    );
+
+    await user.click(selectedRunButton);
+
+    expect(onSelectRun).toHaveBeenCalledWith(selectedRun.id);
+  });
+
   it("opens metric info from the scalar chart card header", async () => {
     const user = userEvent.setup();
     const infoButtonLabel = "Explain metric train/accuracy";

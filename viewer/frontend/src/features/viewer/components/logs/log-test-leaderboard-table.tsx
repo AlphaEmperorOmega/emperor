@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { SurfacePanel } from "@/features/viewer/components/shared/surface-panel";
 import { type LogRun, type LogScalarSeries } from "@/lib/api";
 import {
   formatNumber,
@@ -73,7 +74,7 @@ export function LogTestLeaderboardTable({
   const hiddenRowCount = Math.max(0, rows.length - visibleRows.length);
 
   return (
-    <section className="edge grid min-w-0 gap-3 rounded-card p-4">
+    <SurfacePanel as="section" padding="spacious" className="min-w-0">
       <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="truncate text-sm font-bold text-ink">{tag}</h2>
@@ -169,6 +170,6 @@ export function LogTestLeaderboardTable({
           Showing top {visibleRows.length} of {rows.length} runs.
         </div>
       )}
-    </section>
+    </SurfacePanel>
   );
 }

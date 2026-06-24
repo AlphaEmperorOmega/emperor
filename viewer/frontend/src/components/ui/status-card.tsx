@@ -1,5 +1,6 @@
 import { Loader2 } from "lucide-react";
 import { type ReactNode } from "react";
+import { SurfacePanel } from "@/features/viewer/components/shared/surface-panel";
 
 export type StatusCardProps = {
   title: ReactNode;
@@ -37,14 +38,17 @@ export function StatusCard({
   if (layout === "page") {
     return (
       <main className="grid min-h-screen place-items-center bg-bg p-6 text-ink">
-        <div className="edge grid max-w-md justify-items-center gap-3 rounded-card p-6 text-center">
+        <SurfacePanel
+          padding="spacious"
+          className="max-w-md justify-items-center text-center"
+        >
           {framedIcon && <IconFrame>{framedIcon}</IconFrame>}
           <div>
             <h1 className="text-lg font-bold">{title}</h1>
             {detail && <p className="mt-1 text-sm leading-6 text-ink-dim">{detail}</p>}
           </div>
           {actions}
-        </div>
+        </SurfacePanel>
       </main>
     );
   }
@@ -52,14 +56,17 @@ export function StatusCard({
   if (layout === "overlay") {
     return (
       <div className="absolute inset-0 flex items-center justify-center p-6">
-        <div className="edge grid max-w-[360px] justify-items-center gap-3 rounded-card p-6 text-center shadow-panel">
+        <SurfacePanel
+          padding="spacious"
+          className="max-w-[360px] justify-items-center text-center shadow-panel"
+        >
           {framedIcon && <IconFrame>{framedIcon}</IconFrame>}
           <div>
             <div className="text-sm font-semibold text-ink">{title}</div>
             {detail && <div className="mt-1 text-xs leading-5 text-ink-faint">{detail}</div>}
           </div>
           {actions}
-        </div>
+        </SurfacePanel>
       </div>
     );
   }
@@ -67,7 +74,10 @@ export function StatusCard({
   if (layout === "chart") {
     return (
       <div className="grid h-full min-h-[360px] place-items-center p-6">
-        <div className="edge grid max-w-md justify-items-center gap-3 rounded-card p-6 text-center shadow-panel">
+        <SurfacePanel
+          padding="spacious"
+          className="max-w-md justify-items-center text-center shadow-panel"
+        >
           {busy && defaultBusyIcon("h-5 w-5 animate-spin text-violet")}
           {icon && <IconFrame>{icon}</IconFrame>}
           <div>
@@ -75,20 +85,32 @@ export function StatusCard({
             {detail && <div className="mt-1 text-xs leading-5 text-ink-faint">{detail}</div>}
           </div>
           {actions}
-        </div>
+        </SurfacePanel>
       </div>
     );
   }
 
   const inlineClasses =
-    tone === "danger"
-      ? "rounded-card border border-danger-line bg-danger-soft p-3 text-sm text-danger-text shadow-panel"
-      : "rounded-card border border-line-soft bg-white/[0.018] p-3 text-sm text-ink-faint shadow-panel";
+    "rounded-[10px] border border-danger-line bg-danger-soft p-3 text-sm text-danger-text";
   const inlineDetailClasses =
     tone === "danger" ? "mt-1 text-danger-detail" : "mt-1 text-ink-faint";
 
+  if (tone !== "danger") {
+    return (
+      <SurfacePanel padding="roomy" className="text-sm text-ink-faint">
+        <div className="flex items-center gap-2 font-semibold">
+          {busy && defaultBusyIcon("h-4 w-4 animate-spin")}
+          {icon}
+          {title}
+        </div>
+        {detail && <div className={inlineDetailClasses}>{detail}</div>}
+        {actions}
+      </SurfacePanel>
+    );
+  }
+
   return (
-    <div role={tone === "danger" ? "alert" : undefined} className={inlineClasses}>
+    <div role="alert" className={inlineClasses}>
       <div className="flex items-center gap-2 font-semibold">
         {busy && defaultBusyIcon("h-4 w-4 animate-spin")}
         {icon}

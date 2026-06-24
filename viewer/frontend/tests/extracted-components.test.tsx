@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { FullPageError } from "@/components/layout/page-error-status";
 import { FullPageLoading, FullPageStatus } from "@/components/layout/page-status";
+import { StatusCard } from "@/components/ui/status-card";
 import { FeatureListDialog } from "@/features/viewer/components/feature-list-dialog";
 import { createViewerContext } from "@/features/viewer/providers/create-context";
 import { DialogShell } from "@/features/viewer/components/shared/dialog-shell";
@@ -55,6 +56,78 @@ describe("FullPageError", () => {
     render(<FullPageError message="Exploded during render" onRetry={() => {}} />);
 
     expect(screen.getByText("Exploded during render")).toBeInTheDocument();
+  });
+});
+
+describe("StatusCard", () => {
+  it.each(["page", "overlay", "chart"] as const)(
+    "renders the %s layout on the shared surface",
+    (layout) => {
+      const { container } = render(
+        <StatusCard
+          layout={layout}
+          title="Loading scalars"
+          detail="Waiting for TensorBoard data."
+          busy
+          actions={<button type="button">Retry</button>}
+        />,
+      );
+
+      const action = screen.getByRole("button", { name: "Retry" });
+      const surface = action.closest("div");
+      expect(surface).toHaveClass(
+        "rounded-[10px]",
+        "border",
+        "border-line",
+        "bg-white/[0.018]",
+        "p-4",
+      );
+      expect(surface).not.toHaveClass("edge", "rounded-card");
+      expect(screen.getByText("Loading scalars")).toBeInTheDocument();
+      expect(screen.getByText("Waiting for TensorBoard data.")).toBeInTheDocument();
+      expect(container.querySelector(".animate-spin")).toBeInTheDocument();
+    },
+  );
+
+  it("renders default and danger inline layouts with roles and actions", () => {
+    const { container, rerender } = render(
+      <StatusCard
+        title="Inline loading"
+        detail="Still working."
+        busy
+        actions={<button type="button">Cancel</button>}
+      />,
+    );
+
+    const inlineSurface = screen.getByRole("button", { name: "Cancel" }).closest("div");
+    expect(inlineSurface).toHaveClass(
+      "rounded-[10px]",
+      "border-line",
+      "bg-white/[0.018]",
+      "p-3",
+    );
+    expect(inlineSurface).not.toHaveClass("edge", "rounded-card");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(container.querySelector(".animate-spin")).toBeInTheDocument();
+
+    rerender(
+      <StatusCard
+        title="Inline error"
+        detail="Request failed."
+        tone="danger"
+        actions={<button type="button">Retry</button>}
+      />,
+    );
+
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveClass(
+      "rounded-[10px]",
+      "border-danger-line",
+      "bg-danger-soft",
+      "text-danger-text",
+    );
+    expect(alert).not.toHaveClass("edge", "rounded-card");
+    expect(within(alert).getByRole("button", { name: "Retry" })).toBeInTheDocument();
   });
 });
 
@@ -472,6 +545,41 @@ describe("SurfacePanel", () => {
     expect(screen.getByText("Run Plan").closest(".custom-header")).toHaveClass(
       "min-h-0",
     );
+  });
+
+  it("renders semantic sections with labelled region attributes", () => {
+    render(
+      <SurfacePanel as="section" aria-labelledby="surface-title">
+        <h2 id="surface-title">Surface Region</h2>
+        <span>Surface region body</span>
+      </SurfacePanel>,
+    );
+
+    const region = screen.getByRole("region", { name: "Surface Region" });
+    expect(region.tagName).toBe("SECTION");
+    expect(region).toHaveAttribute("aria-labelledby", "surface-title");
+    expect(region).toHaveClass(
+      "rounded-[10px]",
+      "border",
+      "border-line",
+      "bg-white/[0.018]",
+    );
+  });
+
+  it.each([
+    ["compact", "gap-1.5", "px-2.5", "py-2"],
+    ["roomy", "gap-3", "p-3"],
+    ["spacious", "gap-4", "p-4"],
+    ["none", "gap-0", "p-0"],
+  ] as const)("applies %s padding classes", (padding, ...classes) => {
+    render(
+      <SurfacePanel padding={padding} className={`surface-${padding}`}>
+        {padding}
+      </SurfacePanel>,
+    );
+
+    const panel = screen.getByText(padding);
+    expect(panel).toHaveClass(...classes);
   });
 });
 

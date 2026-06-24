@@ -14,6 +14,7 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 import { ErrorPanel } from "@/features/viewer/components/error-panel";
 import { ViewModeButton } from "@/features/viewer/components/view-mode-button";
 import { InlineStatus } from "@/features/viewer/components/shared/inline-status";
+import { SurfacePanel } from "@/features/viewer/components/shared/surface-panel";
 import { LogBestRunPanel } from "@/features/viewer/components/logs/log-best-run-panel";
 import { LogConfusionMatrixHeatmaps } from "@/features/viewer/components/logs/log-confusion-matrix-heatmap";
 import { LazyLogScalarChart } from "@/features/viewer/components/logs/log-scalar-chart";
@@ -171,7 +172,10 @@ function LogsMetricGroupHeader({
 function ChartEmptyState({ title, detail, busy }: LogsChartEmptyState) {
   return (
     <div className="grid h-full min-h-[360px] place-items-center p-6">
-      <div className="edge grid max-w-md justify-items-center gap-3 rounded-card p-6 text-center shadow-panel">
+      <SurfacePanel
+        padding="spacious"
+        className="max-w-md justify-items-center text-center shadow-panel"
+      >
         {busy && <Loader2 className="h-5 w-5 animate-spin text-violet" aria-hidden />}
         <div className="flex h-10 w-10 items-center justify-center rounded-[10px] border border-line bg-white/[0.04] text-violet">
           <LineChart className="h-5 w-5" aria-hidden />
@@ -180,7 +184,7 @@ function ChartEmptyState({ title, detail, busy }: LogsChartEmptyState) {
           <div className="text-sm font-semibold text-ink">{title}</div>
           <div className="mt-1 text-xs leading-5 text-ink-faint">{detail}</div>
         </div>
-      </div>
+      </SurfacePanel>
     </div>
   );
 }

@@ -18,6 +18,7 @@ import { SelectOnlyDropdown } from "@/features/viewer/components/screen/select-o
 import { DialogShell } from "@/features/viewer/components/shared/dialog-shell";
 import { InlineStatus } from "@/features/viewer/components/shared/inline-status";
 import { SectionHeading } from "@/features/viewer/components/shared/section-heading";
+import { SurfacePanel } from "@/features/viewer/components/shared/surface-panel";
 import { TrainingTargetDatasetPanel } from "@/features/viewer/components/training/training-target-dataset-panel";
 import { TrainingCompactRunList } from "@/features/viewer/components/training/training-compact-run-list";
 import { TrainingFooterRunSummary } from "@/features/viewer/components/training/training-footer-run-summary";
@@ -487,7 +488,7 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
               />
 
               {clusterGrowth.length > 0 && (
-                <div className="edge grid gap-2 rounded-card p-3">
+                <SurfacePanel padding="roomy">
                   <SectionHeading title="Cluster growth" />
                   <div className="grid gap-1.5">
                     {clusterGrowth.map((summary) => (
@@ -535,7 +536,7 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
                       </div>
                     ))}
                   </div>
-                </div>
+                </SurfacePanel>
               )}
 
               <TrainingLogTailCard logTail={job?.logTail} />
