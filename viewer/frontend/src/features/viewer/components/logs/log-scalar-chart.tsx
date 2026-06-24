@@ -1,8 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Info } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { IconButton } from "@/components/ui/icon-button";
 import { EChart } from "@/features/viewer/components/charts/echart";
+import { TrainingMetricInfoDialog } from "@/features/viewer/components/shared/training-metric-info-dialog";
 import { type LogCheckpoint, type LogRun, type LogScalarSeries } from "@/lib/api";
 import { scalarSeriesColors } from "@/lib/charts";
 import {
@@ -81,6 +84,7 @@ export function LogScalarChart({
   smoothing = 0,
   group,
 }: LogScalarChartProps) {
+  const [isInfoOpen, setIsInfoOpen] = useState(false);
   const runIndex = useMemo(
     () => new Map(runOrder.map((runId, index) => [runId, index])),
     [runOrder],
@@ -134,6 +138,9 @@ export function LogScalarChart({
         .filter((entry): entry is NonNullable<typeof entry> => entry !== null),
     [colorFor, runsById, series],
   );
+  const rangeLabel = `${formatNumber(scalarBounds.minValue)} to ${formatNumber(
+    scalarBounds.maxValue,
+  )}`;
 
   const option = useMemo(() => {
     const lines: ScalarLine[] = series.map((entry) => {
@@ -183,9 +190,20 @@ export function LogScalarChart({
             {scalarBounds.maxStep}
           </div>
         </div>
-        <Badge>
-          {formatNumber(scalarBounds.minValue)} to {formatNumber(scalarBounds.maxValue)}
-        </Badge>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <IconButton
+            label={`Explain metric ${tag}`}
+            title={`Explain ${tag}`}
+            size="sm"
+            variant="ghost"
+            aria-haspopup="dialog"
+            aria-expanded={isInfoOpen ? true : undefined}
+            className="h-6 w-6 rounded-[7px] border border-line-soft bg-white/[0.025] text-ink-faint hover:border-violet/40 hover:bg-violet/10 hover:text-violet focus-visible:ring-2 focus-visible:ring-focus"
+            icon={<Info className="h-3.5 w-3.5" aria-hidden />}
+            onClick={() => setIsInfoOpen(true)}
+          />
+          <Badge>{rangeLabel}</Badge>
+        </div>
       </div>
 
       <div className="h-56 w-full min-w-0" role="img" aria-label={`${tag} scalar chart`}>
@@ -218,6 +236,14 @@ export function LogScalarChart({
           );
         })}
       </div>
+      {isInfoOpen && (
+        <TrainingMetricInfoDialog
+          metricKey={tag}
+          valueTitle="Visible range"
+          valueLabel={rangeLabel}
+          onClose={() => setIsInfoOpen(false)}
+        />
+      )}
     </section>
   );
 }
