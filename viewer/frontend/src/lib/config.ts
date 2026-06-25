@@ -192,6 +192,108 @@ export function hasOverride(overrides: OverrideValues, key: string) {
   return overrideValue(overrides, key) !== undefined;
 }
 
+export const ADAPTIVE_OPTION_PAIRS = [
+  { flagKey: "weight_option_flag", optionKey: "weight_option" },
+  { flagKey: "bias_option_flag", optionKey: "bias_option" },
+  { flagKey: "diagonal_option_flag", optionKey: "diagonal_option" },
+  { flagKey: "mask_option_flag", optionKey: "row_mask_option" },
+] as const;
+
+function configFieldByKey(fields: ConfigField[], key: string) {
+  return fields.find((field) => configFieldMatchesKey(field, key));
+}
+
+function concreteAdaptiveOptionChoice(field: ConfigField) {
+  for (const choice of field.choices) {
+    if (choice === null || choice === undefined) {
+      continue;
+    }
+    const value = String(choice).trim();
+    const normalized = value.toLowerCase();
+    if (value && normalized !== "none" && normalized !== "null") {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function isPresentAdaptiveOptionValue(value: string | undefined) {
+  const normalized = (value ?? "").trim().toLowerCase();
+  return normalized !== "" && normalized !== "null" && normalized !== "none";
+}
+
+function deleteOverrideByKey(overrides: OverrideValues, key: string) {
+  const token = configKeyToken(key);
+  for (const overrideKey of Object.keys(overrides)) {
+    if (configKeyToken(overrideKey) === token) {
+      delete overrides[overrideKey];
+    }
+  }
+}
+
+export function normalizeAdaptiveOptionOverrides(
+  fields: ConfigField[],
+  overrides: OverrideValues,
+): OverrideValues {
+  const next = { ...overrides };
+
+  for (const { flagKey, optionKey } of ADAPTIVE_OPTION_PAIRS) {
+    const flagField = configFieldByKey(fields, flagKey);
+    const optionField = configFieldByKey(fields, optionKey);
+    if (!flagField || !optionField) {
+      continue;
+    }
+
+    const flagValue = fieldValue(flagField, next);
+    if (isEnabledConfigValue(flagValue)) {
+      if (!isPresentAdaptiveOptionValue(overrideValue(next, optionField.key))) {
+        const optionChoice = concreteAdaptiveOptionChoice(optionField);
+        if (optionChoice !== undefined) {
+          deleteOverrideByKey(next, optionField.key);
+          next[optionField.key] = optionChoice;
+        }
+      }
+      continue;
+    }
+
+    deleteOverrideByKey(next, optionField.key);
+  }
+
+  return next;
+}
+
+function adaptiveFlagKeyForOptionField(fieldKey: string) {
+  const fieldToken = configKeyToken(fieldKey);
+  return ADAPTIVE_OPTION_PAIRS.find(
+    ({ optionKey }) => configKeyToken(optionKey) === fieldToken,
+  )?.flagKey;
+}
+
+export function isAdaptiveOptionNoneSuppressed(
+  field: ConfigField,
+  overrides: OverrideValues,
+) {
+  const flagKey = adaptiveFlagKeyForOptionField(field.key);
+  if (!flagKey) {
+    return false;
+  }
+  return isEnabledConfigValue(overrideValue(overrides, flagKey) ?? "");
+}
+
+export function configFieldSelectOptions(
+  field: ConfigField,
+  overrides: OverrideValues,
+) {
+  const includeNone = field.nullable && !isAdaptiveOptionNoneSuppressed(field, overrides);
+  return [
+    ...(includeNone ? [{ value: "", label: "None" }] : []),
+    ...field.choices.map((choice) => ({
+      value: String(choice),
+      label: String(choice),
+    })),
+  ];
+}
+
 export function lockedOverrideKeys(
   fields: ConfigField[],
   overrides: OverrideValues,

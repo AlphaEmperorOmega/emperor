@@ -421,6 +421,37 @@ describe("config snapshots", () => {
     }
   });
 
+  it("normalizes adaptive option overrides in snapshot run plans", () => {
+    const plan = buildConfigSnapshotRunPlan({
+      modelType: "linears",
+      model: "linear_adaptive",
+      selectedPreset: "baseline",
+      selectedTrainingPresets: [],
+      selectedDatasets: ["Mnist"],
+      fields: adaptiveFields,
+      snapshots: [
+        {
+          id: "snapshot-old-adaptive",
+          name: "Old adaptive",
+          modelType: "linears",
+          model: "linear_adaptive",
+          preset: "baseline",
+          overrides: { weight_option_flag: "true" },
+          createdAt: "2026-06-04T00:00:00.000Z",
+        },
+      ],
+      logFolder: "",
+    });
+
+    expect(plan?.runs[0]?.overrides).toEqual({
+      weight_option_flag: "true",
+      weight_option: "SingleModelDynamicWeightConfig",
+    });
+    expect(plan?.runs[0]?.command).toContain(
+      "--weight-option SingleModelDynamicWeightConfig",
+    );
+  });
+
   it("builds preset-only run plans when no snapshots are selected", () => {
     const plan = buildConfigSnapshotRunPlan({
       modelType: "linears",
