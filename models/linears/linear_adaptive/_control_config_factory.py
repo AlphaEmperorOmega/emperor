@@ -224,7 +224,7 @@ class ControlConfigFactory:
         last_layer_bias_option: LastLayerBiasOptions | None = None,
     ) -> ControllerStackOptions:
         return ControllerStackOptions(
-            hidden_dim=self.builder.submodule_hidden_dim,
+            hidden_dim=self.builder.submodule_stack_hidden_dim,
             num_layers=self.builder.submodule_stack_num_layers,
             last_layer_bias_option=(
                 self.builder.submodule_stack_last_layer_bias_option
@@ -235,36 +235,36 @@ class ControlConfigFactory:
                 self.builder.submodule_stack_apply_output_pipeline_flag
             ),
             activation=self.builder.submodule_stack_activation,
-            layer_norm_position=self.builder.submodule_layer_norm_position,
+            layer_norm_position=self.builder.submodule_stack_layer_norm_position,
             residual_connection_option=(
                 self.builder.submodule_stack_residual_connection_option
             ),
             dropout_probability=self.builder.submodule_stack_dropout_probability,
-            bias_flag=self.builder.submodule_bias_flag,
+            bias_flag=self.builder.submodule_stack_bias_flag,
         )
 
     def __gate_stack_source(self) -> ControllerStackSource:
         return ControllerStackSource(
             independent_flag=self.builder.gate_stack_independent_flag,
-            hidden_dim=self.builder.gate_hidden_dim,
+            hidden_dim=self.builder.gate_stack_hidden_dim,
             num_layers=self.builder.gate_stack_num_layers,
             last_layer_bias_option=self.builder.gate_stack_last_layer_bias_option,
             apply_output_pipeline_flag=(
                 self.builder.gate_stack_apply_output_pipeline_flag
             ),
             activation=self.builder.gate_stack_activation,
-            layer_norm_position=self.builder.gate_layer_norm_position,
+            layer_norm_position=self.builder.gate_stack_layer_norm_position,
             residual_connection_option=(
                 self.builder.gate_stack_residual_connection_option
             ),
             dropout_probability=self.builder.gate_stack_dropout_probability,
-            bias_flag=self.builder.gate_bias_flag,
+            bias_flag=self.builder.gate_stack_bias_flag,
         )
 
     def __halting_stack_source(self) -> ControllerStackSource:
         return ControllerStackSource(
             independent_flag=self.builder.halting_stack_independent_flag,
-            hidden_dim=self.builder.halting_hidden_dim,
+            hidden_dim=self.builder.halting_stack_hidden_dim,
             num_layers=self.builder.halting_stack_num_layers,
             last_layer_bias_option=(
                 self.builder.halting_stack_last_layer_bias_option
@@ -273,36 +273,36 @@ class ControlConfigFactory:
                 self.builder.halting_stack_apply_output_pipeline_flag
             ),
             activation=self.builder.halting_stack_activation,
-            layer_norm_position=self.builder.halting_layer_norm_position,
+            layer_norm_position=self.builder.halting_stack_layer_norm_position,
             residual_connection_option=(
                 self.builder.halting_stack_residual_connection_option
             ),
             dropout_probability=self.builder.halting_stack_dropout_probability,
-            bias_flag=self.builder.halting_bias_flag,
+            bias_flag=self.builder.halting_stack_bias_flag,
         )
 
     def __memory_stack_source(self) -> ControllerStackSource:
         return ControllerStackSource(
             independent_flag=self.builder.memory_stack_independent_flag,
-            hidden_dim=self.builder.memory_hidden_dim,
+            hidden_dim=self.builder.memory_stack_hidden_dim,
             num_layers=self.builder.memory_stack_num_layers,
             last_layer_bias_option=self.builder.memory_stack_last_layer_bias_option,
             apply_output_pipeline_flag=(
                 self.builder.memory_stack_apply_output_pipeline_flag
             ),
             activation=self.builder.memory_stack_activation,
-            layer_norm_position=self.builder.memory_layer_norm_position,
+            layer_norm_position=self.builder.memory_stack_layer_norm_position,
             residual_connection_option=(
                 self.builder.memory_stack_residual_connection_option
             ),
             dropout_probability=self.builder.memory_stack_dropout_probability,
-            bias_flag=self.builder.memory_bias_flag,
+            bias_flag=self.builder.memory_stack_bias_flag,
         )
 
     def __recurrent_gate_stack_source(self) -> ControllerStackSource:
         return ControllerStackSource(
             independent_flag=self.builder.recurrent_gate_stack_independent_flag,
-            hidden_dim=self.builder.recurrent_gate_hidden_dim,
+            hidden_dim=self.builder.recurrent_gate_stack_hidden_dim,
             num_layers=self.builder.recurrent_gate_stack_num_layers,
             last_layer_bias_option=(
                 self.builder.recurrent_gate_stack_last_layer_bias_option
@@ -311,12 +311,12 @@ class ControlConfigFactory:
                 self.builder.recurrent_gate_stack_apply_output_pipeline_flag
             ),
             activation=self.builder.recurrent_gate_stack_activation,
-            layer_norm_position=self.builder.recurrent_gate_layer_norm_position,
+            layer_norm_position=self.builder.recurrent_gate_stack_layer_norm_position,
             residual_connection_option=(
                 self.builder.recurrent_gate_stack_residual_connection_option
             ),
             dropout_probability=self.builder.recurrent_gate_stack_dropout_probability,
-            bias_flag=self.builder.recurrent_gate_bias_flag,
+            bias_flag=self.builder.recurrent_gate_stack_bias_flag,
         )
 
     def __recurrent_halting_stack_source(self) -> ControllerStackSource:
@@ -324,7 +324,7 @@ class ControlConfigFactory:
             independent_flag=(
                 self.builder.recurrent_halting_stack_independent_flag
             ),
-            hidden_dim=self.builder.recurrent_halting_hidden_dim,
+            hidden_dim=self.builder.recurrent_halting_stack_hidden_dim,
             num_layers=self.builder.recurrent_halting_stack_num_layers,
             last_layer_bias_option=(
                 self.builder.recurrent_halting_stack_last_layer_bias_option
@@ -333,12 +333,12 @@ class ControlConfigFactory:
                 self.builder.recurrent_halting_stack_apply_output_pipeline_flag
             ),
             activation=self.builder.recurrent_halting_stack_activation,
-            layer_norm_position=self.builder.recurrent_halting_layer_norm_position,
+            layer_norm_position=self.builder.recurrent_halting_stack_layer_norm_position,
             residual_connection_option=(
                 self.builder.recurrent_halting_stack_residual_connection_option
             ),
             dropout_probability=(
                 self.builder.recurrent_halting_stack_dropout_probability
             ),
-            bias_flag=self.builder.recurrent_halting_bias_flag,
+            bias_flag=self.builder.recurrent_halting_stack_bias_flag,
         )

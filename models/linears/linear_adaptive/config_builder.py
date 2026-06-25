@@ -129,6 +129,7 @@ class LinearAdaptiveConfigBuilder:
         output_dim: int = config.OUTPUT_DIM,
         bias_flag: bool = config.BIAS_FLAG,
         layer_norm_position: LayerNormPositionOptions = config.STACK_LAYER_NORM_POSITION,
+        stack_bias_flag: bool | None = None,
         stack_layer_norm_position: LayerNormPositionOptions | None = None,
         generator_depth: DynamicDepthOptions = config.WEIGHT_GENERATOR_DEPTH,
         diagonal_option_flag: bool = config.DIAGONAL_OPTION_FLAG,
@@ -271,22 +272,22 @@ class LinearAdaptiveConfigBuilder:
         stack_dropout_probability: float = config.STACK_DROPOUT_PROBABILITY,
         stack_last_layer_bias_option: LastLayerBiasOptions = config.STACK_LAST_LAYER_BIAS_OPTION,
         stack_apply_output_pipeline_flag: bool = config.STACK_APPLY_OUTPUT_PIPELINE_FLAG,
-        submodule_hidden_dim: int = config.SUBMODULE_HIDDEN_DIM,
-        submodule_layer_norm_position: LayerNormPositionOptions = config.SUBMODULE_LAYER_NORM_POSITION,
+        submodule_stack_hidden_dim: int = config.SUBMODULE_STACK_HIDDEN_DIM,
+        submodule_stack_layer_norm_position: LayerNormPositionOptions = config.SUBMODULE_STACK_LAYER_NORM_POSITION,
         submodule_stack_num_layers: int = config.SUBMODULE_STACK_NUM_LAYERS,
         submodule_stack_activation: ActivationOptions = config.SUBMODULE_STACK_ACTIVATION,
         submodule_stack_residual_connection_option: ResidualConnectionOptions = config.SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION,
         submodule_stack_dropout_probability: float = config.SUBMODULE_STACK_DROPOUT_PROBABILITY,
         submodule_stack_last_layer_bias_option: LastLayerBiasOptions = config.SUBMODULE_STACK_LAST_LAYER_BIAS_OPTION,
         submodule_stack_apply_output_pipeline_flag: bool = config.SUBMODULE_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
-        submodule_bias_flag: bool = config.SUBMODULE_BIAS_FLAG,
+        submodule_stack_bias_flag: bool = config.SUBMODULE_STACK_BIAS_FLAG,
         stack_gate_flag: bool = config.GATE_FLAG,
         gate_option: LayerGateOptions | None = config.GATE_OPTION,
         gate_activation: ActivationOptions | None = config.GATE_ACTIVATION,
         gate_stack_independent_flag: bool = config.GATE_STACK_INDEPENDENT_FLAG,
-        gate_hidden_dim: int | None = config.GATE_HIDDEN_DIM,
-        gate_layer_norm_position: LayerNormPositionOptions
-        | None = config.GATE_LAYER_NORM_POSITION,
+        gate_stack_hidden_dim: int | None = config.GATE_STACK_HIDDEN_DIM,
+        gate_stack_layer_norm_position: LayerNormPositionOptions
+        | None = config.GATE_STACK_LAYER_NORM_POSITION,
         gate_stack_num_layers: int | None = config.GATE_STACK_NUM_LAYERS,
         gate_stack_activation: ActivationOptions | None = config.GATE_STACK_ACTIVATION,
         gate_stack_residual_connection_option: ResidualConnectionOptions
@@ -297,7 +298,7 @@ class LinearAdaptiveConfigBuilder:
         | None = config.GATE_STACK_LAST_LAYER_BIAS_OPTION,
         gate_stack_apply_output_pipeline_flag: bool
         | None = config.GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
-        gate_bias_flag: bool | None = config.GATE_BIAS_FLAG,
+        gate_stack_bias_flag: bool | None = config.GATE_STACK_BIAS_FLAG,
         stack_halting_flag: bool = config.HALTING_FLAG,
         halting_threshold: float = config.HALTING_THRESHOLD,
         halting_dropout: float = config.HALTING_DROPOUT,
@@ -305,10 +306,10 @@ class LinearAdaptiveConfigBuilder:
             config.HALTING_HIDDEN_STATE_MODE
         ),
         halting_stack_independent_flag: bool = config.HALTING_STACK_INDEPENDENT_FLAG,
-        halting_hidden_dim: int | None = config.HALTING_HIDDEN_DIM,
+        halting_stack_hidden_dim: int | None = config.HALTING_STACK_HIDDEN_DIM,
         halting_output_dim: int = config.HALTING_OUTPUT_DIM,
-        halting_layer_norm_position: LayerNormPositionOptions
-        | None = config.HALTING_LAYER_NORM_POSITION,
+        halting_stack_layer_norm_position: LayerNormPositionOptions
+        | None = config.HALTING_STACK_LAYER_NORM_POSITION,
         halting_stack_num_layers: int | None = config.HALTING_STACK_NUM_LAYERS,
         halting_stack_activation: ActivationOptions
         | None = config.HALTING_STACK_ACTIVATION,
@@ -320,7 +321,7 @@ class LinearAdaptiveConfigBuilder:
         | None = config.HALTING_STACK_LAST_LAYER_BIAS_OPTION,
         halting_stack_apply_output_pipeline_flag: bool
         | None = config.HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
-        halting_bias_flag: bool | None = config.HALTING_BIAS_FLAG,
+        halting_stack_bias_flag: bool | None = config.HALTING_STACK_BIAS_FLAG,
         memory_flag: bool = config.MEMORY_FLAG,
         memory_option: type[DynamicMemoryConfig] = config.MEMORY_OPTION,
         memory_position_option: MemoryPositionOptions = config.MEMORY_POSITION_OPTION,
@@ -331,9 +332,9 @@ class LinearAdaptiveConfigBuilder:
             config.MEMORY_TEST_TIME_TRAINING_NUM_INNER_STEPS
         ),
         memory_stack_independent_flag: bool = config.MEMORY_STACK_INDEPENDENT_FLAG,
-        memory_hidden_dim: int | None = config.MEMORY_HIDDEN_DIM,
-        memory_layer_norm_position: LayerNormPositionOptions | None = (
-            config.MEMORY_LAYER_NORM_POSITION
+        memory_stack_hidden_dim: int | None = config.MEMORY_STACK_HIDDEN_DIM,
+        memory_stack_layer_norm_position: LayerNormPositionOptions | None = (
+            config.MEMORY_STACK_LAYER_NORM_POSITION
         ),
         memory_stack_num_layers: int | None = config.MEMORY_STACK_NUM_LAYERS,
         memory_stack_activation: ActivationOptions
@@ -350,16 +351,16 @@ class LinearAdaptiveConfigBuilder:
         memory_stack_apply_output_pipeline_flag: bool | None = (
             config.MEMORY_STACK_APPLY_OUTPUT_PIPELINE_FLAG
         ),
-        memory_bias_flag: bool | None = config.MEMORY_BIAS_FLAG,
-        adaptive_generator_stack_num_layers: int = config.ADAPTIVE_STACK_NUM_LAYERS,
-        adaptive_generator_stack_hidden_dim: int = config.ADAPTIVE_STACK_HIDDEN_DIM,
-        adaptive_generator_stack_activation: ActivationOptions = config.ADAPTIVE_STACK_ACTIVATION,
-        adaptive_generator_stack_residual_connection_option: ResidualConnectionOptions = config.ADAPTIVE_STACK_RESIDUAL_CONNECTION_OPTION,
-        adaptive_generator_stack_dropout_probability: float = config.ADAPTIVE_STACK_DROPOUT_PROBABILITY,
-        adaptive_generator_stack_layer_norm_position: LayerNormPositionOptions = config.ADAPTIVE_STACK_LAYER_NORM_POSITION,
-        adaptive_generator_stack_last_layer_bias_option: LastLayerBiasOptions = config.ADAPTIVE_STACK_LAST_LAYER_BIAS_OPTION,
-        adaptive_generator_stack_apply_output_pipeline_flag: bool = config.ADAPTIVE_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
-        adaptive_generator_stack_bias_flag: bool = config.ADAPTIVE_STACK_BIAS_FLAG,
+        memory_stack_bias_flag: bool | None = config.MEMORY_STACK_BIAS_FLAG,
+        adaptive_generator_stack_num_layers: int = config.ADAPTIVE_SUBMODULE_STACK_NUM_LAYERS,
+        adaptive_generator_stack_hidden_dim: int = config.ADAPTIVE_SUBMODULE_STACK_HIDDEN_DIM,
+        adaptive_generator_stack_activation: ActivationOptions = config.ADAPTIVE_SUBMODULE_STACK_ACTIVATION,
+        adaptive_generator_stack_residual_connection_option: ResidualConnectionOptions = config.ADAPTIVE_SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION,
+        adaptive_generator_stack_dropout_probability: float = config.ADAPTIVE_SUBMODULE_STACK_DROPOUT_PROBABILITY,
+        adaptive_generator_stack_layer_norm_position: LayerNormPositionOptions = config.ADAPTIVE_SUBMODULE_STACK_LAYER_NORM_POSITION,
+        adaptive_generator_stack_last_layer_bias_option: LastLayerBiasOptions = config.ADAPTIVE_SUBMODULE_STACK_LAST_LAYER_BIAS_OPTION,
+        adaptive_generator_stack_apply_output_pipeline_flag: bool = config.ADAPTIVE_SUBMODULE_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+        adaptive_generator_stack_bias_flag: bool = config.ADAPTIVE_SUBMODULE_STACK_BIAS_FLAG,
         recurrent_flag: bool = config.RECURRENT_FLAG,
         recurrent_max_steps: int = config.RECURRENT_MAX_STEPS,
         recurrent_layer_norm_position: LayerNormPositionOptions = config.RECURRENT_LAYER_NORM_POSITION,
@@ -370,9 +371,9 @@ class LinearAdaptiveConfigBuilder:
         recurrent_gate_stack_independent_flag: bool = (
             config.RECURRENT_GATE_STACK_INDEPENDENT_FLAG
         ),
-        recurrent_gate_hidden_dim: int | None = config.RECURRENT_GATE_HIDDEN_DIM,
-        recurrent_gate_layer_norm_position: LayerNormPositionOptions | None = (
-            config.RECURRENT_GATE_LAYER_NORM_POSITION
+        recurrent_gate_stack_hidden_dim: int | None = config.RECURRENT_GATE_STACK_HIDDEN_DIM,
+        recurrent_gate_stack_layer_norm_position: LayerNormPositionOptions | None = (
+            config.RECURRENT_GATE_STACK_LAYER_NORM_POSITION
         ),
         recurrent_gate_stack_num_layers: int | None = (
             config.RECURRENT_GATE_STACK_NUM_LAYERS
@@ -392,7 +393,7 @@ class LinearAdaptiveConfigBuilder:
         recurrent_gate_stack_apply_output_pipeline_flag: bool | None = (
             config.RECURRENT_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG
         ),
-        recurrent_gate_bias_flag: bool | None = config.RECURRENT_GATE_BIAS_FLAG,
+        recurrent_gate_stack_bias_flag: bool | None = config.RECURRENT_GATE_STACK_BIAS_FLAG,
         recurrent_halting_flag: bool = config.RECURRENT_HALTING_FLAG,
         recurrent_halting_threshold: float = config.RECURRENT_HALTING_THRESHOLD,
         recurrent_halting_dropout: float = config.RECURRENT_HALTING_DROPOUT,
@@ -402,13 +403,13 @@ class LinearAdaptiveConfigBuilder:
         recurrent_halting_stack_independent_flag: bool = (
             config.RECURRENT_HALTING_STACK_INDEPENDENT_FLAG
         ),
-        recurrent_halting_hidden_dim: int | None = (
-            config.RECURRENT_HALTING_HIDDEN_DIM
+        recurrent_halting_stack_hidden_dim: int | None = (
+            config.RECURRENT_HALTING_STACK_HIDDEN_DIM
         ),
         recurrent_halting_output_dim: int = config.RECURRENT_HALTING_OUTPUT_DIM,
-        recurrent_halting_layer_norm_position: (
+        recurrent_halting_stack_layer_norm_position: (
             LayerNormPositionOptions | None
-        ) = config.RECURRENT_HALTING_LAYER_NORM_POSITION,
+        ) = config.RECURRENT_HALTING_STACK_LAYER_NORM_POSITION,
         recurrent_halting_stack_num_layers: int | None = (
             config.RECURRENT_HALTING_STACK_NUM_LAYERS
         ),
@@ -427,7 +428,7 @@ class LinearAdaptiveConfigBuilder:
         recurrent_halting_stack_apply_output_pipeline_flag: bool | None = (
             config.RECURRENT_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG
         ),
-        recurrent_halting_bias_flag: bool | None = (config.RECURRENT_HALTING_BIAS_FLAG),
+        recurrent_halting_stack_bias_flag: bool | None = (config.RECURRENT_HALTING_STACK_BIAS_FLAG),
         input_layer_adaptive_flag: bool = config.INPUT_LAYER_ADAPTIVE_FLAG,
         input_layer_weight_option: type[DynamicWeightConfig] | None = (
             config.INPUT_LAYER_WEIGHT_OPTION
@@ -589,7 +590,7 @@ class LinearAdaptiveConfigBuilder:
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
         self.output_dim = output_dim
-        self.bias_flag = bias_flag
+        self.bias_flag = stack_bias_flag if stack_bias_flag is not None else bias_flag
         self.layer_norm_position = layer_norm_position
         self.stack_layer_norm_position = (
             stack_layer_norm_position
@@ -714,8 +715,8 @@ class LinearAdaptiveConfigBuilder:
         self.stack_dropout_probability = stack_dropout_probability
         self.stack_last_layer_bias_option = stack_last_layer_bias_option
         self.stack_apply_output_pipeline_flag = stack_apply_output_pipeline_flag
-        self.submodule_hidden_dim = submodule_hidden_dim
-        self.submodule_layer_norm_position = submodule_layer_norm_position
+        self.submodule_stack_hidden_dim = submodule_stack_hidden_dim
+        self.submodule_stack_layer_norm_position = submodule_stack_layer_norm_position
         self.submodule_stack_num_layers = submodule_stack_num_layers
         self.submodule_stack_activation = submodule_stack_activation
         self.submodule_stack_residual_connection_option = (
@@ -728,13 +729,13 @@ class LinearAdaptiveConfigBuilder:
         self.submodule_stack_apply_output_pipeline_flag = (
             submodule_stack_apply_output_pipeline_flag
         )
-        self.submodule_bias_flag = submodule_bias_flag
+        self.submodule_stack_bias_flag = submodule_stack_bias_flag
         self.stack_gate_flag = stack_gate_flag
         self.gate_option = gate_option
         self.gate_activation = gate_activation
         self.gate_stack_independent_flag = gate_stack_independent_flag
-        self.gate_hidden_dim = gate_hidden_dim
-        self.gate_layer_norm_position = gate_layer_norm_position
+        self.gate_stack_hidden_dim = gate_stack_hidden_dim
+        self.gate_stack_layer_norm_position = gate_stack_layer_norm_position
         self.gate_stack_num_layers = gate_stack_num_layers
         self.gate_stack_activation = gate_stack_activation
         self.gate_stack_residual_connection_option = (
@@ -745,16 +746,16 @@ class LinearAdaptiveConfigBuilder:
         self.gate_stack_apply_output_pipeline_flag = (
             gate_stack_apply_output_pipeline_flag
         )
-        self.gate_bias_flag = gate_bias_flag
+        self.gate_stack_bias_flag = gate_stack_bias_flag
         self.shared_gate_config = shared_gate_config
         self.stack_halting_flag = stack_halting_flag
         self.halting_threshold = halting_threshold
         self.halting_dropout = halting_dropout
         self.halting_hidden_state_mode = halting_hidden_state_mode
         self.halting_stack_independent_flag = halting_stack_independent_flag
-        self.halting_hidden_dim = halting_hidden_dim
+        self.halting_stack_hidden_dim = halting_stack_hidden_dim
         self.halting_output_dim = halting_output_dim
-        self.halting_layer_norm_position = halting_layer_norm_position
+        self.halting_stack_layer_norm_position = halting_stack_layer_norm_position
         self.halting_stack_num_layers = halting_stack_num_layers
         self.halting_stack_activation = halting_stack_activation
         self.halting_stack_residual_connection_option = (
@@ -765,7 +766,7 @@ class LinearAdaptiveConfigBuilder:
         self.halting_stack_apply_output_pipeline_flag = (
             halting_stack_apply_output_pipeline_flag
         )
-        self.halting_bias_flag = halting_bias_flag
+        self.halting_stack_bias_flag = halting_stack_bias_flag
         self.memory_flag = memory_flag
         self.memory_option = memory_option
         self.memory_position_option = memory_position_option
@@ -776,8 +777,8 @@ class LinearAdaptiveConfigBuilder:
             memory_test_time_training_num_inner_steps
         )
         self.memory_stack_independent_flag = memory_stack_independent_flag
-        self.memory_hidden_dim = memory_hidden_dim
-        self.memory_layer_norm_position = memory_layer_norm_position
+        self.memory_stack_hidden_dim = memory_stack_hidden_dim
+        self.memory_stack_layer_norm_position = memory_stack_layer_norm_position
         self.memory_stack_num_layers = memory_stack_num_layers
         self.memory_stack_activation = memory_stack_activation
         self.memory_stack_residual_connection_option = (
@@ -788,7 +789,7 @@ class LinearAdaptiveConfigBuilder:
         self.memory_stack_apply_output_pipeline_flag = (
             memory_stack_apply_output_pipeline_flag
         )
-        self.memory_bias_flag = memory_bias_flag
+        self.memory_stack_bias_flag = memory_stack_bias_flag
         self.adaptive_generator_stack_num_layers = adaptive_generator_stack_num_layers
         self.adaptive_generator_stack_hidden_dim = adaptive_generator_stack_hidden_dim
         self.adaptive_generator_stack_activation = adaptive_generator_stack_activation
@@ -817,8 +818,8 @@ class LinearAdaptiveConfigBuilder:
         self.recurrent_gate_stack_independent_flag = (
             recurrent_gate_stack_independent_flag
         )
-        self.recurrent_gate_hidden_dim = recurrent_gate_hidden_dim
-        self.recurrent_gate_layer_norm_position = recurrent_gate_layer_norm_position
+        self.recurrent_gate_stack_hidden_dim = recurrent_gate_stack_hidden_dim
+        self.recurrent_gate_stack_layer_norm_position = recurrent_gate_stack_layer_norm_position
         self.recurrent_gate_stack_num_layers = recurrent_gate_stack_num_layers
         self.recurrent_gate_stack_activation = recurrent_gate_stack_activation
         self.recurrent_gate_stack_residual_connection_option = (
@@ -833,7 +834,7 @@ class LinearAdaptiveConfigBuilder:
         self.recurrent_gate_stack_apply_output_pipeline_flag = (
             recurrent_gate_stack_apply_output_pipeline_flag
         )
-        self.recurrent_gate_bias_flag = recurrent_gate_bias_flag
+        self.recurrent_gate_stack_bias_flag = recurrent_gate_stack_bias_flag
         self.recurrent_halting_flag = recurrent_halting_flag
         self.recurrent_halting_threshold = recurrent_halting_threshold
         self.recurrent_halting_dropout = recurrent_halting_dropout
@@ -841,10 +842,10 @@ class LinearAdaptiveConfigBuilder:
         self.recurrent_halting_stack_independent_flag = (
             recurrent_halting_stack_independent_flag
         )
-        self.recurrent_halting_hidden_dim = recurrent_halting_hidden_dim
+        self.recurrent_halting_stack_hidden_dim = recurrent_halting_stack_hidden_dim
         self.recurrent_halting_output_dim = recurrent_halting_output_dim
-        self.recurrent_halting_layer_norm_position = (
-            recurrent_halting_layer_norm_position
+        self.recurrent_halting_stack_layer_norm_position = (
+            recurrent_halting_stack_layer_norm_position
         )
         self.recurrent_halting_stack_num_layers = recurrent_halting_stack_num_layers
         self.recurrent_halting_stack_activation = recurrent_halting_stack_activation
@@ -860,7 +861,7 @@ class LinearAdaptiveConfigBuilder:
         self.recurrent_halting_stack_apply_output_pipeline_flag = (
             recurrent_halting_stack_apply_output_pipeline_flag
         )
-        self.recurrent_halting_bias_flag = recurrent_halting_bias_flag
+        self.recurrent_halting_stack_bias_flag = recurrent_halting_stack_bias_flag
         self.input_boundary_options = BoundaryLayerOptions(
             adaptive_flag=input_layer_adaptive_flag,
             weight_option=input_layer_weight_option,

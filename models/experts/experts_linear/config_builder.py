@@ -79,29 +79,29 @@ class ExpertsLinearConfigBuilder:
         stack_gate_flag: bool = config.GATE_FLAG,
         gate_option: LayerGateOptions | None = config.GATE_OPTION,
         gate_activation: ActivationOptions | None = config.GATE_ACTIVATION,
-        gate_hidden_dim: int = config.GATE_HIDDEN_DIM,
-        gate_layer_norm_position: LayerNormPositionOptions = config.GATE_LAYER_NORM_POSITION,
+        gate_stack_hidden_dim: int = config.GATE_STACK_HIDDEN_DIM,
+        gate_stack_layer_norm_position: LayerNormPositionOptions = config.GATE_STACK_LAYER_NORM_POSITION,
         gate_stack_num_layers: int = config.GATE_STACK_NUM_LAYERS,
         gate_stack_activation: ActivationOptions = config.GATE_STACK_ACTIVATION,
         gate_stack_residual_connection_option: ResidualConnectionOptions = config.GATE_STACK_RESIDUAL_CONNECTION_OPTION,
         gate_stack_dropout_probability: float = config.GATE_STACK_DROPOUT_PROBABILITY,
         gate_stack_last_layer_bias_option: LastLayerBiasOptions = config.GATE_STACK_LAST_LAYER_BIAS_OPTION,
         gate_stack_apply_output_pipeline_flag: bool = config.GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
-        gate_bias_flag: bool = config.GATE_BIAS_FLAG,
+        gate_stack_bias_flag: bool = config.GATE_STACK_BIAS_FLAG,
         stack_halting_flag: bool = config.HALTING_FLAG,
         halting_threshold: float = config.HALTING_THRESHOLD,
         halting_dropout: float = config.HALTING_DROPOUT,
         halting_hidden_state_mode: HaltingHiddenStateModeOptions = config.HALTING_HIDDEN_STATE_MODE,
-        halting_hidden_dim: int = config.HALTING_HIDDEN_DIM,
+        halting_stack_hidden_dim: int = config.HALTING_STACK_HIDDEN_DIM,
         halting_output_dim: int = config.HALTING_OUTPUT_DIM,
-        halting_layer_norm_position: LayerNormPositionOptions = config.HALTING_LAYER_NORM_POSITION,
+        halting_stack_layer_norm_position: LayerNormPositionOptions = config.HALTING_STACK_LAYER_NORM_POSITION,
         halting_stack_num_layers: int = config.HALTING_STACK_NUM_LAYERS,
         halting_stack_activation: ActivationOptions = config.HALTING_STACK_ACTIVATION,
         halting_stack_residual_connection_option: ResidualConnectionOptions = config.HALTING_STACK_RESIDUAL_CONNECTION_OPTION,
         halting_stack_dropout_probability: float = config.HALTING_STACK_DROPOUT_PROBABILITY,
         halting_stack_last_layer_bias_option: LastLayerBiasOptions = config.HALTING_STACK_LAST_LAYER_BIAS_OPTION,
         halting_stack_apply_output_pipeline_flag: bool = config.HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
-        halting_bias_flag: bool = config.HALTING_BIAS_FLAG,
+        halting_stack_bias_flag: bool = config.HALTING_STACK_BIAS_FLAG,
         recurrent_flag: bool = config.RECURRENT_FLAG,
         recurrent_max_steps: int = config.RECURRENT_MAX_STEPS,
         recurrent_layer_norm_position: LayerNormPositionOptions = config.RECURRENT_LAYER_NORM_POSITION,
@@ -173,8 +173,8 @@ class ExpertsLinearConfigBuilder:
         self.stack_gate_flag = stack_gate_flag
         self.gate_option = gate_option
         self.gate_activation = gate_activation
-        self.gate_hidden_dim = gate_hidden_dim
-        self.gate_layer_norm_position = gate_layer_norm_position
+        self.gate_stack_hidden_dim = gate_stack_hidden_dim
+        self.gate_stack_layer_norm_position = gate_stack_layer_norm_position
         self.gate_stack_num_layers = gate_stack_num_layers
         self.gate_stack_activation = gate_stack_activation
         self.gate_stack_residual_connection_option = (
@@ -185,15 +185,15 @@ class ExpertsLinearConfigBuilder:
         self.gate_stack_apply_output_pipeline_flag = (
             gate_stack_apply_output_pipeline_flag
         )
-        self.gate_bias_flag = gate_bias_flag
+        self.gate_stack_bias_flag = gate_stack_bias_flag
         self.shared_gate_config = shared_gate_config
         self.stack_halting_flag = stack_halting_flag
         self.halting_threshold = halting_threshold
         self.halting_dropout = halting_dropout
         self.halting_hidden_state_mode = halting_hidden_state_mode
-        self.halting_hidden_dim = halting_hidden_dim
+        self.halting_stack_hidden_dim = halting_stack_hidden_dim
         self.halting_output_dim = halting_output_dim
-        self.halting_layer_norm_position = halting_layer_norm_position
+        self.halting_stack_layer_norm_position = halting_stack_layer_norm_position
         self.halting_stack_num_layers = halting_stack_num_layers
         self.halting_stack_activation = halting_stack_activation
         self.halting_stack_residual_connection_option = (
@@ -204,7 +204,7 @@ class ExpertsLinearConfigBuilder:
         self.halting_stack_apply_output_pipeline_flag = (
             halting_stack_apply_output_pipeline_flag
         )
-        self.halting_bias_flag = halting_bias_flag
+        self.halting_stack_bias_flag = halting_stack_bias_flag
         self.recurrent_flag = recurrent_flag
         self.recurrent_max_steps = recurrent_max_steps
         self.recurrent_layer_norm_position = recurrent_layer_norm_position

@@ -201,31 +201,31 @@ class ControlConfigFactory:
     def __gate_stack_options(self) -> ControllerStackOptions:
         builder = self.builder
         return ControllerStackOptions(
-            hidden_dim=builder.gate_hidden_dim,
+            hidden_dim=builder.gate_stack_hidden_dim,
             num_layers=builder.gate_stack_num_layers,
             last_layer_bias_option=builder.gate_stack_last_layer_bias_option,
             apply_output_pipeline_flag=builder.gate_stack_apply_output_pipeline_flag,
             activation=builder.gate_stack_activation,
-            layer_norm_position=builder.gate_layer_norm_position,
+            layer_norm_position=builder.gate_stack_layer_norm_position,
             residual_connection_option=builder.gate_stack_residual_connection_option,
             dropout_probability=builder.gate_stack_dropout_probability,
-            bias_flag=builder.gate_bias_flag,
+            bias_flag=builder.gate_stack_bias_flag,
         )
 
     def __halting_stack_options(self) -> ControllerStackOptions:
         builder = self.builder
         return ControllerStackOptions(
-            hidden_dim=builder.halting_hidden_dim,
+            hidden_dim=builder.halting_stack_hidden_dim,
             num_layers=builder.halting_stack_num_layers,
             last_layer_bias_option=builder.halting_stack_last_layer_bias_option,
             apply_output_pipeline_flag=builder.halting_stack_apply_output_pipeline_flag,
             activation=builder.halting_stack_activation,
-            layer_norm_position=builder.halting_layer_norm_position,
+            layer_norm_position=builder.halting_stack_layer_norm_position,
             residual_connection_option=(
                 builder.halting_stack_residual_connection_option
             ),
             dropout_probability=builder.halting_stack_dropout_probability,
-            bias_flag=builder.halting_bias_flag,
+            bias_flag=builder.halting_stack_bias_flag,
         )
 
     def __expert_stack_options(self) -> ControllerStackOptions:

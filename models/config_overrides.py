@@ -16,22 +16,22 @@ SKIP_CONFIG_KEYS = {
 }
 
 MODEL_PARAM_ALIASES = {
-    "adaptive_stack_activation": "adaptive_generator_stack_activation",
-    "adaptive_stack_apply_output_pipeline_flag": (
+    "adaptive_submodule_stack_activation": "adaptive_generator_stack_activation",
+    "adaptive_submodule_stack_apply_output_pipeline_flag": (
         "adaptive_generator_stack_apply_output_pipeline_flag"
     ),
-    "adaptive_stack_dropout_probability": (
+    "adaptive_submodule_stack_dropout_probability": (
         "adaptive_generator_stack_dropout_probability"
     ),
-    "adaptive_stack_hidden_dim": "adaptive_generator_stack_hidden_dim",
-    "adaptive_stack_last_layer_bias_option": (
+    "adaptive_submodule_stack_hidden_dim": "adaptive_generator_stack_hidden_dim",
+    "adaptive_submodule_stack_last_layer_bias_option": (
         "adaptive_generator_stack_last_layer_bias_option"
     ),
-    "adaptive_stack_layer_norm_position": (
+    "adaptive_submodule_stack_layer_norm_position": (
         "adaptive_generator_stack_layer_norm_position"
     ),
-    "adaptive_stack_num_layers": "adaptive_generator_stack_num_layers",
-    "adaptive_stack_residual_connection_option": (
+    "adaptive_submodule_stack_num_layers": "adaptive_generator_stack_num_layers",
+    "adaptive_submodule_stack_residual_connection_option": (
         "adaptive_generator_stack_residual_connection_option"
     ),
     "expert_capacity_factor": "capacity_factor",
@@ -43,24 +43,7 @@ MODEL_PARAM_ALIASES = {
     "expert_weighted_parameters_flag": "weighted_parameters_flag",
     "expert_weighting_position_option": "weighting_position_option",
     "gate_flag": "stack_gate_flag",
-    "gate_stack_bias_flag": "gate_bias_flag",
-    "gate_stack_hidden_dim": "gate_hidden_dim",
-    "gate_stack_layer_norm_position": "gate_layer_norm_position",
     "halting_flag": "stack_halting_flag",
-    "halting_stack_bias_flag": "halting_bias_flag",
-    "halting_stack_hidden_dim": "halting_hidden_dim",
-    "halting_stack_layer_norm_position": "halting_layer_norm_position",
-    "memory_stack_bias_flag": "memory_bias_flag",
-    "memory_stack_hidden_dim": "memory_hidden_dim",
-    "memory_stack_layer_norm_position": "memory_layer_norm_position",
-    "recurrent_gate_stack_bias_flag": "recurrent_gate_bias_flag",
-    "recurrent_gate_stack_hidden_dim": "recurrent_gate_hidden_dim",
-    "recurrent_gate_stack_layer_norm_position": "recurrent_gate_layer_norm_position",
-    "recurrent_halting_stack_bias_flag": "recurrent_halting_bias_flag",
-    "recurrent_halting_stack_hidden_dim": "recurrent_halting_hidden_dim",
-    "recurrent_halting_stack_layer_norm_position": (
-        "recurrent_halting_layer_norm_position"
-    ),
     "stack_bias_flag": "bias_flag",
     "stack_hidden_dim": "hidden_dim",
     "stack_layer_norm_position": "layer_norm_position",
@@ -68,9 +51,47 @@ MODEL_PARAM_ALIASES = {
 }
 
 LEGACY_CONFIG_KEY_ALIASES = {
+    "adaptive_stack_activation": "adaptive_submodule_stack_activation",
+    "adaptive_stack_apply_output_pipeline_flag": (
+        "adaptive_submodule_stack_apply_output_pipeline_flag"
+    ),
+    "adaptive_stack_dropout_probability": (
+        "adaptive_submodule_stack_dropout_probability"
+    ),
+    "adaptive_stack_hidden_dim": "adaptive_submodule_stack_hidden_dim",
+    "adaptive_stack_last_layer_bias_option": (
+        "adaptive_submodule_stack_last_layer_bias_option"
+    ),
+    "adaptive_stack_layer_norm_position": (
+        "adaptive_submodule_stack_layer_norm_position"
+    ),
+    "adaptive_stack_num_layers": "adaptive_submodule_stack_num_layers",
+    "adaptive_stack_residual_connection_option": (
+        "adaptive_submodule_stack_residual_connection_option"
+    ),
     "bias_flag": "stack_bias_flag",
     "hidden_dim": "stack_hidden_dim",
     "layer_norm_position": "stack_layer_norm_position",
+    "gate_bias_flag": "gate_stack_bias_flag",
+    "gate_hidden_dim": "gate_stack_hidden_dim",
+    "gate_layer_norm_position": "gate_stack_layer_norm_position",
+    "halting_bias_flag": "halting_stack_bias_flag",
+    "halting_hidden_dim": "halting_stack_hidden_dim",
+    "halting_layer_norm_position": "halting_stack_layer_norm_position",
+    "memory_bias_flag": "memory_stack_bias_flag",
+    "memory_hidden_dim": "memory_stack_hidden_dim",
+    "memory_layer_norm_position": "memory_stack_layer_norm_position",
+    "recurrent_gate_bias_flag": "recurrent_gate_stack_bias_flag",
+    "recurrent_gate_hidden_dim": "recurrent_gate_stack_hidden_dim",
+    "recurrent_gate_layer_norm_position": "recurrent_gate_stack_layer_norm_position",
+    "recurrent_halting_bias_flag": "recurrent_halting_stack_bias_flag",
+    "recurrent_halting_hidden_dim": "recurrent_halting_stack_hidden_dim",
+    "recurrent_halting_layer_norm_position": (
+        "recurrent_halting_stack_layer_norm_position"
+    ),
+    "submodule_bias_flag": "submodule_stack_bias_flag",
+    "submodule_hidden_dim": "submodule_stack_hidden_dim",
+    "submodule_layer_norm_position": "submodule_stack_layer_norm_position",
 }
 
 
@@ -96,6 +117,9 @@ def search_key_to_config_key(key: str) -> str:
 
 
 def canonical_config_key(key: str) -> str:
+    stripped_key = key.strip().replace("-", "_")
+    if stripped_key.isupper():
+        return stripped_key
     normalized_key = normalize_key(key)
     return LEGACY_CONFIG_KEY_ALIASES.get(normalized_key, normalized_key).upper()
 
