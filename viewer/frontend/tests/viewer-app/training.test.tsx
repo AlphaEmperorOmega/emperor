@@ -57,6 +57,14 @@ function trainingJobPollCalls(
   );
 }
 
+function trainingRunPlanRequestBodies(
+  fetchMock: ReturnType<typeof installFetchMock>["fetchMock"],
+) {
+  return trainingRunPlanCalls(fetchMock).map(([, init]) =>
+    JSON.parse(String((init as RequestInit | undefined)?.body)),
+  );
+}
+
 function modelCatalogCalls(
   fetchMock: ReturnType<typeof installFetchMock>["fetchMock"],
 ) {
@@ -439,7 +447,7 @@ describe("ViewerApp Training And Preview", () => {
       name: /layer stack options section, 3 fields, 0 overrides/i,
     });
     const gateAccordion = within(dialog).getByRole("button", {
-      name: /gate stack options section, 1 field, 0 overrides, 1 preset/i,
+      name: /gate options section, 1 field, 0 overrides, 1 preset/i,
     });
     const layerSection = layerAccordion.closest("section");
     const gateSection = gateAccordion.closest("section");
@@ -447,7 +455,7 @@ describe("ViewerApp Training And Preview", () => {
       name: /jump to layer stack options/i,
     });
     const gateJump = within(sectionNav).getByRole("button", {
-      name: /jump to gate stack options/i,
+      name: /jump to gate options/i,
     });
     const layerNavRow = layerJump.parentElement?.parentElement;
     const gateNavRow = gateJump.parentElement?.parentElement;
@@ -890,7 +898,7 @@ describe("ViewerApp Training And Preview", () => {
         preset: "baseline",
         presets: ["baseline"],
         datasets: ["Mnist", "Cifar10"],
-        overrides: { hidden_dim: "128" },
+        overrides: { stack_hidden_dim: "128" },
         logFolder: "my_experiment",
         monitors: [],
       });
@@ -1020,7 +1028,7 @@ describe("ViewerApp Training And Preview", () => {
             model: "linear",
             preset: "baseline",
             name: "Wide snapshot",
-            overrides: { hidden_dim: "128", num_epochs: "5" },
+            overrides: { stack_hidden_dim: "128", num_epochs: "5" },
             createdAt: "2026-06-01T00:00:00.000Z",
             updatedAt: "2026-06-01T00:00:00.000Z",
           },
@@ -1084,7 +1092,7 @@ describe("ViewerApp Training And Preview", () => {
     const runList = trainingRunList(details);
     expect(within(runList).getByText("2 runs")).toBeInTheDocument();
     expect(within(runList).getByText("Wide snapshot")).toBeInTheDocument();
-    expect(within(runList).getByText("hidden_dim=128")).toBeInTheDocument();
+    expect(within(runList).getByText("stack_hidden_dim=128")).toBeInTheDocument();
 
     await user.click(
       within(runList).getByRole("button", { name: /command for run 1/i }),
@@ -1108,7 +1116,7 @@ describe("ViewerApp Training And Preview", () => {
       name: /training command/i,
     });
     expect(commandField(commandDialog)).toHaveValue(
-      "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist --logdir mixed_snapshots --config --hidden-dim 128 --num-epochs 5",
+      "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist --logdir mixed_snapshots --config --stack-hidden-dim 128 --num-epochs 5",
     );
     await user.click(
       within(commandDialog).getByRole("button", {
@@ -1141,7 +1149,7 @@ describe("ViewerApp Training And Preview", () => {
       "Wide snapshot",
     );
     expect(trainingBodies[0]).toHaveProperty(
-      "runPlan.runs.1.overrides.hidden_dim",
+      "runPlan.runs.1.overrides.stack_hidden_dim",
       "128",
     );
   });
@@ -1253,7 +1261,7 @@ describe("ViewerApp Training And Preview", () => {
             model: "linear",
             preset: "baseline",
             name: "Wide snapshot",
-            overrides: { hidden_dim: "128", num_epochs: "5" },
+            overrides: { stack_hidden_dim: "128", num_epochs: "5" },
             createdAt: "2026-06-01T00:00:00.000Z",
             updatedAt: "2026-06-01T00:00:00.000Z",
           },
@@ -1351,7 +1359,7 @@ describe("ViewerApp Training And Preview", () => {
             model: "linear",
             preset: "baseline",
             name: "Wide snapshot",
-            overrides: { hidden_dim: "128", num_epochs: "5" },
+            overrides: { stack_hidden_dim: "128", num_epochs: "5" },
             createdAt: "2026-06-01T00:00:00.000Z",
             updatedAt: "2026-06-01T00:00:00.000Z",
           },
@@ -1432,7 +1440,7 @@ describe("ViewerApp Training And Preview", () => {
             model: "linear",
             preset: "baseline",
             name: "Wide snapshot",
-            overrides: { hidden_dim: "128", num_epochs: "5" },
+            overrides: { stack_hidden_dim: "128", num_epochs: "5" },
             createdAt: "2026-06-01T00:00:00.000Z",
             updatedAt: "2026-06-01T00:00:00.000Z",
           },
@@ -1502,7 +1510,7 @@ describe("ViewerApp Training And Preview", () => {
 
     const details = await expandedTrainingDetailsReady(user);
     await user.click(within(details).getByRole("radio", { name: /^random$/i }));
-    await user.click(within(details).getByLabelText(/^search axis hidden_dim$/i));
+    await user.click(within(details).getByLabelText(/^search axis stack_hidden_dim$/i));
     await findTrainingRunSummary(
       /0\s*\/\s*2 runs;\s*0\s*\/\s*60 epochs/i,
     );
@@ -1574,7 +1582,7 @@ describe("ViewerApp Training And Preview", () => {
     );
     const runList = trainingRunList(details);
     expect(within(runList).getAllByText("Completed")).toHaveLength(2);
-    expect(within(runList).getAllByText("hidden_dim=128")).toHaveLength(2);
+    expect(within(runList).getAllByText("stack_hidden_dim=128")).toHaveLength(2);
     expect(within(runList).getByText("Cifar10")).toBeInTheDocument();
     expect(within(runList).getByText("Mnist")).toBeInTheDocument();
     expect(within(runList).getByText("2 runs")).toBeInTheDocument();
@@ -1616,7 +1624,7 @@ describe("ViewerApp Training And Preview", () => {
 
     const runList = trainingRunList(details);
     expect(within(runList).queryByText("Completed")).not.toBeInTheDocument();
-    expect(within(runList).getByText("hidden_dim=192")).toBeInTheDocument();
+    expect(within(runList).getByText("stack_hidden_dim=192")).toBeInTheDocument();
   });
 
   it("hides reset training while the next run is being created", async () => {
@@ -1688,15 +1696,15 @@ describe("ViewerApp Training And Preview", () => {
       expect(trainingBodies).toHaveLength(2);
       expect(trainingBodies[1]).toMatchObject({
         logFolder: "second_plan",
-        overrides: { hidden_dim: "192" },
+        overrides: { stack_hidden_dim: "192" },
       });
       expect(trainingBodies[1]).toHaveProperty(
-        "runPlan.runs.0.overrides.hidden_dim",
+        "runPlan.runs.0.overrides.stack_hidden_dim",
         "192",
       );
       expect(trainingBodies[1]).toHaveProperty(
         "runPlan.runs.0.command",
-        "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist --logdir second_plan --config --hidden-dim 192",
+        "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist --logdir second_plan --config --stack-hidden-dim 192",
       );
     });
   });
@@ -1709,7 +1717,7 @@ describe("ViewerApp Training And Preview", () => {
     const details = await expandedTrainingDetailsReady(user);
     await setTargetHiddenDimOverride(user, "128");
     await user.click(within(details).getByRole("radio", { name: /^grid$/i }));
-    await user.click(within(details).getByLabelText(/^search axis hidden_dim$/i));
+    await user.click(within(details).getByLabelText(/^search axis stack_hidden_dim$/i));
     expect(within(details).getByText(/1 fixed override replaced by search axes/i))
       .toBeInTheDocument();
 
@@ -1757,7 +1765,7 @@ describe("ViewerApp Training And Preview", () => {
       model: "linear",
       preset: "recurrent-gating-halting",
       dataset: "Mnist",
-      overrides: { hidden_dim: "128" },
+      overrides: { stack_hidden_dim: "128" },
     });
     expect(
       within(details).getByRole("combobox", {
@@ -1922,7 +1930,7 @@ describe("ViewerApp Training And Preview", () => {
     );
 
     await user.click(within(details).getByRole("radio", { name: /^grid$/i }));
-    await user.click(within(details).getByLabelText(/^search axis hidden_dim$/i));
+    await user.click(within(details).getByLabelText(/^search axis stack_hidden_dim$/i));
 
     expect(within(details).getByText("3 combinations")).toBeInTheDocument();
     expect(within(details).getAllByText("12 planned runs").length).toBeGreaterThan(0);
@@ -1940,8 +1948,8 @@ describe("ViewerApp Training And Preview", () => {
     await user.click(within(details).getByRole("radio", { name: /^grid$/i }));
     expect(screen.getByRole("button", { name: /start training/i })).toBeDisabled();
 
-    await user.click(within(details).getByLabelText(/^search axis hidden_dim$/i));
-    await user.click(within(details).getByLabelText(/^search value hidden_dim 128$/i));
+    await user.click(within(details).getByLabelText(/^search axis stack_hidden_dim$/i));
+    await user.click(within(details).getByLabelText(/^search value stack_hidden_dim 128$/i));
 
     expect(within(details).getByText(/1 fixed override replaced by search axes/i))
       .toBeInTheDocument();
@@ -1961,12 +1969,12 @@ describe("ViewerApp Training And Preview", () => {
         monitors: [],
         search: {
           mode: "grid",
-          values: { hidden_dim: [64] },
+          values: { stack_hidden_dim: [64] },
         },
       });
       expect(trainingBodies[0]).toHaveProperty("runPlan.summary.totalRuns", 1);
       expect(trainingBodies[0]).toHaveProperty(
-        "runPlan.runs.0.overrides.hidden_dim",
+        "runPlan.runs.0.overrides.stack_hidden_dim",
         64,
       );
     });
@@ -2021,7 +2029,7 @@ describe("ViewerApp Training And Preview", () => {
         search: {
           mode: "grid",
           values: {
-            hidden_dim: [64, 128],
+            stack_hidden_dim: [64, 128],
             stack_num_layers: [2, 4],
             stack_activation: ["RELU", "GELU"],
           },
@@ -2078,7 +2086,7 @@ describe("ViewerApp Training And Preview", () => {
         search: {
           mode: "grid",
           values: {
-            hidden_dim: [64, 128],
+            stack_hidden_dim: [64, 128],
           },
         },
       });
@@ -2102,7 +2110,7 @@ describe("ViewerApp Training And Preview", () => {
     const details = await expandedTrainingDetailsReady(user);
     await selectNewTrainingLogFolder(user, "gating_search");
     await user.click(within(details).getByRole("radio", { name: /^grid$/i }));
-    await user.click(within(details).getByLabelText(/^search axis hidden_dim$/i));
+    await user.click(within(details).getByLabelText(/^search axis stack_hidden_dim$/i));
     await user.click(
       within(details).getByLabelText(/^search axis stack_layer_norm_position$/i),
     );
@@ -2139,7 +2147,7 @@ describe("ViewerApp Training And Preview", () => {
           (trainingBodies[0] as { search?: { values?: Record<string, unknown[]> } })
             .search?.values ?? {},
         ),
-      ).not.toContain("hidden_dim");
+      ).not.toContain("stack_hidden_dim");
     });
   });
 
@@ -2199,12 +2207,87 @@ describe("ViewerApp Training And Preview", () => {
     });
   });
 
-  it("training panel posts selected monitor names", async () => {
-    const { trainingBodies } = installFetchMock();
+  it("training panel includes selected monitors in run-plan commands and job submissions", async () => {
+    const { fetchMock, trainingBodies } = installFetchMock();
     renderViewer();
     const user = userEvent.setup();
 
+    const details = await selectTrainingMonitorOption(user, /Linear layers/i);
+    await user.keyboard("{Escape}");
+
+    let requestCountAfterMonitorSelection = 0;
+    await waitFor(() => {
+      const bodies = trainingRunPlanRequestBodies(fetchMock);
+      expect(bodies[bodies.length - 1]?.monitors).toEqual(["linear"]);
+      requestCountAfterMonitorSelection = bodies.length;
+    });
+    const runList = trainingRunList(details);
+    await user.click(
+      within(runList).getByRole("button", { name: /command for run 1/i }),
+    );
+    let commandDialog = await screen.findByRole("dialog", {
+      name: /training command/i,
+    });
+    expect(commandField(commandDialog)).toHaveValue(
+      "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist --monitors linear",
+    );
+    await user.click(
+      within(commandDialog).getByRole("button", {
+        name: /close training command/i,
+      }),
+    );
+
+    await user.click(within(runList).getByRole("button", { name: /^commands$/i }));
+    commandDialog = await screen.findByRole("dialog", {
+      name: /training commands/i,
+    });
+    expect(
+      within(commandDialog).getByRole("textbox", {
+        name: /^training commands$/i,
+      }),
+    ).toHaveValue(
+      "(\n  set -e\n  source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist --monitors linear\n)",
+    );
+    await user.click(
+      within(commandDialog).getByRole("button", {
+        name: /close training commands/i,
+      }),
+    );
+
+    await setTrainingMultiSelectOption(
+      user,
+      details,
+      "Training monitors",
+      /Linear layers/i,
+      false,
+    );
+    await user.keyboard("{Escape}");
+    await waitFor(() => {
+      const bodies = trainingRunPlanRequestBodies(fetchMock);
+      expect(bodies.length).toBeGreaterThan(requestCountAfterMonitorSelection);
+      expect(bodies[bodies.length - 1]?.monitors).toEqual([]);
+    });
+    await user.click(
+      within(runList).getByRole("button", { name: /command for run 1/i }),
+    );
+    commandDialog = await screen.findByRole("dialog", {
+      name: /training command/i,
+    });
+    expect(commandField(commandDialog)).toHaveValue(
+      "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist",
+    );
+    await user.click(
+      within(commandDialog).getByRole("button", {
+        name: /close training command/i,
+      }),
+    );
+
     await selectTrainingMonitorOption(user, /Linear layers/i);
+    await user.keyboard("{Escape}");
+    await waitFor(() => {
+      const bodies = trainingRunPlanRequestBodies(fetchMock);
+      expect(bodies[bodies.length - 1]?.monitors).toEqual(["linear"]);
+    });
     await selectNewTrainingLogFolder(user, "monitor_run");
     await user.click(screen.getByRole("button", { name: /start training/i }));
 
@@ -2213,6 +2296,10 @@ describe("ViewerApp Training And Preview", () => {
         logFolder: "monitor_run",
         monitors: ["linear"],
       });
+      expect(trainingBodies[0]).toHaveProperty(
+        "runPlan.runs.0.command",
+        "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist --logdir monitor_run --monitors linear",
+      );
     });
     expect(screen.getAllByText(/1 monitors/i).length).toBeGreaterThan(0);
   });
@@ -2374,7 +2461,7 @@ describe("ViewerApp Training And Preview", () => {
       model: "linear",
       preset: "recurrent-gating-halting",
       dataset: "Mnist",
-      overrides: { hidden_dim: "128" },
+      overrides: { stack_hidden_dim: "128" },
     });
   });
 

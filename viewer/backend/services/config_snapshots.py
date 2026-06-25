@@ -201,6 +201,8 @@ class ConfigSnapshotService:
                 "Change at least one non-default field before adding a snapshot."
             )
 
+        _validate_snapshot_config(model=model, preset=preset, entries=entries)
+
         identity = _identity(model, preset, entries)
         for existing in self._list_snapshot_records(model):
             if existing.id == exclude_snapshot_id or existing.preset != preset:
@@ -211,6 +213,42 @@ class ConfigSnapshotService:
                     "A snapshot with these config values already exists."
                 )
         return entries
+
+
+def _validate_snapshot_config(
+    *,
+    model: str,
+    preset: str,
+    entries: list[dict[str, str]],
+) -> None:
+    from viewer.backend.inspector.discovery import load_model_parts
+    from viewer.backend.inspector.overrides import parse_override_mapping
+    from viewer.backend.inspector.service import build_config
+
+    overrides = {entry["key"]: entry["value"] for entry in entries}
+    try:
+        parts = load_model_parts(model)
+        parsed_overrides = parse_override_mapping(parts.config_module, overrides)
+        build_config(model, preset, config_overrides=parsed_overrides)
+    except InspectorError as exc:
+        raise InspectorError(
+            f"Invalid config snapshot overrides: {_snapshot_config_error_detail(exc)}"
+        ) from exc
+    except Exception as exc:
+        detail = str(exc) or type(exc).__name__
+        raise InspectorError(f"Invalid config snapshot overrides: {detail}") from exc
+
+
+def _snapshot_config_error_detail(exc: InspectorError) -> str:
+    message = str(exc)
+    cause = exc.__cause__
+    if (
+        message.startswith("Failed to build preset")
+        and cause is not None
+        and str(cause)
+    ):
+        return str(cause)
+    return message or type(exc).__name__
 
 
 def _now() -> str:

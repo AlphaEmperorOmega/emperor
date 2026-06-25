@@ -1,12 +1,9 @@
 import { type RefObject } from "react";
 import {
-  Camera,
   Copy,
-  FlaskConical,
   FilePlus2,
   Info,
   Pencil,
-  SlidersHorizontal,
   Target,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -193,13 +190,12 @@ export function TargetSelectorSection({
         </span>
         <SegmentedControl
           aria-label="Configuration Source"
-          className="grid w-full grid-cols-3"
+          className="grid w-full grid-cols-3 [&>button]:justify-center [&>button]:text-center"
         >
           <ViewModeButton
             active={activeTargetMode === "preset"}
             onClick={onActivatePresetMode}
           >
-            <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
             Presets
           </ViewModeButton>
           <ViewModeButton
@@ -207,7 +203,6 @@ export function TargetSelectorSection({
             disabled={!hasSnapshots}
             onClick={onActivateSnapshotMode}
           >
-            <Camera className="h-3.5 w-3.5" aria-hidden />
             Snapshots
           </ViewModeButton>
           <ViewModeButton
@@ -215,7 +210,6 @@ export function TargetSelectorSection({
             disabled={!canActivateExperimentMode}
             onClick={onActivateExperimentMode}
           >
-            <FlaskConical className="h-3.5 w-3.5" aria-hidden />
             Experiments
           </ViewModeButton>
         </SegmentedControl>

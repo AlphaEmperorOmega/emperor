@@ -89,6 +89,7 @@ describe("training requests", () => {
         selectedDatasets: ["Mnist", "FashionMnist"],
         effectiveOverrides: { hidden_size: "128" },
         logFolder: "runs",
+        selectedMonitors: ["linear_layers", "gradient_norm"],
       }),
     ).toEqual({
       modelType: "linears",
@@ -98,6 +99,7 @@ describe("training requests", () => {
       datasets: ["Mnist", "FashionMnist"],
       overrides: { hidden_size: "128" },
       logFolder: "runs",
+      monitors: ["linear_layers", "gradient_norm"],
     });
   });
 
@@ -155,6 +157,7 @@ describe("training requests", () => {
         selectedDatasets: ["Mnist"],
         effectiveOverrides,
         logFolder: "search_runs",
+        selectedMonitors: [],
         searchPayload,
       }),
     ).toEqual({
@@ -165,6 +168,7 @@ describe("training requests", () => {
       datasets: ["Mnist"],
       overrides: { learning_rate: "0.001" },
       logFolder: "search_runs",
+      monitors: [],
       search: {
         mode: "grid",
         values: {

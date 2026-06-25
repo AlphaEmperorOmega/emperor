@@ -248,6 +248,7 @@ class TrainingJobManager:
         datasets: list[str],
         overrides: dict[str, Any],
         log_folder: str = "",
+        monitors: list[str] | None = None,
         search: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         selected = self.run_plan_builder.resolve_inputs(
@@ -258,10 +259,12 @@ class TrainingJobManager:
             overrides=overrides,
             search=search,
         )
+        selected_monitors = resolve_model_monitors(selected.parts, monitors)
         return self.run_plan_builder.create(
             model=model,
             selected=selected,
             log_folder=self.run_plan_builder.valid_plan_log_folder(log_folder),
+            monitors=[monitor.name for monitor in selected_monitors],
         )
 
     def create_job(
@@ -293,6 +296,7 @@ class TrainingJobManager:
             selected=selected,
             run_plan=run_plan,
             validated_log_folder=validated_log_folder,
+            monitors=[monitor.name for monitor in selected_monitors],
         )
         planned_run_count = materialized_run_plan["summary"]["totalRuns"]
 
@@ -374,6 +378,7 @@ class TrainingJobManager:
         selected: SelectedTrainingInputs,
         run_plan: dict[str, Any] | None,
         validated_log_folder: str,
+        monitors: list[str],
     ) -> dict[str, Any]:
         if run_plan is not None:
             return self.run_plan_builder.from_submitted(
@@ -381,11 +386,13 @@ class TrainingJobManager:
                 selected=selected,
                 run_plan=run_plan,
                 log_folder=validated_log_folder,
+                monitors=monitors,
             )
         return self.run_plan_builder.create(
             model=model,
             selected=selected,
             log_folder=validated_log_folder,
+            monitors=monitors,
         )
 
     def _ensure_job_log_folder(self, validated_log_folder: str) -> None:

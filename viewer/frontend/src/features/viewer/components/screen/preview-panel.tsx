@@ -1,5 +1,5 @@
 import dynamic from "next/dynamic";
-import { GitBranch, RefreshCw } from "lucide-react";
+import { Activity, Clock3, GitBranch, RefreshCw } from "lucide-react";
 import { EmptyState } from "@/features/viewer/components/empty-state";
 import { ErrorPanel } from "@/features/viewer/components/error-panel";
 import { viewerStatusCopy } from "@/features/viewer/components/shared/status-copy";
@@ -27,7 +27,11 @@ function isNeuronModelType(modelType: string) {
 }
 
 export function PreviewPanel() {
-  const { selectedModelType } = useTargetConfig();
+  const {
+    selectedModelType,
+    selectedTargetMode,
+    selectedExperimentRunId,
+  } = useTargetConfig();
   const {
     graph,
     graphForDetail,
@@ -35,6 +39,8 @@ export function PreviewPanel() {
     edges,
     selectedNodeId,
     previewInspection,
+    isParameterStatusLoading,
+    isParameterStatusPathMismatch,
     setSelectedNodeId: onSelectNode,
     revealGraphNode: onRevealNode,
     openCluster3d,
@@ -52,6 +58,9 @@ export function PreviewPanel() {
     ? graph?.nodes.find((node) => node.typeName === "NeuronCluster")?.id ?? null
     : null;
   const hasPreviewGraph = Boolean(graph);
+  const isExperimentTargetPending =
+    selectedTargetMode === "experiment" && !selectedExperimentRunId;
+  const showActivityLoading = hasPreviewGraph && isParameterStatusLoading;
 
   return (
     <div className="relative h-full min-h-0 overflow-hidden bg-transparent">
@@ -60,14 +69,43 @@ export function PreviewPanel() {
           <ErrorPanel title="Preview failed" message={errorMessage(previewError)} />
         </div>
       )}
-      {isPreviewBuilding && (
-        <div className="absolute left-4 top-4 z-10">
-          <StatusPill
-            icon={<RefreshCw className="h-4 w-4 motion-safe:animate-spin" />}
-            label="preview"
-            value="building"
-            tone="warn"
-          />
+      {(isPreviewBuilding ||
+        isExperimentTargetPending ||
+        showActivityLoading ||
+        isParameterStatusPathMismatch) && (
+        <div className="absolute left-4 top-4 z-10 flex flex-wrap gap-2">
+          {isPreviewBuilding && (
+            <StatusPill
+              icon={<RefreshCw className="h-4 w-4 motion-safe:animate-spin" />}
+              label="preview"
+              value="building"
+              tone="warn"
+            />
+          )}
+          {isExperimentTargetPending && (
+            <StatusPill
+              icon={<Clock3 className="h-4 w-4" />}
+              label="experiment"
+              value="pending"
+              tone="warn"
+            />
+          )}
+          {showActivityLoading && (
+            <StatusPill
+              icon={<Activity className="h-4 w-4 motion-safe:animate-pulse" />}
+              label="activity"
+              value="loading"
+              tone="warn"
+            />
+          )}
+          {isParameterStatusPathMismatch && (
+            <StatusPill
+              icon={<Activity className="h-4 w-4" />}
+              label="monitor"
+              value="path mismatch"
+              tone="warn"
+            />
+          )}
         </div>
       )}
       <div className="relative h-full min-h-0 overflow-hidden">

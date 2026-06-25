@@ -212,7 +212,7 @@ class TrainingJobTests(unittest.TestCase):
                             "preset": "baseline",
                             "presets": ["baseline", "gating"],
                             "datasets": ["Mnist"],
-                            "overrides": {"hidden_dim": "128"},
+                            "overrides": {"stack_hidden_dim": "128"},
                             "logFolder": "test_model",
                             "monitors": ["linear"],
                         },
@@ -751,7 +751,7 @@ while True:
                 model="linears/linear",
                 preset="baseline",
                 datasets=["Mnist"],
-                overrides={"hidden_dim": "128"},
+                overrides={"stack_hidden_dim": "128"},
                 log_folder="test_model",
                 monitors=["linear"],
             )
@@ -2171,9 +2171,9 @@ while True:
 
         invalid_searches = [
             {"mode": "grid", "values": {"missing_axis": [1]}},
-            {"mode": "grid", "values": {"hidden_dim": []}},
-            {"mode": "random", "values": {"hidden_dim": [64]}, "randomSamples": 0},
-            {"mode": "grid", "values": {"hidden_dim": [999]}},
+            {"mode": "grid", "values": {"stack_hidden_dim": []}},
+            {"mode": "random", "values": {"stack_hidden_dim": [64]}, "randomSamples": 0},
+            {"mode": "grid", "values": {"stack_hidden_dim": [999]}},
             {"mode": "grid", "values": {}},
         ]
 

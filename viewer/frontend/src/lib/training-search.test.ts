@@ -11,9 +11,9 @@ import {
 
 const axes: SearchAxis[] = [
   {
-    key: "hidden_dim",
-    configKey: "HIDDEN_DIM",
-    searchKey: "SEARCH_SPACE_HIDDEN_DIM",
+    key: "stack_hidden_dim",
+    configKey: "STACK_HIDDEN_DIM",
+    searchKey: "SEARCH_SPACE_STACK_HIDDEN_DIM",
     label: "hidden dim",
     section: "Layer Stack Options",
     type: "int",
@@ -42,7 +42,7 @@ const axes: SearchAxis[] = [
 describe("training search lock handling", () => {
   it("treats all axes as all unlocked axes", () => {
     expect(unlockedSearchAxes(axes).map((axis) => axis.key)).toEqual([
-      "hidden_dim",
+      "stack_hidden_dim",
     ]);
   });
 
@@ -50,7 +50,7 @@ describe("training search lock handling", () => {
     const search: TrainingSearchState = {
       mode: "grid",
       selectedValues: {
-        hidden_dim: [64],
+        stack_hidden_dim: [64],
         stack_layer_norm_position: ["BEFORE", "AFTER"],
       },
       randomSamples: 10,
@@ -73,7 +73,7 @@ describe("training search lock handling", () => {
     const search: TrainingSearchState = {
       mode: "grid",
       selectedValues: {
-        hidden_dim: [64],
+        stack_hidden_dim: [64],
         stack_layer_norm_position: ["BEFORE", "AFTER"],
       },
       randomSamples: 10,
@@ -82,7 +82,7 @@ describe("training search lock handling", () => {
     expect(effectiveUnlockedTrainingSearch(search, axes)).toEqual({
       mode: "grid",
       selectedValues: {
-        hidden_dim: [64],
+        stack_hidden_dim: [64],
       },
       randomSamples: 10,
     });

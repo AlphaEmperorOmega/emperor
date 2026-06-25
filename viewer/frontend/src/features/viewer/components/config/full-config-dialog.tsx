@@ -61,6 +61,7 @@ export function FullConfigDialog({
     selectedConfigSnapshot,
     selectedTrainingSnapshotIds,
     selectedDatasets,
+    selectedMonitors,
     allConfigSnapshots,
     allConfigSnapshotGroups,
     allConfigSnapshotCount,
@@ -202,11 +203,20 @@ export function FullConfigDialog({
             modelType,
             model,
             preset,
+            monitors: selectedMonitors,
             sections,
             overrides: dialogOverrides,
           })
         : "",
-    [dialogOverrides, isTrainingCommandOpen, modelType, model, preset, sections],
+    [
+      dialogOverrides,
+      isTrainingCommandOpen,
+      modelType,
+      model,
+      preset,
+      sections,
+      selectedMonitors,
+    ],
   );
   const handleToggleAllSections = useCallback(() => {
     setOpenSections(

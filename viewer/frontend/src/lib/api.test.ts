@@ -144,14 +144,14 @@ describe("shared API value schemas", () => {
   it("accepts only primitive config override values", () => {
     expect(
       configOverridesSchema.parse({
-        hidden_dim: 128,
+        stack_hidden_dim: 128,
         learning_rate: 0.01,
         use_bias: true,
         activation: "RELU",
         optional_layer: null,
       }),
     ).toEqual({
-      hidden_dim: 128,
+      stack_hidden_dim: 128,
       learning_rate: 0.01,
       use_bias: true,
       activation: "RELU",
@@ -378,9 +378,9 @@ const successfulSearchSpaceResponse = {
   preset: "baseline",
   axes: [
     {
-      key: "hidden_dim",
-      configKey: "HIDDEN_DIM",
-      searchKey: "SEARCH_SPACE_HIDDEN_DIM",
+      key: "stack_hidden_dim",
+      configKey: "STACK_HIDDEN_DIM",
+      searchKey: "SEARCH_SPACE_STACK_HIDDEN_DIM",
       label: "Hidden dimension",
       section: "Layer Stack Options",
       type: "int",
@@ -464,7 +464,7 @@ const successfulTrainingRunFixture = {
       source: "override",
     },
     {
-      key: "hidden_dim",
+      key: "stack_hidden_dim",
       label: "Hidden dimension",
       value: 128,
       source: "search",
@@ -502,7 +502,7 @@ const successfulTrainingRunPlanFixture = {
   search: {
     mode: "grid",
     values: {
-      hidden_dim: [64, 128],
+      stack_hidden_dim: [64, 128],
       use_bias: [true, false],
       activation: ["relu"],
     },
@@ -540,7 +540,7 @@ const successfulTrainingJobFixture = {
   search: {
     mode: "grid",
     values: {
-      hidden_dim: [64, 128],
+      stack_hidden_dim: [64, 128],
       use_bias: [true, false],
     },
     randomSamples: null,
@@ -1766,9 +1766,9 @@ describe("URL and query construction", () => {
             preset: "baseline",
             axes: [
               {
-                key: "hidden_dim",
-                configKey: "HIDDEN_DIM",
-                searchKey: "SEARCH_SPACE_HIDDEN_DIM",
+                key: "stack_hidden_dim",
+                configKey: "STACK_HIDDEN_DIM",
+                searchKey: "SEARCH_SPACE_STACK_HIDDEN_DIM",
                 label: "hidden dim",
                 section: "Layer Stack Options",
                 type: "int",
@@ -1791,7 +1791,7 @@ describe("URL and query construction", () => {
       `${BASE}/models/linears/linear/search-space?preset=baseline%2Fpreset&presets=baseline%2Fpreset%2Cpost-norm`,
     );
     expect(result.axes[0]).toMatchObject({
-      key: "hidden_dim",
+      key: "stack_hidden_dim",
       values: [64, 128],
     });
   });

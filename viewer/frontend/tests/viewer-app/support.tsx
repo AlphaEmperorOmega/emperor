@@ -7,6 +7,7 @@ import {
   clearPersistedTargetSelection,
 } from "@/features/viewer/state/target/target-selection-storage";
 import { resetViewerApiBaseUrl } from "@/lib/api";
+import type { GraphParameterActivity } from "@/lib/graph";
 export { IMPLEMENTED_FEATURES } from "@/lib/feature-catalog";
 
 type MockModelIdentity = { modelType: string; model: string };
@@ -57,6 +58,7 @@ export type MockNodeData = {
   isExpanded: boolean;
   canToggleExpansion: boolean;
   canOpenMonitor?: boolean;
+  parameterActivity?: GraphParameterActivity;
   isDetailsExpanded: boolean;
   onActivateNode: () => void;
   onToggleExpansion: () => void;
@@ -229,6 +231,29 @@ export function parameterShapeRows(details: Record<string, unknown>) {
   });
 }
 
+function MockGraphParameterIndicators({
+  activity,
+}: {
+  activity?: GraphParameterActivity;
+}) {
+  if (!activity) {
+    return null;
+  }
+
+  return (
+    <span data-testid="graph-parameter-indicators">
+      <span role="img" aria-label={`Weights parameter activity: ${activity.weights.status}`}>
+        W
+      </span>
+      {activity.bias && (
+        <span role="img" aria-label={`Bias parameter activity: ${activity.bias.status}`}>
+          b
+        </span>
+      )}
+    </span>
+  );
+}
+
 vi.mock("@xyflow/react", () => ({
   ReactFlow: ({
     nodes,
@@ -374,6 +399,9 @@ vi.mock("@xyflow/react", () => ({
                           {modelSizeText}
                         </span>
                       )}
+                      <MockGraphParameterIndicators
+                        activity={moduleData.parameterActivity}
+                      />
                     </div>
                     {!isSimpleMode && <span>{moduleData.subtitle}</span>}
                     {!isSimpleMode && moduleData.clusterDiagram ? (
@@ -1179,10 +1207,10 @@ export const schemaResponse = {
   model: "linear",
   fields: [
     {
-      key: "hidden_dim",
-      configKey: "HIDDEN_DIM",
-      flag: "--hidden-dim",
-      label: "hidden dim",
+      key: "stack_hidden_dim",
+      configKey: "STACK_HIDDEN_DIM",
+      flag: "--stack-hidden-dim",
+      label: "stack hidden dim",
       section: "Layer Stack Options",
       type: "int",
       default: 256,
@@ -1205,7 +1233,7 @@ export const schemaResponse = {
       configKey: "GATE_FLAG",
       flag: "--gate-flag",
       label: "gate flag",
-      section: "Gate Stack Options",
+      section: "Gate Options",
       type: "bool",
       default: false,
       nullable: false,
@@ -1230,10 +1258,10 @@ export const searchSpaceResponse = {
   preset: "baseline",
   axes: [
     {
-      key: "hidden_dim",
-      configKey: "HIDDEN_DIM",
-      searchKey: "SEARCH_SPACE_HIDDEN_DIM",
-      label: "hidden dim",
+      key: "stack_hidden_dim",
+      configKey: "STACK_HIDDEN_DIM",
+      searchKey: "SEARCH_SPACE_STACK_HIDDEN_DIM",
+      label: "stack hidden dim",
       section: "Layer Stack Options",
       type: "int",
       values: [64, 128],
@@ -2114,15 +2142,16 @@ export function mockTrainingCommand(input: {
   preset: string;
   dataset: string;
   logFolder: string;
+  monitors?: string[];
   overrides: Record<string, unknown>;
 }) {
-	  const parts = [
-	    "source",
-	    "experiment.sh",
-	    "--model-type",
-	    input.modelType,
-	    "--model",
-	    input.model,
+  const parts = [
+    "source",
+    "experiment.sh",
+    "--model-type",
+    input.modelType,
+    "--model",
+    input.model,
     "--preset",
     input.preset,
     "--datasets",
@@ -2130,6 +2159,9 @@ export function mockTrainingCommand(input: {
   ];
   if (input.logFolder) {
     parts.push("--logdir", input.logFolder);
+  }
+  if (input.monitors && input.monitors.length > 0) {
+    parts.push("--monitors", ...input.monitors);
   }
   const entries = Object.entries(input.overrides);
   if (entries.length > 0) {
@@ -2168,12 +2200,13 @@ export function mockTrainingRunPlan(request: MockTrainingPlanRequest) {
           dataset,
           changes: [...fixedChanges, ...combination.changes],
           overrides: rowOverrides,
-	          command: mockTrainingCommand({
-	            modelType,
-	            model,
+          command: mockTrainingCommand({
+            modelType,
+            model,
             preset: runPreset,
             dataset,
             logFolder: request.logFolder ?? "",
+            monitors: request.monitors ?? [],
             overrides: rowOverrides,
           }),
           totalEpochs: Number(overrides.num_epochs ?? 30),
@@ -2190,9 +2223,9 @@ export function mockTrainingRunPlan(request: MockTrainingPlanRequest) {
     index: index + 1,
   }));
   const totalEpochs = runs.reduce((total, run) => total + run.totalEpochs, 0);
-	  return {
-	    modelType,
-	    model,
+  return {
+    modelType,
+    model,
     preset: presets[0],
     presets,
     datasets,
@@ -2631,7 +2664,9 @@ export function installFetchMock(
       dataset: string | null;
       logDir: string | null;
     }) => unknown;
-    logParameterStatusResponse?: (context: { runIds: string[] }) => unknown;
+    logParameterStatusResponse?: (
+      context: { runIds: string[] },
+    ) => unknown | Promise<unknown>;
     trainingJobStatus?: MockTrainingJobStatus;
     trainingJobResponseFactory?: (
       requestIndex: number,
@@ -3424,20 +3459,21 @@ export function installFetchMock(
     }
     if (url.endsWith("/logs/parameter-status")) {
       const body = JSON.parse(String(init?.body)) as { runIds: string[] };
-      return jsonResponse(
-        options.logParameterStatusResponse?.({ runIds: body.runIds }) ?? {
-          runs: body.runIds.map((runId) => {
-            const run = logResponse.runs.find((candidate) => candidate.id === runId);
-            return {
-              sourceId: runId,
-              preset: run?.preset ?? null,
-              dataset: run?.dataset ?? null,
-              logDir: run?.relativePath ?? null,
-              nodes: [],
-            };
-          }),
-        },
-      );
+      const responseBody = options.logParameterStatusResponse?.({
+        runIds: body.runIds,
+      }) ?? {
+        runs: body.runIds.map((runId) => {
+          const run = logResponse.runs.find((candidate) => candidate.id === runId);
+          return {
+            sourceId: runId,
+            preset: run?.preset ?? null,
+            dataset: run?.dataset ?? null,
+            logDir: run?.relativePath ?? null,
+            nodes: [],
+          };
+        }),
+      };
+      return Promise.resolve(responseBody).then((payload) => jsonResponse(payload));
     }
     return jsonResponse({ detail: `Unhandled ${url}` }, 404);
   });
@@ -3486,7 +3522,12 @@ export async function waitForOpenFullConfigButton(
   return screen.getByRole("button", { name: /open full config/i });
 }
 
-type TargetDropdownLabel = "model type" | "model" | "preset";
+type TargetDropdownLabel =
+  | "model type"
+  | "model"
+  | "preset"
+  | "experiment"
+  | "dataset";
 
 export async function findTargetCombobox(label: TargetDropdownLabel) {
   return screen.findByRole("combobox", {

@@ -8,7 +8,7 @@ import {
   type ParameterStatus,
 } from "@/lib/api";
 import { anyLogRunTagsMatchParameterNodePath } from "@/lib/historical-monitor-runs";
-import { monitorPathAliases } from "@/lib/monitor-paths";
+import { monitorPathAliases, monitorPathsMatch } from "@/lib/monitor-paths";
 import {
   buildMonitorComparisonCandidateGroups,
   createMonitorTargetResolver,
@@ -61,6 +61,7 @@ export type ParameterActivityInput = {
   graph?: InspectResponse;
   source?: MonitorChartsSource;
   status?: ParameterStatus | LogParameterStatusResponse;
+  statusLoading?: boolean;
   linearMonitorTargetResolver?: LinearMonitorTargetResolver;
 };
 
@@ -156,6 +157,18 @@ function unknownParameterChannel(
 ): GraphParameterActivityChannel {
   return {
     status: "unknown",
+    source,
+    sourceLabel,
+    observedPoints: 0,
+  };
+}
+
+function loadingParameterChannel(
+  source: GraphParameterActivitySource,
+  sourceLabel: string,
+): GraphParameterActivityChannel {
+  return {
+    status: "loading",
     source,
     sourceLabel,
     observedPoints: 0,
@@ -272,6 +285,63 @@ function isLogParameterStatusResponse(
   return Boolean(status && "runs" in status);
 }
 
+function statusNodePathsForSource({
+  source,
+  status,
+}: {
+  source?: MonitorChartsSource;
+  status?: ParameterStatus | LogParameterStatusResponse;
+}) {
+  if (!source || !status) {
+    return [];
+  }
+  if (source.kind === "active-job") {
+    return isLogParameterStatusResponse(status)
+      ? []
+      : status.nodes.map((node) => node.nodePath);
+  }
+  const sourceRunIds =
+    source.kind === "historical-run-group"
+      ? new Set(source.runs.map((run) => run.id))
+      : source.kind === "historical-run"
+        ? new Set([source.run.id])
+        : new Set<string>();
+  if (!isLogParameterStatusResponse(status) || sourceRunIds.size === 0) {
+    return [];
+  }
+  return status.runs
+    .filter((run) => sourceRunIds.has(run.sourceId))
+    .flatMap((run) => run.nodes.map((node) => node.nodePath));
+}
+
+export function deriveParameterStatusPathMismatch(
+  input: ParameterActivityInput,
+) {
+  if (!input.graph || !input.source || input.statusLoading || !input.status) {
+    return false;
+  }
+
+  const statusNodePaths = statusNodePathsForSource(input);
+  if (statusNodePaths.length === 0) {
+    return false;
+  }
+
+  const resolver =
+    input.linearMonitorTargetResolver ??
+    createLinearMonitorTargetResolver(input.graph);
+  const targetPaths = [
+    ...new Set(
+      expectedLinearParameterChannels(input.graph, resolver).map(
+        (channel) => channel.nodePath,
+      ),
+    ),
+  ];
+
+  return !statusNodePaths.some((statusPath) =>
+    targetPaths.some((targetPath) => monitorPathsMatch(statusPath, targetPath)),
+  );
+}
+
 export function deriveParameterActivityByNodePath(
   input: ParameterActivityInput,
 ): Map<string, GraphParameterActivity> | undefined {
@@ -296,11 +366,28 @@ export function deriveParameterActivityByNodePath(
   );
 
   if (input.source.kind === "active-job") {
+    const sourceLabel = `active job ${input.source.job.id}`;
+    if (input.statusLoading) {
+      return new Map(
+        targetPaths.map((targetPath) => {
+          const activity: GraphParameterActivity = {
+            targetPath,
+            weights: loadingParameterChannel("active-job", sourceLabel),
+          };
+          if (biasTargetPaths.has(targetPath)) {
+            activity.bias = loadingParameterChannel("active-job", sourceLabel);
+          }
+          return [
+            targetPath,
+            activity,
+          ];
+        }),
+      );
+    }
     const status = isLogParameterStatusResponse(input.status)
       ? undefined
       : input.status;
     const nodesByPath = statusNodeByPath(status);
-    const sourceLabel = `active job ${input.source.job.id}`;
     return new Map(
       targetPaths.map((targetPath) => {
         const node = nodesByPath.get(targetPath);
@@ -334,6 +421,24 @@ export function deriveParameterActivityByNodePath(
   );
   const sourceLabel =
     runs.length === 1 ? "1 historical run" : `${runs.length} historical runs`;
+
+  if (input.statusLoading) {
+    return new Map(
+      targetPaths.map((targetPath) => {
+        const activity: GraphParameterActivity = {
+          targetPath,
+          weights: loadingParameterChannel("historical", sourceLabel),
+        };
+        if (biasTargetPaths.has(targetPath)) {
+          activity.bias = loadingParameterChannel("historical", sourceLabel);
+        }
+        return [
+          targetPath,
+          activity,
+        ];
+      }),
+    );
+  }
 
   return new Map(
     targetPaths.map((targetPath) => {

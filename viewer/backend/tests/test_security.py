@@ -31,7 +31,7 @@ PROTECTED_ROUTE_CASES = (
             "model": "linear",
             "preset": "baseline",
             "dataset": "Mnist",
-            "overrides": {"hidden_dim": "128"},
+            "overrides": {"stack_hidden_dim": "128"},
         },
     ),
     (
@@ -44,7 +44,7 @@ PROTECTED_ROUTE_CASES = (
             "preset": "baseline",
             "presets": ["baseline"],
             "datasets": ["Mnist"],
-            "overrides": {"hidden_dim": "128"},
+            "overrides": {"stack_hidden_dim": "128"},
             "logFolder": "auth_route",
             "search": None,
         },
@@ -59,7 +59,7 @@ PROTECTED_ROUTE_CASES = (
             "preset": "baseline",
             "presets": ["baseline"],
             "datasets": ["Mnist"],
-            "overrides": {"hidden_dim": "128"},
+            "overrides": {"stack_hidden_dim": "128"},
             "logFolder": "auth_route",
             "monitors": [],
             "search": None,
@@ -182,6 +182,7 @@ class RouteAuthIntegrationTests(unittest.TestCase):
                 preset: str,
                 overrides: dict[str, object],
                 dataset: str | None,
+                log_run_id: str | None,
             ) -> dict[str, object]:
                 return {
                     "modelType": model_type,
@@ -497,7 +498,7 @@ class RouteAuthIntegrationTests(unittest.TestCase):
                         "preset": "baseline",
                         "presets": ["baseline"],
                         "datasets": ["Mnist"],
-                        "overrides": {"hidden_dim": "128"},
+                        "overrides": {"stack_hidden_dim": "128"},
                         "logFolder": "mutation_guard",
                         "monitors": [],
                         "search": None,

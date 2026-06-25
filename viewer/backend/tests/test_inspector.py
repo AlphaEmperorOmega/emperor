@@ -39,7 +39,11 @@ class InspectorServiceTests(unittest.TestCase):
         )
 
     def test_override_parsing_changes_linear_hidden_dim_graph_details(self) -> None:
-        result = inspect_model("linears/linear", "baseline", {"hidden_dim": "128"})
+        result = inspect_model(
+            "linears/linear",
+            "baseline",
+            {"stack_hidden_dim": "128"},
+        )
         node_by_id = {node["id"]: node for node in result["nodes"]}
         main_layer_details = node_by_id["main_model.layers.0"]["details"]
         output_layer_details = node_by_id["output_model"]["details"]
@@ -58,14 +62,14 @@ class InspectorServiceTests(unittest.TestCase):
 
         self.assert_neuron_linear_graph_dims(
             result,
-            hidden_dim=neuron_linear_config.HIDDEN_DIM,
+            hidden_dim=neuron_linear_config.STACK_HIDDEN_DIM,
         )
 
     def test_neuron_linear_hidden_dim_override_flows_through_graph(self) -> None:
         result = inspect_model(
             "neuron/neuron_linear",
             "baseline",
-            {"hidden_dim": "64"},
+            {"stack_hidden_dim": "64"},
         )
 
         self.assert_neuron_linear_graph_dims(result, hidden_dim=64)
@@ -160,9 +164,9 @@ class InspectorServiceTests(unittest.TestCase):
             },
         )
 
-        self.assertEqual(parsed["hidden_dim"], 128)
+        self.assertEqual(parsed["stack_hidden_dim"], 128)
         self.assertIs(parsed["layer_norm_position"], LayerNormPositionOptions.AFTER)
-        self.assertFalse(parsed["bias_flag"])
+        self.assertFalse(parsed["stack_bias_flag"])
         self.assertTrue(parsed["gate_stack_independent_flag"])
         self.assertEqual(parsed["gate_stack_hidden_dim"], 32)
         self.assertIs(
@@ -234,7 +238,7 @@ class InspectorServiceTests(unittest.TestCase):
 
     def test_empty_string_override_still_rejects_non_nullable_fields(self) -> None:
         with self.assertRaises(InspectorError):
-            parse_override_mapping(vit_linear_config, {"hidden_dim": ""})
+            parse_override_mapping(vit_linear_config, {"stack_hidden_dim": ""})
 
     def test_legacy_residual_flag_override_maps_to_connection_option(self) -> None:
         cases = (

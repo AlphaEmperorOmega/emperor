@@ -11,9 +11,9 @@ import { type ConfigField } from "@/lib/api";
 
 const fields: ConfigField[] = [
   {
-    key: "hidden_dim",
-    configKey: "HIDDEN_DIM",
-    flag: "--hidden-dim",
+    key: "stack_hidden_dim",
+    configKey: "STACK_HIDDEN_DIM",
+    flag: "--stack-hidden-dim",
     label: "Hidden Dim",
     section: "Model",
     type: "int",
@@ -74,6 +74,105 @@ const fields: ConfigField[] = [
   },
 ];
 
+const adaptiveFields: ConfigField[] = [
+  {
+    key: "weight_option_flag",
+    configKey: "WEIGHT_OPTION_FLAG",
+    flag: "--weight-option-flag",
+    label: "Weight Option Flag",
+    section: "Weight Options",
+    type: "bool",
+    default: false,
+    nullable: false,
+    choices: [true, false],
+    locked: false,
+  },
+  {
+    key: "weight_option",
+    configKey: "WEIGHT_OPTION",
+    flag: "--weight-option",
+    label: "Weight Option",
+    section: "Weight Options",
+    type: "class",
+    default: null,
+    nullable: true,
+    choices: ["SingleModelDynamicWeightConfig"],
+    locked: false,
+  },
+  {
+    key: "bias_option_flag",
+    configKey: "BIAS_OPTION_FLAG",
+    flag: "--bias-option-flag",
+    label: "Bias Option Flag",
+    section: "Bias Options",
+    type: "bool",
+    default: false,
+    nullable: false,
+    choices: [true, false],
+    locked: false,
+  },
+  {
+    key: "bias_option",
+    configKey: "BIAS_OPTION",
+    flag: "--bias-option",
+    label: "Bias Option",
+    section: "Bias Options",
+    type: "class",
+    default: null,
+    nullable: true,
+    choices: ["AdditiveDynamicBiasConfig"],
+    locked: false,
+  },
+  {
+    key: "diagonal_option_flag",
+    configKey: "DIAGONAL_OPTION_FLAG",
+    flag: "--diagonal-option-flag",
+    label: "Diagonal Option Flag",
+    section: "Diagonal Options",
+    type: "bool",
+    default: false,
+    nullable: false,
+    choices: [true, false],
+    locked: false,
+  },
+  {
+    key: "diagonal_option",
+    configKey: "DIAGONAL_OPTION",
+    flag: "--diagonal-option",
+    label: "Diagonal Option",
+    section: "Diagonal Options",
+    type: "class",
+    default: null,
+    nullable: true,
+    choices: ["StandardDynamicDiagonalConfig"],
+    locked: false,
+  },
+  {
+    key: "mask_option_flag",
+    configKey: "MASK_OPTION_FLAG",
+    flag: "--mask-option-flag",
+    label: "Mask Option Flag",
+    section: "Mask Options",
+    type: "bool",
+    default: false,
+    nullable: false,
+    choices: [true, false],
+    locked: false,
+  },
+  {
+    key: "row_mask_option",
+    configKey: "ROW_MASK_OPTION",
+    flag: "--row-mask-option",
+    label: "Row Mask Option",
+    section: "Mask Options",
+    type: "class",
+    default: null,
+    nullable: true,
+    choices: ["DiagonalAxisMaskConfig"],
+    locked: false,
+  },
+];
+
 function makeSnapshot(overrides: Record<string, string>, name = "snapshot") {
   const result = createConfigSnapshot({
     id: `snap-${name}`,
@@ -101,7 +200,7 @@ describe("config snapshots", () => {
       model: "linear",
       preset: "baseline",
       fields,
-      overrides: { hidden_dim: "64" },
+      overrides: { stack_hidden_dim: "64" },
       snapshots: [],
       createdAt: "2026-06-04T00:00:00.000Z",
     });
@@ -150,7 +249,7 @@ describe("config snapshots", () => {
 
     expect(
       configSnapshotOverrideEntries(normalizationFields, {
-        hidden_dim: "256",
+        stack_hidden_dim: "256",
         dropout: "0.2",
         use_bias: "false",
         optional_hidden_dim: "",
@@ -166,7 +265,7 @@ describe("config snapshots", () => {
       model: "linear",
       preset: "baseline",
       fields,
-      overrides: { hidden_dim: "128" },
+      overrides: { stack_hidden_dim: "128" },
       snapshots: [],
       createdAt: "2026-06-04T00:00:00.000Z",
     });
@@ -178,7 +277,7 @@ describe("config snapshots", () => {
   });
 
   it("rejects duplicate config identity and duplicate names", () => {
-    const existing = makeSnapshot({ hidden_dim: "128" }, "same name");
+    const existing = makeSnapshot({ stack_hidden_dim: "128" }, "same name");
     const duplicate = createConfigSnapshot({
       id: "snap-dup",
       name: "different name",
@@ -186,7 +285,7 @@ describe("config snapshots", () => {
       model: "linear",
       preset: "baseline",
       fields,
-      overrides: { hidden_dim: "128" },
+      overrides: { stack_hidden_dim: "128" },
       snapshots: [existing],
       createdAt: "2026-06-04T00:00:00.000Z",
     });
@@ -197,7 +296,7 @@ describe("config snapshots", () => {
       model: "linear",
       preset: "baseline",
       fields,
-      overrides: { hidden_dim: "256" },
+      overrides: { stack_hidden_dim: "256" },
       snapshots: [existing],
       createdAt: "2026-06-04T00:00:00.000Z",
     });
@@ -213,7 +312,7 @@ describe("config snapshots", () => {
   });
 
   it("allows edit validation to exclude the snapshot being updated", () => {
-    const existing = makeSnapshot({ hidden_dim: "128" }, "existing");
+    const existing = makeSnapshot({ stack_hidden_dim: "128" }, "existing");
 
     const nameResult = validateConfigSnapshotName({
       modelType: "linears",
@@ -228,7 +327,7 @@ describe("config snapshots", () => {
       model: "linear",
       preset: "baseline",
       fields,
-      overrides: { hidden_dim: "128" },
+      overrides: { stack_hidden_dim: "128" },
       snapshots: [existing],
       excludeSnapshotId: existing.id,
     });
@@ -256,6 +355,72 @@ describe("config snapshots", () => {
     });
   });
 
+  it("rejects adaptive option flags without matching options", () => {
+    const cases = [
+      ["weight_option_flag", "weight_option"],
+      ["bias_option_flag", "bias_option"],
+      ["diagonal_option_flag", "diagonal_option"],
+      ["mask_option_flag", "row_mask_option"],
+    ];
+
+    for (const [flagKey, optionKey] of cases) {
+      const result = validateConfigSnapshotCandidate({
+        modelType: "linears",
+        model: "linear_adaptive",
+        preset: "baseline",
+        fields: adaptiveFields,
+        overrides: { [flagKey]: "true" },
+        snapshots: [],
+      });
+
+      expect(result).toMatchObject({
+        ok: false,
+        error: `Invalid config snapshot overrides: ${optionKey} must be set when ${flagKey} is True.`,
+      });
+    }
+  });
+
+  it("accepts adaptive option flags with matching options", () => {
+    const cases = [
+      {
+        flagKey: "weight_option_flag",
+        optionKey: "weight_option",
+        optionValue: "SingleModelDynamicWeightConfig",
+      },
+      {
+        flagKey: "bias_option_flag",
+        optionKey: "bias_option",
+        optionValue: "AdditiveDynamicBiasConfig",
+      },
+      {
+        flagKey: "diagonal_option_flag",
+        optionKey: "diagonal_option",
+        optionValue: "StandardDynamicDiagonalConfig",
+      },
+      {
+        flagKey: "mask_option_flag",
+        optionKey: "row_mask_option",
+        optionValue: "DiagonalAxisMaskConfig",
+      },
+    ];
+
+    for (const { flagKey, optionKey, optionValue } of cases) {
+      const result = validateConfigSnapshotCandidate({
+        modelType: "linears",
+        model: "linear_adaptive",
+        preset: "baseline",
+        fields: adaptiveFields,
+        overrides: { [flagKey]: "true", [optionKey]: optionValue },
+        snapshots: [],
+      });
+
+      expect(result).toMatchObject({
+        ok: true,
+        overrides: { [flagKey]: "true", [optionKey]: optionValue },
+      });
+    }
+  });
+
   it("builds preset-only run plans when no snapshots are selected", () => {
     const plan = buildConfigSnapshotRunPlan({
       modelType: "linears",
@@ -276,7 +441,7 @@ describe("config snapshots", () => {
 
   it("builds snapshot-only run plans from selected snapshot records", () => {
     const snapshots: ConfigSnapshot[] = [
-      makeSnapshot({ hidden_dim: "128", num_epochs: "3" }, "wide"),
+      makeSnapshot({ stack_hidden_dim: "128", num_epochs: "3" }, "wide"),
     ];
 
     const plan = buildConfigSnapshotRunPlan({
@@ -297,13 +462,13 @@ describe("config snapshots", () => {
       preset: "baseline",
       snapshotId: "snap-wide",
       snapshotName: "wide",
-      overrides: { hidden_dim: "128", num_epochs: "3" },
+      overrides: { stack_hidden_dim: "128", num_epochs: "3" },
     });
   });
 
   it("builds mixed default and snapshot run plans across selected datasets", () => {
     const snapshots: ConfigSnapshot[] = [
-      makeSnapshot({ hidden_dim: "128", num_epochs: "3" }, "wide"),
+      makeSnapshot({ stack_hidden_dim: "128", num_epochs: "3" }, "wide"),
       makeSnapshot({ num_layers: "4" }, "deep"),
     ];
 
@@ -315,7 +480,7 @@ describe("config snapshots", () => {
       selectedDatasets: ["Mnist", "Cifar10"],
       snapshots,
       fields,
-      presetOverrides: { hidden_dim: "192" },
+      presetOverrides: { stack_hidden_dim: "192" },
       logFolder: "snapshots",
     });
 
@@ -327,21 +492,21 @@ describe("config snapshots", () => {
       undefined,
     ]);
     expect(plan?.runs.slice(0, 2).map((run) => run.overrides)).toEqual([
-      { hidden_dim: "192" },
-      { hidden_dim: "192" },
+      { stack_hidden_dim: "192" },
+      { stack_hidden_dim: "192" },
     ]);
     expect(plan?.runs[0]).not.toHaveProperty("snapshotId");
     expect(plan?.runs[0]).not.toHaveProperty("snapshotName");
     expect(plan?.runs[0].changes).toEqual([
       {
-        key: "hidden_dim",
+        key: "stack_hidden_dim",
         label: "Hidden Dim",
         value: "192",
         source: "override",
       },
     ]);
     expect(plan?.runs[0].command).toBe(
-      "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist --logdir snapshots --config --hidden-dim 192",
+      "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist --logdir snapshots --config --stack-hidden-dim 192",
     );
     expect(plan?.runs.map((run) => run.snapshotName)).toEqual([
       undefined,
@@ -353,7 +518,7 @@ describe("config snapshots", () => {
     ]);
     expect(plan?.runs[2].changes).toEqual([
       {
-        key: "hidden_dim",
+        key: "stack_hidden_dim",
         label: "Hidden Dim",
         value: "128",
         source: "override",
@@ -366,7 +531,7 @@ describe("config snapshots", () => {
       },
     ]);
     expect(plan?.runs[2].command).toContain("--logdir snapshots");
-    expect(plan?.runs[2].command).toContain("--config --hidden-dim 128");
+    expect(plan?.runs[2].command).toContain("--config --stack-hidden-dim 128");
     expect(plan?.runs[2].command).not.toContain("wide");
     expect(plan?.runs[2].command).not.toContain("snap-wide");
   });
@@ -374,7 +539,7 @@ describe("config snapshots", () => {
   it("keeps selected snapshots when their source preset is not selected", () => {
     const snapshots: ConfigSnapshot[] = [
       {
-        ...makeSnapshot({ hidden_dim: "128" }, "fast-wide"),
+        ...makeSnapshot({ stack_hidden_dim: "128" }, "fast-wide"),
         preset: "fast",
       },
     ];
@@ -401,14 +566,14 @@ describe("config snapshots", () => {
       preset: "fast",
       snapshotId: "snap-fast-wide",
       snapshotName: "fast-wide",
-      overrides: { hidden_dim: "128" },
+      overrides: { stack_hidden_dim: "128" },
     });
   });
 
   it("uses the first selected training preset when the target primary is deselected", () => {
     const snapshots: ConfigSnapshot[] = [
       {
-        ...makeSnapshot({ hidden_dim: "128" }, "fast-wide"),
+        ...makeSnapshot({ stack_hidden_dim: "128" }, "fast-wide"),
         preset: "fast",
       },
     ];

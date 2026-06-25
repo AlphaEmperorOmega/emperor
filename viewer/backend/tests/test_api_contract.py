@@ -883,6 +883,7 @@ SCHEMA_PARITY_CASES = (
             "datasets",
             "overrides",
             "logFolder",
+            "monitors",
             "search",
         ),
         ("modelType", "model", "preset", "datasets", "overrides"),
@@ -1871,7 +1872,7 @@ class ApiIntegrationContractTests(unittest.TestCase):
                     model="linear",
                     preset="baseline",
                     dataset="Mnist",
-                    overrides={"hidden_dim": "128"},
+                    overrides={"stack_hidden_dim": "128"},
                 ),
                 InspectionService(),
             )
@@ -1882,7 +1883,7 @@ class ApiIntegrationContractTests(unittest.TestCase):
         self.assertEqual(search_space_response.status_code, 200)
         search_space_payload = search_space_response.json()
         self.assertIn(
-            "HIDDEN_DIM", {axis["key"] for axis in search_space_payload["axes"]}
+            "STACK_HIDDEN_DIM", {axis["key"] for axis in search_space_payload["axes"]}
         )
         payload = response.model_dump(mode="json")
         self.assertEqual(payload["modelType"], "linears")

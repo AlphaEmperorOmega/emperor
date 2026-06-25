@@ -4,6 +4,7 @@ export type GraphDetailMode = "simple" | "basic" | "full";
 export type GraphScope = "opened" | "entire";
 export type GraphCoordinate = [number, number, number];
 export type GraphParameterActivityStatus =
+  | "loading"
   | "updated"
   | "unchanged"
   | "missing"

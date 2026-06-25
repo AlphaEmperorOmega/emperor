@@ -57,6 +57,7 @@ class TrainingJobRepository:
                 datasets=command.datasets,
                 overrides=command.overrides,
                 log_folder=command.log_folder,
+                monitors=command.monitors,
                 search=(
                     command.search.to_api_payload()
                     if command.search is not None

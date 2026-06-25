@@ -8,9 +8,9 @@ import { useTrainingRequestState } from "@/features/viewer/state/training/use-tr
 
 const fields: ConfigField[] = [
   {
-    key: "hidden_dim",
-    configKey: "HIDDEN_DIM",
-    flag: "--hidden-dim",
+    key: "stack_hidden_dim",
+    configKey: "STACK_HIDDEN_DIM",
+    flag: "--stack-hidden-dim",
     label: "Hidden Dim",
     section: "Model",
     type: "int",
@@ -37,9 +37,9 @@ const configSections: ConfigSection[] = [{ title: "Model", fields }];
 
 const searchAxes: SearchAxis[] = [
   {
-    key: "hidden_dim",
-    configKey: "HIDDEN_DIM",
-    searchKey: "SEARCH_SPACE_HIDDEN_DIM",
+    key: "stack_hidden_dim",
+    configKey: "STACK_HIDDEN_DIM",
+    searchKey: "SEARCH_SPACE_STACK_HIDDEN_DIM",
     label: "Hidden Dim",
     section: "Model",
     type: "int",
@@ -50,7 +50,7 @@ const searchAxes: SearchAxis[] = [
 
 const gridSearch: TrainingSearchState = {
   mode: "grid",
-  selectedValues: { hidden_dim: [128, 256] },
+  selectedValues: { stack_hidden_dim: [128, 256] },
   randomSamples: 10,
 };
 
@@ -61,7 +61,7 @@ const snapshots: ConfigSnapshot[] = [
     modelType: "linears",
     model: "linear",
     preset: "baseline",
-    overrides: { hidden_dim: "128", num_epochs: "4" },
+    overrides: { stack_hidden_dim: "128", num_epochs: "4" },
     createdAt: "2026-06-01T00:00:00.000Z",
   },
 ];
@@ -74,7 +74,7 @@ function renderRequestState({
   return renderHook(() =>
     useTrainingRequestState({
       configSections,
-      overrides: { hidden_dim: "192", dropout: "0.2" },
+      overrides: { stack_hidden_dim: "192", dropout: "0.2" },
       configSnapshotCount: snapshots.length,
       selectedTrainingSnapshots,
       selectedModelType: "linears",
@@ -108,13 +108,13 @@ describe("useTrainingRequestState", () => {
       "snapshotId",
     );
     expect(result.current.snapshotRunPlan?.runs[0].overrides).toEqual({
-      hidden_dim: "192",
+      stack_hidden_dim: "192",
       dropout: "0.2",
     });
     expect(result.current.snapshotRunPlan?.runs[1]).toMatchObject({
       snapshotId: "wide",
       snapshotName: "Wide",
-      overrides: { hidden_dim: "128", num_epochs: "4" },
+      overrides: { stack_hidden_dim: "128", num_epochs: "4" },
     });
     expect(result.current.plannedRunCount).toBe(2);
     expect(result.current.canPlan).toBe(true);
@@ -131,7 +131,7 @@ describe("useTrainingRequestState", () => {
     expect(result.current.effectiveOverrides).toEqual({ dropout: "0.2" });
     expect(result.current.searchPayload).toEqual({
       mode: "grid",
-      values: { hidden_dim: [128, 256] },
+      values: { stack_hidden_dim: [128, 256] },
     });
     expect(result.current.snapshotRunPlan).toBeUndefined();
     expect(result.current.plannedRunCount).toBe(2);

@@ -123,6 +123,34 @@ describe("useGraphPreviewOrchestration", () => {
     await waitFor(() => expect(result.current.graph.nodes).not.toEqual([]));
   });
 
+  it("exposes an experiment graph when the backend returns a canonical preset name", async () => {
+    const matchingGraph = graph("linear", "baseline", "linears");
+    const { result } = renderOrchestration({
+      ...baseInput,
+      targetModelType: "linears",
+      targetModel: "linear",
+      targetPreset: "BASELINE",
+      targetMode: "experiment",
+      targetId: "run-1",
+      controller: controller({
+        graph: matchingGraph,
+        previewRequest: {
+          modelType: "linears",
+          model: "linear",
+          preset: "BASELINE",
+          dataset: "Mnist",
+          overrides: {},
+          targetMode: "experiment",
+          targetId: "run-1",
+          logRunId: "run-1",
+        },
+      }),
+    });
+
+    expect(result.current.graph.graph).toBe(matchingGraph);
+    await waitFor(() => expect(result.current.graph.nodes).not.toEqual([]));
+  });
+
   it("does not expose a graph when the preview request belongs to another dataset", () => {
     const { result } = renderOrchestration({
       ...baseInput,

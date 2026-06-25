@@ -200,8 +200,42 @@ def _enum_choices(value: Any, annotation: Any) -> list[str]:
     return list(enum_type.__members__)
 
 
+def _class_choice_name(value: Any) -> str | None:
+    if value is None:
+        return None
+    if inspect.isclass(value):
+        return value.__name__
+    return None
+
+
+def _search_space_class_choices(
+    config_module: ModuleType,
+    key: str | None,
+    available_choices: set[str],
+) -> list[str]:
+    if key is None:
+        return []
+    search_key = f"SEARCH_SPACE_{key}"
+    search_values = getattr(config_module, search_key, None)
+    if not isinstance(search_values, list):
+        return []
+
+    ordered_choices = []
+    seen = set()
+    for search_value in search_values:
+        choice = _class_choice_name(search_value)
+        if choice is None or choice not in available_choices or choice in seen:
+            continue
+        ordered_choices.append(choice)
+        seen.add(choice)
+    return ordered_choices
+
+
 def _class_choices(
-    config_module: ModuleType, annotation: Any, current_value: Any
+    config_module: ModuleType,
+    annotation: Any,
+    current_value: Any,
+    key: str | None = None,
 ) -> list[str]:
     expected_classes = [
         cls
@@ -225,7 +259,16 @@ def _class_choices(
             for expected in expected_classes
         ):
             choices.append(candidate.__name__)
-    return sorted(set(choices))
+    available_choices = set(choices)
+    ordered_choices = _search_space_class_choices(
+        config_module,
+        key,
+        available_choices,
+    )
+    if ordered_choices:
+        ordered_choice_set = set(ordered_choices)
+        return ordered_choices + sorted(available_choices - ordered_choice_set)
+    return sorted(available_choices)
 
 
 def _choices_for(
@@ -233,13 +276,14 @@ def _choices_for(
     value: Any,
     annotation: Any,
     kind: str,
+    key: str | None = None,
 ) -> list[Any]:
     if kind == "bool":
         return [True, False]
     if kind == "enum":
         return _enum_choices(value, annotation)
     if kind == "class":
-        return _class_choices(config_module, annotation, value)
+        return _class_choices(config_module, annotation, value, key)
     return []
 
 
@@ -352,6 +396,7 @@ def config_schema(model_name: str, preset_name: str | None = None) -> dict[str, 
                     value,
                     annotation,
                     kind,
+                    key,
                 ),
                 "locked": lock is not None,
                 "lockedValue": serialize_config_value(locked_value)

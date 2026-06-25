@@ -51,12 +51,6 @@ function SectionHeaderControl({
       data-config-section-header-control={field.key}
       className="inline-flex min-w-0 items-center gap-2 rounded-[9px] border border-line bg-black/25 px-2.5 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.025)]"
     >
-      <span className="min-w-0 truncate text-xs font-semibold leading-5 text-ink-faint">
-        {field.label}
-      </span>
-      <span className="shrink-0 font-mono text-xs font-semibold leading-none text-ink">
-        {isEnabled ? "Enabled" : "Off"}
-      </span>
       <Switch
         id={controlId}
         aria-label={field.label}

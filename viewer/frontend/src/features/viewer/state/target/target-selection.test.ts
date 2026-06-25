@@ -61,7 +61,7 @@ describe("target selection", () => {
       datasets: [dataset("Mnist"), dataset("Cifar10")],
       presets: [preset("baseline"), preset("fast", "Fast preset")],
       schemaFields: [
-        field({ key: "hidden_dim", section: "Model" }),
+        field({ key: "stack_hidden_dim", section: "Model" }),
         field({
           key: "layer_norm",
           label: "Layer Norm",
@@ -81,7 +81,7 @@ describe("target selection", () => {
       selectedModel: "linear",
       selectedPreset: "fast",
       selectedTrainingPresets: ["fast", "baseline"],
-      overrides: { hidden_dim: "128", dropout: "0.1" },
+      overrides: { stack_hidden_dim: "128", dropout: "0.1" },
     });
 
     expect(state.datasetNames).toEqual(["Mnist", "Cifar10"]);
@@ -93,7 +93,7 @@ describe("target selection", () => {
       "General",
     ]);
     expect(state.configFields.map((configField) => configField.key)).toEqual([
-      "hidden_dim",
+      "stack_hidden_dim",
       "layer_norm",
       "dropout",
     ]);
@@ -123,7 +123,7 @@ describe("target selection", () => {
     ]);
   });
 
-  it("normalizes recurrent controller schema sections for viewer display", () => {
+  it("preserves recurrent controller schema sections from config comments", () => {
     const state = deriveTargetSelectionState({
       datasets: [],
       presets: [],
@@ -160,8 +160,10 @@ describe("target selection", () => {
 
     expect(state.configSections.map((section) => section.title)).toEqual([
       "Recurrent Layer Options",
+      "Recurrent Gate Stack Options",
+      "Recurrent Halting Options",
     ]);
-    expect(state.configSections[0].fields.map((configField) => configField.key))
+    expect(state.configSections.flatMap((section) => section.fields.map((field) => field.key)))
       .toEqual([
         "recurrent_flag",
         "recurrent_layer_norm_position",
@@ -169,12 +171,14 @@ describe("target selection", () => {
         "recurrent_halting_threshold",
       ]);
     expect(
-      state.configSections[0].fields.map((configField) => configField.section),
+      state.configSections.flatMap((section) =>
+        section.fields.map((configField) => configField.section),
+      ),
     ).toEqual([
       "Recurrent Layer Options",
       "Recurrent Layer Options",
-      "Recurrent Layer Options",
-      "Recurrent Layer Options",
+      "Recurrent Gate Stack Options",
+      "Recurrent Halting Options",
     ]);
   });
 });

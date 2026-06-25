@@ -258,6 +258,16 @@ describe("historical monitor run helpers", () => {
     ).toBe(true);
     expect(
       logRunHasLayerMonitorData({
+        scalarTags: [
+          "main_model.layers.0.model/weights/spectral_norm",
+          "main_model.layers.0.model/weights/grad_norm",
+        ],
+        histogramTags: [],
+        imageTags: [],
+      }),
+    ).toBe(true);
+    expect(
+      logRunHasLayerMonitorData({
         scalarTags: [],
         histogramTags: ["main_model.0.model/histogram/usage"],
         imageTags: [],
@@ -265,7 +275,13 @@ describe("historical monitor run helpers", () => {
     ).toBe(false);
     expect(
       logRunHasLayerMonitorData({
-        scalarTags: ["epoch", "train/loss", "test/accuracy"],
+        scalarTags: [
+          "epoch",
+          "train/loss",
+          "test/accuracy",
+          "parameters/global_norm",
+          "gradients/global_norm",
+        ],
         histogramTags: [],
         imageTags: [],
       }),

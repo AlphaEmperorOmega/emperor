@@ -11,6 +11,7 @@ import {
 } from "@/lib/api";
 import { useGraphViewState } from "@/features/viewer/state/graph-monitor/use-graph-view-state";
 import {
+  presetIdentityMatches,
   usePreviewInspectionState,
 } from "@/features/viewer/state/graph-monitor/use-preview-inspection";
 import {
@@ -166,7 +167,7 @@ export function useGraphPreviewOrchestration({
     !previewRequest ||
     (previewRequest.modelType === targetModelType &&
       previewRequest.model === targetModel &&
-      previewRequest.preset === targetPreset &&
+      presetIdentityMatches(previewRequest.preset, targetPreset) &&
       (previewRequest.dataset ?? "") === targetDataset &&
       (previewRequest.targetMode ?? "preset") === targetMode &&
       (previewRequest.targetId ?? previewRequest.preset) === targetId &&
@@ -175,7 +176,7 @@ export function useGraphPreviewOrchestration({
     graph &&
     graph.modelType === targetModelType &&
     graph.model === targetModel &&
-    graph.preset === targetPreset &&
+    presetIdentityMatches(graph.preset, targetPreset) &&
     previewRequestMatchesTarget
       ? graph
       : undefined;
@@ -200,7 +201,9 @@ export function useGraphPreviewOrchestration({
     resolveParameterActivityTargetNode,
     canOpenGraphNodeMonitor,
     parameterActivityByNodePath,
+    isParameterStatusLoading,
     isParameterStatusPartiallyLoading,
+    isParameterStatusPathMismatch,
     deriveSelectedMonitorSourceState,
   } = monitorSource;
   const graphState = useGraphViewState(targetGraph, {
@@ -260,7 +263,9 @@ export function useGraphPreviewOrchestration({
       selectedNode: graphState.selectedNode,
       selectedMonitorNode,
       selectedMonitorComparisonCandidateGroups,
+      isParameterStatusLoading,
       isParameterStatusPartiallyLoading,
+      isParameterStatusPathMismatch,
       collapseGraphNodes: graphState.collapseGraphNodes,
       revealGraphNode: graphState.revealGraphNode,
       revealGraphNodeInFull: graphState.revealGraphNodeInFull,
@@ -284,7 +289,9 @@ export function useGraphPreviewOrchestration({
       graphState.setGraphDetailMode,
       graphState.setGraphScope,
       graphState.setSelectedNodeId,
+      isParameterStatusLoading,
       isParameterStatusPartiallyLoading,
+      isParameterStatusPathMismatch,
       previewInspection,
       selectedMonitorComparisonCandidateGroups,
       selectedMonitorNode,

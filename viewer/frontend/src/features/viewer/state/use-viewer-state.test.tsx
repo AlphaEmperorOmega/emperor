@@ -46,6 +46,7 @@ import {
 import {
   type GraphNode,
   type InspectResponse,
+  type LogParameterStatusResponse,
   type LogRun,
   type ModelIdentity,
   type TrainingJob,
@@ -179,6 +180,102 @@ function monitorGraph(): InspectResponse {
       { id: "root-layer-0", source: root.id, target: wrapper.id },
       { id: "layer-0-linear-0", source: wrapper.id, target: linear.id },
     ],
+  };
+}
+
+function experimentMonitorGraph(
+  request: {
+    modelType: string;
+    model: string;
+    preset: string;
+  },
+  suffix: string,
+): InspectResponse {
+  const root = graphNode(`${suffix}-root`, "main_model", "LayerStack");
+  const wrapper = graphNode(`${suffix}-layer`, "main_model.0", "Layer");
+  const linear = graphNode(
+    `${suffix}-linear`,
+    "main_model.0.model",
+    "LinearLayer",
+    {
+      details: { weightShape: [10, 10], biasShape: [10] },
+      parameterCount: 110,
+    },
+  );
+
+  return {
+    modelType: request.modelType,
+    model: request.model,
+    preset: request.preset,
+    parameterCount: 110,
+    parameterSizeBytes: 440,
+    nodes: [root, wrapper, linear],
+    edges: [
+      { id: `${suffix}-root-layer`, source: root.id, target: wrapper.id },
+      { id: `${suffix}-layer-linear`, source: wrapper.id, target: linear.id },
+    ],
+  };
+}
+
+function parameterLogTags(runIds: string[]) {
+  return {
+    runs: runIds.map((runId) => ({
+      runId,
+      scalarTags: [
+        "main_model.0.model/weights/mean",
+        "main_model.0.model/bias/mean",
+      ],
+      histogramTags: [],
+      imageTags: [],
+      textTags: [],
+    })),
+  };
+}
+
+function performanceLogTags(runIds: string[]) {
+  return {
+    runs: runIds.map((runId) => ({
+      runId,
+      scalarTags: [
+        "epoch",
+        "train/loss",
+        "test/accuracy",
+        "parameters/global_norm",
+        "gradients/global_norm",
+        "train/confusion_matrix/class_0/class_1",
+      ],
+      histogramTags: [],
+      imageTags: ["validation/examples/predictions"],
+      textTags: [],
+    })),
+  };
+}
+
+function parameterStatus(runIds: string[]) {
+  return {
+    runs: runIds.map((runId) => ({
+      sourceId: runId,
+      preset: "baseline",
+      dataset: "Mnist",
+      logDir: `logs/${runId}`,
+      nodes: [
+        {
+          nodePath: "main_model.0.model",
+          weights: {
+            status: "updated" as const,
+            metric: "main_model.0.model/weights/relative_delta_norm",
+            lastStep: 12,
+            observedPoints: 2,
+          },
+          bias: {
+            status: "updated" as const,
+            metric: "main_model.0.model/bias/delta_norm",
+            lastStep: 12,
+            observedPoints: 2,
+          },
+        },
+      ],
+    })),
   };
 }
 
@@ -1117,6 +1214,8 @@ describe("useViewerState", () => {
       expect(result.current.history.selectedLogRunId).toBe("linear-history");
       expect(result.current.target.selectedTargetMode).toBe("experiment");
       expect(result.current.target.selectedExperimentRunId).toBe("linear-history");
+      expect(result.current.target.selectedExperimentPreset).toBe("Fast");
+      expect(result.current.target.selectedExperimentDataset).toBe("FashionMnist");
       expect(result.current.target.selectedPreset).toBe("fast");
       expect(result.current.target.selectedTrainingPresets).toEqual(["fast"]);
       expect(result.current.target.selectedDatasets).toEqual(["FashionMnist"]);
@@ -1124,11 +1223,12 @@ describe("useViewerState", () => {
     });
 
     const finalHistoricalRequests = mocks.inspectModel.mock.calls.filter(
-	      ([request]) =>
-	        request.modelType === "linears" &&
-	        request.model === "linear" &&
-        request.preset === "fast" &&
-        request.dataset === "FashionMnist",
+      ([request]) =>
+        request.modelType === "linears" &&
+        request.model === "linear" &&
+        request.preset === "Fast" &&
+        request.dataset === "FashionMnist" &&
+        request.logRunId === "linear-history",
     );
     expect(finalHistoricalRequests).toHaveLength(1);
 
@@ -1365,6 +1465,433 @@ describe("useViewerState", () => {
     expect(mocks.fetchLogParameterStatus).not.toHaveBeenCalledWith({
       runIds: ["baseline-old"],
     }, expect.any(Object));
+  });
+
+  it("adds parameter activity after selecting a non-current experiment preset through the cascade", async () => {
+    mocks.inspectModel.mockImplementation(
+      (request: { modelType: string; model: string; preset: string }) =>
+        Promise.resolve({
+          ...monitorGraph(),
+          modelType: request.modelType,
+          model: request.model,
+          preset: request.preset,
+        }),
+    );
+    mocks.fetchLogRuns.mockResolvedValueOnce({
+      runs: [
+        logRun({
+          id: "baseline-run",
+          experiment: "exp_linear",
+          preset: "baseline",
+          dataset: "Mnist",
+          timestamp: "2026-06-01 01:02:03",
+        }),
+        logRun({
+          id: "fast-run",
+          experiment: "exp_linear",
+          preset: "fast",
+          dataset: "Mnist",
+          timestamp: "2026-06-02 01:02:03",
+        }),
+      ],
+    });
+    mocks.fetchLogParameterStatus.mockImplementation(
+      (input: { runIds: string[] }) =>
+        Promise.resolve({
+          runs: input.runIds.map((runId) => ({
+            sourceId: runId,
+            preset: "fast",
+            dataset: "Mnist",
+            logDir: `logs/${runId}`,
+            nodes: [
+              {
+                nodePath: "main_model.0.model",
+                weights: {
+                  status: "updated",
+                  metric: "main_model.0.model/weights/relative_delta_norm",
+                  lastStep: 12,
+                  observedPoints: 2,
+                },
+                bias: {
+                  status: "unchanged",
+                  metric: "main_model.0.model/bias/delta_norm",
+                  lastStep: 12,
+                  observedPoints: 1,
+                },
+              },
+            ],
+          })),
+        }),
+    );
+    const { result } = renderViewerState();
+
+    await waitFor(() => {
+      expect(result.current.history.historicalExperimentOptions).toEqual([
+        { value: "exp_linear", label: "exp_linear", count: 2 },
+      ]);
+    });
+
+    act(() => {
+      result.current.history.setSelectedHistoricalExperimentFilter("exp_linear");
+    });
+    await waitFor(() => {
+      expect(result.current.history.historicalDatasetOptions).toEqual([
+        { value: "Mnist", label: "Mnist", count: 2 },
+      ]);
+    });
+
+    act(() => {
+      result.current.history.setSelectedHistoricalDatasetFilter("Mnist");
+    });
+    await waitFor(() => {
+      expect(result.current.history.historicalPresetOptions).toEqual([
+        { value: "fast", label: "fast", count: 1 },
+        { value: "baseline", label: "baseline", count: 1 },
+      ]);
+    });
+
+    act(() => {
+      result.current.history.setSelectedHistoricalPreset("fast");
+    });
+
+    await waitFor(() => {
+      expect(result.current.history.selectedLogRunId).toBe("fast-run");
+      expect(result.current.target.selectedTargetMode).toBe("experiment");
+      expect(result.current.target.selectedExperimentRunId).toBe("fast-run");
+      expect(result.current.target.selectedPreset).toBe("fast");
+      expect(result.current.history.historicalMonitorRuns.map((run) => run.id))
+        .toEqual(["fast-run"]);
+    });
+    await waitFor(() => {
+      expect(mocks.fetchLogParameterStatus).toHaveBeenCalledWith(
+        { runIds: ["fast-run"] },
+        expect.any(Object),
+      );
+    });
+    await waitFor(() => {
+      const layerNode = result.current.graph.nodes.find(
+        (node) => node.id === "layer-0",
+      );
+      expect(layerNode?.data.parameterActivity).toMatchObject({
+        targetPath: "main_model.0.model",
+        weights: {
+          status: "updated",
+          source: "historical",
+          totalRuns: 1,
+        },
+      });
+    });
+  });
+
+  it("keeps an experiment switch pending and shows loading parameter activity until status resolves", async () => {
+    const statusB = deferred<ReturnType<typeof parameterStatus>>();
+
+    mocks.fetchLogRuns.mockResolvedValueOnce({
+      runs: [
+        logRun({
+          id: "run-a",
+          experiment: "exp_a",
+          preset: "baseline",
+          dataset: "Mnist",
+          timestamp: "2026-06-01 01:02:03",
+        }),
+        logRun({
+          id: "run-b",
+          experiment: "exp_b",
+          preset: "baseline",
+          dataset: "Mnist",
+          timestamp: "2026-06-02 01:02:03",
+        }),
+      ],
+    });
+    mocks.fetchLogParameterStatus.mockImplementation(
+      (input: { runIds: string[] }) => {
+        if (input.runIds.length === 1 && input.runIds[0] === "run-b") {
+          return statusB.promise;
+        }
+        return Promise.resolve(parameterStatus(input.runIds));
+      },
+    );
+    mocks.inspectModel.mockImplementation(
+      (request: {
+        modelType: string;
+        model: string;
+        preset: string;
+        logRunId?: string;
+      }) =>
+        Promise.resolve(
+          experimentMonitorGraph(
+            request,
+            request.logRunId === "run-b" ? "b" : "a",
+          ),
+        ),
+    );
+
+    const { result } = renderViewerState();
+
+    await waitFor(() => {
+      expect(result.current.history.historicalExperimentOptions).toEqual([
+        { value: "exp_b", label: "exp_b", count: 1 },
+        { value: "exp_a", label: "exp_a", count: 1 },
+      ]);
+    });
+
+    act(() => {
+      result.current.history.setSelectedHistoricalExperimentFilter("exp_a");
+    });
+    await waitFor(() => {
+      expect(result.current.history.historicalDatasetOptions).toEqual([
+        { value: "Mnist", label: "Mnist", count: 1 },
+      ]);
+    });
+    act(() => {
+      result.current.history.setSelectedHistoricalDatasetFilter("Mnist");
+    });
+    await waitFor(() => {
+      expect(result.current.history.historicalPresetOptions).toEqual([
+        { value: "baseline", label: "baseline", count: 1 },
+      ]);
+    });
+    act(() => {
+      result.current.history.setSelectedHistoricalPreset("baseline");
+    });
+
+    await waitFor(() => {
+      const layerNode = result.current.graph.nodes.find(
+        (node) => node.id === "a-layer",
+      );
+      expect(layerNode?.data.parameterActivity).toMatchObject({
+        weights: { status: "updated" },
+        bias: { status: "updated" },
+      });
+    });
+
+    mocks.inspectModel.mockClear();
+    act(() => {
+      result.current.history.setSelectedHistoricalExperimentFilter("exp_b");
+    });
+
+    await waitFor(() => {
+      expect(result.current.target.selectedTargetMode).toBe("experiment");
+      expect(result.current.target.selectedExperimentRunId).toBe("");
+      expect(result.current.history.historicalDatasetOptions).toEqual([
+        { value: "Mnist", label: "Mnist", count: 1 },
+      ]);
+    });
+    expect(mocks.inspectModel).not.toHaveBeenCalled();
+    expect(result.current.graph.graph).toBeUndefined();
+
+    act(() => {
+      result.current.history.setSelectedHistoricalDatasetFilter("Mnist");
+    });
+    await waitFor(() => {
+      expect(result.current.history.historicalPresetOptions).toEqual([
+        { value: "baseline", label: "baseline", count: 1 },
+      ]);
+    });
+    act(() => {
+      result.current.history.setSelectedHistoricalPreset("baseline");
+    });
+
+    await waitFor(() => {
+      expect(result.current.target.selectedTargetMode).toBe("experiment");
+      expect(result.current.target.selectedExperimentRunId).toBe("run-b");
+      expect(result.current.graph.nodes.map((node) => node.id)).toContain(
+        "b-layer",
+      );
+    });
+    expect(result.current.graph.isParameterStatusLoading).toBe(true);
+    expect(
+      result.current.graph.nodes.find((node) => node.id === "b-layer")
+        ?.data.parameterActivity,
+    ).toMatchObject({
+      weights: { status: "loading" },
+      bias: { status: "loading" },
+    });
+
+    act(() => {
+      statusB.resolve(parameterStatus(["run-b"]));
+    });
+
+    await waitFor(() => {
+      expect(result.current.graph.isParameterStatusLoading).toBe(false);
+      expect(
+        result.current.graph.nodes.find((node) => node.id === "b-layer")
+          ?.data.parameterActivity,
+      ).toMatchObject({
+        weights: { status: "updated" },
+        bias: { status: "updated" },
+      });
+    });
+  });
+
+  it("omits experiments that only have classifier or global metric tags", async () => {
+    const statusForRun = (
+      runId: string,
+      weightsStatus: "updated" | "unchanged",
+      biasStatus: "updated" | "unchanged",
+    ): LogParameterStatusResponse => ({
+      runs: [
+        {
+          sourceId: runId,
+          preset: "baseline",
+          dataset: "Mnist",
+          logDir: `logs/${runId}`,
+          nodes: [
+            {
+              nodePath: "main_model.0.model",
+              weights: {
+                status: weightsStatus,
+                metric: "main_model.0.model/weights/test_delta_norm",
+                lastStep: 12,
+                observedPoints: 2,
+              },
+              bias: {
+                status: biasStatus,
+                metric: "main_model.0.model/bias/test_delta_norm",
+                lastStep: 12,
+                observedPoints: 2,
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    mocks.fetchLogRuns.mockResolvedValueOnce({
+      runs: [
+        logRun({
+          id: "test-linear-run",
+          experiment: "test_linear",
+          preset: "baseline",
+          dataset: "Mnist",
+          timestamp: "2026-06-01 01:02:03",
+        }),
+        logRun({
+          id: "kaggle-linear-run",
+          experiment: "kaggle_linear_all",
+          preset: "KAGGLE_LINEAR",
+          dataset: "KaggleDigits",
+          timestamp: "2026-06-02 01:02:03",
+        }),
+      ],
+    });
+    mocks.fetchLogTags.mockImplementation((input: { runIds: string[] }) =>
+      Promise.resolve({
+        runs: [
+          ...parameterLogTags(
+            input.runIds.filter((runId) => runId !== "kaggle-linear-run"),
+          ).runs,
+          ...performanceLogTags(
+            input.runIds.filter((runId) => runId === "kaggle-linear-run"),
+          ).runs,
+        ],
+      }),
+    );
+    mocks.fetchLogParameterStatus.mockImplementation(
+      (input: { runIds: string[] }) =>
+        Promise.resolve(
+          statusForRun(input.runIds[0] ?? "test-linear-run", "updated", "unchanged"),
+        ),
+    );
+    mocks.inspectModel.mockImplementation(
+      (request: {
+        modelType: string;
+        model: string;
+        preset: string;
+        logRunId?: string;
+      }) =>
+        Promise.resolve(
+          experimentMonitorGraph(
+            request,
+            "test",
+          ),
+        ),
+    );
+
+    const { result } = renderViewerState();
+
+    await waitFor(() => {
+      expect(result.current.target.selectedModel).toBe("linear");
+    });
+
+    act(() => {
+      result.current.target.activateTargetExperimentMode();
+    });
+
+    await waitFor(() => {
+      expect(result.current.history.historicalExperimentOptions).toEqual([
+        { value: "test_linear", label: "test_linear", count: 1 },
+      ]);
+    });
+    expect(result.current.history.historicalExperimentOptions).not.toContainEqual(
+      { value: "kaggle_linear_all", label: "kaggle_linear_all", count: 1 },
+    );
+
+    act(() => {
+      result.current.history.setSelectedHistoricalExperimentFilter("test_linear");
+    });
+    await waitFor(() => {
+      expect(result.current.history.historicalDatasetOptions).toEqual([
+        { value: "Mnist", label: "Mnist", count: 1 },
+      ]);
+    });
+    act(() => {
+      result.current.history.setSelectedHistoricalDatasetFilter("Mnist");
+    });
+    await waitFor(() => {
+      expect(result.current.history.historicalPresetOptions).toEqual([
+        { value: "baseline", label: "baseline", count: 1 },
+      ]);
+    });
+    act(() => {
+      result.current.history.setSelectedHistoricalPreset("baseline");
+    });
+
+    await waitFor(() => {
+      expect(result.current.target.selectedExperimentRunId).toBe("test-linear-run");
+      expect(result.current.graph.nodes.map((node) => node.id)).toContain(
+        "test-layer",
+      );
+    });
+    await waitFor(() => {
+      const layerNode = result.current.graph.nodes.find(
+        (node) => node.id === "test-layer",
+      );
+      expect(layerNode?.data.parameterActivity).toMatchObject({
+        weights: {
+          status: "updated",
+          metric: "main_model.0.model/weights/test_delta_norm",
+        },
+        bias: {
+          status: "unchanged",
+          metric: "main_model.0.model/bias/test_delta_norm",
+        },
+      });
+    });
+
+    mocks.inspectModel.mockClear();
+    mocks.fetchLogParameterStatus.mockClear();
+    act(() => {
+      result.current.history.setSelectedHistoricalExperimentFilter(
+        "kaggle_linear_all",
+      );
+    });
+
+    await waitFor(() => {
+      expect(result.current.target.selectedTargetMode).toBe("experiment");
+      expect(result.current.target.selectedExperimentRunId).toBe("");
+      expect(result.current.history.selectedHistoricalExperimentFilter).toBe("");
+      expect(result.current.history.historicalDatasetOptions).toEqual([]);
+      expect(result.current.history.visibleHistoricalRuns.map((run) => run.id))
+        .toEqual(["test-linear-run"]);
+    });
+    expect(mocks.inspectModel).not.toHaveBeenCalled();
+    expect(mocks.fetchLogParameterStatus).not.toHaveBeenCalled();
+    expect(mocks.fetchLogParameterStatus).not.toHaveBeenCalledWith(
+      { runIds: ["kaggle-linear-run"] },
+      expect.any(Object),
+    );
   });
 
   it("switches from an experiment target back to a preset target with empty overrides", async () => {
@@ -1709,6 +2236,165 @@ describe("useViewerState", () => {
       runIds: ["run-fast"],
     }, expect.any(Object));
     expect(mocks.fetchMonitorParameterStatus).not.toHaveBeenCalled();
+  });
+
+  it("keeps the final experiment graph and monitor controls after stale switch responses resolve", async () => {
+    const oldInspect = deferred<InspectResponse>();
+    const finalInspect = deferred<InspectResponse>();
+    const oldTags = deferred<ReturnType<typeof parameterLogTags>>();
+    const finalTags = deferred<ReturnType<typeof parameterLogTags>>();
+    const oldStatus = deferred<ReturnType<typeof parameterStatus>>();
+    const finalStatus = deferred<ReturnType<typeof parameterStatus>>();
+
+    mocks.fetchLogRuns.mockResolvedValueOnce({
+      runs: [
+        logRun({
+          id: "run-old",
+          experiment: "exp_old",
+          preset: "baseline",
+          dataset: "Mnist",
+          timestamp: "2026-06-01 01:02:03",
+        }),
+        logRun({
+          id: "run-final",
+          experiment: "exp_final",
+          preset: "baseline",
+          dataset: "Mnist",
+          timestamp: "2026-06-02 01:02:03",
+        }),
+      ],
+    });
+    mocks.fetchLogTags.mockImplementation((input: { runIds: string[] }) => {
+      if (input.runIds.length === 1 && input.runIds[0] === "run-old") {
+        return oldTags.promise;
+      }
+      if (input.runIds.length === 1 && input.runIds[0] === "run-final") {
+        return finalTags.promise;
+      }
+      return Promise.resolve(parameterLogTags(input.runIds));
+    });
+    mocks.fetchLogParameterStatus.mockImplementation(
+      (input: { runIds: string[] }) => {
+        if (input.runIds.length === 1 && input.runIds[0] === "run-old") {
+          return oldStatus.promise;
+        }
+        if (input.runIds.length === 1 && input.runIds[0] === "run-final") {
+          return finalStatus.promise;
+        }
+        return Promise.resolve(parameterStatus(input.runIds));
+      },
+    );
+    mocks.inspectModel.mockImplementation(
+      (request: {
+        modelType: string;
+        model: string;
+        preset: string;
+        logRunId?: string;
+      }) => {
+        if (request.logRunId === "run-old") {
+          return oldInspect.promise;
+        }
+        if (request.logRunId === "run-final") {
+          return finalInspect.promise;
+        }
+        return Promise.resolve(experimentMonitorGraph(request, "initial"));
+      },
+    );
+
+    const { result } = renderViewerState();
+
+    await waitFor(() => {
+      expect(result.current.history.visibleHistoricalRuns.map((run) => run.id))
+        .toEqual(["run-final", "run-old"]);
+    });
+
+    act(() => {
+      result.current.history.selectLogRun("run-old");
+    });
+    await waitFor(() => {
+      expect(result.current.target.selectedExperimentRunId).toBe("run-old");
+      expect(mocks.inspectModel).toHaveBeenCalledWith(
+        expect.objectContaining({ logRunId: "run-old" }),
+      );
+    });
+
+    act(() => {
+      result.current.history.selectLogRun("run-final");
+    });
+    await waitFor(() => {
+      expect(result.current.target.selectedExperimentRunId).toBe("run-final");
+      expect(mocks.inspectModel).toHaveBeenCalledWith(
+        expect.objectContaining({ logRunId: "run-final" }),
+      );
+    });
+
+    act(() => {
+      result.current.target.updateOverride("hidden_size", "128", {
+        preserveTargetSelection: true,
+      });
+    });
+    await waitFor(() => {
+      expect(mocks.inspectModel).toHaveBeenCalledWith(
+        expect.objectContaining({
+          logRunId: "run-final",
+          overrides: { hidden_size: "128" },
+        }),
+      );
+    });
+
+    act(() => {
+      finalInspect.resolve(
+        experimentMonitorGraph(
+          { modelType: "linears", model: "linear", preset: "baseline" },
+          "final",
+        ),
+      );
+      finalTags.resolve(parameterLogTags(["run-final"]));
+      finalStatus.resolve(parameterStatus(["run-final"]));
+      oldInspect.resolve(
+        experimentMonitorGraph(
+          { modelType: "linears", model: "linear", preset: "baseline" },
+          "old",
+        ),
+      );
+      oldTags.resolve(parameterLogTags(["run-old"]));
+      oldStatus.resolve(parameterStatus(["run-old"]));
+    });
+
+    await waitFor(() => {
+      expect(result.current.graph.nodes.map((node) => node.id)).toContain(
+        "final-layer",
+      );
+    });
+    expect(result.current.graph.nodes.map((node) => node.id)).not.toContain(
+      "old-layer",
+    );
+    expect(
+      result.current.graphMonitor.graphMonitorSource?.kind ===
+        "historical-run-group"
+        ? result.current.graphMonitor.graphMonitorSource.runs.map((run) => run.id)
+        : [],
+    ).toEqual(["run-final"]);
+
+    await waitFor(() => {
+      const layerNode = result.current.graph.nodes.find(
+        (node) => node.id === "final-layer",
+      );
+      expect(layerNode?.data.canOpenMonitor).toBe(true);
+      expect(layerNode?.data.parameterActivity).toMatchObject({
+        targetPath: "main_model.0.model",
+        weights: {
+          status: "updated",
+          source: "historical",
+          totalRuns: 1,
+        },
+        bias: {
+          status: "updated",
+          source: "historical",
+          totalRuns: 1,
+        },
+      });
+    });
   });
 
   it("switches the sidebar model dropdown without an update loop", async () => {

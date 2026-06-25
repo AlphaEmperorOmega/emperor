@@ -7,6 +7,15 @@ const PARAMETER_MONITOR_METRICS = new Set([
   "l2_norm",
   "mean",
   "var",
+  "grad_mean",
+  "grad_var",
+  "grad_norm",
+  "update_ratio",
+  "spectral_norm",
+  "condition_number",
+  "effective_rank",
+  "dead_input_fraction",
+  "dead_output_fraction",
 ]);
 
 export type ParameterMonitorTag = {

@@ -6,6 +6,7 @@ import {
   deriveNestedConfigSections,
   disabledConfigFieldReasons,
   effectivePresetOverrides,
+  filterConfigSectionsForSearch,
   isDefaultConfigFieldValue,
   lockedOverrideKeys,
   normalizeConfigFieldValue,
@@ -52,7 +53,7 @@ function stackFieldFromCanonical(
 describe("config field value normalization", () => {
   it("matches int defaults against equivalent string input", () => {
     const intField = field({
-      key: "hidden_dim",
+      key: "stack_hidden_dim",
       type: "int",
       default: 256,
     });
@@ -74,7 +75,7 @@ describe("config field value normalization", () => {
 
   it("preserves invalid numeric text as a raw override value", () => {
     const intField = field({
-      key: "hidden_dim",
+      key: "stack_hidden_dim",
       type: "int",
       default: 256,
     });
@@ -118,14 +119,14 @@ describe("config field value normalization", () => {
 
 describe("preset override helpers", () => {
   it("filters locked fields from effective preset overrides without mutating the draft", () => {
-    const unlockedField = field({ key: "hidden_dim" });
+    const unlockedField = field({ key: "stack_hidden_dim" });
     const lockedField = field({
       key: "layer_norm",
       locked: true,
       lockedValue: true,
     });
     const overrides = {
-      hidden_dim: "128",
+      stack_hidden_dim: "128",
       layer_norm: "false",
     };
 
@@ -133,10 +134,10 @@ describe("preset override helpers", () => {
       "layer_norm",
     ]);
     expect(effectivePresetOverrides([unlockedField, lockedField], overrides)).toEqual({
-      hidden_dim: "128",
+      stack_hidden_dim: "128",
     });
     expect(overrides).toEqual({
-      hidden_dim: "128",
+      stack_hidden_dim: "128",
       layer_norm: "false",
     });
   });
@@ -149,25 +150,91 @@ describe("preset override helpers", () => {
 });
 
 describe("config section controls", () => {
+  it("keeps exact comment-section ancestors visible for nested search matches", () => {
+    const sections: ConfigSection[] = [
+      {
+        title: "Recurrent Layer Options",
+        fields: [
+          field({
+            key: "recurrent_flag",
+            type: "bool",
+            default: false,
+            section: "Recurrent Layer Options",
+          }),
+        ],
+      },
+      {
+        title: "Recurrent Gate Options",
+        fields: [
+          field({
+            key: "recurrent_gate_flag",
+            type: "bool",
+            default: false,
+            section: "Recurrent Gate Options",
+          }),
+        ],
+      },
+      {
+        title: "Recurrent Gate Stack Options",
+        fields: [
+          field({
+            key: "recurrent_gate_stack_hidden_dim",
+            label: "recurrent gate stack hidden dim",
+            section: "Recurrent Gate Stack Options",
+          }),
+        ],
+      },
+    ];
+
+    const filtered = filterConfigSectionsForSearch(sections, {
+      query: "recurrent gate stack hidden",
+    });
+    const [recurrentSection] = deriveNestedConfigSections(filtered, sections);
+
+    expect(filtered.map((section) => section.title)).toEqual([
+      "Recurrent Layer Options",
+      "Recurrent Gate Options",
+      "Recurrent Gate Stack Options",
+    ]);
+    expect(recurrentSection.title).toBe("Recurrent Layer Options");
+    expect(recurrentSection.fields.map((item) => item.key)).toEqual([
+      "recurrent_flag",
+      "recurrent_gate_flag",
+      "recurrent_gate_stack_hidden_dim",
+    ]);
+    expect(recurrentSection.children?.[0]?.title).toBe("Recurrent Gate Options");
+    expect(recurrentSection.children?.[0]?.children?.[0]?.title).toBe(
+      "Recurrent Gate Stack Options",
+    );
+  });
+
   it("uses independent stack flags to enable controller stack fields", () => {
     const sections: ConfigSection[] = [
       {
-        title: "Gate Stack Options",
+        title: "Gate Options",
         fields: [
           field({
             key: "gate_flag",
             type: "bool",
             default: true,
+            section: "Gate Options",
           }),
+        ],
+      },
+      {
+        title: "Gate Stack Options",
+        fields: [
           field({
             key: "gate_stack_independent_flag",
             type: "bool",
             default: false,
+            section: "Gate Stack Options",
           }),
           field({
             key: "gate_stack_hidden_dim",
             default: null,
             nullable: true,
+            section: "Gate Stack Options",
           }),
         ],
       },
@@ -175,11 +242,11 @@ describe("config section controls", () => {
 
     const [gateSection] = deriveNestedConfigSections(sections);
     const gateStackSection = gateSection.children?.find(
-      (section) => section.title === "Gate Model Stack",
+      (section) => section.title === "Gate Stack Options",
     );
 
     expect(gateSection.children?.map((section) => section.title)).toEqual([
-      "Gate Model Stack",
+      "Gate Stack Options",
     ]);
     expect(gateStackSection?.controlFieldKey).toBe("gate_stack_independent_flag");
 
@@ -214,27 +281,36 @@ describe("config section controls", () => {
     ];
     const sections: ConfigSection[] = [
       {
-        title: "Gate Stack Options",
+        title: "Gate Options",
         fields: [
           field({
             key: "gate_flag",
             type: "bool",
             default: true,
+            section: "Gate Options",
           }),
+        ],
+      },
+      {
+        title: "Gate Stack Options",
+        fields: [
           field({
             key: "gate_stack_independent_flag",
             type: "bool",
             default: false,
+            section: "Gate Stack Options",
           }),
           stackFieldFromCanonical(canonicalStackFields, {
             key: "gate_stack_bias_flag",
             default: true,
             nullable: true,
+            section: "Gate Stack Options",
           }),
           stackFieldFromCanonical(canonicalStackFields, {
             key: "gate_stack_apply_output_pipeline_flag",
             default: null,
             nullable: true,
+            section: "Gate Stack Options",
           }),
         ],
       },
@@ -242,7 +318,7 @@ describe("config section controls", () => {
 
     const [gateSection] = deriveNestedConfigSections(sections);
     const gateStackSection = gateSection.children?.find(
-      (section) => section.title === "Gate Model Stack",
+      (section) => section.title === "Gate Stack Options",
     );
     const gateBias = gateStackSection?.fields.find(
       (item) => item.key === "gate_stack_bias_flag",
@@ -382,7 +458,7 @@ describe("config section controls", () => {
     ).not.toBe(true);
   });
 
-  it("derives an inner stack section from a stack configuration section", () => {
+  it("keeps adaptive submodule stack fields on their comment-titled section", () => {
     const sections: ConfigSection[] = [
       {
         title: "Adaptive Submodule Stack Options",
@@ -400,12 +476,10 @@ describe("config section controls", () => {
     ];
 
     const [section] = deriveNestedConfigSections(sections);
-    const stackSection = section.children?.find(
-      (child) => child.title === "Adaptive Submodule Stack",
-    );
 
-    expect(stackSection?.controlFieldKey).toBeUndefined();
-    expect(stackSection?.fields.map((item) => item.key)).toEqual([
+    expect(section.title).toBe("Adaptive Submodule Stack Options");
+    expect(section.children).toBeUndefined();
+    expect(section.fields.map((item) => item.key)).toEqual([
       "adaptive_submodule_stack_hidden_dim",
       "adaptive_submodule_stack_num_layers",
     ]);
@@ -415,32 +489,37 @@ describe("config section controls", () => {
   it("uses adaptive option flags and generator stack flags for component sections", () => {
     const sections: ConfigSection[] = [
       {
-        title: "Weight Options",
+        title: "Weight Generator Options",
         fields: [
           field({
             key: "weight_option_flag",
             type: "bool",
             default: false,
-            section: "Weight Options",
+            section: "Weight Generator Options",
           }),
           field({
             key: "weight_option",
             type: "class",
             default: null,
             nullable: true,
-            section: "Weight Options",
+            section: "Weight Generator Options",
           }),
+        ],
+      },
+      {
+        title: "Weight Generator Stack Options",
+        fields: [
           field({
             key: "weight_generator_stack_independent_flag",
             type: "bool",
             default: false,
-            section: "Weight Options",
+            section: "Weight Generator Stack Options",
           }),
           field({
             key: "weight_generator_stack_hidden_dim",
             default: null,
             nullable: true,
-            section: "Weight Options",
+            section: "Weight Generator Stack Options",
           }),
         ],
       },
@@ -460,17 +539,22 @@ describe("config section controls", () => {
             nullable: true,
             section: "Mask Options",
           }),
+        ],
+      },
+      {
+        title: "Mask Stack Options",
+        fields: [
           field({
             key: "mask_generator_stack_independent_flag",
             type: "bool",
             default: false,
-            section: "Mask Options",
+            section: "Mask Stack Options",
           }),
           field({
             key: "mask_generator_stack_hidden_dim",
             default: null,
             nullable: true,
-            section: "Mask Options",
+            section: "Mask Stack Options",
           }),
         ],
       },
@@ -481,7 +565,7 @@ describe("config section controls", () => {
       (section) => section.title === "Weight Generator Stack Options",
     );
     const maskGeneratorSection = maskSection.children?.find(
-      (section) => section.title === "Mask Generator Stack Options",
+      (section) => section.title === "Mask Stack Options",
     );
 
     expect(weightSection.controlFieldKey).toBe("weight_option_flag");

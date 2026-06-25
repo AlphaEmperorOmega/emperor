@@ -20,7 +20,7 @@ const sections: ConfigSection[] = [
   {
     title: "Layer",
     fields: [
-      field({ key: "hidden_dim", flag: "--hidden-dim", type: "int", default: 256 }),
+      field({ key: "stack_hidden_dim", flag: "--stack-hidden-dim", type: "int", default: 256 }),
       field({ key: "activation", flag: "--activation", default: "GELU" }),
     ],
   },
@@ -68,6 +68,25 @@ describe("buildTrainingCommand", () => {
     );
   });
 
+  it("emits datasets, log folder, and monitors before config overrides", () => {
+    expect(
+      buildTrainingCommand({
+        modelType: "linears",
+        model: "linear",
+        preset: "baseline",
+        datasets: ["Mnist"],
+        logFolder: "monitor_run",
+        monitors: ["linear", "halting"],
+        sections,
+        overrides: {
+          stack_hidden_dim: "128",
+        },
+      }),
+    ).toBe(
+      "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist --logdir monitor_run --monitors linear halting --config --stack-hidden-dim 128",
+    );
+  });
+
   it("emits overrides in config schema order", () => {
     expect(
       buildTrainingCommand({
@@ -77,11 +96,11 @@ describe("buildTrainingCommand", () => {
         sections,
         overrides: {
           activation: "RELU",
-          hidden_dim: "128",
+          stack_hidden_dim: "128",
         },
       }),
     ).toBe(
-      "source experiment.sh --model-type linears --model linear --preset baseline --config --hidden-dim 128 --activation RELU",
+      "source experiment.sh --model-type linears --model linear --preset baseline --config --stack-hidden-dim 128 --activation RELU",
     );
   });
 

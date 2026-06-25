@@ -144,6 +144,35 @@ describe("usePreviewInspectionState", () => {
     );
   });
 
+  it("accepts canonical preset names returned for historical run preset labels", async () => {
+    inspectModelMock.mockResolvedValueOnce({
+      modelType: "linears",
+      model: "linear",
+      preset: "baseline",
+      parameterCount: 1,
+      parameterSizeBytes: 4,
+      nodes: [],
+      edges: [],
+    });
+
+    const { result } = renderPreview();
+    act(() =>
+      result.current.requestPreview({
+        modelType: "linears",
+        model: "linear",
+        preset: "BASELINE",
+        dataset: "Mnist",
+        overrides: {},
+        targetMode: "experiment",
+        targetId: "run-1",
+        logRunId: "run-1",
+      }),
+    );
+
+    await waitFor(() => expect(result.current.graph?.preset).toBe("baseline"));
+    expect(result.current.previewInspection.isError).toBe(false);
+  });
+
   it("passes logRunId through for experiment preview requests", async () => {
     inspectModelMock.mockResolvedValueOnce({
       modelType: "linears",
