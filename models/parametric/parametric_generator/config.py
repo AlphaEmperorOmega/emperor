@@ -46,7 +46,7 @@ INPUT_DIM: int = 28**2
 OUTPUT_DIM: int = 10
 
 # Layer stack options
-HIDDEN_DIM: int = 64
+STACK_HIDDEN_DIM: int = 64
 STACK_NUM_LAYERS: int = 1
 STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
 STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
@@ -83,7 +83,7 @@ GENERATOR_STACK_DROPOUT_PROBABILITY: float = 0.0
 
 # Hyperparameter search space
 SEARCH_SPACE_LEARNING_RATE: list = [1e-4, 1e-3]
-SEARCH_SPACE_HIDDEN_DIM: list = [32, 64]
+SEARCH_SPACE_STACK_HIDDEN_DIM: list = [32, 64]
 SEARCH_SPACE_STACK_DROPOUT_PROBABILITY: list = [0.0, 0.1]
 SEARCH_SPACE_STACK_ACTIVATION: list = [
     ActivationOptions.RELU,

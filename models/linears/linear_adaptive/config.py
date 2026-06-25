@@ -71,6 +71,8 @@ from emperor.augmentations.adaptive_parameters import (
 # Global
 BATCH_SIZE: int = 128
 NUM_EPOCHS: int = 10
+INPUT_DIM: int = 28**2
+OUTPUT_DIM: int = 10
 LEARNING_RATE: float = 1e-3
 DATASET_OPTIONS: list = [Mnist, FashionMNIST, Cifar10, Cifar100]
 
@@ -78,19 +80,14 @@ DATASET_OPTIONS: list = [Mnist, FashionMNIST, Cifar10, Cifar100]
 TRAINER_ACCELERATOR: str = "cpu"
 TRAINER_DEVICES: int = 1
 TRAINER_GRADIENT_CLIP_VAL: float = 1.0
-CALLBACK_EARLY_STOPPING_PATIENCE: int = 10
 
 # Callback
 CALLBACK_EARLY_STOPPING_METRIC: str = "validation/accuracy"
-
-# Model
-INPUT_DIM: int = 28**2
-OUTPUT_DIM: int = 10
-BIAS_FLAG: bool = True
+CALLBACK_EARLY_STOPPING_PATIENCE: int = 10
 
 #########################################################################
 # LAYER STACK OPTIONS
-HIDDEN_DIM: int = 256
+STACK_HIDDEN_DIM: int = 256
 STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = LayerNormPositionOptions.BEFORE
 STACK_NUM_LAYERS: int = 5
 STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
@@ -100,11 +97,11 @@ STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
 STACK_DROPOUT_PROBABILITY: float = 0.2
 STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT
 STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = True
-STACK_BIAS_FLAG: bool = BIAS_FLAG
+STACK_BIAS_FLAG: bool = True
 
 #########################################################################
 # LAYER STACK SUBMODULE OPTIONS
-SUBMODULE_STACK_HIDDEN_DIM: int = HIDDEN_DIM
+SUBMODULE_STACK_HIDDEN_DIM: int = STACK_HIDDEN_DIM
 SUBMODULE_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = (
     STACK_LAYER_NORM_POSITION
 )
@@ -118,12 +115,14 @@ SUBMODULE_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = (
     LastLayerBiasOptions.DEFAULT
 )
 SUBMODULE_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = False
-SUBMODULE_STACK_BIAS_FLAG: bool = BIAS_FLAG
+SUBMODULE_STACK_BIAS_FLAG: bool = STACK_BIAS_FLAG
 
 #########################################################################
 # ADAPTIVE SUBMODULE STACK OPTIONS
-ADAPTIVE_SUBMODULE_STACK_HIDDEN_DIM: int = HIDDEN_DIM
-ADAPTIVE_SUBMODULE_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = STACK_LAYER_NORM_POSITION
+ADAPTIVE_SUBMODULE_STACK_HIDDEN_DIM: int = STACK_HIDDEN_DIM
+ADAPTIVE_SUBMODULE_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = (
+    STACK_LAYER_NORM_POSITION
+)
 ADAPTIVE_SUBMODULE_STACK_NUM_LAYERS: int = 2
 ADAPTIVE_SUBMODULE_STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
 ADAPTIVE_SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
@@ -134,14 +133,15 @@ ADAPTIVE_SUBMODULE_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = (
     LastLayerBiasOptions.DEFAULT
 )
 ADAPTIVE_SUBMODULE_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = False
-ADAPTIVE_SUBMODULE_STACK_BIAS_FLAG: bool = BIAS_FLAG
+ADAPTIVE_SUBMODULE_STACK_BIAS_FLAG: bool = STACK_BIAS_FLAG
 
 #########################################################################
-# GATE STACK OPTIONS
+# GATE OPTIONS
 # If `GATE_FLAG` is False, the gate-specific parameters below are ignored.
 GATE_FLAG: bool = False
 GATE_OPTION: LayerGateOptions | None = LayerGateOptions.MULTIPLIER
 GATE_ACTIVATION: ActivationOptions | None = ActivationOptions.SIGMOID
+# GATE STACK OPTIONS
 # If False, gate model stack options inherit the layer stack submodule options.
 GATE_STACK_INDEPENDENT_FLAG: bool = False
 GATE_STACK_HIDDEN_DIM: int | None = None
@@ -163,6 +163,7 @@ HALTING_DROPOUT: float = 0.0
 HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
     HaltingHiddenStateModeOptions.RAW
 )
+# HALTING STACK OPTIONS
 # If False, halting model stack options inherit the layer stack submodule options.
 HALTING_STACK_INDEPENDENT_FLAG: bool = False
 HALTING_STACK_HIDDEN_DIM: int | None = None
@@ -187,6 +188,7 @@ MEMORY_OPTION: type[DynamicMemoryConfig] = GatedResidualDynamicMemoryConfig
 MEMORY_POSITION_OPTION: MemoryPositionOptions = MemoryPositionOptions.AFTER_AFFINE
 MEMORY_TEST_TIME_TRAINING_LEARNING_RATE: float | None = None
 MEMORY_TEST_TIME_TRAINING_NUM_INNER_STEPS: int | None = None
+# MEMORY STACK OPTIONS
 # If False, memory model stack options inherit the layer stack submodule options.
 MEMORY_STACK_INDEPENDENT_FLAG: bool = False
 MEMORY_STACK_HIDDEN_DIM: int | None = None
@@ -209,10 +211,11 @@ RECURRENT_LAYER_NORM_POSITION: LayerNormPositionOptions = (
 )
 
 #########################################################################
-# RECURRENT GATE STACK OPTIONS
+# RECURRENT GATE OPTIONS
 RECURRENT_GATE_FLAG: bool = False
 RECURRENT_GATE_OPTION: LayerGateOptions | None = LayerGateOptions.MULTIPLIER
 RECURRENT_GATE_ACTIVATION: ActivationOptions | None = ActivationOptions.SIGMOID
+# RECURRENT GATE STACK OPTIONS
 # If False, recurrent gate stack options inherit gate/submodule stack options.
 RECURRENT_GATE_STACK_INDEPENDENT_FLAG: bool = False
 RECURRENT_GATE_STACK_HIDDEN_DIM: int | None = None
@@ -233,6 +236,7 @@ RECURRENT_HALTING_DROPOUT: float = HALTING_DROPOUT
 RECURRENT_HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
     HALTING_HIDDEN_STATE_MODE
 )
+# RECURRENT HALTING STACK OPTIONS
 # If False, recurrent halting stack options inherit halting/submodule stack options.
 RECURRENT_HALTING_STACK_INDEPENDENT_FLAG: bool = False
 RECURRENT_HALTING_STACK_HIDDEN_DIM: int | None = None
@@ -248,7 +252,7 @@ RECURRENT_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool | None = None
 RECURRENT_HALTING_STACK_BIAS_FLAG: bool | None = None
 
 #########################################################################
-# WEIGHT OPTIONS
+# WEIGHT GENERATOR OPTIONS
 # If `WEIGHT_OPTION_FLAG` is False, the weight-specific parameters below are ignored.
 WEIGHT_OPTION_FLAG: bool = False
 WEIGHT_OPTION: type[DynamicWeightConfig] | None = None
@@ -265,7 +269,7 @@ WEIGHT_NORMALIZATION_POSITION_OPTION: WeightNormalizationPositionOptions = (
 WEIGHT_BANK_EXPANSION_FACTOR: BankExpansionFactorOptions = (
     BankExpansionFactorOptions.FACTOR_OF_THREE
 )
-# Weight generator stack options.
+# WEIGHT GENERATOR STACK OPTIONS
 # If False, weight generator stack options inherit ADAPTIVE_SUBMODULE_STACK_*.
 WEIGHT_GENERATOR_STACK_INDEPENDENT_FLAG: bool = False
 WEIGHT_GENERATOR_STACK_HIDDEN_DIM: int | None = None
@@ -282,7 +286,7 @@ WEIGHT_GENERATOR_STACK_BIAS_FLAG: bool | None = None
 
 
 #########################################################################
-# BIAS OPTIONS
+# BIAS GENERATOR OPTIONS
 # If `BIAS_OPTION_FLAG` is False, the bias-specific parameters below are ignored.
 BIAS_OPTION_FLAG: bool = False
 BIAS_OPTION: type[DynamicBiasConfig] | None = None
@@ -292,7 +296,7 @@ BIAS_DECAY_WARMUP_BATCHES: int = 0
 BIAS_BANK_EXPANSION_FACTOR: BankExpansionFactorOptions = (
     BankExpansionFactorOptions.FACTOR_OF_TWO
 )
-# Bias generator stack options.
+# BIAS GENERATOR STACK OPTIONS
 # If False, bias generator stack options inherit ADAPTIVE_SUBMODULE_STACK_*.
 BIAS_GENERATOR_STACK_INDEPENDENT_FLAG: bool = False
 BIAS_GENERATOR_STACK_HIDDEN_DIM: int | None = None
@@ -306,12 +310,12 @@ BIAS_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool | None = None
 BIAS_GENERATOR_STACK_BIAS_FLAG: bool | None = None
 
 #########################################################################
-# DIAGONAL OPTIONS
+# DIAGONAL GENERATOR OPTIONS
 # If `DIAGONAL_OPTION_FLAG` is False, the diagonal-specific parameters below are
 # ignored.
 DIAGONAL_OPTION_FLAG: bool = False
 DIAGONAL_OPTION: type[DynamicDiagonalConfig] | None = None
-# Diagonal generator stack options.
+# DIAGONAL GENERATOR STACK OPTIONS
 # If False, diagonal generator stack options inherit ADAPTIVE_SUBMODULE_STACK_*.
 DIAGONAL_GENERATOR_STACK_INDEPENDENT_FLAG: bool = False
 DIAGONAL_GENERATOR_STACK_HIDDEN_DIM: int | None = None
@@ -336,7 +340,7 @@ MASK_FLOOR: float = 0.0
 MASK_TRANSITION_WIDTH: float = 0.1
 MASK_SURROGATE_SCALE: float = 10.0
 MASK_DIMENSION_OPTION: MaskDimensionOptions = MaskDimensionOptions.COLUMN
-# Mask generator stack options.
+# MASK STACK OPTIONS
 # If False, mask generator stack options inherit ADAPTIVE_SUBMODULE_STACK_*.
 MASK_GENERATOR_STACK_INDEPENDENT_FLAG: bool = False
 MASK_GENERATOR_STACK_HIDDEN_DIM: int | None = None
@@ -387,11 +391,15 @@ INPUT_LAYER_MASK_TRANSITION_WIDTH: float = MASK_TRANSITION_WIDTH
 INPUT_LAYER_MASK_SURROGATE_SCALE: float = MASK_SURROGATE_SCALE
 INPUT_LAYER_MASK_DIMENSION_OPTION: MaskDimensionOptions = MASK_DIMENSION_OPTION
 # Input boundary adaptive generator stack options.
-INPUT_LAYER_ADAPTIVE_GENERATOR_STACK_HIDDEN_DIM: int = ADAPTIVE_SUBMODULE_STACK_HIDDEN_DIM
+INPUT_LAYER_ADAPTIVE_GENERATOR_STACK_HIDDEN_DIM: int = (
+    ADAPTIVE_SUBMODULE_STACK_HIDDEN_DIM
+)
 INPUT_LAYER_ADAPTIVE_GENERATOR_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = (
     ADAPTIVE_SUBMODULE_STACK_LAYER_NORM_POSITION
 )
-INPUT_LAYER_ADAPTIVE_GENERATOR_STACK_NUM_LAYERS: int = ADAPTIVE_SUBMODULE_STACK_NUM_LAYERS
+INPUT_LAYER_ADAPTIVE_GENERATOR_STACK_NUM_LAYERS: int = (
+    ADAPTIVE_SUBMODULE_STACK_NUM_LAYERS
+)
 INPUT_LAYER_ADAPTIVE_GENERATOR_STACK_ACTIVATION: ActivationOptions = (
     ADAPTIVE_SUBMODULE_STACK_ACTIVATION
 )
@@ -445,11 +453,15 @@ OUTPUT_LAYER_MASK_TRANSITION_WIDTH: float = MASK_TRANSITION_WIDTH
 OUTPUT_LAYER_MASK_SURROGATE_SCALE: float = MASK_SURROGATE_SCALE
 OUTPUT_LAYER_MASK_DIMENSION_OPTION: MaskDimensionOptions = MASK_DIMENSION_OPTION
 # Output boundary adaptive generator stack options.
-OUTPUT_LAYER_ADAPTIVE_GENERATOR_STACK_HIDDEN_DIM: int = ADAPTIVE_SUBMODULE_STACK_HIDDEN_DIM
+OUTPUT_LAYER_ADAPTIVE_GENERATOR_STACK_HIDDEN_DIM: int = (
+    ADAPTIVE_SUBMODULE_STACK_HIDDEN_DIM
+)
 OUTPUT_LAYER_ADAPTIVE_GENERATOR_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = (
     ADAPTIVE_SUBMODULE_STACK_LAYER_NORM_POSITION
 )
-OUTPUT_LAYER_ADAPTIVE_GENERATOR_STACK_NUM_LAYERS: int = ADAPTIVE_SUBMODULE_STACK_NUM_LAYERS
+OUTPUT_LAYER_ADAPTIVE_GENERATOR_STACK_NUM_LAYERS: int = (
+    ADAPTIVE_SUBMODULE_STACK_NUM_LAYERS
+)
 OUTPUT_LAYER_ADAPTIVE_GENERATOR_STACK_ACTIVATION: ActivationOptions = (
     ADAPTIVE_SUBMODULE_STACK_ACTIVATION
 )
@@ -475,7 +487,7 @@ OUTPUT_LAYER_ADAPTIVE_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = (
 # Global training hyperparameters.
 SEARCH_SPACE_LEARNING_RATE: list = [1e-4, 1e-3, 1e-2]
 # Main stack shape and regularization hyperparameters.
-SEARCH_SPACE_HIDDEN_DIM: list = [16, 32, 64, 128, 256, 512]
+SEARCH_SPACE_STACK_HIDDEN_DIM: list = [16, 32, 64, 128, 256, 512]
 SEARCH_SPACE_STACK_NUM_LAYERS: list = [2, 4, 8, 16, 32]
 SEARCH_SPACE_STACK_DROPOUT_PROBABILITY: list = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
 # Main stack normalization and activation hyperparameters.

@@ -32,7 +32,7 @@ class BertLinearConfigBuilder:
         batch_size: int = config.BATCH_SIZE,
         learning_rate: float = config.LEARNING_RATE,
         input_dim: int = config.INPUT_DIM,
-        hidden_dim: int = config.HIDDEN_DIM,
+        stack_hidden_dim: int = config.STACK_HIDDEN_DIM,
         output_dim: int = config.OUTPUT_DIM,
         sequence_length: int = config.SEQUENCE_LENGTH,
         stack_num_layers: int = config.STACK_NUM_LAYERS,
@@ -56,7 +56,7 @@ class BertLinearConfigBuilder:
         self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.input_dim = input_dim
-        self.hidden_dim = hidden_dim
+        self.hidden_dim = stack_hidden_dim
         self.output_dim = output_dim
         self.sequence_length = sequence_length
         self.stack_num_layers = stack_num_layers

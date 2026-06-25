@@ -123,7 +123,7 @@ class TestParametricVectorModel(unittest.TestCase):
     def test_builder_returns_boundary_style_experiment_config(self):
         cfg = ParametricVectorConfigBuilder(
             input_dim=8,
-            hidden_dim=4,
+            stack_hidden_dim=4,
             output_dim=3,
         ).build()
 
@@ -148,7 +148,7 @@ class TestParametricVectorModel(unittest.TestCase):
         hidden_dim = 5
         cfg = ExperimentPresets()._preset(
             input_dim=8,
-            hidden_dim=hidden_dim,
+            stack_hidden_dim=hidden_dim,
             output_dim=3,
         )
         stack_config = cfg.experiment_config.model_config
@@ -187,7 +187,7 @@ class TestParametricVectorModel(unittest.TestCase):
         )
 
     def test_vector_shared_router_is_rejected(self):
-        cfg = ExperimentPresets()._preset(input_dim=8, hidden_dim=4, output_dim=3)
+        cfg = ExperimentPresets()._preset(input_dim=8, stack_hidden_dim=4, output_dim=3)
         parametric_config = deepcopy(
             cfg.experiment_config.model_config.layer_config.layer_model_config
         )
@@ -299,7 +299,7 @@ class TestParametricVectorModel(unittest.TestCase):
 
     def test_model_step_accepts_tuple_output(self):
         batch_size = 2
-        cfg = ExperimentPresets()._preset(input_dim=8, hidden_dim=4, output_dim=3)
+        cfg = ExperimentPresets()._preset(input_dim=8, stack_hidden_dim=4, output_dim=3)
         model = Model(cfg)
         X = torch.randn(batch_size, 1, 2, 4)
         y = torch.tensor([0, 2])

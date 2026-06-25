@@ -125,7 +125,7 @@ class TestParametricGeneratorModel(unittest.TestCase):
     def test_builder_returns_boundary_style_experiment_config(self):
         cfg = ParametricGeneratorConfigBuilder(
             input_dim=8,
-            hidden_dim=4,
+            stack_hidden_dim=4,
             output_dim=3,
         ).build()
 
@@ -150,7 +150,7 @@ class TestParametricGeneratorModel(unittest.TestCase):
         hidden_dim = 5
         cfg = ExperimentPresets()._preset(
             input_dim=8,
-            hidden_dim=hidden_dim,
+            stack_hidden_dim=hidden_dim,
             output_dim=3,
         )
         stack_config = cfg.experiment_config.model_config
@@ -191,7 +191,7 @@ class TestParametricGeneratorModel(unittest.TestCase):
     def test_generator_weight_and_bias_configs_use_matching_moe_configs(self):
         cfg = ExperimentPresets()._preset(
             input_dim=8,
-            hidden_dim=5,
+            stack_hidden_dim=5,
             output_dim=3,
             adaptive_mixture_top_k=1,
             adaptive_mixture_num_experts=2,
@@ -321,13 +321,13 @@ class TestParametricGeneratorModel(unittest.TestCase):
             ExperimentPreset.CONFIG,
             config.DATASET_OPTIONS[0],
             GridSearch(),
-            search_keys=["hidden_dim"],
+            search_keys=["stack_hidden_dim"],
         )
 
-        self.assertEqual(len(configs), len(config.SEARCH_SPACE_HIDDEN_DIM))
+        self.assertEqual(len(configs), len(config.SEARCH_SPACE_STACK_HIDDEN_DIM))
         self.assertEqual(
             {cfg.hidden_dim for cfg in configs},
-            set(config.SEARCH_SPACE_HIDDEN_DIM),
+            set(config.SEARCH_SPACE_STACK_HIDDEN_DIM),
         )
 
     def test_config_search_applies_generator_specific_axes(self):
@@ -354,7 +354,7 @@ class TestParametricGeneratorModel(unittest.TestCase):
 
     def test_model_step_accepts_tuple_output(self):
         batch_size = 2
-        cfg = ExperimentPresets()._preset(input_dim=8, hidden_dim=4, output_dim=3)
+        cfg = ExperimentPresets()._preset(input_dim=8, stack_hidden_dim=4, output_dim=3)
         model = Model(cfg)
         X = torch.randn(batch_size, 1, 2, 4)
         y = torch.tensor([0, 2])

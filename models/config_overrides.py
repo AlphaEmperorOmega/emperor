@@ -44,8 +44,6 @@ MODEL_PARAM_ALIASES = {
     "expert_weighting_position_option": "weighting_position_option",
     "gate_flag": "stack_gate_flag",
     "halting_flag": "stack_halting_flag",
-    "stack_bias_flag": "bias_flag",
-    "stack_hidden_dim": "hidden_dim",
     "stack_layer_norm_position": "layer_norm_position",
     "weight_generator_depth": "generator_depth",
 }
@@ -69,8 +67,6 @@ LEGACY_CONFIG_KEY_ALIASES = {
     "adaptive_stack_residual_connection_option": (
         "adaptive_submodule_stack_residual_connection_option"
     ),
-    "bias_flag": "stack_bias_flag",
-    "hidden_dim": "stack_hidden_dim",
     "layer_norm_position": "stack_layer_norm_position",
     "gate_bias_flag": "gate_stack_bias_flag",
     "gate_hidden_dim": "gate_stack_hidden_dim",

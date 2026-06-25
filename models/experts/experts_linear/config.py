@@ -85,11 +85,10 @@ CALLBACK_EARLY_STOPPING_METRIC: str = "validation/accuracy"
 # Model
 INPUT_DIM: int = 28**2
 OUTPUT_DIM: int = 10
-BIAS_FLAG: bool = True
 
 #########################################################################
 # MAIN STACK / HIDDEN DIM
-HIDDEN_DIM: int = 256
+STACK_HIDDEN_DIM: int = 256
 LAYER_NORM_POSITION: LayerNormPositionOptions = LayerNormPositionOptions.BEFORE
 STACK_NUM_LAYERS: int = 5
 STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
@@ -99,6 +98,7 @@ STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
 STACK_DROPOUT_PROBABILITY: float = 0.2
 STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT
 STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = True
+STACK_BIAS_FLAG: bool = True
 
 #########################################################################
 # GATE STACK OPTIONS (applied per outer MoE-layer in the main stack)
@@ -106,7 +106,7 @@ STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = True
 GATE_FLAG: bool = False
 GATE_OPTION: LayerGateOptions | None = LayerGateOptions.MULTIPLIER
 GATE_ACTIVATION: ActivationOptions | None = ActivationOptions.SIGMOID
-GATE_STACK_HIDDEN_DIM: int = HIDDEN_DIM
+GATE_STACK_HIDDEN_DIM: int = STACK_HIDDEN_DIM
 GATE_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = LAYER_NORM_POSITION
 GATE_STACK_NUM_LAYERS: int = 2
 GATE_STACK_ACTIVATION: ActivationOptions = ActivationOptions.TANH
@@ -127,7 +127,7 @@ HALTING_DROPOUT: float = 0.0
 HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
     HaltingHiddenStateModeOptions.RAW
 )
-HALTING_STACK_HIDDEN_DIM: int = HIDDEN_DIM
+HALTING_STACK_HIDDEN_DIM: int = STACK_HIDDEN_DIM
 HALTING_OUTPUT_DIM: int = 2
 HALTING_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = (
     LayerNormPositionOptions.DISABLED
@@ -142,7 +142,7 @@ HALTING_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = (
     LastLayerBiasOptions.DISABLED
 )
 HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = False
-HALTING_STACK_BIAS_FLAG: bool = BIAS_FLAG
+HALTING_STACK_BIAS_FLAG: bool = STACK_BIAS_FLAG
 
 #########################################################################
 # RECURRENT LAYER OPTIONS
@@ -191,7 +191,7 @@ EXPERT_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = (
 )
 EXPERT_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT
 EXPERT_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = True
-EXPERT_BIAS_FLAG: bool = BIAS_FLAG
+EXPERT_BIAS_FLAG: bool = STACK_BIAS_FLAG
 
 #########################################################################
 # SAMPLER SCALAR PARAMS
@@ -224,12 +224,12 @@ SAMPLER_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = (
     LastLayerBiasOptions.DEFAULT
 )
 SAMPLER_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = True
-SAMPLER_BIAS_FLAG: bool = BIAS_FLAG
+SAMPLER_BIAS_FLAG: bool = STACK_BIAS_FLAG
 
 #########################################################################
 # HYPERPARAMETER SEARCH SPACE
 SEARCH_SPACE_LEARNING_RATE: list = [1e-4, 1e-3, 1e-2]
-SEARCH_SPACE_HIDDEN_DIM: list = [16, 32, 64, 128, 256, 512]
+SEARCH_SPACE_STACK_HIDDEN_DIM: list = [16, 32, 64, 128, 256, 512]
 SEARCH_SPACE_STACK_NUM_LAYERS: list = [2, 4, 8, 16, 32]
 SEARCH_SPACE_STACK_DROPOUT_PROBABILITY: list = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
 SEARCH_SPACE_LAYER_NORM_POSITION: list = [

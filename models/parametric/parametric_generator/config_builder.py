@@ -18,7 +18,7 @@ class ParametricGeneratorConfigBuilder:
         batch_size: int = config.BATCH_SIZE,
         learning_rate: float = config.LEARNING_RATE,
         input_dim: int = config.INPUT_DIM,
-        hidden_dim: int = config.HIDDEN_DIM,
+        stack_hidden_dim: int = config.STACK_HIDDEN_DIM,
         output_dim: int = config.OUTPUT_DIM,
         stack_num_layers: int = config.STACK_NUM_LAYERS,
         stack_activation: ActivationOptions = config.STACK_ACTIVATION,
@@ -67,7 +67,7 @@ class ParametricGeneratorConfigBuilder:
         self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.input_dim = input_dim
-        self.hidden_dim = hidden_dim
+        self.hidden_dim = stack_hidden_dim
         self.output_dim = output_dim
         self.stack_num_layers = stack_num_layers
         self.stack_activation = stack_activation

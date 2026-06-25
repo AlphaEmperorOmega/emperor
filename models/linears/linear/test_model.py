@@ -1,3 +1,5 @@
+import contextlib
+import io
 import importlib
 import runpy
 import sys
@@ -173,16 +175,14 @@ class TestLinearModel(unittest.TestCase):
                 self.assertTrue(callable(option.callback_factory))
                 self.assertIsNotNone(option.callback_factory())
 
-    def test_cli_legacy_and_stack_alias_flags_remain_available(self):
+    def test_cli_stack_hidden_dim_flag_uses_canonical_override(self):
         parser = get_experiment_parser(
             ExperimentPreset.names(),
             "models.linears.linear",
         )
         cases = (
-            ("--bias-flag", "false", "bias_flag", False),
-            ("--stack-bias-flag", "false", "bias_flag", False),
-            ("--hidden-dim", "64", "hidden_dim", 64),
-            ("--stack-hidden-dim", "64", "hidden_dim", 64),
+            ("--stack-bias-flag", "false", "stack_bias_flag", False),
+            ("--stack-hidden-dim", "64", "stack_hidden_dim", 64),
             (
                 "--layer-norm-position",
                 "AFTER",
@@ -208,6 +208,28 @@ class TestLinearModel(unittest.TestCase):
 
                 self.assertEqual(mode.config_overrides[override_key], expected_value)
                 self.assertEqual(mode.search_overrides, {})
+
+    def test_cli_rejects_top_level_hidden_dim_alias(self):
+        parser = get_experiment_parser(
+            ExperimentPreset.names(),
+            "models.linears.linear",
+        )
+        removed_flag = "--" + "hidden-dim"
+
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                parser.parse_args(["--preset", "baseline", removed_flag, "64"])
+
+    def test_cli_rejects_top_level_bias_flag_alias(self):
+        parser = get_experiment_parser(
+            ExperimentPreset.names(),
+            "models.linears.linear",
+        )
+        removed_flag = "--" + "bias-flag"
+
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                parser.parse_args(["--preset", "baseline", removed_flag, "false"])
 
     def test_all_presets_forward_one_mnist_batch(self):
         batch_size = 4
@@ -800,7 +822,7 @@ class TestLinearModel(unittest.TestCase):
     def test_memory_config_uses_builder_defaults(self):
         cfg = LinearConfigBuilder(
             input_dim=8,
-            hidden_dim=8,
+            stack_hidden_dim=8,
             output_dim=4,
             memory_flag=True,
         ).build()
@@ -820,7 +842,7 @@ class TestLinearModel(unittest.TestCase):
     def test_memory_config_uses_builder_overrides(self):
         cfg = LinearConfigBuilder(
             input_dim=8,
-            hidden_dim=8,
+            stack_hidden_dim=8,
             output_dim=4,
             memory_flag=True,
             memory_option=WeightedDynamicMemoryConfig,
@@ -878,7 +900,7 @@ class TestLinearModel(unittest.TestCase):
     def test_memory_enabled_forwards_one_fake_batch(self):
         cfg = LinearConfigBuilder(
             input_dim=8,
-            hidden_dim=8,
+            stack_hidden_dim=8,
             output_dim=4,
             stack_num_layers=2,
             memory_flag=True,
@@ -892,7 +914,7 @@ class TestLinearModel(unittest.TestCase):
     def test_memory_enabled_backward_produces_memory_gradients(self):
         cfg = LinearConfigBuilder(
             input_dim=8,
-            hidden_dim=8,
+            stack_hidden_dim=8,
             output_dim=4,
             stack_num_layers=2,
             memory_flag=True,
@@ -919,7 +941,7 @@ class TestLinearModel(unittest.TestCase):
     def test_recurrent_memory_stays_on_block_config(self):
         cfg = LinearConfigBuilder(
             input_dim=8,
-            hidden_dim=8,
+            stack_hidden_dim=8,
             output_dim=4,
             recurrent_flag=True,
             memory_flag=True,

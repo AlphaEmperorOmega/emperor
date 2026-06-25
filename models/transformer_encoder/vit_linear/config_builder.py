@@ -28,7 +28,7 @@ class VitLinearConfigBuilder:
         batch_size: int = config.BATCH_SIZE,
         learning_rate: float = config.LEARNING_RATE,
         input_dim: int = config.INPUT_DIM,
-        hidden_dim: int = config.HIDDEN_DIM,
+        stack_hidden_dim: int = config.STACK_HIDDEN_DIM,
         output_dim: int = config.OUTPUT_DIM,
         image_patch_size: int = config.IMAGE_PATCH_SIZE,
         input_channels: int = config.INPUT_CHANNELS,
@@ -58,7 +58,7 @@ class VitLinearConfigBuilder:
         self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.input_dim = input_dim
-        self.hidden_dim = hidden_dim
+        self.hidden_dim = stack_hidden_dim
         self.output_dim = output_dim
         self.image_patch_size = image_patch_size
         self.input_channels = input_channels

@@ -220,7 +220,7 @@ class TestVitLinearModel(unittest.TestCase):
             config.DATASET_OPTIONS[0],
             config_overrides={
                 "batch_size": 2,
-                "hidden_dim": 24,
+                "stack_hidden_dim": 24,
                 "stack_num_layers": 2,
                 "stack_activation": ActivationOptions.RELU,
                 "stack_dropout_probability": 0.2,
@@ -449,7 +449,7 @@ class TestVitLinearModel(unittest.TestCase):
     def _test_overrides(self, batch_size: int) -> dict:
         return {
             "batch_size": batch_size,
-            "hidden_dim": 16,
+            "stack_hidden_dim": 16,
             "stack_num_layers": 1,
             "attn_num_heads": 4,
             "stack_dropout_probability": 0.0,

@@ -125,11 +125,10 @@ class LinearAdaptiveConfigBuilder:
         batch_size: int = config.BATCH_SIZE,
         learning_rate: float = config.LEARNING_RATE,
         input_dim: int = config.INPUT_DIM,
-        hidden_dim: int = config.HIDDEN_DIM,
+        stack_hidden_dim: int = config.STACK_HIDDEN_DIM,
         output_dim: int = config.OUTPUT_DIM,
-        bias_flag: bool = config.BIAS_FLAG,
         layer_norm_position: LayerNormPositionOptions = config.STACK_LAYER_NORM_POSITION,
-        stack_bias_flag: bool | None = None,
+        stack_bias_flag: bool = config.STACK_BIAS_FLAG,
         stack_layer_norm_position: LayerNormPositionOptions | None = None,
         generator_depth: DynamicDepthOptions = config.WEIGHT_GENERATOR_DEPTH,
         diagonal_option_flag: bool = config.DIAGONAL_OPTION_FLAG,
@@ -586,9 +585,9 @@ class LinearAdaptiveConfigBuilder:
         self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.input_dim = input_dim
-        self.hidden_dim = hidden_dim
+        self.hidden_dim = stack_hidden_dim
         self.output_dim = output_dim
-        self.bias_flag = stack_bias_flag if stack_bias_flag is not None else bias_flag
+        self.bias_flag = stack_bias_flag
         self.layer_norm_position = layer_norm_position
         self.stack_layer_norm_position = (
             stack_layer_norm_position
