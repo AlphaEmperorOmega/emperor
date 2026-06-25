@@ -307,7 +307,6 @@ class NeuronLinearConfigBuilder:
             "halting_dropout": config.HALTING_DROPOUT,
             "halting_hidden_state_mode": config.HALTING_HIDDEN_STATE_MODE,
             "halting_stack_hidden_dim": config.HALTING_STACK_HIDDEN_DIM,
-            "halting_output_dim": config.HALTING_OUTPUT_DIM,
             "halting_stack_layer_norm_position": (
                 config.HALTING_STACK_LAYER_NORM_POSITION
             ),

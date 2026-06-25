@@ -431,7 +431,6 @@ class TestLinearModel(unittest.TestCase):
             halting_dropout=0.2,
             halting_stack_independent_flag=True,
             halting_stack_hidden_dim=48,
-            halting_output_dim=4,
             halting_stack_layer_norm_position=LayerNormPositionOptions.BEFORE,
             halting_stack_num_layers=5,
             halting_stack_activation=ActivationOptions.MISH,
@@ -448,7 +447,7 @@ class TestLinearModel(unittest.TestCase):
         self.assertEqual(halting_cfg.threshold, 0.5)
         self.assertEqual(halting_cfg.halting_dropout, 0.2)
         self.assertEqual(halting_stack_cfg.hidden_dim, 48)
-        self.assertEqual(halting_stack_cfg.output_dim, 4)
+        self.assertEqual(halting_stack_cfg.output_dim, 2)
         self.assertEqual(halting_stack_cfg.num_layers, 5)
         self.assertEqual(
             halting_stack_cfg.last_layer_bias_option, LastLayerBiasOptions.DISABLED
@@ -1002,7 +1001,6 @@ class TestLinearModel(unittest.TestCase):
             recurrent_halting_hidden_state_mode=HaltingHiddenStateModeOptions.ACCUMULATED,
             recurrent_halting_stack_independent_flag=True,
             recurrent_halting_stack_hidden_dim=72,
-            recurrent_halting_output_dim=3,
             recurrent_halting_stack_layer_norm_position=LayerNormPositionOptions.BEFORE,
             recurrent_halting_stack_num_layers=4,
             recurrent_halting_stack_activation=ActivationOptions.MISH,
@@ -1025,7 +1023,7 @@ class TestLinearModel(unittest.TestCase):
             halting_cfg.hidden_state_mode, HaltingHiddenStateModeOptions.ACCUMULATED
         )
         self.assertEqual(halting_stack_cfg.hidden_dim, 72)
-        self.assertEqual(halting_stack_cfg.output_dim, 3)
+        self.assertEqual(halting_stack_cfg.output_dim, 2)
         self.assertEqual(halting_stack_cfg.num_layers, 4)
         self.assertEqual(
             halting_stack_cfg.last_layer_bias_option, LastLayerBiasOptions.DISABLED

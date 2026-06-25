@@ -23,6 +23,8 @@ from models.linears.linear_adaptive._controller_stack import (
     resolve_enabled,
 )
 
+STICK_BREAKING_GATE_OUTPUT_DIM = 2
+
 
 class ControlConfigFactory:
     def __init__(self, builder: Any) -> None:
@@ -166,7 +168,7 @@ class ControlConfigFactory:
             halting_gate_config=build_linear_controller_stack(
                 options,
                 hidden_dim=options.hidden_dim or self.builder.output_dim,
-                output_dim=self.builder.halting_output_dim,
+                output_dim=STICK_BREAKING_GATE_OUTPUT_DIM,
             ),
         )
 
@@ -190,7 +192,7 @@ class ControlConfigFactory:
             halting_gate_config=build_linear_controller_stack(
                 options,
                 hidden_dim=options.hidden_dim or self.builder.output_dim,
-                output_dim=self.builder.recurrent_halting_output_dim,
+                output_dim=STICK_BREAKING_GATE_OUTPUT_DIM,
             ),
         )
 

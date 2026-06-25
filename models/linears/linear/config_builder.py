@@ -79,7 +79,6 @@ class LinearConfigBuilder:
         ),
         halting_stack_independent_flag: bool = config.HALTING_STACK_INDEPENDENT_FLAG,
         halting_stack_hidden_dim: int | None = config.HALTING_STACK_HIDDEN_DIM,
-        halting_output_dim: int = config.HALTING_OUTPUT_DIM,
         halting_stack_layer_norm_position: (
             LayerNormPositionOptions | None
         ) = config.HALTING_STACK_LAYER_NORM_POSITION,
@@ -173,7 +172,6 @@ class LinearConfigBuilder:
         recurrent_halting_stack_hidden_dim: (
             int | None
         ) = config.RECURRENT_HALTING_STACK_HIDDEN_DIM,
-        recurrent_halting_output_dim: int = config.RECURRENT_HALTING_OUTPUT_DIM,
         recurrent_halting_stack_layer_norm_position: (
             LayerNormPositionOptions | None
         ) = config.RECURRENT_HALTING_STACK_LAYER_NORM_POSITION,
@@ -258,7 +256,6 @@ class LinearConfigBuilder:
         self.halting_hidden_state_mode = halting_hidden_state_mode
         self.halting_stack_independent_flag = halting_stack_independent_flag
         self.halting_stack_hidden_dim = halting_stack_hidden_dim
-        self.halting_output_dim = halting_output_dim
         self.halting_stack_layer_norm_position = halting_stack_layer_norm_position
         self.halting_stack_num_layers = halting_stack_num_layers
         self.halting_stack_activation = halting_stack_activation
@@ -328,7 +325,6 @@ class LinearConfigBuilder:
             recurrent_halting_stack_independent_flag
         )
         self.recurrent_halting_stack_hidden_dim = recurrent_halting_stack_hidden_dim
-        self.recurrent_halting_output_dim = recurrent_halting_output_dim
         self.recurrent_halting_stack_layer_norm_position = (
             recurrent_halting_stack_layer_norm_position
         )
