@@ -110,7 +110,6 @@ HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
 # If False, halting model stack options inherit the layer stack submodule options.
 HALTING_STACK_INDEPENDENT_FLAG: bool = False
 HALTING_STACK_HIDDEN_DIM: int | None = None
-HALTING_OUTPUT_DIM: int = 2
 HALTING_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = (
     LayerNormPositionOptions.DISABLED
 )
@@ -181,7 +180,6 @@ RECURRENT_HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
 # If False, recurrent halting stack options inherit halting/submodule stack options.
 RECURRENT_HALTING_STACK_INDEPENDENT_FLAG: bool = False
 RECURRENT_HALTING_STACK_HIDDEN_DIM: int | None = None
-RECURRENT_HALTING_OUTPUT_DIM: int = HALTING_OUTPUT_DIM
 RECURRENT_HALTING_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = None
 RECURRENT_HALTING_STACK_NUM_LAYERS: int | None = None
 RECURRENT_HALTING_STACK_ACTIVATION: ActivationOptions | None = None
