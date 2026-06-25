@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   boundaryProjectorFieldGroups,
+  configFieldSelectOptions,
   defaultConfigFieldValue,
   deriveNestedConfigSections,
   disabledConfigFieldReasons,
@@ -9,6 +10,7 @@ import {
   filterConfigSectionsForSearch,
   isDefaultConfigFieldValue,
   lockedOverrideKeys,
+  normalizeAdaptiveOptionOverrides,
   normalizeConfigFieldValue,
   overrideDigest,
   overrideValueForConfigField,
@@ -49,6 +51,69 @@ function stackFieldFromCanonical(
     choices: canonical.choices,
   });
 }
+
+const adaptiveOptionFields = [
+  field({
+    key: "weight_option_flag",
+    type: "bool",
+    default: false,
+    choices: [true, false],
+    section: "Weight Generator Options",
+  }),
+  field({
+    key: "weight_option",
+    type: "class",
+    default: null,
+    nullable: true,
+    choices: ["SingleModelDynamicWeightConfig", "DualModelDynamicWeightConfig"],
+    section: "Weight Generator Options",
+  }),
+  field({
+    key: "bias_option_flag",
+    type: "bool",
+    default: false,
+    choices: [true, false],
+    section: "Bias Generator Options",
+  }),
+  field({
+    key: "bias_option",
+    type: "class",
+    default: null,
+    nullable: true,
+    choices: ["AffineTransformDynamicBiasConfig", "AdditiveDynamicBiasConfig"],
+    section: "Bias Generator Options",
+  }),
+  field({
+    key: "diagonal_option_flag",
+    type: "bool",
+    default: false,
+    choices: [true, false],
+    section: "Diagonal Generator Options",
+  }),
+  field({
+    key: "diagonal_option",
+    type: "class",
+    default: null,
+    nullable: true,
+    choices: ["StandardDynamicDiagonalConfig", "AntiDynamicDiagonalConfig"],
+    section: "Diagonal Generator Options",
+  }),
+  field({
+    key: "mask_option_flag",
+    type: "bool",
+    default: false,
+    choices: [true, false],
+    section: "Mask Options",
+  }),
+  field({
+    key: "row_mask_option",
+    type: "class",
+    default: null,
+    nullable: true,
+    choices: ["DiagonalAxisMaskConfig", "OuterProductMaskConfig"],
+    section: "Mask Options",
+  }),
+];
 
 describe("config field value normalization", () => {
   it("matches int defaults against equivalent string input", () => {
@@ -114,6 +179,88 @@ describe("config field value normalization", () => {
     expect(normalizeConfigFieldValue(nullableField, "")).toBe("null");
     expect(isDefaultConfigFieldValue(nullableField, "")).toBe(true);
     expect(overrideValueForConfigField(nullableField, "")).toBe("");
+  });
+});
+
+describe("adaptive option override helpers", () => {
+  it("selects the first concrete option when an adaptive flag is enabled", () => {
+    const cases = [
+      {
+        flagKey: "weight_option_flag",
+        optionKey: "weight_option",
+        optionValue: "SingleModelDynamicWeightConfig",
+      },
+      {
+        flagKey: "bias_option_flag",
+        optionKey: "bias_option",
+        optionValue: "AffineTransformDynamicBiasConfig",
+      },
+      {
+        flagKey: "diagonal_option_flag",
+        optionKey: "diagonal_option",
+        optionValue: "StandardDynamicDiagonalConfig",
+      },
+      {
+        flagKey: "mask_option_flag",
+        optionKey: "row_mask_option",
+        optionValue: "DiagonalAxisMaskConfig",
+      },
+    ];
+
+    for (const { flagKey, optionKey, optionValue } of cases) {
+      const normalized = normalizeAdaptiveOptionOverrides(adaptiveOptionFields, {
+        [flagKey]: "true",
+      });
+
+      expect(normalized).toMatchObject({
+        [flagKey]: "true",
+        [optionKey]: optionValue,
+      });
+    }
+  });
+
+  it("clears only the paired adaptive option when a flag is disabled", () => {
+    const normalized = normalizeAdaptiveOptionOverrides(adaptiveOptionFields, {
+      weight_option_flag: "false",
+      weight_option: "DualModelDynamicWeightConfig",
+      stack_hidden_dim: "128",
+    });
+
+    expect(normalized).toEqual({
+      weight_option_flag: "false",
+      stack_hidden_dim: "128",
+    });
+  });
+
+  it("clears paired adaptive options when the flag is at its inactive default", () => {
+    const normalized = normalizeAdaptiveOptionOverrides(adaptiveOptionFields, {
+      row_mask_option: "OuterProductMaskConfig",
+      stack_hidden_dim: "128",
+    });
+
+    expect(normalized).toEqual({ stack_hidden_dim: "128" });
+  });
+
+  it("omits the nullable None option only while the adaptive flag is enabled", () => {
+    const optionField = adaptiveOptionFields.find(
+      (item) => item.key === "weight_option",
+    );
+    if (!optionField) {
+      throw new Error("Missing weight option field fixture");
+    }
+
+    expect(configFieldSelectOptions(optionField, {}).at(0)).toEqual({
+      value: "",
+      label: "None",
+    });
+    expect(
+      configFieldSelectOptions(optionField, { weight_option_flag: "true" }).map(
+        (option) => option.label,
+      ),
+    ).toEqual([
+      "SingleModelDynamicWeightConfig",
+      "DualModelDynamicWeightConfig",
+    ]);
   });
 });
 

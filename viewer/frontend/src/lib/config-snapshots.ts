@@ -6,10 +6,13 @@ import {
   type TrainingRunPlan,
 } from "@/lib/api";
 import {
+  ADAPTIVE_OPTION_PAIRS,
   configKeyToken,
   defaultConfigFieldValue,
   hasOverride,
+  normalizeAdaptiveOptionOverrides,
   normalizeConfigFieldValue,
+  normalizeConfigOverrides,
   overrideValue,
   overrideValueForConfigField,
   type OverrideValues,
@@ -82,13 +85,6 @@ export function overridesFromSnapshotEntries(
   return Object.fromEntries(entries.map((entry) => [entry.key, entry.value]));
 }
 
-const ADAPTIVE_OPTION_REQUIREMENTS = [
-  { flagKey: "weight_option_flag", optionKey: "weight_option" },
-  { flagKey: "bias_option_flag", optionKey: "bias_option" },
-  { flagKey: "diagonal_option_flag", optionKey: "diagonal_option" },
-  { flagKey: "mask_option_flag", optionKey: "row_mask_option" },
-];
-
 function isEnabledSnapshotValue(value: string | undefined) {
   return ["true", "1", "yes", "on"].includes((value ?? "").trim().toLowerCase());
 }
@@ -104,7 +100,7 @@ function validateAdaptiveOptionRequirements(
   const entryValues = new Map(
     entries.map((entry) => [configKeyToken(entry.key), entry.value]),
   );
-  for (const { flagKey, optionKey } of ADAPTIVE_OPTION_REQUIREMENTS) {
+  for (const { flagKey, optionKey } of ADAPTIVE_OPTION_PAIRS) {
     if (
       isEnabledSnapshotValue(entryValues.get(configKeyToken(flagKey))) &&
       !isPresentSnapshotOption(entryValues.get(configKeyToken(optionKey)))
@@ -473,13 +469,6 @@ function epochDefault(fieldsByKey: Map<string, ConfigField>) {
   return Number.isFinite(defaultEpochs) ? Math.max(0, Math.trunc(defaultEpochs)) : 10;
 }
 
-function snapshotEpochs(
-  snapshot: ConfigSnapshot,
-  fieldsByKey: Map<string, ConfigField>,
-) {
-  return epochsFromOverrides(snapshot.overrides, fieldsByKey);
-}
-
 function epochsFromOverrides(
   overrides: OverrideValues,
   fieldsByKey: Map<string, ConfigField>,
@@ -606,6 +595,10 @@ export function buildConfigSnapshotRunPlan({
     }
   }
   for (const snapshot of selectedSnapshots) {
+    const snapshotOverrides = normalizeAdaptiveOptionOverrides(
+      fields,
+      normalizeConfigOverrides(fields, snapshot.overrides),
+    );
     for (const dataset of selectedDatasets) {
       const index = runs.length + 1;
       runs.push({
@@ -616,17 +609,17 @@ export function buildConfigSnapshotRunPlan({
         snapshotId: snapshot.id,
         snapshotName: snapshot.name,
         dataset,
-        changes: snapshotRunChanges(snapshot.overrides, fieldsByKey),
-        overrides: snapshot.overrides,
+        changes: snapshotRunChanges(snapshotOverrides, fieldsByKey),
+        overrides: snapshotOverrides,
         command: trainingCommand({
           model,
           modelType,
           preset: snapshot.preset,
           dataset,
-          overrides: snapshot.overrides,
+          overrides: snapshotOverrides,
           logFolder,
         }),
-        totalEpochs: snapshotEpochs(snapshot, fieldsByKey),
+        totalEpochs: epochsFromOverrides(snapshotOverrides, fieldsByKey),
         currentEpoch: 0,
         metrics: {},
         logDir: null,

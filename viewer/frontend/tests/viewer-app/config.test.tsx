@@ -1406,10 +1406,10 @@ describe("ViewerApp Full Config", () => {
     );
 
     const enabledWeightAccordion = within(dialog).getByRole("button", {
-      name: /^weight generator options section, 4 fields, 1 override/i,
+      name: /^weight generator options section, 4 fields, 2 overrides/i,
     });
     const enabledMaskAccordion = within(dialog).getByRole("button", {
-      name: /^mask options section, 4 fields, 1 override/i,
+      name: /^mask options section, 4 fields, 2 overrides/i,
     });
     const weightDirectGrid = directFieldGridFor(enabledWeightAccordion);
     const maskDirectGrid = directFieldGridFor(enabledMaskAccordion);

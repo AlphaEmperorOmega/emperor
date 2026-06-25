@@ -121,7 +121,7 @@ function configField(
     label: overrides.label ?? overrides.key,
     section: overrides.section ?? "Model",
     type: overrides.type ?? "int",
-    default: overrides.default ?? 64,
+    default: "default" in overrides ? overrides.default ?? null : 64,
     nullable: overrides.nullable ?? false,
     choices: overrides.choices ?? [],
     locked: overrides.locked ?? false,
@@ -129,6 +129,39 @@ function configField(
     lockedReason: overrides.lockedReason,
   };
 }
+
+const adaptiveConfigFields = [
+  configField({
+    key: "weight_option_flag",
+    type: "bool",
+    default: false,
+    choices: [true, false],
+    section: "Weight Generator Options",
+  }),
+  configField({
+    key: "weight_option",
+    type: "class",
+    default: null,
+    nullable: true,
+    choices: ["SingleModelDynamicWeightConfig", "DualModelDynamicWeightConfig"],
+    section: "Weight Generator Options",
+  }),
+  configField({
+    key: "mask_option_flag",
+    type: "bool",
+    default: false,
+    choices: [true, false],
+    section: "Mask Options",
+  }),
+  configField({
+    key: "row_mask_option",
+    type: "class",
+    default: null,
+    nullable: true,
+    choices: ["DiagonalAxisMaskConfig", "OuterProductMaskConfig"],
+    section: "Mask Options",
+  }),
+];
 
 function renderTargetState() {
   return renderHook(() =>
@@ -619,6 +652,160 @@ describe("useTargetConfigState", () => {
         targetMode: "preset",
         targetId: "fast",
       });
+    });
+  });
+
+  it("normalizes adaptive flag updates in preset override state", async () => {
+    schemaFieldsByPreset = { baseline: adaptiveConfigFields };
+    const { result } = renderTargetState();
+
+    await waitFor(() => {
+      expect(result.current.target.selectedPreset).toBe("baseline");
+    });
+
+    act(() => {
+      result.current.target.updateOverride("weight_option_flag", "true");
+    });
+
+    expect(result.current.target.overrides).toEqual({
+      weight_option_flag: "true",
+      weight_option: "SingleModelDynamicWeightConfig",
+    });
+
+    act(() => {
+      result.current.target.updateOverride("weight_option_flag", "false");
+    });
+
+    expect(result.current.target.overrides).toEqual({
+      weight_option_flag: "false",
+    });
+  });
+
+  it("normalizes adaptive flag updates in snapshot editor drafts", async () => {
+    schemaFieldsByPreset = { baseline: adaptiveConfigFields };
+    const { result } = renderTargetState();
+
+    await waitFor(() => {
+      expect(result.current.target.selectedPreset).toBe("baseline");
+    });
+
+    act(() => {
+      result.current.target.updateSnapshotEditorDraftOverride(
+        "mask_option_flag",
+        "true",
+      );
+    });
+
+    expect(result.current.target.snapshotEditorDraft).toEqual({
+      mask_option_flag: "true",
+      row_mask_option: "DiagonalAxisMaskConfig",
+    });
+
+    act(() => {
+      result.current.target.updateSnapshotEditorDraftOverride(
+        "mask_option_flag",
+        "false",
+      );
+    });
+
+    expect(result.current.target.snapshotEditorDraft).toEqual({
+      mask_option_flag: "false",
+    });
+  });
+
+  it("normalizes old adaptive snapshot overrides before preview", async () => {
+    schemaFieldsByPreset = { baseline: adaptiveConfigFields };
+    snapshots = [
+      {
+        id: "snapshot-old-adaptive",
+        name: "Old adaptive",
+        modelType: "linears",
+        model: "linear",
+        preset: "baseline",
+        overrides: { weight_option_flag: "true" },
+        createdAt: "2026-06-01T00:00:00.000Z",
+        updatedAt: "2026-06-01T00:00:00.000Z",
+      },
+    ];
+    const { result } = renderTargetState();
+
+    await waitFor(() => {
+      expect(result.current.target.selectedPreset).toBe("baseline");
+      expect(result.current.target.selectedDatasets).toEqual(["Mnist"]);
+    });
+
+    mocks.requestPreview.mockClear();
+    act(() => {
+      expect(
+        result.current.target.selectTargetSnapshot("snapshot-old-adaptive", {
+          includeTrainingSnapshot: false,
+        }),
+      ).toBe(true);
+    });
+
+    expect(result.current.target.snapshotEditorDraft).toEqual({
+      weight_option_flag: "true",
+      weight_option: "SingleModelDynamicWeightConfig",
+    });
+    expect(mocks.requestPreview).toHaveBeenLastCalledWith({
+      modelType: "linears",
+      model: "linear",
+      preset: "baseline",
+      dataset: "Mnist",
+      overrides: {
+        weight_option_flag: "true",
+        weight_option: "SingleModelDynamicWeightConfig",
+      },
+      targetMode: "snapshot",
+      targetId: "snapshot-old-adaptive",
+    });
+  });
+
+  it("persists normalized adaptive overrides when updating a selected snapshot", async () => {
+    schemaFieldsByPreset = { baseline: adaptiveConfigFields };
+    snapshots = [
+      {
+        id: "snapshot-old-adaptive",
+        name: "Old adaptive",
+        modelType: "linears",
+        model: "linear",
+        preset: "baseline",
+        overrides: { weight_option_flag: "true" },
+        createdAt: "2026-06-01T00:00:00.000Z",
+        updatedAt: "2026-06-01T00:00:00.000Z",
+      },
+    ];
+    const { result } = renderTargetState();
+
+    await waitFor(() => {
+      expect(result.current.target.selectedPreset).toBe("baseline");
+    });
+
+    act(() => {
+      result.current.target.selectTargetSnapshot("snapshot-old-adaptive", {
+        includeTrainingSnapshot: false,
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.target.snapshotEditorDraft).toEqual({
+        weight_option_flag: "true",
+        weight_option: "SingleModelDynamicWeightConfig",
+      });
+    });
+
+    const updateResult = result.current.target.updateSelectedConfigSnapshot(
+      "Old adaptive",
+    );
+
+    expect(updateResult).toMatchObject({
+      ok: true,
+      snapshot: {
+        overrides: {
+          weight_option_flag: "true",
+          weight_option: "SingleModelDynamicWeightConfig",
+        },
+      },
     });
   });
 

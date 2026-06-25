@@ -5,7 +5,12 @@ import { Input } from "@/components/ui/input";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SelectOnlyDropdown } from "@/features/viewer/components/screen/select-only-dropdown";
 import { type ConfigField } from "@/lib/api";
-import { type OverrideValues, fieldValue, hasOverride } from "@/lib/config";
+import {
+  type OverrideValues,
+  configFieldSelectOptions,
+  fieldValue,
+  hasOverride,
+} from "@/lib/config";
 import { cn } from "@/lib/utils";
 
 type ConfigFieldControlDensity = "comfortable" | "compact";
@@ -136,13 +141,7 @@ export function ConfigFieldValueEditor({
           id={controlId}
           label={controlLabel ?? field.label}
           value={value}
-          options={[
-            ...(field.nullable ? [{ value: "", label: "None" }] : []),
-            ...choices.map((choice) => ({
-              value: String(choice),
-              label: String(choice),
-            })),
-          ]}
+          options={configFieldSelectOptions(field, overrides)}
           disabled={isControlDisabled}
           onChange={(nextValue) => onChange(field.key, nextValue)}
           placeholder="None"

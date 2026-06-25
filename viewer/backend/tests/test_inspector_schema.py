@@ -434,6 +434,28 @@ class InspectorSchemaTests(unittest.TestCase):
             fields["row_mask_option"]["choices"],
         )
 
+    def test_config_schema_orders_adaptive_class_choices_from_search_space(
+        self,
+    ) -> None:
+        fields = _fields_by_key(config_schema("linears/linear_adaptive", "baseline"))
+
+        self.assertEqual(
+            fields["weight_option"]["choices"][0],
+            "SingleModelDynamicWeightConfig",
+        )
+        self.assertEqual(
+            fields["bias_option"]["choices"][0],
+            "AffineTransformDynamicBiasConfig",
+        )
+        self.assertEqual(
+            fields["diagonal_option"]["choices"][0],
+            "StandardDynamicDiagonalConfig",
+        )
+        self.assertEqual(
+            fields["row_mask_option"]["choices"][0],
+            "DiagonalAxisMaskConfig",
+        )
+
     def test_config_schema_exposes_adaptive_component_option_flags(self) -> None:
         fields = _fields_by_key(config_schema("linears/linear_adaptive"))
 

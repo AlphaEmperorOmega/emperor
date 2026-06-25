@@ -10,8 +10,10 @@ import {
 } from "@/lib/api";
 import {
   activeOverrideScopeLabel,
+  configKeyToken,
   effectivePresetOverrides,
   lockedOverrideKeys,
+  normalizeAdaptiveOptionOverrides,
   normalizeConfigOverrides,
   overrideDigest,
   overrideValue,
@@ -97,6 +99,15 @@ function overrideValuesEqual(left: OverrideValues, right: OverrideValues) {
     return false;
   }
   return leftEntries.every(([key, value]) => right[key] === value);
+}
+
+function withoutOverride(overrides: OverrideValues, key: string): OverrideValues {
+  const token = configKeyToken(key);
+  return Object.fromEntries(
+    Object.entries(overrides).filter(
+      ([overrideKey]) => configKeyToken(overrideKey) !== token,
+    ),
+  );
 }
 
 function createSnapshotId() {
@@ -186,8 +197,6 @@ export function useTargetConfigState({
     presetOverrides,
     setPresetOverrides,
     selectPreset,
-    updatePresetOverride,
-    clearPresetOverride,
     clearPresetOverrides,
     selectModel: selectTargetModel,
   } = useTargetOverridesState({
@@ -345,11 +354,17 @@ export function useTargetConfigState({
       return;
     }
     setPresetOverrides((current) => {
-      const next = normalizeConfigOverrides(configFields, current);
+      const next = normalizeAdaptiveOptionOverrides(
+        configFields,
+        normalizeConfigOverrides(configFields, current),
+      );
       return overrideValuesEqual(current, next) ? current : next;
     });
     setSnapshotEditorDraft((current) => {
-      const next = normalizeConfigOverrides(configFields, current);
+      const next = normalizeAdaptiveOptionOverrides(
+        configFields,
+        normalizeConfigOverrides(configFields, current),
+      );
       return overrideValuesEqual(current, next) ? current : next;
     });
   }, [configFields, setPresetOverrides]);
@@ -554,12 +569,18 @@ export function useTargetConfigState({
         ? current
         : [...current, pendingConfigSnapshot.id],
     );
-    setSnapshotEditorDraft({ ...pendingConfigSnapshot.overrides });
+    setSnapshotEditorDraft(
+      normalizeAdaptiveOptionOverrides(
+        configFields,
+        normalizeConfigOverrides(configFields, pendingConfigSnapshot.overrides),
+      ),
+    );
     lastRequestedPreviewTargetKeyRef.current = "";
     setPendingConfigSnapshot(null);
   }, [
     configSnapshotsQuery.isSuccess,
     clearExperimentTarget,
+    configFields,
     pendingConfigSnapshot,
     presetNames,
     presetsQuery.isSuccess,
@@ -648,10 +669,14 @@ export function useTargetConfigState({
     setSelectedTrainingSnapshotIds((current) =>
       current.includes(snapshot.id) ? current : [...current, snapshot.id],
     );
+    const normalizedSnapshotOverrides = normalizeAdaptiveOptionOverrides(
+      configFields,
+      normalizeConfigOverrides(configFields, snapshot.overrides),
+    );
     setSnapshotEditorDraft((current) =>
-      overrideValuesEqual(current, snapshot.overrides)
+      overrideValuesEqual(current, normalizedSnapshotOverrides)
         ? current
-        : { ...snapshot.overrides },
+        : normalizedSnapshotOverrides,
     );
     lastRequestedPreviewTargetKeyRef.current = "";
     setIsRestoringTargetSelection(false);
@@ -659,6 +684,7 @@ export function useTargetConfigState({
     configSnapshotsQuery.isSuccess,
     configSnapshotsQuery.isError,
     clearExperimentTarget,
+    configFields,
     datasetNames.length,
     initialTargetSelection,
     isRestoringTargetSelection,
@@ -991,6 +1017,10 @@ export function useTargetConfigState({
       name: string,
       draftOverrides: OverrideValues = activeOverrides,
     ): ConfigSnapshotCreateResult => {
+      const normalizedDraftOverrides = normalizeAdaptiveOptionOverrides(
+        configFields,
+        normalizeConfigOverrides(configFields, draftOverrides),
+      );
       // Validate client-side for instant dialog feedback; the server re-validates
       // and is the source of truth. The client-generated id is discarded: the
       // persisted snapshot, with its server id, arrives via query invalidation.
@@ -1001,7 +1031,7 @@ export function useTargetConfigState({
         model: selectedModel,
         preset: selectedPreset,
         fields: configFields,
-        overrides: draftOverrides,
+        overrides: normalizedDraftOverrides,
         snapshots: configSnapshots,
         createdAt: new Date().toISOString(),
       });
@@ -1072,6 +1102,10 @@ export function useTargetConfigState({
       if (!selectedConfigSnapshot) {
         return { ok: false, error: "Select a snapshot first." };
       }
+      const normalizedDraftOverrides = normalizeAdaptiveOptionOverrides(
+        configFields,
+        normalizeConfigOverrides(configFields, draftOverrides),
+      );
       const nameValidation = validateConfigSnapshotName({
         modelType: selectedConfigSnapshot.modelType,
         model: selectedConfigSnapshot.model,
@@ -1088,7 +1122,7 @@ export function useTargetConfigState({
         model: selectedConfigSnapshot.model,
         preset: selectedConfigSnapshot.preset,
         fields: configFields,
-        overrides: draftOverrides,
+        overrides: normalizedDraftOverrides,
         snapshots: configSnapshots,
         excludeSnapshotId: selectedConfigSnapshot.id,
       });
@@ -1318,7 +1352,11 @@ export function useTargetConfigState({
           current.includes(snapshot.id) ? current : [...current, snapshot.id],
         );
       }
-      setSnapshotEditorDraft({ ...snapshot.overrides });
+      const normalizedSnapshotOverrides = normalizeAdaptiveOptionOverrides(
+        configFields,
+        normalizeConfigOverrides(configFields, snapshot.overrides),
+      );
+      setSnapshotEditorDraft(normalizedSnapshotOverrides);
 
       const previewDataset = selectedDatasets[0];
       if (!selectedModel || !snapshot.preset || !previewDataset) {
@@ -1333,7 +1371,7 @@ export function useTargetConfigState({
         dataset: previewDataset,
         mode: "snapshot",
         target: snapshot.id,
-        overrides: snapshot.overrides,
+        overrides: normalizedSnapshotOverrides,
       });
       resetGraphSelectionAndExpansion();
       requestPreview({
@@ -1341,7 +1379,7 @@ export function useTargetConfigState({
         model: selectedModel,
         preset: snapshot.preset,
         dataset: previewDataset,
-        overrides: { ...snapshot.overrides },
+        overrides: { ...normalizedSnapshotOverrides },
         targetMode: "snapshot",
         targetId: snapshot.id,
       });
@@ -1350,6 +1388,7 @@ export function useTargetConfigState({
     [
       modelConfigSnapshots,
       clearExperimentTarget,
+      configFields,
       presetNames,
       requestPreview,
       resetGraphSelectionAndExpansion,
@@ -1824,13 +1863,22 @@ export function useTargetConfigState({
         clearExperimentTarget();
         onTargetPresetSelected?.();
       }
-      updatePresetOverride(key, value);
+      setPresetOverrides((current) =>
+        normalizeAdaptiveOptionOverrides(
+          configFields,
+          normalizeConfigOverrides(configFields, {
+            ...current,
+            [key]: value,
+          }),
+        ),
+      );
     },
     [
       clearExperimentTarget,
+      configFields,
       onTargetPresetSelected,
       selectedTargetMode,
-      updatePresetOverride,
+      setPresetOverrides,
     ],
   );
 
@@ -1845,30 +1893,46 @@ export function useTargetConfigState({
         clearExperimentTarget();
         onTargetPresetSelected?.();
       }
-      clearPresetOverride(key);
+      setPresetOverrides((current) =>
+        normalizeAdaptiveOptionOverrides(
+          configFields,
+          normalizeConfigOverrides(configFields, withoutOverride(current, key)),
+        ),
+      );
     },
     [
       clearExperimentTarget,
-      clearPresetOverride,
+      configFields,
       onTargetPresetSelected,
       selectedTargetMode,
+      setPresetOverrides,
     ],
   );
 
   const updateSnapshotEditorDraftOverride = useCallback(
     (key: string, value: string) => {
-      setSnapshotEditorDraft((current) => ({ ...current, [key]: value }));
+      setSnapshotEditorDraft((current) =>
+        normalizeAdaptiveOptionOverrides(
+          configFields,
+          normalizeConfigOverrides(configFields, {
+            ...current,
+            [key]: value,
+          }),
+        ),
+      );
     },
-    [],
+    [configFields],
   );
 
   const clearSnapshotEditorDraftOverride = useCallback((key: string) => {
     setSnapshotEditorDraft((current) => {
-      const next = { ...current };
-      delete next[key];
-      return next;
+      const next = withoutOverride(current, key);
+      return normalizeAdaptiveOptionOverrides(
+        configFields,
+        normalizeConfigOverrides(configFields, next),
+      );
     });
-  }, []);
+  }, [configFields]);
 
   const resetSnapshotEditorDraft = useCallback(() => {
     setSnapshotEditorDraft({});
