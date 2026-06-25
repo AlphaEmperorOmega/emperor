@@ -1,3 +1,4 @@
+import inspect
 import unittest
 
 import torch
@@ -167,6 +168,60 @@ class TestExpertsLinearAdaptiveModel(unittest.TestCase):
 
         self.assertIs(stack_cfg.shared_gate_config, shared_gate_config)
         self.assertIsNone(stack_cfg.layer_config.gate_config)
+
+    def test_controller_stack_builder_kwargs_are_canonical(self):
+        parameters = inspect.signature(
+            ExpertsLinearAdaptiveConfigBuilder.__init__
+        ).parameters
+        expected_names = {
+            "gate_stack_hidden_dim",
+            "gate_stack_layer_norm_position",
+            "gate_stack_bias_flag",
+            "halting_stack_hidden_dim",
+            "halting_stack_layer_norm_position",
+            "halting_stack_bias_flag",
+        }
+        legacy_names = {name.replace("_stack_", "_") for name in expected_names}
+
+        for name in expected_names:
+            with self.subTest(name=name):
+                self.assertIn(name, parameters)
+
+        for name in legacy_names:
+            with self.subTest(name=name):
+                self.assertNotIn(name, parameters)
+
+        legacy_gate_hidden_dim = "gate" + "_hidden_dim"
+        with self.assertRaises(TypeError):
+            ExpertsLinearAdaptiveConfigBuilder(**{legacy_gate_hidden_dim: 32})
+
+    def test_controller_stack_overrides_use_canonical_names(self):
+        cfg = ExpertsLinearAdaptiveConfigBuilder(
+            stack_gate_flag=True,
+            gate_stack_hidden_dim=32,
+            gate_stack_layer_norm_position=LayerNormPositionOptions.AFTER,
+            gate_stack_bias_flag=False,
+            stack_halting_flag=True,
+            halting_stack_hidden_dim=48,
+            halting_stack_layer_norm_position=LayerNormPositionOptions.BEFORE,
+            halting_stack_bias_flag=False,
+        ).build()
+        stack_cfg = cfg.experiment_config.model_config.stack_config
+        gate_stack = stack_cfg.layer_config.gate_config.model_config
+        halting_stack = stack_cfg.layer_config.halting_config.halting_gate_config
+
+        self.assertEqual(gate_stack.hidden_dim, 32)
+        self.assertEqual(
+            gate_stack.layer_config.layer_norm_position,
+            LayerNormPositionOptions.AFTER,
+        )
+        self.assertFalse(gate_stack.layer_config.layer_model_config.bias_flag)
+        self.assertEqual(halting_stack.hidden_dim, 48)
+        self.assertEqual(
+            halting_stack.layer_config.layer_norm_position,
+            LayerNormPositionOptions.BEFORE,
+        )
+        self.assertFalse(halting_stack.layer_config.layer_model_config.bias_flag)
 
     def test_gate_options_propagate_to_outer_stack_and_recurrent_wrapper(self):
         cfg = ExpertsLinearAdaptiveConfigBuilder(

@@ -366,15 +366,15 @@ class TestLinearModel(unittest.TestCase):
             stack_gate_flag=True,
             gate_option=LayerGateOptions.MULTIPLIER,
             gate_stack_independent_flag=True,
-            gate_hidden_dim=32,
-            gate_layer_norm_position=LayerNormPositionOptions.AFTER,
+            gate_stack_hidden_dim=32,
+            gate_stack_layer_norm_position=LayerNormPositionOptions.AFTER,
             gate_stack_num_layers=3,
             gate_stack_activation=ActivationOptions.SILU,
             gate_stack_residual_connection_option=ResidualConnectionOptions.DISABLED,
             gate_stack_dropout_probability=0.1,
             gate_stack_last_layer_bias_option=LastLayerBiasOptions.DISABLED,
             gate_stack_apply_output_pipeline_flag=True,
-            gate_bias_flag=False,
+            gate_stack_bias_flag=False,
         ).build()
 
         layer_cfg = cfg.experiment_config.model_config.layer_config
@@ -430,16 +430,16 @@ class TestLinearModel(unittest.TestCase):
             halting_threshold=0.5,
             halting_dropout=0.2,
             halting_stack_independent_flag=True,
-            halting_hidden_dim=48,
+            halting_stack_hidden_dim=48,
             halting_output_dim=4,
-            halting_layer_norm_position=LayerNormPositionOptions.BEFORE,
+            halting_stack_layer_norm_position=LayerNormPositionOptions.BEFORE,
             halting_stack_num_layers=5,
             halting_stack_activation=ActivationOptions.MISH,
             halting_stack_residual_connection_option=ResidualConnectionOptions.DISABLED,
             halting_stack_dropout_probability=0.3,
             halting_stack_last_layer_bias_option=LastLayerBiasOptions.DISABLED,
             halting_stack_apply_output_pipeline_flag=True,
-            halting_bias_flag=False,
+            halting_stack_bias_flag=False,
         ).build()
 
         halting_cfg = cfg.experiment_config.model_config.layer_config.halting_config
@@ -534,12 +534,12 @@ class TestLinearModel(unittest.TestCase):
         self.assertTrue(memory_stack_cfg.layer_config.layer_model_config.bias_flag)
 
     def test_stack_defaults_match_submodule_defaults(self):
-        self.assertEqual(config.SUBMODULE_HIDDEN_DIM, config.STACK_HIDDEN_DIM)
+        self.assertEqual(config.SUBMODULE_STACK_HIDDEN_DIM, config.STACK_HIDDEN_DIM)
         self.assertEqual(
-            config.SUBMODULE_LAYER_NORM_POSITION,
+            config.SUBMODULE_STACK_LAYER_NORM_POSITION,
             config.STACK_LAYER_NORM_POSITION,
         )
-        self.assertEqual(config.SUBMODULE_BIAS_FLAG, config.STACK_BIAS_FLAG)
+        self.assertEqual(config.SUBMODULE_STACK_BIAS_FLAG, config.STACK_BIAS_FLAG)
 
         cfg = LinearConfigBuilder().build()
         model_cfg = cfg.experiment_config.model_config
@@ -561,8 +561,8 @@ class TestLinearModel(unittest.TestCase):
             stack_gate_flag=True,
             stack_halting_flag=True,
             memory_flag=True,
-            submodule_hidden_dim=37,
-            submodule_layer_norm_position=LayerNormPositionOptions.AFTER,
+            submodule_stack_hidden_dim=37,
+            submodule_stack_layer_norm_position=LayerNormPositionOptions.AFTER,
             submodule_stack_num_layers=4,
             submodule_stack_activation=ActivationOptions.MISH,
             submodule_stack_residual_connection_option=(
@@ -571,11 +571,11 @@ class TestLinearModel(unittest.TestCase):
             submodule_stack_dropout_probability=0.12,
             submodule_stack_last_layer_bias_option=LastLayerBiasOptions.DISABLED,
             submodule_stack_apply_output_pipeline_flag=True,
-            submodule_bias_flag=False,
+            submodule_stack_bias_flag=False,
             gate_stack_activation=ActivationOptions.TANH,
             gate_stack_apply_output_pipeline_flag=False,
-            gate_bias_flag=True,
-            halting_layer_norm_position=LayerNormPositionOptions.DISABLED,
+            gate_stack_bias_flag=True,
+            halting_stack_layer_norm_position=LayerNormPositionOptions.DISABLED,
             halting_stack_last_layer_bias_option=LastLayerBiasOptions.DISABLED,
         ).build()
 
@@ -615,13 +615,13 @@ class TestLinearModel(unittest.TestCase):
             stack_gate_flag=True,
             stack_halting_flag=True,
             memory_flag=True,
-            submodule_hidden_dim=11,
+            submodule_stack_hidden_dim=11,
             submodule_stack_activation=ActivationOptions.RELU,
-            gate_hidden_dim=22,
+            gate_stack_hidden_dim=22,
             gate_stack_activation=ActivationOptions.SILU,
-            halting_hidden_dim=33,
+            halting_stack_hidden_dim=33,
             halting_stack_activation=ActivationOptions.MISH,
-            memory_hidden_dim=44,
+            memory_stack_hidden_dim=44,
             memory_stack_activation=ActivationOptions.TANH,
         ).build()
 
@@ -651,16 +651,16 @@ class TestLinearModel(unittest.TestCase):
             stack_gate_flag=True,
             stack_halting_flag=True,
             memory_flag=True,
-            submodule_hidden_dim=11,
+            submodule_stack_hidden_dim=11,
             submodule_stack_activation=ActivationOptions.RELU,
             gate_stack_independent_flag=True,
-            gate_hidden_dim=22,
+            gate_stack_hidden_dim=22,
             gate_stack_activation=ActivationOptions.SILU,
             halting_stack_independent_flag=True,
-            halting_hidden_dim=33,
+            halting_stack_hidden_dim=33,
             halting_stack_activation=ActivationOptions.MISH,
             memory_stack_independent_flag=True,
-            memory_hidden_dim=44,
+            memory_stack_hidden_dim=44,
             memory_stack_activation=ActivationOptions.TANH,
         ).build()
 
@@ -791,7 +791,7 @@ class TestLinearModel(unittest.TestCase):
             output_dim=11,
             stack_halting_flag=True,
             halting_stack_independent_flag=True,
-            halting_hidden_dim=0,
+            halting_stack_hidden_dim=0,
         ).build()
 
         halting_cfg = cfg.experiment_config.model_config.layer_config.halting_config
@@ -829,8 +829,8 @@ class TestLinearModel(unittest.TestCase):
             memory_test_time_training_learning_rate=0.02,
             memory_test_time_training_num_inner_steps=2,
             memory_stack_independent_flag=True,
-            memory_hidden_dim=12,
-            memory_layer_norm_position=LayerNormPositionOptions.AFTER,
+            memory_stack_hidden_dim=12,
+            memory_stack_layer_norm_position=LayerNormPositionOptions.AFTER,
             memory_stack_num_layers=3,
             memory_stack_activation=ActivationOptions.SILU,
             memory_stack_residual_connection_option=(
@@ -839,7 +839,7 @@ class TestLinearModel(unittest.TestCase):
             memory_stack_dropout_probability=0.1,
             memory_stack_last_layer_bias_option=LastLayerBiasOptions.DISABLED,
             memory_stack_apply_output_pipeline_flag=True,
-            memory_bias_flag=False,
+            memory_stack_bias_flag=False,
         ).build()
 
         memory_cfg = cfg.experiment_config.model_config.shared_memory_config
@@ -960,15 +960,15 @@ class TestLinearModel(unittest.TestCase):
             recurrent_gate_flag=True,
             recurrent_gate_option=LayerGateOptions.MULTIPLIER,
             recurrent_gate_stack_independent_flag=True,
-            recurrent_gate_hidden_dim=64,
-            recurrent_gate_layer_norm_position=LayerNormPositionOptions.AFTER,
+            recurrent_gate_stack_hidden_dim=64,
+            recurrent_gate_stack_layer_norm_position=LayerNormPositionOptions.AFTER,
             recurrent_gate_stack_num_layers=4,
             recurrent_gate_stack_activation=ActivationOptions.SILU,
             recurrent_gate_stack_residual_connection_option=ResidualConnectionOptions.DISABLED,
             recurrent_gate_stack_dropout_probability=0.15,
             recurrent_gate_stack_last_layer_bias_option=LastLayerBiasOptions.DISABLED,
             recurrent_gate_stack_apply_output_pipeline_flag=False,
-            recurrent_gate_bias_flag=False,
+            recurrent_gate_stack_bias_flag=False,
         ).build()
 
         recurrent_cfg = cfg.experiment_config.model_config
@@ -1001,16 +1001,16 @@ class TestLinearModel(unittest.TestCase):
             recurrent_halting_dropout=0.25,
             recurrent_halting_hidden_state_mode=HaltingHiddenStateModeOptions.ACCUMULATED,
             recurrent_halting_stack_independent_flag=True,
-            recurrent_halting_hidden_dim=72,
+            recurrent_halting_stack_hidden_dim=72,
             recurrent_halting_output_dim=3,
-            recurrent_halting_layer_norm_position=LayerNormPositionOptions.BEFORE,
+            recurrent_halting_stack_layer_norm_position=LayerNormPositionOptions.BEFORE,
             recurrent_halting_stack_num_layers=4,
             recurrent_halting_stack_activation=ActivationOptions.MISH,
             recurrent_halting_stack_residual_connection_option=ResidualConnectionOptions.DISABLED,
             recurrent_halting_stack_dropout_probability=0.35,
             recurrent_halting_stack_last_layer_bias_option=LastLayerBiasOptions.DISABLED,
             recurrent_halting_stack_apply_output_pipeline_flag=True,
-            recurrent_halting_bias_flag=False,
+            recurrent_halting_stack_bias_flag=False,
         ).build()
 
         recurrent_cfg = cfg.experiment_config.model_config
@@ -1051,25 +1051,25 @@ class TestLinearModel(unittest.TestCase):
             recurrent_gate_flag=True,
             recurrent_halting_flag=True,
             gate_stack_independent_flag=True,
-            gate_hidden_dim=31,
-            gate_layer_norm_position=LayerNormPositionOptions.AFTER,
+            gate_stack_hidden_dim=31,
+            gate_stack_layer_norm_position=LayerNormPositionOptions.AFTER,
             gate_stack_num_layers=3,
             gate_stack_activation=ActivationOptions.SILU,
             gate_stack_residual_connection_option=ResidualConnectionOptions.RESIDUAL,
             gate_stack_dropout_probability=0.11,
             gate_stack_last_layer_bias_option=LastLayerBiasOptions.DISABLED,
             gate_stack_apply_output_pipeline_flag=False,
-            gate_bias_flag=False,
+            gate_stack_bias_flag=False,
             halting_stack_independent_flag=True,
-            halting_hidden_dim=41,
-            halting_layer_norm_position=LayerNormPositionOptions.BEFORE,
+            halting_stack_hidden_dim=41,
+            halting_stack_layer_norm_position=LayerNormPositionOptions.BEFORE,
             halting_stack_num_layers=4,
             halting_stack_activation=ActivationOptions.MISH,
             halting_stack_residual_connection_option=ResidualConnectionOptions.RESIDUAL,
             halting_stack_dropout_probability=0.21,
             halting_stack_last_layer_bias_option=LastLayerBiasOptions.DISABLED,
             halting_stack_apply_output_pipeline_flag=True,
-            halting_bias_flag=False,
+            halting_stack_bias_flag=False,
         ).build()
 
         recurrent_cfg = cfg.experiment_config.model_config
@@ -1119,10 +1119,10 @@ class TestLinearModel(unittest.TestCase):
             recurrent_flag=True,
             stack_gate_flag=True,
             gate_stack_independent_flag=True,
-            gate_hidden_dim=32,
+            gate_stack_hidden_dim=32,
             recurrent_gate_flag=True,
             recurrent_gate_stack_independent_flag=True,
-            recurrent_gate_hidden_dim=64,
+            recurrent_gate_stack_hidden_dim=64,
             stack_halting_flag=True,
             halting_stack_independent_flag=True,
             halting_threshold=0.55,

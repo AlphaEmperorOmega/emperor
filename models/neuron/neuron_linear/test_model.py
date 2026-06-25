@@ -1,4 +1,5 @@
 import importlib
+import inspect
 import unittest
 
 import torch
@@ -238,10 +239,14 @@ class TestNeuronLinearModel(unittest.TestCase):
             cluster_terminal_top_k=2,
             cluster_halting_flag=True,
             cluster_halting_threshold=0.75,
+            cluster_halting_stack_hidden_dim=33,
+            cluster_halting_stack_layer_norm_position=LayerNormPositionOptions.BEFORE,
+            cluster_halting_stack_bias_flag=False,
         ).build()
         cluster_cfg = cfg.experiment_config.neuron_cluster_config
         terminal_sampler = cluster_cfg.neuron_config.terminal_config.sampler_config
         router_cfg = terminal_sampler.router_config
+        halting_stack = cluster_cfg.halting_config.halting_gate_config
 
         self.assertEqual(cluster_cfg.x_axis_total_neurons, 6)
         self.assertEqual(cluster_cfg.y_axis_total_neurons, 5)
@@ -261,6 +266,12 @@ class TestNeuronLinearModel(unittest.TestCase):
         self.assertEqual(router_cfg.model_config.output_dim, 18)
         self.assertIsNotNone(cluster_cfg.halting_config)
         self.assertEqual(cluster_cfg.halting_config.threshold, 0.75)
+        self.assertEqual(halting_stack.hidden_dim, 33)
+        self.assertEqual(
+            halting_stack.layer_config.layer_norm_position,
+            LayerNormPositionOptions.BEFORE,
+        )
+        self.assertFalse(halting_stack.layer_config.layer_model_config.bias_flag)
 
     def test_cluster_terminal_top_k_is_clamped_to_expert_count(self):
         cfg = NeuronLinearConfigBuilder(
@@ -287,6 +298,60 @@ class TestNeuronLinearModel(unittest.TestCase):
         cfg = NeuronLinearConfigBuilder(cluster_halting_flag=False).build()
 
         self.assertIsNone(cfg.experiment_config.neuron_cluster_config.halting_config)
+
+    def test_cluster_halting_builder_kwargs_are_canonical(self):
+        parameters = inspect.signature(NeuronLinearConfigBuilder.__init__).parameters
+        expected_names = {
+            "cluster_halting_stack_hidden_dim",
+            "cluster_halting_stack_layer_norm_position",
+            "cluster_halting_stack_bias_flag",
+        }
+        legacy_names = {name.replace("_stack_", "_") for name in expected_names}
+
+        for name in expected_names:
+            with self.subTest(name=name):
+                self.assertIn(name, parameters)
+
+        for name in legacy_names:
+            with self.subTest(name=name):
+                self.assertNotIn(name, parameters)
+
+        legacy_cluster_hidden_dim = "cluster_halting" + "_hidden_dim"
+        with self.assertRaises(TypeError):
+            NeuronLinearConfigBuilder(**{legacy_cluster_hidden_dim: 32}).build()
+
+    def test_legacy_source_controller_stack_kwargs_are_normalized(self):
+        cfg = NeuronLinearConfigBuilder(
+            stack_gate_flag=True,
+            gate_stack_independent_flag=True,
+            gate_hidden_dim=32,
+            gate_layer_norm_position=LayerNormPositionOptions.AFTER,
+            gate_bias_flag=False,
+            stack_halting_flag=True,
+            halting_stack_independent_flag=True,
+            halting_hidden_dim=48,
+            halting_layer_norm_position=LayerNormPositionOptions.BEFORE,
+            halting_bias_flag=False,
+        ).build()
+        hidden_block_cfg = (
+            cfg.experiment_config.neuron_cluster_config.neuron_config.nucleus_config.model_config
+        )
+        stack_cfg = hidden_block_cfg.model_config
+        gate_stack = stack_cfg.layer_config.gate_config.model_config
+        halting_stack = stack_cfg.layer_config.halting_config.halting_gate_config
+
+        self.assertEqual(gate_stack.hidden_dim, 32)
+        self.assertEqual(
+            gate_stack.layer_config.layer_norm_position,
+            LayerNormPositionOptions.AFTER,
+        )
+        self.assertFalse(gate_stack.layer_config.layer_model_config.bias_flag)
+        self.assertEqual(halting_stack.hidden_dim, 48)
+        self.assertEqual(
+            halting_stack.layer_config.layer_norm_position,
+            LayerNormPositionOptions.BEFORE,
+        )
+        self.assertFalse(halting_stack.layer_config.layer_model_config.bias_flag)
 
     def test_builder_uses_neuron_linear_source_defaults(self):
         cfg = NeuronLinearConfigBuilder().build()

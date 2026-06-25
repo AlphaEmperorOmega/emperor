@@ -145,8 +145,8 @@ STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = True
 GATE_FLAG: bool = False
 GATE_OPTION: LayerGateOptions | None = LayerGateOptions.MULTIPLIER
 GATE_ACTIVATION: ActivationOptions | None = ActivationOptions.SIGMOID
-GATE_HIDDEN_DIM: int = HIDDEN_DIM
-GATE_LAYER_NORM_POSITION: LayerNormPositionOptions = LAYER_NORM_POSITION
+GATE_STACK_HIDDEN_DIM: int = HIDDEN_DIM
+GATE_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = LAYER_NORM_POSITION
 GATE_STACK_NUM_LAYERS: int = 2
 GATE_STACK_ACTIVATION: ActivationOptions = ActivationOptions.TANH
 GATE_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
@@ -155,7 +155,7 @@ GATE_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
 GATE_STACK_DROPOUT_PROBABILITY: float = 0.0
 GATE_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = STACK_LAST_LAYER_BIAS_OPTION
 GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = True
-GATE_BIAS_FLAG: bool = True
+GATE_STACK_BIAS_FLAG: bool = True
 
 #########################################################################
 # Halting options
@@ -167,9 +167,9 @@ HALTING_DROPOUT: float = 0.0
 HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
     HaltingHiddenStateModeOptions.RAW
 )
-HALTING_HIDDEN_DIM: int = HIDDEN_DIM
+HALTING_STACK_HIDDEN_DIM: int = HIDDEN_DIM
 HALTING_OUTPUT_DIM: int = 2
-HALTING_LAYER_NORM_POSITION: LayerNormPositionOptions = (
+HALTING_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = (
     LayerNormPositionOptions.DISABLED
 )
 HALTING_STACK_NUM_LAYERS: int = 2
@@ -182,7 +182,7 @@ HALTING_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = (
     LastLayerBiasOptions.DISABLED
 )
 HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = False
-HALTING_BIAS_FLAG: bool = BIAS_FLAG
+HALTING_STACK_BIAS_FLAG: bool = BIAS_FLAG
 
 #########################################################################
 # RECURRENT LAYER OPTIONS
@@ -278,9 +278,9 @@ CLUSTER_HALTING_DROPOUT: float = 0.0
 CLUSTER_HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
     HaltingHiddenStateModeOptions.RAW
 )
-CLUSTER_HALTING_HIDDEN_DIM: int = HIDDEN_DIM
+CLUSTER_HALTING_STACK_HIDDEN_DIM: int = HIDDEN_DIM
 CLUSTER_HALTING_OUTPUT_DIM: int = 2
-CLUSTER_HALTING_LAYER_NORM_POSITION: LayerNormPositionOptions = (
+CLUSTER_HALTING_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = (
     LayerNormPositionOptions.DISABLED
 )
 CLUSTER_HALTING_STACK_NUM_LAYERS: int = 1
@@ -293,7 +293,7 @@ CLUSTER_HALTING_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = (
     LastLayerBiasOptions.DISABLED
 )
 CLUSTER_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = False
-CLUSTER_HALTING_BIAS_FLAG: bool = True
+CLUSTER_HALTING_STACK_BIAS_FLAG: bool = True
 
 SEARCH_SPACE_CLUSTER_MAX_STEPS: list = [1, 2, 4, 6]
 SEARCH_SPACE_CLUSTER_TERMINAL_TOP_K: list = [1, 2]

@@ -153,7 +153,7 @@ class NeuronControlConfigFactory:
             hidden_state_mode=self.builder.cluster_halting_hidden_state_mode,
             halting_gate_config=LayerStackConfig(
                 input_dim=hidden_dim,
-                hidden_dim=self.builder.cluster_halting_hidden_dim,
+                hidden_dim=self.builder.cluster_halting_stack_hidden_dim,
                 output_dim=self.builder.cluster_halting_output_dim,
                 num_layers=self.builder.cluster_halting_stack_num_layers,
                 last_layer_bias_option=(
@@ -171,13 +171,13 @@ class NeuronControlConfigFactory:
                         self.builder.cluster_halting_stack_dropout_probability
                     ),
                     layer_norm_position=(
-                        self.builder.cluster_halting_layer_norm_position
+                        self.builder.cluster_halting_stack_layer_norm_position
                     ),
                     gate_config=None,
                     halting_config=None,
                     memory_config=None,
                     layer_model_config=LinearLayerConfig(
-                        bias_flag=self.builder.cluster_halting_bias_flag
+                        bias_flag=self.builder.cluster_halting_stack_bias_flag
                     ),
                 ),
             ),

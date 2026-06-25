@@ -116,6 +116,27 @@ class TestBertLinearModel(unittest.TestCase):
                     overrides,
                 )
 
+    def test_skipped_controller_stack_config_constants_are_canonical(self):
+        canonical_names = {
+            "GATE_STACK_HIDDEN_DIM",
+            "GATE_STACK_LAYER_NORM_POSITION",
+            "GATE_STACK_BIAS_FLAG",
+            "HALTING_STACK_HIDDEN_DIM",
+            "HALTING_STACK_LAYER_NORM_POSITION",
+            "HALTING_STACK_BIAS_FLAG",
+        }
+        legacy_names = {name.replace("_STACK_", "_") for name in canonical_names}
+
+        for name in canonical_names:
+            with self.subTest(name=name):
+                self.assertTrue(hasattr(config, name))
+                self.assertIn(name, config.CONFIG_OVERRIDE_SKIP_KEYS)
+
+        for name in legacy_names:
+            with self.subTest(name=name):
+                self.assertFalse(hasattr(config, name))
+                self.assertNotIn(name, config.CONFIG_OVERRIDE_SKIP_KEYS)
+
     def test_preset_locks_are_exposed_with_reasons(self):
         presets = ExperimentPresets()
 
