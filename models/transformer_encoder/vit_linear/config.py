@@ -42,7 +42,6 @@ MONITOR_OPTIONS: list[MonitorOption] = [
     ),
 ]
 CONFIG_OVERRIDE_SKIP_KEYS: set[str] = {
-    "BIAS_FLAG",
     "SEQUENCE_LENGTH",
 }
 
@@ -57,8 +56,7 @@ CALLBACK_EARLY_STOPPING_METRIC: str = "validation/loss"
 INPUT_DIM: int = 32 * 32 * 3
 OUTPUT_DIM: int = 10
 SEQUENCE_LENGTH: int = 65
-HIDDEN_DIM: int = 32
-BIAS_FLAG: bool = True
+STACK_HIDDEN_DIM: int = 32
 
 #########################################################################
 # IMAGE PATCHES
@@ -106,7 +104,7 @@ OUTPUT_BIAS_FLAG: bool = True
 #########################################################################
 # HYPERPARAMETER SEARCH SPACE
 SEARCH_SPACE_LEARNING_RATE: list = [1e-4, 1e-3, 1e-2]
-SEARCH_SPACE_HIDDEN_DIM: list = [16, 32, 64, 128, 256, 512]
+SEARCH_SPACE_STACK_HIDDEN_DIM: list = [16, 32, 64, 128, 256, 512]
 SEARCH_SPACE_STACK_NUM_LAYERS: list = [1, 2, 4, 8]
 SEARCH_SPACE_STACK_DROPOUT_PROBABILITY: list = [0.0, 0.1, 0.2, 0.3]
 SEARCH_SPACE_LAYER_NORM_POSITION: list = [

@@ -48,7 +48,6 @@ MONITOR_OPTIONS: list[MonitorOption] = [
 ]
 CONFIG_OVERRIDE_SKIP_KEYS: set[str] = {
     "BERT_PRETRAINING_TARGET_VOCAB_SIZE",
-    "BIAS_FLAG",
     "GATE_FLAG",
     "GATE_STACK_ACTIVATION",
     "GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG",
@@ -92,8 +91,7 @@ CALLBACK_EARLY_STOPPING_METRIC: str = "validation/loss"
 INPUT_DIM: int = BERT_PRETRAINING_TARGET_VOCAB_SIZE
 OUTPUT_DIM: int = BERT_PRETRAINING_TARGET_VOCAB_SIZE
 SEQUENCE_LENGTH: int = 35
-HIDDEN_DIM: int = 128
-BIAS_FLAG: bool = True
+STACK_HIDDEN_DIM: int = 128
 
 #########################################################################
 # MAIN ENCODER STACK (transformer encoder of self-attention + feed-forward)
@@ -132,7 +130,7 @@ FF_BIAS_FLAG: bool = True
 # GATE STACK OPTIONS (per encoder-layer block; recurrent gate when recurrent)
 # If GATE_FLAG is False, the gate-specific parameters below are ignored.
 GATE_FLAG: bool = False
-GATE_STACK_HIDDEN_DIM: int = HIDDEN_DIM
+GATE_STACK_HIDDEN_DIM: int = STACK_HIDDEN_DIM
 GATE_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = LAYER_NORM_POSITION
 GATE_STACK_NUM_LAYERS: int = 2
 GATE_STACK_ACTIVATION: ActivationOptions = ActivationOptions.TANH
@@ -153,7 +151,7 @@ HALTING_DROPOUT: float = 0.0
 HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
     HaltingHiddenStateModeOptions.RAW
 )
-HALTING_STACK_HIDDEN_DIM: int = HIDDEN_DIM
+HALTING_STACK_HIDDEN_DIM: int = STACK_HIDDEN_DIM
 HALTING_OUTPUT_DIM: int = 2
 HALTING_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = (
     LayerNormPositionOptions.DISABLED
@@ -168,7 +166,7 @@ HALTING_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = (
     LastLayerBiasOptions.DISABLED
 )
 HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = False
-HALTING_STACK_BIAS_FLAG: bool = BIAS_FLAG
+HALTING_STACK_BIAS_FLAG: bool = True
 
 #########################################################################
 # RECURRENT LAYER OPTIONS
@@ -181,7 +179,7 @@ RECURRENT_HALTING_FLAG: bool = False
 #########################################################################
 # HYPERPARAMETER SEARCH SPACE
 SEARCH_SPACE_LEARNING_RATE: list = [1e-4, 1e-3, 1e-2]
-SEARCH_SPACE_HIDDEN_DIM: list = [16, 32, 64, 128, 256, 512]
+SEARCH_SPACE_STACK_HIDDEN_DIM: list = [16, 32, 64, 128, 256, 512]
 SEARCH_SPACE_STACK_NUM_LAYERS: list = [2, 4, 8, 16, 32]
 SEARCH_SPACE_STACK_DROPOUT_PROBABILITY: list = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
 SEARCH_SPACE_LAYER_NORM_POSITION: list = [

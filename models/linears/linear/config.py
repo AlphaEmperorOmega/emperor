@@ -30,6 +30,8 @@ from emperor.base.options import (
 
 # Global
 BATCH_SIZE: int = 128
+INPUT_DIM: int = 28**2
+OUTPUT_DIM: int = 10
 LEARNING_RATE: float = 1e-3
 NUM_EPOCHS: int = 30
 DATASET_OPTIONS: list = [Mnist, FashionMNIST, Cifar10, Cifar100]
@@ -38,22 +40,15 @@ DATASET_OPTIONS: list = [Mnist, FashionMNIST, Cifar10, Cifar100]
 TRAINER_ACCELERATOR: str = "cpu"
 TRAINER_DEVICES: int = 1
 TRAINER_GRADIENT_CLIP_VAL: float = 1.0
-CALLBACK_EARLY_STOPPING_PATIENCE: int = 10
 
 # Callback
 CALLBACK_EARLY_STOPPING_METRIC: str = "validation/accuracy"
-
-# Model
-INPUT_DIM: int = 28**2
-OUTPUT_DIM: int = 10
-HIDDEN_DIM: int = 256
-LAYER_NORM_POSITION: LayerNormPositionOptions = LayerNormPositionOptions.BEFORE
-BIAS_FLAG: bool = True
+CALLBACK_EARLY_STOPPING_PATIENCE: int = 10
 
 #########################################################################
 # LAYER STACK OPTIONS
-STACK_HIDDEN_DIM: int = HIDDEN_DIM
-STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = LAYER_NORM_POSITION
+STACK_HIDDEN_DIM: int = 256
+STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = LayerNormPositionOptions.BEFORE
 STACK_NUM_LAYERS: int = 5
 STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
 STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
@@ -62,12 +57,14 @@ STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
 STACK_DROPOUT_PROBABILITY: float = 0.2
 STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT
 STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = True
-STACK_BIAS_FLAG: bool = BIAS_FLAG
+STACK_BIAS_FLAG: bool = True
 
 #########################################################################
 # LAYER STACK SUBMODULE OPTIONS
 SUBMODULE_STACK_HIDDEN_DIM: int = STACK_HIDDEN_DIM
-SUBMODULE_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = STACK_LAYER_NORM_POSITION
+SUBMODULE_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = (
+    STACK_LAYER_NORM_POSITION
+)
 SUBMODULE_STACK_NUM_LAYERS: int = 2
 SUBMODULE_STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
 SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
@@ -81,11 +78,12 @@ SUBMODULE_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = False
 SUBMODULE_STACK_BIAS_FLAG: bool = STACK_BIAS_FLAG
 
 #########################################################################
-# GATE STACK OPTIONS
+# GATE OPTIONS
 # If `GATE_FLAG` is False, the gate-specific parameters below are ignored.
 GATE_FLAG: bool = False
 GATE_OPTION: LayerGateOptions | None = LayerGateOptions.MULTIPLIER
 GATE_ACTIVATION: ActivationOptions | None = ActivationOptions.SIGMOID
+# GATE STACK OPTIONS
 # If False, gate model stack options inherit the layer stack submodule options.
 GATE_STACK_INDEPENDENT_FLAG: bool = False
 GATE_STACK_HIDDEN_DIM: int | None = None
@@ -99,7 +97,7 @@ GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool | None = True
 GATE_STACK_BIAS_FLAG: bool | None = True
 
 #########################################################################
-# Halting options
+# HALTING OPTIONS
 # If `HALTING_FLAG` is False, the halting-specific parameters below are ignored.
 HALTING_FLAG: bool = False
 HALTING_THRESHOLD: float = 0.99
@@ -107,6 +105,7 @@ HALTING_DROPOUT: float = 0.0
 HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
     HaltingHiddenStateModeOptions.RAW
 )
+# HALTING STACK OPTIONS
 # If False, halting model stack options inherit the layer stack submodule options.
 HALTING_STACK_INDEPENDENT_FLAG: bool = False
 HALTING_STACK_HIDDEN_DIM: int | None = None
@@ -131,6 +130,7 @@ MEMORY_OPTION: type[DynamicMemoryConfig] = GatedResidualDynamicMemoryConfig
 MEMORY_POSITION_OPTION: MemoryPositionOptions = MemoryPositionOptions.AFTER_AFFINE
 MEMORY_TEST_TIME_TRAINING_LEARNING_RATE: float | None = None
 MEMORY_TEST_TIME_TRAINING_NUM_INNER_STEPS: int | None = None
+# MEMORY STACK OPTIONS
 # If False, memory model stack options inherit the layer stack submodule options.
 MEMORY_STACK_INDEPENDENT_FLAG: bool = False
 MEMORY_STACK_HIDDEN_DIM: int | None = None
@@ -151,12 +151,12 @@ RECURRENT_MAX_STEPS: int = 4
 RECURRENT_LAYER_NORM_POSITION: LayerNormPositionOptions = (
     LayerNormPositionOptions.DISABLED
 )
-
 #########################################################################
-# RECURRENT GATE STACK OPTIONS
+# RECURRENT GATE OPTIONS
 RECURRENT_GATE_FLAG: bool = False
 RECURRENT_GATE_OPTION: LayerGateOptions | None = LayerGateOptions.MULTIPLIER
 RECURRENT_GATE_ACTIVATION: ActivationOptions | None = ActivationOptions.SIGMOID
+# RECURRENT GATE STACK OPTIONS
 # If False, recurrent gate stack options inherit gate/submodule stack options.
 RECURRENT_GATE_STACK_INDEPENDENT_FLAG: bool = False
 RECURRENT_GATE_STACK_HIDDEN_DIM: int | None = None
@@ -177,6 +177,7 @@ RECURRENT_HALTING_DROPOUT: float = HALTING_DROPOUT
 RECURRENT_HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
     HALTING_HIDDEN_STATE_MODE
 )
+# RECURRENT HALTING STACK OPTIONS
 # If False, recurrent halting stack options inherit halting/submodule stack options.
 RECURRENT_HALTING_STACK_INDEPENDENT_FLAG: bool = False
 RECURRENT_HALTING_STACK_HIDDEN_DIM: int | None = None
@@ -211,7 +212,6 @@ SEARCH_SPACE_STACK_ACTIVATION: list = [
     ActivationOptions.GELU,
     ActivationOptions.TANH,
 ]
-SEARCH_SPACE_HIDDEN_DIM: list = SEARCH_SPACE_STACK_HIDDEN_DIM
 SEARCH_SPACE_LAYER_NORM_POSITION: list = SEARCH_SPACE_STACK_LAYER_NORM_POSITION
 
 #########################################################################

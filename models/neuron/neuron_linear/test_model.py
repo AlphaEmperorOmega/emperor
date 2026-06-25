@@ -355,9 +355,9 @@ class TestNeuronLinearModel(unittest.TestCase):
 
     def test_builder_uses_neuron_linear_source_defaults(self):
         cfg = NeuronLinearConfigBuilder().build()
-        override_cfg = NeuronLinearConfigBuilder(hidden_dim=128).build()
+        override_cfg = NeuronLinearConfigBuilder(stack_hidden_dim=128).build()
 
-        self.assertEqual(cfg.hidden_dim, config.HIDDEN_DIM)
+        self.assertEqual(cfg.hidden_dim, config.STACK_HIDDEN_DIM)
         self.assertEqual(override_cfg.hidden_dim, 128)
 
     def test_shared_gate_config_flows_to_source_hidden_block(self):

@@ -220,7 +220,7 @@ class TestBertLinearModel(unittest.TestCase):
     def _test_overrides(self, batch_size: int) -> dict:
         return {
             "batch_size": batch_size,
-            "hidden_dim": 16,
+            "stack_hidden_dim": 16,
             "sequence_length": 8,
             "stack_num_layers": 1,
             "attn_num_heads": 4,
@@ -267,13 +267,13 @@ class TestBertLinearModel(unittest.TestCase):
             ExperimentPreset.BASELINE,
             config.DATASET_OPTIONS[0],
             GridSearch(),
-            search_keys=["hidden_dim"],
+            search_keys=["stack_hidden_dim"],
         )
 
-        self.assertEqual(len(configs), len(config.SEARCH_SPACE_HIDDEN_DIM))
+        self.assertEqual(len(configs), len(config.SEARCH_SPACE_STACK_HIDDEN_DIM))
         self.assertEqual(
             {cfg.hidden_dim for cfg in configs},
-            set(config.SEARCH_SPACE_HIDDEN_DIM),
+            set(config.SEARCH_SPACE_STACK_HIDDEN_DIM),
         )
 
     def test_unlocked_overrides_update_flat_and_nested_config(self):
@@ -281,7 +281,7 @@ class TestBertLinearModel(unittest.TestCase):
             ExperimentPreset.BASELINE,
             config.DATASET_OPTIONS[0],
             config_overrides={
-                "hidden_dim": 24,
+                "stack_hidden_dim": 24,
                 "sequence_length": 8,
                 "stack_num_layers": 1,
                 "stack_dropout_probability": 0.2,

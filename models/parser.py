@@ -142,7 +142,7 @@ def get_experiment_parser(
         metavar="KEY",
         help=(
             "Restrict sweep to named SEARCH_SPACE_* axes "
-            "(e.g. HIDDEN_DIM STACK_NUM_LAYERS).\n"
+            "(e.g. STACK_HIDDEN_DIM STACK_NUM_LAYERS).\n"
             "Requires --grid-search or --random-search."
         ),
     )
