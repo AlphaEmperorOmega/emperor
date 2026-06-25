@@ -4,6 +4,7 @@ from dataclasses import fields
 import io
 import unittest
 
+import models.experts.experts_linear.config as experts_linear_config
 import models.linears.linear.config as linear_config
 import models.linears.linear_adaptive.config as linear_adaptive_config
 import models.transformer_encoder.bert_linear.config as bert_linear_config
@@ -20,6 +21,9 @@ from emperor.datasets.image.classification.mnist import Mnist
 from emperor.experiments.base import GridSearch
 from lightning.pytorch.callbacks import EarlyStopping
 from models.config_overrides import iter_supported_config_keys, print_config_options
+from models.experts.experts_linear import (
+    ExperimentPreset as ExpertsLinearExperimentPreset,
+)
 from models.linears.linear import ExperimentPreset as LinearExperimentPreset
 from models.linears.linear_adaptive import ExperimentPreset
 from models.linears.linear_adaptive.presets import Experiment, ExperimentPresets
@@ -252,6 +256,45 @@ class TestExperimentConfigOverrideParsing(
         self.assertEqual(grouped_mode.config_overrides, plain_mode.config_overrides)
         self.assertEqual(grouped_mode.search_overrides, plain_mode.search_overrides)
 
+    def test_legacy_controller_stack_flags_parse_to_canonical_params(self):
+        parser = get_experiment_parser(
+            ExpertsLinearExperimentPreset.names(),
+            "models.experts.experts_linear",
+        )
+        args = parser.parse_args(
+            [
+                "--preset",
+                "baseline",
+                "--gate-hidden-dim",
+                "32",
+                "--gate-layer-norm-position",
+                "AFTER",
+                "--gate-bias-flag",
+                "false",
+                "--halting-hidden-dim",
+                "48",
+                "--halting-layer-norm-position",
+                "BEFORE",
+                "--halting-bias-flag",
+                "false",
+            ]
+        )
+
+        mode = resolve_experiment_mode(args, ExpertsLinearExperimentPreset)
+
+        self.assertEqual(mode.config_overrides["gate_stack_hidden_dim"], 32)
+        self.assertIs(
+            mode.config_overrides["gate_stack_layer_norm_position"],
+            experts_linear_config.LayerNormPositionOptions.AFTER,
+        )
+        self.assertFalse(mode.config_overrides["gate_stack_bias_flag"])
+        self.assertEqual(mode.config_overrides["halting_stack_hidden_dim"], 48)
+        self.assertIs(
+            mode.config_overrides["halting_stack_layer_norm_position"],
+            experts_linear_config.LayerNormPositionOptions.BEFORE,
+        )
+        self.assertFalse(mode.config_overrides["halting_stack_bias_flag"])
+
     def test_monitor_resolver_builds_callbacks_for_valid_names(self):
         callbacks = resolve_monitor_callbacks(
             linear_config,
@@ -481,7 +524,11 @@ class TestExperimentConfigOverrideParsing(
         vit_keys = set(iter_supported_config_keys(vit_linear_config))
 
         self.assertNotIn("GATE_FLAG", bert_keys)
+        self.assertNotIn("GATE_HIDDEN_DIM", bert_keys)
+        self.assertNotIn("GATE_STACK_HIDDEN_DIM", bert_keys)
         self.assertNotIn("HALTING_FLAG", bert_keys)
+        self.assertNotIn("HALTING_HIDDEN_DIM", bert_keys)
+        self.assertNotIn("HALTING_STACK_HIDDEN_DIM", bert_keys)
         self.assertNotIn("RECURRENT_FLAG", bert_keys)
         self.assertNotIn("BERT_PRETRAINING_TARGET_VOCAB_SIZE", bert_keys)
         self.assertNotIn("BIAS_FLAG", bert_keys)
