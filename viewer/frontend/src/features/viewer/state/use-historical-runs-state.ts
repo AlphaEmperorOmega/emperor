@@ -242,10 +242,15 @@ export function useHistoricalRunsState({
     enabled: tagsEnabled && filteredHistoricalRunIds.length > 0,
     queryKey: logQueryKeys.filteredHistoricalRunTags(filteredHistoricalRunIds),
   });
+  const modelRunTagsLoading =
+    tagsEnabled && modelRunTagsQuery.isLoading && !modelRunTagsQuery.data;
 
   useEffect(() => {
     if (!selectedModel) {
       setSelectedHistoricalExperimentFilter("");
+      return;
+    }
+    if (modelRunTagsLoading) {
       return;
     }
     if (
@@ -258,6 +263,7 @@ export function useHistoricalRunsState({
     }
   }, [
     historicalExperimentOptions,
+    modelRunTagsLoading,
     selectedHistoricalExperimentFilter,
     selectedModel,
     setSelectedHistoricalExperimentFilter,
@@ -266,6 +272,9 @@ export function useHistoricalRunsState({
   useEffect(() => {
     if (!selectedHistoricalExperimentFilter) {
       setSelectedHistoricalDatasetFilter("");
+      return;
+    }
+    if (modelRunTagsLoading) {
       return;
     }
     if (
@@ -278,6 +287,7 @@ export function useHistoricalRunsState({
     }
   }, [
     historicalDatasetOptions,
+    modelRunTagsLoading,
     selectedHistoricalDatasetFilter,
     selectedHistoricalExperimentFilter,
     setSelectedHistoricalDatasetFilter,
@@ -286,6 +296,9 @@ export function useHistoricalRunsState({
   useEffect(() => {
     if (!selectedHistoricalExperimentFilter || !selectedHistoricalDatasetFilter) {
       setSelectedHistoricalPreset("");
+      return;
+    }
+    if (modelRunTagsLoading) {
       return;
     }
     if (
@@ -298,6 +311,7 @@ export function useHistoricalRunsState({
     }
   }, [
     historicalPresetOptions,
+    modelRunTagsLoading,
     selectedHistoricalDatasetFilter,
     selectedHistoricalExperimentFilter,
     selectedHistoricalPreset,
@@ -312,16 +326,20 @@ export function useHistoricalRunsState({
     if (logRunsQuery.isLoading && !logRunsQuery.data) {
       return;
     }
+    if (modelRunTagsLoading) {
+      return;
+    }
     setSelectedLogRunId((current) =>
-      current && modelLogRuns.some((run) => run.id === current)
+      current && selectedLogRun?.id === current
         ? current
         : null,
     );
   }, [
     logRunsQuery.data,
     logRunsQuery.isLoading,
-    modelLogRuns,
+    modelRunTagsLoading,
     selectedModel,
+    selectedLogRun,
     setSelectedLogRunId,
   ]);
 
@@ -334,6 +352,9 @@ export function useHistoricalRunsState({
     ) {
       return;
     }
+    if (modelRunTagsLoading) {
+      return;
+    }
     const resolvedRun = visibleHistoricalRuns[0];
     setSelectedLogRunId((current) =>
       current === (resolvedRun?.id ?? null) ? current : resolvedRun?.id ?? null,
@@ -343,6 +364,7 @@ export function useHistoricalRunsState({
     selectedHistoricalExperimentFilter,
     selectedHistoricalPreset,
     selectedModel,
+    modelRunTagsLoading,
     setSelectedLogRunId,
     visibleHistoricalRuns,
   ]);

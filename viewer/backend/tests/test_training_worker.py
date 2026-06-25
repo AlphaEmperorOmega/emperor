@@ -90,7 +90,7 @@ class FakeExperiment:
 
 def fake_model_parts(*, locked_fields=None):
     config_module = ModuleType("fake_model_config")
-    config_module.HIDDEN_DIM = 256
+    config_module.STACK_HIDDEN_DIM = 256
     config_module.GATE_FLAG = False
     config_module.MONITOR_OPTIONS = [
         MonitorOption(
@@ -153,7 +153,7 @@ class TrainingWorkerSearchModeTests(unittest.TestCase):
         grid_search = parse_training_search(
             "linears/linear",
             "baseline",
-            {"mode": "grid", "values": {"hidden_dim": [64]}},
+            {"mode": "grid", "values": {"stack_hidden_dim": [64]}},
             dataset_count=1,
         )
         random_search = parse_training_search(
@@ -161,7 +161,7 @@ class TrainingWorkerSearchModeTests(unittest.TestCase):
             "baseline",
             {
                 "mode": "random",
-                "values": {"hidden_dim": [64, 128]},
+                "values": {"stack_hidden_dim": [64, 128]},
                 "randomSamples": 2,
             },
             dataset_count=1,
@@ -219,7 +219,7 @@ class TrainingWorkerMaterializedRunConversionTests(unittest.TestCase):
                             "preset": "baseline",
                             "dataset": "Mnist",
                             "overrides": {
-                                "hidden-dim": "64",
+                                "stack-hidden-dim": "64",
                                 "gate_flag": "true",
                             },
                         },
@@ -244,7 +244,7 @@ class TrainingWorkerMaterializedRunConversionTests(unittest.TestCase):
         self.assertEqual(
             runs[0]["config_overrides"],
             {
-                "hidden_dim": 64,
+                "stack_hidden_dim": 64,
                 "stack_gate_flag": True,
             },
         )
@@ -308,7 +308,7 @@ class TrainingWorkerMaterializedRunConversionTests(unittest.TestCase):
                 {
                     "preset": "baseline",
                     "dataset": "Mnist",
-                    "overrides": {"hidden_dim": "wide"},
+                    "overrides": {"stack_hidden_dim": "wide"},
                 },
                 InspectorError,
                 "Invalid value for override",
@@ -510,7 +510,7 @@ class TrainingWorkerPayloadProgressTests(unittest.TestCase):
                 "presets": ["baseline"],
                 "datasets": ["Mnist"],
                 "overrides": {},
-                "search": {"mode": "grid", "values": {"hidden_dim": [64]}},
+                "search": {"mode": "grid", "values": {"stack_hidden_dim": [64]}},
                 "monitors": [],
                 "logFolder": "unit_logs",
                 "runPlan": {
@@ -520,7 +520,7 @@ class TrainingWorkerPayloadProgressTests(unittest.TestCase):
                             "index": 7,
                             "preset": "baseline",
                             "dataset": "Mnist",
-                            "overrides": {"hidden_dim": "128"},
+                            "overrides": {"stack_hidden_dim": "128"},
                         }
                     ]
                 },
@@ -528,8 +528,8 @@ class TrainingWorkerPayloadProgressTests(unittest.TestCase):
             parsed_search = SimpleNamespace(
                 mode="grid",
                 random_samples=None,
-                model_params={"hidden_dim"},
-                search_overrides={"hidden_dim": [64]},
+                model_params={"stack_hidden_dim"},
+                search_overrides={"stack_hidden_dim": [64]},
             )
 
             with patch(
@@ -541,7 +541,7 @@ class TrainingWorkerPayloadProgressTests(unittest.TestCase):
             parse_search.assert_called_once_with(
                 "linears/linear",
                 "baseline",
-                {"mode": "grid", "values": {"hidden_dim": [64]}},
+                {"mode": "grid", "values": {"stack_hidden_dim": [64]}},
                 dataset_count=1,
             )
             self.assertEqual(len(FakeExperiment.instances), 1)
@@ -563,7 +563,7 @@ class TrainingWorkerPayloadProgressTests(unittest.TestCase):
             self.assertIs(materialized_runs[0]["dataset_type"], Mnist)
             self.assertEqual(
                 materialized_runs[0]["config_overrides"],
-                {"hidden_dim": 128},
+                {"stack_hidden_dim": 128},
             )
 
             events = read_jsonl(progress_path)

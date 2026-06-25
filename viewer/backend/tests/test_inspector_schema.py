@@ -83,7 +83,7 @@ class InspectorSchemaTests(unittest.TestCase):
                         "TRAINER_ACCELERATOR: str = 'cpu'",
                         "",
                         "# Model",
-                        "HIDDEN_DIM: int = 128",
+                        "STACK_HIDDEN_DIM: int = 128",
                     ]
                 ),
                 encoding="utf-8",
@@ -107,7 +107,7 @@ class InspectorSchemaTests(unittest.TestCase):
         self.assertEqual(fields["trainer_max_steps"]["section"], "Trainer")
         self.assertEqual(fields["trainer_precision"]["section"], "Trainer")
         self.assertEqual(fields["callback_checkpoint_flag"]["section"], "Callback")
-        self.assertEqual(fields["hidden_dim"]["section"], "Model")
+        self.assertEqual(fields["stack_hidden_dim"]["section"], "Model")
 
     def test_config_schema_exposes_supported_field_types(self) -> None:
         linear_fields = _fields_by_key(config_schema("linears/linear"))
@@ -154,6 +154,10 @@ class InspectorSchemaTests(unittest.TestCase):
         self.assertNotIn("gate_bias_flag", linear_fields)
         self.assertEqual(
             linear_fields["gate_option"]["section"],
+            "Gate Options",
+        )
+        self.assertEqual(
+            linear_fields["gate_stack_hidden_dim"]["section"],
             "Gate Stack Options",
         )
         self.assertEqual(linear_fields["recurrent_gate_option"]["type"], "enum")
@@ -230,6 +234,10 @@ class InspectorSchemaTests(unittest.TestCase):
         self.assertNotIn("recurrent_gate_bias_flag", linear_fields)
         self.assertEqual(
             linear_fields["recurrent_gate_option"]["section"],
+            "Recurrent Gate Options",
+        )
+        self.assertEqual(
+            linear_fields["recurrent_gate_stack_hidden_dim"]["section"],
             "Recurrent Gate Stack Options",
         )
         self.assertEqual(linear_fields["recurrent_layer_norm_position"]["type"], "enum")
@@ -306,6 +314,27 @@ class InspectorSchemaTests(unittest.TestCase):
         )
         self.assertFalse(adaptive_fields["input_layer_adaptive_flag"]["default"])
         self.assertFalse(adaptive_fields["output_layer_adaptive_flag"]["default"])
+
+    def test_linear_schemas_do_not_expose_halting_output_dims(self) -> None:
+        removed_field_keys = {
+            "halting_output_dim",
+            "recurrent_halting_output_dim",
+        }
+        removed_config_keys = {
+            "HALTING_OUTPUT_DIM",
+            "RECURRENT_HALTING_OUTPUT_DIM",
+        }
+
+        for model_name in ("linears/linear", "linears/linear_adaptive"):
+            payload = config_schema(model_name)
+            fields = _fields_by_key(payload)
+            config_keys = {field["configKey"] for field in payload["fields"]}
+
+            with self.subTest(model_name=model_name):
+                for field_key in removed_field_keys:
+                    self.assertNotIn(field_key, fields)
+                for config_key in removed_config_keys:
+                    self.assertNotIn(config_key, config_keys)
 
     def test_linear_adaptive_schema_uses_controller_stack_field_names(self) -> None:
         fields = _fields_by_key(config_schema("linears/linear_adaptive"))
@@ -409,9 +438,9 @@ class InspectorSchemaTests(unittest.TestCase):
         fields = _fields_by_key(config_schema("linears/linear_adaptive"))
 
         expected_flags = {
-            "weight_option_flag": "Weight Options",
-            "bias_option_flag": "Bias Options",
-            "diagonal_option_flag": "Diagonal Options",
+            "weight_option_flag": "Weight Generator Options",
+            "bias_option_flag": "Bias Generator Options",
+            "diagonal_option_flag": "Diagonal Generator Options",
             "mask_option_flag": "Mask Options",
         }
         for field_key, section in expected_flags.items():
@@ -450,9 +479,30 @@ class InspectorSchemaTests(unittest.TestCase):
             fields["diagonal_option"]["choices"],
         )
         self.assertEqual(fields["row_mask_option"]["type"], "class")
+        self.assertEqual(fields["row_mask_option"]["section"], "Mask Options")
         self.assertIn(
             "WeightInformedScoreAxisMaskConfig",
             fields["row_mask_option"]["choices"],
+        )
+        self.assertEqual(
+            fields["weight_generator_stack_independent_flag"]["section"],
+            "Weight Generator Stack Options",
+        )
+        self.assertEqual(
+            fields["bias_generator_stack_independent_flag"]["section"],
+            "Bias Generator Stack Options",
+        )
+        self.assertEqual(
+            fields["diagonal_generator_stack_independent_flag"]["section"],
+            "Diagonal Generator Stack Options",
+        )
+        self.assertEqual(
+            fields["mask_generator_stack_independent_flag"]["section"],
+            "Mask Stack Options",
+        )
+        self.assertEqual(
+            fields["mask_generator_stack_hidden_dim"]["section"],
+            "Mask Stack Options",
         )
 
     def test_config_schema_exposes_boundary_projector_adaptive_flags(self) -> None:
@@ -776,7 +826,7 @@ class InspectorSchemaTests(unittest.TestCase):
             axes["bias_option"]["lockedValue"],
             "AdditiveDynamicBiasConfig",
         )
-        self.assertFalse(axes["hidden_dim"]["locked"])
+        self.assertFalse(axes["stack_hidden_dim"]["locked"])
         self.assertNotIn("weight_option_flag", axes)
         self.assertNotIn("bias_option_flag", axes)
 

@@ -103,6 +103,7 @@ async def create_training_run_plan(
         datasets=request.datasets,
         overrides=request.overrides,
         log_folder=request.logFolder,
+        monitors=request.monitors,
         search=(
             TrainingSearch.from_payload(request.search.model_dump())
             if request.search is not None

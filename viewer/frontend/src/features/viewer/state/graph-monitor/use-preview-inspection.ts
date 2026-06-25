@@ -45,13 +45,21 @@ function previewInspectionPayload(request: PreviewInspectionRequest) {
   return request.logRunId ? { ...payload, logRunId: request.logRunId } : payload;
 }
 
+function presetIdentityKey(preset: string) {
+  return preset.toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+export function presetIdentityMatches(left: string, right: string) {
+  return left === right || presetIdentityKey(left) === presetIdentityKey(right);
+}
+
 function assertPreviewIdentity<
   Response extends Pick<InspectResponse, "modelType" | "model" | "preset">,
 >(request: PreviewInspectionRequest, response: Response) {
   if (
     response.modelType === request.modelType &&
     response.model === request.model &&
-    response.preset === request.preset
+    presetIdentityMatches(response.preset, request.preset)
   ) {
     return response;
   }

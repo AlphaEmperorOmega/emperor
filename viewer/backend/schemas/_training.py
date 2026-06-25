@@ -51,6 +51,10 @@ class TrainingRunPlanCreateRequest(ApiResponseModel):
     )
     overrides: ConfigOverrides = Field(default_factory=dict)
     logFolder: str = ""
+    monitors: list[str] = Field(
+        default_factory=list,
+        max_length=MAX_TRAINING_MONITORS,
+    )
     search: TrainingSearchRequest | None = None
 
 

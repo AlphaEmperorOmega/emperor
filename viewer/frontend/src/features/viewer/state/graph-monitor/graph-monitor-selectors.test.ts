@@ -3,6 +3,7 @@ import {
   deriveDatasetSelectionState,
   deriveMonitorSource,
   deriveParameterActivityByNodePath,
+  deriveParameterStatusPathMismatch,
 } from "@/features/viewer/state/graph-monitor/graph-monitor-selectors";
 import {
   type GraphNode,
@@ -45,12 +46,30 @@ function layerTags(runId: string): LogRunTags {
   };
 }
 
+function modernLayerTags(runId: string): LogRunTags {
+  return {
+    runId,
+    scalarTags: ["main_model.layers.0.model/weights/spectral_norm"],
+    histogramTags: [],
+    imageTags: [],
+    textTags: [],
+  };
+}
+
 function performanceTags(runId: string): LogRunTags {
   return {
     runId,
-    scalarTags: ["epoch", "train/loss", "test/accuracy"],
+    scalarTags: [
+      "epoch",
+      "train/loss",
+      "test/accuracy",
+      "parameters/global_norm",
+      "gradients/global_norm",
+      "train/confusion_matrix/class_0/class_1",
+      "validation/per_class/class_0/accuracy",
+    ],
     histogramTags: [],
-    imageTags: [],
+    imageTags: ["validation/examples/predictions"],
     textTags: [],
   };
 }
@@ -242,7 +261,7 @@ describe("viewer state selectors", () => {
       modelRunTags: [
         layerTags("old-mnist"),
         layerTags("new-mnist"),
-        layerTags("fashion"),
+        modernLayerTags("fashion"),
         layerTags("fast-mnist"),
         layerTags("other-experiment"),
       ],
@@ -408,7 +427,7 @@ describe("viewer state selectors", () => {
     ]);
   });
 
-  it("keeps performance-only runs in filter options while monitor groups stay empty", () => {
+  it("omits performance-only runs from historical configuration cascade options", () => {
     const state = deriveDatasetSelectionState({
       logRuns: [
         run({ id: "layer-run", experiment: "exp_a", dataset: "Mnist", preset: "baseline" }),
@@ -423,21 +442,22 @@ describe("viewer state selectors", () => {
     });
 
     expect(state.historicalExperimentOptions).toEqual([
-      { value: "exp_a", label: "exp_a", count: 2 },
+      { value: "exp_a", label: "exp_a", count: 1 },
+    ]);
+    expect(state.historicalDatasetOptions).toEqual([
+      { value: "Mnist", label: "Mnist", count: 1 },
     ]);
     expect(state.historicalPresetOptions).toEqual([
-      { value: "fast", label: "fast", count: 1 },
       { value: "baseline", label: "baseline", count: 1 },
     ]);
-    expect(state.visibleHistoricalRuns.map((item) => item.id)).toEqual([
-      "perf-run",
-    ]);
-    expect(state.selectedLogRun?.id).toBe("perf-run");
+    expect(state.visibleHistoricalRuns).toEqual([]);
+    expect(state.selectedLogRun).toBeUndefined();
     expect(state.filteredHistoricalRuns).toEqual([]);
     expect(state.historicalMonitorRuns).toEqual([]);
+    expect(state.filteredHistoricalRunIds).toEqual([]);
   });
 
-  it("keeps cascade options visible while model run tags load", () => {
+  it("hides cascade options while model run tags load", () => {
     const state = deriveDatasetSelectionState({
       logRuns: [run({ id: "layer-run", experiment: "exp_a", dataset: "Mnist" })],
       modelRunTags: undefined,
@@ -449,22 +469,14 @@ describe("viewer state selectors", () => {
     });
 
     expect(state.modelLogRuns.map((item) => item.id)).toEqual(["layer-run"]);
-    expect(state.historicalExperimentOptions).toEqual([
-      { value: "exp_a", label: "exp_a", count: 1 },
-    ]);
-    expect(state.historicalDatasetOptions).toEqual([
-      { value: "Mnist", label: "Mnist", count: 1 },
-    ]);
-    expect(state.historicalPresetOptions).toEqual([
-      { value: "baseline", label: "baseline", count: 1 },
-    ]);
-    expect(state.visibleHistoricalRuns.map((item) => item.id)).toEqual([
-      "layer-run",
-    ]);
+    expect(state.historicalExperimentOptions).toEqual([]);
+    expect(state.historicalDatasetOptions).toEqual([]);
+    expect(state.historicalPresetOptions).toEqual([]);
+    expect(state.visibleHistoricalRuns).toEqual([]);
     expect(state.historicalMonitorRuns).toEqual([]);
   });
 
-  it("keeps the selected model run visible while monitor tags are loading", () => {
+  it("does not resolve a selected model run while monitor tags are loading", () => {
     const state = deriveDatasetSelectionState({
       logRuns: [
         run({
@@ -481,15 +493,39 @@ describe("viewer state selectors", () => {
     });
 
     expect(state.historicalPresetOptions).toEqual([]);
-    expect(state.visibleHistoricalRuns.map((item) => item.id)).toEqual([
-      "selected-run",
-    ]);
-    expect(state.selectedLogRun?.id).toBe("selected-run");
-    expect(state.selectedHistoricalExperiment).toBe("exp_a");
-    expect(state.selectedHistoricalDataset).toBe("Mnist");
-    expect(state.selectedHistoricalRunPreset).toBe("baseline");
+    expect(state.visibleHistoricalRuns).toEqual([]);
+    expect(state.selectedLogRun).toBeUndefined();
+    expect(state.selectedHistoricalExperiment).toBe("");
+    expect(state.selectedHistoricalDataset).toBe("");
+    expect(state.selectedHistoricalRunPreset).toBe("");
     expect(state.filteredHistoricalRuns).toEqual([]);
     expect(state.filteredHistoricalRunIds).toEqual([]);
+  });
+
+  it("keeps cascade options visible when monitor tag filtering is disabled", () => {
+    const state = deriveDatasetSelectionState({
+      logRuns: [run({ id: "layer-run", experiment: "exp_a", dataset: "Mnist" })],
+      modelRunTags: undefined,
+      includeRunsWithoutMonitorTags: true,
+      selectedModel: "linear",
+      selectedHistoricalExperimentFilter: "exp_a",
+      selectedHistoricalDatasetFilter: "Mnist",
+      selectedHistoricalPreset: "",
+      selectedLogRunId: null,
+    });
+
+    expect(state.historicalExperimentOptions).toEqual([
+      { value: "exp_a", label: "exp_a", count: 1 },
+    ]);
+    expect(state.historicalDatasetOptions).toEqual([
+      { value: "Mnist", label: "Mnist", count: 1 },
+    ]);
+    expect(state.historicalPresetOptions).toEqual([
+      { value: "baseline", label: "baseline", count: 1 },
+    ]);
+    expect(state.visibleHistoricalRuns.map((item) => item.id)).toEqual([
+      "layer-run",
+    ]);
   });
 
   it("filters target runs by model type and model", () => {
@@ -753,6 +789,59 @@ describe("viewer state selectors", () => {
     expect(activity?.targetPath).toBe("main_model.layers.0.model");
     expect(activity?.weights.status).toBe("updated");
     expect(activity?.bias?.status).toBe("unchanged");
+  });
+
+  it("detects parameter status paths that cannot attach to the inspected graph", () => {
+    const graph = modernMonitorGraph();
+    const historicalRuns = [run({ id: "run-updated" })];
+    const source = deriveMonitorSource({
+      graph,
+      historicalMonitorRuns: historicalRuns,
+      selectedHistoricalExperiment: "exp_a",
+      selectedHistoricalDataset: "Mnist",
+      selectedHistoricalPreset: "baseline",
+    }).graphMonitorSource;
+
+    expect(
+      deriveParameterStatusPathMismatch({
+        graph,
+        source,
+        status: {
+          runs: [
+            parameterStatus({
+              sourceId: "run-updated",
+              nodes: [
+                {
+                  nodePath: "other_model.0.model",
+                  weights: {
+                    status: "updated",
+                    metric: "other_model.0.model/weights/delta_norm",
+                    lastStep: 12,
+                    observedPoints: 2,
+                  },
+                  bias: {
+                    status: "updated",
+                    metric: "other_model.0.model/bias/delta_norm",
+                    lastStep: 12,
+                    observedPoints: 2,
+                  },
+                },
+              ],
+            }),
+          ],
+        },
+      }),
+    ).toBe(true);
+
+    expect(
+      deriveParameterStatusPathMismatch({
+        graph,
+        source,
+        status: {
+          runs: [parameterStatus({ sourceId: "run-updated" })],
+        },
+      }),
+    ).toBe(false);
   });
 
   it("does not create graph bias activity when the inspected target has no bias shape", () => {

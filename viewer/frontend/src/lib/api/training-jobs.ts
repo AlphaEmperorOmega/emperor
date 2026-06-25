@@ -413,6 +413,7 @@ export type TrainingRunPlanCreateInput = {
   datasets: string[];
   overrides: ConfigOverrides;
   logFolder?: string;
+  monitors?: string[];
   search?: TrainingSearchCreateInput;
 };
 

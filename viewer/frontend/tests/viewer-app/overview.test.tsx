@@ -555,11 +555,14 @@ describe("ViewerApp Overview", () => {
     expect(snapshotsTab).toHaveAttribute("aria-checked", "false");
     expect(snapshotsTab).toBeDisabled();
     expect(experimentsTab).toHaveAttribute("aria-checked", "false");
+    expect(presetsTab.querySelector("svg")).toBeNull();
+    expect(snapshotsTab.querySelector("svg")).toBeNull();
+    expect(experimentsTab.querySelector("svg")).toBeNull();
     expect(screen.getByRole("combobox", { name: /^preset$/i }))
       .toHaveTextContent("baseline");
     expect(screen.queryByRole("combobox", { name: /^snapshot$/i }))
       .not.toBeInTheDocument();
-    expect(screen.queryByRole("combobox", { name: /^experiment run$/i }))
+    expect(screen.queryByRole("combobox", { name: /^experiment$/i }))
       .not.toBeInTheDocument();
   });
 
@@ -580,10 +583,14 @@ describe("ViewerApp Overview", () => {
 
     await user.click(experimentsTab);
 
-    await waitFor(() => {
-      expect(screen.getByRole("combobox", { name: /^experiment run$/i }))
-        .toBeDisabled();
+    const experimentControl = await screen.findByRole("combobox", {
+      name: /^experiment$/i,
     });
+    await waitFor(() => {
+      expect(experimentControl).toBeDisabled();
+    });
+    expect(screen.getByRole("combobox", { name: /^dataset$/i })).toBeDisabled();
+    expect(screen.getByRole("combobox", { name: /^preset$/i })).toBeDisabled();
   });
 
   it("shows only current-model snapshots in the target snapshot selector", async () => {
@@ -598,7 +605,7 @@ describe("ViewerApp Overview", () => {
             model: "linear",
             preset: "baseline",
             name: "Wide snapshot",
-            overrides: { hidden_dim: "128", num_epochs: "5" },
+            overrides: { stack_hidden_dim: "128", num_epochs: "5" },
             createdAt: "2026-06-01T00:00:00.000Z",
             updatedAt: "2026-06-01T00:00:00.000Z",
           },
@@ -608,7 +615,7 @@ describe("ViewerApp Overview", () => {
             model: "bert_linear",
             preset: "bert-baseline",
             name: "Bert snapshot",
-            overrides: { hidden_dim: "64" },
+            overrides: { stack_hidden_dim: "64" },
             createdAt: "2026-06-01T00:00:00.000Z",
             updatedAt: "2026-06-01T00:00:00.000Z",
           },
@@ -654,7 +661,7 @@ describe("ViewerApp Overview", () => {
             model: "linear",
             preset: "baseline",
             name: "Wide snapshot",
-            overrides: { hidden_dim: "128", num_epochs: "5" },
+            overrides: { stack_hidden_dim: "128", num_epochs: "5" },
             createdAt: "2026-06-01T00:00:00.000Z",
             updatedAt: "2026-06-01T00:00:00.000Z",
           },
@@ -664,7 +671,7 @@ describe("ViewerApp Overview", () => {
             model: "linear",
             preset: "recurrent-gating-halting",
             name: "Recurrent snapshot",
-            overrides: { hidden_dim: "64" },
+            overrides: { stack_hidden_dim: "64" },
             createdAt: "2026-06-01T00:00:00.000Z",
             updatedAt: "2026-06-01T00:00:00.000Z",
           },
@@ -706,7 +713,7 @@ describe("ViewerApp Overview", () => {
         model: "linear",
         preset: "recurrent-gating-halting",
         dataset: "Mnist",
-        overrides: { hidden_dim: "64" },
+        overrides: { stack_hidden_dim: "64" },
       });
     });
     await waitFor(() => {
@@ -729,7 +736,7 @@ describe("ViewerApp Overview", () => {
             model: "linear",
             preset: "baseline",
             name: "Wide snapshot",
-            overrides: { hidden_dim: "128" },
+            overrides: { stack_hidden_dim: "128" },
             createdAt: "2026-06-01T00:00:00.000Z",
             updatedAt: "2026-06-01T00:00:00.000Z",
           },
@@ -739,7 +746,7 @@ describe("ViewerApp Overview", () => {
             model: "bert_linear",
             preset: "bert-baseline",
             name: "Bert snapshot",
-            overrides: { hidden_dim: "64" },
+            overrides: { stack_hidden_dim: "64" },
             createdAt: "2026-06-01T00:00:00.000Z",
             updatedAt: "2026-06-01T00:00:00.000Z",
           },
@@ -785,7 +792,7 @@ describe("ViewerApp Overview", () => {
         model: "bert_linear",
         preset: "bert-baseline",
         dataset: "ToyText",
-        overrides: { hidden_dim: "64" },
+        overrides: { stack_hidden_dim: "64" },
       });
     });
   });
@@ -802,7 +809,7 @@ describe("ViewerApp Overview", () => {
             model: "linear",
             preset: "baseline",
             name: "Wide snapshot",
-            overrides: { hidden_dim: "128", num_epochs: "5" },
+            overrides: { stack_hidden_dim: "128", num_epochs: "5" },
             createdAt: "2026-06-01T00:00:00.000Z",
             updatedAt: "2026-06-01T00:00:00.000Z",
           },
@@ -820,7 +827,7 @@ describe("ViewerApp Overview", () => {
         model: "linear",
         preset: "baseline",
         dataset: "Mnist",
-        overrides: { hidden_dim: "128", num_epochs: "5" },
+        overrides: { stack_hidden_dim: "128", num_epochs: "5" },
       });
     });
 
@@ -853,7 +860,7 @@ describe("ViewerApp Overview", () => {
             model: "linear",
             preset: "baseline",
             name: "Wide snapshot",
-            overrides: { hidden_dim: "128" },
+            overrides: { stack_hidden_dim: "128" },
             createdAt: "2026-06-01T00:00:00.000Z",
             updatedAt: "2026-06-01T00:00:00.000Z",
           },
@@ -863,7 +870,7 @@ describe("ViewerApp Overview", () => {
             model: "bert_linear",
             preset: "bert-baseline",
             name: "Bert snapshot",
-            overrides: { hidden_dim: "64" },
+            overrides: { stack_hidden_dim: "64" },
             createdAt: "2026-06-01T00:00:00.000Z",
             updatedAt: "2026-06-01T00:00:00.000Z",
           },
@@ -1058,45 +1065,45 @@ describe("ViewerApp Overview", () => {
     await user.click(experimentsTab);
     expect(experimentsTab).toHaveAttribute("aria-checked", "true");
 
-    const experimentRunControl = await screen.findByRole("combobox", {
-      name: /^experiment run$/i,
+    const experimentControl = await screen.findByRole("combobox", {
+      name: /^experiment$/i,
     });
-    expect(experimentRunControl).toHaveTextContent("Select run");
+    await waitFor(() => expect(experimentControl).not.toBeDisabled());
+    expect(experimentControl).toHaveTextContent("Select experiment");
 
-    await user.click(experimentRunControl);
-    const runOptions = await screen.findByRole("listbox", {
-      name: /^experiment run options$/i,
+    await user.click(experimentControl);
+    const experimentOptions = await screen.findByRole("listbox", {
+      name: /^experiment options$/i,
     });
     expect(
-      within(runOptions).getByRole("option", {
-        name: "test_model · BASELINE · Mnist · 2026-06-01 01:02:03",
+      within(experimentOptions).getByRole("option", {
+        name: "test_model",
       }),
     ).toBeInTheDocument();
     expect(
-      within(runOptions).queryByRole("option", {
+      within(experimentOptions).getByRole("option", {
+        name: "test_model_2",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(experimentOptions).queryByRole("option", {
         name: /bert_experiment/i,
       }),
     ).not.toBeInTheDocument();
-    const experimentRoot = experimentRunControl.parentElement;
-    if (!(experimentRoot instanceof HTMLElement)) {
-      throw new Error("Expected experiment run dropdown root");
-    }
-    await user.type(
-      within(experimentRoot).getByRole("searchbox", {
-        name: /^search experiment run$/i,
-      }),
-      "Cifar10",
-    );
-    const newestRun = within(runOptions).getByRole("option", {
-      name: "test_model_2 · BASELINE · Cifar10 · 2026-06-01 02:03:04",
-    });
+    await user.keyboard("{Escape}");
 
-    await user.click(newestRun);
+    await selectTargetOption(user, "experiment", "test_model_2");
     await waitFor(() =>
-      expect(experimentRunControl).toHaveTextContent(
-        "test_model_2 · BASELINE · Cifar10 · 2026-06-01 02:03:04",
-      ),
+      expect(screen.getByRole("combobox", { name: /^dataset$/i }))
+        .not.toBeDisabled(),
     );
+    await selectTargetOption(user, "dataset", "Cifar10");
+    await waitFor(() =>
+      expect(screen.getByRole("combobox", { name: /^preset$/i }))
+        .not.toBeDisabled(),
+    );
+    const presetControl = await selectTargetOption(user, "preset", "BASELINE");
+
     expect(screen.getByRole("radio", { name: "Experiments" })).toHaveAttribute(
       "aria-checked",
       "true",
@@ -1105,24 +1112,19 @@ describe("ViewerApp Overview", () => {
       expect(inspectBodies.at(-1)).toEqual({
         modelType: "linears",
         model: "linear",
-        preset: "baseline",
+        preset: "BASELINE",
         dataset: "Cifar10",
         overrides: {},
+        logRunId: "log-cifar",
       });
     });
 
     const requestCount = inspectBodies.length;
-    await user.click(experimentRunControl);
-    await user.click(
-      within(
-        await screen.findByRole("listbox", { name: /^experiment run options$/i }),
-      ).getByRole("option", {
-        name: "test_model_2 · BASELINE · Cifar10 · 2026-06-01 02:03:04",
-      }),
-    );
-    expect(experimentRunControl).toHaveTextContent(
-      "test_model_2 · BASELINE · Cifar10 · 2026-06-01 02:03:04",
-    );
+    await selectTargetOption(user, "preset", "BASELINE");
+    expect(experimentControl).toHaveTextContent("test_model_2");
+    expect(screen.getByRole("combobox", { name: /^dataset$/i }))
+      .toHaveTextContent("Cifar10");
+    expect(presetControl).toHaveTextContent("BASELINE");
     expect(inspectBodies).toHaveLength(requestCount);
   });
 
@@ -1169,22 +1171,13 @@ describe("ViewerApp Overview", () => {
     const experimentsTab = await screen.findByRole("radio", { name: "Experiments" });
     await waitFor(() => expect(experimentsTab).not.toBeDisabled());
     await user.click(experimentsTab);
-    const experimentRunControl = await screen.findByRole("combobox", {
-      name: /^experiment run$/i,
-    });
-    await user.click(experimentRunControl);
-    await user.click(
-      within(
-        await screen.findByRole("listbox", { name: /^experiment run options$/i }),
-      ).getByRole("option", {
-        name: "exp_alpha · BASELINE · Mnist · 2026-06-01 01:00:00",
-      }),
-    );
     await waitFor(() =>
-      expect(experimentRunControl).toHaveTextContent(
-        "exp_alpha · BASELINE · Mnist · 2026-06-01 01:00:00",
-      ),
+      expect(screen.getByRole("combobox", { name: /^experiment$/i }))
+        .not.toBeDisabled(),
     );
+    await selectTargetOption(user, "experiment", "exp_alpha");
+    await selectTargetOption(user, "dataset", "Mnist");
+    await selectTargetOption(user, "preset", "BASELINE");
 
     await selectTargetOption(user, "model type", "Transformer encoder");
     await waitFor(() =>
@@ -1194,18 +1187,19 @@ describe("ViewerApp Overview", () => {
     const refreshedExperimentsTab = screen.getByRole("radio", { name: "Experiments" });
     await waitFor(() => expect(refreshedExperimentsTab).not.toBeDisabled());
     await user.click(refreshedExperimentsTab);
-    const refreshedRunControl = await screen.findByRole("combobox", {
-      name: /^experiment run$/i,
+    const refreshedExperimentControl = await screen.findByRole("combobox", {
+      name: /^experiment$/i,
     });
-    expect(refreshedRunControl).toHaveTextContent("Select run");
+    await waitFor(() => expect(refreshedExperimentControl).not.toBeDisabled());
+    expect(refreshedExperimentControl).toHaveTextContent("Select experiment");
 
-    await user.click(refreshedRunControl);
+    await user.click(refreshedExperimentControl);
     const refreshedOptions = await screen.findByRole("listbox", {
-      name: /^experiment run options$/i,
+      name: /^experiment options$/i,
     });
     expect(
       within(refreshedOptions).getByRole("option", {
-        name: "exp_bert · BERT_BASELINE · ToyText · 2026-06-01 03:00:00",
+        name: "exp_bert",
       }),
     ).toBeInTheDocument();
     expect(
@@ -1228,30 +1222,29 @@ describe("ViewerApp Overview", () => {
     const experimentsTab = await screen.findByRole("radio", { name: "Experiments" });
     await waitFor(() => expect(experimentsTab).not.toBeDisabled());
     await user.click(experimentsTab);
-    const experimentRunControl = await screen.findByRole("combobox", {
-      name: /^experiment run$/i,
-    });
-    await user.click(experimentRunControl);
-    await user.click(
-      within(
-        await screen.findByRole("listbox", { name: /^experiment run options$/i }),
-      ).getByRole("option", {
-        name: "test_model · BASELINE · Mnist · 2026-06-01 01:02:03",
-      }),
+    await waitFor(() =>
+      expect(screen.getByRole("combobox", { name: /^experiment$/i }))
+        .not.toBeDisabled(),
     );
+    const experimentControl = await selectTargetOption(
+      user,
+      "experiment",
+      "test_model",
+    );
+    await selectTargetOption(user, "dataset", "Mnist");
+    await selectTargetOption(user, "preset", "BASELINE");
 
     await waitFor(() => {
       expect(inspectBodies.at(-1)).toEqual({
         modelType: "linears",
         model: "linear",
-        preset: "baseline",
+        preset: "BASELINE",
         dataset: "Mnist",
         overrides: {},
+        logRunId: "log-mnist",
       });
     });
-    expect(experimentRunControl).toHaveTextContent(
-      "test_model · BASELINE · Mnist · 2026-06-01 01:02:03",
-    );
+    expect(experimentControl).toHaveTextContent("test_model");
     expect(screen.getByText("0 overrides")).toBeInTheDocument();
   });
 

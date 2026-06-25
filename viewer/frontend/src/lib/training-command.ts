@@ -37,6 +37,9 @@ export function buildTrainingCommand({
   model,
   preset,
   presets,
+  datasets,
+  logFolder,
+  monitors,
   sections,
   overrides,
 }: {
@@ -44,6 +47,9 @@ export function buildTrainingCommand({
   model: string;
   preset: string;
   presets?: string[];
+  datasets?: string[];
+  logFolder?: string;
+  monitors?: string[];
   sections: ConfigSection[];
   overrides: OverrideValues;
 }) {
@@ -63,6 +69,15 @@ export function buildTrainingCommand({
     parts.push("--presets", ...selectedPresets.map(shellQuote));
   } else {
     parts.push("--preset", shellQuote(selectedPresets[0] ?? preset));
+  }
+  if (datasets && datasets.length > 0) {
+    parts.push("--datasets", ...datasets.map(shellQuote));
+  }
+  if (logFolder) {
+    parts.push("--logdir", shellQuote(logFolder));
+  }
+  if (monitors && monitors.length > 0) {
+    parts.push("--monitors", ...monitors.map(shellQuote));
   }
   const orderedOverrides = orderedOverrideEntries(sections, overrides);
 

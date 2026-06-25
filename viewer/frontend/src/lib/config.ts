@@ -78,22 +78,30 @@ export function normalizeConfigOverrides(
 }
 
 const CONTROLLED_SECTION_FLAG_KEYS_BY_TITLE = new Map([
-  ["Gate Stack Options", "gate_flag"],
+  ["Gate Options", "gate_flag"],
+  ["Gate Stack Options", "gate_stack_independent_flag"],
   ["Halting Options", "halting_flag"],
+  ["Halting Stack Options", "halting_stack_independent_flag"],
   ["Memory Options", "memory_flag"],
+  ["Memory Stack Options", "memory_stack_independent_flag"],
   ["Recurrent Layer Options", "recurrent_flag"],
-  ["Recurrent Gate Stack Options", "recurrent_gate_flag"],
+  ["Recurrent Gate Options", "recurrent_gate_flag"],
+  ["Recurrent Gate Stack Options", "recurrent_gate_stack_independent_flag"],
   ["Recurrent Halting Options", "recurrent_halting_flag"],
+  ["Recurrent Halting Stack Options", "recurrent_halting_stack_independent_flag"],
   ["Weight Options", "weight_option_flag"],
+  ["Weight Generator Options", "weight_option_flag"],
+  ["Weight Generator Stack Options", "weight_generator_stack_independent_flag"],
   ["Bias Options", "bias_option_flag"],
+  ["Bias Generator Options", "bias_option_flag"],
+  ["Bias Generator Stack Options", "bias_generator_stack_independent_flag"],
   ["Diagonal Options", "diagonal_option_flag"],
+  ["Diagonal Generator Options", "diagonal_option_flag"],
+  ["Diagonal Generator Stack Options", "diagonal_generator_stack_independent_flag"],
   ["Mask Options", "mask_option_flag"],
+  ["Mask Stack Options", "mask_generator_stack_independent_flag"],
   ["Input Boundary Projector Options", "input_layer_adaptive_flag"],
   ["Output Boundary Projector Options", "output_layer_adaptive_flag"],
-  ["Weight Generator Stack Options", "weight_generator_stack_independent_flag"],
-  ["Bias Generator Stack Options", "bias_generator_stack_independent_flag"],
-  ["Diagonal Generator Stack Options", "diagonal_generator_stack_independent_flag"],
-  ["Mask Generator Stack Options", "mask_generator_stack_independent_flag"],
 ]);
 
 const FALLBACK_CONTROLLED_SECTION_FLAG_KEYS = new Set([
@@ -107,16 +115,8 @@ const GENERAL_CONFIG_SECTION = "General";
 const RECURRENT_LAYER_CONFIG_SECTION = "Recurrent Layer Options";
 const INPUT_BOUNDARY_PROJECTOR_SECTION = "Input Boundary Projector Options";
 const OUTPUT_BOUNDARY_PROJECTOR_SECTION = "Output Boundary Projector Options";
-const RECURRENT_LAYER_FIELD_PREFIXES = [
-  "recurrent_gate_",
-  "recurrent_halting_",
-];
 
 export function displayConfigFieldSection(field: ConfigField) {
-  const key = configKeyToken(field.key);
-  if (RECURRENT_LAYER_FIELD_PREFIXES.some((prefix) => key.startsWith(prefix))) {
-    return RECURRENT_LAYER_CONFIG_SECTION;
-  }
   return field.section || GENERAL_CONFIG_SECTION;
 }
 
@@ -397,7 +397,7 @@ export function filterConfigSectionsForSearch(
     return sections;
   }
 
-  return sections.reduce<ConfigSection[]>((visibleSections, section) => {
+  const matchedSections = sections.reduce<ConfigSection[]>((visibleSections, section) => {
     const fields = section.fields.filter((field) => {
       if (selectedKey) {
         return configKeyToken(field.key) === configKeyToken(selectedKey);
@@ -421,6 +421,8 @@ export function filterConfigSectionsForSearch(
 
     return visibleSections;
   }, []);
+
+  return withAncestorConfigSections(sections, matchedSections);
 }
 
 function fieldsWithPrefix(fields: ConfigField[], prefix: string) {
@@ -428,7 +430,6 @@ function fieldsWithPrefix(fields: ConfigField[], prefix: string) {
 }
 
 const STACK_SCOPE_FIELD_SUFFIXES = ["hidden_dim", "layer_norm_position"];
-const STACK_SCOPE_FLAG_SUFFIXES = ["bias_flag"];
 
 function stackScopedFields(fields: ConfigField[], prefix: string) {
   const stackPrefix = `${prefix}stack_`;
@@ -437,8 +438,7 @@ function stackScopedFields(fields: ConfigField[], prefix: string) {
       const key = configKeyToken(field.key);
       return (
         key.startsWith(stackPrefix) ||
-        STACK_SCOPE_FIELD_SUFFIXES.some((suffix) => key === `${prefix}${suffix}`) ||
-        STACK_SCOPE_FLAG_SUFFIXES.some((suffix) => key === `${prefix}${suffix}`)
+        STACK_SCOPE_FIELD_SUFFIXES.some((suffix) => key === `${prefix}${suffix}`)
       );
     },
   );
@@ -540,8 +540,15 @@ function titleWithoutOptionsSuffix(title: string) {
 }
 
 const STACK_CHILD_TITLE_BY_PREFIX = new Map([
-  ["gate_", "Gate Model Stack"],
-  ["recurrent_gate_", "Recurrent Gate Model Stack"],
+  ["gate_", "Gate Stack Options"],
+  ["halting_", "Halting Stack Options"],
+  ["memory_", "Memory Stack Options"],
+  ["recurrent_gate_", "Recurrent Gate Stack Options"],
+  ["recurrent_halting_", "Recurrent Halting Stack Options"],
+  ["weight_generator_", "Weight Generator Stack Options"],
+  ["bias_generator_", "Bias Generator Stack Options"],
+  ["diagonal_generator_", "Diagonal Generator Stack Options"],
+  ["mask_generator_", "Mask Stack Options"],
 ]);
 
 function sectionTitleImpliesStackPrefix(section: ConfigSection, prefix: string) {
@@ -554,6 +561,16 @@ function sectionTitleImpliesStackPrefix(section: ConfigSection, prefix: string) 
 const SECTION_OWNED_STACK_PREFIXES_BY_TITLE = new Map([
   ["Layer Stack Options", new Set(["stack_"])],
   ["Layer Stack Submodule Options", new Set(["submodule_"])],
+  ["Adaptive Submodule Stack Options", new Set(["adaptive_submodule_"])],
+  ["Gate Stack Options", new Set(["gate_"])],
+  ["Halting Stack Options", new Set(["halting_"])],
+  ["Memory Stack Options", new Set(["memory_"])],
+  ["Recurrent Gate Stack Options", new Set(["recurrent_gate_"])],
+  ["Recurrent Halting Stack Options", new Set(["recurrent_halting_"])],
+  ["Weight Generator Stack Options", new Set(["weight_generator_"])],
+  ["Bias Generator Stack Options", new Set(["bias_generator_"])],
+  ["Diagonal Generator Stack Options", new Set(["diagonal_generator_"])],
+  ["Mask Stack Options", new Set(["mask_generator_"])],
 ]);
 
 function sectionTitleOwnsStackPrefix(
@@ -573,8 +590,7 @@ function stackScopedPrefixFromKey(fieldKey: string) {
     return undefined;
   }
 
-  const suffixes = [...STACK_SCOPE_FIELD_SUFFIXES, ...STACK_SCOPE_FLAG_SUFFIXES];
-  for (const suffix of suffixes) {
+  for (const suffix of STACK_SCOPE_FIELD_SUFFIXES) {
     if (!key.endsWith(`_${suffix}`)) {
       continue;
     }
@@ -669,6 +685,15 @@ function withDerivedStackChildren(section: ConfigSection) {
   };
 }
 
+function sectionTitleFromFields(
+  fields: ConfigField[],
+  parentTitle: string,
+  fallbackTitle: string,
+) {
+  return fields.find((field) => field.section && field.section !== parentTitle)?.section
+    ?? fallbackTitle;
+}
+
 function deriveRecurrentChildren(section: ConfigSection) {
   const recurrentGateFields = fieldsWithPrefix(section.fields, "recurrent_gate_");
   const recurrentHaltingFields = fieldsWithPrefix(
@@ -677,36 +702,166 @@ function deriveRecurrentChildren(section: ConfigSection) {
   );
 
   return [
-    sectionWithFields("Recurrent Gate Stack Options", recurrentGateFields, {
-      controlFieldKey: "recurrent_gate_flag",
-    }),
-    sectionWithFields("Recurrent Halting Options", recurrentHaltingFields, {
-      controlFieldKey: "recurrent_halting_flag",
-    }),
+    sectionWithFields(
+      sectionTitleFromFields(
+        recurrentGateFields,
+        section.title,
+        "Recurrent Gate Options",
+      ),
+      recurrentGateFields,
+      {
+        controlFieldKey: "recurrent_gate_flag",
+      },
+    ),
+    sectionWithFields(
+      sectionTitleFromFields(
+        recurrentHaltingFields,
+        section.title,
+        "Recurrent Halting Options",
+      ),
+      recurrentHaltingFields,
+      {
+        controlFieldKey: "recurrent_halting_flag",
+      },
+    ),
   ]
     .filter((child): child is ConfigSection => Boolean(child))
     .map((child) => withDerivedStackChildren(child));
 }
 
+const CHILD_SECTION_TITLES_BY_TITLE = new Map([
+  ["Gate Options", ["Gate Stack Options"]],
+  ["Halting Options", ["Halting Stack Options"]],
+  ["Memory Options", ["Memory Stack Options"]],
+  [
+    RECURRENT_LAYER_CONFIG_SECTION,
+    ["Recurrent Gate Options", "Recurrent Halting Options"],
+  ],
+  ["Recurrent Gate Options", ["Recurrent Gate Stack Options"]],
+  ["Recurrent Halting Options", ["Recurrent Halting Stack Options"]],
+  ["Weight Generator Options", ["Weight Generator Stack Options"]],
+  ["Bias Generator Options", ["Bias Generator Stack Options"]],
+  ["Diagonal Generator Options", ["Diagonal Generator Stack Options"]],
+  ["Mask Options", ["Mask Stack Options"]],
+]);
+
+function parentSectionTitlesByChildTitle() {
+  const parentsByChild = new Map<string, string[]>();
+  for (const [parentTitle, childTitles] of CHILD_SECTION_TITLES_BY_TITLE) {
+    for (const childTitle of childTitles) {
+      const parents = parentsByChild.get(childTitle) ?? [];
+      parents.push(parentTitle);
+      parentsByChild.set(childTitle, parents);
+    }
+  }
+  return parentsByChild;
+}
+
+function withAncestorConfigSections(
+  sourceSections: ConfigSection[],
+  matchedSections: ConfigSection[],
+) {
+  if (matchedSections.length === 0) {
+    return matchedSections;
+  }
+
+  const sourceSectionsByTitle = new Map(
+    sourceSections.map((section) => [section.title, section]),
+  );
+  const parentsByChild = parentSectionTitlesByChildTitle();
+  const visibleSectionsByTitle = new Map(
+    matchedSections.map((section) => [section.title, section]),
+  );
+
+  function includeAncestors(sectionTitle: string) {
+    for (const parentTitle of parentsByChild.get(sectionTitle) ?? []) {
+      if (!sourceSectionsByTitle.has(parentTitle)) {
+        continue;
+      }
+      if (!visibleSectionsByTitle.has(parentTitle)) {
+        visibleSectionsByTitle.set(parentTitle, {
+          ...sourceSectionsByTitle.get(parentTitle)!,
+          fields: [],
+        });
+      }
+      includeAncestors(parentTitle);
+    }
+  }
+
+  for (const section of matchedSections) {
+    includeAncestors(section.title);
+  }
+
+  return sourceSections
+    .filter((section) => visibleSectionsByTitle.has(section.title))
+    .map((section) => visibleSectionsByTitle.get(section.title)!);
+}
+
+function withSectionControlField(section: ConfigSection) {
+  const controlFieldKey = CONTROLLED_SECTION_FLAG_KEYS_BY_TITLE.get(section.title);
+  return controlFieldKey ? { ...section, controlFieldKey } : section;
+}
+
+function consumedChildSectionTitles(sectionsByTitle: Map<string, ConfigSection>) {
+  const consumed = new Set<string>();
+  for (const [parentTitle, childTitles] of CHILD_SECTION_TITLES_BY_TITLE) {
+    if (!sectionsByTitle.has(parentTitle)) {
+      continue;
+    }
+    for (const childTitle of childTitles) {
+      if (sectionsByTitle.has(childTitle)) {
+        consumed.add(childTitle);
+      }
+    }
+  }
+  return consumed;
+}
+
+function nestedConfigSection(
+  section: ConfigSection,
+  sectionsByTitle: Map<string, ConfigSection>,
+  visiting = new Set<string>(),
+): ConfigSection {
+  if (visiting.has(section.title)) {
+    return withSectionControlField(section);
+  }
+
+  const nextVisiting = new Set(visiting);
+  nextVisiting.add(section.title);
+  const explicitChildren = (CHILD_SECTION_TITLES_BY_TITLE.get(section.title) ?? [])
+    .map((title) => sectionsByTitle.get(title))
+    .filter((child): child is ConfigSection => Boolean(child))
+    .map((child) => nestedConfigSection(child, sectionsByTitle, nextVisiting));
+
+  let result = withSectionControlField(section);
+  if (
+    section.title === RECURRENT_LAYER_CONFIG_SECTION &&
+    explicitChildren.length === 0
+  ) {
+    const recurrentChildren = deriveRecurrentChildren(result);
+    if (recurrentChildren.length > 0) {
+      result = { ...result, children: recurrentChildren };
+    }
+  }
+
+  if (!boundaryProjectorPrefix(result.title)) {
+    result = withDerivedStackChildren(result);
+  }
+  if (explicitChildren.length > 0) {
+    result = {
+      ...result,
+      children: [...(result.children ?? []), ...explicitChildren],
+    };
+  }
+  return result;
+}
+
 function deriveNestedConfigSectionsFromFields(sections: ConfigSection[]) {
-  return sections.map((section) => {
-    if (section.title === "Recurrent Layer Options") {
-      return {
-        ...section,
-        children: deriveRecurrentChildren(section),
-        controlFieldKey: "recurrent_flag",
-      };
-    }
-
-    const controlFieldKey = CONTROLLED_SECTION_FLAG_KEYS_BY_TITLE.get(section.title);
-    if (boundaryProjectorPrefix(section.title)) {
-      return controlFieldKey ? { ...section, controlFieldKey } : section;
-    }
-
-    return withDerivedStackChildren(
-      controlFieldKey ? { ...section, controlFieldKey } : section,
-    );
-  });
+  const sectionsByTitle = new Map(sections.map((section) => [section.title, section]));
+  const consumedChildTitles = consumedChildSectionTitles(sectionsByTitle);
+  return sections
+    .filter((section) => !consumedChildTitles.has(section.title))
+    .map((section) => nestedConfigSection(section, sectionsByTitle));
 }
 
 function controlFieldForSection(section: ConfigSection | undefined) {

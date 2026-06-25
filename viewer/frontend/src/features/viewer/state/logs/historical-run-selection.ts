@@ -73,17 +73,25 @@ export function deriveDatasetSelectionState(
         (!input.selectedModelType || run.modelType === input.selectedModelType),
     ),
   );
-  const historicalExperimentOptions = historicalExperimentRunOptions(modelLogRuns);
+  const eligibleRunIds = monitorEligibleRunIds({
+    modelLogRuns,
+    modelRunTags: input.modelRunTags,
+    includeRunsWithoutMonitorTags: input.includeRunsWithoutMonitorTags,
+  });
+  const eligibleRuns = modelLogRuns.filter((run) =>
+    eligibleRunIds.has(run.id),
+  );
+  const historicalExperimentOptions = historicalExperimentRunOptions(eligibleRuns);
   const historicalDatasetOptions = selectedHistoricalExperimentFilter
     ? buildHistoricalDatasetOptions(
-        modelLogRuns,
+        eligibleRuns,
         selectedHistoricalExperimentFilter,
       )
     : [];
   const datasetFilteredHistoricalRuns =
     selectedHistoricalExperimentFilter && selectedHistoricalDatasetFilter
       ? filterHistoricalRuns(
-          modelLogRuns,
+          eligibleRuns,
           selectedHistoricalExperimentFilter,
           selectedHistoricalDatasetFilter,
         )
@@ -93,21 +101,13 @@ export function deriveDatasetSelectionState(
       ? buildHistoricalPresetOptions(datasetFilteredHistoricalRuns)
       : [];
   const visibleHistoricalRuns = filterHistoricalRuns(
-    modelLogRuns,
+    eligibleRuns,
     selectedHistoricalExperimentFilter,
     selectedHistoricalDatasetFilter,
     input.selectedHistoricalPreset,
   );
-  const eligibleRunIds = monitorEligibleRunIds({
-    modelLogRuns,
-    modelRunTags: input.modelRunTags,
-    includeRunsWithoutMonitorTags: input.includeRunsWithoutMonitorTags,
-  });
-  const eligibleRuns = modelLogRuns.filter((run) =>
-    eligibleRunIds.has(run.id),
-  );
   const selectedModelLogRun = input.selectedLogRunId
-    ? modelLogRuns.find((run) => run.id === input.selectedLogRunId)
+    ? eligibleRuns.find((run) => run.id === input.selectedLogRunId)
     : undefined;
   const selectedLogRun = selectedModelLogRun;
   const hasCompleteCascade = Boolean(

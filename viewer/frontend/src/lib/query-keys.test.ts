@@ -24,6 +24,7 @@ function trainingRunPlanInput(
     datasets: ["Mnist"],
     overrides: { hidden_size: "128" },
     logFolder: "runs",
+    monitors: [],
     ...overrides,
   };
 }
@@ -177,6 +178,7 @@ describe("query key factories", () => {
         logFolder: "runs",
         modelType: "linears",
         model: "linear",
+        monitors: [],
         overrides: { hidden_size: "128" },
         preset: "baseline",
         presets: ["baseline"],
@@ -234,6 +236,20 @@ describe("query key factories", () => {
           presets: ["baseline", "wide"],
           datasets: ["Mnist", "Cifar10"],
         }),
+      ),
+    );
+  });
+
+  it("changes training run-plan query keys when monitors change", () => {
+    expect(
+      trainingQueryKeys.runPlan(
+        0,
+        trainingRunPlanInput({ monitors: ["linear"] }),
+      ),
+    ).not.toEqual(
+      trainingQueryKeys.runPlan(
+        0,
+        trainingRunPlanInput({ monitors: ["linear", "halting"] }),
       ),
     );
   });

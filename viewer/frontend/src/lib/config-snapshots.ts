@@ -82,6 +82,42 @@ export function overridesFromSnapshotEntries(
   return Object.fromEntries(entries.map((entry) => [entry.key, entry.value]));
 }
 
+const ADAPTIVE_OPTION_REQUIREMENTS = [
+  { flagKey: "weight_option_flag", optionKey: "weight_option" },
+  { flagKey: "bias_option_flag", optionKey: "bias_option" },
+  { flagKey: "diagonal_option_flag", optionKey: "diagonal_option" },
+  { flagKey: "mask_option_flag", optionKey: "row_mask_option" },
+];
+
+function isEnabledSnapshotValue(value: string | undefined) {
+  return ["true", "1", "yes", "on"].includes((value ?? "").trim().toLowerCase());
+}
+
+function isPresentSnapshotOption(value: string | undefined) {
+  const normalized = (value ?? "").trim().toLowerCase();
+  return normalized !== "" && normalized !== "null" && normalized !== "none";
+}
+
+function validateAdaptiveOptionRequirements(
+  entries: ConfigSnapshotOverrideEntry[],
+) {
+  const entryValues = new Map(
+    entries.map((entry) => [configKeyToken(entry.key), entry.value]),
+  );
+  for (const { flagKey, optionKey } of ADAPTIVE_OPTION_REQUIREMENTS) {
+    if (
+      isEnabledSnapshotValue(entryValues.get(configKeyToken(flagKey))) &&
+      !isPresentSnapshotOption(entryValues.get(configKeyToken(optionKey)))
+    ) {
+      return {
+        ok: false as const,
+        error: `Invalid config snapshot overrides: ${optionKey} must be set when ${flagKey} is True.`,
+      };
+    }
+  }
+  return { ok: true as const };
+}
+
 function snapshotIdentity({
   modelType,
   model,
@@ -201,6 +237,11 @@ export function validateConfigSnapshotCandidate({
       ok: false as const,
       error: "Change at least one non-default field before adding a snapshot.",
     };
+  }
+
+  const adaptiveOptionValidation = validateAdaptiveOptionRequirements(entries);
+  if (!adaptiveOptionValidation.ok) {
+    return adaptiveOptionValidation;
   }
 
   const identity = snapshotIdentity({ modelType, model, preset, entries });

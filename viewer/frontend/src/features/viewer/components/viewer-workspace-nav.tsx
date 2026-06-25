@@ -1,14 +1,12 @@
-import { GitCompare, Layers, LineChart, type LucideIcon } from "lucide-react";
 import { type ViewerWorkspace } from "@/types/viewer";
 
 const workspaceItems: Array<{
   value: ViewerWorkspace;
   label: string;
-  icon: LucideIcon;
 }> = [
-  { value: "model", label: "Model", icon: Layers },
-  { value: "compare", label: "Compare", icon: GitCompare },
-  { value: "logs", label: "Logs", icon: LineChart },
+  { value: "model", label: "Model" },
+  { value: "compare", label: "Compare" },
+  { value: "logs", label: "Logs" },
 ];
 
 export function ViewerWorkspaceNav({
@@ -21,7 +19,6 @@ export function ViewerWorkspaceNav({
   return (
     <nav className="grid grid-cols-3 gap-2 rounded-control-group border border-line-soft bg-control-muted p-1">
       {workspaceItems.map((item) => {
-        const Icon = item.icon;
         const active = activeWorkspace === item.value;
         return (
           <button
@@ -35,7 +32,6 @@ export function ViewerWorkspaceNav({
             aria-pressed={active}
             onClick={() => onChange(item.value)}
           >
-            <Icon className="h-4 w-4 shrink-0 text-current" aria-hidden />
             {item.label}
           </button>
         );

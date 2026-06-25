@@ -24,6 +24,7 @@ export type TrainingRunPlanQueryKeyInput = {
   datasets: StringList;
   overrides: OverrideValues;
   logFolder: string;
+  monitors: StringList;
   search?: TrainingSearchCreateInput;
   submittedRunPlan?: TrainingRunPlan;
 };
@@ -68,6 +69,7 @@ function trainingRunPlanInputKey({
   datasets,
   overrides,
   logFolder,
+  monitors,
   search,
   submittedRunPlan,
 }: TrainingRunPlanQueryKeyInput): NormalizedQueryObject {
@@ -76,6 +78,7 @@ function trainingRunPlanInputKey({
     logFolder,
     model,
     modelType,
+    monitors: [...monitors],
     overrides: normalizedQueryValue(overrides),
     preset,
     presets: [...presets],

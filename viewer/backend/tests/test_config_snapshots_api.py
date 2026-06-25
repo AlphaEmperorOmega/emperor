@@ -53,6 +53,10 @@ def fake_config_schema(model: str, preset: str | None = None) -> dict[str, Any]:
     return FAKE_FIELDS
 
 
+def fake_validate_snapshot_config(**_kwargs: Any) -> None:
+    return None
+
+
 def split_test_model(model: str) -> tuple[str, str]:
     if "/" not in model:
         return "linears", model
@@ -60,6 +64,10 @@ def split_test_model(model: str) -> tuple[str, str]:
     return model_type, model_name
 
 
+@mock.patch(
+    "viewer.backend.services.config_snapshots._validate_snapshot_config",
+    fake_validate_snapshot_config,
+)
 @mock.patch(
     "viewer.backend.services.config_snapshots.config_schema",
     fake_config_schema,

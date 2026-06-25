@@ -176,7 +176,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
             "logFolder": "api_schema",
         }
         overrides = {
-            "hidden_dim": 128,
+            "stack_hidden_dim": 128,
             "learning_rate": 0.01,
             "use_bias": True,
             "activation": "RELU",
@@ -221,7 +221,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
             "preset": "baseline",
             "presets": ["baseline"],
             "datasets": ["Mnist"],
-            "overrides": {"hidden_dim": 128, "use_bias": True},
+            "overrides": {"stack_hidden_dim": 128, "use_bias": True},
             "search": None,
             "logFolder": "api_schema",
             "isRandomSearch": False,
@@ -242,7 +242,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
 
         request = SubmittedTrainingRunPlanRequest.model_validate(base_payload)
 
-        self.assertEqual(request.overrides, {"hidden_dim": 128, "use_bias": True})
+        self.assertEqual(request.overrides, {"stack_hidden_dim": 128, "use_bias": True})
         with self.assertRaises(ValidationError):
             SubmittedTrainingRunPlanRequest.model_validate(
                 {
@@ -281,6 +281,54 @@ class TrainingApiLifecycleTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 422)
         self.assertIn("overrides", response.text)
+
+    def test_training_run_plan_accepts_and_validates_monitors(self) -> None:
+        import httpx
+
+        with tempfile.TemporaryDirectory() as tmp:
+            app, _manager = self._create_test_app(Path(tmp))
+
+            async def call_api() -> tuple[httpx.Response, httpx.Response]:
+                transport = httpx.ASGITransport(app=app)
+                async with httpx.AsyncClient(
+                    transport=transport,
+                    base_url="http://testserver",
+                ) as client:
+                    accepted = await client.post(
+                        "/training/run-plan",
+                        json={
+                            "modelType": "linears",
+                            "model": "linear",
+                            "preset": "baseline",
+                            "datasets": ["Mnist"],
+                            "overrides": {},
+                            "logFolder": "monitor_api",
+                            "monitors": ["linear"],
+                        },
+                    )
+                    rejected = await client.post(
+                        "/training/run-plan",
+                        json={
+                            "modelType": "linears",
+                            "model": "linear",
+                            "preset": "baseline",
+                            "datasets": ["Mnist"],
+                            "overrides": {},
+                            "logFolder": "monitor_api",
+                            "monitors": ["missing"],
+                        },
+                    )
+                    return accepted, rejected
+
+            accepted, rejected = asyncio.run(call_api())
+
+        self.assertEqual(accepted.status_code, 200, accepted.text)
+        self.assertIn(
+            "--monitors linear",
+            accepted.json()["runs"][0]["command"],
+        )
+        self.assertEqual(rejected.status_code, 400)
+        self.assertIn("Unknown monitor option", rejected.text)
 
     def test_training_run_plan_rejects_overlarge_search_axis(self) -> None:
         import httpx
@@ -530,7 +578,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
             "preset": "baseline",
             "presets": ["baseline"],
             "datasets": ["Mnist"],
-            "overrides": {"hidden_dim": 128},
+            "overrides": {"stack_hidden_dim": 128},
             "search": None,
             "logFolder": "api_schema",
             "isRandomSearch": False,
@@ -545,7 +593,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
             "preset": "baseline",
             "presets": ["baseline"],
             "datasets": ["Mnist"],
-            "overrides": {"hidden_dim": 128},
+            "overrides": {"stack_hidden_dim": 128},
             "search": None,
             "plannedRunCount": 0,
             "runPlan": run_plan_payload,
@@ -568,11 +616,11 @@ class TrainingApiLifecycleTests(unittest.TestCase):
 
         self.assertEqual(
             TrainingRunPlanResponse.model_validate(run_plan_payload).overrides,
-            {"hidden_dim": 128},
+            {"stack_hidden_dim": 128},
         )
         self.assertEqual(
             TrainingJobResponse.model_validate(job_payload).overrides,
-            {"hidden_dim": 128},
+            {"stack_hidden_dim": 128},
         )
         with self.assertRaises(ValidationError):
             TrainingRunPlanResponse.model_validate(
@@ -679,7 +727,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                             "preset": "baseline",
                             "presets": ["baseline"],
                             "datasets": ["Mnist"],
-                            "overrides": {"hidden_dim": "128"},
+                            "overrides": {"stack_hidden_dim": "128"},
                             "logFolder": "api_schema",
                             "search": None,
                         },
@@ -692,7 +740,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                             "preset": "baseline",
                             "presets": ["baseline"],
                             "datasets": ["Mnist"],
-                            "overrides": {"hidden_dim": "128"},
+                            "overrides": {"stack_hidden_dim": "128"},
                             "logFolder": "api_schema",
                             "monitors": ["linear"],
                             "search": None,

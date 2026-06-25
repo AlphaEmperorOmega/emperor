@@ -69,6 +69,13 @@ const EMPTY_SEARCH_AXES: SearchAxis[] = [];
 
 type TargetMode = "preset" | "snapshot" | "experiment";
 
+type HistoricalExperimentTarget = {
+  runId: string;
+  experiment: string;
+  preset: string;
+  dataset: string;
+};
+
 type TargetConfigStateOptions = {
   requestPreview: (request: PreviewInspectionRequest) => void;
   clearPreview: () => void;
@@ -107,6 +114,7 @@ type PresetSnapshotDraftOptions = {
 function previewTargetKey({
   modelType,
   model,
+  preset,
   dataset,
   mode,
   target,
@@ -114,12 +122,51 @@ function previewTargetKey({
 }: {
   modelType: string;
   model: string;
+  preset: string;
   dataset: string;
   mode: TargetMode;
   target: string;
   overrides: OverrideValues;
 }) {
-  return `${modelType}\u0000${model}\u0000${dataset}\u0000${mode}\u0000${target}\u0000${overrideDigest(overrides)}`;
+  return `${modelType}\u0000${model}\u0000${preset}\u0000${dataset}\u0000${mode}\u0000${target}\u0000${overrideDigest(overrides)}`;
+}
+
+function resolvePreviewTarget({
+  selectedTargetMode,
+  selectedSnapshotId,
+  selectedExperimentTarget,
+  selectedPreset,
+  selectedDatasets,
+}: {
+  selectedTargetMode: TargetMode;
+  selectedSnapshotId: string;
+  selectedExperimentTarget: HistoricalExperimentTarget | null;
+  selectedPreset: string;
+  selectedDatasets: string[];
+}) {
+  const catalogDataset = selectedDatasets[0] ?? "";
+  if (selectedTargetMode === "snapshot" && selectedSnapshotId) {
+    return {
+      targetMode: "snapshot" as const,
+      targetId: selectedSnapshotId,
+      preset: selectedPreset,
+      dataset: catalogDataset,
+    };
+  }
+  if (selectedTargetMode === "experiment") {
+    return {
+      targetMode: "experiment" as const,
+      targetId: selectedExperimentTarget?.runId ?? "",
+      preset: selectedExperimentTarget?.preset ?? selectedPreset,
+      dataset: selectedExperimentTarget?.dataset ?? catalogDataset,
+    };
+  }
+  return {
+    targetMode: "preset" as const,
+    targetId: selectedPreset,
+    preset: selectedPreset,
+    dataset: catalogDataset,
+  };
 }
 
 export function useTargetConfigState({
@@ -160,7 +207,15 @@ export function useTargetConfigState({
       ? initialTargetSelection.selectedSnapshotId
       : "",
   );
-  const [selectedExperimentRunId, setSelectedExperimentRunId] = useState("");
+  const [selectedExperimentTarget, setSelectedExperimentTarget] =
+    useState<HistoricalExperimentTarget | null>(null);
+  const selectedExperimentRunId = selectedExperimentTarget?.runId ?? "";
+  const selectedExperimentName = selectedExperimentTarget?.experiment ?? "";
+  const selectedExperimentPreset = selectedExperimentTarget?.preset ?? "";
+  const selectedExperimentDataset = selectedExperimentTarget?.dataset ?? "";
+  const clearExperimentTarget = useCallback(() => {
+    setSelectedExperimentTarget((current) => (current === null ? current : null));
+  }, []);
   const [selectedDatasets, setSelectedDatasets] = useState<string[]>([]);
   const [selectedTrainingPresets, setSelectedTrainingPresets] = useState<string[]>(
     initialTargetSelection?.selectedPreset &&
@@ -353,7 +408,7 @@ export function useTargetConfigState({
       setSelectedModelType(nextModel ? nextModelType : "");
       setSelectedTargetMode("preset");
       setSelectedSnapshotId("");
-      setSelectedExperimentRunId("");
+      clearExperimentTarget();
       selectTargetModel(nextModel);
       setSnapshotEditorDraft({});
       setSelectedDatasets([]);
@@ -366,6 +421,7 @@ export function useTargetConfigState({
     },
     [
       clearPreview,
+      clearExperimentTarget,
       onModelSelected,
       resetGraphSelectionAndExpansion,
       selectTargetModel,
@@ -443,7 +499,7 @@ export function useTargetConfigState({
       if (!shouldKeepSnapshotTarget) {
         setSelectedTargetMode("preset");
         setSelectedSnapshotId("");
-        setSelectedExperimentRunId("");
+        clearExperimentTarget();
       }
       setSelectedPreset(nextPreset);
       allowEmptyTrainingPresetDraftRef.current = Boolean(pendingSnapshotForModel);
@@ -451,6 +507,7 @@ export function useTargetConfigState({
     }
   }, [
     datasetNames,
+    clearExperimentTarget,
     pendingConfigSnapshot,
     presetNames,
     selectedPreset,
@@ -491,7 +548,7 @@ export function useTargetConfigState({
       selectedTrainingPresets.length === 0;
     setSelectedTargetMode("snapshot");
     setSelectedSnapshotId(pendingConfigSnapshot.id);
-    setSelectedExperimentRunId("");
+    clearExperimentTarget();
     setSelectedTrainingSnapshotIds((current) =>
       current.includes(pendingConfigSnapshot.id)
         ? current
@@ -502,6 +559,7 @@ export function useTargetConfigState({
     setPendingConfigSnapshot(null);
   }, [
     configSnapshotsQuery.isSuccess,
+    clearExperimentTarget,
     pendingConfigSnapshot,
     presetNames,
     presetsQuery.isSuccess,
@@ -552,7 +610,7 @@ export function useTargetConfigState({
     if (configSnapshotsQuery.isError || schemaQuery.isError) {
       setSelectedTargetMode("preset");
       setSelectedSnapshotId("");
-      setSelectedExperimentRunId("");
+      clearExperimentTarget();
       setSnapshotEditorDraft({});
       setIsRestoringTargetSelection(false);
       return;
@@ -567,7 +625,7 @@ export function useTargetConfigState({
     if (!snapshot || !presetNames.includes(snapshot.preset)) {
       setSelectedTargetMode("preset");
       setSelectedSnapshotId("");
-      setSelectedExperimentRunId("");
+      clearExperimentTarget();
       setSnapshotEditorDraft({});
       setIsRestoringTargetSelection(false);
       return;
@@ -586,7 +644,7 @@ export function useTargetConfigState({
       selectedTrainingPresets.length === 0;
     setSelectedTargetMode("snapshot");
     setSelectedSnapshotId(snapshot.id);
-    setSelectedExperimentRunId("");
+    clearExperimentTarget();
     setSelectedTrainingSnapshotIds((current) =>
       current.includes(snapshot.id) ? current : [...current, snapshot.id],
     );
@@ -600,6 +658,7 @@ export function useTargetConfigState({
   }, [
     configSnapshotsQuery.isSuccess,
     configSnapshotsQuery.isError,
+    clearExperimentTarget,
     datasetNames.length,
     initialTargetSelection,
     isRestoringTargetSelection,
@@ -640,10 +699,6 @@ export function useTargetConfigState({
   ]);
 
   useEffect(() => {
-    const previewDataset = selectedDatasets[0];
-    if (!selectedModel || !selectedPreset || !previewDataset) {
-      return;
-    }
     if (isRestoringTargetSelection) {
       return;
     }
@@ -660,23 +715,49 @@ export function useTargetConfigState({
       }
     }
 
-    const targetMode =
-      selectedTargetMode === "snapshot" && selectedSnapshotId
-        ? "snapshot"
-        : selectedTargetMode === "experiment" && selectedExperimentRunId
-          ? "experiment"
-        : "preset";
+    const {
+      targetMode,
+      targetId,
+      preset: previewPreset,
+      dataset: previewDataset,
+    } = resolvePreviewTarget({
+      selectedTargetMode,
+      selectedSnapshotId,
+      selectedExperimentTarget,
+      selectedPreset,
+      selectedDatasets,
+    });
+    if (!selectedModel) {
+      return;
+    }
+    if (targetMode === "experiment" && !targetId) {
+      const pendingExperimentTargetKey = previewTargetKey({
+        modelType: selectedModelType,
+        model: selectedModel,
+        preset: previewPreset,
+        dataset: previewDataset,
+        mode: targetMode,
+        target: targetId,
+        overrides: activeOverrides,
+      });
+      if (lastRequestedPreviewTargetKeyRef.current === pendingExperimentTargetKey) {
+        return;
+      }
+      lastRequestedPreviewTargetKeyRef.current = pendingExperimentTargetKey;
+      resetGraphSelectionAndExpansion();
+      clearPreview();
+      return;
+    }
+    if (!previewPreset || !previewDataset) {
+      return;
+    }
     const targetKey = previewTargetKey({
       modelType: selectedModelType,
       model: selectedModel,
+      preset: previewPreset,
       dataset: previewDataset,
       mode: targetMode,
-      target:
-        targetMode === "snapshot"
-          ? selectedSnapshotId
-          : targetMode === "experiment"
-            ? selectedExperimentRunId
-            : selectedPreset,
+      target: targetId,
       overrides: activeOverrides,
     });
     if (suppressedAutomaticPreviewTargetKeyRef.current) {
@@ -691,33 +772,34 @@ export function useTargetConfigState({
 
     lastRequestedPreviewTargetKeyRef.current = targetKey;
     resetGraphSelectionAndExpansion();
-    requestPreview({
+    const previewRequest: PreviewInspectionRequest = {
       modelType: selectedModelType,
       model: selectedModel,
-      preset: selectedPreset,
+      preset: previewPreset,
       dataset: previewDataset,
       overrides: { ...activeOverrides },
       targetMode,
-      targetId:
-        targetMode === "snapshot"
-          ? selectedSnapshotId
-          : targetMode === "experiment"
-            ? selectedExperimentRunId
-            : selectedPreset,
-    });
+      targetId,
+    };
+    requestPreview(
+      targetMode === "experiment"
+        ? { ...previewRequest, logRunId: targetId }
+        : previewRequest,
+    );
   }, [
     activeOverrides,
+    clearPreview,
     isRestoringTargetSelection,
     pendingConfigSnapshot,
     requestPreview,
     resetGraphSelectionAndExpansion,
     selectedConfigSnapshot,
     selectedDatasets,
+    selectedExperimentTarget,
     selectedModel,
     selectedModelType,
     selectedPreset,
     selectedSnapshotId,
-    selectedExperimentRunId,
     selectedTargetMode,
   ]);
 
@@ -801,26 +883,32 @@ export function useTargetConfigState({
       if (!selectedModel) {
         return;
       }
-      const preset = resolveRunPresetName(
+      const rawPreset = selectedLogRun.preset;
+      const rawDataset = selectedLogRun.dataset;
+      const catalogPreset = resolveRunPresetName(
         selectedLogRun,
         presets,
       );
-      const dataset = datasetNames.includes(selectedLogRun.dataset)
-        ? selectedLogRun.dataset
+      const catalogDataset = datasetNames.includes(rawDataset)
+        ? rawDataset
         : "";
-      if (!preset || !dataset) {
-        return;
-      }
-      const desiredTrainingPresets = [preset];
-      const desiredDatasets = [dataset];
       const overridesAlreadyEmpty = overridesAreEmpty(presetOverrides);
+      const catalogPresetSynced =
+        !catalogPreset ||
+        (selectedPreset === catalogPreset &&
+          selectionValuesEqual(selectedTrainingPresets, [catalogPreset]));
+      const catalogDatasetSynced =
+        !catalogDataset ||
+        selectionValuesEqual(selectedDatasets, [catalogDataset]);
       const alreadySynced =
         selectedTargetMode === "experiment" &&
         selectedExperimentRunId === selectedLogRun.id &&
-        selectedPreset === preset &&
+        selectedExperimentName === selectedLogRun.experiment &&
+        selectedExperimentPreset === rawPreset &&
+        selectedExperimentDataset === rawDataset &&
         selectedSnapshotId === "" &&
-        selectionValuesEqual(selectedTrainingPresets, desiredTrainingPresets) &&
-        selectionValuesEqual(selectedDatasets, desiredDatasets) &&
+        catalogPresetSynced &&
+        catalogDatasetSynced &&
         overridesAlreadyEmpty;
       if (alreadySynced) {
         return;
@@ -828,26 +916,38 @@ export function useTargetConfigState({
 
       setSelectedTargetMode("experiment");
       setSelectedSnapshotId("");
-      setSelectedExperimentRunId(selectedLogRun.id);
-      if (selectedPreset !== preset) {
-        setSelectedPreset(preset);
+      setSelectedExperimentTarget({
+        runId: selectedLogRun.id,
+        experiment: selectedLogRun.experiment,
+        preset: rawPreset,
+        dataset: rawDataset,
+      });
+      if (catalogPreset && selectedPreset !== catalogPreset) {
+        setSelectedPreset(catalogPreset);
       }
-      allowEmptyTrainingPresetDraftRef.current = false;
-      setSelectedTrainingPresets((current) =>
-        selectionValuesEqual(current, desiredTrainingPresets)
-          ? current
-          : desiredTrainingPresets,
-      );
-      setSelectedDatasets((current) =>
-        selectionValuesEqual(current, desiredDatasets) ? current : desiredDatasets,
-      );
+      if (catalogPreset) {
+        allowEmptyTrainingPresetDraftRef.current = false;
+        setSelectedTrainingPresets((current) =>
+          selectionValuesEqual(current, [catalogPreset])
+            ? current
+            : [catalogPreset],
+        );
+      }
+      if (catalogDataset) {
+        setSelectedDatasets((current) =>
+          selectionValuesEqual(current, [catalogDataset])
+            ? current
+            : [catalogDataset],
+        );
+      }
       if (!overridesAlreadyEmpty) {
         clearPresetOverrides();
       }
       lastRequestedPreviewTargetKeyRef.current = previewTargetKey({
         modelType: selectedModelType,
         model: selectedModel,
-        dataset,
+        preset: rawPreset,
+        dataset: rawDataset,
         mode: "experiment",
         target: selectedLogRun.id,
         overrides: {},
@@ -856,8 +956,8 @@ export function useTargetConfigState({
       requestPreview({
         modelType: selectedModelType,
         model: selectedModel,
-        preset,
-        dataset,
+        preset: rawPreset,
+        dataset: rawDataset,
         overrides: {},
         targetMode: "experiment",
         targetId: selectedLogRun.id,
@@ -872,6 +972,9 @@ export function useTargetConfigState({
       requestPreview,
       resetGraphSelectionAndExpansion,
       selectedDatasets,
+      selectedExperimentDataset,
+      selectedExperimentName,
+      selectedExperimentPreset,
       selectedExperimentRunId,
       selectedModel,
       selectedModelType,
@@ -1102,6 +1205,7 @@ export function useTargetConfigState({
           ? previewTargetKey({
               modelType: selectedModelType,
               model: selectedModel,
+              preset,
               dataset: previewDataset,
               mode: "preset",
               target: preset,
@@ -1122,13 +1226,18 @@ export function useTargetConfigState({
       suppressAutomaticPreviewForPreset(preset);
       setSelectedTargetMode("preset");
       setSelectedSnapshotId("");
-      setSelectedExperimentRunId("");
+      clearExperimentTarget();
       onTargetPresetSelected?.();
       selectPreset(preset);
       allowEmptyTrainingPresetDraftRef.current = false;
       setSelectedTrainingPresets([preset]);
     },
-    [onTargetPresetSelected, selectPreset, suppressAutomaticPreviewForPreset],
+    [
+      clearExperimentTarget,
+      onTargetPresetSelected,
+      selectPreset,
+      suppressAutomaticPreviewForPreset,
+    ],
   );
 
   const selectTargetPreset = useCallback(
@@ -1153,6 +1262,7 @@ export function useTargetConfigState({
       lastRequestedPreviewTargetKeyRef.current = previewTargetKey({
         modelType: selectedModelType,
         model: selectedModel,
+        preset,
         dataset: previewDataset,
         mode: "preset",
         target: preset,
@@ -1198,7 +1308,7 @@ export function useTargetConfigState({
 
       setSelectedTargetMode("snapshot");
       setSelectedSnapshotId(snapshot.id);
-      setSelectedExperimentRunId("");
+      clearExperimentTarget();
       onTargetSnapshotSelected?.();
       setSelectedPreset(snapshot.preset);
       allowEmptyTrainingPresetDraftRef.current =
@@ -1219,6 +1329,7 @@ export function useTargetConfigState({
       lastRequestedPreviewTargetKeyRef.current = previewTargetKey({
         modelType: selectedModelType,
         model: selectedModel,
+        preset: snapshot.preset,
         dataset: previewDataset,
         mode: "snapshot",
         target: snapshot.id,
@@ -1238,6 +1349,7 @@ export function useTargetConfigState({
     },
     [
       modelConfigSnapshots,
+      clearExperimentTarget,
       presetNames,
       requestPreview,
       resetGraphSelectionAndExpansion,
@@ -1262,7 +1374,7 @@ export function useTargetConfigState({
     if (!selectedPreset) {
       setSelectedTargetMode("preset");
       setSelectedSnapshotId("");
-      setSelectedExperimentRunId("");
+      clearExperimentTarget();
       onTargetPresetSelected?.();
       lastRequestedPreviewTargetKeyRef.current = "";
       return;
@@ -1278,6 +1390,7 @@ export function useTargetConfigState({
     lastRequestedPreviewTargetKeyRef.current = previewTargetKey({
       modelType: selectedModelType,
       model: selectedModel,
+      preset: selectedPreset,
       dataset: previewDataset,
       mode: "preset",
       target: selectedPreset,
@@ -1295,6 +1408,7 @@ export function useTargetConfigState({
     });
   }, [
     effectivePresetOverrideValues,
+    clearExperimentTarget,
     onTargetPresetSelected,
     requestPreview,
     resetGraphSelectionAndExpansion,
@@ -1321,9 +1435,9 @@ export function useTargetConfigState({
   }, []);
 
   const clearSelectedExperimentRun = useCallback(() => {
-    setSelectedExperimentRunId((current) => (current ? "" : current));
+    clearExperimentTarget();
     lastRequestedPreviewTargetKeyRef.current = "";
-  }, []);
+  }, [clearExperimentTarget]);
 
   const setTrainingPresetSelection = useCallback(
     (presets: string[]) => {
@@ -1419,7 +1533,7 @@ export function useTargetConfigState({
       selectPreset(preset);
       setSelectedTargetMode("preset");
       setSelectedSnapshotId("");
-      setSelectedExperimentRunId("");
+      clearExperimentTarget();
       allowEmptyTrainingPresetDraftRef.current = false;
       setSelectedTrainingPresets((current) =>
         normalizePrimarySelection(
@@ -1429,7 +1543,12 @@ export function useTargetConfigState({
         ),
       );
     },
-    [presetNames, selectPreset, suppressAutomaticPreviewForPreset],
+    [
+      clearExperimentTarget,
+      presetNames,
+      selectPreset,
+      suppressAutomaticPreviewForPreset,
+    ],
   );
 
   const preparePresetSnapshotDraft = useCallback(
@@ -1444,7 +1563,7 @@ export function useTargetConfigState({
       selectPreset(preset);
       setSelectedTargetMode("preset");
       setSelectedSnapshotId("");
-      setSelectedExperimentRunId("");
+      clearExperimentTarget();
       if (!includeTrainingPreset) {
         allowEmptyTrainingPresetDraftRef.current =
           selectedTrainingPresets.length === 0;
@@ -1465,6 +1584,7 @@ export function useTargetConfigState({
     },
     [
       presetNames,
+      clearExperimentTarget,
       selectPreset,
       selectedTrainingPresets.length,
       suppressAutomaticPreviewForPreset,
@@ -1542,55 +1662,55 @@ export function useTargetConfigState({
   }, []);
 
   const updatePreview = useCallback(() => {
-    const previewDataset = selectedDatasets[0];
-    if (!selectedModel || !selectedPreset || !previewDataset) {
+    const {
+      targetMode,
+      targetId,
+      preset: previewPreset,
+      dataset: previewDataset,
+    } = resolvePreviewTarget({
+      selectedTargetMode,
+      selectedSnapshotId,
+      selectedExperimentTarget,
+      selectedPreset,
+      selectedDatasets,
+    });
+    if (!selectedModel || !previewPreset || !previewDataset) {
       return;
     }
-    const targetMode =
-      selectedTargetMode === "snapshot" && selectedSnapshotId
-        ? "snapshot"
-        : selectedTargetMode === "experiment" && selectedExperimentRunId
-          ? "experiment"
-        : "preset";
     lastRequestedPreviewTargetKeyRef.current = previewTargetKey({
       modelType: selectedModelType,
       model: selectedModel,
+      preset: previewPreset,
       dataset: previewDataset,
       mode: targetMode,
-      target:
-        targetMode === "snapshot"
-          ? selectedSnapshotId
-          : targetMode === "experiment"
-            ? selectedExperimentRunId
-            : selectedPreset,
+      target: targetId,
       overrides: activeOverrides,
     });
     resetGraphSelectionAndExpansion();
+    if (targetMode === "experiment" && !targetId) {
+      clearPreview();
+      return;
+    }
     requestPreview({
       modelType: selectedModelType,
       model: selectedModel,
-      preset: selectedPreset,
+      preset: previewPreset,
       dataset: previewDataset,
       overrides: { ...activeOverrides },
       targetMode,
-      targetId:
-        targetMode === "snapshot"
-          ? selectedSnapshotId
-          : targetMode === "experiment"
-            ? selectedExperimentRunId
-            : selectedPreset,
-      logRunId:
-        targetMode === "experiment" ? selectedExperimentRunId : undefined,
+      targetId,
+      logRunId: targetMode === "experiment" ? targetId : undefined,
     });
   }, [
     activeOverrides,
+    clearPreview,
     requestPreview,
     resetGraphSelectionAndExpansion,
     selectedDatasets,
+    selectedExperimentTarget,
     selectedModel,
     selectedModelType,
     selectedPreset,
-    selectedExperimentRunId,
     selectedSnapshotId,
     selectedTargetMode,
   ]);
@@ -1600,7 +1720,7 @@ export function useTargetConfigState({
       if (!preserveTargetSelection) {
         setSelectedTargetMode("preset");
         setSelectedSnapshotId("");
-        setSelectedExperimentRunId("");
+        clearExperimentTarget();
         onTargetPresetSelected?.();
       }
       const resetSnapshotDraft =
@@ -1613,39 +1733,65 @@ export function useTargetConfigState({
         clearPresetOverrides();
       }
       resetGraphExpansion();
-      const previewDataset = selectedDatasets[0];
-      if (selectedModel && selectedPreset && previewDataset) {
-        const targetMode =
-          preserveTargetSelection &&
-          selectedTargetMode === "snapshot" &&
-          selectedSnapshotId
-            ? "snapshot"
-            : "preset";
+      const resolvedTarget = preserveTargetSelection
+          ? resolvePreviewTarget({
+              selectedTargetMode,
+              selectedSnapshotId,
+              selectedExperimentTarget,
+              selectedPreset,
+              selectedDatasets,
+            })
+          : {
+              targetMode: "preset" as const,
+              targetId: selectedPreset,
+              preset: selectedPreset,
+              dataset: selectedDatasets[0] ?? "",
+            };
+      const {
+        targetMode,
+        targetId,
+        preset: previewPreset,
+        dataset: previewDataset,
+      } = resolvedTarget;
+      if (selectedModel && previewPreset && previewDataset) {
         const nextOverrides = {};
         lastRequestedPreviewTargetKeyRef.current = previewTargetKey({
           modelType: selectedModelType,
           model: selectedModel,
+          preset: previewPreset,
           dataset: previewDataset,
           mode: targetMode,
-          target: targetMode === "snapshot" ? selectedSnapshotId : selectedPreset,
+          target: targetId,
           overrides: nextOverrides,
         });
-        requestPreview({
+        if (targetMode === "experiment" && !targetId) {
+          clearPreview();
+          return;
+        }
+        const previewRequest: PreviewInspectionRequest = {
           modelType: selectedModelType,
           model: selectedModel,
-          preset: selectedPreset,
+          preset: previewPreset,
           dataset: previewDataset,
           overrides: nextOverrides,
           targetMode,
-          targetId: targetMode === "snapshot" ? selectedSnapshotId : selectedPreset,
-        });
+          targetId,
+        };
+        requestPreview(
+          targetMode === "experiment"
+            ? { ...previewRequest, logRunId: targetId }
+            : previewRequest,
+        );
       }
     },
     [
+      clearPreview,
       clearPresetOverrides,
       requestPreview,
       resetGraphExpansion,
+      clearExperimentTarget,
       selectedDatasets,
+      selectedExperimentTarget,
       selectedModel,
       selectedModelType,
       selectedPreset,
@@ -1675,12 +1821,17 @@ export function useTargetConfigState({
       ) {
         setSelectedTargetMode("preset");
         setSelectedSnapshotId("");
-        setSelectedExperimentRunId("");
+        clearExperimentTarget();
         onTargetPresetSelected?.();
       }
       updatePresetOverride(key, value);
     },
-    [onTargetPresetSelected, selectedTargetMode, updatePresetOverride],
+    [
+      clearExperimentTarget,
+      onTargetPresetSelected,
+      selectedTargetMode,
+      updatePresetOverride,
+    ],
   );
 
   const clearTargetOverride = useCallback(
@@ -1691,12 +1842,17 @@ export function useTargetConfigState({
       ) {
         setSelectedTargetMode("preset");
         setSelectedSnapshotId("");
-        setSelectedExperimentRunId("");
+        clearExperimentTarget();
         onTargetPresetSelected?.();
       }
       clearPresetOverride(key);
     },
-    [clearPresetOverride, onTargetPresetSelected, selectedTargetMode],
+    [
+      clearExperimentTarget,
+      clearPresetOverride,
+      onTargetPresetSelected,
+      selectedTargetMode,
+    ],
   );
 
   const updateSnapshotEditorDraftOverride = useCallback(
@@ -1736,6 +1892,10 @@ export function useTargetConfigState({
       selectedSnapshotId,
       selectedConfigSnapshot,
       selectedExperimentRunId,
+      selectedExperimentTarget,
+      selectedExperimentName,
+      selectedExperimentPreset,
+      selectedExperimentDataset,
       selectTargetSnapshot,
       prepareSelectedSnapshotEdit,
       selectedPresetMeta,
@@ -1896,7 +2056,11 @@ export function useTargetConfigState({
       selectTrainingPrimaryPreset,
       selectedConfigSnapshot,
       selectedDatasets,
+      selectedExperimentDataset,
+      selectedExperimentName,
+      selectedExperimentPreset,
       selectedExperimentRunId,
+      selectedExperimentTarget,
       selectedModel,
       selectedModelType,
       selectedMonitors,

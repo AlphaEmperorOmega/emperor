@@ -16,6 +16,7 @@ import {
 import { cn } from "@/lib/utils";
 
 const statusClassNames: Record<GraphParameterActivityStatus, string> = {
+  loading: "border-cyan-200/40 bg-cyan-300/[0.11] text-cyan-100",
   updated: "border-ok/35 bg-ok/10 text-ok",
   unchanged: "border-danger-line bg-danger-soft text-danger-text",
   mixed: "border-amber/40 bg-amber/[0.12] text-amber",
@@ -24,6 +25,8 @@ const statusClassNames: Record<GraphParameterActivityStatus, string> = {
 };
 
 const statusCopy: Record<GraphParameterActivityStatus, string> = {
+  loading:
+    "Parameter activity is being loaded for this graph target.",
   updated:
     "This parameter was logged and at least one sampled point showed update or value-change evidence.",
   unchanged:

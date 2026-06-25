@@ -59,6 +59,7 @@ def _build_training_command(
     dataset: str,
     overrides: dict[str, Any],
     log_folder: str,
+    monitors: list[str],
 ) -> str:
     values_by_field_key: dict[str, Any] = {}
     for raw_key, raw_value in overrides.items():
@@ -81,6 +82,9 @@ def _build_training_command(
     ]
     if log_folder:
         parts.extend(["--logdir", _shell_quote(log_folder)])
+    if monitors:
+        parts.append("--monitors")
+        parts.extend(_shell_quote(monitor) for monitor in monitors)
 
     config_parts: list[str] = []
     for field in fields:
@@ -308,8 +312,10 @@ class TrainingRunPlanBuilder:
         model: str,
         selected: SelectedTrainingInputs,
         log_folder: str,
+        monitors: list[str] | None = None,
     ) -> dict[str, Any]:
         self._reject_overlarge_plan(selected)
+        monitor_names = monitors or []
         total_epochs = self._total_epochs(selected.parts, selected.parsed_overrides)
         runs: list[dict[str, Any]] = []
         for selected_preset, selected_search in zip(
@@ -340,6 +346,7 @@ class TrainingRunPlanBuilder:
                             changes=[*fixed_changes, *search_changes],
                             overrides=row_overrides,
                             log_folder=log_folder,
+                            monitors=monitor_names,
                             total_epochs=total_epochs,
                         )
                     )
@@ -358,7 +365,9 @@ class TrainingRunPlanBuilder:
         selected: SelectedTrainingInputs,
         run_plan: dict[str, Any],
         log_folder: str,
+        monitors: list[str] | None = None,
     ) -> dict[str, Any]:
+        monitor_names = monitors or []
         valid_presets = set(selected.selected_preset_names)
         valid_datasets = {
             dataset_name(dataset) for dataset in selected.selected_datasets
@@ -416,6 +425,7 @@ class TrainingRunPlanBuilder:
                         dataset=dataset,
                         overrides=canonical_row_overrides,
                         log_folder=log_folder,
+                        monitors=monitor_names,
                     ),
                     "totalEpochs": int(row.get("totalEpochs") or 0),
                     "currentEpoch": 0,
@@ -678,6 +688,7 @@ class TrainingRunPlanBuilder:
         dataset: str,
         overrides: dict[str, Any],
         log_folder: str,
+        monitors: list[str],
     ) -> str:
         fields, by_key = self._field_maps(model, preset)
         return _build_training_command(
@@ -688,6 +699,7 @@ class TrainingRunPlanBuilder:
             dataset=dataset,
             overrides=overrides,
             log_folder=log_folder,
+            monitors=monitors,
         )
 
     def _total_epochs(self, parts, parsed_overrides: dict[str, Any]) -> int:
@@ -710,6 +722,7 @@ class TrainingRunPlanBuilder:
         changes: list[dict[str, Any]],
         overrides: dict[str, Any],
         log_folder: str,
+        monitors: list[str],
         total_epochs: int,
     ) -> dict[str, Any]:
         return {
@@ -726,6 +739,7 @@ class TrainingRunPlanBuilder:
                 dataset=dataset,
                 overrides=overrides,
                 log_folder=log_folder,
+                monitors=monitors,
             ),
             "totalEpochs": total_epochs,
             "currentEpoch": 0,

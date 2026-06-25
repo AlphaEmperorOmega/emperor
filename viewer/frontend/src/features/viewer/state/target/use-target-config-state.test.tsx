@@ -379,6 +379,136 @@ describe("useTargetConfigState", () => {
       overrides: {},
       targetMode: "experiment",
       targetId: "run-fast",
+      logRunId: "run-fast",
+    });
+  });
+
+  it("syncs a selected historical run whose preset and dataset are absent from the catalog", async () => {
+    const { result } = renderTargetState();
+
+    await waitFor(() => {
+      expect(result.current.target.selectedPreset).toBe("baseline");
+      expect(result.current.target.selectedDatasets).toEqual(["Mnist"]);
+    });
+
+    act(() => {
+      result.current.target.updateOverride("hidden_size", "128");
+    });
+    act(() => {
+      result.current.syncSelectedLogRun(
+        logRun({
+          id: "kaggle-run",
+          experiment: "kaggle_linear_all",
+          preset: "KAGGLE_LINEAR",
+          dataset: "KaggleDigits",
+        }),
+      );
+    });
+
+    expect(result.current.target.selectedTargetMode).toBe("experiment");
+    expect(result.current.target.selectedExperimentRunId).toBe("kaggle-run");
+    expect(result.current.target.selectedExperimentName).toBe(
+      "kaggle_linear_all",
+    );
+    expect(result.current.target.selectedExperimentPreset).toBe("KAGGLE_LINEAR");
+    expect(result.current.target.selectedExperimentDataset).toBe("KaggleDigits");
+    expect(result.current.target.selectedPreset).toBe("baseline");
+    expect(result.current.target.selectedTrainingPresets).toEqual(["baseline"]);
+    expect(result.current.target.selectedDatasets).toEqual(["Mnist"]);
+    expect(result.current.target.overrides).toEqual({});
+    expect(mocks.requestPreview).toHaveBeenLastCalledWith({
+      modelType: "linears",
+      model: "linear",
+      preset: "KAGGLE_LINEAR",
+      dataset: "KaggleDigits",
+      overrides: {},
+      targetMode: "experiment",
+      targetId: "kaggle-run",
+      logRunId: "kaggle-run",
+    });
+  });
+
+  it("keeps the log run id on automatic experiment preview refreshes", async () => {
+    const { result } = renderTargetState();
+
+    await waitFor(() => {
+      expect(result.current.target.selectedPreset).toBe("baseline");
+    });
+
+    act(() => {
+      result.current.syncSelectedLogRun(logRun({ id: "run-fast" }));
+    });
+
+    await waitFor(() => {
+      expect(result.current.target.selectedTargetMode).toBe("experiment");
+      expect(result.current.target.selectedExperimentRunId).toBe("run-fast");
+    });
+
+    mocks.requestPreview.mockClear();
+    act(() => {
+      result.current.target.updateOverride("hidden_size", "128", {
+        preserveTargetSelection: true,
+      });
+    });
+
+    await waitFor(() => {
+      expect(mocks.requestPreview).toHaveBeenLastCalledWith({
+        modelType: "linears",
+        model: "linear",
+        preset: "fast",
+        dataset: "FashionMnist",
+        overrides: { hidden_size: "128" },
+        targetMode: "experiment",
+        targetId: "run-fast",
+        logRunId: "run-fast",
+      });
+    });
+  });
+
+  it("preserves the selected historical run when resetting overrides", async () => {
+    const { result } = renderTargetState();
+
+    await waitFor(() => {
+      expect(result.current.target.selectedPreset).toBe("baseline");
+    });
+
+    act(() => {
+      result.current.syncSelectedLogRun(logRun({ id: "run-fast" }));
+    });
+
+    await waitFor(() => {
+      expect(result.current.target.selectedTargetMode).toBe("experiment");
+      expect(result.current.target.selectedExperimentRunId).toBe("run-fast");
+    });
+
+    act(() => {
+      result.current.target.updateOverride("hidden_size", "128", {
+        preserveTargetSelection: true,
+      });
+    });
+    await waitFor(() => {
+      expect(result.current.target.overrides).toEqual({ hidden_size: "128" });
+    });
+
+    mocks.requestPreview.mockClear();
+    act(() => {
+      result.current.target.resetOverridesPreservingTargetSelection();
+    });
+
+    await waitFor(() => {
+      expect(result.current.target.selectedTargetMode).toBe("experiment");
+      expect(result.current.target.selectedExperimentRunId).toBe("run-fast");
+      expect(result.current.target.overrides).toEqual({});
+    });
+    expect(mocks.requestPreview).toHaveBeenLastCalledWith({
+      modelType: "linears",
+      model: "linear",
+      preset: "fast",
+      dataset: "FashionMnist",
+      overrides: {},
+      targetMode: "experiment",
+      targetId: "run-fast",
+      logRunId: "run-fast",
     });
   });
 
@@ -543,6 +673,63 @@ describe("useTargetConfigState", () => {
 
     expect(result.current.target.selectedTargetMode).toBe("preset");
     expect(result.current.target.overrides).toEqual({ hidden_size: "128" });
+  });
+
+  it("preserves the selected snapshot when resetting overrides", async () => {
+    snapshots = [
+      {
+        id: "snapshot-baseline",
+        name: "Baseline tuned",
+        modelType: "linears",
+        model: "linear",
+        preset: "baseline",
+        overrides: { hidden_size: "256" },
+        createdAt: "2026-06-01T00:00:00.000Z",
+        updatedAt: "2026-06-01T00:00:00.000Z",
+      },
+    ];
+    const { result } = renderTargetState();
+
+    await waitFor(() => {
+      expect(result.current.target.selectedPreset).toBe("baseline");
+    });
+
+    act(() => {
+      expect(
+        result.current.target.prepareSelectedSnapshotEdit("snapshot-baseline", {
+          includeTrainingSnapshot: false,
+        }),
+      ).toBe(true);
+    });
+
+    await waitFor(() => {
+      expect(result.current.target.selectedTargetMode).toBe("snapshot");
+      expect(result.current.target.selectedSnapshotId).toBe("snapshot-baseline");
+      expect(result.current.target.overrides).toEqual({ hidden_size: "256" });
+    });
+
+    mocks.requestPreview.mockClear();
+    act(() => {
+      result.current.target.resetOverridesPreservingTargetSelection();
+    });
+
+    await waitFor(() => {
+      expect(result.current.target.selectedTargetMode).toBe("snapshot");
+      expect(result.current.target.selectedSnapshotId).toBe("snapshot-baseline");
+      expect(result.current.target.overrides).toEqual({});
+    });
+    expect(mocks.requestPreview).toHaveBeenLastCalledWith({
+      modelType: "linears",
+      model: "linear",
+      preset: "baseline",
+      dataset: "Mnist",
+      overrides: {},
+      targetMode: "snapshot",
+      targetId: "snapshot-baseline",
+    });
+    expect(mocks.requestPreview.mock.calls.at(-1)?.[0]).not.toHaveProperty(
+      "logRunId",
+    );
   });
 
   it("includes a snapshot from an unselected preset without selecting its preset", async () => {

@@ -9,6 +9,7 @@ import {
   longSelectedNodeId,
   longSelectedNodeInspectResponse,
   monitorScopeInspectResponse,
+  parameterShapeInspectResponse,
   renderViewer,
   repeatedLayersInspectResponse,
   resetViewerAppTestState,
@@ -513,6 +514,273 @@ describe("ViewerApp Monitor Charts And Errors", () => {
       .not.toBeInTheDocument();
   });
 
+  it("renders graph parameter activity after selecting an experiment dataset and preset", async () => {
+    const fixture = buildHistoricalMonitorFixture(1);
+    const { fetchMock } = installFetchMock({
+      ...fixture,
+      inspectResponse: parameterShapeInspectResponse,
+      logParameterStatusResponse: ({ runIds }) => ({
+        runs: runIds.map((runId) => ({
+          sourceId: runId,
+          preset: "BASELINE",
+          dataset: "Mnist",
+          logDir: `logs/${runId}`,
+          nodes: [
+            {
+              nodePath: "main_model.0.model",
+              weights: {
+                status: "updated",
+                metric: "main_model.0.model/weights/relative_delta_norm",
+                lastStep: 12,
+                observedPoints: 2,
+              },
+              bias: {
+                status: "unchanged",
+                metric: "main_model.0.model/bias/delta_norm",
+                lastStep: 12,
+                observedPoints: 1,
+              },
+            },
+          ],
+        })),
+      }),
+    });
+    renderViewer();
+    const user = userEvent.setup();
+
+    await selectExperimentRun(
+      user,
+      "monitor_exp · BASELINE · Mnist · 2026-06-01 01:00:00",
+    );
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([url]) =>
+          String(url).endsWith("/logs/parameter-status"),
+        ),
+      ).toBe(true);
+    });
+    expect(
+      await screen.findByLabelText("Weights parameter activity: updated"),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByLabelText("Bias parameter activity: unchanged"),
+    ).toBeInTheDocument();
+  });
+
+  it("shows a monitor path mismatch when historical status cannot attach to the graph", async () => {
+    const fixture = buildHistoricalMonitorFixture(1);
+    installFetchMock({
+      ...fixture,
+      inspectResponse: parameterShapeInspectResponse,
+      logParameterStatusResponse: ({ runIds }) => ({
+        runs: runIds.map((runId) => ({
+          sourceId: runId,
+          preset: "BASELINE",
+          dataset: "Mnist",
+          logDir: `logs/${runId}`,
+          nodes: [
+            {
+              nodePath: "other_model.0.model",
+              weights: {
+                status: "updated",
+                metric: "other_model.0.model/weights/relative_delta_norm",
+                lastStep: 12,
+                observedPoints: 2,
+              },
+              bias: {
+                status: "updated",
+                metric: "other_model.0.model/bias/delta_norm",
+                lastStep: 12,
+                observedPoints: 1,
+              },
+            },
+          ],
+        })),
+      }),
+    });
+    renderViewer();
+    const user = userEvent.setup();
+
+    await selectExperimentRun(
+      user,
+      "monitor_exp · BASELINE · Mnist · 2026-06-01 01:00:00",
+    );
+
+    expect(await screen.findByText("path mismatch")).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Weights parameter activity: updated"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows pending and loading parameter activity while switching experiments", async () => {
+    const fixture = buildHistoricalMonitorFixture(2);
+    const statusB = deferred<{
+      runs: Array<{
+        sourceId: string;
+        preset: string;
+        dataset: string;
+        logDir: string;
+        nodes: unknown[];
+      }>;
+    }>();
+    const [runA, runB] = fixture.logRunsResponse.runs;
+    const runs = [
+      {
+        ...runA,
+        id: "historical-a",
+        group: "monitor_exp_a",
+        experiment: "monitor_exp_a",
+        runName: "monitor_a_20260601_010000",
+        timestamp: "2026-06-01 01:00:00",
+        relativePath:
+          "monitor_exp_a/linear/BASELINE/Mnist/monitor_a_20260601_010000/version_0",
+      },
+      {
+        ...runB,
+        id: "historical-b",
+        group: "monitor_exp_b",
+        experiment: "monitor_exp_b",
+        runName: "monitor_b_20260601_020000",
+        timestamp: "2026-06-01 02:00:00",
+        relativePath:
+          "monitor_exp_b/linear/BASELINE/Mnist/monitor_b_20260601_020000/version_0",
+      },
+    ];
+    const statusPayload = (
+      runId: string,
+      weightsStatus: "updated" | "unchanged",
+      biasStatus: "updated" | "unchanged",
+    ) => ({
+      runs: [
+        {
+          sourceId: runId,
+          preset: "BASELINE",
+          dataset: "Mnist",
+          logDir: `logs/${runId}`,
+          nodes: [
+            {
+              nodePath: "main_model.0.model",
+              weights: {
+                status: weightsStatus,
+                metric: "main_model.0.model/weights/relative_delta_norm",
+                lastStep: 12,
+                observedPoints: 2,
+              },
+              bias: {
+                status: biasStatus,
+                metric: "main_model.0.model/bias/delta_norm",
+                lastStep: 12,
+                observedPoints: 1,
+              },
+            },
+          ],
+        },
+      ],
+    });
+    installFetchMock({
+      ...fixture,
+      logRunsResponse: { runs },
+      logTagsByRun: {
+        "historical-a": fixture.logTagsByRun["historical-01"],
+        "historical-b": fixture.logTagsByRun["historical-02"],
+      },
+      inspectResponse: parameterShapeInspectResponse,
+      logParameterStatusResponse: ({ runIds }) => {
+        if (runIds.length === 1 && runIds[0] === "historical-b") {
+          return statusB.promise;
+        }
+        return statusPayload(runIds[0] ?? "historical-a", "updated", "unchanged");
+      },
+    });
+    renderViewer();
+    const user = userEvent.setup();
+    const selectExperiment = async (name: RegExp) => {
+      const experimentsTab = await screen.findByRole("radio", {
+        name: "Experiments",
+      });
+      await waitFor(() => expect(experimentsTab).not.toBeDisabled());
+      await user.click(experimentsTab);
+
+      const experimentControl = await screen.findByRole("combobox", {
+        name: "Experiment",
+      });
+      await user.click(experimentControl);
+      await user.click(
+        within(
+          await screen.findByRole("listbox", { name: /^experiment options$/i }),
+        ).getByRole("option", { name }),
+      );
+    };
+    const selectDatasetAndPreset = async () => {
+      const datasetControl = await screen.findByRole("combobox", {
+        name: "Dataset",
+      });
+      await user.click(datasetControl);
+      await user.click(
+        within(
+          await screen.findByRole("listbox", { name: /^dataset options$/i }),
+        ).getByRole("option", { name: /^Mnist/ }),
+      );
+
+      const presetControl = await screen.findByRole("combobox", {
+        name: "Preset",
+      });
+      await user.click(presetControl);
+      await user.click(
+        within(
+          await screen.findByRole("listbox", { name: /^preset options$/i }),
+        ).getByRole("option", { name: /^BASELINE/ }),
+      );
+    };
+
+    await selectExperiment(/^monitor_exp_a/);
+    await selectDatasetAndPreset();
+
+    expect(
+      await screen.findByLabelText("Weights parameter activity: updated"),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByLabelText("Bias parameter activity: unchanged"),
+    ).toBeInTheDocument();
+
+    await selectExperiment(/^monitor_exp_b/);
+
+    expect(await screen.findByText("pending")).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Weights parameter activity: updated"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Bias parameter activity: unchanged"),
+    ).not.toBeInTheDocument();
+
+    await selectDatasetAndPreset();
+
+    expect(
+      await screen.findByLabelText("Weights parameter activity: loading"),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByLabelText("Bias parameter activity: loading"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("activity")).toBeInTheDocument();
+    expect(screen.getByText("loading")).toBeInTheDocument();
+
+    statusB.resolve(statusPayload("historical-b", "unchanged", "updated"));
+
+    expect(
+      await screen.findByLabelText("Weights parameter activity: unchanged"),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByLabelText("Bias parameter activity: updated"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Weights parameter activity: updated"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Bias parameter activity: unchanged"),
+    ).not.toBeInTheDocument();
+  });
+
   it("keeps performance-only historical runs from enabling graph monitor charts", async () => {
     const fixture = buildHistoricalMonitorFixture(1);
     installFetchMock({
@@ -529,21 +797,19 @@ describe("ViewerApp Monitor Charts And Errors", () => {
     renderViewer();
     const user = userEvent.setup();
 
-    await selectExperimentRun(
-      user,
-      "monitor_exp · BASELINE · Mnist · 2026-06-01 01:00:00",
-    );
-    await user.click(
-      await screen.findByRole("button", { name: /select and expand main_model\.0/i }),
-    );
-    await user.click(
-      await screen.findByRole("button", { name: /^select main_model\.0\.model$/i }),
-    );
-
-    const monitorCharts = await screen.findByRole("button", {
-      name: /^monitor charts$/i,
+    const experimentsTab = await screen.findByRole("radio", { name: "Experiments" });
+    await waitFor(() => expect(experimentsTab).not.toBeDisabled());
+    await user.click(experimentsTab);
+    const experimentControl = await screen.findByRole("combobox", {
+      name: "Experiment",
     });
-    await waitFor(() => expect(monitorCharts).toBeDisabled());
+    await waitFor(() => expect(experimentControl).toBeDisabled());
+    expect(screen.getByRole("combobox", { name: "Dataset" })).toBeDisabled();
+    expect(screen.getByRole("combobox", { name: "Preset" })).toBeDisabled();
+
+    expect(
+      screen.queryByRole("button", { name: /^monitor charts$/i }),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByLabelText(/Weights parameter activity:/i),
     ).not.toBeInTheDocument();

@@ -15,6 +15,7 @@ export type TrainingRunPlanRequestInput = {
   selectedDatasets: string[];
   effectiveOverrides: OverrideValues;
   logFolder: string;
+  selectedMonitors: string[];
   searchPayload?: TrainingSearchCreateInput;
   submittedRunPlan?: TrainingRunPlan;
 };
@@ -28,6 +29,7 @@ export function buildTrainingRunPlanRequest({
   selectedDatasets,
   effectiveOverrides,
   logFolder,
+  selectedMonitors,
   searchPayload,
   submittedRunPlan,
 }: TrainingRunPlanRequestInput): TrainingRunPlanCreateInput | null {
@@ -42,6 +44,7 @@ export function buildTrainingRunPlanRequest({
     datasets: selectedDatasets,
     overrides: effectiveOverrides,
     logFolder,
+    monitors: selectedMonitors,
     ...(searchPayload ? { search: searchPayload } : {}),
   };
 }

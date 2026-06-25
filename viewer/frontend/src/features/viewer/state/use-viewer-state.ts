@@ -67,12 +67,14 @@ function graphPreviewCompositionInput({
     selectedTargetMode,
     selectedSnapshotId,
     selectedExperimentRunId,
+    selectedExperimentPreset,
+    selectedExperimentDataset,
   } = targetConfig.target;
   const historicalGraphPreview = historicalRuns.graphPreview;
   const targetMode =
     selectedTargetMode === "snapshot" && selectedSnapshotId
       ? "snapshot"
-      : selectedTargetMode === "experiment" && selectedExperimentRunId
+      : selectedTargetMode === "experiment"
         ? "experiment"
         : "preset";
   const targetId =
@@ -81,6 +83,14 @@ function graphPreviewCompositionInput({
       : targetMode === "experiment"
         ? selectedExperimentRunId
         : selectedPreset;
+  const targetPreset =
+    targetMode === "experiment" && selectedExperimentPreset
+      ? selectedExperimentPreset
+      : selectedPreset;
+  const targetDatasets =
+    targetMode === "experiment" && selectedExperimentDataset
+      ? [selectedExperimentDataset]
+      : selectedDatasets;
 
   return {
     controller: graphPreview,
@@ -94,8 +104,8 @@ function graphPreviewCompositionInput({
     filteredHistoricalRunIds: historicalGraphPreview.filteredHistoricalRunIds,
     targetModelType: selectedModelType,
     targetModel: selectedModel,
-    targetPreset: selectedPreset,
-    targetDatasets: selectedDatasets,
+    targetPreset,
+    targetDatasets,
     targetMode,
     targetId,
   };

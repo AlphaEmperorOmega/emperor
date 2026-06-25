@@ -14,6 +14,7 @@ import { monitorQueryKeys } from "@/lib/query-keys";
 import {
   deriveMonitorSource,
   deriveParameterActivityByNodePath,
+  deriveParameterStatusPathMismatch,
 } from "@/features/viewer/state/graph-monitor/graph-monitor-selectors";
 import { type ActiveMonitorJob } from "@/types/monitor";
 
@@ -134,6 +135,9 @@ export function useMonitorSourceOrchestration({
     parameterStatusActiveJob?.currentDataset ??
     parameterStatusActiveJob?.datasets[0] ??
     targetDatasets[0];
+  const activeParameterStatusEnabled = Boolean(
+    parameterStatusActiveJob?.monitors.includes("linear"),
+  );
   const historicalParameterStatusEnabled = Boolean(
     !parameterStatusActiveJob && parameterStatusHistoricalRunIds.length > 0,
   );
@@ -185,9 +189,7 @@ export function useMonitorSourceOrchestration({
         { signal },
       );
     },
-    enabled: Boolean(
-      parameterStatusActiveJob?.monitors.includes("linear"),
-    ),
+    enabled: activeParameterStatusEnabled,
     retry: false,
     refetchInterval:
       parameterStatusActiveJob &&
@@ -244,15 +246,28 @@ export function useMonitorSourceOrchestration({
           historicalParameterStatusData.runs.length > 0
         ? historicalParameterStatusData
         : undefined;
-  const isParameterStatusPartiallyLoading = Boolean(
+  const isHistoricalParameterStatusLoading = Boolean(
     !parameterStatusActiveJob &&
-      historicalParameterStatusData &&
-      historicalParameterStatusData.runs.length > 0 &&
+      historicalParameterStatusEnabled &&
       isQueryWindowLoading({
         enabledCount: historicalParameterStatusEnabledCount,
         queries: historicalParameterStatusQueries,
         total: parameterStatusHistoricalRunIds.length,
       }),
+  );
+  const isActiveParameterStatusLoading = Boolean(
+    activeParameterStatusEnabled &&
+      !activeParameterStatusQuery.data &&
+      (activeParameterStatusQuery.isFetching ||
+        activeParameterStatusQuery.isLoading),
+  );
+  const isParameterStatusLoading =
+    isActiveParameterStatusLoading || isHistoricalParameterStatusLoading;
+  const isParameterStatusPartiallyLoading = Boolean(
+    !parameterStatusActiveJob &&
+      historicalParameterStatusData &&
+      historicalParameterStatusData.runs.length > 0 &&
+      isHistoricalParameterStatusLoading,
   );
   const parameterActivityByNodePath = useMemo(
     () =>
@@ -260,10 +275,29 @@ export function useMonitorSourceOrchestration({
         graph,
         source: parameterStatusSource,
         status: parameterStatusData,
+        statusLoading: isParameterStatusLoading,
         linearMonitorTargetResolver,
       }),
     [
       graph,
+      isParameterStatusLoading,
+      linearMonitorTargetResolver,
+      parameterStatusData,
+      parameterStatusSource,
+    ],
+  );
+  const isParameterStatusPathMismatch = useMemo(
+    () =>
+      deriveParameterStatusPathMismatch({
+        graph,
+        source: parameterStatusSource,
+        status: parameterStatusData,
+        statusLoading: isParameterStatusLoading,
+        linearMonitorTargetResolver,
+      }),
+    [
+      graph,
+      isParameterStatusLoading,
       linearMonitorTargetResolver,
       parameterStatusData,
       parameterStatusSource,
@@ -323,7 +357,9 @@ export function useMonitorSourceOrchestration({
     resolveParameterActivityTargetNode,
     canOpenGraphNodeMonitor,
     parameterActivityByNodePath,
+    isParameterStatusLoading,
     isParameterStatusPartiallyLoading,
+    isParameterStatusPathMismatch,
     deriveSelectedMonitorSourceState,
   };
 }

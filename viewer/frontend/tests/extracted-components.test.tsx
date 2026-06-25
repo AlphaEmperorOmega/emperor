@@ -137,18 +137,24 @@ describe("ViewerWorkspaceNav", () => {
     const onChange = vi.fn();
     render(<ViewerWorkspaceNav activeWorkspace="model" onChange={onChange} />);
 
-    expect(screen.getByRole("button", { name: "Model" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(screen.getByRole("button", { name: "Logs" })).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
+    const modelButton = screen.getByRole("button", { name: "Model" });
+    const compareButton = screen.getByRole("button", { name: "Compare" });
+    const logsButton = screen.getByRole("button", { name: "Logs" });
 
-    await user.click(screen.getByRole("button", { name: "Logs" }));
+    expect(modelButton).toHaveAttribute("aria-pressed", "true");
+    expect(compareButton).toHaveAttribute("aria-pressed", "false");
+    expect(logsButton).toHaveAttribute("aria-pressed", "false");
+    expect(modelButton.querySelector("svg")).toBeNull();
+    expect(compareButton.querySelector("svg")).toBeNull();
+    expect(logsButton.querySelector("svg")).toBeNull();
 
-    expect(onChange).toHaveBeenCalledWith("logs");
+    await user.click(compareButton);
+    await user.click(logsButton);
+    await user.click(modelButton);
+
+    expect(onChange).toHaveBeenNthCalledWith(1, "compare");
+    expect(onChange).toHaveBeenNthCalledWith(2, "logs");
+    expect(onChange).toHaveBeenNthCalledWith(3, "model");
   });
 });
 

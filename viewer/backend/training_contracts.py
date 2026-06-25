@@ -455,12 +455,12 @@ class CreateTrainingRunPlanCommand:
     datasets: list[str]
     overrides: dict[str, Any]
     log_folder: str
+    monitors: list[str] = field(default_factory=list)
     search: TrainingSearch | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class CreateTrainingJobCommand(CreateTrainingRunPlanCommand):
-    monitors: list[str] = field(default_factory=list)
     run_plan: TrainingRunPlanView | None = None
 
 
