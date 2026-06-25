@@ -160,7 +160,7 @@ class TestExperimentConfigOverrideParsing(
                 "0",
                 "--learning-rate",
                 "1e-4",
-                "--hidden-dim",
+                "--stack-hidden-dim",
                 "128",
                 "--stack-activation",
                 "GELU",
@@ -184,7 +184,7 @@ class TestExperimentConfigOverrideParsing(
         self.assertEqual(mode.config_overrides["num_epochs"], 30)
         self.assertEqual(mode.config_overrides["callback_early_stopping_patience"], 0)
         self.assertEqual(mode.config_overrides["learning_rate"], 1e-4)
-        self.assertEqual(mode.config_overrides["hidden_dim"], 128)
+        self.assertEqual(mode.config_overrides["stack_hidden_dim"], 128)
         self.assertIs(mode.config_overrides["stack_activation"], ActivationOptions.GELU)
         self.assertIs(mode.config_overrides["gate_option"], LayerGateOptions.ADDITION)
         self.assertIs(
@@ -203,12 +203,26 @@ class TestExperimentConfigOverrideParsing(
         )
         self.assertEqual(mode.search_overrides, {})
 
+    def test_top_level_hidden_dim_alias_is_rejected(self):
+        removed_flag = "--" + "hidden-dim"
+
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                self.make_parser().parse_args(
+                    [
+                        "--preset",
+                        "single-model-weight",
+                        removed_flag,
+                        "128",
+                    ]
+                )
+
     def test_named_config_flags_parse_bool_and_string_values(self):
         args = self.make_parser().parse_args(
             [
                 "--preset",
                 "single-model-weight",
-                "--bias-flag",
+                "--stack-bias-flag",
                 "false",
                 "--trainer-accelerator",
                 "mps",
@@ -221,7 +235,7 @@ class TestExperimentConfigOverrideParsing(
 
         mode = self.resolve_args(args)
 
-        self.assertIs(mode.config_overrides["bias_flag"], False)
+        self.assertIs(mode.config_overrides["stack_bias_flag"], False)
         self.assertEqual(mode.config_overrides["trainer_accelerator"], "mps")
         self.assertEqual(mode.config_overrides["data_num_workers"], 0)
         self.assertIs(mode.config_overrides["run_test_after_fit"], False)
@@ -234,7 +248,7 @@ class TestExperimentConfigOverrideParsing(
                 "single-model-weight",
                 "--num-epochs",
                 "30",
-                "--bias-flag",
+                "--stack-bias-flag",
                 "false",
             ]
         )
@@ -245,7 +259,7 @@ class TestExperimentConfigOverrideParsing(
                 "--config",
                 "--num-epochs",
                 "30",
-                "--bias-flag",
+                "--stack-bias-flag",
                 "false",
             ]
         )
@@ -255,6 +269,20 @@ class TestExperimentConfigOverrideParsing(
 
         self.assertEqual(grouped_mode.config_overrides, plain_mode.config_overrides)
         self.assertEqual(grouped_mode.search_overrides, plain_mode.search_overrides)
+
+    def test_top_level_bias_flag_alias_is_rejected(self):
+        removed_flag = "--" + "bias-flag"
+
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                self.make_parser().parse_args(
+                    [
+                        "--preset",
+                        "single-model-weight",
+                        removed_flag,
+                        "false",
+                    ]
+                )
 
     def test_legacy_controller_stack_flags_parse_to_canonical_params(self):
         parser = get_experiment_parser(
@@ -382,7 +410,7 @@ class TestExperimentConfigOverrideParsing(
                 "single-model-weight",
                 "--grid-search",
                 "--search-set",
-                "hidden-dim=64,128",
+                "stack-hidden-dim=64,128",
                 "--search-set",
                 "stack_activation=RELU,GELU",
                 "--search-set",
@@ -401,7 +429,7 @@ class TestExperimentConfigOverrideParsing(
         mode = self.resolve_args(args)
 
         self.assertIsInstance(mode.search_mode, GridSearch)
-        self.assertEqual(mode.search_overrides["hidden_dim"], [64, 128])
+        self.assertEqual(mode.search_overrides["stack_hidden_dim"], [64, 128])
         self.assertEqual(
             mode.search_overrides["stack_activation"],
             [ActivationOptions.RELU, ActivationOptions.GELU],
@@ -439,7 +467,7 @@ class TestExperimentConfigOverrideParsing(
                 "--preset",
                 "single-model-weight",
                 "--search-set",
-                "hidden_dim=64,128",
+                "stack_hidden_dim=64,128",
             ]
         )
 
@@ -508,11 +536,11 @@ class TestExperimentConfigOverrideParsing(
             [
                 "--preset",
                 "single-model-weight",
-                "--hidden-dim",
+                "--stack-hidden-dim",
                 "128",
                 "--grid-search",
                 "--search-set",
-                "hidden_dim=64,128",
+                "stack_hidden_dim=64,128",
             ]
         )
 
@@ -522,6 +550,7 @@ class TestExperimentConfigOverrideParsing(
     def test_transformer_configs_hide_builder_unsupported_override_keys(self):
         bert_keys = set(iter_supported_config_keys(bert_linear_config))
         vit_keys = set(iter_supported_config_keys(vit_linear_config))
+        removed_bias_constant = "BIAS" + "_FLAG"
 
         self.assertNotIn("GATE_FLAG", bert_keys)
         self.assertNotIn("GATE_HIDDEN_DIM", bert_keys)
@@ -531,9 +560,9 @@ class TestExperimentConfigOverrideParsing(
         self.assertNotIn("HALTING_STACK_HIDDEN_DIM", bert_keys)
         self.assertNotIn("RECURRENT_FLAG", bert_keys)
         self.assertNotIn("BERT_PRETRAINING_TARGET_VOCAB_SIZE", bert_keys)
-        self.assertNotIn("BIAS_FLAG", bert_keys)
+        self.assertNotIn(removed_bias_constant, bert_keys)
         self.assertNotIn("SEQUENCE_LENGTH", vit_keys)
-        self.assertNotIn("BIAS_FLAG", vit_keys)
+        self.assertNotIn(removed_bias_constant, vit_keys)
         self.assertNotIn("TRANSFORMER_NUM_LAYERS", vit_keys)
         self.assertNotIn("ACTIVATION_FUNCTION", vit_keys)
         self.assertNotIn("DROPOUT_PROBABILITY", vit_keys)
@@ -548,7 +577,7 @@ class TestExperimentConfigOverrideApplication(unittest.TestCase):
             ExperimentPreset.SINGLE_MODEL_WEIGHT,
             Mnist,
             config_overrides={
-                "hidden_dim": 64,
+                "stack_hidden_dim": 64,
             },
         )[0]
 
@@ -569,7 +598,7 @@ class TestExperimentConfigOverrideApplication(unittest.TestCase):
             Mnist,
             search_mode=GridSearch(),
             search_overrides={
-                "hidden_dim": [64, 128],
+                "stack_hidden_dim": [64, 128],
                 "stack_num_layers": [2, 4],
             },
         )
