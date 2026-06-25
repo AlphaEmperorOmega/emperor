@@ -26,6 +26,7 @@ type GraphViewStateOptions = {
   canOpenMonitor?: (node: GraphNode) => boolean;
   onOpenMonitor?: (node: GraphNode) => void;
   resolveMonitorTarget?: (node: GraphNode) => GraphNode | undefined;
+  resolveParameterActivityTarget?: (node: GraphNode) => GraphNode | undefined;
   parameterActivityByNodePath?: Map<string, GraphParameterActivity>;
 };
 
@@ -37,6 +38,7 @@ export function useGraphViewState(
     canOpenMonitor,
     onOpenMonitor,
     resolveMonitorTarget,
+    resolveParameterActivityTarget,
     parameterActivityByNodePath,
   } = options;
   const [graphDetailMode, setGraphDetailMode] = useState<GraphDetailMode>("basic");
@@ -149,6 +151,12 @@ export function useGraphViewState(
     return resolveMonitorTarget ? resolveMonitorTarget(node) : node;
   }, [resolveMonitorTarget]);
 
+  const parameterActivityTargetForNode = useCallback((node: GraphNode) => {
+    return resolveParameterActivityTarget
+      ? resolveParameterActivityTarget(node)
+      : monitorTargetForNode(node);
+  }, [monitorTargetForNode, resolveParameterActivityTarget]);
+
   const canOpenGraphNodeMonitor = useCallback((node: GraphNode) => {
     const monitorTarget = monitorTargetForNode(node);
     return Boolean(monitorTarget && canOpenMonitor?.(monitorTarget));
@@ -164,11 +172,11 @@ export function useGraphViewState(
   }, [monitorTargetForNode, onOpenMonitor]);
 
   const parameterActivityForNode = useCallback((node: GraphNode) => {
-    const monitorTarget = monitorTargetForNode(node);
+    const monitorTarget = parameterActivityTargetForNode(node);
     return monitorTarget
       ? parameterActivityByNodePath?.get(monitorTarget.path)
       : undefined;
-  }, [monitorTargetForNode, parameterActivityByNodePath]);
+  }, [parameterActivityByNodePath, parameterActivityTargetForNode]);
 
   const revealGraphNode = useCallback((nodeId: string) => {
     if (!detailNodeIds.has(nodeId)) {

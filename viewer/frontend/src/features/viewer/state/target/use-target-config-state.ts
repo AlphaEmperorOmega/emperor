@@ -12,7 +12,9 @@ import {
   activeOverrideScopeLabel,
   effectivePresetOverrides,
   lockedOverrideKeys,
+  normalizeConfigOverrides,
   overrideDigest,
+  overrideValue,
   type ActiveOverrideScope,
   type OverrideValues,
 } from "@/lib/config";
@@ -135,6 +137,7 @@ export function useTargetConfigState({
     selectedPreset,
     setSelectedPreset,
     presetOverrides,
+    setPresetOverrides,
     selectPreset,
     updatePresetOverride,
     clearPresetOverride,
@@ -282,6 +285,19 @@ export function useTargetConfigState({
     presetOwnedFieldCount,
     fieldCount,
   } = targetSelectionState;
+  useEffect(() => {
+    if (configFields.length === 0) {
+      return;
+    }
+    setPresetOverrides((current) => {
+      const next = normalizeConfigOverrides(configFields, current);
+      return overrideValuesEqual(current, next) ? current : next;
+    });
+    setSnapshotEditorDraft((current) => {
+      const next = normalizeConfigOverrides(configFields, current);
+      return overrideValuesEqual(current, next) ? current : next;
+    });
+  }, [configFields, setPresetOverrides]);
   const selectedConfigSnapshot = useMemo(
     () =>
       modelConfigSnapshots.find(
@@ -306,7 +322,10 @@ export function useTargetConfigState({
   const inactiveLockedOverrides = useMemo(
     () =>
       Object.fromEntries(
-        inactiveLockedOverrideKeys.map((key) => [key, presetOverrides[key] ?? ""]),
+        inactiveLockedOverrideKeys.map((key) => [
+          key,
+          overrideValue(presetOverrides, key) ?? "",
+        ]),
       ) as OverrideValues,
     [inactiveLockedOverrideKeys, presetOverrides],
   );
@@ -842,6 +861,7 @@ export function useTargetConfigState({
         overrides: {},
         targetMode: "experiment",
         targetId: selectedLogRun.id,
+        logRunId: selectedLogRun.id,
       });
     },
     [
@@ -1300,6 +1320,11 @@ export function useTargetConfigState({
     setSelectedTargetMode("experiment");
   }, []);
 
+  const clearSelectedExperimentRun = useCallback(() => {
+    setSelectedExperimentRunId((current) => (current ? "" : current));
+    lastRequestedPreviewTargetKeyRef.current = "";
+  }, []);
+
   const setTrainingPresetSelection = useCallback(
     (presets: string[]) => {
       const validPresets = uniqueValidValues(presets, presetNames);
@@ -1554,6 +1579,8 @@ export function useTargetConfigState({
           : targetMode === "experiment"
             ? selectedExperimentRunId
             : selectedPreset,
+      logRunId:
+        targetMode === "experiment" ? selectedExperimentRunId : undefined,
     });
   }, [
     activeOverrides,
@@ -1913,7 +1940,8 @@ export function useTargetConfigState({
       target,
       selection,
       syncSelectedLogRun,
+      clearSelectedExperimentRun,
     }),
-    [selection, syncSelectedLogRun, target],
+    [clearSelectedExperimentRun, selection, syncSelectedLogRun, target],
   );
 }

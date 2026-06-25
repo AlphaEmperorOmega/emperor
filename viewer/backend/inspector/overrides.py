@@ -5,6 +5,7 @@ from types import NoneType
 from typing import Any, get_args
 
 from models.config_overrides import (
+    LEGACY_CONFIG_KEY_ALIASES,
     config_key_to_model_param,
     iter_supported_config_keys,
     normalize_key,
@@ -13,38 +14,26 @@ from models.config_overrides import (
 
 from viewer.backend.inspector.config_classes import abstract_config_class_error
 from viewer.backend.inspector.errors import InspectorError
+from viewer.backend.inspector.values import serialize_config_value
 
-LEGACY_OVERRIDE_ALIASES = {
-    "bias_flag": "stack_bias_flag",
-    "hidden_dim": "stack_hidden_dim",
-    "layer_norm_position": "stack_layer_norm_position",
-    "gate_bias_flag": "gate_stack_bias_flag",
-    "gate_hidden_dim": "gate_stack_hidden_dim",
-    "gate_layer_norm_position": "gate_stack_layer_norm_position",
-    "halting_bias_flag": "halting_stack_bias_flag",
-    "halting_hidden_dim": "halting_stack_hidden_dim",
-    "halting_layer_norm_position": "halting_stack_layer_norm_position",
-    "memory_bias_flag": "memory_stack_bias_flag",
-    "memory_hidden_dim": "memory_stack_hidden_dim",
-    "memory_layer_norm_position": "memory_stack_layer_norm_position",
-    "recurrent_gate_bias_flag": "recurrent_gate_stack_bias_flag",
-    "recurrent_gate_hidden_dim": "recurrent_gate_stack_hidden_dim",
-    "recurrent_gate_layer_norm_position": "recurrent_gate_stack_layer_norm_position",
-    "recurrent_halting_bias_flag": "recurrent_halting_stack_bias_flag",
-    "recurrent_halting_hidden_dim": "recurrent_halting_stack_hidden_dim",
-    "recurrent_halting_layer_norm_position": (
-        "recurrent_halting_stack_layer_norm_position"
-    ),
-}
+def _supported_config_keys(config_module: Any) -> dict[str, str]:
+    return {
+        normalize_key(config_key): config_key
+        for config_key in iter_supported_config_keys(config_module)
+    }
 
 
-def _legacy_override_alias(
+def resolve_override_key(
     normalized_key: str,
     supported: Mapping[str, str],
 ) -> tuple[str | None, bool]:
-    alias = LEGACY_OVERRIDE_ALIASES.get(normalized_key)
+    config_key = supported.get(normalized_key)
+    if config_key is not None:
+        return config_key, False
+
+    alias = LEGACY_CONFIG_KEY_ALIASES.get(normalized_key)
     if alias is not None:
-        return supported.get(alias), False
+        return supported.get(normalize_key(alias)), False
     if normalized_key.endswith("_residual_flag"):
         residual_option_key = (
             normalized_key.removesuffix("_residual_flag")
@@ -103,26 +92,25 @@ def _override_parse_value(
 
 
 def parse_override_mapping(
-    config_module, overrides: Mapping[str, Any] | None
+    config_module,
+    overrides: Mapping[str, Any] | None,
+    *,
+    ignore_unknown: bool = False,
 ) -> dict[str, Any]:
     if not overrides:
         return {}
 
-    supported = {
-        normalize_key(config_key): config_key
-        for config_key in iter_supported_config_keys(config_module)
-    }
+    supported = _supported_config_keys(config_module)
     parsed = {}
     for raw_key, raw_value in overrides.items():
         normalized_key = normalize_key(raw_key)
-        config_key = supported.get(normalized_key)
-        legacy_residual_flag = False
+        config_key, legacy_residual_flag = resolve_override_key(
+            normalized_key,
+            supported,
+        )
         if config_key is None:
-            config_key, legacy_residual_flag = _legacy_override_alias(
-                normalized_key,
-                supported,
-            )
-        if config_key is None:
+            if ignore_unknown:
+                continue
             raise InspectorError(f"Unknown override '{raw_key}'.")
         try:
             parse_value = (
@@ -145,3 +133,68 @@ def parse_override_mapping(
                 f"Invalid value for override '{raw_key}': {raw_value!r}. {exc}"
             ) from exc
     return parsed
+
+
+def canonicalize_override_keys(
+    config_module,
+    overrides: Mapping[str, Any] | None,
+    *,
+    ignore_unknown: bool = False,
+) -> dict[str, Any]:
+    if not overrides:
+        return {}
+
+    supported = _supported_config_keys(config_module)
+    canonical: dict[str, Any] = {}
+    for raw_key, raw_value in overrides.items():
+        normalized_key = normalize_key(raw_key)
+        config_key, legacy_residual_flag = resolve_override_key(
+            normalized_key,
+            supported,
+        )
+        if config_key is None:
+            if ignore_unknown:
+                continue
+            raise InspectorError(f"Unknown override '{raw_key}'.")
+        canonical[config_key] = (
+            _legacy_residual_flag_value(raw_value)
+            if legacy_residual_flag
+            else raw_value
+        )
+    return canonical
+
+
+def serialize_override_mapping(
+    config_module,
+    overrides: Mapping[str, Any] | None,
+    *,
+    ignore_unknown: bool = False,
+) -> dict[str, Any]:
+    if not overrides:
+        return {}
+
+    supported = _supported_config_keys(config_module)
+    serialized: dict[str, Any] = {}
+    for raw_key, raw_value in overrides.items():
+        normalized_key = normalize_key(raw_key)
+        config_key, legacy_residual_flag = resolve_override_key(
+            normalized_key,
+            supported,
+        )
+        if config_key is None:
+            if ignore_unknown:
+                continue
+            raise InspectorError(f"Unknown override '{raw_key}'.")
+        parse_value = (
+            _legacy_residual_flag_value(raw_value)
+            if legacy_residual_flag
+            else _override_parse_value(config_module, config_key, raw_value)
+        )
+        try:
+            parsed_value = parse_config_value(config_module, config_key, parse_value)
+        except Exception as exc:
+            raise InspectorError(
+                f"Invalid value for override '{raw_key}': {raw_value!r}. {exc}"
+            ) from exc
+        serialized[config_key] = serialize_config_value(parsed_value)
+    return serialized

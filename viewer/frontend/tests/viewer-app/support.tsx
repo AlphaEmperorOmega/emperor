@@ -1161,7 +1161,9 @@ export function buildHistoricalMonitorFixture(count = 6) {
         {
           scalarTags: [
             "main_model.0.model/output/mean",
+            "main_model.0.model/weights/mean",
             "main_model.1.model/output/mean",
+            "main_model.1.model/weights/mean",
           ],
           histogramTags: [],
           imageTags: [],

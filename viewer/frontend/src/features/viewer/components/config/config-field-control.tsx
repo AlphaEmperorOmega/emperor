@@ -2,18 +2,73 @@ import { RotateCcw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SelectOnlyDropdown } from "@/features/viewer/components/screen/select-only-dropdown";
 import { type ConfigField } from "@/lib/api";
-import {
-  type OverrideValues,
-  defaultLabel,
-  fieldValue,
-  hasOverride,
-} from "@/lib/config";
+import { type OverrideValues, fieldValue, hasOverride } from "@/lib/config";
 import { cn } from "@/lib/utils";
 
 type ConfigFieldControlDensity = "comfortable" | "compact";
+
+const booleanOptions = [
+  { value: "true", label: "On" },
+  { value: "false", label: "Off" },
+] as const;
+
+function BooleanSegmentedControl({
+  id,
+  label,
+  value,
+  onChange,
+  disabled,
+  isCompact,
+  className,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  disabled: boolean;
+  isCompact: boolean;
+  className?: string;
+}) {
+  return (
+    <SegmentedControl
+      id={id}
+      aria-label={label}
+      aria-disabled={disabled || undefined}
+      className={cn(
+        "grid w-full min-w-0 grid-cols-2 overflow-hidden rounded-control border border-line bg-control-chrome p-0 font-sans font-semibold text-ink transition",
+        isCompact ? "h-10 text-[12.5px]" : "h-10 text-[13px]",
+        disabled && "opacity-60",
+        className,
+      )}
+    >
+      {booleanOptions.map((option) => {
+        const isSelected =
+          option.value === "true" ? value === "true" : value !== "true";
+        return (
+          <button
+            key={option.value}
+            type="button"
+            role="radio"
+            aria-checked={isSelected}
+            disabled={disabled}
+            onClick={() => onChange(option.value)}
+            className={cn(
+              "min-w-0 border-r border-line-soft px-2 text-center transition last:border-r-0 focus:outline-none focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed",
+              isSelected
+                ? "bg-control-selected text-violet"
+                : "bg-transparent text-ink-faint hover:bg-control-active hover:text-ink",
+            )}
+          >
+            <span className="block min-w-0 truncate">{option.label}</span>
+          </button>
+        );
+      })}
+    </SegmentedControl>
+  );
+}
 
 export function ConfigFieldValueEditor({
   field,
@@ -66,40 +121,16 @@ export function ConfigFieldValueEditor({
         className,
       )}
     >
-      {field.type === "bool" && field.nullable ? (
-        <SelectOnlyDropdown
+      {field.type === "bool" ? (
+        <BooleanSegmentedControl
           id={controlId}
           label={controlLabel ?? field.label}
           value={value}
-          options={[
-            { value: "", label: "None" },
-            { value: "true", label: "Enabled" },
-            { value: "false", label: "Off" },
-          ]}
-          onChange={(nextValue) => onChange(field.key, nextValue)}
           disabled={isControlDisabled}
-          placeholder="None"
-          triggerClassName={selectTriggerClassName}
+          isCompact={isCompact}
+          onChange={(nextValue) => onChange(field.key, nextValue)}
+          className={resetPaddingClassName}
         />
-      ) : field.type === "bool" ? (
-        <div
-          className={cn(
-            "flex items-center justify-between rounded-[10px] border border-line bg-black/25",
-            isCompact ? "h-10 px-3" : "h-9 px-2.5",
-            resetPaddingClassName,
-          )}
-        >
-          <span className={cn("text-ink", isCompact ? "text-[13px]" : "text-sm")}>
-            {value === "true" ? "Enabled" : "Off"}
-          </span>
-          <Switch
-            id={controlId}
-            aria-label={controlLabel ?? field.label}
-            disabled={isControlDisabled}
-            checked={value === "true"}
-            onCheckedChange={(checked) => onChange(field.key, String(checked))}
-          />
-        </div>
       ) : choices.length > 0 ? (
         <SelectOnlyDropdown
           id={controlId}
@@ -185,9 +216,6 @@ export function ConfigFieldControl({
   const isLocked = field.locked;
   const isControlDisabled = disabled && !isLocked;
   const isCompact = density === "compact";
-  const defaultBadgeClassName = isCompact
-    ? "rounded-none border-0 bg-transparent px-0 py-0 font-mono text-xs leading-4"
-    : undefined;
   const overrideBadgeClassName = isCompact ? "px-1 py-0.5 text-xs" : undefined;
 
   return (
@@ -206,14 +234,6 @@ export function ConfigFieldControl({
         <span className="flex min-w-0 items-start justify-between gap-2">
           <span className="min-w-0 text-[13px] font-semibold leading-5 text-ink [overflow-wrap:anywhere]">
             {field.label}
-          </span>
-          <span
-            className={cn(
-              "flex max-w-[62%] shrink-0 flex-wrap items-start justify-end",
-              isCompact ? "gap-x-2 gap-y-1" : "gap-1",
-            )}
-          >
-            <Badge className={defaultBadgeClassName}>default {defaultLabel(field)}</Badge>
           </span>
         </span>
         {(isModified || isLocked || isControlDisabled) && (

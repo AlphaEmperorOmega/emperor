@@ -11,9 +11,7 @@ from models.catalog import model_identity_payload_from_id
 from models.config_overrides import (
     config_key_to_flag,
     config_key_to_model_param,
-    config_key_to_param,
     iter_supported_config_keys,
-    normalize_key,
 )
 
 from viewer.backend.inspector.config_classes import abstract_config_class_error
@@ -341,7 +339,7 @@ def config_schema(model_name: str, preset_name: str | None = None) -> dict[str, 
         locked_reason = getattr(lock, "reason", "") if lock is not None else ""
         fields.append(
             {
-                "key": config_key_to_param(key),
+                "key": key,
                 "configKey": key,
                 "flag": config_key_to_flag(key),
                 "label": key.lower().replace("_", " "),
@@ -425,7 +423,7 @@ def search_space_schema(
         ]
         axes.append(
             {
-                "key": normalize_key(config_key),
+                "key": config_key,
                 "configKey": config_key,
                 "searchKey": search_key,
                 "label": (

@@ -1,4 +1,9 @@
 import { type LogRun, type LogRunTags } from "@/lib/api";
+import {
+  tagMatchesNodePath,
+  tagsIncludeParameterMonitorData,
+  tagsMatchParameterNodePath,
+} from "@/lib/monitor-paths";
 
 export const HISTORICAL_MONITOR_RUN_LIMIT = 5;
 
@@ -174,9 +179,31 @@ export function logRunTagsMatchNodePath(
   if (!tags || !nodePath) {
     return false;
   }
-  const prefix = `${nodePath}/`;
   return [...tags.scalarTags, ...tags.histogramTags, ...tags.imageTags].some((tag) =>
-    tag.startsWith(prefix),
+    tagMatchesNodePath(tag, nodePath),
+  );
+}
+
+export function logRunTagsMatchParameterNodePath(
+  tags: Pick<LogRunTags, "scalarTags" | "histogramTags" | "imageTags"> | undefined,
+  nodePath: string | undefined,
+) {
+  return tagsMatchParameterNodePath(tags, nodePath);
+}
+
+export function anyLogRunTagsMatchParameterNodePath(
+  tagsByRun: LogRunTags[] | undefined,
+  runIds: string[],
+  nodePath: string | undefined,
+) {
+  if (!tagsByRun || runIds.length === 0 || !nodePath) {
+    return false;
+  }
+  const allowedRunIds = new Set(runIds);
+  return tagsByRun.some(
+    (runTags) =>
+      allowedRunIds.has(runTags.runId) &&
+      logRunTagsMatchParameterNodePath(runTags, nodePath),
   );
 }
 
@@ -195,45 +222,17 @@ export function anyLogRunTagsMatchNodePath(
   );
 }
 
-const performanceTagRoots = new Set([
-  "best_validation",
-  "epoch",
-  "gap",
-  "gradients",
-  "parameters",
-  "test",
-  "train",
-  "validation",
-]);
-
-function tagLooksLikeLayerMonitorTag(tag: string) {
-  const [nodePath, group, metric] = tag.split("/");
-  if (!nodePath || !group || !metric) {
-    return false;
-  }
-  if (performanceTagRoots.has(nodePath)) {
-    return false;
-  }
-  return nodePath.includes(".") || nodePath.endsWith("_model") || nodePath === "model";
-}
-
 /**
- * Whether a run carries per-layer monitor data (as opposed to only flat
- * model-performance metrics such as `train/loss`, `validation/examples/*`, or
- * confusion matrices. Shape-based and monitor-type agnostic so it survives new
- * monitor callbacks, but the first path segment still has to look like a graph
- * node path rather than a training metric namespace.
+ * Whether a run carries parameter monitor data for W/b graph state. Performance
+ * metrics and non-parameter monitor media do not qualify.
  */
 export function logRunHasLayerMonitorData(
   tags: Pick<LogRunTags, "scalarTags" | "histogramTags" | "imageTags"> | undefined,
 ) {
-  if (!tags) {
-    return false;
-  }
-  return [...tags.scalarTags, ...tags.histogramTags, ...tags.imageTags].some(
-    tagLooksLikeLayerMonitorTag,
-  );
+  return tagsIncludeParameterMonitorData(tags);
 }
+
+export const logRunHasParameterMonitorData = logRunHasLayerMonitorData;
 
 /**
  * The set of experiments that contain at least one run with per-layer monitor

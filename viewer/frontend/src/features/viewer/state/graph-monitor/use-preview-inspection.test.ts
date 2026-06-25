@@ -144,6 +144,37 @@ describe("usePreviewInspectionState", () => {
     );
   });
 
+  it("passes logRunId through for experiment preview requests", async () => {
+    inspectModelMock.mockResolvedValueOnce({
+      modelType: "linears",
+      model: "A",
+      preset: "p",
+      parameterCount: 1,
+      parameterSizeBytes: 4,
+      nodes: [],
+      edges: [],
+    });
+
+    const { result } = renderPreview();
+    act(() =>
+      result.current.requestPreview({
+        ...request("A"),
+        targetMode: "experiment",
+        targetId: "run-1",
+        logRunId: "run-1",
+      }),
+    );
+
+    await waitFor(() => expect(result.current.graph?.model).toBe("A"));
+    expect(inspectModelMock).toHaveBeenCalledWith({
+      modelType: "linears",
+      model: "A",
+      preset: "p",
+      overrides: {},
+      logRunId: "run-1",
+    });
+  });
+
   it("clears preview state and ignores in-flight responses", async () => {
     const pending = deferred<unknown>();
     inspectModelMock.mockReturnValueOnce(pending.promise);

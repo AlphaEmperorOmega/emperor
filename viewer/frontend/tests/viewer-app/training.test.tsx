@@ -490,14 +490,30 @@ describe("ViewerApp Training And Preview", () => {
     const searchPopup = fullConfigSearchPopup(dialog);
     const gateSearchRow = fullConfigSearchResultRow(searchPopup, /gate flag/i);
     const searchPresetBadge = within(gateSearchRow).getByText("preset");
-    const searchGateSwitch = within(gateSearchRow).getByRole("switch", {
+    const searchGateControl = within(gateSearchRow).getByRole("radiogroup", {
       name: /current value/i,
+    });
+    const searchGateOn = within(searchGateControl).getByRole("radio", {
+      name: "On",
+    });
+    const searchGateOff = within(searchGateControl).getByRole("radio", {
+      name: "Off",
     });
 
     expect(gateSearchRow).toHaveTextContent(/current\s*true/i);
-    expect(gateSearchRow).toHaveTextContent(/default\s*false/i);
+    expect(gateSearchRow).not.toHaveTextContent(/default\s*false/i);
     expect(searchPresetBadge).toHaveClass("text-amber");
-    expect(searchGateSwitch).toBeDisabled();
+    expect(searchGateControl).toHaveAttribute("aria-disabled", "true");
+    expect(searchGateOn).toBeDisabled();
+    expect(searchGateOff).toBeDisabled();
+    expect(
+      within(searchGateControl).queryByRole("radio", { name: "None" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(gateSearchRow).queryByRole("switch", {
+        name: /current value/i,
+      }),
+    ).not.toBeInTheDocument();
     expect(
       within(gateSearchRow).queryByRole("button", {
         name: /reset search result override/i,

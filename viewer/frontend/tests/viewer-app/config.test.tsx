@@ -1,6 +1,7 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { type ConfigField } from "@/lib/api";
 import {
   commandField,
   configFieldGridFor,
@@ -105,6 +106,115 @@ function makeScrollable(element: HTMLElement) {
   element.scrollTop = 760;
 }
 
+function expectBooleanSegmentedControl(container: HTMLElement, name: string | RegExp) {
+  const control = within(container).getByRole("radiogroup", { name });
+  const radios = within(control).getAllByRole("radio");
+  const on = within(control).getByRole("radio", { name: "On" });
+  const off = within(control).getByRole("radio", { name: "Off" });
+
+  expect(radios).toEqual([on, off]);
+  expect(within(control).queryByRole("radio", { name: "None" })).not.toBeInTheDocument();
+  expect(within(container).queryByRole("switch", { name })).not.toBeInTheDocument();
+  expect(within(container).queryByRole("combobox", { name })).not.toBeInTheDocument();
+
+  return { control, on, off };
+}
+
+type ConfigFieldFixture = Partial<ConfigField> &
+  Pick<ConfigField, "key" | "section" | "type" | "default">;
+
+function configFixtureField({
+  key,
+  configKey,
+  flag,
+  label,
+  section,
+  type,
+  default: defaultValue,
+  nullable,
+  choices,
+  locked,
+  lockedValue,
+  lockedReason,
+}: ConfigFieldFixture): ConfigField {
+  return {
+    key,
+    configKey: configKey ?? key.toUpperCase(),
+    flag: flag ?? `--${key.replace(/_/g, "-")}`,
+    label: label ?? key.replace(/_/g, " "),
+    section,
+    type,
+    default: defaultValue,
+    nullable: nullable ?? defaultValue === null,
+    choices: choices ?? [],
+    locked,
+    lockedValue,
+    lockedReason,
+  };
+}
+
+const canonicalStackFixtureFields = [
+  configFixtureField({
+    key: "stack_hidden_dim",
+    section: "Layer Stack Options",
+    type: "int",
+    default: 256,
+  }),
+  configFixtureField({
+    key: "stack_num_layers",
+    section: "Layer Stack Options",
+    type: "int",
+    default: 5,
+  }),
+  configFixtureField({
+    key: "stack_activation",
+    section: "Layer Stack Options",
+    type: "enum",
+    default: "GELU",
+    choices: ["DISABLED", "RELU", "GELU", "SIGMOID", "TANH"],
+  }),
+  configFixtureField({
+    key: "stack_layer_norm_position",
+    section: "Layer Stack Options",
+    type: "enum",
+    default: "BEFORE",
+    choices: ["DISABLED", "DEFAULT", "BEFORE", "AFTER"],
+  }),
+  configFixtureField({
+    key: "stack_apply_output_pipeline_flag",
+    section: "Layer Stack Options",
+    type: "bool",
+    default: false,
+    choices: [true, false],
+  }),
+  configFixtureField({
+    key: "stack_bias_flag",
+    section: "Layer Stack Options",
+    type: "bool",
+    default: true,
+    choices: [true, false],
+  }),
+];
+
+function stackFixtureField(
+  overrides: Partial<ConfigField> & Pick<ConfigField, "key" | "section" | "default">,
+): ConfigField {
+  const suffix = overrides.key.split("_stack_", 2)[1];
+  const canonical = canonicalStackFixtureFields.find(
+    (field) => field.key === `stack_${suffix}`,
+  );
+
+  if (!canonical) {
+    throw new Error(`Missing canonical stack field fixture for ${overrides.key}`);
+  }
+
+  return configFixtureField({
+    ...overrides,
+    type: canonical.type,
+    choices: canonical.choices,
+  });
+}
+
 function nestedControlledSchemaResponse() {
   return {
     ...schemaResponse,
@@ -132,39 +242,24 @@ function nestedControlledSchemaResponse() {
         nullable: false,
         choices: [],
       },
-      {
+      stackFixtureField({
         key: "halting_stack_num_layers",
-        configKey: "HALTING_STACK_NUM_LAYERS",
-        flag: "--halting-stack-num-layers",
-        label: "halting stack num layers",
         section: "Halting Options",
-        type: "int",
         default: 2,
         nullable: false,
-        choices: [],
-      },
-      {
-        key: "halting_hidden_dim",
-        configKey: "HALTING_HIDDEN_DIM",
-        flag: "--halting-hidden-dim",
-        label: "halting hidden dim",
+      }),
+      stackFixtureField({
+        key: "halting_stack_hidden_dim",
         section: "Halting Options",
-        type: "int",
         default: 64,
         nullable: false,
-        choices: [],
-      },
-      {
-        key: "halting_layer_norm_position",
-        configKey: "HALTING_LAYER_NORM_POSITION",
-        flag: "--halting-layer-norm-position",
-        label: "halting layer norm position",
+      }),
+      stackFixtureField({
+        key: "halting_stack_layer_norm_position",
         section: "Halting Options",
-        type: "enum",
         default: "BEFORE",
         nullable: false,
-        choices: ["BEFORE", "AFTER"],
-      },
+      }),
       {
         key: "memory_flag",
         configKey: "MEMORY_FLAG",
@@ -212,50 +307,30 @@ function nestedControlledSchemaResponse() {
         nullable: true,
         choices: [],
       },
-      {
-        key: "memory_hidden_dim",
-        configKey: "MEMORY_HIDDEN_DIM",
-        flag: "--memory-hidden-dim",
-        label: "memory hidden dim",
+      stackFixtureField({
+        key: "memory_stack_hidden_dim",
         section: "Memory Options",
-        type: "int",
         default: 128,
         nullable: false,
-        choices: [],
-      },
-      {
-        key: "memory_layer_norm_position",
-        configKey: "MEMORY_LAYER_NORM_POSITION",
-        flag: "--memory-layer-norm-position",
-        label: "memory layer norm position",
+      }),
+      stackFixtureField({
+        key: "memory_stack_layer_norm_position",
         section: "Memory Options",
-        type: "enum",
         default: "BEFORE",
         nullable: false,
-        choices: ["BEFORE", "AFTER"],
-      },
-      {
+      }),
+      stackFixtureField({
         key: "memory_stack_num_layers",
-        configKey: "MEMORY_STACK_NUM_LAYERS",
-        flag: "--memory-stack-num-layers",
-        label: "memory stack num layers",
         section: "Memory Options",
-        type: "int",
         default: 2,
         nullable: false,
-        choices: [],
-      },
-      {
+      }),
+      stackFixtureField({
         key: "memory_stack_activation",
-        configKey: "MEMORY_STACK_ACTIVATION",
-        flag: "--memory-stack-activation",
-        label: "memory stack activation",
         section: "Memory Options",
-        type: "enum",
         default: "GELU",
         nullable: false,
-        choices: ["GELU", "SILU"],
-      },
+      }),
       {
         key: "memory_stack_dropout_probability",
         configKey: "MEMORY_STACK_DROPOUT_PROBABILITY",
@@ -300,17 +375,12 @@ function nestedControlledSchemaResponse() {
         nullable: false,
         choices: [true, false],
       },
-      {
-        key: "recurrent_gate_hidden_dim",
-        configKey: "RECURRENT_GATE_HIDDEN_DIM",
-        flag: "--recurrent-gate-hidden-dim",
-        label: "recurrent gate hidden dim",
+      stackFixtureField({
+        key: "recurrent_gate_stack_hidden_dim",
         section: "Recurrent Gate Stack Options",
-        type: "int",
         default: 128,
         nullable: false,
-        choices: [],
-      },
+      }),
       {
         key: "recurrent_halting_flag",
         configKey: "RECURRENT_HALTING_FLAG",
@@ -333,39 +403,24 @@ function nestedControlledSchemaResponse() {
         nullable: false,
         choices: [],
       },
-      {
+      stackFixtureField({
         key: "recurrent_halting_stack_num_layers",
-        configKey: "RECURRENT_HALTING_STACK_NUM_LAYERS",
-        flag: "--recurrent-halting-stack-num-layers",
-        label: "recurrent halting stack num layers",
         section: "Recurrent Halting Options",
-        type: "int",
         default: 2,
         nullable: false,
-        choices: [],
-      },
-      {
-        key: "recurrent_halting_hidden_dim",
-        configKey: "RECURRENT_HALTING_HIDDEN_DIM",
-        flag: "--recurrent-halting-hidden-dim",
-        label: "recurrent halting hidden dim",
+      }),
+      stackFixtureField({
+        key: "recurrent_halting_stack_hidden_dim",
         section: "Recurrent Halting Options",
-        type: "int",
         default: 64,
         nullable: false,
-        choices: [],
-      },
-      {
-        key: "recurrent_halting_layer_norm_position",
-        configKey: "RECURRENT_HALTING_LAYER_NORM_POSITION",
-        flag: "--recurrent-halting-layer-norm-position",
-        label: "recurrent halting layer norm position",
+      }),
+      stackFixtureField({
+        key: "recurrent_halting_stack_layer_norm_position",
         section: "Recurrent Halting Options",
-        type: "enum",
         default: "BEFORE",
         nullable: false,
-        choices: ["BEFORE", "AFTER"],
-      },
+      }),
     ],
   };
 }
@@ -397,50 +452,30 @@ function gateOptionSchemaResponse() {
         nullable: true,
         choices: ["None", "SIGMOID", "TANH"],
       },
-      {
-        key: "gate_hidden_dim",
-        configKey: "GATE_HIDDEN_DIM",
-        flag: "--gate-hidden-dim",
-        label: "gate hidden dim",
+      stackFixtureField({
+        key: "gate_stack_hidden_dim",
         section: "Gate Stack Options",
-        type: "int",
         default: 128,
         nullable: false,
-        choices: [],
-      },
-      {
-        key: "gate_layer_norm_position",
-        configKey: "GATE_LAYER_NORM_POSITION",
-        flag: "--gate-layer-norm-position",
-        label: "gate layer norm position",
+      }),
+      stackFixtureField({
+        key: "gate_stack_layer_norm_position",
         section: "Gate Stack Options",
-        type: "enum",
         default: "BEFORE",
         nullable: false,
-        choices: ["BEFORE", "AFTER"],
-      },
-      {
-        key: "gate_bias_flag",
-        configKey: "GATE_BIAS_FLAG",
-        flag: "--gate-bias-flag",
-        label: "gate bias flag",
+      }),
+      stackFixtureField({
+        key: "gate_stack_bias_flag",
         section: "Gate Stack Options",
-        type: "bool",
         default: true,
         nullable: false,
-        choices: [true, false],
-      },
-      {
+      }),
+      stackFixtureField({
         key: "gate_stack_num_layers",
-        configKey: "GATE_STACK_NUM_LAYERS",
-        flag: "--gate-stack-num-layers",
-        label: "gate stack num layers",
         section: "Gate Stack Options",
-        type: "int",
         default: 2,
         nullable: false,
-        choices: [],
-      },
+      }),
       {
         key: "recurrent_gate_flag",
         configKey: "RECURRENT_GATE_FLAG",
@@ -474,50 +509,30 @@ function gateOptionSchemaResponse() {
         nullable: true,
         choices: ["None", "SIGMOID", "TANH"],
       },
-      {
-        key: "recurrent_gate_hidden_dim",
-        configKey: "RECURRENT_GATE_HIDDEN_DIM",
-        flag: "--recurrent-gate-hidden-dim",
-        label: "recurrent gate hidden dim",
+      stackFixtureField({
+        key: "recurrent_gate_stack_hidden_dim",
         section: "Recurrent Gate Stack Options",
-        type: "int",
         default: 128,
         nullable: false,
-        choices: [],
-      },
-      {
-        key: "recurrent_gate_layer_norm_position",
-        configKey: "RECURRENT_GATE_LAYER_NORM_POSITION",
-        flag: "--recurrent-gate-layer-norm-position",
-        label: "recurrent gate layer norm position",
+      }),
+      stackFixtureField({
+        key: "recurrent_gate_stack_layer_norm_position",
         section: "Recurrent Gate Stack Options",
-        type: "enum",
         default: "BEFORE",
         nullable: false,
-        choices: ["BEFORE", "AFTER"],
-      },
-      {
-        key: "recurrent_gate_bias_flag",
-        configKey: "RECURRENT_GATE_BIAS_FLAG",
-        flag: "--recurrent-gate-bias-flag",
-        label: "recurrent gate bias flag",
+      }),
+      stackFixtureField({
+        key: "recurrent_gate_stack_bias_flag",
         section: "Recurrent Gate Stack Options",
-        type: "bool",
         default: true,
         nullable: false,
-        choices: [true, false],
-      },
-      {
+      }),
+      stackFixtureField({
         key: "recurrent_gate_stack_num_layers",
-        configKey: "RECURRENT_GATE_STACK_NUM_LAYERS",
-        flag: "--recurrent-gate-stack-num-layers",
-        label: "recurrent gate stack num layers",
         section: "Recurrent Gate Stack Options",
-        type: "int",
         default: 2,
         nullable: false,
-        choices: [],
-      },
+      }),
     ],
   };
 }
@@ -559,12 +574,11 @@ function adaptiveComponentSchemaResponse() {
         false,
         [true, false],
       ),
-      adaptiveField(
-        "weight_generator_stack_hidden_dim",
-        "Weight Options",
-        "int",
-        null,
-      ),
+      stackFixtureField({
+        key: "weight_generator_stack_hidden_dim",
+        section: "Weight Options",
+        default: null,
+      }),
       adaptiveField("bias_option_flag", "Bias Options", "bool", false, [
         true,
         false,
@@ -593,24 +607,21 @@ function adaptiveComponentSchemaResponse() {
         false,
         [true, false],
       ),
-      adaptiveField(
-        "mask_generator_stack_hidden_dim",
-        "Mask Options",
-        "int",
-        null,
-      ),
-      adaptiveField(
-        "adaptive_stack_hidden_dim",
-        "Adaptive Generator Stack Options",
-        "int",
-        256,
-      ),
-      adaptiveField(
-        "adaptive_stack_num_layers",
-        "Adaptive Generator Stack Options",
-        "int",
-        2,
-      ),
+      stackFixtureField({
+        key: "mask_generator_stack_hidden_dim",
+        section: "Mask Options",
+        default: null,
+      }),
+      stackFixtureField({
+        key: "adaptive_submodule_stack_hidden_dim",
+        section: "Adaptive Submodule Stack Options",
+        default: 256,
+      }),
+      stackFixtureField({
+        key: "adaptive_submodule_stack_num_layers",
+        section: "Adaptive Submodule Stack Options",
+        default: 2,
+      }),
     ],
   };
 }
@@ -673,12 +684,11 @@ function boundaryProjectorSchemaResponse() {
         null,
         ["WeightInformedScoreAxisMaskConfig"],
       ),
-      boundaryField(
-        "input_layer_adaptive_generator_stack_hidden_dim",
-        "Input Boundary Projector Options",
-        "int",
-        256,
-      ),
+      stackFixtureField({
+        key: "input_layer_adaptive_generator_stack_hidden_dim",
+        section: "Input Boundary Projector Options",
+        default: 256,
+      }),
       boundaryField(
         "output_layer_adaptive_flag",
         "Output Boundary Projector Options",
@@ -714,12 +724,11 @@ function boundaryProjectorSchemaResponse() {
         null,
         ["WeightInformedScoreAxisMaskConfig"],
       ),
-      boundaryField(
-        "output_layer_adaptive_generator_stack_hidden_dim",
-        "Output Boundary Projector Options",
-        "int",
-        256,
-      ),
+      stackFixtureField({
+        key: "output_layer_adaptive_generator_stack_hidden_dim",
+        section: "Output Boundary Projector Options",
+        default: 256,
+      }),
     ],
   };
 }
@@ -1003,7 +1012,8 @@ describe("ViewerApp Full Config", () => {
       "grid",
       "content-start",
       "gap-1.5",
-      "overflow-hidden",
+      "relative",
+      "overflow-visible",
       "rounded-[10px]",
       "border",
       "border-line",
@@ -1011,13 +1021,16 @@ describe("ViewerApp Full Config", () => {
       "px-0",
       "py-0",
       "shadow-[0_16px_40px_-30px_rgba(0,0,0,0.95)]",
+      "focus-within:z-30",
     );
+    expect(layerSection).not.toHaveClass("overflow-hidden");
     expect(layerSection).not.toHaveClass("rounded-[12px]", "bg-panel/80");
     expect(gateSection).toHaveClass(
       "grid",
       "content-start",
       "gap-1.5",
-      "overflow-hidden",
+      "relative",
+      "overflow-visible",
       "rounded-[10px]",
       "border",
       "border-line-soft",
@@ -1025,7 +1038,9 @@ describe("ViewerApp Full Config", () => {
       "px-0",
       "py-0",
       "shadow-[0_10px_28px_-26px_rgba(0,0,0,0.9)]",
+      "focus-within:z-30",
     );
+    expect(gateSection).not.toHaveClass("overflow-hidden");
     expect(gateSection).not.toHaveClass("rounded-[12px]", "bg-panel/70");
     expect(layerNavToggle).toHaveAttribute("aria-expanded", "true");
     expect(layerNavToggle).toHaveAttribute("aria-controls");
@@ -1076,6 +1091,54 @@ describe("ViewerApp Full Config", () => {
     expect(within(dialog).queryByText("--gate-flag")).not.toBeInTheDocument();
   });
 
+  it("keeps layer stack-prefixed fields in the parent accordion", async () => {
+    installFetchMock({
+      schemaResponse: {
+        ...schemaResponse,
+        fields: [
+          ...schemaResponse.fields,
+          {
+            key: "stack_hidden_dim",
+            configKey: "STACK_HIDDEN_DIM",
+            flag: "--stack-hidden-dim",
+            label: "stack hidden dim",
+            section: "Layer Stack Options",
+            type: "int",
+            default: 512,
+            nullable: false,
+            choices: [],
+          },
+        ],
+      },
+    });
+    renderViewer();
+    const user = userEvent.setup();
+
+    const dialog = await openFullConfig(user);
+    const layerAccordion = within(dialog).getByRole("button", {
+      name: /^layer stack options section, 4 fields, 0 overrides/i,
+    });
+
+    if (layerAccordion.getAttribute("aria-expanded") !== "true") {
+      await user.click(layerAccordion);
+    }
+
+    const layerSection = fullConfigSectionFor(layerAccordion);
+    expect(
+      within(layerSection).queryByRole("button", {
+        name: /^layer stack section,/i,
+      }),
+    ).not.toBeInTheDocument();
+
+    const layerDirectGrid = directFieldGridFor(layerAccordion);
+    expect(within(layerDirectGrid).getByLabelText(/stack hidden dim/i))
+      .toBeInTheDocument();
+    expect(within(layerDirectGrid).getByLabelText(/stack num layers/i))
+      .toBeInTheDocument();
+    expect(within(layerDirectGrid).getByLabelText(/stack activation/i))
+      .toBeInTheDocument();
+  });
+
   it("shows shared layer stack submodule defaults as a top-level accordion", async () => {
     installFetchMock({
       schemaResponse: {
@@ -1083,8 +1146,8 @@ describe("ViewerApp Full Config", () => {
         fields: [
           ...schemaResponse.fields,
           {
-            key: "submodule_hidden_dim",
-            configKey: "SUBMODULE_HIDDEN_DIM",
+            key: "submodule_stack_hidden_dim",
+            configKey: "SUBMODULE_STACK_HIDDEN_DIM",
             flag: "--submodule-hidden-dim",
             label: "submodule hidden dim",
             section: "Layer Stack Submodule Options",
@@ -1125,9 +1188,15 @@ describe("ViewerApp Full Config", () => {
       }),
     ).toBeInTheDocument();
     await user.click(submoduleAccordion);
-    expect(within(dialog).getByLabelText(/submodule hidden dim/i))
+    expect(
+      within(dialog).queryByRole("button", {
+        name: /submodule stack options section/i,
+      }),
+    ).not.toBeInTheDocument();
+    const submoduleDirectGrid = directFieldGridFor(submoduleAccordion);
+    expect(within(submoduleDirectGrid).getByLabelText(/submodule hidden dim/i))
       .toBeInTheDocument();
-    expect(within(dialog).getByLabelText(/submodule stack activation/i))
+    expect(within(submoduleDirectGrid).getByLabelText(/submodule stack activation/i))
       .toBeInTheDocument();
   });
 
@@ -1137,17 +1206,12 @@ describe("ViewerApp Full Config", () => {
         ...schemaResponse,
         fields: [
           ...schemaResponse.fields,
-          {
-            key: "gate_hidden_dim",
-            configKey: "GATE_HIDDEN_DIM",
-            flag: "--gate-hidden-dim",
-            label: "gate hidden dim",
+          stackFixtureField({
+            key: "gate_stack_hidden_dim",
             section: "Gate Stack Options",
-            type: "int",
             default: 256,
             nullable: false,
-            choices: [],
-          },
+          }),
           {
             key: "halting_flag",
             configKey: "HALTING_FLAG",
@@ -1224,18 +1288,18 @@ describe("ViewerApp Full Config", () => {
     expect(within(gateSection).getByLabelText("0 overrides")).toBeInTheDocument();
     expect(within(haltingSection).getByLabelText("0 overrides")).toBeInTheDocument();
     expect(within(recurrentSection).getByLabelText("0 overrides")).toBeInTheDocument();
-    expect(within(dialog).queryByLabelText(/gate hidden dim/i)).not.toBeInTheDocument();
+    expect(within(dialog).queryByLabelText(/gate stack hidden dim/i)).not.toBeInTheDocument();
     expect(within(dialog).queryByLabelText(/halting threshold/i)).not.toBeInTheDocument();
     expect(within(dialog).queryByLabelText(/recurrent max steps/i)).not.toBeInTheDocument();
 
     const search = within(dialog).getByRole("combobox", {
       name: /search config fields/i,
     });
-    await user.type(search, "gate hidden");
+    await user.type(search, "gate stack hidden");
     const searchPopup = fullConfigSearchPopup(dialog);
     const gateHiddenSearchRow = fullConfigSearchResultRow(
       searchPopup,
-      /gate hidden dim/i,
+      /gate stack hidden dim/i,
     );
     expect(
       within(gateHiddenSearchRow).getByRole("textbox", {
@@ -1276,7 +1340,7 @@ describe("ViewerApp Full Config", () => {
     expectNoHeaderControlInAccordionBody(enabledGateAccordion, "gate flag");
     expectNoHeaderControlInAccordionBody(enabledHaltingAccordion, "halting flag");
     expectNoHeaderControlInAccordionBody(enabledRecurrentAccordion, "recurrent flag");
-    expect(within(dialog).getByLabelText(/gate hidden dim/i)).toBeInTheDocument();
+    expect(within(dialog).getByLabelText(/gate stack hidden dim/i)).toBeInTheDocument();
     expect(within(dialog).getByLabelText(/halting threshold/i)).toBeInTheDocument();
     expect(within(dialog).getByLabelText(/recurrent max steps/i)).toBeInTheDocument();
   });
@@ -1373,19 +1437,19 @@ describe("ViewerApp Full Config", () => {
     );
 
     const adaptiveStackOptionsAccordion = within(dialog).getByRole("button", {
-      name: /^adaptive generator stack options section, 2 fields, 0 overrides/i,
+      name: /^adaptive submodule stack options section, 2 fields, 0 overrides/i,
     });
     await user.click(adaptiveStackOptionsAccordion);
     const adaptiveStackAccordion = within(
       fullConfigSectionFor(adaptiveStackOptionsAccordion),
     ).getByRole("button", {
-      name: /^adaptive generator stack section, 2 fields, 0 overrides/i,
+      name: /^adaptive submodule stack section, 2 fields, 0 overrides/i,
     });
 
     expect(adaptiveStackAccordion).toHaveAttribute("aria-expanded", "true");
     expect(
       within(accordionPanelFor(adaptiveStackAccordion)).getByLabelText(
-        /adaptive stack hidden dim/i,
+        /adaptive submodule stack hidden dim/i,
       ),
     ).toBeInTheDocument();
 
@@ -1585,30 +1649,51 @@ describe("ViewerApp Full Config", () => {
     expect(gateOption).toHaveTextContent("MULTIPLIER");
     const gateActivation = within(gateDirectGrid).getByLabelText(/gate activation/i);
     expect(gateActivation).toHaveTextContent("SIGMOID");
-    expect(within(gateDirectGrid).queryByLabelText(/gate hidden dim/i))
+    expect(within(gateDirectGrid).queryByLabelText(/gate stack hidden dim/i))
       .not.toBeInTheDocument();
     expect(
       within(accordionPanelFor(gateModelStackAccordion)).getByLabelText(
-        /gate hidden dim/i,
+        /gate stack hidden dim/i,
       ),
     ).toBeInTheDocument();
     expect(
       within(accordionPanelFor(gateModelStackAccordion)).getByLabelText(
-        /gate layer norm position/i,
+        /gate stack layer norm position/i,
       ),
     ).toBeInTheDocument();
-    expect(
-      within(accordionPanelFor(gateModelStackAccordion)).getByRole("switch", {
-        name: /gate bias flag/i,
-      }),
-    ).toBeInTheDocument();
+    expectBooleanSegmentedControl(
+      accordionPanelFor(gateModelStackAccordion),
+      /gate stack bias flag/i,
+    );
     expect(
       within(accordionPanelFor(gateModelStackAccordion)).getByLabelText(
         /gate stack num layers/i,
       ),
     ).toBeInTheDocument();
 
-    await selectSearchableDropdownOption(user, gateOption, "ADDITION", "ADDITION");
+    const enabledGateSection = fullConfigSectionFor(enabledGateAccordion);
+    expect(enabledGateSection).toHaveClass(
+      "relative",
+      "overflow-visible",
+      "focus-within:z-30",
+    );
+    expect(enabledGateSection).not.toHaveClass("overflow-hidden");
+
+    const gateOptionRoot = gateOption.parentElement;
+    if (!(gateOptionRoot instanceof HTMLElement)) {
+      throw new Error("Expected gate option dropdown root to render");
+    }
+    await user.click(gateOption);
+    expect(gateOption).toHaveAttribute("aria-expanded", "true");
+    const gateOptions = await within(gateOptionRoot).findByRole("listbox", {
+      name: /gate option options/i,
+    });
+    expect(within(gateOptions).getByRole("option", { name: "ADDITION" }))
+      .toBeInTheDocument();
+    await user.click(within(gateOptions).getByRole("option", { name: "ADDITION" }));
+    await waitFor(() => {
+      expect(within(gateOptionRoot).queryByRole("listbox")).not.toBeInTheDocument();
+    });
     expect(gateOption).toHaveTextContent("ADDITION");
 
     await user.click(
@@ -1637,24 +1722,23 @@ describe("ViewerApp Full Config", () => {
     expect(recurrentGateActivation).toHaveTextContent("SIGMOID");
     expect(
       within(recurrentGateDirectGrid).queryByLabelText(
-        /recurrent gate hidden dim/i,
+        /recurrent gate stack hidden dim/i,
       ),
     ).not.toBeInTheDocument();
     expect(
       within(accordionPanelFor(recurrentGateModelStackAccordion)).getByLabelText(
-        /recurrent gate hidden dim/i,
+        /recurrent gate stack hidden dim/i,
       ),
     ).toBeInTheDocument();
     expect(
       within(accordionPanelFor(recurrentGateModelStackAccordion)).getByLabelText(
-        /recurrent gate layer norm position/i,
+        /recurrent gate stack layer norm position/i,
       ),
     ).toBeInTheDocument();
-    expect(
-      within(accordionPanelFor(recurrentGateModelStackAccordion)).getByRole("switch", {
-        name: /recurrent gate bias flag/i,
-      }),
-    ).toBeInTheDocument();
+    expectBooleanSegmentedControl(
+      accordionPanelFor(recurrentGateModelStackAccordion),
+      /recurrent gate stack bias flag/i,
+    );
     expect(
       within(accordionPanelFor(recurrentGateModelStackAccordion)).getByLabelText(
         /recurrent gate stack num layers/i,
@@ -1742,9 +1826,9 @@ describe("ViewerApp Full Config", () => {
     expectHeaderControlBeforeMetric(recurrentSection, "recurrent flag", "9 fields");
     expect(within(haltingDirectGrid).getByLabelText(/halting threshold/i))
       .toBeInTheDocument();
-    expect(within(haltingDirectGrid).queryByLabelText(/halting hidden dim/i))
+    expect(within(haltingDirectGrid).queryByLabelText(/halting stack hidden dim/i))
       .not.toBeInTheDocument();
-    expect(within(haltingDirectGrid).queryByLabelText(/halting layer norm position/i))
+    expect(within(haltingDirectGrid).queryByLabelText(/halting stack layer norm position/i))
       .not.toBeInTheDocument();
     expect(within(memoryDirectGrid).getByLabelText(/memory option/i))
       .toBeInTheDocument();
@@ -1755,7 +1839,7 @@ describe("ViewerApp Full Config", () => {
         /memory test time training learning rate/i,
       ),
     ).toBeInTheDocument();
-    expect(within(memoryDirectGrid).queryByLabelText(/memory hidden dim/i))
+    expect(within(memoryDirectGrid).queryByLabelText(/memory stack hidden dim/i))
       .not.toBeInTheDocument();
     expect(within(memoryDirectGrid).queryByLabelText(/memory stack num layers/i))
       .not.toBeInTheDocument();
@@ -1763,7 +1847,7 @@ describe("ViewerApp Full Config", () => {
       .not.toBeInTheDocument();
     expect(within(recurrentDirectGrid).getByLabelText(/recurrent max steps/i))
       .toBeInTheDocument();
-    expect(within(recurrentDirectGrid).queryByLabelText(/recurrent gate hidden dim/i))
+    expect(within(recurrentDirectGrid).queryByLabelText(/recurrent gate stack hidden dim/i))
       .not.toBeInTheDocument();
     expect(within(recurrentDirectGrid).queryByLabelText(/recurrent halting threshold/i))
       .not.toBeInTheDocument();
@@ -1779,22 +1863,22 @@ describe("ViewerApp Full Config", () => {
 
     expect(
       within(accordionPanelFor(haltingStackAccordion)).getByLabelText(
-        /halting hidden dim/i,
+        /halting stack hidden dim/i,
       ),
     ).toBeInTheDocument();
     expect(
       within(accordionPanelFor(haltingStackAccordion)).getByLabelText(
-        /halting layer norm position/i,
+        /halting stack layer norm position/i,
       ),
     ).toBeInTheDocument();
     expect(
       within(accordionPanelFor(memoryStackAccordion)).getByLabelText(
-        /memory hidden dim/i,
+        /memory stack hidden dim/i,
       ),
     ).toBeInTheDocument();
     expect(
       within(accordionPanelFor(memoryStackAccordion)).getByLabelText(
-        /memory layer norm position/i,
+        /memory stack layer norm position/i,
       ),
     ).toBeInTheDocument();
     expect(
@@ -1862,7 +1946,7 @@ describe("ViewerApp Full Config", () => {
     expect(recurrentGateModelStackAccordion).toHaveAttribute("aria-expanded", "true");
     expect(
       within(accordionPanelFor(recurrentGateModelStackAccordion)).getByLabelText(
-        /recurrent gate hidden dim/i,
+        /recurrent gate stack hidden dim/i,
       ),
     ).toBeInTheDocument();
     expect(
@@ -1877,12 +1961,12 @@ describe("ViewerApp Full Config", () => {
     ).not.toBeInTheDocument();
     expect(
       within(recurrentHaltingDirectGrid).queryByLabelText(
-        /recurrent halting hidden dim/i,
+        /recurrent halting stack hidden dim/i,
       ),
     ).not.toBeInTheDocument();
     expect(
       within(recurrentHaltingDirectGrid).queryByLabelText(
-        /recurrent halting layer norm position/i,
+        /recurrent halting stack layer norm position/i,
       ),
     ).not.toBeInTheDocument();
     expect(
@@ -1892,12 +1976,12 @@ describe("ViewerApp Full Config", () => {
     ).toBeInTheDocument();
     expect(
       within(accordionPanelFor(recurrentHaltingStackAccordion)).getByLabelText(
-        /recurrent halting hidden dim/i,
+        /recurrent halting stack hidden dim/i,
       ),
     ).toBeInTheDocument();
     expect(
       within(accordionPanelFor(recurrentHaltingStackAccordion)).getByLabelText(
-        /recurrent halting layer norm position/i,
+        /recurrent halting stack layer norm position/i,
       ),
     ).toBeInTheDocument();
     expectNoHeaderControlInAccordionBody(
@@ -1910,34 +1994,28 @@ describe("ViewerApp Full Config", () => {
     );
   });
 
-  it("renders nullable boolean stack overrides as a tri-state control", async () => {
+  it("renders stack booleans as two-option segmented controls", async () => {
     installFetchMock({
       schemaResponse: {
         ...schemaResponse,
         fields: [
           ...schemaResponse.fields,
-          {
-            key: "memory_flag",
-            configKey: "MEMORY_FLAG",
-            flag: "--memory-flag",
-            label: "memory flag",
-            section: "Memory Options",
-            type: "bool",
-            default: false,
-            nullable: false,
-            choices: [true, false],
-          },
-          {
-            key: "memory_stack_apply_output_pipeline_flag",
-            configKey: "MEMORY_STACK_APPLY_OUTPUT_PIPELINE_FLAG",
-            flag: "--memory-stack-apply-output-pipeline-flag",
-            label: "memory stack apply output pipeline flag",
-            section: "Memory Options",
-            type: "bool",
+          canonicalStackFixtureFields.find((field) => field.key === "stack_bias_flag")!,
+          canonicalStackFixtureFields.find(
+            (field) => field.key === "stack_apply_output_pipeline_flag",
+          )!,
+          stackFixtureField({
+            key: "gate_stack_bias_flag",
+            section: "Gate Stack Options",
+            default: true,
+            nullable: true,
+          }),
+          stackFixtureField({
+            key: "gate_stack_apply_output_pipeline_flag",
+            section: "Gate Stack Options",
             default: null,
             nullable: true,
-            choices: [true, false],
-          },
+          }),
         ],
       },
     });
@@ -1945,40 +2023,60 @@ describe("ViewerApp Full Config", () => {
     const user = userEvent.setup();
 
     const dialog = await openFullConfig(user);
-    await user.click(within(dialog).getByRole("switch", { name: /memory flag/i }));
-
-    const memoryStackAccordion = within(dialog).getByRole("button", {
-      name: /memory stack options section, 1 field, 0 overrides/i,
+    const layerAccordion = within(dialog).getByRole("button", {
+      name: /^layer stack options section,/i,
     });
-    const nullableBoolean = within(
-      accordionPanelFor(memoryStackAccordion),
-    ).getByRole("combobox", {
-      name: /memory stack apply output pipeline flag/i,
-    });
-
-    expect(nullableBoolean).toHaveTextContent("None");
-    await user.click(nullableBoolean);
-    const nullableRoot = nullableBoolean.parentElement;
-    if (!(nullableRoot instanceof HTMLElement)) {
-      throw new Error("Expected nullable boolean dropdown root");
+    if (layerAccordion.getAttribute("aria-expanded") !== "true") {
+      await user.click(layerAccordion);
     }
-    const nullableOptions = within(nullableRoot).getByRole("listbox");
-    expect(within(nullableOptions).getByRole("option", { name: "None" }))
-      .toHaveAttribute("aria-selected", "true");
-    expect(within(nullableOptions).getByRole("option", { name: "Enabled" }))
-      .toHaveAttribute("aria-selected", "false");
-    expect(within(nullableOptions).getByRole("option", { name: "Off" }))
-      .toHaveAttribute("aria-selected", "false");
+    const layerPanel = accordionPanelFor(layerAccordion);
+    expectBooleanSegmentedControl(layerPanel, /stack apply output pipeline flag/i);
+    expectBooleanSegmentedControl(layerPanel, /stack bias flag/i);
 
-    await user.click(within(nullableOptions).getByRole("option", { name: "Enabled" }));
-    expect(nullableBoolean).toHaveTextContent("Enabled");
-    await selectSearchableDropdownOption(user, nullableBoolean, "None", "None");
-    expect(nullableBoolean).toHaveTextContent("None");
-    expect(within(dialog).getAllByLabelText("1 override").length).toBeGreaterThan(0);
+    await user.click(within(dialog).getByRole("switch", { name: /gate flag/i }));
 
-    const commandDialog = await openTrainingCommand(user, dialog);
+    const gateAccordion = within(dialog).getByRole("button", {
+      name: /^gate stack options section, 3 fields, 1 override/i,
+    });
+    const gateModelStackAccordion = within(fullConfigSectionFor(gateAccordion))
+      .getByRole("button", {
+        name: /^gate model stack section, 2 fields, 0 overrides/i,
+      });
+    if (gateModelStackAccordion.getAttribute("aria-expanded") !== "true") {
+      await user.click(gateModelStackAccordion);
+    }
+    const gateModelStackPanel = accordionPanelFor(gateModelStackAccordion);
+    const gateBias = expectBooleanSegmentedControl(
+      gateModelStackPanel,
+      /gate stack bias flag/i,
+    );
+    const gatePipeline = expectBooleanSegmentedControl(
+      gateModelStackPanel,
+      /gate stack apply output pipeline flag/i,
+    );
+
+    expect(gateBias.on).toHaveAttribute("aria-checked", "true");
+    expect(gateBias.off).toHaveAttribute("aria-checked", "false");
+    expect(gatePipeline.on).toHaveAttribute("aria-checked", "false");
+    expect(gatePipeline.off).toHaveAttribute("aria-checked", "true");
+
+    await user.click(gatePipeline.on);
+    expect(gatePipeline.on).toHaveAttribute("aria-checked", "true");
+    let commandDialog = await openTrainingCommand(user, dialog);
     expect(commandField(commandDialog)).toHaveValue(
-      "source experiment.sh --model-type linears --model linear --preset baseline --config --memory-flag true",
+      "source experiment.sh --model-type linears --model linear --preset baseline --config --gate-flag true --gate-stack-apply-output-pipeline-flag true",
+    );
+    await user.click(
+      within(commandDialog).getByRole("button", {
+        name: /close training command/i,
+      }),
+    );
+
+    await user.click(gatePipeline.off);
+    expect(gatePipeline.off).toHaveAttribute("aria-checked", "true");
+    commandDialog = await openTrainingCommand(user, dialog);
+    expect(commandField(commandDialog)).toHaveValue(
+      "source experiment.sh --model-type linears --model linear --preset baseline --config --gate-flag true --gate-stack-apply-output-pipeline-flag false",
     );
   });
 
@@ -1992,11 +2090,11 @@ describe("ViewerApp Full Config", () => {
       name: /search config fields/i,
     });
 
-    await user.type(search, "recurrent gate hidden");
+    await user.type(search, "recurrent gate stack hidden");
     let searchPopup = fullConfigSearchPopup(dialog);
     let recurrentGateRow = fullConfigSearchResultRow(
       searchPopup,
-      /recurrent gate hidden dim/i,
+      /recurrent gate stack hidden dim/i,
     );
 
     expect(
@@ -2014,7 +2112,7 @@ describe("ViewerApp Full Config", () => {
     searchPopup = fullConfigSearchPopup(dialog);
     recurrentGateRow = fullConfigSearchResultRow(
       searchPopup,
-      /recurrent gate hidden dim/i,
+      /recurrent gate stack hidden dim/i,
     );
     expect(
       within(recurrentGateRow).getByRole("textbox", {
@@ -2053,15 +2151,15 @@ describe("ViewerApp Full Config", () => {
     await user.click(search);
     recurrentGateRow = fullConfigSearchResultRow(
       fullConfigSearchPopup(dialog),
-      /recurrent gate hidden dim/i,
+      /recurrent gate stack hidden dim/i,
     );
     await user.click(
       within(recurrentGateRow).getByRole("button", {
-        name: /recurrent gate hidden dim/i,
+        name: /recurrent gate stack hidden dim/i,
       }),
     );
 
-    expect(search).toHaveValue("recurrent gate hidden dim");
+    expect(search).toHaveValue("recurrent gate stack hidden dim");
     expect(
       within(dialog).getByRole("button", {
         name: /recurrent layer options section, 3 fields, 2 overrides/i,
@@ -2084,7 +2182,7 @@ describe("ViewerApp Full Config", () => {
     );
     expect(
       within(accordionPanelFor(recurrentGateModelStackAccordion)).getByLabelText(
-        /recurrent gate hidden dim/i,
+        /recurrent gate stack hidden dim/i,
       ),
     ).toBeInTheDocument();
   });
@@ -2111,7 +2209,7 @@ describe("ViewerApp Full Config", () => {
     const searchPopup = fullConfigSearchPopup(dialog);
     const hiddenDimRow = fullConfigSearchResultRow(searchPopup, /hidden dim/i);
 
-    expect(hiddenDimRow).toHaveTextContent(/default\s*256/i);
+    expect(hiddenDimRow).not.toHaveTextContent(/default\s*256/i);
     expect(hiddenDimRow).not.toHaveTextContent(/current\s*256/i);
     expect(within(hiddenDimRow).getByRole("button", { name: /hidden dim/i }))
       .toBeInTheDocument();
@@ -2140,7 +2238,7 @@ describe("ViewerApp Full Config", () => {
     ).toHaveLength(8);
     expect(
       within(searchPopup).queryByRole("button", {
-        name: /recurrent gate hidden dim/i,
+        name: /recurrent gate stack hidden dim/i,
       }),
     ).not.toBeInTheDocument();
     expect(within(searchPopup).queryByText(/more matches/i)).not.toBeInTheDocument();
@@ -2155,7 +2253,7 @@ describe("ViewerApp Full Config", () => {
     ).toBeInTheDocument();
     await waitFor(() => {
       expect(
-        fullConfigSearchResultRow(searchPopup, /recurrent gate hidden dim/i),
+        fullConfigSearchResultRow(searchPopup, /recurrent gate stack hidden dim/i),
       ).toBeInTheDocument();
     });
     expect(within(searchPopup).queryByText(/more matches/i)).not.toBeInTheDocument();
@@ -2297,7 +2395,7 @@ describe("ViewerApp Full Config", () => {
       name: /current value/i,
     });
 
-    expect(hiddenDimRow).toHaveTextContent(/default\s*256/i);
+    expect(hiddenDimRow).not.toHaveTextContent(/default\s*256/i);
     expect(hiddenDimRow).not.toHaveTextContent(/current\s*256/i);
 
     await user.clear(hiddenDimSearchInput);
@@ -2305,7 +2403,7 @@ describe("ViewerApp Full Config", () => {
 
     expect(fullConfigSearchPopup(dialog)).toBeInTheDocument();
     expect(hiddenDimRow).toHaveTextContent(/current\s*128/i);
-    expect(hiddenDimRow).toHaveTextContent(/default\s*256/i);
+    expect(hiddenDimRow).not.toHaveTextContent(/default\s*256/i);
     expect(within(hiddenDimRow).getByText("override")).toHaveClass("text-violet");
     expect(within(dialog).getAllByLabelText("1 override").length).toBeGreaterThan(0);
     expect(within(dialog).getByLabelText(/hidden dim/i)).toHaveValue("128");
@@ -2390,18 +2488,19 @@ describe("ViewerApp Full Config", () => {
     await user.type(search, "gate");
     searchPopup = fullConfigSearchPopup(dialog);
     const gateFlagRow = fullConfigSearchResultRow(searchPopup, /gate flag/i);
-    const gateFlagSwitch = within(gateFlagRow).getByRole("switch", {
-      name: /current value/i,
-    });
+    const gateFlagControl = expectBooleanSegmentedControl(
+      gateFlagRow,
+      /current value/i,
+    );
 
-    await user.click(gateFlagSwitch);
+    await user.click(gateFlagControl.on);
 
     expect(gateFlagRow).toHaveTextContent(/current\s*true/i);
     expect(within(dialog).getByRole("switch", { name: /gate flag/i }))
       .toHaveAttribute("aria-checked", "true");
     expect(within(dialog).getAllByLabelText("2 overrides").length).toBeGreaterThan(0);
 
-    await user.click(gateFlagSwitch);
+    await user.click(gateFlagControl.off);
 
     await waitFor(() => {
       expect(within(gateFlagRow).queryByText("override")).not.toBeInTheDocument();

@@ -56,6 +56,7 @@ export function inspectModel(input: {
   preset: string;
   overrides: ConfigOverrides;
   dataset?: string;
+  logRunId?: string;
 }) {
   return requestJson("/inspect", inspectResponseSchema, {
     method: "POST",

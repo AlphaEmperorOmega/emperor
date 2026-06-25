@@ -273,6 +273,10 @@ export function useMonitorSourceOrchestration({
     (node: GraphNode) => monitorTargetResolver(node)?.node,
     [monitorTargetResolver],
   );
+  const resolveParameterActivityTargetNode = useCallback(
+    (node: GraphNode) => linearMonitorTargetResolver(node),
+    [linearMonitorTargetResolver],
+  );
   const canOpenGraphNodeMonitor = useCallback(
     (monitorTarget: GraphNode) => Boolean(monitorTargetResolver(monitorTarget)),
     [monitorTargetResolver],
@@ -316,6 +320,7 @@ export function useMonitorSourceOrchestration({
     openGraphNodeMonitor: setGraphMonitorNode,
     closeGraphNodeMonitor,
     resolveMonitorTargetNode,
+    resolveParameterActivityTargetNode,
     canOpenGraphNodeMonitor,
     parameterActivityByNodePath,
     isParameterStatusPartiallyLoading,

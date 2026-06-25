@@ -33,6 +33,50 @@ export type ConfigSearchState = {
   selectedFieldKey?: string | null;
 };
 
+export function configKeyToken(key: string) {
+  return key.trim().replace(/-/g, "_").toLowerCase();
+}
+
+export function canonicalConfigKey(key: string) {
+  return key.trim().replace(/-/g, "_").toUpperCase();
+}
+
+function configFieldMatchesKey(field: ConfigField, key: string) {
+  const token = configKeyToken(key);
+  return (
+    configKeyToken(field.key) === token ||
+    configKeyToken(field.configKey) === token
+  );
+}
+
+export function overrideValue(overrides: OverrideValues, key: string) {
+  if (Object.prototype.hasOwnProperty.call(overrides, key)) {
+    return overrides[key];
+  }
+  const token = configKeyToken(key);
+  const entry = Object.entries(overrides).find(
+    ([overrideKey]) => configKeyToken(overrideKey) === token,
+  );
+  return entry?.[1];
+}
+
+export function normalizeConfigOverrides(
+  fields: ConfigField[],
+  overrides: OverrideValues,
+): OverrideValues {
+  const fieldsByKey = new Map<string, ConfigField>();
+  for (const field of fields) {
+    fieldsByKey.set(configKeyToken(field.key), field);
+    fieldsByKey.set(configKeyToken(field.configKey), field);
+  }
+  return Object.fromEntries(
+    Object.entries(overrides).map(([key, value]) => [
+      fieldsByKey.get(configKeyToken(key))?.key ?? key,
+      value,
+    ]),
+  );
+}
+
 const CONTROLLED_SECTION_FLAG_KEYS_BY_TITLE = new Map([
   ["Gate Stack Options", "gate_flag"],
   ["Halting Options", "halting_flag"],
@@ -69,7 +113,8 @@ const RECURRENT_LAYER_FIELD_PREFIXES = [
 ];
 
 export function displayConfigFieldSection(field: ConfigField) {
-  if (RECURRENT_LAYER_FIELD_PREFIXES.some((prefix) => field.key.startsWith(prefix))) {
+  const key = configKeyToken(field.key);
+  if (RECURRENT_LAYER_FIELD_PREFIXES.some((prefix) => key.startsWith(prefix))) {
     return RECURRENT_LAYER_CONFIG_SECTION;
   }
   return field.section || GENERAL_CONFIG_SECTION;
@@ -81,7 +126,9 @@ export function normalizeConfigFieldForDisplay(field: ConfigField): ConfigField 
 }
 
 export function fieldValue(field: ConfigField, overrides: OverrideValues) {
-  const value = field.locked ? field.lockedValue : (overrides[field.key] ?? field.default);
+  const value = field.locked
+    ? field.lockedValue
+    : (overrideValue(overrides, field.key) ?? field.default);
   return value === null || value === undefined ? "" : String(value);
 }
 
@@ -142,7 +189,7 @@ export function isDefaultConfigFieldValue(
 }
 
 export function hasOverride(overrides: OverrideValues, key: string) {
-  return Object.prototype.hasOwnProperty.call(overrides, key);
+  return overrideValue(overrides, key) !== undefined;
 }
 
 export function lockedOverrideKeys(
@@ -150,10 +197,10 @@ export function lockedOverrideKeys(
   overrides: OverrideValues,
 ) {
   const lockedKeys = new Set(
-    fields.filter((field) => field.locked).map((field) => field.key),
+    fields.filter((field) => field.locked).map((field) => configKeyToken(field.key)),
   );
   return Object.keys(overrides)
-    .filter((key) => lockedKeys.has(key))
+    .filter((key) => lockedKeys.has(configKeyToken(key)))
     .sort((left, right) => left.localeCompare(right));
 }
 
@@ -201,11 +248,11 @@ export function controlledSectionFlagField(section: ConfigSection) {
   const controlFieldKey =
     section.controlFieldKey ?? CONTROLLED_SECTION_FLAG_KEYS_BY_TITLE.get(section.title);
   if (controlFieldKey) {
-    return section.fields.find((field) => field.key === controlFieldKey);
+    return section.fields.find((field) => configFieldMatchesKey(field, controlFieldKey));
   }
 
   return section.fields.find((field) =>
-    FALLBACK_CONTROLLED_SECTION_FLAG_KEYS.has(field.key),
+    FALLBACK_CONTROLLED_SECTION_FLAG_KEYS.has(configKeyToken(field.key)),
   );
 }
 
@@ -260,7 +307,10 @@ export function disabledConfigFieldReasons(
 
     if (sectionDisabledReason) {
       for (const field of section.fields) {
-        const isEditableControl = !inheritedReason && field.key === state.controlField?.key;
+        const isEditableControl =
+          !inheritedReason &&
+          state.controlField !== undefined &&
+          configFieldMatchesKey(field, state.controlField.key);
         if (!isEditableControl) {
           disabledReasons.set(field.key, sectionDisabledReason);
         }
@@ -350,7 +400,7 @@ export function filterConfigSectionsForSearch(
   return sections.reduce<ConfigSection[]>((visibleSections, section) => {
     const fields = section.fields.filter((field) => {
       if (selectedKey) {
-        return field.key === selectedKey;
+        return configKeyToken(field.key) === configKeyToken(selectedKey);
       }
 
       return configSearchOptionMatchesQuery(
@@ -374,7 +424,7 @@ export function filterConfigSectionsForSearch(
 }
 
 function fieldsWithPrefix(fields: ConfigField[], prefix: string) {
-  return fields.filter((field) => field.key.startsWith(prefix));
+  return fields.filter((field) => configKeyToken(field.key).startsWith(prefix));
 }
 
 const STACK_SCOPE_FIELD_SUFFIXES = ["hidden_dim", "layer_norm_position"];
@@ -383,10 +433,14 @@ const STACK_SCOPE_FLAG_SUFFIXES = ["bias_flag"];
 function stackScopedFields(fields: ConfigField[], prefix: string) {
   const stackPrefix = `${prefix}stack_`;
   return fields.filter(
-    (field) =>
-      field.key.startsWith(stackPrefix) ||
-      STACK_SCOPE_FIELD_SUFFIXES.some((suffix) => field.key === `${prefix}${suffix}`) ||
-      STACK_SCOPE_FLAG_SUFFIXES.some((suffix) => field.key === `${prefix}${suffix}`),
+    (field) => {
+      const key = configKeyToken(field.key);
+      return (
+        key.startsWith(stackPrefix) ||
+        STACK_SCOPE_FIELD_SUFFIXES.some((suffix) => key === `${prefix}${suffix}`) ||
+        STACK_SCOPE_FLAG_SUFFIXES.some((suffix) => key === `${prefix}${suffix}`)
+      );
+    },
   );
 }
 
@@ -412,22 +466,23 @@ function boundaryProjectorPrefix(sectionTitle: string) {
 }
 
 function boundaryProjectorGroupTitle(prefix: string, fieldKey: string) {
-  if (fieldKey.startsWith(`${prefix}weight_`)) {
+  const key = configKeyToken(fieldKey);
+  if (key.startsWith(`${prefix}weight_`)) {
     return "Weight";
   }
-  if (fieldKey.startsWith(`${prefix}bias_`)) {
+  if (key.startsWith(`${prefix}bias_`)) {
     return "Bias";
   }
-  if (fieldKey.startsWith(`${prefix}diagonal_`)) {
+  if (key.startsWith(`${prefix}diagonal_`)) {
     return "Diagonal";
   }
   if (
-    fieldKey === `${prefix}row_mask_option` ||
-    fieldKey.startsWith(`${prefix}mask_`)
+    key === `${prefix}row_mask_option` ||
+    key.startsWith(`${prefix}mask_`)
   ) {
     return "Mask";
   }
-  if (fieldKey.startsWith(`${prefix}adaptive_generator_stack_`)) {
+  if (key.startsWith(`${prefix}adaptive_generator_stack_`)) {
     return "Adaptive Generator Stack";
   }
   return undefined;
@@ -496,13 +551,34 @@ function sectionTitleImpliesStackPrefix(section: ConfigSection, prefix: string) 
   return sectionBaseTitle.endsWith("stack") && sectionBaseTitle.includes(prefixTitle);
 }
 
+const SECTION_OWNED_STACK_PREFIXES_BY_TITLE = new Map([
+  ["Layer Stack Options", new Set(["stack_"])],
+  ["Layer Stack Submodule Options", new Set(["submodule_"])],
+]);
+
+function sectionTitleOwnsStackPrefix(
+  section: ConfigSection,
+  prefix: string | undefined,
+) {
+  if (!prefix) {
+    return false;
+  }
+
+  return SECTION_OWNED_STACK_PREFIXES_BY_TITLE.get(section.title)?.has(prefix) ?? false;
+}
+
 function stackScopedPrefixFromKey(fieldKey: string) {
+  const key = configKeyToken(fieldKey);
+  if (/^(.+_)stack_/.test(key)) {
+    return undefined;
+  }
+
   const suffixes = [...STACK_SCOPE_FIELD_SUFFIXES, ...STACK_SCOPE_FLAG_SUFFIXES];
   for (const suffix of suffixes) {
-    if (!fieldKey.endsWith(`_${suffix}`)) {
+    if (!key.endsWith(`_${suffix}`)) {
       continue;
     }
-    return fieldKey.slice(0, -suffix.length);
+    return key.slice(0, -suffix.length);
   }
   return undefined;
 }
@@ -520,12 +596,19 @@ function stackGroupPrefixes(section: ConfigSection) {
   }
 
   for (const field of section.fields) {
-    addPrefix(/^(.+_)stack_/.exec(field.key)?.[1]);
+    const prefix = /^(.+_)stack_/.exec(configKeyToken(field.key))?.[1];
+    if (!sectionTitleOwnsStackPrefix(section, prefix)) {
+      addPrefix(prefix);
+    }
   }
 
   for (const field of section.fields) {
     const prefix = stackScopedPrefixFromKey(field.key);
-    if (prefix && sectionTitleImpliesStackPrefix(section, prefix)) {
+    if (
+      prefix &&
+      sectionTitleImpliesStackPrefix(section, prefix) &&
+      !sectionTitleOwnsStackPrefix(section, prefix)
+    ) {
       addPrefix(prefix);
     }
   }
@@ -555,7 +638,7 @@ function stackChildTitle(section: ConfigSection, prefix: string) {
 }
 
 function optionalFieldKey(fields: ConfigField[], key: string) {
-  return fields.some((field) => field.key === key) ? key : undefined;
+  return fields.find((field) => configFieldMatchesKey(field, key))?.key;
 }
 
 function deriveStackChildren(section: ConfigSection) {
@@ -630,7 +713,9 @@ function controlFieldForSection(section: ConfigSection | undefined) {
   if (!section?.controlFieldKey) {
     return undefined;
   }
-  return section.fields.find((field) => field.key === section.controlFieldKey);
+  return section.fields.find((field) =>
+    configFieldMatchesKey(field, section.controlFieldKey ?? ""),
+  );
 }
 
 function withRequiredControlFields(

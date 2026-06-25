@@ -42,6 +42,7 @@ def create_app(
         cancellation_mode=api_settings.training_cancellation_mode,
     )
     log_runs = LogRunIndex(logs_root=api_settings.logs_root)
+    log_run_repository = LogRunRepository(log_runs)
     snapshot_store = FileSystemConfigSnapshotStore(Path(api_settings.snapshots_root))
 
     api = FastAPI(title="Emperor Model Viewer API", version="1.0.0")
@@ -54,8 +55,8 @@ def create_app(
         config_snapshots=ConfigSnapshotService(
             ConfigSnapshotRepository(snapshot_store)
         ),
-        inspection=InspectionService(),
-        log_runs=LogRunService(LogRunRepository(log_runs)),
+        inspection=InspectionService(log_run_repository),
+        log_runs=LogRunService(log_run_repository),
         training_jobs=TrainingJobService(TrainingJobRepository(jobs)),
     )
 

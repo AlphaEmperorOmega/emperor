@@ -46,11 +46,11 @@ class TrainingRunPlanTests(unittest.TestCase):
             payload_path = Path(tmp) / "jobs" / payload["id"] / "payload.json"
             worker_payload = json.loads(payload_path.read_text())
 
-        self.assertEqual(payload["overrides"], {"stack_num_layers": "4"})
+        self.assertEqual(payload["overrides"], {"STACK_NUM_LAYERS": 4})
         self.assertEqual(payload["search"]["mode"], "grid")
-        self.assertEqual(payload["search"]["values"], {"hidden_dim": [64, 128]})
+        self.assertEqual(payload["search"]["values"], {"HIDDEN_DIM": [64, 128]})
         self.assertEqual(payload["plannedRunCount"], 4)
-        self.assertEqual(worker_payload["overrides"], {"stack_num_layers": "4"})
+        self.assertEqual(worker_payload["overrides"], {"STACK_NUM_LAYERS": 4})
         self.assertEqual(worker_payload["search"], payload["search"])
 
     def test_parse_training_search_serializes_values_payload(self) -> None:
@@ -72,9 +72,9 @@ class TrainingRunPlanTests(unittest.TestCase):
         self.assertEqual(
             parsed.values,
             {
-                "hidden_dim": [64],
-                "stack_activation": ["RELU"],
-                "input_layer_adaptive_flag": [False, True],
+                "HIDDEN_DIM": [64],
+                "STACK_ACTIVATION": ["RELU"],
+                "INPUT_LAYER_ADAPTIVE_FLAG": [False, True],
             },
         )
         self.assertEqual(
@@ -82,9 +82,9 @@ class TrainingRunPlanTests(unittest.TestCase):
             {
                 "mode": "grid",
                 "values": {
-                    "hidden_dim": [64],
-                    "stack_activation": ["RELU"],
-                    "input_layer_adaptive_flag": [False, True],
+                    "HIDDEN_DIM": [64],
+                    "STACK_ACTIVATION": ["RELU"],
+                    "INPUT_LAYER_ADAPTIVE_FLAG": [False, True],
                 },
             },
         )
@@ -120,8 +120,8 @@ class TrainingRunPlanTests(unittest.TestCase):
         self.assertEqual(plan["runs"][0]["preset"], "baseline")
         self.assertEqual(plan["runs"][0]["dataset"], "Mnist")
         self.assertEqual(plan["runs"][0]["status"], "Pending")
-        self.assertEqual(plan["runs"][0]["overrides"]["hidden_dim"], 64)
-        self.assertEqual(plan["runs"][0]["overrides"]["stack_num_layers"], "4")
+        self.assertEqual(plan["runs"][0]["overrides"]["HIDDEN_DIM"], 64)
+        self.assertEqual(plan["runs"][0]["overrides"]["STACK_NUM_LAYERS"], "4")
         self.assertEqual(
             [change["source"] for change in plan["runs"][0]["changes"]],
             ["override", "search"],
@@ -176,14 +176,14 @@ class TrainingRunPlanTests(unittest.TestCase):
         self.assertEqual(plan["preset"], "baseline")
         self.assertEqual(plan["presets"], ["baseline", "gating"])
         self.assertEqual(plan["datasets"], ["Mnist", "Cifar10"])
-        self.assertEqual(plan["overrides"], {"stack_num_layers": "4"})
+        self.assertEqual(plan["overrides"], {"STACK_NUM_LAYERS": 4})
         self.assertEqual(
             plan["search"],
             {
                 "mode": "grid",
                 "values": {
-                    "hidden_dim": [64, 128],
-                    "stack_activation": ["RELU", "GELU"],
+                    "HIDDEN_DIM": [64, 128],
+                    "STACK_ACTIVATION": ["RELU", "GELU"],
                 },
             },
         )
@@ -209,8 +209,8 @@ class TrainingRunPlanTests(unittest.TestCase):
                 (
                     run["preset"],
                     run["dataset"],
-                    run["overrides"]["hidden_dim"],
-                    run["overrides"]["stack_activation"],
+                    run["overrides"]["HIDDEN_DIM"],
+                    run["overrides"]["STACK_ACTIVATION"],
                 )
                 for run in plan["runs"]
             ],
@@ -271,19 +271,19 @@ class TrainingRunPlanTests(unittest.TestCase):
             plan["runs"][0]["changes"],
             [
                 {
-                    "key": "stack_num_layers",
+                    "key": "STACK_NUM_LAYERS",
                     "label": "stack num layers",
                     "value": "4",
                     "source": "override",
                 },
                 {
-                    "key": "hidden_dim",
+                    "key": "HIDDEN_DIM",
                     "label": "hidden dim",
                     "value": 64,
                     "source": "search",
                 },
                 {
-                    "key": "stack_activation",
+                    "key": "STACK_ACTIVATION",
                     "label": "stack activation",
                     "value": "RELU",
                     "source": "search",
@@ -331,16 +331,16 @@ class TrainingRunPlanTests(unittest.TestCase):
             {
                 "mode": "grid",
                 "values": {
-                    "hidden_dim": [64],
-                    "stack_activation": ["RELU"],
-                    "input_layer_adaptive_flag": [False, True],
+                    "HIDDEN_DIM": [64],
+                    "STACK_ACTIVATION": ["RELU"],
+                    "INPUT_LAYER_ADAPTIVE_FLAG": [False, True],
                 },
             },
         )
         self.assertEqual(plan["summary"]["totalRuns"], 2)
 
         runs_by_input_layer = {
-            run["overrides"]["input_layer_adaptive_flag"]: run for run in plan["runs"]
+            run["overrides"]["INPUT_LAYER_ADAPTIVE_FLAG"]: run for run in plan["runs"]
         }
         false_run = runs_by_input_layer[False]
         true_run = runs_by_input_layer[True]
@@ -352,16 +352,16 @@ class TrainingRunPlanTests(unittest.TestCase):
             with self.subTest(input_layer_value=input_layer_value):
                 changes_by_key = {change["key"]: change for change in run["changes"]}
 
-                self.assertEqual(run["overrides"]["hidden_dim"], 64)
-                self.assertEqual(run["overrides"]["stack_activation"], "RELU")
+                self.assertEqual(run["overrides"]["HIDDEN_DIM"], 64)
+                self.assertEqual(run["overrides"]["STACK_ACTIVATION"], "RELU")
                 self.assertEqual(
-                    run["overrides"]["input_layer_adaptive_flag"],
+                    run["overrides"]["INPUT_LAYER_ADAPTIVE_FLAG"],
                     input_layer_value,
                 )
-                self.assertEqual(changes_by_key["hidden_dim"]["value"], 64)
-                self.assertEqual(changes_by_key["stack_activation"]["value"], "RELU")
+                self.assertEqual(changes_by_key["HIDDEN_DIM"]["value"], 64)
+                self.assertEqual(changes_by_key["STACK_ACTIVATION"]["value"], "RELU")
                 self.assertEqual(
-                    changes_by_key["input_layer_adaptive_flag"]["value"],
+                    changes_by_key["INPUT_LAYER_ADAPTIVE_FLAG"]["value"],
                     input_layer_value,
                 )
                 self.assertTrue(
@@ -506,15 +506,15 @@ class TrainingRunPlanTests(unittest.TestCase):
         expected_search = {
             "mode": "random",
             "values": {
-                "hidden_dim": [64, 128],
-                "stack_activation": ["RELU", "GELU"],
+                "HIDDEN_DIM": [64, 128],
+                "STACK_ACTIVATION": ["RELU", "GELU"],
             },
             "randomSamples": 3,
         }
         plan = payload["runPlan"]
 
-        self.assertEqual(payload["overrides"], {"stack_num_layers": "4"})
-        self.assertEqual(worker_payload["overrides"], {"stack_num_layers": "4"})
+        self.assertEqual(payload["overrides"], {"STACK_NUM_LAYERS": 4})
+        self.assertEqual(worker_payload["overrides"], {"STACK_NUM_LAYERS": 4})
         self.assertEqual(payload["search"], expected_search)
         self.assertEqual(worker_payload["search"], expected_search)
         self.assertEqual(payload["plannedRunCount"], 12)
@@ -522,7 +522,7 @@ class TrainingRunPlanTests(unittest.TestCase):
         self.assertEqual(worker_payload["runPlan"], plan)
         self.assertTrue(plan["isRandomSearch"])
         self.assertEqual(plan["search"], expected_search)
-        self.assertEqual(plan["overrides"], {"stack_num_layers": "4"})
+        self.assertEqual(plan["overrides"], {"STACK_NUM_LAYERS": 4})
         self.assertEqual(plan["logFolder"], "random_plan")
         self.assertEqual(
             plan["summary"],
@@ -555,8 +555,8 @@ class TrainingRunPlanTests(unittest.TestCase):
                 (
                     run["preset"],
                     run["dataset"],
-                    run["overrides"]["hidden_dim"],
-                    run["overrides"]["stack_activation"],
+                    run["overrides"]["HIDDEN_DIM"],
+                    run["overrides"]["STACK_ACTIVATION"],
                 )
                 for run in plan["runs"]
             ],
@@ -579,19 +579,19 @@ class TrainingRunPlanTests(unittest.TestCase):
             plan["runs"][0]["changes"],
             [
                 {
-                    "key": "stack_num_layers",
+                    "key": "STACK_NUM_LAYERS",
                     "label": "stack num layers",
                     "value": "4",
                     "source": "override",
                 },
                 {
-                    "key": "hidden_dim",
+                    "key": "HIDDEN_DIM",
                     "label": "hidden dim",
                     "value": 128,
                     "source": "search",
                 },
                 {
-                    "key": "stack_activation",
+                    "key": "STACK_ACTIVATION",
                     "label": "stack activation",
                     "value": "RELU",
                     "source": "search",

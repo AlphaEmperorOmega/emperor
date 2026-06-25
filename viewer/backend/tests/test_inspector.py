@@ -5,6 +5,7 @@ import unittest
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
+import models.experts.experts_linear.config as experts_linear_config
 import models.linears.linear.config as linear_config
 import models.neuron.neuron_linear.config as neuron_linear_config
 import models.transformer_encoder.vit_linear.config as vit_linear_config
@@ -163,20 +164,20 @@ class InspectorServiceTests(unittest.TestCase):
         self.assertIs(parsed["layer_norm_position"], LayerNormPositionOptions.AFTER)
         self.assertFalse(parsed["bias_flag"])
         self.assertTrue(parsed["gate_stack_independent_flag"])
-        self.assertEqual(parsed["gate_hidden_dim"], 32)
+        self.assertEqual(parsed["gate_stack_hidden_dim"], 32)
         self.assertIs(
-            parsed["gate_layer_norm_position"],
+            parsed["gate_stack_layer_norm_position"],
             LayerNormPositionOptions.BEFORE,
         )
-        self.assertTrue(parsed["gate_bias_flag"])
+        self.assertTrue(parsed["gate_stack_bias_flag"])
         self.assertTrue(parsed["halting_stack_independent_flag"])
-        self.assertEqual(parsed["halting_hidden_dim"], 48)
+        self.assertEqual(parsed["halting_stack_hidden_dim"], 48)
         self.assertTrue(parsed["memory_stack_independent_flag"])
-        self.assertEqual(parsed["memory_hidden_dim"], 64)
+        self.assertEqual(parsed["memory_stack_hidden_dim"], 64)
         self.assertTrue(parsed["recurrent_gate_stack_independent_flag"])
-        self.assertEqual(parsed["recurrent_gate_hidden_dim"], 96)
+        self.assertEqual(parsed["recurrent_gate_stack_hidden_dim"], 96)
         self.assertTrue(parsed["recurrent_halting_stack_independent_flag"])
-        self.assertEqual(parsed["recurrent_halting_hidden_dim"], 112)
+        self.assertEqual(parsed["recurrent_halting_stack_hidden_dim"], 112)
 
     def test_legacy_controller_stack_overrides_still_parse(self) -> None:
         parsed = parse_override_mapping(
@@ -190,12 +191,38 @@ class InspectorServiceTests(unittest.TestCase):
         )
 
         self.assertIs(parsed["layer_norm_position"], LayerNormPositionOptions.AFTER)
-        self.assertEqual(parsed["gate_hidden_dim"], 32)
+        self.assertEqual(parsed["gate_stack_hidden_dim"], 32)
         self.assertIs(
-            parsed["gate_layer_norm_position"],
+            parsed["gate_stack_layer_norm_position"],
             LayerNormPositionOptions.BEFORE,
         )
-        self.assertTrue(parsed["gate_bias_flag"])
+        self.assertTrue(parsed["gate_stack_bias_flag"])
+
+    def test_legacy_controller_stack_overrides_parse_for_experts(self) -> None:
+        parsed = parse_override_mapping(
+            experts_linear_config,
+            {
+                "gate_hidden_dim": "32",
+                "gate_layer_norm_position": "BEFORE",
+                "gate_bias_flag": "false",
+                "halting_hidden_dim": "48",
+                "halting_layer_norm_position": "AFTER",
+                "halting_bias_flag": "false",
+            },
+        )
+
+        self.assertEqual(parsed["gate_stack_hidden_dim"], 32)
+        self.assertIs(
+            parsed["gate_stack_layer_norm_position"],
+            LayerNormPositionOptions.BEFORE,
+        )
+        self.assertFalse(parsed["gate_stack_bias_flag"])
+        self.assertEqual(parsed["halting_stack_hidden_dim"], 48)
+        self.assertIs(
+            parsed["halting_stack_layer_norm_position"],
+            LayerNormPositionOptions.AFTER,
+        )
+        self.assertFalse(parsed["halting_stack_bias_flag"])
 
     def test_nullable_empty_string_override_parses_as_none(self) -> None:
         parsed = parse_override_mapping(

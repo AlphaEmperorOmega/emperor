@@ -1004,6 +1004,8 @@ describe("useViewerState", () => {
     await waitFor(() => {
       expect(result.current.target.selectedModel).toBe("experts_linear");
       expect(result.current.history.selectedLogRunId).toBeNull();
+      expect(result.current.history.selectedHistoricalExperimentFilter).toBe("");
+      expect(result.current.history.selectedHistoricalDatasetFilter).toBe("");
       expect(result.current.history.selectedHistoricalPreset).toBe("");
       expect(result.current.target.selectedTargetMode).toBe("preset");
       expect(result.current.target.selectedExperimentRunId).toBe("");
@@ -1139,62 +1141,230 @@ describe("useViewerState", () => {
     expect(mocks.inspectModel.mock.calls.length).toBe(requestCount);
   });
 
-  it("keeps a selected experiment run canonical when it is outside the visible preset filter", async () => {
+  it("selects the newest matching run from the experiment dataset preset cascade", async () => {
+    mocks.inspectModel.mockResolvedValue(monitorGraph());
     mocks.fetchLogRuns.mockResolvedValueOnce({
       runs: [
         logRun({
-          id: "baseline-history",
+          id: "baseline-old",
+          experiment: "exp_linear",
           preset: "baseline",
           dataset: "Mnist",
           timestamp: "2026-06-01 01:02:03",
         }),
         logRun({
+          id: "baseline-new",
+          experiment: "exp_linear",
+          preset: "baseline",
+          dataset: "Mnist",
+          timestamp: "2026-06-03 01:02:03",
+        }),
+        logRun({
           id: "fast-history",
+          experiment: "exp_linear",
+          preset: "fast",
+          dataset: "Mnist",
+          timestamp: "2026-06-02 01:02:03",
+        }),
+        logRun({
+          id: "fashion-history",
+          experiment: "exp_linear",
           preset: "fast",
           dataset: "FashionMnist",
-          timestamp: "2026-06-02 01:02:03",
+          timestamp: "2026-06-04 01:02:03",
         }),
       ],
     });
+    mocks.fetchLogParameterStatus.mockImplementation(
+      (input: { runIds: string[] }) =>
+        Promise.resolve({
+          runs: input.runIds.map((runId) => ({
+            sourceId: runId,
+            preset: "baseline",
+            dataset: "Mnist",
+            logDir: `logs/${runId}`,
+            nodes: [
+              {
+                nodePath: "main_model.0.model",
+                weights: {
+                  status: runId === "baseline-new" ? "updated" : "unchanged",
+                  metric: "main_model.0.model/weights/relative_delta_norm",
+                  lastStep: 12,
+                  observedPoints: 2,
+                },
+                bias: {
+                  status: "unchanged",
+                  metric: "main_model.0.model/bias/delta_norm",
+                  lastStep: 12,
+                  observedPoints: 1,
+                },
+              },
+            ],
+          })),
+        }),
+    );
     const { result } = renderViewerState();
 
     await waitFor(() => {
       expect(result.current.history.visibleHistoricalRuns.map((run) => run.id))
-        .toEqual(["fast-history", "baseline-history"]);
+        .toEqual([
+          "fashion-history",
+          "baseline-new",
+          "fast-history",
+          "baseline-old",
+        ]);
+      expect(result.current.history.historicalExperimentOptions).toEqual([
+        { value: "exp_linear", label: "exp_linear", count: 4 },
+      ]);
     });
 
+    act(() => {
+      result.current.history.setSelectedHistoricalExperimentFilter("exp_linear");
+    });
+
+    await waitFor(() => {
+      expect(result.current.history.visibleHistoricalRuns.map((run) => run.id))
+        .toEqual([
+          "fashion-history",
+          "baseline-new",
+          "fast-history",
+          "baseline-old",
+        ]);
+      expect(result.current.history.selectedHistoricalDatasetFilter).toBe("");
+      expect(result.current.history.selectedHistoricalPreset).toBe("");
+      expect(result.current.history.selectedLogRunId).toBeNull();
+      expect(result.current.history.historicalDatasetOptions).toEqual([
+        { value: "FashionMnist", label: "FashionMnist", count: 1 },
+        { value: "Mnist", label: "Mnist", count: 3 },
+      ]);
+    });
+
+    act(() => {
+      result.current.history.setSelectedHistoricalDatasetFilter("Mnist");
+    });
+
+    await waitFor(() => {
+      expect(result.current.history.visibleHistoricalRuns.map((run) => run.id))
+        .toEqual(["baseline-new", "fast-history", "baseline-old"]);
+      expect(result.current.history.selectedHistoricalPreset).toBe("");
+      expect(result.current.history.selectedLogRunId).toBeNull();
+      expect(result.current.history.historicalPresetOptions).toEqual([
+        { value: "baseline", label: "baseline", count: 2 },
+        { value: "fast", label: "fast", count: 1 },
+      ]);
+    });
+
+    mocks.inspectModel.mockClear();
+    mocks.fetchLogTags.mockClear();
+    mocks.fetchLogParameterStatus.mockClear();
     act(() => {
       result.current.history.setSelectedHistoricalPreset("baseline");
     });
 
     await waitFor(() => {
-      expect(result.current.history.visibleHistoricalRuns.map((run) => run.id))
-        .toEqual(["baseline-history"]);
-    });
-
-    mocks.inspectModel.mockClear();
-    act(() => {
-      result.current.history.selectLogRun("fast-history");
-    });
-
-    await waitFor(() => {
-      expect(result.current.history.selectedLogRunId).toBe("fast-history");
+      expect(result.current.history.selectedLogRunId).toBe("baseline-new");
       expect(result.current.target.selectedTargetMode).toBe("experiment");
-      expect(result.current.target.selectedExperimentRunId).toBe("fast-history");
-      expect(result.current.target.selectedPreset).toBe("fast");
-      expect(result.current.target.selectedTrainingPresets).toEqual(["fast"]);
-      expect(result.current.target.selectedDatasets).toEqual(["FashionMnist"]);
+      expect(result.current.target.selectedExperimentRunId).toBe("baseline-new");
+      expect(result.current.target.selectedPreset).toBe("baseline");
+      expect(result.current.target.selectedTrainingPresets).toEqual(["baseline"]);
+      expect(result.current.target.selectedDatasets).toEqual(["Mnist"]);
+      expect(result.current.history.historicalMonitorRuns.map((run) => run.id))
+        .toEqual(["baseline-new", "baseline-old"]);
+    });
+    await waitFor(() => {
+      expect(mocks.fetchLogTags).toHaveBeenCalledWith({
+        runIds: ["baseline-new", "baseline-old"],
+      }, expect.any(Object));
+      expect(mocks.fetchLogParameterStatus).toHaveBeenCalledWith({
+        runIds: ["baseline-new"],
+      }, expect.any(Object));
+      expect(mocks.fetchLogParameterStatus).toHaveBeenCalledWith({
+        runIds: ["baseline-old"],
+      }, expect.any(Object));
+    });
+    expect(mocks.fetchLogParameterStatus).not.toHaveBeenCalledWith({
+      runIds: ["fast-history"],
+    }, expect.any(Object));
+    expect(mocks.fetchLogParameterStatus).not.toHaveBeenCalledWith({
+      runIds: ["fashion-history"],
+    }, expect.any(Object));
+    expect(result.current.graphMonitor.graphMonitorSource?.kind)
+      .toBe("historical-run-group");
+    expect(
+      result.current.graphMonitor.graphMonitorSource?.kind ===
+        "historical-run-group"
+        ? result.current.graphMonitor.graphMonitorSource.runs.map((run) => run.id)
+        : [],
+    ).toEqual(["baseline-new", "baseline-old"]);
+    await waitFor(() => {
+      expect(result.current.graph.nodes.map((node) => node.id)).toContain(
+        "layer-0",
+      );
+    });
+    await waitFor(() => {
+      const layerNode = result.current.graph.nodes.find(
+        (node) => node.id === "layer-0",
+      );
+      expect(layerNode?.data.parameterActivity).toMatchObject({
+        targetPath: "main_model.0.model",
+        weights: {
+          status: "mixed",
+          source: "historical",
+          totalRuns: 2,
+        },
+      });
     });
     expect(result.current.history.visibleHistoricalRuns.map((run) => run.id))
-      .toEqual(["fast-history", "baseline-history"]);
+      .toEqual(["baseline-new", "baseline-old"]);
     expect(mocks.inspectModel.mock.calls.map(([request]) => request))
       .toContainEqual({
         modelType: "linears",
         model: "linear",
-        preset: "fast",
-        dataset: "FashionMnist",
+        preset: "baseline",
+        dataset: "Mnist",
         overrides: {},
+        logRunId: "baseline-new",
       });
+
+    mocks.fetchLogTags.mockClear();
+    mocks.fetchLogParameterStatus.mockClear();
+    act(() => {
+      result.current.history.setSelectedHistoricalDatasetFilter("FashionMnist");
+    });
+
+    await waitFor(() => {
+      expect(result.current.history.selectedHistoricalPreset).toBe("");
+      expect(result.current.history.selectedLogRunId).toBeNull();
+      expect(result.current.target.selectedExperimentRunId).toBe("");
+      expect(result.current.history.visibleHistoricalRuns.map((run) => run.id))
+        .toEqual(["fashion-history"]);
+    });
+    expect(result.current.history.historicalMonitorRuns).toEqual([]);
+    expect(mocks.fetchLogParameterStatus).not.toHaveBeenCalled();
+
+    act(() => {
+      result.current.history.setSelectedHistoricalPreset("fast");
+    });
+
+    await waitFor(() => {
+      expect(result.current.history.selectedLogRunId).toBe("fashion-history");
+      expect(result.current.target.selectedExperimentRunId).toBe("fashion-history");
+      expect(result.current.target.selectedDatasets).toEqual(["FashionMnist"]);
+      expect(result.current.history.historicalMonitorRuns.map((run) => run.id))
+        .toEqual(["fashion-history"]);
+      expect(mocks.fetchLogTags).toHaveBeenCalledWith({
+        runIds: ["fashion-history"],
+      }, expect.any(Object));
+      expect(mocks.fetchLogParameterStatus).toHaveBeenCalledWith({
+        runIds: ["fashion-history"],
+      }, expect.any(Object));
+    });
+    expect(mocks.fetchLogParameterStatus).not.toHaveBeenCalledWith({
+      runIds: ["baseline-new"],
+    }, expect.any(Object));
+    expect(mocks.fetchLogParameterStatus).not.toHaveBeenCalledWith({
+      runIds: ["baseline-old"],
+    }, expect.any(Object));
   });
 
   it("switches from an experiment target back to a preset target with empty overrides", async () => {
@@ -1527,6 +1697,14 @@ describe("useViewerState", () => {
         runIds: ["run-old"],
       }, expect.any(Object));
     });
+    expect(result.current.graphMonitor.graphMonitorSource?.kind)
+      .toBe("historical-run-group");
+    expect(
+      result.current.graphMonitor.graphMonitorSource?.kind ===
+        "historical-run-group"
+        ? result.current.graphMonitor.graphMonitorSource.runs.map((run) => run.id)
+        : [],
+    ).toEqual(["run-new", "run-old"]);
     expect(mocks.fetchLogParameterStatus).not.toHaveBeenCalledWith({
       runIds: ["run-fast"],
     }, expect.any(Object));
@@ -1681,8 +1859,12 @@ describe("useViewerState", () => {
     await waitFor(() => expect(experimentsButton).toBeEnabled());
     await user.click(experimentsButton);
 
-    expect(await screen.findByRole("combobox", { name: /^experiment run$/i }))
+    expect(await screen.findByRole("combobox", { name: "Experiment" }))
       .toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Dataset" })).toBeDisabled();
+    expect(screen.getByRole("combobox", { name: "Preset" })).toBeDisabled();
+    expect(screen.queryByRole("combobox", { name: /^experiment run$/i }))
+      .not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Create Snapshot" }))
       .not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
@@ -1811,15 +1993,33 @@ describe("useViewerState", () => {
     });
 
     await user.click(await screen.findByRole("radio", { name: "Experiments" }));
-    const experimentRunControl = await screen.findByRole("combobox", {
-      name: /^experiment run$/i,
+    const experimentControl = await screen.findByRole("combobox", {
+      name: "Experiment",
     });
-    await user.click(experimentRunControl);
+    await user.click(experimentControl);
     await user.click(
       within(
-        await screen.findByRole("listbox", { name: /^experiment run options$/i }),
+        await screen.findByRole("listbox", { name: /^experiment options$/i }),
       ).getByRole("option", {
-        name: /exp_locked · baseline · Mnist · 2026-06-02 01:02:03/i,
+        name: "exp_locked",
+      }),
+    );
+    const datasetControl = screen.getByRole("combobox", { name: "Dataset" });
+    await user.click(datasetControl);
+    await user.click(
+      within(
+        await screen.findByRole("listbox", { name: /^dataset options$/i }),
+      ).getByRole("option", {
+        name: "Mnist",
+      }),
+    );
+    const presetControl = screen.getByRole("combobox", { name: "Preset" });
+    await user.click(presetControl);
+    await user.click(
+      within(
+        await screen.findByRole("listbox", { name: /^preset options$/i }),
+      ).getByRole("option", {
+        name: "baseline",
       }),
     );
 

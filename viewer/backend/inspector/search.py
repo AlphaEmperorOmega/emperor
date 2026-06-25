@@ -15,6 +15,7 @@ from models.config_overrides import (
 from viewer.backend.inspector.config_classes import abstract_config_class_error
 from viewer.backend.inspector.discovery import load_model_parts
 from viewer.backend.inspector.errors import InspectorError
+from viewer.backend.inspector.overrides import resolve_override_key
 from viewer.backend.inspector.schema import search_space_schema
 from viewer.backend.inspector.values import serialize_config_value
 from viewer.backend.training_limits import (
@@ -203,7 +204,10 @@ def strip_search_overrides(
     }
     filtered: dict[str, Any] = {}
     for raw_key, raw_value in overrides.items():
-        config_key = supported.get(normalize_key(raw_key))
+        config_key, _legacy_residual_flag = resolve_override_key(
+            normalize_key(str(raw_key)),
+            supported,
+        )
         if (
             config_key is not None
             and config_key_to_model_param(config_key) in search_model_params

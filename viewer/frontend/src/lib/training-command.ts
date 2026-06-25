@@ -2,6 +2,7 @@ import {
   type ConfigSection,
   type OverrideValues,
   hasOverride,
+  overrideValue,
 } from "@/lib/config";
 import { type ConfigField } from "@/lib/api";
 
@@ -20,7 +21,7 @@ function orderedOverrideEntries(sections: ConfigSection[], overrides: OverrideVa
   for (const section of sections) {
     for (const field of section.fields) {
       if (hasOverride(overrides, field.key)) {
-        entries.push({ field, value: overrides[field.key] ?? "" });
+        entries.push({ field, value: overrideValue(overrides, field.key) ?? "" });
       }
     }
   }

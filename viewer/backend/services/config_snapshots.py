@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from models.catalog import model_identity_payload_from_id
+from models.config_overrides import LEGACY_CONFIG_KEY_ALIASES, normalize_key
 
 from viewer.backend.config_snapshots import ConfigSnapshotRecord
 from viewer.backend.inspector.errors import InspectorError
@@ -217,12 +218,17 @@ def _now() -> str:
 
 
 def _snapshot_to_api(snapshot: ConfigSnapshotRecord) -> dict[str, Any]:
+    try:
+        fields = config_schema(snapshot.model, snapshot.preset)["fields"]
+        overrides = _canonical_override_values(fields, snapshot.overrides)
+    except Exception:
+        overrides = snapshot.overrides
     return {
         "id": snapshot.id,
         **model_identity_payload_from_id(snapshot.model),
         "preset": snapshot.preset,
         "name": snapshot.name,
-        "overrides": snapshot.overrides,
+        "overrides": overrides,
         "createdAt": snapshot.created_at,
         "updatedAt": snapshot.updated_at,
     }
@@ -234,18 +240,52 @@ def _override_entries(
 ) -> tuple[list[dict[str, str]], list[dict[str, Any]]]:
     entries: list[dict[str, str]] = []
     locked_fields: list[dict[str, Any]] = []
+    canonical_overrides = _canonical_override_values(fields, overrides)
     for field in fields:
         key = field["key"]
-        if key not in overrides:
+        if key not in canonical_overrides:
             continue
         if field.get("locked"):
             locked_fields.append(field)
-        normalized = _normalize_value_for_field(field, overrides.get(key, ""))
+        normalized = _normalize_value_for_field(field, canonical_overrides.get(key, ""))
         if normalized == _default_value_for_field(field):
             continue
         value = "" if field.get("nullable") and normalized == "null" else normalized
         entries.append({"key": key, "value": value})
     return entries, locked_fields
+
+
+def _canonical_override_values(
+    fields: list[dict[str, Any]],
+    overrides: dict[str, str],
+) -> dict[str, str]:
+    fields_by_key = _fields_by_override_key(fields)
+    canonical: dict[str, str] = {}
+    for raw_key, raw_value in overrides.items():
+        field = fields_by_key.get(normalize_key(str(raw_key)))
+        if field is None:
+            continue
+        key = str(field["key"])
+        normalized = _normalize_value_for_field(field, raw_value)
+        canonical[key] = (
+            "" if field.get("nullable") and normalized == "null" else normalized
+        )
+    return canonical
+
+
+def _fields_by_override_key(
+    fields: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    fields_by_key: dict[str, dict[str, Any]] = {}
+    for field in fields:
+        for key_name in (field.get("key"), field.get("configKey")):
+            if isinstance(key_name, str) and key_name:
+                fields_by_key.setdefault(normalize_key(key_name), field)
+    for legacy_key, canonical_key in LEGACY_CONFIG_KEY_ALIASES.items():
+        field = fields_by_key.get(normalize_key(canonical_key))
+        if field is not None:
+            fields_by_key.setdefault(normalize_key(legacy_key), field)
+    return fields_by_key
 
 
 def _default_value_for_field(field: dict[str, Any]) -> str:

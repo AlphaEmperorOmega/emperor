@@ -11,12 +11,15 @@ import {
   useTargetSelectorState,
 } from "@/features/viewer/providers/viewer-providers";
 import { type FullConfigDialogControls } from "@/features/viewer/state/use-viewer-workspace-shell";
-import { formatRunTimestamp } from "@/lib/format";
 import {
   modelNameForId,
   modelsForType,
   modelTypeOptions as createModelTypeOptions,
 } from "@/lib/selection";
+
+function historicalFilterLabel(option: { label: string; count: number }) {
+  return option.count > 1 ? `${option.label} (${option.count})` : option.label;
+}
 
 export function TargetPresetPanel({
   onOpenFullConfig,
@@ -34,7 +37,6 @@ export function TargetPresetPanel({
     selectedPresetMeta,
     selectedSnapshotId,
     selectedConfigSnapshot,
-    selectedExperimentRunId,
     configSnapshotsEnabled,
     isSchemaReady,
     selectModelType: onSelectModelType,
@@ -48,15 +50,23 @@ export function TargetPresetPanel({
     snapshots,
   } = useTargetSelectorState();
   const {
-    visibleHistoricalRuns,
-    selectedLogRunId,
-    selectLogRun,
+    historicalExperimentOptions,
+    historicalDatasetOptions,
+    historicalPresetOptions,
+    selectedHistoricalExperimentFilter,
+    setSelectedHistoricalExperimentFilter,
+    selectedHistoricalDatasetFilter,
+    setSelectedHistoricalDatasetFilter,
+    selectedHistoricalPreset,
+    setSelectedHistoricalPreset,
   } = useHistoricalRuns();
   const selectedPresetDescription = selectedPresetMeta?.description;
   const presetDescriptionId = useId();
   const presetSelectId = useId();
   const snapshotSelectId = useId();
   const experimentSelectId = useId();
+  const experimentDatasetSelectId = useId();
+  const experimentPresetSelectId = useId();
   const presetDescriptionTriggerRef = useRef<HTMLButtonElement>(null);
   const presetDescriptionSubmenuRef = useRef<HTMLDivElement>(null);
   const [isPresetDescriptionOpen, setIsPresetDescriptionOpen] = useState(false);
@@ -74,11 +84,17 @@ export function TargetPresetPanel({
     value: snapshot.id,
     label: snapshot.name,
   }));
-  const experimentOptions = visibleHistoricalRuns.map((run) => ({
-    value: run.id,
-    label: `${run.experiment} · ${run.preset} · ${run.dataset} · ${formatRunTimestamp(
-      run.timestamp ?? run.version,
-    )}`,
+  const experimentOptions = historicalExperimentOptions.map((option) => ({
+    value: option.value,
+    label: historicalFilterLabel(option),
+  }));
+  const experimentDatasetOptions = historicalDatasetOptions.map((option) => ({
+    value: option.value,
+    label: historicalFilterLabel(option),
+  }));
+  const experimentPresetOptions = historicalPresetOptions.map((option) => ({
+    value: option.value,
+    label: historicalFilterLabel(option),
   }));
   const selectedSnapshotName = selectedConfigSnapshot?.name ?? "";
   const {
@@ -158,7 +174,9 @@ export function TargetPresetPanel({
         selectedPreset={selectedPreset}
         selectedSnapshotId={selectedSnapshotId}
         selectedSnapshotName={selectedSnapshotName}
-        selectedExperimentRunId={selectedLogRunId ?? selectedExperimentRunId}
+        selectedHistoricalExperimentFilter={selectedHistoricalExperimentFilter}
+        selectedHistoricalDatasetFilter={selectedHistoricalDatasetFilter}
+        selectedHistoricalPreset={selectedHistoricalPreset}
         configSnapshotsEnabled={configSnapshotsEnabled}
         isSchemaReady={isSchemaReady}
         modelTypeOptions={modelTypeOptions}
@@ -166,9 +184,13 @@ export function TargetPresetPanel({
         presetOptions={presetOptions}
         snapshotOptions={snapshotOptions}
         experimentOptions={experimentOptions}
+        experimentDatasetOptions={experimentDatasetOptions}
+        experimentPresetOptions={experimentPresetOptions}
         presetSelectId={presetSelectId}
         snapshotSelectId={snapshotSelectId}
         experimentSelectId={experimentSelectId}
+        experimentDatasetSelectId={experimentDatasetSelectId}
+        experimentPresetSelectId={experimentPresetSelectId}
         presetDescriptionId={presetDescriptionId}
         presetDescriptionTriggerRef={presetDescriptionTriggerRef}
         isPresetDescriptionOpen={isPresetDescriptionOpen}
@@ -180,7 +202,9 @@ export function TargetPresetPanel({
         onActivateExperimentMode={activateTargetExperimentMode}
         onSelectPreset={onSelectPreset}
         onSelectSnapshot={onSelectSnapshot}
-        onSelectExperimentRun={selectLogRun}
+        onSelectHistoricalExperimentFilter={setSelectedHistoricalExperimentFilter}
+        onSelectHistoricalDatasetFilter={setSelectedHistoricalDatasetFilter}
+        onSelectHistoricalPreset={setSelectedHistoricalPreset}
         onCreateSnapshot={createPresetSnapshot}
         onEditSnapshot={editSelectedSnapshot}
         onDuplicateSnapshot={duplicateSelectedSnapshot}

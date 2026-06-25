@@ -14,6 +14,7 @@ export type PreviewInspectionRequest = {
   overrides: OverrideValues;
   targetMode?: "preset" | "snapshot" | "experiment";
   targetId?: string;
+  logRunId?: string;
 };
 
 function previewInspectionRequestKey(request: PreviewInspectionRequest) {
@@ -29,17 +30,19 @@ function previewInspectionRequestKey(request: PreviewInspectionRequest) {
     ),
     targetMode: request.targetMode ?? "preset",
     targetId: request.targetId ?? request.preset,
+    logRunId: request.logRunId ?? null,
   });
 }
 
 function previewInspectionPayload(request: PreviewInspectionRequest) {
-  return {
+  const payload = {
     modelType: request.modelType,
     model: request.model,
     preset: request.preset,
     dataset: request.dataset,
     overrides: request.overrides,
   };
+  return request.logRunId ? { ...payload, logRunId: request.logRunId } : payload;
 }
 
 function assertPreviewIdentity<

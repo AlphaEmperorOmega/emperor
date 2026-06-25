@@ -7,7 +7,8 @@ import {
   type ParameterChannelStatus,
   type ParameterStatus,
 } from "@/lib/api";
-import { anyLogRunTagsMatchNodePath } from "@/lib/historical-monitor-runs";
+import { anyLogRunTagsMatchParameterNodePath } from "@/lib/historical-monitor-runs";
+import { monitorPathAliases } from "@/lib/monitor-paths";
 import {
   buildMonitorComparisonCandidateGroups,
   createMonitorTargetResolver,
@@ -73,7 +74,7 @@ export function deriveMonitorSource(input: MonitorSourceInput): MonitorSourceSta
     if (activeTrainingJob?.monitors.includes(target.monitorName)) {
       return true;
     }
-    return anyLogRunTagsMatchNodePath(
+    return anyLogRunTagsMatchParameterNodePath(
       input.logRunTags,
       filteredHistoricalRunIds,
       target.node.path,
@@ -111,7 +112,7 @@ export function deriveMonitorSource(input: MonitorSourceInput): MonitorSourceSta
       selectedMonitorNode,
       selectedMonitorName,
     );
-  const selectedLogRunHasMonitorTags = anyLogRunTagsMatchNodePath(
+  const selectedLogRunHasMonitorTags = anyLogRunTagsMatchParameterNodePath(
     input.logRunTags,
     filteredHistoricalRunIds,
     selectedMonitorNode?.path,
@@ -179,7 +180,18 @@ function activeParameterChannel(
 }
 
 function statusNodeByPath(status: ParameterStatus | undefined) {
-  return new Map((status?.nodes ?? []).map((node) => [node.nodePath, node]));
+  const nodesByPath = new Map((status?.nodes ?? []).map((node) => [node.nodePath, node]));
+  return {
+    get(nodePath: string) {
+      for (const alias of monitorPathAliases(nodePath)) {
+        const node = nodesByPath.get(alias);
+        if (node) {
+          return node;
+        }
+      }
+      return undefined;
+    },
+  };
 }
 
 function firstDefinedMetric(

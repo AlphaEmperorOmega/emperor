@@ -34,9 +34,12 @@ type GraphPreviewOrchestrationInput = {
   selectedHistoricalPreset: string;
   logRunTags?: LogRunTags[];
   filteredHistoricalRunIds: string[];
+  targetModelType: string;
   targetModel: string;
   targetPreset: string;
   targetDatasets: string[];
+  targetMode: "preset" | "snapshot" | "experiment";
+  targetId: string;
 };
 
 type StableActiveMonitorJobRef = {
@@ -145,13 +148,35 @@ export function useGraphPreviewOrchestration({
   selectedHistoricalPreset,
   logRunTags,
   filteredHistoricalRunIds,
+  targetModelType,
   targetModel,
   targetPreset,
   targetDatasets,
+  targetMode,
+  targetId,
 }: GraphPreviewOrchestrationInput) {
-  const { graph, previewInspection, bindGraphResetHandlers } = controller;
+  const {
+    graph,
+    previewInspection,
+    previewRequest,
+    bindGraphResetHandlers,
+  } = controller;
+  const targetDataset = targetDatasets[0] ?? "";
+  const previewRequestMatchesTarget =
+    !previewRequest ||
+    (previewRequest.modelType === targetModelType &&
+      previewRequest.model === targetModel &&
+      previewRequest.preset === targetPreset &&
+      (previewRequest.dataset ?? "") === targetDataset &&
+      (previewRequest.targetMode ?? "preset") === targetMode &&
+      (previewRequest.targetId ?? previewRequest.preset) === targetId &&
+      (targetMode !== "experiment" || previewRequest.logRunId === targetId));
   const targetGraph =
-    graph && graph.model === targetModel && graph.preset === targetPreset
+    graph &&
+    graph.modelType === targetModelType &&
+    graph.model === targetModel &&
+    graph.preset === targetPreset &&
+    previewRequestMatchesTarget
       ? graph
       : undefined;
   const activeMonitorJob = useStableActiveMonitorJob(activeTrainingJob);
@@ -172,6 +197,7 @@ export function useGraphPreviewOrchestration({
     openGraphNodeMonitor,
     closeGraphNodeMonitor,
     resolveMonitorTargetNode,
+    resolveParameterActivityTargetNode,
     canOpenGraphNodeMonitor,
     parameterActivityByNodePath,
     isParameterStatusPartiallyLoading,
@@ -181,6 +207,7 @@ export function useGraphPreviewOrchestration({
     canOpenMonitor: canOpenGraphNodeMonitor,
     onOpenMonitor: openGraphNodeMonitor,
     resolveMonitorTarget: resolveMonitorTargetNode,
+    resolveParameterActivityTarget: resolveParameterActivityTargetNode,
     parameterActivityByNodePath,
   });
   const {

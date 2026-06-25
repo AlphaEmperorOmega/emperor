@@ -62,7 +62,25 @@ function graphPreviewCompositionInput({
   activeTrainingJobState: ActiveTrainingJobState;
 }): Parameters<typeof useGraphPreviewOrchestration>[0] {
   const { selectedModel, selectedPreset, selectedDatasets } = targetConfig.selection;
+  const {
+    selectedModelType,
+    selectedTargetMode,
+    selectedSnapshotId,
+    selectedExperimentRunId,
+  } = targetConfig.target;
   const historicalGraphPreview = historicalRuns.graphPreview;
+  const targetMode =
+    selectedTargetMode === "snapshot" && selectedSnapshotId
+      ? "snapshot"
+      : selectedTargetMode === "experiment" && selectedExperimentRunId
+        ? "experiment"
+        : "preset";
+  const targetId =
+    targetMode === "snapshot"
+      ? selectedSnapshotId
+      : targetMode === "experiment"
+        ? selectedExperimentRunId
+        : selectedPreset;
 
   return {
     controller: graphPreview,
@@ -74,9 +92,12 @@ function graphPreviewCompositionInput({
     selectedHistoricalPreset: historicalGraphPreview.selectedHistoricalRunPreset,
     logRunTags: historicalGraphPreview.logRunTags,
     filteredHistoricalRunIds: historicalGraphPreview.filteredHistoricalRunIds,
+    targetModelType: selectedModelType,
     targetModel: selectedModel,
     targetPreset: selectedPreset,
     targetDatasets: selectedDatasets,
+    targetMode,
+    targetId,
   };
 }
 
@@ -96,15 +117,18 @@ export function useViewerState(options: ViewerStateOptions = {}) {
 
   const targetConfig = useTargetConfigState(cascadeRules);
   const { selectedModel } = targetConfig.selection;
+  const { selectedModelType } = targetConfig.target;
 
   const activeTrainingJobState = useActiveTrainingJobState({ onJobStarted });
   const historicalTagsEnabled =
     targetConfig.target.selectedTargetMode === "experiment" ||
     historicalRunSelection.selectedLogRunId !== null;
   const historicalRuns = useHistoricalRunsState({
+    selectedModelType,
     selectedModel,
     tagsEnabled: historicalTagsEnabled,
     syncSelectedLogRun: targetConfig.syncSelectedLogRun,
+    clearSelectedExperimentRun: targetConfig.clearSelectedExperimentRun,
     selection: historicalRunSelection,
   });
   const apiConnection = useViewerApiConnectionSwitch(graphPreview);

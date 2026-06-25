@@ -32,7 +32,9 @@ export function TargetSelectorSection({
   selectedPreset,
   selectedSnapshotId,
   selectedSnapshotName,
-  selectedExperimentRunId,
+  selectedHistoricalExperimentFilter,
+  selectedHistoricalDatasetFilter,
+  selectedHistoricalPreset,
   configSnapshotsEnabled,
   isSchemaReady,
   modelTypeOptions,
@@ -40,9 +42,13 @@ export function TargetSelectorSection({
   presetOptions,
   snapshotOptions,
   experimentOptions,
+  experimentDatasetOptions,
+  experimentPresetOptions,
   presetSelectId,
   snapshotSelectId,
   experimentSelectId,
+  experimentDatasetSelectId,
+  experimentPresetSelectId,
   presetDescriptionId,
   presetDescriptionTriggerRef,
   isPresetDescriptionOpen,
@@ -54,7 +60,9 @@ export function TargetSelectorSection({
   onActivateExperimentMode,
   onSelectPreset,
   onSelectSnapshot,
-  onSelectExperimentRun,
+  onSelectHistoricalExperimentFilter,
+  onSelectHistoricalDatasetFilter,
+  onSelectHistoricalPreset,
   onCreateSnapshot,
   onEditSnapshot,
   onDuplicateSnapshot,
@@ -67,7 +75,9 @@ export function TargetSelectorSection({
   selectedPreset: string;
   selectedSnapshotId: string;
   selectedSnapshotName: string;
-  selectedExperimentRunId: string;
+  selectedHistoricalExperimentFilter: string;
+  selectedHistoricalDatasetFilter: string;
+  selectedHistoricalPreset: string;
   configSnapshotsEnabled: boolean;
   isSchemaReady: boolean;
   modelTypeOptions: SelectOption[];
@@ -75,9 +85,13 @@ export function TargetSelectorSection({
   presetOptions: SelectOption[];
   snapshotOptions: SelectOption[];
   experimentOptions: SelectOption[];
+  experimentDatasetOptions: SelectOption[];
+  experimentPresetOptions: SelectOption[];
   presetSelectId: string;
   snapshotSelectId: string;
   experimentSelectId: string;
+  experimentDatasetSelectId: string;
+  experimentPresetSelectId: string;
   presetDescriptionId: string;
   presetDescriptionTriggerRef: RefObject<HTMLButtonElement | null>;
   isPresetDescriptionOpen: boolean;
@@ -89,7 +103,9 @@ export function TargetSelectorSection({
   onActivateExperimentMode: () => void;
   onSelectPreset: (preset: string) => void;
   onSelectSnapshot: (snapshotId: string) => boolean | void;
-  onSelectExperimentRun: (runId: string) => void;
+  onSelectHistoricalExperimentFilter: (experiment: string) => void;
+  onSelectHistoricalDatasetFilter: (dataset: string) => void;
+  onSelectHistoricalPreset: (preset: string) => void;
   onCreateSnapshot: () => void;
   onEditSnapshot: () => void;
   onDuplicateSnapshot: () => void;
@@ -109,10 +125,26 @@ export function TargetSelectorSection({
     snapshotOptions.some((option) => option.value === selectedSnapshotId)
       ? selectedSnapshotId
       : "";
-  const experimentRunValue =
+  const experimentValue =
     activeTargetMode === "experiment" &&
-    experimentOptions.some((option) => option.value === selectedExperimentRunId)
-      ? selectedExperimentRunId
+    experimentOptions.some(
+      (option) => option.value === selectedHistoricalExperimentFilter,
+    )
+      ? selectedHistoricalExperimentFilter
+      : "";
+  const experimentDatasetValue =
+    activeTargetMode === "experiment" &&
+    experimentDatasetOptions.some(
+      (option) => option.value === selectedHistoricalDatasetFilter,
+    )
+      ? selectedHistoricalDatasetFilter
+      : "";
+  const experimentPresetValue =
+    activeTargetMode === "experiment" &&
+    experimentPresetOptions.some(
+      (option) => option.value === selectedHistoricalPreset,
+    )
+      ? selectedHistoricalPreset
       : "";
   const snapshotActionsDisabled =
     !configSnapshotsEnabled ||
@@ -267,22 +299,60 @@ export function TargetSelectorSection({
           </div>
         </div>
       ) : (
-        <div className="grid gap-1.5">
-          <label
-            htmlFor={experimentSelectId}
-            className="text-xs font-semibold tracking-[0.02em] text-ink-dim"
-          >
-            Experiment run
-          </label>
-          <SelectOnlyDropdown
-            id={experimentSelectId}
-            label="experiment run"
-            value={experimentRunValue}
-            options={experimentOptions}
-            onChange={onSelectExperimentRun}
-            placeholder="Select run"
-            className="min-w-0"
-          />
+        <div className="grid gap-2">
+          <div className="grid gap-1.5">
+            <label
+              htmlFor={experimentSelectId}
+              className="text-xs font-semibold tracking-[0.02em] text-ink-dim"
+            >
+              Experiment
+            </label>
+            <SelectOnlyDropdown
+              id={experimentSelectId}
+              label="Experiment"
+              value={experimentValue}
+              options={experimentOptions}
+              onChange={onSelectHistoricalExperimentFilter}
+              placeholder="Select experiment"
+              className="min-w-0"
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <label
+              htmlFor={experimentDatasetSelectId}
+              className="text-xs font-semibold tracking-[0.02em] text-ink-dim"
+            >
+              Dataset
+            </label>
+            <SelectOnlyDropdown
+              id={experimentDatasetSelectId}
+              label="Dataset"
+              value={experimentDatasetValue}
+              options={experimentDatasetOptions}
+              onChange={onSelectHistoricalDatasetFilter}
+              placeholder="Select dataset"
+              disabled={!experimentValue}
+              className="min-w-0"
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <label
+              htmlFor={experimentPresetSelectId}
+              className="text-xs font-semibold tracking-[0.02em] text-ink-dim"
+            >
+              Preset
+            </label>
+            <SelectOnlyDropdown
+              id={experimentPresetSelectId}
+              label="Preset"
+              value={experimentPresetValue}
+              options={experimentPresetOptions}
+              onChange={onSelectHistoricalPreset}
+              placeholder="Select preset"
+              disabled={!experimentValue || !experimentDatasetValue}
+              className="min-w-0"
+            />
+          </div>
         </div>
       )}
     </section>
