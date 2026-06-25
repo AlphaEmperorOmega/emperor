@@ -80,6 +80,27 @@ function graph({ withBias = true }: { withBias?: boolean } = {}): InspectRespons
   };
 }
 
+function modernGraph(): InspectResponse {
+  const root = node("root", "main_model", "LayerStack");
+  const wrapper = node("layer-0", "main_model.layers.0", "Layer");
+  const linear = node("linear-0", "main_model.layers.0.model", "LinearLayer", {
+    details: { weightShape: "2 x 2", biasShape: "2" },
+  });
+
+  return {
+    modelType: "linears",
+    model: "linear",
+    preset: "baseline",
+    parameterCount: 0,
+    parameterSizeBytes: 0,
+    nodes: [root, wrapper, linear],
+    edges: [
+      { id: "root-layer-0", source: root.id, target: wrapper.id },
+      { id: "layer-0-linear-0", source: wrapper.id, target: linear.id },
+    ],
+  };
+}
+
 function parameterStatus(
   sourceId: string,
   overrides: Partial<ParameterStatus> = {},
@@ -242,5 +263,17 @@ describe("parameter summaries", () => {
 
     expect(summary.total).toBe(4);
     expect(summary.counts.updated).toBe(4);
+  });
+
+  it("summarizes legacy status paths against modern graph paths", () => {
+    const summary = summarizeHistoricalParameterStatus({
+      graph: modernGraph(),
+      status: { runs: [parameterStatus("run-1")] },
+      runs: [run({ id: "run-1" })],
+    });
+
+    expect(summary.total).toBe(2);
+    expect(summary.counts.updated).toBe(2);
+    expect(summary.severity).toBe("success");
   });
 });

@@ -3,17 +3,17 @@ import { describe, expect, it } from "vitest";
 import { useGraphViewState } from "@/features/viewer/state/graph-monitor/use-graph-view-state";
 import { type GraphNode, type InspectResponse } from "@/lib/api";
 
-function node(id: string): GraphNode {
+function node(id: string, overrides: Partial<GraphNode> = {}): GraphNode {
   return {
     id,
-    label: id,
-    typeName: "Layer",
-    path: id,
-    graphRole: "architecture",
-    parameterCount: 0,
-    parameterSizeBytes: 0,
-    details: {},
-    config: null,
+    label: overrides.label ?? id,
+    typeName: overrides.typeName ?? "Layer",
+    path: overrides.path ?? id,
+    graphRole: overrides.graphRole ?? "architecture",
+    parameterCount: overrides.parameterCount ?? 0,
+    parameterSizeBytes: overrides.parameterSizeBytes ?? 0,
+    details: overrides.details ?? {},
+    config: overrides.config ?? null,
   };
 }
 
@@ -58,5 +58,67 @@ describe("useGraphViewState selection", () => {
     expect(n1After.selected).toBe(true);
     // Edges are produced by the structural pass and stay untouched.
     expect(result.current.edges).toBe(edgesBefore);
+  });
+
+  it("maps parameter activity through a resolver that is independent from monitor availability", async () => {
+    const root = node("root", {
+      typeName: "LayerStack",
+      path: "main_model",
+    });
+    const layer = node("layer", {
+      typeName: "Layer",
+      path: "main_model.0",
+    });
+    const linear = node("linear", {
+      typeName: "LinearLayer",
+      path: "main_model.0.model",
+      details: { weightShape: "2 x 2" },
+    });
+    const monitorGraph: InspectResponse = {
+      modelType: "linears",
+      model: "linear",
+      preset: "baseline",
+      parameterCount: 0,
+      parameterSizeBytes: 0,
+      nodes: [root, layer, linear],
+      edges: [
+        { id: "root-layer", source: root.id, target: layer.id },
+        { id: "layer-linear", source: layer.id, target: linear.id },
+      ],
+    };
+    const activity = {
+      targetPath: "main_model.0.model",
+      weights: {
+        status: "updated" as const,
+        source: "historical" as const,
+        sourceLabel: "1 historical run",
+        observedPoints: 2,
+      },
+    };
+    const { result } = renderHook(() =>
+      useGraphViewState(monitorGraph, {
+        canOpenMonitor: () => false,
+        resolveMonitorTarget: () => undefined,
+        resolveParameterActivityTarget: (candidate) =>
+          candidate.id === "layer" || candidate.id === "linear"
+            ? linear
+            : undefined,
+        parameterActivityByNodePath: new Map([
+          ["main_model.0.model", activity],
+        ]),
+      }),
+    );
+
+    await waitFor(() =>
+      expect(result.current.nodes.map((candidate) => candidate.id)).toContain(
+        "layer",
+      ),
+    );
+
+    const layerNode = result.current.nodes.find(
+      (candidate) => candidate.id === "layer",
+    );
+    expect(layerNode?.data.canOpenMonitor).toBe(false);
+    expect(layerNode?.data.parameterActivity).toBe(activity);
   });
 });

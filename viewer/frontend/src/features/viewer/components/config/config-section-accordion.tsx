@@ -202,7 +202,7 @@ export function ConfigSectionAccordion({
       ref={refCallback}
       className={cn(
         surfacePanelClassName,
-        "overflow-hidden px-0 py-0 shadow-[0_16px_40px_-30px_rgba(0,0,0,0.95)] transition duration-150 hover:-translate-y-px hover:border-line hover:shadow-[0_20px_44px_-32px_rgba(0,0,0,0.95)] focus-within:-translate-y-px focus-within:ring-2 focus-within:ring-focus motion-reduce:transform-none",
+        "relative overflow-visible px-0 py-0 shadow-[0_16px_40px_-30px_rgba(0,0,0,0.95)] transition duration-150 hover:-translate-y-px hover:border-line hover:shadow-[0_20px_44px_-32px_rgba(0,0,0,0.95)] focus-within:z-30 focus-within:-translate-y-px focus-within:ring-2 focus-within:ring-focus motion-reduce:transform-none",
         !isOpen &&
           "border-line-soft bg-white/[0.012] shadow-[0_10px_28px_-26px_rgba(0,0,0,0.9)]",
         isDisabled && "hover:translate-y-0",

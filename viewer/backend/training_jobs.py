@@ -421,7 +421,7 @@ class TrainingJobManager:
             "datasets": [
                 dataset_name(dataset) for dataset in selected.selected_datasets
             ],
-            "overrides": selected.effective_overrides,
+            "overrides": dict(materialized_run_plan.get("overrides") or {}),
             "search": (
                 selected.parsed_search.to_payload()
                 if selected.parsed_search is not None

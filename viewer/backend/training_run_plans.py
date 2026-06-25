@@ -15,7 +15,10 @@ from viewer.backend.inspector.discovery import (
     resolve_datasets,
 )
 from viewer.backend.inspector.errors import InspectorError
-from viewer.backend.inspector.overrides import parse_override_mapping
+from viewer.backend.inspector.overrides import (
+    parse_override_mapping,
+    serialize_override_mapping,
+)
 from viewer.backend.inspector.schema import config_schema, search_space_schema
 from viewer.backend.inspector.search import (
     parse_training_search,
@@ -384,6 +387,10 @@ class TrainingRunPlanBuilder:
                 row_overrides,
             )
             reject_locked_overrides(model, preset, parsed_row_overrides)
+            canonical_row_overrides = self._canonical_override_values(
+                parts=selected.parts,
+                overrides=row_overrides,
+            )
             runs.append(
                 {
                     **row,
@@ -396,12 +403,18 @@ class TrainingRunPlanBuilder:
                     if snapshot_name is not None
                     else None,
                     "dataset": dataset,
-                    "overrides": row_overrides,
+                    "changes": self._canonical_submitted_changes(
+                        model=model,
+                        preset=preset,
+                        changes=list(row.get("changes") or []),
+                        overrides=canonical_row_overrides,
+                    ),
+                    "overrides": canonical_row_overrides,
                     "command": self._training_command(
                         model=model,
                         preset=preset,
                         dataset=dataset,
-                        overrides=row_overrides,
+                        overrides=canonical_row_overrides,
                         log_folder=log_folder,
                     ),
                     "totalEpochs": int(row.get("totalEpochs") or 0),
@@ -510,6 +523,52 @@ class TrainingRunPlanBuilder:
             )
         return changes, ordered_overrides
 
+    def _canonical_override_values(
+        self,
+        *,
+        parts,
+        overrides: dict[str, Any],
+    ) -> dict[str, Any]:
+        return serialize_override_mapping(parts.config_module, overrides)
+
+    def _canonical_submitted_changes(
+        self,
+        *,
+        model: str,
+        preset: str,
+        changes: list[dict[str, Any]],
+        overrides: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        fields, by_key = self._field_maps(model, preset)
+        fields_by_key = {str(field["key"]): field for field in fields}
+        if not changes:
+            return [
+                {
+                    "key": key,
+                    "label": str(fields_by_key.get(key, {}).get("label", key)),
+                    "value": value,
+                    "source": "override",
+                }
+                for key, value in overrides.items()
+            ]
+
+        canonical_changes: list[dict[str, Any]] = []
+        for change in changes:
+            raw_key = str(change.get("key") or "")
+            field = by_key.get(normalize_key(raw_key))
+            key = str(field["key"]) if field is not None else raw_key
+            canonical_changes.append(
+                {
+                    **change,
+                    "key": key,
+                    "label": str(
+                        change.get("label")
+                        or (field.get("label") if field is not None else key)
+                    ),
+                }
+            )
+        return canonical_changes
+
     def _search_axis_maps(
         self,
         *,
@@ -568,7 +627,7 @@ class TrainingRunPlanBuilder:
             overrides = {}
             for axis_key, _model_param, serialized_value, parsed_value in combination:
                 axis = axis_maps.get(normalize_key(axis_key), {})
-                field_key = normalize_key(str(axis.get("configKey", axis_key)))
+                field_key = str(axis.get("key") or axis.get("configKey") or axis_key)
                 overrides[field_key] = serialize_config_value(parsed_value)
                 changes.append(
                     {
@@ -691,7 +750,10 @@ class TrainingRunPlanBuilder:
             "datasets": [
                 dataset_name(dataset) for dataset in selected.selected_datasets
             ],
-            "overrides": selected.effective_overrides,
+            "overrides": self._canonical_override_values(
+                parts=selected.parts,
+                overrides=selected.effective_overrides,
+            ),
             "search": (
                 selected.parsed_search.to_payload()
                 if selected.parsed_search is not None

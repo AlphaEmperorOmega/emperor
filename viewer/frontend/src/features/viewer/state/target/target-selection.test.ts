@@ -141,7 +141,7 @@ describe("target selection", () => {
           choices: ["DISABLED", "BEFORE", "DEFAULT", "AFTER"],
         }),
         field({
-          key: "recurrent_gate_hidden_dim",
+          key: "recurrent_gate_stack_hidden_dim",
           section: "Recurrent Gate Stack Options",
         }),
         field({
@@ -165,7 +165,7 @@ describe("target selection", () => {
       .toEqual([
         "recurrent_flag",
         "recurrent_layer_norm_position",
-        "recurrent_gate_hidden_dim",
+        "recurrent_gate_stack_hidden_dim",
         "recurrent_halting_threshold",
       ]);
     expect(

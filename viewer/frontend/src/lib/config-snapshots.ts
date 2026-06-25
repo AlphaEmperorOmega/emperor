@@ -6,8 +6,11 @@ import {
   type TrainingRunPlan,
 } from "@/lib/api";
 import {
+  configKeyToken,
   defaultConfigFieldValue,
+  hasOverride,
   normalizeConfigFieldValue,
+  overrideValue,
   overrideValueForConfigField,
   type OverrideValues,
 } from "@/lib/config";
@@ -38,10 +41,6 @@ export type ConfigSnapshotCreateResult =
   | { ok: true; snapshot: ConfigSnapshot }
   | { ok: false; error: string };
 
-function hasOwn(object: Record<string, unknown>, key: string) {
-  return Object.prototype.hasOwnProperty.call(object, key);
-}
-
 function displayValueForField(field: ConfigField, value: string) {
   return field.nullable && value === "" ? "None" : value;
 }
@@ -54,13 +53,14 @@ export function configSnapshotOverrideEntries(
   const lockedFields: ConfigField[] = [];
 
   for (const field of fields) {
-    if (!hasOwn(overrides, field.key)) {
+    const rawValue = overrideValue(overrides, field.key);
+    if (!hasOverride(overrides, field.key) || rawValue === undefined) {
       continue;
     }
     if (field.locked) {
       lockedFields.push(field);
     }
-    const normalizedValue = normalizeConfigFieldValue(field, overrides[field.key] ?? "");
+    const normalizedValue = normalizeConfigFieldValue(field, rawValue);
     if (normalizedValue === defaultConfigFieldValue(field)) {
       continue;
     }
@@ -361,7 +361,7 @@ function shellQuote(value: string) {
 }
 
 function snapshotCommandFlag(key: string) {
-  return `--${key.replace(/_/g, "-")}`;
+  return `--${key.toLowerCase().replace(/_/g, "-")}`;
 }
 
 function trainingCommand({
@@ -415,7 +415,7 @@ function snapshotRunChanges(
   return Object.entries(overrides).map<TrainingRunChange>(
     ([key, value]) => ({
       key,
-      label: fieldsByKey.get(key)?.label ?? key,
+      label: fieldsByKey.get(configKeyToken(key))?.label ?? key,
       value: configValueFromOverride(value),
       source: "override",
     }),
@@ -424,7 +424,7 @@ function snapshotRunChanges(
 
 function epochDefault(fieldsByKey: Map<string, ConfigField>) {
   const field =
-    fieldsByKey.get("num_epochs") ??
+    fieldsByKey.get(configKeyToken("num_epochs")) ??
     Array.from(fieldsByKey.values()).find(
       (candidate) => candidate.configKey.toLowerCase() === "num_epochs",
     );
@@ -443,7 +443,7 @@ function epochsFromOverrides(
   overrides: OverrideValues,
   fieldsByKey: Map<string, ConfigField>,
 ) {
-  const rawEpochs = overrides.num_epochs;
+  const rawEpochs = overrideValue(overrides, "NUM_EPOCHS");
   const epochValue = rawEpochs === undefined ? epochDefault(fieldsByKey) : Number(rawEpochs);
   return Number.isFinite(epochValue) ? Math.max(0, Math.trunc(epochValue)) : 0;
 }
@@ -540,7 +540,12 @@ export function buildConfigSnapshotRunPlan({
     return undefined;
   }
 
-  const fieldsByKey = new Map(fields.map((field) => [field.key, field]));
+  const fieldsByKey = new Map(
+    fields.flatMap((field) => [
+      [configKeyToken(field.key), field] as const,
+      [configKeyToken(field.configKey), field] as const,
+    ]),
+  );
   const runs: TrainingRun[] = [];
   for (const preset of selectedTrainingPresets) {
     for (const dataset of selectedDatasets) {

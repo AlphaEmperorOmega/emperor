@@ -400,7 +400,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.json()["summary"]["totalRuns"], 1)
-        self.assertEqual(response.json()["search"]["values"]["stack_hidden_dim"], [128])
+        self.assertEqual(response.json()["search"]["values"]["STACK_HIDDEN_DIM"], [128])
 
     def test_training_random_search_samples_without_rejecting_large_grid(
         self,

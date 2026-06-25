@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import json
 import os
+import tempfile
 import unittest
 from collections import Counter
+from pathlib import Path
 from typing import Any, TypeAlias
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
@@ -34,6 +37,10 @@ from viewer.backend.inspector.discovery import discover_models, list_model_prese
 from viewer.backend.inspector.errors import InspectorError
 from viewer.backend.inspector.graph import serialize_graph
 from viewer.backend.inspector.service import build_config, inspect_model
+from viewer.backend.log_runs import LogRunIndex
+from viewer.backend.repositories.log_runs import LogRunRepository
+from viewer.backend.services.inspection import InspectionService
+from viewer.backend.tests.helpers import write_tensorboard_run
 
 GraphNodePayload: TypeAlias = dict[str, Any]
 GraphEdgePayload: TypeAlias = dict[str, str]
@@ -232,6 +239,201 @@ class InspectorGraphTests(unittest.TestCase):
             with self.subTest(node_id=node_id):
                 self.assertGreater(node_by_id[node_id]["parameterCount"], 0)
                 self.assertGreater(node_by_id[node_id]["parameterSizeBytes"], 0)
+
+    def test_inspection_service_uses_saved_log_run_params(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = os.path.join(tmp, "logs")
+            run_dir = write_tensorboard_run(
+                Path(logs_root),
+                [
+                    "exp_linear",
+                    "linears",
+                    "linear",
+                    "BASELINE",
+                    "Mnist",
+                    "run_20260601_010203",
+                    "version_0",
+                ],
+            )
+            (run_dir / "result.json").write_text(
+                json.dumps({"params": {"stack_hidden_dim": 12}}),
+                encoding="utf-8",
+            )
+            run = LogRunIndex(logs_root=logs_root).list_runs()[0]
+            service = InspectionService(
+                LogRunRepository(LogRunIndex(logs_root=logs_root))
+            )
+
+            default_result = service.inspect(
+                model_type="linears",
+                model="linear",
+                preset="baseline",
+                dataset="Mnist",
+                overrides={},
+            )
+            historical_result = service.inspect(
+                model_type="linears",
+                model="linear",
+                preset="baseline",
+                dataset="Mnist",
+                overrides={},
+                log_run_id=run.id,
+            )
+            expected_result = inspect_model(
+                "linears/linear",
+                "baseline",
+                {"stack_hidden_dim": 12},
+                dataset="Mnist",
+            )
+
+        self.assertNotEqual(
+            historical_result["parameterCount"],
+            default_result["parameterCount"],
+        )
+        self.assertEqual(
+            historical_result["parameterCount"],
+            expected_result["parameterCount"],
+        )
+
+    def test_inspection_service_ignores_unknown_saved_log_run_params(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = os.path.join(tmp, "logs")
+            run_dir = write_tensorboard_run(
+                Path(logs_root),
+                [
+                    "exp_linear",
+                    "linears",
+                    "linear",
+                    "BASELINE",
+                    "Cifar10",
+                    "run_20260601_010203",
+                    "version_0",
+                ],
+            )
+            (run_dir / "result.json").write_text(
+                json.dumps(
+                    {
+                        "params": {
+                            "input_dim": 3072,
+                            "output_dim": 10,
+                            "stack_hidden_dim": 12,
+                            "gather_frequency_flag": False,
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            run = LogRunIndex(logs_root=logs_root).list_runs()[0]
+            service = InspectionService(
+                LogRunRepository(LogRunIndex(logs_root=logs_root))
+            )
+
+            historical_result = service.inspect(
+                model_type="linears",
+                model="linear",
+                preset="baseline",
+                dataset="Cifar10",
+                overrides={},
+                log_run_id=run.id,
+            )
+            expected_result = inspect_model(
+                "linears/linear",
+                "baseline",
+                {
+                    "input_dim": 3072,
+                    "output_dim": 10,
+                    "stack_hidden_dim": 12,
+                },
+                dataset="Cifar10",
+            )
+
+        self.assertEqual(
+            historical_result["parameterCount"],
+            expected_result["parameterCount"],
+        )
+
+    def test_inspection_service_keeps_request_overrides_strict_with_log_run(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = os.path.join(tmp, "logs")
+            write_tensorboard_run(
+                Path(logs_root),
+                [
+                    "exp_linear",
+                    "linears",
+                    "linear",
+                    "BASELINE",
+                    "Mnist",
+                    "run_20260601_010203",
+                    "version_0",
+                ],
+            )
+            run = LogRunIndex(logs_root=logs_root).list_runs()[0]
+            service = InspectionService(
+                LogRunRepository(LogRunIndex(logs_root=logs_root))
+            )
+
+            with self.assertRaises(InspectorError) as raised:
+                service.inspect(
+                    model_type="linears",
+                    model="linear",
+                    preset="baseline",
+                    dataset="Mnist",
+                    overrides={"gather_frequency_flag": False},
+                    log_run_id=run.id,
+                )
+
+        self.assertIn(
+            "Unknown override 'gather_frequency_flag'",
+            raised.exception.detail,
+        )
+
+    def test_inspection_service_rejects_mismatched_log_run_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = os.path.join(tmp, "logs")
+            write_tensorboard_run(
+                Path(logs_root),
+                [
+                    "exp_linear",
+                    "linears",
+                    "linear",
+                    "BASELINE",
+                    "Mnist",
+                    "run_20260601_010203",
+                    "version_0",
+                ],
+            )
+            run = LogRunIndex(logs_root=logs_root).list_runs()[0]
+            service = InspectionService(
+                LogRunRepository(LogRunIndex(logs_root=logs_root))
+            )
+
+            with self.assertRaises(InspectorError) as raised:
+                service.inspect(
+                    model_type="linears",
+                    model="linear",
+                    preset="baseline",
+                    dataset="Cifar10",
+                    overrides={},
+                    log_run_id=run.id,
+                )
+
+        self.assertIn("belongs to dataset 'Mnist'", raised.exception.detail)
+
+    def test_inspection_service_preserves_preset_inspect_without_log_run(self) -> None:
+        service = InspectionService()
+
+        self.assertEqual(
+            service.inspect(
+                model_type="linears",
+                model="linear",
+                preset="baseline",
+                dataset="Mnist",
+                overrides={},
+            ),
+            inspect_model("linears/linear", "baseline", {}, dataset="Mnist"),
+        )
 
     def test_graph_serializer_reports_direct_weight_and_bias_shapes(self) -> None:
         nodes, _edges = serialize_graph(nn.Sequential(nn.Linear(4, 3), nn.ReLU()))

@@ -22,9 +22,13 @@ function renderOrchestration(
   });
 }
 
-function graph(model: string, preset = "baseline"): InspectResponse {
+function graph(
+  model: string,
+  preset = "baseline",
+  modelType = "neuron",
+): InspectResponse {
   return {
-    modelType: "linears",
+    modelType,
     model,
     preset,
     parameterCount: 0,
@@ -75,9 +79,12 @@ const baseInput = {
   selectedHistoricalPreset: "",
   logRunTags: [],
   filteredHistoricalRunIds: [],
-  targetModel: "neuron/neuron_linear",
+  targetModelType: "neuron",
+  targetModel: "neuron_linear",
   targetPreset: "baseline",
   targetDatasets: ["Mnist"],
+  targetMode: "preset" as const,
+  targetId: "baseline",
 };
 
 describe("useGraphPreviewOrchestration", () => {
@@ -85,7 +92,7 @@ describe("useGraphPreviewOrchestration", () => {
     const { result } = renderOrchestration({
       ...baseInput,
       controller: controller({
-        graph: graph("experts/experts_linear"),
+        graph: graph("experts_linear", "baseline", "experts"),
       }),
     });
 
@@ -94,16 +101,69 @@ describe("useGraphPreviewOrchestration", () => {
   });
 
   it("exposes the graph when its identity matches the target", async () => {
-    const matchingGraph = graph("neuron/neuron_linear");
+    const matchingGraph = graph("neuron_linear");
     const { result } = renderOrchestration({
       ...baseInput,
       controller: controller({
         graph: matchingGraph,
+        previewRequest: {
+          modelType: "neuron",
+          model: "neuron_linear",
+          preset: "baseline",
+          dataset: "Mnist",
+          overrides: {},
+          targetMode: "preset",
+          targetId: "baseline",
+        },
       }),
     });
 
     expect(result.current.graph.graph).toBe(matchingGraph);
     // Layout loads asynchronously (dagre is lazily imported); wait for nodes.
     await waitFor(() => expect(result.current.graph.nodes).not.toEqual([]));
+  });
+
+  it("does not expose a graph when the preview request belongs to another dataset", () => {
+    const { result } = renderOrchestration({
+      ...baseInput,
+      controller: controller({
+        graph: graph("neuron_linear"),
+        previewRequest: {
+          modelType: "neuron",
+          model: "neuron_linear",
+          preset: "baseline",
+          dataset: "Cifar10",
+          overrides: {},
+          targetMode: "preset",
+          targetId: "baseline",
+        },
+      }),
+    });
+
+    expect(result.current.graph.graph).toBeUndefined();
+    expect(result.current.graph.nodes).toEqual([]);
+  });
+
+  it("does not expose a graph when the preview request belongs to another experiment target", () => {
+    const { result } = renderOrchestration({
+      ...baseInput,
+      targetMode: "experiment",
+      targetId: "run-new",
+      controller: controller({
+        graph: graph("neuron_linear"),
+        previewRequest: {
+          modelType: "neuron",
+          model: "neuron_linear",
+          preset: "baseline",
+          dataset: "Mnist",
+          overrides: {},
+          targetMode: "experiment",
+          targetId: "run-old",
+        },
+      }),
+    });
+
+    expect(result.current.graph.graph).toBeUndefined();
+    expect(result.current.graph.nodes).toEqual([]);
   });
 });

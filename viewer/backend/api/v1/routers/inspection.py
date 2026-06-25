@@ -39,5 +39,6 @@ async def inspect(
             preset=request.preset,
             overrides=request.overrides,
             dataset=request.dataset,
+            log_run_id=request.logRunId,
         )
     )

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  anyLogRunTagsMatchParameterNodePath,
   anyLogRunTagsMatchNodePath,
   experimentsWithLayerMonitorData,
   filterHistoricalRuns,
@@ -229,8 +230,25 @@ describe("historical monitor run helpers", () => {
     ).toBe(true);
   });
 
-  it("detects per-layer monitor data by tag shape", () => {
-    // Layer scalar tag: node/group/stat (>= 2 slashes).
+  it("matches parameter monitor tags through legacy layer path aliases", () => {
+    expect(
+      anyLogRunTagsMatchParameterNodePath(
+        [
+          {
+            runId: "run-a",
+            scalarTags: ["main_model.0.model/weights/mean"],
+            histogramTags: [],
+            imageTags: [],
+            textTags: [],
+          },
+        ],
+        ["run-a"],
+        "main_model.layers.0.model",
+      ),
+    ).toBe(true);
+  });
+
+  it("detects strict parameter monitor data by tag shape", () => {
     expect(
       logRunHasLayerMonitorData({
         scalarTags: ["main_model.0.model/weights/mean"],
@@ -238,15 +256,13 @@ describe("historical monitor run helpers", () => {
         imageTags: [],
       }),
     ).toBe(true);
-    // Histogram/image tags count only when they also have a graph-node prefix.
     expect(
       logRunHasLayerMonitorData({
         scalarTags: [],
         histogramTags: ["main_model.0.model/histogram/usage"],
         imageTags: [],
       }),
-    ).toBe(true);
-    // Flat model-performance metrics do not count.
+    ).toBe(false);
     expect(
       logRunHasLayerMonitorData({
         scalarTags: ["epoch", "train/loss", "test/accuracy"],
@@ -254,8 +270,6 @@ describe("historical monitor run helpers", () => {
         imageTags: [],
       }),
     ).toBe(false);
-    // Performance diagnostics can have deep paths and media, but do not target
-    // graph nodes.
     expect(
       logRunHasLayerMonitorData({
         scalarTags: [

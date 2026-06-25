@@ -822,7 +822,7 @@ SCHEMA_PARITY_CASES = (
     SchemaParityCase(
         schemas.InspectRequest,
         "inspectModel input",
-        ("modelType", "model", "preset", "overrides", "dataset"),
+        ("modelType", "model", "preset", "overrides", "dataset", "logRunId"),
         ("modelType", "model", "preset", "overrides"),
     ),
     SchemaParityCase(
@@ -1882,7 +1882,7 @@ class ApiIntegrationContractTests(unittest.TestCase):
         self.assertEqual(search_space_response.status_code, 200)
         search_space_payload = search_space_response.json()
         self.assertIn(
-            "hidden_dim", {axis["key"] for axis in search_space_payload["axes"]}
+            "HIDDEN_DIM", {axis["key"] for axis in search_space_payload["axes"]}
         )
         payload = response.model_dump(mode="json")
         self.assertEqual(payload["modelType"], "linears")

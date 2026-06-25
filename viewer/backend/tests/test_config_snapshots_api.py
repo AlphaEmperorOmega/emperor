@@ -19,7 +19,8 @@ FAKE_FIELDS: dict[str, Any] = {
     "model": "linear",
     "fields": [
         {
-            "key": "learning_rate",
+            "key": "LEARNING_RATE",
+            "configKey": "LEARNING_RATE",
             "type": "float",
             "default": 0.001,
             "nullable": False,
@@ -27,7 +28,8 @@ FAKE_FIELDS: dict[str, Any] = {
             "label": "learning rate",
         },
         {
-            "key": "batch_size",
+            "key": "BATCH_SIZE",
+            "configKey": "BATCH_SIZE",
             "type": "int",
             "default": 64,
             "nullable": False,
@@ -35,7 +37,8 @@ FAKE_FIELDS: dict[str, Any] = {
             "label": "batch size",
         },
         {
-            "key": "seed",
+            "key": "SEED",
+            "configKey": "SEED",
             "type": "int",
             "default": 42,
             "nullable": False,
@@ -119,7 +122,7 @@ class ConfigSnapshotApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         snapshot = response.json()
         self.assertEqual(
-            snapshot["overrides"], {"learning_rate": "0.01", "batch_size": "128"}
+            snapshot["overrides"], {"LEARNING_RATE": "0.01", "BATCH_SIZE": "128"}
         )
         self.assertTrue(snapshot["name"])
 
@@ -258,7 +261,7 @@ class ConfigSnapshotApiTests(unittest.TestCase):
         self.assertEqual(body["createdAt"], snapshot["createdAt"])
         self.assertEqual(body["updatedAt"], "2026-06-02T00:00:00+00:00")
         self.assertEqual(body["name"], "larger batch")
-        self.assertEqual(body["overrides"], {"batch_size": "128"})
+        self.assertEqual(body["overrides"], {"BATCH_SIZE": "128"})
 
     def test_rename_rejects_empty_name(self) -> None:
         snapshot_id = self._create(learning_rate="0.01").json()["id"]

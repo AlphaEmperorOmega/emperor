@@ -218,6 +218,27 @@ class TensorBoardMonitorReaderFailureTests(unittest.TestCase):
 
         self.assert_empty_monitor_payload(data, log_dir)
 
+    def test_monitor_reader_matches_legacy_layer_path_aliases(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            log_dir = Path(tmp)
+            writer = SummaryWriter(log_dir=str(log_dir))
+            writer.add_scalar("main_model.0.model/weights/mean", 0.25, 1)
+            writer.flush()
+            writer.close()
+
+            data = TensorBoardMonitorReader().read(
+                job_id="job-1",
+                node_path="main_model.layers.0.model",
+                dataset="Mnist",
+                log_dir=str(log_dir),
+            )
+
+        self.assertEqual(data["nodePath"], "main_model.layers.0.model")
+        self.assertEqual(
+            [(series["tag"], series["label"]) for series in data["scalarSeries"]],
+            [("main_model.0.model/weights/mean", "weights/mean")],
+        )
+
     def test_negative_monitor_results_are_cached_until_event_files_change(
         self,
     ) -> None:

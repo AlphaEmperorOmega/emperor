@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import copy
+import re
 from collections import OrderedDict
 from pathlib import Path
 from typing import Any
@@ -30,6 +31,33 @@ ABSOLUTE_DELTA_EPSILON = 1e-9
 PARAMETER_CHANNELS = ("weights", "bias")
 DELTA_METRICS = ("relative_delta_norm", "delta_norm")
 VALUE_FALLBACK_METRICS = ("l2_norm", "mean", "var")
+
+
+def monitor_path_aliases(node_path: str | None) -> list[str]:
+    if not node_path:
+        return []
+    aliases = {node_path}
+    aliases.add(re.sub(r"(^|\.)layers\.(\d+)(?=\.|$)", r"\1\2", node_path))
+    match = re.match(r"^main_model\.(\d+)(.*)$", node_path)
+    if match:
+        aliases.add(f"main_model.layers.{match.group(1)}{match.group(2)}")
+    return list(aliases)
+
+
+def parse_parameter_monitor_tag(tag: str) -> tuple[str, str, str] | None:
+    parts = tag.rsplit("/", 2)
+    if len(parts) != 3:
+        return None
+    node_path, channel, metric = parts
+    if not node_path or channel not in PARAMETER_CHANNELS:
+        return None
+    if metric not in DELTA_METRICS and metric not in VALUE_FALLBACK_METRICS:
+        return None
+    return node_path, channel, metric
+
+
+def is_parameter_monitor_tag(tag: str) -> bool:
+    return parse_parameter_monitor_tag(tag) is not None
 
 
 def empty_monitor_data(
@@ -151,7 +179,7 @@ class TensorBoardMonitorReader:
         if cached is not None:
             return cached
 
-        prefix = f"{node_path}/"
+        prefixes = [f"{alias}/" for alias in monitor_path_aliases(node_path)]
         for run_dir in event_dirs(root):
             accumulator = load_event_accumulator(run_dir)
             if accumulator is None:
@@ -161,13 +189,13 @@ class TensorBoardMonitorReader:
             except Exception:
                 continue
             response["scalarSeries"].extend(
-                self._read_scalars(accumulator, tags.get("scalars", []), prefix)
+                self._read_scalars(accumulator, tags.get("scalars", []), prefixes)
             )
             response["histograms"].extend(
-                self._read_histograms(accumulator, tags.get("histograms", []), prefix)
+                self._read_histograms(accumulator, tags.get("histograms", []), prefixes)
             )
             response["images"].extend(
-                self._read_images(accumulator, tags.get("images", []), prefix)
+                self._read_images(accumulator, tags.get("images", []), prefixes)
             )
 
         response["scalarSeries"].sort(key=lambda series: series["tag"])
@@ -176,17 +204,27 @@ class TensorBoardMonitorReader:
         self._cache_set(cache_key, response)
         return response
 
-    def _matching_tags(self, tags: list[str], prefix: str) -> list[str]:
-        return sorted(tag for tag in tags if tag.startswith(prefix))
+    def _matching_tags(
+        self,
+        tags: list[str],
+        prefixes: list[str],
+    ) -> list[tuple[str, str]]:
+        matches: dict[str, str] = {}
+        for tag in sorted(tags):
+            for prefix in prefixes:
+                if tag.startswith(prefix):
+                    matches.setdefault(tag, prefix)
+                    break
+        return [(tag, matches[tag]) for tag in sorted(matches)]
 
     def _label(self, tag: str, prefix: str) -> str:
         return tag[len(prefix) :]
 
     def _read_scalars(
-        self, accumulator, tags: list[str], prefix: str
+        self, accumulator, tags: list[str], prefixes: list[str]
     ) -> list[dict[str, Any]]:
         series = []
-        for tag in self._matching_tags(tags, prefix):
+        for tag, prefix in self._matching_tags(tags, prefixes):
             try:
                 points = scalar_points(accumulator, tag, self.scalar_point_limit)
             except Exception:
@@ -200,10 +238,10 @@ class TensorBoardMonitorReader:
         self,
         accumulator,
         tags: list[str],
-        prefix: str,
+        prefixes: list[str],
     ) -> list[dict[str, Any]]:
         histograms = []
-        for tag in self._matching_tags(tags, prefix):
+        for tag, _prefix in self._matching_tags(tags, prefixes):
             try:
                 events = accumulator.Histograms(tag)
             except Exception:
@@ -242,10 +280,10 @@ class TensorBoardMonitorReader:
         return buckets
 
     def _read_images(
-        self, accumulator, tags: list[str], prefix: str
+        self, accumulator, tags: list[str], prefixes: list[str]
     ) -> list[dict[str, Any]]:
         images = []
-        for tag in self._matching_tags(tags, prefix):
+        for tag, _prefix in self._matching_tags(tags, prefixes):
             try:
                 events = accumulator.Images(tag)
             except Exception:
@@ -432,15 +470,7 @@ class TensorBoardParameterStatusReader:
         return scalars_by_node
 
     def _parameter_tag(self, tag: str) -> tuple[str, str, str] | None:
-        parts = tag.rsplit("/", 2)
-        if len(parts) != 3:
-            return None
-        node_path, channel, metric = parts
-        if not node_path or channel not in PARAMETER_CHANNELS:
-            return None
-        if metric not in DELTA_METRICS and metric not in VALUE_FALLBACK_METRICS:
-            return None
-        return node_path, channel, metric
+        return parse_parameter_monitor_tag(tag)
 
     def _empty_channel_data(self) -> dict[str, Any]:
         return {"seen": set(), "points": {}}

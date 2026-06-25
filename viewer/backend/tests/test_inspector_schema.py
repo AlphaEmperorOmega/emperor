@@ -21,7 +21,43 @@ from models.config_overrides import parse_config_value
 from viewer.backend.inspector.schema import config_schema, search_space_schema
 
 
+def _fields_by_key(payload: dict) -> dict[str, dict]:
+    return {field["key"].lower(): field for field in payload["fields"]}
+
+
+def _axes_by_key(payload: dict) -> dict[str, dict]:
+    return {axis["key"].lower(): axis for axis in payload["axes"]}
+
+
 class InspectorSchemaTests(unittest.TestCase):
+    def test_config_schema_emits_uppercase_public_keys(self) -> None:
+        fields = config_schema("linears/linear")["fields"]
+
+        stack_field = next(
+            field
+            for field in fields
+            if field["configKey"] == "STACK_APPLY_OUTPUT_PIPELINE_FLAG"
+        )
+        self.assertEqual(stack_field["key"], "STACK_APPLY_OUTPUT_PIPELINE_FLAG")
+        self.assertEqual(stack_field["key"], stack_field["configKey"])
+        self.assertEqual(stack_field["flag"], "--stack-apply-output-pipeline-flag")
+        for field in fields:
+            self.assertEqual(field["key"], field["configKey"])
+            self.assertTrue(field["key"].isupper())
+
+    def test_search_schema_emits_uppercase_axis_keys(self) -> None:
+        axes = search_space_schema("linears/linear", "baseline")["axes"]
+
+        stack_axis = next(
+            axis for axis in axes if axis["searchKey"] == "SEARCH_SPACE_STACK_HIDDEN_DIM"
+        )
+        self.assertEqual(stack_axis["key"], "STACK_HIDDEN_DIM")
+        self.assertEqual(stack_axis["key"], stack_axis["configKey"])
+        self.assertEqual(stack_axis["searchKey"], "SEARCH_SPACE_STACK_HIDDEN_DIM")
+        for axis in axes:
+            self.assertEqual(axis["key"], axis["configKey"])
+            self.assertTrue(axis["key"].isupper())
+
     def test_config_schema_sections_imported_trainer_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -61,10 +97,7 @@ class InspectorSchemaTests(unittest.TestCase):
                     "viewer.backend.inspector.schema.load_model_parts",
                     return_value=parts,
                 ):
-                    fields = {
-                        field["key"]: field
-                        for field in config_schema("test/model")["fields"]
-                    }
+                    fields = _fields_by_key(config_schema("test/model"))
             finally:
                 sys.path.remove(temp_dir)
                 sys.modules.pop(model_module_name, None)
@@ -77,13 +110,18 @@ class InspectorSchemaTests(unittest.TestCase):
         self.assertEqual(fields["hidden_dim"]["section"], "Model")
 
     def test_config_schema_exposes_supported_field_types(self) -> None:
-        linear_fields = {
-            field["key"]: field for field in config_schema("linears/linear")["fields"]
-        }
+        linear_fields = _fields_by_key(config_schema("linears/linear"))
         self.assertEqual(linear_fields["stack_hidden_dim"]["type"], "int")
         self.assertEqual(linear_fields["stack_hidden_dim"]["default"], 256)
         self.assertEqual(linear_fields["stack_layer_norm_position"]["type"], "enum")
         self.assertEqual(linear_fields["stack_bias_flag"]["type"], "bool")
+        adaptive_fields = _fields_by_key(config_schema("linears/linear_adaptive"))
+        self.assertEqual(adaptive_fields["stack_bias_flag"]["type"], "bool")
+        self.assertEqual(
+            adaptive_fields["stack_bias_flag"]["section"],
+            "Layer Stack Options",
+        )
+        self.assertTrue(adaptive_fields["stack_bias_flag"]["default"])
         self.assertEqual(linear_fields["stack_num_layers"]["type"], "int")
         self.assertEqual(linear_fields["stack_num_layers"]["default"], 5)
         self.assertEqual(linear_fields["stack_num_layers"]["choices"], [])
@@ -111,6 +149,9 @@ class InspectorSchemaTests(unittest.TestCase):
         self.assertEqual(linear_fields["gate_stack_bias_flag"]["type"], "bool")
         self.assertTrue(linear_fields["gate_stack_bias_flag"]["default"])
         self.assertTrue(linear_fields["gate_stack_bias_flag"]["nullable"])
+        self.assertNotIn("gate_hidden_dim", linear_fields)
+        self.assertNotIn("gate_layer_norm_position", linear_fields)
+        self.assertNotIn("gate_bias_flag", linear_fields)
         self.assertEqual(
             linear_fields["gate_option"]["section"],
             "Gate Stack Options",
@@ -184,6 +225,9 @@ class InspectorSchemaTests(unittest.TestCase):
             "TANH",
             linear_fields["recurrent_gate_stack_activation"]["choices"],
         )
+        self.assertNotIn("recurrent_gate_hidden_dim", linear_fields)
+        self.assertNotIn("recurrent_gate_layer_norm_position", linear_fields)
+        self.assertNotIn("recurrent_gate_bias_flag", linear_fields)
         self.assertEqual(
             linear_fields["recurrent_gate_option"]["section"],
             "Recurrent Gate Stack Options",
@@ -234,14 +278,11 @@ class InspectorSchemaTests(unittest.TestCase):
             "Recurrent Layer Options",
         )
         self.assertEqual(
-            linear_fields["submodule_hidden_dim"]["section"],
+            linear_fields["submodule_stack_hidden_dim"]["section"],
             "Layer Stack Submodule Options",
         )
 
-        vit_fields = {
-            field["key"]: field
-            for field in config_schema("transformer_encoder/vit_linear")["fields"]
-        }
+        vit_fields = _fields_by_key(config_schema("transformer_encoder/vit_linear"))
         self.assertEqual(vit_fields["positional_embedding_option"]["type"], "class")
         self.assertIn(
             "ImageLearnedPositionalEmbeddingConfig",
@@ -253,17 +294,9 @@ class InspectorSchemaTests(unittest.TestCase):
         )
 
     def test_config_schema_serializes_value_defaults(self) -> None:
-        linear_fields = {
-            field["key"]: field for field in config_schema("linears/linear")["fields"]
-        }
-        adaptive_fields = {
-            field["key"]: field
-            for field in config_schema("linears/linear_adaptive")["fields"]
-        }
-        vit_fields = {
-            field["key"]: field
-            for field in config_schema("transformer_encoder/vit_linear")["fields"]
-        }
+        linear_fields = _fields_by_key(config_schema("linears/linear"))
+        adaptive_fields = _fields_by_key(config_schema("linears/linear_adaptive"))
+        vit_fields = _fields_by_key(config_schema("transformer_encoder/vit_linear"))
 
         self.assertEqual(linear_fields["stack_hidden_dim"]["default"], 256)
         self.assertEqual(linear_fields["stack_activation"]["default"], "GELU")
@@ -274,11 +307,82 @@ class InspectorSchemaTests(unittest.TestCase):
         self.assertFalse(adaptive_fields["input_layer_adaptive_flag"]["default"])
         self.assertFalse(adaptive_fields["output_layer_adaptive_flag"]["default"])
 
-    def test_config_schema_excludes_abstract_class_choices(self) -> None:
-        fields = {
-            field["key"]: field
-            for field in config_schema("linears/linear_adaptive")["fields"]
+    def test_linear_adaptive_schema_uses_controller_stack_field_names(self) -> None:
+        fields = _fields_by_key(config_schema("linears/linear_adaptive"))
+        expected_stack_fields = {
+            "gate_stack_hidden_dim",
+            "gate_stack_layer_norm_position",
+            "gate_stack_bias_flag",
+            "halting_stack_hidden_dim",
+            "halting_stack_layer_norm_position",
+            "halting_stack_bias_flag",
+            "memory_stack_hidden_dim",
+            "memory_stack_layer_norm_position",
+            "memory_stack_bias_flag",
+            "recurrent_gate_stack_hidden_dim",
+            "recurrent_gate_stack_layer_norm_position",
+            "recurrent_gate_stack_bias_flag",
+            "recurrent_halting_stack_hidden_dim",
+            "recurrent_halting_stack_layer_norm_position",
+            "recurrent_halting_stack_bias_flag",
         }
+        legacy_fields = {
+            name.replace("_stack_", "_") for name in expected_stack_fields
+        }
+
+        for field_name in expected_stack_fields:
+            with self.subTest(field_name=field_name):
+                self.assertIn(field_name, fields)
+
+        for field_name in legacy_fields:
+            with self.subTest(field_name=field_name):
+                self.assertNotIn(field_name, fields)
+
+    def test_model_schemas_use_controller_stack_field_names(self) -> None:
+        expected_by_model = {
+            "experts/experts_linear": {
+                "gate_stack_hidden_dim",
+                "gate_stack_layer_norm_position",
+                "gate_stack_bias_flag",
+                "halting_stack_hidden_dim",
+                "halting_stack_layer_norm_position",
+                "halting_stack_bias_flag",
+            },
+            "experts/experts_linear_adaptive": {
+                "gate_stack_hidden_dim",
+                "gate_stack_layer_norm_position",
+                "gate_stack_bias_flag",
+                "halting_stack_hidden_dim",
+                "halting_stack_layer_norm_position",
+                "halting_stack_bias_flag",
+            },
+            "neuron/neuron_linear": {
+                "gate_stack_hidden_dim",
+                "gate_stack_layer_norm_position",
+                "gate_stack_bias_flag",
+                "halting_stack_hidden_dim",
+                "halting_stack_layer_norm_position",
+                "halting_stack_bias_flag",
+                "cluster_halting_stack_hidden_dim",
+                "cluster_halting_stack_layer_norm_position",
+                "cluster_halting_stack_bias_flag",
+            },
+        }
+
+        for model_name, expected_stack_fields in expected_by_model.items():
+            fields = _fields_by_key(config_schema(model_name))
+            legacy_fields = {
+                field_name.replace("_stack_", "_")
+                for field_name in expected_stack_fields
+            }
+            with self.subTest(model_name=model_name):
+                for field_name in expected_stack_fields:
+                    self.assertIn(field_name, fields)
+                for field_name in legacy_fields:
+                    self.assertNotIn(field_name, fields)
+
+    def test_config_schema_excludes_abstract_class_choices(self) -> None:
+        fields = _fields_by_key(config_schema("linears/linear_adaptive"))
 
         self.assertNotIn("DynamicWeightConfig", fields["weight_option"]["choices"])
         self.assertIn(
@@ -302,10 +406,7 @@ class InspectorSchemaTests(unittest.TestCase):
         )
 
     def test_config_schema_exposes_adaptive_component_option_flags(self) -> None:
-        fields = {
-            field["key"]: field
-            for field in config_schema("linears/linear_adaptive")["fields"]
-        }
+        fields = _fields_by_key(config_schema("linears/linear_adaptive"))
 
         expected_flags = {
             "weight_option_flag": "Weight Options",
@@ -321,15 +422,15 @@ class InspectorSchemaTests(unittest.TestCase):
                 self.assertEqual(fields[field_key]["section"], section)
 
         self.assertEqual(
-            fields["adaptive_stack_hidden_dim"]["section"],
-            "Adaptive Generator Stack Options",
+            fields["adaptive_submodule_stack_hidden_dim"]["section"],
+            "Adaptive Submodule Stack Options",
         )
         self.assertEqual(
-            fields["adaptive_stack_num_layers"]["section"],
-            "Adaptive Generator Stack Options",
+            fields["adaptive_submodule_stack_num_layers"]["section"],
+            "Adaptive Submodule Stack Options",
         )
         self.assertNotEqual(
-            fields["adaptive_stack_hidden_dim"]["section"],
+            fields["adaptive_submodule_stack_hidden_dim"]["section"],
             "Mask Options",
         )
 
@@ -355,10 +456,7 @@ class InspectorSchemaTests(unittest.TestCase):
         )
 
     def test_config_schema_exposes_boundary_projector_adaptive_flags(self) -> None:
-        fields = {
-            field["key"]: field
-            for field in config_schema("linears/linear_adaptive")["fields"]
-        }
+        fields = _fields_by_key(config_schema("linears/linear_adaptive"))
 
         self.assertNotIn("input_layer_model_option", fields)
         self.assertNotIn("output_layer_model_option", fields)
@@ -376,16 +474,14 @@ class InspectorSchemaTests(unittest.TestCase):
                 self.assertNotIn("searchChoices", fields[field_key])
 
     def test_config_schema_exposes_nullable_controller_stack_overrides(self) -> None:
-        fields = {
-            field["key"]: field for field in config_schema("linears/linear")["fields"]
-        }
+        fields = _fields_by_key(config_schema("linears/linear"))
 
         self.assertEqual(
-            fields["submodule_hidden_dim"]["section"],
+            fields["submodule_stack_hidden_dim"]["section"],
             "Layer Stack Submodule Options",
         )
-        self.assertEqual(fields["submodule_hidden_dim"]["type"], "int")
-        self.assertFalse(fields["submodule_hidden_dim"]["nullable"])
+        self.assertEqual(fields["submodule_stack_hidden_dim"]["type"], "int")
+        self.assertFalse(fields["submodule_stack_hidden_dim"]["nullable"])
 
         self.assertEqual(fields["memory_stack_independent_flag"]["type"], "bool")
         self.assertFalse(fields["memory_stack_independent_flag"]["default"])
@@ -393,6 +489,9 @@ class InspectorSchemaTests(unittest.TestCase):
         self.assertIsNone(fields["memory_stack_hidden_dim"]["default"])
         self.assertTrue(fields["memory_stack_hidden_dim"]["nullable"])
         self.assertEqual(fields["memory_stack_hidden_dim"]["choices"], [])
+        self.assertNotIn("memory_hidden_dim", fields)
+        self.assertNotIn("memory_layer_norm_position", fields)
+        self.assertNotIn("memory_bias_flag", fields)
         self.assertEqual(fields["memory_stack_dropout_probability"]["type"], "float")
         self.assertIsNone(fields["memory_stack_dropout_probability"]["default"])
         self.assertTrue(fields["memory_stack_dropout_probability"]["nullable"])
@@ -416,6 +515,9 @@ class InspectorSchemaTests(unittest.TestCase):
         self.assertIn("TANH", fields["gate_stack_activation"]["choices"])
         self.assertEqual(fields["halting_stack_independent_flag"]["type"], "bool")
         self.assertFalse(fields["halting_stack_independent_flag"]["default"])
+        self.assertNotIn("halting_hidden_dim", fields)
+        self.assertNotIn("halting_layer_norm_position", fields)
+        self.assertNotIn("halting_bias_flag", fields)
         self.assertEqual(
             fields["recurrent_halting_stack_independent_flag"]["type"],
             "bool",
@@ -423,6 +525,9 @@ class InspectorSchemaTests(unittest.TestCase):
         self.assertFalse(
             fields["recurrent_halting_stack_independent_flag"]["default"],
         )
+        self.assertNotIn("recurrent_halting_hidden_dim", fields)
+        self.assertNotIn("recurrent_halting_layer_norm_position", fields)
+        self.assertNotIn("recurrent_halting_bias_flag", fields)
         self.assertEqual(
             fields["halting_stack_last_layer_bias_option"]["default"],
             "DISABLED",
@@ -431,6 +536,59 @@ class InspectorSchemaTests(unittest.TestCase):
         self.assertIn(
             "DEFAULT",
             fields["halting_stack_last_layer_bias_option"]["choices"],
+        )
+
+    def test_config_schema_stack_equivalent_fields_match_canonical_metadata(
+        self,
+    ) -> None:
+        stack_equivalent_suffixes = {
+            "hidden_dim",
+            "num_layers",
+            "activation",
+            "layer_norm_position",
+            "apply_output_pipeline_flag",
+            "bias_flag",
+        }
+
+        for model_name in ("linears/linear", "linears/linear_adaptive"):
+            fields = _fields_by_key(config_schema(model_name))
+            for field_key, field in fields.items():
+                if "_stack_" not in field_key or field_key.startswith("stack_"):
+                    continue
+                suffix = field_key.split("_stack_", 1)[1]
+                if suffix not in stack_equivalent_suffixes:
+                    continue
+                canonical_key = f"stack_{suffix}"
+                if canonical_key not in fields:
+                    continue
+
+                with self.subTest(
+                    model_name=model_name,
+                    field_key=field_key,
+                    canonical_key=canonical_key,
+                ):
+                    canonical = fields[canonical_key]
+                    self.assertEqual(field["type"], canonical["type"])
+                    self.assertEqual(field["choices"], canonical["choices"])
+                    self.assertEqual(field["key"].lower(), field_key)
+                    self.assertNotEqual(field["section"], canonical["section"])
+
+        linear_fields = _fields_by_key(config_schema("linears/linear"))
+        self.assertEqual(linear_fields["stack_hidden_dim"]["default"], 256)
+        self.assertFalse(linear_fields["stack_hidden_dim"]["nullable"])
+        self.assertIsNone(linear_fields["gate_stack_hidden_dim"]["default"])
+        self.assertTrue(linear_fields["gate_stack_hidden_dim"]["nullable"])
+        self.assertTrue(
+            linear_fields["stack_apply_output_pipeline_flag"]["default"]
+        )
+        self.assertFalse(
+            linear_fields["stack_apply_output_pipeline_flag"]["nullable"]
+        )
+        self.assertIsNone(
+            linear_fields["memory_stack_apply_output_pipeline_flag"]["default"]
+        )
+        self.assertTrue(
+            linear_fields["memory_stack_apply_output_pipeline_flag"]["nullable"]
         )
 
     def test_parse_config_value_supports_nullable_memory_primitives(self) -> None:
@@ -508,14 +666,8 @@ class InspectorSchemaTests(unittest.TestCase):
         self.assertIsNone(parse_config_value(linear_config, "GATE_OPTION", "None"))
 
     def test_config_schema_marks_preset_owned_fields_locked(self) -> None:
-        baseline_fields = {
-            field["key"]: field
-            for field in config_schema("linears/linear", "baseline")["fields"]
-        }
-        gating_fields = {
-            field["key"]: field
-            for field in config_schema("linears/linear", "gating")["fields"]
-        }
+        baseline_fields = _fields_by_key(config_schema("linears/linear", "baseline"))
+        gating_fields = _fields_by_key(config_schema("linears/linear", "gating"))
 
         self.assertFalse(baseline_fields["gate_flag"]["locked"])
         self.assertTrue(gating_fields["gate_flag"]["locked"])
@@ -523,12 +675,9 @@ class InspectorSchemaTests(unittest.TestCase):
         self.assertIn("GATING preset", gating_fields["gate_flag"]["lockedReason"])
 
     def test_config_schema_locks_adaptive_component_flags_for_presets(self) -> None:
-        fields = {
-            field["key"]: field
-            for field in config_schema("linears/linear_adaptive", "full-stack")[
-                "fields"
-            ]
-        }
+        fields = _fields_by_key(
+            config_schema("linears/linear_adaptive", "full-stack")
+        )
 
         expected_locked_fields = {
             "weight_option_flag": True,
@@ -547,10 +696,7 @@ class InspectorSchemaTests(unittest.TestCase):
                 self.assertIn("FULL_STACK preset", fields[field_key]["lockedReason"])
 
     def test_search_space_schema_exposes_linear_axes(self) -> None:
-        axes = {
-            axis["key"]: axis
-            for axis in search_space_schema("linears/linear", "baseline")["axes"]
-        }
+        axes = _axes_by_key(search_space_schema("linears/linear", "baseline"))
 
         self.assertIn("learning_rate", axes)
         self.assertIn("stack_hidden_dim", axes)
@@ -566,16 +712,10 @@ class InspectorSchemaTests(unittest.TestCase):
         self.assertFalse(axes["stack_hidden_dim"]["locked"])
 
     def test_search_space_schema_serializes_axis_values(self) -> None:
-        linear_axes = {
-            axis["key"]: axis
-            for axis in search_space_schema("linears/linear", "baseline")["axes"]
-        }
-        adaptive_axes = {
-            axis["key"]: axis
-            for axis in search_space_schema("linears/linear_adaptive", "baseline")[
-                "axes"
-            ]
-        }
+        linear_axes = _axes_by_key(search_space_schema("linears/linear", "baseline"))
+        adaptive_axes = _axes_by_key(
+            search_space_schema("linears/linear_adaptive", "baseline")
+        )
 
         self.assertEqual(
             linear_axes["stack_hidden_dim"]["values"],
@@ -595,10 +735,7 @@ class InspectorSchemaTests(unittest.TestCase):
         )
 
     def test_search_space_schema_marks_preset_owned_axes_locked(self) -> None:
-        axes = {
-            axis["key"]: axis
-            for axis in search_space_schema("linears/linear", "post-norm")["axes"]
-        }
+        axes = _axes_by_key(search_space_schema("linears/linear", "post-norm"))
 
         self.assertTrue(axes["stack_layer_norm_position"]["locked"])
         self.assertEqual(axes["stack_layer_norm_position"]["lockedValue"], "AFTER")
@@ -613,14 +750,13 @@ class InspectorSchemaTests(unittest.TestCase):
         )
 
     def test_search_space_schema_locks_union_of_selected_presets(self) -> None:
-        axes = {
-            axis["key"]: axis
-            for axis in search_space_schema(
+        axes = _axes_by_key(
+            search_space_schema(
                 "linears/linear_adaptive",
                 "baseline",
                 ["single-model-weight", "additive-bias"],
-            )["axes"]
-        }
+            )
+        )
 
         self.assertTrue(axes["weight_option"]["locked"])
         self.assertEqual(

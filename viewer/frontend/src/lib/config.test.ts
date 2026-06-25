@@ -32,6 +32,23 @@ function field(overrides: Partial<ConfigField> & Pick<ConfigField, "key">): Conf
   };
 }
 
+function stackFieldFromCanonical(
+  canonicalFields: ConfigField[],
+  overrides: Partial<ConfigField> & Pick<ConfigField, "key">,
+): ConfigField {
+  const suffix = overrides.key.split("_stack_", 2)[1];
+  const canonical = canonicalFields.find((item) => item.key === `stack_${suffix}`);
+  if (!canonical) {
+    throw new Error(`Missing canonical stack fixture for ${overrides.key}`);
+  }
+
+  return field({
+    ...overrides,
+    type: canonical.type,
+    choices: canonical.choices,
+  });
+}
+
 describe("config field value normalization", () => {
   it("matches int defaults against equivalent string input", () => {
     const intField = field({
@@ -161,6 +178,9 @@ describe("config section controls", () => {
       (section) => section.title === "Gate Model Stack",
     );
 
+    expect(gateSection.children?.map((section) => section.title)).toEqual([
+      "Gate Model Stack",
+    ]);
     expect(gateStackSection?.controlFieldKey).toBe("gate_stack_independent_flag");
 
     const disabledByDefault = disabledConfigFieldReasons(sections, {});
@@ -173,6 +193,72 @@ describe("config section controls", () => {
       gate_stack_independent_flag: "true",
     });
     expect(enabled.has("gate_stack_hidden_dim")).toBe(false);
+  });
+
+  it("preserves canonical boolean metadata on derived stack child fields", () => {
+    const canonicalStackFields = [
+      field({
+        key: "stack_bias_flag",
+        section: "Layer Stack Options",
+        type: "bool",
+        default: true,
+        choices: [true, false],
+      }),
+      field({
+        key: "stack_apply_output_pipeline_flag",
+        section: "Layer Stack Options",
+        type: "bool",
+        default: false,
+        choices: [true, false],
+      }),
+    ];
+    const sections: ConfigSection[] = [
+      {
+        title: "Gate Stack Options",
+        fields: [
+          field({
+            key: "gate_flag",
+            type: "bool",
+            default: true,
+          }),
+          field({
+            key: "gate_stack_independent_flag",
+            type: "bool",
+            default: false,
+          }),
+          stackFieldFromCanonical(canonicalStackFields, {
+            key: "gate_stack_bias_flag",
+            default: true,
+            nullable: true,
+          }),
+          stackFieldFromCanonical(canonicalStackFields, {
+            key: "gate_stack_apply_output_pipeline_flag",
+            default: null,
+            nullable: true,
+          }),
+        ],
+      },
+    ];
+
+    const [gateSection] = deriveNestedConfigSections(sections);
+    const gateStackSection = gateSection.children?.find(
+      (section) => section.title === "Gate Model Stack",
+    );
+    const gateBias = gateStackSection?.fields.find(
+      (item) => item.key === "gate_stack_bias_flag",
+    );
+    const gatePipeline = gateStackSection?.fields.find(
+      (item) => item.key === "gate_stack_apply_output_pipeline_flag",
+    );
+
+    expect(gateBias?.type).toBe("bool");
+    expect(gateBias?.choices).toEqual([true, false]);
+    expect(gateBias?.default).toBe(true);
+    expect(gateBias?.nullable).toBe(true);
+    expect(gatePipeline?.type).toBe("bool");
+    expect(gatePipeline?.choices).toEqual([true, false]);
+    expect(gatePipeline?.default).toBeNull();
+    expect(gatePipeline?.nullable).toBe(true);
   });
 
   it("derives stack child sections from config field prefixes", () => {
@@ -228,18 +314,86 @@ describe("config section controls", () => {
     expect(disabledByDefault.has("custom_rate")).toBe(false);
   });
 
+  it("keeps layer stack fields on their owning section", () => {
+    const sections: ConfigSection[] = [
+      {
+        title: "Layer Stack Options",
+        fields: [
+          field({
+            key: "stack_hidden_dim",
+            section: "Layer Stack Options",
+          }),
+          field({
+            key: "stack_num_layers",
+            section: "Layer Stack Options",
+          }),
+          field({
+            key: "stack_activation",
+            type: "enum",
+            default: "GELU",
+            choices: ["GELU", "MISH"],
+            section: "Layer Stack Options",
+          }),
+        ],
+      },
+    ];
+
+    const [section] = deriveNestedConfigSections(sections);
+
+    expect(section.title).toBe("Layer Stack Options");
+    expect(section.fields.map((item) => item.key)).toEqual([
+      "stack_hidden_dim",
+      "stack_num_layers",
+      "stack_activation",
+    ]);
+    expect(section.children?.some((child) => child.title === "Layer Stack"))
+      .not.toBe(true);
+  });
+
+  it("keeps layer stack submodule fields on their owning section", () => {
+    const sections: ConfigSection[] = [
+      {
+        title: "Layer Stack Submodule Options",
+        fields: [
+          field({
+            key: "submodule_stack_hidden_dim",
+            section: "Layer Stack Submodule Options",
+          }),
+          field({
+            key: "submodule_stack_activation",
+            type: "enum",
+            default: "GELU",
+            choices: ["GELU", "MISH"],
+            section: "Layer Stack Submodule Options",
+          }),
+        ],
+      },
+    ];
+
+    const [section] = deriveNestedConfigSections(sections);
+
+    expect(section.title).toBe("Layer Stack Submodule Options");
+    expect(section.fields.map((item) => item.key)).toEqual([
+      "submodule_stack_hidden_dim",
+      "submodule_stack_activation",
+    ]);
+    expect(
+      section.children?.some((child) => child.title === "Submodule Stack Options"),
+    ).not.toBe(true);
+  });
+
   it("derives an inner stack section from a stack configuration section", () => {
     const sections: ConfigSection[] = [
       {
-        title: "Adaptive Generator Stack Options",
+        title: "Adaptive Submodule Stack Options",
         fields: [
           field({
-            key: "adaptive_stack_hidden_dim",
-            section: "Adaptive Generator Stack Options",
+            key: "adaptive_submodule_stack_hidden_dim",
+            section: "Adaptive Submodule Stack Options",
           }),
           field({
-            key: "adaptive_stack_num_layers",
-            section: "Adaptive Generator Stack Options",
+            key: "adaptive_submodule_stack_num_layers",
+            section: "Adaptive Submodule Stack Options",
           }),
         ],
       },
@@ -247,13 +401,13 @@ describe("config section controls", () => {
 
     const [section] = deriveNestedConfigSections(sections);
     const stackSection = section.children?.find(
-      (child) => child.title === "Adaptive Generator Stack",
+      (child) => child.title === "Adaptive Submodule Stack",
     );
 
     expect(stackSection?.controlFieldKey).toBeUndefined();
     expect(stackSection?.fields.map((item) => item.key)).toEqual([
-      "adaptive_stack_hidden_dim",
-      "adaptive_stack_num_layers",
+      "adaptive_submodule_stack_hidden_dim",
+      "adaptive_submodule_stack_num_layers",
     ]);
     expect(disabledConfigFieldReasons(sections, {}).size).toBe(0);
   });

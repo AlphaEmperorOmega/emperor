@@ -25,17 +25,39 @@ describe("ViewerApp Monitor Charts And Errors", () => {
     user: ReturnType<typeof userEvent.setup>,
     optionName: string | RegExp,
   ) {
+    void optionName;
     const experimentsTab = await screen.findByRole("radio", { name: "Experiments" });
     await waitFor(() => expect(experimentsTab).not.toBeDisabled());
     await user.click(experimentsTab);
-    const experimentRunControl = await screen.findByRole("combobox", {
-      name: /^experiment run$/i,
+
+    const experimentControl = await screen.findByRole("combobox", {
+      name: "Experiment",
     });
-    await user.click(experimentRunControl);
+    await user.click(experimentControl);
     await user.click(
       within(
-        await screen.findByRole("listbox", { name: /^experiment run options$/i }),
-      ).getByRole("option", { name: optionName }),
+        await screen.findByRole("listbox", { name: /^experiment options$/i }),
+      ).getByRole("option", { name: /^monitor_exp/ }),
+    );
+
+    const datasetControl = await screen.findByRole("combobox", {
+      name: "Dataset",
+    });
+    await user.click(datasetControl);
+    await user.click(
+      within(
+        await screen.findByRole("listbox", { name: /^dataset options$/i }),
+      ).getByRole("option", { name: /^Mnist/ }),
+    );
+
+    const presetControl = await screen.findByRole("combobox", {
+      name: "Preset",
+    });
+    await user.click(presetControl);
+    await user.click(
+      within(
+        await screen.findByRole("listbox", { name: /^preset options$/i }),
+      ).getByRole("option", { name: /^BASELINE/ }),
     );
   }
 
@@ -489,6 +511,43 @@ describe("ViewerApp Monitor Charts And Errors", () => {
       .toBeInTheDocument();
     expect(within(dialog).queryByText(/monitor_run_01_20260601_010000/))
       .not.toBeInTheDocument();
+  });
+
+  it("keeps performance-only historical runs from enabling graph monitor charts", async () => {
+    const fixture = buildHistoricalMonitorFixture(1);
+    installFetchMock({
+      ...fixture,
+      logTagsByRun: {
+        "historical-01": {
+          scalarTags: ["epoch", "train/loss", "validation/accuracy"],
+          histogramTags: [],
+          imageTags: ["validation/examples/predictions"],
+          textTags: [],
+        },
+      },
+    });
+    renderViewer();
+    const user = userEvent.setup();
+
+    await selectExperimentRun(
+      user,
+      "monitor_exp · BASELINE · Mnist · 2026-06-01 01:00:00",
+    );
+    await user.click(
+      await screen.findByRole("button", { name: /select and expand main_model\.0/i }),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: /^select main_model\.0\.model$/i }),
+    );
+
+    const monitorCharts = await screen.findByRole("button", {
+      name: /^monitor charts$/i,
+    });
+    await waitFor(() => expect(monitorCharts).toBeDisabled());
+    expect(
+      screen.queryByLabelText(/Weights parameter activity:/i),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Bias parameter activity:/i)).not.toBeInTheDocument();
   });
 
   it("renders available historical monitor charts while later runs are still loading", async () => {

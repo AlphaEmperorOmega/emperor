@@ -5,7 +5,6 @@ import { surfacePanelClassName } from "@/features/viewer/components/shared/surfa
 import {
   type ConfigSearchOption,
   type OverrideValues,
-  defaultLabel,
   fieldValue,
   hasOverride,
 } from "@/lib/config";
@@ -38,7 +37,6 @@ function ConfigSearchResultItem({
   const isPresetOwned = Boolean(option.field.locked);
   const showCurrentValue = isOverridden || isPresetOwned;
   const currentValueLabel = fieldValue(option.field, overrides);
-  const defaultValueLabel = defaultLabel(option.field);
 
   return (
     <div
@@ -79,9 +77,6 @@ function ConfigSearchResultItem({
             current <span className="font-mono text-ink">{currentValueLabel}</span>
           </span>
         )}
-        <span className="min-w-0 truncate">
-          default <span className="font-mono text-ink">{defaultValueLabel}</span>
-        </span>
       </span>
       <ConfigFieldValueEditor
         field={option.field}

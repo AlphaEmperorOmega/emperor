@@ -3,7 +3,7 @@ import {
   type SearchAxis,
   type TrainingSearchCreateInput,
 } from "@/lib/api";
-import { type OverrideValues } from "@/lib/config";
+import { configKeyToken, type OverrideValues } from "@/lib/config";
 
 export type TrainingSearchMode = "off" | "grid" | "random";
 
@@ -41,7 +41,7 @@ export function configValueLabel(value: ConfigValue) {
 }
 
 function axisMap(axes: SearchAxis[]) {
-  return new Map(axes.map((axis) => [axis.key, axis]));
+  return new Map(axes.map((axis) => [configKeyToken(axis.key), axis]));
 }
 
 function uniqueStrings(values: string[]) {
@@ -124,9 +124,9 @@ export function buildEffectiveOverrides(
   if (search.mode === "off") {
     return { ...overrides };
   }
-  const searchKeys = new Set(selectedSearchAxisKeys(search));
+  const searchKeys = new Set(selectedSearchAxisKeys(search).map(configKeyToken));
   return Object.fromEntries(
-    Object.entries(overrides).filter(([key]) => !searchKeys.has(key)),
+    Object.entries(overrides).filter(([key]) => !searchKeys.has(configKeyToken(key))),
   );
 }
 
@@ -137,8 +137,8 @@ export function searchOverrideConflictKeys(
   if (search.mode === "off") {
     return [];
   }
-  const searchKeys = new Set(selectedSearchAxisKeys(search));
-  return Object.keys(overrides).filter((key) => searchKeys.has(key));
+  const searchKeys = new Set(selectedSearchAxisKeys(search).map(configKeyToken));
+  return Object.keys(overrides).filter((key) => searchKeys.has(configKeyToken(key)));
 }
 
 export function unlockedSearchAxes(axes: SearchAxis[]) {
@@ -155,9 +155,9 @@ export function effectiveUnlockedTrainingSearch(
   const axesByKey = axisMap(axes);
   const selectedValues = Object.fromEntries(
     Object.entries(search.selectedValues).filter(([key, values]) => {
-      const axis = axesByKey.get(key);
+      const axis = axesByKey.get(configKeyToken(key));
       return Boolean(axis && !axis.locked && values.length > 0);
-    }),
+    }).map(([key, values]) => [axesByKey.get(configKeyToken(key))?.key ?? key, values]),
   );
   return { ...search, selectedValues };
 }
@@ -187,7 +187,7 @@ export function deriveTrainingSearchLockSummary(
 
   const axesByKey = axisMap(axes);
   const skippedSelectedAxes = selectedSearchEntries(search)
-    .map(([key]) => axesByKey.get(key))
+    .map(([key]) => axesByKey.get(configKeyToken(key)))
     .filter((axis): axis is SearchAxis => Boolean(axis?.locked));
   const skippedSelectedAxisLabels = skippedSelectedAxes.map((axis) => axis.label);
   const skippedSelectedAxisCount = skippedSelectedAxes.length;
@@ -231,7 +231,7 @@ export function validateTrainingSearch(
     return { ready: false, message: "Select at least one search axis." };
   }
   for (const [key, values] of entries) {
-    const axis = axesByKey.get(key);
+    const axis = axesByKey.get(configKeyToken(key));
     if (!axis) {
       return { ready: false, message: `Unknown search axis: ${key}.` };
     }
