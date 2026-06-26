@@ -49,6 +49,7 @@ function node(
     id,
     label: overrides.label ?? id,
     typeName: overrides.typeName ?? id,
+    description: overrides.description,
     path: overrides.path ?? id,
     graphRole: (overrides.graphRole ?? "architecture") as GraphRole,
     parameterCount: overrides.parameterCount ?? 0,
@@ -260,8 +261,24 @@ describe("inspectResponseSchema", () => {
     const parsed = inspectResponseSchema.parse(
       graph(
         [
-          node("model", { parameterCount: 15 }),
-          node("linear", { path: "linear", parameterCount: 15 }),
+          node("model", {
+            parameterCount: 15,
+            description: "Root model component",
+          }),
+          node("linear", {
+            path: "linear",
+            parameterCount: 15,
+            config: {
+              typeName: "LinearLayerConfig",
+              fields: [
+                {
+                  key: "input_dim",
+                  value: 4,
+                  description: "Input feature dimension.",
+                },
+              ],
+            },
+          }),
         ],
         [["model", "linear"]],
       ),
@@ -271,6 +288,10 @@ describe("inspectResponseSchema", () => {
     expect(parsed.parameterSizeBytes).toBe(60);
     expect(parsed.nodes[0].parameterCount).toBe(15);
     expect(parsed.nodes[0].parameterSizeBytes).toBe(60);
+    expect(parsed.nodes[0].description).toBe("Root model component");
+    expect(parsed.nodes[1].config?.fields[0].description).toBe(
+      "Input feature dimension.",
+    );
   });
 });
 
@@ -319,10 +340,18 @@ describe("parameterShapeEntries", () => {
 });
 
 describe("nodeTitle / nodeSubtitle", () => {
-  it("humanizes semantic container types with a named segment", () => {
+  it("uses class names as titles and keeps semantic path labels in subtitles", () => {
     const semantic = node("x", { typeName: "Sequential", path: "model.gate_model" });
-    expect(nodeTitle(semantic)).toBe("Gate Model");
-    expect(nodeSubtitle(semantic)).toBe("Sequential · model.gate_model");
+    expect(nodeTitle(semantic)).toBe("Sequential");
+    expect(nodeSubtitle(semantic)).toBe("Gate Model · model.gate_model");
+
+    const stack = node("main_model.block_model", {
+      label: "Block Model",
+      typeName: "LayerStack",
+      path: "main_model.block_model",
+    });
+    expect(nodeTitle(stack)).toBe("LayerStack");
+    expect(nodeSubtitle(stack)).toBe("Block Model · main_model.block_model");
   });
 
   it("falls back to typeName for numeric or non-semantic segments", () => {
@@ -1215,6 +1244,55 @@ describe("buildStackDiagrams", () => {
     });
   });
 
+  it("derives layer cells for LayerStack nodes with direct transparent-layer children", () => {
+    const g = graph(
+      [
+        node("main_model", {
+          typeName: "LayerStack",
+          path: "main_model",
+          config: {
+            typeName: "LayerStackConfig",
+            fields: [
+              { key: "input_dim", value: 256 },
+              { key: "output_dim", value: 10 },
+              { key: "num_layers", value: 5 },
+            ],
+          },
+        }),
+        ...Array.from({ length: 5 }, (_, index) => [
+          node(`main_model.layers.${index}`, {
+            typeName: "Layer",
+            path: `main_model.layers.${index}`,
+            details: { dims: index === 4 ? "128 -> 10" : "128 -> 128" },
+          }),
+          node(`main_model.layers.${index}.model`, {
+            typeName: "LinearLayer",
+            path: `main_model.layers.${index}.model`,
+          }),
+        ]).flat(),
+      ],
+      Array.from({ length: 5 }, (_, index) => [
+        ["main_model", `main_model.layers.${index}`] as [string, string],
+        [
+          `main_model.layers.${index}`,
+          `main_model.layers.${index}.model`,
+        ] as [string, string],
+      ]).flat(),
+    );
+
+    const diagram = buildStackDiagrams(g, buildGraphNavigation(g)).get("main_model");
+
+    expect(diagram?.totalLayers).toBe(5);
+    expect(diagram?.dims).toBe("256 -> 10");
+    expect(diagram?.cells.map((cell) => cell.label)).toEqual([
+      "Layer 0 · LinearLayer",
+      "Layer 1 · LinearLayer",
+      "Layer 2 · LinearLayer",
+      "Layer 3 · LinearLayer",
+      "Layer 4 · LinearLayer",
+    ]);
+  });
+
   it("uses stack container config dimensions before deriving from child layers", () => {
     const g = graph(
       [
@@ -1967,6 +2045,37 @@ describe("filterGraphByExpansion", () => {
 });
 
 describe("layoutGraph", () => {
+  it("uses typeName for card labels even when the API label is semantic", () => {
+    const g = graph(
+      [
+        node("main_model.block_model", {
+          label: "Block Model",
+          typeName: "LayerStack",
+          path: "main_model.block_model",
+        }),
+      ],
+      [],
+    );
+    const nav = buildGraphNavigation(g);
+    const { nodes } = layoutGraph(g, {
+      graphDetailMode: "basic",
+      navigation: nav,
+      childSummariesById: buildChildSummaries(g, nav),
+      expandedGraphNodeIds: new Set(),
+      expandedDetailNodeIds: new Set(),
+      enableExpansion: true,
+      selectedNodeId: null,
+      onActivateNode: () => {},
+      onToggleExpansion: () => {},
+      onToggleDetails: () => {},
+    });
+
+    expect(nodes[0].data.label).toBe("LayerStack");
+    expect(nodes[0].data.label).not.toBe("Block Model");
+    expect(nodes[0].data.typeName).toBe("LayerStack");
+    expect(nodes[0].data.subtitle).toBe("Block Model · main_model.block_model");
+  });
+
   it("produces positioned react-flow nodes and edges", () => {
     const g = graph(
       [node("a", { parameterCount: 1234 }), node("b", { typeName: "Layer" })],
@@ -1989,13 +2098,13 @@ describe("layoutGraph", () => {
     expect(nodes.map((n) => n.id)).toEqual(["a", "b"]);
     expect(nodes[0].selected).toBe(true);
     expect(nodes[0].data.parameterCount).toBe(1234);
-    expect(nodes[0].data.height).toBe(126);
+    expect(nodes[0].data.height).toBe(158);
     expect(nodes[1].data.label).toBe("Layer");
     expect(typeof nodes[0].position.x).toBe("number");
     expect(edges.map((e) => e.id)).toEqual(["a-b"]);
   });
 
-  it("keeps reserving a dedicated badge row in full mode", () => {
+  it("does not reserve a header badge row in full mode", () => {
     const g = graph(
       [node("a", { parameterCount: 1234 }), node("b", { typeName: "Layer" })],
       [["a", "b"]],
@@ -2014,8 +2123,8 @@ describe("layoutGraph", () => {
       onToggleDetails: () => {},
     });
 
-    expect(nodes[0].data.height).toBe(154);
-    expect(nodes[0].style?.height).toBe(154);
+    expect(nodes[0].data.height).toBe(158);
+    expect(nodes[0].style?.height).toBe(158);
   });
 
   it("does not reserve expanded detail space for preview-only dimensions", () => {
@@ -2044,7 +2153,7 @@ describe("layoutGraph", () => {
       onToggleDetails: () => {},
     });
 
-    expect(nodes[0].data.height).toBe(126);
+    expect(nodes[0].data.height).toBe(158);
   });
 
   it("reserves card height for direct weight and bias shapes", () => {
@@ -2074,7 +2183,7 @@ describe("layoutGraph", () => {
       onToggleDetails: () => {},
     });
 
-    expect(nodes[0].data.height).toBe(162);
+    expect(nodes[0].data.height).toBe(194);
   });
 
   it("sizes expanded detail accordions without adding an extra header gap", () => {
@@ -2105,7 +2214,7 @@ describe("layoutGraph", () => {
       onToggleDetails: () => {},
     });
 
-    expect(nodes[0].data.height).toBe(263);
+    expect(nodes[0].data.height).toBe(238);
   });
 
   it("sizes expanded detail accordions from config row counts", () => {
@@ -2155,8 +2264,8 @@ describe("layoutGraph", () => {
       onToggleDetails: () => {},
     }).nodes[0];
 
-    expect(collapsed.data.height).toBe(223);
-    expect(expanded.data.height - collapsed.data.height).toBe(112);
+    expect(collapsed.data.height).toBe(194);
+    expect(expanded.data.height - collapsed.data.height).toBe(116);
   });
 
   it("reserves diagram height and keeps detail expansion math stable", () => {
@@ -2219,7 +2328,7 @@ describe("layoutGraph", () => {
       "E3",
     ]);
     expect(collapsed.data.height).toBeGreaterThan(148);
-    expect(expanded.data.height - collapsed.data.height).toBe(76);
+    expect(expanded.data.height - collapsed.data.height).toBe(80);
   });
 
   it("reserves stack diagram height and keeps detail expansion math stable", () => {
@@ -2272,8 +2381,8 @@ describe("layoutGraph", () => {
       "Layer 1 · Layer",
       "Layer 2 · Layer",
     ]);
-    expect(collapsed.data.height).toBe(263);
-    expect(expanded.data.height - collapsed.data.height).toBe(40);
+    expect(collapsed.data.height).toBe(234);
+    expect(expanded.data.height - collapsed.data.height).toBe(44);
   });
 
   it("attaches cluster diagrams to graph nodes and reserves map height", () => {
@@ -2315,7 +2424,7 @@ describe("layoutGraph", () => {
     expect(nodes[0].data.clusterDiagram?.capacityTotal).toBe(4);
     expect(nodes[0].data.clusterDiagram?.planes[0]?.cells.filter((cell) => cell.filled))
       .toHaveLength(2);
-    expect(nodes[0].data.height).toBe(186);
+    expect(nodes[0].data.height).toBe(218);
   });
 
   it("reserves large cluster map height before config options", () => {
@@ -2386,29 +2495,29 @@ describe("layoutGraph", () => {
     expect(clusterNode?.data.clusterDiagram?.rows).toBe(10);
     expect(clusterNode?.data.clusterDiagram?.columns).toBe(10);
     expect(clusterNode?.data.config?.fields).toHaveLength(2);
-    expect(clusterNode?.data.height).toBe(443);
-    expect(clusterNode?.style?.height).toBe(443);
+    expect(clusterNode?.data.height).toBe(410);
+    expect(clusterNode?.style?.height).toBe(410);
   });
 
   it("reserves taller stack diagram height for dense layer previews", () => {
     const g = graph(
       [
         node("main_model", {
-          typeName: "Sequential",
+          typeName: "LayerStack",
           path: "main_model",
           details: { numLayers: 5, dims: "128 -> 128" },
         }),
         ...Array.from({ length: 5 }, (_, index) =>
-          node(`main_model.${index}`, {
+          node(`main_model.layers.${index}`, {
             typeName: "Layer",
-            path: `main_model.${index}`,
+            path: `main_model.layers.${index}`,
             details: { dims: "128 -> 128" },
           }),
         ),
       ],
       Array.from({ length: 5 }, (_, index) => [
         "main_model",
-        `main_model.${index}`,
+        `main_model.layers.${index}`,
       ] as [string, string]),
     );
     const nav = buildGraphNavigation(g);
@@ -2427,7 +2536,8 @@ describe("layoutGraph", () => {
     });
 
     expect(nodes[0].data.stackDiagram?.cells).toHaveLength(5);
-    expect(nodes[0].data.height).toBe(311);
+    expect(nodes[0].data.typeName).toBe("LayerStack");
+    expect(nodes[0].data.height).toBe(282);
   });
 
   it("uses compact fixed card dimensions in simple mode", () => {

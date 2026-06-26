@@ -15,14 +15,17 @@ type MockModelIdentity = { modelType: string; model: string };
 export type MockNodeData = {
   nodeId: string;
   label: string;
+  typeName: string;
+  description?: string | null;
   subtitle: string;
   path: string;
+  graphRole: "architecture" | "internal" | "runtime";
   parameterCount: number;
   parameterSizeBytes: number;
   details: Record<string, unknown>;
   config: {
     typeName: string;
-    fields: Array<{ key: string; value: unknown }>;
+    fields: Array<{ key: string; value: unknown; description?: string | null }>;
   } | null;
   childCount: number;
   childSummaries: Array<{
@@ -1701,27 +1704,27 @@ export const stackContainerInspectResponse = {
     },
     {
       id: "main_model",
-      label: "Sequential",
-      typeName: "Sequential",
+      label: "LayerStack",
+      typeName: "LayerStack",
       path: "main_model",
       graphRole: "architecture",
       parameterCount: 65792,
       details: {},
     },
     {
-      id: "main_model.0",
+      id: "main_model.layers.0",
       label: "Layer",
       typeName: "Layer",
-      path: "main_model.0",
+      path: "main_model.layers.0",
       graphRole: "architecture",
       parameterCount: 33024,
       details: { inputDim: 256, outputDim: 256 },
     },
     {
-      id: "main_model.1",
+      id: "main_model.layers.1",
       label: "Layer",
       typeName: "Layer",
-      path: "main_model.1",
+      path: "main_model.layers.1",
       graphRole: "architecture",
       parameterCount: 32768,
       details: { inputDim: 256, outputDim: 10 },
@@ -1734,14 +1737,14 @@ export const stackContainerInspectResponse = {
       target: "main_model",
     },
     {
-      id: "main_model-main_model.0",
+      id: "main_model-main_model.layers.0",
       source: "main_model",
-      target: "main_model.0",
+      target: "main_model.layers.0",
     },
     {
-      id: "main_model-main_model.1",
+      id: "main_model-main_model.layers.1",
       source: "main_model",
-      target: "main_model.1",
+      target: "main_model.layers.1",
     },
   ],
 };

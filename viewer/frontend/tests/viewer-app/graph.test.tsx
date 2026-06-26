@@ -279,7 +279,7 @@ describe("ViewerApp Graph Workspace", () => {
     await user.click(await screen.findByRole("radio", { name: /simple/i }));
 
     const stackNode = await screen.findByTestId("node-main_model");
-    expect(within(stackNode).getByText("Main Model")).toBeInTheDocument();
+    expect(within(stackNode).getByText("LayerStack")).toBeInTheDocument();
     expect(within(stackNode).getByTitle("65,792 parameters")).toHaveTextContent("65.8K params");
     expect(within(stackNode).getByTitle("input/output: 256 -> 10")).toHaveTextContent(
       "256 -> 10",
@@ -364,8 +364,8 @@ describe("ViewerApp Graph Workspace", () => {
     expect(screen.getByText("dims: 128 -> 128")).toBeInTheDocument();
     expect(await screen.findByText("main_model.0.model")).toBeInTheDocument();
     expect(screen.getByTestId("edge-main_model.0-main_model.0.model")).toBeInTheDocument();
-    expect(await screen.findByText("Gate Model")).toBeInTheDocument();
-    expect(screen.getByText("Sequential · main_model.0.gate_model")).toBeInTheDocument();
+    expect(await screen.findByText("Sequential")).toBeInTheDocument();
+    expect(screen.getByText("Gate Model · main_model.0.gate_model")).toBeInTheDocument();
     expect(await screen.findByText("main_model.0.processor.projection")).toBeInTheDocument();
     expect(
       screen.getByTestId("edge-main_model.0-main_model.0.processor.projection"),

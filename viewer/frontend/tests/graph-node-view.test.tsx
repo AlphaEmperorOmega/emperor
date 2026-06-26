@@ -42,8 +42,11 @@ function renderGraphNode(
         data={{
           nodeId: "main_model.0",
           label: "Layer",
+          typeName: "Layer",
+          description: undefined,
           subtitle: "main_model.0",
           path: "main_model.0",
+          graphRole: "architecture",
           parameterCount: 0,
           parameterSizeBytes: 0,
           details: {},
@@ -51,7 +54,7 @@ function renderGraphNode(
           childCount: 1,
           childSummaries: [{ label: "LinearLayer", kind: "child" }],
           graphDetailMode: "basic",
-          height: 148,
+          height: 158,
           isRootNode: false,
           isExpanded: false,
           canToggleExpansion: true,
@@ -74,53 +77,93 @@ describe("GraphNodeView", () => {
       "nodrag",
       "nopan",
       "edge",
-      "px-8",
+      "px-4",
       "pb-4",
       "pt-4",
     );
   });
 
-  it("renders basic-mode parameter and child badges inline with the title", () => {
+  it("renders basic-mode parameter and child badges in the footer", () => {
     renderGraphNode({
       parameterCount: 12500,
       childCount: 2,
-      height: 126,
+      height: 158,
     });
 
     const titleRow = screen.getByTestId("graph-node-title-row-main_model.0");
     const title = within(titleRow).getByText("Layer");
-    const params = within(titleRow).getByTitle("12,500 parameters");
-    const children = within(titleRow).getByText("2 children");
+    const actionBar = screen.getByTestId("graph-node-action-bar-main_model.0");
+    const footerStats = screen.getByTestId("graph-node-footer-stats-main_model.0");
 
-    expect(title.parentElement).toHaveClass("min-w-0", "flex-1", "flex-nowrap");
     expect(title).toHaveClass("min-w-0", "flex-1", "truncate");
-    expect(params).toHaveTextContent("12.5K");
+    expect(within(titleRow).queryByRole("button")).not.toBeInTheDocument();
+    expect(within(titleRow).queryByTitle("12,500 parameters")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("graph-node-badges-main_model.0")).not.toBeInTheDocument();
+    const params = within(footerStats).getByTitle("12,500 parameters");
+    const children = within(footerStats).getByText("2 children");
+    expect(params).toHaveTextContent("12.5K params");
     expect(params).toHaveClass("shrink-0", "whitespace-nowrap");
     expect(children).toHaveClass("shrink-0", "whitespace-nowrap");
-    expect(screen.queryByTestId("graph-node-badges-main_model.0")).not.toBeInTheDocument();
+    expect(actionBar).toHaveClass("h-8", "items-center");
+    expect(actionBar).not.toHaveClass("h-10", "items-end");
     expect(screen.getByText("main_model.0")).toHaveClass("mt-1.5", "leading-5");
   });
 
-  it("keeps full-mode parameter and child badges on a dedicated header row", () => {
+  it("renders class names as card titles with semantic subtitles", () => {
+    renderGraphNode({
+      nodeId: "main_model.block_model",
+      label: "LayerStack",
+      typeName: "LayerStack",
+      subtitle: "Block Model · main_model.block_model",
+      path: "main_model.block_model",
+      childCount: 0,
+      canToggleExpansion: false,
+      height: 154,
+      config: {
+        typeName: "LayerStackConfig",
+        fields: [{ key: "num_layers", value: 2 }],
+      },
+    });
+
+    const card = screen.getByTestId("graph-node-card-main_model.block_model");
+    const titleRow = screen.getByTestId("graph-node-title-row-main_model.block_model");
+
+    expect(within(titleRow).getByText("LayerStack")).toBeInTheDocument();
+    expect(within(titleRow).queryByText("Block Model")).not.toBeInTheDocument();
+    expect(within(card).getByText("Block Model · main_model.block_model"))
+      .toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: /^config options for main_model\.block_model$/i,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /config options for block model/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps full-mode parameter and child badges in the footer", () => {
     renderGraphNode({
       graphDetailMode: "full",
       parameterCount: 12500,
       childCount: 2,
-      height: 154,
+      height: 158,
     });
 
     const titleRow = screen.getByTestId("graph-node-title-row-main_model.0");
-    const badgeRow = screen.getByTestId("graph-node-badges-main_model.0");
+    const footerStats = screen.getByTestId("graph-node-footer-stats-main_model.0");
 
     expect(within(titleRow).getByText("Layer")).toBeInTheDocument();
     expect(within(titleRow).queryByTitle("12,500 parameters")).not.toBeInTheDocument();
-    expect(badgeRow).toHaveClass("mt-1", "h-6", "overflow-hidden");
-    expect(within(badgeRow).getByTitle("12,500 parameters")).toHaveClass(
+    expect(screen.queryByTestId("graph-node-badges-main_model.0")).not.toBeInTheDocument();
+    expect(footerStats).toHaveClass("overflow-hidden");
+    expect(within(footerStats).getByTitle("12,500 parameters")).toHaveClass(
       "h-6",
       "whitespace-nowrap",
     );
-    expect(within(badgeRow).getByTitle("12,500 parameters")).toHaveTextContent("12.5K");
-    expect(within(badgeRow).getByText("2 children")).toHaveClass(
+    expect(within(footerStats).getByTitle("12,500 parameters"))
+      .toHaveTextContent("12.5K params");
+    expect(within(footerStats).getByText("2 children")).toHaveClass(
       "h-6",
       "whitespace-nowrap",
     );
@@ -155,24 +198,25 @@ describe("GraphNodeView", () => {
       .not.toBeInTheDocument();
   });
 
-  it("keeps basic-mode inline badges from wrapping around long titles", () => {
+  it("keeps footer count badges from wrapping around long titles", () => {
     const longLabel = "Layer With An Extremely Long Display Name That Should Truncate";
     renderGraphNode({
       label: longLabel,
       parameterCount: 1234567,
       childCount: 12,
-      height: 126,
+      height: 158,
     });
 
     const titleRow = screen.getByTestId("graph-node-title-row-main_model.0");
     const title = within(titleRow).getByText(longLabel);
-    const params = within(titleRow).getByTitle("1,234,567 parameters");
-    const children = within(titleRow).getByText("12 children");
+    const footerStats = screen.getByTestId("graph-node-footer-stats-main_model.0");
+    const params = within(footerStats).getByTitle("1,234,567 parameters");
+    const children = within(footerStats).getByText("12 children");
 
-    expect(title.parentElement).toHaveClass("flex-nowrap", "min-w-0");
     expect(title).toHaveClass("min-w-0", "flex-1", "truncate");
     expect(params).toHaveClass("shrink-0", "whitespace-nowrap");
     expect(children).toHaveClass("shrink-0", "whitespace-nowrap");
+    expect(within(titleRow).queryByTitle("1,234,567 parameters")).not.toBeInTheDocument();
     expect(screen.queryByTestId("graph-node-badges-main_model.0")).not.toBeInTheDocument();
   });
 
@@ -211,10 +255,35 @@ describe("GraphNodeView", () => {
       .not.toBeInTheDocument();
     expect(screen.queryByTestId("parameter-shapes-main_model.0"))
       .not.toBeInTheDocument();
+    expect(screen.queryByTestId("graph-node-action-bar-main_model.0"))
+      .not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /config options for main_model\.0/i }))
+      .not.toBeInTheDocument();
 
     fireEvent.click(shell);
 
     expect(onActivateNode).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses class names in the moving shell for semantic containers", () => {
+    renderGraphNode(
+      {
+        nodeId: "main_model.block_model",
+        label: "LayerStack",
+        typeName: "LayerStack",
+        subtitle: "Block Model · main_model.block_model",
+        path: "main_model.block_model",
+        childCount: 0,
+        canToggleExpansion: false,
+        height: SIMPLE_NODE_HEIGHT,
+      },
+      { isViewportMoving: true },
+    );
+
+    const shell = screen.getByTestId("graph-node-moving-main_model.block_model");
+    expect(within(shell).getByText("LayerStack")).toBeInTheDocument();
+    expect(within(shell).queryByText("Block Model")).not.toBeInTheDocument();
+    expect(within(shell).getByText("main_model.block_model")).toBeInTheDocument();
   });
 
   it("uses the chevron as the explicit expansion toggle", () => {
@@ -228,8 +297,34 @@ describe("GraphNodeView", () => {
     expect(onActivateNode).not.toHaveBeenCalled();
   });
 
-  it("renders expansion on the left and monitor charts on the right", () => {
+  it("keeps header title rows free of action controls", () => {
     renderGraphNode({
+      details: { activation: "GELU" },
+      parameterCount: 12500,
+      canOpenMonitor: true,
+      onOpenMonitor: vi.fn(),
+      parameterActivity: {
+        targetPath: "main_model.0.model",
+        weights: {
+          status: "updated",
+          source: "active-job",
+          sourceLabel: "active job job-1",
+          observedPoints: 2,
+        },
+      },
+    });
+
+    const titleRow = screen.getByTestId("graph-node-title-row-main_model.0");
+
+    expect(within(titleRow).getByText("Layer")).toBeInTheDocument();
+    expect(within(titleRow).queryByRole("button")).not.toBeInTheDocument();
+    expect(within(titleRow).queryByTestId("graph-parameter-indicators"))
+      .not.toBeInTheDocument();
+  });
+
+  it("renders graph controls in the footer action bar order", () => {
+    renderGraphNode({
+      details: { activation: "GELU" },
       canOpenMonitor: true,
       onOpenMonitor: vi.fn(),
       parameterActivity: {
@@ -251,19 +346,111 @@ describe("GraphNodeView", () => {
       },
     });
 
-    const titleRow = screen.getByTestId("graph-node-title-row-main_model.0");
-    const expandButton = within(titleRow).getByRole("button", {
+    const actionBar = screen.getByTestId("graph-node-action-bar-main_model.0");
+    const detailsButton = within(actionBar).getByRole("button", {
+      name: /^details for main_model\.0$/i,
+    });
+    const expandButton = within(actionBar).getByRole("button", {
       name: /^expand tree main_model\.0$/i,
     });
-    const monitorButton = within(titleRow).getByRole("button", {
+    const monitorButton = within(actionBar).getByRole("button", {
       name: /^open monitor charts for main_model\.0$/i,
     });
-    const indicators = within(titleRow).getByTestId("graph-parameter-indicators");
+    const infoButton = within(actionBar).getByRole("button", {
+      name: /^open component info for main_model\.0$/i,
+    });
+    const footerStats = within(actionBar).getByTestId("graph-node-footer-stats-main_model.0");
+    const indicators = within(actionBar).getByTestId("graph-parameter-indicators");
 
-    expect(titleRow.firstElementChild).toBe(expandButton);
+    expect(detailsButton.compareDocumentPosition(expandButton) & Node.DOCUMENT_POSITION_FOLLOWING)
+      .toBeTruthy();
+    expect(expandButton.compareDocumentPosition(infoButton) & Node.DOCUMENT_POSITION_FOLLOWING)
+      .toBeTruthy();
+    expect(infoButton.compareDocumentPosition(footerStats) & Node.DOCUMENT_POSITION_FOLLOWING)
+      .toBeTruthy();
+    expect(footerStats.compareDocumentPosition(indicators) & Node.DOCUMENT_POSITION_FOLLOWING)
+      .toBeTruthy();
     expect(indicators.compareDocumentPosition(monitorButton) & Node.DOCUMENT_POSITION_FOLLOWING)
       .toBeTruthy();
-    expect(titleRow.lastElementChild).toBe(monitorButton);
+  });
+
+  it("opens component info from the graph cell footer", () => {
+    const onActivateNode = vi.fn();
+    const onToggleExpansion = vi.fn();
+    renderGraphNode({
+      typeName: "LinearLayer",
+      label: "LinearLayer",
+      description: "Applies a learned linear projection.",
+      path: "main_model.0.model",
+      graphRole: "architecture",
+      config: {
+        typeName: "LinearLayerConfig",
+        fields: [
+          {
+            key: "input_dim",
+            value: 128,
+            description: "Input feature dimension.",
+          },
+          { key: "bias_flag", value: false },
+        ],
+      },
+      onActivateNode,
+      onToggleExpansion,
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /^open component info for main_model\.0\.model$/i,
+      }),
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Component info" });
+    expect(within(dialog).getByText("LinearLayer")).toBeInTheDocument();
+    expect(within(dialog).getAllByText("main_model.0.model").length).toBeGreaterThan(0);
+    expect(
+      within(dialog).getByText("Applies a learned linear projection."),
+    ).toBeInTheDocument();
+    expect(within(dialog).getByText("LinearLayerConfig")).toBeInTheDocument();
+    expect(
+      within(dialog).getByTestId("component-info-config-field-input_dim"),
+    ).toHaveTextContent("input_dim - 128");
+    expect(within(dialog).getByText("Input feature dimension.")).toBeInTheDocument();
+    expect(
+      within(dialog).getByTestId("component-info-config-field-bias_flag"),
+    ).toHaveTextContent("bias_flag - false");
+    expect(
+      within(dialog).getByText("No field description available"),
+    ).toBeInTheDocument();
+    expect(onActivateNode).not.toHaveBeenCalled();
+    expect(onToggleExpansion).not.toHaveBeenCalled();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close component info" }));
+
+    expect(screen.queryByRole("dialog", { name: "Component info" }))
+      .not.toBeInTheDocument();
+  });
+
+  it("uses fallback text for graph component info without descriptions or config", () => {
+    renderGraphNode({
+      typeName: "Dropout",
+      label: "Dropout",
+      path: "main_model.dropout",
+      graphRole: "internal",
+      canToggleExpansion: false,
+      config: null,
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /^open component info for main_model\.dropout$/i,
+      }),
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Component info" });
+    expect(within(dialog).getByText("Dropout")).toBeInTheDocument();
+    expect(within(dialog).getByText("No description available")).toBeInTheDocument();
+    expect(within(dialog).getByText("No config")).toBeInTheDocument();
+    expect(within(dialog).getByText("No config fields available")).toBeInTheDocument();
   });
 
   it("renders weight and bias activity indicators with hover pills", () => {
@@ -492,7 +679,7 @@ describe("GraphNodeView", () => {
         ],
       },
       isDetailsExpanded: true,
-      height: 372,
+      height: 386,
     });
 
     const detailsButton = screen.getByRole("button", {
@@ -503,8 +690,10 @@ describe("GraphNodeView", () => {
     );
 
     expect(screen.getByTestId("parameter-shapes-main_model.0")).toBeInTheDocument();
-    expect(detailsButton).toHaveTextContent("Config options");
-    expect(detailsButton).toHaveClass("h-9", "text-sm");
+    expect(detailsButton).toHaveAttribute("aria-expanded", "true");
+    expect(detailsButton).toHaveAttribute("title", "Config options for main_model.0");
+    expect(detailsButton).toHaveClass("h-7", "w-7");
+    expect(detailsButton).toHaveTextContent("");
     expect(details).not.toBeNull();
     expect(within(details!).getByText("bias_flag").parentElement).toHaveClass(
       "h-8",
@@ -517,6 +706,31 @@ describe("GraphNodeView", () => {
     expect(within(details!).queryByText("biasShape")).not.toBeInTheDocument();
     expect(within(details!).queryByText("dims")).not.toBeInTheDocument();
     expect(within(details!).queryByText("shapeTransition")).not.toBeInTheDocument();
+  });
+
+  it("uses an icon-only details toggle with stable accordion attributes", () => {
+    const onActivateNode = vi.fn();
+    const onToggleDetails = vi.fn();
+    renderGraphNode({
+      details: { activation: "GELU" },
+      onActivateNode,
+      onToggleDetails,
+    });
+
+    const detailsButton = screen.getByRole("button", {
+      name: /details for main_model\.0/i,
+    });
+    const detailsId = detailsButton.getAttribute("aria-controls");
+
+    expect(detailsButton).toHaveAttribute("aria-expanded", "false");
+    expect(detailsId).toBe("graph-node-details-main_model-0");
+    expect(document.getElementById(detailsId ?? "")).toBeNull();
+    expect(detailsButton.querySelector("svg")).toBeInTheDocument();
+
+    fireEvent.click(detailsButton);
+
+    expect(onToggleDetails).toHaveBeenCalledTimes(1);
+    expect(onActivateNode).not.toHaveBeenCalled();
   });
 
   it("uses an icon between nested child summary labels", () => {
@@ -546,12 +760,20 @@ describe("GraphNodeView", () => {
     renderGraphNode({
       details: { activation: "GELU" },
       isDetailsExpanded: true,
-      height: 232,
+      height: 202,
     });
 
     const summaries = screen.getByText("LinearLayer").parentElement?.parentElement;
+    const detailsButton = screen.getByRole("button", { name: /details for main_model\.0/i });
+    const details = document.getElementById(
+      detailsButton.getAttribute("aria-controls") ?? "",
+    );
+    const actionBar = screen.getByTestId("graph-node-action-bar-main_model.0");
+
     expect(summaries).not.toHaveClass("flex-1");
-    expect(screen.getByRole("button", { name: /details for main_model\.0/i })).toBeInTheDocument();
+    expect(details).not.toBeNull();
+    expect(details!.compareDocumentPosition(actionBar) & Node.DOCUMENT_POSITION_FOLLOWING)
+      .toBeTruthy();
   });
 
   it("renders stack cells above details and replaces child summaries", () => {
@@ -1076,7 +1298,7 @@ describe("GraphNodeView", () => {
     expect(onActivateNode).toHaveBeenCalledTimes(1);
   });
 
-  it("renders simple mode cards with inline metrics and the expansion chevron", () => {
+  it("renders simple mode cards with compact metrics and footer controls", () => {
     renderGraphNode({
       graphDetailMode: "simple",
       parameterCount: 33024,
@@ -1112,19 +1334,30 @@ describe("GraphNodeView", () => {
     });
 
     const card = screen.getByTestId("graph-node-card-main_model.0");
+    const titleRow = screen.getByTestId("graph-node-title-row-main_model.0");
+    const metrics = screen.getByTestId("graph-node-simple-metrics-main_model.0");
+    const actionBar = screen.getByTestId("graph-node-action-bar-main_model.0");
+    const footerStats = within(actionBar).getByTestId("graph-node-footer-stats-main_model.0");
+
     expect(within(card).getByText("Layer")).toBeInTheDocument();
-    expect(within(card).getByTitle("33,024 parameters")).toHaveTextContent("33K params");
-    expect(within(card).getByTitle("input/output: 128 -> 128")).toHaveTextContent(
+    expect(within(titleRow).queryByRole("button")).not.toBeInTheDocument();
+    expect(within(metrics).queryByTitle("33,024 parameters")).not.toBeInTheDocument();
+    expect(within(metrics).getByTitle("input/output: 128 -> 128")).toHaveTextContent(
       "128 -> 128",
     );
-    expect(screen.getByRole("button", { name: /^expand tree main_model\.0$/i }))
+    expect(within(footerStats).getByTitle("33,024 parameters")).toHaveTextContent("33K params");
+    expect(within(footerStats).getByText("2 children")).toBeInTheDocument();
+    expect(within(actionBar).getByRole("button", { name: /^expand tree main_model\.0$/i }))
+      .toBeInTheDocument();
+    expect(within(actionBar).getByRole("button", { name: /^open component info for main_model\.0$/i }))
       .toBeInTheDocument();
     expect(within(card).queryByText("main_model.0")).not.toBeInTheDocument();
-    expect(within(card).queryByText("2 children")).not.toBeInTheDocument();
     expect(screen.queryByTestId("parameter-shapes-main_model.0")).not.toBeInTheDocument();
     expect(screen.queryByTestId("stack-diagram-main_model.0")).not.toBeInTheDocument();
     expect(screen.queryByTestId("child-summaries-main_model.0")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /config options for main_model\.0/i }))
+      .not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /details for main_model\.0/i }))
       .not.toBeInTheDocument();
     expect(screen.queryByText("dropout")).not.toBeInTheDocument();
     expect(screen.queryByText("activation")).not.toBeInTheDocument();
@@ -1132,11 +1365,11 @@ describe("GraphNodeView", () => {
     expect(screen.queryByText("weightShape")).not.toBeInTheDocument();
   });
 
-  it("renders stack-derived dims inline on simple stack container cards", () => {
+  it("renders stack-derived dims in simple stack container metrics", () => {
     renderGraphNode({
       nodeId: "main_model",
-      label: "Main Model",
-      subtitle: "Sequential · main_model",
+      label: "Sequential",
+      subtitle: "Main Model · main_model",
       path: "main_model",
       graphDetailMode: "simple",
       details: {},
@@ -1162,15 +1395,60 @@ describe("GraphNodeView", () => {
     });
 
     const card = screen.getByTestId("graph-node-card-main_model");
-    expect(within(card).getByTitle("65,792 parameters")).toHaveTextContent("65.8K params");
-    expect(within(card).getByTitle("input/output: 256 -> 10")).toHaveTextContent("256 -> 10");
+    const metrics = screen.getByTestId("graph-node-simple-metrics-main_model");
+    const footerStats = screen.getByTestId("graph-node-footer-stats-main_model");
+    expect(within(metrics).queryByTitle("65,792 parameters")).not.toBeInTheDocument();
+    expect(within(metrics).getByTitle("input/output: 256 -> 10")).toHaveTextContent("256 -> 10");
+    expect(within(footerStats).getByTitle("65,792 parameters")).toHaveTextContent("65.8K params");
+    expect(within(footerStats).getByText("4 children")).toBeInTheDocument();
     expect(screen.queryByTestId("stack-diagram-main_model")).not.toBeInTheDocument();
     expect(screen.queryByTestId("child-summaries-main_model")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /details for main_model/i }))
       .not.toBeInTheDocument();
+    expect(within(card).getByRole("button", { name: /^open component info for main_model$/i }))
+      .toBeInTheDocument();
   });
 
-  it("keeps simple mode inline metrics from wrapping around long titles", () => {
+  it("keeps simple mode footer controls limited to existing applicable actions", () => {
+    renderGraphNode({
+      graphDetailMode: "simple",
+      canOpenMonitor: true,
+      onOpenMonitor: vi.fn(),
+      details: { activation: "GELU" },
+      config: {
+        typeName: "LayerConfig",
+        fields: [{ key: "dropout", value: 0.2 }],
+      },
+      parameterActivity: {
+        targetPath: "main_model.0.model",
+        weights: {
+          status: "updated",
+          source: "active-job",
+          sourceLabel: "active job job-1",
+          observedPoints: 2,
+        },
+      },
+      height: SIMPLE_NODE_HEIGHT,
+    });
+
+    const actionBar = screen.getByTestId("graph-node-action-bar-main_model.0");
+
+    expect(within(actionBar).getByRole("button", { name: /^expand tree main_model\.0$/i }))
+      .toBeInTheDocument();
+    expect(within(actionBar).getByRole("button", { name: /^open component info for main_model\.0$/i }))
+      .toBeInTheDocument();
+    expect(within(actionBar).getByTestId("graph-node-footer-stats-main_model.0"))
+      .toHaveTextContent("1 child");
+    expect(within(actionBar).getByTestId("graph-parameter-indicators")).toBeInTheDocument();
+    expect(within(actionBar).getByRole("button", { name: /^open monitor charts for main_model\.0$/i }))
+      .toBeInTheDocument();
+    expect(within(actionBar).queryByRole("button", { name: /details for main_model\.0/i }))
+      .not.toBeInTheDocument();
+    expect(within(actionBar).queryByRole("button", { name: /config options for main_model\.0/i }))
+      .not.toBeInTheDocument();
+  });
+
+  it("keeps simple mode compact metrics from wrapping around long titles", () => {
     const longLabel = "Layer With An Extremely Long Display Name That Should Truncate";
     renderGraphNode({
       graphDetailMode: "simple",
@@ -1185,11 +1463,13 @@ describe("GraphNodeView", () => {
 
     const card = screen.getByTestId("graph-node-card-main_model.0");
     const title = within(card).getByText(longLabel);
-    const params = within(card).getByTitle("1,234,567 parameters");
-    const dims = within(card).getByTitle("input/output: 256 -> 512");
+    const metrics = screen.getByTestId("graph-node-simple-metrics-main_model.0");
+    const footerStats = screen.getByTestId("graph-node-footer-stats-main_model.0");
+    const params = within(footerStats).getByTitle("1,234,567 parameters");
+    const dims = within(metrics).getByTitle("input/output: 256 -> 512");
 
-    expect(title.parentElement).toHaveClass("flex-nowrap", "min-w-0");
-    expect(title).toHaveClass("min-w-0", "flex-1", "truncate");
+    expect(title).toHaveClass("min-w-0", "truncate");
+    expect(metrics).toHaveClass("h-5", "overflow-hidden");
     expect(params).toHaveTextContent("1.2M params");
     expect(params).toHaveClass("shrink-0", "whitespace-nowrap");
     expect(dims).toHaveTextContent("256 -> 512");
@@ -1198,11 +1478,32 @@ describe("GraphNodeView", () => {
 });
 
 describe("SelectedNodeDetails", () => {
+  it("uses typeName for the selected node title instead of API label", () => {
+    const node: GraphNode = {
+      id: "main_model.block_model",
+      label: "Block Model",
+      typeName: "LayerStack",
+      path: "main_model.block_model",
+      graphRole: "architecture",
+      parameterCount: 0,
+      parameterSizeBytes: 0,
+      details: {},
+      config: null,
+    };
+
+    render(<SelectedNodeDetails node={node} activeTrainingJob={undefined} />);
+
+    expect(screen.getByText("LayerStack")).toBeInTheDocument();
+    expect(screen.getAllByText("main_model.block_model")).toHaveLength(2);
+    expect(screen.queryByText("Block Model")).not.toBeInTheDocument();
+  });
+
   it("uses config fields instead of raw preview details", () => {
     const node: GraphNode = {
       id: "main_model.0.model",
       label: "LinearLayer",
       typeName: "LinearLayer",
+      description: "Applies a learned linear projection.",
       path: "main_model.0.model",
       graphRole: "architecture",
       parameterCount: 512,
@@ -1215,7 +1516,11 @@ describe("SelectedNodeDetails", () => {
       config: {
         typeName: "AdaptiveLinearLayerConfig",
         fields: [
-          { key: "input_dim", value: 128 },
+          {
+            key: "input_dim",
+            value: 128,
+            description: "Input feature dimension.",
+          },
           { key: "output_dim", value: 64 },
           { key: "bias_flag", value: false },
           { key: "adaptive_augmentation_config", value: null },

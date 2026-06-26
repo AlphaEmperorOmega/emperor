@@ -1,12 +1,11 @@
 export const NODE_WIDTH = 360;
-export const SIMPLE_NODE_HEIGHT = 64;
+export const SIMPLE_NODE_HEIGHT = 112;
 export const GRAPH_NODE_VERTICAL_PADDING = 32;
 export const GRAPH_NODE_TITLE_LINE_HEIGHT = 24;
 export const GRAPH_NODE_EXPANSION_TOGGLE_HEIGHT = 28;
-export const GRAPH_NODE_BADGE_ROW_MARGIN_TOP = 4;
-export const GRAPH_NODE_BADGE_ROW_HEIGHT = 24;
 export const GRAPH_NODE_SUBTITLE_MARGIN_TOP = 6;
 export const GRAPH_NODE_SUBTITLE_HEIGHT = 20;
+export const GRAPH_NODE_ACTION_BAR_HEIGHT = 32;
 export const GRAPH_NODE_CONTENT_MARGIN_TOP = 8;
 export const GRAPH_NODE_METADATA_MARGIN_TOP = 12;
 export const GRAPH_NODE_METADATA_BORDER_TOP_WIDTH = 1;
@@ -38,7 +37,15 @@ export const DETAIL_ROW_GAP = 4;
 export const DETAIL_ROW_HEIGHT = 32;
 export const GRAPH_VERTICAL_CARD_GAP = 24;
 export const GRAPH_HORIZONTAL_CARD_GAP = 72;
-export const SEMANTIC_LABEL_TYPE_NAMES = new Set(["ModuleList", "Sequential"]);
-export const STACK_CONTAINER_TYPE_NAMES = new Set(["ModuleList", "Sequential"]);
+export const SEMANTIC_LABEL_TYPE_NAMES = new Set([
+  "LayerStack",
+  "ModuleList",
+  "Sequential",
+]);
+export const STACK_CONTAINER_TYPE_NAMES = new Set([
+  "LayerStack",
+  "ModuleList",
+  "Sequential",
+]);
 export const GATE_SUMMARY_LABEL = "Gate";
 export const HALTING_SUMMARY_LABEL = "Halting mechanism";

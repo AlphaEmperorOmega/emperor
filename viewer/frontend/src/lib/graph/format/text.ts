@@ -179,18 +179,22 @@ function humanizePathSegment(segment: string) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-export function nodeTitle(node: GraphNode) {
+function semanticPathLabel(node: GraphNode) {
   const pathSegment = lastPathSegment(node.path);
   const hasSemanticPathSegment = pathSegment.length > 0 && !/^\d+$/.test(pathSegment);
   if (SEMANTIC_LABEL_TYPE_NAMES.has(node.typeName) && hasSemanticPathSegment) {
     return humanizePathSegment(pathSegment);
   }
+  return undefined;
+}
+
+export function nodeTitle(node: GraphNode) {
   return node.typeName;
 }
 
 export function nodeSubtitle(node: GraphNode) {
-  const title = nodeTitle(node);
-  return title === node.typeName ? node.path : `${node.typeName} · ${node.path}`;
+  const semanticLabel = semanticPathLabel(node);
+  return semanticLabel ? `${semanticLabel} · ${node.path}` : node.path;
 }
 
 export function structureNodeLabel(node: GraphNode) {

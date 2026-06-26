@@ -1,8 +1,5 @@
-import { type ReactNode } from "react";
 import { type GraphDetailMode } from "@/lib/graph";
 import {
-  GraphNodeBadgeRow,
-  GraphNodeInlineBadges,
   GraphNodeSimpleBadges,
 } from "@/features/viewer/components/graph/graph-node-badges";
 
@@ -13,13 +10,7 @@ export function GraphNodeHeader({
   graphDetailMode,
   parameterCount,
   parameterSizeBytes,
-  modelSizeText,
-  childCount,
-  simpleParameterText,
   simpleDimsText,
-  expansionButton,
-  parameterIndicators,
-  monitorButton,
 }: {
   nodeId: string;
   label: string;
@@ -27,38 +18,34 @@ export function GraphNodeHeader({
   graphDetailMode: GraphDetailMode;
   parameterCount: number;
   parameterSizeBytes: number;
-  modelSizeText?: string;
-  childCount: number;
-  simpleParameterText?: string;
   simpleDimsText?: string;
-  expansionButton: ReactNode;
-  parameterIndicators: ReactNode;
-  monitorButton: ReactNode;
 }) {
   const isSimpleMode = graphDetailMode === "simple";
-  const isBasicMode = graphDetailMode === "basic";
-  const hasGraphBadges = parameterCount > 0 || childCount > 0 || Boolean(modelSizeText);
+  const hasSimpleMetrics = Boolean(simpleDimsText);
 
   if (isSimpleMode) {
     return (
-      <div className="flex shrink-0 items-center gap-2">
-        {expansionButton}
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 flex-nowrap items-center gap-2">
-            <div className="min-w-0 flex-1 truncate text-[18px] font-bold leading-6 text-ink">
-              {label}
-            </div>
+      <div className="shrink-0">
+        <div
+          className="min-w-0 truncate text-[18px] font-bold leading-6 text-ink"
+          data-testid={`graph-node-title-row-${nodeId}`}
+        >
+          {label}
+        </div>
+        {hasSimpleMetrics && (
+          <div
+            className="mt-1 flex h-5 min-w-0 items-center gap-1.5 overflow-hidden"
+            data-testid={`graph-node-simple-metrics-${nodeId}`}
+          >
             <GraphNodeSimpleBadges
               parameterCount={parameterCount}
-              parameterText={simpleParameterText}
+              parameterText={undefined}
               parameterSizeBytes={parameterSizeBytes}
-              modelSizeText={modelSizeText}
+              modelSizeText={undefined}
               dimsText={simpleDimsText}
             />
           </div>
-        </div>
-        {parameterIndicators}
-        {monitorButton}
+        )}
       </div>
     );
   }
@@ -69,32 +56,10 @@ export function GraphNodeHeader({
         className="flex min-w-0 items-start gap-2"
         data-testid={`graph-node-title-row-${nodeId}`}
       >
-        {expansionButton}
-        <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-1.5">
-          <div className="min-w-0 flex-1 truncate text-[18px] font-bold leading-6 text-ink">
-            {label}
-          </div>
-          {isBasicMode && (
-            <GraphNodeInlineBadges
-              parameterCount={parameterCount}
-              parameterSizeBytes={parameterSizeBytes}
-              modelSizeText={modelSizeText}
-              childCount={childCount}
-            />
-          )}
+        <div className="min-w-0 flex-1 truncate text-[18px] font-bold leading-6 text-ink">
+          {label}
         </div>
-        {parameterIndicators}
-        {monitorButton}
       </div>
-      {!isBasicMode && hasGraphBadges && (
-        <GraphNodeBadgeRow
-          nodeId={nodeId}
-          parameterCount={parameterCount}
-          parameterSizeBytes={parameterSizeBytes}
-          modelSizeText={modelSizeText}
-          childCount={childCount}
-        />
-      )}
       <div className="mt-1.5 truncate font-mono text-[13px] leading-5 text-ink-dim">
         {subtitle}
       </div>

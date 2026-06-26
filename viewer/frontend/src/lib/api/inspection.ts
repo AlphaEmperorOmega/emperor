@@ -13,6 +13,7 @@ export const graphConfigSchema = z.object({
     z.object({
       key: z.string(),
       value: jsonValueSchema,
+      description: z.string().nullable().optional(),
     }),
   ),
 });
@@ -21,6 +22,7 @@ export const graphNodeSchema = z.object({
   id: z.string(),
   label: z.string(),
   typeName: z.string(),
+  description: z.string().nullable().optional(),
   path: z.string(),
   graphRole: z.enum(["architecture", "internal", "runtime"]),
   parameterCount: z.number(),
