@@ -84,6 +84,21 @@ const EMPTY_HIDDEN_PLOT_TAGS_BY_GROUP: Record<LogPlotSelectorGroupKey, Set<strin
   validation: new Set(),
 };
 
+type LogsChartMetricGroup = (typeof LOG_METRIC_GROUPS)[number];
+
+type LogsChartSectionRenderItem =
+  | {
+      key: LogMetricGroupKey;
+      kind: "metricGroup";
+      group: LogsChartMetricGroup;
+    }
+  | { key: "validationExamples"; kind: "validationExamples" }
+  | { key: "confusionMatrix"; kind: "confusionMatrix" };
+
+const LOG_METRIC_GROUP_BY_KEY = Object.fromEntries(
+  LOG_METRIC_GROUPS.map((group) => [group.key, group]),
+) as Record<LogMetricGroupKey, LogsChartMetricGroup>;
+
 export type LogsChartEmptyState = {
   title: string;
   detail: string;
@@ -179,7 +194,7 @@ function LogsMetricGroupHeader({
   onToggle,
   actions,
 }: {
-  group: (typeof LOG_METRIC_GROUPS)[number];
+  group: LogsChartMetricGroup;
   metricCount: number;
   isCollapsed: boolean;
   controlsId: string;
@@ -440,6 +455,231 @@ export function LogsChartPanel({
     [selectedTagsByGroup],
   );
 
+  const orderedLogChartSections: LogsChartSectionRenderItem[] = [
+    { key: "test", kind: "metricGroup", group: LOG_METRIC_GROUP_BY_KEY.test },
+    {
+      key: "validation",
+      kind: "metricGroup",
+      group: LOG_METRIC_GROUP_BY_KEY.validation,
+    },
+    { key: "validationExamples", kind: "validationExamples" },
+    { key: "confusionMatrix", kind: "confusionMatrix" },
+    { key: "train", kind: "metricGroup", group: LOG_METRIC_GROUP_BY_KEY.train },
+    { key: "other", kind: "metricGroup", group: LOG_METRIC_GROUP_BY_KEY.other },
+  ];
+
+  const renderMetricGroupSection = (group: LogsChartMetricGroup) => {
+    const metrics = metricsByGroup[group.key];
+    const selectedGroupTags = selectedTagsByGroup[group.key];
+    if (metrics.length === 0 && selectedGroupTags.length === 0) {
+      return null;
+    }
+    const isCollapsed = collapsedMetricGroups.has(group.key);
+    const queryState = scalarQueryStates[group.key];
+    const bodyId = `logs-metric-group-${group.key}`;
+    const plotSelectorGroup = isLogPlotSelectorGroup(group.key) ? group.key : null;
+    const hiddenPlotTags = plotSelectorGroup
+      ? hiddenPlotTagsByGroup[plotSelectorGroup]
+      : null;
+    const selectedPlotTags = plotSelectorGroup
+      ? selectedGroupTags.filter((tag) => !hiddenPlotTags?.has(tag))
+      : selectedGroupTags;
+    const selectedPlotTagSet = plotSelectorGroup ? new Set(selectedPlotTags) : null;
+    const renderedMetrics = plotSelectorGroup
+      ? metrics.filter((metric) => selectedPlotTagSet?.has(metric.tag))
+      : metrics;
+    const visibleMetrics = renderedMetrics.slice(0, LOG_METRIC_GROUP_RENDER_LIMIT);
+    const hiddenMetricCount = Math.max(
+      0,
+      renderedMetrics.length - visibleMetrics.length,
+    );
+    const fullSpanClass = SCALAR_CHART_GRID_FULL_SPAN_CLASSES[gridMode];
+    const plotSelectorOptions = plotSelectorGroup
+      ? logPlotSelectorOptions(selectedGroupTags)
+      : [];
+    const plotSelector = plotSelectorGroup ? (
+      <LogPlotSelectorControls
+        groupLabel={group.label}
+        values={selectedPlotTags}
+        options={plotSelectorOptions}
+        onChange={(values) => handlePlotSelectionChange(plotSelectorGroup, values)}
+      />
+    ) : undefined;
+    const hasNoSelectedPlots =
+      plotSelectorGroup !== null &&
+      selectedGroupTags.length > 0 &&
+      selectedPlotTags.length === 0;
+
+    return (
+      <section key={group.key} className="grid gap-3">
+        <LogsMetricGroupHeader
+          group={group}
+          metricCount={selectedGroupTags.length}
+          isCollapsed={isCollapsed}
+          controlsId={bodyId}
+          onToggle={onToggleMetricGroup}
+          actions={plotSelector}
+        />
+        {!isCollapsed && (
+          <>
+            <div
+              id={bodyId}
+              className={
+                hasNoSelectedPlots ? "grid gap-3" : SCALAR_CHART_GRID_CLASSES[gridMode]
+              }
+            >
+              {hasNoSelectedPlots && (
+                <InlineStatus compact>No plots selected in this group</InlineStatus>
+              )}
+              {!hasNoSelectedPlots && queryState.isError && (
+                <div className={fullSpanClass}>
+                  <ErrorPanel
+                    title={`${group.label} scalar read failed`}
+                    message={errorMessage(queryState.error)}
+                  />
+                </div>
+              )}
+              {!hasNoSelectedPlots &&
+                queryState.isInitialLoading &&
+                metrics.length === 0 && (
+                  <InlineStatus
+                    busy
+                    compact
+                    role="status"
+                    className={fullSpanClass}
+                  >
+                    Loading {group.label} scalar points
+                  </InlineStatus>
+                )}
+              {!hasNoSelectedPlots &&
+                visibleMetrics.map(({ tag, series }) => {
+                  if (isTestMetricTag(tag)) {
+                    return (
+                      <LogTestLeaderboardTable
+                        key={tag}
+                        tag={tag}
+                        series={series}
+                        runsById={runsById}
+                        runOrder={runOrder}
+                        onSelectRun={onSelectRun}
+                      />
+                    );
+                  }
+                  return (
+                    <LazyLogScalarChart
+                      key={tag}
+                      tag={tag}
+                      series={series}
+                      runsById={runsById}
+                      checkpointsByRunId={checkpointsByRunId}
+                      runOrder={runOrder}
+                      onSelectRun={onSelectRun}
+                      highlightedRunId={highlightedRunsByGroup[group.key]}
+                      onHoverRunChange={(runId) =>
+                        setHighlightedRunForGroup(group.key, runId)
+                      }
+                      group={LOGS_SCALAR_GROUP}
+                      xMode={xMode}
+                      yScale={yScale}
+                      smoothing={smoothing}
+                    />
+                  );
+                })}
+            </div>
+            {hiddenMetricCount > 0 && (
+              <div className="rounded-[10px] border border-line-soft bg-white/[0.018] px-3 py-3 text-center text-xs text-ink-faint">
+                Showing {visibleMetrics.length} of {renderedMetrics.length} charts in
+                this group. Narrow selected tags to inspect the rest.
+              </div>
+            )}
+          </>
+        )}
+      </section>
+    );
+  };
+
+  const renderLogChartSection = (section: LogsChartSectionRenderItem) => {
+    if (section.kind === "metricGroup") {
+      return renderMetricGroupSection(section.group);
+    }
+
+    if (section.kind === "validationExamples") {
+      if (!hasValidationExampleMedia) {
+        return null;
+      }
+      return (
+        <section key={section.key} className="grid gap-3">
+          <LogsAccordionHeader
+            label="Validation Examples"
+            badge={mediaCountLabel(
+              mediaImages.length,
+              mediaTexts.length,
+              isValidationExampleMediaLoading,
+            )}
+            isCollapsed={isValidationExamplesCollapsed}
+            controlsId="logs-validation-examples"
+            onToggle={onToggleValidationExamples}
+          />
+          {!isValidationExamplesCollapsed && (
+            <div id="logs-validation-examples">
+              <LogValidationExamplesPanel
+                images={mediaImages}
+                texts={mediaTexts}
+                runsById={runsById}
+                enabled={hasValidationExampleMedia}
+                isLoading={isValidationExampleMediaLoading}
+                onVisible={onValidationExamplesVisible}
+              />
+            </div>
+          )}
+        </section>
+      );
+    }
+
+    if (!hasConfusionMatrixTags) {
+      return null;
+    }
+    return (
+      <section key={section.key} className="grid gap-3">
+        <LogsAccordionHeader
+          label="Confusion Matrix"
+          badge={matrixCountLabel({
+            heatmapCount: confusionHeatmaps.length,
+            isLoaded: isConfusionMatrixLoaded,
+            isLoading: isConfusionMatrixLoading,
+          })}
+          isCollapsed={isConfusionMatrixCollapsed}
+          controlsId="logs-confusion-matrix"
+          onToggle={onToggleConfusionMatrix}
+        />
+        {!isConfusionMatrixCollapsed && (
+          <div id="logs-confusion-matrix" className="grid gap-3">
+            {isConfusionMatrixError && (
+              <ErrorPanel
+                title="Confusion matrix read failed"
+                message={errorMessage(confusionMatrixError)}
+              />
+            )}
+            {isConfusionMatrixLoading && confusionHeatmaps.length === 0 && (
+              <InlineStatus busy compact role="status">
+                Loading confusion matrix scalar points
+              </InlineStatus>
+            )}
+            {!isConfusionMatrixLoading &&
+              !isConfusionMatrixError &&
+              isConfusionMatrixLoaded &&
+              confusionHeatmaps.length === 0 && (
+                <InlineStatus compact>
+                  No confusion matrix points for the selected runs.
+                </InlineStatus>
+              )}
+            <LogConfusionMatrixHeatmaps heatmaps={confusionHeatmaps} />
+          </div>
+        )}
+      </section>
+    );
+  };
+
   return (
     <div className="grid min-h-0 grid-rows-[56px_minmax(0,1fr)]">
       <div className="flex min-w-0 items-center justify-between gap-3 border-b border-line bg-panel/45 px-4">
@@ -533,219 +773,12 @@ export function LogsChartPanel({
             <ChartEmptyState {...emptyState} />
           ) : (
             <>
-            {isTagRefreshLoading && (
-              <InlineStatus busy compact role="status">
-                Refreshing TensorBoard tags
-              </InlineStatus>
-            )}
-            {hasValidationExampleMedia && (
-              <section className="grid gap-3">
-                <LogsAccordionHeader
-                  label="Validation Examples"
-                  badge={mediaCountLabel(
-                    mediaImages.length,
-                    mediaTexts.length,
-                    isValidationExampleMediaLoading,
-                  )}
-                  isCollapsed={isValidationExamplesCollapsed}
-                  controlsId="logs-validation-examples"
-                  onToggle={onToggleValidationExamples}
-                />
-                {!isValidationExamplesCollapsed && (
-                  <div id="logs-validation-examples">
-                    <LogValidationExamplesPanel
-                      images={mediaImages}
-                      texts={mediaTexts}
-                      runsById={runsById}
-                      enabled={hasValidationExampleMedia}
-                      isLoading={isValidationExampleMediaLoading}
-                      onVisible={onValidationExamplesVisible}
-                    />
-                  </div>
-                )}
-              </section>
-            )}
-            {hasConfusionMatrixTags && (
-              <section className="grid gap-3">
-                <LogsAccordionHeader
-                  label="Confusion Matrix"
-                  badge={matrixCountLabel({
-                    heatmapCount: confusionHeatmaps.length,
-                    isLoaded: isConfusionMatrixLoaded,
-                    isLoading: isConfusionMatrixLoading,
-                  })}
-                  isCollapsed={isConfusionMatrixCollapsed}
-                  controlsId="logs-confusion-matrix"
-                  onToggle={onToggleConfusionMatrix}
-                />
-                {!isConfusionMatrixCollapsed && (
-                  <div id="logs-confusion-matrix" className="grid gap-3">
-                    {isConfusionMatrixError && (
-                      <ErrorPanel
-                        title="Confusion matrix read failed"
-                        message={errorMessage(confusionMatrixError)}
-                      />
-                    )}
-                    {isConfusionMatrixLoading && confusionHeatmaps.length === 0 && (
-                      <InlineStatus busy compact role="status">
-                        Loading confusion matrix scalar points
-                      </InlineStatus>
-                    )}
-                    {!isConfusionMatrixLoading &&
-                      !isConfusionMatrixError &&
-                      isConfusionMatrixLoaded &&
-                      confusionHeatmaps.length === 0 && (
-                        <InlineStatus compact>
-                          No confusion matrix points for the selected runs.
-                        </InlineStatus>
-                      )}
-                    <LogConfusionMatrixHeatmaps heatmaps={confusionHeatmaps} />
-                  </div>
-                )}
-              </section>
-            )}
-            {LOG_METRIC_GROUPS.map((group) => {
-              const metrics = metricsByGroup[group.key];
-              const selectedGroupTags = selectedTagsByGroup[group.key];
-              if (metrics.length === 0 && selectedGroupTags.length === 0) {
-                return null;
-              }
-              const isCollapsed = collapsedMetricGroups.has(group.key);
-              const queryState = scalarQueryStates[group.key];
-              const bodyId = `logs-metric-group-${group.key}`;
-              const plotSelectorGroup = isLogPlotSelectorGroup(group.key)
-                ? group.key
-                : null;
-              const hiddenPlotTags = plotSelectorGroup
-                ? hiddenPlotTagsByGroup[plotSelectorGroup]
-                : null;
-              const selectedPlotTags = plotSelectorGroup
-                ? selectedGroupTags.filter((tag) => !hiddenPlotTags?.has(tag))
-                : selectedGroupTags;
-              const selectedPlotTagSet = plotSelectorGroup
-                ? new Set(selectedPlotTags)
-                : null;
-              const renderedMetrics = plotSelectorGroup
-                ? metrics.filter((metric) => selectedPlotTagSet?.has(metric.tag))
-                : metrics;
-              const visibleMetrics = renderedMetrics.slice(
-                0,
-                LOG_METRIC_GROUP_RENDER_LIMIT,
-              );
-              const hiddenMetricCount = Math.max(
-                0,
-                renderedMetrics.length - visibleMetrics.length,
-              );
-              const fullSpanClass = SCALAR_CHART_GRID_FULL_SPAN_CLASSES[gridMode];
-              const plotSelectorOptions = plotSelectorGroup
-                ? logPlotSelectorOptions(selectedGroupTags)
-                : [];
-              const plotSelector = plotSelectorGroup ? (
-                <LogPlotSelectorControls
-                  groupLabel={group.label}
-                  values={selectedPlotTags}
-                  options={plotSelectorOptions}
-                  onChange={(values) =>
-                    handlePlotSelectionChange(plotSelectorGroup, values)
-                  }
-                />
-              ) : undefined;
-              const hasNoSelectedPlots =
-                plotSelectorGroup !== null &&
-                selectedGroupTags.length > 0 &&
-                selectedPlotTags.length === 0;
-
-              return (
-                <section key={group.key} className="grid gap-3">
-                  <LogsMetricGroupHeader
-                    group={group}
-                    metricCount={selectedGroupTags.length}
-                    isCollapsed={isCollapsed}
-                    controlsId={bodyId}
-                    onToggle={onToggleMetricGroup}
-                    actions={plotSelector}
-                  />
-                  {!isCollapsed && (
-                    <>
-                      <div
-                        id={bodyId}
-                        className={
-                          hasNoSelectedPlots
-                            ? "grid gap-3"
-                            : SCALAR_CHART_GRID_CLASSES[gridMode]
-                        }
-                      >
-                        {hasNoSelectedPlots && (
-                          <InlineStatus compact>
-                            No plots selected in this group
-                          </InlineStatus>
-                        )}
-                        {!hasNoSelectedPlots && queryState.isError && (
-                          <div className={fullSpanClass}>
-                            <ErrorPanel
-                              title={`${group.label} scalar read failed`}
-                              message={errorMessage(queryState.error)}
-                            />
-                          </div>
-                        )}
-                        {!hasNoSelectedPlots &&
-                          queryState.isInitialLoading &&
-                          metrics.length === 0 && (
-                            <InlineStatus
-                              busy
-                              compact
-                              role="status"
-                              className={fullSpanClass}
-                            >
-                              Loading {group.label} scalar points
-                            </InlineStatus>
-                          )}
-                        {!hasNoSelectedPlots &&
-                          visibleMetrics.map(({ tag, series }) => {
-                            if (isTestMetricTag(tag)) {
-                              return (
-                                <LogTestLeaderboardTable
-                                  key={tag}
-                                  tag={tag}
-                                  series={series}
-                                  runsById={runsById}
-                                  runOrder={runOrder}
-                                  onSelectRun={onSelectRun}
-                                />
-                              );
-                            }
-                            return (
-                              <LazyLogScalarChart
-                                key={tag}
-                                tag={tag}
-                                series={series}
-                                runsById={runsById}
-                                checkpointsByRunId={checkpointsByRunId}
-                                runOrder={runOrder}
-                                onSelectRun={onSelectRun}
-                                highlightedRunId={highlightedRunsByGroup[group.key]}
-                                onHoverRunChange={(runId) =>
-                                  setHighlightedRunForGroup(group.key, runId)
-                                }
-                                group={LOGS_SCALAR_GROUP}
-                                xMode={xMode}
-                                yScale={yScale}
-                                smoothing={smoothing}
-                              />
-                            );
-                          })}
-                      </div>
-                      {hiddenMetricCount > 0 && (
-                        <div className="rounded-[10px] border border-line-soft bg-white/[0.018] px-3 py-3 text-center text-xs text-ink-faint">
-                          Showing {visibleMetrics.length} of {renderedMetrics.length} charts
-                          in this group. Narrow selected tags to inspect the rest.
-                        </div>
-                      )}
-                    </>
-                  )}
-                </section>
-              );
-            })}
+              {isTagRefreshLoading && (
+                <InlineStatus busy compact role="status">
+                  Refreshing TensorBoard tags
+                </InlineStatus>
+              )}
+              {orderedLogChartSections.map(renderLogChartSection)}
             </>
           )}
         </div>

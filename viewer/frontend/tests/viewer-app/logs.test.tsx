@@ -77,6 +77,16 @@ function scalarChartSection(name: RegExp) {
   return section;
 }
 
+function expectElementsInDocumentOrder(elements: HTMLElement[]) {
+  for (let index = 1; index < elements.length; index += 1) {
+    const previous = elements[index - 1];
+    const current = elements[index];
+    expect(previous.compareDocumentPosition(current)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  }
+}
+
 function logScalarLegendButton(card: HTMLElement, runLabel: RegExp) {
   return within(card).getByRole("button", { name: runLabel });
 }
@@ -89,6 +99,16 @@ function expectLegendOpacity(button: HTMLElement, opacity: "normal" | "dimmed") 
   }
   expect(button).toHaveClass("opacity-100");
   expect(button).not.toHaveClass("opacity-30");
+}
+
+function logRunsWithSharedDataset(dataset = "Mnist") {
+  return {
+    runs: logRunsResponse.runs.map((run) => ({
+      ...run,
+      dataset,
+      relativePath: run.relativePath.replace(/\/(Mnist|Cifar10)\//, `/${dataset}/`),
+    })),
+  };
 }
 
 async function expectLogFilterSelection(
@@ -182,7 +202,7 @@ describe("ViewerApp Logs Workspace", () => {
     expect(logTagRequests).toHaveLength(0);
     expect(logScalarRequests).toHaveLength(0);
 
-    await user.click(screen.getByRole("button", { name: /all runs/i }));
+    await user.click(await screen.findByRole("button", { name: /all runs/i }));
 
     await expectLogFilterSelection(user, "Experiments", "test_model", false);
     await expectLogFilterSelection(user, "Experiments", "test_model_2", false);
@@ -227,7 +247,7 @@ describe("ViewerApp Logs Workspace", () => {
     });
   });
 
-  it("opens logs scoped to the current target dataset and broadens through All runs", async () => {
+  it("opens logs scoped to the current target dataset and applies common filters through All runs", async () => {
     const { logRunRequests, logScalarRequests } = installFetchMock();
     renderViewer();
     const user = userEvent.setup();
@@ -295,6 +315,7 @@ describe("ViewerApp Logs Workspace", () => {
       expect(logRunRequests).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
+            experiments: ["test_model", "test_model_2"],
             datasets: [],
             limit: 500,
             offset: 0,
@@ -302,46 +323,42 @@ describe("ViewerApp Logs Workspace", () => {
         ]),
       );
     });
-    await user.click(
-      await screen.findByRole("button", { name: /^Test\s+\d+\s+metrics?$/i }),
-    );
-
-    const accuracyLeaderboard = await screen.findByRole("table", {
-      name: /test\/accuracy test leaderboard/i,
+    await waitFor(() => {
+      expect(screen.getByRole("combobox", { name: /^Datasets\b/i })).toBeDisabled();
+      expect(screen.getByRole("combobox", { name: /^Models\b/i })).toBeEnabled();
+      expect(screen.getByRole("combobox", { name: /^Presets\b/i })).toBeEnabled();
     });
-    const accuracyRows = within(accuracyLeaderboard).getAllByRole("row").slice(1);
-    expect(accuracyRows).toHaveLength(2);
-    expect(accuracyRows[0]).toHaveTextContent("0.9");
-    expect(within(accuracyRows[0]).getByText("aaa_20260601_010203"))
-      .toBeInTheDocument();
-    expect(accuracyRows[1]).toHaveTextContent("0.62");
-    expect(within(accuracyRows[1]).getByText("bbb_20260601_020304"))
-      .toBeInTheDocument();
-    expect(
-      screen.getAllByText(/test_model · Mnist · linear · linears · BASELINE · 2026-06-01 01:02:03/).length,
-    ).toBeGreaterThan(0);
-    const cifarLine = within(accuracyLeaderboard).getByRole("button", {
-      name: /open run details for test_model_2 · Cifar10 · linear · linears · BASELINE · 2026-06-01 02:03:04/i,
-    });
-
-    await user.click(cifarLine);
-
-    const detailsPanel = screen.getByRole("heading", { name: "Run Details" }).closest("aside");
-    expect(detailsPanel).not.toBeNull();
-    expect(within(detailsPanel as HTMLElement).getByText("Experiment")).toBeInTheDocument();
-    expect(within(detailsPanel as HTMLElement).getByText("test_model_2")).toBeInTheDocument();
-    expect(screen.getAllByText("No result.json").length).toBeGreaterThan(0);
+    expect(await screen.findByText("No runs selected")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Test\s+\d+\s+metrics?$/i }))
+      .not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /start training/i }))
       .not.toBeInTheDocument();
   });
 
   it("ranks best runs independently from selected scalar chart tags", async () => {
-    installFetchMock();
+    const runs = [
+      logRunsResponse.runs[0],
+      {
+        ...logRunsResponse.runs[1],
+        group: "test_model",
+        experiment: "test_model",
+        relativePath:
+          "test_model/linear/BASELINE/Cifar10/bbb_20260601_020304/version_0",
+      },
+    ];
+    installFetchMock({
+      logRunsResponse: { runs },
+      logExperimentsResponse: {
+        experiments: [
+          { experiment: "test_model", runCount: 2, relativePath: "test_model" },
+        ],
+      },
+    });
     renderViewer();
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
-    await user.click(screen.getByRole("button", { name: /all runs/i }));
+    await user.click(await screen.findByRole("button", { name: /all runs/i }));
     await selectAllLogExperiments(user);
 
     const bestRunHeading = await screen.findByRole("heading", { name: "Best Run" });
@@ -383,14 +400,61 @@ describe("ViewerApp Logs Workspace", () => {
 
     await user.click(
       within(panel).getAllByRole("button", {
-        name: /open details for test_model_2 · Cifar10/i,
+        name: /open details for test_model · Cifar10/i,
       })[0],
     );
 
     const detailsPanel = screen.getByRole("heading", { name: "Run Details" }).closest("aside");
     expect(detailsPanel).not.toBeNull();
-    expect(within(detailsPanel as HTMLElement).getByText("test_model_2"))
+    expect(within(detailsPanel as HTMLElement).getByText("Cifar10"))
       .toBeInTheDocument();
+  });
+
+  it("orders validation diagnostics between Validation and Train under Best Run", async () => {
+    const matrixRateTags = [
+      "validation/confusion_matrix/true_class_0/predicted_class_0/rate",
+      "validation/confusion_matrix/true_class_0/predicted_class_1/rate",
+      "validation/confusion_matrix/true_class_1/predicted_class_0/rate",
+      "validation/confusion_matrix/true_class_1/predicted_class_1/rate",
+    ];
+    const defaultMnistTags = logTagsByRun["log-mnist"];
+    if (!Array.isArray(defaultMnistTags)) {
+      throw new Error("Expected default Mnist log tags to be scalar tag names");
+    }
+    installFetchMock({
+      logTagsByRun: {
+        "log-mnist": {
+          scalarTags: [...defaultMnistTags, ...matrixRateTags],
+          histogramTags: [],
+          imageTags: ["validation/examples/predictions"],
+          textTags: ["validation/examples/predictions/text_summary"],
+        },
+      },
+    });
+    renderViewer();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+    await selectLogExperiments(user, ["test_model"]);
+    expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
+      .toBeInTheDocument();
+
+    await clickLogOption(user, "Scalar Tags", "main_model.0.model/weights/mean");
+
+    const bestRunSection = screen
+      .getByRole("heading", { name: "Best Run" })
+      .closest("section");
+    expect(bestRunSection).toBeInstanceOf(HTMLElement);
+
+    expectElementsInDocumentOrder([
+      bestRunSection as HTMLElement,
+      logMetricGroupToggle("Test"),
+      logMetricGroupToggle("Validation"),
+      logValidationExamplesToggle(),
+      screen.getByRole("button", { name: /^Confusion Matrix\b/i }),
+      logMetricGroupToggle("Train"),
+      logMetricGroupToggle("Other"),
+    ]);
   });
 
   it("filters logs by dataset across tags, scalars, charts, and details", async () => {
@@ -839,16 +903,14 @@ describe("ViewerApp Logs Workspace", () => {
       (run, index) => ({
         ...run,
         id: `extra-log-${index + 1}`,
-        model: "wide-linear",
-        dataset: "Cifar10",
-        preset: "ALT",
-        relativePath: run.relativePath
-          .replace("/linear/", "/wide-linear/")
-          .replace("/BASELINE/", "/ALT/")
-          .replace("/Mnist/", "/Cifar10/"),
+        model: "linear",
+        dataset: "Mnist",
+        preset: "BASELINE",
+        relativePath:
+          `${run.experiment}/linear/BASELINE/Mnist/${run.runName}/version_0`,
       }),
     );
-    const runs = [...logRunsResponse.runs, ...extraRuns];
+    const runs = [...logRunsWithSharedDataset().runs, ...extraRuns];
     const delayedTagChunk = deferred<null>();
     const { logTagRequests } = installFetchMock({
       logRunsResponse: { runs },
@@ -1141,6 +1203,7 @@ describe("ViewerApp Logs Workspace", () => {
 
   it("sorts test loss leaderboards ascending", async () => {
     installFetchMock({
+      logRunsResponse: logRunsWithSharedDataset(),
       logTagsByRun: {
         "log-mnist": ["test/loss"],
         "log-cifar": ["test/loss"],
@@ -1244,6 +1307,7 @@ describe("ViewerApp Logs Workspace", () => {
       ],
     }));
     installFetchMock({
+      logRunsResponse: logRunsWithSharedDataset(),
       logTagsByRun: Object.fromEntries(
         Object.entries(logTagsByRun).map(([runId, tags]) => [
           runId,
@@ -1272,7 +1336,7 @@ describe("ViewerApp Logs Workspace", () => {
       .toBeInTheDocument();
 
     const mnistRun = /test_model · Mnist · linear · linears · BASELINE · 2026-06-01 01:02:03/i;
-    const cifarRun = /test_model_2 · Cifar10 · linear · linears · BASELINE · 2026-06-01 02:03:04/i;
+    const cifarRun = /test_model_2 · Mnist · linear · linears · BASELINE · 2026-06-01 02:03:04/i;
     const trainLossCard = scalarChartSection(/train\/loss scalar chart/i);
     const trainAccuracyCard = scalarChartSection(/train\/accuracy scalar chart/i);
     const validationCard = scalarChartSection(/validation\/accuracy scalar chart/i);
@@ -1321,7 +1385,9 @@ describe("ViewerApp Logs Workspace", () => {
   });
 
   it("logs workspace experiment and tag checkboxes hide chart content", async () => {
-    installFetchMock();
+    installFetchMock({
+      logRunsResponse: logRunsWithSharedDataset(),
+    });
     renderViewer();
     const user = userEvent.setup();
 
@@ -1337,7 +1403,7 @@ describe("ViewerApp Logs Workspace", () => {
       await screen.findByRole("table", { name: /test\/accuracy test leaderboard/i }),
     ).toBeInTheDocument();
     expect(
-      screen.getAllByText(/test_model_2 · Cifar10 · linear · linears · BASELINE · 2026-06-01 02:03:04/).length,
+      screen.getAllByText(/test_model_2 · Mnist · linear · linears · BASELINE · 2026-06-01 02:03:04/).length,
     ).toBeGreaterThan(0);
 
     await clickLogOption(user, "Experiments", "test_model");
@@ -1348,10 +1414,10 @@ describe("ViewerApp Logs Workspace", () => {
     });
     const datasetSection = logFilterSection("Datasets");
     expect(within(datasetSection).getByText("1 / 1")).toBeInTheDocument();
-    await expectLogFilterSelection(user, "Datasets", "Cifar10", true);
-    expect(queryOpenLogOption("Datasets", "Mnist")).not.toBeInTheDocument();
+    await expectLogFilterSelection(user, "Datasets", "Mnist", true);
+    expect(queryOpenLogOption("Datasets", "Cifar10")).not.toBeInTheDocument();
     expect(
-      screen.getAllByText(/test_model_2 · Cifar10 · linear · linears · BASELINE · 2026-06-01 02:03:04/).length,
+      screen.getAllByText(/test_model_2 · Mnist · linear · linears · BASELINE · 2026-06-01 02:03:04/).length,
     ).toBeGreaterThan(0);
 
     await clickLogOption(user, "Scalar Tags", "validation/accuracy");
@@ -1379,7 +1445,7 @@ describe("ViewerApp Logs Workspace", () => {
   it("requests checkpoint markers only for visible log runs", async () => {
     const { logCheckpointRequests } = installFetchMock({
       logRunsResponse: {
-        runs: logRunsResponse.runs.map((run) =>
+        runs: logRunsWithSharedDataset().runs.map((run) =>
           run.id === "log-cifar" ? { ...run, checkpointCount: 1 } : run,
         ),
       },
@@ -1605,12 +1671,23 @@ describe("ViewerApp Logs Workspace", () => {
 
   it("lazy-loads logs sidebar filters with many options", async () => {
     const fixture = buildLargeLogFixture();
-    const { deleteExperimentRequests, logScalarRequests } = installFetchMock(fixture);
+    const sharedRuns = fixture.logRunsResponse.runs.map((run) => ({
+      ...run,
+      dataset: "Mnist",
+      relativePath:
+        `${run.experiment}/linear/BASELINE/Mnist/${run.runName}/version_0`,
+    }));
+    const sharedFixture = {
+      ...fixture,
+      logRunsResponse: { runs: sharedRuns },
+    };
+    const { deleteExperimentRequests, logScalarRequests } =
+      installFetchMock(sharedFixture);
     renderViewer();
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
-    await user.click(screen.getByRole("button", { name: /all runs/i }));
+    await user.click(await screen.findByRole("button", { name: /all runs/i }));
     await selectAllLogExperiments(user);
 
     let experimentsList = await openLogFilter(user, "Experiments");
@@ -1656,7 +1733,7 @@ describe("ViewerApp Logs Workspace", () => {
       await screen.findByRole("button", { name: /^Other\s+1\s+metric$/i }),
     );
 
-    const expectedRunIds = fixture.logRunsResponse.runs.map((run) => run.id);
+    const expectedRunIds = sharedFixture.logRunsResponse.runs.map((run) => run.id);
     await waitFor(() => {
       const selectedTagRequests = logScalarRequests.filter(
         (request) =>
@@ -1726,8 +1803,6 @@ describe("ViewerApp Logs Workspace", () => {
     });
     expectLogOptionSelected(secondExperiment);
     expectLogsChecklistRowSizing(secondExperiment);
-    await user.click(secondExperiment);
-    expectLogOptionSelected(secondExperiment, false);
     expectLogOptionSelected(
       within(experimentsList).getByRole("option", {
         name: logOptionName("experiment_42"),
@@ -1794,6 +1869,7 @@ describe("ViewerApp Logs Workspace", () => {
 
   it("omits stale scalar tags from chart requests after experiment filtering", async () => {
     const { logScalarRequests } = installFetchMock({
+      logRunsResponse: logRunsWithSharedDataset(),
       logTagsByRun: {
         "log-mnist": ["train/loss", "validation/accuracy"],
         "log-cifar": ["train/loss"],
@@ -1980,55 +2056,63 @@ describe("ViewerApp Logs Workspace", () => {
       .toBeInTheDocument();
   });
 
-  it("widens stale preset facets when selecting a newly loaded experiment", async () => {
-    const priorBaselineRun = {
+  it("shows only common lower filters for selected experiments", async () => {
+    const expACifarRun = {
       ...logRunsResponse.runs[0],
-      id: "prior-linear-baseline",
-      group: "prior_linear",
-      experiment: "prior_linear",
+      id: "exp-a-cifar-common",
+      group: "exp_a",
+      experiment: "exp_a",
       preset: "BASELINE",
-      dataset: "Mnist",
-      runName: "prior_linear_baseline_20260601_010203",
+      dataset: "Cifar10",
+      runName: "exp_a_cifar_common_20260601_010203",
       timestamp: "2026-06-01 01:02:03",
       relativePath:
-        "prior_linear/linear/BASELINE/Mnist/prior_linear_baseline_20260601_010203/version_0",
+        "exp_a/linear/BASELINE/Cifar10/exp_a_cifar_common_20260601_010203/version_0",
       metrics: { "test/accuracy": 0.82 },
     };
-    const priorLegacyRun = {
-      ...priorBaselineRun,
-      id: "prior-linear-legacy",
-      preset: "LEGACY_ONLY",
-      runName: "prior_linear_legacy_20260601_020304",
+    const expAMnistRun = {
+      ...expACifarRun,
+      id: "exp-a-mnist-wide",
+      model: "wide-linear",
+      preset: "WIDE_ONLY",
+      dataset: "Mnist",
+      runName: "exp_a_mnist_wide_20260601_020304",
       timestamp: "2026-06-01 02:03:04",
       relativePath:
-        "prior_linear/linear/LEGACY_ONLY/Mnist/prior_linear_legacy_20260601_020304/version_0",
+        "exp_a/wide-linear/WIDE_ONLY/Mnist/exp_a_mnist_wide_20260601_020304/version_0",
       metrics: { "test/accuracy": 0.84 },
     };
-    const kaggleRunIds = ["kaggle-linear-all-fold-0", "kaggle-linear-all-fold-1"];
-    const kaggleRuns = kaggleRunIds.map((id, index) => ({
+    const expBCifarRun = {
       ...logRunsResponse.runs[0],
-      id,
-      group: "kaggle_linear_all",
-      experiment: "kaggle_linear_all",
-      preset: "KAGGLE_LINEAR",
-      dataset: "KaggleDigits",
-      runName: `kaggle_linear_all_fold_${index}_20260601_030405`,
-      timestamp: `2026-06-01 0${index + 3}:04:05`,
+      id: "exp-b-cifar-common",
+      group: "exp_b",
+      experiment: "exp_b",
+      preset: "BASELINE",
+      dataset: "Cifar10",
+      runName: "exp_b_cifar_common_20260601_030405",
+      timestamp: "2026-06-01 03:04:05",
       relativePath:
-        `kaggle_linear_all/linear/KAGGLE_LINEAR/KaggleDigits/kaggle_linear_all_fold_${index}_20260601_030405/version_0`,
-      metrics: { "test/accuracy": 0.88 + index / 100 },
-    }));
-    const runs = [priorBaselineRun, priorLegacyRun, ...kaggleRuns];
-    const { logScalarRequests, logTagRequests } = installFetchMock({
+        "exp_b/linear/BASELINE/Cifar10/exp_b_cifar_common_20260601_030405/version_0",
+      metrics: { "test/accuracy": 0.88 },
+    };
+    const expBConvRun = {
+      ...expBCifarRun,
+      id: "exp-b-cifar-conv",
+      model: "conv",
+      preset: "CONV_ONLY",
+      runName: "exp_b_cifar_conv_20260601_040506",
+      timestamp: "2026-06-01 04:05:06",
+      relativePath:
+        "exp_b/conv/CONV_ONLY/Cifar10/exp_b_cifar_conv_20260601_040506/version_0",
+      metrics: { "test/accuracy": 0.9 },
+    };
+    const runs = [expACifarRun, expAMnistRun, expBCifarRun, expBConvRun];
+    const { logRunRequests, logTagRequests } = installFetchMock({
       logRunsResponse: { runs },
       logExperimentsResponse: {
         experiments: [
-          { experiment: "prior_linear", runCount: 2, relativePath: "prior_linear" },
-          {
-            experiment: "kaggle_linear_all",
-            runCount: kaggleRuns.length,
-            relativePath: "kaggle_linear_all",
-          },
+          { experiment: "exp_a", runCount: 2, relativePath: "exp_a" },
+          { experiment: "exp_b", runCount: 2, relativePath: "exp_b" },
         ],
       },
       logTagsByRun: Object.fromEntries(
@@ -2057,35 +2141,111 @@ describe("ViewerApp Logs Workspace", () => {
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
     await screen.findByText("Historical Scalars");
     await user.click(await screen.findByRole("button", { name: /all runs/i }));
-    await selectLogExperiments(user, ["prior_linear"]);
-    expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
-      .toBeInTheDocument();
-
-    await clickLogOption(user, "Presets", "LEGACY_ONLY");
-    await expectLogFilterSelection(user, "Presets", "BASELINE", true);
-    await expectLogFilterSelection(user, "Presets", "LEGACY_ONLY", false);
-    await clickLogOption(user, "Experiments", "prior_linear");
-    await clickLogOption(user, "Experiments", "kaggle_linear_all");
+    await selectLogExperiments(user, ["exp_a", "exp_b"]);
 
     await waitFor(() => {
-      expect(logTagRequests.at(-1)).toEqual({ runIds: kaggleRunIds });
+      expect(logRunRequests).toContainEqual(
+        expect.objectContaining({
+          experiments: ["exp_a", "exp_b"],
+          limit: 500,
+          offset: 0,
+        }),
+      );
     });
     await waitFor(() => {
-      expect(logScalarRequests).toContainEqual({
-        runIds: kaggleRunIds,
-        tags: ["validation/accuracy"],
-        maxPoints: 500,
-        sampling: "tail",
-      });
-      expect(logScalarRequests).toContainEqual({
-        runIds: kaggleRunIds,
-        tags: ["train/loss"],
-        maxPoints: 500,
-        sampling: "tail",
+      expect(logTagRequests.at(-1)).toEqual({
+        runIds: ["exp-a-cifar-common", "exp-b-cifar-common"],
       });
     });
+
+    const datasetOptions = await openLogFilter(user, "Datasets");
+    expect(within(datasetOptions).getByRole("option", {
+      name: logOptionName("Cifar10"),
+    })).toBeInTheDocument();
+    expect(within(datasetOptions).queryByRole("option", {
+      name: logOptionName("Mnist"),
+    })).not.toBeInTheDocument();
+
+    const modelOptions = await openLogFilter(user, "Models");
+    expect(within(modelOptions).getByRole("option", {
+      name: /linear · linears/i,
+    })).toBeInTheDocument();
+    expect(within(modelOptions).queryByRole("option", {
+      name: /wide-linear · linears/i,
+    })).not.toBeInTheDocument();
+    expect(within(modelOptions).queryByRole("option", {
+      name: /conv · linears/i,
+    })).not.toBeInTheDocument();
+
+    const presetOptions = await openLogFilter(user, "Presets");
+    expect(within(presetOptions).getByRole("option", {
+      name: logOptionName("BASELINE"),
+    })).toBeInTheDocument();
+    expect(within(presetOptions).queryByRole("option", {
+      name: logOptionName("WIDE_ONLY"),
+    })).not.toBeInTheDocument();
+    expect(within(presetOptions).queryByRole("option", {
+      name: logOptionName("CONV_ONLY"),
+    })).not.toBeInTheDocument();
     expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
       .toBeInTheDocument();
+  });
+
+  it("shows no lower filters or chart requests for experiments with no overlap", async () => {
+    const mnistRun = {
+      ...logRunsResponse.runs[0],
+      id: "exp-a-mnist",
+      group: "exp_a",
+      experiment: "exp_a",
+      dataset: "Mnist",
+      model: "linear",
+      preset: "BASELINE",
+      runName: "exp_a_mnist_20260601_010203",
+      timestamp: "2026-06-01 01:02:03",
+      relativePath: "exp_a/linear/BASELINE/Mnist/exp_a_mnist_20260601_010203/version_0",
+    };
+    const cifarRun = {
+      ...logRunsResponse.runs[0],
+      id: "exp-b-cifar",
+      group: "exp_b",
+      experiment: "exp_b",
+      dataset: "Cifar10",
+      model: "wide-linear",
+      preset: "WIDE_ONLY",
+      runName: "exp_b_cifar_20260601_020304",
+      timestamp: "2026-06-01 02:03:04",
+      relativePath:
+        "exp_b/wide-linear/WIDE_ONLY/Cifar10/exp_b_cifar_20260601_020304/version_0",
+    };
+    const { logScalarRequests, logTagRequests } = installFetchMock({
+      logRunsResponse: { runs: [mnistRun, cifarRun] },
+      logExperimentsResponse: {
+        experiments: [
+          { experiment: "exp_a", runCount: 1, relativePath: "exp_a" },
+          { experiment: "exp_b", runCount: 1, relativePath: "exp_b" },
+        ],
+      },
+      logTagsByRun: {
+        [mnistRun.id]: ["train/loss"],
+        [cifarRun.id]: ["train/loss"],
+      },
+    });
+    renderViewer();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+    await screen.findByText("Historical Scalars");
+    await user.click(await screen.findByRole("button", { name: /all runs/i }));
+    await selectAllLogExperiments(user);
+
+    await waitFor(() => {
+      expect(screen.getByRole("combobox", { name: /^Datasets\b/i })).toBeDisabled();
+      expect(screen.getByRole("combobox", { name: /^Models\b/i })).toBeDisabled();
+      expect(screen.getByRole("combobox", { name: /^Presets\b/i })).toBeDisabled();
+    });
+    expect(await screen.findByText("No runs selected")).toBeInTheDocument();
+    expect(logTagRequests).toHaveLength(0);
+    expect(logScalarRequests).toHaveLength(0);
   });
 
   it("renders Kaggle linear scalars after All tags is clicked during tag refresh", async () => {

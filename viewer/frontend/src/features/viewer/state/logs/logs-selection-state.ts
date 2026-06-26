@@ -17,11 +17,10 @@ type LogRunSelections = {
   presets: Set<string>;
 };
 
-type ExperimentFacetSeedSelections = {
-  loadedExperiments: Set<string>;
-  datasets: Set<string>;
-  models: Set<string>;
-  presets: Set<string>;
+type CommonRunFacetOptions = {
+  datasets: ChecklistOption[];
+  models: ChecklistOption[];
+  presets: ChecklistOption[];
 };
 
 type ExperimentScalarTagSeedSelection = {
@@ -59,6 +58,16 @@ export function pruneSelectionToAvailableValues(
     return selection;
   }
   return next;
+}
+
+export function effectiveSelectionForAvailableValues(
+  selection: NullableSelectionSet,
+  availableValues: string[],
+) {
+  return selectionSetOrDefault(
+    pruneSelectionToAvailableValues(selection, availableValues),
+    new Set(availableValues),
+  );
 }
 
 export function buildInitialExperimentSelection({
@@ -101,58 +110,89 @@ export function startedRunSelections({
   };
 }
 
-function nullableSelectionIncludes(
-  selection: NullableSelectionSet,
-  value: string,
-) {
-  return selection === null || selection.has(value);
-}
-
-export function buildExperimentFacetSeedSelections({
+function intersectExperimentFacetValues({
   runs,
-  pendingExperiments,
-  selectedDatasets,
-  selectedModels,
-  selectedPresets,
+  selectedExperiments,
+  valueForRun,
 }: {
   runs: LogRun[];
-  pendingExperiments: Set<string>;
-  selectedDatasets: NullableSelectionSet;
-  selectedModels: NullableSelectionSet;
-  selectedPresets: NullableSelectionSet;
-}): ExperimentFacetSeedSelections {
-  const selections: ExperimentFacetSeedSelections = {
-    loadedExperiments: new Set(),
-    datasets: new Set(),
-    models: new Set(),
-    presets: new Set(),
-  };
+  selectedExperiments: Set<string>;
+  valueForRun: (run: LogRun) => string;
+}) {
+  let commonValues: Set<string> | null = null;
 
-  for (const experiment of pendingExperiments) {
-    const experimentRuns = runs.filter((run) => run.experiment === experiment);
-    if (experimentRuns.length === 0) {
+  for (const experiment of selectedExperiments) {
+    const experimentValues = new Set<string>();
+    for (const run of runs) {
+      if (run.experiment === experiment) {
+        experimentValues.add(valueForRun(run));
+      }
+    }
+
+    if (commonValues === null) {
+      commonValues = experimentValues;
       continue;
     }
 
-    selections.loadedExperiments.add(experiment);
-    const hasVisibleRun = experimentRuns.some(
-      (run) =>
-        nullableSelectionIncludes(selectedDatasets, run.dataset) &&
-        nullableSelectionIncludes(selectedModels, logRunModelKey(run)) &&
-        nullableSelectionIncludes(selectedPresets, run.preset),
-    );
-    if (hasVisibleRun) {
-      continue;
+    const nextCommonValues = new Set<string>();
+    for (const value of commonValues) {
+      if (experimentValues.has(value)) {
+        nextCommonValues.add(value);
+      }
     }
-
-    for (const run of experimentRuns) {
-      selections.datasets.add(run.dataset);
-      selections.models.add(logRunModelKey(run));
-      selections.presets.add(run.preset);
-    }
+    commonValues = nextCommonValues;
   }
 
-  return selections;
+  return commonValues ?? new Set<string>();
+}
+
+export function buildCommonRunFacetOptions({
+  runs,
+  selectedExperiments,
+}: {
+  runs: LogRun[];
+  selectedExperiments: Set<string>;
+}): CommonRunFacetOptions {
+  if (selectedExperiments.size === 0) {
+    return {
+      datasets: [],
+      models: [],
+      presets: [],
+    };
+  }
+
+  const selectedExperimentRuns = runs.filter((run) =>
+    selectedExperiments.has(run.experiment),
+  );
+  const commonDatasets = intersectExperimentFacetValues({
+    runs,
+    selectedExperiments,
+    valueForRun: (run) => run.dataset,
+  });
+  const commonModels = intersectExperimentFacetValues({
+    runs,
+    selectedExperiments,
+    valueForRun: logRunModelKey,
+  });
+  const commonPresets = intersectExperimentFacetValues({
+    runs,
+    selectedExperiments,
+    valueForRun: (run) => run.preset,
+  });
+
+  return {
+    datasets: buildCountOptions(
+      selectedExperimentRuns.filter((run) => commonDatasets.has(run.dataset)),
+      "dataset",
+    ),
+    models: buildModelCountOptions(
+      selectedExperimentRuns.filter((run) => commonModels.has(logRunModelKey(run))),
+    ),
+    presets: buildCountOptions(
+      selectedExperimentRuns.filter((run) => commonPresets.has(run.preset)),
+      "preset",
+    ),
+  };
 }
 
 function orderedExperimentScalarTags({
