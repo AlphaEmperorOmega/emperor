@@ -152,9 +152,81 @@ class InspectorGraphTests(unittest.TestCase):
         result = inspect_model("linears/linear", "baseline")
         node_ids = {node["id"] for node in result["nodes"]}
         edge_ids = {edge["id"] for edge in result["edges"]}
+        node_by_id = nodes_by_id(result["nodes"])
+
+        self.assertNotIn("main_model.layers", node_ids)
         self.assertIn("main_model.layers.0.model", node_ids)
-        self.assertIn("main_model-main_model.layers", edge_ids)
-        self.assertIn("main_model.layers-main_model.layers.0", edge_ids)
+        self.assertNotIn("main_model-main_model.layers", edge_ids)
+        self.assertNotIn("main_model.layers-main_model.layers.0", edge_ids)
+        for index in range(5):
+            node_id = f"main_model.layers.{index}"
+            with self.subTest(node_id=node_id):
+                self.assertIn(node_id, node_ids)
+                self.assertEqual(node_by_id[node_id]["path"], node_id)
+                self.assertIn(f"main_model-{node_id}", edge_ids)
+
+    def test_graph_serializer_keeps_ordinary_module_lists_visible(self) -> None:
+        class ExpertModulesFixture(nn.Module):
+            def __init__(self) -> None:
+                super().__init__()
+                self.expert_modules = nn.ModuleList([nn.Linear(2, 2)])
+
+        nodes, edges = serialize_graph(ExpertModulesFixture())
+        node_ids = {node["id"] for node in nodes}
+        edge_ids = {edge["id"] for edge in edges}
+
+        self.assertIn("expert_modules", node_ids)
+        self.assertIn("expert_modules.0", node_ids)
+        self.assertIn("__root__-expert_modules", edge_ids)
+        self.assertIn("expert_modules-expert_modules.0", edge_ids)
+
+    def test_graph_serializer_uses_class_names_for_semantic_layer_stack_paths(
+        self,
+    ) -> None:
+        class NestedStackFixture(nn.Module):
+            def __init__(self) -> None:
+                super().__init__()
+                self.main_model = nn.Module()
+                self.main_model.block_model = LayerStackConfig(
+                    input_dim=4,
+                    hidden_dim=4,
+                    output_dim=2,
+                    num_layers=1,
+                    last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
+                    apply_output_pipeline_flag=True,
+                    layer_config=LayerConfig(
+                        input_dim=4,
+                        output_dim=2,
+                        activation=ActivationOptions.DISABLED,
+                        residual_connection_option=ResidualConnectionOptions.DISABLED,
+                        dropout_probability=0.0,
+                        layer_norm_position=LayerNormPositionOptions.DISABLED,
+                        gate_config=None,
+                        halting_config=None,
+                        memory_config=None,
+                        layer_model_config=LinearLayerConfig(
+                            input_dim=4,
+                            output_dim=2,
+                            bias_flag=True,
+                        ),
+                    ),
+                ).build()
+
+        nodes, edges = serialize_graph(NestedStackFixture())
+        node_by_id = nodes_by_id(nodes)
+        edge_ids = {edge["id"] for edge in edges}
+        stack_node = node_by_id["main_model.block_model"]
+
+        self.assertEqual(stack_node["label"], "LayerStack")
+        self.assertEqual(stack_node["typeName"], "LayerStack")
+        self.assertEqual(stack_node["path"], "main_model.block_model")
+        self.assertNotEqual(stack_node["label"], "Block Model")
+        self.assertNotIn("main_model.block_model.layers", node_by_id)
+        self.assertIn("main_model.block_model.layers.0", node_by_id)
+        self.assertIn(
+            "main_model.block_model-main_model.block_model.layers.0",
+            edge_ids,
+        )
 
     def test_inspector_rejects_unknown_memory_linear_graph(self) -> None:
         with self.assertRaises(InspectorError) as raised:
@@ -184,7 +256,7 @@ class InspectorGraphTests(unittest.TestCase):
 
         self.assertEqual(role_by_id["__root__"], "architecture")
         self.assertEqual(role_by_id["main_model"], "architecture")
-        self.assertEqual(role_by_id["main_model.layers"], "architecture")
+        self.assertNotIn("main_model.layers", role_by_id)
         self.assertEqual(role_by_id["main_model.layers.0"], "architecture")
         self.assertEqual(role_by_id["main_model.layers.0.model"], "architecture")
 

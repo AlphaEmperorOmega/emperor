@@ -390,6 +390,22 @@ def _node(node_id: str, path: str, module: Module) -> dict[str, Any]:
     }
 
 
+def _child_path(parent_path: str, child_name: str) -> str:
+    return child_name if not parent_path else f"{parent_path}.{child_name}"
+
+
+def _is_transparent_graph_container(
+    parent: Module,
+    child_name: str,
+    child: Module,
+) -> bool:
+    return (
+        type(parent).__name__ == "LayerStack"
+        and child_name == "layers"
+        and type(child).__name__ == "ModuleList"
+    )
+
+
 def serialize_graph(
     module: Module,
 ) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
@@ -398,15 +414,34 @@ def serialize_graph(
 
     def visit(parent: Module, parent_id: str, parent_path: str) -> None:
         for child_name, child in parent.named_children():
-            child_path = (
-                child_name if not parent_path else f"{parent_path}.{child_name}"
-            )
+            child_path = _child_path(parent_path, child_name)
+            if _is_transparent_graph_container(parent, child_name, child):
+                visit_transparent_container(child, parent_id, child_path)
+                continue
             child_id = child_path
             nodes.append(_node(child_id, child_path, child))
             edges.append(
                 {
                     "id": f"{parent_id}-{child_id}",
                     "source": parent_id,
+                    "target": child_id,
+                }
+            )
+            visit(child, child_id, child_path)
+
+    def visit_transparent_container(
+        container: Module,
+        visible_parent_id: str,
+        container_path: str,
+    ) -> None:
+        for child_name, child in container.named_children():
+            child_path = _child_path(container_path, child_name)
+            child_id = child_path
+            nodes.append(_node(child_id, child_path, child))
+            edges.append(
+                {
+                    "id": f"{visible_parent_id}-{child_id}",
+                    "source": visible_parent_id,
                     "target": child_id,
                 }
             )
