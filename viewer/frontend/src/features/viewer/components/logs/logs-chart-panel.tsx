@@ -7,7 +7,7 @@ import {
   RefreshCw,
   RectangleHorizontal,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
@@ -20,6 +20,10 @@ import { LogConfusionMatrixHeatmaps } from "@/features/viewer/components/logs/lo
 import { LazyLogScalarChart } from "@/features/viewer/components/logs/log-scalar-chart";
 import { LogTestLeaderboardTable } from "@/features/viewer/components/logs/log-test-leaderboard-table";
 import { LogValidationExamplesPanel } from "@/features/viewer/components/logs/log-validation-examples-panel";
+import {
+  MultiSelectDropdown,
+  type MultiSelectDropdownOption,
+} from "@/features/viewer/components/screen/multi-select-dropdown";
 import {
   type LogCheckpoint,
   type LogRun,
@@ -62,12 +66,22 @@ const SCALAR_CHART_GRID_FULL_SPAN_CLASSES: Record<ScalarChartGridMode, string> =
 // up every metric at once, TensorBoard-style.
 const LOGS_SCALAR_GROUP = "logs-scalars";
 const LOG_METRIC_GROUP_RENDER_LIMIT = 100;
+const LOG_PLOT_SELECTOR_GROUPS = ["train", "validation"] as const;
+const LOG_PLOT_SELECTOR_TRIGGER_CLASS_NAME =
+  "!min-h-9 !px-2 !py-1.5 text-xs [&>span:first-child]:gap-0 [&>span:first-child>span:nth-child(2)]:hidden";
+
+type LogPlotSelectorGroupKey = (typeof LOG_PLOT_SELECTOR_GROUPS)[number];
 
 const EMPTY_HIGHLIGHTED_RUNS_BY_GROUP: Record<LogMetricGroupKey, string | null> = {
   train: null,
   validation: null,
   test: null,
   other: null,
+};
+
+const EMPTY_HIDDEN_PLOT_TAGS_BY_GROUP: Record<LogPlotSelectorGroupKey, Set<string>> = {
+  train: new Set(),
+  validation: new Set(),
 };
 
 export type LogsChartEmptyState = {
@@ -115,33 +129,45 @@ function LogsAccordionHeader({
   isCollapsed,
   controlsId,
   onToggle,
+  actions,
 }: {
   label: string;
   badge: string;
   isCollapsed: boolean;
   controlsId: string;
   onToggle: () => void;
+  actions?: ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      className="flex w-full min-w-0 items-center justify-between gap-3 rounded-[10px] border border-line bg-white/[0.025] px-3 py-2.5 text-left transition hover:border-white/15 hover:bg-white/[0.055] focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-      aria-expanded={!isCollapsed}
-      aria-controls={controlsId}
-      onClick={onToggle}
+    <div
+      className={cn(
+        "grid w-full min-w-0 gap-2 rounded-[10px] border border-line bg-white/[0.025] p-2 transition hover:border-white/15 hover:bg-white/[0.055]",
+        actions
+          ? "grid-cols-1 md:grid-cols-[minmax(12rem,1fr)_minmax(18rem,24rem)] md:items-center"
+          : "grid-cols-1",
+      )}
     >
-      <span className="flex min-w-0 items-center gap-2">
-        <ChevronDown
-          className={cn(
-            "h-4 w-4 shrink-0 text-ink-faint transition-transform",
-            isCollapsed && "-rotate-90",
-          )}
-          aria-hidden
-        />
-        <span className="truncate text-sm font-bold text-ink">{label}</span>
-      </span>
-      <Badge>{badge}</Badge>
-    </button>
+      <button
+        type="button"
+        className="flex min-w-0 items-center justify-between gap-3 rounded-[8px] px-1 py-1 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        aria-expanded={!isCollapsed}
+        aria-controls={controlsId}
+        onClick={onToggle}
+      >
+        <span className="flex min-w-0 items-center gap-2">
+          <ChevronDown
+            className={cn(
+              "h-4 w-4 shrink-0 text-ink-faint transition-transform",
+              isCollapsed && "-rotate-90",
+            )}
+            aria-hidden
+          />
+          <span className="truncate text-sm font-bold text-ink">{label}</span>
+        </span>
+        <Badge>{badge}</Badge>
+      </button>
+      {actions && <div className="min-w-0">{actions}</div>}
+    </div>
   );
 }
 
@@ -151,12 +177,14 @@ function LogsMetricGroupHeader({
   isCollapsed,
   controlsId,
   onToggle,
+  actions,
 }: {
   group: (typeof LOG_METRIC_GROUPS)[number];
   metricCount: number;
   isCollapsed: boolean;
   controlsId: string;
   onToggle: (group: LogMetricGroupKey) => void;
+  actions?: ReactNode;
 }) {
   return (
     <LogsAccordionHeader
@@ -165,7 +193,69 @@ function LogsMetricGroupHeader({
       isCollapsed={isCollapsed}
       controlsId={controlsId}
       onToggle={() => onToggle(group.key)}
+      actions={actions}
     />
+  );
+}
+
+function isLogPlotSelectorGroup(
+  group: LogMetricGroupKey,
+): group is LogPlotSelectorGroupKey {
+  return (LOG_PLOT_SELECTOR_GROUPS as readonly LogMetricGroupKey[]).includes(group);
+}
+
+function logPlotSelectorOptions(tags: string[]): MultiSelectDropdownOption[] {
+  return tags.map((tag) => ({
+    value: tag,
+    label: tag,
+  }));
+}
+
+function LogPlotSelectorControls({
+  groupLabel,
+  values,
+  options,
+  onChange,
+}: {
+  groupLabel: string;
+  values: string[];
+  options: MultiSelectDropdownOption[];
+  onChange: (values: string[]) => void;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label={`${groupLabel} plot controls`}
+      className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-1.5"
+    >
+      <MultiSelectDropdown
+        label={`${groupLabel} plots`}
+        values={values}
+        options={options}
+        onChange={onChange}
+        placeholder="No plots selected"
+        className="min-w-0"
+        triggerClassName={LOG_PLOT_SELECTOR_TRIGGER_CLASS_NAME}
+        initialVisibleCount={25}
+        pageSize={25}
+      />
+      <Button
+        variant="secondary"
+        className="h-9 shrink-0 px-2 text-xs"
+        aria-label={`Select all ${groupLabel} plots`}
+        onClick={() => onChange(options.map((option) => option.value))}
+      >
+        All
+      </Button>
+      <Button
+        variant="ghost"
+        className="h-9 shrink-0 border border-line bg-white/[0.025] px-2 text-xs"
+        aria-label={`Select no ${groupLabel} plots`}
+        onClick={() => onChange([])}
+      >
+        None
+      </Button>
+    </div>
   );
 }
 
@@ -275,6 +365,12 @@ export function LogsChartPanel({
   const [highlightedRunsByGroup, setHighlightedRunsByGroup] = useState<
     Record<LogMetricGroupKey, string | null>
   >(() => ({ ...EMPTY_HIGHLIGHTED_RUNS_BY_GROUP }));
+  const [hiddenPlotTagsByGroup, setHiddenPlotTagsByGroup] = useState<
+    Record<LogPlotSelectorGroupKey, Set<string>>
+  >(() => ({
+    train: new Set(EMPTY_HIDDEN_PLOT_TAGS_BY_GROUP.train),
+    validation: new Set(EMPTY_HIDDEN_PLOT_TAGS_BY_GROUP.validation),
+  }));
   const visibleRunIds = useMemo(() => new Set(runOrder), [runOrder]);
   const setHighlightedRunForGroup = useCallback(
     (group: LogMetricGroupKey, runId: string | null) => {
@@ -299,6 +395,50 @@ export function LogsChartPanel({
       return didChange ? next : current;
     });
   }, [visibleRunIds]);
+
+  useEffect(() => {
+    setHiddenPlotTagsByGroup((current) => {
+      let didChange = false;
+      const next = { ...current };
+
+      for (const group of LOG_PLOT_SELECTOR_GROUPS) {
+        const availableTags = new Set(selectedTagsByGroup[group]);
+        const currentHiddenTags = current[group];
+        const filteredHiddenTags = new Set(
+          Array.from(currentHiddenTags).filter((tag) => availableTags.has(tag)),
+        );
+        if (filteredHiddenTags.size !== currentHiddenTags.size) {
+          next[group] = filteredHiddenTags;
+          didChange = true;
+        }
+      }
+
+      return didChange ? next : current;
+    });
+  }, [selectedTagsByGroup]);
+
+  const handlePlotSelectionChange = useCallback(
+    (group: LogPlotSelectorGroupKey, selectedValues: string[]) => {
+      const selectedValueSet = new Set(selectedValues);
+      setHiddenPlotTagsByGroup((current) => {
+        const hiddenTags = new Set(
+          selectedTagsByGroup[group].filter((tag) => !selectedValueSet.has(tag)),
+        );
+        const currentHiddenTags = current[group];
+        if (
+          hiddenTags.size === currentHiddenTags.size &&
+          Array.from(hiddenTags).every((tag) => currentHiddenTags.has(tag))
+        ) {
+          return current;
+        }
+        return {
+          ...current,
+          [group]: hiddenTags,
+        };
+      });
+    },
+    [selectedTagsByGroup],
+  );
 
   return (
     <div className="grid min-h-0 grid-rows-[56px_minmax(0,1fr)]">
@@ -473,9 +613,47 @@ export function LogsChartPanel({
               const isCollapsed = collapsedMetricGroups.has(group.key);
               const queryState = scalarQueryStates[group.key];
               const bodyId = `logs-metric-group-${group.key}`;
-              const visibleMetrics = metrics.slice(0, LOG_METRIC_GROUP_RENDER_LIMIT);
-              const hiddenMetricCount = Math.max(0, metrics.length - visibleMetrics.length);
+              const plotSelectorGroup = isLogPlotSelectorGroup(group.key)
+                ? group.key
+                : null;
+              const hiddenPlotTags = plotSelectorGroup
+                ? hiddenPlotTagsByGroup[plotSelectorGroup]
+                : null;
+              const selectedPlotTags = plotSelectorGroup
+                ? selectedGroupTags.filter((tag) => !hiddenPlotTags?.has(tag))
+                : selectedGroupTags;
+              const selectedPlotTagSet = plotSelectorGroup
+                ? new Set(selectedPlotTags)
+                : null;
+              const renderedMetrics = plotSelectorGroup
+                ? metrics.filter((metric) => selectedPlotTagSet?.has(metric.tag))
+                : metrics;
+              const visibleMetrics = renderedMetrics.slice(
+                0,
+                LOG_METRIC_GROUP_RENDER_LIMIT,
+              );
+              const hiddenMetricCount = Math.max(
+                0,
+                renderedMetrics.length - visibleMetrics.length,
+              );
               const fullSpanClass = SCALAR_CHART_GRID_FULL_SPAN_CLASSES[gridMode];
+              const plotSelectorOptions = plotSelectorGroup
+                ? logPlotSelectorOptions(selectedGroupTags)
+                : [];
+              const plotSelector = plotSelectorGroup ? (
+                <LogPlotSelectorControls
+                  groupLabel={group.label}
+                  values={selectedPlotTags}
+                  options={plotSelectorOptions}
+                  onChange={(values) =>
+                    handlePlotSelectionChange(plotSelectorGroup, values)
+                  }
+                />
+              ) : undefined;
+              const hasNoSelectedPlots =
+                plotSelectorGroup !== null &&
+                selectedGroupTags.length > 0 &&
+                selectedPlotTags.length === 0;
 
               return (
                 <section key={group.key} className="grid gap-3">
@@ -485,11 +663,24 @@ export function LogsChartPanel({
                     isCollapsed={isCollapsed}
                     controlsId={bodyId}
                     onToggle={onToggleMetricGroup}
+                    actions={plotSelector}
                   />
                   {!isCollapsed && (
                     <>
-                      <div id={bodyId} className={SCALAR_CHART_GRID_CLASSES[gridMode]}>
-                        {queryState.isError && (
+                      <div
+                        id={bodyId}
+                        className={
+                          hasNoSelectedPlots
+                            ? "grid gap-3"
+                            : SCALAR_CHART_GRID_CLASSES[gridMode]
+                        }
+                      >
+                        {hasNoSelectedPlots && (
+                          <InlineStatus compact>
+                            No plots selected in this group
+                          </InlineStatus>
+                        )}
+                        {!hasNoSelectedPlots && queryState.isError && (
                           <div className={fullSpanClass}>
                             <ErrorPanel
                               title={`${group.label} scalar read failed`}
@@ -497,54 +688,57 @@ export function LogsChartPanel({
                             />
                           </div>
                         )}
-                        {queryState.isInitialLoading && metrics.length === 0 && (
-                          <InlineStatus
-                            busy
-                            compact
-                            role="status"
-                            className={fullSpanClass}
-                          >
-                            Loading {group.label} scalar points
-                          </InlineStatus>
-                        )}
-                        {visibleMetrics.map(({ tag, series }) => {
-                          if (isTestMetricTag(tag)) {
+                        {!hasNoSelectedPlots &&
+                          queryState.isInitialLoading &&
+                          metrics.length === 0 && (
+                            <InlineStatus
+                              busy
+                              compact
+                              role="status"
+                              className={fullSpanClass}
+                            >
+                              Loading {group.label} scalar points
+                            </InlineStatus>
+                          )}
+                        {!hasNoSelectedPlots &&
+                          visibleMetrics.map(({ tag, series }) => {
+                            if (isTestMetricTag(tag)) {
+                              return (
+                                <LogTestLeaderboardTable
+                                  key={tag}
+                                  tag={tag}
+                                  series={series}
+                                  runsById={runsById}
+                                  runOrder={runOrder}
+                                  onSelectRun={onSelectRun}
+                                />
+                              );
+                            }
                             return (
-                              <LogTestLeaderboardTable
+                              <LazyLogScalarChart
                                 key={tag}
                                 tag={tag}
                                 series={series}
                                 runsById={runsById}
+                                checkpointsByRunId={checkpointsByRunId}
                                 runOrder={runOrder}
                                 onSelectRun={onSelectRun}
+                                highlightedRunId={highlightedRunsByGroup[group.key]}
+                                onHoverRunChange={(runId) =>
+                                  setHighlightedRunForGroup(group.key, runId)
+                                }
+                                group={LOGS_SCALAR_GROUP}
+                                xMode={xMode}
+                                yScale={yScale}
+                                smoothing={smoothing}
                               />
                             );
-                          }
-                          return (
-                            <LazyLogScalarChart
-                              key={tag}
-                              tag={tag}
-                              series={series}
-                              runsById={runsById}
-                              checkpointsByRunId={checkpointsByRunId}
-                              runOrder={runOrder}
-                              onSelectRun={onSelectRun}
-                              highlightedRunId={highlightedRunsByGroup[group.key]}
-                              onHoverRunChange={(runId) =>
-                                setHighlightedRunForGroup(group.key, runId)
-                              }
-                              group={LOGS_SCALAR_GROUP}
-                              xMode={xMode}
-                              yScale={yScale}
-                              smoothing={smoothing}
-                            />
-                          );
-                        })}
+                          })}
                       </div>
                       {hiddenMetricCount > 0 && (
                         <div className="rounded-[10px] border border-line-soft bg-white/[0.018] px-3 py-3 text-center text-xs text-ink-faint">
-                          Showing {visibleMetrics.length} of {metrics.length} charts in this
-                          group. Narrow selected tags to inspect the rest.
+                          Showing {visibleMetrics.length} of {renderedMetrics.length} charts
+                          in this group. Narrow selected tags to inspect the rest.
                         </div>
                       )}
                     </>

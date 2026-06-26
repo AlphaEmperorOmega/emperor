@@ -110,6 +110,28 @@ async function clickLogOption(
   return option;
 }
 
+async function openMetricPlotSelector(
+  user: ReturnType<typeof userEvent.setup>,
+  group: "Train" | "Validation",
+) {
+  const trigger = await screen.findByRole("combobox", {
+    name: new RegExp(`^${escapeRegExp(group)} plots\\b`, "i"),
+  });
+  if (trigger.getAttribute("aria-expanded") !== "true") {
+    await user.click(trigger);
+  }
+  return screen.findByRole("listbox", { name: `${group} plots options` });
+}
+
+async function findMetricPlotOption(
+  user: ReturnType<typeof userEvent.setup>,
+  group: "Train" | "Validation",
+  label: string,
+) {
+  const listbox = await openMetricPlotSelector(user, group);
+  return within(listbox).findByRole("option", { name: logOptionName(label) });
+}
+
 function makeScrollable(element: HTMLElement) {
   Object.defineProperty(element, "clientHeight", {
     configurable: true,
@@ -672,6 +694,104 @@ describe("ViewerApp Logs Workspace", () => {
     expect(screen.queryByRole("table", { name: /test\/accuracy test leaderboard/i }))
       .not.toBeInTheDocument();
     expect(logScalarRequests).toHaveLength(4);
+  });
+
+  it("filters train and validation plots locally from accordion selectors", async () => {
+    const { logScalarRequests } = installFetchMock();
+    renderViewer();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+    await selectLogExperiments(user, ["test_model"]);
+
+    expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
+      .toBeInTheDocument();
+    expect(await screen.findByRole("img", { name: /train\/loss scalar chart/i }))
+      .toBeInTheDocument();
+    await waitFor(() => {
+      expect(logScalarRequests).toHaveLength(3);
+    });
+    const scalarRequestCount = logScalarRequests.length;
+
+    expect(
+      screen.getByRole("combobox", { name: /^Train plots\s+1 \/ 1 selected$/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("combobox", { name: /^Validation plots\s+1 \/ 1 selected$/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Train plot controls" })).toHaveClass(
+      "grid",
+      "grid-cols-[minmax(0,1fr)_auto_auto]",
+    );
+    expect(screen.getByRole("group", { name: "Validation plot controls" })).toHaveClass(
+      "grid",
+      "grid-cols-[minmax(0,1fr)_auto_auto]",
+    );
+    expectLogOptionSelected(
+      await findMetricPlotOption(user, "Train", "train/loss"),
+      true,
+    );
+    expectLogOptionSelected(
+      await findMetricPlotOption(user, "Validation", "validation/accuracy"),
+      true,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Select no Validation plots" }),
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByRole("img", { name: /validation\/accuracy scalar chart/i }))
+        .not.toBeInTheDocument();
+    });
+    expect(screen.getByText("No plots selected in this group")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: /train\/loss scalar chart/i }))
+      .toBeInTheDocument();
+    await expectLogFilterSelection(user, "Scalar Tags", "validation/accuracy", true);
+    expect(logScalarRequests).toHaveLength(scalarRequestCount);
+
+    await user.click(
+      screen.getByRole("button", { name: "Select all Validation plots" }),
+    );
+
+    expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
+      .toBeInTheDocument();
+    expect(logScalarRequests).toHaveLength(scalarRequestCount);
+  });
+
+  it("opens a metric plot selector without collapsing its accordion", async () => {
+    installFetchMock();
+    renderViewer();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+    await selectLogExperiments(user, ["test_model"]);
+
+    expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
+      .toBeInTheDocument();
+    const validationToggle = logMetricGroupToggle("Validation");
+    expect(validationToggle).toHaveAttribute("aria-expanded", "true");
+
+    await user.click(
+      screen.getByRole("combobox", { name: /^Validation plots\s+1 \/ 1 selected$/i }),
+    );
+
+    expect(
+      await screen.findByRole("listbox", { name: "Validation plots options" }),
+    ).toBeInTheDocument();
+    expect(validationToggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("img", { name: /validation\/accuracy scalar chart/i }))
+      .toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "Select all Validation plots" }),
+    );
+    expect(validationToggle).toHaveAttribute("aria-expanded", "true");
+
+    await user.click(
+      screen.getByRole("button", { name: "Select no Validation plots" }),
+    );
+    expect(validationToggle).toHaveAttribute("aria-expanded", "true");
   });
 
   it("keeps loaded scalar groups visible while the default-open Train group loads", async () => {
