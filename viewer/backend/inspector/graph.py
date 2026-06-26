@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import fields, is_dataclass
 from enum import Enum
+from inspect import cleandoc
 from typing import Any, Literal
 
 from emperor.base.utils import ConfigBase
@@ -36,6 +37,176 @@ RUNTIME_GRAPH_TYPE_NAMES = {
     "SequenceClassifierMetricsLogger",
 }
 
+COMPONENT_DESCRIPTION_BY_CLASS_NAME = {
+    "Model": (
+        "Top-level inspected model wrapper that owns the architecture, loss, "
+        "metrics, and runtime modules for the selected preset."
+    ),
+    "ModuleList": (
+        "Container that stores an ordered list of child modules; execution is "
+        "defined by the parent module."
+    ),
+    "Sequential": (
+        "Container that applies child modules in order, passing each output to "
+        "the next child."
+    ),
+    "Dropout": (
+        "Regularization module that randomly zeroes activations during training "
+        "and is inactive during evaluation."
+    ),
+    "LayerNorm": (
+        "Normalizes features within each sample to stabilize hidden-state "
+        "scale before or after a layer block."
+    ),
+    "CrossEntropyLoss": (
+        "Runtime loss module for multi-class classification targets."
+    ),
+    "ClassifierMetricsLogger": (
+        "Runtime module that groups classifier metrics for train, validation, "
+        "and test reporting."
+    ),
+    "LanguageModelMetricsLogger": (
+        "Runtime module that groups language-model metrics for train, "
+        "validation, and test reporting."
+    ),
+    "SequenceClassifierMetricsLogger": (
+        "Runtime module that groups sequence-classifier metrics for train, "
+        "validation, and test reporting."
+    ),
+    "MulticlassAccuracy": (
+        "Runtime metric that reports the share of classified examples whose "
+        "predicted class matches the target class."
+    ),
+    "MulticlassF1Score": (
+        "Runtime metric that reports the harmonic mean of classifier precision "
+        "and recall across classes."
+    ),
+    "KeyValueBias": (
+        "Internal attention helper that adds learned key/value bias terms."
+    ),
+    "SamplerAuxiliaryLosses": (
+        "Internal mixture-of-experts helper that tracks auxiliary routing losses."
+    ),
+    "SelfAttentionProcessor": (
+        "Internal attention helper that prepares attention inputs and masks."
+    ),
+    "SelfAttentionProjector": (
+        "Internal attention helper that projects hidden states into attention "
+        "query, key, and value tensors."
+    ),
+    "Unfold": (
+        "Internal tensor reshaping module that extracts sliding local blocks "
+        "from an input tensor."
+    ),
+    "LinearLayer": (
+        "Applies a learned linear projection with configured input/output "
+        "dimensions and optional bias."
+    ),
+    "LinearLayerConfig": (
+        "Builds a learned linear projection with configured input/output "
+        "dimensions and optional bias."
+    ),
+    "AdaptiveLinearLayer": (
+        "Applies a learned linear projection that can optionally augment "
+        "parameters from the current input."
+    ),
+    "AdaptiveLinearLayerConfig": (
+        "Builds a linear projection that can optionally augment parameters from "
+        "the current input."
+    ),
+    "Layer": (
+        "Applies one configured layer block with optional activation, residuals, "
+        "normalization, gating, halting, and memory hooks."
+    ),
+    "LayerConfig": (
+        "Builds a Layer block with optional activation, residuals, normalization, "
+        "gating, halting, and memory hooks."
+    ),
+    "LayerStack": (
+        "Runs an ordered stack of Layer blocks, with shared dimensions and "
+        "optional shared gate, halting, or memory modules."
+    ),
+    "LayerStackConfig": (
+        "Builds an ordered stack of Layer blocks, with shared dimensions and "
+        "optional shared gate, halting, or memory modules."
+    ),
+    "RecurrentLayer": (
+        "Reuses a configured block for multiple recurrent steps, optionally "
+        "adding recurrent gating, normalization, halting, or memory."
+    ),
+    "RecurrentLayerConfig": (
+        "Builds a recurrent block that can run for multiple steps with optional "
+        "gating, normalization, halting, or memory."
+    ),
+    "MixtureOfExperts": (
+        "Routes inputs across a set of expert modules using sampler probabilities "
+        "and combines or maps the selected expert outputs."
+    ),
+    "MixtureOfExpertsMap": (
+        "Routes inputs across experts and returns mapped expert outputs."
+    ),
+    "MixtureOfExpertsReduce": (
+        "Routes inputs across experts and reduces selected expert outputs back "
+        "into one representation."
+    ),
+    "MixtureOfExpertsLayer": (
+        "Wraps mixture-of-experts routing in the standard Layer pipeline."
+    ),
+    "MixtureOfExpertsConfig": (
+        "Configures expert count, routing, capacity, weighting, sampler behavior, "
+        "and expert model construction."
+    ),
+    "MixtureOfExpertsLayerConfig": (
+        "Builds a mixture-of-experts layer inside the standard Layer pipeline."
+    ),
+    "MixtureOfExpertsModelConfig": (
+        "Builds a model around a mixture-of-experts layer stack."
+    ),
+    "LayerGate": (
+        "Combines a learned gate output with the current layer value by scaling "
+        "or addition."
+    ),
+    "Gate": (
+        "Combines a learned gate output with the current layer value by scaling "
+        "or addition."
+    ),
+    "GateConfig": (
+        "Configures a layer gate network and how its output is composed with "
+        "the current value."
+    ),
+    "Halting": (
+        "Controls adaptive computation by deciding when recurrent processing has "
+        "accumulated enough probability mass to stop."
+    ),
+    "HaltingConfig": (
+        "Configures adaptive computation halting thresholds, dropout, hidden-state "
+        "mode, and gate network."
+    ),
+    "SoftHalting": (
+        "Accumulates weighted recurrent states until the halting threshold is met."
+    ),
+    "SoftHaltingConfig": (
+        "Builds soft halting, which accumulates weighted recurrent states until "
+        "the threshold is met."
+    ),
+    "StickBreaking": (
+        "Allocates remaining recurrent probability mass step by step until the "
+        "halting threshold is met."
+    ),
+    "StickBreakingConfig": (
+        "Builds stick-breaking halting, which allocates remaining recurrent "
+        "probability mass over steps."
+    ),
+    "NeuronCluster": (
+        "Maintains a 3D cluster of routed neurons that can traverse, branch, and "
+        "grow during training."
+    ),
+    "NeuronClusterConfig": (
+        "Configures a 3D routed neuron cluster, including capacity, traversal, "
+        "sampling, and growth controls."
+    ),
+}
+
 
 def _display_value(value: Any) -> Any:
     if isinstance(value, Enum):
@@ -61,23 +232,74 @@ def _config_field_value(value: Any) -> Any:
     return str(value)
 
 
-def _module_config(module: Module) -> dict[str, Any] | None:
+def _module_config_instance(module: Module) -> Any | None:
     config = getattr(module, "_emperor_config", None)
     if config is None:
         config = getattr(module, "cfg", None)
     if config is None or isinstance(config, type) or not is_dataclass(config):
         return None
+    return config
+
+
+def _metadata_help(metadata: Any) -> str | None:
+    help_text = metadata.get("help") if hasattr(metadata, "get") else None
+    if not isinstance(help_text, str):
+        return None
+    help_text = help_text.strip()
+    return help_text or None
+
+
+def _module_config(module: Module) -> dict[str, Any] | None:
+    config = _module_config_instance(module)
+    if config is None:
+        return None
+
+    serialized_fields: list[dict[str, Any]] = []
+    for field in fields(config):
+        serialized_field = {
+            "key": field.name,
+            "value": _config_field_value(getattr(config, field.name)),
+        }
+        description = _metadata_help(field.metadata)
+        if description is not None:
+            serialized_field["description"] = description
+        serialized_fields.append(serialized_field)
 
     return {
         "typeName": type(config).__name__,
-        "fields": [
-            {
-                "key": field.name,
-                "value": _config_field_value(getattr(config, field.name)),
-            }
-            for field in fields(config)
-        ],
+        "fields": serialized_fields,
     }
+
+
+def _explicit_docstring_description(class_type: type[Any]) -> str | None:
+    raw_docstring = class_type.__dict__.get("__doc__")
+    if not isinstance(raw_docstring, str):
+        return None
+    docstring = cleandoc(raw_docstring).strip()
+    if not docstring or docstring.startswith(f"{class_type.__name__}("):
+        return None
+    return docstring.split("\n\n", 1)[0].replace("\n", " ")
+
+
+def _component_description(module: Module) -> str | None:
+    module_type = type(module)
+    description = COMPONENT_DESCRIPTION_BY_CLASS_NAME.get(module_type.__name__)
+    if description is not None:
+        return description
+
+    config = _module_config_instance(module)
+    if config is not None:
+        description = COMPONENT_DESCRIPTION_BY_CLASS_NAME.get(type(config).__name__)
+        if description is not None:
+            return description
+
+    if not module_type.__module__.startswith("torch."):
+        description = _explicit_docstring_description(module_type)
+        if description is not None:
+            return description
+    if config is not None:
+        return _explicit_docstring_description(type(config))
+    return None
 
 
 def _shape_value(value: Any) -> str | None:
@@ -377,17 +599,25 @@ def parameter_size_bytes(module: Module) -> int:
 
 def _node(node_id: str, path: str, module: Module) -> dict[str, Any]:
     type_name = type(module).__name__
-    return {
+    description = _component_description(module)
+    node = {
         "id": node_id,
         "label": type_name,
         "typeName": type_name,
-        "path": path,
-        "graphRole": graph_role(module),
-        "parameterCount": parameter_count(module),
-        "parameterSizeBytes": parameter_size_bytes(module),
-        "details": module_details(module),
-        "config": _module_config(module),
     }
+    if description is not None:
+        node["description"] = description
+    node.update(
+        {
+            "path": path,
+            "graphRole": graph_role(module),
+            "parameterCount": parameter_count(module),
+            "parameterSizeBytes": parameter_size_bytes(module),
+            "details": module_details(module),
+            "config": _module_config(module),
+        }
+    )
+    return node
 
 
 def _child_path(parent_path: str, child_name: str) -> str:

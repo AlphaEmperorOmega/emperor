@@ -369,7 +369,7 @@ SEARCH_AXIS_REQUIRED_FIELDS = (
     "type",
     "values",
 )
-GRAPH_CONFIG_FIELD_FIELDS = ("key", "value")
+GRAPH_CONFIG_FIELD_FIELDS = ("key", "value", "description")
 GRAPH_CONFIG_FIELD_REQUIRED_FIELDS = ("key",)
 GRAPH_CONFIG_FIELD_LOOSENESS = {
     "value": (
@@ -379,6 +379,18 @@ GRAPH_CONFIG_FIELD_LOOSENESS = {
     ),
 }
 GRAPH_NODE_FIELDS = (
+    "id",
+    "label",
+    "typeName",
+    "description",
+    "path",
+    "graphRole",
+    "parameterCount",
+    "parameterSizeBytes",
+    "details",
+    "config",
+)
+GRAPH_NODE_REQUIRED_FIELDS = (
     "id",
     "label",
     "typeName",
@@ -811,7 +823,7 @@ SCHEMA_PARITY_CASES = (
         schemas.GraphNodeResponse,
         "graphNodeSchema",
         GRAPH_NODE_FIELDS,
-        GRAPH_NODE_FIELDS,
+        GRAPH_NODE_REQUIRED_FIELDS,
     ),
     SchemaParityCase(
         schemas.GraphEdgeResponse,
