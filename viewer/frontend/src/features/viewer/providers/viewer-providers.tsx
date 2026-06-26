@@ -93,6 +93,9 @@ export function useTargetSelectorState() {
     selectedConfigSnapshot,
     selectedExperimentRunId,
     selectedDatasets,
+    activeOverrides,
+    effectivePresetOverrides,
+    configSections,
     capabilities,
     selectModelType,
     selectModel,
@@ -107,6 +110,8 @@ export function useTargetSelectorState() {
     models,
     presets,
     datasets,
+    targetMonitors,
+    targetMonitorsLoading,
     isSchemaReady,
   } = useTargetConfig();
 
@@ -123,6 +128,9 @@ export function useTargetSelectorState() {
     selectedConfigSnapshot,
     selectedExperimentRunId,
     selectedDatasets,
+    activeOverrides,
+    effectivePresetOverrides,
+    configSections,
     configSnapshotsEnabled: capabilities.configSnapshotsEnabled,
     isSchemaReady,
     selectModelType,
@@ -138,6 +146,8 @@ export function useTargetSelectorState() {
     models,
     presets,
     datasets,
+    targetMonitors,
+    targetMonitorsLoading,
   };
 }
 

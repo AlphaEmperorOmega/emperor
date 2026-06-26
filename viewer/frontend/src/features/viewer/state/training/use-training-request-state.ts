@@ -142,7 +142,7 @@ export function useTrainingRequestState({
             selectedDatasets,
             snapshots: selectedTrainingSnapshots,
             fields: configFields,
-            presetOverrides: editablePresetOverrides,
+            bulkOverrides: editablePresetOverrides,
             logFolder,
           })
         : undefined,

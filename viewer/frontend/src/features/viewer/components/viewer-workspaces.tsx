@@ -1,14 +1,14 @@
 import dynamic from "next/dynamic";
 import { CompareWorkspace } from "@/features/viewer/components/compare-workspace";
+import { FullConfigDialog } from "@/features/viewer/components/config/full-config-dialog";
 import { ConnectedMonitorChartsModal } from "@/features/viewer/components/monitor/connected-monitor-charts-modal";
-import { ConnectedTrainingPanel } from "@/features/viewer/components/connected-training-panel";
+import { ConnectedTrainingWorkspace } from "@/features/viewer/components/connected-training-panel";
 import { ApiConnectionDialog } from "@/features/viewer/components/screen/api-connection-dialog";
 import { ImportLogsDialog } from "@/features/viewer/components/screen/import-logs-dialog";
 import { NodeDetailsPanel } from "@/features/viewer/components/screen/node-details-panel";
 import { PreviewPanel } from "@/features/viewer/components/screen/preview-panel";
 import { PreviewToolbar } from "@/features/viewer/components/screen/preview-toolbar";
 import { ViewerModelSidebar } from "@/features/viewer/components/viewer-model-sidebar";
-import { ViewerWorkspaceNav } from "@/features/viewer/components/viewer-workspace-nav";
 import { useGraphView } from "@/features/viewer/providers/viewer-providers";
 import {
   type FullConfigDialogControls,
@@ -16,13 +16,6 @@ import {
 } from "@/features/viewer/state/use-viewer-workspace-shell";
 import { type ViewerWorkspace } from "@/types/viewer";
 
-const FullConfigDialog = dynamic(
-  () =>
-    import("@/features/viewer/components/config/full-config-dialog").then(
-      (module) => module.FullConfigDialog,
-    ),
-  { ssr: false },
-);
 const FeatureListDialog = dynamic(
   () =>
     import("@/features/viewer/components/feature-list-dialog").then(
@@ -61,24 +54,21 @@ const ConnectedNeuronCluster3DPopup = dynamic(
 
 export function ViewerWorkspaceSidebar({
   activeWorkspace,
-  onChangeWorkspace,
   onOpenFullConfig,
 }: {
   activeWorkspace: ViewerWorkspace;
-  onChangeWorkspace: (workspace: ViewerWorkspace) => void;
   onOpenFullConfig: FullConfigDialogControls["open"];
 }) {
   const isModelWorkspace = activeWorkspace === "model";
   const isLogsWorkspace = activeWorkspace === "logs";
 
+  if (activeWorkspace === "training") {
+    return null;
+  }
+
   return (
     <aside className="min-h-0 overflow-y-auto border-b border-line bg-[linear-gradient(180deg,rgba(13,12,22,0.6),rgba(8,8,13,0.4))] px-4 pb-7 pt-[18px] backdrop-blur lg:border-b-0 lg:border-r">
       <div className="grid gap-[22px]">
-        <ViewerWorkspaceNav
-          activeWorkspace={activeWorkspace}
-          onChange={onChangeWorkspace}
-        />
-
         {isModelWorkspace ? (
           <ViewerModelSidebar onOpenFullConfig={onOpenFullConfig} />
         ) : isLogsWorkspace ? (
@@ -92,9 +82,11 @@ export function ViewerWorkspaceSidebar({
 export function ViewerWorkspaceMain({
   activeWorkspace,
   onChangeWorkspace,
+  onOpenFullConfig,
 }: {
   activeWorkspace: ViewerWorkspace;
   onChangeWorkspace: (workspace: ViewerWorkspace) => void;
+  onOpenFullConfig: FullConfigDialogControls["open"];
 }) {
   if (activeWorkspace === "model") {
     return (
@@ -115,6 +107,14 @@ export function ViewerWorkspaceMain({
         <ConnectedLogsGraphPreviewPanel />
         <ConnectedLogRunDetailsPanel />
       </>
+    );
+  }
+
+  if (activeWorkspace === "training") {
+    return (
+      <div className="h-full min-h-[560px] min-w-0 overflow-hidden lg:col-span-3 lg:min-h-0">
+        <ConnectedTrainingWorkspace onOpenFullConfig={onOpenFullConfig} />
+      </div>
     );
   }
 
@@ -146,6 +146,7 @@ export function ViewerWorkspaceOverlays({
       {fullConfigDialog.isOpen && (
         <FullConfigDialog
           mode={fullConfigDialog.mode}
+          scope={fullConfigDialog.scope}
           onClose={fullConfigDialog.close}
         />
       )}
@@ -160,9 +161,6 @@ export function ViewerWorkspaceOverlays({
       )}
       {isModelWorkspace && <ConnectedMonitorChartsModal />}
       {isModelWorkspace && cluster3dNodeId && <ConnectedNeuronCluster3DPopup />}
-      {isModelWorkspace && (
-        <ConnectedTrainingPanel onOpenFullConfig={fullConfigDialog.open} />
-      )}
     </>
   );
 }

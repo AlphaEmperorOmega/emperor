@@ -17,7 +17,7 @@ export function ViewerScreen({ shell }: { shell: ViewerScreenShell }) {
   } = shell;
 
   return (
-    <main className="grid h-dvh min-h-0 grid-rows-[60px_minmax(0,1fr)_auto] overflow-hidden bg-bg text-ink">
+    <main className="grid h-dvh min-h-0 grid-rows-[60px_minmax(0,1fr)] overflow-hidden bg-bg text-ink">
       <a
         href="#viewer-workspace-content"
         className="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-[100] focus:rounded-[9px] focus:border focus:border-focus focus:bg-panel focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-ink focus:outline-none"
@@ -26,6 +26,7 @@ export function ViewerScreen({ shell }: { shell: ViewerScreenShell }) {
       </a>
       <AppHeader
         activeWorkspace={activeWorkspace}
+        onChangeWorkspace={onChangeWorkspace}
         onOpenFeatureList={featureListDialog.open}
         onOpenApiConnection={apiConnectionDialog.open}
         onOpenImportLogs={importLogsDialog.open}
@@ -38,12 +39,12 @@ export function ViewerScreen({ shell }: { shell: ViewerScreenShell }) {
       >
         <ViewerWorkspaceSidebar
           activeWorkspace={activeWorkspace}
-          onChangeWorkspace={onChangeWorkspace}
           onOpenFullConfig={fullConfigDialog.open}
         />
         <ViewerWorkspaceMain
           activeWorkspace={activeWorkspace}
           onChangeWorkspace={onChangeWorkspace}
+          onOpenFullConfig={fullConfigDialog.open}
         />
       </section>
 

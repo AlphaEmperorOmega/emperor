@@ -9,13 +9,13 @@ import {
   useTrainingPanelViewModel,
 } from "@/features/viewer/state/training/use-training-panel-view-model";
 import {
-  type FullConfigDialogMode,
+  type FullConfigDialogControls,
 } from "@/features/viewer/state/use-viewer-workspace-shell";
 
-export function ConnectedTrainingPanel({
+export function ConnectedTrainingWorkspace({
   onOpenFullConfig,
 }: {
-  onOpenFullConfig: (mode?: FullConfigDialogMode) => void;
+  onOpenFullConfig: FullConfigDialogControls["open"];
 }) {
   const target = useTargetConfig();
   const activeJob = useActiveTrainingJob();
@@ -23,21 +23,21 @@ export function ConnectedTrainingPanel({
   const history = useHistoricalRuns();
   const viewModel = useTrainingPanelViewModel({
     models: target.models,
-    presets: target.presets,
-    datasetOptions: target.datasets,
-    configSections: target.configSections,
-    selectedModelType: target.selectedModelType,
-    selectedModel: target.selectedModel,
-    selectedPreset: target.selectedPreset,
+    presets: target.trainingPresets,
+    datasetOptions: target.trainingDatasets,
+    configSections: target.trainingConfigSections,
+    selectedModelType: target.selectedTrainingModelType,
+    selectedModel: target.selectedTrainingModel,
+    selectedPreset: target.selectedTrainingPrimaryPreset,
     selectedTrainingPresets: target.selectedTrainingPresets,
     selectedTrainingSnapshotIds: target.selectedTrainingSnapshotIds,
-    selectedDatasets: target.selectedDatasets,
-    overrides: target.presetOverrides,
+    selectedDatasets: target.selectedTrainingDatasets,
+    overrides: target.trainingOverrides,
     snapshotOverrideWarning: target.snapshotOverrideWarning,
-    allConfigSnapshots: target.allConfigSnapshots,
-    configSnapshotCount: target.allConfigSnapshotCount,
+    allConfigSnapshots: target.allTrainingConfigSnapshots,
+    configSnapshotCount: target.allTrainingConfigSnapshotCount,
     monitorOptions: target.monitors,
-    selectedMonitors: target.selectedMonitors,
+    selectedMonitors: target.selectedTrainingMonitors,
     monitorsLoading: target.monitorsLoading,
     searchAxes: target.searchAxes,
     searchLoading: target.searchAxesLoading,
@@ -45,9 +45,15 @@ export function ConnectedTrainingPanel({
     trainingEnabled: target.capabilities.trainingEnabled,
     trainingLockedByHistoricalSelection: history.selectedLogRunId !== null,
     historicalTrainingLockExperiment: history.selectedHistoricalExperiment,
-    onSelectModelType: target.selectModelType,
-    onSelectModel: target.selectModel,
-    onSelectPreset: target.selectPreset,
+    canOpenFullConfig: Boolean(
+      target.selectedTrainingModel &&
+        target.selectedTrainingPrimaryPreset &&
+        target.isTrainingSchemaReady,
+    ),
+    onOpenFullConfig: () => onOpenFullConfig("default", "training"),
+    onSelectModelType: target.selectTrainingModelType,
+    onSelectModel: target.selectTrainingModel,
+    onSelectPreset: target.selectTrainingPrimaryPreset,
     onSetTrainingPresets: target.setTrainingPresetSelection,
     onSetTrainingSnapshotSelection: target.setTrainingSnapshotSelection,
     onToggleTrainingPreset: target.toggleTrainingPreset,
@@ -56,36 +62,30 @@ export function ConnectedTrainingPanel({
     onMakeTrainingPresetPrimary: target.makeTrainingPresetPrimary,
     onSelectAllTrainingPresets: target.selectAllTrainingPresets,
     onSelectPrimaryTrainingPreset: target.selectPrimaryTrainingPreset,
-    onSetDatasets: target.setDatasetSelection,
-    onToggleDataset: target.toggleDataset,
-    onSelectAllDatasets: target.selectAllDatasets,
-    onSelectFirstDataset: target.selectFirstDataset,
+    onSetDatasets: target.setTrainingDatasetSelection,
+    onToggleDataset: target.toggleTrainingDataset,
+    onSelectAllDatasets: target.selectAllTrainingDatasets,
+    onSelectFirstDataset: target.selectFirstTrainingDataset,
     onRemoveConfigSnapshot: target.removeConfigSnapshot,
     onIncludeConfigSnapshot: target.includeConfigSnapshot,
     onExcludeConfigSnapshot: target.excludeConfigSnapshot,
     onCreatePresetSnapshot: (preset) => {
       if (
-        target.preparePresetSnapshotDraft(preset, {
-          includeTrainingPreset: false,
-        })
+        target.prepareTrainingPresetSnapshotDraft(preset)
       ) {
         onOpenFullConfig("snapshotDraft");
       }
     },
     onEditConfigSnapshot: (snapshotId) => {
       if (
-        target.prepareSelectedSnapshotEdit(snapshotId, {
-          includeTrainingSnapshot: false,
-        })
+        target.prepareTrainingSelectedSnapshotEdit(snapshotId)
       ) {
         onOpenFullConfig("snapshotEdit");
       }
     },
     onDuplicateConfigSnapshot: (snapshotId) => {
       if (
-        target.prepareSelectedSnapshotEdit(snapshotId, {
-          includeTrainingSnapshot: false,
-        })
+        target.prepareTrainingSelectedSnapshotEdit(snapshotId)
       ) {
         onOpenFullConfig("snapshotDraft");
       }
@@ -102,3 +102,5 @@ export function ConnectedTrainingPanel({
 
   return <TrainingPanel viewModel={viewModel} />;
 }
+
+export const ConnectedTrainingPanel = ConnectedTrainingWorkspace;

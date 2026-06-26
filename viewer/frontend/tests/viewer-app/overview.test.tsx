@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   IMPLEMENTED_FEATURES,
   capabilitiesResponse,
+  commandField,
   expandedTrainingDetails,
   installFetchMock,
   inspectResponse,
@@ -108,6 +109,44 @@ describe("ViewerApp Overview", () => {
     expect(within(header).queryByText(/^edges$/i)).not.toBeInTheDocument();
   });
 
+  it("renders workspace navigation in the header without duplicating it in the sidebar", async () => {
+    installFetchMock();
+    renderViewer();
+    const user = userEvent.setup();
+
+    await waitForTargetValue("model", "linear");
+    await waitForTargetValue("preset", "baseline");
+
+    const header = document.querySelector("header");
+    if (!header) {
+      throw new Error("Expected app header to render");
+    }
+    const workspaceContent = document.getElementById("viewer-workspace-content");
+    const sidebar = workspaceContent?.firstElementChild;
+    if (!(sidebar instanceof HTMLElement)) {
+      throw new Error("Expected workspace sidebar to render");
+    }
+
+    expect(within(header).queryByText("Emperor Model Viewer")).not.toBeInTheDocument();
+    expect(within(header).queryByText(/linear\s*\/\s*baseline/i))
+      .not.toBeInTheDocument();
+
+    const headerNav = within(header).getByRole("navigation", { name: "Workspace" });
+    expect(
+      within(headerNav).getAllByRole("button").map((button) => button.textContent?.trim()),
+    ).toEqual(["Model", "Training", "Logs", "Compare"]);
+    expect(within(sidebar).queryByRole("navigation", { name: "Workspace" }))
+      .not.toBeInTheDocument();
+
+    await user.click(within(headerNav).getByRole("button", { name: /^logs$/i }));
+
+    expect(await screen.findByText("Historical Scalars")).toBeInTheDocument();
+    expect(within(headerNav).getByRole("button", { name: /^logs$/i }))
+      .toHaveAttribute("aria-current", "page");
+    expect(within(sidebar).queryByRole("navigation", { name: "Workspace" }))
+      .not.toBeInTheDocument();
+  });
+
   it("opens API connection settings with frontend and backend environment guidance", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     const user = userEvent.setup();
@@ -165,7 +204,7 @@ describe("ViewerApp Overview", () => {
     expect(writeText).toHaveBeenNthCalledWith(2, frontendEnvValue);
   });
 
-  it("renders Import Logs next to Connection in the top nav", async () => {
+  it("renders flat header action buttons in order in the top nav", async () => {
     installFetchMock();
     renderViewer();
 
@@ -173,16 +212,47 @@ describe("ViewerApp Overview", () => {
     if (!header) {
       throw new Error("Expected app header to render");
     }
-    const buttons = within(header).getAllByRole("button");
-    const connectionIndex = buttons.findIndex(
-      (button) => button.getAttribute("aria-label") === "API connection settings",
-    );
-    const importIndex = buttons.findIndex(
-      (button) => button.getAttribute("aria-label") === "Import logs",
-    );
 
-    expect(connectionIndex).toBeGreaterThanOrEqual(0);
-    expect(importIndex).toBe(connectionIndex + 1);
+    const actionButtons = [
+      within(header).getByRole("button", {
+        name: /api connection settings/i,
+      }),
+      within(header).getByRole("button", { name: /import logs/i }),
+      within(header).getByRole("button", { name: /^features$/i }),
+      within(header).getByRole("button", { name: /^reset overrides$/i }),
+    ];
+    const headerButtons = within(header).getAllByRole("button");
+
+    expect(
+      headerButtons.filter((button) => actionButtons.includes(button)),
+    ).toEqual(actionButtons);
+    for (const button of actionButtons) {
+      expect(button).toHaveClass(
+        "h-9",
+        "gap-1.5",
+        "rounded-control-sm",
+        "border-0",
+        "bg-transparent",
+        "text-ink-dim",
+        "hover:bg-control-hover",
+        "hover:text-ink",
+        "focus-visible:ring-focus",
+      );
+      for (const legacyClassName of [
+        "rounded-control",
+        "border-line",
+        "bg-control",
+        "hover:border-line-hover",
+        "hover:bg-control-active",
+      ]) {
+        expect(button).not.toHaveClass(legacyClassName);
+      }
+    }
+    expect(actionButtons[3]).toHaveClass(
+      "disabled:text-ink-faint",
+      "disabled:hover:bg-transparent",
+      "disabled:hover:text-ink-faint",
+    );
   });
 
   it("imports a selected zip through the configured API base URL", async () => {
@@ -910,45 +980,151 @@ describe("ViewerApp Overview", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows the selected preset description in a compact popup", async () => {
+  it("opens a target preset training command with a local all-monitors toggle", async () => {
     installFetchMock();
     renderViewer();
     const user = userEvent.setup();
 
     await waitForTargetValue("preset", "baseline");
-    const trigger = screen.getByRole("button", { name: /show preset description/i });
-    expect(trigger).toHaveAttribute("aria-haspopup", "dialog");
-    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.queryByRole("button", { name: /show preset description/i }),
+    ).not.toBeInTheDocument();
+    const trigger = screen.getByRole("button", {
+      name: /training command for preset/i,
+    });
     expect(trigger).toBeEnabled();
-    expect(screen.queryByText("Baseline")).not.toBeInTheDocument();
 
     await user.click(trigger);
 
-    const dialog = await screen.findByRole("dialog", { name: /preset description/i });
-    expect(trigger).toHaveAttribute("aria-expanded", "true");
-    expect(within(dialog).getByRole("heading", { name: "baseline" })).toBeInTheDocument();
-    expect(within(dialog).getByText("Baseline")).toBeInTheDocument();
+    let dialog = await screen.findByRole("dialog", { name: /training command/i });
+    expect(commandField(dialog)).toHaveValue(
+      "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist",
+    );
+    const overlayRoot = dialog.parentElement;
+    const workspaceContent = document.getElementById("viewer-workspace-content");
+    const sidebar = workspaceContent?.firstElementChild;
+    if (!(overlayRoot instanceof HTMLElement) || !(sidebar instanceof HTMLElement)) {
+      throw new Error("Expected training command overlay and sidebar to render");
+    }
+    expect(overlayRoot.parentElement).toBe(document.body);
+    expect(overlayRoot).toHaveClass("fixed", "inset-0", "z-[60]");
+    expect(sidebar).not.toContain(overlayRoot);
+    expect((commandField(dialog) as HTMLTextAreaElement).value)
+      .not.toContain("--monitors");
 
-    await user.keyboard("{Escape}");
+    const monitorToggle = within(dialog).getByRole("button", {
+      name: /include all monitors/i,
+    });
+    const copyButton = within(dialog).getByRole("button", { name: /copy command/i });
+    const footer = monitorToggle.closest("footer");
+    if (!(footer instanceof HTMLElement)) {
+      throw new Error("Expected monitor toggle to render in the dialog footer");
+    }
+    expect(footer).toContain(copyButton);
+    expect(
+      monitorToggle.compareDocumentPosition(copyButton) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(monitorToggle).toHaveAttribute("aria-pressed", "false");
+
+    await user.click(monitorToggle);
 
     await waitFor(() => {
-      expect(screen.queryByRole("dialog", { name: /preset description/i }))
-        .not.toBeInTheDocument();
+      expect(commandField(dialog)).toHaveValue(
+        "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist --monitors linear sampler",
+      );
     });
-    expect(trigger).toHaveAttribute("aria-expanded", "false");
-    expect(trigger).toHaveFocus();
+    expect(monitorToggle).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(
+      within(dialog).getByRole("button", { name: /close training command/i }),
+    );
+    await user.click(trigger);
+
+    dialog = await screen.findByRole("dialog", { name: /training command/i });
+    expect(within(dialog).getByRole("button", { name: /include all monitors/i }))
+      .toHaveAttribute("aria-pressed", "false");
+    expect(commandField(dialog)).toHaveValue(
+      "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist",
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: /close training command/i }),
+    );
+
+    const trainingDetails = await expandedTrainingDetails(user);
+    const monitorsDropdown = await openTrainingMultiSelect(
+      user,
+      trainingDetails,
+      "Training monitors",
+    );
+    expect(
+      within(monitorsDropdown.listbox).getByRole("option", {
+        name: /Linear layers/i,
+      }),
+    ).toHaveAttribute("aria-selected", "false");
+    expect(
+      within(monitorsDropdown.listbox).getByRole("option", {
+        name: /Sampler usage/i,
+      }),
+    ).toHaveAttribute("aria-selected", "false");
+  });
+
+  it("opens a snapshot training command with the snapshot preset and overrides", async () => {
+    installFetchMock({
+      configSnapshotsResponse: {
+        modelType: "linears",
+        model: "linear",
+        snapshots: [
+          {
+            id: "linear-wide",
+            modelType: "linears",
+            model: "linear",
+            preset: "baseline",
+            name: "Wide snapshot",
+            overrides: { stack_hidden_dim: "128", stack_num_layers: "7" },
+            createdAt: "2026-06-01T00:00:00.000Z",
+            updatedAt: "2026-06-01T00:00:00.000Z",
+          },
+        ],
+      },
+    });
+    renderViewer();
+    const user = userEvent.setup();
+
+    await waitForTargetValue("preset", "baseline");
+    await user.click(screen.getByRole("radio", { name: "Snapshots" }));
+    expect(await screen.findByRole("combobox", { name: /^snapshot$/i }))
+      .toHaveTextContent("Wide snapshot");
+
+    const trigger = screen.getByRole("button", {
+      name: /training command for snapshot/i,
+    });
+    expect(trigger).toBeEnabled();
 
     await user.click(trigger);
-    expect(await screen.findByRole("dialog", { name: /preset description/i }))
-      .toBeInTheDocument();
-    await selectTargetOption(user, "preset", "recurrent-gating-halting");
 
-    await waitFor(() => {
-      expect(screen.queryByRole("dialog", { name: /preset description/i }))
-        .not.toBeInTheDocument();
+    const dialog = await screen.findByRole("dialog", {
+      name: /training command/i,
     });
-    expect(screen.getByRole("button", { name: /show preset description/i }))
-      .toHaveAttribute("aria-expanded", "false");
+    expect(commandField(dialog)).toHaveValue(
+      "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist --config --stack-hidden-dim 128 --stack-num-layers 7",
+    );
+  });
+
+  it("disables the target training command button without a selected dataset", async () => {
+    installFetchMock({
+      datasetsResponse: {
+        modelType: "linears",
+        model: "linear",
+        datasets: [],
+      },
+    });
+    renderViewer();
+
+    await waitForTargetValue("model", "linear");
+    expect(
+      screen.getByRole("button", { name: /training command for preset/i }),
+    ).toBeDisabled();
   });
 
   it("opens and closes the implemented features dialog without API side effects", async () => {
@@ -984,7 +1160,7 @@ describe("ViewerApp Overview", () => {
     expect(trainingBodies).toHaveLength(0);
   });
 
-  it("uses the first selected dataset for preview requests", async () => {
+  it("keeps training dataset selection out of model preview requests", async () => {
     const { inspectBodies } = installFetchMock();
     renderViewer();
     const user = userEvent.setup();
@@ -1004,11 +1180,12 @@ describe("ViewerApp Overview", () => {
       /Mnist/i,
       false,
     );
+    await user.click(screen.getByRole("button", { name: /^model\b/i }));
     const dialog = await openFullConfig(user);
     await user.click(within(dialog).getByRole("button", { name: /update preview/i }));
 
     await waitFor(() => {
-      expect(inspectBodies.at(-1)).toMatchObject({ dataset: "Cifar10" });
+      expect(inspectBodies.at(-1)).toMatchObject({ dataset: "Mnist" });
     });
   });
 

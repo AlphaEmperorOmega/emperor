@@ -400,7 +400,8 @@ describe("useTargetConfigState", () => {
     expect(result.current.target.selectedTargetMode).toBe("experiment");
     expect(result.current.target.selectedExperimentRunId).toBe("run-fast");
     expect(result.current.target.selectedSnapshotId).toBe("");
-    expect(result.current.target.selectedTrainingPresets).toEqual(["fast"]);
+    expect(result.current.target.selectedTrainingPresets).toEqual(["baseline"]);
+    expect(result.current.target.selectedTrainingDatasets).toEqual(["Mnist"]);
     expect(result.current.target.selectedDatasets).toEqual(["FashionMnist"]);
     expect(result.current.target.overrides).toEqual({});
     expect(mocks.resetGraphSelectionAndExpansion).toHaveBeenCalled();
@@ -604,6 +605,126 @@ describe("useTargetConfigState", () => {
     });
     expect(result.current.target.presetOverrides).toEqual({});
     expect(result.current.target.overrides).toEqual({});
+  });
+
+  it("selects a footer training model type without changing the preview target", async () => {
+    const { result } = renderTargetState();
+
+    await waitFor(() => {
+      expect(result.current.target.selectedModelType).toBe("linears");
+      expect(result.current.target.selectedModel).toBe("linear");
+      expect(result.current.target.selectedPreset).toBe("baseline");
+      expect(result.current.target.selectedTrainingModelType).toBe("linears");
+      expect(result.current.target.selectedTrainingModel).toBe("linear");
+      expect(result.current.target.selectedTrainingPrimaryPreset).toBe("baseline");
+    });
+
+    mocks.requestPreview.mockClear();
+    mocks.clearPreview.mockClear();
+    mocks.resetGraphSelectionAndExpansion.mockClear();
+
+    act(() => {
+      result.current.target.selectTrainingModelType("experts");
+    });
+
+    await waitFor(() => {
+      expect(result.current.target.selectedTrainingModelType).toBe("experts");
+      expect(result.current.target.selectedTrainingModel).toBe("experts_linear");
+      expect(result.current.target.selectedTrainingPrimaryPreset).toBe(
+        "expert-baseline",
+      );
+      expect(result.current.target.selectedTrainingPresets).toEqual([
+        "expert-baseline",
+      ]);
+      expect(result.current.target.selectedTrainingDatasets).toEqual([
+        "ExpertToy",
+      ]);
+    });
+    expect(result.current.target.selectedModelType).toBe("linears");
+    expect(result.current.target.selectedModel).toBe("linear");
+    expect(result.current.target.selectedPreset).toBe("baseline");
+    expect(result.current.target.selectedDatasets).toEqual(["Mnist"]);
+    expect(mocks.requestPreview).not.toHaveBeenCalled();
+    expect(mocks.clearPreview).not.toHaveBeenCalled();
+    expect(mocks.resetGraphSelectionAndExpansion).not.toHaveBeenCalled();
+  });
+
+  it("keeps training overrides independent and resets them for a new training model", async () => {
+    schemaFieldsByPreset = {
+      baseline: [configField({ key: "stack_hidden_dim" })],
+      "expert-baseline": [configField({ key: "stack_hidden_dim" })],
+    };
+    const { result } = renderTargetState();
+
+    await waitFor(() => {
+      expect(result.current.target.selectedTrainingModel).toBe("linear");
+      expect(result.current.target.selectedTrainingPrimaryPreset).toBe("baseline");
+    });
+
+    act(() => {
+      result.current.target.updateTrainingOverride("stack_hidden_dim", "128");
+    });
+
+    expect(result.current.target.trainingOverrides).toEqual({
+      stack_hidden_dim: "128",
+    });
+    expect(result.current.target.presetOverrides).toEqual({});
+    expect(result.current.target.overrides).toEqual({});
+
+    act(() => {
+      result.current.target.resetTrainingOverrides();
+    });
+
+    expect(result.current.target.trainingOverrides).toEqual({});
+
+    act(() => {
+      result.current.target.updateTrainingOverride("stack_hidden_dim", "192");
+    });
+    expect(result.current.target.trainingOverrides).toEqual({
+      stack_hidden_dim: "192",
+    });
+
+    act(() => {
+      result.current.target.selectTrainingModelType("experts");
+    });
+
+    await waitFor(() => {
+      expect(result.current.target.selectedTrainingModelType).toBe("experts");
+      expect(result.current.target.selectedTrainingModel).toBe("experts_linear");
+      expect(result.current.target.selectedTrainingPrimaryPreset).toBe(
+        "expert-baseline",
+      );
+    });
+    expect(result.current.target.trainingOverrides).toEqual({});
+    expect(result.current.target.selectedModelType).toBe("linears");
+    expect(result.current.target.selectedModel).toBe("linear");
+    expect(result.current.target.presetOverrides).toEqual({});
+  });
+
+  it("does not rewrite the seeded footer training target when the preview model changes", async () => {
+    const { result } = renderTargetState();
+
+    await waitFor(() => {
+      expect(result.current.target.selectedTrainingModel).toBe("linear");
+      expect(result.current.target.selectedTrainingPresets).toEqual(["baseline"]);
+      expect(result.current.target.selectedTrainingDatasets).toEqual(["Mnist"]);
+    });
+
+    act(() => {
+      result.current.target.selectModelType("experts");
+    });
+
+    await waitFor(() => {
+      expect(result.current.target.selectedModelType).toBe("experts");
+      expect(result.current.target.selectedModel).toBe("experts_linear");
+      expect(result.current.target.selectedPreset).toBe("expert-baseline");
+      expect(result.current.target.selectedDatasets).toEqual(["ExpertToy"]);
+    });
+    expect(result.current.target.selectedTrainingModelType).toBe("linears");
+    expect(result.current.target.selectedTrainingModel).toBe("linear");
+    expect(result.current.target.selectedTrainingPrimaryPreset).toBe("baseline");
+    expect(result.current.target.selectedTrainingPresets).toEqual(["baseline"]);
+    expect(result.current.target.selectedTrainingDatasets).toEqual(["Mnist"]);
   });
 
   it("keeps locked preset overrides in the draft but omits them from active preview overrides", async () => {
@@ -1060,7 +1181,7 @@ describe("useTargetConfigState", () => {
     ]);
   });
 
-  it("warns that preset overrides do not apply to selected snapshots", async () => {
+  it("does not warn when training overrides and snapshots are selected", async () => {
     snapshots = [
       {
         id: "snapshot-baseline",
@@ -1080,15 +1201,13 @@ describe("useTargetConfigState", () => {
     });
 
     act(() => {
-      result.current.target.updateOverride("hidden_size", "128");
+      result.current.target.updateTrainingOverride("hidden_size", "128");
     });
     act(() => {
       result.current.target.includeConfigSnapshot("snapshot-baseline");
     });
 
-    expect(result.current.target.snapshotOverrideWarning).toContain(
-      "Preset overrides apply only to preset rows",
-    );
+    expect(result.current.target.snapshotOverrideWarning).toBe("");
   });
 
   it("prepares a preset snapshot draft without re-adding an empty training preset selection", async () => {
@@ -1226,7 +1345,8 @@ describe("useTargetConfigState", () => {
 
     expect(result.current.target.selectedPreset).toBe("baseline");
     expect(result.current.target.selectedTrainingPresets).toEqual([]);
-    expect(result.current.target.configSnapshotCount).toBe(0);
+    expect(result.current.target.configSnapshotCount).toBe(1);
+    expect(result.current.target.trainingConfigSnapshotCount).toBe(0);
     expect(result.current.target.allConfigSnapshotCount).toBe(1);
   });
 
@@ -1260,9 +1380,7 @@ describe("useTargetConfigState", () => {
     await waitFor(() => {
       expect(result.current.target.selectedPreset).toBe("fast");
       expect(result.current.target.selectedTrainingPresets).toEqual(["baseline"]);
-      expect(result.current.target.selectedTrainingSnapshotIds).toEqual([
-        "snapshot-1",
-      ]);
+      expect(result.current.target.selectedTrainingSnapshotIds).toEqual([]);
       expect(result.current.target.overrides).toEqual({ hidden_size: "256" });
     });
   });
@@ -1295,8 +1413,9 @@ describe("useTargetConfigState", () => {
       expect(result.current.target.selectedModelType).toBe("experts");
       expect(result.current.target.selectedModel).toBe("experts_linear");
       expect(result.current.target.selectedPreset).toBe("expert-baseline");
-      expect(result.current.target.selectedTrainingPresets).toEqual([]);
+      expect(result.current.target.selectedTrainingPresets).toEqual(["baseline"]);
       expect(result.current.target.selectedDatasets).toEqual(["ExpertToy"]);
+      expect(result.current.target.selectedTrainingDatasets).toEqual(["Mnist"]);
       expect(result.current.target.overrides).toEqual({ expert_width: "4" });
     });
   });

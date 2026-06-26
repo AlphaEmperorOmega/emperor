@@ -8,11 +8,13 @@ export type ViewerDialogControls = {
 };
 
 export type FullConfigDialogMode = "default" | "snapshotDraft" | "snapshotEdit";
+export type FullConfigDialogScope = "model" | "training";
 
 export type FullConfigDialogControls = {
   isOpen: boolean;
   mode: FullConfigDialogMode;
-  open: (mode?: FullConfigDialogMode) => void;
+  scope: FullConfigDialogScope;
+  open: (mode?: FullConfigDialogMode, scope?: FullConfigDialogScope) => void;
   close: () => void;
 };
 
@@ -30,6 +32,8 @@ export function useViewerWorkspaceShell() {
   const [isFullConfigOpen, setIsFullConfigOpen] = useState(false);
   const [fullConfigMode, setFullConfigMode] =
     useState<FullConfigDialogMode>("default");
+  const [fullConfigScope, setFullConfigScope] =
+    useState<FullConfigDialogScope>("model");
   const [isFeatureListOpen, setIsFeatureListOpen] = useState(false);
   const [isApiConnectionOpen, setIsApiConnectionOpen] = useState(false);
   const [isImportLogsOpen, setIsImportLogsOpen] = useState(false);
@@ -40,10 +44,17 @@ export function useViewerWorkspaceShell() {
       setIsFullConfigOpen(false);
     }
   }, []);
-  const openFullConfig = useCallback((mode: FullConfigDialogMode = "default") => {
-    setFullConfigMode(mode);
-    setIsFullConfigOpen(true);
-  }, []);
+  const openFullConfig = useCallback(
+    (
+      mode: FullConfigDialogMode = "default",
+      scope: FullConfigDialogScope = "model",
+    ) => {
+      setFullConfigMode(mode);
+      setFullConfigScope(scope);
+      setIsFullConfigOpen(true);
+    },
+    [],
+  );
   const closeFullConfig = useCallback(() => setIsFullConfigOpen(false), []);
   const openFeatureList = useCallback(() => setIsFeatureListOpen(true), []);
   const closeFeatureList = useCallback(() => setIsFeatureListOpen(false), []);
@@ -58,6 +69,7 @@ export function useViewerWorkspaceShell() {
     fullConfigDialog: {
       isOpen: isFullConfigOpen,
       mode: fullConfigMode,
+      scope: fullConfigScope,
       open: openFullConfig,
       close: closeFullConfig,
     },
