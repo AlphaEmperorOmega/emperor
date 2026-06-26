@@ -54,7 +54,7 @@ function renderGraphNode(
           childCount: 1,
           childSummaries: [{ label: "LinearLayer", kind: "child" }],
           graphDetailMode: "basic",
-          height: 158,
+          height: 164,
           isRootNode: false,
           isExpanded: false,
           canToggleExpansion: true,
@@ -87,7 +87,7 @@ describe("GraphNodeView", () => {
     renderGraphNode({
       parameterCount: 12500,
       childCount: 2,
-      height: 158,
+      height: 164,
     });
 
     const titleRow = screen.getByTestId("graph-node-title-row-main_model.0");
@@ -104,8 +104,8 @@ describe("GraphNodeView", () => {
     expect(params).toHaveTextContent("12.5K params");
     expect(params).toHaveClass("shrink-0", "whitespace-nowrap");
     expect(children).toHaveClass("shrink-0", "whitespace-nowrap");
-    expect(actionBar).toHaveClass("h-8", "items-center");
-    expect(actionBar).not.toHaveClass("h-10", "items-end");
+    expect(actionBar).toHaveClass("mt-1.5", "h-8", "items-center");
+    expect(actionBar).not.toHaveClass("mt-auto", "h-10", "items-end");
     expect(screen.getByText("main_model.0")).toHaveClass("mt-1.5", "leading-5");
   });
 
@@ -147,7 +147,7 @@ describe("GraphNodeView", () => {
       graphDetailMode: "full",
       parameterCount: 12500,
       childCount: 2,
-      height: 158,
+      height: 164,
     });
 
     const titleRow = screen.getByTestId("graph-node-title-row-main_model.0");
@@ -204,7 +204,7 @@ describe("GraphNodeView", () => {
       label: longLabel,
       parameterCount: 1234567,
       childCount: 12,
-      height: 158,
+      height: 164,
     });
 
     const titleRow = screen.getByTestId("graph-node-title-row-main_model.0");
@@ -760,7 +760,7 @@ describe("GraphNodeView", () => {
     renderGraphNode({
       details: { activation: "GELU" },
       isDetailsExpanded: true,
-      height: 202,
+      height: 208,
     });
 
     const summaries = screen.getByText("LinearLayer").parentElement?.parentElement;

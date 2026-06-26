@@ -2098,7 +2098,7 @@ describe("layoutGraph", () => {
     expect(nodes.map((n) => n.id)).toEqual(["a", "b"]);
     expect(nodes[0].selected).toBe(true);
     expect(nodes[0].data.parameterCount).toBe(1234);
-    expect(nodes[0].data.height).toBe(158);
+    expect(nodes[0].data.height).toBe(164);
     expect(nodes[1].data.label).toBe("Layer");
     expect(typeof nodes[0].position.x).toBe("number");
     expect(edges.map((e) => e.id)).toEqual(["a-b"]);
@@ -2123,8 +2123,8 @@ describe("layoutGraph", () => {
       onToggleDetails: () => {},
     });
 
-    expect(nodes[0].data.height).toBe(158);
-    expect(nodes[0].style?.height).toBe(158);
+    expect(nodes[0].data.height).toBe(164);
+    expect(nodes[0].style?.height).toBe(164);
   });
 
   it("does not reserve expanded detail space for preview-only dimensions", () => {
@@ -2153,7 +2153,7 @@ describe("layoutGraph", () => {
       onToggleDetails: () => {},
     });
 
-    expect(nodes[0].data.height).toBe(158);
+    expect(nodes[0].data.height).toBe(164);
   });
 
   it("reserves card height for direct weight and bias shapes", () => {
@@ -2183,7 +2183,7 @@ describe("layoutGraph", () => {
       onToggleDetails: () => {},
     });
 
-    expect(nodes[0].data.height).toBe(194);
+    expect(nodes[0].data.height).toBe(200);
   });
 
   it("sizes expanded detail accordions without adding an extra header gap", () => {
@@ -2214,7 +2214,7 @@ describe("layoutGraph", () => {
       onToggleDetails: () => {},
     });
 
-    expect(nodes[0].data.height).toBe(238);
+    expect(nodes[0].data.height).toBe(244);
   });
 
   it("sizes expanded detail accordions from config row counts", () => {
@@ -2264,7 +2264,7 @@ describe("layoutGraph", () => {
       onToggleDetails: () => {},
     }).nodes[0];
 
-    expect(collapsed.data.height).toBe(194);
+    expect(collapsed.data.height).toBe(200);
     expect(expanded.data.height - collapsed.data.height).toBe(116);
   });
 
@@ -2381,7 +2381,7 @@ describe("layoutGraph", () => {
       "Layer 1 · Layer",
       "Layer 2 · Layer",
     ]);
-    expect(collapsed.data.height).toBe(234);
+    expect(collapsed.data.height).toBe(240);
     expect(expanded.data.height - collapsed.data.height).toBe(44);
   });
 
@@ -2424,7 +2424,7 @@ describe("layoutGraph", () => {
     expect(nodes[0].data.clusterDiagram?.capacityTotal).toBe(4);
     expect(nodes[0].data.clusterDiagram?.planes[0]?.cells.filter((cell) => cell.filled))
       .toHaveLength(2);
-    expect(nodes[0].data.height).toBe(218);
+    expect(nodes[0].data.height).toBe(224);
   });
 
   it("reserves large cluster map height before config options", () => {
@@ -2495,8 +2495,8 @@ describe("layoutGraph", () => {
     expect(clusterNode?.data.clusterDiagram?.rows).toBe(10);
     expect(clusterNode?.data.clusterDiagram?.columns).toBe(10);
     expect(clusterNode?.data.config?.fields).toHaveLength(2);
-    expect(clusterNode?.data.height).toBe(410);
-    expect(clusterNode?.style?.height).toBe(410);
+    expect(clusterNode?.data.height).toBe(416);
+    expect(clusterNode?.style?.height).toBe(416);
   });
 
   it("reserves taller stack diagram height for dense layer previews", () => {
@@ -2537,7 +2537,7 @@ describe("layoutGraph", () => {
 
     expect(nodes[0].data.stackDiagram?.cells).toHaveLength(5);
     expect(nodes[0].data.typeName).toBe("LayerStack");
-    expect(nodes[0].data.height).toBe(282);
+    expect(nodes[0].data.height).toBe(288);
   });
 
   it("uses compact fixed card dimensions in simple mode", () => {

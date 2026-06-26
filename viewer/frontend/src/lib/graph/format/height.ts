@@ -10,6 +10,7 @@ import {
   CLUSTER_DIAGRAM_CELL_HEIGHT,
   CLUSTER_DIAGRAM_HEADER_HEIGHT,
   GRAPH_NODE_ACTION_BAR_HEIGHT,
+  GRAPH_NODE_ACTION_BAR_MARGIN_TOP,
   GRAPH_NODE_CONTENT_MARGIN_TOP,
   GRAPH_NODE_METADATA_MARGIN_TOP,
   GRAPH_NODE_SUBTITLE_HEIGHT,
@@ -132,6 +133,7 @@ export function graphNodeHeight(input: GraphNodeHeightInput) {
     parameterShapeListHeight(input.details) +
     summaryBlockHeight(input) +
     detailRowsHeight(detailEntries.length, input.isDetailsExpanded) +
+    GRAPH_NODE_ACTION_BAR_MARGIN_TOP +
     GRAPH_NODE_ACTION_BAR_HEIGHT
   );
 }
