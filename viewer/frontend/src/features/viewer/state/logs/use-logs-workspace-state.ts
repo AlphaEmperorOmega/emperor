@@ -21,10 +21,8 @@ import {
 import { useLogQueryCache } from "@/features/viewer/state/logs/use-log-query-cache";
 import { logQueryKeys } from "@/lib/query-keys";
 import {
-  buildCountOptions,
   buildExperimentOptions,
   buildLogScalarTagOptions,
-  buildModelCountOptions,
   isDefaultScalarTag,
   type LogMetricGroupKey,
   selectedOptionsSet,
@@ -34,10 +32,10 @@ import {
 import {
   addValueToInitializedSelection,
   addValuesToInitializedSelection,
-  buildExperimentFacetSeedSelections,
-  buildExperimentScalarTagSeedSelection,
-  buildInitialRunFacetSelection,
+  buildCommonRunFacetOptions,
   buildLogRunDeleteFilters,
+  buildExperimentScalarTagSeedSelection,
+  effectiveSelectionForAvailableValues,
   filterVisibleLogRuns,
   nextSelectedDetailRunId,
   pruneSelectionToAvailableValues,
@@ -46,6 +44,7 @@ import {
   removeValueFromSelection,
   selectionSetOrDefault,
   startedRunSelections,
+  sortedSelectionValues,
 } from "@/features/viewer/state/logs/logs-selection-state";
 
 const TARGET_LOG_RUN_LIMIT = 5;
@@ -155,9 +154,6 @@ export function useLogsWorkspaceState({
   const [selectedModels, setSelectedModels] = useState<Set<string> | null>(null);
   const [selectedPresets, setSelectedPresets] = useState<Set<string> | null>(null);
   const [selectedTags, setSelectedTags] = useState<Set<string> | null>(null);
-  const [pendingExperimentFacetSeeds, setPendingExperimentFacetSeeds] = useState<
-    Set<string>
-  >(new Set());
   const [pendingExperimentTagSeeds, setPendingExperimentTagSeeds] = useState<
     Set<string>
   >(new Set());
@@ -194,14 +190,28 @@ export function useLogsWorkspaceState({
     ],
   );
   const isTargetScopeMode = scopeMode === "target";
+  const selectedExperimentQueryValues = useMemo(
+    () => (selectedExperiments ? sortedSelectionValues(selectedExperiments) : []),
+    [selectedExperiments],
+  );
+  const hasSelectedExperimentFilters = selectedExperimentQueryValues.length > 0;
+  const customRunFilters = useMemo(
+    () =>
+      hasSelectedExperimentFilters
+        ? { experiment: selectedExperimentQueryValues }
+        : undefined,
+    [hasSelectedExperimentFilters, selectedExperimentQueryValues],
+  );
   const canQueryRuns = enabled && (!isTargetScopeMode || hasTargetScope);
   const runsQuery = useLogRunsQuery({
     enabled: canQueryRuns,
-    filters: isTargetScopeMode ? targetRunFilters : undefined,
+    filters: isTargetScopeMode ? targetRunFilters : customRunFilters,
     pagination: {
       limit: isTargetScopeMode ? TARGET_LOG_RUN_LIMIT : CUSTOM_LOG_RUN_LIMIT,
       offset: 0,
     },
+    includeAllPages:
+      !isTargetScopeMode && hasSelectedExperimentFilters ? true : undefined,
   });
   const experimentsQuery = useLogExperimentsQuery({ enabled });
 
@@ -234,7 +244,6 @@ export function useLogsWorkspaceState({
     setSelectedModels(null);
     setSelectedPresets(null);
     setSelectedTags(null);
-    setPendingExperimentFacetSeeds(new Set());
     setPendingExperimentTagSeeds(new Set());
     setPendingTagSelection(null);
     setSelectedDetailRunId(null);
@@ -291,77 +300,69 @@ export function useLogsWorkspaceState({
     });
   }, [runs, startedExperiments]);
 
-  useEffect(() => {
-    if (pendingExperimentFacetSeeds.size === 0 || runs.length === 0) {
-      return;
-    }
-    const facetSeeds = buildExperimentFacetSeedSelections({
-      runs,
-      pendingExperiments: pendingExperimentFacetSeeds,
-      selectedDatasets,
-      selectedModels,
-      selectedPresets,
-    });
-    if (facetSeeds.loadedExperiments.size === 0) {
-      return;
-    }
-    setSelectedDatasets((previous) => {
-      return addValuesToInitializedSelection(previous, facetSeeds.datasets);
-    });
-    setSelectedModels((previous) => {
-      return addValuesToInitializedSelection(previous, facetSeeds.models);
-    });
-    setSelectedPresets((previous) => {
-      return addValuesToInitializedSelection(previous, facetSeeds.presets);
-    });
-    setPendingExperimentFacetSeeds((previous) => {
-      const next = new Set(previous);
-      for (const experiment of facetSeeds.loadedExperiments) {
-        next.delete(experiment);
-      }
-      return next.size === previous.size ? previous : next;
-    });
-  }, [
-    pendingExperimentFacetSeeds,
-    runs,
-    selectedDatasets,
-    selectedModels,
-    selectedPresets,
-  ]);
-
   const experimentSet = useMemo(
     () => selectedExperiments ?? emptySelection(),
     [selectedExperiments],
   );
-  const experimentRuns = useMemo(
-    () => runs.filter((run) => experimentSet.has(run.experiment)),
+  const commonRunFacetOptions = useMemo(
+    () =>
+      buildCommonRunFacetOptions({
+        runs,
+        selectedExperiments: experimentSet,
+      }),
     [experimentSet, runs],
   );
-  const datasetOptions = useMemo(
-    () => buildCountOptions(experimentRuns, "dataset"),
-    [experimentRuns],
+  const datasetOptions = commonRunFacetOptions.datasets;
+  const modelOptions = commonRunFacetOptions.models;
+  const presetOptions = commonRunFacetOptions.presets;
+  const datasetOptionValues = useMemo(
+    () => datasetOptions.map((option) => option.value),
+    [datasetOptions],
   );
-  const modelOptions = useMemo(
-    () => buildModelCountOptions(experimentRuns),
-    [experimentRuns],
+  const modelOptionValues = useMemo(
+    () => modelOptions.map((option) => option.value),
+    [modelOptions],
   );
-  const presetOptions = useMemo(
-    () => buildCountOptions(experimentRuns, "preset"),
-    [experimentRuns],
+  const presetOptionValues = useMemo(
+    () => presetOptions.map((option) => option.value),
+    [presetOptions],
   );
 
   const datasetSet = useMemo(
-    () => selectedDatasets ?? buildInitialRunFacetSelection(runs, "dataset"),
-    [runs, selectedDatasets],
+    () =>
+      effectiveSelectionForAvailableValues(selectedDatasets, datasetOptionValues),
+    [datasetOptionValues, selectedDatasets],
   );
   const modelSet = useMemo(
-    () => selectedModels ?? buildInitialRunFacetSelection(runs, "model"),
-    [runs, selectedModels],
+    () =>
+      effectiveSelectionForAvailableValues(selectedModels, modelOptionValues),
+    [modelOptionValues, selectedModels],
   );
   const presetSet = useMemo(
-    () => selectedPresets ?? buildInitialRunFacetSelection(runs, "preset"),
-    [runs, selectedPresets],
+    () =>
+      effectiveSelectionForAvailableValues(selectedPresets, presetOptionValues),
+    [presetOptionValues, selectedPresets],
   );
+
+  useEffect(() => {
+    if (!runsQuery.data) {
+      return;
+    }
+    setSelectedDatasets((previous) =>
+      pruneSelectionToAvailableValues(previous, datasetOptionValues),
+    );
+    setSelectedModels((previous) =>
+      pruneSelectionToAvailableValues(previous, modelOptionValues),
+    );
+    setSelectedPresets((previous) =>
+      pruneSelectionToAvailableValues(previous, presetOptionValues),
+    );
+  }, [
+    datasetOptionValues,
+    modelOptionValues,
+    presetOptionValues,
+    runsQuery.data,
+  ]);
 
   const visibleRuns = useMemo(
     () =>
@@ -512,9 +513,6 @@ export function useLogsWorkspaceState({
       setStartedExperiments((previous) => {
         return removeStartedExperiment(previous, result.experiment);
       });
-      setPendingExperimentFacetSeeds((previous) => {
-        return removePendingExperimentSeed(previous, result.experiment);
-      });
       setPendingExperimentTagSeeds((previous) => {
         return removePendingExperimentSeed(previous, result.experiment);
       });
@@ -606,11 +604,6 @@ export function useLogsWorkspaceState({
       const experimentFallbackValues = experimentOptions.map((option) => option.value);
       const currentSelection = selectedExperiments ?? new Set(experimentFallbackValues);
       const isSelectingExperiment = !currentSelection.has(value);
-      setPendingExperimentFacetSeeds((previous) => {
-        return isSelectingExperiment
-          ? addPendingExperimentSeed(previous, value)
-          : removePendingExperimentSeed(previous, value);
-      });
       setPendingExperimentTagSeeds((previous) => {
         return isSelectingExperiment
           ? addPendingExperimentSeed(previous, value)
@@ -657,13 +650,6 @@ export function useLogsWorkspaceState({
     selectAllExperiments: () => {
       markCustomScope();
       const experimentValues = experimentOptions.map((option) => option.value);
-      setPendingExperimentFacetSeeds((previous) => {
-        const next = new Set(previous);
-        for (const experiment of experimentValues) {
-          next.add(experiment);
-        }
-        return next;
-      });
       setPendingExperimentTagSeeds((previous) => {
         const next = new Set(previous);
         for (const experiment of experimentValues) {
@@ -678,7 +664,6 @@ export function useLogsWorkspaceState({
     },
     selectNoExperiments: () => {
       markCustomScope();
-      setPendingExperimentFacetSeeds(new Set());
       setPendingExperimentTagSeeds(new Set());
       setNoValues(setSelectedExperiments);
     },

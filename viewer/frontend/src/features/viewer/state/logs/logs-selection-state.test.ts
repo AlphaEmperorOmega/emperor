@@ -3,11 +3,12 @@ import { type LogRun, type LogRunTags } from "@/lib/api";
 import {
   addValueToInitializedSelection,
   addValuesToInitializedSelection,
-  buildExperimentFacetSeedSelections,
+  buildCommonRunFacetOptions,
   buildExperimentScalarTagSeedSelection,
   buildInitialExperimentSelection,
   buildInitialRunFacetSelection,
   buildLogRunDeleteFilters,
+  effectiveSelectionForAvailableValues,
   filterVisibleLogRuns,
   nextSelectedDetailRunId,
   pruneSelectionToAvailableValues,
@@ -106,85 +107,109 @@ describe("logs selection state", () => {
       .toEqual(["exp_a", "exp_b"]);
   });
 
-  it("widens stale run facets when a pending experiment would show no runs", () => {
-    const seedSelections = buildExperimentFacetSeedSelections({
+  it("returns every lower facet value for one selected experiment", () => {
+    const facetOptions = buildCommonRunFacetOptions({
       runs: [
-        logRun({ id: "baseline", experiment: "prior", dataset: "Mnist" }),
+        logRun({ id: "a-mnist", experiment: "exp_a", dataset: "Mnist" }),
         logRun({
-          id: "kaggle",
-          experiment: "kaggle_linear_all",
-          dataset: "KaggleDigits",
+          id: "a-cifar",
+          experiment: "exp_a",
+          dataset: "Cifar10",
           model: "wide-linear",
-          preset: "KAGGLE_LINEAR",
+          preset: "WIDE",
         }),
+        logRun({ id: "b-cifar", experiment: "exp_b", dataset: "Cifar10" }),
       ],
-      pendingExperiments: new Set(["kaggle_linear_all"]),
-      selectedDatasets: new Set(["Mnist"]),
-      selectedModels: new Set(["linears/linear"]),
-      selectedPresets: new Set(["BASELINE"]),
+      selectedExperiments: new Set(["exp_a"]),
     });
 
-    expect(values(seedSelections.loadedExperiments)).toEqual(["kaggle_linear_all"]);
-    expect(values(seedSelections.datasets)).toEqual(["KaggleDigits"]);
-    expect(values(seedSelections.models)).toEqual(["linears/wide-linear"]);
-    expect(values(seedSelections.presets)).toEqual(["KAGGLE_LINEAR"]);
-    expect(
-      values(
-        addValuesToInitializedSelection(
-          new Set(["BASELINE"]),
-          seedSelections.presets,
-        ),
-      ),
-    ).toEqual(["BASELINE", "KAGGLE_LINEAR"]);
+    expect(facetOptions.datasets).toMatchObject([
+      { value: "Cifar10", count: 1 },
+      { value: "Mnist", count: 1 },
+    ]);
+    expect(facetOptions.models.map((option) => option.value)).toEqual([
+      "linears/linear",
+      "linears/wide-linear",
+    ]);
+    expect(facetOptions.presets.map((option) => option.value)).toEqual([
+      "baseline",
+      "WIDE",
+    ]);
   });
 
-  it("preserves matching run facets for a pending experiment", () => {
-    const seedSelections = buildExperimentFacetSeedSelections({
+  it("returns only lower facet values shared by every selected experiment", () => {
+    const facetOptions = buildCommonRunFacetOptions({
       runs: [
+        logRun({ id: "a-cifar", experiment: "exp_a", dataset: "Cifar10" }),
         logRun({
-          id: "kaggle-mnist",
-          experiment: "kaggle_linear_all",
+          id: "a-mnist",
+          experiment: "exp_a",
           dataset: "Mnist",
-          preset: "BASELINE",
+          model: "wide-linear",
+          preset: "WIDE",
         }),
+        logRun({ id: "b-cifar", experiment: "exp_b", dataset: "Cifar10" }),
         logRun({
-          id: "kaggle-digits",
-          experiment: "kaggle_linear_all",
-          dataset: "KaggleDigits",
-          preset: "KAGGLE_LINEAR",
+          id: "b-imagenet",
+          experiment: "exp_b",
+          dataset: "ImageNet",
+          model: "conv",
+          preset: "CONV",
         }),
       ],
-      pendingExperiments: new Set(["kaggle_linear_all"]),
-      selectedDatasets: new Set(["Mnist"]),
-      selectedModels: new Set(["linears/linear"]),
-      selectedPresets: new Set(["BASELINE"]),
+      selectedExperiments: new Set(["exp_a", "exp_b"]),
     });
 
-    expect(values(seedSelections.loadedExperiments)).toEqual(["kaggle_linear_all"]);
-    expect(values(seedSelections.datasets)).toEqual([]);
-    expect(values(seedSelections.models)).toEqual([]);
-    expect(values(seedSelections.presets)).toEqual([]);
+    expect(facetOptions.datasets).toEqual([
+      { value: "Cifar10", label: "Cifar10", count: 2 },
+    ]);
+    expect(facetOptions.models.map((option) => ({
+      value: option.value,
+      count: option.count,
+    }))).toEqual([{ value: "linears/linear", count: 2 }]);
+    expect(facetOptions.presets).toEqual([
+      { value: "baseline", label: "baseline", count: 2 },
+    ]);
   });
 
-  it("keeps null run facet selections as all-values fallbacks", () => {
-    const seedSelections = buildExperimentFacetSeedSelections({
-      runs: [
-        logRun({
-          id: "kaggle",
-          experiment: "kaggle_linear_all",
-          dataset: "KaggleDigits",
-          preset: "KAGGLE_LINEAR",
-        }),
-      ],
-      pendingExperiments: new Set(["kaggle_linear_all"]),
-      selectedDatasets: null,
-      selectedModels: new Set(["linears/wide-linear"]),
-      selectedPresets: null,
+  it("returns empty lower facets when a selected experiment has no runs", () => {
+    const facetOptions = buildCommonRunFacetOptions({
+      runs: [logRun({ id: "a-cifar", experiment: "exp_a", dataset: "Cifar10" })],
+      selectedExperiments: new Set(["exp_a", "exp_empty"]),
     });
 
-    expect(values(seedSelections.datasets)).toEqual(["KaggleDigits"]);
-    expect(addValuesToInitializedSelection(null, seedSelections.datasets)).toBeNull();
-    expect(addValuesToInitializedSelection(null, seedSelections.presets)).toBeNull();
+    expect(facetOptions.datasets).toEqual([]);
+    expect(facetOptions.models).toEqual([]);
+    expect(facetOptions.presets).toEqual([]);
+  });
+
+  it("prunes stale lower selections from visible-run filtering", () => {
+    const selectedRuns = [
+      logRun({ id: "a-cifar", experiment: "exp_a", dataset: "Cifar10" }),
+      logRun({ id: "b-cifar", experiment: "exp_b", dataset: "Cifar10" }),
+    ];
+    const facetOptions = buildCommonRunFacetOptions({
+      runs: selectedRuns,
+      selectedExperiments: new Set(["exp_a", "exp_b"]),
+    });
+
+    const visibleRuns = filterVisibleLogRuns(selectedRuns, {
+      experiments: new Set(["exp_a", "exp_b"]),
+      datasets: effectiveSelectionForAvailableValues(
+        new Set(["Mnist"]),
+        facetOptions.datasets.map((option) => option.value),
+      ),
+      models: effectiveSelectionForAvailableValues(
+        null,
+        facetOptions.models.map((option) => option.value),
+      ),
+      presets: effectiveSelectionForAvailableValues(
+        null,
+        facetOptions.presets.map((option) => option.value),
+      ),
+    });
+
+    expect(visibleRuns).toEqual([]);
   });
 
   it("replaces stale checked scalar tags for a pending experiment", () => {
