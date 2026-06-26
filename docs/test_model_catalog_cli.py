@@ -157,6 +157,24 @@ class TestExperimentShellCatalogCli(unittest.TestCase):
             check=False,
         )
 
+    def run_model_command_with_python_stub(self, *args):
+        command = "\n".join(
+            [
+                "source experiment.sh >/dev/null",
+                "model_module() { printf '%s\\n' models.fake; }",
+                "python3() { printf '%s\\n' \"$@\"; }",
+                f"run_model_command linears linear {shlex.join(args)}",
+            ]
+        )
+        return subprocess.run(
+            ["bash", "-lc", command],
+            cwd=REPO_ROOT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+
     def test_list_model_types_prints_copyable_model_type_flags(self):
         completed = self.run_experiment("--list-model-types")
 
@@ -292,6 +310,58 @@ class TestExperimentShellCatalogCli(unittest.TestCase):
                     "Run 'source experiment.sh --model-type linears --model linear "
                     "--preset <preset> --print-model' without --monitors."
                 ),
+            ],
+        )
+
+    def test_training_command_forwards_monitor_names_to_model_module(self):
+        completed = self.run_model_command_with_python_stub(
+            "--preset",
+            "baseline",
+            "--monitors",
+            "linear",
+            "halting",
+        )
+
+        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(completed.stderr, "")
+        self.assertEqual(
+            completed.stdout.splitlines(),
+            [
+                "-m",
+                "models.fake",
+                "--preset",
+                "baseline",
+                "--monitors",
+                "linear",
+                "halting",
+            ],
+        )
+
+    def test_training_command_does_not_swallow_config_flags_after_monitors(self):
+        completed = self.run_model_command_with_python_stub(
+            "--preset",
+            "baseline",
+            "--monitors",
+            "linear",
+            "--config",
+            "--num-epochs",
+            "1",
+        )
+
+        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(completed.stderr, "")
+        self.assertEqual(
+            completed.stdout.splitlines(),
+            [
+                "-m",
+                "models.fake",
+                "--preset",
+                "baseline",
+                "--monitors",
+                "linear",
+                "--config",
+                "--num-epochs",
+                "1",
             ],
         )
 
