@@ -98,6 +98,25 @@ async function openDropdown(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("MultiSelectDropdown", () => {
+  it("applies custom trigger classes after the default trigger styling", () => {
+    const onChange = vi.fn();
+    render(
+      <MultiSelectDropdown
+        label="Targets"
+        values={["baseline"]}
+        options={options}
+        onChange={onChange}
+        triggerClassName="compact-trigger h-7 px-1"
+      />,
+    );
+
+    expect(screen.getByRole("combobox", { name: /^targets\b/i })).toHaveClass(
+      "compact-trigger",
+      "h-7",
+      "px-1",
+    );
+  });
+
   it("renders row actions without adding them to the option accessible name", async () => {
     const user = userEvent.setup();
     renderDropdown();
