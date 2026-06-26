@@ -547,7 +547,8 @@ export function buildConfigSnapshotRunPlan({
   selectedDatasets,
   snapshots,
   fields,
-  presetOverrides = {},
+  bulkOverrides,
+  presetOverrides,
   logFolder,
 }: {
   modelType: string;
@@ -557,6 +558,7 @@ export function buildConfigSnapshotRunPlan({
   selectedDatasets: string[];
   snapshots: ConfigSnapshot[];
   fields: ConfigField[];
+  bulkOverrides?: OverrideValues;
   presetOverrides?: OverrideValues;
   logFolder: string;
 }): TrainingRunPlan | undefined {
@@ -576,6 +578,10 @@ export function buildConfigSnapshotRunPlan({
       [configKeyToken(field.configKey), field] as const,
     ]),
   );
+  const normalizedBulkOverrides = normalizeAdaptiveOptionOverrides(
+    fields,
+    normalizeConfigOverrides(fields, bulkOverrides ?? presetOverrides ?? {}),
+  );
   const runs: TrainingRun[] = [];
   for (const preset of selectedTrainingPresets) {
     for (const dataset of selectedDatasets) {
@@ -588,7 +594,7 @@ export function buildConfigSnapshotRunPlan({
           dataset,
           index,
           fieldsByKey,
-          overrides: presetOverrides,
+          overrides: normalizedBulkOverrides,
           logFolder,
         }),
       );
@@ -598,6 +604,13 @@ export function buildConfigSnapshotRunPlan({
     const snapshotOverrides = normalizeAdaptiveOptionOverrides(
       fields,
       normalizeConfigOverrides(fields, snapshot.overrides),
+    );
+    const mergedSnapshotOverrides = normalizeAdaptiveOptionOverrides(
+      fields,
+      normalizeConfigOverrides(fields, {
+        ...snapshotOverrides,
+        ...normalizedBulkOverrides,
+      }),
     );
     for (const dataset of selectedDatasets) {
       const index = runs.length + 1;
@@ -609,17 +622,17 @@ export function buildConfigSnapshotRunPlan({
         snapshotId: snapshot.id,
         snapshotName: snapshot.name,
         dataset,
-        changes: snapshotRunChanges(snapshotOverrides, fieldsByKey),
-        overrides: snapshotOverrides,
+        changes: snapshotRunChanges(mergedSnapshotOverrides, fieldsByKey),
+        overrides: mergedSnapshotOverrides,
         command: trainingCommand({
           model,
           modelType,
           preset: snapshot.preset,
           dataset,
-          overrides: snapshotOverrides,
+          overrides: mergedSnapshotOverrides,
           logFolder,
         }),
-        totalEpochs: epochsFromOverrides(snapshotOverrides, fieldsByKey),
+        totalEpochs: epochsFromOverrides(mergedSnapshotOverrides, fieldsByKey),
         currentEpoch: 0,
         metrics: {},
         logDir: null,

@@ -9,7 +9,10 @@ import {
   useTargetConfig,
   ViewerProviders,
 } from "@/features/viewer/providers/viewer-providers";
-import { ViewerWorkspaceOverlays } from "@/features/viewer/components/viewer-workspaces";
+import {
+  ViewerWorkspaceMain,
+  ViewerWorkspaceOverlays,
+} from "@/features/viewer/components/viewer-workspaces";
 import { type ViewerWorkspace } from "@/types/viewer";
 import {
   capabilitiesResponse,
@@ -17,7 +20,6 @@ import {
   deferred,
   expandedTrainingDetails,
   expandedTrainingDetailsReady,
-  expandTrainingPanel,
   fullConfigSearchPopup,
   fullConfigSearchResultRow,
   inspectResponse,
@@ -149,6 +151,7 @@ function renderWorkspaceOverlayHarness({
   const fullConfigDialog = {
     isOpen: false,
     mode: "default" as const,
+    scope: "model" as const,
     open: vi.fn(),
     close: vi.fn(),
   };
@@ -173,6 +176,13 @@ function renderWorkspaceOverlayHarness({
       <ViewerProviders activeWorkspace={activeWorkspace}>
         <LogsWorkspaceProvider enabled={activeWorkspace === "logs"}>
           {children}
+          {activeWorkspace === "training" && (
+            <ViewerWorkspaceMain
+              activeWorkspace={activeWorkspace}
+              onChangeWorkspace={vi.fn()}
+              onOpenFullConfig={fullConfigDialog.open}
+            />
+          )}
           <ViewerWorkspaceOverlays
             activeWorkspace={activeWorkspace}
             fullConfigDialog={fullConfigDialog}
@@ -236,6 +246,31 @@ function trainingRunList(details: HTMLElement) {
   });
 }
 
+async function openTrainingFullConfig(
+  user: ReturnType<typeof userEvent.setup>,
+  details: HTMLElement,
+) {
+  await user.click(
+    within(trainingRunList(details)).getByRole("button", {
+      name: /open full config/i,
+    }),
+  );
+  return screen.findByRole("dialog", {
+    name: /training full configuration/i,
+  });
+}
+
+async function setTrainingHiddenDimOverride(
+  user: ReturnType<typeof userEvent.setup>,
+  details: HTMLElement,
+  value: string,
+) {
+  const dialog = await openTrainingFullConfig(user, details);
+  await typeConfigFieldValue(user, dialog, /hidden dim/i, value);
+  await user.click(within(dialog).getByRole("button", { name: /^done$/i }));
+  return details;
+}
+
 async function findTrainingRunSummary(name: RegExp) {
   return screen.findByRole("status", {
     name,
@@ -245,17 +280,17 @@ async function findTrainingRunSummary(name: RegExp) {
 describe("ViewerApp Training And Preview", () => {
   beforeEach(resetViewerAppTestState);
 
-  it("mounts the training panel only in the model workspace", async () => {
+  it("mounts Training as its own workspace", async () => {
     installFetchMock();
     renderViewer();
     const user = userEvent.setup();
 
-    expect(await screen.findByRole("button", { name: /start training/i }))
-      .toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /start training/i }))
+      .not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /^compare$/i }));
 
-    expect(await screen.findByRole("heading", { name: /model comparison/i }))
+    expect(await screen.findByRole("heading", { name: /training run comparison/i }))
       .toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /start training/i }))
       .not.toBeInTheDocument();
@@ -266,13 +301,15 @@ describe("ViewerApp Training And Preview", () => {
     expect(screen.queryByRole("button", { name: /start training/i }))
       .not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /^model$/i }));
+    await user.click(screen.getByRole("button", { name: /^training$/i }));
 
+    expect(await screen.findByRole("heading", { name: /^training$/i }))
+      .toBeInTheDocument();
     expect(await screen.findByRole("button", { name: /start training/i }))
       .toBeInTheDocument();
   });
 
-  it("does not request training run plans while the panel is hidden", async () => {
+  it("requests training run plans only while the Training workspace is mounted", async () => {
     const { fetchMock } = installFetchMock();
     const modelReady = vi.fn();
 
@@ -281,10 +318,20 @@ describe("ViewerApp Training And Preview", () => {
       children: <TargetTrainingInputsReady onReady={modelReady} />,
     });
     await waitForTargetTrainingInputs(modelReady);
+    expect(trainingRunPlanCalls(fetchMock)).toHaveLength(0);
+    modelRender.unmount();
+    fetchMock.mockClear();
+
+    const trainingReady = vi.fn();
+    const trainingRender = renderWorkspaceOverlayHarness({
+      activeWorkspace: "training",
+      children: <TargetTrainingInputsReady onReady={trainingReady} />,
+    });
+    await waitForTargetTrainingInputs(trainingReady);
     await waitFor(() => {
       expect(trainingRunPlanCalls(fetchMock).length).toBeGreaterThan(0);
     });
-    modelRender.unmount();
+    trainingRender.unmount();
     fetchMock.mockClear();
 
     const logsReady = vi.fn();
@@ -310,7 +357,7 @@ describe("ViewerApp Training And Preview", () => {
     expect(trainingRunPlanCalls(fetchMock)).toHaveLength(0);
   });
 
-  it("keeps active job polling mounted while the panel is hidden", async () => {
+  it("keeps active job polling mounted while the Training workspace is hidden", async () => {
     const { fetchMock } = installFetchMock();
 
     renderWorkspaceOverlayHarness({
@@ -332,46 +379,60 @@ describe("ViewerApp Training And Preview", () => {
         "Training job 'job-1' process survived terminate and kill.",
     });
     renderWorkspaceOverlayHarness({
-      activeWorkspace: "model",
+      activeWorkspace: "training",
       children: <SeedActiveJob jobId="job-1" />,
     });
     const user = userEvent.setup();
 
-    const cancelButton = await screen.findByRole("button", { name: /^cancel$/i });
-    expect(cancelButton).toBeEnabled();
     const details = await expandedTrainingDetails(user);
+    const runList = trainingRunList(details);
+    const cancelButton = await within(runList).findByRole("button", {
+      name: /^cancel$/i,
+    });
+    expect(cancelButton).toBeEnabled();
 
     await user.click(cancelButton);
 
     await waitFor(() => {
-      expect(within(details).getByRole("alert")).toHaveTextContent(
-        /process survived terminate and kill/i,
-      );
+      expect(
+        within(details)
+          .getAllByRole("alert")
+          .some((alert) =>
+            /process survived terminate and kill/i.test(alert.textContent ?? ""),
+          ),
+      ).toBe(true);
     });
     expect(fetchMock.mock.calls.some(([input]) =>
       String(input).endsWith("/training/jobs/job-1/cancel"),
     )).toBe(true);
-    expect(screen.getByRole("button", { name: /^cancel$/i })).toBeEnabled();
+    expect(within(runList).getByRole("button", { name: /^cancel$/i }))
+      .toBeEnabled();
     expect(screen.getAllByText("running").length).toBeGreaterThan(0);
   });
 
-  it("shows cancel errors while the training panel is collapsed", async () => {
+  it("shows cancel errors in the Training workspace header", async () => {
     installFetchMock({
       trainingJobStatus: "running",
       cancelTrainingJobError:
         "Training job 'job-1' process survived terminate and kill.",
     });
     renderWorkspaceOverlayHarness({
-      activeWorkspace: "model",
+      activeWorkspace: "training",
       children: <SeedActiveJob jobId="job-1" />,
     });
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: /^cancel$/i }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      /process survived terminate and kill/i,
-    );
+    await waitFor(() => {
+      expect(
+        screen
+          .getAllByRole("alert")
+          .some((alert) =>
+            /process survived terminate and kill/i.test(alert.textContent ?? ""),
+          ),
+      ).toBe(true);
+    });
     expect(screen.getByRole("button", { name: /^cancel$/i })).toBeEnabled();
   });
 
@@ -529,7 +590,7 @@ describe("ViewerApp Training And Preview", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("expanded training panel shows the three-zone setup, run list, and status layout", async () => {
+  it("Training workspace shows the three-zone setup, run list, and status layout", async () => {
     installFetchMock();
     renderViewer();
     const user = userEvent.setup();
@@ -545,9 +606,45 @@ describe("ViewerApp Training And Preview", () => {
     const statusSidebar = within(details).getByRole("complementary", {
       name: "Training Status Sidebar",
     });
+    const trainingHeading = within(runList).getByRole("heading", {
+      name: /^training$/i,
+    });
+    const firstRunIndex = await within(runList).findByText("#1");
+    const trainingBar = runList.firstElementChild;
+    if (!(trainingBar instanceof HTMLElement)) {
+      throw new Error("Expected Training bar to render inside the run list");
+    }
+    expect(trainingBar.contains(trainingHeading)).toBe(true);
+    expect(trainingBar).not.toHaveTextContent(/\/\s*Mnist/i);
+    expect(trainingBar).not.toHaveTextContent(/No metrics/i);
+    expect(trainingBar).not.toHaveTextContent(/planned run/i);
+    expect(trainingBar).not.toHaveTextContent(/snapshots?/i);
+    expect(trainingBar).not.toHaveTextContent(/Choose log folder/i);
+    expect(within(runList).queryByText("Training Runs")).not.toBeInTheDocument();
+    expect(
+      within(trainingBar).getByRole("button", { name: /^commands$/i }),
+    ).toBeInTheDocument();
+    expect(
+      within(trainingBar).getByRole("button", { name: /open full config/i }),
+    ).toBeInTheDocument();
+    expect(
+      trainingHeading.compareDocumentPosition(firstRunIndex) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      within(runList).getByRole("button", { name: /start training/i }),
+    ).toBeInTheDocument();
+    expect(
+      setupSidebar.compareDocumentPosition(runList) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      runList.compareDocumentPosition(statusSidebar) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(
       within(details).queryByRole("tablist", {
-        name: "Training footer sections",
+        name: "Training workspace sections",
       }),
     ).not.toBeInTheDocument();
 
@@ -611,7 +708,6 @@ describe("ViewerApp Training And Preview", () => {
     );
     expect(setupSidebar).toContainElement(searchModeControl);
     expect(within(details).queryByText(/^Request$/)).not.toBeInTheDocument();
-    expect(await within(runList).findByText("Training Runs")).toBeInTheDocument();
     expect(within(runList).getByText("#1")).toBeInTheDocument();
     expect(within(runList).getAllByText("baseline").length).toBeGreaterThan(0);
     expect(within(runList).getByText("Mnist")).toBeInTheDocument();
@@ -811,14 +907,16 @@ describe("ViewerApp Training And Preview", () => {
     });
   });
 
-  it("training setup preset changes preserve overrides while model changes clear them", async () => {
-    installFetchMock();
+  it("training setup target changes do not change preview overrides or main target", async () => {
+    const { trainingBodies } = installFetchMock();
     renderViewer();
     const user = userEvent.setup();
 
     let details = await expandedTrainingDetailsReady(user);
+    await user.click(screen.getByRole("button", { name: /^model$/i }));
     await setTargetHiddenDimOverride(user, "128");
     expect(screen.getAllByText(/1 overrides?/i).length).toBeGreaterThan(0);
+    details = await expandedTrainingDetailsReady(user);
 
     const { listbox } = await openTrainingMultiSelect(user, details, "Presets");
     await user.click(
@@ -838,50 +936,93 @@ describe("ViewerApp Training And Preview", () => {
     );
     await user.keyboard("{Escape}");
 
-    expect(await waitForTargetValue("preset", "recurrent-gating-halting"))
-      .toHaveTextContent("recurrent-gating-halting");
+    await user.click(screen.getByRole("button", { name: /^model$/i }));
+    expect(await waitForTargetValue("preset", "baseline"))
+      .toHaveTextContent("baseline");
+    details = await expandedTrainingDetailsReady(user);
+    await waitFor(() => {
+      expect(
+        within(details).getByRole("combobox", {
+          name: /^presets\s+2\s*\/\s*2 selected$/i,
+        }),
+      ).toHaveTextContent("recurrent-gating-halting");
+    });
+    await user.click(screen.getByRole("button", { name: /^model$/i }));
     expect(screen.getAllByText(/1 overrides?/i).length).toBeGreaterThan(0);
     details = await expandedTrainingDetailsReady(user);
+    await user.click(screen.getByRole("button", { name: /^model$/i }));
     let dialog = await openFullConfig(user);
     await waitFor(() => {
       expect(within(dialog).getByLabelText(/hidden dim/i)).toHaveValue("128");
     });
     await user.click(within(dialog).getByRole("button", { name: /^close$/i }));
+    details = await expandedTrainingDetailsReady(user);
 
+    await user.click(screen.getByRole("button", { name: /^model$/i }));
     await setTargetHiddenDimOverride(user, "192");
     expect(screen.getAllByText(/1 overrides?/i).length).toBeGreaterThan(0);
+    details = await expandedTrainingDetailsReady(user);
 
     await selectTrainingTargetOption(user, "model type", "Transformer encoder");
 
-    expect(await waitForTargetValue("model", "bert_linear")).toHaveTextContent("bert_linear");
-    expect(screen.getAllByText("0 overrides").length).toBeGreaterThan(0);
+    await user.click(screen.getByRole("button", { name: /^model$/i }));
+    expect(await waitForTargetValue("model", "linear")).toHaveTextContent("linear");
+    expect(screen.getAllByText(/1 overrides?/i).length).toBeGreaterThan(0);
     details = await expandedTrainingDetailsReady(user);
     await waitFor(() => {
+      expect(
+        within(details).getByRole("combobox", {
+          name: /^training model$/i,
+        }),
+      ).toHaveTextContent("bert_linear");
       expect(
         within(details).getByRole("combobox", {
           name: /^presets\s+1\s*\/\s*1 selected$/i,
         }),
       ).toHaveTextContent("bert-baseline");
     });
+    await user.click(screen.getByRole("button", { name: /^model$/i }));
     dialog = await openFullConfig(user);
     await waitFor(() => {
-      expect(within(dialog).getByLabelText(/hidden dim/i)).toHaveValue("256");
+      expect(within(dialog).getByLabelText(/hidden dim/i)).toHaveValue("192");
     });
     await user.click(within(dialog).getByRole("button", { name: /^close$/i }));
+    details = await expandedTrainingDetailsReady(user);
     expect(
       within(details).getByRole("combobox", {
         name: /^training datasets\s+1\s*\/\s*1 selected$/i,
       }),
     ).toHaveTextContent("Toy Text");
+    expect(
+      within(details).queryByText(/preview overrides are ignored/i),
+    ).not.toBeInTheDocument();
+
+    await selectNewTrainingLogFolder(user, "independent_training_target");
+    await user.click(screen.getByRole("button", { name: /start training/i }));
+
+    await waitFor(() => {
+      expect(trainingBodies[0]).toMatchObject({
+        modelType: "transformer_encoder",
+        model: "bert_linear",
+        preset: "bert-baseline",
+        presets: ["bert-baseline"],
+        datasets: ["ToyText"],
+        overrides: {},
+        logFolder: "independent_training_target",
+      });
+    });
+    await user.click(screen.getByRole("button", { name: /^model$/i }));
+    expect(await waitForTargetValue("model", "linear")).toHaveTextContent("linear");
+    expect(await waitForTargetValue("preset", "baseline")).toHaveTextContent("baseline");
   });
 
-  it("training panel posts selected model, preset, datasets, and overrides", async () => {
+  it("Training workspace posts selected model, preset, datasets, and overrides", async () => {
     const { trainingBodies } = installFetchMock();
     renderViewer();
     const user = userEvent.setup();
 
-    const details = await expandedTrainingDetailsReady(user);
-    await setTargetHiddenDimOverride(user, "128");
+    let details = await expandedTrainingDetailsReady(user);
+    details = await setTrainingHiddenDimOverride(user, details, "128");
     await setTrainingMultiSelectOption(
       user,
       details,
@@ -889,7 +1030,11 @@ describe("ViewerApp Training And Preview", () => {
       /Cifar 10/i,
     );
     await selectNewTrainingLogFolder(user, "my_experiment");
-    await user.click(screen.getByRole("button", { name: /start training/i }));
+    await user.click(
+      within(trainingRunList(details)).getByRole("button", {
+        name: /start training/i,
+      }),
+    );
 
     await waitFor(() => {
       expect(trainingBodies[0]).toMatchObject({
@@ -910,7 +1055,42 @@ describe("ViewerApp Training And Preview", () => {
     });
   });
 
-  it("training panel posts selected presets and multiplies planned runs", async () => {
+  it("Training Full Config does not mutate Model workspace overrides", async () => {
+    installFetchMock();
+    renderViewer();
+    const user = userEvent.setup();
+
+    let details = await expandedTrainingDetailsReady(user);
+    details = await setTrainingHiddenDimOverride(user, details, "128");
+
+    await waitFor(() => {
+      expect(
+        within(trainingRunList(details)).getByText("stack_hidden_dim=128"),
+      ).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: /^model$/i }));
+    expect(screen.queryByText(/1 overrides?/i)).not.toBeInTheDocument();
+
+    const dialog = await openFullConfig(user);
+    expect(within(dialog).getByLabelText(/hidden dim/i)).toHaveValue("256");
+    await user.click(within(dialog).getByRole("button", { name: /^close$/i }));
+
+    details = await expandedTrainingDetailsReady(user);
+    const trainingDialog = await openTrainingFullConfig(user, details);
+    await user.click(
+      within(trainingDialog).getByRole("button", { name: /reset overrides/i }),
+    );
+    await user.click(
+      within(trainingDialog).getByRole("button", { name: /^done$/i }),
+    );
+    await waitFor(() => {
+      expect(within(trainingRunList(details)).queryByText("stack_hidden_dim=128"))
+        .not.toBeInTheDocument();
+    });
+  });
+
+  it("shows multiple planned training runs and posts selected presets", async () => {
     const { trainingBodies } = installFetchMock();
     renderViewer();
     const user = userEvent.setup();
@@ -950,6 +1130,26 @@ describe("ViewerApp Training And Preview", () => {
       }),
     ).toBeInTheDocument();
     expect(within(details).getByText("4 planned runs")).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+
+    const runList = trainingRunList(details);
+    await waitFor(() => {
+      expect(
+        within(runList).getAllByRole("button", { name: /command for run/i }),
+      ).toHaveLength(4);
+    });
+    expect(
+      within(runList).getAllByText("baseline").length,
+    ).toBeGreaterThanOrEqual(2);
+    expect(
+      within(runList).getAllByText("recurrent-gating-halting").length,
+    ).toBeGreaterThanOrEqual(2);
+    expect(
+      within(runList).getAllByText("Mnist").length,
+    ).toBeGreaterThanOrEqual(2);
+    expect(
+      within(runList).getAllByText("Cifar10").length,
+    ).toBeGreaterThanOrEqual(2);
 
     await selectNewTrainingLogFolder(user, "multi_preset");
     await user.click(screen.getByRole("button", { name: /start training/i }));
@@ -999,7 +1199,86 @@ describe("ViewerApp Training And Preview", () => {
     );
   });
 
+  it("keeps the running preset and dataset row visible with active progress", async () => {
+    let runningJob: unknown;
+    installFetchMock({
+      createTrainingJobResponseFactory: (request) => {
+        const job = mockTrainingJobPayload(
+          request as Parameters<typeof mockTrainingJobPayload>[0],
+          { status: "running" },
+        );
+        const runs = job.runPlan.runs.map((run, index) =>
+          index === 0
+            ? {
+                ...run,
+                status: "Running",
+                currentEpoch: 1,
+                metrics: { loss: 0.42 },
+              }
+            : run,
+        );
+        runningJob = {
+          ...job,
+          epoch: 1,
+          step: 4,
+          metrics: { loss: 0.42 },
+          runPlan: {
+            ...job.runPlan,
+            runs,
+            summary: {
+              ...job.runPlan.summary,
+              runningRuns: 1,
+              pendingRuns: 0,
+              completedEpochs: 1,
+              remainingEpochs: 29,
+            },
+          },
+        };
+        return runningJob;
+      },
+      trainingJobResponseFactory: () =>
+        runningJob ??
+        mockTrainingJobPayload(
+          { logFolder: "running_progress" },
+          { status: "running" },
+        ),
+    });
+    renderViewer();
+    const user = userEvent.setup();
+
+    const details = await expandedTrainingDetailsReady(user);
+    await selectNewTrainingLogFolder(user, "running_progress");
+    await user.click(screen.getByRole("button", { name: /start training/i }));
+
+    const runList = trainingRunList(details);
+    await waitFor(() => {
+      expect(within(runList).getByText("Running")).toBeInTheDocument();
+      expect(within(runList).getByText("baseline")).toBeInTheDocument();
+      expect(within(runList).getByText("Mnist")).toBeInTheDocument();
+      expect(within(runList).getByText("1 / 30 epochs")).toBeInTheDocument();
+    });
+
+    const statusSidebar = within(details).getByRole("complementary", {
+      name: "Training Status Sidebar",
+    });
+    expect(within(statusSidebar).getByText("Active Run")).toBeInTheDocument();
+    expect(within(statusSidebar).getByText("running")).toBeInTheDocument();
+    expect(within(statusSidebar).getByText("Active run")).toBeInTheDocument();
+    expect(within(statusSidebar).getByText("epoch 1 / step 4")).toBeInTheDocument();
+    expect(within(statusSidebar).getByText("29 left")).toBeInTheDocument();
+  });
+
   it("shows and submits plain preset rows alongside checked config snapshots", async () => {
+    const snapshotRecord = {
+      id: "snap-wide",
+      modelType: "linears",
+      model: "linear",
+      preset: "baseline",
+      name: "Wide snapshot",
+      overrides: { stack_hidden_dim: "128", num_epochs: "5" },
+      createdAt: "2026-06-01T00:00:00.000Z",
+      updatedAt: "2026-06-01T00:00:00.000Z",
+    };
     const { trainingBodies } = installFetchMock({
       schemaResponse: {
         ...schemaResponse,
@@ -1021,24 +1300,14 @@ describe("ViewerApp Training And Preview", () => {
       configSnapshotsResponse: {
         modelType: "linears",
         model: "linear",
-        snapshots: [
-          {
-            id: "snap-wide",
-            modelType: "linears",
-            model: "linear",
-            preset: "baseline",
-            name: "Wide snapshot",
-            overrides: { stack_hidden_dim: "128", num_epochs: "5" },
-            createdAt: "2026-06-01T00:00:00.000Z",
-            updatedAt: "2026-06-01T00:00:00.000Z",
-          },
-        ],
+        snapshots: [snapshotRecord],
       },
     });
     renderViewer();
     const user = userEvent.setup();
 
     const details = await expandedTrainingDetailsReady(user);
+    await setTrainingHiddenDimOverride(user, details, "192");
     await selectNewTrainingLogFolder(user, "mixed_snapshots");
 
     expect(
@@ -1090,9 +1359,8 @@ describe("ViewerApp Training And Preview", () => {
       /0\s*\/\s*2 runs;\s*0\s*\/\s*35 epochs/i,
     );
     const runList = trainingRunList(details);
-    expect(within(runList).getByText("2 runs")).toBeInTheDocument();
     expect(within(runList).getByText("Wide snapshot")).toBeInTheDocument();
-    expect(within(runList).getByText("stack_hidden_dim=128")).toBeInTheDocument();
+    expect(within(runList).getAllByText("stack_hidden_dim=192")).toHaveLength(2);
 
     await user.click(
       within(runList).getByRole("button", { name: /command for run 1/i }),
@@ -1101,7 +1369,7 @@ describe("ViewerApp Training And Preview", () => {
       name: /training command/i,
     });
     expect(commandField(commandDialog)).toHaveValue(
-      "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist --logdir mixed_snapshots",
+      "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist --logdir mixed_snapshots --config --stack-hidden-dim 192",
     );
     await user.click(
       within(commandDialog).getByRole("button", {
@@ -1116,11 +1384,36 @@ describe("ViewerApp Training And Preview", () => {
       name: /training command/i,
     });
     expect(commandField(commandDialog)).toHaveValue(
-      "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist --logdir mixed_snapshots --config --stack-hidden-dim 128 --num-epochs 5",
+      "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist --logdir mixed_snapshots --config --stack-hidden-dim 192 --num-epochs 5",
     );
     await user.click(
       within(commandDialog).getByRole("button", {
         name: /close training command/i,
+      }),
+    );
+
+    await user.click(
+      within(runList).getByRole("button", { name: /^commands$/i }),
+    );
+    commandDialog = await screen.findByRole("dialog", {
+      name: /training commands/i,
+    });
+    expect(
+      within(commandDialog).getByRole("textbox", {
+        name: /^training commands$/i,
+      }),
+    ).toHaveValue(
+      [
+        "(",
+        "  set -e",
+        "  source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist --logdir mixed_snapshots --config --stack-hidden-dim 192",
+        "  source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist --logdir mixed_snapshots --config --stack-hidden-dim 192 --num-epochs 5",
+        ")",
+      ].join("\n"),
+    );
+    await user.click(
+      within(commandDialog).getByRole("button", {
+        name: /close training commands/i,
       }),
     );
 
@@ -1135,10 +1428,13 @@ describe("ViewerApp Training And Preview", () => {
     });
     expect(trainingBodies[0]).not.toHaveProperty("search");
     expect(trainingBodies[0]).toHaveProperty("runPlan.summary.totalRuns", 2);
-    expect(trainingBodies[0]).toHaveProperty("runPlan.runs.0.overrides", {});
+    expect(trainingBodies[0]).toHaveProperty(
+      "runPlan.runs.0.overrides.stack_hidden_dim",
+      "192",
+    );
     expect(trainingBodies[0]).toHaveProperty(
       "runPlan.runs.0.command",
-      "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist --logdir mixed_snapshots",
+      "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist --logdir mixed_snapshots --config --stack-hidden-dim 192",
     );
     expect(trainingBodies[0]).toHaveProperty(
       "runPlan.runs.1.snapshotId",
@@ -1150,8 +1446,12 @@ describe("ViewerApp Training And Preview", () => {
     );
     expect(trainingBodies[0]).toHaveProperty(
       "runPlan.runs.1.overrides.stack_hidden_dim",
-      "128",
+      "192",
     );
+    expect(snapshotRecord.overrides).toEqual({
+      stack_hidden_dim: "128",
+      num_epochs: "5",
+    });
   });
 
   it("opens snapshot draft config from a preset row action without changing preset inclusion", async () => {
@@ -1330,7 +1630,7 @@ describe("ViewerApp Training And Preview", () => {
     expect(control).not.toHaveTextContent("Wide snapshot");
   });
 
-  it("deselects a preset run from the expanded footer run list and syncs setup variants", async () => {
+  it("deselects a preset run from the Training run list and syncs setup variants", async () => {
     installFetchMock({
       schemaResponse: {
         ...schemaResponse,
@@ -1503,7 +1803,7 @@ describe("ViewerApp Training And Preview", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows Resample in the expanded footer for random search before start", async () => {
+  it("shows Resample in the Training run list for random search before start", async () => {
     const { fetchMock } = installFetchMock();
     renderViewer();
     const user = userEvent.setup();
@@ -1532,8 +1832,8 @@ describe("ViewerApp Training And Preview", () => {
     renderViewer();
     const user = userEvent.setup();
 
-    const details = await expandedTrainingDetailsReady(user);
-    await setTargetHiddenDimOverride(user, "128");
+    let details = await expandedTrainingDetailsReady(user);
+    details = await setTrainingHiddenDimOverride(user, details, "128");
     await setTrainingMultiSelectOption(
       user,
       details,
@@ -1557,10 +1857,12 @@ describe("ViewerApp Training And Preview", () => {
       expect(within(details).getByTitle("logs/completed_plan")).toBeInTheDocument();
     });
 
+    await user.click(screen.getByRole("button", { name: /^model$/i }));
     await user.click(screen.getByRole("button", { name: /^reset overrides$/i }));
     await waitFor(() => {
       expect(screen.getAllByText("0 overrides").length).toBeGreaterThan(0);
     });
+    details = await expandedTrainingDetailsReady(user);
     await setTrainingMultiSelectOption(
       user,
       details,
@@ -1585,32 +1887,36 @@ describe("ViewerApp Training And Preview", () => {
     expect(within(runList).getAllByText("stack_hidden_dim=128")).toHaveLength(2);
     expect(within(runList).getByText("Cifar10")).toBeInTheDocument();
     expect(within(runList).getByText("Mnist")).toBeInTheDocument();
-    expect(within(runList).getByText("2 runs")).toBeInTheDocument();
     expect(
       within(runList).queryByRole("button", { name: /^resample$/i }),
     ).not.toBeInTheDocument();
   });
 
-  it("resets completed training footer progress back to the current draft plan", async () => {
+  it("resets completed training progress back to the current draft plan", async () => {
     installFetchMock();
     renderViewer();
     const user = userEvent.setup();
 
-    const details = await expandedTrainingDetailsReady(user);
-    await setTargetHiddenDimOverride(user, "128");
+    let details = await expandedTrainingDetailsReady(user);
+    details = await setTrainingHiddenDimOverride(user, details, "128");
     await selectNewTrainingLogFolder(user, "completed_then_reset");
     await user.click(screen.getByRole("button", { name: /start training/i }));
 
     await findTrainingRunSummary(
       /1\s*\/\s*1 runs;\s*30\s*\/\s*30 epochs/i,
     );
+    const completedRunList = trainingRunList(details);
     expect(
-      screen.getByRole("button", { name: /^reset training$/i }),
+      within(completedRunList).getByRole("button", { name: /^reset training$/i }),
     ).toBeInTheDocument();
 
-    await setTargetHiddenDimOverride(user, "192");
+    await setTrainingHiddenDimOverride(user, details, "192");
     await selectNewTrainingLogFolder(user, "after_reset");
-    await user.click(screen.getByRole("button", { name: /^reset training$/i }));
+    await user.click(
+      within(trainingRunList(details)).getByRole("button", {
+        name: /^reset training$/i,
+      }),
+    );
 
     await findTrainingRunSummary(
       /0\s*\/\s*1 runs;\s*0\s*\/\s*30 epochs;\s*Next run #1 0\s*\/\s*30 epochs/i,
@@ -1670,8 +1976,8 @@ describe("ViewerApp Training And Preview", () => {
     renderViewer();
     const user = userEvent.setup();
 
-    await expandedTrainingDetailsReady(user);
-    await setTargetHiddenDimOverride(user, "128");
+    let details = await expandedTrainingDetailsReady(user);
+    details = await setTrainingHiddenDimOverride(user, details, "128");
     await selectNewTrainingLogFolder(user, "first_plan");
     await user.click(screen.getByRole("button", { name: /start training/i }));
 
@@ -1684,7 +1990,7 @@ describe("ViewerApp Training And Preview", () => {
       ).toBeInTheDocument();
     });
 
-    await setTargetHiddenDimOverride(user, "192");
+    await setTrainingHiddenDimOverride(user, details, "192");
     await selectNewTrainingLogFolder(user, "second_plan");
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /start training/i }))
@@ -1709,13 +2015,13 @@ describe("ViewerApp Training And Preview", () => {
     });
   });
 
-  it("making a selected preset primary updates the primary target and resets search state", async () => {
+  it("making a selected preset primary updates the training target and resets search state", async () => {
     const { inspectBodies } = installFetchMock();
     renderViewer();
     const user = userEvent.setup();
 
-    const details = await expandedTrainingDetailsReady(user);
-    await setTargetHiddenDimOverride(user, "128");
+    let details = await expandedTrainingDetailsReady(user);
+    details = await setTrainingHiddenDimOverride(user, details, "128");
     await user.click(within(details).getByRole("radio", { name: /^grid$/i }));
     await user.click(within(details).getByLabelText(/^search axis stack_hidden_dim$/i));
     expect(within(details).getByText(/1 fixed override replaced by search axes/i))
@@ -1746,15 +2052,18 @@ describe("ViewerApp Training And Preview", () => {
     );
     await user.keyboard("{Escape}");
 
-    expect(await waitForTargetValue("preset", "recurrent-gating-halting"))
-      .toHaveTextContent("recurrent-gating-halting");
-    expect(screen.getAllByText(/1 overrides?/i).length).toBeGreaterThan(0);
+    await user.click(screen.getByRole("button", { name: /^model$/i }));
+    expect(await waitForTargetValue("preset", "baseline"))
+      .toHaveTextContent("baseline");
+    expect(screen.queryByText(/1 overrides?/i)).not.toBeInTheDocument();
+    details = await expandedTrainingDetailsReady(user);
     await waitFor(() => {
       expect(within(details).getByRole("radio", { name: /^off$/i }))
         .toHaveAttribute("aria-checked", "true");
     });
     expect(inspectBodies).toHaveLength(initialInspectRequestCount);
 
+    await user.click(screen.getByRole("button", { name: /^model$/i }));
     const dialog = await openFullConfig(user);
     await user.click(within(dialog).getByRole("button", { name: /update preview/i }));
     await waitFor(() =>
@@ -1763,10 +2072,12 @@ describe("ViewerApp Training And Preview", () => {
     expect(inspectBodies.at(-1)).toEqual({
       modelType: "linears",
       model: "linear",
-      preset: "recurrent-gating-halting",
+      preset: "baseline",
       dataset: "Mnist",
-      overrides: { stack_hidden_dim: "128" },
+      overrides: {},
     });
+    await user.click(within(dialog).getByRole("button", { name: /^close$/i }));
+    details = await expandedTrainingDetailsReady(user);
     expect(
       within(details).getByRole("combobox", {
         name: /^presets\s+2\s*\/\s*2 selected$/i,
@@ -1779,7 +2090,7 @@ describe("ViewerApp Training And Preview", () => {
     renderViewer();
     const user = userEvent.setup();
 
-    const details = await expandedTrainingDetailsReady(user);
+    let details = await expandedTrainingDetailsReady(user);
     const { listbox } = await openTrainingMultiSelect(user, details, "Presets");
     await user.click(
       within(listbox).getByRole("option", {
@@ -1792,7 +2103,9 @@ describe("ViewerApp Training And Preview", () => {
     expect(currentPrimary).not.toHaveAttribute("aria-disabled", "true");
     await user.click(currentPrimary);
 
+    await user.click(screen.getByRole("button", { name: /^model$/i }));
     expect(await waitForTargetValue("preset", "baseline")).toHaveTextContent("baseline");
+    details = await expandedTrainingDetailsReady(user);
     await waitFor(() => {
       expect(
         within(details).getByRole("combobox", {
@@ -1800,7 +2113,12 @@ describe("ViewerApp Training And Preview", () => {
         }),
       ).toHaveTextContent("recurrent-gating-halting");
     });
-    expect(within(listbox).getByRole("option", { name: /baseline/i }))
+    const { listbox: refreshedListbox } = await openTrainingMultiSelect(
+      user,
+      details,
+      "Presets",
+    );
+    expect(within(refreshedListbox).getByRole("option", { name: /baseline/i }))
       .toHaveAttribute("aria-selected", "false");
   });
 
@@ -1941,8 +2259,8 @@ describe("ViewerApp Training And Preview", () => {
     renderViewer();
     const user = userEvent.setup();
 
-    const details = await expandedTrainingDetailsReady(user);
-    await setTargetHiddenDimOverride(user, "128");
+    let details = await expandedTrainingDetailsReady(user);
+    details = await setTrainingHiddenDimOverride(user, details, "128");
     await selectNewTrainingLogFolder(user, "grid_search");
 
     await user.click(within(details).getByRole("radio", { name: /^grid$/i }));
@@ -2207,7 +2525,7 @@ describe("ViewerApp Training And Preview", () => {
     });
   });
 
-  it("training panel includes selected monitors in run-plan commands and job submissions", async () => {
+  it("Training workspace includes selected monitors in run-plan commands and job submissions", async () => {
     const { fetchMock, trainingBodies } = installFetchMock();
     renderViewer();
     const user = userEvent.setup();
@@ -2301,7 +2619,11 @@ describe("ViewerApp Training And Preview", () => {
         "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist --logdir monitor_run --monitors linear",
       );
     });
-    expect(screen.getAllByText(/1 monitors/i).length).toBeGreaterThan(0);
+    expect(
+      within(details).getByRole("combobox", {
+        name: /^training monitors\s+1\s*\/\s*2 selected$/i,
+      }),
+    ).toHaveTextContent(/Linear layers/i);
   });
 
   it("requires a valid log folder before starting training", async () => {
@@ -2309,10 +2631,10 @@ describe("ViewerApp Training And Preview", () => {
     renderViewer();
     const user = userEvent.setup();
 
+    await expandedTrainingDetailsReady(user);
     const startButton = await screen.findByRole("button", { name: /start training/i });
     expect(startButton).toBeDisabled();
 
-    await expandTrainingPanel(user);
     await user.click(screen.getByRole("radio", { name: /new folder/i }));
     const input = screen.getByLabelText(/^new log folder$/i);
 
@@ -2352,10 +2674,10 @@ describe("ViewerApp Training And Preview", () => {
     renderViewer();
     const user = userEvent.setup();
 
+    const details = await expandedTrainingDetails(user);
     const startButton = await screen.findByRole("button", { name: /start training/i });
     expect(startButton).toBeDisabled();
 
-    const details = await expandedTrainingDetails(user);
     expect(within(details).getByText(/training is disabled/i)).toBeInTheDocument();
 
     await user.click(within(details).getByRole("radio", { name: /new folder/i }));

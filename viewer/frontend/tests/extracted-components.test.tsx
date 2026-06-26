@@ -138,30 +138,66 @@ describe("ViewerWorkspaceNav", () => {
     render(<ViewerWorkspaceNav activeWorkspace="model" onChange={onChange} />);
 
     const modelButton = screen.getByRole("button", { name: "Model" });
+    const trainingButton = screen.getByRole("button", { name: "Training" });
     const compareButton = screen.getByRole("button", { name: "Compare" });
     const logsButton = screen.getByRole("button", { name: "Logs" });
-    const workspaceButtons = within(screen.getByRole("navigation")).getAllByRole("button");
+    const workspaceNav = screen.getByRole("navigation", { name: "Workspace" });
+    const workspaceButtons = within(workspaceNav).getAllByRole("button");
 
     expect(workspaceButtons.map((button) => button.textContent?.trim())).toEqual([
       "Model",
+      "Training",
       "Logs",
       "Compare",
     ]);
+    expect(within(workspaceNav).getByRole("list")).toBeInTheDocument();
+    expect(within(workspaceNav).getAllByRole("listitem")).toHaveLength(4);
 
-    expect(modelButton).toHaveAttribute("aria-pressed", "true");
-    expect(compareButton).toHaveAttribute("aria-pressed", "false");
-    expect(logsButton).toHaveAttribute("aria-pressed", "false");
-    expect(modelButton.querySelector("svg")).toBeNull();
-    expect(compareButton.querySelector("svg")).toBeNull();
-    expect(logsButton.querySelector("svg")).toBeNull();
+    expect(modelButton).toHaveAttribute("aria-current", "page");
+    expect(modelButton.className).not.toContain("after:");
+    expect(trainingButton).not.toHaveAttribute("aria-current");
+    expect(compareButton).not.toHaveAttribute("aria-current");
+    expect(logsButton).not.toHaveAttribute("aria-current");
+    expect(modelButton).not.toHaveAttribute("aria-pressed");
+    expect(trainingButton).not.toHaveAttribute("aria-pressed");
+    expect(compareButton).not.toHaveAttribute("aria-pressed");
+    expect(logsButton).not.toHaveAttribute("aria-pressed");
+    for (const button of workspaceButtons) {
+      const icon = button.querySelector("svg");
+      expect(icon).not.toBeNull();
+      expect(icon?.getAttribute("aria-hidden")).toBe("true");
+    }
 
-    await user.click(compareButton);
+    await user.click(trainingButton);
     await user.click(logsButton);
+    await user.click(compareButton);
     await user.click(modelButton);
 
-    expect(onChange).toHaveBeenNthCalledWith(1, "compare");
+    expect(onChange).toHaveBeenNthCalledWith(1, "training");
     expect(onChange).toHaveBeenNthCalledWith(2, "logs");
-    expect(onChange).toHaveBeenNthCalledWith(3, "model");
+    expect(onChange).toHaveBeenNthCalledWith(3, "compare");
+    expect(onChange).toHaveBeenNthCalledWith(4, "model");
+  });
+
+  it.each([
+    ["running", "warn"],
+    ["completed", "good"],
+    ["failed", "danger"],
+    ["cancelled", "danger"],
+  ] as const)("renders the Training nav badge for %s jobs", (label, tone) => {
+    render(
+      <ViewerWorkspaceNav
+        activeWorkspace="model"
+        onChange={vi.fn()}
+        trainingStatus={{ label, tone }}
+      />,
+    );
+
+    const trainingButton = screen.getByRole("button", {
+      name: new RegExp(`Training\\s+${label}`, "i"),
+    });
+    expect(trainingButton).toBeInTheDocument();
+    expect(within(trainingButton).getByText(label)).toBeInTheDocument();
   });
 });
 

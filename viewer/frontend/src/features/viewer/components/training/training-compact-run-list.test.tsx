@@ -1,7 +1,10 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { TrainingCompactRunList } from "@/features/viewer/components/training/training-compact-run-list";
+import {
+  TrainingAllCommandsButton,
+  TrainingCompactRunList,
+} from "@/features/viewer/components/training/training-compact-run-list";
 import { type TrainingRun, type TrainingRunPlan } from "@/lib/api";
 
 function run(overrides: Partial<TrainingRun> = {}): TrainingRun {
@@ -108,11 +111,7 @@ describe("TrainingCompactRunList", () => {
       />,
     );
 
-    expect(screen.getByText("Training Runs")).toBeInTheDocument();
-    expect(screen.getByText("5 runs")).toBeInTheDocument();
-    expect(screen.getByText("1 running")).toBeInTheDocument();
-    expect(screen.getByText("1 done")).toBeInTheDocument();
-    expect(screen.getByText("2 stopped")).toBeInTheDocument();
+    expect(screen.queryByText("Training Runs")).not.toBeInTheDocument();
     for (const status of ["Pending", "Running", "Completed", "Failed", "Cancelled"]) {
       expect(screen.getByText(status)).toBeInTheDocument();
     }
@@ -175,23 +174,17 @@ describe("TrainingCompactRunList", () => {
       .toBeInTheDocument();
   });
 
-  it("shows a visible header button for all training commands", () => {
-    render(<TrainingCompactRunList plan={plan([run()])} />);
+  it("shows a visible button for all training commands", () => {
+    render(<TrainingAllCommandsButton plan={plan([run()])} />);
 
-    const title = screen.getByText("Training Runs");
-    const header = title.closest("div")?.parentElement;
-    if (!(header instanceof HTMLElement)) {
-      throw new Error("Expected Training Runs header");
-    }
-
-    const commandsButton = within(header).getByRole("button", {
+    const commandsButton = screen.getByRole("button", {
       name: "Commands",
     });
 
     expect(commandsButton).toBeInTheDocument();
     expect(commandsButton).toHaveTextContent("Commands");
     expect(
-      within(header).queryByRole("button", {
+      screen.queryByRole("button", {
         name: "Copy all training commands",
       }),
     ).not.toBeInTheDocument();
@@ -210,7 +203,7 @@ describe("TrainingCompactRunList", () => {
       "source experiment.sh --model linear --preset wide --datasets Cifar10";
 
     render(
-      <TrainingCompactRunList
+      <TrainingAllCommandsButton
         plan={plan([
           run({ index: 1, command: firstCommand }),
           run({ index: 2, command: "" }),
@@ -257,7 +250,13 @@ describe("TrainingCompactRunList", () => {
       }),
     );
 
-    render(<TrainingCompactRunList plan={plan(runs)} />);
+    const currentPlan = plan(runs);
+    render(
+      <>
+        <TrainingAllCommandsButton plan={currentPlan} />
+        <TrainingCompactRunList plan={currentPlan} />
+      </>,
+    );
 
     await user.click(screen.getByRole("button", { name: "Commands" }));
 
@@ -276,7 +275,7 @@ describe("TrainingCompactRunList", () => {
 
   it("omits the copy-all action when there are no runnable commands", () => {
     render(
-      <TrainingCompactRunList
+      <TrainingAllCommandsButton
         plan={plan([
           run({ index: 1, command: "" }),
           run({ index: 2, command: undefined as unknown as string }),
@@ -345,35 +344,4 @@ describe("TrainingCompactRunList", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Plan failed");
   });
 
-  it("shows Resample only when enabled and calls the handler", async () => {
-    const user = userEvent.setup();
-    const onResample = vi.fn();
-    const currentPlan = plan([run()]);
-    const { rerender } = render(<TrainingCompactRunList plan={currentPlan} />);
-
-    expect(
-      screen.queryByRole("button", { name: /^resample$/i }),
-    ).not.toBeInTheDocument();
-
-    rerender(
-      <TrainingCompactRunList
-        plan={currentPlan}
-        canResample
-        onResample={onResample}
-      />,
-    );
-
-    await user.click(screen.getByRole("button", { name: /^resample$/i }));
-    expect(onResample).toHaveBeenCalledTimes(1);
-
-    rerender(
-      <TrainingCompactRunList
-        plan={currentPlan}
-        canResample
-        isResampling
-        onResample={onResample}
-      />,
-    );
-    expect(screen.getByRole("button", { name: /^resample$/i })).toBeDisabled();
-  });
 });

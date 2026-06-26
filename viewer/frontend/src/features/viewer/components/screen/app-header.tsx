@@ -1,5 +1,4 @@
 import {
-  Layers,
   ListChecks,
   Lock,
   Plug,
@@ -7,46 +6,77 @@ import {
   SlidersHorizontal,
   Upload,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import {
+  controlDisabledClassName,
+  controlFocusClassName,
+} from "@/components/ui/control-styles";
 import { StatusDot } from "@/components/ui/status-dot";
 import { StatusPill } from "@/features/viewer/components/status-pill";
+import { ViewerWorkspaceNav } from "@/features/viewer/components/viewer-workspace-nav";
 import {
+  useActiveTrainingJob,
   useTargetHeaderState,
 } from "@/features/viewer/providers/viewer-providers";
+import { cn } from "@/lib/utils";
 import { type ViewerWorkspace } from "@/types/viewer";
+
+const headerActionButtonClassName = [
+  "inline-flex h-9 items-center justify-center gap-1.5 rounded-control-sm px-2.5",
+  "border-0 bg-transparent text-sm font-semibold text-ink-dim transition hover:bg-control-hover hover:text-ink",
+  "active:translate-y-px disabled:text-ink-faint disabled:hover:bg-transparent disabled:hover:text-ink-faint sm:px-3",
+  controlFocusClassName,
+  controlDisabledClassName,
+].join(" ");
+
+function trainingStatusTone(status: string) {
+  if (status === "completed") {
+    return "good" as const;
+  }
+  if (status === "failed" || status === "cancelled") {
+    return "danger" as const;
+  }
+  if (status === "queued" || status === "running") {
+    return "warn" as const;
+  }
+  return "neutral" as const;
+}
 
 export function AppHeader({
   activeWorkspace,
+  onChangeWorkspace,
   onOpenFeatureList,
   onOpenApiConnection,
   onOpenImportLogs,
 }: {
   activeWorkspace: ViewerWorkspace;
+  onChangeWorkspace: (workspace: ViewerWorkspace) => void;
   onOpenFeatureList: () => void;
   onOpenApiConnection: () => void;
   onOpenImportLogs: () => void;
 }) {
   const {
     selectedModel,
-    selectedPreset,
     apiOnline,
     overrideCount,
     presetOwnedFieldCount,
     resetOverrides: onResetOverrides,
   } = useTargetHeaderState();
+  const { activeTrainingJob } = useActiveTrainingJob();
+  const trainingStatus = activeTrainingJob
+    ? {
+        label: activeTrainingJob.status,
+        tone: trainingStatusTone(activeTrainingJob.status),
+      }
+    : undefined;
   const canResetOverrides = activeWorkspace === "model" && Boolean(selectedModel);
   return (
     <header className="flex h-[60px] min-h-0 items-center justify-between gap-3 border-b border-line bg-[linear-gradient(180deg,rgba(16,14,28,0.7),rgba(8,8,14,0.5))] px-[22px] backdrop-blur-xl">
-      <div className="flex min-w-0 items-center gap-3">
-        <div className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[11px] bg-grad text-white shadow-primary">
-          <Layers className="h-[19px] w-[19px]" aria-hidden />
-        </div>
-        <div className="min-w-0">
-          <h1 className="truncate text-base font-bold text-ink">Emperor Model Viewer</h1>
-          <div className="mt-0.5 truncate font-mono text-xs text-ink-dim">
-            {selectedModel || "No model"} {selectedPreset ? `/ ${selectedPreset}` : ""}
-          </div>
-        </div>
+      <div className="min-w-0">
+        <ViewerWorkspaceNav
+          activeWorkspace={activeWorkspace}
+          onChange={onChangeWorkspace}
+          trainingStatus={trainingStatus}
+        />
       </div>
       <div className="flex shrink-0 items-center justify-end gap-2">
         <StatusPill
@@ -71,42 +101,42 @@ export function AppHeader({
           tone={presetOwnedFieldCount > 0 ? "warn" : "neutral"}
         />
         <div className="mx-1 hidden h-6 w-px bg-line xl:block" />
-        <Button
-          variant="secondary"
+        <button
+          type="button"
           aria-label="API connection settings"
           onClick={onOpenApiConnection}
-          className="h-9 px-3 sm:h-9 sm:px-4"
+          className={headerActionButtonClassName}
         >
           <Plug className="h-[15px] w-[15px]" aria-hidden />
           <span className="hidden sm:inline">Connection</span>
-        </Button>
-        <Button
-          variant="secondary"
+        </button>
+        <button
+          type="button"
           aria-label="Import logs"
           onClick={onOpenImportLogs}
-          className="h-9 px-3 sm:h-9 sm:px-4"
+          className={headerActionButtonClassName}
         >
           <Upload className="h-[15px] w-[15px]" aria-hidden />
           <span className="hidden sm:inline">Import Logs</span>
-        </Button>
-        <Button
-          variant="secondary"
+        </button>
+        <button
+          type="button"
           aria-label="Features"
           onClick={onOpenFeatureList}
-          className="h-9 px-3 sm:h-9 sm:px-4"
+          className={headerActionButtonClassName}
         >
           <ListChecks className="h-[15px] w-[15px]" aria-hidden />
           <span className="hidden sm:inline">Features</span>
-        </Button>
-        <Button
-          variant="secondary"
+        </button>
+        <button
+          type="button"
           onClick={onResetOverrides}
           disabled={!canResetOverrides}
-          className="hidden xl:inline-flex"
+          className={cn(headerActionButtonClassName, "hidden xl:inline-flex")}
         >
           <RotateCcw className="h-[15px] w-[15px]" aria-hidden />
           Reset Overrides
-        </Button>
+        </button>
       </div>
     </header>
   );

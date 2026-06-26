@@ -37,7 +37,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/api", () => mocks);
 
 import { useViewerState } from "@/features/viewer/state/use-viewer-state";
-import { ConnectedTrainingPanel } from "@/features/viewer/components/connected-training-panel";
+import { ConnectedTrainingWorkspace } from "@/features/viewer/components/connected-training-panel";
 import { ViewerProviders } from "@/features/viewer/providers/viewer-providers";
 import { TargetPresetPanel } from "@/features/viewer/components/screen/target-preset-panel";
 import {
@@ -88,7 +88,7 @@ function renderTrainingPanel() {
   return render(
     <QueryClientProvider client={client}>
       <ViewerProviders>
-        <ConnectedTrainingPanel onOpenFullConfig={vi.fn()} />
+        <ConnectedTrainingWorkspace onOpenFullConfig={vi.fn()} />
       </ViewerProviders>
     </QueryClientProvider>,
   );
@@ -103,7 +103,7 @@ function renderTrainingPanelWithExperiments() {
     <QueryClientProvider client={client}>
       <ViewerProviders>
         <TargetPresetPanel onOpenFullConfig={vi.fn()} />
-        <ConnectedTrainingPanel onOpenFullConfig={vi.fn()} />
+        <ConnectedTrainingWorkspace onOpenFullConfig={vi.fn()} />
       </ViewerProviders>
     </QueryClientProvider>,
   );
@@ -737,6 +737,8 @@ describe("useViewerState", () => {
     await waitFor(() => {
       expect(result.current.target.selectedModel).toBe("linear");
       expect(result.current.target.selectedPreset).toBe("baseline");
+      expect(result.current.target.selectedTrainingDatasets).toEqual(["Mnist"]);
+      expect(result.current.target.trainingSearchAxesLoading).toBe(false);
       expect(result.current.history.experimentsLoading).toBe(false);
     });
     const target = result.current.target;
@@ -1125,8 +1127,10 @@ describe("useViewerState", () => {
     await waitFor(() => {
       expect(result.current.target.selectedModel).toBe("bert_linear");
       expect(result.current.target.selectedPreset).toBe("bert-baseline");
-      expect(result.current.target.selectedTrainingPresets).toEqual(["bert-baseline"]);
       expect(result.current.target.selectedDatasets).toEqual(["ToyText"]);
+      expect(result.current.target.selectedTrainingModel).toBe("linear");
+      expect(result.current.target.selectedTrainingPresets).toEqual(["baseline"]);
+      expect(result.current.target.selectedTrainingDatasets).toEqual(["Mnist"]);
     });
     expect(mocks.inspectModel.mock.calls.map(([request]) => request)).toContainEqual({
       modelType: "transformer_encoder",
@@ -1217,8 +1221,9 @@ describe("useViewerState", () => {
       expect(result.current.target.selectedExperimentPreset).toBe("Fast");
       expect(result.current.target.selectedExperimentDataset).toBe("FashionMnist");
       expect(result.current.target.selectedPreset).toBe("fast");
-      expect(result.current.target.selectedTrainingPresets).toEqual(["fast"]);
       expect(result.current.target.selectedDatasets).toEqual(["FashionMnist"]);
+      expect(result.current.target.selectedTrainingPresets).toEqual(["bert-baseline"]);
+      expect(result.current.target.selectedTrainingDatasets).toEqual(["ToyText"]);
       expect(result.current.target.overrides).toEqual({});
     });
 
@@ -2397,6 +2402,25 @@ describe("useViewerState", () => {
     });
   });
 
+  it("uses footer-style icon labels in the sidebar target selectors", async () => {
+    mockPublicModelCatalog();
+    renderTargetPresetPanel();
+
+    await screen.findByRole("combobox", { name: /^model type$/i });
+
+    for (const label of ["Model Type", "Model Name", "Configuration Source"]) {
+      const heading = screen.getByText(label).closest("div");
+      expect(heading).toHaveClass(
+        "flex",
+        "items-center",
+        "gap-2",
+        "uppercase",
+        "tracking-[0.09em]",
+      );
+      expect(heading?.querySelector("svg")).toBeInTheDocument();
+    }
+  });
+
   it("switches the sidebar model dropdown without an update loop", async () => {
     mockPublicModelCatalog();
     renderTargetPresetPanel();
@@ -2563,10 +2587,9 @@ describe("useViewerState", () => {
     renderTrainingPanel();
     const user = userEvent.setup();
 
-    await user.click(await screen.findByRole("button", { name: /^training/i }));
-    const details = document.getElementById("training-panel-details");
-    expect(details).toBeInstanceOf(HTMLElement);
-    const panel = details as HTMLElement;
+    const panel = await screen.findByRole("region", {
+      name: "Training workspace",
+    });
     const modelControl = await within(panel).findByRole("combobox", {
       name: /^training model$/i,
     });
@@ -2593,10 +2616,9 @@ describe("useViewerState", () => {
     renderTrainingPanel();
     const user = userEvent.setup();
 
-    await user.click(await screen.findByRole("button", { name: /^training/i }));
-    const details = document.getElementById("training-panel-details");
-    expect(details).toBeInstanceOf(HTMLElement);
-    const panel = details as HTMLElement;
+    const panel = await screen.findByRole("region", {
+      name: "Training workspace",
+    });
     const modelTypeControl = await within(panel).findByRole("combobox", {
       name: /^training model type$/i,
     });
@@ -2669,7 +2691,6 @@ describe("useViewerState", () => {
     renderTrainingPanelWithExperiments();
     const user = userEvent.setup();
 
-    await user.click(await screen.findByRole("button", { name: /^training/i }));
     await user.click(screen.getByRole("radio", { name: /new folder/i }));
     await user.type(screen.getByLabelText(/^new log folder$/i), "scratch_run");
 

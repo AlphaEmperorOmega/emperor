@@ -551,7 +551,7 @@ describe("config snapshots", () => {
       {
         key: "stack_hidden_dim",
         label: "Hidden Dim",
-        value: "128",
+        value: "192",
         source: "override",
       },
       {
@@ -562,9 +562,39 @@ describe("config snapshots", () => {
       },
     ]);
     expect(plan?.runs[2].command).toContain("--logdir snapshots");
-    expect(plan?.runs[2].command).toContain("--config --stack-hidden-dim 128");
+    expect(plan?.runs[2].command).toContain("--config --stack-hidden-dim 192");
     expect(plan?.runs[2].command).not.toContain("wide");
     expect(plan?.runs[2].command).not.toContain("snap-wide");
+  });
+
+  it("merges bulk overrides into snapshot rows without mutating snapshots", () => {
+    const snapshot = makeSnapshot(
+      { stack_hidden_dim: "128", num_epochs: "3" },
+      "wide",
+    );
+
+    const plan = buildConfigSnapshotRunPlan({
+      modelType: "linears",
+      model: "linear",
+      selectedPreset: "baseline",
+      selectedTrainingPresets: [],
+      selectedDatasets: ["Mnist"],
+      snapshots: [snapshot],
+      fields,
+      bulkOverrides: { stack_hidden_dim: "192" },
+      logFolder: "snapshots",
+    });
+
+    expect(plan?.runs[0]).toMatchObject({
+      snapshotId: "snap-wide",
+      snapshotName: "wide",
+      overrides: { stack_hidden_dim: "192", num_epochs: "3" },
+    });
+    expect(plan?.runs[0]?.command).toContain("--stack-hidden-dim 192");
+    expect(snapshot.overrides).toEqual({
+      stack_hidden_dim: "128",
+      num_epochs: "3",
+    });
   });
 
   it("keeps selected snapshots when their source preset is not selected", () => {

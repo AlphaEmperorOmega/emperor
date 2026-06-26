@@ -114,7 +114,11 @@ describe("useTrainingRequestState", () => {
     expect(result.current.snapshotRunPlan?.runs[1]).toMatchObject({
       snapshotId: "wide",
       snapshotName: "Wide",
-      overrides: { stack_hidden_dim: "128", num_epochs: "4" },
+      overrides: {
+        stack_hidden_dim: "192",
+        num_epochs: "4",
+        dropout: "0.2",
+      },
     });
     expect(result.current.plannedRunCount).toBe(2);
     expect(result.current.canPlan).toBe(true);

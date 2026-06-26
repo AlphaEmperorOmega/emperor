@@ -1,9 +1,4 @@
-import {
-  type Dispatch,
-  type SetStateAction,
-  useMemo,
-  useState,
-} from "react";
+import { type Dispatch, type SetStateAction, useMemo } from "react";
 import {
   type Dataset,
   type ModelIdentity,
@@ -46,6 +41,8 @@ export type TrainingPanelViewModelInput = {
   trainingEnabled: boolean;
   trainingLockedByHistoricalSelection: boolean;
   historicalTrainingLockExperiment: string;
+  canOpenFullConfig: boolean;
+  onOpenFullConfig: () => void;
   onSetMonitors: (monitors: string[]) => void;
   onSelectAllMonitors: () => void;
   onClearMonitors: () => void;
@@ -101,6 +98,8 @@ export function useTrainingPanelViewModel({
   trainingEnabled,
   trainingLockedByHistoricalSelection,
   historicalTrainingLockExperiment,
+  canOpenFullConfig,
+  onOpenFullConfig,
   onSetMonitors,
   onSelectAllMonitors,
   onClearMonitors,
@@ -131,8 +130,7 @@ export function useTrainingPanelViewModel({
   onActiveJobIdChange,
   onJobChange,
 }: TrainingPanelViewModelInput) {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const logFolder = useTrainingLogFolderState({ enabled: isExpanded });
+  const logFolder = useTrainingLogFolderState({ enabled: true });
   const options = useTrainingPanelOptions({
     models,
     selectedModelType,
@@ -187,7 +185,7 @@ export function useTrainingPanelViewModel({
     progressError,
     onActiveJobIdChange,
     onJobChange,
-    onJobStarted: () => setIsExpanded(true),
+    onJobStarted: () => {},
   });
   const clusterGrowth = useMemo(
     () => buildClusterGrowth(training.job),
@@ -242,6 +240,8 @@ export function useTrainingPanelViewModel({
       searchAxes,
       searchLoading,
       trainingEnabled,
+      canOpenFullConfig,
+      onOpenFullConfig,
       onSelectModelType,
       onSelectModel,
       onSelectPreset,
@@ -267,10 +267,6 @@ export function useTrainingPanelViewModel({
       onEditConfigSnapshot,
       onDuplicateConfigSnapshot,
       onTrainingSearchChange,
-    },
-    ui: {
-      isExpanded,
-      toggleExpanded: () => setIsExpanded((current) => !current),
     },
     logFolder: {
       mode: logFolder.mode,

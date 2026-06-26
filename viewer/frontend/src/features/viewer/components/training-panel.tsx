@@ -1,11 +1,12 @@
 import {
-  ChevronDown,
-  ChevronUp,
+  Activity,
   CircleStop,
   FolderOpen,
   FolderPlus,
   Loader2,
+  Maximize2,
   Play,
+  RefreshCw,
   RotateCcw,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -20,8 +21,11 @@ import { InlineStatus } from "@/features/viewer/components/shared/inline-status"
 import { SectionHeading } from "@/features/viewer/components/shared/section-heading";
 import { SurfacePanel } from "@/features/viewer/components/shared/surface-panel";
 import { TrainingTargetDatasetPanel } from "@/features/viewer/components/training/training-target-dataset-panel";
-import { TrainingCompactRunList } from "@/features/viewer/components/training/training-compact-run-list";
-import { TrainingFooterRunSummary } from "@/features/viewer/components/training/training-footer-run-summary";
+import {
+  TrainingAllCommandsButton,
+  TrainingCompactRunList,
+} from "@/features/viewer/components/training/training-compact-run-list";
+import { TrainingRunSummaryBadge } from "@/features/viewer/components/training/training-footer-run-summary";
 import { TrainingLogTailCard } from "@/features/viewer/components/training/training-log-tail-card";
 import { TrainingRunPlanCard } from "@/features/viewer/components/training/training-run-plan-card";
 import {
@@ -32,11 +36,10 @@ type TrainingPanelProps = {
   viewModel: TrainingPanelViewModel;
 };
 
-const footerIconClass = "h-[15px] w-[15px] text-violet";
+const trainingIconClass = "h-[15px] w-[15px] text-violet";
 
 export function TrainingPanel({ viewModel }: TrainingPanelProps) {
-  const { input, logFolder, options, request, status, training, ui } =
-    viewModel;
+  const { input, logFolder, options, request, status, training } = viewModel;
   const {
     datasetOptions,
     selectedModelType,
@@ -47,7 +50,6 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
     selectedDatasets,
     overrides,
     allConfigSnapshots,
-    configSnapshotCount,
     monitorOptions,
     snapshotOverrideWarning,
     selectedMonitors,
@@ -55,6 +57,8 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
     searchAxes,
     searchLoading,
     trainingEnabled,
+    canOpenFullConfig,
+    onOpenFullConfig,
     onSelectModelType,
     onSelectModel,
     onSelectPreset,
@@ -127,17 +131,10 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
     resampleRunPlan,
   } = training;
   const {
-    activeSearchLabel,
     clusterGrowth,
-    currentDataset,
-    currentPreset,
     datasetCountLabel,
-    epochStep,
     historicalTrainingLockMessage,
     jobStatus,
-    logFolderLabel,
-    metricLabel: jobMetricLabel,
-    plannedRunLabel,
     presetCountLabel,
   } = status;
   const planChangingControlsDisabled = isRunning;
@@ -171,125 +168,18 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
   }));
 
   return (
-    <section className="border-t border-line bg-[linear-gradient(0deg,rgba(14,12,24,0.7),rgba(8,8,14,0.4))] backdrop-blur-xl">
-      <div className="grid h-16 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-[22px]">
-        <button
-          type="button"
-          onClick={ui.toggleExpanded}
-          className="flex min-w-0 items-center gap-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-          aria-expanded={ui.isExpanded}
-          aria-controls="training-panel-details"
-          aria-label={`Training ${jobStatus} ${currentDataset} ${epochStep} · ${jobMetricLabel}`}
-        >
-          <span className="relative grid h-[38px] w-[38px] shrink-0 place-items-center rounded-[11px] border border-violet/35 bg-[linear-gradient(135deg,#2a2740,#16142a)] text-[15px] font-extrabold text-white">
-            N
-            <span className="absolute -bottom-1 -right-1 grid h-4 w-4 place-items-center rounded-full border border-line bg-panel text-ink-faint">
-              {ui.isExpanded ? (
-                <ChevronDown className="h-3 w-3" aria-hidden />
-              ) : (
-                <ChevronUp className="h-3 w-3" aria-hidden />
-              )}
-            </span>
-          </span>
-          <span className="grid min-w-0 gap-1">
-            <span className="flex min-w-0 flex-wrap items-center gap-2">
-              <span className="text-sm font-bold text-ink">Training</span>
-              {historicalTrainingLockMessage && (
-                <span
-                  className="rounded-full border border-danger-line bg-danger-soft px-2 py-0.5 text-[11px] font-bold text-danger-text"
-                  role="status"
-                >
-                  {historicalTrainingLockMessage}
-                </span>
-              )}
-              <Badge
-                className={
-                  jobStatus === "failed"
-                    ? "border-danger-line bg-danger-soft text-danger-text"
-                    : jobStatus === "completed"
-                      ? "border-ok/30 bg-ok/10 text-ok"
-                      : "border-line bg-white/[0.05] text-ink-faint"
-                }
-              >
-                {jobStatus}
-              </Badge>
-              <span className="truncate font-mono text-xs text-ink-dim">
-                {currentPreset
-                  ? `${currentPreset} / ${currentDataset}`
-                  : currentDataset}
-              </span>
-            </span>
-            <span className="truncate text-xs text-ink-faint">
-              {epochStep} · {jobMetricLabel}
-              {` · ${presetCountLabel} · ${datasetCountLabel} · ${plannedRunLabel}`}
-              {configSnapshotCount > 0
-                ? ` · ${configSnapshotCount} snapshots`
-                : ""}
-              {selectedMonitors.length > 0
-                ? ` · ${selectedMonitors.length} monitors`
-                : ""}
-              {activeSearchLabel ? ` · ${activeSearchLabel}` : ""}
-              {" · "}
-              {logFolderLabel}
-            </span>
-          </span>
-        </button>
-        <div className="flex shrink-0 items-center gap-2">
-          {isRunning && (
-            <Button
-              variant="danger"
-              onClick={cancelTraining}
-              disabled={isCancelling || !trainingEnabled}
-            >
-              <CircleStop className="h-4 w-4" aria-hidden />
-              Cancel
-            </Button>
+    <section
+      id="training-workspace"
+      aria-label="Training workspace"
+      className="h-full min-h-[560px] min-w-0 overflow-hidden bg-[linear-gradient(180deg,rgba(13,12,22,0.72),rgba(8,8,14,0.88))] lg:min-h-0"
+    >
+      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-x-auto overflow-y-hidden bg-bg-2/90 px-4 py-3 sm:px-5">
+        <div className="grid gap-2 empty:hidden">
+          {trainingError && (
+            <InlineStatus tone="danger" compact role="alert">
+              {trainingError}
+            </InlineStatus>
           )}
-          <TrainingFooterRunSummary
-            plan={progressRunPlan}
-            job={job}
-            isLoading={isProgressPlanning}
-            error={progressPlanError}
-          />
-          {canResetTraining && (
-            <Button
-              variant="secondary"
-              onClick={resetTraining}
-              disabled={!trainingEnabled}
-              className="h-10 px-3 text-[13px]"
-            >
-              <RotateCcw className="h-4 w-4" aria-hidden />
-              Reset Training
-            </Button>
-          )}
-          <Button
-            variant="primary"
-            onClick={startTraining}
-            disabled={!canRequestTraining || !canStart}
-            className="h-10 px-[22px] text-sm"
-          >
-            {isStarting ? (
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-            ) : (
-              <Play className="h-4 w-4" aria-hidden />
-            )}
-            Start Training
-          </Button>
-        </div>
-      </div>
-      {trainingError && (
-        <div className="px-[22px] pb-3">
-          <InlineStatus tone="danger" compact role="alert">
-            {trainingError}
-          </InlineStatus>
-        </div>
-      )}
-
-      {ui.isExpanded && (
-        <div
-          id="training-panel-details"
-          className="grid max-h-[52vh] min-h-[22rem] grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-x-auto overflow-y-hidden border-t border-line bg-bg-2/90 px-4 py-3 sm:px-5"
-        >
           {!trainingEnabled && (
             <InlineStatus tone="warning" compact>
               Training is disabled by this backend.
@@ -300,7 +190,8 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
               {historicalTrainingLockMessage}
             </InlineStatus>
           )}
-          <div className="grid min-h-0 min-w-[920px] gap-3 grid-cols-[minmax(300px,340px)_minmax(22rem,1fr)_minmax(280px,360px)]">
+        </div>
+        <div className="grid min-h-0 min-w-[920px] gap-3 grid-cols-[minmax(300px,340px)_minmax(22rem,1fr)_minmax(280px,360px)]">
             <aside
               aria-label="Training Setup Sidebar"
               className="grid min-h-0 content-start gap-4 overflow-y-auto pr-1"
@@ -316,9 +207,9 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
                   <SectionHeading
                     icon={
                       logFolderMode === "existing" ? (
-                        <FolderOpen className={footerIconClass} aria-hidden />
+                        <FolderOpen className={trainingIconClass} aria-hidden />
                       ) : (
-                        <FolderPlus className={footerIconClass} aria-hidden />
+                        <FolderPlus className={trainingIconClass} aria-hidden />
                       )
                     }
                     title="Log Folder"
@@ -448,15 +339,112 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
 
             <main
               aria-label="Training Run List"
-              className="grid min-h-0"
+              className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3"
             >
+              <header className="grid gap-3 border-b border-line px-4 py-3 backdrop-blur-xl sm:px-[22px] xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+                <div className="grid min-w-0 gap-1.5">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[9px] border border-violet/35 bg-[linear-gradient(135deg,#2a2740,#16142a)] text-violet">
+                      <Activity className="h-4 w-4" aria-hidden />
+                    </span>
+                    <h1 className="text-base font-bold text-ink">Training</h1>
+                    {historicalTrainingLockMessage && (
+                      <span
+                        className="rounded-full border border-danger-line bg-danger-soft px-2 py-0.5 text-[11px] font-bold text-danger-text"
+                        role="status"
+                      >
+                        {historicalTrainingLockMessage}
+                      </span>
+                    )}
+                    <Badge
+                      className={
+                        jobStatus === "failed" || jobStatus === "cancelled"
+                          ? "border-danger-line bg-danger-soft text-danger-text"
+                          : jobStatus === "completed"
+                            ? "border-ok/30 bg-ok/10 text-ok"
+                            : jobStatus === "running" || jobStatus === "queued"
+                              ? "border-amber/40 bg-amber/[0.12] text-amber"
+                              : "border-line bg-white/[0.05] text-ink-faint"
+                      }
+                    >
+                      {jobStatus}
+                    </Badge>
+                  </div>
+                </div>
+                <div className="flex min-w-0 flex-wrap items-center gap-2 xl:justify-end">
+                  {isRunning && (
+                    <Button
+                      variant="danger"
+                      onClick={cancelTraining}
+                      disabled={isCancelling || !trainingEnabled}
+                    >
+                      <CircleStop className="h-4 w-4" aria-hidden />
+                      Cancel
+                    </Button>
+                  )}
+                  <TrainingRunSummaryBadge
+                    plan={progressRunPlan}
+                    job={job}
+                    isLoading={isProgressPlanning}
+                    error={progressPlanError}
+                    className="min-w-0"
+                  />
+                  <TrainingAllCommandsButton plan={progressRunPlan} />
+                  <Button
+                    variant="secondary"
+                    onClick={onOpenFullConfig}
+                    disabled={planChangingControlsDisabled || !canOpenFullConfig}
+                    className="h-10 px-3 text-[13px]"
+                  >
+                    <Maximize2 className="h-4 w-4" aria-hidden />
+                    Open Full Config
+                  </Button>
+                  {canResampleRunPlan && (
+                    <Button
+                      variant="secondary"
+                      onClick={resampleRunPlan}
+                      disabled={isResampling}
+                      className="h-10 px-3 text-[13px]"
+                    >
+                      <RefreshCw
+                        className={
+                          isResampling ? "h-4 w-4 animate-spin" : "h-4 w-4"
+                        }
+                        aria-hidden
+                      />
+                      Resample
+                    </Button>
+                  )}
+                  {canResetTraining && (
+                    <Button
+                      variant="secondary"
+                      onClick={resetTraining}
+                      disabled={!trainingEnabled}
+                      className="h-10 px-3 text-[13px]"
+                    >
+                      <RotateCcw className="h-4 w-4" aria-hidden />
+                      Reset Training
+                    </Button>
+                  )}
+                  <Button
+                    variant="primary"
+                    onClick={startTraining}
+                    disabled={!canRequestTraining || !canStart}
+                    className="h-10 px-[22px] text-sm"
+                  >
+                    {isStarting ? (
+                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                    ) : (
+                      <Play className="h-4 w-4" aria-hidden />
+                    )}
+                    Start Training
+                  </Button>
+                </div>
+              </header>
               <TrainingCompactRunList
                 plan={progressRunPlan}
                 isLoading={isProgressPlanning}
                 error={progressPlanError}
-                canResample={canResampleRunPlan}
-                isResampling={isResampling}
-                onResample={resampleRunPlan}
                 canManageDraftRuns={!job}
                 onExcludePreset={onExcludeDraftTrainingPreset}
                 onExcludeSnapshot={onExcludeConfigSnapshot}
@@ -541,9 +529,8 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
 
               <TrainingLogTailCard logTail={job?.logTail} />
             </aside>
-          </div>
         </div>
-      )}
+      </div>
       {showLargeGridConfirmation && (
         <DialogShell
           titleId="large-grid-search-title"

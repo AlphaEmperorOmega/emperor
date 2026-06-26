@@ -1,3 +1,5 @@
+import { type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Copy, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
@@ -15,6 +17,8 @@ export function TrainingCommandDialog({
   commandAriaLabel = "Training command",
   closeButtonLabel = "Close training command",
   rows = 3,
+  controls,
+  footerStart,
   onCopy,
   onClose,
 }: {
@@ -28,15 +32,17 @@ export function TrainingCommandDialog({
   commandAriaLabel?: string;
   closeButtonLabel?: string;
   rows?: number;
+  controls?: ReactNode;
+  footerStart?: ReactNode;
   onCopy: () => void;
   onClose: () => void;
 }) {
-  return (
+  const dialog = (
     <DialogShell
       titleId="training-command-title"
       panelVariant="surface"
       onClose={onClose}
-      className="absolute inset-0 z-20 flex items-center justify-center bg-black/55 p-3 backdrop-blur-sm sm:p-6"
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/55 p-3 backdrop-blur-sm sm:p-6"
       panelClassName="grid max-h-none w-full max-w-3xl gap-4 overflow-visible p-4 sm:max-h-none sm:p-5"
       header={
         <header className="flex items-start justify-between gap-3">
@@ -58,12 +64,15 @@ export function TrainingCommandDialog({
       }
       footer={
         <footer className="flex flex-wrap items-center justify-between gap-2">
-          <div
-            role={copyStatus === "failed" ? "alert" : "status"}
-            className="min-h-5 text-xs font-medium text-ink-faint"
-          >
-            {copyStatus === "copied" && copiedMessage}
-            {copyStatus === "failed" && "Clipboard copy failed"}
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            {footerStart}
+            <div
+              role={copyStatus === "failed" ? "alert" : "status"}
+              className="min-h-5 text-xs font-medium text-ink-faint"
+            >
+              {copyStatus === "copied" && copiedMessage}
+              {copyStatus === "failed" && "Clipboard copy failed"}
+            </div>
           </div>
           <Button variant="primary" onClick={onCopy}>
             <Copy className="h-4 w-4" aria-hidden />
@@ -72,6 +81,7 @@ export function TrainingCommandDialog({
         </footer>
       }
     >
+      {controls}
       <label className="grid gap-2">
         <span className="text-xs font-bold uppercase tracking-[0.09em] text-ink-faint">
           Command
@@ -86,4 +96,6 @@ export function TrainingCommandDialog({
       </label>
     </DialogShell>
   );
+
+  return typeof document === "undefined" ? dialog : createPortal(dialog, document.body);
 }

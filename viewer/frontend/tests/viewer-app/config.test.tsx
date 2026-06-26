@@ -784,7 +784,7 @@ describe("ViewerApp Full Config", () => {
     renderViewer();
 
     await waitForTargetValue("preset", "baseline");
-    expect(screen.getByText(/^Target$/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /open full config/i })).toBeEnabled();
     expect(screen.queryByRole("heading", { name: "Snapshots" }))
       .not.toBeInTheDocument();
     expect(screen.queryByText("Bert tuned")).not.toBeInTheDocument();

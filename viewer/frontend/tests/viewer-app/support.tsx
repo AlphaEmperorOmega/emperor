@@ -3517,7 +3517,12 @@ export async function waitForOpenFullConfigButton(
   user: ReturnType<typeof userEvent.setup> = userEvent.setup(),
 ) {
   if (!screen.queryByRole("button", { name: /open full config/i })) {
-    await expandTrainingPanel(user);
+    const modelWorkspaceButton = screen.queryByRole("button", {
+      name: /^model\b/i,
+    });
+    if (modelWorkspaceButton) {
+      await user.click(modelWorkspaceButton);
+    }
   }
   await waitFor(() =>
     expect(screen.getByRole("button", { name: /open full config/i })).toBeEnabled(),
@@ -3717,17 +3722,36 @@ export function fullConfigSectionNavRowFor(sectionNav: HTMLElement, name: RegExp
   return row;
 }
 
-export async function expandTrainingPanel(user: ReturnType<typeof userEvent.setup>) {
-  if (!screen.queryByRole("radio", { name: /new folder/i })) {
-    await user.click(await screen.findByRole("button", { name: /^training/i }));
+export async function openTrainingWorkspace(user: ReturnType<typeof userEvent.setup>) {
+  const existingWorkspace = document.getElementById("training-workspace");
+  if (existingWorkspace instanceof HTMLElement) {
+    return existingWorkspace;
   }
+
+  const workspaceNav = await screen.findByRole("navigation", {
+    name: "Workspace",
+  });
+  const trainingWorkspaceButton = await within(workspaceNav).findByRole("button", {
+    name: /^training\b/i,
+  });
+  await user.click(trainingWorkspaceButton);
+  const workspace = await screen.findByRole("region", {
+    name: "Training workspace",
+  });
+  if (!(workspace instanceof HTMLElement)) {
+    throw new Error("Expected Training workspace to render");
+  }
+  return workspace;
+}
+
+export async function expandTrainingPanel(user: ReturnType<typeof userEvent.setup>) {
+  await openTrainingWorkspace(user);
 }
 
 export async function expandedTrainingDetails(user: ReturnType<typeof userEvent.setup>) {
-  await expandTrainingPanel(user);
-  const details = document.getElementById("training-panel-details");
+  const details = await openTrainingWorkspace(user);
   if (!(details instanceof HTMLElement)) {
-    throw new Error("Expected expanded training panel details to render");
+    throw new Error("Expected Training workspace details to render");
   }
   return details;
 }
@@ -3747,9 +3771,16 @@ export async function setTargetHiddenDimOverride(
   user: ReturnType<typeof userEvent.setup>,
   value: string,
 ) {
+  const restoreTrainingWorkspace = Boolean(
+    document.getElementById("training-workspace"),
+  );
   const dialog = await openFullConfig(user);
   await typeConfigFieldValue(user, dialog, /hidden dim/i, value);
   await user.click(within(dialog).getByRole("button", { name: /^close$/i }));
+  if (restoreTrainingWorkspace) {
+    return expandedTrainingDetailsReady(user);
+  }
+  return undefined;
 }
 
 export async function selectTrainingTargetOption(

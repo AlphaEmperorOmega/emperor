@@ -3,7 +3,6 @@ import {
   AlertTriangle,
   Copy,
   FolderOpen,
-  RefreshCw,
   Terminal,
   X,
 } from "lucide-react";
@@ -53,6 +52,48 @@ function runnableTrainingCommands(plan?: TrainingRunPlan) {
 function trainingCommandBlock(commands: string[]) {
   return ["(", "  set -e", ...commands.map((command) => `  ${command}`), ")"].join(
     "\n",
+  );
+}
+
+export function TrainingAllCommandsButton({
+  className,
+  plan,
+}: {
+  className?: string;
+  plan?: TrainingRunPlan;
+}) {
+  const [isAllCommandsOpen, setIsAllCommandsOpen] = useState(false);
+  const runnableCommands = useMemo(() => runnableTrainingCommands(plan), [plan]);
+  const allTrainingCommandsBlock = useMemo(
+    () => trainingCommandBlock(runnableCommands),
+    [runnableCommands],
+  );
+  const canCopyAllCommands = runnableCommands.length > 0;
+
+  if (!canCopyAllCommands) {
+    return null;
+  }
+
+  return (
+    <>
+      <Button
+        variant="secondary"
+        onClick={() => setIsAllCommandsOpen(true)}
+        className={cn("h-10 px-3 text-[13px]", className)}
+        title="Review training commands"
+      >
+        <Copy className="h-4 w-4" aria-hidden />
+        Commands
+      </Button>
+      {isAllCommandsOpen && (
+        <AllTrainingCommandsDialog
+          model={plan?.model ?? ""}
+          preset={plan?.preset ?? ""}
+          trainingCommand={allTrainingCommandsBlock}
+          onClose={() => setIsAllCommandsOpen(false)}
+        />
+      )}
+    </>
   );
 }
 
@@ -282,9 +323,6 @@ export function TrainingCompactRunList({
   plan,
   isLoading = false,
   error = "",
-  canResample = false,
-  isResampling = false,
-  onResample,
   canManageDraftRuns = false,
   onExcludePreset,
   onExcludeSnapshot,
@@ -292,89 +330,17 @@ export function TrainingCompactRunList({
   plan?: TrainingRunPlan;
   isLoading?: boolean;
   error?: string;
-  canResample?: boolean;
-  isResampling?: boolean;
-  onResample?: () => void;
   canManageDraftRuns?: boolean;
   onExcludePreset?: (preset: string) => void;
   onExcludeSnapshot?: (snapshotId: string) => void;
 }) {
   const [commandRun, setCommandRun] = useState<TrainingRun | null>(null);
   const [errorRun, setErrorRun] = useState<TrainingRun | null>(null);
-  const [isAllCommandsOpen, setIsAllCommandsOpen] = useState(false);
   const runs = useMemo(() => visibleRuns(plan?.runs ?? []), [plan?.runs]);
-  const runnableCommands = useMemo(() => runnableTrainingCommands(plan), [plan]);
-  const allTrainingCommandsBlock = useMemo(
-    () => trainingCommandBlock(runnableCommands),
-    [runnableCommands],
-  );
-  const canCopyAllCommands = runnableCommands.length > 0;
   const hiddenRunCount = Math.max(0, (plan?.runs.length ?? 0) - runs.length);
 
   return (
-    <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-[10px] border border-line bg-black/10">
-      <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-b border-line-soft px-3 py-2">
-        <div className="grid min-w-0 gap-0.5">
-          <h3 className="text-xs font-bold uppercase tracking-[0.08em] text-ink-faint">
-            Training Runs
-          </h3>
-          <span className="truncate font-mono text-xs text-ink-dim">
-            {plan?.model ?? "No model"}
-            {plan?.preset ? ` / ${plan.preset}` : ""}
-          </span>
-        </div>
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
-          {canCopyAllCommands && (
-            <Button
-              variant="secondary"
-              onClick={() => setIsAllCommandsOpen(true)}
-              className="h-8 px-2 text-xs sm:px-3"
-              title="Review training commands"
-            >
-              <Copy className="h-3.5 w-3.5" aria-hidden />
-              Commands
-            </Button>
-          )}
-          {canResample && (
-            <Button
-              variant="secondary"
-              onClick={onResample}
-              disabled={isResampling || !onResample}
-              className="h-8 px-2 text-xs"
-            >
-              <RefreshCw
-                className={
-                  isResampling ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"
-                }
-                aria-hidden
-              />
-              Resample
-            </Button>
-          )}
-          {plan ? (
-            <>
-              <Badge>{plan.summary.totalRuns} runs</Badge>
-              <Badge variant={plan.summary.runningRuns > 0 ? "violet" : "default"}>
-                {plan.summary.runningRuns} running
-              </Badge>
-              <Badge
-                variant={plan.summary.completedRuns > 0 ? "success" : "default"}
-              >
-                {plan.summary.completedRuns} done
-              </Badge>
-              {(plan.summary.failedRuns > 0 ||
-                plan.summary.cancelledRuns > 0) && (
-                <Badge variant="danger">
-                  {plan.summary.failedRuns + plan.summary.cancelledRuns} stopped
-                </Badge>
-              )}
-            </>
-          ) : (
-            <Badge>No plan</Badge>
-          )}
-        </div>
-      </div>
-
+    <div className="grid min-h-0 grid-rows-[minmax(0,1fr)] overflow-hidden rounded-[10px] border border-line bg-black/10">
       <div className="min-h-0 overflow-y-auto">
         {error ? (
           <InlineStatus tone="danger" compact role="alert" className="m-3">
@@ -418,14 +384,6 @@ export function TrainingCompactRunList({
         onCloseCommand={() => setCommandRun(null)}
         onCloseError={() => setErrorRun(null)}
       />
-      {isAllCommandsOpen && canCopyAllCommands && (
-        <AllTrainingCommandsDialog
-          model={plan?.model ?? ""}
-          preset={plan?.preset ?? ""}
-          trainingCommand={allTrainingCommandsBlock}
-          onClose={() => setIsAllCommandsOpen(false)}
-        />
-      )}
     </div>
   );
 }

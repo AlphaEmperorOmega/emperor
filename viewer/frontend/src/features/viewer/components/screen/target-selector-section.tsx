@@ -1,10 +1,11 @@
-import { type RefObject } from "react";
 import {
   Copy,
+  Cpu,
   FilePlus2,
-  Info,
+  Layers,
   Pencil,
-  Target,
+  SlidersHorizontal,
+  Terminal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
@@ -12,7 +13,6 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 import { ViewModeButton } from "@/features/viewer/components/view-mode-button";
 import { SelectOnlyDropdown } from "@/features/viewer/components/screen/select-only-dropdown";
 import { SectionHeading } from "@/features/viewer/components/shared/section-heading";
-import { cn } from "@/lib/utils";
 
 type TargetMode = "preset" | "snapshot" | "experiment";
 
@@ -21,8 +21,9 @@ type SelectOption = {
   label: string;
 };
 
+const fieldIconClassName = "h-[15px] w-[15px] text-violet";
+
 export function TargetSelectorSection({
-  presetCount,
   selectedModelType,
   selectedModel,
   selectedTargetMode,
@@ -46,10 +47,8 @@ export function TargetSelectorSection({
   experimentSelectId,
   experimentDatasetSelectId,
   experimentPresetSelectId,
-  presetDescriptionId,
-  presetDescriptionTriggerRef,
-  isPresetDescriptionOpen,
-  hasPresetDescription,
+  presetTrainingCommandDisabled,
+  snapshotTrainingCommandDisabled,
   onSelectModelType,
   onSelectModel,
   onActivatePresetMode,
@@ -63,9 +62,9 @@ export function TargetSelectorSection({
   onCreateSnapshot,
   onEditSnapshot,
   onDuplicateSnapshot,
-  onTogglePresetDescription,
+  onOpenPresetTrainingCommand,
+  onOpenSnapshotTrainingCommand,
 }: {
-  presetCount: number;
   selectedModelType: string;
   selectedModel: string;
   selectedTargetMode: TargetMode;
@@ -89,10 +88,8 @@ export function TargetSelectorSection({
   experimentSelectId: string;
   experimentDatasetSelectId: string;
   experimentPresetSelectId: string;
-  presetDescriptionId: string;
-  presetDescriptionTriggerRef: RefObject<HTMLButtonElement | null>;
-  isPresetDescriptionOpen: boolean;
-  hasPresetDescription: boolean;
+  presetTrainingCommandDisabled: boolean;
+  snapshotTrainingCommandDisabled: boolean;
   onSelectModelType: (modelType: string) => void;
   onSelectModel: (model: string) => void;
   onActivatePresetMode: () => void;
@@ -106,7 +103,8 @@ export function TargetSelectorSection({
   onCreateSnapshot: () => void;
   onEditSnapshot: () => void;
   onDuplicateSnapshot: () => void;
-  onTogglePresetDescription: () => void;
+  onOpenPresetTrainingCommand: () => void;
+  onOpenSnapshotTrainingCommand: () => void;
 }) {
   const hasSnapshots = snapshotOptions.length > 0;
   const hasExperimentRuns = experimentOptions.length > 0;
@@ -151,18 +149,12 @@ export function TargetSelectorSection({
 
   return (
     <section className="grid gap-3">
-      <div className="flex items-center justify-between gap-3">
-        <SectionHeading
-          icon={<Target className="h-[15px] w-[15px] text-violet" aria-hidden />}
-          title="Target"
-        />
-        <span className="text-xs font-medium text-ink-dim">{presetCount} presets</span>
-      </div>
       <div className="grid min-w-0 gap-2">
         <div className="grid min-w-0 gap-1.5">
-          <span className="text-xs font-semibold tracking-[0.02em] text-ink-dim">
-            Model type
-          </span>
+          <SectionHeading
+            icon={<Layers className={fieldIconClassName} aria-hidden />}
+            title="Model Type"
+          />
           <SelectOnlyDropdown
             label="model type"
             value={selectedModelType}
@@ -172,9 +164,10 @@ export function TargetSelectorSection({
           />
         </div>
         <div className="grid min-w-0 gap-1.5">
-          <span className="text-xs font-semibold tracking-[0.02em] text-ink-dim">
-            Model
-          </span>
+          <SectionHeading
+            icon={<Cpu className={fieldIconClassName} aria-hidden />}
+            title="Model Name"
+          />
           <SelectOnlyDropdown
             label="model"
             value={selectedModel}
@@ -185,9 +178,10 @@ export function TargetSelectorSection({
         </div>
       </div>
       <div className="grid gap-1.5">
-        <span className="text-xs font-semibold tracking-[0.02em] text-ink-dim">
-          Configuration Source
-        </span>
+        <SectionHeading
+          icon={<SlidersHorizontal className={fieldIconClassName} aria-hidden />}
+          title="Configuration Source"
+        />
         <SegmentedControl
           aria-label="Configuration Source"
           className="grid w-full grid-cols-3 [&>button]:justify-center [&>button]:text-center"
@@ -227,21 +221,14 @@ export function TargetSelectorSection({
               className="min-w-0"
             />
             <IconButton
-              ref={presetDescriptionTriggerRef}
-              label="Show preset description"
-              icon={<Info className="h-4 w-4" aria-hidden />}
+              label="Training command for preset"
+              icon={<Terminal className="h-4 w-4" aria-hidden />}
               size="md"
               variant="edge"
-              className={cn(
-                "h-10 w-10",
-                isPresetDescriptionOpen &&
-                  "border-violet/40 bg-control-selected text-ink",
-              )}
+              className="h-10 w-10"
               aria-haspopup="dialog"
-              aria-expanded={isPresetDescriptionOpen}
-              aria-controls={presetDescriptionId}
-              disabled={!hasPresetDescription}
-              onClick={onTogglePresetDescription}
+              disabled={presetTrainingCommandDisabled}
+              onClick={onOpenPresetTrainingCommand}
             />
           </div>
           <Button
@@ -256,15 +243,27 @@ export function TargetSelectorSection({
         </div>
       ) : activeTargetMode === "snapshot" ? (
         <div className="grid gap-3">
-          <SelectOnlyDropdown
-            id={snapshotSelectId}
-            label="snapshot"
-            value={snapshotValue}
-            options={snapshotOptions}
-            onChange={onSelectSnapshot}
-            placeholder="Select snapshot"
-            className="min-w-0"
-          />
+          <div className="grid grid-cols-[minmax(0,1fr)_40px] gap-2">
+            <SelectOnlyDropdown
+              id={snapshotSelectId}
+              label="snapshot"
+              value={snapshotValue}
+              options={snapshotOptions}
+              onChange={onSelectSnapshot}
+              placeholder="Select snapshot"
+              className="min-w-0"
+            />
+            <IconButton
+              label="Training command for snapshot"
+              icon={<Terminal className="h-4 w-4" aria-hidden />}
+              size="md"
+              variant="edge"
+              className="h-10 w-10"
+              aria-haspopup="dialog"
+              disabled={snapshotTrainingCommandDisabled || !snapshotValue}
+              onClick={onOpenSnapshotTrainingCommand}
+            />
+          </div>
           <div className="grid grid-cols-2 gap-2">
             <Button
               variant="secondary"

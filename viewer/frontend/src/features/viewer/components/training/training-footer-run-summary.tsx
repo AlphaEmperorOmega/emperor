@@ -7,7 +7,7 @@ import {
 import { type TrainingJob, type TrainingRun, type TrainingRunPlan } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
-export type TrainingFooterRunSummaryProps = {
+export type TrainingRunSummaryBadgeProps = {
   plan?: TrainingRunPlan;
   job?: TrainingJob;
   isLoading?: boolean;
@@ -33,8 +33,8 @@ function summaryLabel({
   isLoading,
   job,
   plan,
-}: Required<Pick<TrainingFooterRunSummaryProps, "isLoading" | "error">> &
-  Pick<TrainingFooterRunSummaryProps, "job" | "plan">) {
+}: Required<Pick<TrainingRunSummaryBadgeProps, "isLoading" | "error">> &
+  Pick<TrainingRunSummaryBadgeProps, "job" | "plan">) {
   if (isLoading) {
     return "Training run summary: planning training runs";
   }
@@ -55,13 +55,13 @@ function summaryLabel({
   return `Training run summary: ${plan.summary.completedRuns} / ${plan.summary.totalRuns} runs; ${plan.summary.completedEpochs} / ${plan.summary.totalEpochs} epochs; ${runText}`;
 }
 
-export function TrainingFooterRunSummary({
+export function TrainingRunSummaryBadge({
   className,
   error = "",
   isLoading = false,
   job,
   plan,
-}: TrainingFooterRunSummaryProps) {
+}: TrainingRunSummaryBadgeProps) {
   const run = selectTrainingRunForDisplay({ plan, job });
   const ariaLabel = summaryLabel({ error, isLoading, job, plan });
 
@@ -131,3 +131,7 @@ export function TrainingFooterRunSummary({
     </div>
   );
 }
+
+export type TrainingFooterRunSummaryProps = TrainingRunSummaryBadgeProps;
+
+export const TrainingFooterRunSummary = TrainingRunSummaryBadge;
