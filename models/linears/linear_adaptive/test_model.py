@@ -517,6 +517,61 @@ class TestAdaptiveLinearModel(unittest.TestCase):
                         **kwargs,
                     ).build()
 
+    def test_adaptive_component_flags_build_default_concrete_options(self):
+        cases = [
+            (
+                "weight",
+                {
+                    "weight_option_flag": True,
+                    "weight_option": SingleModelDynamicWeightConfig,
+                },
+                "weight_config",
+                SingleModelDynamicWeightConfig,
+            ),
+            (
+                "bias",
+                {
+                    "bias_option_flag": True,
+                    "bias_option": AffineTransformDynamicBiasConfig,
+                },
+                "bias_config",
+                AffineTransformDynamicBiasConfig,
+            ),
+            (
+                "diagonal",
+                {
+                    "diagonal_option_flag": True,
+                    "diagonal_option": StandardDynamicDiagonalConfig,
+                },
+                "diagonal_config",
+                StandardDynamicDiagonalConfig,
+            ),
+            (
+                "mask",
+                {
+                    "mask_option_flag": True,
+                    "row_mask_option": DiagonalAxisMaskConfig,
+                },
+                "mask_config",
+                DiagonalAxisMaskConfig,
+            ),
+        ]
+
+        for component, kwargs, attribute, expected_type in cases:
+            with self.subTest(component=component):
+                cfg = LinearAdaptiveConfigBuilder(
+                    input_dim=8,
+                    stack_hidden_dim=16,
+                    output_dim=4,
+                    **kwargs,
+                ).build()
+                augmentation_config = self._augmentation_config(cfg)
+
+                self.assertIsInstance(
+                    getattr(augmentation_config, attribute),
+                    expected_type,
+                )
+
     def test_adaptive_component_stacks_inherit_shared_generator_by_default(self):
         cfg = LinearAdaptiveConfigBuilder(
             input_dim=8,
