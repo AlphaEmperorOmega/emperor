@@ -225,7 +225,6 @@ export function useHistoricalRunsState({
     ],
   );
   const {
-    modelLogRuns,
     historicalExperimentOptions,
     historicalDatasetOptions,
     historicalPresetOptions,
