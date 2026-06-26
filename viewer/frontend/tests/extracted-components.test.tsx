@@ -140,6 +140,13 @@ describe("ViewerWorkspaceNav", () => {
     const modelButton = screen.getByRole("button", { name: "Model" });
     const compareButton = screen.getByRole("button", { name: "Compare" });
     const logsButton = screen.getByRole("button", { name: "Logs" });
+    const workspaceButtons = within(screen.getByRole("navigation")).getAllByRole("button");
+
+    expect(workspaceButtons.map((button) => button.textContent?.trim())).toEqual([
+      "Model",
+      "Logs",
+      "Compare",
+    ]);
 
     expect(modelButton).toHaveAttribute("aria-pressed", "true");
     expect(compareButton).toHaveAttribute("aria-pressed", "false");

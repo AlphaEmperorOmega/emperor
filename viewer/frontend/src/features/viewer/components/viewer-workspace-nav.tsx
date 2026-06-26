@@ -5,8 +5,8 @@ const workspaceItems: Array<{
   label: string;
 }> = [
   { value: "model", label: "Model" },
-  { value: "compare", label: "Compare" },
   { value: "logs", label: "Logs" },
+  { value: "compare", label: "Compare" },
 ];
 
 export function ViewerWorkspaceNav({
