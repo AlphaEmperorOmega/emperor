@@ -120,7 +120,10 @@ export function ViewerWorkspaceMain({
 
   return (
     <div className="h-full min-h-[560px] min-w-0 overflow-hidden lg:col-span-2 lg:min-h-0">
-      <CompareWorkspace onUseTarget={() => onChangeWorkspace("model")} />
+      <CompareWorkspace
+        onOpenLogs={() => onChangeWorkspace("logs")}
+        onUseTarget={() => onChangeWorkspace("model")}
+      />
     </div>
   );
 }
