@@ -101,39 +101,7 @@ export function GraphNodeSimpleBadges({
   );
 }
 
-export function GraphNodeInlineBadges({
-  parameterCount,
-  parameterSizeBytes,
-  modelSizeText,
-  childCount,
-}: {
-  parameterCount: number;
-  parameterSizeBytes: number;
-  modelSizeText?: string;
-  childCount: number;
-}) {
-  return (
-    <>
-      {parameterCount > 0 && (
-        <GraphNodeParameterBadge
-          parameterCount={parameterCount}
-          text={formatCompactCount(parameterCount)}
-          className={PARAMETER_BADGE_CLASS}
-        />
-      )}
-      {modelSizeText && (
-        <GraphNodeModelSizeBadge
-          parameterSizeBytes={parameterSizeBytes}
-          text={modelSizeText}
-          className={MODEL_SIZE_BADGE_CLASS}
-        />
-      )}
-      {childCount > 0 && <GraphNodeChildBadge childCount={childCount} />}
-    </>
-  );
-}
-
-export function GraphNodeBadgeRow({
+export function GraphNodeFooterStats({
   nodeId,
   parameterCount,
   parameterSizeBytes,
@@ -146,17 +114,32 @@ export function GraphNodeBadgeRow({
   modelSizeText?: string;
   childCount: number;
 }) {
+  const hasStats = parameterCount > 0 || Boolean(modelSizeText) || childCount > 0;
+
+  if (!hasStats) {
+    return null;
+  }
+
   return (
     <div
-      className="mt-1 flex h-6 min-w-0 items-center gap-1.5 overflow-hidden"
-      data-testid={`graph-node-badges-${nodeId}`}
+      className="flex min-w-0 items-center gap-1 overflow-hidden"
+      data-testid={`graph-node-footer-stats-${nodeId}`}
     >
-      <GraphNodeInlineBadges
-        parameterCount={parameterCount}
-        parameterSizeBytes={parameterSizeBytes}
-        modelSizeText={modelSizeText}
-        childCount={childCount}
-      />
+      {parameterCount > 0 && (
+        <GraphNodeParameterBadge
+          parameterCount={parameterCount}
+          text={`${formatCompactCount(parameterCount)} params`}
+          className={PARAMETER_BADGE_CLASS}
+        />
+      )}
+      {modelSizeText && (
+        <GraphNodeModelSizeBadge
+          parameterSizeBytes={parameterSizeBytes}
+          text={modelSizeText}
+          className={MODEL_SIZE_BADGE_CLASS}
+        />
+      )}
+      {childCount > 0 && <GraphNodeChildBadge childCount={childCount} />}
     </div>
   );
 }

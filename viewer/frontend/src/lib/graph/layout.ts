@@ -72,9 +72,11 @@ export function layoutGraph(
         : graphNodeHeight({
             title: nodeTitle(node),
             parameterCount: node.parameterCount,
+            parameterSizeBytes: node.parameterSizeBytes,
             childCount,
             graphDetailMode: options.graphDetailMode,
             canToggleExpansion,
+            isRootNode: isRoot,
             details: node.details,
             config: node.config,
             childSummaries,
@@ -126,8 +128,11 @@ export function layoutGraph(
       data: {
         nodeId: node.id,
         label: title,
+        typeName: node.typeName,
+        description: node.description,
         subtitle: nodeSubtitle(node),
         path: node.path,
+        graphRole: node.graphRole,
         parameterCount: node.parameterCount,
         parameterSizeBytes: node.parameterSizeBytes,
         details: node.details,

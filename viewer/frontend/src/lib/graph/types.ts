@@ -35,8 +35,11 @@ export type GraphParameterActivity = {
 export type ViewerNodeData = {
   nodeId: string;
   label: string;
+  typeName: string;
+  description?: string | null;
   subtitle: string;
   path: string;
+  graphRole: GraphNode["graphRole"];
   parameterCount: number;
   parameterSizeBytes: number;
   details: GraphNode["details"];

@@ -3,21 +3,15 @@ import {
   CHILD_SUMMARY_EMPTY_HEIGHT,
   CHILD_SUMMARY_ROW_GAP,
   CHILD_SUMMARY_ROW_HEIGHT,
-  DETAIL_LIST_MARGIN_TOP,
   DETAIL_ROW_GAP,
   DETAIL_ROW_HEIGHT,
   EXPERT_DIAGRAM_HEIGHT,
   CLUSTER_DIAGRAM_CELL_GAP,
   CLUSTER_DIAGRAM_CELL_HEIGHT,
   CLUSTER_DIAGRAM_HEADER_HEIGHT,
-  GRAPH_NODE_BADGE_ROW_HEIGHT,
-  GRAPH_NODE_BADGE_ROW_MARGIN_TOP,
+  GRAPH_NODE_ACTION_BAR_HEIGHT,
   GRAPH_NODE_CONTENT_MARGIN_TOP,
-  GRAPH_NODE_EXPANSION_TOGGLE_HEIGHT,
-  GRAPH_NODE_METADATA_BORDER_TOP_WIDTH,
   GRAPH_NODE_METADATA_MARGIN_TOP,
-  GRAPH_NODE_METADATA_PADDING_TOP,
-  GRAPH_NODE_METADATA_TOGGLE_HEIGHT,
   GRAPH_NODE_SUBTITLE_HEIGHT,
   GRAPH_NODE_SUBTITLE_MARGIN_TOP,
   GRAPH_NODE_TITLE_LINE_HEIGHT,
@@ -44,9 +38,11 @@ import {
 export type GraphNodeHeightInput = {
   title: string;
   parameterCount: number;
+  parameterSizeBytes: number;
   childCount: number;
   graphDetailMode: GraphDetailMode;
   canToggleExpansion: boolean;
+  isRootNode: boolean;
   details: GraphNode["details"];
   config: GraphNode["config"];
   childSummaries: ChildSummary[];
@@ -95,15 +91,9 @@ function parameterShapeListHeight(details: GraphNode["details"]) {
   );
 }
 
-function nonSimpleHeaderHeight(input: GraphNodeHeightInput) {
-  const hasBadgeRow =
-    input.graphDetailMode === "full" && (input.parameterCount > 0 || input.childCount > 0);
+function nonSimpleHeaderHeight() {
   return (
-    Math.max(
-      GRAPH_NODE_TITLE_LINE_HEIGHT,
-      input.canToggleExpansion ? GRAPH_NODE_EXPANSION_TOGGLE_HEIGHT : 0,
-    ) +
-    (hasBadgeRow ? GRAPH_NODE_BADGE_ROW_MARGIN_TOP + GRAPH_NODE_BADGE_ROW_HEIGHT : 0) +
+    GRAPH_NODE_TITLE_LINE_HEIGHT +
     GRAPH_NODE_SUBTITLE_MARGIN_TOP +
     GRAPH_NODE_SUBTITLE_HEIGHT
   );
@@ -121,21 +111,15 @@ function summaryBlockHeight(input: GraphNodeHeightInput) {
   return GRAPH_NODE_CONTENT_MARGIN_TOP + contentHeight;
 }
 
-function metadataBlockHeight(rowCount: number, isExpanded: boolean) {
-  if (rowCount === 0) {
+function detailRowsHeight(rowCount: number, isExpanded: boolean) {
+  if (rowCount === 0 || !isExpanded) {
     return 0;
   }
 
   return (
     GRAPH_NODE_METADATA_MARGIN_TOP +
-    GRAPH_NODE_METADATA_BORDER_TOP_WIDTH +
-    GRAPH_NODE_METADATA_PADDING_TOP +
-    GRAPH_NODE_METADATA_TOGGLE_HEIGHT +
-    (isExpanded
-      ? DETAIL_LIST_MARGIN_TOP +
-        rowCount * DETAIL_ROW_HEIGHT +
-        Math.max(rowCount - 1, 0) * DETAIL_ROW_GAP
-      : 0)
+    rowCount * DETAIL_ROW_HEIGHT +
+    Math.max(rowCount - 1, 0) * DETAIL_ROW_GAP
   );
 }
 
@@ -144,9 +128,10 @@ export function graphNodeHeight(input: GraphNodeHeightInput) {
 
   return (
     GRAPH_NODE_VERTICAL_PADDING +
-    nonSimpleHeaderHeight(input) +
+    nonSimpleHeaderHeight() +
     parameterShapeListHeight(input.details) +
     summaryBlockHeight(input) +
-    metadataBlockHeight(detailEntries.length, input.isDetailsExpanded)
+    detailRowsHeight(detailEntries.length, input.isDetailsExpanded) +
+    GRAPH_NODE_ACTION_BAR_HEIGHT
   );
 }
