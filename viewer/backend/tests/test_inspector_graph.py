@@ -5,6 +5,7 @@ import os
 import tempfile
 import unittest
 from collections import Counter
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TypeAlias
 
@@ -75,6 +76,15 @@ class SharedParameterGraph(nn.Module):
         self.right = SharedParameterBranch(shared_parameter)
 
 
+@dataclass
+class PlainConfig:
+    width: int
+
+
+class DocumentedModule(nn.Module):
+    """Documented component description."""
+
+
 def config_fields(node: GraphNodePayload) -> dict[str, object]:
     config = node["config"]
     if config is None:
@@ -124,10 +134,11 @@ class InspectorGraphTests(unittest.TestCase):
             "details",
             "config",
         }
+        optional_node_keys = {"description"}
 
         for node in nodes:
             with self.subTest(node=node["id"]):
-                self.assertEqual(set(node), expected_node_keys)
+                self.assertEqual(set(node) - optional_node_keys, expected_node_keys)
                 self.assertEqual(node["graphRole"], "architecture")
 
         self.assertEqual(node_by_id["__root__"]["path"], "model")
@@ -237,18 +248,49 @@ class InspectorGraphTests(unittest.TestCase):
     def test_graph_serializer_marks_internal_modules(self) -> None:
         nodes, _edges = serialize_graph(nn.Sequential(nn.Dropout(), nn.LayerNorm(4)))
         role_by_type = {node["typeName"]: node["graphRole"] for node in nodes}
+        description_by_type = {
+            node["typeName"]: node.get("description") for node in nodes
+        }
 
         self.assertEqual(role_by_type["Dropout"], "internal")
         self.assertEqual(role_by_type["LayerNorm"], "internal")
+        self.assertEqual(
+            description_by_type["Dropout"],
+            (
+                "Regularization module that randomly zeroes activations during "
+                "training and is inactive during evaluation."
+            ),
+        )
+        self.assertEqual(
+            description_by_type["LayerNorm"],
+            (
+                "Normalizes features within each sample to stabilize hidden-state "
+                "scale before or after a layer block."
+            ),
+        )
 
     def test_graph_serializer_marks_runtime_modules(self) -> None:
         result = inspect_model("linears/linear", "baseline")
         role_by_id = {node["id"]: node["graphRole"] for node in result["nodes"]}
+        description_by_id = {
+            node["id"]: node.get("description") for node in result["nodes"]
+        }
 
         self.assertEqual(role_by_id["loss_fn"], "runtime")
         self.assertEqual(role_by_id["metrics"], "runtime")
         self.assertEqual(role_by_id["metrics.train_accuracy"], "runtime")
         self.assertEqual(role_by_id["metrics.train_f1_score"], "runtime")
+        self.assertEqual(
+            description_by_id["loss_fn"],
+            "Runtime loss module for multi-class classification targets.",
+        )
+        self.assertEqual(
+            description_by_id["metrics"],
+            (
+                "Runtime module that groups classifier metrics for train, "
+                "validation, and test reporting."
+            ),
+        )
 
     def test_graph_serializer_marks_architecture_modules(self) -> None:
         result = inspect_model("linears/linear", "baseline")
@@ -529,11 +571,51 @@ class InspectorGraphTests(unittest.TestCase):
 
         self.assertEqual(linear_node["config"]["typeName"], "LinearLayerConfig")
         self.assertEqual(
+            linear_node["description"],
+            (
+                "Applies a learned linear projection with configured input/output "
+                "dimensions and optional bias."
+            ),
+        )
+        self.assertEqual(
             config_fields(linear_node),
             {"input_dim": 4, "output_dim": 3, "bias_flag": False},
         )
+        field_by_key = {
+            field["key"]: field for field in linear_node["config"]["fields"]
+        }
+        self.assertEqual(
+            field_by_key["input_dim"]["description"],
+            "Input feature dimension.",
+        )
+        self.assertEqual(
+            field_by_key["output_dim"]["description"],
+            "Output feature dimension.",
+        )
+        self.assertEqual(
+            field_by_key["bias_flag"]["description"],
+            "Add a learnable bias to the output.",
+        )
         self.assertIn("weightShape", linear_node["details"])
         self.assertNotIn("biasShape", linear_node["details"])
+
+    def test_graph_serializer_uses_docstring_description_fallback(self) -> None:
+        nodes, _edges = serialize_graph(DocumentedModule())
+
+        self.assertEqual(nodes[0]["description"], "Documented component description.")
+
+    def test_graph_serializer_omits_unknown_descriptions_quietly(self) -> None:
+        nodes, _edges = serialize_graph(ConfiguredModule(PlainConfig(width=7)))
+        root = nodes[0]
+
+        self.assertNotIn("description", root)
+        self.assertEqual(
+            root["config"],
+            {
+                "typeName": "PlainConfig",
+                "fields": [{"key": "width", "value": 7}],
+            },
+        )
 
     def test_graph_serializer_serializes_adaptive_config_references(self) -> None:
         no_augmentation = ConfiguredModule(

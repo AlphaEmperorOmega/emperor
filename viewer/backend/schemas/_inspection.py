@@ -17,6 +17,7 @@ from viewer.backend.schemas._base import (
 class GraphConfigFieldResponse(ApiResponseModel):
     key: str
     value: JsonValue
+    description: str | None = None
 
 
 class GraphConfigResponse(ApiResponseModel):
@@ -28,6 +29,7 @@ class GraphNodeResponse(ApiResponseModel):
     id: str
     label: str
     typeName: str
+    description: str | None = None
     path: str
     graphRole: Literal["architecture", "internal", "runtime"]
     parameterCount: int
