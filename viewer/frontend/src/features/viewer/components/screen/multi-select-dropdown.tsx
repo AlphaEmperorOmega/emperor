@@ -83,6 +83,7 @@ export function MultiSelectDropdown({
   noResultsMessage = "No matching options",
   disabled: disabledProp = false,
   className,
+  triggerClassName,
   initialVisibleCount = 50,
   pageSize = initialVisibleCount,
 }: {
@@ -100,6 +101,7 @@ export function MultiSelectDropdown({
   noResultsMessage?: string;
   disabled?: boolean;
   className?: string;
+  triggerClassName?: string;
   initialVisibleCount?: number;
   pageSize?: number;
 }) {
@@ -420,6 +422,7 @@ export function MultiSelectDropdown({
           multiSelectTriggerClassName,
           isOpen && selectTriggerActiveClassName,
           disabledProp && "cursor-not-allowed opacity-60",
+          triggerClassName,
         )}
       >
         <span className="grid min-w-0 gap-1">
