@@ -85,6 +85,13 @@ def _has_active_job_for_log_folder(
     )
 
 
+def _cached_layer_monitor_data(repository: LogRunRepository, run: Any) -> bool | None:
+    cache_lookup = getattr(repository, "cached_layer_monitor_data_for_run", None)
+    if not callable(cache_lookup):
+        return None
+    return cache_lookup(run)
+
+
 class LogRunService:
     def __init__(self, repository: LogRunRepository) -> None:
         self._repository = repository
@@ -118,7 +125,12 @@ class LogRunService:
                 run.eventFileCount > 0
             ) != has_event_files:
                 continue
-            runs.append(run.to_response())
+            response = run.to_response()
+            response["hasLayerMonitorData"] = _cached_layer_monitor_data(
+                self._repository,
+                run,
+            )
+            runs.append(response)
         return _paginated_response(
             runs,
             collection_key="runs",
