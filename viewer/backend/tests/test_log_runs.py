@@ -58,6 +58,23 @@ class FakeTensorBoardAccumulator:
         ]
 
 
+def write_fake_event_run(
+    logs_root: Path,
+    run_name: str,
+    payload: bytes,
+) -> Path:
+    run_dir = logs_root.joinpath(
+        "linear",
+        "BASELINE",
+        "Mnist",
+        run_name,
+        "version_0",
+    )
+    run_dir.mkdir(parents=True)
+    (run_dir / "events.out.tfevents.fake").write_bytes(payload)
+    return run_dir
+
+
 class LogExperimentNameTests(unittest.TestCase):
     def test_log_experiment_name_regex_pattern_is_stable(self) -> None:
         self.assertEqual(
@@ -2212,6 +2229,160 @@ class LogRunIndexAndApiTests(unittest.TestCase):
         self.assertTrue(tags["truncated"])
         self.assertIn("event files skipped", tags["truncationReason"])
         load.assert_not_called()
+
+    def test_log_run_query_service_skips_uncached_tags_past_batch_budget(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = Path(tmp)
+            write_fake_event_run(
+                logs_root,
+                "first_20260601_010203",
+                b"1111",
+            )
+            write_fake_event_run(
+                logs_root,
+                "second_20260601_020304",
+                b"2222",
+            )
+            write_fake_event_run(
+                logs_root,
+                "third_20260601_030405",
+                b"3333",
+            )
+            scanner = LogRunScanner(logs_root=logs_root)
+            run_ids = {run.runName: run.id for run in scanner.list_runs()}
+            service = LogRunQueryService(
+                scanner=scanner,
+                max_tag_event_bytes=100,
+                max_tag_batch_event_bytes=8,
+            )
+            loaded_event_dirs: list[Path] = []
+
+            def load_accumulator(
+                event_dir: Path,
+                **_kwargs,
+            ) -> FakeTensorBoardAccumulator:
+                loaded_event_dirs.append(event_dir)
+                return FakeTensorBoardAccumulator()
+
+            with patch(
+                "viewer.backend.log_runs.load_event_accumulator",
+                load_accumulator,
+            ):
+                payloads = service.tags_for_runs(
+                    [
+                        run_ids["first_20260601_010203"],
+                        run_ids["second_20260601_020304"],
+                        run_ids["third_20260601_030405"],
+                    ]
+                )
+
+        self.assertEqual(len(loaded_event_dirs), 2)
+        self.assertEqual(payloads[0]["scalarTags"], ["train/loss"])
+        self.assertEqual(payloads[1]["scalarTags"], ["train/loss"])
+        skipped = payloads[2]
+        self.assertEqual(skipped["scalarTags"], [])
+        self.assertEqual(skipped["histogramTags"], [])
+        self.assertEqual(skipped["imageTags"], [])
+        self.assertEqual(skipped["textTags"], [])
+        self.assertFalse(skipped["hasLayerMonitorData"])
+        self.assertEqual(skipped["eventBytes"], 4)
+        self.assertEqual(skipped["skippedEventFiles"], 1)
+        self.assertEqual(skipped["sourceItemCount"], 1)
+        self.assertEqual(skipped["returnedItemCount"], 0)
+        self.assertTrue(skipped["truncated"])
+        self.assertIn("batch tag-read cap", skipped["truncationReason"])
+
+    def test_log_run_query_service_does_not_cache_batch_budget_skips(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = Path(tmp)
+            write_fake_event_run(
+                logs_root,
+                "first_20260601_010203",
+                b"1111",
+            )
+            write_fake_event_run(
+                logs_root,
+                "second_20260601_020304",
+                b"2222",
+            )
+            write_fake_event_run(
+                logs_root,
+                "third_20260601_030405",
+                b"3333",
+            )
+            scanner = LogRunScanner(logs_root=logs_root)
+            run_ids = {run.runName: run.id for run in scanner.list_runs()}
+            service = LogRunQueryService(
+                scanner=scanner,
+                max_tag_event_bytes=100,
+                max_tag_batch_event_bytes=8,
+            )
+
+            with patch(
+                "viewer.backend.log_runs.load_event_accumulator",
+                return_value=FakeTensorBoardAccumulator(),
+            ) as load:
+                first_payloads = service.tags_for_runs(
+                    [
+                        run_ids["first_20260601_010203"],
+                        run_ids["second_20260601_020304"],
+                        run_ids["third_20260601_030405"],
+                    ]
+                )
+                second_payloads = service.tags_for_runs(
+                    [run_ids["third_20260601_030405"]]
+                )
+
+        self.assertEqual(load.call_count, 3)
+        self.assertTrue(first_payloads[2]["truncated"])
+        self.assertEqual(first_payloads[2]["scalarTags"], [])
+        self.assertFalse(second_payloads[0]["truncated"])
+        self.assertEqual(second_payloads[0]["scalarTags"], ["train/loss"])
+
+    def test_log_run_query_service_cached_tags_bypass_batch_budget(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = Path(tmp)
+            write_fake_event_run(
+                logs_root,
+                "first_20260601_010203",
+                b"11111111",
+            )
+            write_fake_event_run(
+                logs_root,
+                "second_20260601_020304",
+                b"2222",
+            )
+            scanner = LogRunScanner(logs_root=logs_root)
+            run_ids = {run.runName: run.id for run in scanner.list_runs()}
+            service = LogRunQueryService(
+                scanner=scanner,
+                max_tag_event_bytes=100,
+                max_tag_batch_event_bytes=8,
+            )
+
+            with patch(
+                "viewer.backend.log_runs.load_event_accumulator",
+                return_value=FakeTensorBoardAccumulator(),
+            ) as load:
+                service.tags_for_runs([run_ids["first_20260601_010203"]])
+                payloads = service.tags_for_runs(
+                    [
+                        run_ids["first_20260601_010203"],
+                        run_ids["second_20260601_020304"],
+                    ]
+                )
+
+        self.assertEqual(load.call_count, 2)
+        self.assertFalse(payloads[0]["truncated"])
+        self.assertFalse(payloads[1]["truncated"])
+        self.assertEqual(payloads[0]["scalarTags"], ["train/loss"])
+        self.assertEqual(payloads[1]["scalarTags"], ["train/loss"])
 
     def test_log_api_filters_runs_before_pagination(self) -> None:
         import httpx
