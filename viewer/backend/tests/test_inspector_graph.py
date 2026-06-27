@@ -8,6 +8,7 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TypeAlias
+from unittest import mock
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
@@ -35,6 +36,7 @@ from emperor.linears.core.config import AdaptiveLinearLayerConfig, LinearLayerCo
 from torch import nn
 
 from viewer.backend.inspector.checkpoint_shapes import (
+    MAX_CHECKPOINT_GRAPH_SHAPE_BYTES,
     checkpoint_graph_shapes_from_state_dict,
 )
 from viewer.backend.inspector.discovery import discover_models, list_model_presets
@@ -1179,6 +1181,81 @@ class InspectorGraphTests(unittest.TestCase):
         self.assertEqual(
             historical_result["parameterCount"],
             expected_result["parameterCount"],
+        )
+
+    def test_inspection_service_skips_oversized_checkpoint_shape_load(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = os.path.join(tmp, "logs")
+            run_dir = write_tensorboard_run(
+                Path(logs_root),
+                [
+                    "exp_linear",
+                    "linears",
+                    "linear",
+                    "BASELINE",
+                    "Cifar10",
+                    "run_20260601_010203",
+                    "version_0",
+                ],
+            )
+            (run_dir / "result.json").write_text(
+                json.dumps(
+                    {
+                        "params": {
+                            "input_dim": 3072,
+                            "output_dim": 10,
+                            "stack_hidden_dim": 12,
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            checkpoint_path = run_dir / "checkpoints" / "epoch=0-step=1.ckpt"
+            os.truncate(checkpoint_path, MAX_CHECKPOINT_GRAPH_SHAPE_BYTES + 1)
+            run = LogRunIndex(logs_root=logs_root).list_runs()[0]
+            service = InspectionService(
+                LogRunRepository(LogRunIndex(logs_root=logs_root))
+            )
+
+            with mock.patch(
+                "viewer.backend.inspector.checkpoint_shapes.torch.load",
+                side_effect=AssertionError("oversized checkpoint was loaded"),
+            ) as torch_load:
+                historical_result = service.inspect(
+                    model_type="linears",
+                    model="linear",
+                    preset="baseline",
+                    dataset="Cifar10",
+                    overrides={},
+                    log_run_id=run.id,
+                )
+            expected_result = inspect_model(
+                "linears/linear",
+                "baseline",
+                {
+                    "input_dim": 3072,
+                    "output_dim": 10,
+                    "stack_hidden_dim": 12,
+                },
+                dataset="Cifar10",
+            )
+
+        torch_load.assert_not_called()
+        root_checkpoint = nodes_by_id(historical_result["nodes"])["__root__"][
+            "details"
+        ]["checkpoint"]
+        self.assertEqual(
+            historical_result["parameterCount"],
+            expected_result["parameterCount"],
+        )
+        self.assertEqual(root_checkpoint["status"], "missing")
+        self.assertEqual(root_checkpoint["tensorCount"], 0)
+        self.assertEqual(root_checkpoint["reason"], "structuralFallback")
+        self.assertTrue(
+            any(
+                reason.startswith("checkpointTooLarge:")
+                for reason in root_checkpoint["fallbackReasons"]
+            )
         )
 
     def test_inspection_service_keeps_request_overrides_strict_with_log_run(

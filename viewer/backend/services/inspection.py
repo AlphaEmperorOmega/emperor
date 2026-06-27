@@ -225,6 +225,11 @@ def _patch_checkpoint_shape_details(
             checkpoint_detail["reason"] = "noCheckpointTensor"
         if path == "model" and structural_fallback:
             checkpoint_detail["reason"] = "structuralFallback"
+            fallback_reasons = (
+                checkpoint_shapes.diagnostics.structural_fallback_reasons
+            )
+            if fallback_reasons:
+                checkpoint_detail["fallbackReasons"] = list(fallback_reasons)
         details["checkpoint"] = checkpoint_detail
 
 
