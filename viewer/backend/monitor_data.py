@@ -539,10 +539,25 @@ class TensorBoardParameterStatusReader:
             ),
             None,
         )
-        metric = evidence_metric or delta_metrics[0]
+        two_sample_metric = next(
+            (
+                metric
+                for metric in delta_metrics
+                if len(points_by_metric[metric]) >= 2
+            ),
+            None,
+        )
+        metric = evidence_metric or two_sample_metric or delta_metrics[0]
         points = points_by_metric[metric]
+        status = (
+            "updated"
+            if evidence_metric
+            else "unchanged"
+            if two_sample_metric
+            else "unknown"
+        )
         return {
-            "status": "updated" if evidence_metric else "unchanged",
+            "status": status,
             "metric": f"{node_path}/{channel}/{metric}",
             "lastStep": int(points[-1]["step"]),
             "observedPoints": len(points),
