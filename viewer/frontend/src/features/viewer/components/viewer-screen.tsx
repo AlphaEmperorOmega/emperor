@@ -43,7 +43,6 @@ export function ViewerScreen({ shell }: { shell: ViewerScreenShell }) {
         />
         <ViewerWorkspaceMain
           activeWorkspace={activeWorkspace}
-          onChangeWorkspace={onChangeWorkspace}
           onOpenFullConfig={fullConfigDialog.open}
         />
       </section>

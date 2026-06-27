@@ -91,12 +91,6 @@ export const IMPLEMENTED_FEATURES: ImplementedFeature[] = [
     description: "Shows config sections, editable fields, override state, and training commands.",
   },
   {
-    id: "training-run-comparison",
-    category: "Frontend state and config",
-    title: "Training run comparison",
-    description: "Compares selected historical training runs across scalar graphs and compact metric summaries, with model config comparison available as a secondary mode.",
-  },
-  {
     id: "graph-canvas-modes-scopes-layout",
     category: "Graph visualization",
     title: "Graph canvas, modes, scopes, and layout",

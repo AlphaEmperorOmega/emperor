@@ -1,5 +1,4 @@
 import dynamic from "next/dynamic";
-import { CompareWorkspace } from "@/features/viewer/components/compare-workspace";
 import { FullConfigDialog } from "@/features/viewer/components/config/full-config-dialog";
 import { ConnectedMonitorChartsModal } from "@/features/viewer/components/monitor/connected-monitor-charts-modal";
 import { ConnectedTrainingWorkspace } from "@/features/viewer/components/connected-training-panel";
@@ -81,11 +80,9 @@ export function ViewerWorkspaceSidebar({
 
 export function ViewerWorkspaceMain({
   activeWorkspace,
-  onChangeWorkspace,
   onOpenFullConfig,
 }: {
   activeWorkspace: ViewerWorkspace;
-  onChangeWorkspace: (workspace: ViewerWorkspace) => void;
   onOpenFullConfig: FullConfigDialogControls["open"];
 }) {
   if (activeWorkspace === "model") {
@@ -118,14 +115,7 @@ export function ViewerWorkspaceMain({
     );
   }
 
-  return (
-    <div className="h-full min-h-[560px] min-w-0 overflow-hidden lg:col-span-2 lg:min-h-0">
-      <CompareWorkspace
-        onOpenLogs={() => onChangeWorkspace("logs")}
-        onUseTarget={() => onChangeWorkspace("model")}
-      />
-    </div>
-  );
+  return null;
 }
 
 export function ViewerWorkspaceOverlays({

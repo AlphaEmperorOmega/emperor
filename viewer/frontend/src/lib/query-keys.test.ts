@@ -137,20 +137,6 @@ describe("query key factories", () => {
     expect(
       viewerQueryKeys.historicalSummaryInspection("linear", "baseline", "Mnist"),
     ).toEqual(["inspect", "historical-summary", "linear", "baseline", "Mnist"]);
-    expect(
-      viewerQueryKeys.comparisonInspection(
-        "linears",
-        "linear",
-        "baseline",
-        "Mnist",
-      ),
-    ).toEqual([
-      "comparison-inspection",
-      "linears",
-      "linear",
-      "baseline",
-      "Mnist",
-    ]);
     expect(viewerQueryKeys.configSnapshots("linears", "linear")).toEqual([
       "config-snapshots",
       "linears",
