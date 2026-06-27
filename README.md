@@ -515,12 +515,16 @@ bash download_logs.sh logs emperor_logs.zip
 bash download_logs.sh logs /tmp/emperor_logs.zip
 ```
 
-To restore that archive into another local project, start the Viewer backend
-with local mutations enabled
-(`VIEWER_API_ALLOW_UNSAFE_LOCAL_MUTATIONS=true`), open the Viewer, choose
-**Import Logs** in the top navigation, and select the produced `.zip` file. The
-import extracts into that project's server-side `logs/` directory and skips
-files that already exist.
+To restore that archive into another local project, start the Viewer backend,
+open the Viewer, choose **Import Logs** in the top navigation, and select the
+produced `.zip` file. Local unauthenticated backends allow log imports by
+default; hosted or read-only bearer-mode backends require
+`VIEWER_API_ALLOW_LOG_IMPORTS=true`. The import extracts into that project's
+server-side `logs/` directory and overwrites files that already exist at the
+same archive paths. Compressed archive uploads and extracted archive contents
+are uncapped by default. Set `VIEWER_API_MAX_UPLOAD_SIZE=<bytes>` or
+`VIEWER_API_MAX_LOG_ARCHIVE_EXTRACTED_SIZE=<bytes>` only when a deployment
+needs to reject large imports.
 
 ## Test and Quality Commands
 

@@ -99,18 +99,29 @@ files or processes:
 export VIEWER_API_ALLOW_UNSAFE_LOCAL_MUTATIONS=true
 ```
 
+Log archive imports are narrower than the broad local mutation switch. Local
+unauthenticated backends allow log imports by default. Bearer-mode hosted
+backends keep uploads disabled unless explicitly enabled:
+
+```bash
+export VIEWER_API_ALLOW_LOG_IMPORTS=true
+```
+
 ## Import Logs
 
 Use `download_logs.sh` from a project directory to create a log archive, then
 open the Viewer and choose **Import Logs** in the top navigation. The backend
-extracts the archive into that project's `logs/` root and skips files that
-already exist.
+extracts the archive into that project's `logs/` root and overwrites files that
+already exist at the same archive paths.
 
-Importing logs is a local file mutation, so hosted or read-only backends keep it
-disabled unless `VIEWER_API_ALLOW_UNSAFE_LOCAL_MUTATIONS=true` is set. The
-backend advertises upload support and the maximum upload size through
-`/capabilities`; adjust `VIEWER_API_MAX_UPLOAD_SIZE` only when larger local
-archives are intentionally allowed.
+Importing logs is a local file mutation scoped to the backend logs folder. Local
+unauthenticated backends enable it by default; hosted or read-only bearer-mode
+backends keep it disabled unless `VIEWER_API_ALLOW_LOG_IMPORTS=true` is set.
+The backend advertises upload support and any compressed upload-size cap
+through `/capabilities`. Compressed `.zip` uploads and extracted archive
+contents are uncapped by default. Set `VIEWER_API_MAX_UPLOAD_SIZE=<bytes>` or
+`VIEWER_API_MAX_LOG_ARCHIVE_EXTRACTED_SIZE=<bytes>` only when a deployment
+needs to reject large imports.
 
 ## Test
 
