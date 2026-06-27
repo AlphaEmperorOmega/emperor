@@ -39,7 +39,7 @@ class ViewerApiSettings(BaseSettings):
     allow_unsafe_local_mutations: bool = False
     allow_log_imports: bool | None = None
     max_upload_size: int | None = Field(default=None, ge=1)
-    max_log_archive_extracted_size: int = Field(
+    max_log_archive_extracted_size: int | None = Field(
         default=DEFAULT_MAX_LOG_ARCHIVE_EXTRACTED_SIZE,
         ge=1,
     )

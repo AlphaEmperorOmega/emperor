@@ -207,7 +207,7 @@ def _plan_import(
     zip_file: zipfile.ZipFile,
     *,
     logs_root: Path,
-    max_extracted_size: int,
+    max_extracted_size: int | None,
 ) -> tuple[list[LogArchiveImportPlanEntry], int]:
     plan: list[LogArchiveImportPlanEntry] = []
     skipped_count = 0
@@ -226,7 +226,7 @@ def _plan_import(
             continue
 
         total_size += info.file_size
-        if total_size > max_extracted_size:
+        if max_extracted_size is not None and total_size > max_extracted_size:
             raise ApiError(
                 (
                     "Log archive extracted files exceed the "
@@ -320,7 +320,7 @@ def import_log_archive(
     filename: str,
     logs_root: Path | str,
     max_upload_size: int | None,
-    max_extracted_size: int,
+    max_extracted_size: int | None,
 ) -> dict[str, object]:
     if max_upload_size is not None and len(archive) > max_upload_size:
         raise _too_large_error(max_upload_size)

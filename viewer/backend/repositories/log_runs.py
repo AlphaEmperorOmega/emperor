@@ -61,7 +61,7 @@ class LogRunRepository:
         archive: bytes,
         filename: str,
         max_upload_size: int | None,
-        max_extracted_size: int,
+        max_extracted_size: int | None,
     ) -> dict[str, object]:
         return self._index.import_archive(
             archive=archive,
