@@ -56,6 +56,7 @@ export {
   nodeDetailEntries,
   nodeSubtitle,
   nodeTitle,
+  parameterShapeDimsText,
   parameterShapeEntries,
   simpleGraphParamText,
   structureNodeLabel,
@@ -67,6 +68,16 @@ export {
   expandableSubtreeNodeIds,
 } from "@/lib/graph/navigation";
 export { filterGraphByDetail, filterGraphByExpansion } from "@/lib/graph/filtering";
+export {
+  collapseParameterActivityMinimapNodes,
+  deriveParameterActivityMinimapModel,
+  expandAllParameterActivityMinimapNodes,
+  filterParameterActivityMinimapGraphByExpansion,
+} from "@/lib/graph/parameter-activity-minimap";
+export type {
+  ParameterActivityMinimapInput,
+  ParameterActivityMinimapModel,
+} from "@/lib/graph/parameter-activity-minimap";
 export { buildChildSummaries } from "@/lib/graph/child-summaries";
 export { buildExpertDiagrams } from "@/lib/graph/expert-diagrams";
 export { buildStackDiagrams } from "@/lib/graph/stack-diagrams";

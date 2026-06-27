@@ -39,8 +39,6 @@ export type TrainingPanelViewModelInput = {
   searchLoading: boolean;
   trainingSearch: TrainingSearchState;
   trainingEnabled: boolean;
-  trainingLockedByHistoricalSelection: boolean;
-  historicalTrainingLockExperiment: string;
   canOpenFullConfig: boolean;
   onOpenFullConfig: () => void;
   onSetMonitors: (monitors: string[]) => void;
@@ -96,8 +94,6 @@ export function useTrainingPanelViewModel({
   searchLoading,
   trainingSearch,
   trainingEnabled,
-  trainingLockedByHistoricalSelection,
-  historicalTrainingLockExperiment,
   canOpenFullConfig,
   onOpenFullConfig,
   onSetMonitors,
@@ -162,8 +158,6 @@ export function useTrainingPanelViewModel({
     searchAxes,
     searchLoading,
     trainingEnabled,
-    trainingLockedByHistoricalSelection,
-    historicalTrainingLockExperiment,
     logFolder: logFolder.value,
   });
   const training = useTrainingJobController({
@@ -301,7 +295,6 @@ export function useTrainingPanelViewModel({
       epochStep,
       metricLabel: metricLabel(training.job),
       clusterGrowth,
-      historicalTrainingLockMessage: requestState.historicalTrainingLockMessage,
       activeSearchLabel,
       logFolderLabel: logFolder.label,
       presetCountLabel,

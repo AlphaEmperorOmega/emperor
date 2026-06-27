@@ -133,7 +133,6 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
   const {
     clusterGrowth,
     datasetCountLabel,
-    historicalTrainingLockMessage,
     jobStatus,
     presetCountLabel,
   } = status;
@@ -183,11 +182,6 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
           {!trainingEnabled && (
             <InlineStatus tone="warning" compact>
               Training is disabled by this backend.
-            </InlineStatus>
-          )}
-          {historicalTrainingLockMessage && (
-            <InlineStatus tone="danger" compact>
-              {historicalTrainingLockMessage}
             </InlineStatus>
           )}
         </div>
@@ -348,14 +342,6 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
                       <Activity className="h-4 w-4" aria-hidden />
                     </span>
                     <h1 className="text-base font-bold text-ink">Training</h1>
-                    {historicalTrainingLockMessage && (
-                      <span
-                        className="rounded-full border border-danger-line bg-danger-soft px-2 py-0.5 text-[11px] font-bold text-danger-text"
-                        role="status"
-                      >
-                        {historicalTrainingLockMessage}
-                      </span>
-                    )}
                     <Badge
                       className={
                         jobStatus === "failed" || jobStatus === "cancelled"

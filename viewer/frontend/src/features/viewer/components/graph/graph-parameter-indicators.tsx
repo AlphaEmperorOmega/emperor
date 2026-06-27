@@ -1,27 +1,41 @@
 import {
+  useId,
   useLayoutEffect,
   useRef,
   useState,
+  type FocusEvent,
   type KeyboardEvent,
   type MouseEvent,
-  type ReactNode,
+  type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
-import { CircleDot, Weight } from "lucide-react";
 import {
-  type GraphParameterActivityChannel,
   type GraphParameterActivity,
+  type GraphParameterActivityChannel,
   type GraphParameterActivityStatus,
 } from "@/lib/graph";
 import { cn } from "@/lib/utils";
 
-const statusClassNames: Record<GraphParameterActivityStatus, string> = {
+export const graphParameterActivityStatusClassNames: Readonly<
+  Record<GraphParameterActivityStatus, string>
+> = {
   loading: "border-cyan-200/40 bg-cyan-300/[0.11] text-cyan-100",
   updated: "border-ok/35 bg-ok/10 text-ok",
   unchanged: "border-danger-line bg-danger-soft text-danger-text",
   mixed: "border-amber/40 bg-amber/[0.12] text-amber",
   missing: "border-line bg-white/[0.03] text-ink-faint",
   unknown: "border-line bg-white/[0.03] text-ink-faint",
+};
+
+const graphParameterActivityTextClassNames: Readonly<
+  Record<GraphParameterActivityStatus, string>
+> = {
+  loading: "text-cyan-100",
+  updated: "text-ok",
+  unchanged: "text-danger-text",
+  mixed: "text-amber",
+  missing: "text-ink-faint",
+  unknown: "text-ink-faint",
 };
 
 const statusCopy: Record<GraphParameterActivityStatus, string> = {
@@ -32,17 +46,24 @@ const statusCopy: Record<GraphParameterActivityStatus, string> = {
   unchanged:
     "This parameter was logged with enough samples, but no update or value-change evidence was observed.",
   mixed:
-    "At least one historical run showed update evidence, but at least one other run did not.",
+    "Historical runs have mixed or incomplete update evidence for this parameter.",
   missing:
     "No tags for this parameter were found in the source, usually because the parameter does not exist or was not logged.",
   unknown:
     "There is no readable source yet, or there are not enough samples to decide whether this parameter changed.",
 };
 
-const TOOLTIP_GAP = 6;
-const TOOLTIP_MARGIN = 8;
-const TOOLTIP_WIDTH = 288;
-const ESTIMATED_TOOLTIP_HEIGHT = 116;
+const POPUP_GAP = 6;
+const POPUP_MARGIN = 8;
+const POPUP_WIDTH = 312;
+const ESTIMATED_POPUP_HEIGHT = 220;
+
+type ActivityChannelView = {
+  key: "weights" | "bias";
+  label: "Weights" | "Bias";
+  shortLabel: "W" | "b";
+  channel: GraphParameterActivityChannel;
+};
 
 function formatStep(step: number | null | undefined) {
   return typeof step === "number" ? String(step) : "n/a";
@@ -57,94 +78,161 @@ function runCounts(channel: GraphParameterActivityChannel) {
   } missing / ${channel.unknownRuns ?? 0} unknown`;
 }
 
-function ParameterIndicator({
-  label,
-  channel,
-  icon,
+function activityChannels(activity: GraphParameterActivity): ActivityChannelView[] {
+  return [
+    {
+      key: "weights",
+      label: "Weights",
+      shortLabel: "W",
+      channel: activity.weights,
+    },
+    ...(activity.bias
+      ? [
+          {
+            key: "bias" as const,
+            label: "Bias" as const,
+            shortLabel: "b" as const,
+            channel: activity.bias,
+          },
+        ]
+      : []),
+  ];
+}
+
+export function parameterActivityLabel(activity: GraphParameterActivity) {
+  return activityChannels(activity)
+    .map(({ label, channel }) => `${label.toLowerCase()} ${channel.status}`)
+    .join(", ");
+}
+
+function GraphParameterActivityIcons({
+  activity,
 }: {
-  label: "Weights" | "Bias";
-  channel: GraphParameterActivityChannel;
-  icon: ReactNode;
+  activity: GraphParameterActivity;
 }) {
-  const indicatorRef = useRef<HTMLSpanElement>(null);
-  const tooltipRef = useRef<HTMLSpanElement>(null);
-  const [tooltipVisible, setTooltipVisible] = useState(false);
-  const [tooltipPosition, setTooltipPosition] = useState<{
+  return (
+    <>
+      {activityChannels(activity).map(({ key, shortLabel, channel }) => (
+        <span
+          key={key}
+          aria-hidden="true"
+          data-testid={`graph-parameter-indicator-${key}`}
+          className={cn(
+            "inline-flex h-5 min-w-3 shrink-0 items-center justify-center font-mono text-[11px] font-bold leading-none",
+            graphParameterActivityTextClassNames[channel.status],
+          )}
+        >
+          {shortLabel}
+        </span>
+      ))}
+    </>
+  );
+}
+
+function GraphParameterActivityPopover({
+  activity,
+  anchorRef,
+  id,
+  open,
+}: {
+  activity: GraphParameterActivity;
+  anchorRef: RefObject<HTMLElement | null>;
+  id: string;
+  open: boolean;
+}) {
+  const popupRef = useRef<HTMLDivElement>(null);
+  const [popupPosition, setPopupPosition] = useState<{
     left: number;
     top: number;
   } | null>(null);
-  const accessibleLabel = `${label} parameter activity: ${channel.status}`;
-  const counts = runCounts(channel);
-  const stopPropagation = (event: MouseEvent | KeyboardEvent) => {
-    event.stopPropagation();
-  };
 
   useLayoutEffect(() => {
-    if (!tooltipVisible) {
-      setTooltipPosition(null);
+    if (!open) {
+      setPopupPosition(null);
       return undefined;
     }
 
-    const updateTooltipPosition = () => {
-      const indicator = indicatorRef.current;
-      if (!indicator || typeof window === "undefined") {
+    const updatePopupPosition = () => {
+      const anchor = anchorRef.current;
+      if (!anchor || typeof window === "undefined") {
         return;
       }
 
-      const rect = indicator.getBoundingClientRect();
+      const rect = anchor.getBoundingClientRect();
       const viewportWidth =
         document.documentElement.clientWidth || window.innerWidth;
       const viewportHeight =
         document.documentElement.clientHeight || window.innerHeight;
-      const tooltipWidth = Math.min(
-        TOOLTIP_WIDTH,
-        Math.max(0, viewportWidth - TOOLTIP_MARGIN * 2),
+      const popupWidth = Math.min(
+        POPUP_WIDTH,
+        Math.max(0, viewportWidth - POPUP_MARGIN * 2),
       );
-      const tooltipHeight =
-        tooltipRef.current?.offsetHeight ?? ESTIMATED_TOOLTIP_HEIGHT;
+      const popupHeight =
+        popupRef.current?.offsetHeight ?? ESTIMATED_POPUP_HEIGHT;
       const maxLeft = Math.max(
-        TOOLTIP_MARGIN,
-        viewportWidth - tooltipWidth - TOOLTIP_MARGIN,
+        POPUP_MARGIN,
+        viewportWidth - popupWidth - POPUP_MARGIN,
       );
       const left = Math.min(
-        Math.max(rect.right - tooltipWidth, TOOLTIP_MARGIN),
+        Math.max(rect.right - popupWidth, POPUP_MARGIN),
         maxLeft,
       );
-      const belowTop = rect.bottom + TOOLTIP_GAP;
-      const aboveTop = rect.top - tooltipHeight - TOOLTIP_GAP;
+      const belowTop = rect.bottom + POPUP_GAP;
+      const aboveTop = rect.top - popupHeight - POPUP_GAP;
       const top =
-        belowTop + tooltipHeight <= viewportHeight - TOOLTIP_MARGIN ||
-        aboveTop < TOOLTIP_MARGIN
+        belowTop + popupHeight <= viewportHeight - POPUP_MARGIN ||
+        aboveTop < POPUP_MARGIN
           ? belowTop
           : aboveTop;
 
-      setTooltipPosition({ left, top });
+      setPopupPosition({ left, top });
     };
 
-    updateTooltipPosition();
-    window.addEventListener("resize", updateTooltipPosition);
-    window.addEventListener("scroll", updateTooltipPosition, true);
+    updatePopupPosition();
+    window.addEventListener("resize", updatePopupPosition);
+    window.addEventListener("scroll", updatePopupPosition, true);
 
     return () => {
-      window.removeEventListener("resize", updateTooltipPosition);
-      window.removeEventListener("scroll", updateTooltipPosition, true);
+      window.removeEventListener("resize", updatePopupPosition);
+      window.removeEventListener("scroll", updatePopupPosition, true);
     };
-  }, [tooltipVisible]);
+  }, [anchorRef, open]);
 
-  const tooltip =
-    tooltipVisible && typeof document !== "undefined"
-      ? createPortal(
-          <span
-            ref={tooltipRef}
-            role="tooltip"
-            style={{
-              left: tooltipPosition?.left ?? 0,
-              top: tooltipPosition?.top ?? 0,
-              visibility: tooltipPosition ? "visible" : "hidden",
-            }}
-            className="pointer-events-none fixed z-[90] grid w-72 max-w-[calc(100vw-1rem)] gap-1 rounded-[8px] border border-line-soft bg-panel px-2.5 py-2 text-left font-sans text-[11px] font-semibold leading-4 text-ink shadow-panel"
-          >
-            <span className="text-ink">{label}</span>
+  if (!open || typeof document === "undefined") {
+    return null;
+  }
+
+  return createPortal(
+    <div
+      id={id}
+      ref={popupRef}
+      role="tooltip"
+      style={{
+        left: popupPosition?.left ?? 0,
+        top: popupPosition?.top ?? 0,
+        visibility: popupPosition ? "visible" : "hidden",
+      }}
+      className="pointer-events-none fixed z-[90] grid w-[19.5rem] max-w-[calc(100vw-1rem)] gap-2 rounded-[8px] border border-line-soft bg-panel px-2.5 py-2 text-left font-sans text-[11px] font-semibold leading-4 text-ink shadow-panel"
+      data-testid="graph-parameter-activity-popover"
+    >
+      <span className="text-ink">Parameter activity</span>
+      {activityChannels(activity).map(({ key, label, shortLabel, channel }) => {
+        const counts = runCounts(channel);
+
+        return (
+          <span key={key} className="grid gap-1">
+            <span className="flex min-w-0 items-center gap-1.5">
+              <span
+                className={cn(
+                  "inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-[6px] border px-1.5 font-mono text-[10px] font-bold leading-none",
+                  graphParameterActivityStatusClassNames[channel.status],
+                )}
+              >
+                {shortLabel}
+              </span>
+              <span className="text-ink">{label}</span>
+              <span className="font-mono text-ink-faint">{channel.status}</span>
+            </span>
             <span className="text-ink-dim">{statusCopy[channel.status]}</span>
             <span className="font-mono text-ink-faint">{channel.sourceLabel}</span>
             <span className="font-mono text-ink-faint">
@@ -152,32 +240,11 @@ function ParameterIndicator({
               {channel.observedPoints}
             </span>
             {counts && <span className="font-mono text-ink-faint">{counts}</span>}
-          </span>,
-          document.body,
-        )
-      : null;
-
-  return (
-    <span
-      ref={indicatorRef}
-      role="img"
-      aria-label={accessibleLabel}
-      tabIndex={0}
-      onBlur={() => setTooltipVisible(false)}
-      onClick={stopPropagation}
-      onFocus={() => setTooltipVisible(true)}
-      onKeyDown={stopPropagation}
-      onMouseDown={stopPropagation}
-      onMouseEnter={() => setTooltipVisible(true)}
-      onMouseLeave={() => setTooltipVisible(false)}
-      className={cn(
-        "nodrag nopan relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] border transition focus:outline-none focus-visible:ring-2 focus-visible:ring-focus",
-        statusClassNames[channel.status],
-      )}
-    >
-      {icon}
-      {tooltip}
-    </span>
+          </span>
+        );
+      })}
+    </div>,
+    document.body,
   );
 }
 
@@ -186,24 +253,80 @@ export function GraphParameterIndicators({
 }: {
   activity?: GraphParameterActivity;
 }) {
+  const triggerRef = useRef<HTMLSpanElement>(null);
+  const popupId = useId();
+  const [isPopupOpen, setIsPopupOpen] = useState(false);
+
   if (!activity) {
     return null;
   }
 
+  const stopActivityPropagation = (
+    event:
+      | FocusEvent<HTMLSpanElement>
+      | KeyboardEvent<HTMLSpanElement>
+      | MouseEvent<HTMLSpanElement>,
+  ) => {
+    event.stopPropagation();
+  };
+  const openPopup = () => setIsPopupOpen(true);
+  const closePopup = () => setIsPopupOpen(false);
+  const handleClick = (event: MouseEvent<HTMLSpanElement>) => {
+    stopActivityPropagation(event);
+    openPopup();
+  };
+  const handleFocus = (event: FocusEvent<HTMLSpanElement>) => {
+    stopActivityPropagation(event);
+    openPopup();
+  };
+  const handleBlur = (event: FocusEvent<HTMLSpanElement>) => {
+    stopActivityPropagation(event);
+    closePopup();
+  };
+  const handleMouseLeave = (event: MouseEvent<HTMLSpanElement>) => {
+    stopActivityPropagation(event);
+    closePopup();
+  };
+  const handleKeyDown = (event: KeyboardEvent<HTMLSpanElement>) => {
+    stopActivityPropagation(event);
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closePopup();
+      return;
+    }
+
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      openPopup();
+    }
+  };
+
   return (
-    <span className="flex shrink-0 items-center gap-1" data-testid="graph-parameter-indicators">
-      <ParameterIndicator
-        label="Weights"
-        channel={activity.weights}
-        icon={<Weight className="h-3.5 w-3.5" aria-hidden />}
+    <>
+      <span
+        ref={triggerRef}
+        role="button"
+        aria-describedby={isPopupOpen ? popupId : undefined}
+        aria-label={`Parameter activity: ${parameterActivityLabel(activity)}`}
+        tabIndex={0}
+        data-testid="graph-parameter-indicators"
+        onBlur={handleBlur}
+        onClick={handleClick}
+        onFocus={handleFocus}
+        onKeyDown={handleKeyDown}
+        onMouseDown={stopActivityPropagation}
+        onMouseLeave={handleMouseLeave}
+        className="nodrag nopan inline-flex shrink-0 cursor-help items-center gap-1 whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+      >
+        <GraphParameterActivityIcons activity={activity} />
+      </span>
+      <GraphParameterActivityPopover
+        activity={activity}
+        anchorRef={triggerRef}
+        id={popupId}
+        open={isPopupOpen}
       />
-      {activity.bias && (
-        <ParameterIndicator
-          label="Bias"
-          channel={activity.bias}
-          icon={<CircleDot className="h-3.5 w-3.5" aria-hidden />}
-        />
-      )}
-    </span>
+    </>
   );
 }

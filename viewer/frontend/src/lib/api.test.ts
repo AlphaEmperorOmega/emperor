@@ -684,6 +684,7 @@ const successfulLogRunFixture = {
   version: "version_0",
   relativePath: "viewer-training/linear/baseline/Mnist/run-0001/version_0",
   hasResult: true,
+  hasLayerMonitorData: true,
   eventFileCount: 2,
   checkpointCount: 1,
   hasHparams: true,
@@ -773,6 +774,7 @@ const successfulLogTagsResponse = {
       histogramTags: ["weights/classifier"],
       imageTags: ["activations/classifier"],
       textTags: ["validation/examples/predictions/text_summary"],
+      hasLayerMonitorData: true,
     },
   ],
 };
@@ -1152,6 +1154,7 @@ describe("successful API fixtures", () => {
 
     expect(result.hasMore).toBe(false);
     expect(result.runs[0].experiment).toBe("viewer-training");
+    expect(result.runs[0].hasLayerMonitorData).toBe(true);
   });
 
   it("accepts a log experiments response fixture", async () => {
@@ -1204,6 +1207,7 @@ describe("successful API fixtures", () => {
     );
 
     expect(result.runs[0].histogramTags).toEqual(["weights/classifier"]);
+    expect(result.runs[0].hasLayerMonitorData).toBe(true);
   });
 
   it("accepts a log scalars response fixture", async () => {
@@ -1989,6 +1993,7 @@ describe("URL and query construction", () => {
                 version: "version_0",
                 relativePath: "linear/BASELINE/Mnist/aaa_20260601_010203/version_0",
                 hasResult: false,
+                hasLayerMonitorData: null,
                 eventFileCount: 1,
                 checkpointCount: 0,
                 hasHparams: true,
@@ -2013,6 +2018,7 @@ describe("URL and query construction", () => {
       experiment: "linear",
       dataset: "Mnist",
       hasResult: false,
+      hasLayerMonitorData: null,
     });
   });
 

@@ -1,6 +1,6 @@
 import { type GraphNode } from "@/lib/api";
 import { isRecord } from "@/lib/graph/helpers";
-import { type NodeDetailEntry } from "@/lib/graph/format/text";
+import { nodeDimsText, type NodeDetailEntry } from "@/lib/graph/format/text";
 
 const PREVIEW_ONLY_DETAIL_KEYS = new Set([
   "weightShape",
@@ -73,6 +73,21 @@ export function parameterShapeEntries(details: GraphNode["details"]) {
     const shape = shapeText(details[key]);
     return shape ? [{ key, label, shape }] : [];
   });
+}
+
+export function parameterShapeDimsText(
+  details: GraphNode["details"],
+  config?: GraphNode["config"],
+  visibleDimsTexts: Array<string | null | undefined> = [],
+) {
+  const dimsText = nodeDimsText(details, config);
+  if (!dimsText) {
+    return undefined;
+  }
+
+  return visibleDimsTexts.some((visibleDimsText) => visibleDimsText === dimsText)
+    ? undefined
+    : dimsText;
 }
 
 export function nodeDetailEntries(

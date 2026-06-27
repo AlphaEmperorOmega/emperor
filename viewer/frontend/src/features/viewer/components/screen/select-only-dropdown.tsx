@@ -427,6 +427,9 @@ export function SelectOnlyDropdown({
                 const isActive = index === activeIndex;
                 const isSelected = option.value === value;
                 const isOptionDisabled = Boolean(option.disabled);
+                const descriptionId = option.description
+                  ? `${listboxId}-option-${index}-description`
+                  : undefined;
                 return (
                   <button
                     ref={(node) => {
@@ -436,8 +439,10 @@ export function SelectOnlyDropdown({
                     id={`${listboxId}-option-${index}`}
                     type="button"
                     role="option"
+                    aria-label={option.label}
                     aria-selected={isSelected}
                     aria-disabled={isOptionDisabled || undefined}
+                    aria-describedby={descriptionId}
                     tabIndex={-1}
                     onMouseDown={(event) => event.preventDefault()}
                     onMouseEnter={() => setActiveIndex(index)}
@@ -456,7 +461,10 @@ export function SelectOnlyDropdown({
                     <span className="grid min-w-0 gap-0.5">
                       <span className="block min-w-0 truncate">{option.label}</span>
                       {option.description && (
-                        <span className="block min-w-0 truncate font-mono text-xs text-ink-dim">
+                        <span
+                          id={descriptionId}
+                          className="block min-w-0 truncate font-mono text-xs text-ink-dim"
+                        >
                           {option.description}
                         </span>
                       )}

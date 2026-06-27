@@ -55,6 +55,7 @@ function childSummary(
         ? { dims: parentLayerInnerModelDims ?? childDims }
         : {}),
       kind: "child",
+      sourceNodeId: child.id,
     };
   }
 
@@ -68,6 +69,7 @@ function childSummary(
       ...(childDims ? { dims: childDims } : {}),
       kind: "child",
       stackKind: "layer",
+      sourceNodeId: child.id,
     };
   }
 
@@ -77,6 +79,7 @@ function childSummary(
     ...(childDims ? { dims: childDims } : {}),
     kind: "child",
     stackKind: "layer",
+    sourceNodeId: child.id,
   };
 }
 
@@ -88,6 +91,8 @@ function collapseLayerStackSummaries(childSummaries: ChildSummary[]) {
 
   let emittedLayerCount = 0;
   let insertedOverflow = false;
+  const hiddenLayerCount =
+    layerSummaries.length - LAYER_STACK_VISIBLE_BEFORE_OVERFLOW - 1;
 
   return childSummaries.flatMap((summary) => {
     if (summary.stackKind !== "layer") {
@@ -96,6 +101,10 @@ function collapseLayerStackSummaries(childSummaries: ChildSummary[]) {
 
     emittedLayerCount += 1;
     if (emittedLayerCount <= LAYER_STACK_VISIBLE_BEFORE_OVERFLOW) {
+      return [summary];
+    }
+
+    if (emittedLayerCount === layerSummaries.length) {
       return [summary];
     }
 
@@ -108,12 +117,7 @@ function collapseLayerStackSummaries(childSummaries: ChildSummary[]) {
       {
         label: "...",
         kind: "overflow" as const,
-        title: `${layerSummaries.length - LAYER_STACK_VISIBLE_BEFORE_OVERFLOW} more layers`,
-      },
-      {
-        label: `${layerSummaries.length} layers`,
-        kind: "child" as const,
-        title: `${layerSummaries.length} layers total`,
+        title: `${hiddenLayerCount} more layer${hiddenLayerCount === 1 ? "" : "s"}`,
       },
     ];
   });

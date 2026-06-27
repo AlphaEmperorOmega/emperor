@@ -62,6 +62,10 @@ export function useGraphViewState(
     () => buildChildSummaries(graphForDetail, graphNavigation),
     [graphForDetail, graphNavigation],
   );
+  const childSummarySourceNodesById = useMemo(
+    () => new Map((graphForDetail?.nodes ?? []).map((node) => [node.id, node])),
+    [graphForDetail],
+  );
   const expertDiagramsById = useMemo(
     () => buildExpertDiagrams(graphForDetail, graphNavigation),
     [graphForDetail, graphNavigation],
@@ -270,6 +274,7 @@ export function useGraphViewState(
       graphDetailMode,
       navigation: graphNavigation,
       childSummariesById,
+      childSummarySourceNodesById,
       expertDiagramsById,
       stackDiagramsById,
       clusterDiagramsById,
@@ -299,6 +304,7 @@ export function useGraphViewState(
     openGraphNodeMonitor,
     onOpenMonitor,
     childSummariesById,
+    childSummarySourceNodesById,
     clusterDiagramsById,
     expertDiagramsById,
     stackDiagramsById,

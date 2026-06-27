@@ -38,8 +38,6 @@ type TrainingRequestStateInput = {
   searchAxes: SearchAxis[];
   searchLoading: boolean;
   trainingEnabled: boolean;
-  trainingLockedByHistoricalSelection: boolean;
-  historicalTrainingLockExperiment: string;
   logFolder: string;
 };
 
@@ -57,8 +55,6 @@ export function useTrainingRequestState({
   searchAxes,
   searchLoading,
   trainingEnabled,
-  trainingLockedByHistoricalSelection,
-  historicalTrainingLockExperiment,
   logFolder,
 }: TrainingRequestStateInput) {
   const configFields = useMemo(
@@ -117,13 +113,7 @@ export function useTrainingRequestState({
   );
   const selectedTrainingPresetCount = selectedTrainingPresets.length;
   const activeSearchAxisCount = selectedSearchAxisCount(effectiveTrainingSearch);
-  const canRequestTraining =
-    trainingEnabled && !trainingLockedByHistoricalSelection;
-  const historicalTrainingLockMessage = trainingLockedByHistoricalSelection
-    ? historicalTrainingLockExperiment
-      ? `Cannot perform training while experiment ${historicalTrainingLockExperiment} is selected.`
-      : "Cannot perform training while a historical experiment is selected."
-    : "";
+  const canRequestTraining = trainingEnabled;
   const searchPayload = useMemo(
     () =>
       hasActiveConfigSnapshots
@@ -209,7 +199,6 @@ export function useTrainingRequestState({
     selectedTrainingPresetCount,
     activeSearchAxisCount,
     canRequestTraining,
-    historicalTrainingLockMessage,
     searchPayload,
     snapshotRunPlan,
     plannedRunCount,

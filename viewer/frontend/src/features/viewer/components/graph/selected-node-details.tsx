@@ -1,20 +1,10 @@
 import { useState } from "react";
-import dynamic from "next/dynamic";
 import { SelectedNodeDetailsView } from "@/features/viewer/components/graph/selected-node-details-view";
+import { MonitorChartsModal } from "@/features/viewer/components/monitor/monitor-charts-modal";
 import { InlineStatus } from "@/features/viewer/components/shared/inline-status";
 import { type GraphNode, type LogRun, type TrainingJob } from "@/lib/api";
 import { type LinearMonitorComparisonCandidateGroups } from "@/lib/graph/monitor-targets";
 import { type MonitorChartsSource } from "@/types/monitor";
-
-// Lazy-loaded so the monitor charts modal and its inline SVG charts ship in a
-// separate chunk that only downloads when a node's charts are opened.
-const MonitorChartsModal = dynamic(
-  () =>
-    import("@/features/viewer/components/monitor/monitor-charts-modal").then(
-      (module) => module.MonitorChartsModal,
-    ),
-  { ssr: false },
-);
 
 export function SelectedNodeDetails({
   node,

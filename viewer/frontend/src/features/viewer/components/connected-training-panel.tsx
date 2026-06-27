@@ -2,7 +2,6 @@ import { TrainingPanel } from "@/features/viewer/components/training-panel";
 import {
   useActiveTrainingJob,
   useActiveTrainingJobProgressState,
-  useHistoricalRuns,
   useTargetConfig,
 } from "@/features/viewer/providers/viewer-providers";
 import {
@@ -20,7 +19,6 @@ export function ConnectedTrainingWorkspace({
   const target = useTargetConfig();
   const activeJob = useActiveTrainingJob();
   const activeJobProgress = useActiveTrainingJobProgressState();
-  const history = useHistoricalRuns();
   const viewModel = useTrainingPanelViewModel({
     models: target.models,
     presets: target.trainingPresets,
@@ -43,8 +41,6 @@ export function ConnectedTrainingWorkspace({
     searchLoading: target.searchAxesLoading,
     trainingSearch: target.trainingSearch,
     trainingEnabled: target.capabilities.trainingEnabled,
-    trainingLockedByHistoricalSelection: history.selectedLogRunId !== null,
-    historicalTrainingLockExperiment: history.selectedHistoricalExperiment,
     canOpenFullConfig: Boolean(
       target.selectedTrainingModel &&
         target.selectedTrainingPrimaryPreset &&

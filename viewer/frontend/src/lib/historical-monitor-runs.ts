@@ -7,10 +7,14 @@ import {
 
 export const HISTORICAL_MONITOR_RUN_LIMIT = 5;
 
+export type MonitorEligibility = "checking" | "eligible" | "ineligible";
+
 export type HistoricalRunOption = {
   value: string;
   label: string;
   count: number;
+  monitorEligibility: MonitorEligibility;
+  description?: string;
 };
 
 export type HistoricalExperimentRunGroup = {
@@ -63,44 +67,121 @@ export function groupModelLogRunsByExperiment(
   }));
 }
 
-export function historicalExperimentRunOptions(runs: LogRun[]): HistoricalRunOption[] {
+export function monitorEligibilityDescription(
+  monitorEligibility: MonitorEligibility,
+) {
+  if (monitorEligibility === "eligible") {
+    return "monitor data";
+  }
+  if (monitorEligibility === "ineligible") {
+    return "no monitor data";
+  }
+  return "monitor checking";
+}
+
+export function runMonitorEligibility(run: LogRun): MonitorEligibility {
+  if (run.hasLayerMonitorData === true) {
+    return "eligible";
+  }
+  if (run.hasLayerMonitorData === false) {
+    return "ineligible";
+  }
+  return "checking";
+}
+
+export function aggregateMonitorEligibility(
+  runs: LogRun[],
+  getRunEligibility: (run: LogRun) => MonitorEligibility = runMonitorEligibility,
+): MonitorEligibility {
+  let hasCheckingRun = false;
+  for (const run of runs) {
+    const eligibility = getRunEligibility(run);
+    if (eligibility === "eligible") {
+      return "eligible";
+    }
+    if (eligibility === "checking") {
+      hasCheckingRun = true;
+    }
+  }
+  return hasCheckingRun ? "checking" : "ineligible";
+}
+
+function historicalRunOption(
+  value: string,
+  count: number,
+  runs: LogRun[],
+  getRunEligibility: (run: LogRun) => MonitorEligibility,
+): HistoricalRunOption {
+  const monitorEligibility = aggregateMonitorEligibility(runs, getRunEligibility);
+  return {
+    value,
+    label: value,
+    count,
+    monitorEligibility,
+    description: monitorEligibilityDescription(monitorEligibility),
+  };
+}
+
+export function historicalExperimentRunOptions(
+  runs: LogRun[],
+  getRunEligibility: (run: LogRun) => MonitorEligibility = runMonitorEligibility,
+): HistoricalRunOption[] {
   return groupModelLogRunsByExperiment(runs).map((group) => ({
-    value: group.experiment,
-    label: group.experiment,
-    count: group.runs.length,
+    ...historicalRunOption(
+      group.experiment,
+      group.runs.length,
+      group.runs,
+      getRunEligibility,
+    ),
   }));
 }
 
 export function historicalDatasetOptions(
   runs: LogRun[],
   selectedExperiment: string,
+  getRunEligibility: (run: LogRun) => MonitorEligibility = runMonitorEligibility,
 ): HistoricalRunOption[] {
-  const counts = new Map<string, number>();
+  const runsByDataset = new Map<string, LogRun[]>();
   const experimentRuns = sortLogRunsNewestFirst(
     runs.filter((run) => run.experiment === selectedExperiment),
   );
 
   for (const run of experimentRuns) {
-    counts.set(run.dataset, (counts.get(run.dataset) ?? 0) + 1);
+    runsByDataset.set(run.dataset, [
+      ...(runsByDataset.get(run.dataset) ?? []),
+      run,
+    ]);
   }
 
-  return Array.from(counts, ([dataset, count]) => ({
-    value: dataset,
-    label: dataset,
-    count,
-  }));
+  return Array.from(runsByDataset, ([dataset, datasetRuns]) =>
+    historicalRunOption(
+      dataset,
+      datasetRuns.length,
+      datasetRuns,
+      getRunEligibility,
+    ),
+  );
 }
 
-export function historicalPresetOptions(runs: LogRun[]): HistoricalRunOption[] {
-  const counts = new Map<string, number>();
+export function historicalPresetOptions(
+  runs: LogRun[],
+  getRunEligibility: (run: LogRun) => MonitorEligibility = runMonitorEligibility,
+): HistoricalRunOption[] {
+  const runsByPreset = new Map<string, LogRun[]>();
   for (const run of sortLogRunsNewestFirst(runs)) {
-    counts.set(run.preset, (counts.get(run.preset) ?? 0) + 1);
+    runsByPreset.set(run.preset, [
+      ...(runsByPreset.get(run.preset) ?? []),
+      run,
+    ]);
   }
-  return Array.from(counts, ([preset, count]) => ({
-    value: preset,
-    label: preset,
-    count,
-  }));
+  return Array.from(runsByPreset, ([preset, presetRuns]) =>
+    historicalRunOption(
+      preset,
+      presetRuns.length,
+      presetRuns,
+      getRunEligibility,
+    ),
+  );
 }
 
 export function resolveRunPresetName(

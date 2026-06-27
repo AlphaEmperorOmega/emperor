@@ -19,6 +19,7 @@ type TargetMode = "preset" | "snapshot" | "experiment";
 type SelectOption = {
   value: string;
   label: string;
+  description?: string;
 };
 
 const fieldIconClassName = "h-[15px] w-[15px] text-violet";

@@ -1,7 +1,7 @@
-import { type HTMLAttributes, type ReactNode } from "react";
+import { type HTMLAttributes, type ReactNode, type Ref } from "react";
 import { cn } from "@/lib/utils";
 
-type GraphChipTone = "default" | "violet" | "success" | "warning";
+type GraphChipTone = "default" | "violet" | "success" | "warning" | "none";
 
 export type GraphChipProps = Omit<
   HTMLAttributes<HTMLSpanElement>,
@@ -12,6 +12,7 @@ export type GraphChipProps = Omit<
   title?: string;
   children: ReactNode;
   className?: string;
+  elementRef?: Ref<HTMLSpanElement>;
 };
 
 const graphChipToneClassNames: Readonly<Record<GraphChipTone, string>> = {
@@ -20,6 +21,7 @@ const graphChipToneClassNames: Readonly<Record<GraphChipTone, string>> = {
     "border-violet/30 bg-violet/15 text-violet-text shadow-[inset_0_-1px_0_rgba(146,113,255,0.24)]",
   success: "border-ok/30 bg-ok/10 text-ok",
   warning: "border-amber/40 bg-amber/[0.12] text-amber",
+  none: "",
 };
 
 export function GraphChip({
@@ -28,10 +30,12 @@ export function GraphChip({
   title,
   children,
   className,
+  elementRef,
   ...props
 }: GraphChipProps) {
   return (
     <span
+      ref={elementRef}
       title={title}
       className={cn(
         "border",

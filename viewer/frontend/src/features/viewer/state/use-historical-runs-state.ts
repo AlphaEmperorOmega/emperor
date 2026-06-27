@@ -57,10 +57,13 @@ type HistoricalRunsProviderSlice = {
   selectedHistoricalDataset: string;
   selectedHistoricalRunPreset: string;
   selectedLogRunId: string | null;
+  selectedLogRun?: LogRun;
   selectLogRun: (runId: string) => void;
   logRunTagsLoading: boolean;
   experimentsLoading: boolean;
   experimentsError: Error | null;
+  selectedLogRunMonitorEligibility:
+    ReturnType<typeof deriveDatasetSelectionState>["selectedLogRunMonitorEligibility"];
 };
 
 type HistoricalRunsGraphPreviewState = {
@@ -235,21 +238,16 @@ export function useHistoricalRunsState({
     historicalMonitorRuns,
     filteredHistoricalRunIds,
     selectedLogRun,
+    selectedLogRunMonitorEligibility,
   } = datasetSelectionState;
   const logRunTagsQuery = useLogTagsQuery({
     runIds: filteredHistoricalRunIds,
     enabled: tagsEnabled && filteredHistoricalRunIds.length > 0,
     queryKey: logQueryKeys.filteredHistoricalRunTags(filteredHistoricalRunIds),
   });
-  const modelRunTagsLoading =
-    tagsEnabled && modelRunTagsQuery.isLoading && !modelRunTagsQuery.data;
-
   useEffect(() => {
     if (!selectedModel) {
       setSelectedHistoricalExperimentFilter("");
-      return;
-    }
-    if (modelRunTagsLoading) {
       return;
     }
     if (
@@ -262,7 +260,6 @@ export function useHistoricalRunsState({
     }
   }, [
     historicalExperimentOptions,
-    modelRunTagsLoading,
     selectedHistoricalExperimentFilter,
     selectedModel,
     setSelectedHistoricalExperimentFilter,
@@ -271,9 +268,6 @@ export function useHistoricalRunsState({
   useEffect(() => {
     if (!selectedHistoricalExperimentFilter) {
       setSelectedHistoricalDatasetFilter("");
-      return;
-    }
-    if (modelRunTagsLoading) {
       return;
     }
     if (
@@ -286,7 +280,6 @@ export function useHistoricalRunsState({
     }
   }, [
     historicalDatasetOptions,
-    modelRunTagsLoading,
     selectedHistoricalDatasetFilter,
     selectedHistoricalExperimentFilter,
     setSelectedHistoricalDatasetFilter,
@@ -295,9 +288,6 @@ export function useHistoricalRunsState({
   useEffect(() => {
     if (!selectedHistoricalExperimentFilter || !selectedHistoricalDatasetFilter) {
       setSelectedHistoricalPreset("");
-      return;
-    }
-    if (modelRunTagsLoading) {
       return;
     }
     if (
@@ -310,7 +300,6 @@ export function useHistoricalRunsState({
     }
   }, [
     historicalPresetOptions,
-    modelRunTagsLoading,
     selectedHistoricalDatasetFilter,
     selectedHistoricalExperimentFilter,
     selectedHistoricalPreset,
@@ -325,9 +314,6 @@ export function useHistoricalRunsState({
     if (logRunsQuery.isLoading && !logRunsQuery.data) {
       return;
     }
-    if (modelRunTagsLoading) {
-      return;
-    }
     setSelectedLogRunId((current) =>
       current && selectedLogRun?.id === current
         ? current
@@ -336,7 +322,6 @@ export function useHistoricalRunsState({
   }, [
     logRunsQuery.data,
     logRunsQuery.isLoading,
-    modelRunTagsLoading,
     selectedModel,
     selectedLogRun,
     setSelectedLogRunId,
@@ -351,9 +336,6 @@ export function useHistoricalRunsState({
     ) {
       return;
     }
-    if (modelRunTagsLoading) {
-      return;
-    }
     const resolvedRun = visibleHistoricalRuns[0];
     setSelectedLogRunId((current) =>
       current === (resolvedRun?.id ?? null) ? current : resolvedRun?.id ?? null,
@@ -363,7 +345,6 @@ export function useHistoricalRunsState({
     selectedHistoricalExperimentFilter,
     selectedHistoricalPreset,
     selectedModel,
-    modelRunTagsLoading,
     setSelectedLogRunId,
     visibleHistoricalRuns,
   ]);
@@ -398,11 +379,12 @@ export function useHistoricalRunsState({
       selectedHistoricalDataset,
       selectedHistoricalRunPreset,
       selectedLogRunId,
+      selectedLogRun,
       selectLogRun,
       logRunTagsLoading: logRunTagsQuery.isLoading,
-      experimentsLoading:
-        logRunsQuery.isLoading || (tagsEnabled && modelRunTagsQuery.isLoading),
-      experimentsError: logRunsQuery.error ?? (tagsEnabled ? modelRunTagsQuery.error : null),
+      experimentsLoading: logRunsQuery.isLoading,
+      experimentsError: logRunsQuery.error,
+      selectedLogRunMonitorEligibility,
     }),
     [
       historicalMonitorRuns,
@@ -412,8 +394,6 @@ export function useHistoricalRunsState({
       logRunTagsQuery.isLoading,
       logRunsQuery.error,
       logRunsQuery.isLoading,
-      modelRunTagsQuery.error,
-      modelRunTagsQuery.isLoading,
       selectLogRun,
       selectedHistoricalDatasetFilter,
       selectedHistoricalDataset,
@@ -421,11 +401,12 @@ export function useHistoricalRunsState({
       selectedHistoricalExperiment,
       selectedHistoricalPreset,
       selectedHistoricalRunPreset,
+      selectedLogRun,
       selectedLogRunId,
+      selectedLogRunMonitorEligibility,
       setSelectedHistoricalDatasetFilter,
       setSelectedHistoricalExperimentFilter,
       setSelectedHistoricalPreset,
-      tagsEnabled,
       visibleHistoricalRuns,
     ],
   );

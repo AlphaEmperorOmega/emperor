@@ -79,6 +79,19 @@ describe("ViewerApp Monitor Charts And Errors", () => {
     };
   }
 
+  async function openModelWorkspace(user: ReturnType<typeof userEvent.setup>) {
+    const workspaceNav = await screen.findByRole("navigation", {
+      name: "Workspace",
+    });
+    const modelWorkspaceButton = within(workspaceNav).getByRole("button", {
+      name: /^model\b/i,
+    });
+    await user.click(modelWorkspaceButton);
+    await waitFor(() => {
+      expect(modelWorkspaceButton).toHaveAttribute("aria-current", "page");
+    });
+  }
+
   it("opens selected-node monitor charts for the active training job", async () => {
     const { monitorDataRequests } = installFetchMock();
     renderViewer();
@@ -90,6 +103,7 @@ describe("ViewerApp Monitor Charts And Errors", () => {
     await selectTrainingMonitorOption(user, /Linear layers/i);
     await selectNewTrainingLogFolder(user, "monitor_charts");
     await user.click(screen.getByRole("button", { name: /start training/i }));
+    await openModelWorkspace(user);
 
     await waitFor(() =>
       expect(screen.getByRole("button", { name: /^monitor charts$/i })).toBeEnabled(),
@@ -135,6 +149,7 @@ describe("ViewerApp Monitor Charts And Errors", () => {
     await selectTrainingMonitorOption(user, /Linear layers/i);
     await selectNewTrainingLogFolder(user, "semantic_monitor_charts");
     await user.click(screen.getByRole("button", { name: /start training/i }));
+    await openModelWorkspace(user);
 
     await waitFor(() =>
       expect(screen.getByRole("button", { name: /^monitor charts$/i })).toBeEnabled(),
@@ -233,6 +248,7 @@ describe("ViewerApp Monitor Charts And Errors", () => {
     await selectTrainingMonitorOption(user, /Linear layers/i);
     await selectNewTrainingLogFolder(user, "monitor_compare");
     await user.click(screen.getByRole("button", { name: /start training/i }));
+    await openModelWorkspace(user);
 
     await waitFor(() =>
       expect(screen.getByRole("button", { name: /^monitor charts$/i })).toBeEnabled(),
@@ -287,6 +303,7 @@ describe("ViewerApp Monitor Charts And Errors", () => {
     await selectTrainingMonitorOption(user, /Linear layers/i);
     await selectNewTrainingLogFolder(user, "monitor_scope_select");
     await user.click(screen.getByRole("button", { name: /start training/i }));
+    await openModelWorkspace(user);
 
     await waitFor(() =>
       expect(screen.getByRole("button", { name: /^monitor charts$/i })).toBeEnabled(),
@@ -370,6 +387,7 @@ describe("ViewerApp Monitor Charts And Errors", () => {
     await selectTrainingMonitorOption(user, /Linear layers/i);
     await selectNewTrainingLogFolder(user, "graph_card_monitor");
     await user.click(screen.getByRole("button", { name: /start training/i }));
+    await openModelWorkspace(user);
 
     await user.click(
       await screen.findByRole("button", {
@@ -406,6 +424,7 @@ describe("ViewerApp Monitor Charts And Errors", () => {
     await selectTrainingMonitorOption(user, /Linear layers/i);
     await selectNewTrainingLogFolder(user, "input_output_monitor_scope");
     await user.click(screen.getByRole("button", { name: /start training/i }));
+    await openModelWorkspace(user);
 
     await user.click(
       await screen.findByRole("button", {
@@ -451,10 +470,11 @@ describe("ViewerApp Monitor Charts And Errors", () => {
     await selectTrainingMonitorOption(user, /Sampler usage/i);
     await selectNewTrainingLogFolder(user, "sampler_only_monitor");
     await user.click(screen.getByRole("button", { name: /start training/i }));
+    await openModelWorkspace(user);
 
     await waitFor(() => {
       expect(
-        screen.getByRole("button", { name: /training (running|completed) mnist/i }),
+        screen.getByRole("button", { name: /training (running|completed)/i }),
       ).toBeInTheDocument();
     });
     expect(
@@ -566,6 +586,92 @@ describe("ViewerApp Monitor Charts And Errors", () => {
     expect(
       await screen.findByLabelText("Bias parameter activity: unchanged"),
     ).toBeInTheDocument();
+  });
+
+  it("opens a selected-run parameter activity minimap from the graph controls", async () => {
+    const fixture = buildHistoricalMonitorFixture(1);
+    installFetchMock({
+      ...fixture,
+      inspectResponse: parameterShapeInspectResponse,
+      logParameterStatusResponse: ({ runIds }) => ({
+        runs: runIds.map((runId) => ({
+          sourceId: runId,
+          preset: "BASELINE",
+          dataset: "Mnist",
+          logDir: `logs/${runId}`,
+          nodes: [
+            {
+              nodePath: "main_model.0.model",
+              weights: {
+                status: "updated",
+                metric: "main_model.0.model/weights/relative_delta_norm",
+                lastStep: 12,
+                observedPoints: 2,
+              },
+              bias: {
+                status: "unchanged",
+                metric: "main_model.0.model/bias/delta_norm",
+                lastStep: 12,
+                observedPoints: 1,
+              },
+            },
+          ],
+        })),
+      }),
+    });
+    renderViewer();
+    const user = userEvent.setup();
+
+    await selectExperimentRun(
+      user,
+      "monitor_exp · BASELINE · Mnist · 2026-06-01 01:00:00",
+    );
+
+    const minimapButton = await screen.findByRole("button", {
+      name: /open parameter activity minimap/i,
+    });
+    await waitFor(() => expect(minimapButton).toBeEnabled());
+    await user.click(minimapButton);
+
+    const minimapDialog = await screen.findByRole("dialog", {
+      name: /parameter activity/i,
+    });
+    expect(within(minimapDialog).getByRole("heading", {
+      name: /parameter activity/i,
+    })).toBeInTheDocument();
+    expect(within(minimapDialog).queryByText("main_model.0.model"))
+      .not.toBeInTheDocument();
+
+    await user.click(within(minimapDialog).getByRole("button", {
+      name: /^expand all$/i,
+    }));
+
+    const parameterNode = await within(minimapDialog).findByTestId(
+      "parameter-activity-minimap-node-main_model.0.model",
+    );
+    expect(within(parameterNode).getByLabelText(/weights updated/i))
+      .toHaveTextContent("W");
+    expect(within(parameterNode).getByLabelText(/bias unchanged/i))
+      .toHaveTextContent("b");
+
+    await user.click(
+      within(parameterNode).getByRole("button", {
+        name: /open monitor charts for main_model\.0\.model/i,
+      }),
+    );
+    const monitorDialog = await screen.findByRole("dialog", {
+      name: /monitor charts/i,
+    });
+    expect(monitorDialog).toBeInTheDocument();
+
+    await user.click(
+      within(monitorDialog).getByRole("button", {
+        name: /^close monitor charts$/i,
+      }),
+    );
+    expect(await screen.findByRole("dialog", {
+      name: /parameter activity/i,
+    })).toBeInTheDocument();
   });
 
   it("shows a monitor path mismatch when historical status cannot attach to the graph", async () => {
@@ -781,9 +887,9 @@ describe("ViewerApp Monitor Charts And Errors", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("keeps performance-only historical runs from enabling graph monitor charts", async () => {
+  it("keeps performance-only historical runs selectable without graph activity", async () => {
     const fixture = buildHistoricalMonitorFixture(1);
-    installFetchMock({
+    const { fetchMock } = installFetchMock({
       ...fixture,
       logTagsByRun: {
         "historical-01": {
@@ -797,23 +903,24 @@ describe("ViewerApp Monitor Charts And Errors", () => {
     renderViewer();
     const user = userEvent.setup();
 
-    const experimentsTab = await screen.findByRole("radio", { name: "Experiments" });
-    await waitFor(() => expect(experimentsTab).not.toBeDisabled());
-    await user.click(experimentsTab);
-    const experimentControl = await screen.findByRole("combobox", {
-      name: "Experiment",
-    });
-    await waitFor(() => expect(experimentControl).toBeDisabled());
-    expect(screen.getByRole("combobox", { name: "Dataset" })).toBeDisabled();
-    expect(screen.getByRole("combobox", { name: "Preset" })).toBeDisabled();
+    await selectExperimentRun(
+      user,
+      "monitor_exp · BASELINE · Mnist · 2026-06-01 01:00:00",
+    );
 
     expect(
-      screen.queryByRole("button", { name: /^monitor charts$/i }),
-    ).not.toBeInTheDocument();
+      await screen.findByText("No monitor data for graph activity"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^monitor charts$/i })).toBeDisabled();
     expect(
       screen.queryByLabelText(/Weights parameter activity:/i),
     ).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/Bias parameter activity:/i)).not.toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(([url]) =>
+        String(url).endsWith("/logs/parameter-status"),
+      ),
+    ).toBe(false);
   });
 
   it("renders available historical monitor charts while later runs are still loading", async () => {
@@ -932,6 +1039,7 @@ describe("ViewerApp Monitor Charts And Errors", () => {
     await selectTrainingMonitorOption(user, /Linear layers/i);
     await selectNewTrainingLogFolder(user, "active_precedence");
     await user.click(screen.getByRole("button", { name: /start training/i }));
+    await openModelWorkspace(user);
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /^monitor charts$/i })).toBeEnabled();

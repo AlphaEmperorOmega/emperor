@@ -5,6 +5,7 @@ import {
   GraphNodeRenderModeProvider,
   nodeTypes,
 } from "@/features/viewer/components/graph/graph-node-view";
+import { graphParameterActivityStatusClassNames } from "@/features/viewer/components/graph/graph-parameter-indicators";
 import { SelectedNodeDetails } from "@/features/viewer/components/graph/selected-node-details";
 import type { GraphNode } from "@/lib/api";
 import type { ViewerNodeData } from "@/lib/graph";
@@ -322,7 +323,7 @@ describe("GraphNodeView", () => {
       .not.toBeInTheDocument();
   });
 
-  it("renders graph controls in the footer action bar order", () => {
+  it("renders graph controls in the footer action bar order without parameter activity", () => {
     renderGraphNode({
       details: { activation: "GELU" },
       canOpenMonitor: true,
@@ -360,7 +361,6 @@ describe("GraphNodeView", () => {
       name: /^open component info for main_model\.0$/i,
     });
     const footerStats = within(actionBar).getByTestId("graph-node-footer-stats-main_model.0");
-    const indicators = within(actionBar).getByTestId("graph-parameter-indicators");
 
     expect(detailsButton.compareDocumentPosition(expandButton) & Node.DOCUMENT_POSITION_FOLLOWING)
       .toBeTruthy();
@@ -368,10 +368,10 @@ describe("GraphNodeView", () => {
       .toBeTruthy();
     expect(infoButton.compareDocumentPosition(footerStats) & Node.DOCUMENT_POSITION_FOLLOWING)
       .toBeTruthy();
-    expect(footerStats.compareDocumentPosition(indicators) & Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(footerStats.compareDocumentPosition(monitorButton) & Node.DOCUMENT_POSITION_FOLLOWING)
       .toBeTruthy();
-    expect(indicators.compareDocumentPosition(monitorButton) & Node.DOCUMENT_POSITION_FOLLOWING)
-      .toBeTruthy();
+    expect(within(actionBar).queryByTestId("graph-parameter-indicators"))
+      .not.toBeInTheDocument();
   });
 
   it("opens component info from the graph cell footer", () => {
@@ -453,8 +453,8 @@ describe("GraphNodeView", () => {
     expect(within(dialog).getByText("No config fields available")).toBeInTheDocument();
   });
 
-  it("renders weight and bias activity indicators with hover pills", () => {
-    const { container } = renderGraphNode({
+  it("does not render node-level parameter activity in the action bar", () => {
+    renderGraphNode({
       parameterActivity: {
         targetPath: "main_model.0.model",
         weights: {
@@ -486,59 +486,81 @@ describe("GraphNodeView", () => {
       },
     });
 
-    const weights = screen.getByLabelText("Weights parameter activity: updated");
-    const bias = screen.getByLabelText("Bias parameter activity: mixed");
-    expect(weights).toHaveClass("border-ok/35", "bg-ok/10", "text-ok");
-    expect(bias).toHaveClass("border-amber/40", "bg-amber/[0.12]", "text-amber");
-
-    fireEvent.focus(weights);
-
-    expect(screen.getByRole("tooltip")).toHaveTextContent(
-      "This parameter was logged and at least one sampled point showed update or value-change evidence.",
-    );
-
-    fireEvent.blur(weights);
-    fireEvent.focus(bias);
-
-    const tooltip = screen.getByRole("tooltip");
-    expect(container).not.toContainElement(tooltip);
-    expect(tooltip).toHaveClass("fixed");
-    expect(tooltip).toHaveTextContent("Bias");
-    expect(tooltip).toHaveTextContent(
-      "At least one historical run showed update evidence, but at least one other run did not.",
-    );
-    expect(tooltip).toHaveTextContent("2 historical runs");
-    expect(tooltip).not.toHaveTextContent("main_model.0.model/bias/delta_norm");
-    expect(tooltip).toHaveTextContent(
-      "1 updated / 1 unchanged / 0 missing / 0 unknown",
-    );
+    const actionBar = screen.getByTestId("graph-node-action-bar-main_model.0");
+    expect(within(actionBar).queryByTestId("graph-parameter-indicators"))
+      .not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Weights parameter activity:/i))
+      .not.toBeInTheDocument();
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
   });
 
-  it("does not activate the node when activity indicators are clicked", () => {
+  it("moves monitor charts next to child-summary W/b activity indicators", () => {
     const onActivateNode = vi.fn();
+    const onToggleExpansion = vi.fn();
+    const onOpenMonitor = vi.fn();
     renderGraphNode({
+      canOpenMonitor: true,
       onActivateNode,
-      parameterActivity: {
-        targetPath: "main_model.0.model",
-        weights: {
-          status: "unchanged",
-          source: "active-job",
-          sourceLabel: "active job job-1",
-          metric: "main_model.0.model/weights/delta_norm",
-          lastStep: 4,
-          observedPoints: 1,
+      onToggleExpansion,
+      onOpenMonitor,
+      childSummaries: [
+        {
+          label: "LinearLayer",
+          dims: "128 -> 64",
+          kind: "child",
+          parameterActivity: {
+            targetPath: "main_model.0.model",
+            weights: {
+              status: "updated",
+              source: "historical",
+              sourceLabel: "2 historical runs",
+              observedPoints: 3,
+            },
+            bias: {
+              status: "updated",
+              source: "historical",
+              sourceLabel: "2 historical runs",
+              observedPoints: 2,
+            },
+          },
         },
-        bias: {
-          status: "unknown",
-          source: "active-job",
-          sourceLabel: "active job job-1",
-          observedPoints: 0,
-        },
-      },
+      ],
     });
 
-    fireEvent.click(screen.getByLabelText("Weights parameter activity: unchanged"));
+    const actionBar = screen.getByTestId("graph-node-action-bar-main_model.0");
+    const row = screen.getByTestId("child-summary-main_model.0-0");
+    const indicators = within(row).getByTestId("graph-parameter-indicators");
+    const monitorButton = within(row).getByRole("button", {
+      name: /^open monitor charts for main_model\.0$/i,
+    });
 
+    expect(
+      within(actionBar).queryByRole("button", {
+        name: /^open monitor charts for main_model\.0$/i,
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      indicators.compareDocumentPosition(monitorButton) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(indicators).not.toHaveClass("h-7", "rounded-[8px]");
+    expect(monitorButton).toHaveClass(
+      "h-6",
+      "w-6",
+      "rounded-[7px]",
+      "border-violet/30",
+      "bg-violet/10",
+      "shadow-[inset_0_-1px_0_rgba(146,113,255,0.22)]",
+    );
+    expect(monitorButton).not.toHaveClass(
+      "border-transparent",
+      "bg-transparent",
+    );
+
+    fireEvent.click(monitorButton);
+
+    expect(onOpenMonitor).toHaveBeenCalledTimes(1);
+    expect(onToggleExpansion).not.toHaveBeenCalled();
     expect(onActivateNode).not.toHaveBeenCalled();
   });
 
@@ -637,13 +659,199 @@ describe("GraphNodeView", () => {
       "leading-none",
       "shadow-[inset_0_-1px_0_rgba(146,113,255,0.24)]",
     );
-    expect(within(shapes).getByLabelText("b shape 128")).toHaveClass("h-7", "text-[12px]");
+    expect(within(shapes).getByLabelText("B shape 128")).toHaveClass("h-7", "text-[12px]");
     expect(within(shapes).getByText("W")).toBeInTheDocument();
     expect(within(shapes).getByText("W")).toHaveClass("truncate");
     expect(within(shapes).getByText("128 x 128")).toBeInTheDocument();
     expect(within(shapes).getByText("128 x 128")).toHaveClass("truncate");
-    expect(within(shapes).getByText("b")).toBeInTheDocument();
+    expect(within(shapes).getByText("B")).toBeInTheDocument();
     expect(within(shapes).getByText("128")).toBeInTheDocument();
+  });
+
+  it("colors direct weight and bias shapes from parameter activity", () => {
+    renderGraphNode({
+      details: {
+        weightShape: "256 x 10",
+        biasShape: "10",
+      },
+      parameterActivity: {
+        targetPath: "main_model.0.model",
+        weights: {
+          status: "updated",
+          source: "active-job",
+          sourceLabel: "active job job-1",
+          observedPoints: 2,
+        },
+        bias: {
+          status: "unchanged",
+          source: "active-job",
+          sourceLabel: "active job job-1",
+          observedPoints: 2,
+        },
+      },
+      height: 162,
+    });
+
+    const shapes = screen.getByTestId("parameter-shapes-main_model.0");
+    const weights = within(shapes).getByLabelText(
+      "W shape 256 x 10, weights activity updated",
+    );
+    const bias = within(shapes).getByLabelText("B shape 10, bias activity unchanged");
+
+    expect(weights).toHaveAttribute(
+      "title",
+      "W shape: 256 x 10 (weights activity updated)",
+    );
+    expect(bias).toHaveAttribute("title", "B shape: 10 (bias activity unchanged)");
+    expect(weights).toHaveClass(
+      ...graphParameterActivityStatusClassNames.updated.split(" "),
+    );
+    expect(bias).toHaveClass(
+      ...graphParameterActivityStatusClassNames.unchanged.split(" "),
+    );
+    expect(within(weights).getByText("W")).toHaveClass("text-current");
+    expect(within(bias).getByText("B")).toHaveClass("text-current");
+    expect(within(bias).queryByText("b")).not.toBeInTheDocument();
+  });
+
+  it("does not color unchanged weight shapes as updated", () => {
+    renderGraphNode({
+      details: {
+        weightShape: "32 x 32",
+      },
+      parameterActivity: {
+        targetPath: "main_model.0.model",
+        weights: {
+          status: "unchanged",
+          source: "active-job",
+          sourceLabel: "active job job-1",
+          observedPoints: 2,
+        },
+      },
+      height: 162,
+    });
+
+    const shapes = screen.getByTestId("parameter-shapes-main_model.0");
+    const weights = within(shapes).getByLabelText(
+      "W shape 32 x 32, weights activity unchanged",
+    );
+
+    expect(weights).toHaveClass(
+      ...graphParameterActivityStatusClassNames.unchanged.split(" "),
+    );
+    expect(weights).not.toHaveClass(
+      ...graphParameterActivityStatusClassNames.updated.split(" "),
+    );
+  });
+
+  it("renders direct LinearLayer dims in shape metadata without an empty summary spacer", () => {
+    renderGraphNode({
+      label: "LinearLayer",
+      typeName: "LinearLayer",
+      path: "main_model.0.model",
+      subtitle: "main_model.0.model",
+      details: {
+        weightShape: "10 x 256",
+        biasShape: "10",
+      },
+      config: {
+        typeName: "LinearLayerConfig",
+        fields: [
+          { key: "input_dim", value: 256 },
+          { key: "output_dim", value: 10 },
+        ],
+      },
+      childCount: 0,
+      childSummaries: [],
+      canToggleExpansion: false,
+      height: 156,
+    });
+
+    const shapes = screen.getByTestId("parameter-shapes-main_model.0");
+    const dims = within(shapes.parentElement ?? shapes).getByTitle(
+      "input/output: 256 -> 10",
+    );
+    const weights = within(shapes).getByLabelText("W shape 10 x 256");
+    const bias = within(shapes).getByLabelText("B shape 10");
+    const actionBar = screen.getByTestId("graph-node-action-bar-main_model.0");
+
+    expect(shapes).toHaveClass(
+      "grid",
+      "items-center",
+      "grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)]",
+    );
+    expect(dims).toHaveTextContent("256 -> 10");
+    expect(dims).toHaveClass("h-7", "rounded-[7px]", "px-2", "text-[12px]");
+    expect(dims).not.toHaveClass("h-5", "px-1.5", "text-[10px]");
+    expect(dims.parentElement).toBe(shapes);
+    expect(weights.parentElement).toBe(shapes);
+    expect(bias.parentElement).toBe(shapes);
+    expect(
+      dims.compareDocumentPosition(weights) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      dims.compareDocumentPosition(bias) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.queryByTestId("child-summaries-main_model.0"))
+      .not.toBeInTheDocument();
+    expect(
+      (shapes.parentElement ?? shapes).compareDocumentPosition(actionBar) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("renders checkpoint-derived LinearLayer dims instead of stale config dims", () => {
+    renderGraphNode({
+      label: "LinearLayer",
+      typeName: "LinearLayer",
+      path: "main_model.0.gate_model.model.layers.0.model",
+      subtitle: "main_model.0.gate_model.model.layers.0.model",
+      details: {
+        dims: "32 -> 32",
+        inputDim: 32,
+        outputDim: 32,
+        weightShape: "32 x 32",
+        biasShape: "32",
+      },
+      config: {
+        typeName: "LinearLayerConfig",
+        fields: [
+          { key: "input_dim", value: 32 },
+          { key: "output_dim", value: 256 },
+        ],
+      },
+      childCount: 0,
+      childSummaries: [],
+      canToggleExpansion: false,
+      height: 156,
+    });
+
+    const shapes = screen.getByTestId("parameter-shapes-main_model.0");
+
+    expect(within(shapes).getByTitle("input/output: 32 -> 32"))
+      .toHaveTextContent("32 -> 32");
+    expect(within(shapes).getByLabelText("W shape 32 x 32"))
+      .toHaveTextContent("32 x 32");
+    expect(within(shapes).getByLabelText("B shape 32"))
+      .toHaveTextContent("32");
+    expect(screen.queryByText("32 -> 256")).not.toBeInTheDocument();
+  });
+
+  it("omits shape dims when a visible child summary already shows the same dims", () => {
+    renderGraphNode({
+      details: {
+        dims: "128 -> 64",
+        weightShape: "64 x 128",
+        biasShape: "64",
+      },
+      childSummaries: [{ label: "LinearLayer", dims: "128 -> 64", kind: "child" }],
+      height: 200,
+    });
+
+    expect(screen.getByTestId("parameter-shapes-main_model.0")).toBeInTheDocument();
+    expect(screen.getByLabelText("LinearLayer 128 -> 64")).toBeInTheDocument();
+    expect(screen.queryByTestId("parameter-shape-dims-main_model.0"))
+      .not.toBeInTheDocument();
   });
 
   it("renders layer dims on the inner-model child summary row", () => {
@@ -817,24 +1025,21 @@ describe("GraphNodeView", () => {
     const layer2 = within(diagram).getByTitle("Layer 2 · LinearLayer · 128 -> 128");
     expect(layer0).toHaveTextContent("Layer 0 · LinearLayer");
     expect(layer0).toHaveAttribute("aria-label", "Layer 0 · LinearLayer · 128 -> 128");
-    expect(layer0).toHaveClass("text-[12px]");
+    expect(layer0).toHaveClass("h-9", "rounded-[10px]", "px-3", "text-[13px]");
     expect(within(layer0).getByText("Layer 0 · LinearLayer")).toHaveClass(
       "min-w-0",
       "flex-1",
       "truncate",
-      "text-left",
     );
     expect(within(layer0).getByText("128 -> 128")).toHaveClass(
       "shrink-0",
       "text-right",
       "font-mono",
     );
-    expect(Number.parseFloat(layer0.style.top)).toBeLessThan(
-      Number.parseFloat(layer1.style.top),
-    );
-    expect(Number.parseFloat(layer1.style.top)).toBeLessThan(
-      Number.parseFloat(layer2.style.top),
-    );
+    expect(layer0.compareDocumentPosition(layer1) & Node.DOCUMENT_POSITION_FOLLOWING)
+      .toBeTruthy();
+    expect(layer1.compareDocumentPosition(layer2) & Node.DOCUMENT_POSITION_FOLLOWING)
+      .toBeTruthy();
     expect(within(diagram).queryByText("LinearLayer")).not.toBeInTheDocument();
     expect(screen.queryByTestId("child-summaries-main_model.0")).not.toBeInTheDocument();
     expect(
@@ -842,7 +1047,7 @@ describe("GraphNodeView", () => {
     ).toBeTruthy();
   });
 
-  it("uses wide readable cells for five-layer stack previews", () => {
+  it("uses graph child-row styling for stack previews", () => {
     renderGraphNode({
       stackDiagram: {
         totalLayers: 5,
@@ -866,11 +1071,12 @@ describe("GraphNodeView", () => {
     const layer0 = within(diagram).getByTitle(
       "Layer 0 · MixtureOfExpertsLayerWithVeryLongName · 128 -> 128",
     );
-    expect(diagram).toHaveClass("h-[160px]");
-    expect(Number.parseFloat(layer0.style.left)).toBe(0);
-    expect(Number.parseFloat(layer0.style.width)).toBe(296);
-    expect(Number.parseFloat(layer0.style.height)).toBe(24);
-    expect(layer0).toHaveClass("rounded-[8px]", "px-2.5", "text-[12px]");
+    expect(diagram).toHaveClass("grid", "gap-2");
+    expect(diagram).not.toHaveClass("h-[160px]");
+    expect(layer0).toHaveClass("h-9", "rounded-[10px]", "px-3", "text-[13px]");
+    expect(layer0.style.left).toBe("");
+    expect(layer0.style.width).toBe("");
+    expect(layer0.style.height).toBe("");
     expect(within(layer0).getByText("Layer 0 · MixtureOfExpertsLayerWithVeryLongName"))
       .toHaveClass("min-w-0", "flex-1", "truncate");
     expect(within(layer0).getByText("128 -> 128")).toHaveClass("shrink-0", "text-right");
@@ -894,26 +1100,14 @@ describe("GraphNodeView", () => {
             kind: "layer",
             layerIndex: 1,
           },
+          { label: "...", title: "5 more layers", kind: "overflow" },
           {
-            label: "Layer 2 · LinearLayer",
-            title: "Layer 2 · LinearLayer",
+            label: "Layer 7 · LinearLayer",
+            title: "Layer 7 · LinearLayer · 256 -> 10",
+            dims: "256 -> 10",
             kind: "layer",
-            layerIndex: 2,
+            layerIndex: 7,
           },
-          {
-            label: "Layer 3 · LinearLayer",
-            title: "Layer 3 · LinearLayer",
-            kind: "layer",
-            layerIndex: 3,
-          },
-          {
-            label: "Layer 4 · LinearLayer",
-            title: "Layer 4 · LinearLayer",
-            kind: "layer",
-            layerIndex: 4,
-          },
-          { label: "...", title: "3 more layers", kind: "overflow" },
-          { label: "8 layers", title: "8 layers total", kind: "total" },
         ],
       },
       height: 250,
@@ -923,6 +1117,11 @@ describe("GraphNodeView", () => {
       .querySelector('[data-testid="stack-diagram-main_model.0"]')
       ?.querySelector("svg");
     expect(connector).toBeNull();
+    expect(screen.getByTitle("5 more layers")).toHaveTextContent("...");
+    expect(screen.getByTitle("Layer 7 · LinearLayer · 256 -> 10"))
+      .toHaveTextContent("Layer 7 · LinearLayer");
+    expect(screen.getByTitle("Layer 7 · LinearLayer · 256 -> 10"))
+      .toHaveTextContent("256 -> 10");
   });
 
   it("keeps stack diagram cells visual-only while card activation still works", () => {
@@ -1439,7 +1638,8 @@ describe("GraphNodeView", () => {
       .toBeInTheDocument();
     expect(within(actionBar).getByTestId("graph-node-footer-stats-main_model.0"))
       .toHaveTextContent("1 child");
-    expect(within(actionBar).getByTestId("graph-parameter-indicators")).toBeInTheDocument();
+    expect(within(actionBar).queryByTestId("graph-parameter-indicators"))
+      .not.toBeInTheDocument();
     expect(within(actionBar).getByRole("button", { name: /^open monitor charts for main_model\.0$/i }))
       .toBeInTheDocument();
     expect(within(actionBar).queryByRole("button", { name: /details for main_model\.0/i }))
