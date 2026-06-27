@@ -51,6 +51,23 @@ LOG_TAG_READ_MAX_EVENT_BYTES = 96 * 1024 * 1024
 LOG_RESPONSE_ITEM_LIMIT = 500
 LOG_TAG_KEYS = ("scalars", "histograms", "images", "texts")
 EventFingerprint = tuple[tuple[str, int, int], ...]
+PARAMETER_MONITOR_CHANNELS = {"weights", "bias"}
+LAYER_MONITOR_METRICS = {
+    "relative_delta_norm",
+    "delta_norm",
+    "l2_norm",
+    "mean",
+    "var",
+    "grad_mean",
+    "grad_var",
+    "grad_norm",
+    "update_ratio",
+    "spectral_norm",
+    "condition_number",
+    "effective_rank",
+    "dead_input_fraction",
+    "dead_output_fraction",
+}
 
 
 def is_valid_log_experiment_name(name: str) -> bool:
@@ -237,6 +254,26 @@ def _safe_artifact_files(run_dir: Path, root: Path, pattern: str) -> list[Path]:
 
 def _event_file_fingerprint(run_dir: Path) -> EventFingerprint:
     return event_file_fingerprint(run_dir)
+
+
+def _is_layer_monitor_tag(tag: str) -> bool:
+    parts = tag.rsplit("/", 2)
+    if len(parts) != 3:
+        return False
+    node_path, channel, metric = parts
+    return (
+        bool(node_path)
+        and channel in PARAMETER_MONITOR_CHANNELS
+        and metric in LAYER_MONITOR_METRICS
+    )
+
+
+def _tags_have_layer_monitor_data(tags: dict[str, Any]) -> bool:
+    return any(
+        _is_layer_monitor_tag(tag)
+        for key in ("scalars", "histograms", "images")
+        for tag in tags.get(key, [])
+    )
 
 
 def _file_id(run_id: str, relative_path: str) -> str:
@@ -881,6 +918,7 @@ class LogRunQueryService:
         return [
             {
                 "runId": run.id,
+                "hasLayerMonitorData": _tags_have_layer_monitor_data(tags),
                 "scalarTags": tags["scalars"],
                 "histogramTags": tags["histograms"],
                 "imageTags": tags["images"],
@@ -895,6 +933,12 @@ class LogRunQueryService:
             for run in runs
             for tags in [self.read_tags(run.path)]
         ]
+
+    def cached_layer_monitor_data_for_run(self, run: LogRun) -> bool | None:
+        tags = self._cached_tags_if_current(run.path)
+        if tags is None:
+            return None
+        return _tags_have_layer_monitor_data(tags)
 
     def scalars_for_runs(
         self,
@@ -1513,6 +1557,9 @@ class LogRunIndex:
 
     def tags_for_runs(self, run_ids: list[str]) -> list[dict[str, Any]]:
         return self.query_service.tags_for_runs(run_ids)
+
+    def cached_layer_monitor_data_for_run(self, run: LogRun) -> bool | None:
+        return self.query_service.cached_layer_monitor_data_for_run(run)
 
     def scalars_for_runs(
         self,

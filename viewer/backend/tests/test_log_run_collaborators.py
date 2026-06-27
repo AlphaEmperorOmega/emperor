@@ -241,6 +241,7 @@ class LogRunQueryServiceTests(unittest.TestCase):
             [
                 {
                     "runId": "run-1",
+                    "hasLayerMonitorData": False,
                     "scalarTags": ["accuracy", "loss"],
                     "histogramTags": ["weights"],
                     "imageTags": [],

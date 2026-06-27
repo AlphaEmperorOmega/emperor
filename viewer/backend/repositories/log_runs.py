@@ -26,6 +26,9 @@ class LogRunRepository:
     def list_runs(self) -> list[LogRun]:
         return self._index.list_runs()
 
+    def cached_layer_monitor_data_for_run(self, run: LogRun) -> bool | None:
+        return self._index.cached_layer_monitor_data_for_run(run)
+
     def list_experiments(self) -> list[LogExperiment]:
         return self._index.list_experiments()
 

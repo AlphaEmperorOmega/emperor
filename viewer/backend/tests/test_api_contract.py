@@ -582,6 +582,7 @@ LOG_RUN_FIELDS = (
     "eventFileCount",
     "checkpointCount",
     "hasHparams",
+    "hasLayerMonitorData",
     "metrics",
 )
 LOG_RUN_REQUIRED_FIELDS = (
@@ -1221,6 +1222,7 @@ SCHEMA_PARITY_CASES = (
             "truncationReason",
             "sourceItemCount",
             "returnedItemCount",
+            "hasLayerMonitorData",
             "scalarTags",
             "histogramTags",
             "imageTags",

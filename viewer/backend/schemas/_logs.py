@@ -40,6 +40,7 @@ class LogRunResponse(ApiResponseModel):
     eventFileCount: int
     checkpointCount: int
     hasHparams: bool
+    hasLayerMonitorData: bool | None = None
     metrics: JsonObject
 
 
@@ -221,6 +222,7 @@ class LogRunTagsResponse(ApiResponseModel):
     truncationReason: str | None = Field(default=None, exclude_if=_is_none)
     sourceItemCount: int | None = Field(default=None, exclude_if=_is_none)
     returnedItemCount: int | None = Field(default=None, exclude_if=_is_none)
+    hasLayerMonitorData: bool | None = None
     scalarTags: list[str]
     histogramTags: list[str]
     imageTags: list[str]

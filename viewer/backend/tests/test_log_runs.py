@@ -2306,6 +2306,103 @@ class LogRunIndexAndApiTests(unittest.TestCase):
         self.assertEqual(no_event_payload["total"], 1)
         self.assertEqual(no_event_payload["runs"][0]["eventFileCount"], 0)
 
+    def test_log_api_reports_layer_monitor_eligibility_from_tag_cache(
+        self,
+    ) -> None:
+        import httpx
+
+        from viewer.backend.api import ViewerApiSettings, create_app
+
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = Path(tmp) / "logs"
+            write_tensorboard_run(
+                logs_root,
+                [
+                    "linear",
+                    "BASELINE",
+                    "Mnist",
+                    "layer_20260601_010203",
+                    "version_0",
+                ],
+                scalars={"main_model.0.model/weights/mean": [(1, 0.5)]},
+            )
+            write_tensorboard_run(
+                logs_root,
+                [
+                    "linear",
+                    "BASELINE",
+                    "Mnist",
+                    "perf_20260601_020304",
+                    "version_0",
+                ],
+                scalars={"train/loss": [(1, 0.5)]},
+            )
+
+            async def call_api() -> tuple[
+                httpx.Response, httpx.Response, httpx.Response
+            ]:
+                transport = httpx.ASGITransport(
+                    app=create_app(ViewerApiSettings(logs_root=str(logs_root)))
+                )
+                async with httpx.AsyncClient(
+                    transport=transport,
+                    base_url="http://testserver",
+                ) as client:
+                    with patch(
+                        "viewer.backend.log_runs.load_event_accumulator"
+                    ) as load:
+                        before_response = await client.get("/logs/runs")
+                        load.assert_not_called()
+                    run_ids_by_name = {
+                        run["runName"]: run["id"]
+                        for run in before_response.json()["runs"]
+                    }
+                    tags_response = await client.post(
+                        "/logs/tags",
+                        json={
+                            "runIds": [
+                                run_ids_by_name["layer_20260601_010203"],
+                                run_ids_by_name["perf_20260601_020304"],
+                            ]
+                        },
+                    )
+                    after_response = await client.get("/logs/runs")
+                    return before_response, tags_response, after_response
+
+            before_response, tags_response, after_response = asyncio.run(call_api())
+
+        self.assertEqual(before_response.status_code, 200)
+        self.assertEqual(tags_response.status_code, 200)
+        self.assertEqual(after_response.status_code, 200)
+
+        before_by_name = {
+            run["runName"]: run for run in before_response.json()["runs"]
+        }
+        self.assertIsNone(
+            before_by_name["layer_20260601_010203"]["hasLayerMonitorData"]
+        )
+        self.assertIsNone(
+            before_by_name["perf_20260601_020304"]["hasLayerMonitorData"]
+        )
+
+        tags_by_run_id = {
+            run["runId"]: run for run in tags_response.json()["runs"]
+        }
+        layer_run_id = before_by_name["layer_20260601_010203"]["id"]
+        perf_run_id = before_by_name["perf_20260601_020304"]["id"]
+        self.assertTrue(tags_by_run_id[layer_run_id]["hasLayerMonitorData"])
+        self.assertFalse(tags_by_run_id[perf_run_id]["hasLayerMonitorData"])
+
+        after_by_name = {
+            run["runName"]: run for run in after_response.json()["runs"]
+        }
+        self.assertTrue(
+            after_by_name["layer_20260601_010203"]["hasLayerMonitorData"]
+        )
+        self.assertFalse(
+            after_by_name["perf_20260601_020304"]["hasLayerMonitorData"]
+        )
+
     def test_log_api_scalar_request_limits_and_metadata(self) -> None:
         import httpx
 
