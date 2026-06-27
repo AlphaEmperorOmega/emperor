@@ -291,6 +291,50 @@ class AppFactoryTests(unittest.TestCase):
         self.assertEqual(asyncio.run(run_many()), ["ok", "ok", "ok"])
         self.assertEqual(max_active, 1)
 
+    def test_named_blocking_io_limiters_isolate_inspection_work(self) -> None:
+        import threading
+
+        from viewer.backend.blocking import named_blocking_work_limiter, run_blocking_io
+
+        started = threading.Event()
+        release = threading.Event()
+
+        def slow_log_work() -> str:
+            started.set()
+            release.wait(timeout=1)
+            return "logs"
+
+        async def run_sequence() -> tuple[str, str, float]:
+            log_limiter = named_blocking_work_limiter("test-logs", 1)
+            inspection_limiter = named_blocking_work_limiter("inspection", 1)
+            log_task = asyncio.create_task(
+                run_blocking_io(
+                    slow_log_work,
+                    limiter=log_limiter,
+                    timeout_seconds=1,
+                )
+            )
+            while not started.is_set():
+                await asyncio.sleep(0.001)
+            started_at = time.perf_counter()
+            inspection_result = await run_blocking_io(
+                lambda: "inspect",
+                limiter=inspection_limiter,
+                timeout_seconds=1,
+            )
+            inspection_elapsed = time.perf_counter() - started_at
+            release.set()
+            log_result = await log_task
+            return log_result, inspection_result, inspection_elapsed
+
+        log_result, inspection_result, inspection_elapsed = asyncio.run(
+            run_sequence()
+        )
+
+        self.assertEqual(log_result, "logs")
+        self.assertEqual(inspection_result, "inspect")
+        self.assertLess(inspection_elapsed, 0.15)
+
     def test_blocking_io_timeout_holds_capacity_until_worker_finishes(
         self,
     ) -> None:

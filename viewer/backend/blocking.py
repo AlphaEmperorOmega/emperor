@@ -15,13 +15,14 @@ ResultT = TypeVar("ResultT")
 
 DEFAULT_BLOCKING_WORK_TIMEOUT_SECONDS = 60.0
 DEFAULT_BLOCKING_WORK_CONCURRENCY = 4
+DEFAULT_BLOCKING_WORK_LIMITER_NAME = "default"
 BLOCKING_WORK_TIMEOUT_MESSAGE = (
     "Viewer backend work timed out before it could complete."
 )
 
 _blocking_work_limiters: weakref.WeakKeyDictionary[
     asyncio.AbstractEventLoop,
-    asyncio.Semaphore,
+    dict[str, asyncio.Semaphore],
 ] = weakref.WeakKeyDictionary()
 
 
@@ -48,13 +49,33 @@ async def _await_thread_future(
     return future.result()
 
 
-def _default_blocking_work_limiter() -> asyncio.Semaphore:
+def named_blocking_work_limiter(
+    name: str,
+    concurrency: int,
+) -> asyncio.Semaphore:
+    """Return a loop-local limiter for a named class of blocking work."""
+
+    if not name:
+        raise ValueError("Blocking work limiter name must be non-empty")
+    if concurrency < 1:
+        raise ValueError("Blocking work limiter concurrency must be at least 1")
     loop = asyncio.get_running_loop()
-    limiter = _blocking_work_limiters.get(loop)
+    limiters = _blocking_work_limiters.get(loop)
+    if limiters is None:
+        limiters = {}
+        _blocking_work_limiters[loop] = limiters
+    limiter = limiters.get(name)
     if limiter is None:
-        limiter = asyncio.Semaphore(DEFAULT_BLOCKING_WORK_CONCURRENCY)
-        _blocking_work_limiters[loop] = limiter
+        limiter = asyncio.Semaphore(concurrency)
+        limiters[name] = limiter
     return limiter
+
+
+def _default_blocking_work_limiter() -> asyncio.Semaphore:
+    return named_blocking_work_limiter(
+        DEFAULT_BLOCKING_WORK_LIMITER_NAME,
+        DEFAULT_BLOCKING_WORK_CONCURRENCY,
+    )
 
 
 async def run_blocking_io(
