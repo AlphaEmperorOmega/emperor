@@ -1598,7 +1598,7 @@ class LogRunIndex:
         *,
         archive: bytes,
         filename: str,
-        max_upload_size: int,
+        max_upload_size: int | None,
         max_extracted_size: int,
     ) -> dict[str, object]:
         result = import_log_archive(

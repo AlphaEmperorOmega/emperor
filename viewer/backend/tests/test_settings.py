@@ -21,6 +21,7 @@ SETTINGS_ENV_NAMES = (
     "VIEWER_API_CORS_ORIGINS",
     "VIEWER_API_SNAPSHOTS_ROOT",
     "VIEWER_API_ALLOW_UNSAFE_LOCAL_MUTATIONS",
+    "VIEWER_API_ALLOW_LOG_IMPORTS",
     "VIEWER_API_MAX_UPLOAD_SIZE",
     "VIEWER_API_MAX_LOG_ARCHIVE_EXTRACTED_SIZE",
 )
@@ -60,6 +61,13 @@ class ViewerApiSettingsTests(unittest.TestCase):
         self.assertEqual(settings.auth_mode, "none")
         self.assertIsNone(settings.token)
         self.assertIs(settings.allow_unsafe_local_mutations, False)
+        self.assertIs(settings.log_imports_enabled, True)
+        self.assertIsNone(settings.max_upload_size)
+
+    def test_bearer_mode_defaults_disable_log_imports(self) -> None:
+        settings = ViewerApiSettings(auth_mode="bearer", token="secret-token")
+
+        self.assertIs(settings.log_imports_enabled, False)
 
     def test_defaults_keep_local_development_cors_origins(self) -> None:
         with isolated_settings_env():
@@ -111,6 +119,20 @@ class ViewerApiSettingsTests(unittest.TestCase):
             settings = ViewerApiSettings()
 
         self.assertIs(settings.allow_unsafe_local_mutations, True)
+        self.assertIs(settings.log_imports_enabled, True)
+
+    def test_env_parses_log_import_override(self) -> None:
+        with isolated_settings_env(VIEWER_API_ALLOW_LOG_IMPORTS="false"):
+            settings = ViewerApiSettings()
+
+        self.assertIs(settings.allow_log_imports, False)
+        self.assertIs(settings.log_imports_enabled, False)
+
+        with isolated_settings_env(VIEWER_API_ALLOW_LOG_IMPORTS="true"):
+            settings = ViewerApiSettings()
+
+        self.assertIs(settings.allow_log_imports, True)
+        self.assertIs(settings.log_imports_enabled, True)
 
     def test_env_parses_log_upload_size_limits(self) -> None:
         with isolated_settings_env(

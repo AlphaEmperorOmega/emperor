@@ -11,7 +11,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from viewer.backend.core.limits import (
     DEFAULT_MAX_LOG_ARCHIVE_EXTRACTED_SIZE,
-    DEFAULT_MAX_UPLOAD_SIZE,
 )
 
 LOCAL_FRONTEND_ORIGINS = [
@@ -38,7 +37,8 @@ class ViewerApiSettings(BaseSettings):
     auth_mode: Literal["none", "bearer"] = "none"
     token: str | None = Field(default=None, repr=False)
     allow_unsafe_local_mutations: bool = False
-    max_upload_size: int = Field(default=DEFAULT_MAX_UPLOAD_SIZE, ge=1)
+    allow_log_imports: bool | None = None
+    max_upload_size: int | None = Field(default=None, ge=1)
     max_log_archive_extracted_size: int = Field(
         default=DEFAULT_MAX_LOG_ARCHIVE_EXTRACTED_SIZE,
         ge=1,
@@ -59,6 +59,12 @@ class ViewerApiSettings(BaseSettings):
                 "VIEWER_API_AUTH_MODE=bearer"
             )
         return self
+
+    @property
+    def log_imports_enabled(self) -> bool:
+        if self.allow_log_imports is not None:
+            return self.allow_log_imports
+        return self.allow_unsafe_local_mutations or self.auth_mode == "none"
 
 
 @lru_cache(maxsize=1)
