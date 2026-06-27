@@ -255,6 +255,91 @@ describe("ViewerApp Overview", () => {
     );
   });
 
+  it("opens the native file picker from the visible choose button", async () => {
+    const user = userEvent.setup();
+    installFetchMock({
+      capabilitiesResponse: {
+        ...capabilitiesResponse,
+        uploadsEnabled: true,
+        maxUploadSize: null,
+      },
+    });
+    renderViewer();
+
+    await user.click(screen.getByRole("button", { name: /import logs/i }));
+
+    const dialog = await screen.findByRole("dialog", { name: /import logs/i });
+    const fileInput = within(dialog).getByLabelText(/log archive zip file/i);
+    await waitFor(() => expect(fileInput).toBeEnabled());
+    const inputClick = vi
+      .spyOn(fileInput as HTMLInputElement, "click")
+      .mockImplementation(() => undefined);
+
+    try {
+      await user.click(within(dialog).getByRole("button", { name: /choose zip/i }));
+
+      expect(inputClick).toHaveBeenCalledTimes(1);
+    } finally {
+      inputClick.mockRestore();
+    }
+  });
+
+  it("allows oversized zip selection when upload size is unlimited", async () => {
+    const user = userEvent.setup();
+    installFetchMock({
+      capabilitiesResponse: {
+        ...capabilitiesResponse,
+        uploadsEnabled: true,
+        maxUploadSize: null,
+      },
+    });
+    renderViewer();
+
+    await user.click(screen.getByRole("button", { name: /import logs/i }));
+
+    const dialog = await screen.findByRole("dialog", { name: /import logs/i });
+    const fileInput = within(dialog).getByLabelText(/log archive zip file/i);
+    await waitFor(() => expect(fileInput).toBeEnabled());
+    await user.upload(
+      fileInput,
+      new File(["larger than a tiny cap"], "logs.zip", {
+        type: "application/zip",
+      }),
+    );
+
+    expect(within(dialog).queryByRole("alert")).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: /^import logs$/i }))
+      .toBeEnabled();
+  });
+
+  it("blocks oversized zip selection when upload size is capped", async () => {
+    const user = userEvent.setup();
+    installFetchMock({
+      capabilitiesResponse: {
+        ...capabilitiesResponse,
+        uploadsEnabled: true,
+        maxUploadSize: 2,
+      },
+    });
+    renderViewer();
+
+    await user.click(screen.getByRole("button", { name: /import logs/i }));
+
+    const dialog = await screen.findByRole("dialog", { name: /import logs/i });
+    const fileInput = within(dialog).getByLabelText(/log archive zip file/i);
+    await waitFor(() => expect(fileInput).toBeEnabled());
+    await user.upload(
+      fileInput,
+      new File(["zip"], "logs.zip", { type: "application/zip" }),
+    );
+
+    expect(within(dialog).getByRole("alert")).toHaveTextContent(
+      /larger than the 2 B limit/i,
+    );
+    expect(within(dialog).getByRole("button", { name: /^import logs$/i }))
+      .toBeDisabled();
+  });
+
   it("imports a selected zip through the configured API base URL", async () => {
     const user = userEvent.setup();
     setViewerApiBaseUrl("https://api.example.test/viewer");
@@ -266,7 +351,7 @@ describe("ViewerApp Overview", () => {
       },
       logImportResponse: {
         extractedFileCount: 2,
-        skippedFileCount: 1,
+        skippedFileCount: 0,
         destinationRoot: "/workspace/logs",
       },
     });
@@ -297,7 +382,7 @@ describe("ViewerApp Overview", () => {
     const headers = new Headers(request.headers);
     expect(headers.has("content-type")).toBe(false);
     expect(within(dialog).getByRole("status")).toHaveTextContent(
-      /2 files extracted; 1 existing file skipped/i,
+      /2 files imported/i,
     );
     await waitFor(() => {
       expect((fileInput as HTMLInputElement).files).toHaveLength(0);
@@ -344,7 +429,7 @@ describe("ViewerApp Overview", () => {
     importResponse.resolve(importResult);
 
     expect(await within(dialog).findByRole("status")).toHaveTextContent(
-      /1 file extracted; 0 existing files skipped/i,
+      /1 file imported/i,
     );
   });
 
@@ -390,6 +475,7 @@ describe("ViewerApp Overview", () => {
     const dialog = await screen.findByRole("dialog", { name: /import logs/i });
 
     expect(dialog).toHaveTextContent(/log imports are disabled by this backend/i);
+    expect(dialog).toHaveTextContent(/VIEWER_API_ALLOW_LOG_IMPORTS=true/i);
     expect(within(dialog).getByLabelText(/log archive zip file/i)).toBeDisabled();
     expect(within(dialog).getByRole("button", { name: /^import logs$/i }))
       .toBeDisabled();

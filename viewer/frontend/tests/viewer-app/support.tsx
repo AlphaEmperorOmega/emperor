@@ -6,7 +6,7 @@ import { ViewerApp } from "@/features/viewer/components/viewer-app";
 import {
   clearPersistedTargetSelection,
 } from "@/features/viewer/state/target/target-selection-storage";
-import { resetViewerApiBaseUrl } from "@/lib/api";
+import { resetViewerApiBaseUrl, type Capabilities } from "@/lib/api";
 import type { GraphParameterActivity } from "@/lib/graph";
 export { IMPLEMENTED_FEATURES } from "@/lib/feature-catalog";
 
@@ -651,15 +651,16 @@ export const neuronMonitorsResponse = {
     defaultEnabled: boolean;
   }>,
 };
-export const capabilitiesResponse = {
+export const capabilitiesResponse: Capabilities = {
   authMode: "none",
   trainingEnabled: true,
   trainingCancellationCapability: "strict-cgroup",
   logDeletionEnabled: true,
+  configSnapshotsEnabled: true,
   historicalLogsEnabled: true,
   liveMonitorDataEnabled: true,
   historicalMonitorDataEnabled: true,
-  uploadsEnabled: false,
+  uploadsEnabled: true,
   maxUploadSize: null,
   dataSourcesEnabled: false,
   dataSources: [],
