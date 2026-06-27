@@ -303,9 +303,10 @@ class TensorBoardParameterStatusReaderTests(unittest.TestCase):
                         (2, 0.0),
                         (3, 1e-6),
                     ],
-                    "main_model.0.model/bias/delta_norm": [(2, 0.0)],
-                    "main_model.1.model/weights/delta_norm": [(2, 0.0)],
+                    "main_model.0.model/bias/delta_norm": [(2, 0.0), (3, 0.0)],
+                    "main_model.1.model/weights/delta_norm": [(2, 0.0), (3, 0.0)],
                     "main_model.2.model/weights/l2_norm": [(1, 4.0)],
+                    "main_model.3.model/weights/delta_norm": [(2, 0.0), (3, 0.25)],
                 },
             )
 
@@ -328,9 +329,42 @@ class TensorBoardParameterStatusReaderTests(unittest.TestCase):
         self.assertEqual(nodes["main_model.0.model"]["weights"]["lastStep"], 3)
         self.assertEqual(nodes["main_model.0.model"]["weights"]["observedPoints"], 2)
         self.assertEqual(nodes["main_model.0.model"]["bias"]["status"], "unchanged")
+        self.assertEqual(nodes["main_model.0.model"]["bias"]["observedPoints"], 2)
         self.assertEqual(nodes["main_model.1.model"]["weights"]["status"], "unchanged")
         self.assertEqual(nodes["main_model.1.model"]["bias"]["status"], "missing")
         self.assertEqual(nodes["main_model.2.model"]["weights"]["status"], "unknown")
+        self.assertEqual(nodes["main_model.3.model"]["weights"]["status"], "updated")
+        self.assertEqual(
+            nodes["main_model.3.model"]["weights"]["metric"],
+            "main_model.3.model/weights/delta_norm",
+        )
+
+    def test_single_zero_delta_point_is_unknown(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            log_dir = Path(tmp) / "run"
+            self.write_scalars(
+                log_dir,
+                {
+                    "main_model.0.model/weights/delta_norm": [(2, 0.0)],
+                },
+            )
+
+            data = TensorBoardParameterStatusReader().read(
+                source_id="run-1",
+                preset="baseline",
+                dataset="Mnist",
+                log_dir=str(log_dir),
+            )
+
+        node = data["nodes"][0]
+        self.assertEqual(node["nodePath"], "main_model.0.model")
+        self.assertEqual(node["weights"]["status"], "unknown")
+        self.assertEqual(
+            node["weights"]["metric"], "main_model.0.model/weights/delta_norm"
+        )
+        self.assertEqual(node["weights"]["lastStep"], 2)
+        self.assertEqual(node["weights"]["observedPoints"], 1)
+        self.assertEqual(node["bias"]["status"], "missing")
 
     def test_old_logs_without_delta_metrics_use_value_stat_changes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1167,6 +1201,11 @@ class TrainingMonitorDataTests(unittest.TestCase):
                 "main_model.0.model/weights/relative_delta_norm",
                 0.0,
                 10,
+            )
+            first_writer.add_scalar(
+                "main_model.0.model/weights/relative_delta_norm",
+                0.0,
+                11,
             )
             first_writer.flush()
             first_writer.close()
