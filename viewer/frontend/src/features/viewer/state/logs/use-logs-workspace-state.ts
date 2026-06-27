@@ -38,6 +38,7 @@ import {
   effectiveSelectionForAvailableValues,
   filterVisibleLogRuns,
   nextSelectedDetailRunId,
+  normalizeRunFacetSelection,
   pruneSelectionToAvailableValues,
   pruneDeletedDetailRunId,
   removeStartedExperiment,
@@ -103,6 +104,13 @@ function toggleSetValueWithFallback(
   });
 }
 
+function selectionMatchesValues(selection: Set<string>, values: string[]) {
+  if (selection.size !== values.length) {
+    return false;
+  }
+  return values.every((value) => selection.has(value));
+}
+
 export type LogsScopeMode = "target" | "custom";
 
 export type LogsTargetScope = {
@@ -153,6 +161,8 @@ export function useLogsWorkspaceState({
   const [selectedDatasets, setSelectedDatasets] = useState<Set<string> | null>(null);
   const [selectedModels, setSelectedModels] = useState<Set<string> | null>(null);
   const [selectedPresets, setSelectedPresets] = useState<Set<string> | null>(null);
+  const [shouldSelectFirstRunFacets, setShouldSelectFirstRunFacets] =
+    useState(false);
   const [selectedTags, setSelectedTags] = useState<Set<string> | null>(null);
   const [pendingExperimentTagSeeds, setPendingExperimentTagSeeds] = useState<
     Set<string>
@@ -243,6 +253,7 @@ export function useLogsWorkspaceState({
     setSelectedDatasets(null);
     setSelectedModels(null);
     setSelectedPresets(null);
+    setShouldSelectFirstRunFacets(false);
     setSelectedTags(null);
     setPendingExperimentTagSeeds(new Set());
     setPendingTagSelection(null);
@@ -348,20 +359,37 @@ export function useLogsWorkspaceState({
     if (!runsQuery.data) {
       return;
     }
+    const selectFirstAvailable = shouldSelectFirstRunFacets;
     setSelectedDatasets((previous) =>
-      pruneSelectionToAvailableValues(previous, datasetOptionValues),
+      normalizeRunFacetSelection({
+        selection: previous,
+        availableValues: datasetOptionValues,
+        selectFirstAvailable,
+      }),
     );
     setSelectedModels((previous) =>
-      pruneSelectionToAvailableValues(previous, modelOptionValues),
+      normalizeRunFacetSelection({
+        selection: previous,
+        availableValues: modelOptionValues,
+        selectFirstAvailable,
+      }),
     );
     setSelectedPresets((previous) =>
-      pruneSelectionToAvailableValues(previous, presetOptionValues),
+      normalizeRunFacetSelection({
+        selection: previous,
+        availableValues: presetOptionValues,
+        selectFirstAvailable,
+      }),
     );
+    if (selectFirstAvailable) {
+      setShouldSelectFirstRunFacets(false);
+    }
   }, [
     datasetOptionValues,
     modelOptionValues,
     presetOptionValues,
     runsQuery.data,
+    shouldSelectFirstRunFacets,
   ]);
 
   const visibleRuns = useMemo(
@@ -609,6 +637,7 @@ export function useLogsWorkspaceState({
           ? addPendingExperimentSeed(previous, value)
           : removePendingExperimentSeed(previous, value);
       });
+      setShouldSelectFirstRunFacets(true);
       toggleSetValueWithFallback(
         setSelectedExperiments,
         experimentFallbackValues,
@@ -650,6 +679,10 @@ export function useLogsWorkspaceState({
     selectAllExperiments: () => {
       markCustomScope();
       const experimentValues = experimentOptions.map((option) => option.value);
+      const currentSelection = selectedExperiments ?? new Set(experimentValues);
+      if (!selectionMatchesValues(currentSelection, experimentValues)) {
+        setShouldSelectFirstRunFacets(true);
+      }
       setPendingExperimentTagSeeds((previous) => {
         const next = new Set(previous);
         for (const experiment of experimentValues) {
@@ -664,6 +697,12 @@ export function useLogsWorkspaceState({
     },
     selectNoExperiments: () => {
       markCustomScope();
+      const currentSelection =
+        selectedExperiments ??
+        new Set(experimentOptions.map((option) => option.value));
+      if (currentSelection.size > 0) {
+        setShouldSelectFirstRunFacets(true);
+      }
       setPendingExperimentTagSeeds(new Set());
       setNoValues(setSelectedExperiments);
     },

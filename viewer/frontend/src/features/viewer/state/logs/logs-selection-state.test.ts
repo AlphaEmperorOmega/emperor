@@ -10,7 +10,9 @@ import {
   buildLogRunDeleteFilters,
   effectiveSelectionForAvailableValues,
   filterVisibleLogRuns,
+  firstAvailableSelection,
   nextSelectedDetailRunId,
+  normalizeRunFacetSelection,
   pruneSelectionToAvailableValues,
   pruneDeletedDetailRunId,
   removeStartedExperiment,
@@ -375,6 +377,52 @@ describe("logs selection state", () => {
     expect(
       values(selectionSetOrDefault(new Set(["train/loss"]), new Set(["other"]))),
     ).toEqual(["train/loss"]);
+  });
+
+  it("selects only the first lower facet option after an experiment change", () => {
+    expect(values(firstAvailableSelection(["Cifar10", "Mnist"]))).toEqual([
+      "Cifar10",
+    ]);
+    expect(values(firstAvailableSelection([]))).toEqual([]);
+    expect(
+      values(
+        normalizeRunFacetSelection({
+          selection: null,
+          availableValues: ["Cifar10", "Mnist"],
+          selectFirstAvailable: true,
+        }),
+      ),
+    ).toEqual(["Cifar10"]);
+  });
+
+  it("preserves manual lower facet selections until they become fully stale", () => {
+    const manualSelection = new Set(["Mnist"]);
+
+    expect(
+      normalizeRunFacetSelection({
+        selection: manualSelection,
+        availableValues: ["Cifar10", "Mnist"],
+        selectFirstAvailable: false,
+      }),
+    ).toBe(manualSelection);
+    expect(
+      values(
+        normalizeRunFacetSelection({
+          selection: new Set(["StaleDataset"]),
+          availableValues: ["Cifar10", "Mnist"],
+          selectFirstAvailable: false,
+        }),
+      ),
+    ).toEqual(["Cifar10"]);
+    expect(
+      values(
+        normalizeRunFacetSelection({
+          selection: new Set(),
+          availableValues: ["Cifar10", "Mnist"],
+          selectFirstAvailable: false,
+        }),
+      ),
+    ).toEqual([]);
   });
 
   it("builds sorted delete filters from active selections", () => {

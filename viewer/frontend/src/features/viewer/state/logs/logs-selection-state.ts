@@ -60,6 +60,36 @@ export function pruneSelectionToAvailableValues(
   return next;
 }
 
+export function firstAvailableSelection(availableValues: string[]) {
+  return new Set(availableValues.slice(0, 1));
+}
+
+export function normalizeRunFacetSelection({
+  selection,
+  availableValues,
+  selectFirstAvailable,
+}: {
+  selection: NullableSelectionSet;
+  availableValues: string[];
+  selectFirstAvailable: boolean;
+}): NullableSelectionSet {
+  if (selectFirstAvailable) {
+    return firstAvailableSelection(availableValues);
+  }
+
+  const nextSelection = pruneSelectionToAvailableValues(selection, availableValues);
+  if (
+    selection !== null &&
+    selection.size > 0 &&
+    nextSelection !== null &&
+    nextSelection.size === 0 &&
+    availableValues.length > 0
+  ) {
+    return firstAvailableSelection(availableValues);
+  }
+  return nextSelection;
+}
+
 export function effectiveSelectionForAvailableValues(
   selection: NullableSelectionSet,
   availableValues: string[],
