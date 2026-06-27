@@ -1785,12 +1785,37 @@ class ApiIntegrationContractTests(unittest.TestCase):
                 "historicalLogsEnabled": True,
                 "liveMonitorDataEnabled": True,
                 "historicalMonitorDataEnabled": True,
-                "uploadsEnabled": False,
+                "uploadsEnabled": True,
                 "maxUploadSize": get_viewer_api_settings().max_upload_size,
                 "dataSourcesEnabled": False,
                 "dataSources": [],
             },
         )
+
+    def test_capabilities_endpoint_keeps_hosted_uploads_disabled_by_default(
+        self,
+    ) -> None:
+        import httpx
+
+        from viewer.backend.api import ViewerApiSettings, create_app
+
+        app = create_app(
+            ViewerApiSettings(auth_mode="bearer", token="secret-token")
+        )
+
+        async def call_api() -> httpx.Response:
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(
+                transport=transport,
+                base_url="http://testserver",
+            ) as client:
+                return await client.get("/capabilities")
+
+        response = asyncio.run(call_api())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["authMode"], "bearer")
+        self.assertFalse(response.json()["uploadsEnabled"])
 
     def test_capabilities_endpoint_reports_local_mutation_features(self) -> None:
         import httpx
@@ -1813,6 +1838,7 @@ class ApiIntegrationContractTests(unittest.TestCase):
         self.assertTrue(response.json()["trainingEnabled"])
         self.assertTrue(response.json()["logDeletionEnabled"])
         self.assertTrue(response.json()["configSnapshotsEnabled"])
+        self.assertTrue(response.json()["uploadsEnabled"])
 
     def test_model_dataset_endpoint_exposes_path_free_dataset_metadata(self) -> None:
         import httpx

@@ -156,6 +156,7 @@ class RouteAuthIntegrationTests(unittest.TestCase):
         *,
         auth_mode: str = "bearer",
         allow_unsafe_local_mutations: bool = True,
+        allow_log_imports: bool | None = None,
     ):
         from viewer.backend.api import create_app
         from viewer.backend.dependencies import (
@@ -313,6 +314,11 @@ class RouteAuthIntegrationTests(unittest.TestCase):
                 auth_mode=auth_mode,
                 token=token,
                 allow_unsafe_local_mutations=allow_unsafe_local_mutations,
+                **(
+                    {"allow_log_imports": allow_log_imports}
+                    if allow_log_imports is not None
+                    else {}
+                ),
             )
         )
         model_catalog_service = FakeModelCatalogService()
@@ -513,12 +519,12 @@ class RouteAuthIntegrationTests(unittest.TestCase):
             {"detail": LOCAL_MUTATION_DISABLED_DETAIL},
         )
 
-    def test_log_import_rejects_when_local_mutations_are_disabled(self) -> None:
+    def test_log_import_rejects_when_uploads_are_disabled(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             app = self.create_test_app(
                 Path(tmp),
                 auth_mode="none",
-                allow_unsafe_local_mutations=False,
+                allow_log_imports=False,
             )
 
             response = asyncio.run(self.request(app, "POST", "/logs/import"))

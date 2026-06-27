@@ -13,6 +13,7 @@ from viewer.backend.core.errors import ApiError
 from viewer.backend.core.security import (
     require_bearer_auth,
     require_local_mutations_allowed,
+    require_log_imports_allowed,
 )
 from viewer.backend.dependencies import (
     get_log_run_service,
@@ -77,13 +78,13 @@ def _upload_too_large_error(limit: int) -> ApiError:
 async def _read_upload_body_with_limit(
     request: Request,
     *,
-    max_upload_size: int,
+    max_upload_size: int | None,
 ) -> bytes:
     chunks: list[bytes] = []
     total_size = 0
     async for chunk in request.stream():
         total_size += len(chunk)
-        if total_size > max_upload_size:
+        if max_upload_size is not None and total_size > max_upload_size:
             raise _upload_too_large_error(max_upload_size)
         chunks.append(chunk)
     return b"".join(chunks)
@@ -205,7 +206,7 @@ async def import_log_archive(
     service: Annotated[LogRunService, Depends(get_log_run_service)],
     settings: Annotated[ViewerApiSettings, Depends(get_viewer_settings)],
 ) -> LogArchiveImportResponse:
-    require_local_mutations_allowed(settings)
+    require_log_imports_allowed(settings)
 
     content_length = request.headers.get("content-length")
     if content_length is not None:
@@ -213,7 +214,10 @@ async def import_log_archive(
             upload_size = int(content_length)
         except ValueError:
             upload_size = 0
-        if upload_size > settings.max_upload_size:
+        if (
+            settings.max_upload_size is not None
+            and upload_size > settings.max_upload_size
+        ):
             raise _upload_too_large_error(settings.max_upload_size)
 
     upload = parse_multipart_log_archive_upload(

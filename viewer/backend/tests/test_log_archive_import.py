@@ -37,6 +37,7 @@ async def post_archive(
     archive: bytes,
     filename: str = "logs.zip",
     allow_unsafe_local_mutations: bool = True,
+    allow_log_imports: bool | None = None,
     max_upload_size: int | None = None,
     max_extracted_size: int | None = None,
 ) -> httpx.Response:
@@ -44,6 +45,11 @@ async def post_archive(
         ViewerApiSettings(
             logs_root=str(logs_root),
             allow_unsafe_local_mutations=allow_unsafe_local_mutations,
+            **(
+                {"allow_log_imports": allow_log_imports}
+                if allow_log_imports is not None
+                else {}
+            ),
             **(
                 {"max_upload_size": max_upload_size}
                 if max_upload_size is not None
@@ -319,13 +325,28 @@ class LogArchiveImportApiTests(unittest.TestCase):
             self.assertEqual(response.status_code, 400)
             self.assertEqual(response.json()["detail"], "Invalid zip archive.")
 
-    def test_disabled_local_mutation_capability_blocks_endpoint(self) -> None:
+    def test_local_log_import_does_not_require_unsafe_mutation_opt_in(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = Path(tmp) / "logs"
+            response = asyncio.run(
+                post_archive(
+                    logs_root=logs_root,
+                    archive=zip_bytes({"my_experiment/file.txt": "data"}),
+                    allow_unsafe_local_mutations=False,
+                )
+            )
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["extractedFileCount"], 1)
+            self.assertTrue((logs_root / "my_experiment/file.txt").is_file())
+
+    def test_disabled_log_import_capability_blocks_endpoint(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             response = asyncio.run(
                 post_archive(
                     logs_root=Path(tmp) / "logs",
                     archive=zip_bytes({"my_experiment/file.txt": "data"}),
-                    allow_unsafe_local_mutations=False,
+                    allow_log_imports=False,
                 )
             )
 
@@ -350,6 +371,21 @@ class LogArchiveImportApiTests(unittest.TestCase):
                 response.json()["detail"],
                 "Uploaded log archive must be a .zip file.",
             )
+
+    def test_default_upload_size_allows_archives_larger_than_small_cap(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = Path(tmp) / "logs"
+            archive = zip_bytes({"my_experiment/file.txt": "x" * 256})
+            self.assertGreater(len(archive), 64)
+
+            response = asyncio.run(
+                post_archive(logs_root=logs_root, archive=archive)
+            )
+
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertTrue((logs_root / "my_experiment/file.txt").is_file())
 
     def test_upload_size_limit_rejects_request_before_writing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

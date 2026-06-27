@@ -56,9 +56,21 @@ def require_local_mutations_allowed(settings: ViewerApiSettings) -> None:
     )
 
 
+def require_log_imports_allowed(settings: ViewerApiSettings) -> None:
+    """Fail closed for log archive imports when uploads are not enabled."""
+
+    if settings.log_imports_enabled:
+        return
+    raise HTTPException(
+        status_code=403,
+        detail=LOCAL_MUTATION_DISABLED_DETAIL,
+    )
+
+
 __all__ = [
     "WWW_AUTHENTICATE_HEADER",
     "bearer_scheme",
+    "require_log_imports_allowed",
     "require_local_mutations_allowed",
     "require_bearer_auth",
 ]

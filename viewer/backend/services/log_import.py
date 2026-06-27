@@ -14,7 +14,6 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 from viewer.backend.core.errors import ApiError
 from viewer.backend.core.limits import (
     DEFAULT_MAX_LOG_ARCHIVE_EXTRACTED_SIZE,
-    DEFAULT_MAX_UPLOAD_SIZE,
 )
 from viewer.backend.storage.local_files import resolve_root, resolve_under_root
 
@@ -50,11 +49,11 @@ def parse_multipart_log_archive_upload(
     *,
     content_type: str,
     body: bytes,
-    max_upload_size: int,
+    max_upload_size: int | None,
 ) -> LogArchiveUpload:
     """Extract the first zip file part from a bounded multipart/form-data body."""
 
-    if len(body) > max_upload_size:
+    if max_upload_size is not None and len(body) > max_upload_size:
         raise _too_large_error(max_upload_size)
     if not content_type.lower().startswith("multipart/form-data"):
         raise ApiError("Expected multipart form data upload.")
@@ -304,10 +303,10 @@ def import_log_archive(
     archive: bytes,
     filename: str,
     logs_root: Path | str,
-    max_upload_size: int,
+    max_upload_size: int | None,
     max_extracted_size: int,
 ) -> dict[str, object]:
-    if len(archive) > max_upload_size:
+    if max_upload_size is not None and len(archive) > max_upload_size:
         raise _too_large_error(max_upload_size)
     if not filename.lower().endswith(".zip"):
         raise ApiError("Uploaded log archive must be a .zip file.")
@@ -340,7 +339,6 @@ def import_log_archive(
 
 __all__ = [
     "DEFAULT_MAX_LOG_ARCHIVE_EXTRACTED_SIZE",
-    "DEFAULT_MAX_UPLOAD_SIZE",
     "LogArchiveUpload",
     "import_log_archive",
     "parse_multipart_log_archive_upload",

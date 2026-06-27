@@ -33,6 +33,6 @@ async def capabilities(
         ),
         logDeletionEnabled=settings.allow_unsafe_local_mutations,
         configSnapshotsEnabled=settings.allow_unsafe_local_mutations,
-        uploadsEnabled=settings.allow_unsafe_local_mutations,
+        uploadsEnabled=settings.log_imports_enabled,
         maxUploadSize=settings.max_upload_size,
     )
