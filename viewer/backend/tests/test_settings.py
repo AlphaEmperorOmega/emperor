@@ -63,6 +63,7 @@ class ViewerApiSettingsTests(unittest.TestCase):
         self.assertIs(settings.allow_unsafe_local_mutations, False)
         self.assertIs(settings.log_imports_enabled, True)
         self.assertIsNone(settings.max_upload_size)
+        self.assertIsNone(settings.max_log_archive_extracted_size)
 
     def test_bearer_mode_defaults_disable_log_imports(self) -> None:
         settings = ViewerApiSettings(auth_mode="bearer", token="secret-token")
