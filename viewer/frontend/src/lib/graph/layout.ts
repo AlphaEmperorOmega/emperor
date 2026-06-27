@@ -25,6 +25,7 @@ export function layoutGraph(
     graphDetailMode: GraphDetailMode;
     navigation: GraphNavigation;
     childSummariesById: Map<string, ChildSummary[]>;
+    childSummarySourceNodesById?: Map<string, GraphNode>;
     expertDiagramsById?: Map<string, ExpertDiagram>;
     stackDiagramsById?: Map<string, StackDiagram>;
     clusterDiagramsById?: Map<string, ClusterDiagram>;
@@ -53,6 +54,35 @@ export function layoutGraph(
   });
 
   const isSimpleMode = options.graphDetailMode === "simple";
+  const childSummarySourceNodesById =
+    options.childSummarySourceNodesById ??
+    new Map(graph.nodes.map((node) => [node.id, node]));
+
+  const decorateChildSummaries = (childSummaries: ChildSummary[]) => {
+    if (!options.parameterActivityForNode) {
+      return childSummaries;
+    }
+
+    let changed = false;
+    const decorated = childSummaries.map((summary) => {
+      if (!summary.sourceNodeId) {
+        return summary;
+      }
+
+      const sourceNode = childSummarySourceNodesById.get(summary.sourceNodeId);
+      const parameterActivity = sourceNode
+        ? options.parameterActivityForNode?.(sourceNode)
+        : undefined;
+      if (!parameterActivity || parameterActivity === summary.parameterActivity) {
+        return summary;
+      }
+
+      changed = true;
+      return { ...summary, parameterActivity };
+    });
+
+    return changed ? decorated : childSummaries;
+  };
 
   // Compute each node's height once and reuse it for both the dagre layout and
   // the React Flow node style (previously graphNodeHeight ran twice per node).
@@ -102,7 +132,9 @@ export function layoutGraph(
   const nodes: Array<Node<ViewerNodeData>> = graph.nodes.map((node) => {
     const position = dagreGraph.node(node.id);
     const childCount = options.navigation.childrenById.get(node.id)?.length ?? 0;
-    const childSummaries = options.childSummariesById.get(node.id) ?? [];
+    const childSummaries = decorateChildSummaries(
+      options.childSummariesById.get(node.id) ?? [],
+    );
     const expertDiagram = options.expertDiagramsById?.get(node.id);
     const stackDiagram = options.stackDiagramsById?.get(node.id);
     const clusterDiagram = options.clusterDiagramsById?.get(node.id);

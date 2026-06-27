@@ -17,7 +17,6 @@ import {
 } from "@/features/viewer/components/graph/graph-node-details";
 import { GraphNodeHeader } from "@/features/viewer/components/graph/graph-node-header";
 import { GraphNodeFooterStats } from "@/features/viewer/components/graph/graph-node-badges";
-import { GraphParameterIndicators } from "@/features/viewer/components/graph/graph-parameter-indicators";
 import { GraphNodeChildSummaries } from "@/features/viewer/components/graph/graph-node-child-summaries";
 import {
   ClusterDiagramView,
@@ -31,6 +30,7 @@ import {
   nodeDimsText,
   nodeDetailEntries,
   parameterShapeEntries,
+  parameterShapeDimsText,
   simpleGraphParamText,
 } from "@/lib/graph";
 import { cn } from "@/lib/utils";
@@ -110,6 +110,28 @@ const GraphNodeView = memo(function GraphNodeView({
   const hasMetadata = entries.length > 0;
   const detailToggleLabel = data.config ? "Config options" : "Details";
   const detailsId = `graph-node-details-${data.nodeId.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+  const rendersChildSummaries =
+    !isSimpleMode && !data.clusterDiagram && !data.stackDiagram && !data.expertDiagram;
+  const shouldRenderChildSummaries =
+    rendersChildSummaries && data.childSummaries.length > 0;
+  const hasChildSummaryParameterActivity = data.childSummaries.some(
+    (summary) => summary.parameterActivity,
+  );
+  const visibleDimsTexts = [
+    ...(shouldRenderChildSummaries
+      ? data.childSummaries.map((summary) => summary.dims)
+      : []),
+    ...(data.stackDiagram
+      ? [
+          data.stackDiagram.dims,
+          ...data.stackDiagram.cells.map((cell) => cell.dims),
+        ]
+      : []),
+  ];
+  const shapeDimsText =
+    !isSimpleMode && parameterShapes.length > 0
+      ? parameterShapeDimsText(data.details, data.config, visibleDimsTexts)
+      : undefined;
   const expansionButton = data.canToggleExpansion ? (
     <GraphIconButton
       className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] border border-line bg-white/[0.03] text-ink-dim transition hover:border-white/20 hover:bg-white/[0.07] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
@@ -131,17 +153,43 @@ const GraphNodeView = memo(function GraphNodeView({
       icon={<Info className="h-3.5 w-3.5" aria-hidden />}
     />
   );
-  const monitorButton = data.canOpenMonitor && data.onOpenMonitor ? (
-    <GraphIconButton
-      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] border border-violet/25 bg-violet/10 text-violet-muted transition hover:border-violet/45 hover:bg-violet/20 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-      label={`Open monitor charts for ${data.path}`}
-      onClick={() => data.onOpenMonitor?.()}
-      icon={<LineChart className="h-3.5 w-3.5" aria-hidden />}
-    />
-  ) : null;
-  const parameterIndicators = data.parameterActivity ? (
-    <GraphParameterIndicators activity={data.parameterActivity} />
-  ) : null;
+  const monitorLabel = `Open monitor charts for ${data.path}`;
+  const handleMonitorClick = (event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    data.onOpenMonitor?.();
+  };
+  const handleMonitorKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+  };
+  const renderMonitorButton = (compact: boolean) => {
+    if (!data.canOpenMonitor || !data.onOpenMonitor) {
+      return null;
+    }
+
+    if (compact) {
+      return (
+        <button
+          type="button"
+          title={monitorLabel}
+          aria-label={monitorLabel}
+          className="nodrag nopan flex h-6 w-6 shrink-0 items-center justify-center rounded-[7px] border border-violet/30 bg-violet/10 text-violet-muted shadow-[inset_0_-1px_0_rgba(146,113,255,0.22)] transition hover:border-violet/50 hover:bg-violet/20 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          onClick={handleMonitorClick}
+          onKeyDown={handleMonitorKeyDown}
+        >
+          <LineChart className="h-3.5 w-3.5" aria-hidden />
+        </button>
+      );
+    }
+
+    return (
+      <GraphIconButton
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] border border-violet/25 bg-violet/10 text-violet-muted transition hover:border-violet/45 hover:bg-violet/20 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        label={monitorLabel}
+        onClick={() => data.onOpenMonitor?.()}
+        icon={<LineChart className="h-3.5 w-3.5" aria-hidden />}
+      />
+    );
+  };
   const footerStats = (
     <GraphNodeFooterStats
       nodeId={data.nodeId}
@@ -162,6 +210,11 @@ const GraphNodeView = memo(function GraphNodeView({
         onToggleDetails={data.onToggleDetails}
       />
     ) : null;
+  const inlineMonitorButton =
+    shouldRenderChildSummaries && hasChildSummaryParameterActivity
+      ? renderMonitorButton(true)
+      : null;
+  const footerMonitorButton = inlineMonitorButton ? null : renderMonitorButton(false);
 
   return (
     <>
@@ -196,7 +249,12 @@ const GraphNodeView = memo(function GraphNodeView({
             simpleDimsText={simpleDimsText}
           />
           {!isSimpleMode && parameterShapes.length > 0 && (
-            <GraphNodeParameterShapes nodeId={data.nodeId} entries={parameterShapes} />
+            <GraphNodeParameterShapes
+              nodeId={data.nodeId}
+              entries={parameterShapes}
+              parameterActivity={data.parameterActivity}
+              dimsText={shapeDimsText}
+            />
           )}
           {!isSimpleMode && data.clusterDiagram ? (
             <ClusterDiagramView diagram={data.clusterDiagram} nodeId={data.nodeId} />
@@ -204,10 +262,11 @@ const GraphNodeView = memo(function GraphNodeView({
             <StackDiagramView diagram={data.stackDiagram} nodeId={data.nodeId} />
           ) : !isSimpleMode && data.expertDiagram ? (
             <ExpertDiagramView diagram={data.expertDiagram} nodeId={data.nodeId} />
-          ) : !isSimpleMode ? (
+          ) : shouldRenderChildSummaries ? (
             <GraphNodeChildSummaries
               nodeId={data.nodeId}
               summaries={data.childSummaries}
+              monitorButton={inlineMonitorButton}
             />
           ) : null}
           {!isSimpleMode && hasMetadata && (
@@ -223,8 +282,7 @@ const GraphNodeView = memo(function GraphNodeView({
             expansionButton={expansionButton}
             componentInfoButton={componentInfoButton}
             footerStats={footerStats}
-            parameterIndicators={parameterIndicators}
-            monitorButton={monitorButton}
+            monitorButton={footerMonitorButton}
           />
         </div>
         <Handle type="source" position={Position.Right} />
@@ -240,7 +298,6 @@ function GraphNodeActionBar({
   expansionButton,
   componentInfoButton,
   footerStats,
-  parameterIndicators,
   monitorButton,
 }: {
   nodeId: string;
@@ -248,7 +305,6 @@ function GraphNodeActionBar({
   expansionButton: ReactNode;
   componentInfoButton: ReactNode;
   footerStats: ReactNode;
-  parameterIndicators: ReactNode;
   monitorButton: ReactNode;
 }) {
   return (
@@ -263,10 +319,7 @@ function GraphNodeActionBar({
       </div>
       <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
         {footerStats}
-        <div className="flex shrink-0 items-center gap-1">
-          {parameterIndicators}
-          {monitorButton}
-        </div>
+        <div className="flex shrink-0 items-center gap-1">{monitorButton}</div>
       </div>
     </div>
   );

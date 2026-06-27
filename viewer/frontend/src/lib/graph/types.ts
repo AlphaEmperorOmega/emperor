@@ -82,6 +82,8 @@ export type ChildSummary = {
   kind: "child" | "mechanism" | "overflow";
   stackKind?: "layer";
   title?: string;
+  sourceNodeId?: string;
+  parameterActivity?: GraphParameterActivity;
 };
 
 export type ExpertDiagramCell = {

@@ -37,6 +37,26 @@ function run(overrides: Partial<LogRun> & Pick<LogRun, "id">): LogRun {
   };
 }
 
+function option(
+  value: string,
+  count: number,
+  monitorEligibility: "checking" | "eligible" | "ineligible" = "checking",
+) {
+  const description =
+    monitorEligibility === "eligible"
+      ? "monitor data"
+      : monitorEligibility === "ineligible"
+        ? "no monitor data"
+        : "monitor checking";
+  return {
+    value,
+    label: value,
+    count,
+    monitorEligibility,
+    description,
+  };
+}
+
 describe("historical monitor run helpers", () => {
   const runs = [
     run({
@@ -80,8 +100,8 @@ describe("historical monitor run helpers", () => {
       "exp_b",
     ]);
     expect(historicalExperimentRunOptions(runs)).toEqual([
-      { value: "exp_a", label: "exp_a", count: 3 },
-      { value: "exp_b", label: "exp_b", count: 1 },
+      option("exp_a", 3),
+      option("exp_b", 1),
     ]);
   });
 
@@ -93,8 +113,8 @@ describe("historical monitor run helpers", () => {
         run({ id: "c", preset: "baseline", timestamp: "2026-06-02 01:00:00" }),
       ]),
     ).toEqual([
-      { value: "fast", label: "fast", count: 1 },
-      { value: "baseline", label: "baseline", count: 2 },
+      option("fast", 1),
+      option("baseline", 2),
     ]);
   });
 
@@ -114,8 +134,8 @@ describe("historical monitor run helpers", () => {
 
   it("derives dataset options from the selected experiment", () => {
     expect(historicalDatasetOptions(runs, "exp_a")).toEqual([
-      { value: "Mnist", label: "Mnist", count: 2 },
-      { value: "FashionMnist", label: "FashionMnist", count: 1 },
+      option("Mnist", 2),
+      option("FashionMnist", 1),
     ]);
   });
 

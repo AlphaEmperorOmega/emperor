@@ -86,8 +86,6 @@ function renderRequestState({
       searchAxes,
       searchLoading: false,
       trainingEnabled: true,
-      trainingLockedByHistoricalSelection: false,
-      historicalTrainingLockExperiment: "",
       logFolder: "runs",
     }),
   );

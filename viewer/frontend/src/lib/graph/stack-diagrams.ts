@@ -106,18 +106,18 @@ function createStackDiagramCells(
     return layerCells;
   }
 
+  const lastEntry = entries[entries.length - 1];
+  const hiddenLayerCount =
+    entries.length - STACK_DIAGRAM_VISIBLE_BEFORE_OVERFLOW - 1;
+
   return [
     ...layerCells,
     {
       label: "...",
-      title: `${entries.length - STACK_DIAGRAM_VISIBLE_BEFORE_OVERFLOW} more layers`,
+      title: `${hiddenLayerCount} more layer${hiddenLayerCount === 1 ? "" : "s"}`,
       kind: "overflow" as const,
     },
-    {
-      label: `${entries.length} layers`,
-      title: `${entries.length} layers total`,
-      kind: "total" as const,
-    },
+    stackLayerCell(lastEntry, navigation, nodesById),
   ];
 }
 

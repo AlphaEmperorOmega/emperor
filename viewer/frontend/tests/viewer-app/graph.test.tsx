@@ -198,10 +198,11 @@ describe("ViewerApp Graph Workspace", () => {
 
     const modelNode = await screen.findByTestId("node-model");
     expect(within(modelNode).getByLabelText("Layer 0 LinearLayer")).toBeInTheDocument();
-    expect(within(modelNode).getByLabelText("Layer 4 LinearLayer")).toBeInTheDocument();
-    expect(within(modelNode).queryByLabelText("Layer 5 LinearLayer")).not.toBeInTheDocument();
-    expect(within(modelNode).getByTitle("4 more layers")).toHaveTextContent("...");
-    expect(within(modelNode).getByTitle("9 layers total")).toHaveTextContent("9 layers");
+    expect(within(modelNode).getByLabelText("Layer 1 LinearLayer")).toBeInTheDocument();
+    expect(within(modelNode).queryByLabelText("Layer 2 LinearLayer")).not.toBeInTheDocument();
+    expect(within(modelNode).getByTitle("6 more layers")).toHaveTextContent("...");
+    expect(within(modelNode).getByLabelText("Layer 8 LinearLayer")).toBeInTheDocument();
+    expect(within(modelNode).queryByText("9 layers")).not.toBeInTheDocument();
   });
 
   it("builds basic-mode child summaries from the filtered graph", async () => {

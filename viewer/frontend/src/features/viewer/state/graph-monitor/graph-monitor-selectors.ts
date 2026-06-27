@@ -248,13 +248,15 @@ function historicalParameterChannel(
   const observedRuns = updatedRuns + unchangedRuns;
   const totalRuns = normalizedStatuses.length;
   const status =
-    observedRuns === 0
+    totalRuns === 0 || (observedRuns === 0 && missingRuns !== totalRuns)
       ? "unknown"
       : updatedRuns === totalRuns
         ? "updated"
-        : updatedRuns > 0
-          ? "mixed"
-          : "unchanged";
+        : unchangedRuns === totalRuns
+          ? "unchanged"
+          : missingRuns === totalRuns
+            ? "missing"
+            : "mixed";
 
   return {
     status,

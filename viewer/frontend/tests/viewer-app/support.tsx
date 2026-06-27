@@ -69,6 +69,17 @@ export type MockNodeData = {
   onToggleDetails: () => void;
 };
 
+type MockMinimapNodeData = {
+  nodeId: string;
+  path: string;
+  activity?: GraphParameterActivity;
+  isParameterBearing: boolean;
+  canToggleExpansion: boolean;
+  isExpanded: boolean;
+  onToggleExpansion: () => void;
+  onOpenMonitor?: () => void;
+};
+
 export type MockConfigSnapshot = {
   id: string;
   modelType: string;
@@ -258,6 +269,9 @@ function MockGraphParameterIndicators({
 }
 
 vi.mock("@xyflow/react", () => ({
+  ReactFlowProvider: ({ children }: { children: React.ReactNode }) => (
+    <>{children}</>
+  ),
   ReactFlow: ({
     nodes,
     edges,
@@ -274,9 +288,10 @@ vi.mock("@xyflow/react", () => ({
   }: {
     nodes: Array<{
       id: string;
+      type?: string;
       position: { x: number; y: number };
       style?: { height?: number };
-      data: MockNodeData;
+      data: MockNodeData | MockMinimapNodeData;
     }>;
     edges: Array<{ id: string; source: string; target: string }>;
     onNodeClick?: (event: unknown, node: { id: string }) => void;
@@ -310,12 +325,70 @@ vi.mock("@xyflow/react", () => ({
             data-testid={`node-${node.id}`}
             data-x={node.position.x}
             data-y={node.position.y}
-            data-height={node.style?.height ?? node.data.height}
+            data-height={
+              node.style?.height ??
+              (node.type === "parameterActivityMinimapNode"
+                ? undefined
+                : (node.data as MockNodeData).height)
+            }
           >
             {(() => {
+              if (node.type === "parameterActivityMinimapNode") {
+                const data = node.data as MockMinimapNodeData;
+
+                return (
+                  <div
+                    aria-label={
+                      data.isParameterBearing
+                        ? `Parameter activity for ${data.path}`
+                        : `Parameter activity branch ${data.path}`
+                    }
+                    data-testid={`parameter-activity-minimap-node-${data.nodeId}`}
+                  >
+                    {data.canToggleExpansion && (
+                      <button
+                        type="button"
+                        aria-label={`${data.isExpanded ? "Collapse" : "Expand"} ${data.path}`}
+                        aria-expanded={data.isExpanded}
+                        onClick={data.onToggleExpansion}
+                      >
+                        toggle
+                      </button>
+                    )}
+                    {data.activity && (
+                      <>
+                        <span
+                          aria-label={`Weights ${data.activity.weights.status}`}
+                          className={data.activity.weights.status}
+                        >
+                          W
+                        </span>
+                        {data.activity.bias && (
+                          <span
+                            aria-label={`Bias ${data.activity.bias.status}`}
+                            className={data.activity.bias.status}
+                          >
+                            b
+                          </span>
+                        )}
+                      </>
+                    )}
+                    {data.onOpenMonitor && (
+                      <button
+                        type="button"
+                        aria-label={`Open monitor charts for ${data.path}`}
+                        onClick={data.onOpenMonitor}
+                      >
+                        monitor
+                      </button>
+                    )}
+                  </div>
+                );
+              }
+
               const data = node.data;
 
-              const moduleData = data;
+              const moduleData = data as MockNodeData;
               const isSimpleMode = moduleData.graphDetailMode === "simple";
               const {
                 onOpenMonitor,

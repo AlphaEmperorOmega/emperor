@@ -722,7 +722,7 @@ describe("ViewerApp Overview", () => {
       .not.toBeInTheDocument();
   });
 
-  it("keeps the Experiments tab reachable when lazy tag reads find no eligible layer-monitor runs", async () => {
+  it("keeps performance-only experiment runs selectable without graph activity", async () => {
     installFetchMock({
       logTagsByRun: {
         "log-mnist": ["train/loss"],
@@ -743,10 +743,19 @@ describe("ViewerApp Overview", () => {
       name: /^experiment$/i,
     });
     await waitFor(() => {
-      expect(experimentControl).toBeDisabled();
+      expect(experimentControl).toBeEnabled();
     });
-    expect(screen.getByRole("combobox", { name: /^dataset$/i })).toBeDisabled();
-    expect(screen.getByRole("combobox", { name: /^preset$/i })).toBeDisabled();
+
+    await user.click(experimentControl);
+    const experimentOptions = await screen.findByRole("listbox", {
+      name: /^experiment options$/i,
+    });
+    expect(
+      within(experimentOptions).getByRole("option", { name: "test_model" }),
+    ).toHaveTextContent("no monitor data");
+    expect(
+      within(experimentOptions).getByRole("option", { name: "test_model_2" }),
+    ).toHaveTextContent("no monitor data");
   });
 
   it("shows only current-model snapshots in the target snapshot selector", async () => {

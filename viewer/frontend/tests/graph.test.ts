@@ -30,6 +30,11 @@ import { filterGraphByDetail, filterGraphByExpansion } from "@/lib/graph/filteri
 import { layoutGraph } from "@/lib/graph/layout";
 import {
   buildMonitorComparisonCandidateGroups,
+  collapseParameterActivityMinimapNodes,
+  deriveParameterActivityMinimapModel,
+  expandAllParameterActivityMinimapNodes,
+  filterParameterActivityMinimapGraphByExpansion,
+  type GraphParameterActivity,
   buildLinearMonitorComparisonCandidateGroups,
   buildLinearMonitorComparisonCandidates,
   createMonitorTargetResolver,
@@ -253,6 +258,167 @@ describe("simple graph inline metric formatting", () => {
       ),
     ).toBeUndefined();
     expect(nodeDimsText(undefined)).toBeUndefined();
+  });
+});
+
+function activity(
+  targetPath: string,
+  overrides: Partial<GraphParameterActivity> = {},
+): GraphParameterActivity {
+  return {
+    targetPath,
+    weights: {
+      status: "updated",
+      source: "historical",
+      sourceLabel: "1 historical run",
+      observedPoints: 2,
+    },
+    ...overrides,
+  };
+}
+
+function graphNodeIds(targetGraph: InspectResponse | undefined) {
+  return targetGraph?.nodes.map((candidate) => candidate.id) ?? [];
+}
+
+function graphEdgeIds(targetGraph: InspectResponse | undefined) {
+  return targetGraph?.edges.map((candidate) => candidate.id) ?? [];
+}
+
+describe("parameter activity minimap graph", () => {
+  it("keeps parameter-bearing nodes and their minimal ancestor chain", () => {
+    const modelNode = node("model", { path: "main_model" });
+    const stackNode = node("stack", { path: "main_model.stack" });
+    const layerNode = node("layer", { path: "main_model.stack.0" });
+    const linearNode = node("linear", {
+      path: "main_model.stack.0.model",
+      typeName: "LinearLayer",
+    });
+    const unrelatedNode = node("dropout", {
+      path: "main_model.dropout",
+      typeName: "Dropout",
+    });
+    const inputGraph = graph(
+      [modelNode, stackNode, layerNode, linearNode, unrelatedNode],
+      [
+        ["model", "stack"],
+        ["stack", "layer"],
+        ["layer", "linear"],
+        ["model", "dropout"],
+      ],
+    );
+    const minimap = deriveParameterActivityMinimapModel({
+      graph: inputGraph,
+      activityByNodePath: new Map([
+        [linearNode.path, activity(linearNode.path)],
+      ]),
+    });
+
+    expect(graphNodeIds(minimap.graph)).toEqual([
+      "model",
+      "stack",
+      "layer",
+      "linear",
+    ]);
+    expect(graphEdgeIds(minimap.graph)).toEqual([
+      "model-stack",
+      "stack-layer",
+      "layer-linear",
+    ]);
+    expect(minimap.parameterNodeIds).toEqual(new Set(["linear"]));
+    expect(minimap.parameterNodeCount).toBe(1);
+  });
+
+  it("treats weight-only activity as parameter-bearing without requiring bias", () => {
+    const root = node("root", { path: "main_model" });
+    const linear = node("linear", {
+      path: "main_model.linear",
+      typeName: "LinearLayer",
+    });
+    const inputGraph = graph([root, linear], [["root", "linear"]]);
+    const minimap = deriveParameterActivityMinimapModel({
+      graph: inputGraph,
+      activityByNodePath: new Map([[linear.path, activity(linear.path)]]),
+    });
+
+    expect(minimap.parameterNodeIds).toEqual(new Set(["linear"]));
+    expect(minimap.parameterNodeCount).toBe(1);
+  });
+
+  it("filters visible nodes by independent minimap expansion state", () => {
+    const root = node("root", { path: "main_model" });
+    const block = node("block", { path: "main_model.block" });
+    const linear = node("linear", {
+      path: "main_model.block.linear",
+      typeName: "LinearLayer",
+    });
+    const inputGraph = graph(
+      [root, block, linear],
+      [
+        ["root", "block"],
+        ["block", "linear"],
+      ],
+    );
+    const minimap = deriveParameterActivityMinimapModel({
+      graph: inputGraph,
+      activityByNodePath: new Map([[linear.path, activity(linear.path)]]),
+    });
+
+    expect(minimap.initialExpandedNodeIds).toEqual(new Set(["root"]));
+    expect(
+      graphNodeIds(
+        filterParameterActivityMinimapGraphByExpansion(
+          minimap,
+          minimap.initialExpandedNodeIds,
+        ),
+      ),
+    ).toEqual(["root", "block"]);
+    expect(
+      graphNodeIds(
+        filterParameterActivityMinimapGraphByExpansion(
+          minimap,
+          expandAllParameterActivityMinimapNodes(minimap),
+        ),
+      ),
+    ).toEqual(["root", "block", "linear"]);
+    expect(
+      graphNodeIds(
+        filterParameterActivityMinimapGraphByExpansion(
+          minimap,
+          collapseParameterActivityMinimapNodes(minimap),
+        ),
+      ),
+    ).toEqual(["root", "block"]);
+  });
+
+  it("handles empty graphs and graphs with no parameter-bearing components", () => {
+    expect(
+      deriveParameterActivityMinimapModel({
+        graph: undefined,
+        activityByNodePath: undefined,
+      }).parameterNodeCount,
+    ).toBe(0);
+
+    const inputGraph = graph(
+      [
+        node("root", { path: "main_model" }),
+        node("child", { path: "main_model.child" }),
+      ],
+      [["root", "child"]],
+    );
+    const minimap = deriveParameterActivityMinimapModel({
+      graph: inputGraph,
+      activityByNodePath: new Map(),
+    });
+
+    expect(minimap.graph).toBeUndefined();
+    expect(minimap.parameterNodeCount).toBe(0);
+    expect(
+      filterParameterActivityMinimapGraphByExpansion(
+        minimap,
+        minimap.initialExpandedNodeIds,
+      ),
+    ).toBeUndefined();
   });
 });
 
@@ -860,6 +1026,7 @@ describe("buildChildSummaries", () => {
         dims: "128 -> 128",
         kind: "child",
         stackKind: "layer",
+        sourceNodeId: "main_model.0",
       },
       {
         label: "Layer 1",
@@ -867,6 +1034,7 @@ describe("buildChildSummaries", () => {
         dims: "128 -> 10",
         kind: "child",
         stackKind: "layer",
+        sourceNodeId: "main_model.1",
       },
     ]);
   });
@@ -895,8 +1063,13 @@ describe("buildChildSummaries", () => {
     );
 
     expect(buildChildSummaries(g, buildGraphNavigation(g)).get("main_model.0")).toEqual([
-      { label: "LinearLayer", dims: "512 -> 10", kind: "child" },
-      { label: "Gate", kind: "child" },
+      {
+        label: "LinearLayer",
+        dims: "512 -> 10",
+        kind: "child",
+        sourceNodeId: "main_model.0.model",
+      },
+      { label: "Gate", kind: "child", sourceNodeId: "main_model.0.gate_model" },
     ]);
   });
 
@@ -951,17 +1124,28 @@ describe("buildChildSummaries", () => {
     const summaries = buildChildSummaries(g, buildGraphNavigation(g));
 
     expect(summaries.get("block")).toEqual([
-      { label: "LinearLayer", dims: "128 -> 64", kind: "child" },
+      {
+        label: "LinearLayer",
+        dims: "128 -> 64",
+        kind: "child",
+        sourceNodeId: "block.linear",
+      },
       {
         label: "Layer 0",
         nestedLabel: "LinearLayer",
         dims: "64 -> 32",
         kind: "child",
         stackKind: "layer",
+        sourceNodeId: "block.0",
       },
     ]);
     expect(summaries.get("layer_parent")).toEqual([
-      { label: "LinearLayer", dims: "256 -> 10", kind: "child" },
+      {
+        label: "LinearLayer",
+        dims: "256 -> 10",
+        kind: "child",
+        sourceNodeId: "layer_parent.model",
+      },
     ]);
   });
 
@@ -991,6 +1175,7 @@ describe("buildChildSummaries", () => {
         dims: "1 -> 2",
         kind: "child",
         stackKind: "layer",
+        sourceNodeId: "main_model.0",
       },
       {
         label: "Layer 1",
@@ -998,30 +1183,21 @@ describe("buildChildSummaries", () => {
         dims: "2 -> 3",
         kind: "child",
         stackKind: "layer",
+        sourceNodeId: "main_model.1",
       },
       {
-        label: "Layer 2",
-        nestedLabel: "LinearLayer",
-        dims: "3 -> 4",
-        kind: "child",
-        stackKind: "layer",
+        label: "...",
+        kind: "overflow",
+        title: "6 more layers",
       },
       {
-        label: "Layer 3",
+        label: "Layer 8",
         nestedLabel: "LinearLayer",
-        dims: "4 -> 5",
+        dims: "9 -> 10",
         kind: "child",
         stackKind: "layer",
+        sourceNodeId: "main_model.8",
       },
-      {
-        label: "Layer 4",
-        nestedLabel: "LinearLayer",
-        dims: "5 -> 6",
-        kind: "child",
-        stackKind: "layer",
-      },
-      { label: "...", kind: "overflow", title: "4 more layers" },
-      { label: "9 layers", kind: "child", title: "9 layers total" },
     ]);
   });
 
@@ -1044,7 +1220,9 @@ describe("buildChildSummaries", () => {
     );
     const summaries = withChild;
     const built = buildChildSummaries(summaries, buildGraphNavigation(summaries));
-    expect(built.get("ctrl")).toEqual([{ label: "Gate", kind: "child" }]);
+    expect(built.get("ctrl")).toEqual([
+      { label: "Gate", kind: "child", sourceNodeId: "ctrl.gate_model" },
+    ]);
   });
 });
 
@@ -1287,10 +1465,12 @@ describe("buildStackDiagrams", () => {
     expect(diagram?.cells.map((cell) => cell.label)).toEqual([
       "Layer 0 · LinearLayer",
       "Layer 1 · LinearLayer",
-      "Layer 2 · LinearLayer",
-      "Layer 3 · LinearLayer",
+      "...",
       "Layer 4 · LinearLayer",
     ]);
+    expect(diagram?.cells[2].title).toBe("2 more layers");
+    expect(diagram?.cells[3].title).toBe("Layer 4 · LinearLayer · 128 -> 10");
+    expect(diagram?.cells[3].dims).toBe("128 -> 10");
   });
 
   it("uses stack container config dimensions before deriving from child layers", () => {
@@ -1445,7 +1625,7 @@ describe("buildStackDiagrams", () => {
     expect(diagram?.cells[0].title).toBe("Layer 0 · MixtureOfExperts · 128 -> 128");
   });
 
-  it("collapses more than seven layers to five cells, ellipsis, and total", () => {
+  it("collapses more than three layers to two cells, ellipsis, and total", () => {
     const layerCount = 16;
     const g = graph(
       [
@@ -1470,18 +1650,15 @@ describe("buildStackDiagrams", () => {
     expect(diagram?.cells.map((cell) => cell.label)).toEqual([
       "Layer 0 · LinearLayer",
       "Layer 1 · LinearLayer",
-      "Layer 2 · LinearLayer",
-      "Layer 3 · LinearLayer",
-      "Layer 4 · LinearLayer",
       "...",
-      "16 layers",
+      "Layer 15 · LinearLayer",
     ]);
-    expect(diagram?.cells[5].title).toBe("11 more layers");
-    expect(diagram?.cells[6].title).toBe("16 layers total");
+    expect(diagram?.cells[2].title).toBe("13 more layers");
+    expect(diagram?.cells[3].title).toBe("Layer 15 · LinearLayer · 16 -> 17");
     expect(diagram?.dims).toBe("1 -> 17");
     expect(diagram?.cells[0].dims).toBe("1 -> 2");
-    expect(diagram?.cells[5].dims).toBeUndefined();
-    expect(diagram?.cells[6].dims).toBeUndefined();
+    expect(diagram?.cells[2].dims).toBeUndefined();
+    expect(diagram?.cells[3].dims).toBe("16 -> 17");
   });
 
   it("does not derive stack diagrams for expert_modules lists", () => {
@@ -2186,6 +2363,71 @@ describe("layoutGraph", () => {
     expect(nodes[0].data.height).toBe(200);
   });
 
+  it("does not reserve an empty child-summary spacer for shape-only cards", () => {
+    const g = graph(
+      [
+        node("a", {
+          details: {
+            weightShape: "3 x 4",
+            biasShape: "3",
+          },
+        }),
+      ],
+      [],
+    );
+    const nav = buildGraphNavigation(g);
+    const { nodes } = layoutGraph(g, {
+      graphDetailMode: "basic",
+      navigation: nav,
+      childSummariesById: buildChildSummaries(g, nav),
+      expandedGraphNodeIds: new Set(),
+      expandedDetailNodeIds: new Set(),
+      enableExpansion: true,
+      selectedNodeId: "a",
+      onActivateNode: () => {},
+      onToggleExpansion: () => {},
+      onToggleDetails: () => {},
+    });
+
+    expect(nodes[0].data.height).toBe(156);
+  });
+
+  it("keeps direct shape cards compact when the dims chip shares the shape row", () => {
+    const g = graph(
+      [
+        node("a", {
+          details: {
+            weightShape: "10 x 256",
+            biasShape: "10",
+          },
+          config: {
+            typeName: "LinearLayerConfig",
+            fields: [
+              { key: "input_dim", value: 256 },
+              { key: "output_dim", value: 10 },
+            ],
+          },
+        }),
+      ],
+      [],
+    );
+    const nav = buildGraphNavigation(g);
+    const { nodes } = layoutGraph(g, {
+      graphDetailMode: "basic",
+      navigation: nav,
+      childSummariesById: buildChildSummaries(g, nav),
+      expandedGraphNodeIds: new Set(),
+      expandedDetailNodeIds: new Set(),
+      enableExpansion: true,
+      selectedNodeId: "a",
+      onActivateNode: () => {},
+      onToggleExpansion: () => {},
+      onToggleDetails: () => {},
+    });
+
+    expect(nodes[0].data.height).toBe(156);
+  });
+
   it("sizes expanded detail accordions without adding an extra header gap", () => {
     const g = graph(
       [
@@ -2381,7 +2623,7 @@ describe("layoutGraph", () => {
       "Layer 1 · Layer",
       "Layer 2 · Layer",
     ]);
-    expect(collapsed.data.height).toBe(240);
+    expect(collapsed.data.height).toBe(252);
     expect(expanded.data.height - collapsed.data.height).toBe(44);
   });
 
@@ -2499,7 +2741,7 @@ describe("layoutGraph", () => {
     expect(clusterNode?.style?.height).toBe(416);
   });
 
-  it("reserves taller stack diagram height for dense layer previews", () => {
+  it("reserves four stack rows for layer previews over three layers", () => {
     const g = graph(
       [
         node("main_model", {
@@ -2535,9 +2777,14 @@ describe("layoutGraph", () => {
       onToggleDetails: () => {},
     });
 
-    expect(nodes[0].data.stackDiagram?.cells).toHaveLength(5);
+    expect(nodes[0].data.stackDiagram?.cells.map((cell) => cell.label)).toEqual([
+      "Layer 0 · Layer",
+      "Layer 1 · Layer",
+      "...",
+      "Layer 4 · Layer",
+    ]);
     expect(nodes[0].data.typeName).toBe("LayerStack");
-    expect(nodes[0].data.height).toBe(288);
+    expect(nodes[0].data.height).toBe(296);
   });
 
   it("uses compact fixed card dimensions in simple mode", () => {

@@ -32,6 +32,7 @@ const logRunFields = {
   eventFileCount: z.number(),
   checkpointCount: z.number(),
   hasHparams: z.boolean(),
+  hasLayerMonitorData: z.boolean().nullable().optional(),
   metrics: jsonObjectSchema,
 };
 
@@ -63,6 +64,7 @@ export const logRunSchema = logRunPayloadSchema
 
 export const logRunTagsSchema = z.object({
   runId: z.string(),
+  hasLayerMonitorData: z.boolean().nullable().optional(),
   ...responseMetadataSchema.shape,
   scalarTags: z.array(z.string()),
   histogramTags: z.array(z.string()),

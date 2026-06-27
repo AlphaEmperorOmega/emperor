@@ -6,8 +6,10 @@ import {
   historicalPresetOptions as buildHistoricalPresetOptions,
   latestHistoricalMonitorRuns,
   logRunHasLayerMonitorData,
+  monitorEligibilityDescription,
   sortLogRunsNewestFirst,
   type HistoricalRunOption,
+  type MonitorEligibility,
 } from "@/lib/historical-monitor-runs";
 
 export type DatasetSelectionInput = {
@@ -35,28 +37,45 @@ export type DatasetSelectionState = {
   historicalMonitorRuns: LogRun[];
   filteredHistoricalRunIds: string[];
   selectedLogRun: LogRun | undefined;
+  selectedLogRunMonitorEligibility: MonitorEligibility | undefined;
 };
 
-function monitorEligibleRunIds({
+function tagsByRunId(modelRunTags: LogRunTags[] | undefined) {
+  return new Map((modelRunTags ?? []).map((tags) => [tags.runId, tags]));
+}
+
+function monitorEligibilityForRun({
+  run,
+  modelRunTagsByRunId,
+}: {
+  run: LogRun;
+  modelRunTagsByRunId: Map<string, LogRunTags>;
+}): MonitorEligibility {
+  const tags = modelRunTagsByRunId.get(run.id);
+  if (tags) {
+    return logRunHasLayerMonitorData(tags) ? "eligible" : "ineligible";
+  }
+  if (run.hasLayerMonitorData === true) {
+    return "eligible";
+  }
+  if (run.hasLayerMonitorData === false) {
+    return "ineligible";
+  }
+  return "checking";
+}
+
+function monitorEligibleRuns({
   modelLogRuns,
   modelRunTags,
-  includeRunsWithoutMonitorTags,
 }: {
   modelLogRuns: LogRun[];
   modelRunTags: LogRunTags[] | undefined;
-  includeRunsWithoutMonitorTags: boolean | undefined;
 }) {
-  if (modelRunTags === undefined && includeRunsWithoutMonitorTags) {
-    return new Set(modelLogRuns.map((run) => run.id));
-  }
-
-  const runIds = new Set<string>();
-  for (const tags of modelRunTags ?? []) {
-    if (logRunHasLayerMonitorData(tags)) {
-      runIds.add(tags.runId);
-    }
-  }
-  return runIds;
+  const modelRunTagsByRunId = tagsByRunId(modelRunTags);
+  return modelLogRuns.filter(
+    (run) =>
+      monitorEligibilityForRun({ run, modelRunTagsByRunId }) === "eligible",
+  );
 }
 
 export function deriveDatasetSelectionState(
@@ -73,43 +92,53 @@ export function deriveDatasetSelectionState(
         (!input.selectedModelType || run.modelType === input.selectedModelType),
     ),
   );
-  const eligibleRunIds = monitorEligibleRunIds({
+  const modelRunTagsByRunId = tagsByRunId(input.modelRunTags);
+  const getMonitorEligibility = (run: LogRun) =>
+    monitorEligibilityForRun({ run, modelRunTagsByRunId });
+  const eligibleRuns = monitorEligibleRuns({
     modelLogRuns,
     modelRunTags: input.modelRunTags,
-    includeRunsWithoutMonitorTags: input.includeRunsWithoutMonitorTags,
   });
-  const eligibleRuns = modelLogRuns.filter((run) =>
-    eligibleRunIds.has(run.id),
+  const eligibleRunIds = new Set(eligibleRuns.map((run) => run.id));
+  const historicalExperimentOptions = historicalExperimentRunOptions(
+    modelLogRuns,
+    getMonitorEligibility,
   );
-  const historicalExperimentOptions = historicalExperimentRunOptions(eligibleRuns);
   const historicalDatasetOptions = selectedHistoricalExperimentFilter
     ? buildHistoricalDatasetOptions(
-        eligibleRuns,
+        modelLogRuns,
         selectedHistoricalExperimentFilter,
+        getMonitorEligibility,
       )
     : [];
   const datasetFilteredHistoricalRuns =
     selectedHistoricalExperimentFilter && selectedHistoricalDatasetFilter
       ? filterHistoricalRuns(
-          eligibleRuns,
+          modelLogRuns,
           selectedHistoricalExperimentFilter,
           selectedHistoricalDatasetFilter,
         )
       : [];
   const historicalPresetOptions =
     selectedHistoricalExperimentFilter && selectedHistoricalDatasetFilter
-      ? buildHistoricalPresetOptions(datasetFilteredHistoricalRuns)
+      ? buildHistoricalPresetOptions(
+          datasetFilteredHistoricalRuns,
+          getMonitorEligibility,
+        )
       : [];
   const visibleHistoricalRuns = filterHistoricalRuns(
-    eligibleRuns,
+    modelLogRuns,
     selectedHistoricalExperimentFilter,
     selectedHistoricalDatasetFilter,
     input.selectedHistoricalPreset,
   );
   const selectedModelLogRun = input.selectedLogRunId
-    ? eligibleRuns.find((run) => run.id === input.selectedLogRunId)
+    ? modelLogRuns.find((run) => run.id === input.selectedLogRunId)
     : undefined;
   const selectedLogRun = selectedModelLogRun;
+  const selectedLogRunMonitorEligibility = selectedLogRun
+    ? getMonitorEligibility(selectedLogRun)
+    : undefined;
   const hasCompleteCascade = Boolean(
     selectedHistoricalExperimentFilter &&
       selectedHistoricalDatasetFilter &&
@@ -131,20 +160,34 @@ export function deriveDatasetSelectionState(
   );
   const filteredHistoricalRuns = hasMonitorSelection
     ? filterHistoricalRuns(
-        eligibleRuns,
+        modelLogRuns,
         selectedHistoricalExperiment,
         selectedHistoricalDataset,
         selectedHistoricalRunPreset,
       )
     : [];
-  const historicalMonitorRuns = latestHistoricalMonitorRuns(filteredHistoricalRuns);
-  const filteredHistoricalRunIds = filteredHistoricalRuns.map((run) => run.id);
+  const eligibleFilteredHistoricalRuns = filteredHistoricalRuns.filter((run) =>
+    eligibleRunIds.has(run.id),
+  );
+  const historicalMonitorRuns = latestHistoricalMonitorRuns(
+    eligibleFilteredHistoricalRuns,
+  );
+  const filteredHistoricalRunIds = eligibleFilteredHistoricalRuns.map((run) => run.id);
 
   return {
     modelLogRuns,
-    historicalExperimentOptions,
-    historicalDatasetOptions,
-    historicalPresetOptions,
+    historicalExperimentOptions: historicalExperimentOptions.map((option) => ({
+      ...option,
+      description: option.description ?? monitorEligibilityDescription(option.monitorEligibility),
+    })),
+    historicalDatasetOptions: historicalDatasetOptions.map((option) => ({
+      ...option,
+      description: option.description ?? monitorEligibilityDescription(option.monitorEligibility),
+    })),
+    historicalPresetOptions: historicalPresetOptions.map((option) => ({
+      ...option,
+      description: option.description ?? monitorEligibilityDescription(option.monitorEligibility),
+    })),
     visibleHistoricalRuns,
     selectedHistoricalExperiment,
     selectedHistoricalDataset,
@@ -153,5 +196,6 @@ export function deriveDatasetSelectionState(
     historicalMonitorRuns,
     filteredHistoricalRunIds,
     selectedLogRun,
+    selectedLogRunMonitorEligibility,
   };
 }

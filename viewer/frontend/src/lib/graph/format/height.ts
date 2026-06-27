@@ -20,9 +20,6 @@ import {
   PARAMETER_SHAPE_LIST_MARGIN_TOP,
   PARAMETER_SHAPE_ROW_HEIGHT,
   PARAMETER_SHAPE_ROW_GAP,
-  STACK_DIAGRAM_COMPACT_HEIGHT,
-  STACK_DIAGRAM_DENSE_CELL_THRESHOLD,
-  STACK_DIAGRAM_DENSE_HEIGHT,
 } from "@/lib/graph/constants";
 import {
   nodeDetailEntries,
@@ -65,9 +62,10 @@ function childSummaryListHeight(childSummaries: ChildSummary[]) {
 }
 
 function stackDiagramHeight(stackDiagram: StackDiagram) {
-  return stackDiagram.cells.length > STACK_DIAGRAM_DENSE_CELL_THRESHOLD
-    ? STACK_DIAGRAM_DENSE_HEIGHT
-    : STACK_DIAGRAM_COMPACT_HEIGHT;
+  return (
+    stackDiagram.cells.length * CHILD_SUMMARY_ROW_HEIGHT +
+    Math.max(stackDiagram.cells.length - 1, 0) * CHILD_SUMMARY_ROW_GAP
+  );
 }
 
 function clusterDiagramHeight(clusterDiagram: ClusterDiagram) {
@@ -78,8 +76,8 @@ function clusterDiagramHeight(clusterDiagram: ClusterDiagram) {
   );
 }
 
-function parameterShapeListHeight(details: GraphNode["details"]) {
-  const entries = parameterShapeEntries(details);
+function parameterShapeListHeight(input: GraphNodeHeightInput) {
+  const entries = parameterShapeEntries(input.details);
   if (entries.length === 0) {
     return 0;
   }
@@ -107,7 +105,13 @@ function summaryBlockHeight(input: GraphNodeHeightInput) {
       ? EXPERT_DIAGRAM_HEIGHT
       : input.clusterDiagram
         ? clusterDiagramHeight(input.clusterDiagram)
-        : childSummaryListHeight(input.childSummaries);
+        : input.childSummaries.length > 0
+          ? childSummaryListHeight(input.childSummaries)
+          : 0;
+
+  if (contentHeight === 0) {
+    return 0;
+  }
 
   return GRAPH_NODE_CONTENT_MARGIN_TOP + contentHeight;
 }
@@ -130,7 +134,7 @@ export function graphNodeHeight(input: GraphNodeHeightInput) {
   return (
     GRAPH_NODE_VERTICAL_PADDING +
     nonSimpleHeaderHeight() +
-    parameterShapeListHeight(input.details) +
+    parameterShapeListHeight(input) +
     summaryBlockHeight(input) +
     detailRowsHeight(detailEntries.length, input.isDetailsExpanded) +
     GRAPH_NODE_ACTION_BAR_MARGIN_TOP +

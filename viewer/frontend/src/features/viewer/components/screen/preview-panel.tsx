@@ -6,8 +6,10 @@ import { viewerStatusCopy } from "@/features/viewer/components/shared/status-cop
 import { StatusPill } from "@/features/viewer/components/status-pill";
 import {
   useGraphView,
+  useHistoricalRuns,
   useTargetConfig,
 } from "@/features/viewer/providers/viewer-providers";
+import { useParameterActivityMinimapState } from "@/features/viewer/state/graph-monitor/use-parameter-activity-minimap-state";
 import { errorMessage } from "@/lib/utils";
 
 // The ReactFlow canvas (@xyflow/react + graph node views) is the largest piece
@@ -32,6 +34,10 @@ export function PreviewPanel() {
     selectedTargetMode,
     selectedExperimentRunId,
   } = useTargetConfig();
+  const {
+    selectedLogRun,
+    selectedLogRunMonitorEligibility,
+  } = useHistoricalRuns();
   const {
     graph,
     graphForDetail,
@@ -60,7 +66,22 @@ export function PreviewPanel() {
   const hasPreviewGraph = Boolean(graph);
   const isExperimentTargetPending =
     selectedTargetMode === "experiment" && !selectedExperimentRunId;
+  const isMonitorEligibilityChecking =
+    selectedTargetMode === "experiment" &&
+    Boolean(selectedExperimentRunId) &&
+    selectedLogRunMonitorEligibility === "checking";
+  const isMonitorIneligible =
+    selectedTargetMode === "experiment" &&
+    Boolean(selectedExperimentRunId) &&
+    selectedLogRunMonitorEligibility === "ineligible";
   const showActivityLoading = hasPreviewGraph && isParameterStatusLoading;
+  const parameterActivityMinimap = useParameterActivityMinimapState({
+    graph,
+    selectedTargetMode,
+    selectedExperimentRunId,
+    selectedLogRun,
+    selectedLogRunMonitorEligibility,
+  });
 
   return (
     <div className="relative h-full min-h-0 overflow-hidden bg-transparent">
@@ -71,6 +92,8 @@ export function PreviewPanel() {
       )}
       {(isPreviewBuilding ||
         isExperimentTargetPending ||
+        isMonitorEligibilityChecking ||
+        isMonitorIneligible ||
         showActivityLoading ||
         isParameterStatusPathMismatch) && (
         <div className="absolute left-4 top-4 z-10 flex flex-wrap gap-2">
@@ -88,6 +111,23 @@ export function PreviewPanel() {
               label="experiment"
               value="pending"
               tone="warn"
+            />
+          )}
+          {isMonitorEligibilityChecking && (
+            <StatusPill
+              icon={<Activity className="h-4 w-4 motion-safe:animate-pulse" />}
+              label="monitor"
+              value="checking"
+              tone="warn"
+            />
+          )}
+          {isMonitorIneligible && (
+            <StatusPill
+              icon={<Activity className="h-4 w-4" />}
+              label="monitor"
+              value="No monitor data for graph activity"
+              tone="warn"
+              className="h-auto min-h-[34px]"
             />
           )}
           {showActivityLoading && (
@@ -111,11 +151,13 @@ export function PreviewPanel() {
       <div className="relative h-full min-h-0 overflow-hidden">
         <GraphPreviewPanel
           graph={graphForDetail}
+          minimapGraph={graph}
           nodes={nodes}
           edges={edges}
           selectedNodeId={selectedNodeId}
           hasSelectedClusterNode={hasSelectedClusterNode}
           cluster3dNodeId={cluster3dNodeId}
+          parameterActivityMinimap={parameterActivityMinimap}
           onSelectNode={onSelectNode}
           onRevealNode={onRevealNode}
           onOpenCluster3d={openCluster3d}

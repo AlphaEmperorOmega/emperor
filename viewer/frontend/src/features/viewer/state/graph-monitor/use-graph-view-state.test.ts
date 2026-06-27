@@ -68,11 +68,21 @@ describe("useGraphViewState selection", () => {
     const layer = node("layer", {
       typeName: "Layer",
       path: "main_model.0",
+      config: {
+        typeName: "LayerConfig",
+        fields: [
+          { key: "input_dim", value: 16 },
+          { key: "output_dim", value: 16 },
+        ],
+      },
     });
     const linear = node("linear", {
       typeName: "LinearLayer",
       path: "main_model.0.model",
-      details: { weightShape: "2 x 2" },
+      details: {
+        dims: "32 -> 32",
+        weightShape: "32 x 32",
+      },
     });
     const monitorGraph: InspectResponse = {
       modelType: "linears",
@@ -118,7 +128,46 @@ describe("useGraphViewState selection", () => {
     const layerNode = result.current.nodes.find(
       (candidate) => candidate.id === "layer",
     );
+    const rootNode = result.current.nodes.find(
+      (candidate) => candidate.id === "root",
+    );
     expect(layerNode?.data.canOpenMonitor).toBe(false);
     expect(layerNode?.data.parameterActivity).toBe(activity);
+    expect(layerNode?.data.details).not.toHaveProperty("weightShape");
+    expect(rootNode?.data.childSummaries).toEqual([
+      expect.objectContaining({
+        label: "Layer 0",
+        nestedLabel: "LinearLayer",
+        dims: "16 -> 16",
+        kind: "child",
+        sourceNodeId: "layer",
+        parameterActivity: activity,
+      }),
+    ]);
+    expect(layerNode?.data.childSummaries).toEqual([
+      expect.objectContaining({
+        label: "LinearLayer",
+        kind: "child",
+        sourceNodeId: "linear",
+        parameterActivity: activity,
+      }),
+    ]);
+
+    act(() => result.current.setGraphScope("entire"));
+
+    await waitFor(() =>
+      expect(result.current.nodes.map((candidate) => candidate.id)).toContain(
+        "linear",
+      ),
+    );
+
+    const linearNode = result.current.nodes.find(
+      (candidate) => candidate.id === "linear",
+    );
+    expect(linearNode?.data.details).toMatchObject({
+      dims: "32 -> 32",
+      weightShape: "32 x 32",
+    });
+    expect(linearNode?.data.parameterActivity).toBe(activity);
   });
 });

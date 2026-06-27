@@ -141,7 +141,28 @@ function logRun(overrides: Partial<LogRun> & Pick<LogRun, "id">): LogRun {
     eventFileCount: overrides.eventFileCount ?? 1,
     checkpointCount: overrides.checkpointCount ?? 0,
     hasHparams: overrides.hasHparams ?? true,
+    hasLayerMonitorData: overrides.hasLayerMonitorData,
     metrics: overrides.metrics ?? {},
+  };
+}
+
+function historicalOption(
+  value: string,
+  count: number,
+  monitorEligibility: "checking" | "eligible" | "ineligible" = "checking",
+) {
+  const description =
+    monitorEligibility === "eligible"
+      ? "monitor data"
+      : monitorEligibility === "ineligible"
+        ? "no monitor data"
+        : "monitor checking";
+  return {
+    value,
+    label: value,
+    count,
+    monitorEligibility,
+    description,
   };
 }
 
@@ -1320,7 +1341,7 @@ describe("useViewerState", () => {
           "baseline-old",
         ]);
       expect(result.current.history.historicalExperimentOptions).toEqual([
-        { value: "exp_linear", label: "exp_linear", count: 4 },
+        historicalOption("exp_linear", 4, "checking"),
       ]);
     });
 
@@ -1340,8 +1361,8 @@ describe("useViewerState", () => {
       expect(result.current.history.selectedHistoricalPreset).toBe("");
       expect(result.current.history.selectedLogRunId).toBeNull();
       expect(result.current.history.historicalDatasetOptions).toEqual([
-        { value: "FashionMnist", label: "FashionMnist", count: 1 },
-        { value: "Mnist", label: "Mnist", count: 3 },
+        historicalOption("FashionMnist", 1, "checking"),
+        historicalOption("Mnist", 3, "checking"),
       ]);
     });
 
@@ -1355,8 +1376,8 @@ describe("useViewerState", () => {
       expect(result.current.history.selectedHistoricalPreset).toBe("");
       expect(result.current.history.selectedLogRunId).toBeNull();
       expect(result.current.history.historicalPresetOptions).toEqual([
-        { value: "baseline", label: "baseline", count: 2 },
-        { value: "fast", label: "fast", count: 1 },
+        historicalOption("baseline", 2, "checking"),
+        historicalOption("fast", 1, "checking"),
       ]);
     });
 
@@ -1533,7 +1554,7 @@ describe("useViewerState", () => {
 
     await waitFor(() => {
       expect(result.current.history.historicalExperimentOptions).toEqual([
-        { value: "exp_linear", label: "exp_linear", count: 2 },
+        historicalOption("exp_linear", 2, "checking"),
       ]);
     });
 
@@ -1542,7 +1563,7 @@ describe("useViewerState", () => {
     });
     await waitFor(() => {
       expect(result.current.history.historicalDatasetOptions).toEqual([
-        { value: "Mnist", label: "Mnist", count: 2 },
+        historicalOption("Mnist", 2, "checking"),
       ]);
     });
 
@@ -1551,8 +1572,8 @@ describe("useViewerState", () => {
     });
     await waitFor(() => {
       expect(result.current.history.historicalPresetOptions).toEqual([
-        { value: "fast", label: "fast", count: 1 },
-        { value: "baseline", label: "baseline", count: 1 },
+        historicalOption("fast", 1, "checking"),
+        historicalOption("baseline", 1, "checking"),
       ]);
     });
 
@@ -1637,8 +1658,8 @@ describe("useViewerState", () => {
 
     await waitFor(() => {
       expect(result.current.history.historicalExperimentOptions).toEqual([
-        { value: "exp_b", label: "exp_b", count: 1 },
-        { value: "exp_a", label: "exp_a", count: 1 },
+        historicalOption("exp_b", 1, "checking"),
+        historicalOption("exp_a", 1, "checking"),
       ]);
     });
 
@@ -1647,7 +1668,7 @@ describe("useViewerState", () => {
     });
     await waitFor(() => {
       expect(result.current.history.historicalDatasetOptions).toEqual([
-        { value: "Mnist", label: "Mnist", count: 1 },
+        historicalOption("Mnist", 1, "checking"),
       ]);
     });
     act(() => {
@@ -1655,7 +1676,7 @@ describe("useViewerState", () => {
     });
     await waitFor(() => {
       expect(result.current.history.historicalPresetOptions).toEqual([
-        { value: "baseline", label: "baseline", count: 1 },
+        historicalOption("baseline", 1, "checking"),
       ]);
     });
     act(() => {
@@ -1681,7 +1702,7 @@ describe("useViewerState", () => {
       expect(result.current.target.selectedTargetMode).toBe("experiment");
       expect(result.current.target.selectedExperimentRunId).toBe("");
       expect(result.current.history.historicalDatasetOptions).toEqual([
-        { value: "Mnist", label: "Mnist", count: 1 },
+        historicalOption("Mnist", 1, "eligible"),
       ]);
     });
     expect(mocks.inspectModel).not.toHaveBeenCalled();
@@ -1692,7 +1713,7 @@ describe("useViewerState", () => {
     });
     await waitFor(() => {
       expect(result.current.history.historicalPresetOptions).toEqual([
-        { value: "baseline", label: "baseline", count: 1 },
+        historicalOption("baseline", 1, "eligible"),
       ]);
     });
     act(() => {
@@ -1731,7 +1752,7 @@ describe("useViewerState", () => {
     });
   });
 
-  it("omits experiments that only have classifier or global metric tags", async () => {
+  it("keeps performance-only experiments selectable without graph activity", async () => {
     const statusForRun = (
       runId: string,
       weightsStatus: "updated" | "unchanged",
@@ -1827,19 +1848,17 @@ describe("useViewerState", () => {
 
     await waitFor(() => {
       expect(result.current.history.historicalExperimentOptions).toEqual([
-        { value: "test_linear", label: "test_linear", count: 1 },
+        historicalOption("kaggle_linear_all", 1, "ineligible"),
+        historicalOption("test_linear", 1, "eligible"),
       ]);
     });
-    expect(result.current.history.historicalExperimentOptions).not.toContainEqual(
-      { value: "kaggle_linear_all", label: "kaggle_linear_all", count: 1 },
-    );
 
     act(() => {
       result.current.history.setSelectedHistoricalExperimentFilter("test_linear");
     });
     await waitFor(() => {
       expect(result.current.history.historicalDatasetOptions).toEqual([
-        { value: "Mnist", label: "Mnist", count: 1 },
+        historicalOption("Mnist", 1, "eligible"),
       ]);
     });
     act(() => {
@@ -1847,7 +1866,7 @@ describe("useViewerState", () => {
     });
     await waitFor(() => {
       expect(result.current.history.historicalPresetOptions).toEqual([
-        { value: "baseline", label: "baseline", count: 1 },
+        historicalOption("baseline", 1, "eligible"),
       ]);
     });
     act(() => {
@@ -1887,17 +1906,167 @@ describe("useViewerState", () => {
     await waitFor(() => {
       expect(result.current.target.selectedTargetMode).toBe("experiment");
       expect(result.current.target.selectedExperimentRunId).toBe("");
-      expect(result.current.history.selectedHistoricalExperimentFilter).toBe("");
-      expect(result.current.history.historicalDatasetOptions).toEqual([]);
+      expect(result.current.history.selectedHistoricalExperimentFilter).toBe(
+        "kaggle_linear_all",
+      );
+      expect(result.current.history.historicalDatasetOptions).toEqual([
+        historicalOption("KaggleDigits", 1, "ineligible"),
+      ]);
       expect(result.current.history.visibleHistoricalRuns.map((run) => run.id))
-        .toEqual(["test-linear-run"]);
+        .toEqual(["kaggle-linear-run"]);
     });
-    expect(mocks.inspectModel).not.toHaveBeenCalled();
     expect(mocks.fetchLogParameterStatus).not.toHaveBeenCalled();
     expect(mocks.fetchLogParameterStatus).not.toHaveBeenCalledWith(
       { runIds: ["kaggle-linear-run"] },
       expect.any(Object),
     );
+
+    act(() => {
+      result.current.history.setSelectedHistoricalDatasetFilter("KaggleDigits");
+    });
+    await waitFor(() => {
+      expect(result.current.history.historicalPresetOptions).toEqual([
+        historicalOption("KAGGLE_LINEAR", 1, "ineligible"),
+      ]);
+    });
+
+    act(() => {
+      result.current.history.setSelectedHistoricalPreset("KAGGLE_LINEAR");
+    });
+
+    await waitFor(() => {
+      expect(result.current.history.selectedLogRunId).toBe("kaggle-linear-run");
+      expect(result.current.target.selectedExperimentRunId).toBe(
+        "kaggle-linear-run",
+      );
+      expect(result.current.history.selectedLogRunMonitorEligibility).toBe(
+        "ineligible",
+      );
+      expect(result.current.history.historicalMonitorRuns).toEqual([]);
+      expect(result.current.graph.nodes.map((node) => node.id)).toContain(
+        "test-layer",
+      );
+    });
+    expect(mocks.inspectModel).toHaveBeenCalledWith({
+      modelType: "linears",
+      model: "linear",
+      preset: "KAGGLE_LINEAR",
+      dataset: "KaggleDigits",
+      overrides: {},
+      logRunId: "kaggle-linear-run",
+    });
+    expect(mocks.fetchLogParameterStatus).not.toHaveBeenCalled();
+    expect(mocks.fetchLogParameterStatus).not.toHaveBeenCalledWith(
+      { runIds: ["kaggle-linear-run"] },
+      expect.any(Object),
+    );
+  });
+
+  it("does not block experiment options or preview selection while tags load", async () => {
+    const delayedTags = deferred<ReturnType<typeof parameterLogTags>>();
+
+    mocks.fetchLogRuns.mockResolvedValueOnce({
+      runs: [
+        logRun({
+          id: "slow-tags-run",
+          experiment: "slow_exp",
+          preset: "baseline",
+          dataset: "Mnist",
+          timestamp: "2026-06-01 01:02:03",
+          hasLayerMonitorData: null,
+        }),
+      ],
+    });
+    mocks.fetchLogTags.mockImplementation((input: { runIds: string[] }) => {
+      if (input.runIds.includes("slow-tags-run")) {
+        return delayedTags.promise;
+      }
+      return Promise.resolve(parameterLogTags(input.runIds));
+    });
+    mocks.inspectModel.mockImplementation(
+      (request: {
+        modelType: string;
+        model: string;
+        preset: string;
+        logRunId?: string;
+      }) => Promise.resolve(experimentMonitorGraph(request, "slow")),
+    );
+
+    const { result } = renderViewerState();
+
+    await waitFor(() => {
+      expect(result.current.history.historicalExperimentOptions).toEqual([
+        historicalOption("slow_exp", 1, "checking"),
+      ]);
+    });
+    expect(mocks.fetchLogTags).not.toHaveBeenCalled();
+
+    act(() => {
+      result.current.target.activateTargetExperimentMode();
+    });
+    await waitFor(() => {
+      expect(mocks.fetchLogTags).toHaveBeenCalledWith(
+        { runIds: ["slow-tags-run"] },
+        expect.any(Object),
+      );
+    });
+    act(() => {
+      result.current.history.setSelectedHistoricalExperimentFilter("slow_exp");
+    });
+    await waitFor(() => {
+      expect(result.current.history.historicalDatasetOptions).toEqual([
+        historicalOption("Mnist", 1, "checking"),
+      ]);
+    });
+    act(() => {
+      result.current.history.setSelectedHistoricalDatasetFilter("Mnist");
+    });
+    await waitFor(() => {
+      expect(result.current.history.historicalPresetOptions).toEqual([
+        historicalOption("baseline", 1, "checking"),
+      ]);
+    });
+
+    mocks.inspectModel.mockClear();
+    mocks.fetchLogParameterStatus.mockClear();
+    act(() => {
+      result.current.history.setSelectedHistoricalPreset("baseline");
+    });
+
+    await waitFor(() => {
+      expect(result.current.history.selectedLogRunId).toBe("slow-tags-run");
+      expect(result.current.target.selectedExperimentRunId).toBe("slow-tags-run");
+      expect(result.current.history.selectedLogRunMonitorEligibility).toBe(
+        "checking",
+      );
+      expect(result.current.history.historicalMonitorRuns).toEqual([]);
+      expect(result.current.graph.nodes.map((node) => node.id)).toContain(
+        "slow-layer",
+      );
+    });
+    expect(mocks.inspectModel).toHaveBeenCalledWith({
+      modelType: "linears",
+      model: "linear",
+      preset: "baseline",
+      dataset: "Mnist",
+      overrides: {},
+      logRunId: "slow-tags-run",
+    });
+    expect(mocks.fetchLogParameterStatus).not.toHaveBeenCalled();
+
+    act(() => {
+      delayedTags.resolve(parameterLogTags(["slow-tags-run"]));
+    });
+
+    await waitFor(() => {
+      expect(result.current.history.selectedLogRunMonitorEligibility).toBe(
+        "eligible",
+      );
+      expect(mocks.fetchLogParameterStatus).toHaveBeenCalledWith(
+        { runIds: ["slow-tags-run"] },
+        expect.any(Object),
+      );
+    });
   });
 
   it("switches from an experiment target back to a preset target with empty overrides", async () => {
@@ -1938,9 +2107,9 @@ describe("useViewerState", () => {
       expect(result.current.target.selectedSnapshotId).toBe("");
       expect(result.current.target.overrides).toEqual({});
     });
-	    expect(mocks.inspectModel.mock.calls.at(-1)?.[0]).toEqual({
-	      modelType: "linears",
-	      model: "linear",
+    expect(mocks.inspectModel.mock.calls.at(-1)?.[0]).toEqual({
+      modelType: "linears",
+      model: "linear",
       preset: "baseline",
       dataset: "FashionMnist",
       overrides: {},
@@ -2002,9 +2171,9 @@ describe("useViewerState", () => {
       expect(result.current.history.selectedLogRunId).toBeNull();
       expect(result.current.target.overrides).toEqual({ hidden_size: "256" });
     });
-	    expect(mocks.inspectModel.mock.calls.at(-1)?.[0]).toEqual({
-	      modelType: "linears",
-	      model: "linear",
+    expect(mocks.inspectModel.mock.calls.at(-1)?.[0]).toEqual({
+      modelType: "linears",
+      model: "linear",
       preset: "baseline",
       dataset: "FashionMnist",
       overrides: { hidden_size: "256" },
@@ -2668,7 +2837,7 @@ describe("useViewerState", () => {
     });
   });
 
-  it("blocks training while a historical experiment run is selected", async () => {
+  it("allows training while a historical experiment run is selected", async () => {
     mocks.fetchLogRuns.mockResolvedValueOnce({
       runs: [
         logRun({
@@ -2689,6 +2858,20 @@ describe("useViewerState", () => {
         },
       ],
     });
+    mocks.createTrainingJob.mockResolvedValueOnce(
+      trainingJob({
+        id: "job-after-selected-experiment",
+        status: "queued",
+        logFolder: "scratch_run",
+      }),
+    );
+    mocks.fetchTrainingJob.mockResolvedValueOnce(
+      trainingJob({
+        id: "job-after-selected-experiment",
+        status: "queued",
+        logFolder: "scratch_run",
+      }),
+    );
     renderTrainingPanelWithExperiments();
     const user = userEvent.setup();
 
@@ -2733,14 +2916,26 @@ describe("useViewerState", () => {
 
     await waitFor(() => {
       expect(
-        screen.getAllByText(
+        screen.queryByText(
           "Cannot perform training while experiment exp_locked is selected.",
-        ).length,
-      ).toBeGreaterThan(0);
+        ),
+      ).not.toBeInTheDocument();
       expect(screen.getByRole("button", { name: /^start training$/i }))
-        .toBeDisabled();
+        .toBeEnabled();
     });
     await user.click(screen.getByRole("button", { name: /^start training$/i }));
-    expect(mocks.createTrainingJob).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(mocks.createTrainingJob).toHaveBeenCalledWith(
+        expect.objectContaining({
+          modelType: "linears",
+          model: "linear",
+          preset: "baseline",
+          presets: ["baseline"],
+          datasets: ["Mnist"],
+          logFolder: "scratch_run",
+        }),
+        expect.anything(),
+      );
+    });
   });
 });

@@ -90,14 +90,17 @@ export function TargetPresetPanel({
   const experimentOptions = historicalExperimentOptions.map((option) => ({
     value: option.value,
     label: historicalFilterLabel(option),
+    description: option.description,
   }));
   const experimentDatasetOptions = historicalDatasetOptions.map((option) => ({
     value: option.value,
     label: historicalFilterLabel(option),
+    description: option.description,
   }));
   const experimentPresetOptions = historicalPresetOptions.map((option) => ({
     value: option.value,
     label: historicalFilterLabel(option),
+    description: option.description,
   }));
   const selectedSnapshotName = selectedConfigSnapshot?.name ?? "";
   const targetMonitorNames = useMemo(
