@@ -21,7 +21,7 @@ export const LOCAL_DEFAULT_CAPABILITIES: Capabilities = {
   historicalLogsEnabled: true,
   liveMonitorDataEnabled: true,
   historicalMonitorDataEnabled: true,
-  uploadsEnabled: false,
+  uploadsEnabled: true,
   maxUploadSize: null,
   dataSourcesEnabled: false,
   dataSources: [],

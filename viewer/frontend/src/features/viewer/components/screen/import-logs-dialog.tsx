@@ -35,12 +35,16 @@ function formatFileSize(size: number) {
   return `${size} B`;
 }
 
+const logImportsDisabledMessage = "Log imports are disabled by this backend.";
+const logImportsDisabledHint =
+  "For local project uploads, use the local backend defaults or set VIEWER_API_ALLOW_LOG_IMPORTS=true before starting the backend.";
+
 function messageFromImportError(error: unknown) {
   if (!(error instanceof Error)) {
     return "Log import failed.";
   }
   if (error.message.includes("Local mutation endpoints are disabled")) {
-    return "Log imports are disabled by this backend.";
+    return logImportsDisabledMessage;
   }
   if (
     error.name === "TypeError" ||
@@ -53,15 +57,18 @@ function messageFromImportError(error: unknown) {
 }
 
 function successMessage(result: LogArchiveImportResponse) {
-  const extracted =
+  const imported =
     result.extractedFileCount === 1
-      ? "1 file extracted"
-      : `${result.extractedFileCount} files extracted`;
+      ? "1 file imported"
+      : `${result.extractedFileCount} files imported`;
+  if (result.skippedFileCount === 0) {
+    return `${imported}.`;
+  }
   const skipped =
     result.skippedFileCount === 1
-      ? "1 existing file skipped"
-      : `${result.skippedFileCount} existing files skipped`;
-  return `${extracted}; ${skipped}.`;
+      ? "1 file skipped"
+      : `${result.skippedFileCount} files skipped`;
+  return `${imported}; ${skipped}.`;
 }
 
 export function ImportLogsDialog({ onClose }: { onClose: () => void }) {
@@ -85,6 +92,10 @@ export function ImportLogsDialog({ onClose }: { onClose: () => void }) {
   const canImport =
     uploadsEnabled && selectedFile !== null && !selectedFileTooLarge && !isImporting;
 
+  const handleChooseFile = () => {
+    fileInputRef.current?.click();
+  };
+
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null;
     setSelectedFile(file);
@@ -105,7 +116,7 @@ export function ImportLogsDialog({ onClose }: { onClose: () => void }) {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!uploadsEnabled) {
-      setError("Log imports are disabled by this backend.");
+      setError(logImportsDisabledMessage);
       return;
     }
     if (!selectedFile) {
@@ -183,17 +194,31 @@ export function ImportLogsDialog({ onClose }: { onClose: () => void }) {
       <form className="grid gap-4 overflow-y-auto p-4 sm:p-5" onSubmit={handleSubmit}>
         {!uploadsEnabled && (
           <div className="rounded-[8px] border border-amber/[0.25] bg-amber/[0.08] px-3 py-2.5 text-sm leading-6 text-ink-dim">
-            Log imports are disabled by this backend.
+            <p>{logImportsDisabledMessage}</p>
+            <p className="mt-1 text-xs text-ink-faint">
+              {logImportsDisabledHint}
+            </p>
           </div>
         )}
 
-        <label
-          htmlFor="log-archive-file"
-          className="grid gap-2 rounded-[8px] border border-line-soft bg-black/[0.18] p-3"
-        >
-          <span className="text-xs font-semibold text-ink-faint">
+        <div className="grid gap-3 rounded-[8px] border border-line-soft bg-black/[0.18] p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+          <label
+            id="log-archive-file-label"
+            htmlFor="log-archive-file"
+            className="text-xs font-semibold text-ink-faint"
+          >
             Log archive zip file
-          </span>
+          </label>
+          <Button
+            variant="secondary"
+            onClick={handleChooseFile}
+            disabled={isImporting || !uploadsEnabled}
+            aria-describedby="log-archive-file-label"
+            className="w-full sm:w-auto"
+          >
+            <FileArchive className="h-3.5 w-3.5" aria-hidden />
+            Choose Zip
+          </Button>
           <input
             id="log-archive-file"
             ref={fileInputRef}
@@ -201,9 +226,10 @@ export function ImportLogsDialog({ onClose }: { onClose: () => void }) {
             accept=".zip,application/zip,application/x-zip-compressed"
             disabled={isImporting || !uploadsEnabled}
             onChange={handleFileChange}
-            className="block w-full text-sm text-ink-dim file:mr-3 file:h-9 file:rounded-[8px] file:border file:border-line file:bg-control file:px-3 file:text-sm file:font-semibold file:text-ink-dim hover:file:border-line-hover hover:file:bg-control-hover hover:file:text-ink disabled:cursor-not-allowed disabled:opacity-60"
+            tabIndex={-1}
+            className="sr-only"
           />
-        </label>
+        </div>
 
         <div className="rounded-[8px] border border-line-soft bg-black/[0.18] px-3 py-2.5">
           <div className="text-xs font-semibold text-ink-faint">Selected file</div>

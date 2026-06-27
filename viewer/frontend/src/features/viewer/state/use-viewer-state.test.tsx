@@ -778,6 +778,7 @@ describe("useViewerState", () => {
     expect(result.current.target.capabilities).toMatchObject({
       trainingEnabled: true,
       logDeletionEnabled: true,
+      uploadsEnabled: true,
     });
   });
 
