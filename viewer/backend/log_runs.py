@@ -26,6 +26,7 @@ from viewer.backend.monitor_data import (
 )
 from viewer.backend.services.log_import import import_log_archive
 from viewer.backend.tensorboard_reader import (
+    EventFileIndex,
     TENSORBOARD_TAG_SIZE_GUIDANCE,
     event_dirs,
     event_file_fingerprint,
@@ -48,6 +49,7 @@ HPARAM_FLOAT_RE = re.compile(
 )
 LOG_EVENT_CACHE_MAX_ENTRIES = 256
 LOG_TAG_READ_MAX_EVENT_BYTES = 96 * 1024 * 1024
+LOG_TAG_BATCH_READ_MAX_EVENT_BYTES = 64 * 1024 * 1024
 LOG_RESPONSE_ITEM_LIMIT = 500
 LOG_TAG_KEYS = ("scalars", "histograms", "images", "texts")
 EventFingerprint = tuple[tuple[str, int, int], ...]
@@ -790,12 +792,14 @@ class LogRunQueryService:
         scanner: LogRunScanner,
         scalar_point_limit: int = DEFAULT_SCALAR_POINT_LIMIT,
         max_tag_event_bytes: int = LOG_TAG_READ_MAX_EVENT_BYTES,
+        max_tag_batch_event_bytes: int = LOG_TAG_BATCH_READ_MAX_EVENT_BYTES,
         monitor_reader: TensorBoardMonitorReader | None = None,
         parameter_status_reader: TensorBoardParameterStatusReader | None = None,
     ) -> None:
         self.scanner = scanner
         self.scalar_point_limit = scalar_point_limit
         self.max_tag_event_bytes = max(0, int(max_tag_event_bytes))
+        self.max_tag_batch_event_bytes = max(0, int(max_tag_batch_event_bytes))
         self.monitor_reader = monitor_reader or TensorBoardMonitorReader(
             scalar_point_limit=scalar_point_limit,
         )
@@ -871,6 +875,25 @@ class LogRunQueryService:
             return None
         return self._copy_tags_payload(cached)
 
+    def _batch_budget_skip_tags(
+        self,
+        index: EventFileIndex,
+    ) -> dict[str, Any]:
+        return {
+            key: []
+            for key in LOG_TAG_KEYS
+        } | {
+            "eventBytes": index.total_size,
+            "skippedEventFiles": len(index.fingerprint),
+            "truncated": True,
+            "truncationReason": (
+                "event files skipped: uncached batch tag-read cap would "
+                f"exceed {self.max_tag_batch_event_bytes} bytes"
+            ),
+            "sourceItemCount": len(index.fingerprint),
+            "returnedItemCount": 0,
+        }
+
     def _scalar_cache_key(
         self,
         run_dir: Path,
@@ -915,24 +938,46 @@ class LogRunQueryService:
 
     def tags_for_runs(self, run_ids: list[str]) -> list[dict[str, Any]]:
         runs = self.scanner.resolve_runs(run_ids)
-        return [
-            {
-                "runId": run.id,
-                "hasLayerMonitorData": _tags_have_layer_monitor_data(tags),
-                "scalarTags": tags["scalars"],
-                "histogramTags": tags["histograms"],
-                "imageTags": tags["images"],
-                "textTags": tags["texts"],
-                "eventBytes": tags.get("eventBytes"),
-                "skippedEventFiles": tags.get("skippedEventFiles"),
-                "truncated": tags.get("truncated"),
-                "truncationReason": tags.get("truncationReason"),
-                "sourceItemCount": tags.get("sourceItemCount"),
-                "returnedItemCount": tags.get("returnedItemCount"),
-            }
-            for run in runs
-            for tags in [self.read_tags(run.path)]
-        ]
+        results: list[dict[str, Any]] = []
+        uncached_event_bytes = 0
+        for run in runs:
+            tags = self._cached_tags_if_current(run.path)
+            if tags is None:
+                index = event_file_index(run.path)
+                exceeds_per_run_tag_budget = (
+                    self.max_tag_event_bytes > 0
+                    and index.total_size > self.max_tag_event_bytes
+                )
+                would_exceed_batch_budget = (
+                    self.max_tag_batch_event_bytes > 0
+                    and uncached_event_bytes + index.total_size
+                    > self.max_tag_batch_event_bytes
+                )
+                if exceeds_per_run_tag_budget:
+                    tags = self.read_tags(run.path)
+                elif would_exceed_batch_budget:
+                    tags = self._batch_budget_skip_tags(index)
+                else:
+                    uncached_event_bytes += index.total_size
+                    tags = self.read_tags(run.path)
+            results.append(
+                {
+                    "runId": run.id,
+                    "hasLayerMonitorData": _tags_have_layer_monitor_data(tags),
+                    "scalarTags": tags["scalars"],
+                    "histogramTags": tags["histograms"],
+                    "imageTags": tags["images"],
+                    "textTags": tags["texts"],
+                    "eventBytes": tags.get("eventBytes"),
+                    "skippedEventFiles": tags.get("skippedEventFiles"),
+                    "truncated": tags.get("truncated"),
+                    "truncationReason": tags.get("truncationReason"),
+                    "sourceItemCount": tags.get("sourceItemCount"),
+                    "returnedItemCount": tags.get("returnedItemCount"),
+                }
+            )
+        return results
+
 
     def cached_layer_monitor_data_for_run(self, run: LogRun) -> bool | None:
         tags = self._cached_tags_if_current(run.path)
