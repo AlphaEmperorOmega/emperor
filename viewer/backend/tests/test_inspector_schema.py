@@ -49,7 +49,9 @@ class InspectorSchemaTests(unittest.TestCase):
         axes = search_space_schema("linears/linear", "baseline")["axes"]
 
         stack_axis = next(
-            axis for axis in axes if axis["searchKey"] == "SEARCH_SPACE_STACK_HIDDEN_DIM"
+            axis
+            for axis in axes
+            if axis["searchKey"] == "SEARCH_SPACE_STACK_HIDDEN_DIM"
         )
         self.assertEqual(stack_axis["key"], "STACK_HIDDEN_DIM")
         self.assertEqual(stack_axis["key"], stack_axis["configKey"])

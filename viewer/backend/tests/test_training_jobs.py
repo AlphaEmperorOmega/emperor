@@ -2172,7 +2172,11 @@ while True:
         invalid_searches = [
             {"mode": "grid", "values": {"missing_axis": [1]}},
             {"mode": "grid", "values": {"stack_hidden_dim": []}},
-            {"mode": "random", "values": {"stack_hidden_dim": [64]}, "randomSamples": 0},
+            {
+                "mode": "random",
+                "values": {"stack_hidden_dim": [64]},
+                "randomSamples": 0,
+            },
             {"mode": "grid", "values": {"stack_hidden_dim": [999]}},
             {"mode": "grid", "values": {}},
         ]
