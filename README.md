@@ -90,11 +90,12 @@ preset with `--print-model` and a small one-epoch run.
 The Viewer has grown into a local experiment workbench with three workspaces:
 
 - **Model** - choose a model/preset/dataset, inspect module and operation
-  graphs, review parameters, create config snapshots, and start training.
-- **Compare** - compare selected model targets and reuse a target in the Model
-  workspace.
+  graphs, review parameters, create config snapshots, and inspect historical
+  training-run targets.
+- **Training** - plan, start, and monitor local training jobs for the selected
+  model configuration.
 - **Logs** - browse historical TensorBoard runs, inspect saved graphs, and
-  review monitor data from completed runs.
+  review metrics and monitor data from completed runs.
 
 ## Quick Start
 
@@ -462,12 +463,12 @@ with `--preset`, `--presets`, or `--all-presets`.
 The Viewer is the local workbench for model experiments. Use it when you want to
 pick a model, preset, and dataset visually; inspect what a preset builds before
 training; adjust config overrides without assembling a long terminal command;
-start or monitor local training jobs; and compare historical runs after the
+start or monitor local training jobs; and review historical runs after the
 experiment finishes.
 
 It is meant for the human loop around training: understanding the model shape,
 checking planned runs, watching monitor signals while a job is active, and
-reviewing logs once there are results to compare. The terminal CLI remains the
+reviewing logs once there are completed results. The terminal CLI remains the
 simpler path for scripted or repeatable runs.
 
 See [`viewer/README.md`](viewer/README.md) for the focused Viewer guide.
