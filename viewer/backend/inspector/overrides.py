@@ -16,6 +16,7 @@ from viewer.backend.inspector.config_classes import abstract_config_class_error
 from viewer.backend.inspector.errors import InspectorError
 from viewer.backend.inspector.values import serialize_config_value
 
+
 def _supported_config_keys(config_module: Any) -> dict[str, str]:
     return {
         normalize_key(config_key): config_key
@@ -34,6 +35,9 @@ def resolve_override_key(
     alias = LEGACY_CONFIG_KEY_ALIASES.get(normalized_key)
     if alias is not None:
         return supported.get(normalize_key(alias)), False
+    for config_key in supported.values():
+        if config_key_to_model_param(config_key) == normalized_key:
+            return config_key, False
     if normalized_key.endswith("_residual_flag"):
         residual_option_key = (
             normalized_key.removesuffix("_residual_flag")

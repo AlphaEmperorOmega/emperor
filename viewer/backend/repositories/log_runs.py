@@ -6,6 +6,7 @@ services and the concrete local ``LogRunIndex`` data-access object.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from viewer.backend.log_runs import (
@@ -108,6 +109,9 @@ class LogRunRepository:
 
     def checkpoints_for_runs(self, run_ids: list[str]) -> list[dict[str, Any]]:
         return self._index.checkpoints_for_runs(run_ids)
+
+    def checkpoint_paths_for_run(self, run_id: str) -> list[Path]:
+        return self._index.checkpoint_paths_for_run(run_id)
 
     def artifacts_for_run(self, run_id: str) -> dict[str, Any]:
         return self._index.artifacts_for_run(run_id)

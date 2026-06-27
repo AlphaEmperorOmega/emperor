@@ -1079,6 +1079,14 @@ class LogRunQueryService:
             for checkpoint in self.read_checkpoints(run)
         ]
 
+    def checkpoint_paths_for_run(self, run_id: str) -> list[Path]:
+        run = self.scanner.resolve_runs([run_id])[0]
+        root = self.scanner.resolved_root()
+        return [
+            root / checkpoint.relativePath
+            for checkpoint in self.read_checkpoints(run)
+        ]
+
     def artifacts_for_run(self, run_id: str) -> dict[str, Any]:
         run = self.scanner.resolve_runs([run_id])[0]
         result_path = self.scanner.artifact_path(run, "result.json")
@@ -1600,6 +1608,9 @@ class LogRunIndex:
 
     def checkpoints_for_runs(self, run_ids: list[str]) -> list[dict[str, Any]]:
         return self.query_service.checkpoints_for_runs(run_ids)
+
+    def checkpoint_paths_for_run(self, run_id: str) -> list[Path]:
+        return self.query_service.checkpoint_paths_for_run(run_id)
 
     def artifacts_for_run(self, run_id: str) -> dict[str, Any]:
         return self.query_service.artifacts_for_run(run_id)
