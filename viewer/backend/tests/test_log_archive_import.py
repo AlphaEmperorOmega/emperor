@@ -277,7 +277,7 @@ class LogArchiveImportApiTests(unittest.TestCase):
             self.assertIn("absolute", response.json()["detail"])
             self.assertFalse((logs_root / "safe").exists())
 
-    def test_existing_files_are_skipped_without_overwriting(self) -> None:
+    def test_existing_files_are_overwritten(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             logs_root = Path(tmp) / "logs"
             existing = logs_root / "my_experiment/version_0/result.json"
@@ -295,11 +295,37 @@ class LogArchiveImportApiTests(unittest.TestCase):
             )
 
             self.assertEqual(response.status_code, 200)
-            self.assertEqual(response.json()["extractedFileCount"], 1)
-            self.assertEqual(response.json()["skippedFileCount"], 1)
-            self.assertEqual(existing.read_text(encoding="utf-8"), "existing")
+            self.assertEqual(response.json()["extractedFileCount"], 2)
+            self.assertEqual(response.json()["skippedFileCount"], 0)
+            self.assertEqual(existing.read_text(encoding="utf-8"), "new")
             self.assertTrue(
                 (logs_root / "my_experiment/version_0/hparams.yaml").is_file()
+            )
+
+    def test_existing_symlink_targets_are_rejected_before_writing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            logs_root = root / "logs"
+            existing = logs_root / "my_experiment/version_0/result.json"
+            existing.parent.mkdir(parents=True)
+            existing.symlink_to(root / "escaped.txt")
+            archive = zip_bytes(
+                {
+                    "my_experiment/version_0/result.json": "new",
+                    "my_experiment/version_0/hparams.yaml": "batch_size: 4\n",
+                }
+            )
+
+            response = asyncio.run(
+                post_archive(logs_root=logs_root, archive=archive)
+            )
+
+            self.assertEqual(response.status_code, 400)
+            self.assertIn("symlink destination", response.json()["detail"])
+            self.assertTrue(existing.is_symlink())
+            self.assertFalse((root / "escaped.txt").exists())
+            self.assertFalse(
+                (logs_root / "my_experiment/version_0/hparams.yaml").exists()
             )
 
     def test_zero_byte_files_are_counted_as_extracted(self) -> None:

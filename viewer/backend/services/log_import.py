@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import stat
+import tempfile
 import zipfile
 import zlib
 from dataclasses import dataclass
@@ -164,6 +165,15 @@ def _validate_existing_ancestors(target: Path, root: Path, original_name: str) -
             )
 
 
+def _validate_existing_target(target: Path, original_name: str) -> None:
+    if target.is_symlink():
+        raise ApiError(
+            f"Unsafe archive path uses symlink destination: {original_name}"
+        )
+    if target.exists() and not target.is_file():
+        raise ApiError(f"Archive path target is not a regular file: {original_name}")
+
+
 def _validate_zip_info(info: zipfile.ZipInfo) -> None:
     if info.flag_bits & 0x1:
         raise _zip_error("Encrypted log archives are not supported.")
@@ -245,11 +255,9 @@ def _plan_import(
         planned_parts.add(relative_parts)
 
         target = logs_root.joinpath(*relative_parts)
+        _validate_existing_ancestors(target, logs_root, info.filename)
+        _validate_existing_target(target, info.filename)
         resolved_target = _resolved_under_root(target, logs_root, info.filename)
-        _validate_existing_ancestors(resolved_target, logs_root, info.filename)
-        if resolved_target.exists() or resolved_target.is_symlink():
-            skipped_count += 1
-            continue
         plan.append(
             LogArchiveImportPlanEntry(
                 info=info,
@@ -276,22 +284,30 @@ def _copy_zip_entry(
     zip_file: zipfile.ZipFile,
     entry: LogArchiveImportPlanEntry,
 ) -> bool:
-    created = False
+    temp_path: Path | None = None
     try:
         entry.target.parent.mkdir(parents=True, exist_ok=True)
-        with zip_file.open(entry.info) as source, entry.target.open("xb") as output:
-            created = True
-            while True:
-                chunk = source.read(ZIP_CHUNK_SIZE)
-                if not chunk:
-                    break
-                output.write(chunk)
+        with zip_file.open(entry.info) as source:
+            with tempfile.NamedTemporaryFile(
+                "wb",
+                delete=False,
+                dir=entry.target.parent,
+                prefix=f".{entry.target.name}.",
+                suffix=".tmp",
+            ) as output:
+                temp_path = Path(output.name)
+                while True:
+                    chunk = source.read(ZIP_CHUNK_SIZE)
+                    if not chunk:
+                        break
+                    output.write(chunk)
+        temp_path.replace(entry.target)
     except FileExistsError:
         return False
     except (RuntimeError, zipfile.BadZipFile, OSError) as exc:
-        if created:
+        if temp_path is not None:
             try:
-                entry.target.unlink(missing_ok=True)
+                temp_path.unlink(missing_ok=True)
             except OSError:
                 pass
         raise _zip_error(f"Invalid zip archive: {_detail_text(exc)}") from exc
