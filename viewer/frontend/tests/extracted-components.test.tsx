@@ -139,7 +139,6 @@ describe("ViewerWorkspaceNav", () => {
 
     const modelButton = screen.getByRole("button", { name: "Model" });
     const trainingButton = screen.getByRole("button", { name: "Training" });
-    const compareButton = screen.getByRole("button", { name: "Compare" });
     const logsButton = screen.getByRole("button", { name: "Logs" });
     const workspaceNav = screen.getByRole("navigation", { name: "Workspace" });
     const workspaceButtons = within(workspaceNav).getAllByRole("button");
@@ -148,19 +147,16 @@ describe("ViewerWorkspaceNav", () => {
       "Model",
       "Training",
       "Logs",
-      "Compare",
     ]);
     expect(within(workspaceNav).getByRole("list")).toBeInTheDocument();
-    expect(within(workspaceNav).getAllByRole("listitem")).toHaveLength(4);
+    expect(within(workspaceNav).getAllByRole("listitem")).toHaveLength(3);
 
     expect(modelButton).toHaveAttribute("aria-current", "page");
     expect(modelButton.className).not.toContain("after:");
     expect(trainingButton).not.toHaveAttribute("aria-current");
-    expect(compareButton).not.toHaveAttribute("aria-current");
     expect(logsButton).not.toHaveAttribute("aria-current");
     expect(modelButton).not.toHaveAttribute("aria-pressed");
     expect(trainingButton).not.toHaveAttribute("aria-pressed");
-    expect(compareButton).not.toHaveAttribute("aria-pressed");
     expect(logsButton).not.toHaveAttribute("aria-pressed");
     for (const button of workspaceButtons) {
       const icon = button.querySelector("svg");
@@ -170,13 +166,11 @@ describe("ViewerWorkspaceNav", () => {
 
     await user.click(trainingButton);
     await user.click(logsButton);
-    await user.click(compareButton);
     await user.click(modelButton);
 
     expect(onChange).toHaveBeenNthCalledWith(1, "training");
     expect(onChange).toHaveBeenNthCalledWith(2, "logs");
-    expect(onChange).toHaveBeenNthCalledWith(3, "compare");
-    expect(onChange).toHaveBeenNthCalledWith(4, "model");
+    expect(onChange).toHaveBeenNthCalledWith(3, "model");
   });
 
   it.each([

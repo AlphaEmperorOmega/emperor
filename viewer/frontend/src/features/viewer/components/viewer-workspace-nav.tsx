@@ -1,4 +1,4 @@
-import { Activity, FileText, GitCompare, Layers } from "lucide-react";
+import { Activity, FileText, Layers } from "lucide-react";
 import { type ViewerWorkspace } from "@/types/viewer";
 import { cn } from "@/lib/utils";
 
@@ -15,7 +15,6 @@ const workspaceItems: Array<{
   { value: "model", label: "Model", icon: Layers },
   { value: "training", label: "Training", icon: Activity },
   { value: "logs", label: "Logs", icon: FileText },
-  { value: "compare", label: "Compare", icon: GitCompare },
 ];
 
 export function ViewerWorkspaceNav({

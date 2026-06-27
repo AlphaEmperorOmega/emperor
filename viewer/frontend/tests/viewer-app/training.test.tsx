@@ -179,7 +179,6 @@ function renderWorkspaceOverlayHarness({
           {activeWorkspace === "training" && (
             <ViewerWorkspaceMain
               activeWorkspace={activeWorkspace}
-              onChangeWorkspace={vi.fn()}
               onOpenFullConfig={fullConfigDialog.open}
             />
           )}
@@ -288,13 +287,6 @@ describe("ViewerApp Training And Preview", () => {
     expect(screen.queryByRole("button", { name: /start training/i }))
       .not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /^compare$/i }));
-
-    expect(await screen.findByRole("heading", { name: /training run comparison/i }))
-      .toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /start training/i }))
-      .not.toBeInTheDocument();
-
     await user.click(screen.getByRole("button", { name: /^logs$/i }));
 
     expect(await screen.findByText("Historical Scalars")).toBeInTheDocument();
@@ -344,17 +336,6 @@ describe("ViewerApp Training And Preview", () => {
     expect(trainingRunPlanCalls(fetchMock)).toHaveLength(0);
 
     logsRender.unmount();
-    fetchMock.mockClear();
-
-    const compareReady = vi.fn();
-    renderWorkspaceOverlayHarness({
-      activeWorkspace: "compare",
-      children: <TargetTrainingInputsReady onReady={compareReady} />,
-    });
-    await waitForTargetTrainingInputs(compareReady);
-    expect(modelCatalogCalls(fetchMock).length).toBeGreaterThan(0);
-
-    expect(trainingRunPlanCalls(fetchMock)).toHaveLength(0);
   });
 
   it("keeps active job polling mounted while the Training workspace is hidden", async () => {

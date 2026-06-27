@@ -171,12 +171,6 @@ export const viewerQueryKeys = {
     preset: string,
     dataset: string,
   ) => ["inspect", "historical-summary", model, preset, dataset] as const,
-  comparisonInspection: (
-    modelType: string,
-    model: string,
-    preset: string,
-    dataset: string,
-  ) => ["comparison-inspection", modelType, model, preset, dataset] as const,
   configSnapshots: (selectedModelType: string, selectedModel: string) =>
     ["config-snapshots", selectedModelType, selectedModel] as const,
   configSnapshotLibrary: () => ["config-snapshot-library"] as const,

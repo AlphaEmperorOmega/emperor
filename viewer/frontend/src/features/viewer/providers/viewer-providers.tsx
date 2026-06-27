@@ -225,34 +225,6 @@ export function useTargetQueryStatusState() {
   };
 }
 
-export function useCompareTargetState() {
-  const {
-    selectedModelType,
-    selectedModel,
-    selectedPreset,
-    selectModel,
-    selectPreset,
-    models,
-    modelsLoading,
-    isModelsError,
-    modelsError,
-  } = useTargetConfig();
-
-  return {
-    selectedModelType,
-    selectedModel,
-    selectedPreset,
-    selectModel,
-    selectPreset,
-    catalog: {
-      models,
-      isLoading: modelsLoading,
-      isError: isModelsError,
-      error: modelsError,
-    },
-  };
-}
-
 export type ViewerProvidersProps = {
   /** Wired to the logs workspace so a new job's folder appears in its run list. */
   onJobStarted?: (logFolder: string) => void;

@@ -134,7 +134,7 @@ describe("ViewerApp Overview", () => {
     const headerNav = within(header).getByRole("navigation", { name: "Workspace" });
     expect(
       within(headerNav).getAllByRole("button").map((button) => button.textContent?.trim()),
-    ).toEqual(["Model", "Training", "Logs", "Compare"]);
+    ).toEqual(["Model", "Training", "Logs"]);
     expect(within(sidebar).queryByRole("navigation", { name: "Workspace" }))
       .not.toBeInTheDocument();
 
