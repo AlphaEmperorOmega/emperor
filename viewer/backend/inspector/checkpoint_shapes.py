@@ -11,6 +11,8 @@ import torch
 TensorShape = tuple[int, ...]
 
 MAX_TENSOR_SHAPES_PER_NODE = 12
+MAX_CHECKPOINT_GRAPH_SHAPE_BYTES = 256 * 1024 * 1024
+_OVERSIZED_CHECKPOINT_REASON = "checkpointTooLarge"
 
 _DIRECT_STACK_WEIGHT_RE = re.compile(
     r"^main_model\.layers\.(?P<index>\d+)\.model\.weight_params$"
@@ -91,7 +93,12 @@ class CheckpointGraphShapes:
 def load_checkpoint_graph_shapes(
     checkpoint_paths: Iterable[Path],
 ) -> CheckpointGraphShapes | None:
+    fallback_reasons: list[str] = []
     for checkpoint_path in checkpoint_paths:
+        skip_reason = _checkpoint_shape_skip_reason(checkpoint_path)
+        if skip_reason is not None:
+            fallback_reasons.append(skip_reason)
+            continue
         try:
             checkpoint = torch.load(
                 checkpoint_path,
@@ -107,6 +114,27 @@ def load_checkpoint_graph_shapes(
         shapes = checkpoint_graph_shapes_from_state_dict(state_dict)
         if shapes is not None:
             return shapes
+    if fallback_reasons:
+        return CheckpointGraphShapes(
+            config_overrides={},
+            parameter_shapes={},
+            coverage_counts={},
+            tensor_count=0,
+            diagnostics=CheckpointGraphDiagnostics(tuple(fallback_reasons)),
+        )
+    return None
+
+
+def _checkpoint_shape_skip_reason(checkpoint_path: Path) -> str | None:
+    try:
+        checkpoint_size = checkpoint_path.stat().st_size
+    except OSError:
+        return "checkpointUnavailable"
+    if checkpoint_size > MAX_CHECKPOINT_GRAPH_SHAPE_BYTES:
+        return (
+            f"{_OVERSIZED_CHECKPOINT_REASON}:"
+            f"{checkpoint_size}>{MAX_CHECKPOINT_GRAPH_SHAPE_BYTES}"
+        )
     return None
 
 
