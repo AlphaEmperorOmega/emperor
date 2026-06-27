@@ -6,7 +6,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
-from viewer.backend.blocking import run_blocking_io
+from viewer.backend.blocking import named_blocking_work_limiter, run_blocking_io
 from viewer.backend.core.security import require_bearer_auth
 from viewer.backend.dependencies import get_inspection_service
 from viewer.backend.schemas import (
@@ -14,6 +14,9 @@ from viewer.backend.schemas import (
     InspectResponse,
 )
 from viewer.backend.services.inspection import InspectionService
+
+INSPECTION_BLOCKING_WORK_CONCURRENCY = 2
+INSPECTION_BLOCKING_WORK_LIMITER_NAME = "inspection"
 
 router = APIRouter(
     tags=["inspection"],
@@ -40,5 +43,9 @@ async def inspect(
             overrides=request.overrides,
             dataset=request.dataset,
             log_run_id=request.logRunId,
+            limiter=named_blocking_work_limiter(
+                INSPECTION_BLOCKING_WORK_LIMITER_NAME,
+                INSPECTION_BLOCKING_WORK_CONCURRENCY,
+            ),
         )
     )
