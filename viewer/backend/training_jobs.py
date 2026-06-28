@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import copy
 import subprocess
 import uuid
-from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from threading import RLock
 from typing import Any
 
 from models.catalog import model_identity_payload_from_id
@@ -36,11 +35,16 @@ from viewer.backend.training_cgroups import (
     StrictCancellationUnavailable,
     TrainingCancellationMode,
 )
+from viewer.backend.training_job_lifecycle import (
+    latest_terminal_event,
+    terminal_exit_code,
+    terminal_status_from_event,
+)
 from viewer.backend.training_job_projector import (
-    TRAINING_JOB_EVENT_TAIL_LIMIT,
     TrainingJobLiveProjection,
     TrainingJobProjector,
 )
+from viewer.backend.training_live_projection import TrainingLiveProjectionCache
 from viewer.backend.training_monitor_locator import (
     TrainingMonitorLocator,
     normalize_preset_token,
@@ -52,11 +56,6 @@ from viewer.backend.training_progress_store import (
 from viewer.backend.training_run_plans import (
     SelectedTrainingInputs,
     TrainingRunPlanBuilder,
-)
-from viewer.backend.training_run_progress import (
-    apply_training_run_progress_event,
-    finalize_training_run_progress,
-    run_lookup_by_id,
 )
 from viewer.backend.training_worker_launcher import (
     PersistedCgroupProcessHandle,
@@ -70,12 +69,6 @@ from viewer.backend.training_worker_launcher import (
 # Grace period for a cancelled worker to exit after SIGTERM (and again after
 # the SIGKILL escalation) before cancellation is reported as failed.
 CANCEL_REAP_GRACE_SECONDS = 5.0
-_TERMINAL_EVENT_TYPE_STATUS: dict[str, str] = {
-    "completed": "completed",
-    "failed": "failed",
-    "error": "failed",
-    "cancelled": "cancelled",
-}
 
 
 def _now() -> str:
@@ -84,46 +77,6 @@ def _now() -> str:
 
 TrainingJob = TrainingJobRecord
 
-
-def _terminal_status_from_event(event: dict[str, Any]) -> str | None:
-    status = event.get("status")
-    if isinstance(status, str) and is_terminal_job_status(status):
-        return status
-    event_type = event.get("type")
-    if isinstance(event_type, str):
-        return _TERMINAL_EVENT_TYPE_STATUS.get(event_type)
-    return None
-
-
-def _latest_terminal_event(events: list[dict[str, Any]]) -> dict[str, Any] | None:
-    return next(
-        (
-            event
-            for event in reversed(events)
-            if _terminal_status_from_event(event) is not None
-        ),
-        None,
-    )
-
-
-def _terminal_exit_code(
-    status: str,
-    event: dict[str, Any],
-    current_exit_code: int | None,
-) -> int | None:
-    explicit_exit_code = event.get("exitCode")
-    if isinstance(explicit_exit_code, int):
-        return explicit_exit_code
-    if current_exit_code is not None:
-        return current_exit_code
-    if status == "completed":
-        return 0
-    if status == "failed":
-        return 1
-    if status == "cancelled":
-        return -15
-    return None
-
 __all__ = [
     "ProcessHandle",
     "ProcessRunner",
@@ -131,59 +84,6 @@ __all__ = [
     "TrainingJob",
     "TrainingJobManager",
 ]
-
-
-@dataclass
-class _ClusterGrowthState:
-    node: str
-    count: int = 0
-    capacity_total: int = 0
-    addition_count: int = 0
-    additions: list[dict[str, Any]] = field(default_factory=list)
-
-    def to_payload(self) -> dict[str, Any]:
-        return {
-            "node": self.node,
-            "count": self.count,
-            "capacityTotal": self.capacity_total,
-            "additionCount": self.addition_count,
-            "additions": list(self.additions),
-        }
-
-
-@dataclass
-class _LiveProjectionCache:
-    event_count: int
-    event_counts: dict[str, int]
-    events_tail: list[dict[str, Any]]
-    run_plan_base: dict[str, Any]
-    run_by_id: dict[str, dict[str, Any]]
-    latest_event: dict[str, Any] = field(default_factory=dict)
-    metrics_event: dict[str, Any] = field(default_factory=dict)
-    latest_failed_event: dict[str, Any] = field(default_factory=dict)
-    result_events: list[dict[str, Any]] = field(default_factory=list)
-    cluster_growth: dict[str, _ClusterGrowthState] = field(default_factory=dict)
-
-
-def _capacity_total(value: Any) -> int:
-    if not isinstance(value, list):
-        return 0
-    total = 1
-    for axis in value:
-        if not isinstance(axis, int | float):
-            return 0
-        total *= int(axis)
-    return total
-
-
-def _coord(value: Any) -> list[int] | None:
-    if (
-        isinstance(value, list)
-        and len(value) == 3
-        and all(isinstance(item, int | float) for item in value)
-    ):
-        return [int(value[0]), int(value[1]), int(value[2])]
-    return None
 
 
 class TrainingJobManager:
@@ -227,8 +127,9 @@ class TrainingJobManager:
         self.job_projector = job_projector or TrainingJobProjector(
             self.monitor_locator
         )
+        self._state_lock = RLock()
         self._processes: dict[str, ProcessHandle] = {}
-        self._live_projection_cache: dict[str, _LiveProjectionCache] = {}
+        self._live_projection_cache = TrainingLiveProjectionCache()
 
     @property
     def jobs(self) -> dict[str, TrainingJob]:
@@ -345,7 +246,8 @@ class TrainingJobManager:
             )
             return self.get_job(job_id)
         except Exception:
-            self._processes.pop(job_id, None)
+            with self._state_lock:
+                self._processes.pop(job_id, None)
             try:
                 self._terminate_and_reap_process(job_id, launch.process)
             except Exception:
@@ -491,7 +393,8 @@ class TrainingJobManager:
             cgroup_path=containment.cgroup_path,
         )
         self.job_store.save(job)
-        self._processes[job_id] = process
+        with self._state_lock:
+            self._processes[job_id] = process
         return job
 
     def get_job(self, job_id: str) -> dict[str, Any]:
@@ -657,12 +560,17 @@ class TrainingJobManager:
             ) from exc
 
     def _process_for_job(self, job: TrainingJob) -> ProcessHandle | None:
-        process = self._processes.get(job.id)
+        with self._state_lock:
+            process = self._processes.get(job.id)
         if process is not None:
             return process
         process = self._rehydrate_process_handle(job)
         if process is not None:
-            self._processes[job.id] = process
+            with self._state_lock:
+                cached_process = self._processes.get(job.id)
+                if cached_process is not None:
+                    return cached_process
+                self._processes[job.id] = process
         return process
 
     def _rehydrate_process_handle(self, job: TrainingJob) -> ProcessHandle | None:
@@ -680,7 +588,8 @@ class TrainingJobManager:
     def _job_has_live_containment(self, job: TrainingJob) -> bool:
         if job.cancellation_mode != "strict-cgroup":
             return False
-        process = self._processes.get(job.id)
+        with self._state_lock:
+            process = self._processes.get(job.id)
         if process is not None and process.poll() is None:
             return True
         cgroup = self.cgroup_manager.from_existing(job.cgroup_path)
@@ -697,9 +606,9 @@ class TrainingJobManager:
         exit_code = process.poll() if process is not None else None
         containment_live = process is not None and exit_code is None
         events = events if events is not None else self._events(job)
-        latest_terminal = _latest_terminal_event(events)
+        latest_terminal = latest_terminal_event(events)
         terminal_status = (
-            _terminal_status_from_event(latest_terminal)
+            terminal_status_from_event(latest_terminal)
             if latest_terminal is not None
             else None
         )
@@ -709,7 +618,7 @@ class TrainingJobManager:
             and not containment_live
         ):
             job.status = terminal_status
-            job.exit_code = _terminal_exit_code(
+            job.exit_code = terminal_exit_code(
                 terminal_status,
                 latest_terminal,
                 job.exit_code,
@@ -801,145 +710,8 @@ class TrainingJobManager:
         job: TrainingJob,
         snapshot: TrainingProgressSnapshot,
     ) -> TrainingJobLiveProjection:
-        cache = self._live_projection_cache.get(job.id)
-        if (
-            cache is None
-            or snapshot.reset
-            or snapshot.total_count < cache.event_count
-            or cache.run_plan_base.get("runs") is None
-        ):
-            cache = self._new_live_projection_cache(job)
-            self._live_projection_cache[job.id] = cache
-            events_to_apply = snapshot.events
-        else:
-            events_to_apply = snapshot.events[cache.event_count :]
-
-        for event in events_to_apply:
-            self._apply_live_event(cache, event)
-        cache.event_count = snapshot.total_count
-
-        run_plan = finalize_training_run_progress(
-            cache.run_plan_base,
-            job_status=job.status,
+        return self._live_projection_cache.project(
+            job,
+            snapshot,
             summarize=self.run_plan_builder.summarize,
-            latest_failed_event=cache.latest_failed_event,
         )
-        return TrainingJobLiveProjection(
-            run_plan=run_plan,
-            latest_event=dict(cache.latest_event),
-            metrics_event=dict(cache.metrics_event),
-            result_events=list(cache.result_events),
-            events_tail=list(cache.events_tail),
-            event_count=cache.event_count,
-            event_counts=dict(cache.event_counts),
-            events_truncated=cache.event_count > len(cache.events_tail),
-            cluster_growth=[
-                entry.to_payload()
-                for entry in cache.cluster_growth.values()
-            ],
-        )
-
-    def _new_live_projection_cache(self, job: TrainingJob) -> _LiveProjectionCache:
-        run_plan_base = copy.deepcopy(job.run_plan)
-        runs = run_plan_base.get("runs") or []
-        return _LiveProjectionCache(
-            event_count=0,
-            event_counts={},
-            events_tail=[],
-            run_plan_base=run_plan_base,
-            run_by_id=run_lookup_by_id(runs),
-        )
-
-    def _apply_live_event(
-        self,
-        cache: _LiveProjectionCache,
-        event: dict[str, Any],
-    ) -> None:
-        event_type = str(event.get("type") or "unknown")
-        cache.event_counts[event_type] = cache.event_counts.get(event_type, 0) + 1
-        cache.events_tail.append(event)
-        cache.events_tail = cache.events_tail[-TRAINING_JOB_EVENT_TAIL_LIMIT:]
-        cache.latest_event = event
-        if isinstance(event.get("metrics"), dict):
-            cache.metrics_event = event
-        if event.get("status") == "failed":
-            cache.latest_failed_event = event
-        if event_type == "dataset_completed":
-            cache.result_events.append(event)
-        apply_training_run_progress_event(
-            runs=cache.run_plan_base.get("runs") or [],
-            run_by_id=cache.run_by_id,
-            event=event,
-        )
-        self._apply_cluster_growth_event(cache, event)
-
-    def _apply_cluster_growth_event(
-        self,
-        cache: _LiveProjectionCache,
-        event: dict[str, Any],
-    ) -> None:
-        node = event.get("node")
-        if not isinstance(node, str) or not node:
-            return
-
-        event_type = event.get("type")
-        if event_type not in {"cluster_initialized", "neuron_added", "neurons_added"}:
-            return
-
-        summary = cache.cluster_growth.setdefault(
-            node,
-            _ClusterGrowthState(node=node),
-        )
-        if isinstance(event.get("count"), int):
-            summary.count = event["count"]
-        capacity_total = _capacity_total(event.get("capacity"))
-        if capacity_total:
-            summary.capacity_total = capacity_total
-
-        if event_type == "cluster_initialized":
-            return
-        if event_type == "neurons_added":
-            coordinates = event.get("coordinates")
-            if not isinstance(coordinates, list):
-                coordinates = []
-            coordinate_count = event.get("coordinateCount")
-            if not isinstance(coordinate_count, int):
-                coordinate_count = len(coordinates)
-            summary.addition_count += max(0, coordinate_count)
-            for coordinate_value in coordinates[-50:]:
-                coord = _coord(coordinate_value)
-                if coord is None:
-                    continue
-                summary.additions.append(
-                    {
-                        "coord": coord,
-                        "step": (
-                            event.get("step")
-                            if isinstance(event.get("step"), int)
-                            else None
-                        ),
-                        "epoch": (
-                            event.get("epoch")
-                            if isinstance(event.get("epoch"), int)
-                            else None
-                        ),
-                    }
-                )
-            summary.additions = summary.additions[-50:]
-            return
-        coord = _coord(event.get("coord"))
-        if coord is None:
-            return
-        summary.addition_count += 1
-        summary.additions.append(
-            {
-                "coord": coord,
-                "step": (
-                    event.get("step") if isinstance(event.get("step"), int) else None
-                ),
-                "epoch": (
-                    event.get("epoch") if isinstance(event.get("epoch"), int) else None
-                ),
-            }
-        )
-        summary.additions = summary.additions[-50:]
