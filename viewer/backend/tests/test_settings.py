@@ -14,6 +14,10 @@ from viewer.backend.core.config import (
     ViewerApiSettings,
     get_viewer_api_settings,
 )
+from viewer.backend.core.limits import (
+    DEFAULT_MAX_LOG_ARCHIVE_EXTRACTED_SIZE,
+    DEFAULT_MAX_LOG_ARCHIVE_UPLOAD_SIZE,
+)
 
 SETTINGS_ENV_NAMES = (
     "VIEWER_API_AUTH_MODE",
@@ -64,11 +68,41 @@ class ViewerApiSettingsTests(unittest.TestCase):
         self.assertIs(settings.log_imports_enabled, True)
         self.assertIsNone(settings.max_upload_size)
         self.assertIsNone(settings.max_log_archive_extracted_size)
+        self.assertIsNone(settings.effective_max_upload_size)
+        self.assertIsNone(settings.effective_max_log_archive_extracted_size)
 
     def test_bearer_mode_defaults_disable_log_imports(self) -> None:
         settings = ViewerApiSettings(auth_mode="bearer", token="secret-token")
 
         self.assertIs(settings.log_imports_enabled, False)
+
+    def test_hosted_or_explicit_log_imports_use_default_size_limits(self) -> None:
+        bearer_settings = ViewerApiSettings(
+            auth_mode="bearer",
+            token="secret-token",
+            allow_log_imports=True,
+        )
+        local_override_settings = ViewerApiSettings(allow_log_imports=True)
+
+        for settings in (bearer_settings, local_override_settings):
+            with self.subTest(settings=settings):
+                self.assertEqual(
+                    settings.effective_max_upload_size,
+                    DEFAULT_MAX_LOG_ARCHIVE_UPLOAD_SIZE,
+                )
+                self.assertEqual(
+                    settings.effective_max_log_archive_extracted_size,
+                    DEFAULT_MAX_LOG_ARCHIVE_EXTRACTED_SIZE,
+                )
+
+    def test_code_can_explicitly_disable_log_import_size_limits(self) -> None:
+        settings = ViewerApiSettings(
+            max_upload_size=None,
+            max_log_archive_extracted_size=None,
+        )
+
+        self.assertIsNone(settings.effective_max_upload_size)
+        self.assertIsNone(settings.effective_max_log_archive_extracted_size)
 
     def test_defaults_keep_local_development_cors_origins(self) -> None:
         with isolated_settings_env():
@@ -144,6 +178,8 @@ class ViewerApiSettingsTests(unittest.TestCase):
 
         self.assertEqual(settings.max_upload_size, 1024)
         self.assertEqual(settings.max_log_archive_extracted_size, 2048)
+        self.assertEqual(settings.effective_max_upload_size, 1024)
+        self.assertEqual(settings.effective_max_log_archive_extracted_size, 2048)
 
     def test_env_parses_cors_origins_json_array(self) -> None:
         origins = [

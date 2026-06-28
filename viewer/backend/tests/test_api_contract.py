@@ -1788,7 +1788,9 @@ class ApiIntegrationContractTests(unittest.TestCase):
                 "liveMonitorDataEnabled": True,
                 "historicalMonitorDataEnabled": True,
                 "uploadsEnabled": True,
-                "maxUploadSize": get_viewer_api_settings().max_upload_size,
+                "maxUploadSize": (
+                    get_viewer_api_settings().effective_max_upload_size
+                ),
                 "dataSourcesEnabled": False,
                 "dataSources": [],
             },
@@ -1818,6 +1820,39 @@ class ApiIntegrationContractTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["authMode"], "bearer")
         self.assertFalse(response.json()["uploadsEnabled"])
+
+    def test_capabilities_endpoint_reports_hosted_upload_cap_when_enabled(
+        self,
+    ) -> None:
+        import httpx
+
+        from viewer.backend.api import ViewerApiSettings, create_app
+        from viewer.backend.core.limits import DEFAULT_MAX_LOG_ARCHIVE_UPLOAD_SIZE
+
+        app = create_app(
+            ViewerApiSettings(
+                auth_mode="bearer",
+                token="secret-token",
+                allow_log_imports=True,
+            )
+        )
+
+        async def call_api() -> httpx.Response:
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(
+                transport=transport,
+                base_url="http://testserver",
+            ) as client:
+                return await client.get("/capabilities")
+
+        response = asyncio.run(call_api())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["uploadsEnabled"])
+        self.assertEqual(
+            response.json()["maxUploadSize"],
+            DEFAULT_MAX_LOG_ARCHIVE_UPLOAD_SIZE,
+        )
 
     def test_capabilities_endpoint_reports_local_mutation_features(self) -> None:
         import httpx

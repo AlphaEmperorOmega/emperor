@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -144,6 +145,66 @@ class FileSystemTrainingJobStoreTests(unittest.TestCase):
 
             self.assertIsNone(store.get("job-1"))
             self.assertEqual(store.list(), [])
+
+    def test_get_rejects_unsafe_job_ids_without_touching_parent_paths(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "jobs"
+            outside = Path(tmp) / "outside"
+            outside.mkdir()
+            (outside / "metadata.json").write_text("{}", encoding="utf-8")
+
+            store = FileSystemTrainingJobStore(root)
+
+            for job_id in ("../outside", "nested/job", r"nested\\job", ""):
+                with self.subTest(job_id=job_id):
+                    self.assertIsNone(store.get(job_id))
+
+    def test_list_does_not_cache_metadata_with_unsafe_job_id(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "jobs"
+            bad_root = root / "bad"
+            bad_root.mkdir(parents=True)
+            (bad_root / "metadata.json").write_text(
+                json.dumps(
+                    {
+                        "id": "../outside",
+                        "modelType": "linears",
+                        "model": "linear",
+                        "preset": "baseline",
+                        "presets": ["baseline"],
+                        "datasets": ["Mnist"],
+                        "overrides": {},
+                        "search": None,
+                        "planned_run_count": 1,
+                        "run_plan": {"runs": [], "summary": {"totalRuns": 0}},
+                        "monitors": [],
+                        "log_folder": "test_model",
+                        "command": ["python", "-m", "viewer.backend.training_worker"],
+                        "root": str(bad_root),
+                        "created_at": "2026-06-06T00:00:00+00:00",
+                        "updated_at": "2026-06-06T00:00:00+00:00",
+                        "status": "running",
+                        "pid": 1234,
+                        "exit_code": None,
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            store = FileSystemTrainingJobStore(root)
+
+            self.assertEqual(store.list(), [])
+            self.assertIsNone(store.get("../outside"))
+
+    def test_save_rejects_unsafe_job_id(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            record = make_record("../outside")
+            record.root = root / "bad"
+            store = FileSystemTrainingJobStore(root)
+
+            with self.assertRaises(ValueError):
+                store.save(record)
 
 
 if __name__ == "__main__":

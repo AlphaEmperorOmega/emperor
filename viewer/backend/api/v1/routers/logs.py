@@ -198,6 +198,8 @@ async def import_log_archive(
     settings: Annotated[ViewerApiSettings, Depends(get_viewer_settings)],
 ) -> LogArchiveImportResponse:
     require_log_imports_allowed(settings)
+    max_upload_size = settings.effective_max_upload_size
+    max_extracted_size = settings.effective_max_log_archive_extracted_size
 
     content_length = request.headers.get("content-length")
     if content_length is not None:
@@ -205,27 +207,24 @@ async def import_log_archive(
             upload_size = int(content_length)
         except ValueError:
             upload_size = 0
-        if (
-            settings.max_upload_size is not None
-            and upload_size > settings.max_upload_size
-        ):
-            raise _upload_too_large_error(settings.max_upload_size)
+        if max_upload_size is not None and upload_size > max_upload_size:
+            raise _upload_too_large_error(max_upload_size)
 
     upload = parse_multipart_log_archive_upload(
         content_type=request.headers.get("content-type", ""),
         body=await _read_upload_body_with_limit(
             request,
-            max_upload_size=settings.max_upload_size,
+            max_upload_size=max_upload_size,
         ),
-        max_upload_size=settings.max_upload_size,
+        max_upload_size=max_upload_size,
     )
 
     def extract_archive() -> dict[str, object]:
         return service.import_archive(
             archive=upload.content,
             filename=upload.filename,
-            max_upload_size=settings.max_upload_size,
-            max_extracted_size=settings.max_log_archive_extracted_size,
+            max_upload_size=max_upload_size,
+            max_extracted_size=max_extracted_size,
         )
 
     return LogArchiveImportResponse.model_validate(
