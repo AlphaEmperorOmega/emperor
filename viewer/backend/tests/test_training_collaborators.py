@@ -119,6 +119,25 @@ class TrainingProgressStoreTests(unittest.TestCase):
         self.assertEqual(events[0]["type"], "dataset_started")
         self.assertIn("timestamp", events[0])
 
+    def test_progress_store_retries_incomplete_final_jsonl_line(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            job = make_job(Path(tmp) / "job-1")
+            store = TrainingProgressStore()
+            job.root.mkdir(parents=True)
+            partial = '{"type": "dataset_started"'
+            job.progress_path.write_text(partial, encoding="utf-8")
+
+            first_read = store.read_snapshot(job)
+            with job.progress_path.open("a", encoding="utf-8") as handle:
+                handle.write('}\n{"type": "dataset_completed"}\n')
+            second_read = store.read_snapshot(job)
+
+        self.assertEqual(first_read.events, [])
+        self.assertEqual(
+            [event["type"] for event in second_read.new_events],
+            ["dataset_started", "dataset_completed"],
+        )
+
 
 class TrainingWorkerLauncherTests(unittest.TestCase):
     def test_launcher_writes_payload_and_starts_worker_command(self) -> None:

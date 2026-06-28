@@ -6,6 +6,7 @@ import json
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from threading import RLock
 from typing import Any
 
 from viewer.backend.job_store import TrainingJobRecord
@@ -33,8 +34,13 @@ class _ProgressCacheEntry:
 class TrainingProgressStore:
     def __init__(self) -> None:
         self._cache: dict[Path, _ProgressCacheEntry] = {}
+        self._lock = RLock()
 
     def read_snapshot(self, job: TrainingJobRecord) -> TrainingProgressSnapshot:
+        with self._lock:
+            return self._read_snapshot(job)
+
+    def _read_snapshot(self, job: TrainingJobRecord) -> TrainingProgressSnapshot:
         path = job.progress_path
         if not path.exists():
             self._cache.pop(path, None)
@@ -54,8 +60,7 @@ class TrainingProgressStore:
                 entry is None
                 or stat.st_size < entry.offset
                 or (
-                    entry.prefix
-                    and current_prefix[: len(entry.prefix)] != entry.prefix
+                    entry.prefix and current_prefix[: len(entry.prefix)] != entry.prefix
                 )
             ):
                 entry = _ProgressCacheEntry(prefix=current_prefix)
@@ -66,7 +71,14 @@ class TrainingProgressStore:
 
             new_events: list[dict[str, Any]] = []
             handle.seek(entry.offset)
-            for raw_line in handle:
+            while True:
+                line_start = handle.tell()
+                raw_line = handle.readline()
+                if not raw_line:
+                    break
+                if not raw_line.endswith(b"\n"):
+                    handle.seek(line_start)
+                    break
                 line = raw_line.decode("utf-8")
                 if not line.strip():
                     continue
