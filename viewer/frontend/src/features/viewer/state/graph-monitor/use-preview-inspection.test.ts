@@ -125,7 +125,7 @@ describe("usePreviewInspectionState", () => {
     expect(result.current.graph).not.toEqual(graphA);
   });
 
-  it("keeps the current graph visible while a different preview builds", async () => {
+  it("clears the current graph while a different preview builds", async () => {
     const next = deferred<unknown>();
     const graphA = {
       modelType: "linears",
@@ -153,7 +153,7 @@ describe("usePreviewInspectionState", () => {
 
     act(() => result.current.requestPreview(request("B")));
 
-    expect(result.current.graph).toEqual(graphA);
+    expect(result.current.graph).toBeUndefined();
     await waitFor(() => expect(result.current.previewInspection.isBuilding).toBe(true));
 
     await act(async () => {
