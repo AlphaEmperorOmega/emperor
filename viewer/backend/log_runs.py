@@ -51,8 +51,10 @@ LOG_EVENT_CACHE_MAX_ENTRIES = 256
 LOG_TAG_READ_MAX_EVENT_BYTES = 96 * 1024 * 1024
 LOG_TAG_BATCH_READ_MAX_EVENT_BYTES = 64 * 1024 * 1024
 LOG_RESPONSE_ITEM_LIMIT = 500
+LOG_SCALAR_ACCUMULATOR_CACHE_MAX_ENTRIES = 32
 LOG_TAG_KEYS = ("scalars", "histograms", "images", "texts")
 EventFingerprint = tuple[tuple[str, int, int], ...]
+LogRunCatalogFingerprint = tuple[tuple[Any, ...], ...]
 PARAMETER_MONITOR_CHANNELS = {"weights", "bias"}
 LAYER_MONITOR_METRICS = {
     "relative_delta_norm",
@@ -643,11 +645,12 @@ class LogRunScanner:
         self,
         *,
         logs_root: Path | str = "logs",
-        cache_ttl_seconds: float = 1.0,
+        cache_ttl_seconds: float = 30.0,
     ) -> None:
         self.logs_root = Path(logs_root)
         self.cache_ttl_seconds = max(0.0, float(cache_ttl_seconds))
         self._runs_cache: list[LogRun] | None = None
+        self._runs_cache_fingerprint: LogRunCatalogFingerprint | None = None
         self._runs_cache_deadline = 0.0
 
     def list_runs(self) -> list[LogRun]:
@@ -657,16 +660,22 @@ class LogRunScanner:
 
         root = self.resolved_root()
         if not root.exists():
+            self._runs_cache = []
+            self._runs_cache_fingerprint = ()
+            self._runs_cache_deadline = now + self.cache_ttl_seconds
             return []
 
+        version_dirs, fingerprint = self._version_dirs_and_fingerprint(root)
+        if (
+            self._runs_cache is not None
+            and self._runs_cache_fingerprint == fingerprint
+        ):
+            self._runs_cache_deadline = now + self.cache_ttl_seconds
+            return list(self._runs_cache)
+
         runs: list[LogRun] = []
-        for version_dir in sorted(root.rglob("version_*")):
-            if not version_dir.is_dir():
-                continue
-            resolved = self.resolve_under_root(version_dir, root)
-            if resolved is None:
-                continue
-            run = self.parse_run(root, resolved)
+        for version_dir in version_dirs:
+            run = self.parse_run(root, version_dir)
             if run is not None:
                 runs.append(run)
         sorted_runs = sorted(
@@ -683,12 +692,58 @@ class LogRunScanner:
             reverse=True,
         )
         self._runs_cache = list(sorted_runs)
+        self._runs_cache_fingerprint = fingerprint
         self._runs_cache_deadline = now + self.cache_ttl_seconds
         return sorted_runs
 
     def clear_cache(self) -> None:
         self._runs_cache = None
+        self._runs_cache_fingerprint = None
         self._runs_cache_deadline = 0.0
+
+    def _version_dirs_and_fingerprint(
+        self,
+        root: Path,
+    ) -> tuple[list[Path], LogRunCatalogFingerprint]:
+        version_dirs: list[Path] = []
+        fingerprint: list[tuple[Any, ...]] = []
+        for version_dir in sorted(root.rglob("version_*")):
+            if not version_dir.is_dir():
+                continue
+            resolved = self.resolve_under_root(version_dir, root)
+            if resolved is None:
+                continue
+            version_dirs.append(resolved)
+            try:
+                relative_path = resolved.relative_to(root).as_posix()
+            except ValueError:
+                continue
+            fingerprint.append(("dir", relative_path, *self._path_stat(resolved)))
+            for pattern in (
+                "result.json",
+                "hparams.yaml",
+                "events.out.tfevents.*",
+                "*.ckpt",
+            ):
+                for artifact in sorted(resolved.glob(pattern)):
+                    artifact_resolved = self.resolve_under_root(artifact, root)
+                    if artifact_resolved is None or not artifact_resolved.is_file():
+                        continue
+                    try:
+                        artifact_relative = artifact_resolved.relative_to(root).as_posix()
+                    except ValueError:
+                        continue
+                    fingerprint.append(
+                        ("file", artifact_relative, *self._path_stat(artifact_resolved))
+                    )
+        return version_dirs, tuple(fingerprint)
+
+    def _path_stat(self, path: Path) -> tuple[int, int]:
+        try:
+            stat = path.stat()
+        except OSError:
+            return (0, 0)
+        return (int(stat.st_mtime_ns), int(stat.st_size))
 
     def list_experiments(self) -> list[LogExperiment]:
         root = self.resolved_root()
@@ -814,6 +869,10 @@ class LogRunQueryService:
             tuple[str, EventFingerprint, str, int, str],
             dict[str, Any],
         ] = OrderedDict()
+        self._scalar_accumulator_cache: OrderedDict[
+            tuple[str, EventFingerprint],
+            Any,
+        ] = OrderedDict()
 
     def _cache_get(
         self,
@@ -830,15 +889,18 @@ class LogRunQueryService:
         cache: OrderedDict[Any, Any],
         key: Any,
         value: Any,
+        *,
+        max_entries: int = LOG_EVENT_CACHE_MAX_ENTRIES,
     ) -> None:
         cache[key] = value
         cache.move_to_end(key)
-        while len(cache) > LOG_EVENT_CACHE_MAX_ENTRIES:
+        while len(cache) > max_entries:
             cache.popitem(last=False)
 
     def clear_cache(self) -> None:
         self._tags_cache.clear()
         self._scalar_cache.clear()
+        self._scalar_accumulator_cache.clear()
         self.monitor_reader.clear_cache()
         self.parameter_status_reader.clear_cache()
 
@@ -850,6 +912,13 @@ class LogRunQueryService:
             for key in list(cache):
                 if key and key[0] in roots:
                     cache.pop(key, None)
+        for key in list(self._scalar_accumulator_cache):
+            cached_root = key[0]
+            if any(
+                cached_root == root or cached_root.startswith(f"{root}/")
+                for root in roots
+            ):
+                self._scalar_accumulator_cache.pop(key, None)
         self.monitor_reader.clear_roots(roots)
         self.parameter_status_reader.clear_roots(roots)
 
@@ -935,6 +1004,21 @@ class LogRunQueryService:
             "sourcePointCount": source_point_count,
             "truncated": source_point_count > len(sampled_points),
         }
+
+    def _load_scalar_accumulator(self, event_dir: Path) -> Any | None:
+        cache_key = (event_dir.as_posix(), event_file_fingerprint(event_dir))
+        cached = self._cache_get(self._scalar_accumulator_cache, cache_key)
+        if cached is not None:
+            return cached
+        accumulator = load_event_accumulator(event_dir)
+        if accumulator is not None:
+            self._cache_set(
+                self._scalar_accumulator_cache,
+                cache_key,
+                accumulator,
+                max_entries=LOG_SCALAR_ACCUMULATOR_CACHE_MAX_ENTRIES,
+            )
+        return accumulator
 
     def tags_for_runs(self, run_ids: list[str]) -> list[dict[str, Any]]:
         runs = self.scanner.resolve_runs(run_ids)
@@ -1345,7 +1429,7 @@ class LogRunQueryService:
                 tag: [] for tag in uncached_tags
             }
             for event_dir in event_dirs(run_dir):
-                accumulator = load_event_accumulator(event_dir)
+                accumulator = self._load_scalar_accumulator(event_dir)
                 if accumulator is None:
                     continue
                 for tag in uncached_tags:
