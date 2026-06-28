@@ -140,6 +140,48 @@ describe("MultiSelectDropdown", () => {
     ).toBeInTheDocument();
   });
 
+  it("can wrap long option labels while exposing metadata as hover-only context", async () => {
+    const user = userEvent.setup();
+    render(
+      <MultiSelectDropdown
+        label="Experiments"
+        values={[]}
+        options={[
+          {
+            value: "same_prefix_with_a_very_long_suffix_alpha",
+            label: "same_prefix_with_a_very_long_suffix_alpha",
+            metaTooltip: "12 runs",
+            wrapLabel: true,
+          },
+        ]}
+        onChange={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox", { name: /^experiments\b/i }));
+    const listbox = await screen.findByRole("listbox", {
+      name: "Experiments options",
+    });
+    const option = within(listbox).getByRole("option", {
+      name: "same_prefix_with_a_very_long_suffix_alpha",
+    });
+
+    expect(option).toHaveAccessibleDescription("12 runs");
+    expect(
+      within(option).getByText("same_prefix_with_a_very_long_suffix_alpha"),
+    ).toHaveClass("whitespace-normal", "break-words", "[overflow-wrap:anywhere]");
+    expect(screen.getByRole("tooltip")).toHaveClass(
+      "opacity-0",
+      "group-hover:opacity-100",
+      "group-focus-within:opacity-100",
+    );
+    expect(
+      within(listbox).queryByRole("option", {
+        name: /12 runs/i,
+      }),
+    ).not.toBeInTheDocument();
+  });
+
   it("runs a mouse action without toggling the row selection", async () => {
     const user = userEvent.setup();
     const { onAction, onChange } = renderDropdown();

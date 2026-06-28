@@ -2122,6 +2122,18 @@ describe("ViewerApp Logs Workspace", () => {
       name: logOptionName("experiment_01"),
     });
     expectLogOptionSelected(firstExperiment);
+    expect(firstExperiment).toHaveAccessibleDescription("1 run");
+    expect(within(firstExperiment).getByText("experiment_01")).toHaveClass(
+      "whitespace-normal",
+      "break-words",
+      "[overflow-wrap:anywhere]",
+    );
+    const firstExperimentRow = firstExperiment.closest('[role="presentation"]');
+    if (!(firstExperimentRow instanceof HTMLElement)) {
+      throw new Error("Expected experiment option to render in a row");
+    }
+    expect(within(firstExperimentRow).getByRole("tooltip", { name: "1 run" }))
+      .toHaveClass("opacity-0", "group-hover:opacity-100");
     expectLogsChecklistRowSizing(firstExperiment);
     expectLogsChecklistRowSizing(
       within(experimentsList).getByRole("option", {

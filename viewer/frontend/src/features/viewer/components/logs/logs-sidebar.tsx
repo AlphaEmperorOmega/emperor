@@ -146,6 +146,10 @@ function selectedValuesForOptions(selected: Set<string>, options: ChecklistOptio
     .map((option) => option.value);
 }
 
+function runCountLabel(count: number) {
+  return `${count} ${count === 1 ? "run" : "runs"}`;
+}
+
 function LogFilterSection({
   title,
   icon,
@@ -157,6 +161,7 @@ function LogFilterSection({
   optionActions,
   beforeDropdown,
   divided = false,
+  optionCountDisplay = "visible",
 }: {
   title: string;
   icon: ReactNode;
@@ -170,6 +175,7 @@ function LogFilterSection({
   ) => MultiSelectDropdownOptionAction[] | undefined;
   beforeDropdown?: ReactNode;
   divided?: boolean;
+  optionCountDisplay?: "visible" | "hover";
 }) {
   const selectedValues = useMemo(
     () => selectedValuesForOptions(selected, options),
@@ -182,14 +188,19 @@ function LogFilterSection({
         label: option.label,
         description: option.detail,
         meta:
-          option.count === undefined ? undefined : (
+          option.count === undefined || optionCountDisplay === "hover" ? undefined : (
             <StatChip size="xs" className="shrink-0">
-              {option.count} runs
+              {runCountLabel(option.count)}
             </StatChip>
           ),
+        metaTooltip:
+          option.count === undefined || optionCountDisplay !== "hover"
+            ? undefined
+            : runCountLabel(option.count),
+        wrapLabel: optionCountDisplay === "hover",
         actions: optionActions?.(option),
       })),
-    [optionActions, options],
+    [optionActions, optionCountDisplay, options],
   );
 
   function changeSelection(nextValues: string[]) {
@@ -489,6 +500,7 @@ export function LogsSidebar({
             onToggle={toggleExperiment}
             onAll={selectAllExperiments}
             onNone={selectNoExperiments}
+            optionCountDisplay="hover"
             beforeDropdown={
               <div className="grid grid-cols-2 gap-2">
                 <Button

@@ -41,6 +41,8 @@ export type MultiSelectDropdownOption = {
   label: string;
   description?: string;
   meta?: ReactNode;
+  metaTooltip?: string;
+  wrapLabel?: boolean;
   actions?: MultiSelectDropdownOptionAction[];
 };
 
@@ -505,7 +507,7 @@ export function MultiSelectDropdown({
                   key={option.value}
                   role="presentation"
                   className={cn(
-                    "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2",
+                    "group relative grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2",
                     dropdownOptionClassName,
                     dropdownOptionStateClassName({
                       active: isActive,
@@ -522,6 +524,11 @@ export function MultiSelectDropdown({
                     role="option"
                     tabIndex={-1}
                     aria-label={optionAccessibleName(option)}
+                    aria-describedby={
+                      option.metaTooltip
+                        ? `${listboxId}-option-${index}-meta`
+                        : undefined
+                    }
                     aria-selected={isSelected}
                     aria-disabled={isDisabled || undefined}
                     onMouseDown={(event) => event.preventDefault()}
@@ -553,9 +560,24 @@ export function MultiSelectDropdown({
                       />
                     </span>
                     <span className="grid min-w-0 gap-0.5">
-                      <span className="truncate">{option.label}</span>
+                      <span
+                        className={cn(
+                          option.wrapLabel
+                            ? "whitespace-normal break-words leading-4 [overflow-wrap:anywhere]"
+                            : "truncate",
+                        )}
+                      >
+                        {option.label}
+                      </span>
                       {option.description && (
-                        <span className="truncate font-mono text-xs text-ink-dim">
+                        <span
+                          className={cn(
+                            "font-mono text-xs text-ink-dim",
+                            option.wrapLabel
+                              ? "whitespace-normal break-words [overflow-wrap:anywhere]"
+                              : "truncate",
+                          )}
+                        >
                           {option.description}
                         </span>
                       )}
@@ -573,6 +595,15 @@ export function MultiSelectDropdown({
                       )}
                     </span>
                   </div>
+                  {option.metaTooltip && (
+                    <span
+                      id={`${listboxId}-option-${index}-meta`}
+                      role="tooltip"
+                      className="pointer-events-none absolute right-10 top-1/2 z-30 -translate-y-1/2 whitespace-nowrap rounded-[7px] border border-line-soft bg-panel px-2 py-1 font-sans text-[11px] font-bold leading-none text-ink opacity-0 shadow-panel transition-opacity group-focus-within:opacity-100 group-hover:opacity-100"
+                    >
+                      {option.metaTooltip}
+                    </span>
+                  )}
                   {actions.length > 0 && (
                     <span className="flex shrink-0 items-center gap-1.5">
                       {actions.map((action) => (
