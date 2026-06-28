@@ -1,4 +1,4 @@
-import { MonitorChartsModal } from "@/features/viewer/components/monitor/monitor-charts-modal";
+import { LazyMonitorChartsModal } from "@/features/viewer/components/monitor/lazy-monitor-charts-modal";
 import { useGraphMonitor } from "@/features/viewer/providers/viewer-providers";
 
 export function ConnectedMonitorChartsModal() {
@@ -14,7 +14,7 @@ export function ConnectedMonitorChartsModal() {
   }
 
   return (
-    <MonitorChartsModal
+    <LazyMonitorChartsModal
       node={graphMonitorNode}
       source={graphMonitorSource}
       comparisonCandidateGroups={graphMonitorComparisonCandidateGroups}

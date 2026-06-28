@@ -31,7 +31,7 @@ import {
   graphParameterActivityStatusClassNames,
   parameterActivityLabel,
 } from "@/features/viewer/components/graph/graph-parameter-indicators";
-import { MonitorChartsModal } from "@/features/viewer/components/monitor/monitor-charts-modal";
+import { LazyMonitorChartsModal } from "@/features/viewer/components/monitor/lazy-monitor-charts-modal";
 import { DialogShell } from "@/features/viewer/components/shared/dialog-shell";
 import {
   buildLinearMonitorComparisonCandidateGroups,
@@ -402,7 +402,7 @@ function ParameterActivityMinimapDialogContent({
         </div>
       </DialogShell>
       {monitorNode && (
-        <MonitorChartsModal
+        <LazyMonitorChartsModal
           node={monitorNode}
           source={source}
           comparisonCandidateGroups={monitorComparisonCandidateGroups}

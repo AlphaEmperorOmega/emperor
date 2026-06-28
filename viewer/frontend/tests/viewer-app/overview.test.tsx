@@ -724,6 +724,12 @@ describe("ViewerApp Overview", () => {
 
   it("keeps performance-only experiment runs selectable without graph activity", async () => {
     installFetchMock({
+      logRunsResponse: {
+        runs: logRunsResponse.runs.map((run) => ({
+          ...run,
+          hasLayerMonitorData: false,
+        })),
+      },
       logTagsByRun: {
         "log-mnist": ["train/loss"],
         "log-cifar": ["validation/accuracy"],

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { SelectedNodeDetailsView } from "@/features/viewer/components/graph/selected-node-details-view";
-import { MonitorChartsModal } from "@/features/viewer/components/monitor/monitor-charts-modal";
+import { LazyMonitorChartsModal } from "@/features/viewer/components/monitor/lazy-monitor-charts-modal";
 import { InlineStatus } from "@/features/viewer/components/shared/inline-status";
 import { type GraphNode, type LogRun, type TrainingJob } from "@/lib/api";
 import { type LinearMonitorComparisonCandidateGroups } from "@/lib/graph/monitor-targets";
@@ -78,7 +78,7 @@ export function SelectedNodeDetails({
         }}
       />
       {isMonitorOpen && monitorSource && monitorNode && (
-        <MonitorChartsModal
+        <LazyMonitorChartsModal
           node={monitorNode}
           source={monitorSource}
           comparisonCandidateGroups={comparisonCandidateGroups}
