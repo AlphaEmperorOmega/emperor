@@ -32,7 +32,10 @@ function deferred<T>(): Deferred<T> {
 
 function renderPreview() {
   const client = new QueryClient({
-    defaultOptions: { mutations: { retry: false } },
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
   });
   return renderHook(() => usePreviewInspectionState(), {
     wrapper: ({ children }: { children: ReactNode }) =>
@@ -120,6 +123,96 @@ describe("usePreviewInspectionState", () => {
     });
     await waitFor(() => expect(result.current.graph).toEqual(graphB));
     expect(result.current.graph).not.toEqual(graphA);
+  });
+
+  it("keeps the current graph visible while a different preview builds", async () => {
+    const next = deferred<unknown>();
+    const graphA = {
+      modelType: "linears",
+      model: "A",
+      preset: "p",
+      parameterCount: 1,
+      parameterSizeBytes: 4,
+      nodes: [],
+      edges: [],
+    };
+    const graphB = {
+      modelType: "linears",
+      model: "B",
+      preset: "p",
+      parameterCount: 2,
+      parameterSizeBytes: 8,
+      nodes: [],
+      edges: [],
+    };
+    inspectModelMock.mockResolvedValueOnce(graphA).mockReturnValueOnce(next.promise);
+
+    const { result } = renderPreview();
+    act(() => result.current.requestPreview(request("A")));
+    await waitFor(() => expect(result.current.graph).toEqual(graphA));
+
+    act(() => result.current.requestPreview(request("B")));
+
+    expect(result.current.graph).toEqual(graphA);
+    await waitFor(() => expect(result.current.previewInspection.isBuilding).toBe(true));
+
+    await act(async () => {
+      next.resolve(graphB);
+      await next.promise;
+    });
+    await waitFor(() => expect(result.current.graph).toEqual(graphB));
+  });
+
+  it("reuses a cached preview response for repeated identical requests", async () => {
+    const graph = {
+      modelType: "linears",
+      model: "A",
+      preset: "p",
+      parameterCount: 1,
+      parameterSizeBytes: 4,
+      nodes: [],
+      edges: [],
+    };
+    inspectModelMock.mockResolvedValueOnce(graph);
+
+    const { result } = renderPreview();
+    act(() => result.current.requestPreview(request("A")));
+    await waitFor(() => expect(result.current.graph).toEqual(graph));
+
+    inspectModelMock.mockClear();
+    act(() => result.current.requestPreview(request("A")));
+
+    await waitFor(() =>
+      expect(result.current.previewInspection.isBuilding).toBe(false),
+    );
+    expect(result.current.graph).toEqual(graph);
+    expect(inspectModelMock).not.toHaveBeenCalled();
+  });
+
+  it("deduplicates identical in-flight preview requests", async () => {
+    const pending = deferred<unknown>();
+    const graph = {
+      modelType: "linears",
+      model: "A",
+      preset: "p",
+      parameterCount: 1,
+      parameterSizeBytes: 4,
+      nodes: [],
+      edges: [],
+    };
+    inspectModelMock.mockReturnValueOnce(pending.promise);
+
+    const { result } = renderPreview();
+    act(() => result.current.requestPreview(request("A")));
+    act(() => result.current.requestPreview(request("A")));
+
+    expect(inspectModelMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      pending.resolve(graph);
+      await pending.promise;
+    });
+    await waitFor(() => expect(result.current.graph).toEqual(graph));
   });
 
   it("rejects inspect responses whose identity does not match the request", async () => {
