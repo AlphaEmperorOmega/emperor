@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
-from models.catalog import model_id_from_parts
 
 from viewer.backend.blocking import run_blocking_io
 from viewer.backend.core.config import ViewerApiSettings
@@ -14,7 +13,6 @@ from viewer.backend.core.security import (
     require_local_mutations_allowed,
 )
 from viewer.backend.dependencies import get_training_job_service, get_viewer_settings
-from viewer.backend.inspector.errors import InspectorError
 from viewer.backend.schemas import (
     MonitorDataResponse,
     ParameterStatusResponse,
@@ -25,11 +23,9 @@ from viewer.backend.schemas import (
     TrainingRunPlanResponse,
 )
 from viewer.backend.services.training import TrainingJobService
-from viewer.backend.training_contracts import (
-    CreateTrainingJobCommand,
-    CreateTrainingRunPlanCommand,
-    TrainingRunPlanView,
-    TrainingSearch,
+from viewer.backend.training_request_commands import (
+    create_run_plan_command,
+    create_training_job_command,
 )
 
 router = APIRouter(
@@ -37,15 +33,6 @@ router = APIRouter(
     tags=["training"],
     dependencies=[Depends(require_bearer_auth)],
 )
-
-
-def _model_id(model_type: str, model: str) -> str:
-    model_id = model_id_from_parts(model_type, model)
-    if model_id is None:
-        raise InspectorError(
-            f"Unknown model: --model-type {model_type} --model {model}"
-        )
-    return model_id
 
 
 @router.post(
@@ -60,28 +47,13 @@ async def create_training_job(
     settings: Annotated[ViewerApiSettings, Depends(get_viewer_settings)],
 ) -> TrainingJobResponse:
     require_local_mutations_allowed(settings)
-    model_id = _model_id(request.modelType, request.model)
-    command = CreateTrainingJobCommand(
-        model=model_id,
-        preset=request.preset,
-        presets=request.presets,
-        datasets=request.datasets,
-        overrides=request.overrides,
-        log_folder=request.logFolder,
-        monitors=request.monitors,
-        search=(
-            TrainingSearch.from_payload(request.search.model_dump())
-            if request.search is not None
-            else None
-        ),
-        run_plan=(
-            TrainingRunPlanView.from_payload(request.runPlan.model_dump())
-            if request.runPlan is not None
-            else None
-        ),
-    )
     return TrainingJobResponse.model_validate(
-        (await run_blocking_io(service.create_job, command)).to_api_payload()
+        (
+            await run_blocking_io(
+                service.create_job,
+                create_training_job_command(request),
+            )
+        ).to_api_payload()
     )
 
 
@@ -95,23 +67,13 @@ async def create_training_run_plan(
     request: TrainingRunPlanCreateRequest,
     service: Annotated[TrainingJobService, Depends(get_training_job_service)],
 ) -> TrainingRunPlanResponse:
-    model_id = _model_id(request.modelType, request.model)
-    command = CreateTrainingRunPlanCommand(
-        model=model_id,
-        preset=request.preset,
-        presets=request.presets,
-        datasets=request.datasets,
-        overrides=request.overrides,
-        log_folder=request.logFolder,
-        monitors=request.monitors,
-        search=(
-            TrainingSearch.from_payload(request.search.model_dump())
-            if request.search is not None
-            else None
-        ),
-    )
     return TrainingRunPlanResponse.model_validate(
-        (await run_blocking_io(service.create_run_plan, command)).to_api_payload()
+        (
+            await run_blocking_io(
+                service.create_run_plan,
+                create_run_plan_command(request),
+            )
+        ).to_api_payload()
     )
 
 

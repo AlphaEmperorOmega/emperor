@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from models.catalog import model_id_from_parts
 from models.dataset_naming import normalize_dataset_name
 
 from viewer.backend.inspector.checkpoint_shapes import (
@@ -15,6 +14,7 @@ from viewer.backend.inspector.discovery import load_model_parts
 from viewer.backend.inspector.errors import InspectorError
 from viewer.backend.inspector.overrides import parse_override_mapping
 from viewer.backend.inspector.schema import preset_locks
+from viewer.backend.model_identity import require_model_id
 from viewer.backend.repositories.log_runs import LogRunRepository
 from viewer.backend.training_monitor_locator import normalize_preset_token
 
@@ -47,15 +47,6 @@ _ADAPTIVE_OPTION_KEYS = {
 }
 
 
-def _model_id(model_type: str, model: str) -> str:
-    model_id = model_id_from_parts(model_type, model)
-    if model_id is None:
-        raise InspectorError(
-            f"Unknown model: --model-type {model_type} --model {model}"
-        )
-    return model_id
-
-
 def _normalized_dataset(dataset: str | None) -> str | None:
     return normalize_dataset_name(dataset) if dataset else None
 
@@ -76,7 +67,7 @@ class InspectionService:
     ) -> dict[str, Any]:
         from viewer.backend.inspector.service import inspect_model
 
-        model_id = _model_id(model_type, model)
+        model_id = require_model_id(model_type, model)
         parts = load_model_parts(model_id)
         request_overrides = parse_override_mapping(parts.config_module, overrides)
         checkpoint_shapes: CheckpointGraphShapes | None = None

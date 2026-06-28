@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
-from models.catalog import model_id_from_parts
 
 from viewer.backend.blocking import run_blocking_io
 from viewer.backend.core.config import ViewerApiSettings
@@ -17,7 +16,7 @@ from viewer.backend.dependencies import (
     get_config_snapshot_service,
     get_viewer_settings,
 )
-from viewer.backend.inspector.errors import InspectorError
+from viewer.backend.model_identity import require_model_id
 from viewer.backend.schemas import (
     ConfigSnapshotCreateRequest,
     ConfigSnapshotLibraryResponse,
@@ -34,15 +33,6 @@ router = APIRouter(
 )
 
 
-def _model_id(model_type: str, model: str) -> str:
-    model_id = model_id_from_parts(model_type, model)
-    if model_id is None:
-        raise InspectorError(
-            f"Unknown model: --model-type {model_type} --model {model}"
-        )
-    return model_id
-
-
 @router.get(
     "",
     response_model=ConfigSnapshotsResponse,
@@ -54,7 +44,7 @@ async def list_config_snapshots(
     modelType: str = Query(...),
     model: str = Query(...),
 ) -> ConfigSnapshotsResponse:
-    model_id = _model_id(modelType, model)
+    model_id = require_model_id(modelType, model)
     return ConfigSnapshotsResponse.model_validate(
         {
             "modelType": modelType,
@@ -90,7 +80,7 @@ async def create_config_snapshot(
     settings: Annotated[ViewerApiSettings, Depends(get_viewer_settings)],
 ) -> ConfigSnapshotResponse:
     require_local_mutations_allowed(settings)
-    model_id = _model_id(request.modelType, request.model)
+    model_id = require_model_id(request.modelType, request.model)
     return ConfigSnapshotResponse.model_validate(
         await run_blocking_io(
             service.create_snapshot,

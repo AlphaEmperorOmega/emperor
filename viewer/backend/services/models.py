@@ -6,20 +6,10 @@ from typing import Any
 
 from models.catalog import (
     discover_model_identity_payloads,
-    model_id_from_parts,
     model_identity_payload_from_id,
 )
 
-from viewer.backend.inspector.errors import InspectorError
-
-
-def _model_id(model_type: str, model: str) -> str:
-    model_id = model_id_from_parts(model_type, model)
-    if model_id is None:
-        raise InspectorError(
-            f"Unknown model: --model-type {model_type} --model {model}"
-        )
-    return model_id
+from viewer.backend.model_identity import require_model_id
 
 
 class ModelCatalogService:
@@ -29,17 +19,17 @@ class ModelCatalogService:
     def list_presets(self, model_type: str, model: str) -> list[dict[str, Any]]:
         from viewer.backend.inspector.discovery import list_model_presets
 
-        return list_model_presets(_model_id(model_type, model))
+        return list_model_presets(require_model_id(model_type, model))
 
     def list_datasets(self, model_type: str, model: str) -> list[dict[str, Any]]:
         from viewer.backend.inspector.discovery import list_model_datasets
 
-        return list_model_datasets(_model_id(model_type, model))
+        return list_model_datasets(require_model_id(model_type, model))
 
     def list_monitors(self, model_type: str, model: str) -> list[dict[str, Any]]:
         from viewer.backend.inspector.discovery import list_model_monitors
 
-        return list_model_monitors(_model_id(model_type, model))
+        return list_model_monitors(require_model_id(model_type, model))
 
     def config_schema(
         self,
@@ -49,7 +39,7 @@ class ModelCatalogService:
     ) -> dict[str, Any]:
         from viewer.backend.inspector.schema import config_schema
 
-        return config_schema(_model_id(model_type, model), preset)
+        return config_schema(require_model_id(model_type, model), preset)
 
     def search_space_schema(
         self,
@@ -60,7 +50,7 @@ class ModelCatalogService:
     ) -> dict[str, Any]:
         from viewer.backend.inspector.schema import search_space_schema
 
-        return search_space_schema(_model_id(model_type, model), preset, presets)
+        return search_space_schema(require_model_id(model_type, model), preset, presets)
 
 
 def identity_payload(model_id: str) -> dict[str, str]:

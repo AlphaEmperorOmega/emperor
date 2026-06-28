@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Request
-from models.catalog import model_id_from_parts
 
 from viewer.backend.blocking import run_blocking_io
 from viewer.backend.core.config import ViewerApiSettings
@@ -21,6 +20,7 @@ from viewer.backend.dependencies import (
     get_viewer_settings,
 )
 from viewer.backend.inspector.errors import InspectorError
+from viewer.backend.model_identity import require_model_id
 from viewer.backend.schemas import (
     LogArchiveImportResponse,
     LogCheckpointResponse,
@@ -110,15 +110,6 @@ def active_job_payloads(service: TrainingJobService) -> list[dict[str, str]]:
     return [job.to_api_payload() for job in service.active_jobs()]
 
 
-def _model_id(model_type: str, model: str) -> str:
-    model_id = model_id_from_parts(model_type, model)
-    if model_id is None:
-        raise InspectorError(
-            f"Unknown model: --model-type {model_type} --model {model}"
-        )
-    return model_id
-
-
 def _model_query_ids(
     model_types: list[str] | None,
     models: list[str] | None,
@@ -130,14 +121,14 @@ def _model_query_ids(
     if len(model_types) != len(models):
         raise InspectorError("Log modelType and model filters must be paired.")
     return [
-        _model_id(model_type, model)
+        require_model_id(model_type, model)
         for model_type, model in zip(model_types, models, strict=True)
     ]
 
 
 def _model_filter_ids(request: LogRunDeleteFiltersRequest) -> list[str]:
     return [
-        _model_id(model.modelType, model.model)
+        require_model_id(model.modelType, model.model)
         for model in request.models
     ]
 
