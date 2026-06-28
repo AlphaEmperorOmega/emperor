@@ -24,13 +24,21 @@ function renderQueries(
   model: string,
   preset: string,
   trainingPresets: string[] = [],
+  options: { includeSearchSpace?: boolean } = {},
 ) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return renderHook(
-    ({ m, p, presets }: { m: string; p: string; presets: string[] }) =>
-      useViewerQueries("linears", m, p, presets),
+    ({
+      m,
+      p,
+      presets,
+    }: {
+      m: string;
+      p: string;
+      presets: string[];
+    }) => useViewerQueries("linears", m, p, presets, options),
     {
       initialProps: { m: model, p: preset, presets: trainingPresets },
       wrapper: ({ children }: { children: ReactNode }) =>
@@ -124,6 +132,30 @@ describe("useViewerQueries enabled gating", () => {
       { modelType: "linears", model: "linear" },
       "base",
       ["base", "post-norm"],
+    );
+  });
+
+  it("can skip search-space when callers only need schema metadata", async () => {
+    renderQueries("linear", "base", [], { includeSearchSpace: false });
+
+    await waitFor(() =>
+      expect(mocks.fetchConfigSchema).toHaveBeenCalledWith(
+        { modelType: "linears", model: "linear" },
+        "base",
+      ),
+    );
+    expect(mocks.fetchSearchSpace).not.toHaveBeenCalled();
+  });
+
+  it("normalizes empty training preset selections to the selected preset", async () => {
+    renderQueries("linear", "base");
+
+    await waitFor(() =>
+      expect(mocks.fetchSearchSpace).toHaveBeenCalledWith(
+        { modelType: "linears", model: "linear" },
+        "base",
+        ["base"],
+      ),
     );
   });
 });

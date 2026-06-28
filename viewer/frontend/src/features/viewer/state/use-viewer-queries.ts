@@ -49,13 +49,21 @@ export function useViewerQueries(
   selectedModel: string,
   selectedPreset: string,
   selectedTrainingPresets: readonly string[] = [],
+  options: { includeSearchSpace?: boolean } = {},
 ) {
+  const { includeSearchSpace = true } = options;
   const selectedIdentity = {
     modelType: selectedModelType,
     model: selectedModel,
   };
   const hasSelectedModel =
     selectedModelType.length > 0 && selectedModel.length > 0;
+  const searchSpacePresets =
+    selectedTrainingPresets.length > 0
+      ? selectedTrainingPresets
+      : selectedPreset
+        ? [selectedPreset]
+        : [];
   const healthQuery = useQuery({
     queryKey: viewerQueryKeys.health(),
     queryFn: fetchHealth,
@@ -112,17 +120,15 @@ export function useViewerQueries(
       selectedModelType,
       selectedModel,
       selectedPreset,
-      selectedTrainingPresets,
+      searchSpacePresets,
     ),
     queryFn: () =>
       fetchSearchSpace(
         selectedIdentity,
         selectedPreset,
-        selectedTrainingPresets.length > 0
-          ? selectedTrainingPresets
-          : [selectedPreset],
+        searchSpacePresets,
       ),
-    enabled: hasSelectedModel && selectedPreset.length > 0,
+    enabled: includeSearchSpace && hasSelectedModel && selectedPreset.length > 0,
     retry: false,
     staleTime: STATIC_METADATA_STALE_TIME_MS,
   });
