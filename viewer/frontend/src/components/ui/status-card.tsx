@@ -1,6 +1,6 @@
 import { Loader2 } from "lucide-react";
 import { type ReactNode } from "react";
-import { SurfacePanel } from "@/features/viewer/components/shared/surface-panel";
+import { SurfacePanel } from "@/components/ui/surface-panel";
 
 export type StatusCardProps = {
   title: ReactNode;
