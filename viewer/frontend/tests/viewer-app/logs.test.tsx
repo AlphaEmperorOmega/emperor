@@ -1226,6 +1226,14 @@ describe("ViewerApp Logs Workspace", () => {
     expect(path).toHaveClass("min-w-0", "break-words");
     expect(path.classList.contains("[overflow-wrap:anywhere]")).toBe(true);
 
+    const summaryCardGrid = within(panel).getByTitle(longExperiment).parentElement
+      ?.parentElement;
+    if (!(summaryCardGrid instanceof HTMLElement)) {
+      throw new Error("Expected log run metadata cards to render inside a grid");
+    }
+    expect(summaryCardGrid).toHaveClass("grid", "w-full", "min-w-0", "grid-cols-1");
+    expect(summaryCardGrid).not.toHaveClass("grid-cols-2");
+
     for (const summaryValue of [
       longExperiment,
       longDataset,
@@ -1233,7 +1241,13 @@ describe("ViewerApp Logs Workspace", () => {
       longPreset,
       longVersion,
     ]) {
-      expect(within(panel).getByTitle(summaryValue)).toHaveClass("min-w-0", "truncate");
+      const summaryValueElement = within(panel).getByTitle(summaryValue);
+      const summaryCard = summaryValueElement.parentElement;
+      if (!(summaryCard instanceof HTMLElement)) {
+        throw new Error(`Expected ${summaryValue} to render inside a metric card`);
+      }
+      expect(summaryValueElement).toHaveClass("min-w-0", "truncate");
+      expect(summaryCard).toHaveClass("w-full", "min-w-0");
     }
 
     const checkpointLabel = await within(panel).findByText(longCheckpointFilename);
