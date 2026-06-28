@@ -1,6 +1,5 @@
 import dynamic from "next/dynamic";
 import { FullConfigDialog } from "@/features/viewer/components/config/full-config-dialog";
-import { ConnectedMonitorChartsModal } from "@/features/viewer/components/monitor/connected-monitor-charts-modal";
 import { ConnectedTrainingWorkspace } from "@/features/viewer/components/connected-training-panel";
 import { ApiConnectionDialog } from "@/features/viewer/components/screen/api-connection-dialog";
 import { ImportLogsDialog } from "@/features/viewer/components/screen/import-logs-dialog";
@@ -8,7 +7,10 @@ import { NodeDetailsPanel } from "@/features/viewer/components/screen/node-detai
 import { PreviewPanel } from "@/features/viewer/components/screen/preview-panel";
 import { PreviewToolbar } from "@/features/viewer/components/screen/preview-toolbar";
 import { ViewerModelSidebar } from "@/features/viewer/components/viewer-model-sidebar";
-import { useGraphView } from "@/features/viewer/providers/viewer-providers";
+import {
+  useGraphMonitor,
+  useGraphView,
+} from "@/features/viewer/providers/viewer-providers";
 import {
   type FullConfigDialogControls,
   type ViewerDialogControls,
@@ -41,6 +43,13 @@ const ConnectedLogRunDetailsPanel = dynamic(
     import("@/features/viewer/components/logs/log-run-details-panel").then(
       (module) => module.ConnectedLogRunDetailsPanel,
     ),
+  { ssr: false },
+);
+const ConnectedMonitorChartsModal = dynamic(
+  () =>
+    import(
+      "@/features/viewer/components/monitor/connected-monitor-charts-modal"
+    ).then((module) => module.ConnectedMonitorChartsModal),
   { ssr: false },
 );
 const ConnectedNeuronCluster3DPopup = dynamic(
@@ -133,6 +142,7 @@ export function ViewerWorkspaceOverlays({
 }) {
   const isModelWorkspace = activeWorkspace === "model";
   const { cluster3dNodeId } = useGraphView();
+  const { graphMonitorNode, graphMonitorSource } = useGraphMonitor();
 
   return (
     <>
@@ -152,7 +162,9 @@ export function ViewerWorkspaceOverlays({
       {importLogsDialog.isOpen && (
         <ImportLogsDialog onClose={importLogsDialog.close} />
       )}
-      {isModelWorkspace && <ConnectedMonitorChartsModal />}
+      {isModelWorkspace && graphMonitorNode && graphMonitorSource && (
+        <ConnectedMonitorChartsModal />
+      )}
       {isModelWorkspace && cluster3dNodeId && <ConnectedNeuronCluster3DPopup />}
     </>
   );
