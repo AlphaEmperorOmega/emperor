@@ -440,6 +440,30 @@ class LogRunIndexAndApiTests(unittest.TestCase):
         self.assertEqual([run.id for run in first], [run.id for run in third])
         self.assertEqual(parse.call_count, 4)
 
+    def test_log_run_scanner_reuses_expired_cache_when_catalog_is_unchanged(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = Path(tmp) / "logs"
+            run_dir = write_tensorboard_run(
+                logs_root,
+                ["linear", "BASELINE", "Mnist", "aaa_20260601_010203", "version_0"],
+            )
+            scanner = LogRunScanner(logs_root=logs_root, cache_ttl_seconds=0)
+
+            with patch.object(scanner, "parse_run", wraps=scanner.parse_run) as parse:
+                first = scanner.list_runs()
+                second = scanner.list_runs()
+                (run_dir / "result.json").write_text(
+                    json.dumps({"metrics": {"accuracy": 0.95}}),
+                    encoding="utf-8",
+                )
+                third = scanner.list_runs()
+
+        self.assertEqual([run.id for run in first], [run.id for run in second])
+        self.assertEqual([run.id for run in first], [run.id for run in third])
+        self.assertEqual(parse.call_count, 2)
+
     def test_log_run_index_reads_checkpoints_and_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             logs_root = Path(tmp) / "logs"
@@ -2201,6 +2225,43 @@ class LogRunIndexAndApiTests(unittest.TestCase):
             [2, 3],
         )
         self.assertEqual(len(load_calls), 3)
+
+    def test_log_run_query_service_reuses_scalar_accumulator_across_tag_batches(
+        self,
+    ) -> None:
+        class MultiTagAccumulator:
+            def Scalars(self, tag: str) -> list[FakeScalarEvent]:
+                return [FakeScalarEvent(step=1, value=0.5 if tag == "loss" else 0.8)]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp) / "run"
+            run_dir.mkdir()
+            (run_dir / "events.out.tfevents.cache").write_text(
+                "events",
+                encoding="utf-8",
+            )
+            service = LogRunQueryService(
+                scanner=LogRunScanner(logs_root=Path(tmp)),
+            )
+
+            with patch(
+                "viewer.backend.log_runs.load_event_accumulator",
+                return_value=MultiTagAccumulator(),
+            ) as load:
+                loss = service.read_scalar_series_batch(
+                    run_dir,
+                    ["loss"],
+                    max_points=2,
+                )
+                accuracy = service.read_scalar_series_batch(
+                    run_dir,
+                    ["accuracy"],
+                    max_points=2,
+                )
+
+        self.assertEqual(load.call_count, 1)
+        self.assertEqual(loss["loss"]["points"][0]["value"], 0.5)
+        self.assertEqual(accuracy["accuracy"]["points"][0]["value"], 0.8)
 
     def test_log_run_query_service_skips_tag_scan_for_oversized_event_files(
         self,
