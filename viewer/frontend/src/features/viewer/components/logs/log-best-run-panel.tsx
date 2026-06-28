@@ -176,7 +176,7 @@ export function LogBestRunPanel({
       <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 id="logs-best-run-title" className="text-sm font-bold text-ink">
-            Best Run
+            Best Run by Selected Metric
           </h2>
           <div className="mt-0.5 font-mono text-xs text-ink-faint">
             Best run per visible dataset · {countLabel(bestRun.visibleRunCount, "run")} ·{" "}
