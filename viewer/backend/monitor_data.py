@@ -5,6 +5,7 @@ import copy
 import re
 from collections import OrderedDict
 from pathlib import Path
+from threading import RLock
 from typing import Any
 
 from tensorboard.backend.event_processing import event_accumulator
@@ -121,26 +122,31 @@ class TensorBoardMonitorReader:
         self.bucket_limit = bucket_limit
         self.max_event_bytes = max(0, int(max_event_bytes))
         self._cache: OrderedDict[tuple[Any, ...], dict[str, Any]] = OrderedDict()
+        self._cache_lock = RLock()
 
     def _cache_get(self, key: tuple[Any, ...]) -> dict[str, Any] | None:
-        if key not in self._cache:
-            return None
-        self._cache.move_to_end(key)
-        return copy.deepcopy(self._cache[key])
+        with self._cache_lock:
+            if key not in self._cache:
+                return None
+            self._cache.move_to_end(key)
+            return copy.deepcopy(self._cache[key])
 
     def _cache_set(self, key: tuple[Any, ...], value: dict[str, Any]) -> None:
-        self._cache[key] = copy.deepcopy(value)
-        self._cache.move_to_end(key)
-        while len(self._cache) > MONITOR_EVENT_CACHE_MAX_ENTRIES:
-            self._cache.popitem(last=False)
+        with self._cache_lock:
+            self._cache[key] = copy.deepcopy(value)
+            self._cache.move_to_end(key)
+            while len(self._cache) > MONITOR_EVENT_CACHE_MAX_ENTRIES:
+                self._cache.popitem(last=False)
 
     def clear_roots(self, roots: set[str]) -> None:
-        for key in list(self._cache):
-            if key and key[0] in roots:
-                self._cache.pop(key, None)
+        with self._cache_lock:
+            for key in list(self._cache):
+                if key and key[0] in roots:
+                    self._cache.pop(key, None)
 
     def clear_cache(self) -> None:
-        self._cache.clear()
+        with self._cache_lock:
+            self._cache.clear()
 
     def read(
         self,
@@ -346,26 +352,31 @@ class TensorBoardParameterStatusReader:
             event_accumulator.SCALARS: self.scalar_point_limit,
         }
         self._cache: OrderedDict[tuple[Any, ...], dict[str, Any]] = OrderedDict()
+        self._cache_lock = RLock()
 
     def _cache_get(self, key: tuple[Any, ...]) -> dict[str, Any] | None:
-        if key not in self._cache:
-            return None
-        self._cache.move_to_end(key)
-        return copy.deepcopy(self._cache[key])
+        with self._cache_lock:
+            if key not in self._cache:
+                return None
+            self._cache.move_to_end(key)
+            return copy.deepcopy(self._cache[key])
 
     def _cache_set(self, key: tuple[Any, ...], value: dict[str, Any]) -> None:
-        self._cache[key] = copy.deepcopy(value)
-        self._cache.move_to_end(key)
-        while len(self._cache) > MONITOR_EVENT_CACHE_MAX_ENTRIES:
-            self._cache.popitem(last=False)
+        with self._cache_lock:
+            self._cache[key] = copy.deepcopy(value)
+            self._cache.move_to_end(key)
+            while len(self._cache) > MONITOR_EVENT_CACHE_MAX_ENTRIES:
+                self._cache.popitem(last=False)
 
     def clear_roots(self, roots: set[str]) -> None:
-        for key in list(self._cache):
-            if key and key[0] in roots:
-                self._cache.pop(key, None)
+        with self._cache_lock:
+            for key in list(self._cache):
+                if key and key[0] in roots:
+                    self._cache.pop(key, None)
 
     def clear_cache(self) -> None:
-        self._cache.clear()
+        with self._cache_lock:
+            self._cache.clear()
 
     def read(
         self,
