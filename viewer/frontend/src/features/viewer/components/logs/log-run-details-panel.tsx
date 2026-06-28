@@ -13,6 +13,8 @@ import { type LogsWorkspaceState } from "@/features/viewer/state/logs/use-logs-w
 import { type LogRunArtifacts } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
+const metadataCardClassName = "w-full min-w-0";
+
 function FilePresenceRow({
   label,
   value,
@@ -156,39 +158,39 @@ export function LogRunDetailsPanel({
             </div>
           </SurfacePanel>
 
-          <div className="grid grid-cols-2 gap-[9px]">
+          <div className="grid w-full min-w-0 grid-cols-1 gap-[9px]">
             <MetricCard
               label="Experiment"
               value={run.experiment}
-              className="min-w-0"
+              className={metadataCardClassName}
               valueTitle={run.experiment}
               valueClassName="mt-1.5 min-w-0 truncate text-sm font-bold"
             />
             <MetricCard
               label="Dataset"
               value={run.dataset}
-              className="min-w-0"
+              className={metadataCardClassName}
               valueTitle={run.dataset}
               valueClassName="mt-1.5 min-w-0 truncate text-sm font-bold"
             />
             <MetricCard
               label="Model"
               value={run.model}
-              className="min-w-0"
+              className={metadataCardClassName}
               valueTitle={run.model}
               valueClassName="mt-1.5 min-w-0 truncate text-sm font-bold"
             />
             <MetricCard
               label="Preset"
               value={run.preset}
-              className="min-w-0"
+              className={metadataCardClassName}
               valueTitle={run.preset}
               valueClassName="mt-1.5 min-w-0 truncate text-sm font-bold"
             />
             <MetricCard
               label="Version"
               value={run.version}
-              className="min-w-0"
+              className={metadataCardClassName}
               valueTitle={run.version}
               valueClassName="mt-1.5 min-w-0 truncate text-sm font-bold"
             />
