@@ -2197,7 +2197,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                 return FakeTensorBoardAccumulator()
 
             with patch(
-                "viewer.backend.log_runs.load_event_accumulator",
+                "viewer.backend.log_run_query.load_event_accumulator",
                 load_accumulator,
             ):
                 first_tags = service.read_tags(run_dir)
@@ -2245,7 +2245,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
             )
 
             with patch(
-                "viewer.backend.log_runs.load_event_accumulator",
+                "viewer.backend.log_run_query.load_event_accumulator",
                 return_value=MultiTagAccumulator(),
             ) as load:
                 loss = service.read_scalar_series_batch(
@@ -2276,7 +2276,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                 max_tag_event_bytes=4,
             )
 
-            with patch("viewer.backend.log_runs.load_event_accumulator") as load:
+            with patch("viewer.backend.log_run_query.load_event_accumulator") as load:
                 tags = service.read_tags(run_dir)
 
         self.assertEqual(tags["scalars"], [])
@@ -2328,7 +2328,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                 return FakeTensorBoardAccumulator()
 
             with patch(
-                "viewer.backend.log_runs.load_event_accumulator",
+                "viewer.backend.log_run_query.load_event_accumulator",
                 load_accumulator,
             ):
                 payloads = service.tags_for_runs(
@@ -2384,7 +2384,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
             )
 
             with patch(
-                "viewer.backend.log_runs.load_event_accumulator",
+                "viewer.backend.log_run_query.load_event_accumulator",
                 return_value=FakeTensorBoardAccumulator(),
             ) as load:
                 first_payloads = service.tags_for_runs(
@@ -2428,7 +2428,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
             )
 
             with patch(
-                "viewer.backend.log_runs.load_event_accumulator",
+                "viewer.backend.log_run_query.load_event_accumulator",
                 return_value=FakeTensorBoardAccumulator(),
             ) as load:
                 service.tags_for_runs([run_ids["first_20260601_010203"]])
@@ -2581,7 +2581,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                     base_url="http://testserver",
                 ) as client:
                     with patch(
-                        "viewer.backend.log_runs.load_event_accumulator"
+                        "viewer.backend.log_run_query.load_event_accumulator"
                     ) as load:
                         before_response = await client.get("/logs/runs")
                         load.assert_not_called()
