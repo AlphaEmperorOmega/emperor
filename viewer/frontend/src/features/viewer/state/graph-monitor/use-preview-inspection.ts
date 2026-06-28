@@ -98,6 +98,7 @@ export function usePreviewInspectionState() {
       const queryKey = viewerQueryKeys.previewInspection(requestKey);
       setPreviewRequest(request);
       setPreviewRequestKey(requestKey);
+      setGraph(undefined);
       setIsBuilding(true);
       setError(null);
       void queryClient
