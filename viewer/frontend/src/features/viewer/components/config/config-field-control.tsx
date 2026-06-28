@@ -23,6 +23,7 @@ const booleanOptions = [
 function BooleanSegmentedControl({
   id,
   label,
+  labelledBy,
   value,
   onChange,
   disabled,
@@ -31,6 +32,7 @@ function BooleanSegmentedControl({
 }: {
   id: string;
   label: string;
+  labelledBy?: string;
   value: string;
   onChange: (value: string) => void;
   disabled: boolean;
@@ -40,7 +42,8 @@ function BooleanSegmentedControl({
   return (
     <SegmentedControl
       id={id}
-      aria-label={label}
+      aria-label={labelledBy ? undefined : label}
+      aria-labelledby={labelledBy}
       aria-disabled={disabled || undefined}
       className={cn(
         "grid w-full min-w-0 grid-cols-2 overflow-hidden rounded-control border border-line bg-control-chrome p-0 font-sans font-semibold text-ink transition",
@@ -75,6 +78,61 @@ function BooleanSegmentedControl({
   );
 }
 
+function ConfigFieldLabelContent({
+  field,
+  isModified,
+  isLocked,
+  isControlDisabled,
+  disabledReason,
+  overrideBadgeClassName,
+}: {
+  field: ConfigField;
+  isModified: boolean;
+  isLocked: boolean;
+  isControlDisabled: boolean;
+  disabledReason?: string;
+  overrideBadgeClassName?: string;
+}) {
+  return (
+    <>
+      <span className="flex min-w-0 items-start justify-between gap-2">
+        <span className="min-w-0 text-[13px] font-semibold leading-5 text-ink [overflow-wrap:anywhere]">
+          {field.label}
+        </span>
+      </span>
+      {(isModified || isLocked || isControlDisabled) && (
+        <span className="flex min-w-0 flex-wrap items-center gap-1.5 text-xs font-medium text-ink-faint">
+          {isModified && (
+            <Badge
+              className={cn(
+                "border-violet/30 bg-violet/15 text-violet",
+                overrideBadgeClassName,
+              )}
+            >
+              override
+            </Badge>
+          )}
+          {isLocked && (
+            <Badge variant="preset" className={overrideBadgeClassName}>
+              preset
+            </Badge>
+          )}
+          {isLocked && field.lockedReason && (
+            <span className="min-w-0 text-xs leading-4 text-ink-dim">
+              {field.lockedReason}
+            </span>
+          )}
+          {isControlDisabled && disabledReason && (
+            <span className="min-w-0 text-xs leading-4 text-ink-dim">
+              {disabledReason}
+            </span>
+          )}
+        </span>
+      )}
+    </>
+  );
+}
+
 export function ConfigFieldValueEditor({
   field,
   overrides,
@@ -86,6 +144,7 @@ export function ConfigFieldValueEditor({
   resetTitle,
   density = "comfortable",
   disabled = false,
+  controlLabelledBy,
   className,
 }: {
   field: ConfigField;
@@ -94,6 +153,7 @@ export function ConfigFieldValueEditor({
   onReset: (key: string) => void;
   controlId: string;
   controlLabel?: string;
+  controlLabelledBy?: string;
   resetLabel?: string;
   resetTitle?: string;
   density?: ConfigFieldControlDensity;
@@ -130,6 +190,7 @@ export function ConfigFieldValueEditor({
         <BooleanSegmentedControl
           id={controlId}
           label={controlLabel ?? field.label}
+          labelledBy={controlLabelledBy}
           value={value}
           disabled={isControlDisabled}
           isCompact={isCompact}
@@ -211,8 +272,9 @@ export function ConfigFieldControl({
   disabledReason?: string;
 }) {
   const id = `${idPrefix}-${field.key}`;
+  const labelId = `${id}-label`;
   const isModified = hasOverride(overrides, field.key);
-  const isLocked = field.locked;
+  const isLocked = field.locked === true;
   const isControlDisabled = disabled && !isLocked;
   const isCompact = density === "compact";
   const overrideBadgeClassName = isCompact ? "px-1 py-0.5 text-xs" : undefined;
@@ -229,48 +291,42 @@ export function ConfigFieldControl({
           "rounded-[10px] border-l-2 border-line bg-white/[0.025] pl-2 pr-2 opacity-65",
       )}
     >
-      <label className={cn("grid", isCompact ? "gap-1" : "gap-1.5")} htmlFor={id}>
-        <span className="flex min-w-0 items-start justify-between gap-2">
-          <span className="min-w-0 text-[13px] font-semibold leading-5 text-ink [overflow-wrap:anywhere]">
-            {field.label}
-          </span>
-        </span>
-        {(isModified || isLocked || isControlDisabled) && (
-          <span className="flex min-w-0 flex-wrap items-center gap-1.5 text-xs font-medium text-ink-faint">
-            {isModified && (
-              <Badge
-                className={cn(
-                  "border-violet/30 bg-violet/15 text-violet",
-                  overrideBadgeClassName,
-                )}
-              >
-                override
-              </Badge>
-            )}
-            {isLocked && (
-              <Badge variant="preset" className={overrideBadgeClassName}>
-                preset
-              </Badge>
-            )}
-            {isLocked && field.lockedReason && (
-              <span className="min-w-0 text-xs leading-4 text-ink-dim">
-                {field.lockedReason}
-              </span>
-            )}
-            {isControlDisabled && disabledReason && (
-              <span className="min-w-0 text-xs leading-4 text-ink-dim">
-                {disabledReason}
-              </span>
-            )}
-          </span>
-        )}
-      </label>
+      {field.type === "bool" ? (
+        <div
+          id={labelId}
+          className={cn("grid", isCompact ? "gap-1" : "gap-1.5")}
+        >
+          <ConfigFieldLabelContent
+            field={field}
+            isModified={isModified}
+            isLocked={isLocked}
+            isControlDisabled={isControlDisabled}
+            disabledReason={disabledReason}
+            overrideBadgeClassName={overrideBadgeClassName}
+          />
+        </div>
+      ) : (
+        <label
+          className={cn("grid", isCompact ? "gap-1" : "gap-1.5")}
+          htmlFor={id}
+        >
+          <ConfigFieldLabelContent
+            field={field}
+            isModified={isModified}
+            isLocked={isLocked}
+            isControlDisabled={isControlDisabled}
+            disabledReason={disabledReason}
+            overrideBadgeClassName={overrideBadgeClassName}
+          />
+        </label>
+      )}
       <ConfigFieldValueEditor
         field={field}
         overrides={overrides}
         onChange={onChange}
         onReset={onReset}
         controlId={id}
+        controlLabelledBy={field.type === "bool" ? labelId : undefined}
         density={density}
         disabled={disabled}
         resetTitle={`Reset ${field.label}`}

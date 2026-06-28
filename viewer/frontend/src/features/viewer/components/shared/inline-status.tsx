@@ -28,7 +28,7 @@ export function InlineStatus({
 }: InlineStatusProps) {
   return (
     <div
-      role={role}
+      role={role ?? (busy ? "status" : undefined)}
       className={cn(
         "rounded-[10px] border border-dashed text-sm",
         compact ? "p-3" : "p-4",
