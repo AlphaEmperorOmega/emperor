@@ -11,6 +11,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from viewer.backend.core.limits import (
     DEFAULT_MAX_LOG_ARCHIVE_EXTRACTED_SIZE,
+    DEFAULT_MAX_LOG_ARCHIVE_UPLOAD_SIZE,
 )
 
 LOCAL_FRONTEND_ORIGINS = [
@@ -39,10 +40,7 @@ class ViewerApiSettings(BaseSettings):
     allow_unsafe_local_mutations: bool = False
     allow_log_imports: bool | None = None
     max_upload_size: int | None = Field(default=None, ge=1)
-    max_log_archive_extracted_size: int | None = Field(
-        default=DEFAULT_MAX_LOG_ARCHIVE_EXTRACTED_SIZE,
-        ge=1,
-    )
+    max_log_archive_extracted_size: int | None = Field(default=None, ge=1)
     training_cancellation_mode: Literal["strict-cgroup", "process-group"] = (
         "strict-cgroup"
     )
@@ -55,8 +53,7 @@ class ViewerApiSettings(BaseSettings):
             self.token is None or not self.token.strip()
         ):
             raise ValueError(
-                "VIEWER_API_TOKEN must be non-empty when "
-                "VIEWER_API_AUTH_MODE=bearer"
+                "VIEWER_API_TOKEN must be non-empty when VIEWER_API_AUTH_MODE=bearer"
             )
         return self
 
@@ -65,6 +62,29 @@ class ViewerApiSettings(BaseSettings):
         if self.allow_log_imports is not None:
             return self.allow_log_imports
         return self.allow_unsafe_local_mutations or self.auth_mode == "none"
+
+    @property
+    def effective_max_upload_size(self) -> int | None:
+        if self.max_upload_size is not None:
+            return self.max_upload_size
+        if self._uses_trusted_local_import_defaults():
+            return None
+        return DEFAULT_MAX_LOG_ARCHIVE_UPLOAD_SIZE
+
+    @property
+    def effective_max_log_archive_extracted_size(self) -> int | None:
+        if self.max_log_archive_extracted_size is not None:
+            return self.max_log_archive_extracted_size
+        if self._uses_trusted_local_import_defaults():
+            return None
+        return DEFAULT_MAX_LOG_ARCHIVE_EXTRACTED_SIZE
+
+    def _uses_trusted_local_import_defaults(self) -> bool:
+        return (
+            self.auth_mode == "none"
+            and self.allow_log_imports is None
+            and not self.allow_unsafe_local_mutations
+        )
 
 
 @lru_cache(maxsize=1)

@@ -5,11 +5,19 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from threading import RLock
 from typing import Any, Protocol
 
 from models.catalog import model_id_from_payload, model_identity_payload_from_id
 
-from viewer.backend.storage.local_files import read_json_object, write_json_atomic
+from viewer.backend.storage.local_files import (
+    read_json_object,
+    require_safe_name,
+    resolve_root,
+    resolve_under_root,
+    safe_child_path,
+    write_json_atomic,
+)
 
 METADATA_FILENAME = "metadata.json"
 
@@ -57,38 +65,40 @@ class TrainingJobRecord:
 
 
 class TrainingJobStore(Protocol):
-    def save(self, job: TrainingJobRecord) -> None:
-        ...
+    def save(self, job: TrainingJobRecord) -> None: ...
 
-    def get(self, job_id: str) -> TrainingJobRecord | None:
-        ...
+    def get(self, job_id: str) -> TrainingJobRecord | None: ...
 
-    def list(self) -> list[TrainingJobRecord]:
-        ...
+    def list(self) -> list[TrainingJobRecord]: ...
 
 
 class InMemoryTrainingJobStore:
     def __init__(self) -> None:
         self._jobs: dict[str, TrainingJobRecord] = {}
+        self._lock = RLock()
 
     @property
     def jobs(self) -> dict[str, TrainingJobRecord]:
         return self._jobs
 
     def save(self, job: TrainingJobRecord) -> None:
-        self._jobs[job.id] = job
+        with self._lock:
+            self._jobs[job.id] = job
 
     def get(self, job_id: str) -> TrainingJobRecord | None:
-        return self._jobs.get(job_id)
+        with self._lock:
+            return self._jobs.get(job_id)
 
     def list(self) -> list[TrainingJobRecord]:
-        return list(self._jobs.values())
+        with self._lock:
+            return list(self._jobs.values())
 
 
 class FileSystemTrainingJobStore:
     def __init__(self, root: Path) -> None:
-        self.root = Path(root)
+        self.root = resolve_root(Path(root))
         self._jobs: dict[str, TrainingJobRecord] = {}
+        self._lock = RLock()
 
     @property
     def jobs(self) -> dict[str, TrainingJobRecord]:
@@ -96,31 +106,53 @@ class FileSystemTrainingJobStore:
         return self._jobs
 
     def save(self, job: TrainingJobRecord) -> None:
-        self._jobs[job.id] = job
+        if self._safe_job_id(job.id) is None:
+            raise ValueError("training job id contains unsafe path characters")
         metadata_path = self._metadata_path(job.root)
         write_json_atomic(metadata_path, _record_to_metadata(job))
+        with self._lock:
+            self._jobs[job.id] = job
 
     def get(self, job_id: str) -> TrainingJobRecord | None:
-        if job_id in self._jobs:
-            return self._jobs[job_id]
-        metadata_path = self.root / job_id / METADATA_FILENAME
+        safe_job_id = self._safe_job_id(job_id)
+        if safe_job_id is None:
+            return None
+        with self._lock:
+            cached_job = self._jobs.get(job_id)
+        if cached_job is not None:
+            return cached_job
+        metadata_path = safe_child_path(
+            self.root,
+            f"{safe_job_id}/{METADATA_FILENAME}",
+        )
         job = self._read_metadata(metadata_path)
         if job is None or job.id != job_id:
             return None
-        self._jobs[job.id] = job
+        with self._lock:
+            self._jobs[job.id] = job
         return job
 
     def list(self) -> list[TrainingJobRecord]:
         if self.root.exists():
             for metadata_path in sorted(self.root.glob(f"*/{METADATA_FILENAME}")):
                 job = self._read_metadata(metadata_path)
-                if job is None or job.id in self._jobs:
+                if job is None or self._safe_job_id(job.id) is None:
                     continue
-                self._jobs[job.id] = job
-        return sorted(self._jobs.values(), key=lambda job: job.id)
+                with self._lock:
+                    if job.id in self._jobs:
+                        continue
+                    self._jobs[job.id] = job
+        with self._lock:
+            return sorted(self._jobs.values(), key=lambda job: job.id)
 
     def _metadata_path(self, job_root: Path) -> Path:
-        return Path(job_root) / METADATA_FILENAME
+        return resolve_under_root(self.root, Path(job_root) / METADATA_FILENAME)
+
+    def _safe_job_id(self, job_id: str) -> str | None:
+        try:
+            return require_safe_name(job_id, "training job id")
+        except ValueError:
+            return None
 
     def _read_metadata(self, metadata_path: Path) -> TrainingJobRecord | None:
         payload = read_json_object(metadata_path)
@@ -177,11 +209,7 @@ def _record_from_metadata(
         presets=[str(item) for item in payload["presets"]],
         datasets=[str(item) for item in payload["datasets"]],
         overrides=dict(payload["overrides"]),
-        search=(
-            dict(payload["search"])
-            if payload.get("search") is not None
-            else None
-        ),
+        search=(dict(payload["search"]) if payload.get("search") is not None else None),
         planned_run_count=int(payload["planned_run_count"]),
         run_plan=dict(payload["run_plan"]),
         monitors=[str(item) for item in payload["monitors"]],
@@ -209,9 +237,7 @@ def _record_from_metadata(
         created_at=str(payload["created_at"]),
         updated_at=str(payload["updated_at"]),
         exit_code=(
-            int(payload["exit_code"])
-            if payload.get("exit_code") is not None
-            else None
+            int(payload["exit_code"]) if payload.get("exit_code") is not None else None
         ),
     )
 

@@ -7,6 +7,7 @@ path safety rules in one place without introducing a storage framework.
 from __future__ import annotations
 
 import json
+import tempfile
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -90,9 +91,23 @@ def write_json_atomic(path: Path, payload: Mapping[str, Any]) -> None:
 
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
-    temporary_path = target.with_name(f".{target.name}.tmp")
-    temporary_path.write_text(
-        json.dumps(dict(payload), indent=2, sort_keys=True),
-        encoding="utf-8",
-    )
-    temporary_path.replace(target)
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            delete=False,
+            dir=target.parent,
+            encoding="utf-8",
+            prefix=f".{target.name}.",
+            suffix=".tmp",
+        ) as temporary_file:
+            temporary_path = Path(temporary_file.name)
+            temporary_file.write(json.dumps(dict(payload), indent=2, sort_keys=True))
+        temporary_path.replace(target)
+    except Exception:
+        if temporary_path is not None:
+            try:
+                temporary_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+        raise
