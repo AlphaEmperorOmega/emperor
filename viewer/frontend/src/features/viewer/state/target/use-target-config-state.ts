@@ -304,6 +304,7 @@ export function useTargetConfigState({
     selectedModel,
     selectedPreset,
     [],
+    { includeSearchSpace: false },
   );
   const {
     presetsQuery: trainingPresetsQuery,
