@@ -12,6 +12,7 @@ export default defineConfig({
       ["src/features/viewer/state/logs/use-log-query-cache.test.ts", "jsdom"],
       ["src/features/viewer/state/target/use-target-overrides.test.ts", "jsdom"],
       ["src/features/viewer/state/use-viewer-queries.test.ts", "jsdom"],
+      ["src/lib/api-origin-lock.test.ts", "jsdom"],
       ["src/lib/api.test.ts", "jsdom"],
       ["src/lib/auth-token.test.ts", "jsdom"],
     ],

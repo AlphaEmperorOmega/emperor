@@ -100,9 +100,17 @@ export function ApiConnectionDialog({ onClose }: { onClose: () => void }) {
       );
       return;
     }
-    const nextApiBaseUrl = switchApiBaseUrl(normalizedUrl);
-    setInputValue(nextApiBaseUrl);
-    setError(null);
+    try {
+      const nextApiBaseUrl = switchApiBaseUrl(normalizedUrl);
+      setInputValue(nextApiBaseUrl);
+      setError(null);
+    } catch (errorValue) {
+      setError(
+        errorValue instanceof Error
+          ? errorValue.message
+          : "This API base URL is not allowed by this build.",
+      );
+    }
   };
 
   const handleReset = () => {
