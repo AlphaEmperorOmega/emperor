@@ -330,7 +330,7 @@ describe("ViewerApp Logs Workspace", () => {
     expect(screen.queryByRole("button", { name: /^Test\s+\d+\s+metrics?$/i }))
       .not.toBeInTheDocument();
     await waitFor(() => {
-      expect(logScalarRequests).toHaveLength(4);
+      expect(logScalarRequests).toHaveLength(3);
       expect(logScalarRequests).toEqual(expect.arrayContaining([
         {
           runIds: ["log-mnist"],
@@ -367,7 +367,7 @@ describe("ViewerApp Logs Workspace", () => {
           expect.objectContaining({
             experiments: ["test_model", "test_model_2"],
             datasets: [],
-            limit: 500,
+            limit: 100,
             offset: 0,
           }),
         ]),
@@ -781,7 +781,7 @@ describe("ViewerApp Logs Workspace", () => {
     expect(await screen.findByRole("img", { name: /train\/loss scalar chart/i }))
       .toBeInTheDocument();
     await waitFor(() => {
-      expect(logScalarRequests).toHaveLength(4);
+      expect(logScalarRequests).toHaveLength(3);
     });
     expect(
       await screen.findByRole("table", { name: /test\/accuracy test leaderboard/i }),
@@ -808,7 +808,7 @@ describe("ViewerApp Logs Workspace", () => {
     expect(screen.queryByRole("img", { name: /train\/loss scalar chart/i }))
       .not.toBeInTheDocument();
     await expectLogFilterSelection(user, "Scalar Tags", "train/loss", true);
-    expect(logScalarRequests).toHaveLength(4);
+    expect(logScalarRequests).toHaveLength(3);
 
     await clickLogOption(user, "Scalar Tags", "main_model.0.model/weights/mean");
     await expectLogFilterSelection(
@@ -821,7 +821,7 @@ describe("ViewerApp Logs Workspace", () => {
       name: /^Other\s+1\s+metric$/i,
     });
     expect(otherToggle).toHaveAttribute("aria-expanded", "false");
-    expect(logScalarRequests).toHaveLength(4);
+    expect(logScalarRequests).toHaveLength(3);
 
     await user.click(otherToggle);
     await waitFor(() => {
@@ -834,9 +834,9 @@ describe("ViewerApp Logs Workspace", () => {
     )
       .toBeInTheDocument();
     await waitFor(() => {
-      expect(logScalarRequests).toHaveLength(5);
+      expect(logScalarRequests).toHaveLength(4);
     });
-    expect(logScalarRequests[4]).toMatchObject({
+    expect(logScalarRequests[3]).toMatchObject({
       runIds: ["log-mnist"],
       tags: ["main_model.0.model/weights/mean"],
     });
@@ -852,7 +852,7 @@ describe("ViewerApp Logs Workspace", () => {
       }),
     )
       .not.toBeInTheDocument();
-    expect(logScalarRequests).toHaveLength(5);
+    expect(logScalarRequests).toHaveLength(4);
   });
 
   it("filters train and validation plots locally from accordion plot selectors", async () => {
@@ -868,7 +868,7 @@ describe("ViewerApp Logs Workspace", () => {
     expect(await screen.findByRole("img", { name: /train\/loss scalar chart/i }))
       .toBeInTheDocument();
     await waitFor(() => {
-      expect(logScalarRequests).toHaveLength(4);
+      expect(logScalarRequests).toHaveLength(3);
     });
     const scalarRequestCount = logScalarRequests.length;
 
@@ -993,14 +993,14 @@ describe("ViewerApp Logs Workspace", () => {
       .toBeInTheDocument();
 
     await waitFor(() => {
-      expect(logScalarRequests).toHaveLength(4);
+      expect(logScalarRequests).toHaveLength(3);
     });
     expect(screen.getByRole("img", { name: /validation\/accuracy scalar chart/i }))
       .toBeInTheDocument();
     expect(screen.queryByText(/^Loading scalar points$/i)).not.toBeInTheDocument();
     const trainBody = document.getElementById("logs-metric-group-train");
     expect(trainBody).toBeInstanceOf(HTMLElement);
-    expect(within(trainBody as HTMLElement).getByText("Loading Train scalar points"))
+    expect(within(trainBody as HTMLElement).getByText("Loading train/loss scalar points"))
       .toBeInTheDocument();
 
     trainScalarResponse.resolve({
@@ -1352,6 +1352,10 @@ describe("ViewerApp Logs Workspace", () => {
     expect(splitCheckbox.closest("section")).toBe(testScores);
     expect(splitCheckbox).not.toBeChecked();
 
+    await waitFor(() => {
+      expect(within(combinedLeaderboard).getAllByRole("row").slice(1))
+        .toHaveLength(2);
+    });
     const combinedRows = within(combinedLeaderboard).getAllByRole("row").slice(1);
     expect(combinedRows).toHaveLength(2);
     expect(combinedRows[0]).toHaveTextContent("0.9");
@@ -1605,7 +1609,7 @@ describe("ViewerApp Logs Workspace", () => {
     const threeColumnTab = within(layoutControl).getByRole("radio", { name: /^3 col$/i });
 
     await waitFor(() => {
-      expect(logScalarRequests).toHaveLength(4);
+      expect(logScalarRequests).toHaveLength(3);
     });
     expect(fullTab).toHaveAttribute("aria-checked", "false");
     expect(twoColumnTab).toHaveAttribute("aria-checked", "true");
@@ -1635,7 +1639,7 @@ describe("ViewerApp Logs Workspace", () => {
     ]);
     expect(chartGrid).not.toHaveClass("xl:grid-cols-2");
     expect(chartGrid).not.toHaveClass("2xl:grid-cols-3");
-    expect(logScalarRequests).toHaveLength(4);
+    expect(logScalarRequests).toHaveLength(3);
 
     await user.click(twoColumnTab);
 
@@ -1646,7 +1650,7 @@ describe("ViewerApp Logs Workspace", () => {
     expect(accordionGrid).not.toHaveClass("2xl:grid-cols-3");
     expect(chartGrid).not.toHaveClass("xl:grid-cols-2");
     expect(chartGrid).not.toHaveClass("2xl:grid-cols-3");
-    expect(logScalarRequests).toHaveLength(4);
+    expect(logScalarRequests).toHaveLength(3);
 
     await user.click(threeColumnTab);
 
@@ -1656,12 +1660,12 @@ describe("ViewerApp Logs Workspace", () => {
     expect(accordionGrid).toHaveClass("xl:grid-cols-2", "2xl:grid-cols-3");
     expect(chartGrid).not.toHaveClass("xl:grid-cols-2");
     expect(chartGrid).not.toHaveClass("2xl:grid-cols-3");
-    expect(logScalarRequests).toHaveLength(4);
+    expect(logScalarRequests).toHaveLength(3);
 
     await user.click(screen.getByRole("button", { name: /refresh scalar charts/i }));
 
     await waitFor(() => {
-      expect(logScalarRequests).toHaveLength(8);
+      expect(logScalarRequests).toHaveLength(6);
     });
   });
 
@@ -2192,18 +2196,19 @@ describe("ViewerApp Logs Workspace", () => {
         (request) =>
           request.tags.length === 1 && request.tags[0] === "custom/tag-42",
       );
-      expect(selectedTagRequests.at(-2)).toEqual({
-        runIds: expectedRunIds.slice(0, 50),
-        tags: ["custom/tag-42"],
-        maxPoints: 500,
-        sampling: "tail",
-      });
-      expect(selectedTagRequests.at(-1)).toEqual({
-        runIds: expectedRunIds.slice(50),
-        tags: ["custom/tag-42"],
-        maxPoints: 500,
-        sampling: "tail",
-      });
+      expect(
+        selectedTagRequests.slice(-Math.ceil(expectedRunIds.length / 2)),
+      ).toEqual(
+        Array.from(
+          { length: Math.ceil(expectedRunIds.length / 2) },
+          (_, index) => ({
+            runIds: expectedRunIds.slice(index * 2, (index + 1) * 2),
+            tags: ["custom/tag-42"],
+            maxPoints: 500,
+            sampling: "tail",
+          }),
+        ),
+      );
     });
 
     await openLogFilter(user, "Scalar Tags");
@@ -2261,6 +2266,42 @@ describe("ViewerApp Logs Workspace", () => {
         name: logOptionName("experiment_42"),
       }),
     );
+  });
+
+  it("loads additional custom experiment run pages only when requested", async () => {
+    const fixture = buildLargeLogFixture(105);
+    const { logRunRequests } = installFetchMock(fixture);
+    renderViewer();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+    await user.click(await screen.findByRole("button", { name: /all runs/i }));
+    await selectAllLogExperiments(user);
+
+    const customPageRequests = () =>
+      logRunRequests.filter((request) => request.limit === 100);
+
+    await waitFor(() => {
+      expect(customPageRequests().some((request) => request.offset === 0))
+        .toBe(true);
+    });
+    expect(customPageRequests().some((request) => request.offset === 100))
+      .toBe(false);
+    expect(screen.getByText("100 of 105 runs loaded")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /^load more runs$/i }),
+    ).toBeEnabled();
+
+    await user.click(screen.getByRole("button", { name: /^load more runs$/i }));
+
+    await waitFor(() => {
+      expect(customPageRequests().some((request) => request.offset === 100))
+        .toBe(true);
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: /^load more runs$/i }))
+        .not.toBeInTheDocument();
+    });
   });
 
   it("does not delete a log experiment when the dialog is cancelled", async () => {
@@ -2600,7 +2641,7 @@ describe("ViewerApp Logs Workspace", () => {
       expect(logRunRequests).toContainEqual(
         expect.objectContaining({
           experiments: ["exp_a", "exp_b"],
-          limit: 500,
+          limit: 100,
           offset: 0,
         }),
       );

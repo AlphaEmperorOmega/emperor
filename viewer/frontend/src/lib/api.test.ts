@@ -112,7 +112,7 @@ function createDeferred<T>() {
 }
 
 async function flushAsyncWork() {
-  for (let index = 0; index < 5; index += 1) {
+  for (let index = 0; index < 20; index += 1) {
     await Promise.resolve();
   }
 }
@@ -2665,19 +2665,21 @@ describe("POST requests", () => {
       { signal: controller.signal },
     );
 
-    for (let index = 0; index < 2; index += 1) {
+    for (let index = 0; index < 47; index += 1) {
       await flushAsyncWork();
       expect(pending).toHaveLength(index + 1);
       resolveRequest(index);
     }
     await scalarsPromise;
 
-    expect(scalarFetchMock).toHaveBeenCalledTimes(2);
+    expect(scalarFetchMock).toHaveBeenCalledTimes(47);
     expect(maxActive).toBe(1);
-    expect(pending.map((request) => request.body.runIds.length)).toEqual([50, 44]);
+    expect(pending.map((request) => request.body.runIds.length)).toEqual(
+      Array.from({ length: 47 }, () => 2),
+    );
     for (const request of pending) {
       expect(request.signal).toBe(controller.signal);
-      expect(request.body.runIds.length).toBeLessThanOrEqual(50);
+      expect(request.body.runIds.length).toBeLessThanOrEqual(2);
       expect(request.body.tags).toEqual(["validation/accuracy"]);
     }
   });
@@ -2737,23 +2739,23 @@ describe("POST requests", () => {
     }
     await scalarsPromise;
 
-    expect(scalarFetchMock).toHaveBeenCalledTimes(6);
+    expect(scalarFetchMock).toHaveBeenCalledTimes(141);
     expect(maxActive).toBe(1);
     expect(
       pending.map((request) => [
         request.body.runIds.length,
         request.body.tags.length,
       ]),
-    ).toEqual([
-      [50, 50],
-      [50, 50],
-      [50, 46],
-      [44, 50],
-      [44, 50],
-      [44, 46],
-    ]);
+    ).toEqual(
+      Array.from({ length: 47 }, () =>
+        [50, 50, 46].map((tagCount) => [
+          2,
+          tagCount,
+        ]),
+      ).flat(),
+    );
     for (const request of pending) {
-      expect(request.body.runIds.length).toBeLessThanOrEqual(50);
+      expect(request.body.runIds.length).toBeLessThanOrEqual(2);
       expect(request.body.tags.length).toBeLessThanOrEqual(50);
     }
   });
@@ -2791,19 +2793,23 @@ describe("POST requests", () => {
 
     const scalars = await fetchLogScalars({ runIds, tags });
 
-    expect(scalarFetchMock).toHaveBeenCalledTimes(4);
+    expect(scalarFetchMock).toHaveBeenCalledTimes(52);
     expect(
       scalars.series.map((series) => ({
         runId: series.runId,
         tag: series.tag,
         value: series.points[0].value,
       })),
-    ).toEqual([
-      { runId: "run-0", tag: "validation/tag-0", value: 50.5 },
-      { runId: "run-0", tag: "validation/tag-50", value: 50.01 },
-      { runId: "run-50", tag: "validation/tag-0", value: 1.5 },
-      { runId: "run-50", tag: "validation/tag-50", value: 1.01 },
-    ]);
+    ).toEqual(
+      Array.from({ length: 26 }, (_, runChunkIndex) => {
+        const runId = `run-${runChunkIndex * 2}`;
+        const runCount = runChunkIndex === 25 ? 1 : 2;
+        return [
+          { runId, tag: "validation/tag-0", value: runCount + 0.5 },
+          { runId, tag: "validation/tag-50", value: runCount + 0.01 },
+        ];
+      }).flat(),
+    );
   });
 
   it("serializes log scalar requests across concurrent callers", async () => {

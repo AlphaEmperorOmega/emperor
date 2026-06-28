@@ -40,6 +40,7 @@ import {
   type LogBestRunViewModel,
   type LogMetricChartLayoutGroupKey,
   type LogMetricGroupScalarQueryStates,
+  type LogScalarTagQueryState,
 } from "@/features/viewer/state/logs/logs-chart-view-model";
 import {
   type ConfusionMatrixHeatmap,
@@ -385,6 +386,8 @@ export function LogsChartPanel({
   visibleRunCount,
   selectedTagCount,
   scalarQueryStates,
+  scalarTagQueryStates,
+  onScalarChartVisible,
   hasConfusionMatrixTags,
   isConfusionMatrixCollapsed,
   isConfusionMatrixLoaded,
@@ -428,6 +431,8 @@ export function LogsChartPanel({
   visibleRunCount: number;
   selectedTagCount: number;
   scalarQueryStates: LogMetricGroupScalarQueryStates;
+  scalarTagQueryStates: Map<string, LogScalarTagQueryState>;
+  onScalarChartVisible: (tag: string) => void;
   hasConfusionMatrixTags: boolean;
   isConfusionMatrixCollapsed: boolean;
   isConfusionMatrixLoaded: boolean;
@@ -660,6 +665,7 @@ export function LogsChartPanel({
                 )}
               {!hasNoSelectedPlots &&
                 visibleMetrics.map(({ tag, series }) => {
+                  const tagQueryState = scalarTagQueryStates.get(tag);
                   return (
                     <LazyLogScalarChart
                       key={tag}
@@ -677,6 +683,15 @@ export function LogsChartPanel({
                       xMode={xMode}
                       yScale={yScale}
                       smoothing={smoothing}
+                      hasRequested={tagQueryState?.hasRequested ?? false}
+                      isLoading={
+                        tagQueryState?.isInitialLoading ||
+                        tagQueryState?.isFetching ||
+                        false
+                      }
+                      isError={tagQueryState?.isError ?? false}
+                      error={tagQueryState?.error}
+                      onVisible={onScalarChartVisible}
                     />
                   );
                 })}

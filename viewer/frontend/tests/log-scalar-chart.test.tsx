@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -86,6 +86,188 @@ describe("LogScalarChart", () => {
           writable: true,
           value: originalObserver,
         });
+      }
+    }
+  });
+
+  it("waits for viewport entry before requesting scalar data", async () => {
+    const originalObserver = globalThis.IntersectionObserver;
+    let onIntersect: IntersectionObserverCallback | null = null;
+    class IntersectionObserverMock {
+      constructor(callback: IntersectionObserverCallback) {
+        onIntersect = callback;
+      }
+      observe = vi.fn();
+      disconnect = vi.fn();
+      unobserve = vi.fn();
+      takeRecords = vi.fn(() => []);
+      root = null;
+      rootMargin = "";
+      thresholds = [];
+    }
+    Object.defineProperty(globalThis, "IntersectionObserver", {
+      configurable: true,
+      writable: true,
+      value: IntersectionObserverMock,
+    });
+    const onVisible = vi.fn();
+
+    try {
+      const { rerender } = render(
+        <LazyLogScalarChart
+          tag="validation/loss"
+          series={[]}
+          runsById={new Map([["run-1", logRun()]])}
+          checkpointsByRunId={new Map()}
+          runOrder={["run-1"]}
+          onSelectRun={vi.fn()}
+          onVisible={onVisible}
+        />,
+      );
+
+      expect(
+        screen.getByLabelText("validation/loss scalar chart placeholder"),
+      ).toBeInTheDocument();
+      expect(onVisible).not.toHaveBeenCalled();
+
+      act(() => {
+        onIntersect?.(
+          [{ isIntersecting: true } as IntersectionObserverEntry],
+          {} as IntersectionObserver,
+        );
+      });
+
+      await waitFor(() => expect(onVisible).toHaveBeenCalledWith("validation/loss"));
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Loading validation/loss scalar points",
+      );
+      expect(
+        screen.queryByRole("img", {
+          name: /validation\/loss scalar chart/i,
+        }),
+      ).not.toBeInTheDocument();
+
+      rerender(
+        <LazyLogScalarChart
+          tag="validation/loss"
+          series={[scalarSeries({ tag: "validation/loss" })]}
+          runsById={new Map([["run-1", logRun()]])}
+          checkpointsByRunId={new Map()}
+          runOrder={["run-1"]}
+          onSelectRun={vi.fn()}
+          hasRequested
+          onVisible={onVisible}
+        />,
+      );
+
+      expect(
+        await screen.findByRole("img", {
+          name: /validation\/loss scalar chart/i,
+        }),
+      ).toBeInTheDocument();
+    } finally {
+      if (originalObserver) {
+        Object.defineProperty(globalThis, "IntersectionObserver", {
+          configurable: true,
+          writable: true,
+          value: originalObserver,
+        });
+      } else {
+        Reflect.deleteProperty(globalThis, "IntersectionObserver");
+      }
+    }
+  });
+
+  it("requests visible scalar data when the observer misses the initial viewport entry", async () => {
+    const originalObserver = globalThis.IntersectionObserver;
+    const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+    const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
+    const rectSpy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect");
+    class IntersectionObserverMock {
+      observe = vi.fn();
+      disconnect = vi.fn();
+      unobserve = vi.fn();
+      takeRecords = vi.fn(() => []);
+      root = null;
+      rootMargin = "";
+      thresholds = [];
+    }
+    Object.defineProperty(globalThis, "IntersectionObserver", {
+      configurable: true,
+      writable: true,
+      value: IntersectionObserverMock,
+    });
+    Object.defineProperty(globalThis, "requestAnimationFrame", {
+      configurable: true,
+      writable: true,
+      value: (callback: FrameRequestCallback) => {
+        callback(0);
+        return 1;
+      },
+    });
+    Object.defineProperty(globalThis, "cancelAnimationFrame", {
+      configurable: true,
+      writable: true,
+      value: vi.fn(),
+    });
+    rectSpy.mockReturnValue({
+      x: 0,
+      y: 80,
+      top: 80,
+      left: 0,
+      right: 800,
+      bottom: 430,
+      width: 800,
+      height: 350,
+      toJSON: () => ({}),
+    } as DOMRect);
+    const onVisible = vi.fn();
+
+    try {
+      render(
+        <LazyLogScalarChart
+          tag="validation/loss"
+          series={[]}
+          runsById={new Map([["run-1", logRun()]])}
+          checkpointsByRunId={new Map()}
+          runOrder={["run-1"]}
+          onSelectRun={vi.fn()}
+          onVisible={onVisible}
+        />,
+      );
+
+      await waitFor(() => expect(onVisible).toHaveBeenCalledWith("validation/loss"));
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Loading validation/loss scalar points",
+      );
+    } finally {
+      rectSpy.mockRestore();
+      if (originalObserver) {
+        Object.defineProperty(globalThis, "IntersectionObserver", {
+          configurable: true,
+          writable: true,
+          value: originalObserver,
+        });
+      } else {
+        Reflect.deleteProperty(globalThis, "IntersectionObserver");
+      }
+      if (originalRequestAnimationFrame) {
+        Object.defineProperty(globalThis, "requestAnimationFrame", {
+          configurable: true,
+          writable: true,
+          value: originalRequestAnimationFrame,
+        });
+      } else {
+        Reflect.deleteProperty(globalThis, "requestAnimationFrame");
+      }
+      if (originalCancelAnimationFrame) {
+        Object.defineProperty(globalThis, "cancelAnimationFrame", {
+          configurable: true,
+          writable: true,
+          value: originalCancelAnimationFrame,
+        });
+      } else {
+        Reflect.deleteProperty(globalThis, "cancelAnimationFrame");
       }
     }
   });

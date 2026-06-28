@@ -82,6 +82,9 @@ export type LogsSidebarProps = {
   deleteRuns: LogsWorkspaceState["deleteRuns"];
   runDeleteError: LogsWorkspaceState["runDeleteError"];
   isDeletingRunDelete: LogsWorkspaceState["isDeletingRunDelete"];
+  canLoadMoreRuns: LogsWorkspaceState["canLoadMoreRuns"];
+  isLoadingMoreRuns: LogsWorkspaceState["isLoadingMoreRuns"];
+  loadMoreRuns: LogsWorkspaceState["loadMoreRuns"];
 };
 
 function uniqueSorted(values: string[]) {
@@ -314,6 +317,9 @@ export function LogsSidebar({
   deleteRuns,
   runDeleteError,
   isDeletingRunDelete,
+  canLoadMoreRuns,
+  isLoadingMoreRuns,
+  loadMoreRuns,
 }: LogsSidebarProps) {
   const [deleteOption, setDeleteOption] = useState<ChecklistOption | null>(null);
   const [subsetDeleteTarget, setSubsetDeleteTarget] =
@@ -328,6 +334,7 @@ export function LogsSidebar({
     selectedExperimentOptions.size === 1
       ? Array.from(selectedExperimentOptions)[0]
       : null;
+  const totalRunCount = runsQuery.data?.total ?? runs.length;
 
   useEffect(() => {
     if (!subsetDeleteTarget || singleSelectedExperiment === subsetDeleteTarget.experiment) {
@@ -574,6 +581,28 @@ export function LogsSidebar({
                 optionActions={presetDeleteActions}
                 divided
               />
+              {canLoadMoreRuns && (
+                <div className="grid gap-2 rounded-[12px] border border-line-soft bg-white/[0.018] p-3">
+                  <div className="text-xs text-ink-faint">
+                    {runs.length} of {totalRunCount} runs loaded
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="h-8 border border-line bg-white/[0.025] text-xs"
+                    onClick={loadMoreRuns}
+                    disabled={isLoadingMoreRuns}
+                  >
+                    {isLoadingMoreRuns && (
+                      <Loader2
+                        className="mr-2 h-3.5 w-3.5 animate-spin"
+                        aria-hidden
+                      />
+                    )}
+                    Load more runs
+                  </Button>
+                </div>
+              )}
               {tagsQuery.isError && (
                 <ErrorPanel title="Tag read failed" message={errorMessage(tagsQuery.error)} />
               )}

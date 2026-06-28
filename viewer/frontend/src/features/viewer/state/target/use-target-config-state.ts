@@ -1403,7 +1403,7 @@ export function useTargetConfigState({
 
   const suppressAutomaticPreviewForPreset = useCallback(
     (preset: string) => {
-      const previewDataset = selectedDatasets[0];
+      const previewDataset = selectedDatasets[0] ?? selectedExperimentDataset;
       suppressedAutomaticPreviewTargetKeyRef.current =
         selectedModel && preset && previewDataset
           ? previewTargetKey({
@@ -1420,6 +1420,7 @@ export function useTargetConfigState({
     [
       effectivePresetOverrideValues,
       selectedDatasets,
+      selectedExperimentDataset,
       selectedModel,
       selectedModelType,
     ],
@@ -1473,7 +1474,7 @@ export function useTargetConfigState({
         return;
       }
 
-      const previewDataset = selectedDatasets[0];
+      const previewDataset = selectedDatasets[0] ?? selectedExperimentDataset;
       if (!selectedModel || !preset || !previewDataset) {
         lastRequestedPreviewTargetKeyRef.current = "";
         return;
@@ -1505,6 +1506,7 @@ export function useTargetConfigState({
       resetGraphSelectionAndExpansion,
       selectPreviewPreset,
       selectedDatasets,
+      selectedExperimentDataset,
       selectedExperimentRunId,
       selectedModel,
       selectedModelType,
@@ -1542,7 +1544,7 @@ export function useTargetConfigState({
       );
       setSnapshotEditorDraft(normalizedSnapshotOverrides);
 
-      const previewDataset = selectedDatasets[0];
+      const previewDataset = selectedDatasets[0] ?? selectedExperimentDataset;
       if (!selectedModel || !snapshot.preset || !previewDataset) {
         lastRequestedPreviewTargetKeyRef.current = "";
         return true;
@@ -1577,6 +1579,7 @@ export function useTargetConfigState({
       requestPreview,
       resetGraphSelectionAndExpansion,
       selectedDatasets,
+      selectedExperimentDataset,
       selectedModel,
       selectedModelType,
       onTargetSnapshotSelected,

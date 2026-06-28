@@ -1,4 +1,9 @@
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useQueries,
+  useQuery,
+  type UseQueryResult,
+} from "@tanstack/react-query";
 import {
   DEFAULT_LOG_SCALAR_MAX_POINTS,
   LOG_SCALAR_SAMPLING,
@@ -30,19 +35,65 @@ type QueryOptions = {
   enabled?: boolean;
 };
 
+export type LogScalarQueryInput = {
+  runIds: string[];
+  tags: string[];
+  enabled: boolean;
+  group?: string;
+  queryKey: readonly unknown[];
+};
+
+export type LogRunsQueryInput = FetchLogRunsInput & {
+  enabled: boolean;
+  queryKey: readonly unknown[];
+  keepPreviousData?: boolean;
+};
+
+const LOG_RUNS_STALE_TIME_MS = 30_000;
+const LOG_TAGS_STALE_TIME_MS = 5 * 60_000;
+const LOG_SERIES_STALE_TIME_MS = 60_000;
+type LogRunsQueryData = Awaited<ReturnType<typeof fetchLogRuns>>;
+type LogScalarsQueryData = Awaited<ReturnType<typeof fetchLogScalars>>;
+
 export function useLogRunsQuery({
   enabled = true,
   filters,
   pagination,
   includeAllPages,
-}: QueryOptions & FetchLogRunsInput = {}) {
+  keepPreviousData: shouldKeepPreviousData = true,
+}: QueryOptions & FetchLogRunsInput & { keepPreviousData?: boolean } = {}) {
   return useQuery({
     queryKey: logQueryKeys.runs({ filters, pagination, includeAllPages }),
     queryFn: ({ signal }) =>
       fetchLogRuns({ filters, pagination, includeAllPages }, { signal }),
     enabled,
+    placeholderData: shouldKeepPreviousData ? keepPreviousData : undefined,
     retry: false,
+    staleTime: LOG_RUNS_STALE_TIME_MS,
   });
+}
+
+export function useLogRunQueries(
+  inputs: LogRunsQueryInput[],
+): Array<UseQueryResult<LogRunsQueryData>> {
+  return useQueries({
+    queries: inputs.map((input) => ({
+      queryKey: input.queryKey,
+      queryFn: ({ signal }) =>
+        fetchLogRuns(
+          {
+            filters: input.filters,
+            pagination: input.pagination,
+            includeAllPages: input.includeAllPages,
+          },
+          { signal },
+        ),
+      enabled: input.enabled,
+      placeholderData: input.keepPreviousData === false ? undefined : keepPreviousData,
+      retry: false,
+      staleTime: LOG_RUNS_STALE_TIME_MS,
+    })),
+  }) as Array<UseQueryResult<LogRunsQueryData>>;
 }
 
 export function useLogExperimentsQuery({ enabled = true }: QueryOptions = {}) {
@@ -51,6 +102,7 @@ export function useLogExperimentsQuery({ enabled = true }: QueryOptions = {}) {
     queryFn: ({ signal }) => fetchLogExperiments({ signal }),
     enabled,
     retry: false,
+    staleTime: LOG_RUNS_STALE_TIME_MS,
   });
 }
 
@@ -68,6 +120,7 @@ export function useLogTagsQuery({
     enabled: enabled && runIds.length > 0,
     placeholderData: keepPreviousData,
     retry: false,
+    staleTime: LOG_TAGS_STALE_TIME_MS,
   });
 }
 
@@ -98,7 +151,32 @@ export function useLogScalarsQuery({
     enabled: enabled && runIds.length > 0 && tags.length > 0,
     placeholderData: keepPreviousData,
     retry: false,
+    staleTime: LOG_SERIES_STALE_TIME_MS,
   });
+}
+
+export function useLogScalarQueries(
+  inputs: LogScalarQueryInput[],
+): Array<UseQueryResult<LogScalarsQueryData>> {
+  return useQueries({
+    queries: inputs.map((input) => ({
+      queryKey: input.queryKey,
+      queryFn: ({ signal }) =>
+        fetchLogScalars(
+          {
+            runIds: input.runIds,
+            tags: input.tags,
+            maxPoints: DEFAULT_LOG_SCALAR_MAX_POINTS,
+            sampling: LOG_SCALAR_SAMPLING,
+          },
+          { signal },
+        ),
+      enabled: input.enabled && input.runIds.length > 0 && input.tags.length > 0,
+      placeholderData: keepPreviousData,
+      retry: false,
+      staleTime: LOG_SERIES_STALE_TIME_MS,
+    })),
+  }) as Array<UseQueryResult<LogScalarsQueryData>>;
 }
 
 export function useLogMediaQuery({
@@ -121,6 +199,7 @@ export function useLogMediaQuery({
       enabled && runIds.length > 0 && (imageTags.length > 0 || textTags.length > 0),
     placeholderData: keepPreviousData,
     retry: false,
+    staleTime: LOG_SERIES_STALE_TIME_MS,
   });
 }
 
@@ -137,6 +216,7 @@ export function useLogCheckpointsQuery({
     queryFn: ({ signal }) => fetchLogCheckpoints({ runIds }, { signal }),
     enabled: enabled && runIds.length > 0,
     retry: false,
+    staleTime: LOG_RUNS_STALE_TIME_MS,
   });
 }
 
@@ -151,5 +231,6 @@ export function useLogRunArtifactsQuery({
     queryFn: ({ signal }) => fetchLogRunArtifacts(runId ?? "", { signal }),
     enabled: enabled && Boolean(runId),
     retry: false,
+    staleTime: LOG_RUNS_STALE_TIME_MS,
   });
 }

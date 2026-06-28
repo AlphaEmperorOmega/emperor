@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  bestRunMetricGroupForActiveScalarQuery,
+  buildLogScalarChunkQueryInputs,
   buildLogScalarQueryInput,
+  chunkScalarTagsForQueries,
   defaultLogBestRunMetricTag,
   deriveLogMetricGroupScalarQueryStates,
   deriveLogsChartEmptyState,
   groupLogScalarSeriesByTag,
+  groupSelectedLogMetrics,
 } from "@/features/viewer/state/logs/logs-chart-view-model";
 import {
   buildLogScalarTagOptions,
@@ -142,6 +146,101 @@ describe("logs chart view model", () => {
     expect(groups.other).toEqual([]);
   });
 
+  it("groups selected log metrics even before scalar series load", () => {
+    const seriesByTag = groupLogScalarSeriesByTag([
+      scalarSeries({ runId: "run-1", tag: "train/loss" }),
+    ]);
+
+    const groups = groupSelectedLogMetrics({
+      selectedTagList: ["train/loss", "validation/accuracy", "custom/metric"],
+      seriesByTag,
+    });
+
+    expect(groups.train).toEqual([
+      { tag: "train/loss", series: seriesByTag.get("train/loss") },
+    ]);
+    expect(groups.validation).toEqual([
+      { tag: "validation/accuracy", series: [] },
+    ]);
+    expect(groups.other).toEqual([{ tag: "custom/metric", series: [] }]);
+  });
+
+  it("builds stable scalar tag chunks for near-visible charts", () => {
+    expect(
+      chunkScalarTagsForQueries(
+        ["a", "b", "a", "c", "d", "e", "f", "g"],
+        3,
+      ),
+    ).toEqual([
+      ["a", "b", "c"],
+      ["d", "e", "f"],
+      ["g"],
+    ]);
+
+    expect(
+      buildLogScalarChunkQueryInputs({
+        enabled: true,
+        group: "train",
+        requestedTags: new Set(["train/loss", "train/accuracy"]),
+        selectedTagList: ["train/loss", "train/accuracy", "train/calibration/ece"],
+        visibleRunIds: ["run-1"],
+      }),
+    ).toEqual([
+      {
+        runIds: ["run-1"],
+        tags: ["train/loss", "train/accuracy"],
+        enabled: true,
+        group: "train",
+        queryKey: [
+          "log-scalars",
+          ["run-1"],
+          ["train/accuracy", "train/loss"],
+          { group: "train", maxPoints: 500, sampling: "tail" },
+        ],
+      },
+    ]);
+
+    expect(
+      buildLogScalarChunkQueryInputs({
+        enabled: true,
+        group: "train",
+        requestedTags: new Set(),
+        selectedTagList: ["train/loss", "train/accuracy"],
+        visibleRunIds: ["run-1"],
+      }),
+    ).toEqual([]);
+  });
+
+  it("splits scalar chunk queries across run and tag dimensions", () => {
+    const runIds = Array.from({ length: 24 }, (_, index) => `run-${index}`);
+    const selectedTags = Array.from(
+      { length: 7 },
+      (_, index) => `train/metric-${index}`,
+    );
+
+    const inputs = buildLogScalarChunkQueryInputs({
+      enabled: true,
+      group: "train",
+      requestedTags: new Set(selectedTags),
+      selectedTagList: selectedTags,
+      visibleRunIds: runIds,
+    });
+
+    expect(
+      inputs.map((input) => ({
+        runIds: input.runIds,
+        tags: input.tags,
+      })),
+    ).toEqual(
+      Array.from({ length: 12 }, (_, runChunkIndex) =>
+        [selectedTags.slice(0, 6), selectedTags.slice(6)].map((tags) => ({
+          runIds: runIds.slice(runChunkIndex * 2, (runChunkIndex + 1) * 2),
+          tags,
+        })),
+      ).flat(),
+    );
+  });
+
   it("defaults to compact common scalar tags without bulk classifier diagnostics", () => {
     expect(isDefaultScalarTag("gap/accuracy")).toBe(true);
     expect(isDefaultScalarTag("gap/loss")).toBe(true);
@@ -201,6 +300,52 @@ describe("logs chart view model", () => {
     expect(defaultLogBestRunMetricTag([{ value: "custom", label: "custom" }]))
       .toBe("custom");
     expect(defaultLogBestRunMetricTag([])).toBeNull();
+  });
+
+  it("reuses an active scalar metric group for best-run rankings", () => {
+    const selectedTagsByGroup = {
+      train: ["train/loss"],
+      validation: ["validation/accuracy"],
+      test: ["test/accuracy"],
+      other: ["custom/metric"],
+    };
+
+    expect(
+      bestRunMetricGroupForActiveScalarQuery({
+        activeGroups: {
+          train: true,
+          validation: true,
+          test: true,
+          other: false,
+        },
+        selectedTagsByGroup,
+        tag: "validation/accuracy",
+      }),
+    ).toBe("validation");
+    expect(
+      bestRunMetricGroupForActiveScalarQuery({
+        activeGroups: {
+          train: true,
+          validation: false,
+          test: true,
+          other: false,
+        },
+        selectedTagsByGroup,
+        tag: "validation/accuracy",
+      }),
+    ).toBeNull();
+    expect(
+      bestRunMetricGroupForActiveScalarQuery({
+        activeGroups: {
+          train: true,
+          validation: true,
+          test: true,
+          other: true,
+        },
+        selectedTagsByGroup,
+        tag: "missing/metric",
+      }),
+    ).toBeNull();
   });
 
   it("routes confusion-matrix rates to heatmaps and hides raw cells from scalar groups", () => {
@@ -276,7 +421,7 @@ describe("logs chart view model", () => {
         tagsRefreshing: false,
         visibleRunCount: 1,
       }),
-    ).toMatchObject({ title: "No scalar points for selection", busy: false });
+    ).toBeNull();
 
     expect(
       deriveLogsChartEmptyState({
@@ -308,7 +453,7 @@ describe("logs chart view model", () => {
         tagsRefreshing: false,
         visibleRunCount: 1,
       }),
-    ).toMatchObject({ title: "Loading scalar points", busy: true });
+    ).toBeNull();
   });
 
   it("allows the confusion matrix accordion when no normal scalar tags are selected", () => {
