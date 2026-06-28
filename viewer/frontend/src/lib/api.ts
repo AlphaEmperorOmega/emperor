@@ -1,10 +1,13 @@
 export {
+  getViewerApiAllowedOrigins,
   getViewerApiBaseUrl,
   isUnauthorizedApiError,
+  isViewerApiBaseUrlAllowed,
   normalizeViewerApiBaseUrl,
   requestMultipartJson,
   resetViewerApiBaseUrl,
   setViewerApiBaseUrl,
+  VIEWER_API_ALLOWED_ORIGINS_ENV_NAME,
   VIEWER_API_BASE_URL,
   VIEWER_API_BASE_URL_STORAGE_KEY,
   VIEWER_API_URL_ENV_NAME,
