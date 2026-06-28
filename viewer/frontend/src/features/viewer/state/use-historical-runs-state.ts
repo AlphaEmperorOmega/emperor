@@ -6,7 +6,7 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
-import { type LogRun, type LogRunTags } from "@/lib/api";
+import { type LogRun, type LogRunTags, type ModelIdentity } from "@/lib/api";
 import { useLogRunsQuery, useLogTagsQuery } from "@/features/viewer/state/logs/use-log-queries";
 import {
   deriveDatasetSelectionState,
@@ -186,27 +186,31 @@ export function useHistoricalRunsState({
     selectLogRun,
   } = selection;
 
-  const logRunsQuery = useLogRunsQuery();
-  const modelLogRunIds = useMemo(
+  const logRunFilters = useMemo(
     () =>
-      (logRunsQuery.data?.runs ?? [])
-        .filter(
-          (run) =>
-            run.modelType === selectedModelType && run.model === selectedModel,
-        )
-        .map((run) => run.id),
-    [logRunsQuery.data?.runs, selectedModel, selectedModelType],
+      selectedModel && selectedModelType
+        ? {
+            models: [
+              {
+                modelType: selectedModelType,
+                model: selectedModel,
+              } satisfies ModelIdentity,
+            ],
+          }
+        : undefined,
+    [selectedModel, selectedModelType],
   );
-  const modelRunTagsQuery = useLogTagsQuery({
-    runIds: modelLogRunIds,
-    enabled: tagsEnabled,
-    queryKey: logQueryKeys.modelRunTags(modelLogRunIds),
+  const logRunsQuery = useLogRunsQuery({
+    enabled: Boolean(selectedModel && selectedModelType),
+    filters: logRunFilters,
+    includeAllPages: true,
+    keepPreviousData: false,
   });
-  const datasetSelectionState = useMemo(
+  const selectedRunCandidateState = useMemo(
     () =>
       deriveDatasetSelectionState({
         logRuns: logRunsQuery.data?.runs,
-        modelRunTags: modelRunTagsQuery.data?.runs,
+        modelRunTags: undefined,
         includeRunsWithoutMonitorTags: !tagsEnabled,
         selectedModelType,
         selectedModel,
@@ -217,7 +221,55 @@ export function useHistoricalRunsState({
       }),
     [
       logRunsQuery.data?.runs,
-      modelRunTagsQuery.data?.runs,
+      selectedHistoricalDatasetFilter,
+      selectedHistoricalExperimentFilter,
+      selectedHistoricalPreset,
+      selectedLogRunId,
+      selectedModel,
+      selectedModelType,
+      tagsEnabled,
+    ],
+  );
+  const selectedHistoricalRunIdsForTags = useMemo(
+    () => selectedRunCandidateState.filteredHistoricalRuns.map((run) => run.id),
+    [selectedRunCandidateState.filteredHistoricalRuns],
+  );
+  const logRunTagsQuery = useLogTagsQuery({
+    runIds: selectedHistoricalRunIdsForTags,
+    enabled: tagsEnabled && selectedHistoricalRunIdsForTags.length > 0,
+    queryKey: logQueryKeys.filteredHistoricalRunTags(
+      selectedHistoricalRunIdsForTags,
+    ),
+  });
+  const selectedRunTags = useMemo(() => {
+    if (!tagsEnabled || selectedHistoricalRunIdsForTags.length === 0) {
+      return undefined;
+    }
+    const selectedRunIds = new Set(selectedHistoricalRunIdsForTags);
+    return (logRunTagsQuery.data?.runs ?? []).filter((tags) =>
+      selectedRunIds.has(tags.runId),
+    );
+  }, [
+    logRunTagsQuery.data?.runs,
+    selectedHistoricalRunIdsForTags,
+    tagsEnabled,
+  ]);
+  const datasetSelectionState = useMemo(
+    () =>
+      deriveDatasetSelectionState({
+        logRuns: logRunsQuery.data?.runs,
+        modelRunTags: selectedRunTags,
+        includeRunsWithoutMonitorTags: !tagsEnabled,
+        selectedModelType,
+        selectedModel,
+        selectedHistoricalExperimentFilter,
+        selectedHistoricalDatasetFilter,
+        selectedHistoricalPreset,
+        selectedLogRunId,
+      }),
+    [
+      logRunsQuery.data?.runs,
+      selectedRunTags,
       selectedHistoricalDatasetFilter,
       selectedHistoricalExperimentFilter,
       selectedHistoricalPreset,
@@ -240,11 +292,6 @@ export function useHistoricalRunsState({
     selectedLogRun,
     selectedLogRunMonitorEligibility,
   } = datasetSelectionState;
-  const logRunTagsQuery = useLogTagsQuery({
-    runIds: filteredHistoricalRunIds,
-    enabled: tagsEnabled && filteredHistoricalRunIds.length > 0,
-    queryKey: logQueryKeys.filteredHistoricalRunTags(filteredHistoricalRunIds),
-  });
   useEffect(() => {
     if (!selectedModel) {
       setSelectedHistoricalExperimentFilter("");
@@ -416,13 +463,13 @@ export function useHistoricalRunsState({
       selectedHistoricalExperiment,
       selectedHistoricalDataset,
       selectedHistoricalRunPreset,
-      logRunTags: logRunTagsQuery.data?.runs,
+      logRunTags: selectedRunTags,
       filteredHistoricalRunIds,
     }),
     [
       filteredHistoricalRunIds,
       historicalMonitorRuns,
-      logRunTagsQuery.data?.runs,
+      selectedRunTags,
       selectedHistoricalDataset,
       selectedHistoricalExperiment,
       selectedHistoricalRunPreset,

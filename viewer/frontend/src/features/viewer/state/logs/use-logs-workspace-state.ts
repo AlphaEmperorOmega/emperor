@@ -15,6 +15,7 @@ import {
 } from "@/lib/api";
 import {
   useLogExperimentsQuery,
+  useLogRunQueries,
   useLogRunsQuery,
   useLogTagsQuery,
 } from "@/features/viewer/state/logs/use-log-queries";
@@ -49,7 +50,7 @@ import {
 } from "@/features/viewer/state/logs/logs-selection-state";
 
 const TARGET_LOG_RUN_LIMIT = 5;
-const CUSTOM_LOG_RUN_LIMIT = 500;
+const CUSTOM_LOG_RUN_LIMIT = 100;
 const LOG_SELECT_ALL_TAG_LIMIT = 100;
 const DEFAULT_COLLAPSED_METRIC_GROUPS = new Set<LogMetricGroupKey>(["other"]);
 
@@ -160,6 +161,10 @@ export function useLogsWorkspaceState({
   const [selectedPresets, setSelectedPresets] = useState<Set<string> | null>(null);
   const [shouldSelectFirstRunFacets, setShouldSelectFirstRunFacets] =
     useState(false);
+  const [customRunPageState, setCustomRunPageState] = useState({
+    key: "",
+    count: 1,
+  });
   const [selectedTags, setSelectedTags] = useState<Set<string> | null>(null);
   const [pendingExperimentTagSeeds, setPendingExperimentTagSeeds] = useState<
     Set<string>
@@ -210,16 +215,76 @@ export function useLogsWorkspaceState({
     [hasSelectedExperimentFilters, selectedExperimentQueryValues],
   );
   const canQueryRuns = enabled && (!isTargetScopeMode || hasTargetScope);
-  const runsQuery = useLogRunsQuery({
-    enabled: canQueryRuns,
-    filters: isTargetScopeMode ? targetRunFilters : customRunFilters,
+  const customRunFilterKey = useMemo(
+    () => JSON.stringify({ filters: customRunFilters, scopeMode }),
+    [customRunFilters, scopeMode],
+  );
+  const customRunPageCount =
+    customRunPageState.key === customRunFilterKey ? customRunPageState.count : 1;
+  useEffect(() => {
+    if (customRunPageState.key === customRunFilterKey) {
+      return;
+    }
+    setCustomRunPageState({ key: customRunFilterKey, count: 1 });
+  }, [customRunFilterKey, customRunPageState.key]);
+
+  const targetRunsQuery = useLogRunsQuery({
+    enabled: canQueryRuns && isTargetScopeMode,
+    filters: targetRunFilters,
     pagination: {
-      limit: isTargetScopeMode ? TARGET_LOG_RUN_LIMIT : CUSTOM_LOG_RUN_LIMIT,
+      limit: TARGET_LOG_RUN_LIMIT,
       offset: 0,
     },
-    includeAllPages:
-      !isTargetScopeMode && hasSelectedExperimentFilters ? true : undefined,
   });
+  const customRunPageInputs = useMemo(
+    () =>
+      Array.from({ length: customRunPageCount }, (_, pageIndex) => {
+        const pagination = {
+          limit: CUSTOM_LOG_RUN_LIMIT,
+          offset: pageIndex * CUSTOM_LOG_RUN_LIMIT,
+        };
+        return {
+          enabled: canQueryRuns && !isTargetScopeMode,
+          filters: customRunFilters,
+          pagination,
+          queryKey: logQueryKeys.runs({
+            filters: customRunFilters,
+            pagination,
+          }),
+        };
+      }),
+    [canQueryRuns, customRunFilters, customRunPageCount, isTargetScopeMode],
+  );
+  const customRunPageQueries = useLogRunQueries(customRunPageInputs);
+  const customRunPages = customRunPageQueries
+    .map((query) => query.data)
+    .filter((page): page is NonNullable<typeof page> => Boolean(page));
+  const customRunErrorQuery = customRunPageQueries.find((query) => query.isError);
+  const lastCustomRunPage = customRunPages.at(-1);
+  const customRunsQuery = {
+    data:
+      customRunPages.length > 0
+        ? {
+            ...customRunPages[0],
+            runs: customRunPages.flatMap((page) => page.runs),
+            total: customRunPages[0]?.total ?? customRunPages[0]?.runs.length ?? 0,
+            limit: CUSTOM_LOG_RUN_LIMIT,
+            offset: 0,
+            hasMore: lastCustomRunPage?.hasMore ?? false,
+          }
+        : undefined,
+    isLoading:
+      customRunPageInputs.some((input) => input.enabled) &&
+      customRunPages.length === 0 &&
+      customRunPageQueries.some((query) => query.isLoading),
+    isFetching: customRunPageQueries.some((query) => query.isFetching),
+    isError: Boolean(customRunErrorQuery),
+    error: customRunErrorQuery?.error ?? null,
+    isPlaceholderData: customRunPageQueries.some(
+      (query) => query.isPlaceholderData,
+    ),
+  };
+  const runsQuery = isTargetScopeMode ? targetRunsQuery : customRunsQuery;
   const experimentsQuery = useLogExperimentsQuery({ enabled });
 
   const runsData = runsQuery.data?.runs;
@@ -357,6 +422,15 @@ export function useLogsWorkspaceState({
       return;
     }
     const selectFirstAvailable = shouldSelectFirstRunFacets;
+    if (
+      selectFirstAvailable &&
+      (runsQuery.isPlaceholderData ||
+        datasetOptionValues.length === 0 ||
+        modelOptionValues.length === 0 ||
+        presetOptionValues.length === 0)
+    ) {
+      return;
+    }
     setSelectedDatasets((previous) =>
       normalizeRunFacetSelection({
         selection: previous,
@@ -386,6 +460,7 @@ export function useLogsWorkspaceState({
     modelOptionValues,
     presetOptionValues,
     runsQuery.data,
+    runsQuery.isPlaceholderData,
     shouldSelectFirstRunFacets,
   ]);
 
@@ -401,9 +476,10 @@ export function useLogsWorkspaceState({
   );
 
   const visibleRunIds = useMemo(() => visibleRuns.map((run) => run.id), [visibleRuns]);
+  const tagsEnabled = enabled && !shouldSelectFirstRunFacets;
   const tagsQuery = useLogTagsQuery({
     runIds: visibleRunIds,
-    enabled,
+    enabled: tagsEnabled,
     queryKey: logQueryKeys.tagsForRuns(visibleRunIds),
   });
 
@@ -605,6 +681,31 @@ export function useLogsWorkspaceState({
     },
     runDeleteError: deleteRunsMutation.error,
     isDeletingRunDelete: deleteRunsMutation.isPending,
+    canLoadMoreRuns: Boolean(
+      !isTargetScopeMode && runsQuery.data?.hasMore,
+    ),
+    isLoadingMoreRuns: Boolean(
+      !isTargetScopeMode &&
+        customRunPageQueries.some(
+          (query, index) => index > 0 && query.isFetching && !query.data,
+        ),
+    ),
+    loadMoreRuns: () => {
+      if (
+        isTargetScopeMode ||
+        !runsQuery.data?.hasMore ||
+        customRunPageQueries.some((query) => query.isLoading)
+      ) {
+        return;
+      }
+      setCustomRunPageState((previous) => ({
+        key: customRunFilterKey,
+        count:
+          previous.key === customRunFilterKey
+            ? previous.count + 1
+            : customRunPageCount + 1,
+      }));
+    },
     resetRunDelete: () => {
       runDeletePlanMutation.reset();
       deleteRunsMutation.reset();

@@ -53,6 +53,9 @@ export function LogsSidebarPanel({ state }: { state: LogsWorkspaceState }) {
       deleteRuns={state.deleteRuns}
       runDeleteError={state.runDeleteError}
       isDeletingRunDelete={state.isDeletingRunDelete}
+      canLoadMoreRuns={state.canLoadMoreRuns}
+      isLoadingMoreRuns={state.isLoadingMoreRuns}
+      loadMoreRuns={state.loadMoreRuns}
     />
   );
 }

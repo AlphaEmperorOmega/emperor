@@ -68,6 +68,14 @@ function values(selection: Set<string>) {
   return Array.from(selection);
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve;
+  });
+  return { promise, resolve };
+}
+
 const targetScope: LogsTargetScope = {
   modelType: "linears",
   model: "linear",
@@ -144,5 +152,65 @@ describe("useLogsWorkspaceState", () => {
       expect(values(result.current.selectedPresets)).toEqual(["baseline"]);
     });
     expect(result.current.visibleRuns.map((run) => run.id)).toEqual(["a-cifar"]);
+  });
+
+  it("waits for fresh experiment runs before selecting first dataset, model, and preset", async () => {
+    const customRuns = [
+      logRun({ id: "a-cifar" }),
+      logRun({
+        id: "a-mnist",
+        dataset: "Mnist",
+        model: "wide_linear",
+        preset: "wide",
+      }),
+    ];
+    const experimentRuns = deferred<{ runs: LogRun[] }>();
+    mocks.fetchLogRuns.mockImplementation(
+      ({ filters }: { filters?: { experiment?: string[] } } = {}) => {
+        if (filters?.experiment?.includes("exp_a")) {
+          return experimentRuns.promise;
+        }
+        return Promise.resolve({ runs: [] });
+      },
+    );
+    const { result } = renderLogsWorkspaceState();
+
+    await waitFor(() => {
+      expect(result.current.experimentOptions.map((option) => option.value))
+        .toEqual(["exp_a", "exp_b"]);
+    });
+
+    act(() => {
+      result.current.toggleExperiment("exp_a");
+    });
+    await waitFor(() => {
+      expect(mocks.fetchLogRuns).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({ experiment: ["exp_a"] }),
+        }),
+        expect.any(Object),
+      );
+    });
+
+    act(() => {
+      experimentRuns.resolve({ runs: customRuns });
+    });
+
+    await waitFor(() => {
+      expect(values(result.current.selectedDatasets)).toEqual(["Cifar10"]);
+      expect(values(result.current.selectedModels)).toEqual(["linears/linear"]);
+      expect(values(result.current.selectedPresets)).toEqual(["baseline"]);
+    });
+    expect(result.current.visibleRuns.map((run) => run.id)).toEqual(["a-cifar"]);
+    await waitFor(() => {
+      expect(mocks.fetchLogTags).toHaveBeenCalledWith(
+        { runIds: ["a-cifar"] },
+        expect.any(Object),
+      );
+    });
+    expect(mocks.fetchLogTags).not.toHaveBeenCalledWith(
+      { runIds: ["a-cifar", "a-mnist"] },
+      expect.any(Object),
+    );
   });
 });

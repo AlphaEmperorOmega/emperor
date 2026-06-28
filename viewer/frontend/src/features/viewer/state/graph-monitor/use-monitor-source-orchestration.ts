@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useCallback, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   fetchLogParameterStatus,
   fetchMonitorParameterStatus,
@@ -19,36 +19,7 @@ import {
 import { type ActiveMonitorJob } from "@/types/monitor";
 
 const runningTrainingStatuses = new Set(["running", "queued"]);
-const HISTORICAL_PARAMETER_STATUS_REQUEST_CONCURRENCY = 2;
-
-type ProgressQuery = {
-  isSuccess: boolean;
-  isError: boolean;
-  isFetching: boolean;
-  isLoading: boolean;
-};
-
-function settledQueryCount(queries: ProgressQuery[]) {
-  return queries.filter((query) => query.isSuccess || query.isError).length;
-}
-
-function isQueryWindowLoading({
-  enabledCount,
-  queries,
-  total,
-}: {
-  enabledCount: number;
-  queries: ProgressQuery[];
-  total: number;
-}) {
-  const settled = settledQueryCount(queries);
-  return (
-    total > 0 &&
-    settled < total &&
-    (enabledCount < total ||
-      queries.some((query) => query.isFetching || query.isLoading))
-  );
-}
+const PARAMETER_STATUS_STALE_TIME_MS = 5 * 60_000;
 
 export type MonitorSourceOrchestrationInput = {
   graph?: InspectResponse;
@@ -123,10 +94,6 @@ export function useMonitorSourceOrchestration({
     () => parameterStatusHistoricalRuns.map((run) => run.id),
     [parameterStatusHistoricalRuns],
   );
-  const parameterStatusHistoricalRunKey = useMemo(
-    () => parameterStatusHistoricalRunIds.join("\n"),
-    [parameterStatusHistoricalRunIds],
-  );
   const parameterStatusPreset =
     parameterStatusActiveJob?.currentPreset ??
     parameterStatusActiveJob?.preset ??
@@ -141,33 +108,6 @@ export function useMonitorSourceOrchestration({
   const historicalParameterStatusEnabled = Boolean(
     !parameterStatusActiveJob && parameterStatusHistoricalRunIds.length > 0,
   );
-  const [
-    historicalParameterStatusEnabledCount,
-    setHistoricalParameterStatusEnabledCount,
-  ] = useState(() =>
-    historicalParameterStatusEnabled
-      ? Math.min(
-          parameterStatusHistoricalRunIds.length,
-          HISTORICAL_PARAMETER_STATUS_REQUEST_CONCURRENCY,
-        )
-      : 0,
-  );
-
-  useEffect(() => {
-    setHistoricalParameterStatusEnabledCount(
-      historicalParameterStatusEnabled
-        ? Math.min(
-            parameterStatusHistoricalRunIds.length,
-            HISTORICAL_PARAMETER_STATUS_REQUEST_CONCURRENCY,
-          )
-        : 0,
-    );
-  }, [
-    historicalParameterStatusEnabled,
-    parameterStatusHistoricalRunIds.length,
-    parameterStatusHistoricalRunKey,
-  ]);
-
   const activeParameterStatusQuery = useQuery<ParameterStatus>({
     queryKey: parameterStatusActiveJob
       ? monitorQueryKeys.activeJobParameterStatus(
@@ -191,53 +131,31 @@ export function useMonitorSourceOrchestration({
     },
     enabled: activeParameterStatusEnabled,
     retry: false,
+    staleTime: PARAMETER_STATUS_STALE_TIME_MS,
     refetchInterval:
       parameterStatusActiveJob &&
       runningTrainingStatuses.has(parameterStatusActiveJob.status)
         ? 1500
         : false,
   });
-  const historicalParameterStatusQueries = useQueries({
-    queries: parameterStatusHistoricalRuns.map((run, index) => ({
-      queryKey: monitorQueryKeys.historicalParameterStatus([run.id]),
-      queryFn: ({ signal }) =>
-        fetchLogParameterStatus({ runIds: [run.id] }, { signal }),
-      enabled:
-        historicalParameterStatusEnabled &&
-        index < historicalParameterStatusEnabledCount,
-      retry: false,
-    })),
+  const historicalParameterStatusQuery = useQuery<LogParameterStatusResponse>({
+    queryKey: monitorQueryKeys.historicalParameterStatus(
+      parameterStatusHistoricalRunIds,
+    ),
+    queryFn: ({ signal }) =>
+      fetchLogParameterStatus(
+        { runIds: parameterStatusHistoricalRunIds },
+        { signal },
+      ),
+    enabled: historicalParameterStatusEnabled,
+    retry: false,
+    staleTime: PARAMETER_STATUS_STALE_TIME_MS,
   });
-  const historicalParameterStatusSettledCount = settledQueryCount(
-    historicalParameterStatusQueries,
-  );
-
-  useEffect(() => {
-    if (!historicalParameterStatusEnabled) {
-      return;
-    }
-    const nextEnabledCount = Math.min(
-      parameterStatusHistoricalRunIds.length,
-      historicalParameterStatusSettledCount +
-        HISTORICAL_PARAMETER_STATUS_REQUEST_CONCURRENCY,
-    );
-    setHistoricalParameterStatusEnabledCount((current) =>
-      nextEnabledCount > current ? nextEnabledCount : current,
-    );
-  }, [
-    historicalParameterStatusEnabled,
-    historicalParameterStatusSettledCount,
-    parameterStatusHistoricalRunIds.length,
-  ]);
 
   const historicalParameterStatusData:
     | LogParameterStatusResponse
     | undefined = !parameterStatusActiveJob
-    ? {
-        runs: parameterStatusHistoricalRuns.flatMap((_, index) => {
-          return historicalParameterStatusQueries[index]?.data?.runs ?? [];
-        }),
-      }
+    ? historicalParameterStatusQuery.data
     : undefined;
   const parameterStatusData: ParameterStatus | LogParameterStatusResponse | undefined =
     parameterStatusActiveJob
@@ -249,11 +167,9 @@ export function useMonitorSourceOrchestration({
   const isHistoricalParameterStatusLoading = Boolean(
     !parameterStatusActiveJob &&
       historicalParameterStatusEnabled &&
-      isQueryWindowLoading({
-        enabledCount: historicalParameterStatusEnabledCount,
-        queries: historicalParameterStatusQueries,
-        total: parameterStatusHistoricalRunIds.length,
-      }),
+      !historicalParameterStatusQuery.data &&
+      (historicalParameterStatusQuery.isFetching ||
+        historicalParameterStatusQuery.isLoading),
   );
   const isActiveParameterStatusLoading = Boolean(
     activeParameterStatusEnabled &&
@@ -263,12 +179,7 @@ export function useMonitorSourceOrchestration({
   );
   const isParameterStatusLoading =
     isActiveParameterStatusLoading || isHistoricalParameterStatusLoading;
-  const isParameterStatusPartiallyLoading = Boolean(
-    !parameterStatusActiveJob &&
-      historicalParameterStatusData &&
-      historicalParameterStatusData.runs.length > 0 &&
-      isHistoricalParameterStatusLoading,
-  );
+  const isParameterStatusPartiallyLoading = false;
   const parameterActivityByNodePath = useMemo(
     () =>
       deriveParameterActivityByNodePath({

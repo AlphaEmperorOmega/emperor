@@ -179,7 +179,7 @@ export type LogRunArtifacts = z.infer<typeof logRunArtifactsSchema>;
 const DEFAULT_LOG_PAGE_LIMIT = 500;
 export const DEFAULT_LOG_SCALAR_MAX_POINTS = 500;
 export const LOG_TAG_RUN_REQUEST_LIMIT = 20;
-export const LOG_SCALAR_RUN_REQUEST_LIMIT = 50;
+export const LOG_SCALAR_RUN_REQUEST_LIMIT = 2;
 export const LOG_SCALAR_TAG_REQUEST_LIMIT = 50;
 export const LOG_MEDIA_TAG_REQUEST_LIMIT = 20;
 export const LOG_TAG_REQUEST_CONCURRENCY = 1;
@@ -218,13 +218,13 @@ type FetchPaginatedResult<TPage, TItem> = {
   offset: number;
 };
 
-const LOG_SCALAR_GLOBAL_REQUEST_CONCURRENCY = 2;
+const LOG_SCALAR_GLOBAL_REQUEST_CONCURRENCY = 1;
 let activeLogScalarRequestCount = 0;
 const pendingLogScalarRequests: Array<() => void> = [];
 
 function queueLogScalarRequest<TResponse>(request: () => Promise<TResponse>) {
-  // TensorBoard scalar reads are disk-heavy, but one slow metric group should not
-  // block already-visible groups from loading. Keep a small global queue.
+  // TensorBoard scalar reads are disk-heavy; keep one backend scalar request
+  // active so large visible chart sets do not pile up blocking work.
   return new Promise<TResponse>((resolve, reject) => {
     const run = () => {
       activeLogScalarRequestCount += 1;

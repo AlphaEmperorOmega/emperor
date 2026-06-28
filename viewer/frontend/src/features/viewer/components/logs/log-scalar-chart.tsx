@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Info } from "lucide-react";
+import { Info, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { IconButton } from "@/components/ui/icon-button";
 import { EChart } from "@/features/viewer/components/charts/echart";
+import { ErrorPanel } from "@/features/viewer/components/error-panel";
 import { SurfacePanel } from "@/features/viewer/components/shared/surface-panel";
 import { TrainingMetricInfoDialog } from "@/features/viewer/components/shared/training-metric-info-dialog";
 import { type LogCheckpoint, type LogRun, type LogScalarSeries } from "@/lib/api";
@@ -20,7 +21,7 @@ import {
   formatNumber,
   formatRunLabel,
 } from "@/features/viewer/state/logs/logs-selectors";
-import { cn } from "@/lib/utils";
+import { cn, errorMessage } from "@/lib/utils";
 
 type LogScalarChartProps = {
   tag: string;
@@ -35,11 +36,43 @@ type LogScalarChartProps = {
   yScale?: ScalarYScale;
   smoothing?: number;
   group?: string;
+  hasRequested?: boolean;
+  isLoading?: boolean;
+  isError?: boolean;
+  error?: unknown;
+  onVisible?: (tag: string) => void;
 };
+
+const LOG_SCALAR_CHART_VIEWPORT_MARGIN_PX = 360;
+
+function isElementNearViewport(
+  node: HTMLElement,
+  margin = LOG_SCALAR_CHART_VIEWPORT_MARGIN_PX,
+) {
+  const rect = node.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) {
+    return false;
+  }
+  const viewportWidth =
+    window.innerWidth || document.documentElement.clientWidth || 0;
+  const viewportHeight =
+    window.innerHeight || document.documentElement.clientHeight || 0;
+  return (
+    rect.bottom >= -margin &&
+    rect.right >= -margin &&
+    rect.top <= viewportHeight + margin &&
+    rect.left <= viewportWidth + margin
+  );
+}
 
 export function LazyLogScalarChart(props: LogScalarChartProps) {
   const chartRef = useRef<HTMLElement | null>(null);
   const [hasEnteredView, setHasEnteredView] = useState(false);
+  const { onVisible, tag } = props;
+  const markEnteredView = useCallback(() => {
+    setHasEnteredView(true);
+    onVisible?.(tag);
+  }, [onVisible, tag]);
 
   useEffect(() => {
     if (hasEnteredView) {
@@ -47,21 +80,42 @@ export function LazyLogScalarChart(props: LogScalarChartProps) {
     }
     const node = chartRef.current;
     if (!node || typeof IntersectionObserver === "undefined") {
-      setHasEnteredView(true);
+      markEnteredView();
       return;
     }
+    let cancelled = false;
+    const cancelScheduledChecks: Array<() => void> = [];
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry?.isIntersecting) {
-          setHasEnteredView(true);
+          markEnteredView();
           observer.disconnect();
         }
       },
       { rootMargin: "360px 0px" },
     );
     observer.observe(node);
-    return () => observer.disconnect();
-  }, [hasEnteredView]);
+    const checkInitialViewportEntry = () => {
+      if (!cancelled && isElementNearViewport(node)) {
+        markEnteredView();
+        observer.disconnect();
+      }
+    };
+    if (typeof window.requestAnimationFrame === "function") {
+      const frameId = window.requestAnimationFrame(checkInitialViewportEntry);
+      cancelScheduledChecks.push(() => window.cancelAnimationFrame?.(frameId));
+    } else {
+      const timeoutId = window.setTimeout(checkInitialViewportEntry, 0);
+      cancelScheduledChecks.push(() => window.clearTimeout(timeoutId));
+    }
+    const delayedTimeoutId = window.setTimeout(checkInitialViewportEntry, 120);
+    cancelScheduledChecks.push(() => window.clearTimeout(delayedTimeoutId));
+    return () => {
+      cancelled = true;
+      observer.disconnect();
+      cancelScheduledChecks.forEach((cancel) => cancel());
+    };
+  }, [hasEnteredView, markEnteredView]);
 
   if (!hasEnteredView) {
     return (
@@ -72,6 +126,44 @@ export function LazyLogScalarChart(props: LogScalarChartProps) {
         className="min-h-[350px]"
         aria-label={`${props.tag} scalar chart placeholder`}
       />
+    );
+  }
+
+  if (props.series.length === 0) {
+    if (props.isError) {
+      return (
+        <SurfacePanel
+          as="section"
+          padding="spacious"
+          className="min-h-[350px]"
+          aria-label={`${props.tag} scalar chart error`}
+        >
+          <ErrorPanel
+            title={`${props.tag} scalar read failed`}
+            message={errorMessage(props.error)}
+          />
+        </SurfacePanel>
+      );
+    }
+
+    const isWaiting = props.isLoading || !props.hasRequested;
+    return (
+      <SurfacePanel
+        as="section"
+        padding="spacious"
+        className="grid min-h-[350px] place-items-center"
+        aria-label={`${props.tag} scalar chart loading`}
+      >
+        <div
+          role={isWaiting ? "status" : undefined}
+          className="flex items-center gap-2 text-xs text-ink-faint"
+        >
+          {isWaiting && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
+          {isWaiting
+            ? `Loading ${props.tag} scalar points`
+            : `No scalar points for ${props.tag}`}
+        </div>
+      </SurfacePanel>
     );
   }
 
