@@ -432,7 +432,9 @@ describe("InlineStatus", () => {
   it("renders a busy spinner", () => {
     render(<InlineStatus busy>Loading status</InlineStatus>);
 
-    const spinner = screen.getByText("Loading status").querySelector("svg");
+    const status = screen.getByRole("status");
+    expect(status).toHaveTextContent("Loading status");
+    const spinner = status.querySelector("svg");
     expect(spinner).toHaveClass("h-4", "w-4", "animate-spin", "text-violet");
     expect(spinner).toHaveAttribute("aria-hidden", "true");
   });
