@@ -539,6 +539,16 @@ function summarizeSnapshotRuns(runs: TrainingRun[]) {
   };
 }
 
+function normalizedRunOverrides(
+  fields: ConfigField[],
+  overrides: OverrideValues | undefined,
+) {
+  return normalizeAdaptiveOptionOverrides(
+    fields,
+    normalizeConfigOverrides(fields, overrides ?? {}),
+  );
+}
+
 export function buildConfigSnapshotRunPlan({
   modelType,
   model,
@@ -578,10 +588,13 @@ export function buildConfigSnapshotRunPlan({
       [configKeyToken(field.configKey), field] as const,
     ]),
   );
-  const normalizedBulkOverrides = normalizeAdaptiveOptionOverrides(
+  const defaultRunOverrides = normalizedRunOverrides(
     fields,
-    normalizeConfigOverrides(fields, bulkOverrides ?? presetOverrides ?? {}),
+    bulkOverrides ?? presetOverrides,
   );
+  const snapshotBulkOverrides = bulkOverrides
+    ? normalizedRunOverrides(fields, bulkOverrides)
+    : undefined;
   const runs: TrainingRun[] = [];
   for (const preset of selectedTrainingPresets) {
     for (const dataset of selectedDatasets) {
@@ -594,24 +607,20 @@ export function buildConfigSnapshotRunPlan({
           dataset,
           index,
           fieldsByKey,
-          overrides: normalizedBulkOverrides,
+          overrides: defaultRunOverrides,
           logFolder,
         }),
       );
     }
   }
   for (const snapshot of selectedSnapshots) {
-    const snapshotOverrides = normalizeAdaptiveOptionOverrides(
-      fields,
-      normalizeConfigOverrides(fields, snapshot.overrides),
-    );
-    const mergedSnapshotOverrides = normalizeAdaptiveOptionOverrides(
-      fields,
-      normalizeConfigOverrides(fields, {
-        ...snapshotOverrides,
-        ...normalizedBulkOverrides,
-      }),
-    );
+    const snapshotOverrides = normalizedRunOverrides(fields, snapshot.overrides);
+    const mergedSnapshotOverrides = snapshotBulkOverrides
+      ? normalizedRunOverrides(fields, {
+          ...snapshotOverrides,
+          ...snapshotBulkOverrides,
+        })
+      : snapshotOverrides;
     for (const dataset of selectedDatasets) {
       const index = runs.length + 1;
       runs.push({

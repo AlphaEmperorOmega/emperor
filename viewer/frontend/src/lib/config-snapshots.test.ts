@@ -551,7 +551,7 @@ describe("config snapshots", () => {
       {
         key: "stack_hidden_dim",
         label: "Hidden Dim",
-        value: "192",
+        value: "128",
         source: "override",
       },
       {
@@ -562,7 +562,7 @@ describe("config snapshots", () => {
       },
     ]);
     expect(plan?.runs[2].command).toContain("--logdir snapshots");
-    expect(plan?.runs[2].command).toContain("--config --stack-hidden-dim 192");
+    expect(plan?.runs[2].command).toContain("--config --stack-hidden-dim 128");
     expect(plan?.runs[2].command).not.toContain("wide");
     expect(plan?.runs[2].command).not.toContain("snap-wide");
   });
