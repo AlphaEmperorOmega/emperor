@@ -29,6 +29,18 @@ NEXT_PUBLIC_VIEWER_API_URL=http://127.0.0.1:9999
 `NEXT_PUBLIC_VIEWER_API_URL` is intentionally public because browser-side code
 uses it to call the API. Do not put secrets in `NEXT_PUBLIC_*` variables.
 
+Local development keeps the in-app API base URL switcher unlocked so you can
+point the browser at different loopback backends. Hosted builds should also set
+`NEXT_PUBLIC_VIEWER_API_ALLOWED_ORIGINS` to the API origins that may receive
+browser requests and bearer tokens:
+
+```bash
+NEXT_PUBLIC_VIEWER_API_ALLOWED_ORIGINS=https://api.example.com
+```
+
+Use a comma-separated list or JSON array when a hosted frontend may talk to more
+than one API origin.
+
 ## Development
 
 Start the development server:
@@ -79,6 +91,24 @@ must call an API endpoint other than `http://127.0.0.1:9999`, then build with:
 ```bash
 npm run build
 ```
+
+When `NEXT_PUBLIC_VIEWER_API_URL` points at a non-local API, the client locks API
+requests to that configured origin by default. Set
+`NEXT_PUBLIC_VIEWER_API_ALLOWED_ORIGINS` to make the allowlist explicit or to
+permit additional API origins. Values are baked into the browser bundle at build
+time.
+
+For a hosted bearer-auth setup, build the frontend with public API routing values
+only:
+
+```bash
+NEXT_PUBLIC_VIEWER_API_URL=https://api.example.com
+NEXT_PUBLIC_VIEWER_API_ALLOWED_ORIGINS='["https://api.example.com"]'
+```
+
+Set backend-only values such as `VIEWER_API_AUTH_MODE=bearer` and
+`VIEWER_API_TOKEN=<secret>` in the backend runtime environment, not in this
+frontend package.
 
 Deploy the resulting Next.js app with the platform or runtime used by the
 project. Keep backend-only secrets out of this frontend package and out of
