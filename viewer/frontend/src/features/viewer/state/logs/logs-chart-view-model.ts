@@ -44,6 +44,7 @@ export type LogsChartEmptyState = {
 };
 
 export type ScalarChartGridMode = "full" | "two" | "three";
+export type LogMetricChartLayoutGroupKey = Exclude<LogMetricGroupKey, "test">;
 export type {
   LogMetricDatasetRankingRow,
   LogMetricDirection,
@@ -168,6 +169,15 @@ const BEST_RUN_DEFAULT_TAGS = [
   "train/accuracy",
 ];
 
+const DEFAULT_LOG_METRIC_GRID_MODES: Record<
+  LogMetricChartLayoutGroupKey,
+  ScalarChartGridMode
+> = {
+  train: "full",
+  validation: "full",
+  other: "full",
+};
+
 export function defaultLogBestRunMetricTag(tagOptions: ChecklistOption[]) {
   const availableTags = new Set(tagOptions.map((option) => option.value));
   return (
@@ -277,7 +287,11 @@ function scalarQuerySnapshot(
 }
 
 export function useLogsChartViewModel(state: LogsWorkspaceState) {
-  const [gridMode, setGridMode] = useState<ScalarChartGridMode>("two");
+  const [accordionGridMode, setAccordionGridMode] =
+    useState<ScalarChartGridMode>("two");
+  const [metricGridModes, setMetricGridModes] = useState<
+    Record<LogMetricChartLayoutGroupKey, ScalarChartGridMode>
+  >(() => ({ ...DEFAULT_LOG_METRIC_GRID_MODES }));
   const [smoothing, setSmoothing] = useState(0);
   const [xMode, setXMode] = useState<ScalarXMode>("step");
   const [yScale, setYScale] = useState<ScalarYScale>("linear");
@@ -305,6 +319,14 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
   );
   const toggleConfusionMatrix = useCallback(
     () => setIsConfusionMatrixCollapsed((previous) => !previous),
+    [],
+  );
+  const handleMetricGridModeChange = useCallback(
+    (group: LogMetricChartLayoutGroupKey, mode: ScalarChartGridMode) => {
+      setMetricGridModes((current) =>
+        current[group] === mode ? current : { ...current, [group]: mode },
+      );
+    },
     [],
   );
   const selectedTagsByGroup = useMemo(
@@ -345,7 +367,6 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
   const testScalarQueryActive =
     state.enabled &&
     !tagsAreRefreshing &&
-    !state.collapsedMetricGroups.has("test") &&
     selectedTagsByGroup.test.length > 0 &&
     state.visibleRunIds.length > 0;
   const otherScalarQueryActive =
@@ -473,7 +494,7 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
   });
   const hasExpandedCheckpointChart =
     LOG_METRIC_GROUPS.some((group) => {
-      if (state.collapsedMetricGroups.has(group.key)) {
+      if (group.key !== "test" && state.collapsedMetricGroups.has(group.key)) {
         return false;
       }
       return selectedTagsByGroup[group.key].some((tag) => !isTestMetricTag(tag));
@@ -560,13 +581,13 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
     ],
   );
   const expandedSelectedTagCount = LOG_METRIC_GROUPS.reduce((total, group) => {
-    if (state.collapsedMetricGroups.has(group.key)) {
+    if (group.key === "test" || state.collapsedMetricGroups.has(group.key)) {
       return total;
     }
     return total + selectedTagsByGroup[group.key].length;
   }, 0);
   const expandedSelectedSeriesCount = LOG_METRIC_GROUPS.reduce((total, group) => {
-    if (state.collapsedMetricGroups.has(group.key)) {
+    if (group.key === "test" || state.collapsedMetricGroups.has(group.key)) {
       return total;
     }
     return (
@@ -650,8 +671,10 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
       state.visibleRunIds.length > 0,
     collapsedMetricGroups: state.collapsedMetricGroups,
     onToggleMetricGroup: state.toggleMetricGroup,
-    gridMode,
-    onGridModeChange: setGridMode,
+    accordionGridMode,
+    onAccordionGridModeChange: setAccordionGridMode,
+    metricGridModes,
+    onMetricGridModeChange: handleMetricGridModeChange,
     smoothing,
     onSmoothingChange: setSmoothing,
     xMode,

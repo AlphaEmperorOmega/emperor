@@ -121,7 +121,9 @@ describe("LogBestRunPanel", () => {
       />,
     );
 
-    const panel = screen.getByRole("heading", { name: "Best Run" }).closest("section");
+    const panel = screen
+      .getByRole("heading", { name: "Best Run by Selected Metric" })
+      .closest("section");
     expect(panel).toBeInstanceOf(HTMLElement);
     const section = panel as HTMLElement;
     expect(section).toHaveClass(

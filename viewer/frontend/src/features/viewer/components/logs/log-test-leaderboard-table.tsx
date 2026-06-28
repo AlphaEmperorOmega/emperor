@@ -52,19 +52,27 @@ function MetadataCell({ value }: { value: string }) {
   );
 }
 
-export function LogTestLeaderboardTable({
+function LogTestLeaderboardContent({
+  heading,
+  headingLevel = "h2",
+  tableAriaLabel,
   tag,
   series,
   runsById,
   runOrder,
   onSelectRun,
 }: {
+  heading?: string;
+  headingLevel?: "h2" | "h3";
+  tableAriaLabel?: string;
   tag: string;
   series: LogScalarSeries[];
   runsById: Map<string, LogRun>;
   runOrder: string[];
   onSelectRun: (runId: string) => void;
 }) {
+  const Heading = headingLevel;
+  const headingText = heading ?? tag;
   const direction = inferLogMetricDirection(tag);
   const rows = useMemo(
     () => buildTestLeaderboardRows({ tag, series, runsById, runOrder }),
@@ -74,10 +82,12 @@ export function LogTestLeaderboardTable({
   const hiddenRowCount = Math.max(0, rows.length - visibleRows.length);
 
   return (
-    <SurfacePanel as="section" padding="spacious" className="min-w-0">
+    <>
       <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="truncate text-sm font-bold text-ink">{tag}</h2>
+          <Heading className="truncate text-sm font-bold text-ink" title={headingText}>
+            {headingText}
+          </Heading>
           <div className="mt-0.5 font-mono text-xs text-ink-faint">
             {rows.length} {rows.length === 1 ? "run" : "runs"} ·{" "}
             {directionLabel(direction)}
@@ -89,7 +99,7 @@ export function LogTestLeaderboardTable({
       <div className="max-h-[420px] min-w-0 overflow-auto">
         <table
           className="w-full min-w-[920px] border-separate border-spacing-0 text-left text-xs"
-          aria-label={`${tag} test leaderboard`}
+          aria-label={tableAriaLabel ?? `${tag} test leaderboard`}
         >
           <thead className="sticky top-0 z-10 bg-bg-2/95 text-[11px] uppercase tracking-[0.08em] text-ink-faint">
             <tr>
@@ -170,6 +180,65 @@ export function LogTestLeaderboardTable({
           Showing top {visibleRows.length} of {rows.length} runs.
         </div>
       )}
+    </>
+  );
+}
+
+export function LogTestLeaderboardSection({
+  heading,
+  tableAriaLabel,
+  tag,
+  series,
+  runsById,
+  runOrder,
+  onSelectRun,
+}: {
+  heading?: string;
+  tableAriaLabel?: string;
+  tag: string;
+  series: LogScalarSeries[];
+  runsById: Map<string, LogRun>;
+  runOrder: string[];
+  onSelectRun: (runId: string) => void;
+}) {
+  return (
+    <section className="grid min-w-0 gap-3">
+      <LogTestLeaderboardContent
+        heading={heading}
+        headingLevel="h3"
+        tableAriaLabel={tableAriaLabel}
+        tag={tag}
+        series={series}
+        runsById={runsById}
+        runOrder={runOrder}
+        onSelectRun={onSelectRun}
+      />
+    </section>
+  );
+}
+
+export function LogTestLeaderboardTable({
+  tag,
+  series,
+  runsById,
+  runOrder,
+  onSelectRun,
+}: {
+  tag: string;
+  series: LogScalarSeries[];
+  runsById: Map<string, LogRun>;
+  runOrder: string[];
+  onSelectRun: (runId: string) => void;
+}) {
+  return (
+    <SurfacePanel as="section" padding="spacious" className="min-w-0">
+      <LogTestLeaderboardContent
+        tag={tag}
+        series={series}
+        runsById={runsById}
+        runOrder={runOrder}
+        onSelectRun={onSelectRun}
+      />
     </SurfacePanel>
   );
 }
