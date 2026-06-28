@@ -193,7 +193,7 @@ class LogRunQueryServiceTests(unittest.TestCase):
                 return BatchAccumulator()
 
             with patch(
-                "viewer.backend.log_runs.load_event_accumulator",
+                "viewer.backend.log_run_query.load_event_accumulator",
                 load_accumulator,
             ):
                 service.read_tags(run_dir)
