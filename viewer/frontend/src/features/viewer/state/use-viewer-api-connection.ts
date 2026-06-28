@@ -9,6 +9,7 @@ import {
 import {
   type PreviewInspectionRequest,
 } from "@/features/viewer/state/graph-monitor/use-preview-inspection";
+import { viewerQueryKeys } from "@/lib/query-keys";
 
 type PreviewRefreshController = {
   previewRequest: PreviewInspectionRequest | null;
@@ -32,6 +33,7 @@ export function useViewerApiConnectionSwitch({
       clearPreview();
       const nextApiBaseUrl = changeApiBaseUrl();
       setApiBaseUrlState(nextApiBaseUrl);
+      queryClient.removeQueries({ queryKey: viewerQueryKeys.previewInspections() });
       void queryClient.invalidateQueries({ refetchType: "active" });
       if (previousPreviewRequest) {
         requestPreview(previousPreviewRequest);

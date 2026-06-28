@@ -1,10 +1,11 @@
 import { useCallback, useMemo, useRef, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   inspectModel,
   type InspectResponse,
 } from "@/lib/api";
 import { type OverrideValues } from "@/lib/config";
+import { viewerQueryKeys } from "@/lib/query-keys";
 
 export type PreviewInspectionRequest = {
   modelType: string;
@@ -45,6 +46,8 @@ function previewInspectionPayload(request: PreviewInspectionRequest) {
   return request.logRunId ? { ...payload, logRunId: request.logRunId } : payload;
 }
 
+const PREVIEW_INSPECTION_STALE_TIME_MS = 5 * 60_000;
+
 function presetIdentityKey(preset: string) {
   return preset.toLowerCase().replace(/[^a-z0-9]+/g, "");
 }
@@ -69,56 +72,70 @@ function assertPreviewIdentity<
 }
 
 export function usePreviewInspectionState() {
+  const queryClient = useQueryClient();
   const [graph, setGraph] = useState<InspectResponse | undefined>();
   const [previewRequest, setPreviewRequest] =
     useState<PreviewInspectionRequest | null>(null);
   const [previewRequestKey, setPreviewRequestKey] = useState<string | null>(null);
+  const [isBuilding, setIsBuilding] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
   const requestIdRef = useRef(0);
-  const {
-    mutate,
-    reset,
-    isPending,
-    isError,
-    error,
-  } = useMutation({
-    mutationFn: async (request: PreviewInspectionRequest) =>
-      assertPreviewIdentity(request, await inspectModel(previewInspectionPayload(request))),
-  });
 
   const clearPreview = useCallback(() => {
     requestIdRef.current += 1;
     setGraph(undefined);
     setPreviewRequest(null);
     setPreviewRequestKey(null);
-    reset();
-  }, [reset]);
+    setIsBuilding(false);
+    setError(null);
+  }, []);
 
   const requestPreview = useCallback(
     (request: PreviewInspectionRequest) => {
       requestIdRef.current += 1;
       const requestId = requestIdRef.current;
       const requestKey = previewInspectionRequestKey(request);
-      setGraph(undefined);
+      const queryKey = viewerQueryKeys.previewInspection(requestKey);
       setPreviewRequest(request);
       setPreviewRequestKey(requestKey);
-      mutate(request, {
-        onSuccess: (response) => {
+      setIsBuilding(true);
+      setError(null);
+      void queryClient
+        .fetchQuery({
+          queryKey,
+          queryFn: async () =>
+            assertPreviewIdentity(
+              request,
+              await inspectModel(previewInspectionPayload(request)),
+            ),
+          staleTime: PREVIEW_INSPECTION_STALE_TIME_MS,
+        })
+        .then((response) => {
           if (requestIdRef.current === requestId) {
             setGraph(response);
           }
-        },
-      });
+        })
+        .catch((caught: unknown) => {
+          if (requestIdRef.current === requestId) {
+            setError(caught instanceof Error ? caught : new Error(String(caught)));
+          }
+        })
+        .finally(() => {
+          if (requestIdRef.current === requestId) {
+            setIsBuilding(false);
+          }
+        });
     },
-    [mutate],
+    [queryClient],
   );
 
   const previewInspection = useMemo(
     () => ({
-      isBuilding: isPending,
-      isError,
+      isBuilding,
+      isError: Boolean(error),
       error,
     }),
-    [error, isError, isPending],
+    [error, isBuilding],
   );
 
   return {
