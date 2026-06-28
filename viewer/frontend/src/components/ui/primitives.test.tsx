@@ -10,9 +10,9 @@ import { Input } from "@/components/ui/input";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Select } from "@/components/ui/select";
 import { StatusDot } from "@/components/ui/status-dot";
+import { SurfacePanel } from "@/components/ui/surface-panel";
 import { Switch } from "@/components/ui/switch";
 import { MetricCard } from "@/features/viewer/components/shared/metric-card";
-import { SurfacePanel } from "@/features/viewer/components/shared/surface-panel";
 
 // Render + role/behaviour smoke tests for the shared primitives, pinning the
 // current public contract before they are reused more widely in Phase 1.
