@@ -172,8 +172,8 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
       aria-label="Training workspace"
       className="h-full min-h-[560px] min-w-0 overflow-hidden bg-[linear-gradient(180deg,rgba(13,12,22,0.72),rgba(8,8,14,0.88))] lg:min-h-0"
     >
-      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-x-auto overflow-y-hidden bg-bg-2/90 px-4 py-3 sm:px-5">
-        <div className="grid gap-2 empty:hidden">
+      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-x-auto overflow-y-hidden bg-bg-2/90 px-4 py-3 sm:px-5">
+        <div className="mb-3 grid gap-2 empty:hidden">
           {trainingError && (
             <InlineStatus tone="danger" compact role="alert">
               {trainingError}
@@ -185,10 +185,10 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
             </InlineStatus>
           )}
         </div>
-        <div className="grid min-h-0 min-w-[920px] gap-3 grid-cols-[minmax(300px,340px)_minmax(22rem,1fr)_minmax(280px,360px)]">
+        <div className="row-start-2 grid h-full min-h-0 min-w-[920px] grid-cols-[minmax(300px,340px)_minmax(22rem,1fr)_minmax(280px,360px)] items-stretch gap-3 overflow-y-hidden">
             <aside
               aria-label="Training Setup Sidebar"
-              className="grid min-h-0 content-start gap-4 overflow-y-auto pr-1"
+              className="grid h-full min-h-0 content-start gap-4 overflow-y-auto pr-1"
             >
               {setupLockMessage && (
                 <InlineStatus tone="warning" compact>
@@ -333,7 +333,7 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
 
             <main
               aria-label="Training Run List"
-              className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3"
+              className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden"
             >
               <header className="grid gap-3 border-b border-line px-4 py-3 backdrop-blur-xl sm:px-[22px] xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
                 <div className="grid min-w-0 gap-1.5">
@@ -440,7 +440,7 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
             <aside
               aria-label="Training Status Sidebar"
               aria-live="polite"
-              className="grid min-h-0 content-start gap-3 overflow-y-auto pr-1"
+              className="grid h-full min-h-0 content-start gap-3 overflow-y-auto pr-1"
             >
               <TrainingRunPlanCard
                 plan={progressRunPlan}

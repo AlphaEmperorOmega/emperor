@@ -109,7 +109,7 @@ export function ViewerWorkspaceMain({
 
   if (activeWorkspace === "training") {
     return (
-      <div className="h-full min-h-[560px] min-w-0 overflow-hidden lg:col-span-3 lg:min-h-0">
+      <div className="grid h-full min-h-[560px] min-w-0 grid-rows-[minmax(0,1fr)] overflow-hidden lg:col-span-3 lg:min-h-0">
         <ConnectedTrainingWorkspace onOpenFullConfig={onOpenFullConfig} />
       </div>
     );
