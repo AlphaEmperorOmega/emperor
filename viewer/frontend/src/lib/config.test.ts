@@ -759,17 +759,11 @@ describe("config section controls", () => {
     expect(stackEnabled.has("mask_generator_stack_hidden_dim")).toBe(false);
   });
 
-  it("uses adaptive flags and divider groups for boundary projector sections", () => {
+  it("uses divider groups for boundary projector sections", () => {
     const sections: ConfigSection[] = [
       {
         title: "Input Boundary Projector Options",
         fields: [
-          field({
-            key: "input_layer_adaptive_flag",
-            type: "bool",
-            default: false,
-            section: "Input Boundary Projector Options",
-          }),
           field({
             key: "input_layer_weight_option",
             type: "class",
@@ -798,21 +792,11 @@ describe("config section controls", () => {
             nullable: true,
             section: "Input Boundary Projector Options",
           }),
-          field({
-            key: "input_layer_adaptive_generator_stack_hidden_dim",
-            section: "Input Boundary Projector Options",
-          }),
         ],
       },
       {
         title: "Output Boundary Projector Options",
         fields: [
-          field({
-            key: "output_layer_adaptive_flag",
-            type: "bool",
-            default: false,
-            section: "Output Boundary Projector Options",
-          }),
           field({
             key: "output_layer_weight_option",
             type: "class",
@@ -825,16 +809,13 @@ describe("config section controls", () => {
     ];
 
     const [inputSection, outputSection] = deriveNestedConfigSections(sections);
-    const inputBodyFields = inputSection.fields.filter(
-      (item) => item.key !== inputSection.controlFieldKey,
-    );
     const groups = boundaryProjectorFieldGroups(
       inputSection.title,
-      inputBodyFields,
+      inputSection.fields,
     );
 
-    expect(inputSection.controlFieldKey).toBe("input_layer_adaptive_flag");
-    expect(outputSection.controlFieldKey).toBe("output_layer_adaptive_flag");
+    expect(inputSection.controlFieldKey).toBeUndefined();
+    expect(outputSection.controlFieldKey).toBeUndefined();
     expect(inputSection.children ?? []).toEqual([]);
     expect(outputSection.children ?? []).toEqual([]);
     expect(groups?.map((group) => group.title)).toEqual([
@@ -842,30 +823,16 @@ describe("config section controls", () => {
       "Bias",
       "Diagonal",
       "Mask",
-      "Adaptive Generator Stack",
     ]);
     expect(groups?.map((group) => group.fields.map((item) => item.key))).toEqual([
       ["input_layer_weight_option"],
       ["input_layer_bias_option"],
       ["input_layer_diagonal_option"],
       ["input_layer_row_mask_option"],
-      ["input_layer_adaptive_generator_stack_hidden_dim"],
     ]);
 
     const disabledByDefault = disabledConfigFieldReasons(sections, {});
-    expect(disabledByDefault.has("input_layer_adaptive_flag")).toBe(false);
-    expect(disabledByDefault.get("input_layer_weight_option")).toContain(
-      "input_layer_adaptive_flag",
-    );
-    expect(disabledByDefault.get("output_layer_weight_option")).toContain(
-      "output_layer_adaptive_flag",
-    );
-
-    const enabled = disabledConfigFieldReasons(sections, {
-      input_layer_adaptive_flag: "true",
-      output_layer_adaptive_flag: "true",
-    });
-    expect(enabled.has("input_layer_weight_option")).toBe(false);
-    expect(enabled.has("output_layer_weight_option")).toBe(false);
+    expect(disabledByDefault.has("input_layer_weight_option")).toBe(false);
+    expect(disabledByDefault.has("output_layer_weight_option")).toBe(false);
   });
 });

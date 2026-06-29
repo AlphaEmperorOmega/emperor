@@ -100,8 +100,6 @@ const CONTROLLED_SECTION_FLAG_KEYS_BY_TITLE = new Map([
   ["Diagonal Generator Stack Options", "diagonal_generator_stack_independent_flag"],
   ["Mask Options", "mask_option_flag"],
   ["Mask Stack Options", "mask_generator_stack_independent_flag"],
-  ["Input Boundary Projector Options", "input_layer_adaptive_flag"],
-  ["Output Boundary Projector Options", "output_layer_adaptive_flag"],
 ]);
 
 const FALLBACK_CONTROLLED_SECTION_FLAG_KEYS = new Set([
@@ -584,9 +582,6 @@ function boundaryProjectorGroupTitle(prefix: string, fieldKey: string) {
   ) {
     return "Mask";
   }
-  if (key.startsWith(`${prefix}adaptive_generator_stack_`)) {
-    return "Adaptive Generator Stack";
-  }
   return undefined;
 }
 
@@ -605,7 +600,6 @@ export function boundaryProjectorFieldGroups(
       "Bias",
       "Diagonal",
       "Mask",
-      "Adaptive Generator Stack",
     ].map((title) => [title, [] as ConfigField[]]),
   );
 
