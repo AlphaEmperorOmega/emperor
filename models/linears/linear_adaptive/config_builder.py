@@ -8,12 +8,13 @@ from emperor.base.layer.config import (
     LayerStackConfig,
 )
 from emperor.base.layer.gate import GateConfig, LayerGateOptions
+from models.linears.linear_adaptive._boundary_config_factory import (
+    BoundaryConfigFactory,
+    BoundaryLayerOptions,
+)
 from models.linears.linear_adaptive._control_config_factory import ControlConfigFactory
 from models.linears.linear_adaptive.experiment_config import ExperimentConfig
-from emperor.linears.core.config import AdaptiveLinearLayerConfig, LinearLayerConfig
-from emperor.augmentations.adaptive_parameters.config import (
-    AdaptiveParameterAugmentationConfig,
-)
+from emperor.linears.core.config import LinearLayerConfig
 from emperor.augmentations.adaptive_parameters.core.bias import (
     DynamicBiasConfig,
     WeightedBankDynamicBiasConfig,
@@ -57,31 +58,6 @@ from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
-    from emperor.halting.config import HaltingConfig
-
-
-@dataclass(frozen=True)
-class BoundaryLayerOptions:
-    weight_option: type[DynamicWeightConfig] | None
-    weight_generator_depth: DynamicDepthOptions
-    weight_decay_schedule: WeightDecayScheduleOptions
-    weight_decay_rate: float
-    weight_decay_warmup_batches: int
-    weight_normalization_option: WeightNormalizationOptions
-    weight_normalization_position_option: WeightNormalizationPositionOptions
-    weight_bank_expansion_factor: BankExpansionFactorOptions
-    bias_option: type[DynamicBiasConfig] | None
-    bias_decay_schedule: WeightDecayScheduleOptions
-    bias_decay_rate: float
-    bias_decay_warmup_batches: int
-    bias_bank_expansion_factor: BankExpansionFactorOptions
-    diagonal_option: type[DynamicDiagonalConfig] | None
-    row_mask_option: type[AxisMaskConfig] | None
-    mask_dimension_option: MaskDimensionOptions
-    mask_threshold: float
-    mask_surrogate_scale: float
-    mask_floor: float
-    mask_transition_width: float
 
 
 @dataclass(frozen=True)
@@ -851,25 +827,8 @@ class LinearAdaptiveConfigBuilder:
     def build(self) -> "ModelConfig":
         from emperor.config import ModelConfig
 
-        input_model_config = self._build_boundary_layer_config(
-            options=self.input_boundary_options,
-            activation=self.stack_activation,
-            layer_norm_position=LayerNormPositionOptions.DISABLED,
-            dropout_probability=0.0,
-            gate_config=None,
-            halting_config=None,
-        )
-
-        model_config = ControlConfigFactory(self).build()
-
-        output_model_config = self._build_boundary_layer_config(
-            options=self.output_boundary_options,
-            activation=ActivationOptions.DISABLED,
-            layer_norm_position=LayerNormPositionOptions.DISABLED,
-            dropout_probability=0.0,
-            gate_config=None,
-            halting_config=None,
-        )
+        boundary_factory = BoundaryConfigFactory(self)
+        control_factory = ControlConfigFactory(self)
 
         return ModelConfig(
             learning_rate=self.learning_rate,
@@ -878,69 +837,9 @@ class LinearAdaptiveConfigBuilder:
             hidden_dim=self.hidden_dim,
             output_dim=self.output_dim,
             experiment_config=ExperimentConfig(
-                input_model_config=input_model_config,
-                model_config=model_config,
-                output_model_config=output_model_config,
-            ),
-        )
-
-    def _build_boundary_layer_config(
-        self,
-        options: BoundaryLayerOptions,
-        activation: ActivationOptions,
-        layer_norm_position: LayerNormPositionOptions,
-        dropout_probability: float,
-        gate_config: GateConfig | None,
-        halting_config: "HaltingConfig | None",
-    ) -> LayerConfig:
-        return LayerConfig(
-            activation=activation,
-            layer_norm_position=layer_norm_position,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
-            dropout_probability=dropout_probability,
-            gate_config=gate_config,
-            halting_config=halting_config,
-            layer_model_config=self._build_boundary_layer_model_config(options),
-        )
-
-    def _build_boundary_layer_model_config(
-        self,
-        options: BoundaryLayerOptions,
-    ) -> AdaptiveLinearLayerConfig:
-        return AdaptiveLinearLayerConfig(
-            bias_flag=self.bias_flag,
-            adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
-                weight_config=self._build_weight_config_from_options(
-                    weight_option=options.weight_option,
-                    generator_depth=options.weight_generator_depth,
-                    decay_schedule=options.weight_decay_schedule,
-                    decay_rate=options.weight_decay_rate,
-                    decay_warmup_batches=options.weight_decay_warmup_batches,
-                    normalization_option=options.weight_normalization_option,
-                    normalization_position_option=(
-                        options.weight_normalization_position_option
-                    ),
-                    bank_expansion_factor=options.weight_bank_expansion_factor,
-                ),
-                bias_config=self._build_bias_config_from_options(
-                    bias_option=options.bias_option,
-                    decay_schedule=options.bias_decay_schedule,
-                    decay_rate=options.bias_decay_rate,
-                    decay_warmup_batches=options.bias_decay_warmup_batches,
-                    bank_expansion_factor=options.bias_bank_expansion_factor,
-                ),
-                diagonal_config=self._build_diagonal_config_from_option(
-                    options.diagonal_option
-                ),
-                mask_config=self._build_mask_config_from_options(
-                    row_mask_option=options.row_mask_option,
-                    mask_dimension_option=options.mask_dimension_option,
-                    mask_threshold=options.mask_threshold,
-                    mask_surrogate_scale=options.mask_surrogate_scale,
-                    mask_floor=options.mask_floor,
-                    mask_transition_width=options.mask_transition_width,
-                ),
-                model_config=self._build_model_config(),
+                input_model_config=boundary_factory.build_input_model_config(),
+                model_config=control_factory.build(),
+                output_model_config=boundary_factory.build_output_model_config(),
             ),
         )
 
