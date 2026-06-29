@@ -20,6 +20,7 @@ MODEL_PARAM_ALIASES = {
     "adaptive_submodule_stack_apply_output_pipeline_flag": (
         "adaptive_generator_stack_apply_output_pipeline_flag"
     ),
+    "adaptive_submodule_stack_bias_flag": "adaptive_generator_stack_bias_flag",
     "adaptive_submodule_stack_dropout_probability": (
         "adaptive_generator_stack_dropout_probability"
     ),

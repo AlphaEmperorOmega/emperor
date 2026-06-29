@@ -314,8 +314,9 @@ class InspectorSchemaTests(unittest.TestCase):
             vit_fields["positional_embedding_option"]["default"],
             "ImageLearnedPositionalEmbeddingConfig",
         )
-        self.assertFalse(adaptive_fields["input_layer_adaptive_flag"]["default"])
-        self.assertFalse(adaptive_fields["output_layer_adaptive_flag"]["default"])
+        self.assertFalse(
+            any(key.endswith("_layer_adaptive_flag") for key in adaptive_fields)
+        )
 
     def test_linear_schemas_do_not_expose_halting_output_dims(self) -> None:
         removed_field_keys = {
@@ -529,22 +530,28 @@ class InspectorSchemaTests(unittest.TestCase):
             "Mask Stack Options",
         )
 
-    def test_config_schema_exposes_boundary_projector_adaptive_flags(self) -> None:
+    def test_config_schema_exposes_boundary_projector_adaptive_options(self) -> None:
         fields = _fields_by_key(config_schema("linears/linear_adaptive"))
 
         self.assertNotIn("input_layer_model_option", fields)
         self.assertNotIn("output_layer_model_option", fields)
-        expected_flags = {
-            "input_layer_adaptive_flag": "Input Boundary Projector Options",
-            "output_layer_adaptive_flag": "Output Boundary Projector Options",
+        self.assertFalse(any(key.endswith("_layer_adaptive_flag") for key in fields))
+        expected_options = {
+            "input_layer_weight_option": "Input Boundary Projector Options",
+            "input_layer_bias_option": "Input Boundary Projector Options",
+            "input_layer_diagonal_option": "Input Boundary Projector Options",
+            "input_layer_row_mask_option": "Input Boundary Projector Options",
+            "output_layer_weight_option": "Output Boundary Projector Options",
+            "output_layer_bias_option": "Output Boundary Projector Options",
+            "output_layer_diagonal_option": "Output Boundary Projector Options",
+            "output_layer_row_mask_option": "Output Boundary Projector Options",
         }
-        for field_key, section in expected_flags.items():
+        for field_key, section in expected_options.items():
             with self.subTest(field_key=field_key):
                 self.assertEqual(fields[field_key]["section"], section)
-                self.assertEqual(fields[field_key]["type"], "bool")
-                self.assertFalse(fields[field_key]["default"])
-                self.assertFalse(fields[field_key]["nullable"])
-                self.assertEqual(fields[field_key]["choices"], [True, False])
+                self.assertEqual(fields[field_key]["type"], "class")
+                self.assertIsNone(fields[field_key]["default"])
+                self.assertTrue(fields[field_key]["nullable"])
                 self.assertNotIn("searchChoices", fields[field_key])
 
     def test_config_schema_exposes_nullable_controller_stack_overrides(self) -> None:
@@ -799,13 +806,12 @@ class InspectorSchemaTests(unittest.TestCase):
             linear_axes["stack_activation"]["values"],
             ["RELU", "LEAKY_RELU", "ELU", "GELU", "TANH"],
         )
-        self.assertEqual(
-            adaptive_axes["input_layer_adaptive_flag"]["values"],
-            [False, True],
+        self.assertFalse(
+            any(key.endswith("_layer_adaptive_flag") for key in adaptive_axes)
         )
         self.assertEqual(
-            adaptive_axes["output_layer_adaptive_flag"]["values"],
-            [False, True],
+            adaptive_axes["adaptive_generator_stack_num_layers"]["values"],
+            [1, 2, 3],
         )
 
     def test_search_space_schema_marks_preset_owned_axes_locked(self) -> None:

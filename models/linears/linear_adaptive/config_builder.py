@@ -57,11 +57,11 @@ from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
+    from emperor.halting.config import HaltingConfig
 
 
 @dataclass(frozen=True)
 class BoundaryLayerOptions:
-    adaptive_flag: bool
     weight_option: type[DynamicWeightConfig] | None
     weight_generator_depth: DynamicDepthOptions
     weight_decay_schedule: WeightDecayScheduleOptions
@@ -82,14 +82,6 @@ class BoundaryLayerOptions:
     mask_surrogate_scale: float
     mask_floor: float
     mask_transition_width: float
-    adaptive_generator_stack_num_layers: int
-    adaptive_generator_stack_hidden_dim: int
-    adaptive_generator_stack_activation: ActivationOptions
-    adaptive_generator_stack_residual_connection_option: ResidualConnectionOptions
-    adaptive_generator_stack_dropout_probability: float
-    adaptive_generator_stack_layer_norm_position: LayerNormPositionOptions
-    adaptive_generator_stack_last_layer_bias_option: LastLayerBiasOptions
-    adaptive_generator_stack_apply_output_pipeline_flag: bool
 
 
 @dataclass(frozen=True)
@@ -426,7 +418,6 @@ class LinearAdaptiveConfigBuilder:
             config.RECURRENT_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG
         ),
         recurrent_halting_stack_bias_flag: bool | None = (config.RECURRENT_HALTING_STACK_BIAS_FLAG),
-        input_layer_adaptive_flag: bool = config.INPUT_LAYER_ADAPTIVE_FLAG,
         input_layer_weight_option: type[DynamicWeightConfig] | None = (
             config.INPUT_LAYER_WEIGHT_OPTION
         ),
@@ -479,31 +470,6 @@ class LinearAdaptiveConfigBuilder:
         input_layer_mask_transition_width: float = (
             config.INPUT_LAYER_MASK_TRANSITION_WIDTH
         ),
-        input_layer_adaptive_generator_stack_num_layers: int = (
-            config.INPUT_LAYER_ADAPTIVE_GENERATOR_STACK_NUM_LAYERS
-        ),
-        input_layer_adaptive_generator_stack_hidden_dim: int = (
-            config.INPUT_LAYER_ADAPTIVE_GENERATOR_STACK_HIDDEN_DIM
-        ),
-        input_layer_adaptive_generator_stack_activation: ActivationOptions = (
-            config.INPUT_LAYER_ADAPTIVE_GENERATOR_STACK_ACTIVATION
-        ),
-        input_layer_adaptive_generator_stack_residual_connection_option: ResidualConnectionOptions = (
-            config.INPUT_LAYER_ADAPTIVE_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION
-        ),
-        input_layer_adaptive_generator_stack_dropout_probability: float = (
-            config.INPUT_LAYER_ADAPTIVE_GENERATOR_STACK_DROPOUT_PROBABILITY
-        ),
-        input_layer_adaptive_generator_stack_layer_norm_position: LayerNormPositionOptions = (
-            config.INPUT_LAYER_ADAPTIVE_GENERATOR_STACK_LAYER_NORM_POSITION
-        ),
-        input_layer_adaptive_generator_stack_last_layer_bias_option: LastLayerBiasOptions = (
-            config.INPUT_LAYER_ADAPTIVE_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION
-        ),
-        input_layer_adaptive_generator_stack_apply_output_pipeline_flag: bool = (
-            config.INPUT_LAYER_ADAPTIVE_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG
-        ),
-        output_layer_adaptive_flag: bool = config.OUTPUT_LAYER_ADAPTIVE_FLAG,
         output_layer_weight_option: type[DynamicWeightConfig] | None = (
             config.OUTPUT_LAYER_WEIGHT_OPTION
         ),
@@ -555,30 +521,6 @@ class LinearAdaptiveConfigBuilder:
         output_layer_mask_floor: float = config.OUTPUT_LAYER_MASK_FLOOR,
         output_layer_mask_transition_width: float = (
             config.OUTPUT_LAYER_MASK_TRANSITION_WIDTH
-        ),
-        output_layer_adaptive_generator_stack_num_layers: int = (
-            config.OUTPUT_LAYER_ADAPTIVE_GENERATOR_STACK_NUM_LAYERS
-        ),
-        output_layer_adaptive_generator_stack_hidden_dim: int = (
-            config.OUTPUT_LAYER_ADAPTIVE_GENERATOR_STACK_HIDDEN_DIM
-        ),
-        output_layer_adaptive_generator_stack_activation: ActivationOptions = (
-            config.OUTPUT_LAYER_ADAPTIVE_GENERATOR_STACK_ACTIVATION
-        ),
-        output_layer_adaptive_generator_stack_residual_connection_option: ResidualConnectionOptions = (
-            config.OUTPUT_LAYER_ADAPTIVE_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION
-        ),
-        output_layer_adaptive_generator_stack_dropout_probability: float = (
-            config.OUTPUT_LAYER_ADAPTIVE_GENERATOR_STACK_DROPOUT_PROBABILITY
-        ),
-        output_layer_adaptive_generator_stack_layer_norm_position: LayerNormPositionOptions = (
-            config.OUTPUT_LAYER_ADAPTIVE_GENERATOR_STACK_LAYER_NORM_POSITION
-        ),
-        output_layer_adaptive_generator_stack_last_layer_bias_option: LastLayerBiasOptions = (
-            config.OUTPUT_LAYER_ADAPTIVE_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION
-        ),
-        output_layer_adaptive_generator_stack_apply_output_pipeline_flag: bool = (
-            config.OUTPUT_LAYER_ADAPTIVE_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG
         ),
         shared_gate_config: GateConfig | None = None,
     ) -> None:
@@ -858,7 +800,6 @@ class LinearAdaptiveConfigBuilder:
         )
         self.recurrent_halting_stack_bias_flag = recurrent_halting_stack_bias_flag
         self.input_boundary_options = BoundaryLayerOptions(
-            adaptive_flag=input_layer_adaptive_flag,
             weight_option=input_layer_weight_option,
             weight_generator_depth=input_layer_weight_generator_depth,
             weight_decay_schedule=input_layer_weight_decay_schedule,
@@ -881,33 +822,8 @@ class LinearAdaptiveConfigBuilder:
             mask_surrogate_scale=input_layer_mask_surrogate_scale,
             mask_floor=input_layer_mask_floor,
             mask_transition_width=input_layer_mask_transition_width,
-            adaptive_generator_stack_num_layers=(
-                input_layer_adaptive_generator_stack_num_layers
-            ),
-            adaptive_generator_stack_hidden_dim=(
-                input_layer_adaptive_generator_stack_hidden_dim
-            ),
-            adaptive_generator_stack_activation=(
-                input_layer_adaptive_generator_stack_activation
-            ),
-            adaptive_generator_stack_residual_connection_option=(
-                input_layer_adaptive_generator_stack_residual_connection_option
-            ),
-            adaptive_generator_stack_dropout_probability=(
-                input_layer_adaptive_generator_stack_dropout_probability
-            ),
-            adaptive_generator_stack_layer_norm_position=(
-                input_layer_adaptive_generator_stack_layer_norm_position
-            ),
-            adaptive_generator_stack_last_layer_bias_option=(
-                input_layer_adaptive_generator_stack_last_layer_bias_option
-            ),
-            adaptive_generator_stack_apply_output_pipeline_flag=(
-                input_layer_adaptive_generator_stack_apply_output_pipeline_flag
-            ),
         )
         self.output_boundary_options = BoundaryLayerOptions(
-            adaptive_flag=output_layer_adaptive_flag,
             weight_option=output_layer_weight_option,
             weight_generator_depth=output_layer_weight_generator_depth,
             weight_decay_schedule=output_layer_weight_decay_schedule,
@@ -930,51 +846,29 @@ class LinearAdaptiveConfigBuilder:
             mask_surrogate_scale=output_layer_mask_surrogate_scale,
             mask_floor=output_layer_mask_floor,
             mask_transition_width=output_layer_mask_transition_width,
-            adaptive_generator_stack_num_layers=(
-                output_layer_adaptive_generator_stack_num_layers
-            ),
-            adaptive_generator_stack_hidden_dim=(
-                output_layer_adaptive_generator_stack_hidden_dim
-            ),
-            adaptive_generator_stack_activation=(
-                output_layer_adaptive_generator_stack_activation
-            ),
-            adaptive_generator_stack_residual_connection_option=(
-                output_layer_adaptive_generator_stack_residual_connection_option
-            ),
-            adaptive_generator_stack_dropout_probability=(
-                output_layer_adaptive_generator_stack_dropout_probability
-            ),
-            adaptive_generator_stack_layer_norm_position=(
-                output_layer_adaptive_generator_stack_layer_norm_position
-            ),
-            adaptive_generator_stack_last_layer_bias_option=(
-                output_layer_adaptive_generator_stack_last_layer_bias_option
-            ),
-            adaptive_generator_stack_apply_output_pipeline_flag=(
-                output_layer_adaptive_generator_stack_apply_output_pipeline_flag
-            ),
         )
 
     def build(self) -> "ModelConfig":
         from emperor.config import ModelConfig
 
         input_model_config = self._build_boundary_layer_config(
-            boundary_name="input",
             options=self.input_boundary_options,
             activation=self.stack_activation,
-            layer_norm_position=self.layer_norm_position,
-            dropout_probability=self.stack_dropout_probability,
+            layer_norm_position=LayerNormPositionOptions.DISABLED,
+            dropout_probability=0.0,
+            gate_config=None,
+            halting_config=None,
         )
 
         model_config = ControlConfigFactory(self).build()
 
         output_model_config = self._build_boundary_layer_config(
-            boundary_name="output",
             options=self.output_boundary_options,
             activation=ActivationOptions.DISABLED,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
             dropout_probability=0.0,
+            gate_config=None,
+            halting_config=None,
         )
 
         return ModelConfig(
@@ -992,33 +886,27 @@ class LinearAdaptiveConfigBuilder:
 
     def _build_boundary_layer_config(
         self,
-        boundary_name: str,
         options: BoundaryLayerOptions,
         activation: ActivationOptions,
         layer_norm_position: LayerNormPositionOptions,
         dropout_probability: float,
+        gate_config: GateConfig | None,
+        halting_config: "HaltingConfig | None",
     ) -> LayerConfig:
         return LayerConfig(
             activation=activation,
             layer_norm_position=layer_norm_position,
             residual_connection_option=ResidualConnectionOptions.DISABLED,
             dropout_probability=dropout_probability,
-            gate_config=None,
-            halting_config=None,
-            layer_model_config=self._build_boundary_layer_model_config(
-                boundary_name,
-                options,
-            ),
+            gate_config=gate_config,
+            halting_config=halting_config,
+            layer_model_config=self._build_boundary_layer_model_config(options),
         )
 
     def _build_boundary_layer_model_config(
         self,
-        boundary_name: str,
         options: BoundaryLayerOptions,
-    ) -> LinearLayerConfig | AdaptiveLinearLayerConfig:
-        self._validate_boundary_layer_options(boundary_name, options)
-        if not options.adaptive_flag:
-            return LinearLayerConfig(bias_flag=self.bias_flag)
+    ) -> AdaptiveLinearLayerConfig:
         return AdaptiveLinearLayerConfig(
             bias_flag=self.bias_flag,
             adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
@@ -1052,59 +940,9 @@ class LinearAdaptiveConfigBuilder:
                     mask_floor=options.mask_floor,
                     mask_transition_width=options.mask_transition_width,
                 ),
-                model_config=self._build_model_config_from_options(
-                    hidden_dim=options.adaptive_generator_stack_hidden_dim,
-                    num_layers=options.adaptive_generator_stack_num_layers,
-                    activation=options.adaptive_generator_stack_activation,
-                    residual_connection_option=options.adaptive_generator_stack_residual_connection_option,
-                    dropout_probability=(
-                        options.adaptive_generator_stack_dropout_probability
-                    ),
-                    layer_norm_position=(
-                        options.adaptive_generator_stack_layer_norm_position
-                    ),
-                    last_layer_bias_option=(
-                        options.adaptive_generator_stack_last_layer_bias_option
-                    ),
-                    apply_output_pipeline_flag=(
-                        options.adaptive_generator_stack_apply_output_pipeline_flag
-                    ),
-                    bias_flag=self.bias_flag,
-                ),
+                model_config=self._build_model_config(),
             ),
         )
-
-    def _validate_boundary_layer_options(
-        self,
-        boundary_name: str,
-        options: BoundaryLayerOptions,
-    ) -> None:
-        if type(options.adaptive_flag) is not bool:
-            raise ValueError(
-                f"{boundary_name}_layer_adaptive_flag must be a bool, "
-                f"received {type(options.adaptive_flag).__name__}."
-            )
-        if options.adaptive_flag:
-            return
-
-        adaptive_fields = {
-            f"{boundary_name}_layer_weight_option": options.weight_option,
-            f"{boundary_name}_layer_bias_option": options.bias_option,
-            f"{boundary_name}_layer_diagonal_option": options.diagonal_option,
-            f"{boundary_name}_layer_row_mask_option": options.row_mask_option,
-        }
-        enabled_fields = [
-            field_name
-            for field_name, field_value in adaptive_fields.items()
-            if field_value is not None
-        ]
-        if enabled_fields:
-            raise ValueError(
-                f"{boundary_name} boundary projector adaptive options require "
-                f"{boundary_name}_layer_adaptive_flag=True; "
-                f"received {', '.join(enabled_fields)} with a default linear "
-                "projector."
-            )
 
     @staticmethod
     def _enabled_component_option(

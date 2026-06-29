@@ -657,6 +657,42 @@ class InspectorGraphTests(unittest.TestCase):
             2,
         )
 
+    def test_checkpoint_shape_extractor_maps_boundary_generator_counts_to_global(
+        self,
+    ) -> None:
+        state_dict = checkpoint_state_dict(
+            input_dim=8,
+            hidden_dim=16,
+            output_dim=4,
+            layer_count=2,
+        )
+        for prefix in (
+            "input_model.model.adaptive_behaviour.weight_generator.model",
+            "output_model.model.adaptive_behaviour.weight_generator.model",
+        ):
+            for layer_index in range(3):
+                state_dict[
+                    f"{prefix}.layers.{layer_index}.model.weight_params"
+                ] = torch.zeros(16, 16)
+
+        checkpoint_shapes = checkpoint_graph_shapes_from_state_dict(state_dict)
+
+        self.assertIsNotNone(checkpoint_shapes)
+        if checkpoint_shapes is None:
+            self.fail("Expected checkpoint shape extraction to succeed.")
+        self.assertEqual(
+            checkpoint_shapes.config_overrides["adaptive_generator_stack_num_layers"],
+            3,
+        )
+        self.assertEqual(
+            [
+                key
+                for key in checkpoint_shapes.config_overrides
+                if key.endswith("_layer_adaptive_generator_stack_num_layers")
+            ],
+            [],
+        )
+
     def test_checkpoint_shape_extractor_infers_controller_hidden_dims_safely(
         self,
     ) -> None:

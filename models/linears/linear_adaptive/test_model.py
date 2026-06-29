@@ -134,7 +134,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
         self.assertEqual(cfg.output_dim, 4)
         self.assertIsInstance(
             cfg.experiment_config.input_model_config.layer_model_config,
-            LinearLayerConfig,
+            AdaptiveLinearLayerConfig,
         )
         self.assertIsInstance(
             cfg.experiment_config.model_config.layer_config.layer_model_config,
@@ -142,8 +142,80 @@ class TestAdaptiveLinearModel(unittest.TestCase):
         )
         self.assertIsInstance(
             cfg.experiment_config.output_model_config.layer_model_config,
-            LinearLayerConfig,
+            AdaptiveLinearLayerConfig,
         )
+
+    def test_boundary_layer_pipeline_matches_linear_projection_options(self):
+        cfg = LinearAdaptiveConfigBuilder(
+            input_dim=8,
+            stack_hidden_dim=16,
+            output_dim=4,
+            stack_activation=ActivationOptions.RELU,
+            layer_norm_position=LayerNormPositionOptions.AFTER,
+            stack_dropout_probability=0.35,
+            input_layer_weight_option=DualModelDynamicWeightConfig,
+            output_layer_weight_option=LowRankDynamicWeightConfig,
+            adaptive_generator_stack_hidden_dim=21,
+            adaptive_generator_stack_num_layers=3,
+            adaptive_generator_stack_activation=ActivationOptions.MISH,
+            adaptive_generator_stack_layer_norm_position=(
+                LayerNormPositionOptions.BEFORE
+            ),
+            adaptive_generator_stack_dropout_probability=0.2,
+            adaptive_generator_stack_last_layer_bias_option=(
+                LastLayerBiasOptions.DISABLED
+            ),
+            adaptive_generator_stack_apply_output_pipeline_flag=True,
+            adaptive_generator_stack_bias_flag=False,
+        ).build()
+
+        input_config = cfg.experiment_config.input_model_config
+        hidden_config = cfg.experiment_config.model_config.layer_config
+        output_config = cfg.experiment_config.output_model_config
+
+        self.assertEqual(input_config.activation, ActivationOptions.RELU)
+        self.assertEqual(
+            input_config.layer_norm_position,
+            LayerNormPositionOptions.DISABLED,
+        )
+        self.assertEqual(
+            input_config.residual_connection_option,
+            ResidualConnectionOptions.DISABLED,
+        )
+        self.assertEqual(input_config.dropout_probability, 0.0)
+        self.assertIsNone(input_config.gate_config)
+        self.assertIsNone(input_config.halting_config)
+        self.assertIsNone(input_config.memory_config)
+
+        self.assertEqual(output_config.activation, ActivationOptions.DISABLED)
+        self.assertEqual(
+            output_config.layer_norm_position,
+            LayerNormPositionOptions.DISABLED,
+        )
+        self.assertEqual(output_config.dropout_probability, 0.0)
+
+        self.assertEqual(
+            hidden_config.layer_norm_position,
+            LayerNormPositionOptions.AFTER,
+        )
+        self.assertEqual(hidden_config.dropout_probability, 0.35)
+
+        for layer_model_config in (
+            input_config.layer_model_config,
+            output_config.layer_model_config,
+        ):
+            self.assertIsInstance(layer_model_config, AdaptiveLinearLayerConfig)
+            self._assert_generator_stack(
+                layer_model_config.adaptive_augmentation_config.model_config,
+                hidden_dim=21,
+                num_layers=3,
+                activation=ActivationOptions.MISH,
+                layer_norm_position=LayerNormPositionOptions.BEFORE,
+                dropout_probability=0.2,
+                last_layer_bias_option=LastLayerBiasOptions.DISABLED,
+                apply_output_pipeline_flag=True,
+                bias_flag=False,
+            )
 
     def test_config_builder_applies_stack_bias_flag_to_layer_stack(self):
         cfg = LinearAdaptiveConfigBuilder(
@@ -190,25 +262,20 @@ class TestAdaptiveLinearModel(unittest.TestCase):
             activation=ActivationOptions.SIGMOID,
         )
 
-    def test_boundary_layer_adaptive_flags_can_differ(self):
+    def test_boundary_projectors_enable_adaptive_options_independently(self):
         cases = [
             (
-                True,
-                False,
                 "input_layer_weight_option",
+                "input",
             ),
             (
-                False,
-                True,
                 "output_layer_weight_option",
+                "output",
             ),
         ]
 
-        for input_flag, output_flag, boundary_weight_key in cases:
-            with self.subTest(
-                input_flag=input_flag,
-                output_flag=output_flag,
-            ):
+        for boundary_weight_key, enabled_boundary in cases:
+            with self.subTest(enabled_boundary=enabled_boundary):
                 boundary_kwargs = {
                     boundary_weight_key: DualModelDynamicWeightConfig,
                 }
@@ -218,8 +285,6 @@ class TestAdaptiveLinearModel(unittest.TestCase):
                     output_dim=4,
                     weight_option_flag=True,
                     weight_option=LowRankDynamicWeightConfig,
-                    input_layer_adaptive_flag=input_flag,
-                    output_layer_adaptive_flag=output_flag,
                     **boundary_kwargs,
                 ).build()
                 input_layer_model_config = (
@@ -230,24 +295,30 @@ class TestAdaptiveLinearModel(unittest.TestCase):
                 )
                 hidden_augmentation_config = cfg.experiment_config.model_config.layer_config.layer_model_config.adaptive_augmentation_config
 
-                expected_input_type = (
-                    AdaptiveLinearLayerConfig if input_flag else LinearLayerConfig
+                self.assertIsInstance(
+                    input_layer_model_config,
+                    AdaptiveLinearLayerConfig,
                 )
-                expected_output_type = (
-                    AdaptiveLinearLayerConfig if output_flag else LinearLayerConfig
+                self.assertIsInstance(
+                    output_layer_model_config,
+                    AdaptiveLinearLayerConfig,
                 )
-                self.assertIs(type(input_layer_model_config), expected_input_type)
-                self.assertIs(type(output_layer_model_config), expected_output_type)
                 self.assertIsInstance(
                     hidden_augmentation_config.weight_config,
                     LowRankDynamicWeightConfig,
                 )
-                if input_flag:
+                if enabled_boundary == "input":
                     self.assertIsInstance(
                         input_layer_model_config.adaptive_augmentation_config.weight_config,
                         DualModelDynamicWeightConfig,
                     )
-                if output_flag:
+                    self.assertIsNone(
+                        output_layer_model_config.adaptive_augmentation_config.weight_config
+                    )
+                if enabled_boundary == "output":
+                    self.assertIsNone(
+                        input_layer_model_config.adaptive_augmentation_config.weight_config
+                    )
                     self.assertIsInstance(
                         output_layer_model_config.adaptive_augmentation_config.weight_config,
                         DualModelDynamicWeightConfig,
@@ -257,21 +328,26 @@ class TestAdaptiveLinearModel(unittest.TestCase):
                 logits = output[0] if isinstance(output, tuple) else output
                 self.assertEqual(logits.shape, (2, 4))
 
-    def test_adaptive_boundary_projectors_can_disable_augmentation(self):
+    def test_boundary_projectors_default_to_empty_adaptive_augmentation(self):
         cfg = LinearAdaptiveConfigBuilder(
             input_dim=8,
             stack_hidden_dim=16,
             output_dim=4,
-            input_layer_adaptive_flag=True,
-            output_layer_adaptive_flag=True,
         ).build()
 
-        input_augmentation_config = cfg.experiment_config.input_model_config.layer_model_config.adaptive_augmentation_config
-        output_augmentation_config = cfg.experiment_config.output_model_config.layer_model_config.adaptive_augmentation_config
+        input_layer_model_config = (
+            cfg.experiment_config.input_model_config.layer_model_config
+        )
+        output_layer_model_config = (
+            cfg.experiment_config.output_model_config.layer_model_config
+        )
+
+        self.assertIsInstance(input_layer_model_config, AdaptiveLinearLayerConfig)
+        self.assertIsInstance(output_layer_model_config, AdaptiveLinearLayerConfig)
 
         for augmentation_config in (
-            input_augmentation_config,
-            output_augmentation_config,
+            input_layer_model_config.adaptive_augmentation_config,
+            output_layer_model_config.adaptive_augmentation_config,
         ):
             self.assertIsNone(augmentation_config.weight_config)
             self.assertIsNone(augmentation_config.bias_config)
@@ -282,97 +358,91 @@ class TestAdaptiveLinearModel(unittest.TestCase):
         logits = output[0] if isinstance(output, tuple) else output
         self.assertEqual(logits.shape, (2, 4))
 
-    def test_boundary_adaptive_options_require_adaptive_boundary_projector(self):
-        cases = [
-            (
-                "input_layer_weight_option",
-                {"input_layer_weight_option": DualModelDynamicWeightConfig},
-            ),
-            (
-                "input_layer_bias_option",
-                {"input_layer_bias_option": AdditiveDynamicBiasConfig},
-            ),
-            (
-                "input_layer_diagonal_option",
-                {"input_layer_diagonal_option": StandardDynamicDiagonalConfig},
-            ),
-            (
-                "input_layer_row_mask_option",
-                {"input_layer_row_mask_option": WeightInformedScoreAxisMaskConfig},
-            ),
-            (
-                "output_layer_weight_option",
-                {"output_layer_weight_option": DualModelDynamicWeightConfig},
-            ),
-            (
-                "output_layer_bias_option",
-                {"output_layer_bias_option": AdditiveDynamicBiasConfig},
-            ),
-            (
-                "output_layer_diagonal_option",
-                {"output_layer_diagonal_option": StandardDynamicDiagonalConfig},
-            ),
-            (
-                "output_layer_row_mask_option",
-                {"output_layer_row_mask_option": WeightInformedScoreAxisMaskConfig},
-            ),
-        ]
+    def test_empty_adaptive_boundary_projectors_behave_as_affine_layers(self):
+        cfg = LinearAdaptiveConfigBuilder(
+            input_dim=8,
+            stack_hidden_dim=16,
+            output_dim=4,
+        ).build()
+        model = Model(cfg)
 
-        for expected_field, kwargs in cases:
-            with self.subTest(expected_field=expected_field):
-                with self.assertRaises(ValueError) as context:
-                    LinearAdaptiveConfigBuilder(
-                        input_dim=8,
-                        stack_hidden_dim=16,
-                        output_dim=4,
-                        **kwargs,
-                    ).build()
-                expected_flag = (
-                    "input_layer_adaptive_flag"
-                    if expected_field.startswith("input_")
-                    else "output_layer_adaptive_flag"
-                )
-                message = str(context.exception)
-                self.assertIn(expected_field, message)
-                self.assertIn(f"{expected_flag}=True", message)
+        for boundary_model, X in (
+            (model.input_model.model, torch.randn(2, 8)),
+            (model.output_model.model, torch.randn(2, 16)),
+        ):
+            with self.subTest(boundary_model=boundary_model.__class__.__name__):
+                self.assertFalse(boundary_model.has_adaptive_augmentation)
+                self.assertIsNone(boundary_model.adaptive_behaviour)
 
-    def test_boundary_layer_adaptive_flags_are_searchable(self):
-        configs = ExperimentPresets().get_config(
-            ExperimentPreset.BASELINE,
-            config.DATASET_OPTIONS[0],
-            GridSearch(),
-            search_keys=[
-                "input_layer_adaptive_flag",
-                "output_layer_adaptive_flag",
-            ],
+                output = boundary_model(X)
+                expected = X @ boundary_model.weight_params
+                if boundary_model.bias_params is not None:
+                    expected = expected + boundary_model.bias_params
+
+                torch.testing.assert_close(output, expected)
+
+    def test_boundary_adaptive_projectors_inherit_shared_generator_stack(self):
+        cfg = LinearAdaptiveConfigBuilder(
+            input_dim=8,
+            stack_hidden_dim=16,
+            output_dim=4,
+            stack_bias_flag=True,
+            input_layer_weight_option=DualModelDynamicWeightConfig,
+            output_layer_weight_option=LowRankDynamicWeightConfig,
+            adaptive_generator_stack_hidden_dim=21,
+            adaptive_generator_stack_num_layers=3,
+            adaptive_generator_stack_activation=ActivationOptions.RELU,
+            adaptive_generator_stack_layer_norm_position=(
+                LayerNormPositionOptions.AFTER
+            ),
+            adaptive_generator_stack_dropout_probability=0.2,
+            adaptive_generator_stack_last_layer_bias_option=(
+                LastLayerBiasOptions.DISABLED
+            ),
+            adaptive_generator_stack_apply_output_pipeline_flag=True,
+            adaptive_generator_stack_bias_flag=False,
+        ).build()
+
+        input_layer_model_config = (
+            cfg.experiment_config.input_model_config.layer_model_config
         )
-        boundary_pairs = {
-            (
-                type(cfg.experiment_config.input_model_config.layer_model_config),
-                type(cfg.experiment_config.output_model_config.layer_model_config),
+        output_layer_model_config = (
+            cfg.experiment_config.output_model_config.layer_model_config
+        )
+
+        self.assertIsInstance(input_layer_model_config, AdaptiveLinearLayerConfig)
+        self.assertIsInstance(output_layer_model_config, AdaptiveLinearLayerConfig)
+        self.assertTrue(input_layer_model_config.bias_flag)
+        self.assertTrue(output_layer_model_config.bias_flag)
+        self.assertIsInstance(
+            input_layer_model_config.adaptive_augmentation_config.weight_config,
+            DualModelDynamicWeightConfig,
+        )
+        self.assertIsInstance(
+            output_layer_model_config.adaptive_augmentation_config.weight_config,
+            LowRankDynamicWeightConfig,
+        )
+        for layer_model_config in (
+            input_layer_model_config,
+            output_layer_model_config,
+        ):
+            augmentation_config = layer_model_config.adaptive_augmentation_config
+            self.assertIsNone(augmentation_config.weight_config.model_config)
+            self._assert_generator_stack(
+                augmentation_config.model_config,
+                hidden_dim=21,
+                num_layers=3,
+                activation=ActivationOptions.RELU,
+                layer_norm_position=LayerNormPositionOptions.AFTER,
+                dropout_probability=0.2,
+                last_layer_bias_option=LastLayerBiasOptions.DISABLED,
+                apply_output_pipeline_flag=True,
+                bias_flag=False,
             )
-            for cfg in configs
-        }
 
-        self.assertEqual(len(configs), 4)
-        self.assertEqual(
-            boundary_pairs,
-            {
-                (LinearLayerConfig, LinearLayerConfig),
-                (LinearLayerConfig, AdaptiveLinearLayerConfig),
-                (AdaptiveLinearLayerConfig, LinearLayerConfig),
-                (AdaptiveLinearLayerConfig, AdaptiveLinearLayerConfig),
-            },
-        )
-        self.assertTrue(
-            all(
-                isinstance(
-                    cfg.experiment_config.model_config.layer_config.layer_model_config,
-                    AdaptiveLinearLayerConfig,
-                )
-                for cfg in configs
-            )
-        )
+        output = Model(cfg)(torch.randn(2, 1, 2, 4))
+        logits = output[0] if isinstance(output, tuple) else output
+        self.assertEqual(logits.shape, (2, 4))
 
     def test_stack_layer_norm_position_is_searchable(self):
         configs = ExperimentPresets().get_config(
