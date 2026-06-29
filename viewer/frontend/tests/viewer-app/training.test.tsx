@@ -105,6 +105,23 @@ const searchLockPresetsResponse = {
   ],
 };
 
+const largePresetOptions = [
+  presetsResponse.presets[0],
+  ...Array.from({ length: 69 }, (_, index) => {
+    const number = index + 2;
+    return {
+      name: `adaptive-preset-${number}`,
+      label: `ADAPTIVE_PRESET_${number}`,
+      description: `Adaptive preset ${number}`,
+    };
+  }),
+];
+
+const largePresetsResponse = {
+  ...presetsResponse,
+  presets: largePresetOptions,
+};
+
 function searchSpaceWithPresetLocks(url: string) {
   const selectedPresets = new Set(
     (new URL(url, "http://testserver").searchParams.get("presets") ?? "")
@@ -1193,6 +1210,50 @@ describe("ViewerApp Training And Preview", () => {
         datasets: expect.arrayContaining(["Mnist", "Cifar10"]),
         logFolder: "multi_preset",
       });
+    });
+  });
+
+  it("selects all presets when more than fifty are available", async () => {
+    const { fetchMock } = installFetchMock({
+      presetsResponse: largePresetsResponse,
+    });
+    renderViewer();
+    const user = userEvent.setup();
+
+    const details = await expandedTrainingDetailsReady(user);
+    const allPresetsButton = within(details)
+      .getAllByRole("button", { name: /^All$/i })
+      .find((button) =>
+        button.parentElement?.textContent?.includes("Primary only"),
+      );
+    if (!(allPresetsButton instanceof HTMLElement)) {
+      throw new Error("Expected preset All button to render near Primary only");
+    }
+
+    await user.click(allPresetsButton);
+
+    await waitFor(() => {
+      expect(
+        within(details).getByRole("combobox", {
+          name: /^presets\s+70\s*\/\s*70 selected$/i,
+        }),
+      ).toBeInTheDocument();
+    });
+    expect(
+      within(details).getAllByText("70 planned runs").length,
+    ).toBeGreaterThan(0);
+
+    await waitFor(() => {
+      expect(
+        trainingRunPlanRequestBodies(fetchMock).at(-1)?.presets,
+      ).toHaveLength(70);
+    });
+    expect(trainingRunPlanRequestBodies(fetchMock).at(-1)).toMatchObject({
+      modelType: "linears",
+      model: "linear",
+      preset: "baseline",
+      presets: largePresetOptions.map((option) => option.name),
+      datasets: ["Mnist"],
     });
   });
 
