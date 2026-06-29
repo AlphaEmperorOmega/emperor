@@ -19,6 +19,7 @@ import {
   renderViewer,
   resetViewerAppTestState,
   schemaResponse,
+  schemaResponseWithDescriptions,
   scrollIntoViewMock,
   selectSearchableDropdownOption,
   selectTargetOption,
@@ -179,6 +180,7 @@ function configFixtureField({
   flag,
   label,
   section,
+  description,
   type,
   default: defaultValue,
   nullable,
@@ -193,6 +195,7 @@ function configFixtureField({
     flag: flag ?? `--${key.replace(/_/g, "-")}`,
     label: label ?? key.replace(/_/g, " "),
     section,
+    description: description ?? "",
     type,
     default: defaultValue,
     nullable: nullable ?? defaultValue === null,
@@ -1146,6 +1149,45 @@ describe("ViewerApp Full Config", () => {
     expectHeaderControlBeforeMetric(gateSection, "gate flag", "1 field");
     expect(within(dialog).queryByText("--stack-hidden-dim")).not.toBeInTheDocument();
     expect(within(dialog).queryByText("--gate-flag")).not.toBeInTheDocument();
+  });
+
+  it("shows backend field descriptions from the full config label help button", async () => {
+    installFetchMock({
+      schemaResponse: schemaResponseWithDescriptions({
+        stack_hidden_dim:
+          "Sets the hidden feature width used by the main layer stack.",
+      }),
+    });
+    renderViewer();
+    const user = userEvent.setup();
+
+    const dialog = await openFullConfig(user);
+    const helpButton = within(dialog).getByRole("button", {
+      name: /show description for stack hidden dim/i,
+    });
+    const tooltipId = helpButton.getAttribute("aria-describedby");
+    const tooltip = tooltipId ? document.getElementById(tooltipId) : null;
+
+    if (!(tooltip instanceof HTMLElement)) {
+      throw new Error("Expected field description tooltip to render");
+    }
+
+    expect(tooltip).toHaveClass("sr-only");
+    await user.hover(helpButton);
+    expect(tooltip).toHaveTextContent("hidden feature width");
+    expect(tooltip).not.toHaveClass("sr-only");
+    expect(tooltip).toHaveStyle({
+      width: "min(22rem, calc(100vw - 2rem))",
+      maxWidth: "calc(100vw - 2rem)",
+      overflowWrap: "normal",
+      wordBreak: "normal",
+    });
+    expect(tooltip).not.toHaveClass("w-max");
+
+    await user.unhover(helpButton);
+    expect(tooltip).toHaveClass("sr-only");
+    fireEvent.focus(helpButton);
+    expect(tooltip).not.toHaveClass("sr-only");
   });
 
   it("keeps layer stack-prefixed fields in the parent accordion", async () => {

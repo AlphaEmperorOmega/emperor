@@ -1,4 +1,4 @@
-import { type ReactNode, useId, useState } from "react";
+import { type CSSProperties, type ReactNode, useId, useState } from "react";
 import { cn } from "@/lib/utils";
 
 export type HoverTooltipTriggerProps = {
@@ -14,11 +14,13 @@ export function HoverTooltip({
   className,
   tooltip,
   tooltipClassName,
+  tooltipStyle,
 }: {
   children: (props: HoverTooltipTriggerProps) => ReactNode;
   className?: string;
   tooltip: string;
   tooltipClassName?: string;
+  tooltipStyle?: CSSProperties;
 }) {
   const [isTooltipVisible, setIsTooltipVisible] = useState(false);
   const tooltipId = useId();
@@ -36,6 +38,7 @@ export function HoverTooltip({
       <span
         id={tooltipId}
         role="tooltip"
+        style={isTooltipVisible ? tooltipStyle : undefined}
         className={cn(
           isTooltipVisible
             ? "pointer-events-none absolute top-[calc(100%+6px)] z-30 whitespace-nowrap rounded-[7px] border border-line-soft bg-panel px-2 py-1 font-sans text-[11px] font-bold leading-none text-ink shadow-panel"

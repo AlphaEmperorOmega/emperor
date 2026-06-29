@@ -35,6 +35,7 @@ export const configFieldSchema = z.object({
   flag: z.string(),
   label: z.string(),
   section: z.string(),
+  description: z.string().default(""),
   type: z.string(),
   default: configValueSchema,
   nullable: z.boolean(),
@@ -91,7 +92,10 @@ export type ModelIdentity = z.infer<typeof modelIdentitySchema>;
 export type Preset = z.infer<typeof presetSchema>;
 export type Dataset = z.infer<typeof datasetSchema>;
 export type MonitorOption = z.infer<typeof monitorOptionSchema>;
-export type ConfigField = z.infer<typeof configFieldSchema>;
+export type ConfigField = Omit<
+  z.infer<typeof configFieldSchema>,
+  "description"
+> & { description?: string };
 export type SearchAxis = z.infer<typeof searchAxisSchema>;
 export type SearchSpace = z.infer<typeof searchSpaceSchema>;
 

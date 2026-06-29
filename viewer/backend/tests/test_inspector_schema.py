@@ -303,6 +303,43 @@ class InspectorSchemaTests(unittest.TestCase):
             vit_fields["positional_embedding_option"]["choices"],
         )
 
+    def test_config_schema_exposes_field_descriptions(self) -> None:
+        adaptive_fields = _fields_by_key(config_schema("linears/linear_adaptive"))
+
+        self.assertTrue(
+            all(field["description"].strip() for field in adaptive_fields.values())
+        )
+        self.assertIn(
+            "optimizer steps",
+            adaptive_fields["trainer_max_steps"]["description"],
+        )
+        self.assertIn(
+            "validation data",
+            adaptive_fields["trainer_limit_val_batches"]["description"],
+        )
+        self.assertIn(
+            "model summary",
+            adaptive_fields["trainer_enable_model_summary"]["description"],
+        )
+        self.assertIn(
+            "profiling adds overhead",
+            adaptive_fields["trainer_profiler"]["description"],
+        )
+        self.assertIn(
+            "dedicated halting stack",
+            adaptive_fields["halting_stack_bias_flag"]["description"],
+        )
+        self.assertIn(
+            "output pipeline",
+            adaptive_fields["halting_stack_apply_output_pipeline_flag"][
+                "description"
+            ],
+        )
+        self.assertIn(
+            "smoke tests",
+            adaptive_fields["run_test_after_fit"]["description"],
+        )
+
     def test_config_schema_serializes_value_defaults(self) -> None:
         linear_fields = _fields_by_key(config_schema("linears/linear"))
         adaptive_fields = _fields_by_key(config_schema("linears/linear_adaptive"))

@@ -327,6 +327,7 @@ CONFIG_FIELD_FIELDS = (
     "flag",
     "label",
     "section",
+    "description",
     "type",
     "default",
     "nullable",

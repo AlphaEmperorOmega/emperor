@@ -61,6 +61,7 @@ class ConfigFieldResponse(ApiResponseModel):
     flag: str
     label: str
     section: str
+    description: str = ""
     type: str
     default: ConfigValue
     nullable: bool

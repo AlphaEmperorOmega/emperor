@@ -1,5 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useEffect, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -30,6 +37,7 @@ import {
   renderViewer,
   resetViewerAppTestState,
   schemaResponse,
+  schemaResponseWithDescriptions,
   searchSpaceResponse,
   presetsResponse,
   selectExistingTrainingLogFolder,
@@ -1071,6 +1079,45 @@ describe("ViewerApp Training And Preview", () => {
       expect(within(trainingRunList(details)).queryByText("stack_hidden_dim=128"))
         .not.toBeInTheDocument();
     });
+  });
+
+  it("shows backend field descriptions in Training Full Configuration", async () => {
+    installFetchMock({
+      schemaResponse: schemaResponseWithDescriptions({
+        stack_hidden_dim:
+          "Sets the hidden feature width used by the training layer stack.",
+      }),
+    });
+    renderViewer();
+    const user = userEvent.setup();
+
+    const details = await expandedTrainingDetailsReady(user);
+    const dialog = await openTrainingFullConfig(user, details);
+    const helpButton = within(dialog).getByRole("button", {
+      name: /show description for stack hidden dim/i,
+    });
+    const tooltipId = helpButton.getAttribute("aria-describedby");
+    const tooltip = tooltipId ? document.getElementById(tooltipId) : null;
+
+    if (!(tooltip instanceof HTMLElement)) {
+      throw new Error("Expected field description tooltip to render");
+    }
+
+    await user.hover(helpButton);
+    expect(tooltip).toHaveTextContent("training layer stack");
+    expect(tooltip).not.toHaveClass("sr-only");
+    expect(tooltip).toHaveStyle({
+      width: "min(22rem, calc(100vw - 2rem))",
+      maxWidth: "calc(100vw - 2rem)",
+      overflowWrap: "normal",
+      wordBreak: "normal",
+    });
+    expect(tooltip).not.toHaveClass("w-max");
+
+    await user.unhover(helpButton);
+    expect(tooltip).toHaveClass("sr-only");
+    fireEvent.focus(helpButton);
+    expect(tooltip).not.toHaveClass("sr-only");
   });
 
   it("shows multiple planned training runs and posts selected presets", async () => {

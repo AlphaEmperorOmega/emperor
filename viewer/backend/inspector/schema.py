@@ -16,6 +16,7 @@ from models.config_overrides import (
 
 from viewer.backend.inspector.config_classes import abstract_config_class_error
 from viewer.backend.inspector.errors import InspectorError
+from viewer.backend.inspector.field_descriptions import config_field_description
 from viewer.backend.inspector.values import serialize_config_value
 
 DEFAULT_SECTION = "General"
@@ -377,6 +378,8 @@ def config_schema(model_name: str, preset_name: str | None = None) -> dict[str, 
         annotation = annotations.get(key)
         kind = _value_kind(value, annotation)
         field_metadata = metadata.get(key, {})
+        section = _field_section(key, field_metadata)
+        nullable = value is None or _annotation_is_nullable(annotation)
         model_param = config_key_to_model_param(key)
         lock = locks.get(model_param)
         locked_value = getattr(lock, "value", None) if lock is not None else None
@@ -387,10 +390,17 @@ def config_schema(model_name: str, preset_name: str | None = None) -> dict[str, 
                 "configKey": key,
                 "flag": config_key_to_flag(key),
                 "label": key.lower().replace("_", " "),
-                "section": _field_section(key, field_metadata),
+                "section": section,
+                "description": config_field_description(
+                    key,
+                    section=section,
+                    kind=kind,
+                    nullable=nullable,
+                    default=value,
+                ),
                 "type": kind,
                 "default": serialize_config_value(value),
-                "nullable": value is None or _annotation_is_nullable(annotation),
+                "nullable": nullable,
                 "choices": _choices_for(
                     parts.config_module,
                     value,

@@ -8,6 +8,7 @@ function field(overrides: Partial<ConfigField> & Pick<ConfigField, "key" | "flag
     configKey: overrides.configKey ?? overrides.key.toUpperCase(),
     label: overrides.label ?? overrides.key,
     section: overrides.section ?? "General",
+    description: overrides.description ?? "",
     type: overrides.type ?? "string",
     default: overrides.default ?? "",
     nullable: overrides.nullable ?? false,
