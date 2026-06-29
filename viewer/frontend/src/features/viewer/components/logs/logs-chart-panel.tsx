@@ -95,11 +95,6 @@ const EMPTY_HIGHLIGHTED_RUNS_BY_GROUP: Record<
   other: null,
 };
 
-const EMPTY_HIDDEN_PLOT_TAGS_BY_GROUP: Record<LogPlotSelectorGroupKey, Set<string>> = {
-  train: new Set(),
-  validation: new Set(),
-};
-
 type LogsChartMetricGroup = (typeof LOG_METRIC_GROUPS)[number];
 type LogsChartAccordionMetricGroup = Extract<
   LogsChartMetricGroup,
@@ -371,7 +366,9 @@ function ChartEmptyState({ title, detail, busy }: LogsChartEmptyState) {
 
 export function LogsChartPanel({
   metricsByGroup,
+  availableMetricTagsByGroup,
   selectedTagsByGroup,
+  onMetricGroupTagSelectionChange,
   confusionHeatmaps,
   runsById,
   checkpointsByRunId,
@@ -416,7 +413,12 @@ export function LogsChartPanel({
   onSelectRun,
 }: {
   metricsByGroup: LogMetricsByGroup;
+  availableMetricTagsByGroup: LogMetricTagsByGroup;
   selectedTagsByGroup: LogMetricTagsByGroup;
+  onMetricGroupTagSelectionChange: (
+    group: LogMetricGroupKey,
+    selectedValues: string[],
+  ) => void;
   confusionHeatmaps: ConfusionMatrixHeatmap[];
   runsById: Map<string, LogRun>;
   checkpointsByRunId: Map<string, LogCheckpoint[]>;
@@ -466,12 +468,6 @@ export function LogsChartPanel({
   const [highlightedRunsByGroup, setHighlightedRunsByGroup] = useState<
     Record<LogMetricChartLayoutGroupKey, string | null>
   >(() => ({ ...EMPTY_HIGHLIGHTED_RUNS_BY_GROUP }));
-  const [hiddenPlotTagsByGroup, setHiddenPlotTagsByGroup] = useState<
-    Record<LogPlotSelectorGroupKey, Set<string>>
-  >(() => ({
-    train: new Set(EMPTY_HIDDEN_PLOT_TAGS_BY_GROUP.train),
-    validation: new Set(EMPTY_HIDDEN_PLOT_TAGS_BY_GROUP.validation),
-  }));
   const visibleRunIds = useMemo(() => new Set(runOrder), [runOrder]);
   const setHighlightedRunForGroup = useCallback(
     (group: LogMetricChartLayoutGroupKey, runId: string | null) => {
@@ -497,48 +493,11 @@ export function LogsChartPanel({
     });
   }, [visibleRunIds]);
 
-  useEffect(() => {
-    setHiddenPlotTagsByGroup((current) => {
-      let didChange = false;
-      const next = { ...current };
-
-      for (const group of LOG_PLOT_SELECTOR_GROUPS) {
-        const availableTags = new Set(selectedTagsByGroup[group]);
-        const currentHiddenTags = current[group];
-        const filteredHiddenTags = new Set(
-          Array.from(currentHiddenTags).filter((tag) => availableTags.has(tag)),
-        );
-        if (filteredHiddenTags.size !== currentHiddenTags.size) {
-          next[group] = filteredHiddenTags;
-          didChange = true;
-        }
-      }
-
-      return didChange ? next : current;
-    });
-  }, [selectedTagsByGroup]);
-
   const handlePlotSelectionChange = useCallback(
     (group: LogPlotSelectorGroupKey, selectedValues: string[]) => {
-      const selectedValueSet = new Set(selectedValues);
-      setHiddenPlotTagsByGroup((current) => {
-        const hiddenTags = new Set(
-          selectedTagsByGroup[group].filter((tag) => !selectedValueSet.has(tag)),
-        );
-        const currentHiddenTags = current[group];
-        if (
-          hiddenTags.size === currentHiddenTags.size &&
-          Array.from(hiddenTags).every((tag) => currentHiddenTags.has(tag))
-        ) {
-          return current;
-        }
-        return {
-          ...current,
-          [group]: hiddenTags,
-        };
-      });
+      onMetricGroupTagSelectionChange(group, selectedValues);
     },
-    [selectedTagsByGroup],
+    [onMetricGroupTagSelectionChange],
   );
 
   const orderedLogChartSections: LogsChartSectionRenderItem[] = [
@@ -564,7 +523,12 @@ export function LogsChartPanel({
   const renderMetricGroupSection = (group: LogsChartAccordionMetricGroup) => {
     const metrics = metricsByGroup[group.key];
     const selectedGroupTags = selectedTagsByGroup[group.key];
-    if (metrics.length === 0 && selectedGroupTags.length === 0) {
+    const availableGroupTags = availableMetricTagsByGroup[group.key];
+    if (
+      metrics.length === 0 &&
+      selectedGroupTags.length === 0 &&
+      availableGroupTags.length === 0
+    ) {
       return null;
     }
     const isCollapsed = collapsedMetricGroups.has(group.key);
@@ -572,16 +536,16 @@ export function LogsChartPanel({
     const bodyId = `logs-metric-group-${group.key}`;
     const metricGridMode = metricGridModes[group.key] ?? "two";
     const plotSelectorGroup = isLogPlotSelectorGroup(group.key) ? group.key : null;
-    const hiddenPlotTags = plotSelectorGroup
-      ? hiddenPlotTagsByGroup[plotSelectorGroup]
+    const metricCount = plotSelectorGroup
+      ? availableGroupTags.length
+      : selectedGroupTags.length;
+    const availablePlotTagSet = plotSelectorGroup
+      ? new Set(availableGroupTags)
       : null;
     const selectedPlotTags = plotSelectorGroup
-      ? selectedGroupTags.filter((tag) => !hiddenPlotTags?.has(tag))
+      ? selectedGroupTags.filter((tag) => availablePlotTagSet?.has(tag))
       : selectedGroupTags;
-    const selectedPlotTagSet = plotSelectorGroup ? new Set(selectedPlotTags) : null;
-    const renderedMetrics = plotSelectorGroup
-      ? metrics.filter((metric) => selectedPlotTagSet?.has(metric.tag))
-      : metrics;
+    const renderedMetrics = metrics;
     const visibleMetrics = renderedMetrics.slice(0, LOG_METRIC_GROUP_RENDER_LIMIT);
     const hiddenMetricCount = Math.max(
       0,
@@ -589,9 +553,9 @@ export function LogsChartPanel({
     );
     const fullSpanClass = SCALAR_CHART_GRID_FULL_SPAN_CLASSES[metricGridMode];
     const plotSelectorOptions = plotSelectorGroup
-      ? logPlotSelectorOptions(selectedGroupTags)
+      ? logPlotSelectorOptions(availableGroupTags)
       : [];
-    const plotSelector = plotSelectorGroup ? (
+    const plotSelector = plotSelectorGroup && availableGroupTags.length > 0 ? (
       <LogPlotSelectorControls
         groupLabel={group.label}
         values={selectedPlotTags}
@@ -601,8 +565,8 @@ export function LogsChartPanel({
     ) : undefined;
     const hasNoSelectedPlots =
       plotSelectorGroup !== null &&
-      selectedGroupTags.length > 0 &&
-      selectedPlotTags.length === 0;
+      availableGroupTags.length > 0 &&
+      metrics.length === 0;
     const chartLayoutControl = (
       <ScalarChartLayoutControl
         ariaLabel={`${group.label} chart layout`}
@@ -624,7 +588,7 @@ export function LogsChartPanel({
       <section key={group.key} className="grid gap-3">
         <LogsMetricGroupHeader
           group={group}
-          metricCount={selectedGroupTags.length}
+          metricCount={metricCount}
           isCollapsed={isCollapsed}
           controlsId={bodyId}
           onToggle={onToggleMetricGroup}

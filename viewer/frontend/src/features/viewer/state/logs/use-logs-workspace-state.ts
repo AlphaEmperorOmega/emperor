@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { useMutation } from "@tanstack/react-query";
@@ -12,12 +13,12 @@ import {
   deleteLogExperiment,
   deleteLogRuns,
   type LogRunDeleteFilters,
+  type LogRunTags,
 } from "@/lib/api";
 import {
   useLogExperimentsQuery,
-  useLogRunQueries,
+  useLogTagQueries,
   useLogRunsQuery,
-  useLogTagsQuery,
 } from "@/features/viewer/state/logs/use-log-queries";
 import { useLogQueryCache } from "@/features/viewer/state/logs/use-log-query-cache";
 import { logQueryKeys } from "@/lib/query-keys";
@@ -51,6 +52,7 @@ import {
 
 const TARGET_LOG_RUN_LIMIT = 5;
 const CUSTOM_LOG_RUN_LIMIT = 100;
+const SCALAR_TAG_RUN_WINDOW_SIZE = 100;
 const LOG_SELECT_ALL_TAG_LIMIT = 100;
 const DEFAULT_COLLAPSED_METRIC_GROUPS = new Set<LogMetricGroupKey>(["other"]);
 
@@ -161,9 +163,9 @@ export function useLogsWorkspaceState({
   const [selectedPresets, setSelectedPresets] = useState<Set<string> | null>(null);
   const [shouldSelectFirstRunFacets, setShouldSelectFirstRunFacets] =
     useState(false);
-  const [customRunPageState, setCustomRunPageState] = useState({
+  const [scalarTagRunWindowState, setScalarTagRunWindowState] = useState({
     key: "",
-    count: 1,
+    count: SCALAR_TAG_RUN_WINDOW_SIZE,
   });
   const [selectedTags, setSelectedTags] = useState<Set<string> | null>(null);
   const [pendingExperimentTagSeeds, setPendingExperimentTagSeeds] = useState<
@@ -172,6 +174,7 @@ export function useLogsWorkspaceState({
   const [pendingTagSelection, setPendingTagSelection] = useState<"all" | null>(
     null,
   );
+  const previousTagDataRef = useRef<{ runs: LogRunTags[] } | undefined>(undefined);
   const [selectedDetailRunId, setSelectedDetailRunId] = useState<string | null>(null);
   const [collapsedMetricGroups, setCollapsedMetricGroups] = useState<
     Set<LogMetricGroupKey>
@@ -215,19 +218,6 @@ export function useLogsWorkspaceState({
     [hasSelectedExperimentFilters, selectedExperimentQueryValues],
   );
   const canQueryRuns = enabled && (!isTargetScopeMode || hasTargetScope);
-  const customRunFilterKey = useMemo(
-    () => JSON.stringify({ filters: customRunFilters, scopeMode }),
-    [customRunFilters, scopeMode],
-  );
-  const customRunPageCount =
-    customRunPageState.key === customRunFilterKey ? customRunPageState.count : 1;
-  useEffect(() => {
-    if (customRunPageState.key === customRunFilterKey) {
-      return;
-    }
-    setCustomRunPageState({ key: customRunFilterKey, count: 1 });
-  }, [customRunFilterKey, customRunPageState.key]);
-
   const targetRunsQuery = useLogRunsQuery({
     enabled: canQueryRuns && isTargetScopeMode,
     filters: targetRunFilters,
@@ -236,54 +226,15 @@ export function useLogsWorkspaceState({
       offset: 0,
     },
   });
-  const customRunPageInputs = useMemo(
-    () =>
-      Array.from({ length: customRunPageCount }, (_, pageIndex) => {
-        const pagination = {
-          limit: CUSTOM_LOG_RUN_LIMIT,
-          offset: pageIndex * CUSTOM_LOG_RUN_LIMIT,
-        };
-        return {
-          enabled: canQueryRuns && !isTargetScopeMode,
-          filters: customRunFilters,
-          pagination,
-          queryKey: logQueryKeys.runs({
-            filters: customRunFilters,
-            pagination,
-          }),
-        };
-      }),
-    [canQueryRuns, customRunFilters, customRunPageCount, isTargetScopeMode],
-  );
-  const customRunPageQueries = useLogRunQueries(customRunPageInputs);
-  const customRunPages = customRunPageQueries
-    .map((query) => query.data)
-    .filter((page): page is NonNullable<typeof page> => Boolean(page));
-  const customRunErrorQuery = customRunPageQueries.find((query) => query.isError);
-  const lastCustomRunPage = customRunPages.at(-1);
-  const customRunsQuery = {
-    data:
-      customRunPages.length > 0
-        ? {
-            ...customRunPages[0],
-            runs: customRunPages.flatMap((page) => page.runs),
-            total: customRunPages[0]?.total ?? customRunPages[0]?.runs.length ?? 0,
-            limit: CUSTOM_LOG_RUN_LIMIT,
-            offset: 0,
-            hasMore: lastCustomRunPage?.hasMore ?? false,
-          }
-        : undefined,
-    isLoading:
-      customRunPageInputs.some((input) => input.enabled) &&
-      customRunPages.length === 0 &&
-      customRunPageQueries.some((query) => query.isLoading),
-    isFetching: customRunPageQueries.some((query) => query.isFetching),
-    isError: Boolean(customRunErrorQuery),
-    error: customRunErrorQuery?.error ?? null,
-    isPlaceholderData: customRunPageQueries.some(
-      (query) => query.isPlaceholderData,
-    ),
-  };
+  const customRunsQuery = useLogRunsQuery({
+    enabled: canQueryRuns && !isTargetScopeMode,
+    filters: customRunFilters,
+    pagination: {
+      limit: CUSTOM_LOG_RUN_LIMIT,
+      offset: 0,
+    },
+    includeAllPages: true,
+  });
   const runsQuery = isTargetScopeMode ? targetRunsQuery : customRunsQuery;
   const experimentsQuery = useLogExperimentsQuery({ enabled });
 
@@ -476,12 +427,88 @@ export function useLogsWorkspaceState({
   );
 
   const visibleRunIds = useMemo(() => visibleRuns.map((run) => run.id), [visibleRuns]);
+  const scalarTagRunWindowKey = useMemo(
+    () => visibleRunIds.join("\u0000"),
+    [visibleRunIds],
+  );
+  const scalarTagRunCount =
+    scalarTagRunWindowState.key === scalarTagRunWindowKey
+      ? scalarTagRunWindowState.count
+      : SCALAR_TAG_RUN_WINDOW_SIZE;
+  useEffect(() => {
+    if (scalarTagRunWindowState.key === scalarTagRunWindowKey) {
+      return;
+    }
+    setScalarTagRunWindowState({
+      key: scalarTagRunWindowKey,
+      count: SCALAR_TAG_RUN_WINDOW_SIZE,
+    });
+  }, [scalarTagRunWindowKey, scalarTagRunWindowState.key]);
+  const scalarTagRunIds = useMemo(
+    () => visibleRunIds.slice(0, scalarTagRunCount),
+    [scalarTagRunCount, visibleRunIds],
+  );
   const tagsEnabled = enabled && !shouldSelectFirstRunFacets;
-  const tagsQuery = useLogTagsQuery({
-    runIds: visibleRunIds,
-    enabled: tagsEnabled,
-    queryKey: logQueryKeys.tagsForRuns(visibleRunIds),
-  });
+  const scalarTagWindowInputs = useMemo(
+    () =>
+      Array.from(
+        { length: Math.ceil(scalarTagRunIds.length / SCALAR_TAG_RUN_WINDOW_SIZE) },
+        (_, windowIndex) => {
+          const runIds = scalarTagRunIds.slice(
+            windowIndex * SCALAR_TAG_RUN_WINDOW_SIZE,
+            (windowIndex + 1) * SCALAR_TAG_RUN_WINDOW_SIZE,
+          );
+          return {
+            enabled: tagsEnabled,
+            runIds,
+            queryKey: logQueryKeys.tagsForRuns(runIds),
+          };
+        },
+      ),
+    [scalarTagRunIds, tagsEnabled],
+  );
+  const scalarTagWindowQueries = useLogTagQueries(scalarTagWindowInputs);
+  const scalarTagWindowPages = scalarTagWindowQueries
+    .map((query) => query.data)
+    .filter((page): page is NonNullable<typeof page> => Boolean(page));
+  const scalarTagErrorQuery = scalarTagWindowQueries.find((query) => query.isError);
+  const currentTagsData = useMemo(
+    () =>
+      scalarTagWindowPages.length > 0
+        ? { runs: scalarTagWindowPages.flatMap((page) => page.runs) }
+        : undefined,
+    [scalarTagWindowPages],
+  );
+  const tagWindowsAreFetching = scalarTagWindowQueries.some(
+    (query) => query.isFetching,
+  );
+  const tagWindowsHavePlaceholderData = scalarTagWindowQueries.some(
+    (query) => query.isPlaceholderData,
+  );
+  useEffect(() => {
+    if (!currentTagsData || tagWindowsHavePlaceholderData) {
+      return;
+    }
+    previousTagDataRef.current = currentTagsData;
+  }, [currentTagsData, tagWindowsHavePlaceholderData]);
+  const placeholderTagsData =
+    scalarTagWindowInputs.length > 0 && tagWindowsAreFetching
+      ? previousTagDataRef.current
+      : undefined;
+  const tagsData = currentTagsData ?? placeholderTagsData;
+  const tagsQuery = {
+    data: tagsData,
+    isLoading:
+      scalarTagWindowInputs.some((input) => input.enabled) &&
+      !tagsData &&
+      scalarTagWindowQueries.some((query) => query.isLoading),
+    isFetching: tagWindowsAreFetching,
+    isError: Boolean(scalarTagErrorQuery),
+    error: scalarTagErrorQuery?.error ?? null,
+    isPlaceholderData:
+      tagWindowsHavePlaceholderData ||
+      Boolean(!currentTagsData && placeholderTagsData && tagWindowsAreFetching),
+  };
 
   const scalarTagOptions = useMemo(
     () => buildLogScalarTagOptions(tagsQuery.data?.runs),
@@ -681,30 +708,31 @@ export function useLogsWorkspaceState({
     },
     runDeleteError: deleteRunsMutation.error,
     isDeletingRunDelete: deleteRunsMutation.isPending,
-    canLoadMoreRuns: Boolean(
-      !isTargetScopeMode && runsQuery.data?.hasMore,
+    loadedScalarTagRunCount: scalarTagRunIds.length,
+    totalScalarTagRunCount: visibleRunIds.length,
+    canLoadMoreScalarTags: scalarTagRunIds.length < visibleRunIds.length,
+    isLoadingMoreScalarTags: Boolean(
+      scalarTagWindowQueries.some(
+        (query, index) => index > 0 && query.isFetching && !query.data,
+      ),
     ),
-    isLoadingMoreRuns: Boolean(
-      !isTargetScopeMode &&
-        customRunPageQueries.some(
-          (query, index) => index > 0 && query.isFetching && !query.data,
-        ),
-    ),
-    loadMoreRuns: () => {
-      if (
-        isTargetScopeMode ||
-        !runsQuery.data?.hasMore ||
-        customRunPageQueries.some((query) => query.isLoading)
-      ) {
+    loadMoreScalarTags: () => {
+      if (scalarTagRunIds.length >= visibleRunIds.length || tagsQuery.isFetching) {
         return;
       }
-      setCustomRunPageState((previous) => ({
-        key: customRunFilterKey,
-        count:
-          previous.key === customRunFilterKey
-            ? previous.count + 1
-            : customRunPageCount + 1,
-      }));
+      setScalarTagRunWindowState((previous) => {
+        const currentCount =
+          previous.key === scalarTagRunWindowKey
+            ? previous.count
+            : SCALAR_TAG_RUN_WINDOW_SIZE;
+        return {
+          key: scalarTagRunWindowKey,
+          count: Math.min(
+            currentCount + SCALAR_TAG_RUN_WINDOW_SIZE,
+            visibleRunIds.length,
+          ),
+        };
+      });
     },
     resetRunDelete: () => {
       runDeletePlanMutation.reset();

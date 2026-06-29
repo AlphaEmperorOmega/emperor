@@ -23,6 +23,7 @@ import {
   type LogMetricsByGroup,
   type LogMetricTagsByGroup,
   groupLogMetricTags,
+  groupLogPlotSelectorTags,
   isTestMetricTag,
   metricGroupForTag,
 } from "@/features/viewer/state/logs/logs-selectors";
@@ -407,7 +408,10 @@ function visibleScalarSeries(
   isPlaceholderData: boolean,
   active: boolean,
 ): LogScalarSeries[] {
-  return active && isPlaceholderData ? [] : data?.series ?? [];
+  if (!active || isPlaceholderData) {
+    return [];
+  }
+  return data?.series ?? [];
 }
 
 export function useLogsChartViewModel(state: LogsWorkspaceState) {
@@ -927,6 +931,24 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
       }),
     [seriesByTag, state.selectedTagList],
   );
+  const availableMetricTagsByGroup = useMemo(
+    () => groupLogPlotSelectorTags(state.tagOptions.map((option) => option.value)),
+    [state.tagOptions],
+  );
+  const handleMetricGroupTagSelectionChange = useCallback(
+    (group: LogMetricGroupKey, selectedValues: string[]) => {
+      const selectedValueSet = new Set(selectedValues);
+      const currentSelectedTagSet = new Set(state.selectedTagList);
+      for (const tag of availableMetricTagsByGroup[group]) {
+        const isSelected = currentSelectedTagSet.has(tag);
+        const shouldBeSelected = selectedValueSet.has(tag);
+        if (isSelected !== shouldBeSelected) {
+          state.toggleTag(tag);
+        }
+      }
+    },
+    [availableMetricTagsByGroup, state],
+  );
   const confusionHeatmaps = useMemo(
     () =>
       buildConfusionMatrixHeatmaps({
@@ -971,6 +993,8 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
 
   return {
     metricsByGroup,
+    availableMetricTagsByGroup,
+    onMetricGroupTagSelectionChange: handleMetricGroupTagSelectionChange,
     confusionHeatmaps,
     runsById: visibleRunsById,
     checkpointsByRunId: visibleCheckpointsByRunId,
