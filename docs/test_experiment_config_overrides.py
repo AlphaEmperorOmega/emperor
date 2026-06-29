@@ -170,10 +170,6 @@ class TestExperimentConfigOverrideParsing(
                 "MULTIPLIER",
                 "--weight-option",
                 "LowRankDynamicWeightConfig",
-                "--input-layer-adaptive-flag",
-                "true",
-                "--output-layer-adaptive-flag",
-                "false",
                 "--input-layer-weight-option",
                 "LowRankDynamicWeightConfig",
             ]
@@ -195,8 +191,6 @@ class TestExperimentConfigOverrideParsing(
             mode.config_overrides["weight_option"],
             LowRankDynamicWeightConfig,
         )
-        self.assertIs(mode.config_overrides["input_layer_adaptive_flag"], True)
-        self.assertIs(mode.config_overrides["output_layer_adaptive_flag"], False)
         self.assertIs(
             mode.config_overrides["input_layer_weight_option"],
             LowRankDynamicWeightConfig,
@@ -216,6 +210,70 @@ class TestExperimentConfigOverrideParsing(
                         "128",
                     ]
                 )
+
+    def test_boundary_adaptive_generator_stack_flags_are_rejected(self):
+        removed_flags = [
+            "--input-layer-adaptive-generator-stack-hidden-dim",
+            "--output-layer-adaptive-generator-stack-hidden-dim",
+        ]
+
+        for removed_flag in removed_flags:
+            with self.subTest(flag=removed_flag):
+                with contextlib.redirect_stderr(io.StringIO()):
+                    with self.assertRaises(SystemExit):
+                        self.make_parser().parse_args(
+                            [
+                                "--preset",
+                                "single-model-weight",
+                                removed_flag,
+                                "128",
+                            ]
+                        )
+
+    def test_linear_adaptive_config_hides_boundary_generator_stack_keys(self):
+        supported_keys = set(iter_supported_config_keys(linear_adaptive_config))
+        boundary_stack_prefixes = tuple(
+            f"{boundary}_LAYER_ADAPTIVE_GENERATOR_STACK"
+            for boundary in ("INPUT", "OUTPUT")
+        )
+
+        self.assertFalse(
+            any(key.startswith(boundary_stack_prefixes) for key in supported_keys)
+        )
+        self.assertIn("ADAPTIVE_SUBMODULE_STACK_HIDDEN_DIM", supported_keys)
+        self.assertIn("ADAPTIVE_SUBMODULE_STACK_BIAS_FLAG", supported_keys)
+        self.assertFalse(
+            any(key.endswith("_LAYER_ADAPTIVE_FLAG") for key in supported_keys)
+        )
+
+    def test_global_adaptive_submodule_stack_flags_parse_to_builder_params(self):
+        args = self.make_parser().parse_args(
+            [
+                "--preset",
+                "single-model-weight",
+                "--adaptive-submodule-stack-hidden-dim",
+                "21",
+                "--adaptive-submodule-stack-num-layers",
+                "3",
+                "--adaptive-submodule-stack-bias-flag",
+                "false",
+            ]
+        )
+
+        mode = self.resolve_args(args)
+
+        self.assertEqual(
+            mode.config_overrides["adaptive_generator_stack_hidden_dim"],
+            21,
+        )
+        self.assertEqual(
+            mode.config_overrides["adaptive_generator_stack_num_layers"],
+            3,
+        )
+        self.assertIs(
+            mode.config_overrides["adaptive_generator_stack_bias_flag"],
+            False,
+        )
 
     def test_named_config_flags_parse_bool_and_string_values(self):
         args = self.make_parser().parse_args(
@@ -420,8 +478,6 @@ class TestExperimentConfigOverrideParsing(
                 "--search-set",
                 "weight_option=None,LowRankDynamicWeightConfig",
                 "--search-set",
-                "input_layer_adaptive_flag=false,true",
-                "--search-set",
                 "input_layer_weight_option=None,LowRankDynamicWeightConfig",
             ]
         )
@@ -451,10 +507,6 @@ class TestExperimentConfigOverrideParsing(
         self.assertEqual(
             mode.search_overrides["weight_option"],
             [None, LowRankDynamicWeightConfig],
-        )
-        self.assertEqual(
-            mode.search_overrides["input_layer_adaptive_flag"],
-            [False, True],
         )
         self.assertEqual(
             mode.search_overrides["input_layer_weight_option"],
@@ -612,6 +664,26 @@ class TestExperimentConfigOverrideApplication(unittest.TestCase):
             sorted({cfg.experiment_config.model_config.num_layers for cfg in configs}),
             [2, 4],
         )
+
+    def test_global_adaptive_generator_stack_overrides_apply(self):
+        cfg = ExperimentPresets().get_config(
+            ExperimentPreset.SINGLE_MODEL_WEIGHT,
+            Mnist,
+            config_overrides={
+                "adaptive_generator_stack_hidden_dim": 21,
+                "adaptive_generator_stack_num_layers": 3,
+                "adaptive_generator_stack_bias_flag": False,
+            },
+        )[0]
+        layer_model_config = (
+            cfg.experiment_config.model_config.layer_config.layer_model_config
+        )
+        augmentation_config = layer_model_config.adaptive_augmentation_config
+        stack_config = augmentation_config.model_config
+
+        self.assertEqual(stack_config.hidden_dim, 21)
+        self.assertEqual(stack_config.num_layers, 3)
+        self.assertFalse(stack_config.layer_config.layer_model_config.bias_flag)
 
     def test_trainer_overrides_disable_early_stopping_without_static_monitors(self):
         experiment = Experiment(ExperimentPreset.SINGLE_MODEL_WEIGHT)

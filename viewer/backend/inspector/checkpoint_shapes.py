@@ -58,20 +58,20 @@ _ROUTER_LAYER_PARAMETER_RE = re.compile(
     r"\.router\.model\.layers\.(?P<index>\d+)\.model"
     r"\.(?P<parameter>weight_params|weight|weights|bias_params|bias|biases)$"
 )
-_ADAPTIVE_GENERATOR_STACK_PATTERNS = {
-    "adaptive_generator_stack_num_layers": re.compile(
+_ADAPTIVE_GENERATOR_STACK_PATTERNS = (
+    re.compile(
         r"^(?P<parent>main_model\.layers\.\d+\.model\.adaptive_behaviour\..*"
         r"\.model)\.layers\.(?P<index>\d+)(?:\.|$)"
     ),
-    "input_layer_adaptive_generator_stack_num_layers": re.compile(
+    re.compile(
         r"^(?P<parent>input_model\.model\.adaptive_behaviour\..*"
         r"\.model)\.layers\.(?P<index>\d+)(?:\.|$)"
     ),
-    "output_layer_adaptive_generator_stack_num_layers": re.compile(
+    re.compile(
         r"^(?P<parent>output_model\.model\.adaptive_behaviour\..*"
         r"\.model)\.layers\.(?P<index>\d+)(?:\.|$)"
     ),
-}
+)
 
 
 @dataclass(frozen=True)
@@ -318,15 +318,24 @@ def _config_overrides(
     if expert_count is not None:
         overrides["expert_num_experts"] = expert_count
 
-    for override_key, pattern in _ADAPTIVE_GENERATOR_STACK_PATTERNS.items():
+    adaptive_generator_layer_counts = []
+    for pattern in _ADAPTIVE_GENERATOR_STACK_PATTERNS:
         generator_layer_count = _grouped_stack_layer_count(
             tensor_shapes,
             pattern,
             diagnostics=diagnostics,
-            label=override_key,
+            label="adaptive_generator_stack_num_layers",
         )
         if generator_layer_count is not None:
-            overrides[override_key] = generator_layer_count
+            adaptive_generator_layer_counts.append(generator_layer_count)
+    if adaptive_generator_layer_counts:
+        unique_generator_layer_counts = set(adaptive_generator_layer_counts)
+        if len(unique_generator_layer_counts) == 1:
+            overrides["adaptive_generator_stack_num_layers"] = (
+                adaptive_generator_layer_counts[0]
+            )
+        else:
+            diagnostics.append("adaptive_generator_stack_num_layers:conflictingCounts")
 
     return overrides
 

@@ -62,7 +62,7 @@ class TrainingRunPlanTests(unittest.TestCase):
                 "values": {
                     "stack_hidden_dim": [64],
                     "stack_activation": ["RELU"],
-                    "input_layer_adaptive_flag": [False, True],
+                    "adaptive_generator_stack_num_layers": [1, 2],
                 },
             },
             dataset_count=1,
@@ -74,7 +74,7 @@ class TrainingRunPlanTests(unittest.TestCase):
             {
                 "STACK_HIDDEN_DIM": [64],
                 "STACK_ACTIVATION": ["RELU"],
-                "INPUT_LAYER_ADAPTIVE_FLAG": [False, True],
+                "ADAPTIVE_GENERATOR_STACK_NUM_LAYERS": [1, 2],
             },
         )
         self.assertEqual(
@@ -84,7 +84,7 @@ class TrainingRunPlanTests(unittest.TestCase):
                 "values": {
                     "STACK_HIDDEN_DIM": [64],
                     "STACK_ACTIVATION": ["RELU"],
-                    "INPUT_LAYER_ADAPTIVE_FLAG": [False, True],
+                    "ADAPTIVE_GENERATOR_STACK_NUM_LAYERS": [1, 2],
                 },
             },
         )
@@ -94,8 +94,8 @@ class TrainingRunPlanTests(unittest.TestCase):
             ActivationOptions.RELU,
         )
         self.assertEqual(
-            parsed.search_overrides["input_layer_adaptive_flag"],
-            [False, True],
+            parsed.search_overrides["adaptive_generator_stack_num_layers"],
+            [1, 2],
         )
 
     def test_training_run_plan_materializes_grid_rows_and_commands(self) -> None:
@@ -339,7 +339,7 @@ class TrainingRunPlanTests(unittest.TestCase):
                 "values": {
                     "stack_hidden_dim": [64],
                     "stack_activation": ["RELU"],
-                    "input_layer_adaptive_flag": [False, True],
+                    "adaptive_generator_stack_num_layers": [1, 2],
                 },
             },
             log_folder="serialization_plan",
@@ -352,36 +352,37 @@ class TrainingRunPlanTests(unittest.TestCase):
                 "values": {
                     "STACK_HIDDEN_DIM": [64],
                     "STACK_ACTIVATION": ["RELU"],
-                    "INPUT_LAYER_ADAPTIVE_FLAG": [False, True],
+                    "ADAPTIVE_GENERATOR_STACK_NUM_LAYERS": [1, 2],
                 },
             },
         )
         self.assertEqual(plan["summary"]["totalRuns"], 2)
 
-        runs_by_input_layer = {
-            run["overrides"]["INPUT_LAYER_ADAPTIVE_FLAG"]: run for run in plan["runs"]
+        runs_by_generator_layers = {
+            run["overrides"]["ADAPTIVE_GENERATOR_STACK_NUM_LAYERS"]: run
+            for run in plan["runs"]
         }
-        false_run = runs_by_input_layer[False]
-        true_run = runs_by_input_layer[True]
+        shallow_run = runs_by_generator_layers[1]
+        deep_run = runs_by_generator_layers[2]
 
-        for run, input_layer_value, command_value in (
-            (false_run, False, "false"),
-            (true_run, True, "true"),
+        for run, num_layers in (
+            (shallow_run, 1),
+            (deep_run, 2),
         ):
-            with self.subTest(input_layer_value=input_layer_value):
+            with self.subTest(num_layers=num_layers):
                 changes_by_key = {change["key"]: change for change in run["changes"]}
 
                 self.assertEqual(run["overrides"]["STACK_HIDDEN_DIM"], 64)
                 self.assertEqual(run["overrides"]["STACK_ACTIVATION"], "RELU")
                 self.assertEqual(
-                    run["overrides"]["INPUT_LAYER_ADAPTIVE_FLAG"],
-                    input_layer_value,
+                    run["overrides"]["ADAPTIVE_GENERATOR_STACK_NUM_LAYERS"],
+                    num_layers,
                 )
                 self.assertEqual(changes_by_key["STACK_HIDDEN_DIM"]["value"], 64)
                 self.assertEqual(changes_by_key["STACK_ACTIVATION"]["value"], "RELU")
                 self.assertEqual(
-                    changes_by_key["INPUT_LAYER_ADAPTIVE_FLAG"]["value"],
-                    input_layer_value,
+                    changes_by_key["ADAPTIVE_GENERATOR_STACK_NUM_LAYERS"]["value"],
+                    num_layers,
                 )
                 self.assertTrue(
                     all(change["source"] == "search" for change in run["changes"])
@@ -389,7 +390,7 @@ class TrainingRunPlanTests(unittest.TestCase):
                 self.assertIn("--stack-hidden-dim 64", run["command"])
                 self.assertIn("--stack-activation RELU", run["command"])
                 self.assertIn(
-                    f"--input-layer-adaptive-flag {command_value}",
+                    f"--adaptive-submodule-stack-num-layers {num_layers}",
                     run["command"],
                 )
 

@@ -20,16 +20,12 @@ from viewer.backend.training_monitor_locator import normalize_preset_token
 
 _ADAPTIVE_GENERATOR_COUNT_KEYS = {
     "adaptive_generator_stack_num_layers",
-    "input_layer_adaptive_generator_stack_num_layers",
-    "output_layer_adaptive_generator_stack_num_layers",
 }
 _ADAPTIVE_FLAG_KEYS = {
     "weight_option_flag",
     "bias_option_flag",
     "diagonal_option_flag",
     "mask_option_flag",
-    "input_layer_adaptive_flag",
-    "output_layer_adaptive_flag",
 }
 _ADAPTIVE_OPTION_KEYS = {
     "weight_option",
