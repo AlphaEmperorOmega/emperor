@@ -1,6 +1,9 @@
 import { Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { ConfigFieldValueEditor } from "@/features/viewer/components/config/config-field-control";
+import {
+  ConfigFieldOverrideIcon,
+  ConfigFieldValueEditor,
+} from "@/features/viewer/components/config/config-field-control";
 import { surfacePanelClassName } from "@/features/viewer/components/shared/surface-panel";
 import {
   type ConfigSearchOption,
@@ -56,12 +59,16 @@ function ConfigSearchResultItem({
           id={titleId}
           type="button"
           onClick={() => onSelect(option)}
-          className="min-w-0 truncate rounded-[6px] text-left text-sm font-semibold text-ink underline-offset-4 transition hover:text-violet hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          data-config-field-label=""
+          className={cn(
+            "flex min-w-0 items-center gap-1.5 rounded-[6px] text-left text-sm font-semibold underline-offset-4 transition hover:text-violet hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-focus",
+            isOverridden ? "text-violet" : "text-ink",
+          )}
         >
-          {option.label}
+          <span className="min-w-0 truncate">{option.label}</span>
+          {isOverridden && <ConfigFieldOverrideIcon />}
         </button>
         <span className="flex shrink-0 flex-wrap justify-end gap-1">
-          {isOverridden && <Badge variant="override">override</Badge>}
           {isPresetOwned && <Badge variant="preset">preset</Badge>}
         </span>
       </span>

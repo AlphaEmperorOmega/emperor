@@ -63,6 +63,51 @@ function configFieldGroupFor(accordion: HTMLElement, title: string) {
   return group;
 }
 
+function configFieldLabelFor(container: HTMLElement, name: string | RegExp) {
+  const labels = Array.from(
+    container.querySelectorAll<HTMLElement>("[data-config-field-label]"),
+  );
+  const label = labels.find((candidate) => {
+    const text = candidate.textContent ?? "";
+    return typeof name === "string" ? text.trim() === name : name.test(text);
+  });
+
+  if (!(label instanceof HTMLElement)) {
+    throw new Error(`Expected config field label matching ${String(name)}`);
+  }
+
+  return label;
+}
+
+function configFieldOverrideIconFor(container: HTMLElement) {
+  const icon = container.querySelector("[data-config-field-override-icon]");
+
+  if (!icon) {
+    throw new Error("Expected config field override icon to render");
+  }
+
+  return icon;
+}
+
+function queryConfigFieldOverrideIcon(container: HTMLElement) {
+  return container.querySelector("[data-config-field-override-icon]");
+}
+
+function expectNoModifiedFieldInset(row: HTMLElement) {
+  expect(row).not.toHaveClass("border-l-2");
+  expect(row).not.toHaveClass("border-violet/40");
+  expect(row).not.toHaveClass("pl-2");
+}
+
+function expectModifiedFieldControl(control: HTMLElement) {
+  expect(control).toHaveClass("border-violet/55", "bg-[#100719]");
+  expect(control).not.toHaveClass("border-line-hover", "border-violet/40");
+}
+
+function expectUnmodifiedFieldControl(control: HTMLElement) {
+  expect(control).not.toHaveClass("border-violet/55", "bg-[#100719]");
+}
+
 function expectHeaderControlBeforeMetric(
   section: HTMLElement,
   controlLabel: string,
@@ -2428,7 +2473,12 @@ describe("ViewerApp Full Config", () => {
     expect(fullConfigSearchPopup(dialog)).toBeInTheDocument();
     expect(hiddenDimRow).toHaveTextContent(/current\s*128/i);
     expect(hiddenDimRow).not.toHaveTextContent(/default\s*256/i);
-    expect(within(hiddenDimRow).getByText("override")).toHaveClass("text-violet");
+    expect(configFieldLabelFor(hiddenDimRow, /hidden dim/i)).toHaveClass(
+      "text-violet",
+    );
+    expect(configFieldOverrideIconFor(hiddenDimRow)).toHaveClass("text-violet");
+    expect(within(hiddenDimRow).queryByText("override")).not.toBeInTheDocument();
+    expectModifiedFieldControl(hiddenDimSearchInput);
     expect(within(dialog).getAllByLabelText("1 override").length).toBeGreaterThan(0);
     expect(within(dialog).getByLabelText(/hidden dim/i)).toHaveValue("128");
 
@@ -2461,8 +2511,17 @@ describe("ViewerApp Full Config", () => {
 
     expect(fullConfigSearchPopup(dialog)).toBeInTheDocument();
     await waitFor(() => {
-      expect(within(reopenedHiddenDimRow).queryByText("override")).not.toBeInTheDocument();
+      expect(queryConfigFieldOverrideIcon(reopenedHiddenDimRow))
+        .not.toBeInTheDocument();
     });
+    expect(configFieldLabelFor(reopenedHiddenDimRow, /hidden dim/i)).toHaveClass(
+      "text-ink",
+    );
+    expect(configFieldLabelFor(reopenedHiddenDimRow, /hidden dim/i))
+      .not.toHaveClass("text-violet");
+    expect(within(reopenedHiddenDimRow).queryByText("override"))
+      .not.toBeInTheDocument();
+    expectUnmodifiedFieldControl(reopenedHiddenDimSearchInput);
     expect(reopenedHiddenDimRow).not.toHaveTextContent(/current\s*256/i);
     expect(within(dialog).getByLabelText(/hidden dim/i)).toHaveValue("256");
     expect(within(dialog).getAllByLabelText("0 overrides").length).toBeGreaterThan(0);
@@ -2520,6 +2579,12 @@ describe("ViewerApp Full Config", () => {
     await user.click(gateFlagControl.on);
 
     expect(gateFlagRow).toHaveTextContent(/current\s*true/i);
+    expect(configFieldLabelFor(gateFlagRow, /gate flag/i)).toHaveClass(
+      "text-violet",
+    );
+    expect(configFieldOverrideIconFor(gateFlagRow)).toHaveClass("text-violet");
+    expect(within(gateFlagRow).queryByText("override")).not.toBeInTheDocument();
+    expectModifiedFieldControl(gateFlagControl.control);
     expect(within(dialog).getByRole("switch", { name: /gate flag/i }))
       .toHaveAttribute("aria-checked", "true");
     expect(within(dialog).getAllByLabelText("2 overrides").length).toBeGreaterThan(0);
@@ -2527,8 +2592,14 @@ describe("ViewerApp Full Config", () => {
     await user.click(gateFlagControl.off);
 
     await waitFor(() => {
-      expect(within(gateFlagRow).queryByText("override")).not.toBeInTheDocument();
+      expect(queryConfigFieldOverrideIcon(gateFlagRow)).not.toBeInTheDocument();
     });
+    expect(configFieldLabelFor(gateFlagRow, /gate flag/i)).toHaveClass("text-ink");
+    expect(configFieldLabelFor(gateFlagRow, /gate flag/i)).not.toHaveClass(
+      "text-violet",
+    );
+    expect(within(gateFlagRow).queryByText("override")).not.toBeInTheDocument();
+    expectUnmodifiedFieldControl(gateFlagControl.control);
     expect(gateFlagRow).not.toHaveTextContent(/current\s*false/i);
     expect(within(dialog).getByRole("switch", { name: /gate flag/i }))
       .toHaveAttribute("aria-checked", "false");
@@ -2569,6 +2640,12 @@ describe("ViewerApp Full Config", () => {
     });
 
     expect(stackActivationRow).toHaveTextContent(/current\s*RELU/i);
+    expect(configFieldLabelFor(stackActivationRow, /stack activation/i))
+      .toHaveClass("text-violet");
+    expect(configFieldOverrideIconFor(stackActivationRow)).toHaveClass("text-violet");
+    expect(within(stackActivationRow).queryByText("override"))
+      .not.toBeInTheDocument();
+    expectModifiedFieldControl(stackActivationSelect);
     expect(stackActivationSelect).toHaveTextContent("RELU");
     expect(selectRoot).toHaveClass("z-20");
     expect(resetButton).toHaveClass("absolute", "right-1", "z-40");
@@ -2576,8 +2653,16 @@ describe("ViewerApp Full Config", () => {
     await user.click(resetButton);
 
     await waitFor(() => {
-      expect(within(stackActivationRow).queryByText("override")).not.toBeInTheDocument();
+      expect(queryConfigFieldOverrideIcon(stackActivationRow))
+        .not.toBeInTheDocument();
     });
+    expect(configFieldLabelFor(stackActivationRow, /stack activation/i))
+      .toHaveClass("text-ink");
+    expect(configFieldLabelFor(stackActivationRow, /stack activation/i))
+      .not.toHaveClass("text-violet");
+    expect(within(stackActivationRow).queryByText("override"))
+      .not.toBeInTheDocument();
+    expectUnmodifiedFieldControl(stackActivationSelect);
     expect(stackActivationRow).not.toHaveTextContent(/current\s*GELU/i);
     expect(stackActivationSelect).toHaveTextContent("GELU");
     expect(within(dialog).getByLabelText(/stack activation/i)).toHaveTextContent("GELU");
@@ -2929,7 +3014,7 @@ describe("ViewerApp Full Config", () => {
 
     const hiddenDimInput = await typeConfigFieldValue(user, dialog, /hidden dim/i, "128");
     const hiddenDimRow = configFieldRowFor(hiddenDimInput);
-    const overrideBadge = within(hiddenDimRow).getByText("override");
+    const hiddenDimLabel = configFieldLabelFor(hiddenDimRow, /stack hidden dim/i);
     const layerAccordion = within(dialog).getByRole("button", {
       name: /layer stack options section, 3 fields, 1 override/i,
     });
@@ -2954,9 +3039,11 @@ describe("ViewerApp Full Config", () => {
     expect(layerNavRow).not.toHaveClass("border-amber/30", "bg-amber/[0.055]");
     expect(within(layerNavRow).getByLabelText("1 override")).toHaveClass("text-violet");
     expect(within(layerNavRow).queryByText("1 preset")).not.toBeInTheDocument();
-    expect(overrideBadge).toBeInTheDocument();
-    expect(overrideBadge).toHaveClass("text-violet");
-    expect(hiddenDimRow).toHaveClass("border-violet/40");
+    expect(within(hiddenDimRow).queryByText("override")).not.toBeInTheDocument();
+    expect(hiddenDimLabel).toHaveClass("text-violet");
+    expect(configFieldOverrideIconFor(hiddenDimRow)).toHaveClass("text-violet");
+    expectModifiedFieldControl(hiddenDimInput);
+    expectNoModifiedFieldInset(hiddenDimRow);
     expect(hiddenDimRow).not.toHaveClass("border-amber/55", "bg-amber/[0.055]");
     expect(within(hiddenDimRow).queryByText("preset")).not.toBeInTheDocument();
     expect(within(dialog).queryByText(/\d+ preset/i)).not.toBeInTheDocument();
@@ -2984,13 +3071,26 @@ describe("ViewerApp Full Config", () => {
     const stackLayersRow = configFieldRowFor(stackLayersInput);
 
     await waitFor(() => {
-      expect(within(hiddenDimRow).queryByText("override")).not.toBeInTheDocument();
+      expect(queryConfigFieldOverrideIcon(hiddenDimRow)).not.toBeInTheDocument();
     });
     expect(hiddenDimInput).toHaveValue("256");
-    expect(hiddenDimRow).not.toHaveClass("border-violet/40");
+    expect(configFieldLabelFor(hiddenDimRow, /stack hidden dim/i)).toHaveClass(
+      "text-ink",
+    );
+    expect(configFieldLabelFor(hiddenDimRow, /stack hidden dim/i))
+      .not.toHaveClass("text-violet");
+    expect(within(hiddenDimRow).queryByText("override")).not.toBeInTheDocument();
+    expectNoModifiedFieldInset(hiddenDimRow);
+    expectUnmodifiedFieldControl(hiddenDimInput);
     expect(stackLayersInput).toHaveValue("7");
-    expect(within(stackLayersRow).getByText("override")).toHaveClass("text-violet");
-    expect(stackLayersRow).toHaveClass("border-violet/40");
+    expect(configFieldLabelFor(stackLayersRow, /stack num layers/i)).toHaveClass(
+      "text-violet",
+    );
+    expect(configFieldOverrideIconFor(stackLayersRow)).toHaveClass("text-violet");
+    expect(within(stackLayersRow).queryByText("override"))
+      .not.toBeInTheDocument();
+    expectModifiedFieldControl(stackLayersInput);
+    expectNoModifiedFieldInset(stackLayersRow);
     expect(within(dialog).getAllByLabelText("1 override").length).toBeGreaterThan(0);
     expect(
       within(dialog).getByRole("button", {
