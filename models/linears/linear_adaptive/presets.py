@@ -34,6 +34,7 @@ from emperor.augmentations.adaptive_parameters.options import (
     WeightDecayScheduleOptions,
     WeightNormalizationOptions,
 )
+from emperor.base.layer.residual import ResidualConnectionOptions
 from emperor.base.options import BaseOptions, LayerNormPositionOptions
 from emperor.datasets.image.classification.mnist import Mnist
 from emperor.experiments.base import (
@@ -54,6 +55,58 @@ if TYPE_CHECKING:
 class ExperimentPreset(BaseOptions):
     BASELINE = (
         "Default config: a GELU adaptive linear stack with pre-layer norm and dropout."
+    )
+    GATING = (
+        "Default adaptive config with per-layer gating enabled, so each hidden "
+        "layer output is modulated by a learned sigmoid gate."
+    )
+    HALTING = (
+        "Default adaptive config with stack halting enabled, so examples can "
+        "stop early as they move through the adaptive hidden stack."
+    )
+    MEMORY = (
+        "Default adaptive config with shared stack memory enabled across the "
+        "hidden layers."
+    )
+    GATING_HALTING = (
+        "Default adaptive config with both per-layer gating and stack halting "
+        "enabled."
+    )
+    GATING_MEMORY = (
+        "Default adaptive config with both per-layer gating and shared stack "
+        "memory enabled."
+    )
+    HALTING_MEMORY = (
+        "Default adaptive config with both stack halting and shared stack "
+        "memory enabled."
+    )
+    GATING_HALTING_MEMORY = (
+        "Default adaptive config with per-layer gating, stack halting, and "
+        "shared stack memory enabled."
+    )
+    RESIDUAL = (
+        "Default adaptive config with residual skip connections enabled between "
+        "same-width hidden layers."
+    )
+    POST_NORM = (
+        "Default adaptive config with layer norm applied after each layer "
+        "instead of before it."
+    )
+    RESIDUAL_POST_NORM = (
+        "Default adaptive config with residual skip connections and post-layer "
+        "normalization enabled."
+    )
+    RESIDUAL_GATING = (
+        "Default adaptive config with residual skip connections and per-layer "
+        "gating enabled."
+    )
+    RESIDUAL_HALTING = (
+        "Default adaptive config with residual skip connections and stack "
+        "halting enabled."
+    )
+    RESIDUAL_MEMORY = (
+        "Default adaptive config with residual skip connections and shared "
+        "stack memory enabled."
     )
     SINGLE_MODEL_WEIGHT = (
         "Default adaptive config with the single-model dynamic weight generator "
@@ -164,10 +217,6 @@ class ExperimentPreset(BaseOptions):
         "Default adaptive config with dual-model dynamic weights, additive bias, "
         "combined dynamic diagonal, and weight-informed row masking enabled."
     )
-    ADAPTIVE_HALTING = (
-        "Default adaptive config with dual-model dynamic weights and stack "
-        "halting enabled."
-    )
     DUAL_WEIGHT_GATING = (
         "Default adaptive config with dual-model dynamic weights and per-layer "
         "gating enabled."
@@ -176,9 +225,37 @@ class ExperimentPreset(BaseOptions):
         "Default adaptive config with dual-model dynamic weights and stack "
         "halting enabled."
     )
+    DUAL_WEIGHT_GATING_HALTING = (
+        "Default adaptive config with dual-model dynamic weights, per-layer "
+        "gating, and stack halting enabled."
+    )
+    DUAL_WEIGHT_MEMORY = (
+        "Default adaptive config with dual-model dynamic weights and shared "
+        "stack memory enabled."
+    )
+    DUAL_WEIGHT_GATING_MEMORY = (
+        "Default adaptive config with dual-model dynamic weights, per-layer "
+        "gating, and shared stack memory enabled."
+    )
+    DUAL_WEIGHT_HALTING_MEMORY = (
+        "Default adaptive config with dual-model dynamic weights, stack "
+        "halting, and shared stack memory enabled."
+    )
     FULL_STACK_GATING = (
         "Default adaptive config with full adaptive parameter controls and "
         "per-layer gating enabled."
+    )
+    FULL_STACK_HALTING = (
+        "Default adaptive config with full adaptive parameter controls and "
+        "stack halting enabled."
+    )
+    FULL_STACK_MEMORY = (
+        "Default adaptive config with full adaptive parameter controls and "
+        "shared stack memory enabled."
+    )
+    FULL_STACK_GATING_HALTING = (
+        "Default adaptive config with full adaptive parameter controls, "
+        "per-layer gating, and stack halting enabled."
     )
     FULL_STACK_RECURRENT = (
         "Default adaptive config with full adaptive parameter controls wrapped "
@@ -204,9 +281,33 @@ class ExperimentPreset(BaseOptions):
         "Default recurrent adaptive config with recurrent halting enabled, "
         "allowing early stopping before the max step count."
     )
+    RECURRENT_MEMORY = (
+        "Default recurrent adaptive config whose reused hidden stack has shared "
+        "memory enabled."
+    )
     RECURRENT_GATING_HALTING = (
         "Default recurrent adaptive config with both step-level gating and "
         "recurrent halting enabled."
+    )
+    RECURRENT_GATING_MEMORY = (
+        "Default recurrent adaptive config with step-level gating and shared "
+        "memory in the reused adaptive stack."
+    )
+    RECURRENT_HALTING_MEMORY = (
+        "Default recurrent adaptive config with recurrent halting and shared "
+        "memory in the reused adaptive stack."
+    )
+    RECURRENT_GATING_HALTING_MEMORY = (
+        "Default recurrent adaptive config with step-level gating, recurrent "
+        "halting, and shared memory in the reused adaptive stack."
+    )
+    RECURRENT_RESIDUAL = (
+        "Default recurrent adaptive config using a residual hidden stack at "
+        "each recurrent step."
+    )
+    RECURRENT_POST_NORM = (
+        "Default recurrent adaptive config using a post-normalized hidden stack "
+        "at each recurrent step."
     )
 
 
@@ -260,6 +361,80 @@ _FULL_STACK_OVERRIDES = _with_adaptive_option_flags(
 
 _PRESET_OVERRIDES = {
     ExperimentPreset.BASELINE: _with_adaptive_option_flags({}),
+    ExperimentPreset.GATING: _with_adaptive_option_flags(
+        {
+            "stack_gate_flag": True,
+        }
+    ),
+    ExperimentPreset.HALTING: _with_adaptive_option_flags(
+        {
+            "stack_halting_flag": True,
+        }
+    ),
+    ExperimentPreset.MEMORY: _with_adaptive_option_flags(
+        {
+            "memory_flag": True,
+        }
+    ),
+    ExperimentPreset.GATING_HALTING: _with_adaptive_option_flags(
+        {
+            "stack_gate_flag": True,
+            "stack_halting_flag": True,
+        }
+    ),
+    ExperimentPreset.GATING_MEMORY: _with_adaptive_option_flags(
+        {
+            "stack_gate_flag": True,
+            "memory_flag": True,
+        }
+    ),
+    ExperimentPreset.HALTING_MEMORY: _with_adaptive_option_flags(
+        {
+            "stack_halting_flag": True,
+            "memory_flag": True,
+        }
+    ),
+    ExperimentPreset.GATING_HALTING_MEMORY: _with_adaptive_option_flags(
+        {
+            "stack_gate_flag": True,
+            "stack_halting_flag": True,
+            "memory_flag": True,
+        }
+    ),
+    ExperimentPreset.RESIDUAL: _with_adaptive_option_flags(
+        {
+            "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+        }
+    ),
+    ExperimentPreset.POST_NORM: _with_adaptive_option_flags(
+        {
+            "layer_norm_position": LayerNormPositionOptions.AFTER,
+        }
+    ),
+    ExperimentPreset.RESIDUAL_POST_NORM: _with_adaptive_option_flags(
+        {
+            "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+            "layer_norm_position": LayerNormPositionOptions.AFTER,
+        }
+    ),
+    ExperimentPreset.RESIDUAL_GATING: _with_adaptive_option_flags(
+        {
+            "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+            "stack_gate_flag": True,
+        }
+    ),
+    ExperimentPreset.RESIDUAL_HALTING: _with_adaptive_option_flags(
+        {
+            "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+            "stack_halting_flag": True,
+        }
+    ),
+    ExperimentPreset.RESIDUAL_MEMORY: _with_adaptive_option_flags(
+        {
+            "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+            "memory_flag": True,
+        }
+    ),
     ExperimentPreset.SINGLE_MODEL_WEIGHT: _with_adaptive_option_flags(
         {
             "weight_option": SingleModelDynamicWeightConfig,
@@ -458,12 +633,6 @@ _PRESET_OVERRIDES = {
         }
     ),
     ExperimentPreset.FULL_STACK: _FULL_STACK_OVERRIDES,
-    ExperimentPreset.ADAPTIVE_HALTING: _with_adaptive_option_flags(
-        {
-            "weight_option": DualModelDynamicWeightConfig,
-            "stack_halting_flag": True,
-        }
-    ),
     ExperimentPreset.DUAL_WEIGHT_GATING: _with_adaptive_option_flags(
         {
             "weight_option": DualModelDynamicWeightConfig,
@@ -476,10 +645,56 @@ _PRESET_OVERRIDES = {
             "stack_halting_flag": True,
         }
     ),
+    ExperimentPreset.DUAL_WEIGHT_GATING_HALTING: _with_adaptive_option_flags(
+        {
+            "weight_option": DualModelDynamicWeightConfig,
+            "stack_gate_flag": True,
+            "stack_halting_flag": True,
+        }
+    ),
+    ExperimentPreset.DUAL_WEIGHT_MEMORY: _with_adaptive_option_flags(
+        {
+            "weight_option": DualModelDynamicWeightConfig,
+            "memory_flag": True,
+        }
+    ),
+    ExperimentPreset.DUAL_WEIGHT_GATING_MEMORY: _with_adaptive_option_flags(
+        {
+            "weight_option": DualModelDynamicWeightConfig,
+            "stack_gate_flag": True,
+            "memory_flag": True,
+        }
+    ),
+    ExperimentPreset.DUAL_WEIGHT_HALTING_MEMORY: _with_adaptive_option_flags(
+        {
+            "weight_option": DualModelDynamicWeightConfig,
+            "stack_halting_flag": True,
+            "memory_flag": True,
+        }
+    ),
     ExperimentPreset.FULL_STACK_GATING: _with_adaptive_option_flags(
         {
             **_FULL_STACK_OVERRIDES,
             "stack_gate_flag": True,
+        }
+    ),
+    ExperimentPreset.FULL_STACK_HALTING: _with_adaptive_option_flags(
+        {
+            **_FULL_STACK_OVERRIDES,
+            "stack_halting_flag": True,
+        }
+    ),
+    ExperimentPreset.FULL_STACK_MEMORY: _with_adaptive_option_flags(
+        {
+            **_FULL_STACK_OVERRIDES,
+            "memory_flag": True,
+        }
+    ),
+    ExperimentPreset.FULL_STACK_GATING_HALTING: _with_adaptive_option_flags(
+        {
+            **_FULL_STACK_OVERRIDES,
+            "stack_gate_flag": True,
+            "stack_halting_flag": True,
         }
     ),
     ExperimentPreset.FULL_STACK_RECURRENT: _with_adaptive_option_flags(
@@ -517,11 +732,51 @@ _PRESET_OVERRIDES = {
             "recurrent_halting_flag": True,
         }
     ),
+    ExperimentPreset.RECURRENT_MEMORY: _with_adaptive_option_flags(
+        {
+            "recurrent_flag": True,
+            "memory_flag": True,
+        }
+    ),
     ExperimentPreset.RECURRENT_GATING_HALTING: _with_adaptive_option_flags(
         {
             "recurrent_flag": True,
             "recurrent_gate_flag": True,
             "recurrent_halting_flag": True,
+        }
+    ),
+    ExperimentPreset.RECURRENT_GATING_MEMORY: _with_adaptive_option_flags(
+        {
+            "recurrent_flag": True,
+            "recurrent_gate_flag": True,
+            "memory_flag": True,
+        }
+    ),
+    ExperimentPreset.RECURRENT_HALTING_MEMORY: _with_adaptive_option_flags(
+        {
+            "recurrent_flag": True,
+            "recurrent_halting_flag": True,
+            "memory_flag": True,
+        }
+    ),
+    ExperimentPreset.RECURRENT_GATING_HALTING_MEMORY: _with_adaptive_option_flags(
+        {
+            "recurrent_flag": True,
+            "recurrent_gate_flag": True,
+            "recurrent_halting_flag": True,
+            "memory_flag": True,
+        }
+    ),
+    ExperimentPreset.RECURRENT_RESIDUAL: _with_adaptive_option_flags(
+        {
+            "recurrent_flag": True,
+            "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+        }
+    ),
+    ExperimentPreset.RECURRENT_POST_NORM: _with_adaptive_option_flags(
+        {
+            "recurrent_flag": True,
+            "layer_norm_position": LayerNormPositionOptions.AFTER,
         }
     ),
 }

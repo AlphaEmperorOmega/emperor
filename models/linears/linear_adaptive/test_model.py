@@ -1,10 +1,6 @@
-from emperor.base.layer.residual import ResidualConnectionOptions
 import unittest
 
 import torch
-
-import models.linears.linear_adaptive.config as config
-
 from emperor.augmentations.adaptive_parameters.core.bias import (
     AdditiveDynamicBiasConfig,
     AffineTransformDynamicBiasConfig,
@@ -40,17 +36,18 @@ from emperor.augmentations.adaptive_parameters.options import (
     WeightDecayScheduleOptions,
     WeightNormalizationOptions,
 )
-from emperor.base.options import (
-    ActivationOptions,
-    LastLayerBiasOptions,
-    LayerNormPositionOptions,
-)
 from emperor.base.layer import (
     LayerConfig,
     LayerStackConfig,
     RecurrentLayerConfig,
 )
 from emperor.base.layer.gate import GateConfig, LayerGateOptions
+from emperor.base.layer.residual import ResidualConnectionOptions
+from emperor.base.options import (
+    ActivationOptions,
+    LastLayerBiasOptions,
+    LayerNormPositionOptions,
+)
 from emperor.experiments.base import GridSearch, PresetLock
 from emperor.halting.options import HaltingHiddenStateModeOptions
 from emperor.linears.core.config import AdaptiveLinearLayerConfig, LinearLayerConfig
@@ -59,6 +56,8 @@ from emperor.memory.config import (
     WeightedDynamicMemoryConfig,
 )
 from emperor.memory.options import MemoryPositionOptions
+
+import models.linears.linear_adaptive.config as config
 from models.linears.linear_adaptive.config_builder import LinearAdaptiveConfigBuilder
 from models.linears.linear_adaptive.model import Model
 from models.linears.linear_adaptive.presets import ExperimentPreset, ExperimentPresets
@@ -112,7 +111,11 @@ class TestAdaptiveLinearModel(unittest.TestCase):
                 tiny_cpu_trainer().fit(model, datamodule=datamodule)
 
     def test_preset_builds_adaptive_linear_layer_config(self):
-        cfg = ExperimentPresets()._preset(input_dim=8, stack_hidden_dim=16, output_dim=4)
+        cfg = ExperimentPresets()._preset(
+            input_dim=8,
+            stack_hidden_dim=16,
+            output_dim=4,
+        )
         layer_model_config = (
             cfg.experiment_config.model_config.layer_config.layer_model_config
         )
@@ -300,7 +303,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
                 output_layer_model_config = (
                     cfg.experiment_config.output_model_config.layer_model_config
                 )
-                hidden_augmentation_config = cfg.experiment_config.model_config.layer_config.layer_model_config.adaptive_augmentation_config
+                hidden_augmentation_config = self._augmentation_config(cfg)
 
                 self.assertIsInstance(
                     input_layer_model_config,
@@ -519,7 +522,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
             row_mask_option=WeightInformedScoreAxisMaskConfig,
             mask_dimension_option=MaskDimensionOptions.ROW,
         )
-        augmentation_config = cfg.experiment_config.model_config.layer_config.layer_model_config.adaptive_augmentation_config
+        augmentation_config = self._augmentation_config(cfg)
 
         self.assertIsInstance(
             augmentation_config.weight_config, DualModelDynamicWeightConfig
@@ -1077,6 +1080,14 @@ class TestAdaptiveLinearModel(unittest.TestCase):
                     self.assertEqual(lock.value, expected_value)
                     self.assertIn(preset.name, lock.reason)
 
+    def test_experiment_presets_do_not_alias_names(self):
+        self.assertEqual(
+            len(ExperimentPreset.__members__),
+            len(set(ExperimentPreset.__members__.values())),
+        )
+        self.assertNotIn("ADAPTIVE_HALTING", ExperimentPreset.__members__)
+        self.assertIn("DUAL_WEIGHT_HALTING", ExperimentPreset.names())
+
     def test_adaptive_option_preset_locks_include_component_flags(self):
         presets = ExperimentPresets()
         option_flags = {
@@ -1110,7 +1121,9 @@ class TestAdaptiveLinearModel(unittest.TestCase):
                 AdditiveDynamicBiasConfig,
                 CombinedDynamicDiagonalConfig,
             ),
-            ExperimentPreset.LAYERED_WEIGHTED_BANK_WEIGHT_ADDITIVE_BIAS_COMBINED_DIAGONAL: (
+            (
+                ExperimentPreset.LAYERED_WEIGHTED_BANK_WEIGHT_ADDITIVE_BIAS_COMBINED_DIAGONAL
+            ): (
                 LayeredWeightedBankDynamicWeightConfig,
                 AdditiveDynamicBiasConfig,
                 CombinedDynamicDiagonalConfig,
@@ -1130,7 +1143,9 @@ class TestAdaptiveLinearModel(unittest.TestCase):
                 AdditiveDynamicBiasConfig,
                 StandardDynamicDiagonalConfig,
             ),
-            ExperimentPreset.LAYERED_WEIGHTED_BANK_WEIGHT_ADDITIVE_BIAS_STANDARD_DIAGONAL: (
+            (
+                ExperimentPreset.LAYERED_WEIGHTED_BANK_WEIGHT_ADDITIVE_BIAS_STANDARD_DIAGONAL
+            ): (
                 LayeredWeightedBankDynamicWeightConfig,
                 AdditiveDynamicBiasConfig,
                 StandardDynamicDiagonalConfig,
@@ -1145,7 +1160,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
         for preset, expected_types in expected_configs.items():
             with self.subTest(preset=preset.name):
                 cfg = ExperimentPresets().get_config(preset)[0]
-                augmentation_config = cfg.experiment_config.model_config.layer_config.layer_model_config.adaptive_augmentation_config
+                augmentation_config = self._augmentation_config(cfg)
 
                 self.assertIsInstance(
                     augmentation_config.weight_config, expected_types[0]
@@ -1795,14 +1810,24 @@ class TestAdaptiveLinearModel(unittest.TestCase):
 
     def test_recurrent_presets_wire_optional_controllers(self):
         expected_controllers = {
-            ExperimentPreset.RECURRENT: (False, False),
-            ExperimentPreset.RECURRENT_GATING: (True, False),
-            ExperimentPreset.RECURRENT_HALTING: (False, True),
-            ExperimentPreset.RECURRENT_GATING_HALTING: (True, True),
-            ExperimentPreset.FULL_STACK_RECURRENT: (False, False),
+            ExperimentPreset.RECURRENT: (False, False, False),
+            ExperimentPreset.RECURRENT_GATING: (True, False, False),
+            ExperimentPreset.RECURRENT_HALTING: (False, True, False),
+            ExperimentPreset.RECURRENT_MEMORY: (False, False, True),
+            ExperimentPreset.RECURRENT_GATING_HALTING: (True, True, False),
+            ExperimentPreset.RECURRENT_GATING_MEMORY: (True, False, True),
+            ExperimentPreset.RECURRENT_HALTING_MEMORY: (False, True, True),
+            ExperimentPreset.RECURRENT_GATING_HALTING_MEMORY: (True, True, True),
+            ExperimentPreset.RECURRENT_RESIDUAL: (False, False, False),
+            ExperimentPreset.RECURRENT_POST_NORM: (False, False, False),
+            ExperimentPreset.FULL_STACK_RECURRENT: (False, False, False),
         }
 
-        for preset, (expected_gate, expected_halting) in expected_controllers.items():
+        for preset, (
+            expected_gate,
+            expected_halting,
+            expected_memory,
+        ) in expected_controllers.items():
             with self.subTest(preset=preset.name):
                 cfg = ExperimentPresets().get_config(preset)[0]
                 recurrent_cfg = cfg.experiment_config.model_config
@@ -1812,6 +1837,165 @@ class TestAdaptiveLinearModel(unittest.TestCase):
                 self.assertEqual(
                     recurrent_cfg.halting_config is not None,
                     expected_halting,
+                )
+                self.assertEqual(
+                    recurrent_cfg.block_config.shared_memory_config is not None,
+                    expected_memory,
+                )
+
+    def test_linear_parity_presets_build_valid_configs(self):
+        parity_presets = [
+            ExperimentPreset.GATING,
+            ExperimentPreset.HALTING,
+            ExperimentPreset.MEMORY,
+            ExperimentPreset.GATING_HALTING,
+            ExperimentPreset.GATING_MEMORY,
+            ExperimentPreset.HALTING_MEMORY,
+            ExperimentPreset.GATING_HALTING_MEMORY,
+            ExperimentPreset.RESIDUAL,
+            ExperimentPreset.POST_NORM,
+            ExperimentPreset.RESIDUAL_POST_NORM,
+            ExperimentPreset.RESIDUAL_GATING,
+            ExperimentPreset.RESIDUAL_HALTING,
+            ExperimentPreset.RESIDUAL_MEMORY,
+            ExperimentPreset.RECURRENT_MEMORY,
+            ExperimentPreset.RECURRENT_GATING_MEMORY,
+            ExperimentPreset.RECURRENT_HALTING_MEMORY,
+            ExperimentPreset.RECURRENT_GATING_HALTING_MEMORY,
+            ExperimentPreset.RECURRENT_RESIDUAL,
+            ExperimentPreset.RECURRENT_POST_NORM,
+        ]
+
+        for preset in parity_presets:
+            with self.subTest(preset=preset.name):
+                cfg = ExperimentPresets().get_config(preset)[0]
+                self.assertIsNotNone(cfg.experiment_config.model_config)
+
+    def test_controller_parity_presets_wire_expected_layer_configs(self):
+        cases = {
+            ExperimentPreset.GATING: (True, False, False),
+            ExperimentPreset.HALTING: (False, True, False),
+            ExperimentPreset.MEMORY: (False, False, True),
+            ExperimentPreset.GATING_HALTING: (True, True, False),
+            ExperimentPreset.GATING_MEMORY: (True, False, True),
+            ExperimentPreset.HALTING_MEMORY: (False, True, True),
+            ExperimentPreset.GATING_HALTING_MEMORY: (True, True, True),
+        }
+
+        for preset, (expected_gate, expected_halting, expected_memory) in cases.items():
+            with self.subTest(preset=preset.name):
+                cfg = ExperimentPresets().get_config(preset)[0]
+                model_cfg = cfg.experiment_config.model_config
+                layer_cfg = model_cfg.layer_config
+
+                self.assertEqual(layer_cfg.gate_config is not None, expected_gate)
+                self.assertEqual(
+                    layer_cfg.halting_config is not None,
+                    expected_halting,
+                )
+                self.assertEqual(
+                    model_cfg.shared_memory_config is not None,
+                    expected_memory,
+                )
+
+    def test_residual_and_post_norm_parity_presets_wire_layer_config(self):
+        cases = {
+            ExperimentPreset.RESIDUAL: (
+                ResidualConnectionOptions.RESIDUAL,
+                config.STACK_LAYER_NORM_POSITION,
+                False,
+                False,
+                False,
+            ),
+            ExperimentPreset.POST_NORM: (
+                ResidualConnectionOptions.DISABLED,
+                LayerNormPositionOptions.AFTER,
+                False,
+                False,
+                False,
+            ),
+            ExperimentPreset.RESIDUAL_POST_NORM: (
+                ResidualConnectionOptions.RESIDUAL,
+                LayerNormPositionOptions.AFTER,
+                False,
+                False,
+                False,
+            ),
+            ExperimentPreset.RESIDUAL_GATING: (
+                ResidualConnectionOptions.RESIDUAL,
+                config.STACK_LAYER_NORM_POSITION,
+                True,
+                False,
+                False,
+            ),
+            ExperimentPreset.RESIDUAL_HALTING: (
+                ResidualConnectionOptions.RESIDUAL,
+                config.STACK_LAYER_NORM_POSITION,
+                False,
+                True,
+                False,
+            ),
+            ExperimentPreset.RESIDUAL_MEMORY: (
+                ResidualConnectionOptions.RESIDUAL,
+                config.STACK_LAYER_NORM_POSITION,
+                False,
+                False,
+                True,
+            ),
+        }
+
+        for preset, (
+            expected_residual,
+            expected_norm,
+            expected_gate,
+            expected_halting,
+            expected_memory,
+        ) in cases.items():
+            with self.subTest(preset=preset.name):
+                cfg = ExperimentPresets().get_config(preset)[0]
+                model_cfg = cfg.experiment_config.model_config
+                layer_cfg = model_cfg.layer_config
+
+                self.assertEqual(
+                    layer_cfg.residual_connection_option,
+                    expected_residual,
+                )
+                self.assertEqual(layer_cfg.layer_norm_position, expected_norm)
+                self.assertEqual(layer_cfg.gate_config is not None, expected_gate)
+                self.assertEqual(
+                    layer_cfg.halting_config is not None,
+                    expected_halting,
+                )
+                self.assertEqual(
+                    model_cfg.shared_memory_config is not None,
+                    expected_memory,
+                )
+
+    def test_recurrent_residual_and_post_norm_presets_wire_block_config(self):
+        cases = {
+            ExperimentPreset.RECURRENT_RESIDUAL: (
+                ResidualConnectionOptions.RESIDUAL,
+                config.STACK_LAYER_NORM_POSITION,
+            ),
+            ExperimentPreset.RECURRENT_POST_NORM: (
+                ResidualConnectionOptions.DISABLED,
+                LayerNormPositionOptions.AFTER,
+            ),
+        }
+
+        for preset, (expected_residual, expected_norm) in cases.items():
+            with self.subTest(preset=preset.name):
+                cfg = ExperimentPresets().get_config(preset)[0]
+                recurrent_cfg = cfg.experiment_config.model_config
+
+                self.assertIsInstance(recurrent_cfg, RecurrentLayerConfig)
+                self.assertEqual(
+                    recurrent_cfg.block_config.layer_config.residual_connection_option,
+                    expected_residual,
+                )
+                self.assertEqual(
+                    recurrent_cfg.block_config.layer_config.layer_norm_position,
+                    expected_norm,
                 )
 
     def test_new_adaptive_combination_presets_wire_config(self):
@@ -1833,10 +2017,63 @@ class TestAdaptiveLinearModel(unittest.TestCase):
         )
         self.assertIsNotNone(layer_cfg.halting_config)
 
+        cfg = presets.get_config(ExperimentPreset.DUAL_WEIGHT_GATING_HALTING)[0]
+        layer_cfg = cfg.experiment_config.model_config.layer_config
+        augmentation_config = self._augmentation_config(cfg)
+        self.assertIsInstance(
+            augmentation_config.weight_config, DualModelDynamicWeightConfig
+        )
+        self.assertIsNotNone(layer_cfg.gate_config)
+        self.assertIsNotNone(layer_cfg.halting_config)
+
+        cfg = presets.get_config(ExperimentPreset.DUAL_WEIGHT_MEMORY)[0]
+        model_cfg = cfg.experiment_config.model_config
+        augmentation_config = self._augmentation_config(cfg)
+        self.assertIsInstance(
+            augmentation_config.weight_config, DualModelDynamicWeightConfig
+        )
+        self.assertIsNotNone(model_cfg.shared_memory_config)
+
+        cfg = presets.get_config(ExperimentPreset.DUAL_WEIGHT_GATING_MEMORY)[0]
+        model_cfg = cfg.experiment_config.model_config
+        layer_cfg = model_cfg.layer_config
+        augmentation_config = self._augmentation_config(cfg)
+        self.assertIsInstance(
+            augmentation_config.weight_config, DualModelDynamicWeightConfig
+        )
+        self.assertIsNotNone(layer_cfg.gate_config)
+        self.assertIsNotNone(model_cfg.shared_memory_config)
+
+        cfg = presets.get_config(ExperimentPreset.DUAL_WEIGHT_HALTING_MEMORY)[0]
+        model_cfg = cfg.experiment_config.model_config
+        layer_cfg = model_cfg.layer_config
+        augmentation_config = self._augmentation_config(cfg)
+        self.assertIsInstance(
+            augmentation_config.weight_config, DualModelDynamicWeightConfig
+        )
+        self.assertIsNotNone(layer_cfg.halting_config)
+        self.assertIsNotNone(model_cfg.shared_memory_config)
+
         cfg = presets.get_config(ExperimentPreset.FULL_STACK_GATING)[0]
         layer_cfg = cfg.experiment_config.model_config.layer_config
         self._assert_full_stack_augmentation(self._augmentation_config(cfg))
         self.assertIsNotNone(layer_cfg.gate_config)
+
+        cfg = presets.get_config(ExperimentPreset.FULL_STACK_HALTING)[0]
+        layer_cfg = cfg.experiment_config.model_config.layer_config
+        self._assert_full_stack_augmentation(self._augmentation_config(cfg))
+        self.assertIsNotNone(layer_cfg.halting_config)
+
+        cfg = presets.get_config(ExperimentPreset.FULL_STACK_MEMORY)[0]
+        model_cfg = cfg.experiment_config.model_config
+        self._assert_full_stack_augmentation(self._augmentation_config(cfg))
+        self.assertIsNotNone(model_cfg.shared_memory_config)
+
+        cfg = presets.get_config(ExperimentPreset.FULL_STACK_GATING_HALTING)[0]
+        layer_cfg = cfg.experiment_config.model_config.layer_config
+        self._assert_full_stack_augmentation(self._augmentation_config(cfg))
+        self.assertIsNotNone(layer_cfg.gate_config)
+        self.assertIsNotNone(layer_cfg.halting_config)
 
         cfg = presets.get_config(ExperimentPreset.FULL_STACK_RECURRENT)[0]
         recurrent_cfg = cfg.experiment_config.model_config
