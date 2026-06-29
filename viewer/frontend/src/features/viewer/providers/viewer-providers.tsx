@@ -158,6 +158,7 @@ export function useTargetConfigSummaryState() {
     allConfigSnapshotCount,
     selectedModel,
     selectedPreset,
+    selectedTargetMode,
     isSchemaReady,
     schemaLoading,
   } = useTargetConfig();
@@ -169,6 +170,7 @@ export function useTargetConfigSummaryState() {
     canOpenFullConfig: Boolean(
       selectedModel && selectedPreset && isSchemaReady,
     ),
+    showFullConfigButton: selectedTargetMode !== "experiment",
     isSchemaLoading: schemaLoading,
   };
 }
