@@ -655,13 +655,6 @@ function boundaryProjectorSchemaResponse() {
     fields: [
       ...schemaResponse.fields,
       boundaryField(
-        "input_layer_adaptive_flag",
-        "Input Boundary Projector Options",
-        "bool",
-        false,
-        [true, false],
-      ),
-      boundaryField(
         "input_layer_weight_option",
         "Input Boundary Projector Options",
         "class",
@@ -688,18 +681,6 @@ function boundaryProjectorSchemaResponse() {
         "class",
         null,
         ["WeightInformedScoreAxisMaskConfig"],
-      ),
-      stackFixtureField({
-        key: "input_layer_adaptive_generator_stack_hidden_dim",
-        section: "Input Boundary Projector Options",
-        default: 256,
-      }),
-      boundaryField(
-        "output_layer_adaptive_flag",
-        "Output Boundary Projector Options",
-        "bool",
-        false,
-        [true, false],
       ),
       boundaryField(
         "output_layer_weight_option",
@@ -729,11 +710,6 @@ function boundaryProjectorSchemaResponse() {
         null,
         ["WeightInformedScoreAxisMaskConfig"],
       ),
-      stackFixtureField({
-        key: "output_layer_adaptive_generator_stack_hidden_dim",
-        section: "Output Boundary Projector Options",
-        default: 256,
-      }),
     ],
   };
 }
@@ -1517,94 +1493,53 @@ describe("ViewerApp Full Config", () => {
     ).toBeInTheDocument();
   });
 
-  it("uses adaptive flags and divider groups for boundary projector sections", async () => {
+  it("uses divider groups for boundary projector sections", async () => {
     installFetchMock({ schemaResponse: boundaryProjectorSchemaResponse() });
     renderViewer();
     const user = userEvent.setup();
 
     const dialog = await openFullConfig(user);
     const inputAccordion = within(dialog).getByRole("button", {
-      name: /^input boundary projector options section, 6 fields, 0 overrides/i,
+      name: /^input boundary projector options section, 4 fields, 0 overrides/i,
     });
     const outputAccordion = within(dialog).getByRole("button", {
-      name: /^output boundary projector options section, 6 fields, 0 overrides/i,
+      name: /^output boundary projector options section, 4 fields, 0 overrides/i,
     });
-    const inputSection = fullConfigSectionFor(inputAccordion);
-    const outputSection = fullConfigSectionFor(outputAccordion);
 
-    expect(inputAccordion).toBeDisabled();
-    expect(outputAccordion).toBeDisabled();
-    expectHeaderControlBeforeMetric(
-      inputSection,
-      "input layer adaptive flag",
-      "6 fields",
-    );
-    expectHeaderControlBeforeMetric(
-      outputSection,
-      "output layer adaptive flag",
-      "6 fields",
-    );
+    expect(inputAccordion).toBeEnabled();
+    expect(outputAccordion).toBeEnabled();
 
-    await user.click(
-      within(inputSection).getByRole("switch", {
-        name: /^input layer adaptive flag$/i,
-      }),
-    );
-    await user.click(
-      within(outputSection).getByRole("switch", {
-        name: /^output layer adaptive flag$/i,
-      }),
-    );
+    await user.click(inputAccordion);
+    await user.click(outputAccordion);
 
-    const enabledInputAccordion = within(dialog).getByRole("button", {
-      name: /^input boundary projector options section, 6 fields, 1 override/i,
-    });
-    const enabledOutputAccordion = within(dialog).getByRole("button", {
-      name: /^output boundary projector options section, 6 fields, 1 override/i,
-    });
-    const inputPanel = accordionPanelFor(enabledInputAccordion);
+    const inputPanel = accordionPanelFor(inputAccordion);
 
-    expectNoHeaderControlInAccordionBody(
-      enabledInputAccordion,
-      "input layer adaptive flag",
-    );
-    expectNoHeaderControlInAccordionBody(
-      enabledOutputAccordion,
-      "output layer adaptive flag",
-    );
     expect(within(inputPanel).getByText("Weight")).toBeInTheDocument();
     expect(within(inputPanel).getByText("Bias")).toBeInTheDocument();
     expect(within(inputPanel).getByText("Diagonal")).toBeInTheDocument();
     expect(within(inputPanel).getByText("Mask")).toBeInTheDocument();
-    expect(within(inputPanel).getByText("Adaptive Generator Stack"))
-      .toBeInTheDocument();
     expect(
-      within(configFieldGroupFor(enabledInputAccordion, "Weight")).getByLabelText(
+      within(configFieldGroupFor(inputAccordion, "Weight")).getByLabelText(
         /^input layer weight option$/i,
       ),
     ).toBeInTheDocument();
     expect(
-      within(configFieldGroupFor(enabledInputAccordion, "Bias")).getByLabelText(
+      within(configFieldGroupFor(inputAccordion, "Bias")).getByLabelText(
         /^input layer bias option$/i,
       ),
     ).toBeInTheDocument();
     expect(
-      within(configFieldGroupFor(enabledInputAccordion, "Diagonal")).getByLabelText(
+      within(configFieldGroupFor(inputAccordion, "Diagonal")).getByLabelText(
         /^input layer diagonal option$/i,
       ),
     ).toBeInTheDocument();
     expect(
-      within(configFieldGroupFor(enabledInputAccordion, "Mask")).getByLabelText(
+      within(configFieldGroupFor(inputAccordion, "Mask")).getByLabelText(
         /^input layer row mask option$/i,
       ),
     ).toBeInTheDocument();
     expect(
-      within(
-        configFieldGroupFor(enabledInputAccordion, "Adaptive Generator Stack"),
-      ).getByText(/^input layer adaptive generator stack hidden dim$/i),
-    ).toBeInTheDocument();
-    expect(
-      within(configFieldGroupFor(enabledOutputAccordion, "Weight")).getByLabelText(
+      within(configFieldGroupFor(outputAccordion, "Weight")).getByLabelText(
         /^output layer weight option$/i,
       ),
     ).toBeInTheDocument();
