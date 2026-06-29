@@ -192,7 +192,14 @@ class TestAdaptiveLinearModel(unittest.TestCase):
             output_config.layer_norm_position,
             LayerNormPositionOptions.DISABLED,
         )
+        self.assertEqual(
+            output_config.residual_connection_option,
+            ResidualConnectionOptions.DISABLED,
+        )
         self.assertEqual(output_config.dropout_probability, 0.0)
+        self.assertIsNone(output_config.gate_config)
+        self.assertIsNone(output_config.halting_config)
+        self.assertIsNone(output_config.memory_config)
 
         self.assertEqual(
             hidden_config.layer_norm_position,
