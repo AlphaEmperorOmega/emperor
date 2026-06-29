@@ -369,16 +369,16 @@ function checkpointsByRunId(checkpoints: LogCheckpoint[]) {
 function scalarQuerySnapshot(
   query: Pick<
     ReturnType<typeof useLogScalarsQuery>,
-    "error" | "isError" | "isFetching" | "isLoading"
+    "error" | "isError" | "isFetching" | "isLoading" | "isPlaceholderData"
   >,
   active: boolean,
 ): LogMetricGroupScalarQuerySnapshot {
   return {
     active,
-    isInitialLoading: query.isLoading,
-    isFetching: query.isFetching,
-    isError: query.isError,
-    error: query.error,
+    isInitialLoading: active && (query.isLoading || query.isPlaceholderData),
+    isFetching: active && query.isFetching,
+    isError: active && query.isError,
+    error: active && query.isError ? query.error : null,
   };
 }
 
@@ -386,7 +386,7 @@ function combinedScalarQuerySnapshot(
   queries: Array<
     Pick<
       ReturnType<typeof useLogScalarsQuery>,
-      "error" | "isError" | "isFetching" | "isLoading"
+      "error" | "isError" | "isFetching" | "isLoading" | "isPlaceholderData"
     >
   >,
   active: boolean,
@@ -394,11 +394,20 @@ function combinedScalarQuerySnapshot(
   const errorQuery = queries.find((query) => query.isError);
   return {
     active,
-    isInitialLoading: active && queries.some((query) => query.isLoading),
+    isInitialLoading:
+      active && queries.some((query) => query.isLoading || query.isPlaceholderData),
     isFetching: active && queries.some((query) => query.isFetching),
     isError: active && Boolean(errorQuery),
     error: active && errorQuery ? errorQuery.error : null,
   };
+}
+
+function visibleScalarSeries(
+  data: { series: LogScalarSeries[] } | undefined,
+  isPlaceholderData: boolean,
+  active: boolean,
+): LogScalarSeries[] {
+  return active && isPlaceholderData ? [] : data?.series ?? [];
 }
 
 export function useLogsChartViewModel(state: LogsWorkspaceState) {
@@ -653,11 +662,6 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
     test: scalarQuerySnapshot(testScalarQuery, testScalarQueryActive),
     other: combinedScalarQuerySnapshot(otherScalarQueries, otherScalarQueryActive),
   });
-  const scalarQueries = [
-    ...chartScalarQueries,
-    testScalarQuery,
-    bestRunScalarQuery,
-  ];
   const activeScalarQueries = [
     ...chartScalarQueryEntries
       .filter((entry) => entry.input.enabled)
@@ -705,7 +709,56 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
     enabled: state.enabled && hasExpandedCheckpointChart,
     queryKey: logQueryKeys.checkpointsForRuns(state.visibleRunIds),
   });
-  const scalarSeries = scalarQueries.flatMap((query) => query.data?.series ?? []);
+  const bestRunStandaloneScalarSeries = useMemo(
+    () =>
+      visibleScalarSeries(
+        bestRunScalarQuery.data,
+        bestRunScalarQuery.isPlaceholderData,
+        bestRunScalarQueryActive,
+      ),
+    [
+      bestRunScalarQuery.data,
+      bestRunScalarQuery.isPlaceholderData,
+      bestRunScalarQueryActive,
+    ],
+  );
+  const scalarSeries = useMemo(
+    () => [
+      ...chartScalarQueryEntries.flatMap((entry) =>
+        visibleScalarSeries(
+          entry.query.data,
+          entry.query.isPlaceholderData,
+          entry.input.enabled,
+        ),
+      ),
+      ...visibleScalarSeries(
+        testScalarQuery.data,
+        testScalarQuery.isPlaceholderData,
+        testScalarQueryActive,
+      ),
+      ...bestRunStandaloneScalarSeries,
+    ],
+    [
+      bestRunStandaloneScalarSeries,
+      chartScalarQueryEntries,
+      testScalarQuery.data,
+      testScalarQuery.isPlaceholderData,
+      testScalarQueryActive,
+    ],
+  );
+  const confusionMatrixScalarSeries = useMemo(
+    () =>
+      visibleScalarSeries(
+        confusionMatrixScalarQuery.data,
+        confusionMatrixScalarQuery.isPlaceholderData,
+        confusionMatrixScalarQueryActive,
+      ),
+    [
+      confusionMatrixScalarQuery.data,
+      confusionMatrixScalarQuery.isPlaceholderData,
+      confusionMatrixScalarQueryActive,
+    ],
+  );
   const checkpoints = checkpointQuery.data?.checkpoints;
 
   const seriesByTag = useMemo(
@@ -763,8 +816,8 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
     testScalarQueryActive,
   ]);
   const confusionMatrixSeriesByTag = useMemo(
-    () => groupLogScalarSeriesByTag(confusionMatrixScalarQuery.data?.series ?? []),
-    [confusionMatrixScalarQuery.data?.series],
+    () => groupLogScalarSeriesByTag(confusionMatrixScalarSeries),
+    [confusionMatrixScalarSeries],
   );
   const visibleRunsById = useMemo(
     () => runsById(state.visibleRuns),
@@ -784,12 +837,12 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
         series:
           bestRunCoveredMetricQuery && effectiveBestRunMetricTag
             ? seriesByTag.get(effectiveBestRunMetricTag) ?? []
-            : bestRunScalarQuery.data?.series ?? [],
+            : bestRunStandaloneScalarSeries,
         tag: effectiveBestRunMetricTag,
       }),
     [
       bestRunCoveredMetricQuery,
-      bestRunScalarQuery.data?.series,
+      bestRunStandaloneScalarSeries,
       effectiveBestRunDirection,
       effectiveBestRunMetricTag,
       seriesByTag,
@@ -799,8 +852,10 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
     ],
   );
   const bestRunIsLoading = bestRunCoveredMetricQuery
-    ? bestRunCoveredMetricQuery.isLoading
-    : bestRunScalarQueryActive && bestRunScalarQuery.isLoading;
+    ? bestRunCoveredMetricQuery.isLoading ||
+      bestRunCoveredMetricQuery.isPlaceholderData
+    : bestRunScalarQueryActive &&
+      (bestRunScalarQuery.isLoading || bestRunScalarQuery.isPlaceholderData);
   const bestRunIsFetching = bestRunCoveredMetricQuery
     ? bestRunCoveredMetricQuery.isFetching
     : bestRunScalarQueryActive && bestRunScalarQuery.isFetching;
@@ -900,7 +955,9 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
     confusionMatrixTagCount: state.confusionMatrixRateTags.length,
     hasEventFiles: state.visibleRuns.some((run) => run.eventFileCount > 0),
     runsLoading: state.runsQuery.isLoading,
-    scalarLoading: activeScalarQueries.some((query) => query.isLoading),
+    scalarLoading: activeScalarQueries.some(
+      (query) => query.isLoading || query.isPlaceholderData,
+    ),
     selectedSeriesCount: expandedSelectedSeriesCount,
     selectedTagCount: state.selectedTagList.length,
     tagOptionCount: state.tagOptions.length,
@@ -928,7 +985,9 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
     hasConfusionMatrixTags: state.confusionMatrixRateTags.length > 0,
     isConfusionMatrixCollapsed,
     isConfusionMatrixLoaded:
-      confusionMatrixScalarQueryActive && confusionMatrixScalarQuery.isSuccess,
+      confusionMatrixScalarQueryActive &&
+      confusionMatrixScalarQuery.isSuccess &&
+      !confusionMatrixScalarQuery.isPlaceholderData,
     isConfusionMatrixLoading: confusionMatrixQueryState.isInitialLoading,
     isConfusionMatrixError: confusionMatrixQueryState.isError,
     confusionMatrixError: confusionMatrixQueryState.error,
