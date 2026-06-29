@@ -14,6 +14,9 @@ export type ConfigSection = {
 export type ConfigFieldGroup = {
   title: string;
   fields: ConfigField[];
+  controlField?: ConfigField;
+  isEnabled?: boolean;
+  disabledReason?: string;
 };
 
 export type ConfigSearchOption = {
@@ -201,7 +204,7 @@ function configFieldByKey(fields: ConfigField[], key: string) {
   return fields.find((field) => configFieldMatchesKey(field, key));
 }
 
-function concreteAdaptiveOptionChoice(field: ConfigField) {
+export function concreteConfigOptionChoice(field: ConfigField) {
   for (const choice of field.choices) {
     if (choice === null || choice === undefined) {
       continue;
@@ -215,7 +218,7 @@ function concreteAdaptiveOptionChoice(field: ConfigField) {
   return undefined;
 }
 
-function isPresentAdaptiveOptionValue(value: string | undefined) {
+export function isPresentConfigOptionValue(value: string | undefined) {
   const normalized = (value ?? "").trim().toLowerCase();
   return normalized !== "" && normalized !== "null" && normalized !== "none";
 }
@@ -244,8 +247,8 @@ export function normalizeAdaptiveOptionOverrides(
 
     const flagValue = fieldValue(flagField, next);
     if (isEnabledConfigValue(flagValue)) {
-      if (!isPresentAdaptiveOptionValue(overrideValue(next, optionField.key))) {
-        const optionChoice = concreteAdaptiveOptionChoice(optionField);
+      if (!isPresentConfigOptionValue(overrideValue(next, optionField.key))) {
+        const optionChoice = concreteConfigOptionChoice(optionField);
         if (optionChoice !== undefined) {
           deleteOverrideByKey(next, optionField.key);
           next[optionField.key] = optionChoice;
@@ -267,10 +270,28 @@ function adaptiveFlagKeyForOptionField(fieldKey: string) {
   )?.flagKey;
 }
 
+export function isBoundaryProjectorControlField(field: ConfigField) {
+  const key = configKeyToken(field.key);
+  return (
+    key === "input_layer_weight_option" ||
+    key === "input_layer_bias_option" ||
+    key === "input_layer_diagonal_option" ||
+    key === "input_layer_row_mask_option" ||
+    key === "output_layer_weight_option" ||
+    key === "output_layer_bias_option" ||
+    key === "output_layer_diagonal_option" ||
+    key === "output_layer_row_mask_option"
+  );
+}
+
 export function isAdaptiveOptionNoneSuppressed(
   field: ConfigField,
   overrides: OverrideValues,
 ) {
+  if (isBoundaryProjectorControlField(field)) {
+    return isPresentConfigOptionValue(fieldValue(field, overrides));
+  }
+
   const flagKey = adaptiveFlagKeyForOptionField(field.key);
   if (!flagKey) {
     return false;
@@ -413,6 +434,24 @@ export function disabledConfigFieldReasons(
           configFieldMatchesKey(field, state.controlField.key);
         if (!isEditableControl) {
           disabledReasons.set(field.key, sectionDisabledReason);
+        }
+      }
+    }
+
+    if (!sectionDisabledReason) {
+      const boundaryGroups = boundaryProjectorFieldGroups(
+        section.title,
+        section.fields,
+        overrides,
+      );
+      for (const group of boundaryGroups ?? []) {
+        if (!group.disabledReason || !group.controlField) {
+          continue;
+        }
+        for (const field of group.fields) {
+          if (!configFieldMatchesKey(field, group.controlField.key)) {
+            disabledReasons.set(field.key, group.disabledReason);
+          }
         }
       }
     }
@@ -585,9 +624,26 @@ function boundaryProjectorGroupTitle(prefix: string, fieldKey: string) {
   return undefined;
 }
 
+function boundaryProjectorControlFieldKey(prefix: string, groupTitle: string) {
+  if (groupTitle === "Weight") {
+    return `${prefix}weight_option`;
+  }
+  if (groupTitle === "Bias") {
+    return `${prefix}bias_option`;
+  }
+  if (groupTitle === "Diagonal") {
+    return `${prefix}diagonal_option`;
+  }
+  if (groupTitle === "Mask") {
+    return `${prefix}row_mask_option`;
+  }
+  return undefined;
+}
+
 export function boundaryProjectorFieldGroups(
   sectionTitle: string,
   fields: ConfigField[],
+  overrides: OverrideValues = {},
 ): ConfigFieldGroup[] | undefined {
   const prefix = boundaryProjectorPrefix(sectionTitle);
   if (!prefix) {
@@ -610,10 +666,25 @@ export function boundaryProjectorFieldGroups(
     }
   }
 
-  const groups = Array.from(groupsByTitle, ([title, groupFields]) => ({
-    title,
-    fields: groupFields,
-  })).filter((group) => group.fields.length > 0);
+  const groups = Array.from(groupsByTitle, ([title, groupFields]) => {
+    const controlFieldKey = boundaryProjectorControlFieldKey(prefix, title);
+    const controlField = groupFields.find((field) =>
+      configFieldMatchesKey(field, controlFieldKey ?? ""),
+    );
+    const isEnabled = controlField
+      ? isPresentConfigOptionValue(fieldValue(controlField, overrides))
+      : true;
+    return {
+      title,
+      fields: groupFields,
+      controlField,
+      isEnabled,
+      disabledReason:
+        controlField && !isEnabled
+          ? `Select ${controlField.label} before editing ${title.toLowerCase()} boundary settings.`
+          : undefined,
+    };
+  }).filter((group) => group.fields.length > 0);
   const groupedFieldCount = groups.reduce(
     (count, group) => count + group.fields.length,
     0,

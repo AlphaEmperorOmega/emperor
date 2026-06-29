@@ -4,9 +4,11 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { type ConfigField } from "@/lib/api";
 import {
+  type ConfigFieldGroup,
   type ConfigSection,
   type OverrideValues,
   boundaryProjectorFieldGroups,
+  concreteConfigOptionChoice,
   controlledSectionState,
   fieldValue,
   hasOverride as fieldHasOverride,
@@ -104,6 +106,137 @@ function descendantFieldKeys(sections: ConfigSection[]) {
   return keys;
 }
 
+function BoundaryProjectorGroupAccordion({
+  id,
+  group,
+  overrides,
+  isOpen,
+  onToggle,
+  onEnabledChange,
+  onFieldChange,
+  onFieldReset,
+}: {
+  id: string;
+  group: ConfigFieldGroup;
+  overrides: OverrideValues;
+  isOpen: boolean;
+  onToggle: () => void;
+  onEnabledChange: (checked: boolean) => void;
+  onFieldChange: (key: string, value: string) => void;
+  onFieldReset: (key: string) => void;
+}) {
+  const isEnabled = group.isEnabled === true;
+  const controlField = group.controlField;
+  const fieldCount = group.fields.length;
+  const overrideCount = modifiedCount(group.fields, overrides);
+  const presetCount = presetOwnedCount(group.fields);
+  const hasPreset = presetCount > 0;
+  const firstConcreteOption = controlField
+    ? concreteConfigOptionChoice(controlField)
+    : undefined;
+  const isSwitchDisabled =
+    !controlField ||
+    Boolean(controlField.locked) ||
+    (!isEnabled && firstConcreteOption === undefined);
+  const panelId = `${id}-fields`;
+
+  return (
+    <section
+      className={cn(
+        "overflow-visible rounded-[10px] border border-line-soft bg-black/[0.12] transition",
+        isEnabled
+          ? "shadow-[0_16px_34px_-30px_rgba(0,0,0,0.95)]"
+          : "opacity-82",
+        overrideCount > 0 && "border-violet/35 bg-violet/[0.045]",
+        hasPreset && "border-amber/35 bg-amber/[0.035]",
+      )}
+      data-config-field-group={group.title}
+    >
+      <div className="grid min-h-12 grid-cols-[minmax(0,1fr)_auto] items-stretch overflow-hidden rounded-t-[9px]">
+        <h4 className="h-full min-w-0">
+          <button
+            type="button"
+            aria-expanded={isEnabled && isOpen}
+            aria-controls={panelId}
+            aria-label={`${group.title} boundary projector group, ${sectionCountLabel(
+              fieldCount,
+              "field",
+            )}, ${sectionCountLabel(overrideCount, "override")}${
+              hasPreset ? `, ${sectionCountLabel(presetCount, "preset")}` : ""
+            }${!isEnabled && controlField ? `, select ${controlField.label} to open` : ""}`}
+            disabled={!isEnabled}
+            onClick={onToggle}
+            className={cn(
+              "flex h-full min-h-12 w-full min-w-0 items-center gap-3 overflow-hidden px-3 py-2.5 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed",
+              isEnabled
+                ? "bg-white/[0.035] hover:bg-white/[0.065]"
+                : "bg-white/[0.018] hover:bg-white/[0.018]",
+            )}
+          >
+            <span className="flex min-w-0 items-center gap-2 overflow-hidden">
+              <ChevronDown
+                className={cn(
+                  "h-4 w-4 shrink-0 text-ink-faint transition-transform",
+                  (!isEnabled || !isOpen) && "-rotate-90",
+                )}
+                aria-hidden
+              />
+              <span className="min-w-0 truncate text-sm font-semibold text-ink">
+                {group.title}
+              </span>
+            </span>
+          </button>
+        </h4>
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 border-l border-line-soft bg-black/15 px-3 py-2">
+          {controlField && (
+            <Switch
+              aria-label={controlField.label}
+              checked={isEnabled}
+              disabled={isSwitchDisabled}
+              onCheckedChange={onEnabledChange}
+            />
+          )}
+          <ConfigMetricBadge count={fieldCount} kind="fields" focusable={false} />
+          <ConfigMetricBadge
+            count={overrideCount}
+            kind="overrides"
+            variant={overrideCount > 0 ? "override" : "default"}
+            focusable={false}
+          />
+          {hasPreset && (
+            <Badge variant="preset" className="h-[23px] items-center px-1.5 py-0">
+              {presetCount} preset
+            </Badge>
+          )}
+        </div>
+      </div>
+      <div
+        id={panelId}
+        hidden={!isEnabled || !isOpen}
+        className={
+          isEnabled && isOpen
+            ? "grid gap-x-3 gap-y-3 border-t border-line-soft bg-black/[0.08] px-3 py-3 md:grid-cols-2 2xl:grid-cols-3"
+            : "hidden"
+        }
+      >
+        {isEnabled &&
+          isOpen &&
+          group.fields.map((field) => (
+            <ConfigFieldControl
+              key={field.key}
+              field={field}
+              overrides={overrides}
+              onChange={onFieldChange}
+              onReset={onFieldReset}
+              density="compact"
+              idPrefix={`${id}-field`}
+            />
+          ))}
+      </div>
+    </section>
+  );
+}
+
 export function ConfigSectionAccordion({
   id,
   refCallback,
@@ -144,7 +277,17 @@ export function ConfigSectionAccordion({
   const bodyFields = fields.filter(
     (field) => field.key !== controlField?.key && !childFieldKeys.has(field.key),
   );
-  const bodyFieldGroups = boundaryProjectorFieldGroups(title, bodyFields);
+  const bodyFieldGroups = boundaryProjectorFieldGroups(title, bodyFields, overrides);
+  const boundaryGroupTitleSignature = (
+    bodyFieldGroups?.map((group) => group.title) ?? []
+  ).join(String.fromCharCode(0));
+  const enabledBoundaryGroupTitleSignature = (
+    bodyFieldGroups
+      ?.filter((group) => group.isEnabled)
+      .map((group) => group.title) ?? []
+  ).join(
+    String.fromCharCode(0),
+  );
   const childSectionTitles = useMemo(
     () => childSections.map((section) => section.title),
     [childSections],
@@ -152,6 +295,9 @@ export function ConfigSectionAccordion({
   const childSectionTitleSignature = childSectionTitles.join(String.fromCharCode(0));
   const [openChildSectionTitles, setOpenChildSectionTitles] = useState(
     () => new Set(childSectionTitles),
+  );
+  const [openBoundaryGroupTitles, setOpenBoundaryGroupTitles] = useState(
+    () => new Set(sectionTitlesFromSignature(enabledBoundaryGroupTitleSignature)),
   );
   const sectionHasOverride = sectionModifiedCount > 0;
   const hasPreset = sectionPresetOwnedCount > 0;
@@ -179,6 +325,29 @@ export function ConfigSectionAccordion({
     );
   }, [autoOpenKey, childSectionTitleSignature]);
 
+  useEffect(() => {
+    if (!boundaryGroupTitleSignature) {
+      return;
+    }
+    const groupTitles = sectionTitlesFromSignature(boundaryGroupTitleSignature);
+    const enabledTitles = sectionTitlesFromSignature(
+      enabledBoundaryGroupTitleSignature,
+    );
+    setOpenBoundaryGroupTitles((current) => {
+      const next = new Set(current);
+      const enabledTitleSet = new Set(enabledTitles);
+      for (const title of groupTitles) {
+        if (!enabledTitleSet.has(title)) {
+          next.delete(title);
+        }
+      }
+      for (const title of enabledTitles) {
+        next.add(title);
+      }
+      return next;
+    });
+  }, [boundaryGroupTitleSignature, enabledBoundaryGroupTitleSignature]);
+
   function toggleChildSection(title: string) {
     setOpenChildSectionTitles((current) => {
       const next = new Set(current);
@@ -189,6 +358,44 @@ export function ConfigSectionAccordion({
       }
       return next;
     });
+  }
+
+  function toggleBoundaryGroup(title: string) {
+    setOpenBoundaryGroupTitles((current) => {
+      const next = new Set(current);
+      if (next.has(title)) {
+        next.delete(title);
+      } else {
+        next.add(title);
+      }
+      return next;
+    });
+  }
+
+  function setBoundaryGroupEnabled(group: ConfigFieldGroup, checked: boolean) {
+    const controlField = group.controlField;
+    if (!controlField) {
+      return;
+    }
+    if (!checked) {
+      onFieldChange(controlField.key, "");
+      setOpenBoundaryGroupTitles((current) => {
+        const next = new Set(current);
+        next.delete(group.title);
+        return next;
+      });
+      return;
+    }
+
+    const firstConcreteOption = concreteConfigOptionChoice(controlField);
+    if (firstConcreteOption !== undefined) {
+      onFieldChange(controlField.key, firstConcreteOption);
+      setOpenBoundaryGroupTitles((current) => {
+        const next = new Set(current);
+        next.add(group.title);
+        return next;
+      });
+    }
   }
 
   return (
@@ -289,34 +496,19 @@ export function ConfigSectionAccordion({
         }
       >
         {bodyFields.length > 0 && bodyFieldGroups && bodyFieldGroups.length > 0 && (
-          <div className="grid gap-4">
-            {bodyFieldGroups.map((group) => (
-              <div
+          <div className="grid gap-2.5">
+            {bodyFieldGroups.map((group, index) => (
+              <BoundaryProjectorGroupAccordion
                 key={group.title}
-                className="grid gap-2.5"
-                data-config-field-group={group.title}
-              >
-                <div className="flex min-w-0 items-center gap-2">
-                  <h4 className="shrink-0 text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-ink-faint">
-                    {group.title}
-                  </h4>
-                  <span className="h-px min-w-4 flex-1 bg-line-soft" aria-hidden />
-                </div>
-                <div className="grid gap-x-3 gap-y-3 md:grid-cols-2 2xl:grid-cols-3">
-                  {isOpen &&
-                    group.fields.map((field) => (
-                      <ConfigFieldControl
-                        key={field.key}
-                        field={field}
-                        overrides={overrides}
-                        onChange={onFieldChange}
-                        onReset={onFieldReset}
-                        density="compact"
-                        idPrefix={`${id}-field`}
-                      />
-                    ))}
-                </div>
-              </div>
+                id={sectionElementId(index, group.title, `${id}-boundary-group`)}
+                group={group}
+                overrides={overrides}
+                isOpen={openBoundaryGroupTitles.has(group.title)}
+                onToggle={() => toggleBoundaryGroup(group.title)}
+                onEnabledChange={(checked) => setBoundaryGroupEnabled(group, checked)}
+                onFieldChange={onFieldChange}
+                onFieldReset={onFieldReset}
+              />
             ))}
           </div>
         )}

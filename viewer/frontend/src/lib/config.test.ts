@@ -769,6 +769,13 @@ describe("config section controls", () => {
             type: "class",
             default: null,
             nullable: true,
+            choices: ["DualModelDynamicWeightConfig"],
+            section: "Input Boundary Projector Options",
+          }),
+          field({
+            key: "input_layer_weight_decay_warmup_batches",
+            type: "int",
+            default: 0,
             section: "Input Boundary Projector Options",
           }),
           field({
@@ -825,14 +832,47 @@ describe("config section controls", () => {
       "Mask",
     ]);
     expect(groups?.map((group) => group.fields.map((item) => item.key))).toEqual([
-      ["input_layer_weight_option"],
+      ["input_layer_weight_option", "input_layer_weight_decay_warmup_batches"],
       ["input_layer_bias_option"],
       ["input_layer_diagonal_option"],
       ["input_layer_row_mask_option"],
     ]);
+    expect(groups?.[0]?.controlField?.key).toBe("input_layer_weight_option");
+    expect(groups?.[0]?.isEnabled).toBe(false);
 
     const disabledByDefault = disabledConfigFieldReasons(sections, {});
     expect(disabledByDefault.has("input_layer_weight_option")).toBe(false);
+    expect(
+      disabledByDefault.get("input_layer_weight_decay_warmup_batches"),
+    ).toContain("input_layer_weight_option");
     expect(disabledByDefault.has("output_layer_weight_option")).toBe(false);
+
+    const enabledGroups = boundaryProjectorFieldGroups(
+      inputSection.title,
+      inputSection.fields,
+      { input_layer_weight_option: "DualModelDynamicWeightConfig" },
+    );
+    expect(enabledGroups?.[0]?.isEnabled).toBe(true);
+    expect(
+      disabledConfigFieldReasons(sections, {
+        input_layer_weight_option: "DualModelDynamicWeightConfig",
+      }).has("input_layer_weight_decay_warmup_batches"),
+    ).toBe(false);
+
+    const inputWeightOption = inputSection.fields.find(
+      (item) => item.key === "input_layer_weight_option",
+    );
+    if (!inputWeightOption) {
+      throw new Error("Missing input boundary weight option fixture");
+    }
+    expect(configFieldSelectOptions(inputWeightOption, {}).at(0)).toEqual({
+      value: "",
+      label: "None",
+    });
+    expect(
+      configFieldSelectOptions(inputWeightOption, {
+        input_layer_weight_option: "DualModelDynamicWeightConfig",
+      }).map((option) => option.label),
+    ).toEqual(["DualModelDynamicWeightConfig"]);
   });
 });
