@@ -1,4 +1,4 @@
-import { RotateCcw } from "lucide-react";
+import { PencilLine, RotateCcw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,20 @@ const booleanOptions = [
   { value: "true", label: "On" },
   { value: "false", label: "Off" },
 ] as const;
+
+const modifiedControlClassName =
+  "border-violet/55 bg-[#100719] hover:border-violet/70";
+
+export function ConfigFieldOverrideIcon({ className }: { className?: string }) {
+  return (
+    <PencilLine
+      aria-hidden
+      focusable="false"
+      data-config-field-override-icon=""
+      className={cn("h-3.5 w-3.5 shrink-0 text-violet", className)}
+    />
+  );
+}
 
 function BooleanSegmentedControl({
   id,
@@ -84,36 +98,33 @@ function ConfigFieldLabelContent({
   isLocked,
   isControlDisabled,
   disabledReason,
-  overrideBadgeClassName,
+  statusBadgeClassName,
 }: {
   field: ConfigField;
   isModified: boolean;
   isLocked: boolean;
   isControlDisabled: boolean;
   disabledReason?: string;
-  overrideBadgeClassName?: string;
+  statusBadgeClassName?: string;
 }) {
   return (
     <>
       <span className="flex min-w-0 items-start justify-between gap-2">
-        <span className="min-w-0 text-[13px] font-semibold leading-5 text-ink [overflow-wrap:anywhere]">
-          {field.label}
+        <span
+          data-config-field-label=""
+          className={cn(
+            "flex min-w-0 items-start gap-1.5 text-[13px] font-semibold leading-5 [overflow-wrap:anywhere]",
+            isModified ? "text-violet" : "text-ink",
+          )}
+        >
+          <span className="min-w-0 [overflow-wrap:anywhere]">{field.label}</span>
+          {isModified && <ConfigFieldOverrideIcon className="mt-[3px]" />}
         </span>
       </span>
-      {(isModified || isLocked || isControlDisabled) && (
+      {(isLocked || isControlDisabled) && (
         <span className="flex min-w-0 flex-wrap items-center gap-1.5 text-xs font-medium text-ink-faint">
-          {isModified && (
-            <Badge
-              className={cn(
-                "border-violet/30 bg-violet/15 text-violet",
-                overrideBadgeClassName,
-              )}
-            >
-              override
-            </Badge>
-          )}
           {isLocked && (
-            <Badge variant="preset" className={overrideBadgeClassName}>
+            <Badge variant="preset" className={statusBadgeClassName}>
               preset
             </Badge>
           )}
@@ -171,10 +182,15 @@ export function ConfigFieldValueEditor({
   const resetInsetClassName = isCompact ? "right-1" : "right-0.5";
   const resetPaddingClassName = showResetButton ? "pr-11" : undefined;
   const selectTriggerClassName = isCompact
-    ? cn("h-10 px-3 py-2 text-[13.5px]", resetPaddingClassName)
-    : resetPaddingClassName;
+    ? cn(
+        "h-10 px-3 py-2 text-[13.5px]",
+        isModified && modifiedControlClassName,
+        resetPaddingClassName,
+      )
+    : cn(isModified && modifiedControlClassName, resetPaddingClassName);
   const inputClassName = cn(
     isCompact ? "h-10 px-3 py-2 text-[13.5px]" : undefined,
+    isModified && modifiedControlClassName,
     resetPaddingClassName,
   );
 
@@ -195,7 +211,7 @@ export function ConfigFieldValueEditor({
           disabled={isControlDisabled}
           isCompact={isCompact}
           onChange={(nextValue) => onChange(field.key, nextValue)}
-          className={resetPaddingClassName}
+          className={cn(isModified && modifiedControlClassName, resetPaddingClassName)}
         />
       ) : choices.length > 0 ? (
         <SelectOnlyDropdown
@@ -278,14 +294,13 @@ export function ConfigFieldControl({
   const isLocked = field.locked === true;
   const isControlDisabled = disabled && !isLocked;
   const isCompact = density === "compact";
-  const overrideBadgeClassName = isCompact ? "px-1 py-0.5 text-xs" : undefined;
+  const statusBadgeClassName = isCompact ? "px-1 py-0.5 text-xs" : undefined;
 
   return (
     <div
       className={cn(
         "grid w-full transition",
         isCompact ? "gap-1.5 py-1.5" : "gap-2 py-1.5",
-        isModified && "border-l-2 border-violet/40 pl-2",
         isLocked &&
           "rounded-[10px] border-l-2 border-amber/55 bg-amber/[0.055] pl-2 pr-2 shadow-[inset_0_0_0_1px_rgba(255,209,102,0.04)]",
         isControlDisabled &&
@@ -303,7 +318,7 @@ export function ConfigFieldControl({
             isLocked={isLocked}
             isControlDisabled={isControlDisabled}
             disabledReason={disabledReason}
-            overrideBadgeClassName={overrideBadgeClassName}
+            statusBadgeClassName={statusBadgeClassName}
           />
         </div>
       ) : (
@@ -317,7 +332,7 @@ export function ConfigFieldControl({
             isLocked={isLocked}
             isControlDisabled={isControlDisabled}
             disabledReason={disabledReason}
-            overrideBadgeClassName={overrideBadgeClassName}
+            statusBadgeClassName={statusBadgeClassName}
           />
         </label>
       )}
