@@ -242,7 +242,10 @@ class TrainingApiLifecycleTests(unittest.TestCase):
 
         request = SubmittedTrainingRunPlanRequest.model_validate(base_payload)
 
-        self.assertEqual(request.overrides, {"stack_hidden_dim": 128, "use_bias": True})
+        self.assertEqual(
+            request.overrides,
+            {"stack_hidden_dim": 128, "use_bias": True},
+        )
         with self.assertRaises(ValidationError):
             SubmittedTrainingRunPlanRequest.model_validate(
                 {
@@ -250,6 +253,48 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                     "overrides": {"scheduler": {"name": "cosine"}},
                 }
             )
+
+    def test_training_request_schemas_do_not_cap_preset_selection_count(self) -> None:
+        presets = [f"preset-{index}" for index in range(2501)]
+        create_payload = {
+            "modelType": "linears",
+            "model": "linear",
+            "preset": "baseline",
+            "presets": presets,
+            "datasets": ["Mnist"],
+            "overrides": {},
+            "logFolder": "api_schema",
+        }
+        submitted_payload = {
+            **create_payload,
+            "search": None,
+            "isRandomSearch": False,
+            "runs": [],
+            "summary": {
+                "totalRuns": 0,
+                "completedRuns": 0,
+                "runningRuns": 0,
+                "pendingRuns": 0,
+                "failedRuns": 0,
+                "cancelledRuns": 0,
+                "skippedRuns": 0,
+                "totalEpochs": 0,
+                "completedEpochs": 0,
+                "remainingEpochs": 0,
+            },
+        }
+
+        job_request = TrainingJobCreateRequest.model_validate(
+            {**create_payload, "monitors": []}
+        )
+        run_plan_request = TrainingRunPlanCreateRequest.model_validate(create_payload)
+        submitted_request = SubmittedTrainingRunPlanRequest.model_validate(
+            submitted_payload
+        )
+
+        self.assertEqual(job_request.presets, presets)
+        self.assertEqual(run_plan_request.presets, presets)
+        self.assertEqual(submitted_request.presets, presets)
 
     def test_training_run_plan_rejects_nested_override_object_at_api_boundary(
         self,
@@ -329,6 +374,45 @@ class TrainingApiLifecycleTests(unittest.TestCase):
         )
         self.assertEqual(rejected.status_code, 400)
         self.assertIn("Unknown monitor option", rejected.text)
+
+    def test_training_run_plan_accepts_all_linear_adaptive_presets(self) -> None:
+        import httpx
+
+        from models.linears.linear_adaptive.presets import ExperimentPreset
+
+        presets = ExperimentPreset.cli_names()
+        self.assertGreaterEqual(len(presets), 70)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            app, _manager = self._create_test_app(Path(tmp))
+
+            async def call_api() -> httpx.Response:
+                transport = httpx.ASGITransport(app=app)
+                async with httpx.AsyncClient(
+                    transport=transport,
+                    base_url="http://testserver",
+                ) as client:
+                    return await client.post(
+                        "/training/run-plan",
+                        json={
+                            "modelType": "linears",
+                            "model": "linear_adaptive",
+                            "preset": "baseline",
+                            "presets": presets,
+                            "datasets": ["Mnist"],
+                            "overrides": {},
+                            "logFolder": "all_adaptive_presets",
+                        },
+                    )
+
+            response = asyncio.run(call_api())
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(payload["model"], "linear_adaptive")
+        self.assertEqual(payload["presets"], presets)
+        self.assertEqual(payload["summary"]["totalRuns"], len(presets))
+        self.assertEqual(len(payload["runs"]), len(presets))
 
     def test_training_run_plan_rejects_overlarge_search_axis(self) -> None:
         import httpx

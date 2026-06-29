@@ -16,7 +16,6 @@ from viewer.backend.training_limits import (
     MAX_TRAINING_DATASETS,
     MAX_TRAINING_MONITORS,
     MAX_TRAINING_PLANNED_RUNS,
-    MAX_TRAINING_PRESETS,
     MAX_TRAINING_SEARCH_AXES,
 )
 
@@ -25,7 +24,7 @@ class TrainingJobCreateRequest(ApiResponseModel):
     modelType: str
     model: str
     preset: str
-    presets: list[str] | None = Field(default=None, max_length=MAX_TRAINING_PRESETS)
+    presets: list[str] | None = None
     datasets: list[str] = Field(
         default_factory=list,
         max_length=MAX_TRAINING_DATASETS,
@@ -44,7 +43,7 @@ class TrainingRunPlanCreateRequest(ApiResponseModel):
     modelType: str
     model: str
     preset: str
-    presets: list[str] | None = Field(default=None, max_length=MAX_TRAINING_PRESETS)
+    presets: list[str] | None = None
     datasets: list[str] = Field(
         default_factory=list,
         max_length=MAX_TRAINING_DATASETS,
@@ -184,10 +183,7 @@ class SubmittedTrainingRunPlanRequest(ApiResponseModel):
     modelType: str
     model: str
     preset: str
-    presets: list[str] = Field(
-        default_factory=list,
-        max_length=MAX_TRAINING_PRESETS,
-    )
+    presets: list[str] = Field(default_factory=list)
     datasets: list[str] = Field(
         default_factory=list,
         max_length=MAX_TRAINING_DATASETS,
