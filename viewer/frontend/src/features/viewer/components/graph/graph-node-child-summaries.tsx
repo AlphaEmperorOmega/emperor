@@ -67,14 +67,9 @@ function GraphNodeChildSummaryRow({
       aria-label={summaryAccessibleLabel}
       data-testid={`child-summary-${nodeId}-${index}`}
       title={summaryTitle}
-      tone={summary.kind === "mechanism" ? "violet" : "default"}
       className={cn(
         "relative flex h-9 items-center gap-2 overflow-hidden rounded-[10px] px-3 text-[13px] font-medium",
-        summary.kind === "mechanism"
-          ? "bg-[linear-gradient(135deg,rgba(146,113,255,0.14),rgba(111,168,255,0.08))]"
-          : summary.kind === "overflow"
-            ? "bg-white/[0.035]"
-            : undefined,
+        summary.kind === "overflow" ? "bg-white/[0.035]" : undefined,
       )}
     >
       {summary.kind === "overflow" ? (

@@ -623,19 +623,28 @@ describe("GraphNodeView", () => {
     );
   });
 
-  it("renders mechanism summary rows with explicit bottom edge styling", () => {
+  it("renders mechanism summary rows with neutral child row styling", () => {
     renderGraphNode({
       childSummaries: [{ label: "Gate", kind: "mechanism" }],
     });
 
-    expect(screen.getByText("Gate").parentElement).toHaveClass(
+    const gateSummary = screen.getByText("Gate").parentElement;
+    expect(gateSummary).toHaveClass(
       "h-9",
       "rounded-[10px]",
       "border",
-      "border-violet/30",
+      "border-line-soft",
+      "bg-white/[0.02]",
       "text-[13px]",
+      "text-ink-dim",
+      "leading-none",
+    );
+    expect(gateSummary).not.toHaveClass("border-violet/30");
+    expect(gateSummary).not.toHaveClass("text-violet-text");
+    expect(gateSummary).not.toHaveClass(
       "shadow-[inset_0_-1px_0_rgba(146,113,255,0.24)]",
     );
+    expect(gateSummary?.className).not.toContain("linear-gradient");
   });
 
   it("renders direct weight and bias shapes inside the card", () => {

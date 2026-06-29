@@ -33,6 +33,34 @@ const activity: GraphParameterActivity = {
   },
 };
 
+const neutralSummaryRowClasses = [
+  "h-9",
+  "rounded-[10px]",
+  "border",
+  "border-line-soft",
+  "bg-white/[0.02]",
+  "px-3",
+  "text-[13px]",
+  "text-ink-dim",
+  "leading-none",
+];
+
+const mechanismHighlightClasses = [
+  "border-violet/30",
+  "bg-violet/15",
+  "text-violet-text",
+  "shadow-[inset_0_-1px_0_rgba(146,113,255,0.24)]",
+];
+
+function expectNeutralSummaryRow(row: HTMLElement) {
+  expect(row).toHaveClass(...neutralSummaryRowClasses);
+  expect(row.className).not.toContain("linear-gradient");
+
+  for (const className of mechanismHighlightClasses) {
+    expect(row).not.toHaveClass(className);
+  }
+}
+
 describe("GraphNodeChildSummaries", () => {
   it("uses the W/b indicator group as the only activity popup trigger", () => {
     const onParentClick = vi.fn();
@@ -194,5 +222,29 @@ describe("GraphNodeChildSummaries", () => {
     fireEvent.click(screen.getByLabelText("LinearLayer 128 -> 64"));
 
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+  });
+
+  it("renders mechanism rows with the same neutral styling as child rows", () => {
+    render(
+      <GraphNodeChildSummaries
+        nodeId="main_model.0"
+        summaries={[
+          { label: "LinearLayer", dims: "128 -> 64", kind: "child" },
+          { label: "Gate", kind: "mechanism" },
+          { label: "Halting mechanism", kind: "mechanism" },
+        ]}
+      />,
+    );
+
+    const linearLayerRow = screen.getByTestId("child-summary-main_model.0-0");
+    const gateRow = screen.getByTestId("child-summary-main_model.0-1");
+    const haltingRow = screen.getByTestId("child-summary-main_model.0-2");
+
+    expect(linearLayerRow).toHaveTextContent("LinearLayer");
+    expect(gateRow).toHaveTextContent("Gate");
+    expect(haltingRow).toHaveTextContent("Halting mechanism");
+    expectNeutralSummaryRow(linearLayerRow);
+    expectNeutralSummaryRow(gateRow);
+    expectNeutralSummaryRow(haltingRow);
   });
 });
