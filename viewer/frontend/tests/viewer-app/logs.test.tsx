@@ -211,6 +211,12 @@ async function selectAllLogDatasets(user: ReturnType<typeof userEvent.setup>) {
   await user.click(within(section).getByRole("button", { name: /^all$/i }));
 }
 
+async function selectAllLogPresets(user: ReturnType<typeof userEvent.setup>) {
+  await screen.findByRole("combobox", { name: /^Presets\b/i });
+  const section = logFilterSection("Presets");
+  await user.click(within(section).getByRole("button", { name: /^all$/i }));
+}
+
 async function selectLogExperiments(
   user: ReturnType<typeof userEvent.setup>,
   experiments: string[],
@@ -629,6 +635,207 @@ describe("ViewerApp Logs Workspace", () => {
       .toBeInTheDocument();
     expect(within(detailsPanel as HTMLElement).queryByTitle("multi_mnist_20260601_010203"))
       .not.toBeInTheDocument();
+
+    await selectAllLogDatasets(user);
+
+    await waitFor(() => {
+      expect(logTagRequests.at(-1)).toEqual({
+        runIds: ["multi-mnist", "multi-cifar"],
+      });
+    });
+    await waitFor(() => {
+      expect(logScalarRequests).toContainEqual({
+        runIds: ["multi-mnist", "multi-cifar"],
+        tags: ["validation/accuracy"],
+        maxPoints: 500,
+        sampling: "tail",
+      });
+      expect(logScalarRequests).toContainEqual({
+        runIds: ["multi-mnist", "multi-cifar"],
+        tags: ["train/loss"],
+        maxPoints: 500,
+        sampling: "tail",
+      });
+    });
+    expect(screen.getAllByText(/multi_dataset · Mnist · linear · linears · BASELINE/).length)
+      .toBeGreaterThan(0);
+    expect(screen.getAllByText(/multi_dataset · Cifar10 · linear · linears · BASELINE/).length)
+      .toBeGreaterThan(0);
+  });
+
+  it("updates scalar charts when preset filters return to All", async () => {
+    const runs = [
+      {
+        ...logRunsResponse.runs[0],
+        id: "multi-baseline",
+        group: "multi_preset",
+        experiment: "multi_preset",
+        preset: "BASELINE",
+        dataset: "Mnist",
+        runName: "multi_baseline_20260601_010203",
+        timestamp: "2026-06-01 01:02:03",
+        relativePath:
+          "multi_preset/linear/BASELINE/Mnist/multi_baseline_20260601_010203/version_0",
+        metrics: { "test/accuracy": 0.91 },
+      },
+      {
+        ...logRunsResponse.runs[0],
+        id: "multi-wide",
+        group: "multi_preset",
+        experiment: "multi_preset",
+        preset: "WIDE",
+        dataset: "Mnist",
+        runName: "multi_wide_20260601_020304",
+        timestamp: "2026-06-01 02:03:04",
+        relativePath:
+          "multi_preset/linear/WIDE/Mnist/multi_wide_20260601_020304/version_0",
+        metrics: { "test/accuracy": 0.73 },
+      },
+    ];
+    const expandedScalarResponse = deferred<unknown>();
+    let delayExpandedScalarReads = false;
+    const { logScalarRequests, logTagRequests } = installFetchMock({
+      logRunsResponse: { runs },
+      logExperimentsResponse: {
+        experiments: [
+          { experiment: "multi_preset", runCount: 2, relativePath: "multi_preset" },
+        ],
+      },
+      logTagsByRun: {
+        "multi-baseline": ["train/loss", "validation/accuracy"],
+        "multi-wide": ["train/loss", "validation/accuracy"],
+      },
+      logScalarSeries: [
+        {
+          runId: "multi-baseline",
+          tag: "train/loss",
+          points: [{ step: 1, wallTime: 1780000000, value: 0.44 }],
+        },
+        {
+          runId: "multi-baseline",
+          tag: "validation/accuracy",
+          points: [{ step: 1, wallTime: 1780000000, value: 0.81 }],
+        },
+        {
+          runId: "multi-wide",
+          tag: "train/loss",
+          points: [{ step: 1, wallTime: 1780000100, value: 0.66 }],
+        },
+        {
+          runId: "multi-wide",
+          tag: "validation/accuracy",
+          points: [{ step: 1, wallTime: 1780000100, value: 0.59 }],
+        },
+      ],
+      logScalarResponseFactory: (body) => {
+        if (
+          delayExpandedScalarReads &&
+          body.runIds.includes("multi-baseline") &&
+          body.runIds.includes("multi-wide") &&
+          body.tags.includes("validation/accuracy")
+        ) {
+          return expandedScalarResponse.promise;
+        }
+        return undefined;
+      },
+    });
+    renderViewer();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+    await user.click(await screen.findByRole("button", { name: /all runs/i }));
+    await selectLogExperiments(user, ["multi_preset"]);
+    await selectAllLogPresets(user);
+    await waitFor(() => {
+      expect(
+        screen.getByRole("combobox", { name: /^Presets\s+2 \/ 2 selected$/i }),
+      ).toBeInTheDocument();
+    });
+
+    expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
+      .toBeInTheDocument();
+    await waitFor(() => {
+      expect(logTagRequests.at(-1)).toEqual({
+        runIds: ["multi-baseline", "multi-wide"],
+      });
+    });
+
+    await clickLogOption(user, "Presets", "BASELINE");
+
+    await waitFor(() => {
+      expect(logTagRequests.at(-1)).toEqual({ runIds: ["multi-wide"] });
+    });
+    await waitFor(() => {
+      expect(logScalarRequests).toContainEqual({
+        runIds: ["multi-wide"],
+        tags: ["validation/accuracy"],
+        maxPoints: 500,
+        sampling: "tail",
+      });
+      expect(logScalarRequests).toContainEqual({
+        runIds: ["multi-wide"],
+        tags: ["train/loss"],
+        maxPoints: 500,
+        sampling: "tail",
+      });
+    });
+    expect(screen.queryByText(/multi_baseline_20260601_010203/))
+      .not.toBeInTheDocument();
+    expect(screen.getAllByText(/multi_preset · Mnist · linear · linears · WIDE/).length)
+      .toBeGreaterThan(0);
+
+    delayExpandedScalarReads = true;
+    await selectAllLogPresets(user);
+
+    await waitFor(() => {
+      expect(logTagRequests.at(-1)).toEqual({
+        runIds: ["multi-baseline", "multi-wide"],
+      });
+    });
+    await waitFor(() => {
+      expect(logScalarRequests).toContainEqual({
+        runIds: ["multi-baseline", "multi-wide"],
+        tags: ["validation/accuracy"],
+        maxPoints: 500,
+        sampling: "tail",
+      });
+      expect(logScalarRequests).toContainEqual({
+        runIds: ["multi-baseline", "multi-wide"],
+        tags: ["train/loss"],
+        maxPoints: 500,
+        sampling: "tail",
+      });
+    });
+    await waitFor(() => {
+      expect(
+        screen.getByText("Loading validation/accuracy scalar points"),
+      ).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByRole("img", { name: /validation\/accuracy scalar chart/i }),
+    ).not.toBeInTheDocument();
+
+    expandedScalarResponse.resolve({
+      series: [
+        {
+          runId: "multi-baseline",
+          tag: "validation/accuracy",
+          points: [{ step: 1, wallTime: 1780000000, value: 0.81 }],
+        },
+        {
+          runId: "multi-wide",
+          tag: "validation/accuracy",
+          points: [{ step: 1, wallTime: 1780000100, value: 0.59 }],
+        },
+      ],
+    });
+
+    expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
+      .toBeInTheDocument();
+    expect(screen.getAllByText(/multi_preset · Mnist · linear · linears · BASELINE/).length)
+      .toBeGreaterThan(0);
+    expect(screen.getAllByText(/multi_preset · Mnist · linear · linears · WIDE/).length)
+      .toBeGreaterThan(0);
   });
 
   it("keeps validation examples collapsed until the accordion is opened", async () => {
