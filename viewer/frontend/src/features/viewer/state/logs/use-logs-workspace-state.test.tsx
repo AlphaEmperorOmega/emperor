@@ -213,4 +213,123 @@ describe("useLogsWorkspaceState", () => {
       expect.any(Object),
     );
   });
+
+  it("uses complete custom run metadata while scalar tags load by visible-run window", async () => {
+    const runs = Array.from({ length: 105 }, (_, index) => {
+      const lateRun = index >= 100;
+      return logRun({
+        id: `large-${String(index + 1).padStart(3, "0")}`,
+        experiment: "large_exp",
+        dataset: lateRun ? "ZebraSet" : "Mnist",
+        model: lateRun ? "wide_linear" : "linear",
+        preset: lateRun ? "BASELINE" : "AAA_CONTROL",
+      });
+    });
+    mocks.fetchLogExperiments.mockResolvedValue({
+      experiments: [
+        { experiment: "large_exp", runCount: runs.length, relativePath: "large_exp" },
+      ],
+    });
+    mocks.fetchLogRuns.mockImplementation(
+      ({ filters }: { filters?: { experiment?: string[] } } = {}) =>
+        Promise.resolve({
+          runs: filters?.experiment
+            ? runs.filter((run) => filters.experiment?.includes(run.experiment))
+            : runs,
+          total: runs.length,
+          limit: 100,
+          offset: 0,
+          hasMore: false,
+        }),
+    );
+    mocks.fetchLogTags.mockImplementation(({ runIds }: { runIds: string[] }) =>
+      Promise.resolve({
+        runs: runIds.map((runId) => ({
+          runId,
+          scalarTags: ["train/loss"],
+          histogramTags: [],
+          imageTags: [],
+          textTags: [],
+        })),
+      }),
+    );
+
+    const { result } = renderLogsWorkspaceState();
+
+    await waitFor(() => {
+      expect(result.current.experimentOptions.map((option) => option.value))
+        .toEqual(["large_exp"]);
+    });
+
+    act(() => {
+      result.current.toggleExperiment("large_exp");
+    });
+
+    await waitFor(() => {
+      expect(result.current.datasetOptions.map((option) => option.value))
+        .toEqual(["Mnist", "ZebraSet"]);
+      expect(result.current.modelOptions.map((option) => option.value))
+        .toEqual(["linears/linear", "linears/wide_linear"]);
+      expect(result.current.presetOptions.map((option) => option.value))
+        .toEqual(["AAA_CONTROL", "BASELINE"]);
+    });
+    expect(mocks.fetchLogRuns).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filters: { experiment: ["large_exp"] },
+        includeAllPages: true,
+        pagination: { limit: 100, offset: 0 },
+      }),
+      expect.any(Object),
+    );
+
+    act(() => {
+      result.current.selectAllDatasets();
+      result.current.selectAllModels();
+      result.current.selectAllPresets();
+    });
+
+    await waitFor(() => {
+      expect(result.current.visibleRunIds).toHaveLength(105);
+    });
+    await waitFor(() => {
+      expect(mocks.fetchLogTags).toHaveBeenCalledWith(
+        { runIds: runs.slice(0, 100).map((run) => run.id) },
+        expect.any(Object),
+      );
+    });
+    expect(result.current.loadedScalarTagRunCount).toBe(100);
+    expect(result.current.totalScalarTagRunCount).toBe(105);
+    expect(result.current.canLoadMoreScalarTags).toBe(true);
+
+    const datasetOptionsBefore = result.current.datasetOptions.map(
+      (option) => option.value,
+    );
+    const modelOptionsBefore = result.current.modelOptions.map(
+      (option) => option.value,
+    );
+    const presetOptionsBefore = result.current.presetOptions.map(
+      (option) => option.value,
+    );
+
+    act(() => {
+      result.current.loadMoreScalarTags();
+    });
+
+    await waitFor(() => {
+      expect(mocks.fetchLogTags).toHaveBeenCalledWith(
+        { runIds: runs.slice(100).map((run) => run.id) },
+        expect.any(Object),
+      );
+    });
+    await waitFor(() => {
+      expect(result.current.loadedScalarTagRunCount).toBe(105);
+    });
+    expect(result.current.canLoadMoreScalarTags).toBe(false);
+    expect(result.current.datasetOptions.map((option) => option.value))
+      .toEqual(datasetOptionsBefore);
+    expect(result.current.modelOptions.map((option) => option.value))
+      .toEqual(modelOptionsBefore);
+    expect(result.current.presetOptions.map((option) => option.value))
+      .toEqual(presetOptionsBefore);
+  });
 });

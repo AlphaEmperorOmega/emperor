@@ -821,19 +821,93 @@ export function logTagsPayload(tags: MockLogTags | undefined) {
 
 export const logTagsByRun: Record<string, MockLogTags> = {
   "log-mnist": [
+    "validation/accuracy_epoch",
+    "validation/loss_epoch",
+    "train/loss_epoch",
+    "train/accuracy_epoch",
     "train/loss",
+    "train/accuracy",
     "validation/accuracy",
     "test/accuracy",
     "main_model.0.model/weights/mean",
   ],
   "log-cifar": [
+    "validation/accuracy_epoch",
+    "validation/loss_epoch",
+    "train/loss_epoch",
+    "train/accuracy_epoch",
     "train/loss",
+    "train/accuracy",
     "validation/accuracy",
     "test/accuracy",
     "main_model.0.model/weights/mean",
   ],
 };
 export const logScalarSeries = [
+  {
+    runId: "log-mnist",
+    tag: "train/loss_epoch",
+    points: [
+      { step: 1, wallTime: 1780000000, value: 0.72 },
+      { step: 2, wallTime: 1780000001, value: 0.31 },
+    ],
+  },
+  {
+    runId: "log-cifar",
+    tag: "train/loss_epoch",
+    points: [
+      { step: 1, wallTime: 1780000000, value: 0.91 },
+      { step: 2, wallTime: 1780000001, value: 0.54 },
+    ],
+  },
+  {
+    runId: "log-mnist",
+    tag: "train/accuracy_epoch",
+    points: [
+      { step: 1, wallTime: 1780000000, value: 0.52 },
+      { step: 2, wallTime: 1780000001, value: 0.78 },
+    ],
+  },
+  {
+    runId: "log-cifar",
+    tag: "train/accuracy_epoch",
+    points: [
+      { step: 1, wallTime: 1780000000, value: 0.42 },
+      { step: 2, wallTime: 1780000001, value: 0.69 },
+    ],
+  },
+  {
+    runId: "log-mnist",
+    tag: "validation/loss_epoch",
+    points: [
+      { step: 1, wallTime: 1780000000, value: 0.64 },
+      { step: 2, wallTime: 1780000001, value: 0.28 },
+    ],
+  },
+  {
+    runId: "log-cifar",
+    tag: "validation/loss_epoch",
+    points: [
+      { step: 1, wallTime: 1780000000, value: 0.86 },
+      { step: 2, wallTime: 1780000001, value: 0.47 },
+    ],
+  },
+  {
+    runId: "log-mnist",
+    tag: "validation/accuracy_epoch",
+    points: [
+      { step: 1, wallTime: 1780000000, value: 0.6 },
+      { step: 2, wallTime: 1780000001, value: 0.8 },
+    ],
+  },
+  {
+    runId: "log-cifar",
+    tag: "validation/accuracy_epoch",
+    points: [
+      { step: 1, wallTime: 1780000000, value: 0.4 },
+      { step: 2, wallTime: 1780000001, value: 0.55 },
+    ],
+  },
   {
     runId: "log-mnist",
     tag: "train/loss",
@@ -848,6 +922,22 @@ export const logScalarSeries = [
     points: [
       { step: 1, wallTime: 1780000000, value: 0.9 },
       { step: 2, wallTime: 1780000001, value: 0.5 },
+    ],
+  },
+  {
+    runId: "log-mnist",
+    tag: "train/accuracy",
+    points: [
+      { step: 1, wallTime: 1780000000, value: 0.5 },
+      { step: 2, wallTime: 1780000001, value: 0.76 },
+    ],
+  },
+  {
+    runId: "log-cifar",
+    tag: "train/accuracy",
+    points: [
+      { step: 1, wallTime: 1780000000, value: 0.45 },
+      { step: 2, wallTime: 1780000001, value: 0.7 },
     ],
   },
   {
@@ -1113,12 +1203,20 @@ export function buildKaggleLinearLogFixture() {
   ];
   const runs = [normalRun, ...kaggleRuns];
   const kaggleTags = ["train/kaggle_logloss", "validation/kaggle_auc"];
+  const normalTags = [
+    "validation/accuracy_epoch",
+    "validation/loss_epoch",
+    "train/loss_epoch",
+    "train/accuracy_epoch",
+    "train/loss",
+    "validation/accuracy",
+  ];
 
   return {
     kaggleRunIds: kaggleRuns.map((run) => run.id),
     kaggleTags,
     normalRunId: normalRun.id,
-    normalTags: ["train/loss", "validation/accuracy"],
+    normalTags,
     logRunsResponse: { runs },
     logExperimentsResponse: {
       experiments: [
@@ -1127,11 +1225,43 @@ export function buildKaggleLinearLogFixture() {
       ],
     },
     logTagsByRun: {
-      [normalRun.id]: ["train/loss", "validation/accuracy"],
+      [normalRun.id]: normalTags,
       [kaggleRuns[0].id]: kaggleTags,
       [kaggleRuns[1].id]: kaggleTags,
     } as Record<string, MockLogTags>,
     logScalarSeries: [
+      {
+        runId: normalRun.id,
+        tag: "validation/accuracy_epoch",
+        points: [
+          { step: 1, wallTime: 1780000000, value: 0.5 },
+          { step: 2, wallTime: 1780000100, value: 0.72 },
+        ],
+      },
+      {
+        runId: normalRun.id,
+        tag: "validation/loss_epoch",
+        points: [
+          { step: 1, wallTime: 1780000000, value: 0.66 },
+          { step: 2, wallTime: 1780000100, value: 0.35 },
+        ],
+      },
+      {
+        runId: normalRun.id,
+        tag: "train/loss_epoch",
+        points: [
+          { step: 1, wallTime: 1780000000, value: 0.8 },
+          { step: 2, wallTime: 1780000100, value: 0.4 },
+        ],
+      },
+      {
+        runId: normalRun.id,
+        tag: "train/accuracy_epoch",
+        points: [
+          { step: 1, wallTime: 1780000000, value: 0.48 },
+          { step: 2, wallTime: 1780000100, value: 0.74 },
+        ],
+      },
       {
         runId: normalRun.id,
         tag: "train/loss",

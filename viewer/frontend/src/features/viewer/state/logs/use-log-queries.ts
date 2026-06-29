@@ -43,16 +43,16 @@ export type LogScalarQueryInput = {
   queryKey: readonly unknown[];
 };
 
-export type LogRunsQueryInput = FetchLogRunsInput & {
+export type LogTagsQueryInput = {
+  runIds: string[];
   enabled: boolean;
   queryKey: readonly unknown[];
-  keepPreviousData?: boolean;
 };
 
 const LOG_RUNS_STALE_TIME_MS = 30_000;
 const LOG_TAGS_STALE_TIME_MS = 5 * 60_000;
 const LOG_SERIES_STALE_TIME_MS = 60_000;
-type LogRunsQueryData = Awaited<ReturnType<typeof fetchLogRuns>>;
+type LogTagsQueryData = Awaited<ReturnType<typeof fetchLogTags>>;
 type LogScalarsQueryData = Awaited<ReturnType<typeof fetchLogScalars>>;
 
 export function useLogRunsQuery({
@@ -71,29 +71,6 @@ export function useLogRunsQuery({
     retry: false,
     staleTime: LOG_RUNS_STALE_TIME_MS,
   });
-}
-
-export function useLogRunQueries(
-  inputs: LogRunsQueryInput[],
-): Array<UseQueryResult<LogRunsQueryData>> {
-  return useQueries({
-    queries: inputs.map((input) => ({
-      queryKey: input.queryKey,
-      queryFn: ({ signal }) =>
-        fetchLogRuns(
-          {
-            filters: input.filters,
-            pagination: input.pagination,
-            includeAllPages: input.includeAllPages,
-          },
-          { signal },
-        ),
-      enabled: input.enabled,
-      placeholderData: input.keepPreviousData === false ? undefined : keepPreviousData,
-      retry: false,
-      staleTime: LOG_RUNS_STALE_TIME_MS,
-    })),
-  }) as Array<UseQueryResult<LogRunsQueryData>>;
 }
 
 export function useLogExperimentsQuery({ enabled = true }: QueryOptions = {}) {
@@ -122,6 +99,21 @@ export function useLogTagsQuery({
     retry: false,
     staleTime: LOG_TAGS_STALE_TIME_MS,
   });
+}
+
+export function useLogTagQueries(
+  inputs: LogTagsQueryInput[],
+): Array<UseQueryResult<LogTagsQueryData>> {
+  return useQueries({
+    queries: inputs.map((input) => ({
+      queryKey: input.queryKey,
+      queryFn: ({ signal }) => fetchLogTags({ runIds: input.runIds }, { signal }),
+      enabled: input.enabled && input.runIds.length > 0,
+      placeholderData: keepPreviousData,
+      retry: false,
+      staleTime: LOG_TAGS_STALE_TIME_MS,
+    })),
+  }) as Array<UseQueryResult<LogTagsQueryData>>;
 }
 
 export function useLogScalarsQuery({

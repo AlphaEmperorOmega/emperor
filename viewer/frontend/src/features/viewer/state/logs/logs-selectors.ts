@@ -42,8 +42,36 @@ export const COMMON_SCALAR_TAGS = [
   "test/accuracy",
 ];
 
+export const DEFAULT_SCALAR_TAGS = [
+  "validation/accuracy_epoch",
+  "validation/loss_epoch",
+  "train/loss_epoch",
+  "train/accuracy_epoch",
+];
+
+export const LOG_PLOT_SELECTOR_SCALAR_TAGS = [
+  "train/loss",
+  "train/accuracy",
+  "train/loss_epoch",
+  "train/accuracy_epoch",
+  "train/confidence/mean",
+  "train/calibration/ece",
+  "train/f1_score",
+  "validation/loss",
+  "validation/accuracy",
+  "validation/loss_epoch",
+  "validation/accuracy_epoch",
+  "validation/confidence/mean",
+  "validation/calibration/ece",
+  "validation/f1_score",
+];
+
 export function isDefaultScalarTag(tag: string) {
-  return COMMON_SCALAR_TAGS.includes(tag);
+  return DEFAULT_SCALAR_TAGS.includes(tag);
+}
+
+export function isLogPlotSelectorScalarTag(tag: string) {
+  return LOG_PLOT_SELECTOR_SCALAR_TAGS.includes(tag);
 }
 
 export const LOG_METRIC_GROUPS = [
@@ -251,6 +279,10 @@ export function groupLogMetricTags(tags: string[]): LogMetricTagsByGroup {
     groups[metricGroupForTag(tag)].push(tag);
   }
   return groups;
+}
+
+export function groupLogPlotSelectorTags(tags: string[]): LogMetricTagsByGroup {
+  return groupLogMetricTags(tags.filter((tag) => isLogPlotSelectorScalarTag(tag)));
 }
 
 export function toggleSetValue(

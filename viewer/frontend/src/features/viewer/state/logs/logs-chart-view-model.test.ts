@@ -14,6 +14,8 @@ import {
   buildLogScalarTagOptions,
   isDefaultScalarTag,
   groupRenderableLogMetrics,
+  groupLogPlotSelectorTags,
+  isLogPlotSelectorScalarTag,
 } from "@/features/viewer/state/logs/logs-selectors";
 import { buildConfusionMatrixHeatmaps } from "@/features/viewer/state/logs/log-diagnostics";
 import { type LogRun, type LogScalarSeries } from "@/lib/api";
@@ -241,12 +243,18 @@ describe("logs chart view model", () => {
     );
   });
 
-  it("defaults to compact common scalar tags without bulk classifier diagnostics", () => {
-    expect(isDefaultScalarTag("gap/accuracy")).toBe(true);
-    expect(isDefaultScalarTag("gap/loss")).toBe(true);
-    expect(isDefaultScalarTag("best_validation/accuracy")).toBe(true);
-    expect(isDefaultScalarTag("gradients/global_norm")).toBe(true);
-    expect(isDefaultScalarTag("validation/confidence/mean")).toBe(true);
+  it("defaults to the core epoch scalar tags without diagnostic metrics", () => {
+    expect(isDefaultScalarTag("validation/accuracy_epoch")).toBe(true);
+    expect(isDefaultScalarTag("validation/loss_epoch")).toBe(true);
+    expect(isDefaultScalarTag("train/loss_epoch")).toBe(true);
+    expect(isDefaultScalarTag("train/accuracy_epoch")).toBe(true);
+    expect(isDefaultScalarTag("train/loss")).toBe(false);
+    expect(isDefaultScalarTag("train/accuracy")).toBe(false);
+    expect(isDefaultScalarTag("gap/accuracy")).toBe(false);
+    expect(isDefaultScalarTag("gap/loss")).toBe(false);
+    expect(isDefaultScalarTag("best_validation/accuracy")).toBe(false);
+    expect(isDefaultScalarTag("gradients/global_norm")).toBe(false);
+    expect(isDefaultScalarTag("validation/confidence/mean")).toBe(false);
     expect(isDefaultScalarTag("validation/per_class/class_3/f1")).toBe(false);
     expect(
       isDefaultScalarTag(
@@ -259,6 +267,32 @@ describe("logs chart view model", () => {
       ),
     ).toBe(false);
     expect(isDefaultScalarTag("main_model.0.model/weights/mean")).toBe(false);
+  });
+
+  it("limits accordion plot selectors to compact train and validation metrics", () => {
+    expect(isLogPlotSelectorScalarTag("validation/accuracy")).toBe(true);
+    expect(isLogPlotSelectorScalarTag("validation/f1_score")).toBe(true);
+    expect(isLogPlotSelectorScalarTag("train/f1_score")).toBe(true);
+    expect(isLogPlotSelectorScalarTag("validation/per_class/class_3/f1_score"))
+      .toBe(false);
+    expect(isLogPlotSelectorScalarTag("validation/kaggle_auc")).toBe(false);
+    expect(isLogPlotSelectorScalarTag("gap/accuracy")).toBe(false);
+
+    expect(
+      groupLogPlotSelectorTags([
+        "validation/loss",
+        "validation/per_class/class_3/f1_score",
+        "validation/f1_score",
+        "train/accuracy",
+        "train/kaggle_logloss",
+        "gap/accuracy",
+      ]),
+    ).toEqual({
+      train: ["train/accuracy"],
+      validation: ["validation/loss", "validation/f1_score"],
+      test: [],
+      other: [],
+    });
   });
 
   it("splits confusion-matrix tags out of normal scalar tag options", () => {

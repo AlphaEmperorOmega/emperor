@@ -27,6 +27,42 @@ function logOptionName(label: string) {
   return new RegExp(`^${escapeRegExp(label)}(?:\\b|$)`, "i");
 }
 
+const DEFAULT_EPOCH_SCALAR_TAGS = [
+  "validation/accuracy_epoch",
+  "validation/loss_epoch",
+  "train/loss_epoch",
+  "train/accuracy_epoch",
+];
+
+function scalarTagsWithEpochDefaults(...tags: string[]) {
+  return Array.from(new Set([...DEFAULT_EPOCH_SCALAR_TAGS, ...tags]));
+}
+
+function epochScalarSeriesForRun(runId: string, offset = 0) {
+  return [
+    {
+      runId,
+      tag: "validation/accuracy_epoch",
+      points: [{ step: 1, wallTime: 1780000000 + offset, value: 0.75 + offset / 1000 }],
+    },
+    {
+      runId,
+      tag: "validation/loss_epoch",
+      points: [{ step: 1, wallTime: 1780000001 + offset, value: 0.5 - offset / 1000 }],
+    },
+    {
+      runId,
+      tag: "train/loss_epoch",
+      points: [{ step: 1, wallTime: 1780000002 + offset, value: 0.6 - offset / 1000 }],
+    },
+    {
+      runId,
+      tag: "train/accuracy_epoch",
+      points: [{ step: 1, wallTime: 1780000003 + offset, value: 0.7 + offset / 1000 }],
+    },
+  ];
+}
+
 async function openLogFilter(user: ReturnType<typeof userEvent.setup>, title: string) {
   const trigger = await screen.findByRole("combobox", {
     name: new RegExp(`^${escapeRegExp(title)}\\b`, "i"),
@@ -123,7 +159,7 @@ function expectElementsInDocumentOrder(elements: HTMLElement[]) {
 }
 
 function logScalarLegendButton(card: HTMLElement, runLabel: RegExp) {
-  return within(card).getByRole("button", { name: runLabel });
+  return within(card).getAllByRole("button", { name: runLabel })[0];
 }
 
 function expectLegendOpacity(button: HTMLElement, opacity: "normal" | "dimmed") {
@@ -165,6 +201,19 @@ async function clickLogOption(
   return option;
 }
 
+async function setLogOptionSelection(
+  user: ReturnType<typeof userEvent.setup>,
+  title: string,
+  label: string,
+  selected: boolean,
+) {
+  const option = await findLogOption(user, title, label);
+  const isSelected = option.getAttribute("aria-selected") === "true";
+  if (isSelected !== selected) {
+    await user.click(option);
+  }
+}
+
 async function openMetricPlotSelector(
   user: ReturnType<typeof userEvent.setup>,
   group: "Train" | "Validation",
@@ -185,6 +234,15 @@ async function findMetricPlotOption(
 ) {
   const listbox = await openMetricPlotSelector(user, group);
   return within(listbox).findByRole("option", { name: logOptionName(label) });
+}
+
+async function queryMetricPlotOption(
+  user: ReturnType<typeof userEvent.setup>,
+  group: "Train" | "Validation",
+  label: string,
+) {
+  const listbox = await openMetricPlotSelector(user, group);
+  return within(listbox).queryByRole("option", { name: logOptionName(label) });
 }
 
 function makeScrollable(element: HTMLElement) {
@@ -248,20 +306,9 @@ describe("ViewerApp Logs Workspace", () => {
     expect(await screen.findByText("No runs selected")).toBeInTheDocument();
     expect(logTagRequests).toHaveLength(0);
     expect(logScalarRequests).toHaveLength(0);
-
-    await user.click(await screen.findByRole("button", { name: /all runs/i }));
-
-    await expectLogFilterSelection(user, "Experiments", "test_model", false);
-    await expectLogFilterSelection(user, "Experiments", "test_model_2", false);
-    expect(screen.getByRole("combobox", { name: /^Datasets\b/i })).toBeInTheDocument();
-    expect(screen.queryByRole("combobox", { name: /^Runs\b/i })).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Datasets Mnist")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Datasets Cifar10")).not.toBeInTheDocument();
-    expect(logTagRequests).toHaveLength(0);
-    expect(logScalarRequests).toHaveLength(0);
   });
 
-  it("keeps log scope controls inside Experiments without summary cards", async () => {
+  it("omits log scope controls from the Experiments filter", async () => {
     installFetchMock();
     renderViewer();
     const user = userEvent.setup();
@@ -270,31 +317,22 @@ describe("ViewerApp Logs Workspace", () => {
     await screen.findByRole("combobox", { name: /^Experiments\b/i });
 
     const experimentSection = logFilterSection("Experiments");
-    const currentTargetButton = within(experimentSection).getByRole("button", {
+    expect(within(experimentSection).queryByRole("button", {
       name: /current target/i,
-    });
-    const allRunsButton = within(experimentSection).getByRole("button", {
+    })).not.toBeInTheDocument();
+    expect(within(experimentSection).queryByRole("button", {
       name: /all runs/i,
-    });
-
-    expect(currentTargetButton).toBeDisabled();
-    expect(allRunsButton).toBeEnabled();
+    })).not.toBeInTheDocument();
+    expect(within(experimentSection).getByRole("button", { name: /^all$/i }))
+      .toBeInTheDocument();
+    expect(within(experimentSection).getByRole("button", { name: /^none$/i }))
+      .toBeInTheDocument();
     expect(screen.queryByText(/^Runs$/)).not.toBeInTheDocument();
     expect(screen.queryByText(/^Tags$/)).not.toBeInTheDocument();
     expect(screen.queryByText(/^linear · BASELINE · Mnist$/)).not.toBeInTheDocument();
-
-    await user.click(allRunsButton);
-
-    await waitFor(() => {
-      expect(
-        within(logFilterSection("Experiments")).getByRole("button", {
-          name: /current target/i,
-        }),
-      ).toBeEnabled();
-    });
   });
 
-  it("opens logs scoped to the current target dataset and applies common filters through All runs", async () => {
+  it("opens logs scoped to the current target dataset and applies common filters from experiment selection", async () => {
     const { logRunRequests, logScalarRequests } = installFetchMock();
     renderViewer();
     const user = userEvent.setup();
@@ -318,18 +356,13 @@ describe("ViewerApp Logs Workspace", () => {
         ]),
       );
     });
-    const experimentSection = logFilterSection("Experiments");
-    const currentTargetButton = within(experimentSection).getByRole("button", {
-      name: /current target/i,
-    });
-    const allRunsButton = within(experimentSection).getByRole("button", {
-      name: /all runs/i,
-    });
-    expect(currentTargetButton).toBeDisabled();
-    expect(allRunsButton).toBeEnabled();
+    expect(screen.queryByRole("button", { name: /current target/i }))
+      .not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /all runs/i }))
+      .not.toBeInTheDocument();
     await expectLogFilterSelection(user, "Experiments", "test_model", false);
     await selectLogExperiments(user, ["test_model"]);
-    expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
+    expect(await screen.findByRole("img", { name: /validation\/accuracy_epoch scalar chart/i }))
       .toBeInTheDocument();
     expect(logMetricGroupToggle("Train")).toHaveAttribute("aria-expanded", "true");
     expect(logMetricGroupToggle("Validation")).toHaveAttribute("aria-expanded", "true");
@@ -340,7 +373,13 @@ describe("ViewerApp Logs Workspace", () => {
       expect(logScalarRequests).toEqual(expect.arrayContaining([
         {
           runIds: ["log-mnist"],
-          tags: ["train/loss"],
+          tags: ["train/accuracy_epoch", "train/loss_epoch"],
+          maxPoints: 500,
+          sampling: "tail",
+        },
+        {
+          runIds: ["log-mnist"],
+          tags: ["validation/accuracy_epoch", "validation/loss_epoch"],
           maxPoints: 500,
           sampling: "tail",
         },
@@ -350,22 +389,15 @@ describe("ViewerApp Logs Workspace", () => {
           maxPoints: 500,
           sampling: "tail",
         },
-        {
-          runIds: ["log-mnist"],
-          tags: ["test/accuracy"],
-          maxPoints: 500,
-          sampling: "tail",
-        },
       ]));
     });
-    expect(await screen.findByRole("img", { name: /train\/loss scalar chart/i }))
+    expect(await screen.findByRole("img", { name: /train\/loss_epoch scalar chart/i }))
       .toBeInTheDocument();
-    expect(await screen.findByRole("table", { name: /test\/accuracy test leaderboard/i }))
-      .toBeInTheDocument();
+    expect(screen.queryByRole("table", { name: /test\/accuracy test leaderboard/i }))
+      .not.toBeInTheDocument();
     expect(screen.queryByRole("img", { name: /test\/accuracy scalar chart/i }))
       .not.toBeInTheDocument();
 
-    await user.click(allRunsButton);
     await selectAllLogExperiments(user);
     await waitFor(() => {
       expect(logRunRequests).toEqual(
@@ -414,8 +446,9 @@ describe("ViewerApp Logs Workspace", () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
-    await user.click(await screen.findByRole("button", { name: /all runs/i }));
     await selectAllLogExperiments(user);
+    await clickLogOption(user, "Scalar Tags", "train/loss");
+    await clickLogOption(user, "Scalar Tags", "validation/accuracy");
     await selectAllLogDatasets(user);
 
     const bestRunHeading = await screen.findByRole("heading", {
@@ -447,10 +480,10 @@ describe("ViewerApp Logs Workspace", () => {
         .toBeInTheDocument();
     });
 
-    await clickLogOption(user, "Scalar Tags", "validation/accuracy");
+    await clickLogOption(user, "Scalar Tags", "validation/accuracy_epoch");
 
     await waitFor(() => {
-      expect(screen.queryByRole("img", { name: /validation\/accuracy scalar chart/i }))
+      expect(screen.queryByRole("img", { name: /validation\/accuracy_epoch scalar chart/i }))
         .not.toBeInTheDocument();
     });
     expect(
@@ -469,6 +502,109 @@ describe("ViewerApp Logs Workspace", () => {
     expect(detailsPanel).not.toBeNull();
     expect(within(detailsPanel as HTMLElement).getByText("Cifar10"))
       .toBeInTheDocument();
+  });
+
+  it("keeps scalar tag options available but checks only epoch defaults", async () => {
+    installFetchMock({
+      logTagsByRun: {
+        "log-mnist": scalarTagsWithEpochDefaults(
+          "train/loss",
+          "train/accuracy",
+          "train/calibration/ece",
+          "train/confidence/mean",
+          "train/f1_score",
+          "train/per_class/class_0/f1_score",
+          "train/kaggle_logloss",
+          "validation/loss",
+          "validation/accuracy",
+          "validation/calibration/ece",
+          "validation/confidence/mean",
+          "validation/f1_score",
+          "validation/per_class/class_0/f1_score",
+          "validation/kaggle_auc",
+        ),
+      },
+    });
+    renderViewer();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+    await selectLogExperiments(user, ["test_model"]);
+    expect(await screen.findByRole("img", { name: /validation\/accuracy_epoch scalar chart/i }))
+      .toBeInTheDocument();
+
+    const tagList = await openLogFilter(user, "Scalar Tags");
+    for (const tag of DEFAULT_EPOCH_SCALAR_TAGS) {
+      expectLogOptionSelected(
+        await within(tagList).findByRole("option", { name: logOptionName(tag) }),
+        true,
+      );
+    }
+    for (const tag of [
+      "train/loss",
+      "train/accuracy",
+      "train/calibration/ece",
+      "train/confidence/mean",
+      "train/f1_score",
+      "train/per_class/class_0/f1_score",
+      "train/kaggle_logloss",
+      "validation/loss",
+      "validation/accuracy",
+      "validation/calibration/ece",
+      "validation/confidence/mean",
+      "validation/f1_score",
+      "validation/per_class/class_0/f1_score",
+      "validation/kaggle_auc",
+    ]) {
+      expectLogOptionSelected(
+        await within(tagList).findByRole("option", { name: logOptionName(tag) }),
+        false,
+      );
+    }
+
+    expect(logMetricGroupToggle("Train")).toHaveAccessibleName("Train 7 metrics");
+    expect(logMetricGroupToggle("Validation")).toHaveAccessibleName(
+      "Validation 7 metrics",
+    );
+    expect(
+      screen.getByRole("combobox", { name: /^Train plots\s+2 \/ 7 selected$/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("combobox", {
+        name: /^Validation plots\s+2 \/ 7 selected$/i,
+      }),
+    ).toBeInTheDocument();
+    for (const tag of [
+      "train/loss",
+      "train/accuracy",
+      "train/calibration/ece",
+      "train/confidence/mean",
+      "train/f1_score",
+    ]) {
+      expectLogOptionSelected(await findMetricPlotOption(user, "Train", tag), false);
+    }
+    for (const tag of ["train/per_class/class_0/f1_score", "train/kaggle_logloss"]) {
+      expect(await queryMetricPlotOption(user, "Train", tag)).not.toBeInTheDocument();
+    }
+    for (const tag of [
+      "validation/loss",
+      "validation/accuracy",
+      "validation/calibration/ece",
+      "validation/confidence/mean",
+      "validation/f1_score",
+    ]) {
+      expectLogOptionSelected(
+        await findMetricPlotOption(user, "Validation", tag),
+        false,
+      );
+    }
+    for (const tag of [
+      "validation/per_class/class_0/f1_score",
+      "validation/kaggle_auc",
+    ]) {
+      expect(await queryMetricPlotOption(user, "Validation", tag))
+        .not.toBeInTheDocument();
+    }
   });
 
   it("orders Train immediately after Validation before validation diagnostics", async () => {
@@ -497,9 +633,10 @@ describe("ViewerApp Logs Workspace", () => {
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
     await selectLogExperiments(user, ["test_model"]);
-    expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
+    expect(await screen.findByRole("img", { name: /validation\/accuracy_epoch scalar chart/i }))
       .toBeInTheDocument();
 
+    await clickLogOption(user, "Scalar Tags", "test/accuracy");
     await clickLogOption(user, "Scalar Tags", "main_model.0.model/weights/mean");
 
     const bestRunSection = screen
@@ -553,10 +690,12 @@ describe("ViewerApp Logs Workspace", () => {
         ],
       },
       logTagsByRun: {
-        "multi-mnist": ["train/loss", "validation/accuracy"],
-        "multi-cifar": ["train/loss", "validation/accuracy"],
+        "multi-mnist": scalarTagsWithEpochDefaults("train/loss", "validation/accuracy"),
+        "multi-cifar": scalarTagsWithEpochDefaults("train/loss", "validation/accuracy"),
       },
       logScalarSeries: [
+        ...epochScalarSeriesForRun("multi-mnist"),
+        ...epochScalarSeriesForRun("multi-cifar", 100),
         {
           runId: "multi-mnist",
           tag: "train/loss",
@@ -583,11 +722,10 @@ describe("ViewerApp Logs Workspace", () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
-    await user.click(await screen.findByRole("button", { name: /all runs/i }));
     await selectAllLogExperiments(user);
     await selectAllLogDatasets(user);
 
-    expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
+    expect(await screen.findByRole("img", { name: /validation\/accuracy_epoch scalar chart/i }))
       .toBeInTheDocument();
     await waitFor(() => {
       expect(
@@ -608,19 +746,19 @@ describe("ViewerApp Logs Workspace", () => {
     await waitFor(() => {
       expect(logScalarRequests).toContainEqual({
         runIds: ["multi-cifar"],
-        tags: ["validation/accuracy"],
+        tags: ["validation/accuracy_epoch", "validation/loss_epoch"],
         maxPoints: 500,
         sampling: "tail",
       });
       expect(logScalarRequests).toContainEqual({
         runIds: ["multi-cifar"],
-        tags: ["train/loss"],
+        tags: ["train/accuracy_epoch", "train/loss_epoch"],
         maxPoints: 500,
         sampling: "tail",
       });
     });
     expect(within(logFilterSection("Datasets")).getByText("1 / 2")).toBeInTheDocument();
-    expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
+    expect(await screen.findByRole("img", { name: /validation\/accuracy_epoch scalar chart/i }))
       .toBeInTheDocument();
     await waitFor(() => {
       expect(screen.queryByText(/multi_mnist_20260601_010203/))
@@ -646,13 +784,13 @@ describe("ViewerApp Logs Workspace", () => {
     await waitFor(() => {
       expect(logScalarRequests).toContainEqual({
         runIds: ["multi-mnist", "multi-cifar"],
-        tags: ["validation/accuracy"],
+        tags: ["validation/accuracy_epoch", "validation/loss_epoch"],
         maxPoints: 500,
         sampling: "tail",
       });
       expect(logScalarRequests).toContainEqual({
         runIds: ["multi-mnist", "multi-cifar"],
-        tags: ["train/loss"],
+        tags: ["train/accuracy_epoch", "train/loss_epoch"],
         maxPoints: 500,
         sampling: "tail",
       });
@@ -702,10 +840,12 @@ describe("ViewerApp Logs Workspace", () => {
         ],
       },
       logTagsByRun: {
-        "multi-baseline": ["train/loss", "validation/accuracy"],
-        "multi-wide": ["train/loss", "validation/accuracy"],
+        "multi-baseline": scalarTagsWithEpochDefaults("train/loss", "validation/accuracy"),
+        "multi-wide": scalarTagsWithEpochDefaults("train/loss", "validation/accuracy"),
       },
       logScalarSeries: [
+        ...epochScalarSeriesForRun("multi-baseline"),
+        ...epochScalarSeriesForRun("multi-wide", 100),
         {
           runId: "multi-baseline",
           tag: "train/loss",
@@ -732,7 +872,7 @@ describe("ViewerApp Logs Workspace", () => {
           delayExpandedScalarReads &&
           body.runIds.includes("multi-baseline") &&
           body.runIds.includes("multi-wide") &&
-          body.tags.includes("validation/accuracy")
+          body.tags.includes("validation/accuracy_epoch")
         ) {
           return expandedScalarResponse.promise;
         }
@@ -743,7 +883,6 @@ describe("ViewerApp Logs Workspace", () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
-    await user.click(await screen.findByRole("button", { name: /all runs/i }));
     await selectLogExperiments(user, ["multi_preset"]);
     await selectAllLogPresets(user);
     await waitFor(() => {
@@ -752,7 +891,7 @@ describe("ViewerApp Logs Workspace", () => {
       ).toBeInTheDocument();
     });
 
-    expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
+    expect(await screen.findByRole("img", { name: /validation\/accuracy_epoch scalar chart/i }))
       .toBeInTheDocument();
     await waitFor(() => {
       expect(logTagRequests.at(-1)).toEqual({
@@ -768,13 +907,13 @@ describe("ViewerApp Logs Workspace", () => {
     await waitFor(() => {
       expect(logScalarRequests).toContainEqual({
         runIds: ["multi-wide"],
-        tags: ["validation/accuracy"],
+        tags: ["validation/accuracy_epoch", "validation/loss_epoch"],
         maxPoints: 500,
         sampling: "tail",
       });
       expect(logScalarRequests).toContainEqual({
         runIds: ["multi-wide"],
-        tags: ["train/loss"],
+        tags: ["train/accuracy_epoch", "train/loss_epoch"],
         maxPoints: 500,
         sampling: "tail",
       });
@@ -795,42 +934,42 @@ describe("ViewerApp Logs Workspace", () => {
     await waitFor(() => {
       expect(logScalarRequests).toContainEqual({
         runIds: ["multi-baseline", "multi-wide"],
-        tags: ["validation/accuracy"],
+        tags: ["validation/accuracy_epoch", "validation/loss_epoch"],
         maxPoints: 500,
         sampling: "tail",
       });
       expect(logScalarRequests).toContainEqual({
         runIds: ["multi-baseline", "multi-wide"],
-        tags: ["train/loss"],
+        tags: ["train/accuracy_epoch", "train/loss_epoch"],
         maxPoints: 500,
         sampling: "tail",
       });
     });
     await waitFor(() => {
       expect(
-        screen.getByText("Loading validation/accuracy scalar points"),
+        screen.getByText("Loading validation/accuracy_epoch scalar points"),
       ).toBeInTheDocument();
     });
     expect(
-      screen.queryByRole("img", { name: /validation\/accuracy scalar chart/i }),
+      screen.queryByRole("img", { name: /validation\/accuracy_epoch scalar chart/i }),
     ).not.toBeInTheDocument();
 
     expandedScalarResponse.resolve({
       series: [
         {
           runId: "multi-baseline",
-          tag: "validation/accuracy",
+          tag: "validation/accuracy_epoch",
           points: [{ step: 1, wallTime: 1780000000, value: 0.81 }],
         },
         {
           runId: "multi-wide",
-          tag: "validation/accuracy",
+          tag: "validation/accuracy_epoch",
           points: [{ step: 1, wallTime: 1780000100, value: 0.59 }],
         },
       ],
     });
 
-    expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
+    expect(await screen.findByRole("img", { name: /validation\/accuracy_epoch scalar chart/i }))
       .toBeInTheDocument();
     expect(screen.getAllByText(/multi_preset · Mnist · linear · linears · BASELINE/).length)
       .toBeGreaterThan(0);
@@ -842,7 +981,7 @@ describe("ViewerApp Logs Workspace", () => {
     const { logMediaRequests } = installFetchMock({
       logTagsByRun: {
         "log-mnist": {
-          scalarTags: ["validation/accuracy"],
+          scalarTags: scalarTagsWithEpochDefaults("validation/accuracy"),
           histogramTags: [],
           imageTags: ["validation/examples/predictions"],
           textTags: ["validation/examples/predictions/text_summary"],
@@ -875,7 +1014,7 @@ describe("ViewerApp Logs Workspace", () => {
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
     await selectLogExperiments(user, ["test_model"]);
-    expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
+    expect(await screen.findByRole("img", { name: /validation\/accuracy_epoch scalar chart/i }))
       .toBeInTheDocument();
 
     const examplesToggle = logValidationExamplesToggle();
@@ -983,38 +1122,25 @@ describe("ViewerApp Logs Workspace", () => {
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
     await selectLogExperiments(user, ["test_model"]);
 
-    expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
+    expect(await screen.findByRole("img", { name: /validation\/accuracy_epoch scalar chart/i }))
       .toBeInTheDocument();
-    expect(await screen.findByRole("img", { name: /train\/loss scalar chart/i }))
+    expect(await screen.findByRole("img", { name: /train\/loss_epoch scalar chart/i }))
       .toBeInTheDocument();
     await waitFor(() => {
       expect(logScalarRequests).toHaveLength(3);
     });
     expect(
-      await screen.findByRole("table", { name: /test\/accuracy test leaderboard/i }),
-    ).toBeInTheDocument();
-    expect(
       screen.queryByRole("button", { name: /^Test\s+\d+\s+metrics?$/i }),
     ).not.toBeInTheDocument();
-    expect(logScalarRequests).toEqual(
-      expect.arrayContaining([
-        {
-          runIds: ["log-mnist"],
-          tags: ["test/accuracy"],
-          maxPoints: 500,
-          sampling: "tail",
-        },
-      ]),
-    );
 
     await user.click(logMetricGroupToggle("Train"));
 
     await waitFor(() => {
       expect(logMetricGroupToggle("Train")).toHaveAttribute("aria-expanded", "false");
     });
-    expect(screen.queryByRole("img", { name: /train\/loss scalar chart/i }))
+    expect(screen.queryByRole("img", { name: /train\/loss_epoch scalar chart/i }))
       .not.toBeInTheDocument();
-    await expectLogFilterSelection(user, "Scalar Tags", "train/loss", true);
+    await expectLogFilterSelection(user, "Scalar Tags", "train/loss_epoch", true);
     expect(logScalarRequests).toHaveLength(3);
 
     await clickLogOption(user, "Scalar Tags", "main_model.0.model/weights/mean");
@@ -1062,7 +1188,7 @@ describe("ViewerApp Logs Workspace", () => {
     expect(logScalarRequests).toHaveLength(4);
   });
 
-  it("filters train and validation plots locally from accordion plot selectors", async () => {
+  it("filters train and validation plots from accordion plot selectors", async () => {
     const { logScalarRequests } = installFetchMock();
     renderViewer();
     const user = userEvent.setup();
@@ -1070,9 +1196,9 @@ describe("ViewerApp Logs Workspace", () => {
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
     await selectLogExperiments(user, ["test_model"]);
 
-    expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
+    expect(await screen.findByRole("img", { name: /validation\/accuracy_epoch scalar chart/i }))
       .toBeInTheDocument();
-    expect(await screen.findByRole("img", { name: /train\/loss scalar chart/i }))
+    expect(await screen.findByRole("img", { name: /train\/loss_epoch scalar chart/i }))
       .toBeInTheDocument();
     await waitFor(() => {
       expect(logScalarRequests).toHaveLength(3);
@@ -1080,10 +1206,10 @@ describe("ViewerApp Logs Workspace", () => {
     const scalarRequestCount = logScalarRequests.length;
 
     expect(
-      screen.getByRole("combobox", { name: /^Train plots\s+1 \/ 1 selected$/i }),
+      screen.getByRole("combobox", { name: /^Train plots\s+2 \/ 4 selected$/i }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("combobox", { name: /^Validation plots\s+1 \/ 1 selected$/i }),
+      screen.getByRole("combobox", { name: /^Validation plots\s+2 \/ 3 selected$/i }),
     ).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "Train plot controls" })).toHaveClass(
       "grid",
@@ -1100,12 +1226,24 @@ describe("ViewerApp Logs Workspace", () => {
     expect(screen.queryByRole("radiogroup", { name: "Test chart layout" }))
       .not.toBeInTheDocument();
     expectLogOptionSelected(
+      await findMetricPlotOption(user, "Train", "train/loss_epoch"),
+      true,
+    );
+    expectLogOptionSelected(
       await findMetricPlotOption(user, "Train", "train/loss"),
+      false,
+    );
+    expectLogOptionSelected(
+      await findMetricPlotOption(user, "Train", "train/accuracy"),
+      false,
+    );
+    expectLogOptionSelected(
+      await findMetricPlotOption(user, "Validation", "validation/accuracy_epoch"),
       true,
     );
     expectLogOptionSelected(
       await findMetricPlotOption(user, "Validation", "validation/accuracy"),
-      true,
+      false,
     );
 
     await user.click(
@@ -1113,22 +1251,32 @@ describe("ViewerApp Logs Workspace", () => {
     );
 
     await waitFor(() => {
-      expect(screen.queryByRole("img", { name: /validation\/accuracy scalar chart/i }))
+      expect(screen.queryByRole("img", { name: /validation\/accuracy_epoch scalar chart/i }))
         .not.toBeInTheDocument();
     });
     expect(screen.getByText("No plots selected in this group")).toBeInTheDocument();
-    expect(screen.getByRole("img", { name: /train\/loss scalar chart/i }))
+    expect(screen.getByRole("img", { name: /train\/loss_epoch scalar chart/i }))
       .toBeInTheDocument();
-    await expectLogFilterSelection(user, "Scalar Tags", "validation/accuracy", true);
+    await expectLogFilterSelection(
+      user,
+      "Scalar Tags",
+      "validation/accuracy_epoch",
+      false,
+    );
     expect(logScalarRequests).toHaveLength(scalarRequestCount);
 
     await user.click(
       screen.getByRole("button", { name: "Select all Validation plots" }),
     );
 
-    expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
+    expect(await screen.findByRole("img", { name: /validation\/accuracy_epoch scalar chart/i }))
       .toBeInTheDocument();
-    expect(logScalarRequests).toHaveLength(scalarRequestCount);
+    expect(
+      screen.getByRole("combobox", { name: /^Validation plots\s+3 \/ 3 selected$/i }),
+    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(logScalarRequests.length).toBeGreaterThan(scalarRequestCount);
+    });
   });
 
   it("opens a metric plot selector without collapsing its accordion", async () => {
@@ -1139,9 +1287,9 @@ describe("ViewerApp Logs Workspace", () => {
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
     await selectLogExperiments(user, ["test_model"]);
 
-    expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
+    expect(await screen.findByRole("img", { name: /validation\/accuracy_epoch scalar chart/i }))
       .toBeInTheDocument();
-    expect(await screen.findByRole("img", { name: /train\/loss scalar chart/i }))
+    expect(await screen.findByRole("img", { name: /train\/loss_epoch scalar chart/i }))
       .toBeInTheDocument();
     const validationToggle = logMetricGroupToggle("Validation");
     const trainToggle = logMetricGroupToggle("Train");
@@ -1149,14 +1297,14 @@ describe("ViewerApp Logs Workspace", () => {
     expect(trainToggle).toHaveAttribute("aria-expanded", "true");
 
     await user.click(
-      screen.getByRole("combobox", { name: /^Validation plots\s+1 \/ 1 selected$/i }),
+      screen.getByRole("combobox", { name: /^Validation plots\s+2 \/ 3 selected$/i }),
     );
 
     expect(
       await screen.findByRole("listbox", { name: "Validation plots options" }),
     ).toBeInTheDocument();
     expect(validationToggle).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByRole("img", { name: /validation\/accuracy scalar chart/i }))
+    expect(screen.getByRole("img", { name: /validation\/accuracy_epoch scalar chart/i }))
       .toBeInTheDocument();
 
     await user.click(
@@ -1170,14 +1318,14 @@ describe("ViewerApp Logs Workspace", () => {
     expect(validationToggle).toHaveAttribute("aria-expanded", "true");
 
     await user.click(
-      screen.getByRole("combobox", { name: /^Train plots\s+1 \/ 1 selected$/i }),
+      screen.getByRole("combobox", { name: /^Train plots\s+2 \/ 4 selected$/i }),
     );
 
     expect(
       await screen.findByRole("listbox", { name: "Train plots options" }),
     ).toBeInTheDocument();
     expect(trainToggle).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByRole("img", { name: /train\/loss scalar chart/i }))
+    expect(screen.getByRole("img", { name: /train\/loss_epoch scalar chart/i }))
       .toBeInTheDocument();
   });
 
@@ -1185,7 +1333,7 @@ describe("ViewerApp Logs Workspace", () => {
     const trainScalarResponse = deferred<unknown>();
     const { logScalarRequests } = installFetchMock({
       logScalarResponseFactory: (body) => {
-        if (body.tags.includes("train/loss")) {
+        if (body.tags.includes("train/loss_epoch")) {
           return trainScalarResponse.promise;
         }
         return undefined;
@@ -1196,27 +1344,23 @@ describe("ViewerApp Logs Workspace", () => {
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
     await selectLogExperiments(user, ["test_model"]);
-    expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
-      .toBeInTheDocument();
 
     await waitFor(() => {
-      expect(logScalarRequests).toHaveLength(3);
+      expect(logScalarRequests).toHaveLength(2);
     });
-    expect(screen.getByRole("img", { name: /validation\/accuracy scalar chart/i }))
-      .toBeInTheDocument();
     expect(screen.queryByText(/^Loading scalar points$/i)).not.toBeInTheDocument();
     const trainBody = document.getElementById("logs-metric-group-train");
     expect(trainBody).toBeInstanceOf(HTMLElement);
-    expect(within(trainBody as HTMLElement).getByText("Loading train/loss scalar points"))
+    expect(within(trainBody as HTMLElement).getByText("Loading train/loss_epoch scalar points"))
       .toBeInTheDocument();
 
     trainScalarResponse.resolve({
       series: logScalarSeries.filter(
-        (series) => series.runId === "log-mnist" && series.tag === "train/loss",
+        (series) => series.runId === "log-mnist" && series.tag === "train/loss_epoch",
       ),
     });
 
-    expect(await screen.findByRole("img", { name: /train\/loss scalar chart/i }))
+    expect(await screen.findByRole("img", { name: /train\/loss_epoch scalar chart/i }))
       .toBeInTheDocument();
     expect(screen.queryByText("Loading Train scalar points")).not.toBeInTheDocument();
   });
@@ -1245,14 +1389,20 @@ describe("ViewerApp Logs Workspace", () => {
         })),
       },
       logTagsByRun: {
-        "log-mnist": ["train/loss", "validation/accuracy"],
-        "log-cifar": ["validation/accuracy"],
+        "log-mnist": scalarTagsWithEpochDefaults("train/loss", "validation/accuracy"),
+        "log-cifar": scalarTagsWithEpochDefaults("validation/accuracy"),
         ...Object.fromEntries(
-          extraRuns.map((run) => [run.id, ["validation/accuracy"]]),
+          extraRuns.map((run) => [
+            run.id,
+            scalarTagsWithEpochDefaults("validation/accuracy"),
+          ]),
         ),
       },
       logScalarSeries: [
         ...logScalarSeries,
+        ...extraRuns.flatMap((run, index) =>
+          epochScalarSeriesForRun(run.id, index + 10),
+        ),
         ...extraRuns.map((run, index) => ({
           runId: run.id,
           tag: "validation/accuracy",
@@ -1269,7 +1419,7 @@ describe("ViewerApp Logs Workspace", () => {
         return delayedTagChunk.promise.then(() => ({
           runs: body.runIds.map((runId) => ({
             runId,
-            scalarTags: ["validation/accuracy"],
+            scalarTags: scalarTagsWithEpochDefaults("validation/accuracy"),
             histogramTags: [],
             imageTags: [],
             textTags: [],
@@ -1284,10 +1434,9 @@ describe("ViewerApp Logs Workspace", () => {
     await openLogFilter(user, "Experiments");
     await user.type(await screen.findByLabelText(/^search experiments$/i), "test_model");
     await selectLogExperiments(user, ["test_model"]);
-    expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
-      .toBeInTheDocument();
+    expect(await screen.findByText("Historical Scalars")).toBeInTheDocument();
+    expect(await screen.findByText("Run Details")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /all runs/i }));
     await selectAllLogExperiments(user);
 
     await waitFor(() => {
@@ -1295,8 +1444,7 @@ describe("ViewerApp Logs Workspace", () => {
         logTagRequests.some((request) => request.runIds.includes("extra-log-49")),
       ).toBe(true);
     });
-    expect(screen.getByRole("img", { name: /validation\/accuracy scalar chart/i }))
-      .toBeInTheDocument();
+    expect(screen.getByText("Historical Scalars")).toBeInTheDocument();
     expect(screen.getByText("Refreshing TensorBoard tags")).toBeInTheDocument();
     expect(screen.queryByText("Reading TensorBoard tags")).not.toBeInTheDocument();
 
@@ -1420,7 +1568,6 @@ describe("ViewerApp Logs Workspace", () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
-    await user.click(await screen.findByRole("button", { name: /all runs/i }));
     await selectAllLogExperiments(user);
 
     const detailsPanel = screen.getByRole("heading", { name: "Run Details" }).closest("aside");
@@ -1485,7 +1632,7 @@ describe("ViewerApp Logs Workspace", () => {
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
     await selectLogExperiments(user, ["test_model"]);
-    expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
+    expect(await screen.findByRole("img", { name: /validation\/accuracy_epoch scalar chart/i }))
       .toBeInTheDocument();
 
     const otherTag = await findLogOption(
@@ -1517,25 +1664,23 @@ describe("ViewerApp Logs Workspace", () => {
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
     await selectLogExperiments(user, ["test_model"]);
-    expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
+    expect(await screen.findByRole("img", { name: /validation\/accuracy_epoch scalar chart/i }))
       .toBeInTheDocument();
-    expect(await screen.findByRole("img", { name: /train\/loss scalar chart/i }))
+    expect(await screen.findByRole("img", { name: /train\/loss_epoch scalar chart/i }))
       .toBeInTheDocument();
 
     await user.click(logMetricGroupToggle("Train"));
-    expect(screen.queryByRole("img", { name: /train\/loss scalar chart/i }))
+    expect(screen.queryByRole("img", { name: /train\/loss_epoch scalar chart/i }))
       .not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /^model$/i }));
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
 
-    const trainToggle = await screen.findByRole("button", {
-      name: /^Train\s+1\s+metric$/i,
-    });
+    const trainToggle = logMetricGroupToggle("Train");
     expect(trainToggle).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByRole("img", { name: /train\/loss scalar chart/i }))
+    expect(screen.queryByRole("img", { name: /train\/loss_epoch scalar chart/i }))
       .not.toBeInTheDocument();
-    await expectLogFilterSelection(user, "Scalar Tags", "train/loss", true);
+    await expectLogFilterSelection(user, "Scalar Tags", "train/loss_epoch", true);
   });
 
   it("splits test score leaderboards by experiment without refetching scalars", async () => {
@@ -1546,8 +1691,8 @@ describe("ViewerApp Logs Workspace", () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
-    await user.click(await screen.findByRole("button", { name: /all runs/i }));
     await selectAllLogExperiments(user);
+    await clickLogOption(user, "Scalar Tags", "test/accuracy");
 
     const combinedLeaderboard = await screen.findByRole("table", {
       name: /^test\/accuracy test leaderboard$/i,
@@ -1694,8 +1839,9 @@ describe("ViewerApp Logs Workspace", () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
-    await user.click(await screen.findByRole("button", { name: /all runs/i }));
     await selectAllLogExperiments(user);
+    await clickLogOption(user, "Scalar Tags", "test/accuracy");
+    await clickLogOption(user, "Scalar Tags", "test/loss");
 
     const lossLeaderboard = await screen.findByRole("table", {
       name: /test\/loss test leaderboard/i,
@@ -1790,8 +1936,9 @@ describe("ViewerApp Logs Workspace", () => {
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
     await selectLogExperiments(user, ["test_model"]);
+    await clickLogOption(user, "Scalar Tags", "test/accuracy");
 
-    const chart = await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i });
+    const chart = await screen.findByRole("img", { name: /validation\/accuracy_epoch scalar chart/i });
     const validationToggle = logMetricGroupToggle("Validation");
     const chartGrid = scalarChartGridFor(chart);
     const accordionGrid = accordionSectionGridFor(validationToggle);
@@ -1816,7 +1963,7 @@ describe("ViewerApp Logs Workspace", () => {
     const threeColumnTab = within(layoutControl).getByRole("radio", { name: /^3 col$/i });
 
     await waitFor(() => {
-      expect(logScalarRequests).toHaveLength(3);
+      expect(logScalarRequests).toHaveLength(4);
     });
     expect(fullTab).toHaveAttribute("aria-checked", "false");
     expect(twoColumnTab).toHaveAttribute("aria-checked", "true");
@@ -1846,7 +1993,7 @@ describe("ViewerApp Logs Workspace", () => {
     ]);
     expect(chartGrid).not.toHaveClass("xl:grid-cols-2");
     expect(chartGrid).not.toHaveClass("2xl:grid-cols-3");
-    expect(logScalarRequests).toHaveLength(3);
+    expect(logScalarRequests).toHaveLength(4);
 
     await user.click(twoColumnTab);
 
@@ -1857,7 +2004,7 @@ describe("ViewerApp Logs Workspace", () => {
     expect(accordionGrid).not.toHaveClass("2xl:grid-cols-3");
     expect(chartGrid).not.toHaveClass("xl:grid-cols-2");
     expect(chartGrid).not.toHaveClass("2xl:grid-cols-3");
-    expect(logScalarRequests).toHaveLength(3);
+    expect(logScalarRequests).toHaveLength(4);
 
     await user.click(threeColumnTab);
 
@@ -1867,12 +2014,12 @@ describe("ViewerApp Logs Workspace", () => {
     expect(accordionGrid).toHaveClass("xl:grid-cols-2", "2xl:grid-cols-3");
     expect(chartGrid).not.toHaveClass("xl:grid-cols-2");
     expect(chartGrid).not.toHaveClass("2xl:grid-cols-3");
-    expect(logScalarRequests).toHaveLength(3);
+    expect(logScalarRequests).toHaveLength(4);
 
     await user.click(screen.getByRole("button", { name: /refresh scalar charts/i }));
 
     await waitFor(() => {
-      expect(logScalarRequests).toHaveLength(6);
+      expect(logScalarRequests).toHaveLength(8);
     });
   });
 
@@ -1883,19 +2030,18 @@ describe("ViewerApp Logs Workspace", () => {
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
     await selectLogExperiments(user, ["test_model"]);
+    await clickLogOption(user, "Scalar Tags", "test/accuracy");
 
-    expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
+    expect(await screen.findByRole("img", { name: /validation\/accuracy_epoch scalar chart/i }))
       .toBeInTheDocument();
-    expect(await screen.findByRole("img", { name: /train\/loss scalar chart/i }))
+    expect(await screen.findByRole("img", { name: /train\/loss_epoch scalar chart/i }))
       .toBeInTheDocument();
     expect(
       await screen.findByRole("table", { name: /test\/accuracy test leaderboard/i }),
     ).toBeInTheDocument();
 
     await clickLogOption(user, "Scalar Tags", "main_model.0.model/weights/mean");
-    await user.click(
-      await screen.findByRole("button", { name: /^Other\s+1\s+metric$/i }),
-    );
+    await user.click(logMetricGroupToggle("Other"));
     expect(
       await screen.findByRole("img", {
         name: /main_model\.0\.model\/weights\/mean scalar chart/i,
@@ -1951,48 +2097,28 @@ describe("ViewerApp Logs Workspace", () => {
   });
 
   it("links scalar legend hover across charts in the same metric accordion", async () => {
-    const trainAccuracySeries = logRunsResponse.runs.map((run, index) => ({
-      runId: run.id,
-      tag: "train/accuracy",
-      points: [
-        { step: 1, wallTime: 1780000000 + index, value: 0.51 + index / 10 },
-        { step: 2, wallTime: 1780000001 + index, value: 0.71 + index / 10 },
-      ],
-    }));
     installFetchMock({
       logRunsResponse: logRunsWithSharedDataset(),
-      logTagsByRun: Object.fromEntries(
-        Object.entries(logTagsByRun).map(([runId, tags]) => [
-          runId,
-          Array.isArray(tags)
-            ? [...tags, "train/accuracy"]
-            : {
-                ...tags,
-                scalarTags: [...(tags.scalarTags ?? []), "train/accuracy"],
-              },
-        ]),
-      ),
-      logScalarSeries: [...logScalarSeries, ...trainAccuracySeries],
     });
     renderViewer();
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
-    await user.click(screen.getByRole("button", { name: /all runs/i }));
     await selectAllLogExperiments(user);
+    await clickLogOption(user, "Scalar Tags", "train/accuracy");
 
-    expect(await screen.findByRole("img", { name: /train\/loss scalar chart/i }))
+    expect(await screen.findByRole("img", { name: /train\/loss_epoch scalar chart/i }))
       .toBeInTheDocument();
     expect(await screen.findByRole("img", { name: /train\/accuracy scalar chart/i }))
       .toBeInTheDocument();
-    expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
+    expect(await screen.findByRole("img", { name: /validation\/accuracy_epoch scalar chart/i }))
       .toBeInTheDocument();
 
     const mnistRun = /test_model · Mnist · linear · linears · BASELINE · 2026-06-01 01:02:03/i;
     const cifarRun = /test_model_2 · Mnist · linear · linears · BASELINE · 2026-06-01 02:03:04/i;
-    const trainLossCard = scalarChartSection(/train\/loss scalar chart/i);
+    const trainLossCard = scalarChartSection(/train\/loss_epoch scalar chart/i);
     const trainAccuracyCard = scalarChartSection(/train\/accuracy scalar chart/i);
-    const validationCard = scalarChartSection(/validation\/accuracy scalar chart/i);
+    const validationCard = scalarChartSection(/validation\/accuracy_epoch scalar chart/i);
     const mnistLoss = logScalarLegendButton(trainLossCard, mnistRun);
     const cifarLoss = logScalarLegendButton(trainLossCard, cifarRun);
     const mnistTrainAccuracy = logScalarLegendButton(trainAccuracyCard, mnistRun);
@@ -2045,19 +2171,15 @@ describe("ViewerApp Logs Workspace", () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
-    await user.click(screen.getByRole("button", { name: /all runs/i }));
     await selectAllLogExperiments(user);
-    expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
+    await clickLogOption(user, "Scalar Tags", "test/accuracy");
+    expect(await screen.findByRole("img", { name: /validation\/accuracy_epoch scalar chart/i }))
       .toBeInTheDocument();
-    expect(await screen.findByRole("img", { name: /train\/loss scalar chart/i }))
+    expect(await screen.findByRole("img", { name: /train\/loss_epoch scalar chart/i }))
       .toBeInTheDocument();
     expect(
       await screen.findByRole("table", { name: /test\/accuracy test leaderboard/i }),
     ).toBeInTheDocument();
-    expect(
-      screen.getAllByText(/test_model_2 · Mnist · linear · linears · BASELINE · 2026-06-01 02:03:04/).length,
-    ).toBeGreaterThan(0);
-
     await clickLogOption(user, "Experiments", "test_model");
 
     await waitFor(() => {
@@ -2068,20 +2190,39 @@ describe("ViewerApp Logs Workspace", () => {
     expect(within(datasetSection).getByText("1 / 1")).toBeInTheDocument();
     await expectLogFilterSelection(user, "Datasets", "Mnist", true);
     expect(queryOpenLogOption("Datasets", "Cifar10")).not.toBeInTheDocument();
+    await setLogOptionSelection(user, "Scalar Tags", "train/loss_epoch", true);
+    expect(await screen.findByRole("img", { name: /train\/loss_epoch scalar chart/i }))
+      .toBeInTheDocument();
+    await setLogOptionSelection(
+      user,
+      "Scalar Tags",
+      "validation/accuracy_epoch",
+      true,
+    );
     expect(
-      screen.getAllByText(/test_model_2 · Mnist · linear · linears · BASELINE · 2026-06-01 02:03:04/).length,
-    ).toBeGreaterThan(0);
-
-    await clickLogOption(user, "Scalar Tags", "validation/accuracy");
+      await screen.findByRole("img", {
+        name: /validation\/accuracy_epoch scalar chart/i,
+      }),
+    ).toBeInTheDocument();
+    await setLogOptionSelection(
+      user,
+      "Scalar Tags",
+      "validation/accuracy_epoch",
+      false,
+    );
 
     await waitFor(() => {
-      expect(screen.queryByRole("img", { name: /validation\/accuracy scalar chart/i }))
+      expect(screen.queryByRole("img", { name: /validation\/accuracy_epoch scalar chart/i }))
         .not.toBeInTheDocument();
     });
-    expect(screen.getByRole("img", { name: /train\/loss scalar chart/i }))
+    expect(screen.getByRole("img", { name: /train\/loss_epoch scalar chart/i }))
       .toBeInTheDocument();
 
-    await clickLogOption(user, "Scalar Tags", "test/accuracy");
+    await setLogOptionSelection(user, "Scalar Tags", "test/accuracy", true);
+    expect(
+      await screen.findByRole("table", { name: /test\/accuracy test leaderboard/i }),
+    ).toBeInTheDocument();
+    await setLogOptionSelection(user, "Scalar Tags", "test/accuracy", false);
 
     await waitFor(() => {
       expect(screen.queryByRole("table", { name: /test\/accuracy test leaderboard/i }))
@@ -2134,8 +2275,9 @@ describe("ViewerApp Logs Workspace", () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
-    await user.click(screen.getByRole("button", { name: /all runs/i }));
     await selectAllLogExperiments(user);
+    expect(await screen.findByRole("img", { name: /train\/loss_epoch scalar chart/i }))
+      .toBeInTheDocument();
 
     await waitFor(() => {
       expect(logCheckpointRequests.at(-1)).toEqual({
@@ -2144,9 +2286,12 @@ describe("ViewerApp Logs Workspace", () => {
     });
 
     await clickLogOption(user, "Experiments", "test_model");
+    await setLogOptionSelection(user, "Scalar Tags", "train/loss_epoch", true);
+    expect(await screen.findByRole("img", { name: /train\/loss_epoch scalar chart/i }))
+      .toBeInTheDocument();
 
     await waitFor(() => {
-      expect(logCheckpointRequests.at(-1)).toEqual({ runIds: ["log-cifar"] });
+      expect(logCheckpointRequests).toContainEqual({ runIds: ["log-cifar"] });
     });
     expect(screen.queryByText(/test_model · Mnist · linear · linears · BASELINE/))
       .not.toBeInTheDocument();
@@ -2339,7 +2484,6 @@ describe("ViewerApp Logs Workspace", () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
-    await user.click(await screen.findByRole("button", { name: /all runs/i }));
     await selectAllLogExperiments(user);
 
     let experimentsList = await openLogFilter(user, "Experiments");
@@ -2393,9 +2537,7 @@ describe("ViewerApp Logs Workspace", () => {
     expectLogsChecklistRowSizing(tagOption);
     await user.click(tagOption);
     expectLogOptionSelected(tagOption);
-    await user.click(
-      await screen.findByRole("button", { name: /^Other\s+1\s+metric$/i }),
-    );
+    await user.click(logMetricGroupToggle("Other"));
 
     const expectedRunIds = sharedFixture.logRunsResponse.runs.map((run) => run.id);
     await waitFor(() => {
@@ -2475,40 +2617,159 @@ describe("ViewerApp Logs Workspace", () => {
     );
   });
 
-  it("loads additional custom experiment run pages only when requested", async () => {
-    const fixture = buildLargeLogFixture(105);
-    const { logRunRequests } = installFetchMock(fixture);
+  it("shows complete non-scalar log filter options from all custom run pages", async () => {
+    const runs = Array.from({ length: 105 }, (_, index) => {
+      const number = String(index + 1).padStart(3, "0");
+      const lateRun = index >= 100;
+      const dataset = lateRun ? "ZebraSet" : "Mnist";
+      const model = lateRun ? "wide_linear" : "linear";
+      const preset = lateRun ? "BASELINE" : "AAA_CONTROL";
+      const runName = `mega_${number}_20260601_010203`;
+
+      return {
+        ...logRunsResponse.runs[0],
+        id: `mega-${number}`,
+        group: "mega_experiment",
+        experiment: "mega_experiment",
+        dataset,
+        model,
+        preset,
+        runName,
+        timestamp: `2026-06-01 01:${number}:03`,
+        relativePath:
+          `mega_experiment/${model}/${preset}/${dataset}/${runName}/version_0`,
+        metrics: { "test/accuracy": 0.7 + index / 1000 },
+      };
+    });
+    const { logRunRequests } = installFetchMock({
+      logRunsResponse: { runs },
+      logExperimentsResponse: {
+        experiments: [
+          {
+            experiment: "mega_experiment",
+            runCount: runs.length,
+            relativePath: "mega_experiment",
+          },
+        ],
+      },
+      logTagsByRun: Object.fromEntries(
+        runs.map((run) => [run.id, ["train/loss"]]),
+      ),
+    });
     renderViewer();
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
-    await user.click(await screen.findByRole("button", { name: /all runs/i }));
     await selectAllLogExperiments(user);
 
-    const customPageRequests = () =>
-      logRunRequests.filter((request) => request.limit === 100);
-
     await waitFor(() => {
-      expect(customPageRequests().some((request) => request.offset === 0))
-        .toBe(true);
+      expect(logRunRequests).toContainEqual(
+        expect.objectContaining({
+          experiments: ["mega_experiment"],
+          limit: 100,
+          offset: 0,
+        }),
+      );
+      expect(logRunRequests).toContainEqual(
+        expect.objectContaining({
+          experiments: ["mega_experiment"],
+          limit: 100,
+          offset: 100,
+        }),
+      );
     });
-    expect(customPageRequests().some((request) => request.offset === 100))
-      .toBe(false);
-    expect(screen.getByText("100 of 105 runs loaded")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /^load more runs$/i }),
-    ).toBeEnabled();
+      screen.queryByRole("button", { name: /^load more runs$/i }),
+    ).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /^load more runs$/i }));
+    const datasetOptions = await openLogFilter(user, "Datasets");
+    expect(within(datasetOptions).getByRole("option", {
+      name: logOptionName("Mnist"),
+    })).toBeInTheDocument();
+    expect(within(datasetOptions).getByRole("option", {
+      name: logOptionName("ZebraSet"),
+    })).toBeInTheDocument();
+
+    const modelOptions = await openLogFilter(user, "Models");
+    expect(within(modelOptions).getByRole("option", {
+      name: /^linear · linears/i,
+    })).toBeInTheDocument();
+    expect(within(modelOptions).getByRole("option", {
+      name: /^wide_linear · linears/i,
+    })).toBeInTheDocument();
+
+    const presetOptions = await openLogFilter(user, "Presets");
+    expect(within(presetOptions).getByRole("option", {
+      name: logOptionName("AAA_CONTROL"),
+    })).toBeInTheDocument();
+    expect(within(presetOptions).getByRole("option", {
+      name: logOptionName("BASELINE"),
+    })).toBeInTheDocument();
+  });
+
+  it("lazy-loads scalar tag discovery without changing non-scalar filters", async () => {
+    const fixture = buildLargeLogFixture(105);
+    const sharedRuns = fixture.logRunsResponse.runs.map((run) => ({
+      ...run,
+      dataset: "Mnist",
+      relativePath:
+        `${run.experiment}/linear/BASELINE/Mnist/${run.runName}/version_0`,
+    }));
+    const sharedFixture = {
+      ...fixture,
+      logRunsResponse: { runs: sharedRuns },
+    };
+    const { logRunRequests, logTagRequests } = installFetchMock(sharedFixture);
+    renderViewer();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+    await selectAllLogExperiments(user);
 
     await waitFor(() => {
-      expect(customPageRequests().some((request) => request.offset === 100))
-        .toBe(true);
+      expect(logRunRequests).toContainEqual(
+        expect.objectContaining({ limit: 100, offset: 100 }),
+      );
     });
     await waitFor(() => {
-      expect(screen.queryByRole("button", { name: /^load more runs$/i }))
+      expect(screen.getByText("Scalar tags scanned for 100 of 105 visible runs"))
+        .toBeInTheDocument();
+    });
+    expect(screen.queryByRole("button", { name: /^load more runs$/i }))
+      .not.toBeInTheDocument();
+
+    const firstScalarTagRunIds = sharedRuns.slice(0, 100).map((run) => run.id);
+    await waitFor(() => {
+      expect(logTagRequests.flatMap((request) => request.runIds))
+        .toEqual(firstScalarTagRunIds);
+    });
+    expect(logTagRequests.flatMap((request) => request.runIds))
+      .not.toContain(sharedRuns[100].id);
+
+    const datasetCount = within(logFilterSection("Datasets")).getByText("1 / 1")
+      .textContent;
+    const modelCount = within(logFilterSection("Models")).getByText("1 / 1")
+      .textContent;
+    const presetCount = within(logFilterSection("Presets")).getByText("1 / 1")
+      .textContent;
+
+    await user.click(screen.getByRole("button", { name: /^load more scalar tags$/i }));
+
+    await waitFor(() => {
+      expect(logTagRequests.at(-1)).toEqual({
+        runIds: sharedRuns.slice(100).map((run) => run.id),
+      });
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: /^load more scalar tags$/i }))
         .not.toBeInTheDocument();
     });
+    expect(within(logFilterSection("Datasets")).getByText("1 / 1").textContent)
+      .toBe(datasetCount);
+    expect(within(logFilterSection("Models")).getByText("1 / 1").textContent)
+      .toBe(modelCount);
+    expect(within(logFilterSection("Presets")).getByText("1 / 1").textContent)
+      .toBe(presetCount);
   });
 
   it("does not delete a log experiment when the dialog is cancelled", async () => {
@@ -2580,8 +2841,9 @@ describe("ViewerApp Logs Workspace", () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
-    await user.click(screen.getByRole("button", { name: /all runs/i }));
     await selectAllLogExperiments(user);
+    await setLogOptionSelection(user, "Scalar Tags", "validation/accuracy", true);
+    await setLogOptionSelection(user, "Scalar Tags", "train/loss", true);
 
     await waitFor(() => {
       expect(logScalarRequests).toContainEqual({
@@ -2599,6 +2861,7 @@ describe("ViewerApp Logs Workspace", () => {
     });
 
     await clickLogOption(user, "Experiments", "test_model");
+    await setLogOptionSelection(user, "Scalar Tags", "train/loss", true);
 
     await waitFor(() => {
       expect(logScalarRequests).toContainEqual({
@@ -2613,6 +2876,8 @@ describe("ViewerApp Logs Workspace", () => {
       .not.toBeInTheDocument();
 
     await clickLogOption(user, "Experiments", "test_model");
+    await setLogOptionSelection(user, "Scalar Tags", "validation/accuracy", true);
+    await setLogOptionSelection(user, "Scalar Tags", "train/loss", true);
 
     await waitFor(() => {
       expect(screen.getByText(/2 runs · 2 selected tags/i)).toBeInTheDocument();
@@ -2711,8 +2976,9 @@ describe("ViewerApp Logs Workspace", () => {
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
     await screen.findByText("Historical Scalars");
-    await user.click(await screen.findByRole("button", { name: /all runs/i }));
     await selectLogExperiments(user, ["prior_monitor"]);
+    await clickLogOption(user, "Scalar Tags", "train/loss");
+    await clickLogOption(user, "Scalar Tags", "validation/accuracy");
     expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
       .toBeInTheDocument();
 
@@ -2817,9 +3083,13 @@ describe("ViewerApp Logs Workspace", () => {
         ],
       },
       logTagsByRun: Object.fromEntries(
-        runs.map((run) => [run.id, ["train/loss", "validation/accuracy"]]),
+        runs.map((run) => [
+          run.id,
+          scalarTagsWithEpochDefaults("train/loss", "validation/accuracy"),
+        ]),
       ),
       logScalarSeries: runs.flatMap((run, index) => [
+        ...epochScalarSeriesForRun(run.id, index),
         {
           runId: run.id,
           tag: "train/loss",
@@ -2841,7 +3111,6 @@ describe("ViewerApp Logs Workspace", () => {
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
     await screen.findByText("Historical Scalars");
-    await user.click(await screen.findByRole("button", { name: /all runs/i }));
     await selectLogExperiments(user, ["exp_a", "exp_b"]);
 
     await waitFor(() => {
@@ -2888,7 +3157,7 @@ describe("ViewerApp Logs Workspace", () => {
     expect(within(presetOptions).queryByRole("option", {
       name: logOptionName("CONV_ONLY"),
     })).not.toBeInTheDocument();
-    expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
+    expect(await screen.findByRole("img", { name: /validation\/accuracy_epoch scalar chart/i }))
       .toBeInTheDocument();
   });
 
@@ -2936,7 +3205,6 @@ describe("ViewerApp Logs Workspace", () => {
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
     await screen.findByText("Historical Scalars");
-    await user.click(await screen.findByRole("button", { name: /all runs/i }));
     await selectAllLogExperiments(user);
 
     await waitFor(() => {
@@ -2980,9 +3248,8 @@ describe("ViewerApp Logs Workspace", () => {
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
     await screen.findByText("Historical Scalars");
-    await user.click(await screen.findByRole("button", { name: /all runs/i }));
     await selectLogExperiments(user, ["normal_linear"]);
-    expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
+    expect(await screen.findByRole("img", { name: /validation\/accuracy_epoch scalar chart/i }))
       .toBeInTheDocument();
 
     await clickLogOption(user, "Experiments", "normal_linear");
@@ -3058,7 +3325,7 @@ describe("ViewerApp Logs Workspace", () => {
 
     expect(await screen.findByText("No TensorBoard scalars")).toBeInTheDocument();
     expect(
-      screen.getByText("The selected runs do not contain scalar event data."),
+      await screen.findByText("The selected runs do not contain scalar event data."),
     ).toBeInTheDocument();
     expect(logScalarRequests).toHaveLength(0);
   });

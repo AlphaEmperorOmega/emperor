@@ -22,9 +22,6 @@ export function LogsSidebarPanel({ state }: { state: LogsWorkspaceState }) {
       selectedModels={state.selectedModels}
       selectedPresets={state.selectedPresets}
       selectedTags={state.selectedTags}
-      scopeMode={state.scopeMode}
-      onUseCurrentTarget={state.useCurrentTargetScope}
-      onShowAllRuns={state.showAllRuns}
       toggleExperiment={state.toggleExperiment}
       toggleDataset={state.toggleDataset}
       toggleModel={state.toggleModel}
@@ -53,9 +50,11 @@ export function LogsSidebarPanel({ state }: { state: LogsWorkspaceState }) {
       deleteRuns={state.deleteRuns}
       runDeleteError={state.runDeleteError}
       isDeletingRunDelete={state.isDeletingRunDelete}
-      canLoadMoreRuns={state.canLoadMoreRuns}
-      isLoadingMoreRuns={state.isLoadingMoreRuns}
-      loadMoreRuns={state.loadMoreRuns}
+      loadedScalarTagRunCount={state.loadedScalarTagRunCount}
+      totalScalarTagRunCount={state.totalScalarTagRunCount}
+      canLoadMoreScalarTags={state.canLoadMoreScalarTags}
+      isLoadingMoreScalarTags={state.isLoadingMoreScalarTags}
+      loadMoreScalarTags={state.loadMoreScalarTags}
     />
   );
 }
