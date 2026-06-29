@@ -635,7 +635,7 @@ function boundaryProjectorSchemaResponse() {
   const boundaryField = (
     key: string,
     section: string,
-    type: "bool" | "class" | "int",
+    type: "bool" | "class" | "float" | "int",
     defaultValue: boolean | string | number | null,
     choices: Array<boolean | string> = [],
   ) => ({
@@ -660,6 +660,18 @@ function boundaryProjectorSchemaResponse() {
         "class",
         null,
         ["DualModelDynamicWeightConfig"],
+      ),
+      boundaryField(
+        "input_layer_weight_decay_warmup_batches",
+        "Input Boundary Projector Options",
+        "int",
+        0,
+      ),
+      boundaryField(
+        "input_layer_weight_decay_rate",
+        "Input Boundary Projector Options",
+        "float",
+        0,
       ),
       boundaryField(
         "input_layer_bias_option",
@@ -1493,14 +1505,14 @@ describe("ViewerApp Full Config", () => {
     ).toBeInTheDocument();
   });
 
-  it("uses divider groups for boundary projector sections", async () => {
+  it("uses nested option accordions for boundary projector sections", async () => {
     installFetchMock({ schemaResponse: boundaryProjectorSchemaResponse() });
     renderViewer();
     const user = userEvent.setup();
 
     const dialog = await openFullConfig(user);
     const inputAccordion = within(dialog).getByRole("button", {
-      name: /^input boundary projector options section, 4 fields, 0 overrides/i,
+      name: /^input boundary projector options section, 6 fields, 0 overrides/i,
     });
     const outputAccordion = within(dialog).getByRole("button", {
       name: /^output boundary projector options section, 4 fields, 0 overrides/i,
@@ -1513,36 +1525,91 @@ describe("ViewerApp Full Config", () => {
     await user.click(outputAccordion);
 
     const inputPanel = accordionPanelFor(inputAccordion);
+    const outputPanel = accordionPanelFor(outputAccordion);
 
-    expect(within(inputPanel).getByText("Weight")).toBeInTheDocument();
-    expect(within(inputPanel).getByText("Bias")).toBeInTheDocument();
-    expect(within(inputPanel).getByText("Diagonal")).toBeInTheDocument();
-    expect(within(inputPanel).getByText("Mask")).toBeInTheDocument();
+    const disabledWeightGroup = within(inputPanel).getByRole("button", {
+      name: /^weight boundary projector group, 3 fields, 0 overrides/i,
+    });
+    const inputWeightGroup = configFieldGroupFor(inputAccordion, "Weight");
+    const inputWeightSwitch = within(inputWeightGroup).getByRole("switch", {
+      name: /^input layer weight option$/i,
+    });
+    const outputWeightSwitch = within(
+      configFieldGroupFor(outputAccordion, "Weight"),
+    ).getByRole("switch", {
+      name: /^output layer weight option$/i,
+    });
+
+    expect(disabledWeightGroup).toBeDisabled();
+    expect(inputWeightGroup).toHaveClass("overflow-visible");
+    expect(inputWeightSwitch).toHaveAttribute("aria-checked", "false");
+    expect(outputWeightSwitch).toHaveAttribute("aria-checked", "false");
     expect(
-      within(configFieldGroupFor(inputAccordion, "Weight")).getByLabelText(
-        /^input layer weight option$/i,
-      ),
-    ).toBeInTheDocument();
+      within(inputPanel).queryByRole("combobox", {
+        name: /^input layer weight option$/i,
+      }),
+    ).not.toBeInTheDocument();
     expect(
-      within(configFieldGroupFor(inputAccordion, "Bias")).getByLabelText(
-        /^input layer bias option$/i,
-      ),
-    ).toBeInTheDocument();
+      within(inputPanel).queryByRole("textbox", {
+        name: /^input layer weight decay warmup batches$/i,
+      }),
+    ).not.toBeInTheDocument();
     expect(
-      within(configFieldGroupFor(inputAccordion, "Diagonal")).getByLabelText(
-        /^input layer diagonal option$/i,
-      ),
-    ).toBeInTheDocument();
+      within(inputPanel).queryByRole("textbox", {
+        name: /^input layer weight decay rate$/i,
+      }),
+    ).not.toBeInTheDocument();
+
+    await user.click(inputWeightSwitch);
+
+    const enabledWeightGroup = within(inputPanel).getByRole("button", {
+      name: /^weight boundary projector group, 3 fields, 1 override/i,
+    });
+    const enabledWeightPanel = accordionPanelFor(enabledWeightGroup);
+    const inputWeightOption = within(enabledWeightPanel).getByRole("combobox", {
+      name: /^input layer weight option$/i,
+    });
+    const warmupBatchesInput = within(enabledWeightPanel).getByRole("textbox", {
+      name: /^input layer weight decay warmup batches$/i,
+    });
+    const decayRateInput = within(enabledWeightPanel).getByRole("textbox", {
+      name: /^input layer weight decay rate$/i,
+    });
+
+    expect(enabledWeightGroup).toBeEnabled();
+    expect(enabledWeightGroup).toHaveAttribute("aria-expanded", "true");
+    expect(inputWeightSwitch).toHaveAttribute("aria-checked", "true");
+    expect(inputWeightOption).toHaveTextContent("DualModelDynamicWeightConfig");
+    expect(warmupBatchesInput).toHaveAttribute("placeholder", "int");
+    expect(decayRateInput).toHaveAttribute("placeholder", "float");
+
+    await user.click(inputWeightOption);
+
     expect(
-      within(configFieldGroupFor(inputAccordion, "Mask")).getByLabelText(
-        /^input layer row mask option$/i,
-      ),
+      screen.getByRole("option", { name: /^DualModelDynamicWeightConfig$/i }),
     ).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /^None$/i })).not.toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("option", { name: /^DualModelDynamicWeightConfig$/i }),
+    );
+    await user.click(inputWeightSwitch);
+
     expect(
-      within(configFieldGroupFor(outputAccordion, "Weight")).getByLabelText(
-        /^output layer weight option$/i,
-      ),
-    ).toBeInTheDocument();
+      within(inputPanel).getByRole("button", {
+        name: /^weight boundary projector group, 3 fields, 0 overrides/i,
+      }),
+    ).toBeDisabled();
+    expect(
+      within(inputPanel).queryByRole("combobox", {
+        name: /^input layer weight option$/i,
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(outputPanel).getByRole("button", {
+        name: /^weight boundary projector group, 1 field, 0 overrides/i,
+      }),
+    ).toBeDisabled();
   });
 
   it("renders gate option enum selects in controlled gate sections", async () => {

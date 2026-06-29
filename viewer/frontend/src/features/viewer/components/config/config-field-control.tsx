@@ -216,6 +216,7 @@ export function ConfigFieldValueEditor({
           type="text"
           inputMode={field.type === "float" ? "decimal" : "numeric"}
           autoComplete="off"
+          placeholder={field.type}
           value={value}
           disabled={isControlDisabled}
           onChange={(event) => onChange(field.key, event.target.value)}
