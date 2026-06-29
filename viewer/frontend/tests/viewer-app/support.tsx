@@ -1459,6 +1459,15 @@ export const schemaResponse = {
     },
   ],
 };
+export function schemaResponseWithDescriptions(descriptions: Record<string, string>) {
+  return {
+    ...schemaResponse,
+    fields: schemaResponse.fields.map((field) => ({
+      ...field,
+      description: descriptions[field.key] ?? "",
+    })),
+  };
+}
 export const searchSpaceResponse = {
   modelType: "linears",
   model: "linear",

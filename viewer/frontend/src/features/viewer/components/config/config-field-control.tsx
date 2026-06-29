@@ -1,9 +1,11 @@
-import { PencilLine, RotateCcw } from "lucide-react";
+import { type CSSProperties } from "react";
+import { CircleHelp, PencilLine, RotateCcw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SelectOnlyDropdown } from "@/features/viewer/components/screen/select-only-dropdown";
+import { HoverTooltip } from "@/features/viewer/components/shared/hover-tooltip";
 import { type ConfigField } from "@/lib/api";
 import {
   type OverrideValues,
@@ -22,6 +24,19 @@ const booleanOptions = [
 
 const modifiedControlClassName =
   "border-violet/55 bg-[#100719] hover:border-violet/70";
+
+const descriptionTooltipClassName =
+  "bottom-[calc(100%+6px)] left-0 top-auto z-50 whitespace-normal px-2.5 py-2 text-left text-[12px] font-medium leading-4";
+
+const descriptionTooltipStyle = {
+  width: "min(22rem, calc(100vw - 2rem))",
+  maxWidth: "calc(100vw - 2rem)",
+  overflowWrap: "normal",
+  wordBreak: "normal",
+} satisfies CSSProperties;
+
+const descriptionButtonClassName =
+  "flex h-5 w-5 shrink-0 items-center justify-center rounded-[7px] border border-line-soft bg-white/[0.035] text-ink-faint transition hover:border-line hover:bg-white/[0.07] hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-focus";
 
 export function ConfigFieldOverrideIcon({ className }: { className?: string }) {
   return (
@@ -94,6 +109,7 @@ function BooleanSegmentedControl({
 
 function ConfigFieldLabelContent({
   field,
+  labelTextId,
   isModified,
   isLocked,
   isControlDisabled,
@@ -101,12 +117,15 @@ function ConfigFieldLabelContent({
   statusBadgeClassName,
 }: {
   field: ConfigField;
+  labelTextId?: string;
   isModified: boolean;
   isLocked: boolean;
   isControlDisabled: boolean;
   disabledReason?: string;
   statusBadgeClassName?: string;
 }) {
+  const description = field.description?.trim() ?? "";
+
   return (
     <>
       <span className="flex min-w-0 items-start justify-between gap-2">
@@ -117,7 +136,28 @@ function ConfigFieldLabelContent({
             isModified ? "text-violet" : "text-ink",
           )}
         >
-          <span className="min-w-0 [overflow-wrap:anywhere]">{field.label}</span>
+          <span id={labelTextId} className="min-w-0 [overflow-wrap:anywhere]">
+            {field.label}
+          </span>
+          {description && (
+            <HoverTooltip
+              tooltip={description}
+              className="mt-[1px] shrink-0"
+              tooltipClassName={descriptionTooltipClassName}
+              tooltipStyle={descriptionTooltipStyle}
+            >
+              {(tooltipProps) => (
+                <button
+                  {...tooltipProps}
+                  type="button"
+                  aria-label={`Show description for ${field.label}`}
+                  className={descriptionButtonClassName}
+                >
+                  <CircleHelp className="h-3.5 w-3.5" aria-hidden />
+                </button>
+              )}
+            </HoverTooltip>
+          )}
           {isModified && <ConfigFieldOverrideIcon className="mt-[3px]" />}
         </span>
       </span>
@@ -228,7 +268,8 @@ export function ConfigFieldValueEditor({
         <Input
           id={controlId}
           name={field.key}
-          aria-label={controlLabel}
+          aria-label={controlLabelledBy ? undefined : controlLabel}
+          aria-labelledby={controlLabelledBy}
           type="text"
           inputMode={field.type === "float" ? "decimal" : "numeric"}
           autoComplete="off"
@@ -242,7 +283,8 @@ export function ConfigFieldValueEditor({
         <Input
           id={controlId}
           name={field.key}
-          aria-label={controlLabel}
+          aria-label={controlLabelledBy ? undefined : controlLabel}
+          aria-labelledby={controlLabelledBy}
           autoComplete="off"
           value={value}
           disabled={isControlDisabled}
@@ -289,7 +331,7 @@ export function ConfigFieldControl({
   disabledReason?: string;
 }) {
   const id = `${idPrefix}-${field.key}`;
-  const labelId = `${id}-label`;
+  const labelTextId = `${id}-label-text`;
   const isModified = hasOverride(overrides, field.key);
   const isLocked = field.locked === true;
   const isControlDisabled = disabled && !isLocked;
@@ -307,42 +349,29 @@ export function ConfigFieldControl({
           "rounded-[10px] border-l-2 border-line bg-white/[0.025] pl-2 pr-2 opacity-65",
       )}
     >
-      {field.type === "bool" ? (
-        <div
-          id={labelId}
-          className={cn("grid", isCompact ? "gap-1" : "gap-1.5")}
-        >
-          <ConfigFieldLabelContent
-            field={field}
-            isModified={isModified}
-            isLocked={isLocked}
-            isControlDisabled={isControlDisabled}
-            disabledReason={disabledReason}
-            statusBadgeClassName={statusBadgeClassName}
-          />
-        </div>
-      ) : (
-        <label
-          className={cn("grid", isCompact ? "gap-1" : "gap-1.5")}
-          htmlFor={id}
-        >
-          <ConfigFieldLabelContent
-            field={field}
-            isModified={isModified}
-            isLocked={isLocked}
-            isControlDisabled={isControlDisabled}
-            disabledReason={disabledReason}
-            statusBadgeClassName={statusBadgeClassName}
-          />
-        </label>
-      )}
+      <div className={cn("grid", isCompact ? "gap-1" : "gap-1.5")}>
+        <ConfigFieldLabelContent
+          field={field}
+          labelTextId={labelTextId}
+          isModified={isModified}
+          isLocked={isLocked}
+          isControlDisabled={isControlDisabled}
+          disabledReason={disabledReason}
+          statusBadgeClassName={statusBadgeClassName}
+        />
+      </div>
       <ConfigFieldValueEditor
         field={field}
         overrides={overrides}
         onChange={onChange}
         onReset={onReset}
         controlId={id}
-        controlLabelledBy={field.type === "bool" ? labelId : undefined}
+        controlLabelledBy={
+          field.type === "bool" || field.choices.length === 0
+            ? labelTextId
+            : undefined
+        }
+        controlLabel={field.label}
         density={density}
         disabled={disabled}
         resetTitle={`Reset ${field.label}`}
