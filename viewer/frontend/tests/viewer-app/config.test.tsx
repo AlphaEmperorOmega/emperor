@@ -759,6 +759,25 @@ describe("ViewerApp Full Config", () => {
     expect(screen.queryByLabelText(/hidden dim/i)).not.toBeInTheDocument();
   });
 
+  it("hides the open full config action while selecting experiment targets", async () => {
+    installFetchMock();
+    renderViewer();
+    const user = userEvent.setup();
+
+    await waitForOpenFullConfigButton(user);
+
+    await user.click(
+      screen.getByRole("radio", { name: /^experiments$/i }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("radio", { name: /^experiments$/i }))
+        .toHaveAttribute("aria-checked", "true");
+      expect(screen.queryByRole("button", { name: /open full config/i }))
+        .not.toBeInTheDocument();
+    });
+  });
+
   it("keeps the global snapshot library out of the model sidebar", async () => {
     installFetchMock({
       configSnapshotsResponse: {

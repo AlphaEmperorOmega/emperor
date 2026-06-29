@@ -18,6 +18,7 @@ export function ConfigSummaryPanel({
     overrideCount,
     configSnapshotCount,
     canOpenFullConfig,
+    showFullConfigButton,
     isSchemaLoading,
   } = useTargetConfigSummaryState();
   return (
@@ -41,15 +42,17 @@ export function ConfigSummaryPanel({
         </div>
       </div>
 
-      <Button
-        variant="primary"
-        onClick={onOpenFullConfig}
-        disabled={!canOpenFullConfig}
-        className="h-11 w-full text-[13.5px]"
-      >
-        <Maximize2 className="h-4 w-4" aria-hidden />
-        Open Full Config
-      </Button>
+      {showFullConfigButton && (
+        <Button
+          variant="primary"
+          onClick={onOpenFullConfig}
+          disabled={!canOpenFullConfig}
+          className="h-11 w-full text-[13.5px]"
+        >
+          <Maximize2 className="h-4 w-4" aria-hidden />
+          Open Full Config
+        </Button>
+      )}
 
       {isSchemaLoading ? (
         <InlineStatus compact>
