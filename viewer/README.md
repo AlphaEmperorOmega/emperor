@@ -89,6 +89,41 @@ When bearer auth is enabled, keep origins specific to the deployed frontend
 hosts. Do not use wildcard origins such as `["*"]` for authenticated hosted
 deployments.
 
+Hosted frontend builds should also lock which API origins browser requests may
+target. If `NEXT_PUBLIC_VIEWER_API_URL` points at a non-local API, the frontend
+locks requests to that configured origin by default. Set
+`NEXT_PUBLIC_VIEWER_API_ALLOWED_ORIGINS` to make the allowlist explicit or to
+allow multiple API origins:
+
+```bash
+export NEXT_PUBLIC_VIEWER_API_URL=https://api.example.com/viewer
+export NEXT_PUBLIC_VIEWER_API_ALLOWED_ORIGINS='["https://api.example.com"]'
+```
+
+For a bearer-protected hosted deployment, set the frontend and backend values as
+a matched pair before building or starting the services:
+
+```bash
+# Frontend build environment. These values are public and are bundled into
+# browser JavaScript by Next.js.
+export NEXT_PUBLIC_VIEWER_API_URL=https://api.example.com
+export NEXT_PUBLIC_VIEWER_API_ALLOWED_ORIGINS='["https://api.example.com"]'
+
+# Backend runtime environment. Keep the token secret out of frontend env files.
+export VIEWER_API_CORS_ORIGINS='["https://viewer.example.com"]'
+export VIEWER_API_AUTH_MODE=bearer
+export VIEWER_API_TOKEN='<replace-with-a-secret-token>'
+```
+
+The development launcher starts one Uvicorn process for the Viewer backend. The
+backend uses in-process locks around Training Job, Log Run, TensorBoard, and
+progress caches so concurrent requests in that process do not corrupt shared
+state. Those locks are not cross-worker invalidation. If a hosted deployment
+uses multiple Uvicorn or Gunicorn workers, each worker has its own process-local
+caches and may observe filesystem changes after its own cache TTL or explicit
+cache clear path. Use one worker for the local-file-backed Viewer unless you add
+a shared cache/invalidation design.
+
 For manual or hosted read-only deployments, leave local mutation endpoints
 disabled. Backend mutation actions such as training, log deletion, and config
 snapshot creation, rename, and deletion require explicit backend-side unsafe
