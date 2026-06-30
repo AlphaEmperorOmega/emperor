@@ -87,8 +87,8 @@ class FakePresetGenerator(ExperimentPresetsBase):
 
 
 class FakeModel:
-    def __init__(self, cfg):
-        self.cfg = cfg
+    def __init__(self, config):
+        self.config = config
 
 
 class FakeLogger:
@@ -242,6 +242,13 @@ class TestExperimentTraining(unittest.TestCase):
             FakeTrainer.instances[0].test_datamodule,
             FakeTrainer.instances[0].fit_datamodule,
         )
+
+    def test_train_model_instantiates_model_with_generated_config(self):
+        experiment = FakeExperiment(FakeOption.BASELINE)
+
+        experiment.train_model(selected_datasets=[FakeDatasetA])
+
+        self.assertIsInstance(FakeTrainer.instances[0].model.config, FakeConfig)
 
     def test_materialized_run_sets_progress_context_and_events(self):
         experiment = FakeExperiment()
