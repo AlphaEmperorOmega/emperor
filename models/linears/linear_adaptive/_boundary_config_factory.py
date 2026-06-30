@@ -23,13 +23,19 @@ from emperor.base.layer.gate import GateConfig
 from emperor.base.layer.residual import ResidualConnectionOptions
 from emperor.base.options import ActivationOptions, LayerNormPositionOptions
 from emperor.linears.core.config import AdaptiveLinearLayerConfig
+from models.adaptive_parameter_config_factory import (
+    build_bias_config,
+    build_diagonal_config,
+    build_mask_config,
+    build_weight_config,
+)
 
 if TYPE_CHECKING:
     from emperor.halting.config import HaltingConfig
 
 
 @dataclass(frozen=True)
-class BoundaryLayerOptions:
+class AdaptiveBoundaryProjectionOptions:
     weight_option: type[DynamicWeightConfig] | None
     weight_generator_depth: DynamicDepthOptions
     weight_decay_schedule: WeightDecayScheduleOptions
@@ -50,6 +56,9 @@ class BoundaryLayerOptions:
     mask_surrogate_scale: float
     mask_floor: float
     mask_transition_width: float
+
+
+BoundaryLayerOptions = AdaptiveBoundaryProjectionOptions
 
 
 class BoundaryConfigFactory:
@@ -78,7 +87,7 @@ class BoundaryConfigFactory:
 
     def _build_boundary_layer_config(
         self,
-        options: BoundaryLayerOptions,
+        options: AdaptiveBoundaryProjectionOptions,
         activation: ActivationOptions,
         layer_norm_position: LayerNormPositionOptions,
         dropout_probability: float,
@@ -97,13 +106,13 @@ class BoundaryConfigFactory:
 
     def _build_boundary_layer_model_config(
         self,
-        options: BoundaryLayerOptions,
+        options: AdaptiveBoundaryProjectionOptions,
     ) -> AdaptiveLinearLayerConfig:
         builder = self.builder
         return AdaptiveLinearLayerConfig(
             bias_flag=builder.bias_flag,
             adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
-                weight_config=builder._build_weight_config_from_options(
+                weight_config=build_weight_config(
                     weight_option=options.weight_option,
                     generator_depth=options.weight_generator_depth,
                     decay_schedule=options.weight_decay_schedule,
@@ -115,17 +124,17 @@ class BoundaryConfigFactory:
                     ),
                     bank_expansion_factor=options.weight_bank_expansion_factor,
                 ),
-                bias_config=builder._build_bias_config_from_options(
+                bias_config=build_bias_config(
                     bias_option=options.bias_option,
                     decay_schedule=options.bias_decay_schedule,
                     decay_rate=options.bias_decay_rate,
                     decay_warmup_batches=options.bias_decay_warmup_batches,
                     bank_expansion_factor=options.bias_bank_expansion_factor,
                 ),
-                diagonal_config=builder._build_diagonal_config_from_option(
-                    options.diagonal_option
+                diagonal_config=build_diagonal_config(
+                    options.diagonal_option,
                 ),
-                mask_config=builder._build_mask_config_from_options(
+                mask_config=build_mask_config(
                     row_mask_option=options.row_mask_option,
                     mask_dimension_option=options.mask_dimension_option,
                     mask_threshold=options.mask_threshold,
