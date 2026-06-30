@@ -12,8 +12,8 @@ from emperor.halting.config import StickBreakingConfig
 from emperor.linears.core.config import LinearLayerConfig
 from emperor.sampler.core.config import RouterConfig, SamplerConfig
 
+from models.experts._builder_options import ExpertsControllerStackOptions
 from models.experts.experts_linear._controller_stack import (
-    ControllerStackOptions,
     build_linear_controller_stack,
 )
 
@@ -27,11 +27,14 @@ class ControlConfigFactory:
 
     def __build_main_model_config(self) -> MixtureOfExpertsModelConfig:
         builder = self.builder
+        mixture_options = builder.mixture_options
         return MixtureOfExpertsModelConfig(
             input_dim=builder.hidden_dim,
             output_dim=builder.hidden_dim,
-            top_k=builder.top_k,
-            routing_initialization_mode=builder.routing_initialization_mode,
+            top_k=mixture_options.top_k,
+            routing_initialization_mode=(
+                mixture_options.routing_initialization_mode
+            ),
             sampler_config=self.__build_sampler_config(),
             stack_config=self.__build_main_stack_config(),
         )
@@ -40,37 +43,44 @@ class ControlConfigFactory:
         self,
         block_config: MixtureOfExpertsModelConfig,
     ) -> MixtureOfExpertsModelConfig | RecurrentLayerConfig:
-        builder = self.builder
-        if not builder.recurrent_flag:
+        recurrent_options = self.builder.recurrent_controller_options
+        if not recurrent_options.recurrent_flag:
             return block_config
         return RecurrentLayerConfig(
-            max_steps=builder.recurrent_max_steps,
-            recurrent_layer_norm_position=builder.recurrent_layer_norm_position,
+            max_steps=recurrent_options.recurrent_max_steps,
+            recurrent_layer_norm_position=(
+                recurrent_options.recurrent_layer_norm_position
+            ),
             block_config=block_config,
             gate_config=self.__build_recurrent_gate_config(),
             residual_connection_option=ResidualConnectionOptions.DISABLED,
             halting_config=self.__build_halting_config(
-                enabled=builder.recurrent_halting_flag
+                enabled=recurrent_options.recurrent_halting_flag
             ),
         )
 
     def __build_main_stack_config(self) -> LayerStackConfig:
         builder = self.builder
+        stack_options = builder.stack_options
         gate_config = self.__build_gate_config()
         self.__validate_shared_gate_config(gate_config)
         return LayerStackConfig(
-            input_dim=builder.hidden_dim,
-            hidden_dim=builder.hidden_dim,
-            output_dim=builder.hidden_dim,
-            num_layers=builder.stack_num_layers,
-            last_layer_bias_option=builder.stack_last_layer_bias_option,
-            apply_output_pipeline_flag=builder.stack_apply_output_pipeline_flag,
-            shared_gate_config=builder.shared_gate_config,
+            input_dim=stack_options.hidden_dim,
+            hidden_dim=stack_options.hidden_dim,
+            output_dim=stack_options.hidden_dim,
+            num_layers=stack_options.num_layers,
+            last_layer_bias_option=stack_options.last_layer_bias_option,
+            apply_output_pipeline_flag=stack_options.apply_output_pipeline_flag,
+            shared_gate_config=(
+                builder.layer_controller_options.shared_gate_config
+            ),
             layer_config=MixtureOfExpertsLayerConfig(
-                activation=builder.stack_activation,
-                layer_norm_position=builder.layer_norm_position,
-                residual_connection_option=builder.stack_residual_connection_option,
-                dropout_probability=builder.stack_dropout_probability,
+                activation=stack_options.activation,
+                layer_norm_position=stack_options.layer_norm_position,
+                residual_connection_option=(
+                    stack_options.residual_connection_option
+                ),
+                dropout_probability=stack_options.dropout_probability,
                 gate_config=gate_config,
                 halting_config=self.__build_halting_config(),
                 layer_model_config=self.__build_mixture_of_experts_config(),
@@ -92,17 +102,22 @@ class ControlConfigFactory:
 
     def __build_mixture_of_experts_config(self) -> MixtureOfExpertsConfig:
         builder = self.builder
+        mixture_options = builder.mixture_options
         return MixtureOfExpertsConfig(
             input_dim=builder.hidden_dim,
             output_dim=builder.hidden_dim,
-            top_k=builder.top_k,
-            num_experts=builder.num_experts,
-            capacity_factor=builder.capacity_factor,
-            dropped_token_behavior=builder.dropped_token_behavior,
-            compute_expert_mixture_flag=builder.compute_expert_mixture_flag,
-            weighted_parameters_flag=builder.weighted_parameters_flag,
-            weighting_position_option=builder.weighting_position_option,
-            routing_initialization_mode=builder.routing_initialization_mode,
+            top_k=mixture_options.top_k,
+            num_experts=mixture_options.num_experts,
+            capacity_factor=mixture_options.capacity_factor,
+            dropped_token_behavior=mixture_options.dropped_token_behavior,
+            compute_expert_mixture_flag=(
+                mixture_options.compute_expert_mixture_flag
+            ),
+            weighted_parameters_flag=mixture_options.weighted_parameters_flag,
+            weighting_position_option=mixture_options.weighting_position_option,
+            routing_initialization_mode=(
+                mixture_options.routing_initialization_mode
+            ),
             sampler_config=self.__build_sampler_config(),
             expert_model_config=self.__build_expert_model_config(),
         )
@@ -111,27 +126,27 @@ class ControlConfigFactory:
         self,
         enabled: bool | None = None,
     ) -> GateConfig | None:
-        builder = self.builder
+        layer_options = self.builder.layer_controller_options
         if enabled is None:
-            enabled = builder.stack_gate_flag
+            enabled = layer_options.stack_gate_flag
         if not enabled:
             return None
         return GateConfig(
             model_config=self.__build_gate_model_config(enabled=enabled),
-            option=builder.gate_option,
-            activation=builder.gate_activation,
+            option=layer_options.gate_option,
+            activation=layer_options.gate_activation,
         )
 
     def __build_recurrent_gate_config(self) -> GateConfig | None:
-        builder = self.builder
-        if not builder.recurrent_gate_flag:
+        recurrent_options = self.builder.recurrent_controller_options
+        if not recurrent_options.recurrent_gate_flag:
             return None
         return GateConfig(
             model_config=self.__build_gate_model_config(
-                enabled=builder.recurrent_gate_flag,
+                enabled=recurrent_options.recurrent_gate_flag,
             ),
-            option=builder.recurrent_gate_option,
-            activation=builder.recurrent_gate_activation,
+            option=recurrent_options.recurrent_gate_option,
+            activation=recurrent_options.recurrent_gate_activation,
         )
 
     def __build_gate_model_config(
@@ -146,20 +161,20 @@ class ControlConfigFactory:
         self,
         enabled: bool | None = None,
     ) -> StickBreakingConfig | None:
-        builder = self.builder
+        layer_options = self.builder.layer_controller_options
         if enabled is None:
-            enabled = builder.stack_halting_flag
+            enabled = layer_options.stack_halting_flag
         if not enabled:
             return None
         options = self.__halting_stack_options()
         return StickBreakingConfig(
-            threshold=builder.halting_threshold,
-            halting_dropout=builder.halting_dropout,
-            hidden_state_mode=builder.halting_hidden_state_mode,
+            threshold=layer_options.halting_threshold,
+            halting_dropout=layer_options.halting_dropout,
+            hidden_state_mode=layer_options.halting_hidden_state_mode,
             halting_gate_config=build_linear_controller_stack(
                 options,
-                hidden_dim=options.hidden_dim or builder.output_dim,
-                output_dim=builder.halting_output_dim,
+                hidden_dim=options.hidden_dim or self.builder.output_dim,
+                output_dim=layer_options.halting_output_dim,
             ),
         )
 
@@ -167,97 +182,50 @@ class ControlConfigFactory:
         return build_linear_controller_stack(self.__expert_stack_options())
 
     def __build_sampler_config(self) -> SamplerConfig:
-        builder = self.builder
+        mixture_options = self.builder.mixture_options
+        sampler_options = self.builder.sampler_options
         return SamplerConfig(
-            top_k=builder.top_k,
-            threshold=builder.sampler_threshold,
-            filter_above_threshold=builder.sampler_filter_above_threshold,
-            num_topk_samples=builder.sampler_num_topk_samples,
-            normalize_probabilities_flag=builder.sampler_normalize_probabilities_flag,
-            noisy_topk_flag=builder.sampler_noisy_topk_flag,
-            num_experts=builder.num_experts,
-            coefficient_of_variation_loss_weight=(
-                builder.sampler_coefficient_of_variation_loss_weight
+            top_k=mixture_options.top_k,
+            threshold=sampler_options.threshold,
+            filter_above_threshold=sampler_options.filter_above_threshold,
+            num_topk_samples=sampler_options.num_topk_samples,
+            normalize_probabilities_flag=(
+                sampler_options.normalize_probabilities_flag
             ),
-            switch_loss_weight=builder.sampler_switch_loss_weight,
-            zero_centred_loss_weight=builder.sampler_zero_centred_loss_weight,
+            noisy_topk_flag=sampler_options.noisy_topk_flag,
+            num_experts=mixture_options.num_experts,
+            coefficient_of_variation_loss_weight=(
+                sampler_options.coefficient_of_variation_loss_weight
+            ),
+            switch_loss_weight=sampler_options.switch_loss_weight,
+            zero_centred_loss_weight=sampler_options.zero_centred_loss_weight,
             mutual_information_loss_weight=(
-                builder.sampler_mutual_information_loss_weight
+                sampler_options.mutual_information_loss_weight
             ),
             router_config=self.__build_router_config(),
         )
 
     def __build_router_config(self) -> RouterConfig:
         builder = self.builder
+        mixture_options = builder.mixture_options
+        router_options = builder.router_options
         return RouterConfig(
             input_dim=builder.hidden_dim,
-            num_experts=builder.num_experts,
-            noisy_topk_flag=builder.router_noisy_topk_flag,
+            num_experts=mixture_options.num_experts,
+            noisy_topk_flag=router_options.noisy_topk_flag,
             model_config=build_linear_controller_stack(
                 self.__sampler_stack_options()
             ),
         )
 
-    def __gate_stack_options(self) -> ControllerStackOptions:
-        builder = self.builder
-        return ControllerStackOptions(
-            hidden_dim=builder.gate_stack_hidden_dim,
-            num_layers=builder.gate_stack_num_layers,
-            last_layer_bias_option=builder.gate_stack_last_layer_bias_option,
-            apply_output_pipeline_flag=builder.gate_stack_apply_output_pipeline_flag,
-            activation=builder.gate_stack_activation,
-            layer_norm_position=builder.gate_stack_layer_norm_position,
-            residual_connection_option=builder.gate_stack_residual_connection_option,
-            dropout_probability=builder.gate_stack_dropout_probability,
-            bias_flag=builder.gate_stack_bias_flag,
-        )
+    def __gate_stack_options(self) -> ExpertsControllerStackOptions:
+        return self.builder.layer_controller_options.gate_stack_options
 
-    def __halting_stack_options(self) -> ControllerStackOptions:
-        builder = self.builder
-        return ControllerStackOptions(
-            hidden_dim=builder.halting_stack_hidden_dim,
-            num_layers=builder.halting_stack_num_layers,
-            last_layer_bias_option=builder.halting_stack_last_layer_bias_option,
-            apply_output_pipeline_flag=builder.halting_stack_apply_output_pipeline_flag,
-            activation=builder.halting_stack_activation,
-            layer_norm_position=builder.halting_stack_layer_norm_position,
-            residual_connection_option=(
-                builder.halting_stack_residual_connection_option
-            ),
-            dropout_probability=builder.halting_stack_dropout_probability,
-            bias_flag=builder.halting_stack_bias_flag,
-        )
+    def __halting_stack_options(self) -> ExpertsControllerStackOptions:
+        return self.builder.layer_controller_options.halting_stack_options
 
-    def __expert_stack_options(self) -> ControllerStackOptions:
-        builder = self.builder
-        return ControllerStackOptions(
-            hidden_dim=builder.hidden_dim,
-            num_layers=builder.expert_stack_num_layers,
-            last_layer_bias_option=builder.expert_stack_last_layer_bias_option,
-            apply_output_pipeline_flag=(
-                builder.expert_stack_apply_output_pipeline_flag
-            ),
-            activation=builder.expert_stack_activation,
-            layer_norm_position=builder.expert_stack_layer_norm_position,
-            residual_connection_option=builder.expert_stack_residual_connection_option,
-            dropout_probability=builder.expert_stack_dropout_probability,
-            bias_flag=builder.expert_bias_flag,
-        )
+    def __expert_stack_options(self) -> ExpertsControllerStackOptions:
+        return self.builder.expert_stack_options
 
-    def __sampler_stack_options(self) -> ControllerStackOptions:
-        builder = self.builder
-        return ControllerStackOptions(
-            hidden_dim=builder.hidden_dim,
-            num_layers=builder.sampler_stack_num_layers,
-            last_layer_bias_option=builder.sampler_stack_last_layer_bias_option,
-            apply_output_pipeline_flag=(
-                builder.sampler_stack_apply_output_pipeline_flag
-            ),
-            activation=builder.sampler_stack_activation,
-            layer_norm_position=builder.sampler_stack_layer_norm_position,
-            residual_connection_option=(
-                builder.sampler_stack_residual_connection_option
-            ),
-            dropout_probability=builder.sampler_stack_dropout_probability,
-            bias_flag=builder.sampler_bias_flag,
-        )
+    def __sampler_stack_options(self) -> ExpertsControllerStackOptions:
+        return self.builder.sampler_stack_options

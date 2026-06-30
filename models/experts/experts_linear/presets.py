@@ -1,13 +1,10 @@
-from typing import TYPE_CHECKING
-
 from emperor.base.layer.residual import ResidualConnectionOptions
 from emperor.base.options import BaseOptions, LayerNormPositionOptions
-from emperor.datasets.image.classification.mnist import Mnist
 from emperor.experiments.base import (
+    BuilderBackedExperimentPresetsBase,
     ExperimentBase,
     ExperimentPresetsBase,
-    PresetLock,
-    SearchMode,
+    PresetDefinition,
 )
 from emperor.experts.core.options import (
     DroppedTokenOptions,
@@ -19,88 +16,24 @@ import models.experts.experts_linear.config as config
 from models.experts.experts_linear.config_builder import ExpertsLinearConfigBuilder
 from models.experts.experts_linear.model import Model
 
-if TYPE_CHECKING:
-    from emperor.config import ModelConfig
-
 
 class ExperimentPreset(BaseOptions):
-    BASELINE = (
-        "Default config: a mixture-of-experts classifier with linear expert and "
-        "sampler stacks."
-    )
-    GATING = "Default config with per-layer gating enabled in the expert stack."
-    HALTING = "Default config with stack halting enabled in the expert stack."
-    GATING_HALTING = (
-        "Default config with both per-layer gating and stack halting enabled in "
-        "the expert stack."
-    )
-    RECURRENT = (
-        "Default config wrapped in fixed-step recurrence, reusing the expert "
-        "stack for each recurrent step."
-    )
-    RECURRENT_GATING = (
-        "Default recurrent config with step-level gating enabled after each "
-        "recurrent update."
-    )
-    RECURRENT_HALTING = (
-        "Default recurrent config with recurrent halting enabled, allowing early "
-        "stopping before the max step count."
-    )
-    RECURRENT_GATING_HALTING = (
-        "Default recurrent config with both step-level gating and recurrent "
-        "halting enabled."
-    )
-    SHARED_ROUTER_AFTER_WEIGHT = (
-        "Default config with shared expert routing and expert weighting after "
-        "expert outputs."
-    )
-    TOP1_SWITCH_AUX = (
-        "Default config with top-1 switch routing and switch auxiliary loss enabled."
-    )
-    TOP2_BALANCED_AUX = (
-        "Default config with top-2 routing and balance auxiliary loss enabled."
-    )
-    CAPACITY_TOP1_ZERO = (
-        "Default config with top-1 capacity limiting and dropped tokens zeroed."
-    )
-    CAPACITY_TOP1_IDENTITY = (
-        "Default config with top-1 capacity limiting and dropped tokens preserved "
-        "by identity."
-    )
-    NOISY_SHARED_ROUTER = (
-        "Default config with shared noisy top-k routing enabled for sampler and router."
-    )
-    RESIDUAL_SHARED_ROUTER = (
-        "Default config with residual expert stack connections and shared expert "
-        "routing."
-    )
-    POST_NORM_AFTER_WEIGHT = (
-        "Default config with post-layer normalization and expert weighting after "
-        "expert outputs."
-    )
-
-
-def _lock(preset, value, behavior: str) -> PresetLock:
-    return PresetLock(
-        value=value,
-        reason=(
-            f"Locked by the {preset.name} preset because this preset enables "
-            f"{behavior}."
-        ),
-    )
-
-
-def _preset_locks(
-    preset_overrides: dict["ExperimentPreset", dict[str, object]],
-) -> dict["ExperimentPreset", dict[str, PresetLock]]:
-    return {
-        preset: {
-            field: _lock(preset, value, _PRESET_LOCK_BEHAVIORS[field])
-            for field, value in overrides.items()
-        }
-        for preset, overrides in preset_overrides.items()
-        if overrides
-    }
+    BASELINE = 1
+    GATING = 2
+    HALTING = 3
+    GATING_HALTING = 4
+    RECURRENT = 5
+    RECURRENT_GATING = 6
+    RECURRENT_HALTING = 7
+    RECURRENT_GATING_HALTING = 8
+    SHARED_ROUTER_AFTER_WEIGHT = 9
+    TOP1_SWITCH_AUX = 10
+    TOP2_BALANCED_AUX = 11
+    CAPACITY_TOP1_ZERO = 12
+    CAPACITY_TOP1_IDENTITY = 13
+    NOISY_SHARED_ROUTER = 14
+    RESIDUAL_SHARED_ROUTER = 15
+    POST_NORM_AFTER_WEIGHT = 16
 
 
 _PRESET_LOCK_BEHAVIORS = {
@@ -123,122 +56,149 @@ _PRESET_LOCK_BEHAVIORS = {
     "layer_norm_position": "post-layer normalization",
 }
 
-
-_PRESET_OVERRIDES = {
-    ExperimentPreset.BASELINE: {},
-    ExperimentPreset.GATING: {
-        "stack_gate_flag": True,
-    },
-    ExperimentPreset.HALTING: {
-        "stack_halting_flag": True,
-    },
-    ExperimentPreset.GATING_HALTING: {
-        "stack_gate_flag": True,
-        "stack_halting_flag": True,
-    },
-    ExperimentPreset.RECURRENT: {
-        "recurrent_flag": True,
-    },
-    ExperimentPreset.RECURRENT_GATING: {
-        "recurrent_flag": True,
-        "recurrent_gate_flag": True,
-    },
-    ExperimentPreset.RECURRENT_HALTING: {
-        "recurrent_flag": True,
-        "recurrent_halting_flag": True,
-    },
-    ExperimentPreset.RECURRENT_GATING_HALTING: {
-        "recurrent_flag": True,
-        "recurrent_gate_flag": True,
-        "recurrent_halting_flag": True,
-    },
-    ExperimentPreset.SHARED_ROUTER_AFTER_WEIGHT: {
-        "routing_initialization_mode": RoutingInitializationMode.SHARED,
-        "weighting_position_option": ExpertWeightingPositionOptions.AFTER_EXPERTS,
-    },
-    ExperimentPreset.TOP1_SWITCH_AUX: {
-        "top_k": 1,
-        "sampler_normalize_probabilities_flag": False,
-        "sampler_switch_loss_weight": 0.1,
-    },
-    ExperimentPreset.TOP2_BALANCED_AUX: {
-        "top_k": 2,
-        "sampler_coefficient_of_variation_loss_weight": 0.1,
-    },
-    ExperimentPreset.CAPACITY_TOP1_ZERO: {
-        "top_k": 1,
-        "capacity_factor": 1.0,
-        "dropped_token_behavior": DroppedTokenOptions.ZEROS,
-        "sampler_normalize_probabilities_flag": False,
-    },
-    ExperimentPreset.CAPACITY_TOP1_IDENTITY: {
-        "top_k": 1,
-        "capacity_factor": 1.0,
-        "dropped_token_behavior": DroppedTokenOptions.IDENTITY,
-        "sampler_normalize_probabilities_flag": False,
-    },
-    ExperimentPreset.NOISY_SHARED_ROUTER: {
-        "routing_initialization_mode": RoutingInitializationMode.SHARED,
-        "sampler_noisy_topk_flag": True,
-        "router_noisy_topk_flag": True,
-    },
-    ExperimentPreset.RESIDUAL_SHARED_ROUTER: {
-        "routing_initialization_mode": RoutingInitializationMode.SHARED,
-        "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
-    },
-    ExperimentPreset.POST_NORM_AFTER_WEIGHT: {
-        "layer_norm_position": LayerNormPositionOptions.AFTER,
-        "weighting_position_option": ExpertWeightingPositionOptions.AFTER_EXPERTS,
-    },
+_PRESET_DEFINITIONS = {
+    ExperimentPreset.BASELINE: PresetDefinition(
+        preset_values={},
+        description="Default config: a mixture-of-experts classifier with linear "
+        "expert and sampler stacks.",
+    ),
+    ExperimentPreset.GATING: PresetDefinition(
+        preset_values={
+            "stack_gate_flag": True,
+        },
+        description="Default config with per-layer gating enabled in the expert stack.",
+    ),
+    ExperimentPreset.HALTING: PresetDefinition(
+        preset_values={
+            "stack_halting_flag": True,
+        },
+        description="Default config with stack halting enabled in the expert stack.",
+    ),
+    ExperimentPreset.GATING_HALTING: PresetDefinition(
+        preset_values={
+            "stack_gate_flag": True,
+            "stack_halting_flag": True,
+        },
+        description="Default config with both per-layer gating and stack halting "
+        "enabled in the expert stack.",
+    ),
+    ExperimentPreset.RECURRENT: PresetDefinition(
+        preset_values={
+            "recurrent_flag": True,
+        },
+        description="Default config wrapped in fixed-step recurrence, reusing the expert "
+        "stack for each recurrent step.",
+    ),
+    ExperimentPreset.RECURRENT_GATING: PresetDefinition(
+        preset_values={
+            "recurrent_flag": True,
+            "recurrent_gate_flag": True,
+        },
+        description="Default recurrent config with step-level gating enabled after each "
+        "recurrent update.",
+    ),
+    ExperimentPreset.RECURRENT_HALTING: PresetDefinition(
+        preset_values={
+            "recurrent_flag": True,
+            "recurrent_halting_flag": True,
+        },
+        description="Default recurrent config with recurrent halting enabled, allowing "
+        "early stopping before the max step count.",
+    ),
+    ExperimentPreset.RECURRENT_GATING_HALTING: PresetDefinition(
+        preset_values={
+            "recurrent_flag": True,
+            "recurrent_gate_flag": True,
+            "recurrent_halting_flag": True,
+        },
+        description="Default recurrent config with both step-level gating and recurrent "
+        "halting enabled.",
+    ),
+    ExperimentPreset.SHARED_ROUTER_AFTER_WEIGHT: PresetDefinition(
+        preset_values={
+            "routing_initialization_mode": RoutingInitializationMode.SHARED,
+            "weighting_position_option": (ExpertWeightingPositionOptions.AFTER_EXPERTS),
+        },
+        description="Default config with shared expert routing and expert weighting after "
+        "expert outputs.",
+    ),
+    ExperimentPreset.TOP1_SWITCH_AUX: PresetDefinition(
+        preset_values={
+            "top_k": 1,
+            "sampler_normalize_probabilities_flag": False,
+            "sampler_switch_loss_weight": 0.1,
+        },
+        description="Default config with top-1 switch routing and switch auxiliary loss "
+        "enabled.",
+    ),
+    ExperimentPreset.TOP2_BALANCED_AUX: PresetDefinition(
+        preset_values={
+            "top_k": 2,
+            "sampler_coefficient_of_variation_loss_weight": 0.1,
+        },
+        description="Default config with top-2 routing and balance auxiliary loss enabled.",
+    ),
+    ExperimentPreset.CAPACITY_TOP1_ZERO: PresetDefinition(
+        preset_values={
+            "top_k": 1,
+            "capacity_factor": 1.0,
+            "dropped_token_behavior": DroppedTokenOptions.ZEROS,
+            "sampler_normalize_probabilities_flag": False,
+        },
+        description="Default config with top-1 capacity limiting and dropped tokens zeroed.",
+    ),
+    ExperimentPreset.CAPACITY_TOP1_IDENTITY: PresetDefinition(
+        preset_values={
+            "top_k": 1,
+            "capacity_factor": 1.0,
+            "dropped_token_behavior": DroppedTokenOptions.IDENTITY,
+            "sampler_normalize_probabilities_flag": False,
+        },
+        description="Default config with top-1 capacity limiting and dropped tokens "
+        "preserved by identity.",
+    ),
+    ExperimentPreset.NOISY_SHARED_ROUTER: PresetDefinition(
+        preset_values={
+            "routing_initialization_mode": RoutingInitializationMode.SHARED,
+            "sampler_noisy_topk_flag": True,
+            "router_noisy_topk_flag": True,
+        },
+        description="Default config with shared noisy top-k routing enabled for "
+        "sampler and router.",
+    ),
+    ExperimentPreset.RESIDUAL_SHARED_ROUTER: PresetDefinition(
+        preset_values={
+            "routing_initialization_mode": RoutingInitializationMode.SHARED,
+            "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+        },
+        description="Default config with residual expert stack connections and shared "
+        "expert routing.",
+    ),
+    ExperimentPreset.POST_NORM_AFTER_WEIGHT: PresetDefinition(
+        preset_values={
+            "layer_norm_position": LayerNormPositionOptions.AFTER,
+            "weighting_position_option": (ExpertWeightingPositionOptions.AFTER_EXPERTS),
+        },
+        description="Default config with post-layer normalization and expert weighting "
+        "after expert outputs.",
+    ),
 }
 
 
-class ExperimentPresets(ExperimentPresetsBase):
-    PRESET_OVERRIDES = _PRESET_OVERRIDES
-    PRESET_LOCKS = _preset_locks(PRESET_OVERRIDES)
-
+class ExperimentPresets(BuilderBackedExperimentPresetsBase):
     def __init__(self) -> None:
-        super().__init__()
-
-    def get_config(
-        self,
-        model_config_preset: ExperimentPreset = ExperimentPreset.BASELINE,
-        dataset: type = Mnist,
-        search_mode: SearchMode = None,
-        log_folder: str | None = None,
-        search_keys: list[str] | None = None,
-        config_overrides: dict | None = None,
-        search_overrides: dict | None = None,
-    ) -> list["ModelConfig"]:
-        preset_callback = self._preset_callback_for_preset(model_config_preset)
-        return self._create_preset_search_space_configs(
-            dataset,
-            search_mode,
-            preset_callback,
-            search_keys,
-            config_overrides=config_overrides,
-            search_overrides=search_overrides,
-            model_config_preset=model_config_preset,
+        super().__init__(
+            _PRESET_DEFINITIONS,
+            builder_type=ExpertsLinearConfigBuilder,
+            default_preset=ExperimentPreset.BASELINE,
         )
 
-    def _preset_callback_for_preset(self, preset: ExperimentPreset):
-        if preset not in self.PRESET_OVERRIDES:
-            raise ValueError(
-                "The specified preset is not supported. Please choose a valid "
-                "`ExperimentPreset`."
-            )
-        return lambda **kwargs: self._preset_for_preset(preset, **kwargs)
-
-    def _preset_for_preset(
-        self,
-        preset: ExperimentPreset,
-        **kwargs,
-    ) -> "ModelConfig":
-        preset_overrides = self.PRESET_OVERRIDES[preset]
-        return self._preset(**{**kwargs, **preset_overrides})
-
-    def _preset(self, **kwargs) -> "ModelConfig":
-        return ExpertsLinearConfigBuilder(**kwargs).build()
+    def _preset_lock_reason(self, preset: ExperimentPreset, field: str) -> str:
+        behavior = _PRESET_LOCK_BEHAVIORS[field]
+        return (
+            f"Locked by the {preset.name} preset because this preset enables "
+            f"{behavior}."
+        )
 
 
 class Experiment(ExperimentBase):

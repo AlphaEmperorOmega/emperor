@@ -1,5 +1,3 @@
-from typing import TYPE_CHECKING
-
 from emperor.augmentations.adaptive_parameters.core.bias import (
     AdditiveDynamicBiasConfig,
 )
@@ -14,12 +12,11 @@ from emperor.augmentations.adaptive_parameters.core.weight import (
     LayeredWeightedBankDynamicWeightConfig,
 )
 from emperor.base.options import BaseOptions
-from emperor.datasets.image.classification.mnist import Mnist
 from emperor.experiments.base import (
+    BuilderBackedExperimentPresetsBase,
     ExperimentBase,
     ExperimentPresetsBase,
-    PresetLock,
-    SearchMode,
+    PresetDefinition,
 )
 from emperor.experts.core.options import (
     DroppedTokenOptions,
@@ -33,94 +30,22 @@ from models.experts.experts_linear_adaptive.config_builder import (
 )
 from models.experts.experts_linear_adaptive.model import Model
 
-if TYPE_CHECKING:
-    from emperor.config import ModelConfig
-
 
 class ExperimentPreset(BaseOptions):
-    BASELINE = (
-        "Default config: a mixture-of-experts classifier with adaptive linear "
-        "input, output, expert, and sampler stacks."
-    )
-    GATING = (
-        "Default config with per-layer gating enabled in the adaptive expert stack."
-    )
-    HALTING = "Default config with stack halting enabled in the adaptive expert stack."
-    GATING_HALTING = (
-        "Default config with both per-layer gating and stack halting enabled in "
-        "the adaptive expert stack."
-    )
-    RECURRENT = (
-        "Default config wrapped in fixed-step recurrence, reusing the adaptive "
-        "expert stack for each recurrent step."
-    )
-    RECURRENT_GATING = (
-        "Default recurrent config with step-level gating enabled after each "
-        "recurrent update."
-    )
-    RECURRENT_HALTING = (
-        "Default recurrent config with recurrent halting enabled, allowing early "
-        "stopping before the max step count."
-    )
-    RECURRENT_GATING_HALTING = (
-        "Default recurrent config with both step-level gating and recurrent "
-        "halting enabled."
-    )
-    ADAPTIVE_SHARED_ROUTER = (
-        "Default adaptive config with dual-model dynamic weights and shared "
-        "expert routing."
-    )
-    ADAPTIVE_AFTER_WEIGHT = (
-        "Default adaptive config with dual-model dynamic weights and expert "
-        "weighting after expert outputs."
-    )
-    ADAPTIVE_TOP1_SWITCH = (
-        "Default adaptive config with dual-model dynamic weights, top-1 switch "
-        "routing, and switch auxiliary loss enabled."
-    )
-    ADAPTIVE_FULL_SHARED = (
-        "Default adaptive config with dynamic weights, bias, diagonal, row mask, "
-        "and shared expert routing."
-    )
-    ADAPTIVE_FULL_CAPACITY = (
-        "Default adaptive config with dynamic weights, bias, diagonal, row mask, "
-        "top-1 capacity limiting, and dropped tokens zeroed."
-    )
-    ADAPTIVE_BANK_ROUTER = (
-        "Default adaptive config with layered weighted-bank dynamic weights and "
-        "shared expert routing."
-    )
-
-
-def _lock(preset, value, behavior: str) -> PresetLock:
-    return PresetLock(
-        value=value,
-        reason=(
-            f"Locked by the {preset.name} preset because this preset enables "
-            f"{behavior}."
-        ),
-    )
-
-
-def _preset_locks(
-    preset_overrides: dict["ExperimentPreset", dict[str, object]],
-) -> dict["ExperimentPreset", dict[str, PresetLock]]:
-    return {
-        preset: {
-            field: _lock(preset, value, _PRESET_LOCK_BEHAVIORS[field])
-            for field, value in overrides.items()
-        }
-        for preset, overrides in preset_overrides.items()
-        if overrides
-    }
-
-
-_FULL_ADAPTIVE_KWARGS = {
-    "weight_option": DualModelDynamicWeightConfig,
-    "bias_option": AdditiveDynamicBiasConfig,
-    "diagonal_option": CombinedDynamicDiagonalConfig,
-    "row_mask_option": WeightInformedScoreAxisMaskConfig,
-}
+    BASELINE = 1
+    GATING = 2
+    HALTING = 3
+    GATING_HALTING = 4
+    RECURRENT = 5
+    RECURRENT_GATING = 6
+    RECURRENT_HALTING = 7
+    RECURRENT_GATING_HALTING = 8
+    ADAPTIVE_SHARED_ROUTER = 9
+    ADAPTIVE_AFTER_WEIGHT = 10
+    ADAPTIVE_TOP1_SWITCH = 11
+    ADAPTIVE_FULL_SHARED = 12
+    ADAPTIVE_FULL_CAPACITY = 13
+    ADAPTIVE_BANK_ROUTER = 14
 
 
 _PRESET_LOCK_BEHAVIORS = {
@@ -143,112 +68,145 @@ _PRESET_LOCK_BEHAVIORS = {
 }
 
 
-_PRESET_OVERRIDES = {
-    ExperimentPreset.BASELINE: {},
-    ExperimentPreset.GATING: {
-        "stack_gate_flag": True,
-    },
-    ExperimentPreset.HALTING: {
-        "stack_halting_flag": True,
-    },
-    ExperimentPreset.GATING_HALTING: {
-        "stack_gate_flag": True,
-        "stack_halting_flag": True,
-    },
-    ExperimentPreset.RECURRENT: {
-        "recurrent_flag": True,
-    },
-    ExperimentPreset.RECURRENT_GATING: {
-        "recurrent_flag": True,
-        "recurrent_gate_flag": True,
-    },
-    ExperimentPreset.RECURRENT_HALTING: {
-        "recurrent_flag": True,
-        "recurrent_halting_flag": True,
-    },
-    ExperimentPreset.RECURRENT_GATING_HALTING: {
-        "recurrent_flag": True,
-        "recurrent_gate_flag": True,
-        "recurrent_halting_flag": True,
-    },
-    ExperimentPreset.ADAPTIVE_SHARED_ROUTER: {
+def _full_adaptive_values() -> dict[str, object]:
+    return {
         "weight_option": DualModelDynamicWeightConfig,
-        "routing_initialization_mode": RoutingInitializationMode.SHARED,
-    },
-    ExperimentPreset.ADAPTIVE_AFTER_WEIGHT: {
-        "weight_option": DualModelDynamicWeightConfig,
-        "weighting_position_option": ExpertWeightingPositionOptions.AFTER_EXPERTS,
-    },
-    ExperimentPreset.ADAPTIVE_TOP1_SWITCH: {
-        "weight_option": DualModelDynamicWeightConfig,
-        "top_k": 1,
-        "sampler_normalize_probabilities_flag": False,
-        "sampler_switch_loss_weight": 0.1,
-    },
-    ExperimentPreset.ADAPTIVE_FULL_SHARED: {
-        **_FULL_ADAPTIVE_KWARGS,
-        "routing_initialization_mode": RoutingInitializationMode.SHARED,
-    },
-    ExperimentPreset.ADAPTIVE_FULL_CAPACITY: {
-        **_FULL_ADAPTIVE_KWARGS,
-        "top_k": 1,
-        "capacity_factor": 1.0,
-        "dropped_token_behavior": DroppedTokenOptions.ZEROS,
-        "sampler_normalize_probabilities_flag": False,
-    },
-    ExperimentPreset.ADAPTIVE_BANK_ROUTER: {
-        "weight_option": LayeredWeightedBankDynamicWeightConfig,
-        "routing_initialization_mode": RoutingInitializationMode.SHARED,
-    },
+        "bias_option": AdditiveDynamicBiasConfig,
+        "diagonal_option": CombinedDynamicDiagonalConfig,
+        "row_mask_option": WeightInformedScoreAxisMaskConfig,
+    }
+
+
+_PRESET_DEFINITIONS = {
+    ExperimentPreset.BASELINE: PresetDefinition(
+        preset_values={},
+        description="Default config: a mixture-of-experts classifier with adaptive linear "
+        "input, output, expert, and sampler stacks.",
+    ),
+    ExperimentPreset.GATING: PresetDefinition(
+        preset_values={
+            "stack_gate_flag": True,
+        },
+        description="Default config with per-layer gating enabled in the adaptive expert "
+        "stack.",
+    ),
+    ExperimentPreset.HALTING: PresetDefinition(
+        preset_values={
+            "stack_halting_flag": True,
+        },
+        description="Default config with stack halting enabled in the adaptive expert "
+        "stack.",
+    ),
+    ExperimentPreset.GATING_HALTING: PresetDefinition(
+        preset_values={
+            "stack_gate_flag": True,
+            "stack_halting_flag": True,
+        },
+        description="Default config with both per-layer gating and stack halting "
+        "enabled in the adaptive expert stack.",
+    ),
+    ExperimentPreset.RECURRENT: PresetDefinition(
+        preset_values={
+            "recurrent_flag": True,
+        },
+        description="Default config wrapped in fixed-step recurrence, reusing the adaptive "
+        "expert stack for each recurrent step.",
+    ),
+    ExperimentPreset.RECURRENT_GATING: PresetDefinition(
+        preset_values={
+            "recurrent_flag": True,
+            "recurrent_gate_flag": True,
+        },
+        description="Default recurrent config with step-level gating enabled after each "
+        "recurrent update.",
+    ),
+    ExperimentPreset.RECURRENT_HALTING: PresetDefinition(
+        preset_values={
+            "recurrent_flag": True,
+            "recurrent_halting_flag": True,
+        },
+        description="Default recurrent config with recurrent halting enabled, allowing "
+        "early stopping before the max step count.",
+    ),
+    ExperimentPreset.RECURRENT_GATING_HALTING: PresetDefinition(
+        preset_values={
+            "recurrent_flag": True,
+            "recurrent_gate_flag": True,
+            "recurrent_halting_flag": True,
+        },
+        description="Default recurrent config with both step-level gating and recurrent "
+        "halting enabled.",
+    ),
+    ExperimentPreset.ADAPTIVE_SHARED_ROUTER: PresetDefinition(
+        preset_values={
+            "weight_option": DualModelDynamicWeightConfig,
+            "routing_initialization_mode": RoutingInitializationMode.SHARED,
+        },
+        description="Default adaptive config with dual-model dynamic weights and shared "
+        "expert routing.",
+    ),
+    ExperimentPreset.ADAPTIVE_AFTER_WEIGHT: PresetDefinition(
+        preset_values={
+            "weight_option": DualModelDynamicWeightConfig,
+            "weighting_position_option": (ExpertWeightingPositionOptions.AFTER_EXPERTS),
+        },
+        description="Default adaptive config with dual-model dynamic weights and expert "
+        "weighting after expert outputs.",
+    ),
+    ExperimentPreset.ADAPTIVE_TOP1_SWITCH: PresetDefinition(
+        preset_values={
+            "weight_option": DualModelDynamicWeightConfig,
+            "top_k": 1,
+            "sampler_normalize_probabilities_flag": False,
+            "sampler_switch_loss_weight": 0.1,
+        },
+        description="Default adaptive config with dual-model dynamic weights, top-1 switch "
+        "routing, and switch auxiliary loss enabled.",
+    ),
+    ExperimentPreset.ADAPTIVE_FULL_SHARED: PresetDefinition(
+        preset_values={
+            **_full_adaptive_values(),
+            "routing_initialization_mode": RoutingInitializationMode.SHARED,
+        },
+        description="Default adaptive config with dynamic weights, bias, diagonal, row "
+        "mask, and shared expert routing.",
+    ),
+    ExperimentPreset.ADAPTIVE_FULL_CAPACITY: PresetDefinition(
+        preset_values={
+            **_full_adaptive_values(),
+            "top_k": 1,
+            "capacity_factor": 1.0,
+            "dropped_token_behavior": DroppedTokenOptions.ZEROS,
+            "sampler_normalize_probabilities_flag": False,
+        },
+        description="Default adaptive config with dynamic weights, bias, diagonal, row "
+        "mask, top-1 capacity limiting, and dropped tokens zeroed.",
+    ),
+    ExperimentPreset.ADAPTIVE_BANK_ROUTER: PresetDefinition(
+        preset_values={
+            "weight_option": LayeredWeightedBankDynamicWeightConfig,
+            "routing_initialization_mode": RoutingInitializationMode.SHARED,
+        },
+        description="Default adaptive config with layered weighted-bank dynamic "
+        "weights and shared expert routing.",
+    ),
 }
 
 
-class ExperimentPresets(ExperimentPresetsBase):
-    PRESET_OVERRIDES = _PRESET_OVERRIDES
-    PRESET_LOCKS = _preset_locks(PRESET_OVERRIDES)
-
+class ExperimentPresets(BuilderBackedExperimentPresetsBase):
     def __init__(self) -> None:
-        super().__init__()
-
-    def get_config(
-        self,
-        model_config_preset: ExperimentPreset = ExperimentPreset.BASELINE,
-        dataset: type = Mnist,
-        search_mode: SearchMode = None,
-        log_folder: str | None = None,
-        search_keys: list[str] | None = None,
-        config_overrides: dict | None = None,
-        search_overrides: dict | None = None,
-    ) -> list["ModelConfig"]:
-        preset_callback = self._preset_callback_for_preset(model_config_preset)
-        return self._create_preset_search_space_configs(
-            dataset,
-            search_mode,
-            preset_callback,
-            search_keys,
-            config_overrides=config_overrides,
-            search_overrides=search_overrides,
-            model_config_preset=model_config_preset,
+        super().__init__(
+            _PRESET_DEFINITIONS,
+            builder_type=ExpertsLinearAdaptiveConfigBuilder,
+            default_preset=ExperimentPreset.BASELINE,
         )
 
-    def _preset_callback_for_preset(self, preset: ExperimentPreset):
-        if preset not in self.PRESET_OVERRIDES:
-            raise ValueError(
-                "The specified preset is not supported. Please choose a valid "
-                "`ExperimentPreset`."
-            )
-        return lambda **kwargs: self._preset_for_preset(preset, **kwargs)
-
-    def _preset_for_preset(
-        self,
-        preset: ExperimentPreset,
-        **kwargs,
-    ) -> "ModelConfig":
-        preset_overrides = self.PRESET_OVERRIDES[preset]
-        return self._preset(**{**kwargs, **preset_overrides})
-
-    def _preset(self, **kwargs) -> "ModelConfig":
-        return ExpertsLinearAdaptiveConfigBuilder(**kwargs).build()
+    def _preset_lock_reason(self, preset: ExperimentPreset, field: str) -> str:
+        behavior = _PRESET_LOCK_BEHAVIORS[field]
+        return (
+            f"Locked by the {preset.name} preset because this preset enables "
+            f"{behavior}."
+        )
 
 
 class Experiment(ExperimentBase):
