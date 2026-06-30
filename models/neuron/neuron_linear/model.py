@@ -1,11 +1,11 @@
-import torch
+from typing import TYPE_CHECKING
 
-from torch import Tensor
+import torch
 from emperor.base.layer import Layer
 from emperor.experiments.classifier import ClassifierExperiment
-from models.neuron.neuron_linear.experiment_config import ExperimentConfig
+from torch import Tensor
 
-from typing import TYPE_CHECKING
+from models.neuron.neuron_linear.experiment_config import ExperimentConfig
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
@@ -14,32 +14,35 @@ if TYPE_CHECKING:
 class Model(ClassifierExperiment):
     def __init__(
         self,
-        cfg: "ModelConfig",
+        config: "ModelConfig",
     ) -> None:
-        super().__init__(cfg)
-        if not isinstance(cfg.experiment_config, ExperimentConfig):
+        super().__init__(config)
+        if not isinstance(config.experiment_config, ExperimentConfig):
             raise TypeError(
-                "cfg.experiment_config must be a neuron_linear ExperimentConfig."
+                "config.experiment_config must be a neuron_linear ExperimentConfig."
             )
-        self.model_cfg = cfg
-        self.exp_cfg: ExperimentConfig = cfg.experiment_config
+        self.experiment_config: ExperimentConfig = config.experiment_config
         self.input_model = self._build_input_model()
-        self.neuron_cluster = self.exp_cfg.neuron_cluster_config.build()
+        self.neuron_cluster = self.experiment_config.neuron_cluster_config.build()
         self.output_model = self._build_output_model()
 
     def _build_input_model(self):
-        return self.exp_cfg.input_model_config.build(
-            overrides=type(self.exp_cfg.input_model_config)(
-                input_dim=self.model_cfg.input_dim,
-                output_dim=self.model_cfg.hidden_dim,
+        input_model_config = self.experiment_config.input_model_config
+        input_model_config_type = type(input_model_config)
+        return input_model_config.build(
+            overrides=input_model_config_type(
+                input_dim=self.cfg.input_dim,
+                output_dim=self.cfg.hidden_dim,
             )
         )
 
     def _build_output_model(self):
-        return self.exp_cfg.output_model_config.build(
-            overrides=type(self.exp_cfg.output_model_config)(
-                input_dim=self.model_cfg.hidden_dim,
-                output_dim=self.model_cfg.output_dim,
+        output_model_config = self.experiment_config.output_model_config
+        output_model_config_type = type(output_model_config)
+        return output_model_config.build(
+            overrides=output_model_config_type(
+                input_dim=self.cfg.hidden_dim,
+                output_dim=self.cfg.output_dim,
             )
         )
 

@@ -15,10 +15,12 @@ from emperor.base.options import (
     LastLayerBiasOptions,
     LayerNormPositionOptions,
 )
+from emperor.halting.options import HaltingHiddenStateModeOptions
 from emperor.linears.core.config import LinearLayerConfig
 from emperor.linears.core.layers import AdaptiveLinearLayer, LinearLayer
 from emperor.experiments.base import GridSearch
 from emperor.neuron.core.config import NeuronClusterConfig
+from emperor.neuron.core.options import TerminalRangeOptions, TerminalZAxisOffsetOptions
 from emperor.neuron.core import NeuronClusterOptimizerSyncCallback
 from models.parser import get_experiment_parser, resolve_experiment_mode
 
@@ -30,7 +32,18 @@ from models.linears.linear.presets import (
 from models.neuron.neuron_linear._control_config_factory import (
     NeuronControlConfigFactory,
 )
+from models.neuron.neuron_linear._builder_options import (
+    ClusterRouteHaltingOptions,
+    NeuronClusterCapacityOptions,
+    NeuronControllerStackOptions,
+    NeuronTerminalOptions,
+    NeuronTerminalSamplerOptions,
+)
 from models.neuron.neuron_linear._controller_stack import HiddenBlockAdapter
+from models.neuron.neuron_linear._source_linear_adapter import (
+    canonical_source_kwarg_aliases,
+    source_linear_default_kwargs,
+)
 from models.neuron.neuron_linear.config_builder import NeuronLinearConfigBuilder
 from models.neuron.neuron_linear.experiment_config import (
     ExperimentConfig,
@@ -111,56 +124,60 @@ class TestNeuronLinearModel(unittest.TestCase):
         controller_module = importlib.import_module(
             "models.neuron.neuron_linear._controller_stack"
         )
+        source_adapter_module = importlib.import_module(
+            "models.neuron.neuron_linear._source_linear_adapter"
+        )
 
         self.assertIs(
             control_module.NeuronControlConfigFactory,
             NeuronControlConfigFactory,
         )
         self.assertIs(controller_module.HiddenBlockAdapter, HiddenBlockAdapter)
+        self.assertIs(
+            source_adapter_module.source_linear_default_kwargs,
+            source_linear_default_kwargs,
+        )
         self.assertIs(HiddenBlockConfig()._registry_owner(), HiddenBlockAdapter)
 
     def test_presets_mirror_source_overrides_and_locks(self):
+        presets = ExperimentPresets()
+        source_presets = SourceExperimentPresets()
         for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
                 source_preset = SourceExperimentPreset[preset.name]
                 self.assertEqual(
-                    ExperimentPresets.PRESET_OVERRIDES[preset],
-                    SourceExperimentPresets.PRESET_OVERRIDES[source_preset],
+                    presets.overrides_for_preset(preset),
+                    source_presets.overrides_for_preset(source_preset),
                 )
                 self.assertEqual(
                     {
                         key: lock.value
-                        for key, lock in ExperimentPresets.PRESET_LOCKS.get(
-                            preset,
-                            {},
-                        ).items()
+                        for key, lock in presets.locks_for_preset(preset).items()
                     },
                     {
                         key: lock.value
-                        for key, lock in SourceExperimentPresets.PRESET_LOCKS.get(
-                            source_preset, {}
+                        for key, lock in source_presets.locks_for_preset(
+                            source_preset
                         ).items()
                     },
                 )
-        self.assertEqual(
-            set(ExperimentPresets.PRESET_LOCKS),
-            {
-                ExperimentPreset[source_preset.name]
-                for source_preset in SourceExperimentPresets.PRESET_LOCKS
-            },
-        )
 
     def test_preset_lock_reasons_are_mirrored_from_source(self):
-        for preset, locks in ExperimentPresets.PRESET_LOCKS.items():
+        presets = ExperimentPresets()
+        source_presets = SourceExperimentPresets()
+        for preset in ExperimentPreset:
+            locks = presets.locks_for_preset(preset)
+            if not locks:
+                continue
             source_preset = SourceExperimentPreset[preset.name]
             with self.subTest(preset=preset.name):
                 self.assertEqual(
                     {key: lock.reason for key, lock in locks.items()},
                     {
                         key: lock.reason
-                        for key, lock in SourceExperimentPresets.PRESET_LOCKS[
+                        for key, lock in source_presets.locks_for_preset(
                             source_preset
-                        ].items()
+                        ).items()
                     },
                 )
 
@@ -211,7 +228,7 @@ class TestNeuronLinearModel(unittest.TestCase):
         from models.linears.linear.config_builder import LinearConfigBuilder
 
         builder = NeuronLinearConfigBuilder()
-        source_cfg = LinearConfigBuilder(**builder._source_linear_defaults()).build()
+        source_cfg = LinearConfigBuilder(**source_linear_default_kwargs()).build()
         cluster_cfg = NeuronControlConfigFactory(builder).build(
             source_cfg.experiment_config.model_config,
             source_cfg.hidden_dim,
@@ -273,6 +290,197 @@ class TestNeuronLinearModel(unittest.TestCase):
         )
         self.assertFalse(halting_stack.layer_config.layer_model_config.bias_flag)
 
+    def test_option_group_build_matches_flat_kwargs(self):
+        capacity_options = NeuronClusterCapacityOptions(
+            x_axis_total_neurons=6,
+            y_axis_total_neurons=5,
+            z_axis_total_neurons=2,
+            initial_x_axis_total_neurons=2,
+            initial_y_axis_total_neurons=2,
+            initial_z_axis_total_neurons=1,
+            max_steps=3,
+            growth_threshold=99,
+        )
+        terminal_options = NeuronTerminalOptions(
+            xy_axis_range=TerminalRangeOptions.ONE,
+            z_axis_range=TerminalRangeOptions.ONE,
+            z_axis_offset=TerminalZAxisOffsetOptions.ZERO,
+            top_k=2,
+        )
+        terminal_router_options = NeuronControllerStackOptions(
+            hidden_dim=18,
+            num_layers=2,
+            last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
+            apply_output_pipeline_flag=True,
+            activation=ActivationOptions.GELU,
+            layer_norm_position=LayerNormPositionOptions.BEFORE,
+            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            dropout_probability=0.05,
+            bias_flag=False,
+        )
+        terminal_sampler_options = NeuronTerminalSamplerOptions(
+            threshold=0.17,
+            filter_above_threshold=True,
+            num_topk_samples=2,
+            normalize_probabilities_flag=True,
+            noisy_topk_flag=True,
+            coefficient_of_variation_loss_weight=0.11,
+            switch_loss_weight=0.12,
+            zero_centred_loss_weight=0.13,
+            mutual_information_loss_weight=0.14,
+        )
+        halting_stack_options = NeuronControllerStackOptions(
+            hidden_dim=20,
+            num_layers=2,
+            last_layer_bias_option=LastLayerBiasOptions.DISABLED,
+            apply_output_pipeline_flag=False,
+            activation=ActivationOptions.RELU,
+            layer_norm_position=LayerNormPositionOptions.AFTER,
+            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            dropout_probability=0.04,
+            bias_flag=False,
+        )
+        cluster_halting_options = ClusterRouteHaltingOptions(
+            enabled=True,
+            threshold=0.63,
+            dropout=0.08,
+            hidden_state_mode=HaltingHiddenStateModeOptions.ACCUMULATED,
+            stack_options=halting_stack_options,
+            output_dim=2,
+        )
+        source_kwargs = {
+            "batch_size": 3,
+            "learning_rate": 0.02,
+            "input_dim": 8,
+            "output_dim": 4,
+            "stack_hidden_dim": 12,
+            "stack_num_layers": 1,
+            "stack_activation": ActivationOptions.MISH,
+        }
+        flat_kwargs = {
+            **source_kwargs,
+            "cluster_x_axis_total_neurons": (
+                capacity_options.x_axis_total_neurons
+            ),
+            "cluster_y_axis_total_neurons": (
+                capacity_options.y_axis_total_neurons
+            ),
+            "cluster_z_axis_total_neurons": (
+                capacity_options.z_axis_total_neurons
+            ),
+            "cluster_initial_x_axis_total_neurons": (
+                capacity_options.initial_x_axis_total_neurons
+            ),
+            "cluster_initial_y_axis_total_neurons": (
+                capacity_options.initial_y_axis_total_neurons
+            ),
+            "cluster_initial_z_axis_total_neurons": (
+                capacity_options.initial_z_axis_total_neurons
+            ),
+            "cluster_max_steps": capacity_options.max_steps,
+            "cluster_growth_threshold": capacity_options.growth_threshold,
+            "cluster_terminal_xy_axis_range": terminal_options.xy_axis_range,
+            "cluster_terminal_z_axis_range": terminal_options.z_axis_range,
+            "cluster_terminal_z_axis_offset": terminal_options.z_axis_offset,
+            "cluster_terminal_top_k": terminal_options.top_k,
+            "cluster_terminal_router_hidden_dim": (
+                terminal_router_options.hidden_dim
+            ),
+            "cluster_terminal_router_num_layers": (
+                terminal_router_options.num_layers
+            ),
+            "cluster_terminal_router_last_layer_bias_option": (
+                terminal_router_options.last_layer_bias_option
+            ),
+            "cluster_terminal_router_apply_output_pipeline_flag": (
+                terminal_router_options.apply_output_pipeline_flag
+            ),
+            "cluster_terminal_router_activation": (
+                terminal_router_options.activation
+            ),
+            "cluster_terminal_router_layer_norm_position": (
+                terminal_router_options.layer_norm_position
+            ),
+            "cluster_terminal_router_residual_connection_option": (
+                terminal_router_options.residual_connection_option
+            ),
+            "cluster_terminal_router_dropout_probability": (
+                terminal_router_options.dropout_probability
+            ),
+            "cluster_terminal_router_bias_flag": (
+                terminal_router_options.bias_flag
+            ),
+            "cluster_terminal_sampler_threshold": (
+                terminal_sampler_options.threshold
+            ),
+            "cluster_terminal_sampler_filter_above_threshold": (
+                terminal_sampler_options.filter_above_threshold
+            ),
+            "cluster_terminal_sampler_num_topk_samples": (
+                terminal_sampler_options.num_topk_samples
+            ),
+            "cluster_terminal_sampler_normalize_probabilities_flag": (
+                terminal_sampler_options.normalize_probabilities_flag
+            ),
+            "cluster_terminal_sampler_noisy_topk_flag": (
+                terminal_sampler_options.noisy_topk_flag
+            ),
+            "cluster_terminal_sampler_coefficient_of_variation_loss_weight": (
+                terminal_sampler_options.coefficient_of_variation_loss_weight
+            ),
+            "cluster_terminal_sampler_switch_loss_weight": (
+                terminal_sampler_options.switch_loss_weight
+            ),
+            "cluster_terminal_sampler_zero_centred_loss_weight": (
+                terminal_sampler_options.zero_centred_loss_weight
+            ),
+            "cluster_terminal_sampler_mutual_information_loss_weight": (
+                terminal_sampler_options.mutual_information_loss_weight
+            ),
+            "cluster_halting_flag": cluster_halting_options.enabled,
+            "cluster_halting_threshold": cluster_halting_options.threshold,
+            "cluster_halting_dropout": cluster_halting_options.dropout,
+            "cluster_halting_hidden_state_mode": (
+                cluster_halting_options.hidden_state_mode
+            ),
+            "cluster_halting_stack_hidden_dim": (
+                halting_stack_options.hidden_dim
+            ),
+            "cluster_halting_output_dim": cluster_halting_options.output_dim,
+            "cluster_halting_stack_layer_norm_position": (
+                halting_stack_options.layer_norm_position
+            ),
+            "cluster_halting_stack_num_layers": (
+                halting_stack_options.num_layers
+            ),
+            "cluster_halting_stack_activation": halting_stack_options.activation,
+            "cluster_halting_stack_residual_connection_option": (
+                halting_stack_options.residual_connection_option
+            ),
+            "cluster_halting_stack_dropout_probability": (
+                halting_stack_options.dropout_probability
+            ),
+            "cluster_halting_stack_last_layer_bias_option": (
+                halting_stack_options.last_layer_bias_option
+            ),
+            "cluster_halting_stack_apply_output_pipeline_flag": (
+                halting_stack_options.apply_output_pipeline_flag
+            ),
+            "cluster_halting_stack_bias_flag": halting_stack_options.bias_flag,
+        }
+
+        flat_cfg = NeuronLinearConfigBuilder(**flat_kwargs).build()
+        grouped_cfg = NeuronLinearConfigBuilder(
+            **source_kwargs,
+            cluster_capacity_options=capacity_options,
+            terminal_options=terminal_options,
+            terminal_router_options=terminal_router_options,
+            terminal_sampler_options=terminal_sampler_options,
+            cluster_halting_options=cluster_halting_options,
+        ).build()
+
+        self.assertEqual(flat_cfg, grouped_cfg)
+
     def test_cluster_terminal_top_k_is_clamped_to_expert_count(self):
         cfg = NeuronLinearConfigBuilder(
             cluster_terminal_top_k=999,
@@ -333,9 +541,7 @@ class TestNeuronLinearModel(unittest.TestCase):
             halting_layer_norm_position=LayerNormPositionOptions.BEFORE,
             halting_bias_flag=False,
         ).build()
-        hidden_block_cfg = (
-            cfg.experiment_config.neuron_cluster_config.neuron_config.nucleus_config.model_config
-        )
+        hidden_block_cfg = cfg.experiment_config.neuron_cluster_config.neuron_config.nucleus_config.model_config
         stack_cfg = hidden_block_cfg.model_config
         gate_stack = stack_cfg.layer_config.gate_config.model_config
         halting_stack = stack_cfg.layer_config.halting_config.halting_gate_config
@@ -353,19 +559,44 @@ class TestNeuronLinearModel(unittest.TestCase):
         )
         self.assertFalse(halting_stack.layer_config.layer_model_config.bias_flag)
 
-    def test_builder_uses_neuron_linear_source_defaults(self):
+    def test_source_linear_adapter_defaults_match_source_builder_defaults(self):
+        from models.linears.linear.config_builder import LinearConfigBuilder
+
+        source_defaults = {
+            name: parameter.default
+            for name, parameter in inspect.signature(
+                LinearConfigBuilder.__init__
+            ).parameters.items()
+            if name != "self" and parameter.default is not inspect.Parameter.empty
+        }
+
+        self.assertEqual(source_linear_default_kwargs(), source_defaults)
+
+    def test_source_linear_adapter_exposes_legacy_aliases(self):
+        self.assertEqual(
+            canonical_source_kwarg_aliases(),
+            {
+                "gate_hidden_dim": "gate_stack_hidden_dim",
+                "gate_layer_norm_position": "gate_stack_layer_norm_position",
+                "gate_bias_flag": "gate_stack_bias_flag",
+                "halting_hidden_dim": "halting_stack_hidden_dim",
+                "halting_layer_norm_position": "halting_stack_layer_norm_position",
+                "halting_bias_flag": "halting_stack_bias_flag",
+            },
+        )
+
+    def test_builder_uses_source_linear_adapter_defaults(self):
+        source_defaults = source_linear_default_kwargs()
         cfg = NeuronLinearConfigBuilder().build()
         override_cfg = NeuronLinearConfigBuilder(stack_hidden_dim=128).build()
 
-        self.assertEqual(cfg.hidden_dim, config.STACK_HIDDEN_DIM)
+        self.assertEqual(cfg.hidden_dim, source_defaults["stack_hidden_dim"])
         self.assertEqual(override_cfg.hidden_dim, 128)
 
     def test_shared_gate_config_flows_to_source_hidden_block(self):
         shared_gate_config = self.shared_gate_config()
         cfg = NeuronLinearConfigBuilder(shared_gate_config=shared_gate_config).build()
-        hidden_block_cfg = (
-            cfg.experiment_config.neuron_cluster_config.neuron_config.nucleus_config.model_config
-        )
+        hidden_block_cfg = cfg.experiment_config.neuron_cluster_config.neuron_config.nucleus_config.model_config
         stack_cfg = hidden_block_cfg.model_config
 
         self.assertIsInstance(stack_cfg.shared_gate_config, GateConfig)
@@ -379,9 +610,7 @@ class TestNeuronLinearModel(unittest.TestCase):
             gate_option=LayerGateOptions.MULTIPLIER,
             recurrent_gate_option=LayerGateOptions.MULTIPLIER,
         ).build()
-        hidden_block_cfg = (
-            cfg.experiment_config.neuron_cluster_config.neuron_config.nucleus_config.model_config
-        )
+        hidden_block_cfg = cfg.experiment_config.neuron_cluster_config.neuron_config.nucleus_config.model_config
         recurrent_cfg = hidden_block_cfg.model_config
 
         self.assertIsInstance(recurrent_cfg, RecurrentLayerConfig)
@@ -404,9 +633,7 @@ class TestNeuronLinearModel(unittest.TestCase):
             stack_gate_flag=False,
             shared_gate_config=shared_gate_config,
         ).build()
-        hidden_block_cfg = (
-            cfg.experiment_config.neuron_cluster_config.neuron_config.nucleus_config.model_config
-        )
+        hidden_block_cfg = cfg.experiment_config.neuron_cluster_config.neuron_config.nucleus_config.model_config
         stack_cfg = hidden_block_cfg.model_config
 
         self.assertEqual(stack_cfg.shared_gate_config, shared_gate_config)
