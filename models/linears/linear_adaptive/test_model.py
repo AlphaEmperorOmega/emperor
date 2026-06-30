@@ -31,10 +31,12 @@ from emperor.augmentations.adaptive_parameters.core.weight import (
     SoftWeightedBankDynamicWeightConfig,
 )
 from emperor.augmentations.adaptive_parameters.options import (
+    BankExpansionFactorOptions,
     DynamicDepthOptions,
     MaskDimensionOptions,
     WeightDecayScheduleOptions,
     WeightNormalizationOptions,
+    WeightNormalizationPositionOptions,
 )
 from emperor.base.layer import (
     LayerConfig,
@@ -48,7 +50,7 @@ from emperor.base.options import (
     LastLayerBiasOptions,
     LayerNormPositionOptions,
 )
-from emperor.experiments.base import GridSearch, PresetLock
+from emperor.experiments.base import GridSearch, PresetDefinition, PresetLock
 from emperor.halting.options import HaltingHiddenStateModeOptions
 from emperor.linears.core.config import AdaptiveLinearLayerConfig, LinearLayerConfig
 from emperor.memory.config import (
@@ -58,9 +60,31 @@ from emperor.memory.config import (
 from emperor.memory.options import MemoryPositionOptions
 
 import models.linears.linear_adaptive.config as config
-from models.linears.linear_adaptive.config_builder import LinearAdaptiveConfigBuilder
+from models.linears._controller_stack import (
+    ControllerStackOptions,
+    ControllerStackSource,
+)
+from models.linears.linear_adaptive.config_builder import (
+    AdaptiveBoundaryProjectionOptions,
+    AdaptiveGeneratorStackOptions,
+    DynamicMemoryOptions,
+    LayerControllerOptions,
+    LinearAdaptiveConfigBuilder,
+    LinearAdaptiveStackOptions,
+    RecurrentControllerOptions,
+)
 from models.linears.linear_adaptive.model import Model
-from models.linears.linear_adaptive.presets import ExperimentPreset, ExperimentPresets
+from models.linears.linear_adaptive.presets import (
+    ExperimentPreset,
+    ExperimentPresets,
+    _PRESET_DEFINITIONS,
+)
+from models.adaptive_parameter_config_factory import (
+    build_bias_config,
+    build_diagonal_config,
+    build_mask_config,
+    build_weight_config,
+)
 from models.training_test_utils import (
     RandomImageClassificationDataModule,
     tiny_cpu_trainer,
@@ -147,6 +171,365 @@ class TestAdaptiveLinearModel(unittest.TestCase):
             cfg.experiment_config.output_model_config.layer_model_config,
             AdaptiveLinearLayerConfig,
         )
+
+    def test_option_group_build_matches_flat_kwargs(self):
+        def source_kwargs(prefix: str, source: ControllerStackSource):
+            return {
+                f"{prefix}_independent_flag": source.independent_flag,
+                f"{prefix}_hidden_dim": source.hidden_dim,
+                f"{prefix}_num_layers": source.num_layers,
+                f"{prefix}_last_layer_bias_option": source.last_layer_bias_option,
+                f"{prefix}_apply_output_pipeline_flag": (
+                    source.apply_output_pipeline_flag
+                ),
+                f"{prefix}_activation": source.activation,
+                f"{prefix}_layer_norm_position": source.layer_norm_position,
+                f"{prefix}_residual_connection_option": (
+                    source.residual_connection_option
+                ),
+                f"{prefix}_dropout_probability": source.dropout_probability,
+                f"{prefix}_bias_flag": source.bias_flag,
+            }
+
+        def boundary_kwargs(prefix: str, options: AdaptiveBoundaryProjectionOptions):
+            return {
+                f"{prefix}_weight_option": options.weight_option,
+                f"{prefix}_weight_generator_depth": (
+                    options.weight_generator_depth
+                ),
+                f"{prefix}_weight_decay_schedule": options.weight_decay_schedule,
+                f"{prefix}_weight_decay_rate": options.weight_decay_rate,
+                f"{prefix}_weight_decay_warmup_batches": (
+                    options.weight_decay_warmup_batches
+                ),
+                f"{prefix}_weight_normalization_option": (
+                    options.weight_normalization_option
+                ),
+                f"{prefix}_weight_normalization_position_option": (
+                    options.weight_normalization_position_option
+                ),
+                f"{prefix}_weight_bank_expansion_factor": (
+                    options.weight_bank_expansion_factor
+                ),
+                f"{prefix}_bias_option": options.bias_option,
+                f"{prefix}_bias_decay_schedule": options.bias_decay_schedule,
+                f"{prefix}_bias_decay_rate": options.bias_decay_rate,
+                f"{prefix}_bias_decay_warmup_batches": (
+                    options.bias_decay_warmup_batches
+                ),
+                f"{prefix}_bias_bank_expansion_factor": (
+                    options.bias_bank_expansion_factor
+                ),
+                f"{prefix}_diagonal_option": options.diagonal_option,
+                f"{prefix}_row_mask_option": options.row_mask_option,
+                f"{prefix}_mask_dimension_option": options.mask_dimension_option,
+                f"{prefix}_mask_threshold": options.mask_threshold,
+                f"{prefix}_mask_surrogate_scale": options.mask_surrogate_scale,
+                f"{prefix}_mask_floor": options.mask_floor,
+                f"{prefix}_mask_transition_width": options.mask_transition_width,
+            }
+
+        gate_source = ControllerStackSource(
+            independent_flag=True,
+            hidden_dim=23,
+            num_layers=2,
+            last_layer_bias_option=LastLayerBiasOptions.DISABLED,
+            apply_output_pipeline_flag=True,
+            activation=ActivationOptions.SILU,
+            layer_norm_position=LayerNormPositionOptions.AFTER,
+            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            dropout_probability=0.03,
+            bias_flag=False,
+        )
+        halting_source = ControllerStackSource(
+            independent_flag=True,
+            hidden_dim=29,
+            num_layers=3,
+            last_layer_bias_option=LastLayerBiasOptions.DISABLED,
+            apply_output_pipeline_flag=False,
+            activation=ActivationOptions.MISH,
+            layer_norm_position=LayerNormPositionOptions.BEFORE,
+            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            dropout_probability=0.05,
+            bias_flag=False,
+        )
+        memory_source = ControllerStackSource(
+            independent_flag=True,
+            hidden_dim=31,
+            num_layers=2,
+            last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
+            apply_output_pipeline_flag=True,
+            activation=ActivationOptions.TANH,
+            layer_norm_position=LayerNormPositionOptions.AFTER,
+            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            dropout_probability=0.07,
+            bias_flag=True,
+        )
+        recurrent_gate_source = ControllerStackSource(
+            independent_flag=True,
+            hidden_dim=37,
+            num_layers=2,
+            last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
+            apply_output_pipeline_flag=True,
+            activation=ActivationOptions.SIGMOID,
+            layer_norm_position=LayerNormPositionOptions.BEFORE,
+            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            dropout_probability=0.09,
+            bias_flag=True,
+        )
+        recurrent_halting_source = ControllerStackSource(
+            independent_flag=True,
+            hidden_dim=41,
+            num_layers=2,
+            last_layer_bias_option=LastLayerBiasOptions.DISABLED,
+            apply_output_pipeline_flag=True,
+            activation=ActivationOptions.RELU,
+            layer_norm_position=LayerNormPositionOptions.AFTER,
+            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            dropout_probability=0.11,
+            bias_flag=False,
+        )
+        stack_options = LinearAdaptiveStackOptions(
+            hidden_dim=13,
+            bias_flag=False,
+            layer_norm_position=LayerNormPositionOptions.AFTER,
+            num_layers=3,
+            activation=ActivationOptions.MISH,
+            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            dropout_probability=0.13,
+            last_layer_bias_option=LastLayerBiasOptions.ENABLED,
+            apply_output_pipeline_flag=True,
+        )
+        submodule_stack_options = ControllerStackOptions(
+            hidden_dim=17,
+            num_layers=2,
+            last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
+            apply_output_pipeline_flag=False,
+            activation=ActivationOptions.GELU,
+            layer_norm_position=LayerNormPositionOptions.BEFORE,
+            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            dropout_probability=0.02,
+            bias_flag=True,
+        )
+        generator_stack_options = AdaptiveGeneratorStackOptions(
+            hidden_dim=19,
+            layer_norm_position=LayerNormPositionOptions.BEFORE,
+            num_layers=2,
+            activation=ActivationOptions.SILU,
+            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            dropout_probability=0.04,
+            last_layer_bias_option=LastLayerBiasOptions.DISABLED,
+            apply_output_pipeline_flag=True,
+            bias_flag=False,
+        )
+        input_boundary_options = AdaptiveBoundaryProjectionOptions(
+            weight_option=DualModelDynamicWeightConfig,
+            weight_generator_depth=DynamicDepthOptions.DEPTH_OF_THREE,
+            weight_decay_schedule=WeightDecayScheduleOptions.LINEAR,
+            weight_decay_rate=0.2,
+            weight_decay_warmup_batches=3,
+            weight_normalization_option=WeightNormalizationOptions.RMS,
+            weight_normalization_position_option=(
+                WeightNormalizationPositionOptions.BEFORE_OUTER_PRODUCT
+            ),
+            weight_bank_expansion_factor=BankExpansionFactorOptions.FACTOR_OF_TWO,
+            bias_option=AdditiveDynamicBiasConfig,
+            bias_decay_schedule=WeightDecayScheduleOptions.EXPONENTIAL,
+            bias_decay_rate=0.03,
+            bias_decay_warmup_batches=2,
+            bias_bank_expansion_factor=BankExpansionFactorOptions.FACTOR_OF_ONE,
+            diagonal_option=StandardDynamicDiagonalConfig,
+            row_mask_option=DiagonalAxisMaskConfig,
+            mask_dimension_option=MaskDimensionOptions.ROW,
+            mask_threshold=0.4,
+            mask_surrogate_scale=1.2,
+            mask_floor=0.01,
+            mask_transition_width=0.2,
+        )
+        output_boundary_options = AdaptiveBoundaryProjectionOptions(
+            weight_option=LowRankDynamicWeightConfig,
+            weight_generator_depth=DynamicDepthOptions.DEPTH_OF_TWO,
+            weight_decay_schedule=WeightDecayScheduleOptions.MULTIPLICATIVE,
+            weight_decay_rate=0.15,
+            weight_decay_warmup_batches=4,
+            weight_normalization_option=WeightNormalizationOptions.L2_SCALE,
+            weight_normalization_position_option=(
+                WeightNormalizationPositionOptions.AFTER_OUTER_PRODUCT
+            ),
+            weight_bank_expansion_factor=BankExpansionFactorOptions.FACTOR_OF_THREE,
+            bias_option=AffineTransformDynamicBiasConfig,
+            bias_decay_schedule=WeightDecayScheduleOptions.LINEAR,
+            bias_decay_rate=0.04,
+            bias_decay_warmup_batches=5,
+            bias_bank_expansion_factor=BankExpansionFactorOptions.FACTOR_OF_TWO,
+            diagonal_option=CombinedDynamicDiagonalConfig,
+            row_mask_option=PerAxisScoreMaskConfig,
+            mask_dimension_option=MaskDimensionOptions.COLUMN,
+            mask_threshold=0.35,
+            mask_surrogate_scale=1.4,
+            mask_floor=0.02,
+            mask_transition_width=0.25,
+        )
+        flat_kwargs = {
+            "batch_size": 3,
+            "learning_rate": 0.02,
+            "input_dim": 8,
+            "output_dim": 5,
+            "stack_hidden_dim": stack_options.hidden_dim,
+            "stack_bias_flag": stack_options.bias_flag,
+            "stack_layer_norm_position": stack_options.layer_norm_position,
+            "stack_num_layers": stack_options.num_layers,
+            "stack_activation": stack_options.activation,
+            "stack_residual_connection_option": (
+                stack_options.residual_connection_option
+            ),
+            "stack_dropout_probability": stack_options.dropout_probability,
+            "stack_last_layer_bias_option": stack_options.last_layer_bias_option,
+            "stack_apply_output_pipeline_flag": (
+                stack_options.apply_output_pipeline_flag
+            ),
+            "submodule_stack_hidden_dim": submodule_stack_options.hidden_dim,
+            "submodule_stack_num_layers": submodule_stack_options.num_layers,
+            "submodule_stack_last_layer_bias_option": (
+                submodule_stack_options.last_layer_bias_option
+            ),
+            "submodule_stack_apply_output_pipeline_flag": (
+                submodule_stack_options.apply_output_pipeline_flag
+            ),
+            "submodule_stack_activation": submodule_stack_options.activation,
+            "submodule_stack_layer_norm_position": (
+                submodule_stack_options.layer_norm_position
+            ),
+            "submodule_stack_residual_connection_option": (
+                submodule_stack_options.residual_connection_option
+            ),
+            "submodule_stack_dropout_probability": (
+                submodule_stack_options.dropout_probability
+            ),
+            "submodule_stack_bias_flag": submodule_stack_options.bias_flag,
+            "adaptive_generator_stack_hidden_dim": (
+                generator_stack_options.hidden_dim
+            ),
+            "adaptive_generator_stack_layer_norm_position": (
+                generator_stack_options.layer_norm_position
+            ),
+            "adaptive_generator_stack_num_layers": (
+                generator_stack_options.num_layers
+            ),
+            "adaptive_generator_stack_activation": (
+                generator_stack_options.activation
+            ),
+            "adaptive_generator_stack_residual_connection_option": (
+                generator_stack_options.residual_connection_option
+            ),
+            "adaptive_generator_stack_dropout_probability": (
+                generator_stack_options.dropout_probability
+            ),
+            "adaptive_generator_stack_last_layer_bias_option": (
+                generator_stack_options.last_layer_bias_option
+            ),
+            "adaptive_generator_stack_apply_output_pipeline_flag": (
+                generator_stack_options.apply_output_pipeline_flag
+            ),
+            "adaptive_generator_stack_bias_flag": generator_stack_options.bias_flag,
+            "weight_option_flag": True,
+            "weight_option": DualModelDynamicWeightConfig,
+            "bias_option_flag": True,
+            "bias_option": AdditiveDynamicBiasConfig,
+            "diagonal_option_flag": True,
+            "diagonal_option": StandardDynamicDiagonalConfig,
+            "mask_option_flag": True,
+            "row_mask_option": DiagonalAxisMaskConfig,
+            "stack_gate_flag": True,
+            "gate_option": LayerGateOptions.MULTIPLIER,
+            "gate_activation": ActivationOptions.SIGMOID,
+            "stack_halting_flag": True,
+            "halting_threshold": 0.45,
+            "halting_dropout": 0.12,
+            "halting_hidden_state_mode": HaltingHiddenStateModeOptions.ACCUMULATED,
+            "memory_flag": True,
+            "memory_option": WeightedDynamicMemoryConfig,
+            "memory_position_option": MemoryPositionOptions.BEFORE_AFFINE,
+            "memory_test_time_training_learning_rate": 0.03,
+            "memory_test_time_training_num_inner_steps": 2,
+            "recurrent_flag": True,
+            "recurrent_max_steps": 4,
+            "recurrent_layer_norm_position": LayerNormPositionOptions.BEFORE,
+            "recurrent_gate_flag": True,
+            "recurrent_gate_option": LayerGateOptions.MULTIPLIER,
+            "recurrent_gate_activation": ActivationOptions.TANH,
+            "recurrent_halting_flag": True,
+            "recurrent_halting_threshold": 0.62,
+            "recurrent_halting_dropout": 0.14,
+            "recurrent_halting_hidden_state_mode": (
+                HaltingHiddenStateModeOptions.ACCUMULATED
+            ),
+            **source_kwargs("gate_stack", gate_source),
+            **source_kwargs("halting_stack", halting_source),
+            **source_kwargs("memory_stack", memory_source),
+            **source_kwargs("recurrent_gate_stack", recurrent_gate_source),
+            **source_kwargs("recurrent_halting_stack", recurrent_halting_source),
+            **boundary_kwargs("input_layer", input_boundary_options),
+            **boundary_kwargs("output_layer", output_boundary_options),
+        }
+
+        flat_cfg = LinearAdaptiveConfigBuilder(**flat_kwargs).build()
+        grouped_cfg = LinearAdaptiveConfigBuilder(
+            batch_size=3,
+            learning_rate=0.02,
+            input_dim=8,
+            output_dim=5,
+            stack_options=stack_options,
+            submodule_stack_options=submodule_stack_options,
+            adaptive_generator_stack_options=generator_stack_options,
+            weight_option_flag=True,
+            weight_option=DualModelDynamicWeightConfig,
+            bias_option_flag=True,
+            bias_option=AdditiveDynamicBiasConfig,
+            diagonal_option_flag=True,
+            diagonal_option=StandardDynamicDiagonalConfig,
+            mask_option_flag=True,
+            row_mask_option=DiagonalAxisMaskConfig,
+            layer_controller_options=LayerControllerOptions(
+                stack_gate_flag=True,
+                gate_option=LayerGateOptions.MULTIPLIER,
+                gate_activation=ActivationOptions.SIGMOID,
+                gate_stack_source=gate_source,
+                stack_halting_flag=True,
+                halting_threshold=0.45,
+                halting_dropout=0.12,
+                halting_hidden_state_mode=HaltingHiddenStateModeOptions.ACCUMULATED,
+                halting_stack_source=halting_source,
+            ),
+            dynamic_memory_options=DynamicMemoryOptions(
+                memory_flag=True,
+                memory_option=WeightedDynamicMemoryConfig,
+                memory_position_option=MemoryPositionOptions.BEFORE_AFFINE,
+                memory_test_time_training_learning_rate=0.03,
+                memory_test_time_training_num_inner_steps=2,
+                memory_stack_source=memory_source,
+            ),
+            recurrent_controller_options=RecurrentControllerOptions(
+                recurrent_flag=True,
+                recurrent_max_steps=4,
+                recurrent_layer_norm_position=LayerNormPositionOptions.BEFORE,
+                recurrent_gate_flag=True,
+                recurrent_gate_option=LayerGateOptions.MULTIPLIER,
+                recurrent_gate_activation=ActivationOptions.TANH,
+                recurrent_gate_stack_source=recurrent_gate_source,
+                recurrent_halting_flag=True,
+                recurrent_halting_threshold=0.62,
+                recurrent_halting_dropout=0.14,
+                recurrent_halting_hidden_state_mode=(
+                    HaltingHiddenStateModeOptions.ACCUMULATED
+                ),
+                recurrent_halting_stack_source=recurrent_halting_source,
+            ),
+            input_boundary_options=input_boundary_options,
+            output_boundary_options=output_boundary_options,
+        ).build()
+
+        self.assertEqual(flat_cfg, grouped_cfg)
 
     def test_boundary_layer_pipeline_matches_linear_projection_options(self):
         cfg = LinearAdaptiveConfigBuilder(
@@ -270,6 +653,52 @@ class TestAdaptiveLinearModel(unittest.TestCase):
             ),
             option=LayerGateOptions.MULTIPLIER,
             activation=ActivationOptions.SIGMOID,
+        )
+
+    def _controller_stack_configs(self, model_cfg) -> dict[str, LayerStackConfig]:
+        return {
+            "gate": model_cfg.layer_config.gate_config.model_config,
+            "halting": model_cfg.layer_config.halting_config.halting_gate_config,
+            "memory": model_cfg.shared_memory_config.model_config,
+        }
+
+    def _assert_controller_stack_options(
+        self,
+        stack_cfg: LayerStackConfig,
+        *,
+        hidden_dim: int,
+        num_layers: int,
+        activation: ActivationOptions,
+        layer_norm_position: LayerNormPositionOptions,
+        residual_connection_option: ResidualConnectionOptions,
+        dropout_probability: float,
+        last_layer_bias_option: LastLayerBiasOptions,
+        apply_output_pipeline_flag: bool,
+        bias_flag: bool,
+    ) -> None:
+        self.assertEqual(stack_cfg.hidden_dim, hidden_dim)
+        self.assertEqual(stack_cfg.num_layers, num_layers)
+        self.assertEqual(stack_cfg.layer_config.activation, activation)
+        self.assertEqual(
+            stack_cfg.layer_config.layer_norm_position,
+            layer_norm_position,
+        )
+        self.assertEqual(
+            stack_cfg.layer_config.residual_connection_option,
+            residual_connection_option,
+        )
+        self.assertEqual(
+            stack_cfg.layer_config.dropout_probability,
+            dropout_probability,
+        )
+        self.assertEqual(stack_cfg.last_layer_bias_option, last_layer_bias_option)
+        self.assertEqual(
+            stack_cfg.apply_output_pipeline_flag,
+            apply_output_pipeline_flag,
+        )
+        self.assertEqual(
+            stack_cfg.layer_config.layer_model_config.bias_flag,
+            bias_flag,
         )
 
     def test_boundary_projectors_enable_adaptive_options_independently(self):
@@ -540,6 +969,252 @@ class TestAdaptiveLinearModel(unittest.TestCase):
             augmentation_config.mask_config.mask_dimension_option,
             MaskDimensionOptions.ROW,
         )
+
+    def test_adaptive_parameter_factory_builds_all_weight_configs(self):
+        model_config = self.shared_gate_config().model_config
+        cases = [
+            (
+                SingleModelDynamicWeightConfig,
+                {
+                    "normalization_option": WeightNormalizationOptions.RMS,
+                    "normalization_position_option": (
+                        WeightNormalizationPositionOptions.AFTER_OUTER_PRODUCT
+                    ),
+                },
+            ),
+            (
+                DualModelDynamicWeightConfig,
+                {
+                    "normalization_option": WeightNormalizationOptions.RMS,
+                    "normalization_position_option": (
+                        WeightNormalizationPositionOptions.AFTER_OUTER_PRODUCT
+                    ),
+                },
+            ),
+            (
+                LowRankDynamicWeightConfig,
+                {"normalization_option": WeightNormalizationOptions.RMS},
+            ),
+            (
+                HypernetworkDynamicWeightConfig,
+                {"normalization_option": WeightNormalizationOptions.RMS},
+            ),
+            (
+                LayeredWeightedBankDynamicWeightConfig,
+                {
+                    "bank_expansion_factor": (
+                        BankExpansionFactorOptions.FACTOR_OF_THREE
+                    ),
+                },
+            ),
+            (
+                SoftWeightedBankDynamicWeightConfig,
+                {
+                    "bank_expansion_factor": (
+                        BankExpansionFactorOptions.FACTOR_OF_THREE
+                    ),
+                },
+            ),
+        ]
+
+        for weight_option, expected_values in cases:
+            with self.subTest(weight_option=weight_option.__name__):
+                weight_config = build_weight_config(
+                    weight_option,
+                    generator_depth=DynamicDepthOptions.DEPTH_OF_THREE,
+                    decay_schedule=WeightDecayScheduleOptions.LINEAR,
+                    decay_rate=0.25,
+                    decay_warmup_batches=7,
+                    normalization_option=WeightNormalizationOptions.RMS,
+                    normalization_position_option=(
+                        WeightNormalizationPositionOptions.AFTER_OUTER_PRODUCT
+                    ),
+                    bank_expansion_factor=BankExpansionFactorOptions.FACTOR_OF_THREE,
+                    model_config=model_config,
+                )
+
+                self.assertIsInstance(weight_config, weight_option)
+                self.assertEqual(
+                    weight_config.generator_depth,
+                    DynamicDepthOptions.DEPTH_OF_THREE,
+                )
+                self.assertEqual(
+                    weight_config.decay_schedule,
+                    WeightDecayScheduleOptions.LINEAR,
+                )
+                self.assertEqual(weight_config.decay_rate, 0.25)
+                self.assertEqual(weight_config.decay_warmup_batches, 7)
+                self.assertIs(weight_config.model_config, model_config)
+                for field, expected in expected_values.items():
+                    self.assertEqual(getattr(weight_config, field), expected)
+
+    def test_adaptive_parameter_factory_builds_all_bias_configs(self):
+        model_config = self.shared_gate_config().model_config
+        cases = [
+            (AffineTransformDynamicBiasConfig, {}),
+            (AdditiveDynamicBiasConfig, {}),
+            (GeneratorDynamicBiasConfig, {}),
+            (MultiplicativeDynamicBiasConfig, {}),
+            (SigmoidGatedDynamicBiasConfig, {}),
+            (TanhGatedDynamicBiasConfig, {}),
+            (
+                WeightedBankDynamicBiasConfig,
+                {
+                    "bank_expansion_factor": BankExpansionFactorOptions.FACTOR_OF_TWO,
+                },
+            ),
+        ]
+
+        for bias_option, expected_values in cases:
+            with self.subTest(bias_option=bias_option.__name__):
+                bias_config = build_bias_config(
+                    bias_option,
+                    decay_schedule=WeightDecayScheduleOptions.EXPONENTIAL,
+                    decay_rate=0.125,
+                    decay_warmup_batches=11,
+                    bank_expansion_factor=BankExpansionFactorOptions.FACTOR_OF_TWO,
+                    model_config=model_config,
+                )
+
+                self.assertIsInstance(bias_config, bias_option)
+                self.assertEqual(
+                    bias_config.decay_schedule,
+                    WeightDecayScheduleOptions.EXPONENTIAL,
+                )
+                self.assertEqual(bias_config.decay_rate, 0.125)
+                self.assertEqual(bias_config.decay_warmup_batches, 11)
+                self.assertIs(bias_config.model_config, model_config)
+                for field, expected in expected_values.items():
+                    self.assertEqual(getattr(bias_config, field), expected)
+
+    def test_adaptive_parameter_factory_builds_all_diagonal_configs(self):
+        model_config = self.shared_gate_config().model_config
+        cases = [
+            StandardDynamicDiagonalConfig,
+            AntiDynamicDiagonalConfig,
+            CombinedDynamicDiagonalConfig,
+        ]
+
+        for diagonal_option in cases:
+            with self.subTest(diagonal_option=diagonal_option.__name__):
+                diagonal_config = build_diagonal_config(
+                    diagonal_option,
+                    model_config=model_config,
+                )
+
+                self.assertIsInstance(diagonal_config, diagonal_option)
+                self.assertIs(diagonal_config.model_config, model_config)
+
+    def test_adaptive_parameter_factory_builds_all_mask_configs(self):
+        model_config = self.shared_gate_config().model_config
+        cases = [
+            (
+                WeightInformedScoreAxisMaskConfig,
+                {"mask_dimension_option": MaskDimensionOptions.COLUMN},
+            ),
+            (
+                PerAxisScoreMaskConfig,
+                {"mask_dimension_option": MaskDimensionOptions.COLUMN},
+            ),
+            (
+                TopSliceAxisMaskConfig,
+                {
+                    "mask_dimension_option": MaskDimensionOptions.COLUMN,
+                    "mask_transition_width": 0.25,
+                },
+            ),
+            (OuterProductMaskConfig, {}),
+            (
+                DiagonalAxisMaskConfig,
+                {"mask_transition_width": 0.25},
+            ),
+        ]
+
+        for row_mask_option, expected_values in cases:
+            with self.subTest(row_mask_option=row_mask_option.__name__):
+                mask_config = build_mask_config(
+                    row_mask_option,
+                    mask_dimension_option=MaskDimensionOptions.COLUMN,
+                    mask_threshold=0.6,
+                    mask_surrogate_scale=0.3,
+                    mask_floor=0.05,
+                    mask_transition_width=0.25,
+                    model_config=model_config,
+                )
+
+                self.assertIsInstance(mask_config, row_mask_option)
+                self.assertEqual(mask_config.mask_threshold, 0.6)
+                self.assertEqual(mask_config.mask_surrogate_scale, 0.3)
+                self.assertEqual(mask_config.mask_floor, 0.05)
+                self.assertIs(mask_config.model_config, model_config)
+                for field, expected in expected_values.items():
+                    self.assertEqual(getattr(mask_config, field), expected)
+
+    def test_boundary_and_stack_weight_configs_share_constructor_kwargs(self):
+        cfg = LinearAdaptiveConfigBuilder(
+            input_dim=8,
+            stack_hidden_dim=16,
+            output_dim=4,
+            weight_option_flag=True,
+            weight_option=DualModelDynamicWeightConfig,
+            generator_depth=DynamicDepthOptions.DEPTH_OF_THREE,
+            weight_decay_schedule=WeightDecayScheduleOptions.MULTIPLICATIVE,
+            weight_decay_rate=0.125,
+            weight_decay_warmup_batches=11,
+            weight_normalization_option=WeightNormalizationOptions.RMS,
+            weight_normalization_position_option=(
+                WeightNormalizationPositionOptions.BEFORE_OUTER_PRODUCT
+            ),
+            input_layer_weight_option=DualModelDynamicWeightConfig,
+            input_layer_weight_generator_depth=DynamicDepthOptions.DEPTH_OF_THREE,
+            input_layer_weight_decay_schedule=(
+                WeightDecayScheduleOptions.MULTIPLICATIVE
+            ),
+            input_layer_weight_decay_rate=0.125,
+            input_layer_weight_decay_warmup_batches=11,
+            input_layer_weight_normalization_option=WeightNormalizationOptions.RMS,
+            input_layer_weight_normalization_position_option=(
+                WeightNormalizationPositionOptions.BEFORE_OUTER_PRODUCT
+            ),
+            output_layer_weight_option=DualModelDynamicWeightConfig,
+            output_layer_weight_generator_depth=DynamicDepthOptions.DEPTH_OF_THREE,
+            output_layer_weight_decay_schedule=(
+                WeightDecayScheduleOptions.MULTIPLICATIVE
+            ),
+            output_layer_weight_decay_rate=0.125,
+            output_layer_weight_decay_warmup_batches=11,
+            output_layer_weight_normalization_option=WeightNormalizationOptions.RMS,
+            output_layer_weight_normalization_position_option=(
+                WeightNormalizationPositionOptions.BEFORE_OUTER_PRODUCT
+            ),
+        ).build()
+        expected_values = {
+            "generator_depth": DynamicDepthOptions.DEPTH_OF_THREE,
+            "decay_schedule": WeightDecayScheduleOptions.MULTIPLICATIVE,
+            "decay_rate": 0.125,
+            "decay_warmup_batches": 11,
+            "normalization_option": WeightNormalizationOptions.RMS,
+            "normalization_position_option": (
+                WeightNormalizationPositionOptions.BEFORE_OUTER_PRODUCT
+            ),
+        }
+        weight_configs = [
+            self._augmentation_config(cfg).weight_config,
+            (
+                cfg.experiment_config.input_model_config.layer_model_config
+                .adaptive_augmentation_config.weight_config
+            ),
+            (
+                cfg.experiment_config.output_model_config.layer_model_config
+                .adaptive_augmentation_config.weight_config
+            ),
+        ]
+
+        for weight_config in weight_configs:
+            with self.subTest(weight_config=weight_config):
+                self.assertIsInstance(weight_config, DualModelDynamicWeightConfig)
+                for field, expected in expected_values.items():
+                    self.assertEqual(getattr(weight_config, field), expected)
 
     def test_default_adaptive_component_flags_disable_components(self):
         cfg = LinearAdaptiveConfigBuilder(
@@ -894,130 +1569,97 @@ class TestAdaptiveLinearModel(unittest.TestCase):
         self.assertIsNone(augmentation_config.mask_config)
 
     def test_individual_adaptive_presets_wire_expected_config_type(self):
-        cases = [
-            (
-                ExperimentPreset.SINGLE_MODEL_WEIGHT,
-                "weight_config",
-                SingleModelDynamicWeightConfig,
-            ),
-            (
-                ExperimentPreset.DUAL_MODEL_WEIGHT,
-                "weight_config",
-                DualModelDynamicWeightConfig,
-            ),
-            (
-                ExperimentPreset.LOW_RANK_WEIGHT,
-                "weight_config",
-                LowRankDynamicWeightConfig,
-            ),
-            (
-                ExperimentPreset.HYPERNETWORK_WEIGHT,
-                "weight_config",
-                HypernetworkDynamicWeightConfig,
-            ),
-            (
-                ExperimentPreset.LAYERED_WEIGHTED_BANK_WEIGHT,
-                "weight_config",
-                LayeredWeightedBankDynamicWeightConfig,
-            ),
-            (
-                ExperimentPreset.SOFT_WEIGHTED_BANK_WEIGHT,
-                "weight_config",
-                SoftWeightedBankDynamicWeightConfig,
-            ),
-            (
-                ExperimentPreset.AFFINE_TRANSFORM_BIAS,
-                "bias_config",
-                AffineTransformDynamicBiasConfig,
-            ),
-            (
-                ExperimentPreset.ADDITIVE_BIAS,
-                "bias_config",
-                AdditiveDynamicBiasConfig,
-            ),
-            (
-                ExperimentPreset.GENERATOR_BIAS,
-                "bias_config",
-                GeneratorDynamicBiasConfig,
-            ),
-            (
-                ExperimentPreset.MULTIPLICATIVE_BIAS,
-                "bias_config",
-                MultiplicativeDynamicBiasConfig,
-            ),
-            (
-                ExperimentPreset.SIGMOID_GATED_BIAS,
-                "bias_config",
-                SigmoidGatedDynamicBiasConfig,
-            ),
-            (
-                ExperimentPreset.TANH_GATED_BIAS,
-                "bias_config",
-                TanhGatedDynamicBiasConfig,
-            ),
-            (
-                ExperimentPreset.WEIGHTED_BANK_BIAS,
-                "bias_config",
-                WeightedBankDynamicBiasConfig,
-            ),
-            (
-                ExperimentPreset.STANDARD_DIAGONAL,
-                "diagonal_config",
-                StandardDynamicDiagonalConfig,
-            ),
-            (
-                ExperimentPreset.ANTI_DIAGONAL,
-                "diagonal_config",
-                AntiDynamicDiagonalConfig,
-            ),
-            (
-                ExperimentPreset.COMBINED_DIAGONAL,
-                "diagonal_config",
-                CombinedDynamicDiagonalConfig,
-            ),
-            (
-                ExperimentPreset.DIAGONAL_AXIS_MASK,
-                "mask_config",
-                DiagonalAxisMaskConfig,
-            ),
-            (
-                ExperimentPreset.OUTER_PRODUCT_MASK,
-                "mask_config",
-                OuterProductMaskConfig,
-            ),
-            (
-                ExperimentPreset.PER_AXIS_SCORE_MASK,
-                "mask_config",
-                PerAxisScoreMaskConfig,
-            ),
-            (
-                ExperimentPreset.TOP_SLICE_AXIS_MASK,
-                "mask_config",
-                TopSliceAxisMaskConfig,
-            ),
-            (
-                ExperimentPreset.WEIGHT_INFORMED_SCORE_MASK,
-                "mask_config",
-                WeightInformedScoreAxisMaskConfig,
-            ),
-        ]
+        cases_by_family = {
+            "weight": [
+                (
+                    ExperimentPreset.SINGLE_MODEL_WEIGHT,
+                    SingleModelDynamicWeightConfig,
+                ),
+                (
+                    ExperimentPreset.DUAL_MODEL_WEIGHT,
+                    DualModelDynamicWeightConfig,
+                ),
+                (
+                    ExperimentPreset.LOW_RANK_WEIGHT,
+                    LowRankDynamicWeightConfig,
+                ),
+                (
+                    ExperimentPreset.HYPERNETWORK_WEIGHT,
+                    HypernetworkDynamicWeightConfig,
+                ),
+                (
+                    ExperimentPreset.LAYERED_WEIGHTED_BANK_WEIGHT,
+                    LayeredWeightedBankDynamicWeightConfig,
+                ),
+                (
+                    ExperimentPreset.SOFT_WEIGHTED_BANK_WEIGHT,
+                    SoftWeightedBankDynamicWeightConfig,
+                ),
+            ],
+            "bias": [
+                (
+                    ExperimentPreset.AFFINE_TRANSFORM_BIAS,
+                    AffineTransformDynamicBiasConfig,
+                ),
+                (ExperimentPreset.ADDITIVE_BIAS, AdditiveDynamicBiasConfig),
+                (ExperimentPreset.GENERATOR_BIAS, GeneratorDynamicBiasConfig),
+                (
+                    ExperimentPreset.MULTIPLICATIVE_BIAS,
+                    MultiplicativeDynamicBiasConfig,
+                ),
+                (
+                    ExperimentPreset.SIGMOID_GATED_BIAS,
+                    SigmoidGatedDynamicBiasConfig,
+                ),
+                (ExperimentPreset.TANH_GATED_BIAS, TanhGatedDynamicBiasConfig),
+                (ExperimentPreset.WEIGHTED_BANK_BIAS, WeightedBankDynamicBiasConfig),
+            ],
+            "diagonal": [
+                (
+                    ExperimentPreset.STANDARD_DIAGONAL,
+                    StandardDynamicDiagonalConfig,
+                ),
+                (ExperimentPreset.ANTI_DIAGONAL, AntiDynamicDiagonalConfig),
+                (
+                    ExperimentPreset.COMBINED_DIAGONAL,
+                    CombinedDynamicDiagonalConfig,
+                ),
+            ],
+            "mask": [
+                (ExperimentPreset.DIAGONAL_AXIS_MASK, DiagonalAxisMaskConfig),
+                (ExperimentPreset.OUTER_PRODUCT_MASK, OuterProductMaskConfig),
+                (ExperimentPreset.PER_AXIS_SCORE_MASK, PerAxisScoreMaskConfig),
+                (ExperimentPreset.TOP_SLICE_AXIS_MASK, TopSliceAxisMaskConfig),
+                (
+                    ExperimentPreset.WEIGHT_INFORMED_SCORE_MASK,
+                    WeightInformedScoreAxisMaskConfig,
+                ),
+            ],
+        }
 
-        for preset, expected_field, expected_type in cases:
-            with self.subTest(preset=preset.name):
-                cfg = ExperimentPresets().get_config(preset)[0]
-                augmentation_config = self._augmentation_config(cfg)
-
-                for field in (
-                    "weight_config",
-                    "bias_config",
-                    "diagonal_config",
-                    "mask_config",
+        for family, cases in cases_by_family.items():
+            expected_field = f"{family}_config"
+            for preset, expected_type in cases:
+                with self.subTest(
+                    family=family,
+                    preset=preset.name,
+                    expected_config_role=expected_field,
                 ):
-                    value = getattr(augmentation_config, field)
-                    if field == expected_field:
-                        self.assertIsInstance(value, expected_type)
-                    else:
-                        self.assertIsNone(value)
+                    cfg = ExperimentPresets().get_config(preset)[0]
+                    augmentation_config = self._augmentation_config(cfg)
+
+                    for field in (
+                        "weight_config",
+                        "bias_config",
+                        "diagonal_config",
+                        "mask_config",
+                    ):
+                        with self.subTest(config_role=field):
+                            value = getattr(augmentation_config, field)
+                            if field == expected_field:
+                                self.assertIsInstance(value, expected_type)
+                            else:
+                                self.assertIsNone(value)
 
     def test_specialized_weight_presets_wire_expected_knobs(self):
         cases = [
@@ -1055,23 +1697,13 @@ class TestAdaptiveLinearModel(unittest.TestCase):
     def test_preset_locks_are_exposed_with_reasons(self):
         presets = ExperimentPresets()
 
-        self.assertIs(presets.PRESET_OVERRIDES, ExperimentPresets.PRESET_OVERRIDES)
-        self.assertEqual(set(presets.PRESET_OVERRIDES), set(ExperimentPreset))
-        self.assertEqual(
-            set(presets.PRESET_LOCKS),
-            {
-                preset
-                for preset, overrides in presets.PRESET_OVERRIDES.items()
-                if overrides
-            },
-        )
-
-        for preset, expected_locks in presets.PRESET_LOCKS.items():
+        for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
+                expected_locks = presets.locks_for_preset(preset)
                 locks = presets.locked_fields(preset)
 
                 self.assertEqual(set(locks), set(expected_locks))
-                self.assertEqual(set(locks), set(presets.PRESET_OVERRIDES[preset]))
+                self.assertEqual(set(locks), set(presets.overrides_for_preset(preset)))
                 for field, lock in locks.items():
                     expected = expected_locks[field]
                     expected_value = (
@@ -1079,6 +1711,30 @@ class TestAdaptiveLinearModel(unittest.TestCase):
                     )
                     self.assertEqual(lock.value, expected_value)
                     self.assertIn(preset.name, lock.reason)
+
+    def test_preset_definitions_keep_values_and_descriptions_together(self):
+        presets = ExperimentPresets()
+
+        self.assertNotIsInstance(ExperimentPreset.BASELINE.value, str)
+        self.assertEqual(
+            [preset.value for preset in ExperimentPreset],
+            list(range(1, len(ExperimentPreset) + 1)),
+        )
+        self.assertEqual(set(_PRESET_DEFINITIONS), set(ExperimentPreset))
+        for preset, definition in _PRESET_DEFINITIONS.items():
+            with self.subTest(preset=preset.name):
+                self.assertIsInstance(definition, PresetDefinition)
+                self.assertEqual(presets.definition_for_preset(preset), definition)
+                self.assertEqual(
+                    presets.overrides_for_preset(preset),
+                    definition.preset_values,
+                )
+                self.assertEqual(
+                    presets.description_for_preset(preset),
+                    definition.description,
+                )
+                self.assertIsInstance(definition.description, str)
+                self.assertTrue(definition.description)
 
     def test_experiment_presets_do_not_alias_names(self):
         self.assertEqual(
@@ -1097,7 +1753,8 @@ class TestAdaptiveLinearModel(unittest.TestCase):
             "row_mask_option": "mask_option_flag",
         }
 
-        for preset, overrides in presets.PRESET_OVERRIDES.items():
+        for preset in ExperimentPreset:
+            overrides = presets.overrides_for_preset(preset)
             locks = presets.locked_fields(preset)
             for option_key, flag_key in option_flags.items():
                 if option_key not in overrides:
@@ -1286,62 +1943,26 @@ class TestAdaptiveLinearModel(unittest.TestCase):
         ).build()
 
         model_cfg = cfg.experiment_config.model_config
-        gate_cfg = model_cfg.layer_config.gate_config.model_config
-        halting_stack_cfg = model_cfg.layer_config.halting_config.halting_gate_config
-        memory_stack_cfg = model_cfg.shared_memory_config.model_config
+        expected_last_layer_bias_options = {
+            "gate": LastLayerBiasOptions.DEFAULT,
+            "halting": LastLayerBiasOptions.DISABLED,
+            "memory": LastLayerBiasOptions.DEFAULT,
+        }
 
-        self.assertEqual(gate_cfg.hidden_dim, config.STACK_HIDDEN_DIM)
-        self.assertEqual(gate_cfg.num_layers, 2)
-        self.assertEqual(gate_cfg.layer_config.activation, ActivationOptions.GELU)
-        self.assertEqual(
-            gate_cfg.layer_config.layer_norm_position,
-            config.STACK_LAYER_NORM_POSITION,
-        )
-        self.assertEqual(
-            gate_cfg.layer_config.residual_connection_option,
-            ResidualConnectionOptions.DISABLED,
-        )
-        self.assertEqual(gate_cfg.layer_config.dropout_probability, 0.0)
-        self.assertEqual(
-            gate_cfg.last_layer_bias_option,
-            LastLayerBiasOptions.DEFAULT,
-        )
-        self.assertFalse(gate_cfg.apply_output_pipeline_flag)
-        self.assertTrue(gate_cfg.layer_config.layer_model_config.bias_flag)
-
-        self.assertEqual(halting_stack_cfg.hidden_dim, config.STACK_HIDDEN_DIM)
-        self.assertEqual(halting_stack_cfg.num_layers, 2)
-        self.assertEqual(
-            halting_stack_cfg.layer_config.activation,
-            ActivationOptions.GELU,
-        )
-        self.assertEqual(
-            halting_stack_cfg.layer_config.layer_norm_position,
-            config.STACK_LAYER_NORM_POSITION,
-        )
-        self.assertEqual(
-            halting_stack_cfg.last_layer_bias_option,
-            LastLayerBiasOptions.DISABLED,
-        )
-        self.assertFalse(halting_stack_cfg.apply_output_pipeline_flag)
-        self.assertTrue(halting_stack_cfg.layer_config.layer_model_config.bias_flag)
-
-        self.assertEqual(memory_stack_cfg.hidden_dim, config.STACK_HIDDEN_DIM)
-        self.assertEqual(memory_stack_cfg.num_layers, 2)
-        self.assertEqual(
-            memory_stack_cfg.layer_config.activation,
-            ActivationOptions.GELU,
-        )
-        self.assertEqual(
-            memory_stack_cfg.layer_config.layer_norm_position,
-            config.STACK_LAYER_NORM_POSITION,
-        )
-        self.assertEqual(
-            memory_stack_cfg.last_layer_bias_option,
-            LastLayerBiasOptions.DEFAULT,
-        )
-        self.assertFalse(memory_stack_cfg.apply_output_pipeline_flag)
-        self.assertTrue(memory_stack_cfg.layer_config.layer_model_config.bias_flag)
+        for role, stack_cfg in self._controller_stack_configs(model_cfg).items():
+            with self.subTest(config_role=role):
+                self._assert_controller_stack_options(
+                    stack_cfg,
+                    hidden_dim=config.STACK_HIDDEN_DIM,
+                    num_layers=2,
+                    activation=ActivationOptions.GELU,
+                    layer_norm_position=config.STACK_LAYER_NORM_POSITION,
+                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    dropout_probability=0.0,
+                    last_layer_bias_option=expected_last_layer_bias_options[role],
+                    apply_output_pipeline_flag=False,
+                    bias_flag=True,
+                )
 
     def test_controller_stacks_inherit_submodule_defaults_when_overrides_are_none(
         self,
@@ -1369,35 +1990,21 @@ class TestAdaptiveLinearModel(unittest.TestCase):
         ).build()
 
         model_cfg = cfg.experiment_config.model_config
-        stacks = [
-            model_cfg.layer_config.gate_config.model_config,
-            model_cfg.layer_config.halting_config.halting_gate_config,
-            model_cfg.shared_memory_config.model_config,
-        ]
 
-        for stack_cfg in stacks:
-            with self.subTest(stack=type(stack_cfg).__name__):
-                self.assertEqual(stack_cfg.hidden_dim, 37)
-                self.assertEqual(stack_cfg.num_layers, 4)
-                self.assertEqual(
-                    stack_cfg.last_layer_bias_option,
-                    LastLayerBiasOptions.DISABLED,
+        for role, stack_cfg in self._controller_stack_configs(model_cfg).items():
+            with self.subTest(config_role=role):
+                self._assert_controller_stack_options(
+                    stack_cfg,
+                    hidden_dim=37,
+                    num_layers=4,
+                    activation=ActivationOptions.MISH,
+                    layer_norm_position=LayerNormPositionOptions.AFTER,
+                    residual_connection_option=ResidualConnectionOptions.RESIDUAL,
+                    dropout_probability=0.12,
+                    last_layer_bias_option=LastLayerBiasOptions.DISABLED,
+                    apply_output_pipeline_flag=True,
+                    bias_flag=False,
                 )
-                self.assertTrue(stack_cfg.apply_output_pipeline_flag)
-                self.assertEqual(
-                    stack_cfg.layer_config.activation,
-                    ActivationOptions.MISH,
-                )
-                self.assertEqual(
-                    stack_cfg.layer_config.layer_norm_position,
-                    LayerNormPositionOptions.AFTER,
-                )
-                self.assertEqual(
-                    stack_cfg.layer_config.residual_connection_option,
-                    ResidualConnectionOptions.RESIDUAL,
-                )
-                self.assertEqual(stack_cfg.layer_config.dropout_probability, 0.12)
-                self.assertFalse(stack_cfg.layer_config.layer_model_config.bias_flag)
 
     def test_controller_stack_overrides_require_independent_flags(self):
         cfg = LinearAdaptiveConfigBuilder(
@@ -2000,110 +2607,129 @@ class TestAdaptiveLinearModel(unittest.TestCase):
 
     def test_new_adaptive_combination_presets_wire_config(self):
         presets = ExperimentPresets()
+        cases = [
+            {
+                "preset": ExperimentPreset.DUAL_WEIGHT_GATING,
+                "config_role": "dual weight gate",
+                "weight": DualModelDynamicWeightConfig,
+                "gate": True,
+            },
+            {
+                "preset": ExperimentPreset.DUAL_WEIGHT_HALTING,
+                "config_role": "dual weight halting",
+                "weight": DualModelDynamicWeightConfig,
+                "halting": True,
+            },
+            {
+                "preset": ExperimentPreset.DUAL_WEIGHT_GATING_HALTING,
+                "config_role": "dual weight gate halting",
+                "weight": DualModelDynamicWeightConfig,
+                "gate": True,
+                "halting": True,
+            },
+            {
+                "preset": ExperimentPreset.DUAL_WEIGHT_MEMORY,
+                "config_role": "dual weight memory",
+                "weight": DualModelDynamicWeightConfig,
+                "memory": True,
+            },
+            {
+                "preset": ExperimentPreset.DUAL_WEIGHT_GATING_MEMORY,
+                "config_role": "dual weight gate memory",
+                "weight": DualModelDynamicWeightConfig,
+                "gate": True,
+                "memory": True,
+            },
+            {
+                "preset": ExperimentPreset.DUAL_WEIGHT_HALTING_MEMORY,
+                "config_role": "dual weight halting memory",
+                "weight": DualModelDynamicWeightConfig,
+                "halting": True,
+                "memory": True,
+            },
+            {
+                "preset": ExperimentPreset.FULL_STACK_GATING,
+                "config_role": "full stack gate",
+                "full_stack": True,
+                "gate": True,
+            },
+            {
+                "preset": ExperimentPreset.FULL_STACK_HALTING,
+                "config_role": "full stack halting",
+                "full_stack": True,
+                "halting": True,
+            },
+            {
+                "preset": ExperimentPreset.FULL_STACK_MEMORY,
+                "config_role": "full stack memory",
+                "full_stack": True,
+                "memory": True,
+            },
+            {
+                "preset": ExperimentPreset.FULL_STACK_GATING_HALTING,
+                "config_role": "full stack gate halting",
+                "full_stack": True,
+                "gate": True,
+                "halting": True,
+            },
+            {
+                "preset": ExperimentPreset.FULL_STACK_RECURRENT,
+                "config_role": "full stack recurrent",
+                "full_stack": True,
+                "recurrent": True,
+            },
+            {
+                "preset": ExperimentPreset.BANK_WEIGHT_MASK,
+                "config_role": "bank weight mask",
+                "weight": LayeredWeightedBankDynamicWeightConfig,
+                "mask": WeightInformedScoreAxisMaskConfig,
+                "bias_none": True,
+                "diagonal_none": True,
+            },
+            {
+                "preset": ExperimentPreset.LOW_RANK_POST_NORM,
+                "config_role": "low rank post norm",
+                "weight": LowRankDynamicWeightConfig,
+                "layer_norm": LayerNormPositionOptions.AFTER,
+            },
+        ]
 
-        cfg = presets.get_config(ExperimentPreset.DUAL_WEIGHT_GATING)[0]
-        layer_cfg = cfg.experiment_config.model_config.layer_config
-        augmentation_config = self._augmentation_config(cfg)
-        self.assertIsInstance(
-            augmentation_config.weight_config, DualModelDynamicWeightConfig
-        )
-        self.assertIsNotNone(layer_cfg.gate_config)
+        for case in cases:
+            preset = case["preset"]
+            with self.subTest(
+                preset=preset.name,
+                expected_config_role=case["config_role"],
+            ):
+                cfg = presets.get_config(preset)[0]
+                model_cfg = cfg.experiment_config.model_config
+                augmentation_config = self._augmentation_config(cfg)
+                if case.get("recurrent"):
+                    self.assertIsInstance(model_cfg, RecurrentLayerConfig)
+                    layer_cfg = model_cfg.block_config.layer_config
+                else:
+                    layer_cfg = model_cfg.layer_config
 
-        cfg = presets.get_config(ExperimentPreset.DUAL_WEIGHT_HALTING)[0]
-        layer_cfg = cfg.experiment_config.model_config.layer_config
-        augmentation_config = self._augmentation_config(cfg)
-        self.assertIsInstance(
-            augmentation_config.weight_config, DualModelDynamicWeightConfig
-        )
-        self.assertIsNotNone(layer_cfg.halting_config)
-
-        cfg = presets.get_config(ExperimentPreset.DUAL_WEIGHT_GATING_HALTING)[0]
-        layer_cfg = cfg.experiment_config.model_config.layer_config
-        augmentation_config = self._augmentation_config(cfg)
-        self.assertIsInstance(
-            augmentation_config.weight_config, DualModelDynamicWeightConfig
-        )
-        self.assertIsNotNone(layer_cfg.gate_config)
-        self.assertIsNotNone(layer_cfg.halting_config)
-
-        cfg = presets.get_config(ExperimentPreset.DUAL_WEIGHT_MEMORY)[0]
-        model_cfg = cfg.experiment_config.model_config
-        augmentation_config = self._augmentation_config(cfg)
-        self.assertIsInstance(
-            augmentation_config.weight_config, DualModelDynamicWeightConfig
-        )
-        self.assertIsNotNone(model_cfg.shared_memory_config)
-
-        cfg = presets.get_config(ExperimentPreset.DUAL_WEIGHT_GATING_MEMORY)[0]
-        model_cfg = cfg.experiment_config.model_config
-        layer_cfg = model_cfg.layer_config
-        augmentation_config = self._augmentation_config(cfg)
-        self.assertIsInstance(
-            augmentation_config.weight_config, DualModelDynamicWeightConfig
-        )
-        self.assertIsNotNone(layer_cfg.gate_config)
-        self.assertIsNotNone(model_cfg.shared_memory_config)
-
-        cfg = presets.get_config(ExperimentPreset.DUAL_WEIGHT_HALTING_MEMORY)[0]
-        model_cfg = cfg.experiment_config.model_config
-        layer_cfg = model_cfg.layer_config
-        augmentation_config = self._augmentation_config(cfg)
-        self.assertIsInstance(
-            augmentation_config.weight_config, DualModelDynamicWeightConfig
-        )
-        self.assertIsNotNone(layer_cfg.halting_config)
-        self.assertIsNotNone(model_cfg.shared_memory_config)
-
-        cfg = presets.get_config(ExperimentPreset.FULL_STACK_GATING)[0]
-        layer_cfg = cfg.experiment_config.model_config.layer_config
-        self._assert_full_stack_augmentation(self._augmentation_config(cfg))
-        self.assertIsNotNone(layer_cfg.gate_config)
-
-        cfg = presets.get_config(ExperimentPreset.FULL_STACK_HALTING)[0]
-        layer_cfg = cfg.experiment_config.model_config.layer_config
-        self._assert_full_stack_augmentation(self._augmentation_config(cfg))
-        self.assertIsNotNone(layer_cfg.halting_config)
-
-        cfg = presets.get_config(ExperimentPreset.FULL_STACK_MEMORY)[0]
-        model_cfg = cfg.experiment_config.model_config
-        self._assert_full_stack_augmentation(self._augmentation_config(cfg))
-        self.assertIsNotNone(model_cfg.shared_memory_config)
-
-        cfg = presets.get_config(ExperimentPreset.FULL_STACK_GATING_HALTING)[0]
-        layer_cfg = cfg.experiment_config.model_config.layer_config
-        self._assert_full_stack_augmentation(self._augmentation_config(cfg))
-        self.assertIsNotNone(layer_cfg.gate_config)
-        self.assertIsNotNone(layer_cfg.halting_config)
-
-        cfg = presets.get_config(ExperimentPreset.FULL_STACK_RECURRENT)[0]
-        recurrent_cfg = cfg.experiment_config.model_config
-        self.assertIsInstance(recurrent_cfg, RecurrentLayerConfig)
-        self._assert_full_stack_augmentation(self._augmentation_config(cfg))
-
-        cfg = presets.get_config(ExperimentPreset.BANK_WEIGHT_MASK)[0]
-        augmentation_config = self._augmentation_config(cfg)
-        self.assertIsInstance(
-            augmentation_config.weight_config,
-            LayeredWeightedBankDynamicWeightConfig,
-        )
-        self.assertIsInstance(
-            augmentation_config.mask_config,
-            WeightInformedScoreAxisMaskConfig,
-        )
-        self.assertIsNone(augmentation_config.bias_config)
-        self.assertIsNone(augmentation_config.diagonal_config)
-
-        cfg = presets.get_config(ExperimentPreset.LOW_RANK_POST_NORM)[0]
-        layer_cfg = cfg.experiment_config.model_config.layer_config
-        augmentation_config = self._augmentation_config(cfg)
-        self.assertIsInstance(
-            augmentation_config.weight_config,
-            LowRankDynamicWeightConfig,
-        )
-        self.assertEqual(
-            layer_cfg.layer_norm_position,
-            LayerNormPositionOptions.AFTER,
-        )
+                if case.get("full_stack"):
+                    self._assert_full_stack_augmentation(augmentation_config)
+                if "weight" in case:
+                    self.assertIsInstance(
+                        augmentation_config.weight_config,
+                        case["weight"],
+                    )
+                if "mask" in case:
+                    self.assertIsInstance(augmentation_config.mask_config, case["mask"])
+                if case.get("bias_none"):
+                    self.assertIsNone(augmentation_config.bias_config)
+                if case.get("diagonal_none"):
+                    self.assertIsNone(augmentation_config.diagonal_config)
+                if case.get("gate"):
+                    self.assertIsNotNone(layer_cfg.gate_config)
+                if case.get("halting"):
+                    self.assertIsNotNone(layer_cfg.halting_config)
+                if case.get("memory"):
+                    self.assertIsNotNone(model_cfg.shared_memory_config)
+                if "layer_norm" in case:
+                    self.assertEqual(layer_cfg.layer_norm_position, case["layer_norm"])
 
     def _augmentation_config(self, cfg):
         model_config = cfg.experiment_config.model_config
