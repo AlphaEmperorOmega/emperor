@@ -19,6 +19,14 @@ from emperor.transformer.core.config import (
     TransformerEncoderLayerConfig,
 )
 from emperor.transformer.feed_forward import FeedForwardConfig
+from models.transformer_encoder._builder_options import (
+    TransformerAttentionOptions,
+    TransformerEncoderOptions,
+    TransformerFeedForwardOptions,
+    TransformerPositionalEmbeddingOptions,
+    VitOutputOptions,
+    VitPatchOptions,
+)
 from models.transformer_encoder.vit_linear.experiment_config import ExperimentConfig
 
 
@@ -54,34 +62,89 @@ class VitLinearConfigBuilder:
         ff_bias_flag: bool = config.FF_BIAS_FLAG,
         output_num_layers: int = config.OUTPUT_NUM_LAYERS,
         output_bias_flag: bool = config.OUTPUT_BIAS_FLAG,
+        patch_options: VitPatchOptions | None = None,
+        encoder_options: TransformerEncoderOptions | None = None,
+        positional_embedding_options: (
+            TransformerPositionalEmbeddingOptions | None
+        ) = None,
+        attention_options: TransformerAttentionOptions | None = None,
+        feed_forward_options: TransformerFeedForwardOptions | None = None,
+        output_options: VitOutputOptions | None = None,
     ) -> None:
+        patch_options = patch_options or VitPatchOptions(
+            patch_size=image_patch_size,
+            input_channels=input_channels,
+            image_height=image_height,
+            dropout_probability=patch_dropout_probability,
+            bias_flag=patch_bias_flag,
+        )
+        encoder_options = encoder_options or TransformerEncoderOptions(
+            hidden_dim=stack_hidden_dim,
+            num_layers=stack_num_layers,
+            activation=stack_activation,
+            dropout_probability=stack_dropout_probability,
+            layer_norm_position=layer_norm_position,
+        )
+        positional_embedding_options = (
+            positional_embedding_options
+            or TransformerPositionalEmbeddingOptions(
+                option=positional_embedding_option,
+                padding_idx=positional_embedding_padding_idx,
+                auto_expand_flag=positional_embedding_auto_expand_flag,
+            )
+        )
+        attention_options = attention_options or TransformerAttentionOptions(
+            num_heads=attn_num_heads,
+            num_layers=attn_num_layers,
+            bias_flag=attn_bias_flag,
+            add_key_value_bias_flag=attn_add_key_value_bias_flag,
+        )
+        feed_forward_options = (
+            feed_forward_options
+            or TransformerFeedForwardOptions(
+                num_layers=ff_num_layers,
+                bias_flag=ff_bias_flag,
+            )
+        )
+        output_options = output_options or VitOutputOptions(
+            num_layers=output_num_layers,
+            bias_flag=output_bias_flag,
+        )
         self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.input_dim = input_dim
-        self.hidden_dim = stack_hidden_dim
+        self.encoder_options = encoder_options
+        self.hidden_dim = encoder_options.hidden_dim
         self.output_dim = output_dim
-        self.image_patch_size = image_patch_size
-        self.input_channels = input_channels
-        self.image_height = image_height
-        self.patch_dropout_probability = patch_dropout_probability
-        self.patch_bias_flag = patch_bias_flag
-        self.stack_num_layers = stack_num_layers
-        self.stack_activation = stack_activation
-        self.stack_dropout_probability = stack_dropout_probability
-        self.layer_norm_position = layer_norm_position
-        self.positional_embedding_option = positional_embedding_option
-        self.positional_embedding_padding_idx = positional_embedding_padding_idx
+        self.patch_options = patch_options
+        self.image_patch_size = patch_options.patch_size
+        self.input_channels = patch_options.input_channels
+        self.image_height = patch_options.image_height
+        self.patch_dropout_probability = patch_options.dropout_probability
+        self.patch_bias_flag = patch_options.bias_flag
+        self.stack_num_layers = encoder_options.num_layers
+        self.stack_activation = encoder_options.activation
+        self.stack_dropout_probability = encoder_options.dropout_probability
+        self.layer_norm_position = encoder_options.layer_norm_position
+        self.positional_embedding_options = positional_embedding_options
+        self.positional_embedding_option = positional_embedding_options.option
+        self.positional_embedding_padding_idx = positional_embedding_options.padding_idx
         self.positional_embedding_auto_expand_flag = (
-            positional_embedding_auto_expand_flag
+            positional_embedding_options.auto_expand_flag
         )
-        self.attn_num_heads = attn_num_heads
-        self.attn_num_layers = attn_num_layers
-        self.attn_bias_flag = attn_bias_flag
-        self.attn_add_key_value_bias_flag = attn_add_key_value_bias_flag
-        self.ff_num_layers = ff_num_layers
-        self.ff_bias_flag = ff_bias_flag
-        self.output_num_layers = output_num_layers
-        self.output_bias_flag = output_bias_flag
+        self.attention_options = attention_options
+        self.attn_num_heads = attention_options.num_heads
+        self.attn_num_layers = attention_options.num_layers
+        self.attn_bias_flag = attention_options.bias_flag
+        self.attn_add_key_value_bias_flag = (
+            attention_options.add_key_value_bias_flag
+        )
+        self.feed_forward_options = feed_forward_options
+        self.ff_num_layers = feed_forward_options.num_layers
+        self.ff_bias_flag = feed_forward_options.bias_flag
+        self.output_options = output_options
+        self.output_num_layers = output_options.num_layers
+        self.output_bias_flag = output_options.bias_flag
         self.sequence_length = self._sequence_length()
 
     def build(self) -> ModelConfig:
@@ -115,40 +178,43 @@ class VitLinearConfigBuilder:
         return patches_per_axis * patches_per_axis + 1
 
     def _build_patch_config(self) -> LinearPatchEmbeddingConfig:
+        options = self.patch_options
         return LinearPatchEmbeddingConfig(
             embedding_dim=self.hidden_dim,
-            num_input_channels=self.input_channels,
-            patch_size=self.image_patch_size,
-            stride=self.image_patch_size,
+            num_input_channels=options.input_channels,
+            patch_size=options.patch_size,
+            stride=options.patch_size,
             padding=0,
-            dropout_probability=self.patch_dropout_probability,
+            dropout_probability=options.dropout_probability,
             embedding_stack_config=self._build_linear_stack_config(
-                input_dim=self.input_channels * self.image_patch_size**2,
+                input_dim=options.input_channels * options.patch_size**2,
                 output_dim=self.hidden_dim,
                 num_layers=1,
-                bias_flag=self.patch_bias_flag,
+                bias_flag=options.bias_flag,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
-                dropout_probability=self.stack_dropout_probability,
+                dropout_probability=self.encoder_options.dropout_probability,
                 apply_output_pipeline_flag=False,
             ),
         )
 
     def _build_positional_embedding_config(self) -> AbsolutePositionalEmbeddingConfig:
-        return self.positional_embedding_option(
+        options = self.positional_embedding_options
+        return options.option(
             num_embeddings=self.sequence_length - 1,
             embedding_dim=self.hidden_dim,
             init_size=self.sequence_length,
-            padding_idx=self.positional_embedding_padding_idx,
-            auto_expand_flag=self.positional_embedding_auto_expand_flag,
+            padding_idx=options.padding_idx,
+            auto_expand_flag=options.auto_expand_flag,
             class_token_flag=True,
         )
 
     def _build_encoder_config(self) -> LayerStackConfig:
+        options = self.encoder_options
         return LayerStackConfig(
             input_dim=self.hidden_dim,
             hidden_dim=self.hidden_dim,
             output_dim=self.hidden_dim,
-            num_layers=self.stack_num_layers,
+            num_layers=options.num_layers,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
             apply_output_pipeline_flag=True,
             layer_config=TransformerEncoderBlockLayerConfig(
@@ -163,10 +229,11 @@ class VitLinearConfigBuilder:
         )
 
     def _build_encoder_layer_config(self) -> TransformerEncoderLayerConfig:
+        options = self.encoder_options
         return TransformerEncoderLayerConfig(
             embedding_dim=self.hidden_dim,
-            layer_norm_position=self.layer_norm_position,
-            dropout_probability=self.stack_dropout_probability,
+            layer_norm_position=options.layer_norm_position,
+            dropout_probability=options.dropout_probability,
             residual_connection_option=ResidualConnectionOptions.RESIDUAL,
             causal_attention_mask_flag=False,
             attention_config=self._build_attention_config(),
@@ -174,49 +241,54 @@ class VitLinearConfigBuilder:
         )
 
     def _build_attention_config(self) -> SelfAttentionConfig:
+        encoder_options = self.encoder_options
+        attention_options = self.attention_options
         return SelfAttentionConfig(
             batch_size=self.batch_size,
-            num_heads=self.attn_num_heads,
+            num_heads=attention_options.num_heads,
             embedding_dim=self.hidden_dim,
             query_key_projection_dim=self.hidden_dim,
             value_projection_dim=self.hidden_dim,
             target_sequence_length=self.sequence_length,
             source_sequence_length=self.sequence_length,
             target_dtype=torch.float32,
-            dropout_probability=self.stack_dropout_probability,
+            dropout_probability=encoder_options.dropout_probability,
             zero_attention_flag=False,
             causal_attention_mask_flag=False,
-            add_key_value_bias_flag=self.attn_add_key_value_bias_flag,
+            add_key_value_bias_flag=attention_options.add_key_value_bias_flag,
             average_attention_weights_flag=False,
             return_attention_weights_flag=False,
             projection_model_config=self._build_linear_stack_config(
-                num_layers=self.attn_num_layers,
-                bias_flag=self.attn_bias_flag,
+                num_layers=attention_options.num_layers,
+                bias_flag=attention_options.bias_flag,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
                 dropout_probability=0.0,
             ),
         )
 
     def _build_feed_forward_config(self) -> FeedForwardConfig:
+        encoder_options = self.encoder_options
+        feed_forward_options = self.feed_forward_options
         return FeedForwardConfig(
             input_dim=self.hidden_dim,
             output_dim=self.hidden_dim,
             stack_config=self._build_linear_stack_config(
-                num_layers=self.ff_num_layers,
-                bias_flag=self.ff_bias_flag,
+                num_layers=feed_forward_options.num_layers,
+                bias_flag=feed_forward_options.bias_flag,
                 layer_norm_position=LayerNormPositionOptions.BEFORE,
-                dropout_probability=self.stack_dropout_probability,
+                dropout_probability=encoder_options.dropout_probability,
             ),
         )
 
     def _build_output_config(self) -> LayerStackConfig:
+        options = self.output_options
         return self._build_linear_stack_config(
             input_dim=self.hidden_dim,
             output_dim=self.output_dim,
-            num_layers=self.output_num_layers,
-            bias_flag=self.output_bias_flag,
+            num_layers=options.num_layers,
+            bias_flag=options.bias_flag,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
-            dropout_probability=self.stack_dropout_probability,
+            dropout_probability=self.encoder_options.dropout_probability,
             apply_output_pipeline_flag=False,
         )
 
@@ -239,7 +311,7 @@ class VitLinearConfigBuilder:
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
             apply_output_pipeline_flag=apply_output_pipeline_flag,
             layer_config=LayerConfig(
-                activation=self.stack_activation,
+                activation=self.encoder_options.activation,
                 layer_norm_position=layer_norm_position,
                 residual_connection_option=ResidualConnectionOptions.DISABLED,
                 dropout_probability=dropout_probability,

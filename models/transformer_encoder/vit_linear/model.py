@@ -1,11 +1,11 @@
-import torch.nn as nn
-from torch import Tensor
+from typing import TYPE_CHECKING
 
+import torch.nn as nn
 from emperor.base.layer import Layer
 from emperor.experiments.classifier import ClassifierExperiment
-from models.transformer_encoder.vit_linear.experiment_config import ExperimentConfig
+from torch import Tensor
 
-from typing import TYPE_CHECKING
+from models.transformer_encoder.vit_linear.experiment_config import ExperimentConfig
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
@@ -14,20 +14,22 @@ if TYPE_CHECKING:
 class Model(ClassifierExperiment):
     def __init__(
         self,
-        cfg: "ModelConfig",
+        config: "ModelConfig",
     ):
-        super().__init__(cfg)
-        if not isinstance(cfg.experiment_config, ExperimentConfig):
+        super().__init__(config)
+        if not isinstance(config.experiment_config, ExperimentConfig):
             raise TypeError(
-                "cfg.experiment_config must be a vit_linear ExperimentConfig."
+                "config.experiment_config must be a vit_linear ExperimentConfig."
             )
-        self.main_cfg: ExperimentConfig = cfg.experiment_config
+        self.experiment_config: ExperimentConfig = config.experiment_config
 
-        self.patch = self.main_cfg.patch_config.build()
-        self.positional_embedding = self.main_cfg.positional_embedding_config.build()
-        self.transformer = self.main_cfg.encoder_config.build()
-        self.encoder_layer_norm = nn.LayerNorm(cfg.hidden_dim)
-        self.output = self.main_cfg.output_config.build()
+        self.patch = self.experiment_config.patch_config.build()
+        self.positional_embedding = (
+            self.experiment_config.positional_embedding_config.build()
+        )
+        self.transformer = self.experiment_config.encoder_config.build()
+        self.encoder_layer_norm = nn.LayerNorm(self.cfg.hidden_dim)
+        self.output = self.experiment_config.output_config.build()
 
     def forward(
         self,

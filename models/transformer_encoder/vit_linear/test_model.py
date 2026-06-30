@@ -17,6 +17,14 @@ from emperor.embedding.absolute.core.config import (
 from emperor.experiments.base import GridSearch, PresetLock
 from emperor.experiments.classifier import ClassifierExperiment
 from emperor.transformer import TransformerEncoderBlockLayer, TransformerEncoderLayer
+from models.transformer_encoder._builder_options import (
+    TransformerAttentionOptions,
+    TransformerEncoderOptions,
+    TransformerFeedForwardOptions,
+    TransformerPositionalEmbeddingOptions,
+    VitOutputOptions,
+    VitPatchOptions,
+)
 from models.transformer_encoder.vit_linear.config_builder import VitLinearConfigBuilder
 from models.transformer_encoder.vit_linear.model import Model
 from models.transformer_encoder.vit_linear.presets import (
@@ -49,6 +57,90 @@ class TestVitLinearModel(unittest.TestCase):
             Experiment()._public_model_id(),
             "transformer_encoder/vit_linear",
         )
+
+    def test_option_group_build_matches_flat_kwargs(self):
+        patch_options = VitPatchOptions(
+            patch_size=4,
+            input_channels=3,
+            image_height=8,
+            dropout_probability=0.2,
+            bias_flag=False,
+        )
+        encoder_options = TransformerEncoderOptions(
+            hidden_dim=16,
+            num_layers=2,
+            activation=ActivationOptions.RELU,
+            dropout_probability=0.1,
+            layer_norm_position=LayerNormPositionOptions.AFTER,
+        )
+        positional_embedding_options = TransformerPositionalEmbeddingOptions(
+            option=ImageSinusoidalPositionalEmbeddingConfig,
+            padding_idx=None,
+            auto_expand_flag=True,
+        )
+        attention_options = TransformerAttentionOptions(
+            num_heads=4,
+            num_layers=2,
+            bias_flag=True,
+            add_key_value_bias_flag=True,
+        )
+        feed_forward_options = TransformerFeedForwardOptions(
+            num_layers=2,
+            bias_flag=False,
+        )
+        output_options = VitOutputOptions(
+            num_layers=1,
+            bias_flag=True,
+        )
+        flat_kwargs = {
+            "batch_size": 2,
+            "learning_rate": 0.02,
+            "input_dim": 192,
+            "stack_hidden_dim": encoder_options.hidden_dim,
+            "output_dim": 5,
+            "image_patch_size": patch_options.patch_size,
+            "input_channels": patch_options.input_channels,
+            "image_height": patch_options.image_height,
+            "patch_dropout_probability": patch_options.dropout_probability,
+            "patch_bias_flag": patch_options.bias_flag,
+            "stack_num_layers": encoder_options.num_layers,
+            "stack_activation": encoder_options.activation,
+            "stack_dropout_probability": encoder_options.dropout_probability,
+            "layer_norm_position": encoder_options.layer_norm_position,
+            "positional_embedding_option": positional_embedding_options.option,
+            "positional_embedding_padding_idx": (
+                positional_embedding_options.padding_idx
+            ),
+            "positional_embedding_auto_expand_flag": (
+                positional_embedding_options.auto_expand_flag
+            ),
+            "attn_num_heads": attention_options.num_heads,
+            "attn_num_layers": attention_options.num_layers,
+            "attn_bias_flag": attention_options.bias_flag,
+            "attn_add_key_value_bias_flag": (
+                attention_options.add_key_value_bias_flag
+            ),
+            "ff_num_layers": feed_forward_options.num_layers,
+            "ff_bias_flag": feed_forward_options.bias_flag,
+            "output_num_layers": output_options.num_layers,
+            "output_bias_flag": output_options.bias_flag,
+        }
+
+        flat_cfg = VitLinearConfigBuilder(**flat_kwargs).build()
+        grouped_cfg = VitLinearConfigBuilder(
+            batch_size=2,
+            learning_rate=0.02,
+            input_dim=192,
+            output_dim=5,
+            patch_options=patch_options,
+            encoder_options=encoder_options,
+            positional_embedding_options=positional_embedding_options,
+            attention_options=attention_options,
+            feed_forward_options=feed_forward_options,
+            output_options=output_options,
+        ).build()
+
+        self.assertEqual(flat_cfg, grouped_cfg)
 
     def test_module_entrypoint_resolves_cli_without_training(self):
         with (
@@ -91,7 +183,15 @@ class TestVitLinearModel(unittest.TestCase):
             },
         }
 
-        self.assertEqual(ExperimentPresets.PRESET_OVERRIDES, expected_overrides)
+        presets = ExperimentPresets()
+
+        self.assertEqual(
+            {
+                preset: presets.overrides_for_preset(preset)
+                for preset in ExperimentPreset
+            },
+            expected_overrides,
+        )
         for preset, overrides in expected_overrides.items():
             if not overrides:
                 continue
@@ -99,9 +199,7 @@ class TestVitLinearModel(unittest.TestCase):
                 self.assertEqual(
                     {
                         key: lock.value
-                        for key, lock in ExperimentPresets.PRESET_LOCKS[
-                            preset
-                        ].items()
+                        for key, lock in presets.locks_for_preset(preset).items()
                     },
                     overrides,
                 )
@@ -109,8 +207,9 @@ class TestVitLinearModel(unittest.TestCase):
     def test_preset_locks_are_exposed_with_reasons(self):
         presets = ExperimentPresets()
 
-        for preset, expected_locks in presets.PRESET_LOCKS.items():
+        for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
+                expected_locks = presets.locks_for_preset(preset)
                 locks = presets.locked_fields(preset)
 
                 self.assertEqual(set(locks), set(expected_locks))
@@ -195,10 +294,7 @@ class TestVitLinearModel(unittest.TestCase):
             len(config.SEARCH_SPACE_STACK_NUM_LAYERS),
         )
         self.assertEqual(
-            {
-                cfg.experiment_config.encoder_config.num_layers
-                for cfg in configs
-            },
+            {cfg.experiment_config.encoder_config.num_layers for cfg in configs},
             set(config.SEARCH_SPACE_STACK_NUM_LAYERS),
         )
 
@@ -403,10 +499,16 @@ class TestVitLinearModel(unittest.TestCase):
                 self.assertEqual(patch_cfg.num_input_channels, dataset.num_channels)
                 self.assertEqual(cfg.output_dim, dataset.num_classes)
                 self.assertEqual(cfg.sequence_length, expected_sequence_length)
-                self.assertEqual(positional_cfg.num_embeddings, expected_sequence_length - 1)
+                self.assertEqual(
+                    positional_cfg.num_embeddings, expected_sequence_length - 1
+                )
                 self.assertTrue(positional_cfg.class_token_flag)
-                self.assertEqual(attention_cfg.target_sequence_length, expected_sequence_length)
-                self.assertEqual(attention_cfg.source_sequence_length, expected_sequence_length)
+                self.assertEqual(
+                    attention_cfg.target_sequence_length, expected_sequence_length
+                )
+                self.assertEqual(
+                    attention_cfg.source_sequence_length, expected_sequence_length
+                )
 
     def test_presets_wire_config_variants(self):
         presets = ExperimentPresets()
