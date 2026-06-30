@@ -30,7 +30,6 @@ from models.parametric.parametric_matrix.presets import (
     Experiment,
     ExperimentPreset,
     ExperimentPresets,
-    _preset_locks,
 )
 from models.training_test_utils import (
     RandomImageClassificationDataModule,
@@ -85,40 +84,30 @@ class TestParametricMatrixModel(unittest.TestCase):
         self.assertIsNone(kwargs["selected_presets"])
 
     def test_modern_preset_contract_is_exposed(self):
+        presets = ExperimentPresets()
+
         self.assertEqual(
-            ExperimentPresets.PRESET_OVERRIDES,
+            {
+                preset: presets.overrides_for_preset(preset)
+                for preset in ExperimentPreset
+            },
             {
                 ExperimentPreset.PRESET: {},
                 ExperimentPreset.CONFIG: {},
             },
         )
-        self.assertEqual(ExperimentPresets.PRESET_LOCKS, {})
         self.assertEqual(
-            ExperimentPresets().locked_fields(ExperimentPreset.PRESET),
+            presets.locked_fields(ExperimentPreset.PRESET),
             {},
         )
 
-    def test_empty_overrides_generate_empty_locks_and_future_locks_reject(self):
-        self.assertEqual(_preset_locks(ExperimentPresets.PRESET_OVERRIDES), {})
+    def test_empty_overrides_generate_empty_locks(self):
+        presets = ExperimentPresets()
 
-        locks = _preset_locks(
-            {
-                ExperimentPreset.PRESET: {
-                    "learning_rate": config.LEARNING_RATE,
-                },
-            }
-        )
-        original_locks = ExperimentPresets.PRESET_LOCKS
-        try:
-            ExperimentPresets.PRESET_LOCKS = locks
-            with self.assertRaisesRegex(ValueError, "PRESET.*learning_rate"):
-                ExperimentPresets().get_config(
-                    ExperimentPreset.PRESET,
-                    config.DATASET_OPTIONS[0],
-                    config_overrides={"learning_rate": config.LEARNING_RATE * 2},
-                )
-        finally:
-            ExperimentPresets.PRESET_LOCKS = original_locks
+        for preset in ExperimentPreset:
+            with self.subTest(preset=preset.name):
+                self.assertEqual(presets.locks_for_preset(preset), {})
+                self.assertEqual(presets.locked_fields(preset), {})
 
     def test_builder_returns_boundary_style_experiment_config(self):
         cfg = ParametricMatrixConfigBuilder(

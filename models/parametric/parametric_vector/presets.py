@@ -1,12 +1,9 @@
-from typing import TYPE_CHECKING
-
 from emperor.base.options import BaseOptions
-from emperor.datasets.image.classification.mnist import Mnist
 from emperor.experiments.base import (
+    BuilderBackedExperimentPresetsBase,
     ExperimentBase,
     ExperimentPresetsBase,
-    PresetLock,
-    SearchMode,
+    PresetDefinition,
 )
 
 import models.parametric.parametric_vector.config as config
@@ -15,91 +12,33 @@ from models.parametric.parametric_vector.config_builder import (
 )
 from models.parametric.parametric_vector.model import Model
 
-if TYPE_CHECKING:
-    from emperor.config import ModelConfig
-
 
 class ExperimentPreset(BaseOptions):
-    PRESET = (
-        "Default config: a parametric vector classifier with a GELU linear stack "
-        "and top-1 adaptive mixture."
-    )
-    CONFIG = (
-        "Config/search preset for overriding parametric vector classifier settings."
-    )
+    PRESET = 1
+    CONFIG = 2
 
 
-def _lock(preset, value, field: str) -> PresetLock:
-    label = field.replace("_", " ")
-    return PresetLock(
-        value=value,
-        reason=(
-            f"Locked by the {preset.name} preset because this preset sets {label}."
-        ),
-    )
-
-
-def _preset_locks(
-    preset_overrides: dict["ExperimentPreset", dict[str, object]],
-) -> dict["ExperimentPreset", dict[str, PresetLock]]:
-    return {
-        preset: {
-            field: _lock(preset, value, field) for field, value in overrides.items()
-        }
-        for preset, overrides in preset_overrides.items()
-        if overrides
-    }
-
-
-_PRESET_OVERRIDES = {
-    ExperimentPreset.PRESET: {},
-    ExperimentPreset.CONFIG: {},
+_PRESET_DEFINITIONS = {
+    ExperimentPreset.PRESET: PresetDefinition(
+        preset_values={},
+        description="Default config: a parametric vector classifier with a GELU linear "
+        "stack and top-1 adaptive mixture.",
+    ),
+    ExperimentPreset.CONFIG: PresetDefinition(
+        preset_values={},
+        description="Config/search preset for overriding parametric vector classifier "
+        "settings.",
+    ),
 }
 
 
-class ExperimentPresets(ExperimentPresetsBase):
-    PRESET_OVERRIDES = _PRESET_OVERRIDES
-    PRESET_LOCKS = _preset_locks(PRESET_OVERRIDES)
-
-    def get_config(
-        self,
-        model_config_preset: ExperimentPreset = ExperimentPreset.PRESET,
-        dataset: type = Mnist,
-        search_mode: SearchMode = None,
-        log_folder: str | None = None,
-        search_keys: list[str] | None = None,
-        config_overrides: dict | None = None,
-        search_overrides: dict | None = None,
-    ) -> list["ModelConfig"]:
-        preset_callback = self._preset_callback_for_preset(model_config_preset)
-        return self._create_preset_search_space_configs(
-            dataset,
-            search_mode,
-            preset_callback,
-            search_keys,
-            config_overrides=config_overrides,
-            search_overrides=search_overrides,
-            model_config_preset=model_config_preset,
+class ExperimentPresets(BuilderBackedExperimentPresetsBase):
+    def __init__(self) -> None:
+        super().__init__(
+            _PRESET_DEFINITIONS,
+            builder_type=ParametricVectorConfigBuilder,
+            default_preset=ExperimentPreset.PRESET,
         )
-
-    def _preset_callback_for_preset(self, preset: ExperimentPreset):
-        if preset not in self.PRESET_OVERRIDES:
-            raise ValueError(
-                "The specified preset is not supported. Please choose a valid "
-                "`ExperimentPreset`."
-            )
-        return lambda **kwargs: self._preset_for_preset(preset, **kwargs)
-
-    def _preset_for_preset(
-        self,
-        preset: ExperimentPreset,
-        **kwargs,
-    ) -> "ModelConfig":
-        preset_overrides = self.PRESET_OVERRIDES[preset]
-        return self._preset(**{**kwargs, **preset_overrides})
-
-    def _preset(self, **kwargs) -> "ModelConfig":
-        return ParametricVectorConfigBuilder(**kwargs).build()
 
 
 class Experiment(ExperimentBase):

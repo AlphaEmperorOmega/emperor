@@ -9,6 +9,12 @@ from models.parametric.parametric_matrix import config
 from models.parametric.parametric_matrix._control_config_factory import (
     build_parametric_stack_config,
 )
+from models.parametric._shared_stack_factory import (
+    ParametricMixtureOptions,
+    ParametricRouterOptions,
+    ParametricSamplerOptions,
+    ParametricStackOptions,
+)
 from models.parametric.parametric_matrix.experiment_config import ExperimentConfig
 
 
@@ -55,41 +61,83 @@ class ParametricMatrixConfigBuilder:
         sampler_mutual_information_loss_weight: float = (
             config.SAMPLER_MUTUAL_INFORMATION_LOSS_WEIGHT
         ),
+        stack_options: ParametricStackOptions | None = None,
+        mixture_options: ParametricMixtureOptions | None = None,
+        sampler_options: ParametricSamplerOptions | None = None,
+        router_options: ParametricRouterOptions | None = None,
     ) -> None:
+        stack_options = stack_options or ParametricStackOptions(
+            hidden_dim=stack_hidden_dim,
+            num_layers=stack_num_layers,
+            activation=stack_activation,
+            residual_connection_option=stack_residual_connection_option,
+            dropout_probability=stack_dropout_probability,
+        )
+        mixture_options = mixture_options or ParametricMixtureOptions(
+            top_k=adaptive_mixture_top_k,
+            num_experts=adaptive_mixture_num_experts,
+            weighted_parameters_flag=adaptive_mixture_weighted_parameters_flag,
+            clip_parameter_option=adaptive_mixture_clip_parameter_option,
+            clip_range=adaptive_mixture_clip_range,
+        )
+        sampler_options = sampler_options or ParametricSamplerOptions(
+            threshold=sampler_threshold,
+            filter_above_threshold=sampler_filter_above_threshold,
+            num_topk_samples=sampler_num_topk_samples,
+            normalize_probabilities_flag=sampler_normalize_probabilities_flag,
+            noisy_topk_flag=sampler_noisy_topk_flag,
+            coefficient_of_variation_loss_weight=(
+                sampler_coefficient_of_variation_loss_weight
+            ),
+            switch_loss_weight=sampler_switch_loss_weight,
+            zero_centred_loss_weight=sampler_zero_centred_loss_weight,
+            mutual_information_loss_weight=sampler_mutual_information_loss_weight,
+        )
+        router_options = router_options or ParametricRouterOptions(
+            activation=stack_options.activation,
+        )
         self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.input_dim = input_dim
-        self.hidden_dim = stack_hidden_dim
+        self.stack_options = stack_options
+        self.hidden_dim = stack_options.hidden_dim
         self.output_dim = output_dim
-        self.stack_num_layers = stack_num_layers
-        self.stack_activation = stack_activation
-        self.stack_residual_connection_option = stack_residual_connection_option
-        self.stack_dropout_probability = stack_dropout_probability
-        self.adaptive_mixture_top_k = adaptive_mixture_top_k
-        self.adaptive_mixture_num_experts = adaptive_mixture_num_experts
+        self.stack_num_layers = stack_options.num_layers
+        self.stack_activation = stack_options.activation
+        self.stack_residual_connection_option = (
+            stack_options.residual_connection_option
+        )
+        self.stack_dropout_probability = stack_options.dropout_probability
+        self.mixture_options = mixture_options
+        self.adaptive_mixture_top_k = mixture_options.top_k
+        self.adaptive_mixture_num_experts = mixture_options.num_experts
         self.adaptive_mixture_weighted_parameters_flag = (
-            adaptive_mixture_weighted_parameters_flag
+            mixture_options.weighted_parameters_flag
         )
         self.adaptive_mixture_clip_parameter_option = (
-            adaptive_mixture_clip_parameter_option
+            mixture_options.clip_parameter_option
         )
-        self.adaptive_mixture_clip_range = adaptive_mixture_clip_range
+        self.adaptive_mixture_clip_range = mixture_options.clip_range
         self.adaptive_bias_option = adaptive_bias_option
-        self.sampler_threshold = sampler_threshold
-        self.sampler_filter_above_threshold = sampler_filter_above_threshold
-        self.sampler_num_topk_samples = sampler_num_topk_samples
+        self.sampler_options = sampler_options
+        self.sampler_threshold = sampler_options.threshold
+        self.sampler_filter_above_threshold = sampler_options.filter_above_threshold
+        self.sampler_num_topk_samples = sampler_options.num_topk_samples
         self.sampler_normalize_probabilities_flag = (
-            sampler_normalize_probabilities_flag
+            sampler_options.normalize_probabilities_flag
         )
-        self.sampler_noisy_topk_flag = sampler_noisy_topk_flag
+        self.sampler_noisy_topk_flag = sampler_options.noisy_topk_flag
         self.sampler_coefficient_of_variation_loss_weight = (
-            sampler_coefficient_of_variation_loss_weight
+            sampler_options.coefficient_of_variation_loss_weight
         )
-        self.sampler_switch_loss_weight = sampler_switch_loss_weight
-        self.sampler_zero_centred_loss_weight = sampler_zero_centred_loss_weight
+        self.sampler_switch_loss_weight = sampler_options.switch_loss_weight
+        self.sampler_zero_centred_loss_weight = (
+            sampler_options.zero_centred_loss_weight
+        )
         self.sampler_mutual_information_loss_weight = (
-            sampler_mutual_information_loss_weight
+            sampler_options.mutual_information_loss_weight
         )
+        self.router_options = router_options
 
     def build(self) -> ModelConfig:
         return ModelConfig(
@@ -106,39 +154,11 @@ class ParametricMatrixConfigBuilder:
                     input_dim=self.hidden_dim,
                     hidden_dim=self.hidden_dim,
                     output_dim=self.hidden_dim,
-                    num_layers=self.stack_num_layers,
-                    activation=self.stack_activation,
-                    residual_connection_option=self.stack_residual_connection_option,
-                    dropout_probability=self.stack_dropout_probability,
-                    adaptive_mixture_top_k=self.adaptive_mixture_top_k,
-                    adaptive_mixture_num_experts=self.adaptive_mixture_num_experts,
-                    adaptive_mixture_weighted_parameters_flag=(
-                        self.adaptive_mixture_weighted_parameters_flag
-                    ),
-                    adaptive_mixture_clip_parameter_option=(
-                        self.adaptive_mixture_clip_parameter_option
-                    ),
-                    adaptive_mixture_clip_range=self.adaptive_mixture_clip_range,
+                    stack_options=self.stack_options,
+                    mixture_options=self.mixture_options,
+                    sampler_options=self.sampler_options,
+                    router_options=self.router_options,
                     adaptive_bias_option=self.adaptive_bias_option,
-                    sampler_threshold=self.sampler_threshold,
-                    sampler_filter_above_threshold=(
-                        self.sampler_filter_above_threshold
-                    ),
-                    sampler_num_topk_samples=self.sampler_num_topk_samples,
-                    sampler_normalize_probabilities_flag=(
-                        self.sampler_normalize_probabilities_flag
-                    ),
-                    sampler_noisy_topk_flag=self.sampler_noisy_topk_flag,
-                    sampler_coefficient_of_variation_loss_weight=(
-                        self.sampler_coefficient_of_variation_loss_weight
-                    ),
-                    sampler_switch_loss_weight=self.sampler_switch_loss_weight,
-                    sampler_zero_centred_loss_weight=(
-                        self.sampler_zero_centred_loss_weight
-                    ),
-                    sampler_mutual_information_loss_weight=(
-                        self.sampler_mutual_information_loss_weight
-                    ),
                 ),
                 output_model_config=build_linear_layer_config(
                     activation=ActivationOptions.DISABLED,
