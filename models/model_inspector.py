@@ -2,9 +2,12 @@ import argparse
 import importlib
 from enum import Enum
 from typing import Any
+
 from torch.nn import Module
+
 from models.catalog import model_id_from_parts, module_path_for_model_id
-from models.parser import get_experiment_parser, resolve_experiment_mode
+from models.experiment_cli_parser import get_experiment_parser
+from models.experiment_mode import resolve_experiment_mode
 
 
 def _load_model_parts(model_name: str) -> tuple[type[Enum], Any, type[Module], type]:
@@ -32,7 +35,11 @@ def _module_details(module: Module) -> str:
     if gate_attribute is not None:
         details.append(
             "gate="
-            + ("enabled" if getattr(module, gate_attribute, None) is not None else "off")
+            + (
+                "enabled"
+                if getattr(module, gate_attribute, None) is not None
+                else "off"
+            )
         )
     if hasattr(module, "halting_model"):
         details.append(
@@ -69,15 +76,19 @@ def _print_tree_children(module: Module, prefix: str) -> None:
         _print_tree_children(child, next_prefix)
 
 
-def _preset_description(preset: Enum) -> str:
-    value = preset.value
-    if isinstance(value, str):
-        return value
-    return ""
+def _preset_description(preset: Enum, presets: Any | None = None) -> str:
+    description_for_preset = getattr(presets, "description_for_preset", None)
+    description = (
+        description_for_preset(preset) if callable(description_for_preset) else None
+    )
+    if isinstance(description, str):
+        return description
+    return preset.value if isinstance(preset.value, str) else ""
 
 
 def _print_model_structure(
     preset: Enum,
+    presets: Any,
     config_index: int,
     config_count: int,
     model: Module,
@@ -86,7 +97,7 @@ def _print_model_structure(
 
     print("=" * 100)
     print(f"{preset.name}{suffix}")
-    description = _preset_description(preset)
+    description = _preset_description(preset, presets)
     if description:
         print(f"description: {description}")
     _print_module_tree(model)
@@ -107,8 +118,7 @@ def print_experiment_models(
     preset_members = (
         selected_presets
         if selected_presets is not None
-        else
-        list(experiment_preset_enum)
+        else list(experiment_preset_enum)
         if args.all_presets
         else [experiment_preset_enum.get_member(args.preset)]
     )
@@ -126,6 +136,7 @@ def print_experiment_models(
             model = model_type(cfg)
             _print_model_structure(
                 preset,
+                presets,
                 index,
                 len(configs),
                 model,
@@ -170,7 +181,9 @@ def _parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = _parse_args()
-    experiment_preset_enum, presets, model_type, dataset = _load_model_parts(args.model_id)
+    experiment_preset_enum, presets, model_type, dataset = _load_model_parts(
+        args.model_id
+    )
     mode = resolve_experiment_mode(args, experiment_preset_enum)
     print_experiment_models(
         experiment_preset_enum,

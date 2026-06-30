@@ -1,13 +1,18 @@
 import argparse
-import ast
 import inspect
 from enum import Enum
 from pathlib import Path
-from types import ModuleType, UnionType
-from typing import Any, Union, get_args, get_origin
+from types import ModuleType
+from typing import Any
 
 from models.catalog import model_identity_payload_from_id, module_path_for_model_id
-from models.dataset_naming import dataset_class_name_to_cli_name
+from models.config_ast_listing import (
+    dataset_option_names_from_source,
+    iter_config_assignments,
+    monitor_option_names_from_source,
+    preset_option_rows_from_source,
+)
+from models.config_value_parser import parse_config_value
 
 SKIP_CONFIG_KEYS = {
     "CONFIG_OVERRIDE_SKIP_KEYS",
@@ -154,120 +159,6 @@ def iter_supported_config_keys(config_module: ModuleType) -> list[str]:
     return sorted(keys)
 
 
-def _bool_value(raw_value: str) -> bool:
-    value = raw_value.lower()
-    if value in {"true", "1", "yes", "y", "on"}:
-        return True
-    if value in {"false", "0", "no", "n", "off"}:
-        return False
-    raise argparse.ArgumentTypeError(f"expected a boolean value, got '{raw_value}'")
-
-
-def _none_value(raw_value: str) -> None:
-    if raw_value.lower() in {"none", "null"}:
-        return None
-    raise argparse.ArgumentTypeError(f"expected none/null, got '{raw_value}'")
-
-
-def _class_lookup(config_module: ModuleType, raw_value: str) -> type:
-    value = raw_value.split(".")[-1]
-    candidate = getattr(config_module, value, None)
-    if inspect.isclass(candidate):
-        return candidate
-    raise argparse.ArgumentTypeError(f"unknown config class '{raw_value}'")
-
-
-def _enum_lookup(enum_type: type[Enum], raw_value: str) -> Enum:
-    value = raw_value.split(".")[-1]
-    try:
-        return enum_type[value]
-    except KeyError as exc:
-        choices = ", ".join(enum_type.__members__)
-        raise argparse.ArgumentTypeError(
-            f"unknown {enum_type.__name__} value '{raw_value}'. Choices: {choices}"
-        ) from exc
-
-
-def _annotation_classes(annotation: Any) -> list[type]:
-    if annotation is None:
-        return []
-    origin = get_origin(annotation)
-    args = get_args(annotation)
-    if origin in {UnionType, Union}:
-        return [item for arg in args for item in _annotation_classes(arg)]
-    if origin is type and args and isinstance(args[0], type):
-        return [args[0]]
-    if inspect.isclass(annotation):
-        return [annotation]
-    return []
-
-
-def _parse_from_annotation(
-    config_module: ModuleType,
-    annotation: Any,
-    raw_value: str,
-) -> Any:
-    lowered = raw_value.lower()
-    if lowered in {"none", "null"}:
-        return None
-
-    classes = _annotation_classes(annotation)
-    enum_classes = [cls for cls in classes if issubclass(cls, Enum)]
-    if enum_classes:
-        return _enum_lookup(enum_classes[0], raw_value)
-    if bool in classes:
-        return _bool_value(raw_value)
-    if int in classes:
-        return int(raw_value)
-    if float in classes:
-        return float(raw_value)
-    if str in classes:
-        return raw_value
-    if classes:
-        return _class_lookup(config_module, raw_value)
-    return raw_value
-
-
-def parse_config_value(
-    config_module: ModuleType,
-    key: str,
-    raw_value: str,
-) -> Any:
-    current_value = getattr(config_module, key, None)
-    if raw_value.lower() in {"none", "null"}:
-        return None
-    if isinstance(current_value, list):
-        sample_value = next(
-            (value for value in current_value if value is not None), None
-        )
-        if sample_value is None:
-            if raw_value.lower() in {"none", "null"}:
-                return None
-            return raw_value
-        temp_key = f"__{key}_ITEM"
-        setattr(config_module, temp_key, sample_value)
-        try:
-            return parse_config_value(config_module, temp_key, raw_value)
-        finally:
-            delattr(config_module, temp_key)
-    if isinstance(current_value, bool):
-        return _bool_value(raw_value)
-    if isinstance(current_value, int) and not isinstance(current_value, bool):
-        return int(raw_value)
-    if isinstance(current_value, float):
-        return float(raw_value)
-    if isinstance(current_value, str):
-        return raw_value
-    if isinstance(current_value, Enum):
-        return _enum_lookup(type(current_value), raw_value)
-    if inspect.isclass(current_value):
-        return _class_lookup(config_module, raw_value)
-    if current_value is None:
-        annotation = getattr(config_module, "__annotations__", {}).get(key)
-        return _parse_from_annotation(config_module, annotation, raw_value)
-    return raw_value
-
-
 def parse_search_set(
     config_module: ModuleType,
     raw_value: str,
@@ -379,100 +270,6 @@ def extract_config_overrides(
     return overrides, search_overrides
 
 
-def _source_value(source: str, node: ast.AST) -> str:
-    value = ast.get_source_segment(source, node)
-    if value is None:
-        return "..."
-    return " ".join(value.split())
-
-
-def _iter_assignment_nodes(tree: ast.Module):
-    for node in tree.body:
-        key = None
-        value_node = None
-        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-            key = node.target.id
-            value_node = node.value
-        elif isinstance(node, ast.Assign) and len(node.targets) == 1:
-            target = node.targets[0]
-            if isinstance(target, ast.Name):
-                key = target.id
-                value_node = node.value
-        if key is not None and value_node is not None:
-            yield key, value_node
-
-
-def _config_assignment_rows_from_source(
-    source: str,
-) -> tuple[dict[str, str], dict[str, str]]:
-    tree = ast.parse(source)
-    config_options: dict[str, str] = {}
-    search_options: dict[str, str] = {}
-    module_skip_keys = set()
-
-    for key, value_node in _iter_assignment_nodes(tree):
-        if key != "CONFIG_OVERRIDE_SKIP_KEYS" or value_node is None:
-            continue
-        try:
-            raw_skip_keys = ast.literal_eval(value_node)
-        except (SyntaxError, ValueError):
-            continue
-        if isinstance(raw_skip_keys, (list, tuple, set)):
-            module_skip_keys.update(
-                item for item in raw_skip_keys if isinstance(item, str)
-            )
-
-    skip_keys = SKIP_CONFIG_KEYS | module_skip_keys
-
-    for key, value_node in _iter_assignment_nodes(tree):
-        if not key.isupper() or key in skip_keys:
-            continue
-
-        default = _source_value(source, value_node)
-        if key.startswith("SEARCH_SPACE_"):
-            search_options[key[len("SEARCH_SPACE_") :]] = default
-        else:
-            config_options[key] = default
-
-    return config_options, search_options
-
-
-def _imports_shared_trainer_config(tree: ast.Module) -> bool:
-    for node in tree.body:
-        if not isinstance(node, ast.ImportFrom):
-            continue
-        if node.module != "models.trainer_config":
-            continue
-        if any(alias.name == "*" for alias in node.names):
-            return True
-    return False
-
-
-def _iter_config_assignments(
-    config_path: Path,
-) -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
-    source = config_path.read_text()
-    tree = ast.parse(source)
-    config_options: dict[str, str] = {}
-    search_options: dict[str, str] = {}
-
-    if _imports_shared_trainer_config(tree):
-        shared_source = Path(__file__).with_name("trainer_config.py").read_text()
-        shared_config_options, shared_search_options = (
-            _config_assignment_rows_from_source(shared_source)
-        )
-        config_options.update(shared_config_options)
-        search_options.update(shared_search_options)
-
-    local_config_options, local_search_options = _config_assignment_rows_from_source(
-        source
-    )
-    config_options.update(local_config_options)
-    search_options.update(local_search_options)
-
-    return list(config_options.items()), list(search_options.items())
-
-
 def _catalog_source_path(
     experiment: str,
     filename: str,
@@ -498,7 +295,11 @@ def print_config_options(experiment: str, models_dir: str = "models") -> None:
     if not config_path.exists():
         raise SystemExit(f"Config file not found: {config_path}")
 
-    config_options, search_options = _iter_config_assignments(config_path)
+    config_options, search_options = iter_config_assignments(
+        config_path,
+        shared_config_path=Path(__file__).with_name("trainer_config.py"),
+        base_skip_keys=SKIP_CONFIG_KEYS,
+    )
 
     print(f"Config options for {_display_model_selector(experiment)}:")
     for key, default in config_options:
@@ -517,40 +318,17 @@ def print_preset_options(experiment: str, models_dir: str = "models") -> None:
         raise SystemExit(f"Presets file not found: {presets_path}")
 
     source = presets_path.read_text()
-    tree = ast.parse(source)
+    preset_rows = preset_option_rows_from_source(source)
+
     print(f"Available presets for {_display_model_selector(experiment)}:")
 
-    for node in tree.body:
-        if not isinstance(node, ast.ClassDef) or node.name != "ExperimentPreset":
-            continue
-        for item in node.body:
-            key = None
-            value_node = None
-            if isinstance(item, ast.Assign) and len(item.targets) == 1:
-                target = item.targets[0]
-                if isinstance(target, ast.Name):
-                    key = target.id
-                    value_node = item.value
-            elif isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name):
-                key = item.target.id
-                value_node = item.value
-
-            if key is None or value_node is None:
-                continue
-            value = ast.literal_eval(value_node)
-            description = f"  --  {value}" if isinstance(value, str) else ""
-            print(f"  {config_key_to_flag(key)[2:]}{description}")
+    if preset_rows is not None:
+        for key, description in preset_rows:
+            description_suffix = f"  --  {description}" if description else ""
+            print(f"  {config_key_to_flag(key)[2:]}{description_suffix}")
         return
 
     raise SystemExit(f"ExperimentPreset not found in {presets_path}")
-
-
-def _dataset_option_name(item: ast.AST) -> str | None:
-    if isinstance(item, ast.Name):
-        return item.id
-    if isinstance(item, ast.Attribute):
-        return item.attr
-    return None
 
 
 def print_dataset_options(experiment: str, models_dir: str = "models") -> None:
@@ -559,52 +337,13 @@ def print_dataset_options(experiment: str, models_dir: str = "models") -> None:
         raise SystemExit(f"Config file not found: {config_path}")
 
     source = config_path.read_text()
-    tree = ast.parse(source)
-
-    for node in tree.body:
-        key = None
-        value_node = None
-        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-            key = node.target.id
-            value_node = node.value
-        elif isinstance(node, ast.Assign) and len(node.targets) == 1:
-            target = node.targets[0]
-            if isinstance(target, ast.Name):
-                key = target.id
-                value_node = node.value
-
-        if key != "DATASET_OPTIONS" or not isinstance(
-            value_node,
-            ast.List | ast.Tuple,
-        ):
-            continue
-
-        dataset_names = [
-            name
-            for item in value_node.elts
-            if (name := _dataset_option_name(item)) is not None
-        ]
-        if not dataset_names:
-            raise SystemExit(f"No DATASET_OPTIONS found for {experiment}")
+    dataset_names = dataset_option_names_from_source(source)
+    if dataset_names:
         for dataset_name in dataset_names:
-            print(dataset_class_name_to_cli_name(dataset_name))
+            print(dataset_name)
         return
 
     raise SystemExit(f"No DATASET_OPTIONS found for {experiment}")
-
-
-def _monitor_option_name(item: ast.AST) -> str | None:
-    if not isinstance(item, ast.Call):
-        return None
-    for keyword in item.keywords:
-        if keyword.arg != "name":
-            continue
-        try:
-            value = ast.literal_eval(keyword.value)
-        except (SyntaxError, ValueError):
-            return None
-        return value if isinstance(value, str) else None
-    return None
 
 
 def print_monitor_options(experiment: str, models_dir: str = "models") -> None:
@@ -613,30 +352,11 @@ def print_monitor_options(experiment: str, models_dir: str = "models") -> None:
         raise SystemExit(f"Config file not found: {config_path}")
 
     source = config_path.read_text()
-    tree = ast.parse(source)
-
-    for node in tree.body:
-        key = None
-        value_node = None
-        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-            key = node.target.id
-            value_node = node.value
-        elif isinstance(node, ast.Assign) and len(node.targets) == 1:
-            target = node.targets[0]
-            if isinstance(target, ast.Name):
-                key = target.id
-                value_node = node.value
-
-        if key != "MONITOR_OPTIONS":
-            continue
-        if not isinstance(value_node, ast.List | ast.Tuple):
-            return
-
-        for item in value_node.elts:
-            name = _monitor_option_name(item)
-            if name is not None:
-                print(name)
+    monitor_names = monitor_option_names_from_source(source)
+    if monitor_names is None:
         return
+    for name in monitor_names:
+        print(name)
 
 
 def main() -> None:
