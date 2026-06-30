@@ -105,7 +105,13 @@ def preset_cli_name(experiment_preset_enum: type[Enum], preset: Enum) -> str:
     return preset.name.lower().replace("_", "-")
 
 
-def preset_description(preset: Enum) -> str:
+def preset_description(preset: Enum, presets: Any | None = None) -> str:
+    description_for_preset = getattr(presets, "description_for_preset", None)
+    description = (
+        description_for_preset(preset) if callable(description_for_preset) else None
+    )
+    if isinstance(description, str):
+        return description
     return preset.value if isinstance(preset.value, str) else ""
 
 
@@ -238,7 +244,7 @@ def list_model_presets(model_name: str) -> list[dict[str, str]]:
         {
             "name": preset_cli_name(parts.experiment_preset_enum, preset),
             "label": preset.name,
-            "description": preset_description(preset),
+            "description": preset_description(preset, parts.presets),
         }
         for preset in parts.experiment_preset_enum
     ]
