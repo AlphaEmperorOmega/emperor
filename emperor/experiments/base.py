@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from typing import Callable
+from typing import Callable, Mapping
 from emperor.config import ModelConfig
 from emperor.base.options import BaseOptions
 from lightning import Trainer, seed_everything
@@ -48,6 +48,12 @@ class PresetLock:
 
 
 @dataclass(frozen=True)
+class PresetDefinition:
+    preset_values: Mapping[str, object]
+    description: str
+
+
+@dataclass(frozen=True)
 class _EffectivePresetLock:
     field: str
     lock: PresetLock
@@ -63,6 +69,8 @@ class _PresetLockConflict:
 
 
 SearchMode = GridSearch | RandomSearch | None
+_DEFAULT_MODEL_CONFIG_PRESET = object()
+_DEFAULT_DATASET = object()
 
 
 @dataclass
@@ -187,7 +195,11 @@ def create_search_space(
 
 
 class ExperimentPresetsBase:
-    PRESET_LOCKS: dict[object, dict[str, PresetLock | object]] = {}
+    def __init__(
+        self,
+        preset_definitions: Mapping[object, PresetDefinition],
+    ) -> None:
+        self._preset_definitions = dict(preset_definitions)
 
     def get_config(
         self,
@@ -208,20 +220,39 @@ class ExperimentPresetsBase:
             "The method '_preset' must be implemented in the subclass."
         )
 
-    def locked_fields(self, model_config_preset) -> dict[str, PresetLock]:
-        locks = self.PRESET_LOCKS.get(model_config_preset, {})
+    def definition_for_preset(self, model_config_preset) -> PresetDefinition:
+        try:
+            return self._preset_definitions[model_config_preset]
+        except KeyError as exc:
+            raise ValueError(
+                "The specified preset is not supported. Please choose a valid "
+                "`ExperimentPreset`."
+            ) from exc
+
+    def overrides_for_preset(self, model_config_preset) -> dict[str, object]:
+        return dict(self.definition_for_preset(model_config_preset).preset_values)
+
+    def description_for_preset(self, model_config_preset) -> str:
+        return self.definition_for_preset(model_config_preset).description
+
+    def locks_for_preset(self, model_config_preset) -> dict[str, PresetLock]:
         return {
-            key: value
-            if isinstance(value, PresetLock)
-            else PresetLock(
+            field: PresetLock(
                 value=value,
-                reason=(
-                    f"Locked by the {model_config_preset.name} preset because this "
-                    "preset owns this model behavior."
-                ),
+                reason=self._preset_lock_reason(model_config_preset, field),
             )
-            for key, value in locks.items()
+            for field, value in self.overrides_for_preset(model_config_preset).items()
         }
+
+    def _preset_lock_reason(self, model_config_preset, field: str) -> str:
+        label = field.replace("_", " ")
+        return (
+            f"Locked by the {model_config_preset.name} preset because this preset "
+            f"sets {label}."
+        )
+
+    def locked_fields(self, model_config_preset) -> dict[str, PresetLock]:
+        return dict(self.locks_for_preset(model_config_preset))
 
     def _create_default_preset_configs(
         self,
@@ -524,6 +555,64 @@ class ExperimentPresetsBase:
         if isinstance(value, type):
             return value.__name__
         return repr(value)
+
+
+class BuilderBackedExperimentPresetsBase(ExperimentPresetsBase):
+    def __init__(
+        self,
+        preset_definitions: Mapping[object, PresetDefinition],
+        *,
+        builder_type: type,
+        default_preset: object,
+        default_dataset: type = Mnist,
+    ) -> None:
+        super().__init__(preset_definitions)
+        self._builder_type = builder_type
+        self._default_preset = default_preset
+        self._default_dataset = default_dataset
+
+    def get_config(
+        self,
+        model_config_preset=_DEFAULT_MODEL_CONFIG_PRESET,
+        dataset: type = _DEFAULT_DATASET,
+        search_mode: SearchMode = None,
+        log_folder: str | None = None,
+        search_keys: list[str] | None = None,
+        config_overrides: dict | None = None,
+        search_overrides: dict | None = None,
+    ) -> list["ModelConfig"]:
+        if model_config_preset is _DEFAULT_MODEL_CONFIG_PRESET:
+            model_config_preset = self._default_preset
+        model_config_preset = self._normalize_model_config_preset(model_config_preset)
+        if dataset is _DEFAULT_DATASET:
+            dataset = self._default_dataset
+        preset_callback = self._preset_callback_for_preset(model_config_preset)
+        return self._create_preset_search_space_configs(
+            dataset,
+            search_mode,
+            preset_callback,
+            search_keys,
+            config_overrides=config_overrides,
+            search_overrides=search_overrides,
+            model_config_preset=model_config_preset,
+        )
+
+    def _normalize_model_config_preset(self, model_config_preset):
+        return model_config_preset
+
+    def _preset_callback_for_preset(self, preset):
+        self.definition_for_preset(preset)
+        return lambda **kwargs: self._preset_for_preset(preset, **kwargs)
+
+    def _preset_for_preset(
+        self,
+        preset,
+        **kwargs,
+    ) -> "ModelConfig":
+        return self._preset(**{**kwargs, **self.overrides_for_preset(preset)})
+
+    def _preset(self, **kwargs) -> "ModelConfig":
+        return self._builder_type(**kwargs).build()
 
 
 class ExperimentBase:
@@ -843,7 +932,7 @@ class ExperimentBase:
         runtime_config = self._load_runtime_config(training_run.config_overrides)
         dataset = training_run.dataset_type(batch_size=training_run.config.batch_size)
         self._configure_dataset(dataset, runtime_config)
-        model = self.model_type(cfg=training_run.config)
+        model = self.model_type(training_run.config)
         logger = TensorBoardLogger(
             save_dir="logs",
             name=self._build_log_path(
