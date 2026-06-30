@@ -8,15 +8,15 @@ from emperor.patch import PatchConfig
 
 @dataclass
 class ExperimentConfig(ConfigBase):
-    patch_config: "PatchConfig | None" = optional_field(
+    patch_config: PatchConfig | None = optional_field(
         "Config for image patch extraction and projection."
     )
-    positional_embedding_config: "AbsolutePositionalEmbeddingConfig | None" = (
+    positional_embedding_config: AbsolutePositionalEmbeddingConfig | None = (
         optional_field("Config for image positional embeddings added to patches.")
     )
-    encoder_config: "LayerStackConfig | None" = optional_field(
+    encoder_config: LayerStackConfig | None = optional_field(
         "Config for the generic LayerStack transformer encoder block stack."
     )
-    output_config: "LayerStackConfig | None" = optional_field(
+    output_config: LayerStackConfig | None = optional_field(
         "Config for the [CLS] classification head."
     )

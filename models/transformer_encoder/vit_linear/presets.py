@@ -1,61 +1,24 @@
-from typing import TYPE_CHECKING
-
 from emperor.base.options import BaseOptions, LayerNormPositionOptions
-from emperor.datasets.image.classification.mnist import Mnist
 from emperor.embedding.absolute.core.config import (
     ImageSinusoidalPositionalEmbeddingConfig,
 )
 from emperor.experiments.base import (
+    BuilderBackedExperimentPresetsBase,
     ExperimentBase,
     ExperimentPresetsBase,
-    PresetLock,
-    SearchMode,
+    PresetDefinition,
 )
 
 import models.transformer_encoder.vit_linear.config as config
 from models.transformer_encoder.vit_linear.config_builder import VitLinearConfigBuilder
 from models.transformer_encoder.vit_linear.model import Model
 
-if TYPE_CHECKING:
-    from emperor.config import ModelConfig
-
 
 class ExperimentPreset(BaseOptions):
-    BASELINE = (
-        "Default config: a Vision Transformer classifier with linear patch "
-        "embeddings, a trainable class token, learned image positions, and a "
-        "pre-norm bidirectional encoder."
-    )
-    POST_NORM = (
-        "Default config with layer normalization applied after each encoder sub-block."
-    )
-    SINUSOIDAL = "Default config with fixed sinusoidal image positional embeddings."
-    ATTENTION_BIAS = (
-        "Default config with attention projection bias and key/value bias enabled."
-    )
-
-
-def _lock(preset, value, behavior: str) -> PresetLock:
-    return PresetLock(
-        value=value,
-        reason=(
-            f"Locked by the {preset.name} preset because this preset enables "
-            f"{behavior}."
-        ),
-    )
-
-
-def _preset_locks(
-    preset_overrides: dict[ExperimentPreset, dict[str, object]],
-) -> dict[ExperimentPreset, dict[str, PresetLock]]:
-    return {
-        preset: {
-            field: _lock(preset, value, _PRESET_LOCK_BEHAVIORS[field])
-            for field, value in overrides.items()
-        }
-        for preset, overrides in preset_overrides.items()
-        if overrides
-    }
+    BASELINE = 1
+    POST_NORM = 2
+    SINUSOIDAL = 3
+    ATTENTION_BIAS = 4
 
 
 _PRESET_LOCK_BEHAVIORS = {
@@ -65,44 +28,43 @@ _PRESET_LOCK_BEHAVIORS = {
     "attn_add_key_value_bias_flag": "attention key/value bias",
 }
 
-_PRESET_OVERRIDES = {
-    ExperimentPreset.BASELINE: {},
-    ExperimentPreset.POST_NORM: {
-        "layer_norm_position": LayerNormPositionOptions.AFTER,
-    },
-    ExperimentPreset.SINUSOIDAL: {
-        "positional_embedding_option": ImageSinusoidalPositionalEmbeddingConfig,
-    },
-    ExperimentPreset.ATTENTION_BIAS: {
-        "attn_bias_flag": True,
-        "attn_add_key_value_bias_flag": True,
-    },
+_PRESET_DEFINITIONS = {
+    ExperimentPreset.BASELINE: PresetDefinition(
+        preset_values={},
+        description="Default config: a Vision Transformer classifier with linear patch "
+        "embeddings, a trainable class token, learned image positions, and a "
+        "pre-norm bidirectional encoder.",
+    ),
+    ExperimentPreset.POST_NORM: PresetDefinition(
+        preset_values={
+            "layer_norm_position": LayerNormPositionOptions.AFTER,
+        },
+        description="Default config with layer normalization applied after each encoder "
+        "sub-block.",
+    ),
+    ExperimentPreset.SINUSOIDAL: PresetDefinition(
+        preset_values={
+            "positional_embedding_option": ImageSinusoidalPositionalEmbeddingConfig,
+        },
+        description="Default config with fixed sinusoidal image positional embeddings.",
+    ),
+    ExperimentPreset.ATTENTION_BIAS: PresetDefinition(
+        preset_values={
+            "attn_bias_flag": True,
+            "attn_add_key_value_bias_flag": True,
+        },
+        description="Default config with attention projection bias and key/value bias "
+        "enabled.",
+    ),
 }
 
 
-class ExperimentPresets(ExperimentPresetsBase):
-    PRESET_OVERRIDES = _PRESET_OVERRIDES
-    PRESET_LOCKS = _preset_locks(PRESET_OVERRIDES)
-
-    def get_config(
-        self,
-        model_config_preset: ExperimentPreset = ExperimentPreset.BASELINE,
-        dataset: type = Mnist,
-        search_mode: SearchMode = None,
-        log_folder: str | None = None,
-        search_keys: list[str] | None = None,
-        config_overrides: dict | None = None,
-        search_overrides: dict | None = None,
-    ) -> list["ModelConfig"]:
-        preset_callback = self._preset_callback_for_preset(model_config_preset)
-        return self._create_preset_search_space_configs(
-            dataset,
-            search_mode,
-            preset_callback,
-            search_keys,
-            config_overrides=config_overrides,
-            search_overrides=search_overrides,
-            model_config_preset=model_config_preset,
+class ExperimentPresets(BuilderBackedExperimentPresetsBase):
+    def __init__(self) -> None:
+        super().__init__(
+            _PRESET_DEFINITIONS,
+            builder_type=VitLinearConfigBuilder,
+            default_preset=ExperimentPreset.BASELINE,
         )
 
     def _dataset_config(self, dataset: type) -> dict:
@@ -113,24 +75,12 @@ class ExperimentPresets(ExperimentPresetsBase):
             "output_dim": dataset.num_classes,
         }
 
-    def _preset_callback_for_preset(self, preset: ExperimentPreset):
-        if preset not in self.PRESET_OVERRIDES:
-            raise ValueError(
-                "The specified preset is not supported. Please choose a valid "
-                "`ExperimentPreset`."
-            )
-        return lambda **kwargs: self._preset_for_preset(preset, **kwargs)
-
-    def _preset_for_preset(
-        self,
-        preset: ExperimentPreset,
-        **kwargs,
-    ) -> "ModelConfig":
-        preset_overrides = self.PRESET_OVERRIDES[preset]
-        return self._preset(**{**kwargs, **preset_overrides})
-
-    def _preset(self, **kwargs) -> "ModelConfig":
-        return VitLinearConfigBuilder(**kwargs).build()
+    def _preset_lock_reason(self, preset: ExperimentPreset, field: str) -> str:
+        behavior = _PRESET_LOCK_BEHAVIORS[field]
+        return (
+            f"Locked by the {preset.name} preset because this preset enables "
+            f"{behavior}."
+        )
 
 
 class Experiment(ExperimentBase):

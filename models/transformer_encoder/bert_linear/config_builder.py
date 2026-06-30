@@ -17,6 +17,12 @@ from emperor.transformer.core.config import (
     TransformerEncoderBlockLayerConfig,
 )
 from emperor.transformer.feed_forward import FeedForwardConfig
+from models.transformer_encoder._builder_options import (
+    TransformerAttentionOptions,
+    TransformerEncoderOptions,
+    TransformerFeedForwardOptions,
+    TransformerPositionalEmbeddingOptions,
+)
 from emperor.embedding.absolute.core.config import AbsolutePositionalEmbeddingConfig
 from models.transformer_encoder.bert_linear.experiment_config import ExperimentConfig
 
@@ -52,30 +58,71 @@ class BertLinearConfigBuilder:
         attn_add_key_value_bias_flag: bool = config.ATTN_ADD_KEY_VALUE_BIAS_FLAG,
         ff_num_layers: int = config.FF_NUM_LAYERS,
         ff_bias_flag: bool = config.FF_BIAS_FLAG,
+        encoder_options: TransformerEncoderOptions | None = None,
+        positional_embedding_options: (
+            TransformerPositionalEmbeddingOptions | None
+        ) = None,
+        attention_options: TransformerAttentionOptions | None = None,
+        feed_forward_options: TransformerFeedForwardOptions | None = None,
     ) -> None:
+        encoder_options = encoder_options or TransformerEncoderOptions(
+            hidden_dim=stack_hidden_dim,
+            num_layers=stack_num_layers,
+            activation=stack_activation,
+            dropout_probability=stack_dropout_probability,
+            layer_norm_position=layer_norm_position,
+            causal_attention_mask_flag=causal_attention_mask_flag,
+        )
+        positional_embedding_options = (
+            positional_embedding_options
+            or TransformerPositionalEmbeddingOptions(
+                option=positional_embedding_option,
+                padding_idx=positional_embedding_padding_idx,
+                auto_expand_flag=positional_embedding_auto_expand_flag,
+            )
+        )
+        attention_options = attention_options or TransformerAttentionOptions(
+            num_heads=attn_num_heads,
+            num_layers=attn_num_layers,
+            bias_flag=attn_bias_flag,
+            add_key_value_bias_flag=attn_add_key_value_bias_flag,
+        )
+        feed_forward_options = (
+            feed_forward_options
+            or TransformerFeedForwardOptions(
+                num_layers=ff_num_layers,
+                bias_flag=ff_bias_flag,
+            )
+        )
         self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.input_dim = input_dim
-        self.hidden_dim = stack_hidden_dim
+        self.encoder_options = encoder_options
+        self.hidden_dim = encoder_options.hidden_dim
         self.output_dim = output_dim
         self.sequence_length = sequence_length
-        self.stack_num_layers = stack_num_layers
-        self.stack_activation = stack_activation
-        self.stack_dropout_probability = stack_dropout_probability
-        self.layer_norm_position = layer_norm_position
-        self.causal_attention_mask_flag = causal_attention_mask_flag
-        self.positional_embedding_option = positional_embedding_option
-        self.positional_embedding_padding_idx = positional_embedding_padding_idx
+        self.stack_num_layers = encoder_options.num_layers
+        self.stack_activation = encoder_options.activation
+        self.stack_dropout_probability = encoder_options.dropout_probability
+        self.layer_norm_position = encoder_options.layer_norm_position
+        self.causal_attention_mask_flag = encoder_options.causal_attention_mask_flag
+        self.positional_embedding_options = positional_embedding_options
+        self.positional_embedding_option = positional_embedding_options.option
+        self.positional_embedding_padding_idx = positional_embedding_options.padding_idx
         self.positional_embedding_auto_expand_flag = (
-            positional_embedding_auto_expand_flag
+            positional_embedding_options.auto_expand_flag
         )
         self.embedding_dropout_probability = embedding_dropout_probability
-        self.attn_num_heads = attn_num_heads
-        self.attn_num_layers = attn_num_layers
-        self.attn_bias_flag = attn_bias_flag
-        self.attn_add_key_value_bias_flag = attn_add_key_value_bias_flag
-        self.ff_num_layers = ff_num_layers
-        self.ff_bias_flag = ff_bias_flag
+        self.attention_options = attention_options
+        self.attn_num_heads = attention_options.num_heads
+        self.attn_num_layers = attention_options.num_layers
+        self.attn_bias_flag = attention_options.bias_flag
+        self.attn_add_key_value_bias_flag = (
+            attention_options.add_key_value_bias_flag
+        )
+        self.feed_forward_options = feed_forward_options
+        self.ff_num_layers = feed_forward_options.num_layers
+        self.ff_bias_flag = feed_forward_options.bias_flag
 
     def build(self) -> "ModelConfig":
         from emperor.config import ModelConfig
@@ -95,20 +142,22 @@ class BertLinearConfigBuilder:
         )
 
     def _build_positional_embedding_config(self) -> AbsolutePositionalEmbeddingConfig:
-        return self.positional_embedding_option(
+        options = self.positional_embedding_options
+        return options.option(
             num_embeddings=self.sequence_length,
             embedding_dim=self.hidden_dim,
             init_size=self.sequence_length,
-            padding_idx=self.positional_embedding_padding_idx,
-            auto_expand_flag=self.positional_embedding_auto_expand_flag,
+            padding_idx=options.padding_idx,
+            auto_expand_flag=options.auto_expand_flag,
         )
 
     def _build_encoder_config(self) -> LayerStackConfig:
+        options = self.encoder_options
         return LayerStackConfig(
             input_dim=self.hidden_dim,
             hidden_dim=self.hidden_dim,
             output_dim=self.hidden_dim,
-            num_layers=self.stack_num_layers,
+            num_layers=options.num_layers,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
             apply_output_pipeline_flag=True,
             # The wrapped TransformerEncoderLayer owns its own norm, residual, and
@@ -125,49 +174,54 @@ class BertLinearConfigBuilder:
         )
 
     def _build_encoder_layer_config(self) -> TransformerEncoderLayerConfig:
+        options = self.encoder_options
         return TransformerEncoderLayerConfig(
             embedding_dim=self.hidden_dim,
-            layer_norm_position=self.layer_norm_position,
-            dropout_probability=self.stack_dropout_probability,
+            layer_norm_position=options.layer_norm_position,
+            dropout_probability=options.dropout_probability,
             residual_connection_option=ResidualConnectionOptions.RESIDUAL,
-            causal_attention_mask_flag=self.causal_attention_mask_flag,
+            causal_attention_mask_flag=options.causal_attention_mask_flag,
             attention_config=self._build_attention_config(),
             feed_forward_config=self._build_feed_forward_config(),
         )
 
     def _build_attention_config(self) -> SelfAttentionConfig:
+        encoder_options = self.encoder_options
+        attention_options = self.attention_options
         return SelfAttentionConfig(
             batch_size=self.batch_size,
-            num_heads=self.attn_num_heads,
+            num_heads=attention_options.num_heads,
             embedding_dim=self.hidden_dim,
             query_key_projection_dim=self.hidden_dim,
             value_projection_dim=self.hidden_dim,
             target_sequence_length=self.sequence_length,
             source_sequence_length=self.sequence_length,
             target_dtype=torch.float32,
-            dropout_probability=self.stack_dropout_probability,
+            dropout_probability=encoder_options.dropout_probability,
             zero_attention_flag=False,
-            causal_attention_mask_flag=self.causal_attention_mask_flag,
-            add_key_value_bias_flag=self.attn_add_key_value_bias_flag,
+            causal_attention_mask_flag=encoder_options.causal_attention_mask_flag,
+            add_key_value_bias_flag=attention_options.add_key_value_bias_flag,
             average_attention_weights_flag=False,
             return_attention_weights_flag=False,
             projection_model_config=self._build_linear_stack_config(
-                num_layers=self.attn_num_layers,
-                bias_flag=self.attn_bias_flag,
+                num_layers=attention_options.num_layers,
+                bias_flag=attention_options.bias_flag,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
                 dropout_probability=0.0,
             ),
         )
 
     def _build_feed_forward_config(self) -> FeedForwardConfig:
+        encoder_options = self.encoder_options
+        feed_forward_options = self.feed_forward_options
         return FeedForwardConfig(
             input_dim=self.hidden_dim,
             output_dim=self.hidden_dim,
             stack_config=self._build_linear_stack_config(
-                num_layers=self.ff_num_layers,
-                bias_flag=self.ff_bias_flag,
+                num_layers=feed_forward_options.num_layers,
+                bias_flag=feed_forward_options.bias_flag,
                 layer_norm_position=LayerNormPositionOptions.BEFORE,
-                dropout_probability=self.stack_dropout_probability,
+                dropout_probability=encoder_options.dropout_probability,
             ),
         )
 
@@ -190,7 +244,7 @@ class BertLinearConfigBuilder:
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
             apply_output_pipeline_flag=apply_output_pipeline_flag,
             layer_config=LayerConfig(
-                activation=self.stack_activation,
+                activation=self.encoder_options.activation,
                 layer_norm_position=layer_norm_position,
                 residual_connection_option=ResidualConnectionOptions.DISABLED,
                 dropout_probability=dropout_probability,

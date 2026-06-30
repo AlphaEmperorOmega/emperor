@@ -10,7 +10,7 @@ from torch import nn
 
 import models.transformer_encoder.bert_linear.config as config
 
-from emperor.base.options import LayerNormPositionOptions
+from emperor.base.options import ActivationOptions, LayerNormPositionOptions
 from emperor.attention import AttentionLayerState
 from emperor.embedding.absolute.core.config import (
     TextLearnedPositionalEmbeddingConfig,
@@ -23,6 +23,15 @@ from emperor.transformer import (
     TransformerEncoderLayer,
 )
 from models.transformer_encoder.bert_linear.model import Model
+from models.transformer_encoder._builder_options import (
+    TransformerAttentionOptions,
+    TransformerEncoderOptions,
+    TransformerFeedForwardOptions,
+    TransformerPositionalEmbeddingOptions,
+)
+from models.transformer_encoder.bert_linear.config_builder import (
+    BertLinearConfigBuilder,
+)
 from models.transformer_encoder.bert_linear.presets import (
     Experiment,
     ExperimentPreset,
@@ -53,6 +62,78 @@ class TestBertLinearModel(unittest.TestCase):
             Experiment()._public_model_id(),
             "transformer_encoder/bert_linear",
         )
+
+    def test_option_group_build_matches_flat_kwargs(self):
+        encoder_options = TransformerEncoderOptions(
+            hidden_dim=16,
+            num_layers=1,
+            activation=ActivationOptions.MISH,
+            dropout_probability=0.1,
+            layer_norm_position=LayerNormPositionOptions.AFTER,
+            causal_attention_mask_flag=True,
+        )
+        positional_embedding_options = TransformerPositionalEmbeddingOptions(
+            option=TextSinusoidalPositionalEmbeddingConfig,
+            padding_idx=0,
+            auto_expand_flag=True,
+        )
+        attention_options = TransformerAttentionOptions(
+            num_heads=4,
+            num_layers=2,
+            bias_flag=True,
+            add_key_value_bias_flag=True,
+        )
+        feed_forward_options = TransformerFeedForwardOptions(
+            num_layers=2,
+            bias_flag=False,
+        )
+        flat_kwargs = {
+            "batch_size": 2,
+            "learning_rate": 0.02,
+            "input_dim": 32,
+            "stack_hidden_dim": encoder_options.hidden_dim,
+            "output_dim": 32,
+            "sequence_length": 8,
+            "stack_num_layers": encoder_options.num_layers,
+            "stack_activation": encoder_options.activation,
+            "stack_dropout_probability": encoder_options.dropout_probability,
+            "layer_norm_position": encoder_options.layer_norm_position,
+            "causal_attention_mask_flag": (
+                encoder_options.causal_attention_mask_flag
+            ),
+            "positional_embedding_option": positional_embedding_options.option,
+            "positional_embedding_padding_idx": (
+                positional_embedding_options.padding_idx
+            ),
+            "positional_embedding_auto_expand_flag": (
+                positional_embedding_options.auto_expand_flag
+            ),
+            "embedding_dropout_probability": 0.2,
+            "attn_num_heads": attention_options.num_heads,
+            "attn_num_layers": attention_options.num_layers,
+            "attn_bias_flag": attention_options.bias_flag,
+            "attn_add_key_value_bias_flag": (
+                attention_options.add_key_value_bias_flag
+            ),
+            "ff_num_layers": feed_forward_options.num_layers,
+            "ff_bias_flag": feed_forward_options.bias_flag,
+        }
+
+        flat_cfg = BertLinearConfigBuilder(**flat_kwargs).build()
+        grouped_cfg = BertLinearConfigBuilder(
+            batch_size=2,
+            learning_rate=0.02,
+            input_dim=32,
+            output_dim=32,
+            sequence_length=8,
+            embedding_dropout_probability=0.2,
+            encoder_options=encoder_options,
+            positional_embedding_options=positional_embedding_options,
+            attention_options=attention_options,
+            feed_forward_options=feed_forward_options,
+        ).build()
+
+        self.assertEqual(flat_cfg, grouped_cfg)
 
     def test_module_entrypoint_resolves_cli_without_training(self):
         with (
@@ -101,7 +182,15 @@ class TestBertLinearModel(unittest.TestCase):
             },
         }
 
-        self.assertEqual(ExperimentPresets.PRESET_OVERRIDES, expected_overrides)
+        presets = ExperimentPresets()
+
+        self.assertEqual(
+            {
+                preset: presets.overrides_for_preset(preset)
+                for preset in ExperimentPreset
+            },
+            expected_overrides,
+        )
         for preset, overrides in expected_overrides.items():
             if not overrides:
                 continue
@@ -109,9 +198,7 @@ class TestBertLinearModel(unittest.TestCase):
                 self.assertEqual(
                     {
                         key: lock.value
-                        for key, lock in ExperimentPresets.PRESET_LOCKS[
-                            preset
-                        ].items()
+                        for key, lock in presets.locks_for_preset(preset).items()
                     },
                     overrides,
                 )
@@ -140,8 +227,9 @@ class TestBertLinearModel(unittest.TestCase):
     def test_preset_locks_are_exposed_with_reasons(self):
         presets = ExperimentPresets()
 
-        for preset, expected_locks in presets.PRESET_LOCKS.items():
+        for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
+                expected_locks = presets.locks_for_preset(preset)
                 locks = presets.locked_fields(preset)
 
                 self.assertEqual(set(locks), set(expected_locks))
