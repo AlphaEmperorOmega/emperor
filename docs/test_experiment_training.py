@@ -9,6 +9,7 @@ import emperor.experiments.base as experiments_base
 from emperor.experiments.base import (
     ExperimentBase,
     ExperimentPresetsBase,
+    PresetDefinition,
     _result_metrics_payload,
 )
 from emperor.experiments.monitors import MonitorOption
@@ -58,6 +59,15 @@ class FakeOption(Enum):
 
 class FakePresetGenerator(ExperimentPresetsBase):
     def __init__(self):
+        super().__init__(
+            {
+                preset: PresetDefinition(
+                    preset_values={},
+                    description=preset.name.lower(),
+                )
+                for preset in FakeOption
+            }
+        )
         self.seen_datasets = []
         self.seen_presets = []
 
