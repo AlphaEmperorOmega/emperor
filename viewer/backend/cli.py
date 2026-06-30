@@ -79,11 +79,17 @@ def _print_tree(result: dict[str, Any]) -> None:
     walk(ROOT_NODE_ID, "")
 
 
-def _print_result(preset: Enum, index: int, count: int, result: dict[str, Any]) -> None:
+def _print_result(
+    preset: Enum,
+    presets: Any,
+    index: int,
+    count: int,
+    result: dict[str, Any],
+) -> None:
     suffix = f" config {index + 1}/{count}" if count > 1 else ""
     print("=" * 100)
     print(f"{preset.name}{suffix}")
-    description = preset_description(preset)
+    description = preset_description(preset, presets)
     if description:
         print(f"description: {description}")
     _print_tree(result)
@@ -164,7 +170,7 @@ def main() -> None:
         return
 
     for preset, result in results:
-        _print_result(preset, 0, 1, result)
+        _print_result(preset, parts.presets, 0, 1, result)
 
 
 if __name__ == "__main__":
