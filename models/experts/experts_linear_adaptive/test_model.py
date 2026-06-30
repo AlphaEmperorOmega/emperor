@@ -37,8 +37,19 @@ from emperor.experts.core.options import (
     RoutingInitializationMode,
 )
 from emperor.experiments.base import RandomSearch
+from emperor.halting.options import HaltingHiddenStateModeOptions
 from emperor.linears.core.config import LinearLayerConfig
 from models.config_overrides import parse_config_value
+from models.experts._builder_options import (
+    ExpertsAdaptiveGeneratorStackOptions,
+    ExpertsControllerStackOptions,
+    ExpertsLayerControllerOptions,
+    ExpertsMixtureOptions,
+    ExpertsRecurrentControllerOptions,
+    ExpertsRouterOptions,
+    ExpertsSamplerOptions,
+    ExpertsStackOptions,
+)
 from models.experts.experts_linear_adaptive.config_builder import (
     ExpertsLinearAdaptiveConfigBuilder,
 )
@@ -140,6 +151,294 @@ class TestExpertsLinearAdaptiveModel(unittest.TestCase):
         )
 
         self.assertEqual(len(configs), 2)
+
+    def test_option_group_build_matches_flat_kwargs(self):
+        def controller_stack_kwargs(
+            prefix: str,
+            options: ExpertsControllerStackOptions,
+            *,
+            bias_name: str,
+            include_hidden: bool,
+        ):
+            values = {
+                f"{prefix}_num_layers": options.num_layers,
+                f"{prefix}_last_layer_bias_option": (
+                    options.last_layer_bias_option
+                ),
+                f"{prefix}_apply_output_pipeline_flag": (
+                    options.apply_output_pipeline_flag
+                ),
+                f"{prefix}_activation": options.activation,
+                f"{prefix}_layer_norm_position": options.layer_norm_position,
+                f"{prefix}_residual_connection_option": (
+                    options.residual_connection_option
+                ),
+                f"{prefix}_dropout_probability": options.dropout_probability,
+                bias_name: options.bias_flag,
+            }
+            if include_hidden:
+                values[f"{prefix}_hidden_dim"] = options.hidden_dim
+            return values
+
+        stack_options = ExpertsStackOptions(
+            hidden_dim=16,
+            bias_flag=False,
+            layer_norm_position=LayerNormPositionOptions.AFTER,
+            num_layers=3,
+            activation=ActivationOptions.MISH,
+            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            dropout_probability=0.13,
+            last_layer_bias_option=LastLayerBiasOptions.ENABLED,
+            apply_output_pipeline_flag=True,
+        )
+        mixture_options = ExpertsMixtureOptions(
+            top_k=2,
+            num_experts=5,
+            capacity_factor=1.25,
+            dropped_token_behavior=DroppedTokenOptions.IDENTITY,
+            compute_expert_mixture_flag=True,
+            weighted_parameters_flag=True,
+            weighting_position_option=ExpertWeightingPositionOptions.AFTER_EXPERTS,
+            routing_initialization_mode=RoutingInitializationMode.SHARED,
+        )
+        expert_stack_options = ExpertsControllerStackOptions(
+            hidden_dim=stack_options.hidden_dim,
+            num_layers=2,
+            last_layer_bias_option=LastLayerBiasOptions.DISABLED,
+            apply_output_pipeline_flag=True,
+            activation=ActivationOptions.GELU,
+            layer_norm_position=LayerNormPositionOptions.BEFORE,
+            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            dropout_probability=0.05,
+            bias_flag=False,
+        )
+        sampler_options = ExpertsSamplerOptions(
+            threshold=0.17,
+            filter_above_threshold=True,
+            num_topk_samples=3,
+            normalize_probabilities_flag=False,
+            noisy_topk_flag=True,
+            coefficient_of_variation_loss_weight=0.11,
+            switch_loss_weight=0.12,
+            zero_centred_loss_weight=0.13,
+            mutual_information_loss_weight=0.14,
+        )
+        router_options = ExpertsRouterOptions(noisy_topk_flag=True)
+        sampler_stack_options = ExpertsControllerStackOptions(
+            hidden_dim=stack_options.hidden_dim,
+            num_layers=2,
+            last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
+            apply_output_pipeline_flag=False,
+            activation=ActivationOptions.SILU,
+            layer_norm_position=LayerNormPositionOptions.AFTER,
+            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            dropout_probability=0.07,
+            bias_flag=True,
+        )
+        gate_stack_options = ExpertsControllerStackOptions(
+            hidden_dim=18,
+            num_layers=2,
+            last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
+            apply_output_pipeline_flag=True,
+            activation=ActivationOptions.TANH,
+            layer_norm_position=LayerNormPositionOptions.BEFORE,
+            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            dropout_probability=0.03,
+            bias_flag=False,
+        )
+        halting_stack_options = ExpertsControllerStackOptions(
+            hidden_dim=20,
+            num_layers=2,
+            last_layer_bias_option=LastLayerBiasOptions.DISABLED,
+            apply_output_pipeline_flag=False,
+            activation=ActivationOptions.RELU,
+            layer_norm_position=LayerNormPositionOptions.AFTER,
+            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            dropout_probability=0.04,
+            bias_flag=False,
+        )
+        layer_controller_options = ExpertsLayerControllerOptions(
+            stack_gate_flag=True,
+            gate_option=LayerGateOptions.ADDITION,
+            gate_activation=ActivationOptions.TANH,
+            gate_stack_options=gate_stack_options,
+            stack_halting_flag=True,
+            halting_threshold=0.63,
+            halting_dropout=0.08,
+            halting_hidden_state_mode=HaltingHiddenStateModeOptions.ACCUMULATED,
+            halting_stack_options=halting_stack_options,
+            halting_output_dim=2,
+        )
+        adaptive_generator_stack_options = ExpertsAdaptiveGeneratorStackOptions(
+            hidden_dim=12,
+            num_layers=2,
+            last_layer_bias_option=LastLayerBiasOptions.DISABLED,
+            apply_output_pipeline_flag=False,
+            activation=ActivationOptions.ELU,
+            layer_norm_position=LayerNormPositionOptions.BEFORE,
+            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            dropout_probability=0.09,
+        )
+        recurrent_controller_options = ExpertsRecurrentControllerOptions(
+            recurrent_flag=True,
+            recurrent_max_steps=3,
+            recurrent_layer_norm_position=LayerNormPositionOptions.AFTER,
+            recurrent_gate_flag=True,
+            recurrent_gate_option=LayerGateOptions.MULTIPLIER,
+            recurrent_gate_activation=ActivationOptions.SIGMOID,
+            recurrent_halting_flag=True,
+        )
+        flat_kwargs = {
+            "batch_size": 3,
+            "learning_rate": 0.02,
+            "input_dim": 8,
+            "output_dim": 4,
+            "stack_hidden_dim": stack_options.hidden_dim,
+            "stack_bias_flag": stack_options.bias_flag,
+            "layer_norm_position": stack_options.layer_norm_position,
+            "stack_num_layers": stack_options.num_layers,
+            "stack_activation": stack_options.activation,
+            "stack_residual_connection_option": (
+                stack_options.residual_connection_option
+            ),
+            "stack_dropout_probability": stack_options.dropout_probability,
+            "stack_last_layer_bias_option": (
+                stack_options.last_layer_bias_option
+            ),
+            "stack_apply_output_pipeline_flag": (
+                stack_options.apply_output_pipeline_flag
+            ),
+            "top_k": mixture_options.top_k,
+            "num_experts": mixture_options.num_experts,
+            "capacity_factor": mixture_options.capacity_factor,
+            "dropped_token_behavior": mixture_options.dropped_token_behavior,
+            "compute_expert_mixture_flag": (
+                mixture_options.compute_expert_mixture_flag
+            ),
+            "weighted_parameters_flag": mixture_options.weighted_parameters_flag,
+            "weighting_position_option": (
+                mixture_options.weighting_position_option
+            ),
+            "routing_initialization_mode": (
+                mixture_options.routing_initialization_mode
+            ),
+            "sampler_threshold": sampler_options.threshold,
+            "sampler_filter_above_threshold": (
+                sampler_options.filter_above_threshold
+            ),
+            "sampler_num_topk_samples": sampler_options.num_topk_samples,
+            "sampler_normalize_probabilities_flag": (
+                sampler_options.normalize_probabilities_flag
+            ),
+            "sampler_noisy_topk_flag": sampler_options.noisy_topk_flag,
+            "sampler_coefficient_of_variation_loss_weight": (
+                sampler_options.coefficient_of_variation_loss_weight
+            ),
+            "sampler_switch_loss_weight": sampler_options.switch_loss_weight,
+            "sampler_zero_centred_loss_weight": (
+                sampler_options.zero_centred_loss_weight
+            ),
+            "sampler_mutual_information_loss_weight": (
+                sampler_options.mutual_information_loss_weight
+            ),
+            "router_noisy_topk_flag": router_options.noisy_topk_flag,
+            "stack_gate_flag": layer_controller_options.stack_gate_flag,
+            "gate_option": layer_controller_options.gate_option,
+            "gate_activation": layer_controller_options.gate_activation,
+            "stack_halting_flag": layer_controller_options.stack_halting_flag,
+            "halting_threshold": layer_controller_options.halting_threshold,
+            "halting_dropout": layer_controller_options.halting_dropout,
+            "halting_hidden_state_mode": (
+                layer_controller_options.halting_hidden_state_mode
+            ),
+            "halting_output_dim": layer_controller_options.halting_output_dim,
+            "adaptive_generator_stack_hidden_dim": (
+                adaptive_generator_stack_options.hidden_dim
+            ),
+            "adaptive_generator_stack_num_layers": (
+                adaptive_generator_stack_options.num_layers
+            ),
+            "adaptive_generator_stack_last_layer_bias_option": (
+                adaptive_generator_stack_options.last_layer_bias_option
+            ),
+            "adaptive_generator_stack_apply_output_pipeline_flag": (
+                adaptive_generator_stack_options.apply_output_pipeline_flag
+            ),
+            "adaptive_generator_stack_activation": (
+                adaptive_generator_stack_options.activation
+            ),
+            "adaptive_generator_stack_layer_norm_position": (
+                adaptive_generator_stack_options.layer_norm_position
+            ),
+            "adaptive_generator_stack_residual_connection_option": (
+                adaptive_generator_stack_options.residual_connection_option
+            ),
+            "adaptive_generator_stack_dropout_probability": (
+                adaptive_generator_stack_options.dropout_probability
+            ),
+            "recurrent_flag": recurrent_controller_options.recurrent_flag,
+            "recurrent_max_steps": (
+                recurrent_controller_options.recurrent_max_steps
+            ),
+            "recurrent_layer_norm_position": (
+                recurrent_controller_options.recurrent_layer_norm_position
+            ),
+            "recurrent_gate_flag": (
+                recurrent_controller_options.recurrent_gate_flag
+            ),
+            "recurrent_gate_option": (
+                recurrent_controller_options.recurrent_gate_option
+            ),
+            "recurrent_gate_activation": (
+                recurrent_controller_options.recurrent_gate_activation
+            ),
+            "recurrent_halting_flag": (
+                recurrent_controller_options.recurrent_halting_flag
+            ),
+            **controller_stack_kwargs(
+                "expert_stack",
+                expert_stack_options,
+                bias_name="expert_bias_flag",
+                include_hidden=False,
+            ),
+            **controller_stack_kwargs(
+                "sampler_stack",
+                sampler_stack_options,
+                bias_name="sampler_bias_flag",
+                include_hidden=False,
+            ),
+            **controller_stack_kwargs(
+                "gate_stack",
+                gate_stack_options,
+                bias_name="gate_stack_bias_flag",
+                include_hidden=True,
+            ),
+            **controller_stack_kwargs(
+                "halting_stack",
+                halting_stack_options,
+                bias_name="halting_stack_bias_flag",
+                include_hidden=True,
+            ),
+        }
+
+        flat_cfg = ExpertsLinearAdaptiveConfigBuilder(**flat_kwargs).build()
+        grouped_cfg = ExpertsLinearAdaptiveConfigBuilder(
+            batch_size=3,
+            learning_rate=0.02,
+            input_dim=8,
+            output_dim=4,
+            stack_options=stack_options,
+            mixture_options=mixture_options,
+            expert_stack_options=expert_stack_options,
+            sampler_options=sampler_options,
+            router_options=router_options,
+            sampler_stack_options=sampler_stack_options,
+            layer_controller_options=layer_controller_options,
+            adaptive_generator_stack_options=adaptive_generator_stack_options,
+            recurrent_controller_options=recurrent_controller_options,
+        ).build()
+
+        self.assertEqual(flat_cfg, grouped_cfg)
 
     def test_shared_gate_config_is_stored_on_stack_config(self):
         shared_gate_config = self.shared_gate_config()
@@ -295,76 +594,113 @@ class TestExpertsLinearAdaptiveModel(unittest.TestCase):
 
     def test_new_adaptive_moe_presets_wire_config(self):
         presets = ExperimentPresets()
+        cases = [
+            {
+                "preset": ExperimentPreset.ADAPTIVE_SHARED_ROUTER,
+                "config_role": "adaptive shared router",
+                "model_routing": RoutingInitializationMode.SHARED,
+                "expert_weight": DualModelDynamicWeightConfig,
+            },
+            {
+                "preset": ExperimentPreset.ADAPTIVE_AFTER_WEIGHT,
+                "config_role": "adaptive after weight",
+                "weighting_position": (
+                    ExpertWeightingPositionOptions.AFTER_EXPERTS
+                ),
+                "expert_weight": DualModelDynamicWeightConfig,
+            },
+            {
+                "preset": ExperimentPreset.ADAPTIVE_TOP1_SWITCH,
+                "config_role": "adaptive top1 switch",
+                "top_k": 1,
+                "normalize_probabilities": False,
+                "switch_loss_weight": 0.1,
+                "expert_weight": DualModelDynamicWeightConfig,
+            },
+            {
+                "preset": ExperimentPreset.ADAPTIVE_FULL_SHARED,
+                "config_role": "adaptive full shared",
+                "model_routing": RoutingInitializationMode.SHARED,
+                "full_adaptive": True,
+            },
+            {
+                "preset": ExperimentPreset.ADAPTIVE_FULL_CAPACITY,
+                "config_role": "adaptive full capacity",
+                "top_k": 1,
+                "capacity_factor": 1.0,
+                "normalize_probabilities": False,
+                "dropped_token_behavior": DroppedTokenOptions.ZEROS,
+                "full_adaptive": True,
+            },
+            {
+                "preset": ExperimentPreset.ADAPTIVE_BANK_ROUTER,
+                "config_role": "adaptive bank router",
+                "model_routing": RoutingInitializationMode.SHARED,
+                "router_weight": LayeredWeightedBankDynamicWeightConfig,
+            },
+        ]
 
-        cfg = presets.get_config(ExperimentPreset.ADAPTIVE_SHARED_ROUTER)[0]
-        moe_model_cfg = cfg.experiment_config.model_config
-        self.assertEqual(
-            moe_model_cfg.routing_initialization_mode,
-            RoutingInitializationMode.SHARED,
-        )
-        self.assertIsInstance(
-            self._expert_augmentation_config(cfg).weight_config,
-            DualModelDynamicWeightConfig,
-        )
+        for case in cases:
+            preset = case["preset"]
+            with self.subTest(
+                preset=preset.name,
+                expected_config_role=case["config_role"],
+            ):
+                cfg = presets.get_config(preset)[0]
+                moe_model_cfg = cfg.experiment_config.model_config
+                moe_layer_cfg = self._moe_layer_config(cfg)
+                expert_augmentation_config = self._expert_augmentation_config(cfg)
 
-        cfg = presets.get_config(ExperimentPreset.ADAPTIVE_AFTER_WEIGHT)[0]
-        moe_layer_cfg = self._moe_layer_config(cfg)
-        self.assertEqual(
-            moe_layer_cfg.weighting_position_option,
-            ExpertWeightingPositionOptions.AFTER_EXPERTS,
-        )
-        self.assertIsInstance(
-            self._expert_augmentation_config(cfg).weight_config,
-            DualModelDynamicWeightConfig,
-        )
-
-        cfg = presets.get_config(ExperimentPreset.ADAPTIVE_TOP1_SWITCH)[0]
-        moe_layer_cfg = self._moe_layer_config(cfg)
-        self.assertEqual(moe_layer_cfg.top_k, 1)
-        self.assertFalse(moe_layer_cfg.sampler_config.normalize_probabilities_flag)
-        self.assertEqual(moe_layer_cfg.sampler_config.switch_loss_weight, 0.1)
-        self.assertIsInstance(
-            self._expert_augmentation_config(cfg).weight_config,
-            DualModelDynamicWeightConfig,
-        )
-
-        cfg = presets.get_config(ExperimentPreset.ADAPTIVE_FULL_SHARED)[0]
-        moe_model_cfg = cfg.experiment_config.model_config
-        self.assertEqual(
-            moe_model_cfg.routing_initialization_mode,
-            RoutingInitializationMode.SHARED,
-        )
-        self._assert_full_adaptive_augmentation(
-            self._expert_augmentation_config(cfg)
-        )
-
-        cfg = presets.get_config(ExperimentPreset.ADAPTIVE_FULL_CAPACITY)[0]
-        moe_layer_cfg = self._moe_layer_config(cfg)
-        self.assertEqual(moe_layer_cfg.top_k, 1)
-        self.assertEqual(moe_layer_cfg.capacity_factor, 1.0)
-        self.assertFalse(moe_layer_cfg.sampler_config.normalize_probabilities_flag)
-        self.assertEqual(
-            moe_layer_cfg.dropped_token_behavior,
-            DroppedTokenOptions.ZEROS,
-        )
-        self._assert_full_adaptive_augmentation(
-            self._expert_augmentation_config(cfg)
-        )
-
-        cfg = presets.get_config(ExperimentPreset.ADAPTIVE_BANK_ROUTER)[0]
-        moe_model_cfg = cfg.experiment_config.model_config
-        router_augmentation_config = (
-            moe_model_cfg.sampler_config.router_config.model_config.layer_config
-            .layer_model_config.adaptive_augmentation_config
-        )
-        self.assertEqual(
-            moe_model_cfg.routing_initialization_mode,
-            RoutingInitializationMode.SHARED,
-        )
-        self.assertIsInstance(
-            router_augmentation_config.weight_config,
-            LayeredWeightedBankDynamicWeightConfig,
-        )
+                if "model_routing" in case:
+                    self.assertEqual(
+                        moe_model_cfg.routing_initialization_mode,
+                        case["model_routing"],
+                    )
+                if "weighting_position" in case:
+                    self.assertEqual(
+                        moe_layer_cfg.weighting_position_option,
+                        case["weighting_position"],
+                    )
+                if "top_k" in case:
+                    self.assertEqual(moe_layer_cfg.top_k, case["top_k"])
+                if "capacity_factor" in case:
+                    self.assertEqual(
+                        moe_layer_cfg.capacity_factor,
+                        case["capacity_factor"],
+                    )
+                if "normalize_probabilities" in case:
+                    self.assertEqual(
+                        moe_layer_cfg.sampler_config.normalize_probabilities_flag,
+                        case["normalize_probabilities"],
+                    )
+                if "switch_loss_weight" in case:
+                    self.assertEqual(
+                        moe_layer_cfg.sampler_config.switch_loss_weight,
+                        case["switch_loss_weight"],
+                    )
+                if "dropped_token_behavior" in case:
+                    self.assertEqual(
+                        moe_layer_cfg.dropped_token_behavior,
+                        case["dropped_token_behavior"],
+                    )
+                if "expert_weight" in case:
+                    self.assertIsInstance(
+                        expert_augmentation_config.weight_config,
+                        case["expert_weight"],
+                    )
+                if case.get("full_adaptive"):
+                    self._assert_full_adaptive_augmentation(
+                        expert_augmentation_config
+                    )
+                if "router_weight" in case:
+                    router_augmentation_config = (
+                        moe_model_cfg.sampler_config.router_config.model_config
+                        .layer_config.layer_model_config.adaptive_augmentation_config
+                    )
+                    self.assertIsInstance(
+                        router_augmentation_config.weight_config,
+                        case["router_weight"],
+                    )
 
     def test_auxiliary_loss_presets_return_finite_loss(self):
         batch_size = 2

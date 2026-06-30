@@ -17,6 +17,15 @@ from emperor.experts.core.options import (
     RoutingInitializationMode,
 )
 from emperor.halting.options import HaltingHiddenStateModeOptions
+from models.experts._builder_options import (
+    ExpertsControllerStackOptions,
+    ExpertsLayerControllerOptions,
+    ExpertsMixtureOptions,
+    ExpertsRecurrentControllerOptions,
+    ExpertsRouterOptions,
+    ExpertsSamplerOptions,
+    ExpertsStackOptions,
+)
 from models.experts.experts_linear._control_config_factory import ControlConfigFactory
 from models.experts.experts_linear.experiment_config import ExperimentConfig
 
@@ -110,108 +119,283 @@ class ExpertsLinearConfigBuilder:
         recurrent_gate_activation: ActivationOptions | None = config.RECURRENT_GATE_ACTIVATION,
         recurrent_halting_flag: bool = config.RECURRENT_HALTING_FLAG,
         shared_gate_config: GateConfig | None = None,
+        stack_options: ExpertsStackOptions | None = None,
+        mixture_options: ExpertsMixtureOptions | None = None,
+        expert_stack_options: ExpertsControllerStackOptions | None = None,
+        sampler_options: ExpertsSamplerOptions | None = None,
+        router_options: ExpertsRouterOptions | None = None,
+        sampler_stack_options: ExpertsControllerStackOptions | None = None,
+        layer_controller_options: ExpertsLayerControllerOptions | None = None,
+        recurrent_controller_options: ExpertsRecurrentControllerOptions | None = None,
     ) -> None:
+        stack_options = stack_options or ExpertsStackOptions(
+            hidden_dim=stack_hidden_dim,
+            bias_flag=stack_bias_flag,
+            layer_norm_position=layer_norm_position,
+            num_layers=stack_num_layers,
+            activation=stack_activation,
+            residual_connection_option=stack_residual_connection_option,
+            dropout_probability=stack_dropout_probability,
+            last_layer_bias_option=stack_last_layer_bias_option,
+            apply_output_pipeline_flag=stack_apply_output_pipeline_flag,
+        )
+        mixture_options = mixture_options or ExpertsMixtureOptions(
+            top_k=top_k,
+            num_experts=num_experts,
+            capacity_factor=capacity_factor,
+            dropped_token_behavior=dropped_token_behavior,
+            compute_expert_mixture_flag=compute_expert_mixture_flag,
+            weighted_parameters_flag=weighted_parameters_flag,
+            weighting_position_option=weighting_position_option,
+            routing_initialization_mode=routing_initialization_mode,
+        )
+        expert_stack_options = expert_stack_options or ExpertsControllerStackOptions(
+            hidden_dim=stack_options.hidden_dim,
+            num_layers=expert_stack_num_layers,
+            last_layer_bias_option=expert_stack_last_layer_bias_option,
+            apply_output_pipeline_flag=expert_stack_apply_output_pipeline_flag,
+            activation=expert_stack_activation,
+            layer_norm_position=expert_stack_layer_norm_position,
+            residual_connection_option=expert_stack_residual_connection_option,
+            dropout_probability=expert_stack_dropout_probability,
+            bias_flag=expert_bias_flag,
+        )
+        sampler_options = sampler_options or ExpertsSamplerOptions(
+            threshold=sampler_threshold,
+            filter_above_threshold=sampler_filter_above_threshold,
+            num_topk_samples=sampler_num_topk_samples,
+            normalize_probabilities_flag=sampler_normalize_probabilities_flag,
+            noisy_topk_flag=sampler_noisy_topk_flag,
+            coefficient_of_variation_loss_weight=(
+                sampler_coefficient_of_variation_loss_weight
+            ),
+            switch_loss_weight=sampler_switch_loss_weight,
+            zero_centred_loss_weight=sampler_zero_centred_loss_weight,
+            mutual_information_loss_weight=sampler_mutual_information_loss_weight,
+        )
+        router_options = router_options or ExpertsRouterOptions(
+            noisy_topk_flag=router_noisy_topk_flag,
+        )
+        sampler_stack_options = sampler_stack_options or ExpertsControllerStackOptions(
+            hidden_dim=stack_options.hidden_dim,
+            num_layers=sampler_stack_num_layers,
+            last_layer_bias_option=sampler_stack_last_layer_bias_option,
+            apply_output_pipeline_flag=sampler_stack_apply_output_pipeline_flag,
+            activation=sampler_stack_activation,
+            layer_norm_position=sampler_stack_layer_norm_position,
+            residual_connection_option=sampler_stack_residual_connection_option,
+            dropout_probability=sampler_stack_dropout_probability,
+            bias_flag=sampler_bias_flag,
+        )
+        layer_controller_options = (
+            layer_controller_options
+            or ExpertsLayerControllerOptions(
+                stack_gate_flag=stack_gate_flag,
+                gate_option=gate_option,
+                gate_activation=gate_activation,
+                gate_stack_options=ExpertsControllerStackOptions(
+                    hidden_dim=gate_stack_hidden_dim,
+                    num_layers=gate_stack_num_layers,
+                    last_layer_bias_option=gate_stack_last_layer_bias_option,
+                    apply_output_pipeline_flag=gate_stack_apply_output_pipeline_flag,
+                    activation=gate_stack_activation,
+                    layer_norm_position=gate_stack_layer_norm_position,
+                    residual_connection_option=gate_stack_residual_connection_option,
+                    dropout_probability=gate_stack_dropout_probability,
+                    bias_flag=gate_stack_bias_flag,
+                ),
+                stack_halting_flag=stack_halting_flag,
+                halting_threshold=halting_threshold,
+                halting_dropout=halting_dropout,
+                halting_hidden_state_mode=halting_hidden_state_mode,
+                halting_stack_options=ExpertsControllerStackOptions(
+                    hidden_dim=halting_stack_hidden_dim,
+                    num_layers=halting_stack_num_layers,
+                    last_layer_bias_option=halting_stack_last_layer_bias_option,
+                    apply_output_pipeline_flag=(
+                        halting_stack_apply_output_pipeline_flag
+                    ),
+                    activation=halting_stack_activation,
+                    layer_norm_position=halting_stack_layer_norm_position,
+                    residual_connection_option=(
+                        halting_stack_residual_connection_option
+                    ),
+                    dropout_probability=halting_stack_dropout_probability,
+                    bias_flag=halting_stack_bias_flag,
+                ),
+                halting_output_dim=halting_output_dim,
+                shared_gate_config=shared_gate_config,
+            )
+        )
+        recurrent_controller_options = (
+            recurrent_controller_options
+            or ExpertsRecurrentControllerOptions(
+                recurrent_flag=recurrent_flag,
+                recurrent_max_steps=recurrent_max_steps,
+                recurrent_layer_norm_position=recurrent_layer_norm_position,
+                recurrent_gate_flag=recurrent_gate_flag,
+                recurrent_gate_option=recurrent_gate_option,
+                recurrent_gate_activation=recurrent_gate_activation,
+                recurrent_halting_flag=recurrent_halting_flag,
+            )
+        )
         self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.input_dim = input_dim
-        self.hidden_dim = stack_hidden_dim
+        self.stack_options = stack_options
+        self.hidden_dim = stack_options.hidden_dim
         self.output_dim = output_dim
-        self.bias_flag = stack_bias_flag
-        self.layer_norm_position = layer_norm_position
-        self.stack_num_layers = stack_num_layers
-        self.stack_activation = stack_activation
-        self.stack_residual_connection_option = stack_residual_connection_option
-        self.stack_dropout_probability = stack_dropout_probability
-        self.stack_last_layer_bias_option = stack_last_layer_bias_option
-        self.stack_apply_output_pipeline_flag = stack_apply_output_pipeline_flag
-        self.top_k = top_k
-        self.num_experts = num_experts
-        self.capacity_factor = capacity_factor
-        self.dropped_token_behavior = dropped_token_behavior
-        self.compute_expert_mixture_flag = compute_expert_mixture_flag
-        self.weighted_parameters_flag = weighted_parameters_flag
-        self.weighting_position_option = weighting_position_option
-        self.routing_initialization_mode = routing_initialization_mode
-        self.expert_stack_num_layers = expert_stack_num_layers
-        self.expert_stack_activation = expert_stack_activation
+        self.bias_flag = stack_options.bias_flag
+        self.layer_norm_position = stack_options.layer_norm_position
+        self.stack_num_layers = stack_options.num_layers
+        self.stack_activation = stack_options.activation
+        self.stack_residual_connection_option = (
+            stack_options.residual_connection_option
+        )
+        self.stack_dropout_probability = stack_options.dropout_probability
+        self.stack_last_layer_bias_option = stack_options.last_layer_bias_option
+        self.stack_apply_output_pipeline_flag = (
+            stack_options.apply_output_pipeline_flag
+        )
+        self.mixture_options = mixture_options
+        self.top_k = mixture_options.top_k
+        self.num_experts = mixture_options.num_experts
+        self.capacity_factor = mixture_options.capacity_factor
+        self.dropped_token_behavior = mixture_options.dropped_token_behavior
+        self.compute_expert_mixture_flag = (
+            mixture_options.compute_expert_mixture_flag
+        )
+        self.weighted_parameters_flag = mixture_options.weighted_parameters_flag
+        self.weighting_position_option = mixture_options.weighting_position_option
+        self.routing_initialization_mode = (
+            mixture_options.routing_initialization_mode
+        )
+        self.expert_stack_options = expert_stack_options
+        self.expert_stack_num_layers = expert_stack_options.num_layers
+        self.expert_stack_activation = expert_stack_options.activation
         self.expert_stack_residual_connection_option = (
-            expert_stack_residual_connection_option
+            expert_stack_options.residual_connection_option
         )
-        self.expert_stack_dropout_probability = expert_stack_dropout_probability
-        self.expert_stack_layer_norm_position = expert_stack_layer_norm_position
-        self.expert_stack_last_layer_bias_option = expert_stack_last_layer_bias_option
+        self.expert_stack_dropout_probability = (
+            expert_stack_options.dropout_probability
+        )
+        self.expert_stack_layer_norm_position = (
+            expert_stack_options.layer_norm_position
+        )
+        self.expert_stack_last_layer_bias_option = (
+            expert_stack_options.last_layer_bias_option
+        )
         self.expert_stack_apply_output_pipeline_flag = (
-            expert_stack_apply_output_pipeline_flag
+            expert_stack_options.apply_output_pipeline_flag
         )
-        self.expert_bias_flag = expert_bias_flag
-        self.sampler_threshold = sampler_threshold
-        self.sampler_filter_above_threshold = sampler_filter_above_threshold
-        self.sampler_num_topk_samples = sampler_num_topk_samples
-        self.sampler_normalize_probabilities_flag = sampler_normalize_probabilities_flag
-        self.sampler_noisy_topk_flag = sampler_noisy_topk_flag
+        self.expert_bias_flag = expert_stack_options.bias_flag
+        self.sampler_options = sampler_options
+        self.sampler_threshold = sampler_options.threshold
+        self.sampler_filter_above_threshold = sampler_options.filter_above_threshold
+        self.sampler_num_topk_samples = sampler_options.num_topk_samples
+        self.sampler_normalize_probabilities_flag = (
+            sampler_options.normalize_probabilities_flag
+        )
+        self.sampler_noisy_topk_flag = sampler_options.noisy_topk_flag
         self.sampler_coefficient_of_variation_loss_weight = (
-            sampler_coefficient_of_variation_loss_weight
+            sampler_options.coefficient_of_variation_loss_weight
         )
-        self.sampler_switch_loss_weight = sampler_switch_loss_weight
-        self.sampler_zero_centred_loss_weight = sampler_zero_centred_loss_weight
+        self.sampler_switch_loss_weight = sampler_options.switch_loss_weight
+        self.sampler_zero_centred_loss_weight = (
+            sampler_options.zero_centred_loss_weight
+        )
         self.sampler_mutual_information_loss_weight = (
-            sampler_mutual_information_loss_weight
+            sampler_options.mutual_information_loss_weight
         )
-        self.router_noisy_topk_flag = router_noisy_topk_flag
-        self.sampler_stack_num_layers = sampler_stack_num_layers
-        self.sampler_stack_activation = sampler_stack_activation
+        self.router_options = router_options
+        self.router_noisy_topk_flag = router_options.noisy_topk_flag
+        self.sampler_stack_options = sampler_stack_options
+        self.sampler_stack_num_layers = sampler_stack_options.num_layers
+        self.sampler_stack_activation = sampler_stack_options.activation
         self.sampler_stack_residual_connection_option = (
-            sampler_stack_residual_connection_option
+            sampler_stack_options.residual_connection_option
         )
-        self.sampler_stack_dropout_probability = sampler_stack_dropout_probability
-        self.sampler_stack_layer_norm_position = sampler_stack_layer_norm_position
-        self.sampler_stack_last_layer_bias_option = sampler_stack_last_layer_bias_option
+        self.sampler_stack_dropout_probability = (
+            sampler_stack_options.dropout_probability
+        )
+        self.sampler_stack_layer_norm_position = (
+            sampler_stack_options.layer_norm_position
+        )
+        self.sampler_stack_last_layer_bias_option = (
+            sampler_stack_options.last_layer_bias_option
+        )
         self.sampler_stack_apply_output_pipeline_flag = (
-            sampler_stack_apply_output_pipeline_flag
+            sampler_stack_options.apply_output_pipeline_flag
         )
-        self.sampler_bias_flag = sampler_bias_flag
-        self.stack_gate_flag = stack_gate_flag
-        self.gate_option = gate_option
-        self.gate_activation = gate_activation
-        self.gate_stack_hidden_dim = gate_stack_hidden_dim
-        self.gate_stack_layer_norm_position = gate_stack_layer_norm_position
-        self.gate_stack_num_layers = gate_stack_num_layers
-        self.gate_stack_activation = gate_stack_activation
+        self.sampler_bias_flag = sampler_stack_options.bias_flag
+        self.layer_controller_options = layer_controller_options
+        self.stack_gate_flag = layer_controller_options.stack_gate_flag
+        self.gate_option = layer_controller_options.gate_option
+        self.gate_activation = layer_controller_options.gate_activation
+        self.gate_stack_options = layer_controller_options.gate_stack_options
+        self.gate_stack_hidden_dim = self.gate_stack_options.hidden_dim
+        self.gate_stack_layer_norm_position = (
+            self.gate_stack_options.layer_norm_position
+        )
+        self.gate_stack_num_layers = self.gate_stack_options.num_layers
+        self.gate_stack_activation = self.gate_stack_options.activation
         self.gate_stack_residual_connection_option = (
-            gate_stack_residual_connection_option
+            self.gate_stack_options.residual_connection_option
         )
-        self.gate_stack_dropout_probability = gate_stack_dropout_probability
-        self.gate_stack_last_layer_bias_option = gate_stack_last_layer_bias_option
+        self.gate_stack_dropout_probability = (
+            self.gate_stack_options.dropout_probability
+        )
+        self.gate_stack_last_layer_bias_option = (
+            self.gate_stack_options.last_layer_bias_option
+        )
         self.gate_stack_apply_output_pipeline_flag = (
-            gate_stack_apply_output_pipeline_flag
+            self.gate_stack_options.apply_output_pipeline_flag
         )
-        self.gate_stack_bias_flag = gate_stack_bias_flag
-        self.shared_gate_config = shared_gate_config
-        self.stack_halting_flag = stack_halting_flag
-        self.halting_threshold = halting_threshold
-        self.halting_dropout = halting_dropout
-        self.halting_hidden_state_mode = halting_hidden_state_mode
-        self.halting_stack_hidden_dim = halting_stack_hidden_dim
-        self.halting_output_dim = halting_output_dim
-        self.halting_stack_layer_norm_position = halting_stack_layer_norm_position
-        self.halting_stack_num_layers = halting_stack_num_layers
-        self.halting_stack_activation = halting_stack_activation
+        self.gate_stack_bias_flag = self.gate_stack_options.bias_flag
+        self.shared_gate_config = layer_controller_options.shared_gate_config
+        self.stack_halting_flag = layer_controller_options.stack_halting_flag
+        self.halting_threshold = layer_controller_options.halting_threshold
+        self.halting_dropout = layer_controller_options.halting_dropout
+        self.halting_hidden_state_mode = (
+            layer_controller_options.halting_hidden_state_mode
+        )
+        self.halting_stack_options = layer_controller_options.halting_stack_options
+        self.halting_stack_hidden_dim = self.halting_stack_options.hidden_dim
+        self.halting_output_dim = layer_controller_options.halting_output_dim
+        self.halting_stack_layer_norm_position = (
+            self.halting_stack_options.layer_norm_position
+        )
+        self.halting_stack_num_layers = self.halting_stack_options.num_layers
+        self.halting_stack_activation = self.halting_stack_options.activation
         self.halting_stack_residual_connection_option = (
-            halting_stack_residual_connection_option
+            self.halting_stack_options.residual_connection_option
         )
-        self.halting_stack_dropout_probability = halting_stack_dropout_probability
-        self.halting_stack_last_layer_bias_option = halting_stack_last_layer_bias_option
+        self.halting_stack_dropout_probability = (
+            self.halting_stack_options.dropout_probability
+        )
+        self.halting_stack_last_layer_bias_option = (
+            self.halting_stack_options.last_layer_bias_option
+        )
         self.halting_stack_apply_output_pipeline_flag = (
-            halting_stack_apply_output_pipeline_flag
+            self.halting_stack_options.apply_output_pipeline_flag
         )
-        self.halting_stack_bias_flag = halting_stack_bias_flag
-        self.recurrent_flag = recurrent_flag
-        self.recurrent_max_steps = recurrent_max_steps
-        self.recurrent_layer_norm_position = recurrent_layer_norm_position
-        self.recurrent_gate_flag = recurrent_gate_flag
-        self.recurrent_gate_option = recurrent_gate_option
-        self.recurrent_gate_activation = recurrent_gate_activation
-        self.recurrent_halting_flag = recurrent_halting_flag
+        self.halting_stack_bias_flag = self.halting_stack_options.bias_flag
+        self.recurrent_controller_options = recurrent_controller_options
+        self.recurrent_flag = recurrent_controller_options.recurrent_flag
+        self.recurrent_max_steps = recurrent_controller_options.recurrent_max_steps
+        self.recurrent_layer_norm_position = (
+            recurrent_controller_options.recurrent_layer_norm_position
+        )
+        self.recurrent_gate_flag = recurrent_controller_options.recurrent_gate_flag
+        self.recurrent_gate_option = (
+            recurrent_controller_options.recurrent_gate_option
+        )
+        self.recurrent_gate_activation = (
+            recurrent_controller_options.recurrent_gate_activation
+        )
+        self.recurrent_halting_flag = (
+            recurrent_controller_options.recurrent_halting_flag
+        )
 
     def build(self) -> "ModelConfig":
         from emperor.config import ModelConfig
