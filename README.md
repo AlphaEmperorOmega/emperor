@@ -480,12 +480,34 @@ Viewer backend environment:
 export VIEWER_API_CORS_ORIGINS='["https://viewer.example.com"]'
 ```
 
+Hosted frontend builds should also set `NEXT_PUBLIC_VIEWER_API_URL` and, when
+multiple API origins are allowed, `NEXT_PUBLIC_VIEWER_API_ALLOWED_ORIGINS` so
+browser requests and bearer tokens cannot be redirected to arbitrary origins.
+
 Bearer auth can be enabled with:
 
 ```bash
 export VIEWER_API_AUTH_MODE=bearer
 export VIEWER_API_TOKEN=<token>
 ```
+
+Example hosted pairing:
+
+```bash
+# Frontend build env
+export NEXT_PUBLIC_VIEWER_API_URL=https://api.example.com
+export NEXT_PUBLIC_VIEWER_API_ALLOWED_ORIGINS='["https://api.example.com"]'
+
+# Backend runtime env
+export VIEWER_API_CORS_ORIGINS='["https://viewer.example.com"]'
+export VIEWER_API_AUTH_MODE=bearer
+export VIEWER_API_TOKEN='<replace-with-a-secret-token>'
+```
+
+The Viewer backend is local-file-backed. Its in-process locks protect shared
+caches inside one backend worker; they are not cross-worker invalidation. Prefer
+one backend worker for hosted Viewer deployments unless you add a shared
+cache/invalidation design.
 
 ## Results and Logs
 
