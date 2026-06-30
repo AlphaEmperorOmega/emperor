@@ -14,12 +14,26 @@ import models.parametric.parametric_vector.config as config
 
 from emperor.experiments.base import GridSearch, RandomSearch
 from emperor.base.layer import LayerConfig, LayerStackConfig
+from emperor.base.layer.residual import ResidualConnectionOptions
+from emperor.base.options import (
+    ActivationOptions,
+    LastLayerBiasOptions,
+    LayerNormPositionOptions,
+)
 from emperor.linears.core.config import LinearLayerConfig
 from emperor.parametric import (
     AdaptiveRouterOptions,
+    ClipParameterOptions,
     ParametricLayerConfig,
     ParametricLayerHandlerConfig,
     VectorWeightsMixtureConfig,
+)
+from models.parametric._shared_stack_factory import (
+    ParametricGeneratorStackOptions,
+    ParametricMixtureOptions,
+    ParametricRouterOptions,
+    ParametricSamplerOptions,
+    ParametricStackOptions,
 )
 from models.parametric.parametric_vector.config_builder import (
     ParametricVectorConfigBuilder,
@@ -30,7 +44,12 @@ from models.parametric.parametric_vector.presets import (
     Experiment,
     ExperimentPreset,
     ExperimentPresets,
-    _preset_locks,
+)
+from models.parametric.parametric_matrix.config_builder import (
+    ParametricMatrixConfigBuilder,
+)
+from models.parametric.parametric_generator.config_builder import (
+    ParametricGeneratorConfigBuilder,
 )
 from models.training_test_utils import (
     RandomImageClassificationDataModule,
@@ -85,40 +104,30 @@ class TestParametricVectorModel(unittest.TestCase):
         self.assertIsNone(kwargs["selected_presets"])
 
     def test_modern_preset_contract_is_exposed(self):
+        presets = ExperimentPresets()
+
         self.assertEqual(
-            ExperimentPresets.PRESET_OVERRIDES,
+            {
+                preset: presets.overrides_for_preset(preset)
+                for preset in ExperimentPreset
+            },
             {
                 ExperimentPreset.PRESET: {},
                 ExperimentPreset.CONFIG: {},
             },
         )
-        self.assertEqual(ExperimentPresets.PRESET_LOCKS, {})
         self.assertEqual(
-            ExperimentPresets().locked_fields(ExperimentPreset.PRESET),
+            presets.locked_fields(ExperimentPreset.PRESET),
             {},
         )
 
-    def test_empty_overrides_generate_empty_locks_and_future_locks_reject(self):
-        self.assertEqual(_preset_locks(ExperimentPresets.PRESET_OVERRIDES), {})
+    def test_empty_overrides_generate_empty_locks(self):
+        presets = ExperimentPresets()
 
-        locks = _preset_locks(
-            {
-                ExperimentPreset.PRESET: {
-                    "learning_rate": config.LEARNING_RATE,
-                },
-            }
-        )
-        original_locks = ExperimentPresets.PRESET_LOCKS
-        try:
-            ExperimentPresets.PRESET_LOCKS = locks
-            with self.assertRaisesRegex(ValueError, "PRESET.*learning_rate"):
-                ExperimentPresets().get_config(
-                    ExperimentPreset.PRESET,
-                    config.DATASET_OPTIONS[0],
-                    config_overrides={"learning_rate": config.LEARNING_RATE * 2},
-                )
-        finally:
-            ExperimentPresets.PRESET_LOCKS = original_locks
+        for preset in ExperimentPreset:
+            with self.subTest(preset=preset.name):
+                self.assertEqual(presets.locks_for_preset(preset), {})
+                self.assertEqual(presets.locked_fields(preset), {})
 
     def test_builder_returns_boundary_style_experiment_config(self):
         cfg = ParametricVectorConfigBuilder(
@@ -143,6 +152,133 @@ class TestParametricVectorModel(unittest.TestCase):
         self.assertEqual(model.model.output_dim, 4)
         self.assertEqual(model.output_model.input_dim, 4)
         self.assertEqual(model.output_model.output_dim, 3)
+
+    def test_option_group_builds_match_flat_kwargs_across_parametric_variants(self):
+        stack_options = ParametricStackOptions(
+            hidden_dim=7,
+            num_layers=2,
+            activation=ActivationOptions.MISH,
+            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            dropout_probability=0.15,
+        )
+        mixture_options = ParametricMixtureOptions(
+            top_k=2,
+            num_experts=4,
+            weighted_parameters_flag=True,
+            clip_parameter_option=ClipParameterOptions.AFTER,
+            clip_range=0.7,
+        )
+        sampler_options = ParametricSamplerOptions(
+            threshold=0.2,
+            filter_above_threshold=True,
+            num_topk_samples=3,
+            normalize_probabilities_flag=False,
+            noisy_topk_flag=True,
+            coefficient_of_variation_loss_weight=0.01,
+            switch_loss_weight=0.02,
+            zero_centred_loss_weight=0.03,
+            mutual_information_loss_weight=0.04,
+        )
+        router_options = ParametricRouterOptions(
+            activation=stack_options.activation,
+        )
+        generator_stack_options = ParametricGeneratorStackOptions(
+            hidden_dim=11,
+            num_layers=3,
+            activation=ActivationOptions.GELU,
+            dropout_probability=0.05,
+        )
+        flat_kwargs = {
+            "batch_size": 3,
+            "learning_rate": 0.02,
+            "input_dim": 8,
+            "stack_hidden_dim": stack_options.hidden_dim,
+            "output_dim": 5,
+            "stack_num_layers": stack_options.num_layers,
+            "stack_activation": stack_options.activation,
+            "stack_residual_connection_option": (
+                stack_options.residual_connection_option
+            ),
+            "stack_dropout_probability": stack_options.dropout_probability,
+            "adaptive_mixture_top_k": mixture_options.top_k,
+            "adaptive_mixture_num_experts": mixture_options.num_experts,
+            "adaptive_mixture_weighted_parameters_flag": (
+                mixture_options.weighted_parameters_flag
+            ),
+            "adaptive_mixture_clip_parameter_option": (
+                mixture_options.clip_parameter_option
+            ),
+            "adaptive_mixture_clip_range": mixture_options.clip_range,
+            "sampler_threshold": sampler_options.threshold,
+            "sampler_filter_above_threshold": (
+                sampler_options.filter_above_threshold
+            ),
+            "sampler_num_topk_samples": sampler_options.num_topk_samples,
+            "sampler_normalize_probabilities_flag": (
+                sampler_options.normalize_probabilities_flag
+            ),
+            "sampler_noisy_topk_flag": sampler_options.noisy_topk_flag,
+            "sampler_coefficient_of_variation_loss_weight": (
+                sampler_options.coefficient_of_variation_loss_weight
+            ),
+            "sampler_switch_loss_weight": sampler_options.switch_loss_weight,
+            "sampler_zero_centred_loss_weight": (
+                sampler_options.zero_centred_loss_weight
+            ),
+            "sampler_mutual_information_loss_weight": (
+                sampler_options.mutual_information_loss_weight
+            ),
+        }
+        grouped_kwargs = {
+            "batch_size": 3,
+            "learning_rate": 0.02,
+            "input_dim": 8,
+            "output_dim": 5,
+            "stack_options": stack_options,
+            "mixture_options": mixture_options,
+            "sampler_options": sampler_options,
+            "router_options": router_options,
+        }
+        cases = (
+            (
+                "vector",
+                ParametricVectorConfigBuilder,
+                {},
+                {},
+            ),
+            (
+                "matrix",
+                ParametricMatrixConfigBuilder,
+                {},
+                {},
+            ),
+            (
+                "generator",
+                ParametricGeneratorConfigBuilder,
+                {
+                    "generator_stack_hidden_dim": (
+                        generator_stack_options.hidden_dim
+                    ),
+                    "generator_stack_num_layers": (
+                        generator_stack_options.num_layers
+                    ),
+                    "generator_stack_activation": (
+                        generator_stack_options.activation
+                    ),
+                    "generator_stack_dropout_probability": (
+                        generator_stack_options.dropout_probability
+                    ),
+                },
+                {"generator_stack_options": generator_stack_options},
+            ),
+        )
+
+        for variant, builder, extra_flat, extra_grouped in cases:
+            with self.subTest(variant=variant):
+                flat_cfg = builder(**flat_kwargs, **extra_flat).build()
+                grouped_cfg = builder(**grouped_kwargs, **extra_grouped).build()
+
+                self.assertEqual(flat_cfg, grouped_cfg)
 
     def test_preset_builds_current_parametric_config(self):
         hidden_dim = 5
@@ -197,6 +333,43 @@ class TestParametricVectorModel(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             parametric_config.build()
+
+    def test_router_and_sampler_defaults_match_across_parametric_variants(self):
+        builders = {
+            "vector": ParametricVectorConfigBuilder,
+            "matrix": ParametricMatrixConfigBuilder,
+            "generator": ParametricGeneratorConfigBuilder,
+        }
+        summaries = {
+            variant: self._router_sampler_summary(
+                builder(input_dim=8, stack_hidden_dim=9, output_dim=3).build()
+            )
+            for variant, builder in builders.items()
+        }
+        expected_summary = summaries["vector"]
+
+        for variant, summary in summaries.items():
+            with self.subTest(variant=variant):
+                self.assertEqual(summary, expected_summary)
+                self.assertEqual(summary["router_hidden_dim"], 9)
+                self.assertEqual(summary["router_num_layers"], 1)
+                self.assertEqual(
+                    summary["router_last_layer_bias_option"],
+                    LastLayerBiasOptions.DEFAULT,
+                )
+                self.assertFalse(summary["router_apply_output_pipeline_flag"])
+                self.assertEqual(
+                    summary["router_residual_connection_option"],
+                    ResidualConnectionOptions.DISABLED,
+                )
+                self.assertEqual(
+                    summary["router_layer_norm_position"],
+                    LayerNormPositionOptions.DISABLED,
+                )
+                self.assertEqual(summary["router_dropout_probability"], 0.0)
+                self.assertFalse(summary["router_noisy_topk_flag"])
+                self.assertTrue(summary["router_linear_bias_flag"])
+                self.assertIsNone(summary["sampler_router_config"])
 
     def test_forward_one_batch_per_dataset(self):
         batch_size = 2
@@ -317,6 +490,63 @@ class TestParametricVectorModel(unittest.TestCase):
             dataset.default_height,
             dataset.default_width,
         )
+
+    def _router_sampler_summary(self, cfg) -> dict:
+        parametric_config = (
+            cfg.experiment_config.model_config.layer_config.layer_model_config
+        )
+        router_config = parametric_config.router_config
+        router_model_config = router_config.model_config
+        router_layer_config = router_model_config.layer_config
+        router_linear_config = router_layer_config.layer_model_config
+        sampler_config = parametric_config.sampler_config
+
+        return {
+            "router_input_dim": router_config.input_dim,
+            "router_num_experts": router_config.num_experts,
+            "router_noisy_topk_flag": router_config.noisy_topk_flag,
+            "router_model_input_dim": router_model_config.input_dim,
+            "router_hidden_dim": router_model_config.hidden_dim,
+            "router_model_output_dim": router_model_config.output_dim,
+            "router_num_layers": router_model_config.num_layers,
+            "router_last_layer_bias_option": (
+                router_model_config.last_layer_bias_option
+            ),
+            "router_apply_output_pipeline_flag": (
+                router_model_config.apply_output_pipeline_flag
+            ),
+            "router_activation": router_layer_config.activation,
+            "router_residual_connection_option": (
+                router_layer_config.residual_connection_option
+            ),
+            "router_dropout_probability": router_layer_config.dropout_probability,
+            "router_layer_norm_position": router_layer_config.layer_norm_position,
+            "router_linear_input_dim": router_linear_config.input_dim,
+            "router_linear_output_dim": router_linear_config.output_dim,
+            "router_linear_bias_flag": router_linear_config.bias_flag,
+            "sampler_top_k": sampler_config.top_k,
+            "sampler_threshold": sampler_config.threshold,
+            "sampler_filter_above_threshold": (
+                sampler_config.filter_above_threshold
+            ),
+            "sampler_num_topk_samples": sampler_config.num_topk_samples,
+            "sampler_normalize_probabilities_flag": (
+                sampler_config.normalize_probabilities_flag
+            ),
+            "sampler_noisy_topk_flag": sampler_config.noisy_topk_flag,
+            "sampler_num_experts": sampler_config.num_experts,
+            "sampler_coefficient_of_variation_loss_weight": (
+                sampler_config.coefficient_of_variation_loss_weight
+            ),
+            "sampler_switch_loss_weight": sampler_config.switch_loss_weight,
+            "sampler_zero_centred_loss_weight": (
+                sampler_config.zero_centred_loss_weight
+            ),
+            "sampler_mutual_information_loss_weight": (
+                sampler_config.mutual_information_loss_weight
+            ),
+            "sampler_router_config": sampler_config.router_config,
+        }
 
 
 if __name__ == "__main__":

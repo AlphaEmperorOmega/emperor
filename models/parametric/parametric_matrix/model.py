@@ -1,14 +1,14 @@
+from typing import TYPE_CHECKING
+
 import torch
-
-from torch import Tensor
-
 from emperor.base.layer import Layer, LayerConfig, LayerStackConfig
 from emperor.base.utils import Module
 from emperor.experiments.classifier import ClassifierExperiment
 from emperor.parametric.core.state import ParametricLayerState
-from models.parametric.parametric_matrix.experiment_config import ExperimentConfig
+from torch import Tensor
 
-from typing import TYPE_CHECKING
+from models.classifier_pipeline import build_from_experiment_config
+from models.parametric.parametric_matrix.experiment_config import ExperimentConfig
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
@@ -17,56 +17,43 @@ if TYPE_CHECKING:
 class Model(ClassifierExperiment):
     def __init__(
         self,
-        cfg: "ModelConfig",
+        config: "ModelConfig",
     ):
-        super().__init__(cfg)
-        if not isinstance(cfg.experiment_config, ExperimentConfig):
+        super().__init__(config)
+        if not isinstance(config.experiment_config, ExperimentConfig):
             raise TypeError(
-                "cfg.experiment_config must be a parametric_matrix ExperimentConfig."
+                "config.experiment_config must be a parametric_matrix ExperimentConfig."
             )
 
-        self.model_cfg = cfg
-        self.exp_cfg: ExperimentConfig = cfg.experiment_config
-        self.input_config: LayerConfig = self.exp_cfg.input_model_config
-        self.model_config: LayerStackConfig = self.exp_cfg.model_config
-        self.output_config: LayerConfig = self.exp_cfg.output_model_config
+        self.experiment_config: ExperimentConfig = config.experiment_config
+        self.input_config: LayerConfig = self.experiment_config.input_model_config
+        self.model_config: LayerStackConfig = self.experiment_config.model_config
+        self.output_config: LayerConfig = self.experiment_config.output_model_config
 
         self.input_model = self._build_input_model()
         self.model = self._build_model()
         self.output_model = self._build_output_model()
 
     def _build_input_model(self) -> Layer:
-        return self._build_from_experiment_config(
+        return build_from_experiment_config(
             self.input_config,
-            input_dim=self.model_cfg.input_dim,
-            output_dim=self.model_cfg.hidden_dim,
+            input_dim=self.cfg.input_dim,
+            output_dim=self.cfg.hidden_dim,
         )
 
     def _build_model(self) -> Module:
-        return self._build_from_experiment_config(
+        return build_from_experiment_config(
             self.model_config,
-            input_dim=self.model_cfg.hidden_dim,
-            output_dim=self.model_cfg.hidden_dim,
+            input_dim=self.cfg.hidden_dim,
+            output_dim=self.cfg.hidden_dim,
         )
 
     def _build_output_model(self) -> Layer:
-        return self._build_from_experiment_config(
+        return build_from_experiment_config(
             self.output_config,
-            input_dim=self.model_cfg.hidden_dim,
-            output_dim=self.model_cfg.output_dim,
+            input_dim=self.cfg.hidden_dim,
+            output_dim=self.cfg.output_dim,
         )
-
-    def _build_from_experiment_config(
-        self,
-        model_config: LayerConfig | LayerStackConfig,
-        input_dim: int,
-        output_dim: int,
-    ) -> Module:
-        override = type(model_config)(
-            input_dim=input_dim,
-            output_dim=output_dim,
-        )
-        return model_config.build(overrides=override)
 
     def forward(
         self,

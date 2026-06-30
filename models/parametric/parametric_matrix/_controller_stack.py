@@ -1,2 +1,3 @@
-def router_hidden_dim(input_dim: int) -> int:
-    return max(4, min(input_dim, 32))
+from models.parametric._shared_stack_factory import router_hidden_dim
+
+__all__ = ["router_hidden_dim"]
