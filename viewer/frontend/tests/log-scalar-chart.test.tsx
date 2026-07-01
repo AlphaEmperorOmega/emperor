@@ -369,7 +369,7 @@ describe("LogScalarChart", () => {
     const dialog = await screen.findByRole("dialog", { name: "train/accuracy" });
     expect(chartCard).not.toContainElement(dialog);
     expect(within(dialog).getByText("Training accuracy")).toBeInTheDocument();
-    expect(within(dialog).getByText("Visible range")).toBeInTheDocument();
+    expect(within(dialog).getByText("Displayed trend")).toBeInTheDocument();
     expect(within(dialog).getByText("0.4 to 0.75")).toBeInTheDocument();
     expect(within(dialog).getByText(/training examples/i)).toBeInTheDocument();
     expect(within(dialog).getByText("Why it matters")).toBeInTheDocument();
