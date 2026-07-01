@@ -22,6 +22,9 @@ import {
   type LogMetricGroupKey,
   type LogMetricsByGroup,
   type LogMetricTagsByGroup,
+  type TrainValidationScalarPair,
+  buildTrainValidationScalarPairs,
+  defaultTrainValidationScalarPairSuffixes,
   groupLogMetricTags,
   groupLogPlotSelectorTags,
   isTestMetricTag,
@@ -71,6 +74,10 @@ export type LogMetricGroupScalarQueryStates = Record<
   LogMetricGroupKey,
   LogMetricGroupScalarQueryState
 >;
+
+export type LogTrainValidationComparisonMetric = TrainValidationScalarPair & {
+  series: LogScalarSeries[];
+};
 
 export type LogBestRunViewModel = {
   metricTagOptions: ChecklistOption[];
@@ -414,8 +421,27 @@ function visibleScalarSeries(
   return data?.series ?? [];
 }
 
+function mergeLogScalarTagQueryState(
+  states: Map<string, LogScalarTagQueryState>,
+  tag: string,
+  snapshot: LogMetricGroupScalarQueryState,
+  hasRequested: boolean,
+) {
+  const current = states.get(tag);
+  states.set(tag, {
+    hasRequested: (current?.hasRequested ?? false) || hasRequested,
+    isInitialLoading:
+      (current?.isInitialLoading ?? false) || snapshot.isInitialLoading,
+    isFetching: (current?.isFetching ?? false) || snapshot.isFetching,
+    isError: (current?.isError ?? false) || snapshot.isError,
+    error: current?.error ?? snapshot.error,
+  });
+}
+
 export function useLogsChartViewModel(state: LogsWorkspaceState) {
   const [accordionGridMode, setAccordionGridMode] =
+    useState<ScalarChartGridMode>("two");
+  const [trainValidationComparisonGridMode, setTrainValidationComparisonGridMode] =
     useState<ScalarChartGridMode>("two");
   const [metricGridModes, setMetricGridModes] = useState<
     Record<LogMetricChartLayoutGroupKey, ScalarChartGridMode>
@@ -434,9 +460,25 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
     useState(true);
   const [isConfusionMatrixCollapsed, setIsConfusionMatrixCollapsed] =
     useState(true);
+  const [
+    isTrainValidationComparisonCollapsed,
+    setIsTrainValidationComparisonCollapsed,
+  ] = useState(true);
+  const [
+    selectedTrainValidationPairSuffixes,
+    setSelectedTrainValidationPairSuffixes,
+  ] = useState<Set<string> | null>(null);
   const [validationExamplesVisible, setValidationExamplesVisible] = useState(false);
   const [requestedScalarTags, setRequestedScalarTags] = useState<Set<string>>(
     () => new Set(),
+  );
+  const [
+    requestedTrainValidationPairSuffixes,
+    setRequestedTrainValidationPairSuffixes,
+  ] = useState<Set<string>>(() => new Set());
+  const toggleTrainValidationComparison = useCallback(
+    () => setIsTrainValidationComparisonCollapsed((previous) => !previous),
+    [],
   );
   const toggleValidationExamples = useCallback(() => {
     if (isValidationExamplesCollapsed) {
@@ -468,6 +510,45 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
     () => new Set(state.selectedTagList),
     [state.selectedTagList],
   );
+  const trainValidationPairs = useMemo(
+    () => buildTrainValidationScalarPairs(state.tagOptions),
+    [state.tagOptions],
+  );
+  const defaultTrainValidationPairSuffixes = useMemo(
+    () => defaultTrainValidationScalarPairSuffixes(trainValidationPairs),
+    [trainValidationPairs],
+  );
+  const selectedTrainValidationPairSuffixList = useMemo(() => {
+    const selectedSuffixes =
+      selectedTrainValidationPairSuffixes ??
+      new Set(defaultTrainValidationPairSuffixes);
+    return trainValidationPairs
+      .map((pair) => pair.suffix)
+      .filter((suffix) => selectedSuffixes.has(suffix));
+  }, [
+    defaultTrainValidationPairSuffixes,
+    selectedTrainValidationPairSuffixes,
+    trainValidationPairs,
+  ]);
+  const selectedTrainValidationPairSuffixSet = useMemo(
+    () => new Set(selectedTrainValidationPairSuffixList),
+    [selectedTrainValidationPairSuffixList],
+  );
+  const selectedTrainValidationPairs = useMemo(
+    () =>
+      trainValidationPairs.filter((pair) =>
+        selectedTrainValidationPairSuffixSet.has(pair.suffix),
+      ),
+    [selectedTrainValidationPairSuffixSet, trainValidationPairs],
+  );
+  const selectedTrainValidationScalarTags = useMemo(
+    () =>
+      selectedTrainValidationPairs.flatMap((pair) => [
+        pair.trainTag,
+        pair.validationTag,
+      ]),
+    [selectedTrainValidationPairs],
+  );
   useEffect(() => {
     setRequestedScalarTags((current) => {
       const next = new Set(
@@ -476,6 +557,16 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
       return next.size === current.size ? current : next;
     });
   }, [selectedScalarTagSet]);
+  useEffect(() => {
+    setRequestedTrainValidationPairSuffixes((current) => {
+      const next = new Set(
+        Array.from(current).filter((suffix) =>
+          selectedTrainValidationPairSuffixSet.has(suffix),
+        ),
+      );
+      return next.size === current.size ? current : next;
+    });
+  }, [selectedTrainValidationPairSuffixSet]);
   const markScalarChartVisible = useCallback((tag: string) => {
     setRequestedScalarTags((current) => {
       if (current.has(tag)) {
@@ -485,6 +576,19 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
       next.add(tag);
       return next;
     });
+  }, []);
+  const markTrainValidationComparisonChartVisible = useCallback((suffix: string) => {
+    setRequestedTrainValidationPairSuffixes((current) => {
+      if (current.has(suffix)) {
+        return current;
+      }
+      const next = new Set(current);
+      next.add(suffix);
+      return next;
+    });
+  }, []);
+  const handleTrainValidationPairSelectionChange = useCallback((suffixes: string[]) => {
+    setSelectedTrainValidationPairSuffixes(new Set(suffixes));
   }, []);
   const bestRunMetricTagValues = useMemo(
     () => new Set(state.tagOptions.map((option) => option.value)),
@@ -538,6 +642,23 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
     !state.collapsedMetricGroups.has("other") &&
     selectedTagsByGroup.other.length > 0 &&
     state.visibleRunIds.length > 0;
+  const trainValidationComparisonQueryActive =
+    state.enabled &&
+    !tagsAreRefreshing &&
+    !isTrainValidationComparisonCollapsed &&
+    selectedTrainValidationPairs.length > 0 &&
+    state.visibleRunIds.length > 0;
+  const requestedTrainValidationScalarTags = useMemo(() => {
+    const requestedTags = new Set<string>();
+    for (const pair of selectedTrainValidationPairs) {
+      if (!requestedTrainValidationPairSuffixes.has(pair.suffix)) {
+        continue;
+      }
+      requestedTags.add(pair.trainTag);
+      requestedTags.add(pair.validationTag);
+    }
+    return requestedTags;
+  }, [requestedTrainValidationPairSuffixes, selectedTrainValidationPairs]);
   const trainScalarQueryInputs = useMemo(
     () =>
       buildLogScalarChunkQueryInputs({
@@ -586,6 +707,22 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
       state.visibleRunIds,
     ],
   );
+  const trainValidationScalarQueryInputs = useMemo(
+    () =>
+      buildLogScalarChunkQueryInputs({
+        enabled: trainValidationComparisonQueryActive,
+        group: "train-validation",
+        requestedTags: requestedTrainValidationScalarTags,
+        selectedTagList: selectedTrainValidationScalarTags,
+        visibleRunIds: state.visibleRunIds,
+      }),
+    [
+      requestedTrainValidationScalarTags,
+      selectedTrainValidationScalarTags,
+      state.visibleRunIds,
+      trainValidationComparisonQueryActive,
+    ],
+  );
   const chartScalarQueryInputs = useMemo(
     () => [
       ...trainScalarQueryInputs,
@@ -595,6 +732,9 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
     [otherScalarQueryInputs, trainScalarQueryInputs, validationScalarQueryInputs],
   );
   const chartScalarQueries = useLogScalarQueries(chartScalarQueryInputs);
+  const trainValidationScalarQueries = useLogScalarQueries(
+    trainValidationScalarQueryInputs,
+  );
   const testScalarQuery = useLogScalarsQuery(
     buildLogScalarQueryInput({
       enabled: testScalarQueryActive,
@@ -607,6 +747,12 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
     input,
     query: chartScalarQueries[index],
   }));
+  const trainValidationScalarQueryEntries = trainValidationScalarQueryInputs.map(
+    (input, index) => ({
+      input,
+      query: trainValidationScalarQueries[index],
+    }),
+  );
   const bestRunCoveredChartQuery =
     effectiveBestRunMetricTag && effectiveBestRunMetricGroup !== "test"
       ? chartScalarQueryEntries.find((entry) =>
@@ -666,8 +812,17 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
     test: scalarQuerySnapshot(testScalarQuery, testScalarQueryActive),
     other: combinedScalarQuerySnapshot(otherScalarQueries, otherScalarQueryActive),
   });
+  const trainValidationComparisonQueryState = scopedScalarQueryState(
+    combinedScalarQuerySnapshot(
+      trainValidationScalarQueryEntries.map((entry) => entry.query),
+      trainValidationComparisonQueryActive,
+    ),
+  );
   const activeScalarQueries = [
     ...chartScalarQueryEntries
+      .filter((entry) => entry.input.enabled)
+      .map((entry) => entry.query),
+    ...trainValidationScalarQueryEntries
       .filter((entry) => entry.input.enabled)
       .map((entry) => entry.query),
     ...(testScalarQueryActive ? [testScalarQuery] : []),
@@ -699,15 +854,23 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
       mediaTags.textTags,
     ),
   });
+  const hasExpandedMetricGroupCheckpointChart = LOG_METRIC_GROUPS.some((group) => {
+    if (group.key !== "test" && state.collapsedMetricGroups.has(group.key)) {
+      return false;
+    }
+    return selectedTagsByGroup[group.key].some(
+      (tag) => !isTestMetricTag(tag) && requestedScalarTags.has(tag),
+    );
+  });
+  const hasExpandedTrainValidationComparisonCheckpointChart =
+    !isTrainValidationComparisonCollapsed &&
+    selectedTrainValidationPairs.some((pair) =>
+      requestedTrainValidationPairSuffixes.has(pair.suffix),
+    );
   const hasExpandedCheckpointChart =
-    LOG_METRIC_GROUPS.some((group) => {
-      if (group.key !== "test" && state.collapsedMetricGroups.has(group.key)) {
-        return false;
-      }
-      return selectedTagsByGroup[group.key].some(
-        (tag) => !isTestMetricTag(tag) && requestedScalarTags.has(tag),
-      );
-    }) && state.visibleRuns.some((run) => run.checkpointCount > 0);
+    (hasExpandedMetricGroupCheckpointChart ||
+      hasExpandedTrainValidationComparisonCheckpointChart) &&
+    state.visibleRuns.some((run) => run.checkpointCount > 0);
   const checkpointQuery = useLogCheckpointsQuery({
     runIds: state.visibleRunIds,
     enabled: state.enabled && hasExpandedCheckpointChart,
@@ -750,6 +913,17 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
       testScalarQueryActive,
     ],
   );
+  const trainValidationScalarSeries = useMemo(
+    () =>
+      trainValidationScalarQueryEntries.flatMap((entry) =>
+        visibleScalarSeries(
+          entry.query.data,
+          entry.query.isPlaceholderData,
+          entry.input.enabled,
+        ),
+      ),
+    [trainValidationScalarQueryEntries],
+  );
   const confusionMatrixScalarSeries = useMemo(
     () =>
       visibleScalarSeries(
@@ -769,33 +943,23 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
     () => groupLogScalarSeriesByTag(scalarSeries ?? []),
     [scalarSeries],
   );
+  const trainValidationSeriesByTag = useMemo(
+    () => groupLogScalarSeriesByTag(trainValidationScalarSeries),
+    [trainValidationScalarSeries],
+  );
   const scalarTagQueryStates = useMemo(() => {
     const states = new Map<string, LogScalarTagQueryState>();
-    const mergeState = (
-      tag: string,
-      snapshot: LogMetricGroupScalarQueryState,
-      hasRequested: boolean,
-    ) => {
-      const current = states.get(tag);
-      states.set(tag, {
-        hasRequested: (current?.hasRequested ?? false) || hasRequested,
-        isInitialLoading:
-          (current?.isInitialLoading ?? false) || snapshot.isInitialLoading,
-        isFetching: (current?.isFetching ?? false) || snapshot.isFetching,
-        isError: (current?.isError ?? false) || snapshot.isError,
-        error: current?.error ?? snapshot.error,
-      });
-    };
 
     for (const entry of chartScalarQueryEntries) {
       const snapshot = scalarQuerySnapshot(entry.query, entry.input.enabled);
       for (const tag of entry.input.tags) {
-        mergeState(tag, snapshot, true);
+        mergeLogScalarTagQueryState(states, tag, snapshot, true);
       }
     }
 
     if (effectiveBestRunMetricTag && bestRunScalarQueryActive) {
-      mergeState(
+      mergeLogScalarTagQueryState(
+        states,
         effectiveBestRunMetricTag,
         scalarQuerySnapshot(bestRunScalarQuery, true),
         true,
@@ -805,7 +969,7 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
     if (testScalarQueryActive) {
       const snapshot = scalarQuerySnapshot(testScalarQuery, true);
       for (const tag of selectedTagsByGroup.test) {
-        mergeState(tag, snapshot, true);
+        mergeLogScalarTagQueryState(states, tag, snapshot, true);
       }
     }
 
@@ -818,6 +982,38 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
     selectedTagsByGroup.test,
     testScalarQuery,
     testScalarQueryActive,
+  ]);
+  const trainValidationPairQueryStates = useMemo(() => {
+    const tagStates = new Map<string, LogScalarTagQueryState>();
+    for (const entry of trainValidationScalarQueryEntries) {
+      const snapshot = scalarQuerySnapshot(entry.query, entry.input.enabled);
+      for (const tag of entry.input.tags) {
+        mergeLogScalarTagQueryState(tagStates, tag, snapshot, true);
+      }
+    }
+
+    const pairStates = new Map<string, LogScalarTagQueryState>();
+    for (const pair of selectedTrainValidationPairs) {
+      const trainState = tagStates.get(pair.trainTag);
+      const validationState = tagStates.get(pair.validationTag);
+      pairStates.set(pair.suffix, {
+        hasRequested: requestedTrainValidationPairSuffixes.has(pair.suffix),
+        isInitialLoading:
+          (trainState?.isInitialLoading ?? false) ||
+          (validationState?.isInitialLoading ?? false),
+        isFetching:
+          (trainState?.isFetching ?? false) ||
+          (validationState?.isFetching ?? false),
+        isError:
+          (trainState?.isError ?? false) || (validationState?.isError ?? false),
+        error: trainState?.error ?? validationState?.error ?? null,
+      });
+    }
+    return pairStates;
+  }, [
+    requestedTrainValidationPairSuffixes,
+    selectedTrainValidationPairs,
+    trainValidationScalarQueryEntries,
   ]);
   const confusionMatrixSeriesByTag = useMemo(
     () => groupLogScalarSeriesByTag(confusionMatrixScalarSeries),
@@ -931,6 +1127,17 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
       }),
     [seriesByTag, state.selectedTagList],
   );
+  const trainValidationComparisonMetrics = useMemo(
+    () =>
+      selectedTrainValidationPairs.map((pair) => ({
+        ...pair,
+        series: [
+          ...(trainValidationSeriesByTag.get(pair.trainTag) ?? []),
+          ...(trainValidationSeriesByTag.get(pair.validationTag) ?? []),
+        ],
+      })),
+    [selectedTrainValidationPairs, trainValidationSeriesByTag],
+  );
   const availableMetricTagsByGroup = useMemo(
     () => groupLogPlotSelectorTags(state.tagOptions.map((option) => option.value)),
     [state.tagOptions],
@@ -995,6 +1202,19 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
     metricsByGroup,
     availableMetricTagsByGroup,
     onMetricGroupTagSelectionChange: handleMetricGroupTagSelectionChange,
+    trainValidationPairs,
+    trainValidationComparisonMetrics,
+    selectedTrainValidationPairSuffixes: selectedTrainValidationPairSuffixList,
+    trainValidationPairQueryStates,
+    trainValidationComparisonQueryState,
+    isTrainValidationComparisonCollapsed,
+    onToggleTrainValidationComparison: toggleTrainValidationComparison,
+    trainValidationComparisonGridMode,
+    onTrainValidationComparisonGridModeChange: setTrainValidationComparisonGridMode,
+    onTrainValidationPairSelectionChange:
+      handleTrainValidationPairSelectionChange,
+    onTrainValidationComparisonChartVisible:
+      markTrainValidationComparisonChartVisible,
     confusionHeatmaps,
     runsById: visibleRunsById,
     checkpointsByRunId: visibleCheckpointsByRunId,

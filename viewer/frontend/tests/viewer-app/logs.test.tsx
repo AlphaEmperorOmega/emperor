@@ -216,7 +216,7 @@ async function setLogOptionSelection(
 
 async function openMetricPlotSelector(
   user: ReturnType<typeof userEvent.setup>,
-  group: "Train" | "Validation",
+  group: "Train" | "Validation" | "Train vs Validation",
 ) {
   const trigger = await screen.findByRole("combobox", {
     name: new RegExp(`^${escapeRegExp(group)} plots\\b`, "i"),
@@ -229,7 +229,7 @@ async function openMetricPlotSelector(
 
 async function findMetricPlotOption(
   user: ReturnType<typeof userEvent.setup>,
-  group: "Train" | "Validation",
+  group: "Train" | "Validation" | "Train vs Validation",
   label: string,
 ) {
   const listbox = await openMetricPlotSelector(user, group);
@@ -238,11 +238,42 @@ async function findMetricPlotOption(
 
 async function queryMetricPlotOption(
   user: ReturnType<typeof userEvent.setup>,
-  group: "Train" | "Validation",
+  group: "Train" | "Validation" | "Train vs Validation",
   label: string,
 ) {
   const listbox = await openMetricPlotSelector(user, group);
   return within(listbox).queryByRole("option", { name: logOptionName(label) });
+}
+
+function trainValidationComparisonToggle() {
+  return screen.getByRole("button", {
+    name: /^Train vs Validation\s+\d+\s+plots?$/i,
+  });
+}
+
+function findTrainValidationComparisonToggle() {
+  return screen.findByRole("button", {
+    name: /^Train vs Validation\s+\d+\s+plots?$/i,
+  });
+}
+
+function trainValidationComparisonSection() {
+  const section = trainValidationComparisonToggle().closest("section");
+  if (!(section instanceof HTMLElement)) {
+    throw new Error("Expected Train vs Validation accordion to render inside a section");
+  }
+  return section;
+}
+
+function hasCombinedTrainValidationRequest(
+  requests: Array<{ tags: string[] }>,
+  suffix: string,
+) {
+  return requests.some(
+    (request) =>
+      request.tags.includes(`train/${suffix}`) &&
+      request.tags.includes(`validation/${suffix}`),
+  );
 }
 
 function makeScrollable(element: HTMLElement) {
@@ -421,6 +452,147 @@ describe("ViewerApp Logs Workspace", () => {
       .not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /start training/i }))
       .not.toBeInTheDocument();
+  });
+
+  it("renders the train-vs-validation accordion after best run and keeps it cold while collapsed", async () => {
+    const { logScalarRequests } = installFetchMock();
+    renderViewer();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+    await selectLogExperiments(user, ["test_model"]);
+    await clickLogOption(user, "Scalar Tags", "test/accuracy");
+
+    const bestRunSection = (await screen.findByRole("heading", {
+      name: "Best Run by Selected Metric",
+    })).closest("section");
+    expect(bestRunSection).toBeInstanceOf(HTMLElement);
+    const comparisonToggle = trainValidationComparisonToggle();
+    const comparisonSection = trainValidationComparisonSection();
+    const testSection = testScoresSection();
+
+    expectElementsInDocumentOrder([
+      bestRunSection as HTMLElement,
+      comparisonSection,
+      testSection,
+    ]);
+    expect(comparisonToggle).toHaveAttribute("aria-expanded", "false");
+    await waitFor(() => {
+      expect(logScalarRequests.length).toBeGreaterThan(0);
+    });
+    expect(hasCombinedTrainValidationRequest(logScalarRequests, "accuracy_epoch"))
+      .toBe(false);
+
+    await user.click(comparisonToggle);
+
+    expect(
+      await screen.findByRole("combobox", {
+        name: /^Train vs Validation plots\b/i,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("radiogroup", {
+        name: /Train vs Validation chart layout/i,
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("renders a selected train-vs-validation pair and omits incomplete pair options", async () => {
+    const { logScalarRequests } = installFetchMock({
+      logTagsByRun: {
+        "log-mnist": scalarTagsWithEpochDefaults(
+          "validation/precision",
+          "train/recall",
+        ),
+      },
+    });
+    renderViewer();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+    await selectLogExperiments(user, ["test_model"]);
+
+    await findTrainValidationComparisonToggle();
+    const comparisonSection = trainValidationComparisonSection();
+    await user.click(
+      within(comparisonSection).getByRole("button", {
+        name: /select no Train vs Validation plots/i,
+      }),
+    );
+    await user.click(trainValidationComparisonToggle());
+    expect(await screen.findByText("No paired plots selected")).toBeInTheDocument();
+
+    const accuracyOption = await findMetricPlotOption(
+      user,
+      "Train vs Validation",
+      "accuracy_epoch",
+    );
+    expect(
+      await queryMetricPlotOption(user, "Train vs Validation", "validation/precision"),
+    ).not.toBeInTheDocument();
+    expect(
+      await queryMetricPlotOption(user, "Train vs Validation", "train/recall"),
+    ).not.toBeInTheDocument();
+    await user.click(accuracyOption);
+
+    expect(
+      await screen.findByRole("img", {
+        name: /accuracy_epoch train vs validation scalar chart/i,
+      }),
+    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(hasCombinedTrainValidationRequest(logScalarRequests, "accuracy_epoch"))
+        .toBe(true);
+    });
+    expect(screen.getByText(/test_model · Mnist .* · Train/)).toBeInTheDocument();
+    expect(screen.getByText(/test_model · Mnist .* · Validation/))
+      .toBeInTheDocument();
+  });
+
+  it("renders separate train-vs-validation legend entries for each visible run", async () => {
+    const runs = [
+      logRunsResponse.runs[0],
+      {
+        ...logRunsResponse.runs[0],
+        id: "log-mnist-wide",
+        runName: "wide_20260601_030405",
+        timestamp: "2026-06-01 03:04:05",
+        relativePath:
+          "test_model/linear/WIDE/Mnist/wide_20260601_030405/version_0",
+      },
+    ];
+    installFetchMock({
+      logRunsResponse: { runs },
+      logExperimentsResponse: {
+        experiments: [
+          { experiment: "test_model", runCount: 2, relativePath: "test_model" },
+        ],
+      },
+      logTagsByRun: {
+        "log-mnist": scalarTagsWithEpochDefaults(),
+        "log-mnist-wide": scalarTagsWithEpochDefaults(),
+      },
+      logScalarSeries: [
+        ...epochScalarSeriesForRun("log-mnist"),
+        ...epochScalarSeriesForRun("log-mnist-wide", 100),
+      ],
+    });
+    renderViewer();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+    await selectLogExperiments(user, ["test_model"]);
+    await user.click(await findTrainValidationComparisonToggle());
+
+    const chart = await screen.findByRole("img", {
+      name: /accuracy_epoch train vs validation scalar chart/i,
+    });
+    const card = chart.closest("section");
+    if (!(card instanceof HTMLElement)) {
+      throw new Error("Expected combined scalar chart to render inside a section");
+    }
+    expect(await within(card).findAllByText(/· Train$/)).toHaveLength(2);
+    expect(within(card).getAllByText(/· Validation$/)).toHaveLength(2);
   });
 
   it("ranks best runs independently from selected scalar chart tags", async () => {

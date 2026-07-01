@@ -43,6 +43,35 @@ type LogScalarChartProps = {
   onVisible?: (tag: string) => void;
 };
 
+type LogTrainValidationScalarChartProps = {
+  suffix: string;
+  trainTag: string;
+  validationTag: string;
+  series: LogScalarSeries[];
+  runsById: Map<string, LogRun>;
+  checkpointsByRunId: Map<string, LogCheckpoint[]>;
+  runOrder: string[];
+  onSelectRun: (runId: string) => void;
+  highlightedRunId?: string | null;
+  onHoverRunChange?: (runId: string | null) => void;
+  xMode?: ScalarXMode;
+  yScale?: ScalarYScale;
+  smoothing?: number;
+  group?: string;
+  hasRequested?: boolean;
+  isLoading?: boolean;
+  isError?: boolean;
+  error?: unknown;
+  onVisible?: (suffix: string) => void;
+};
+
+export type TrainValidationScalarLine = ScalarLine & {
+  runId: string;
+  tag: string;
+  phase: "Train" | "Validation";
+  latest: ScalarLine["points"][number] | undefined;
+};
+
 const LOG_SCALAR_CHART_VIEWPORT_MARGIN_PX = 360;
 const UNKNOWN_RUN_ORDER = Number.MAX_SAFE_INTEGER;
 
@@ -143,14 +172,19 @@ function isElementNearViewport(
   );
 }
 
-export function LazyLogScalarChart(props: LogScalarChartProps) {
+function useLazyLogChartVisibility({
+  onVisible,
+  visibilityKey,
+}: {
+  onVisible?: (value: string) => void;
+  visibilityKey: string;
+}) {
   const chartRef = useRef<HTMLElement | null>(null);
   const [hasEnteredView, setHasEnteredView] = useState(false);
-  const { onVisible, tag } = props;
   const markEnteredView = useCallback(() => {
     setHasEnteredView(true);
-    onVisible?.(tag);
-  }, [onVisible, tag]);
+    onVisible?.(visibilityKey);
+  }, [onVisible, visibilityKey]);
 
   useEffect(() => {
     if (hasEnteredView) {
@@ -194,6 +228,15 @@ export function LazyLogScalarChart(props: LogScalarChartProps) {
       cancelScheduledChecks.forEach((cancel) => cancel());
     };
   }, [hasEnteredView, markEnteredView]);
+
+  return { chartRef, hasEnteredView };
+}
+
+export function LazyLogScalarChart(props: LogScalarChartProps) {
+  const { chartRef, hasEnteredView } = useLazyLogChartVisibility({
+    onVisible: props.onVisible,
+    visibilityKey: props.tag,
+  });
 
   if (!hasEnteredView) {
     return (
@@ -246,6 +289,138 @@ export function LazyLogScalarChart(props: LogScalarChartProps) {
   }
 
   return <LogScalarChart {...props} />;
+}
+
+export function LazyLogTrainValidationScalarChart(
+  props: LogTrainValidationScalarChartProps,
+) {
+  const { chartRef, hasEnteredView } = useLazyLogChartVisibility({
+    onVisible: props.onVisible,
+    visibilityKey: props.suffix,
+  });
+  const chartLabel = `${props.suffix} train vs validation scalar chart`;
+
+  if (!hasEnteredView) {
+    return (
+      <SurfacePanel
+        as="section"
+        padding="spacious"
+        ref={chartRef}
+        className="min-h-[350px]"
+        aria-label={`${chartLabel} placeholder`}
+      />
+    );
+  }
+
+  if (props.series.length === 0) {
+    if (props.isError) {
+      return (
+        <SurfacePanel
+          as="section"
+          padding="spacious"
+          className="min-h-[350px]"
+          aria-label={`${chartLabel} error`}
+        >
+          <ErrorPanel
+            title={`${props.suffix} train vs validation scalar read failed`}
+            message={errorMessage(props.error)}
+          />
+        </SurfacePanel>
+      );
+    }
+
+    const isWaiting = props.isLoading || !props.hasRequested;
+    return (
+      <SurfacePanel
+        as="section"
+        padding="spacious"
+        className="grid min-h-[350px] place-items-center"
+        aria-label={`${chartLabel} loading`}
+      >
+        <div
+          role={isWaiting ? "status" : undefined}
+          className="flex items-center gap-2 text-xs text-ink-faint"
+        >
+          {isWaiting && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
+          {isWaiting
+            ? `Loading ${props.suffix} train vs validation scalar points`
+            : `No scalar points for ${props.suffix}`}
+        </div>
+      </SurfacePanel>
+    );
+  }
+
+  return <LogTrainValidationScalarChart {...props} />;
+}
+
+function runIndexForOrder(runOrder: readonly string[]) {
+  return new Map(runOrder.map((runId, index) => [runId, index]));
+}
+
+function colorForRunIndex(runIndex: Map<string, number>, runId: string) {
+  return scalarSeriesColors[
+    Math.max(runIndex.get(runId) ?? 0, 0) % scalarSeriesColors.length
+  ];
+}
+
+export function buildTrainValidationScalarLines({
+  series,
+  runsById,
+  runOrder,
+  trainTag,
+  validationTag,
+}: {
+  series: readonly LogScalarSeries[];
+  runsById: Map<string, LogRun>;
+  runOrder: readonly string[];
+  trainTag: string;
+  validationTag: string;
+}): TrainValidationScalarLine[] {
+  const runIndex = runIndexForOrder(runOrder);
+  const orderedRunIds = [...runOrder];
+  const orderedRunIdSet = new Set(orderedRunIds);
+  const seriesByRunAndTag = new Map<string, LogScalarSeries>();
+  for (const entry of series) {
+    seriesByRunAndTag.set(`${entry.runId}::${entry.tag}`, entry);
+    if (!orderedRunIdSet.has(entry.runId)) {
+      orderedRunIdSet.add(entry.runId);
+      orderedRunIds.push(entry.runId);
+      runIndex.set(entry.runId, runIndex.size);
+    }
+  }
+
+  const phases = [
+    { tag: trainTag, label: "Train" as const, lineStyle: { type: "solid" as const } },
+    {
+      tag: validationTag,
+      label: "Validation" as const,
+      lineStyle: { type: "dashed" as const },
+    },
+  ];
+
+  return orderedRunIds.flatMap((runId) => {
+    const run = runsById.get(runId);
+    const runLabel = run ? formatRunLabel(run) : runId;
+    return phases.flatMap(({ tag, label, lineStyle }) => {
+      const entry = seriesByRunAndTag.get(`${runId}::${tag}`);
+      if (!entry || entry.points.length === 0) {
+        return [];
+      }
+      return [
+        {
+          id: `${runId}::${tag}`,
+          runId,
+          tag,
+          phase: label,
+          name: `${runLabel} · ${label}`,
+          color: colorForRunIndex(runIndex, runId),
+          lineStyle,
+          points: entry.points,
+          latest: entry.points.at(-1),
+        },
+      ];
+    });
+  });
 }
 
 export function LogScalarChart({
@@ -417,6 +592,172 @@ export function LogScalarChart({
       {isInfoOpen && (
         <TrainingMetricInfoDialog
           metricKey={tag}
+          valueTitle="Displayed trend"
+          valueLabel={trendLabel}
+          onClose={() => setIsInfoOpen(false)}
+        />
+      )}
+    </SurfacePanel>
+  );
+}
+
+export function LogTrainValidationScalarChart({
+  suffix,
+  trainTag,
+  validationTag,
+  series,
+  runsById,
+  checkpointsByRunId,
+  runOrder,
+  onSelectRun,
+  highlightedRunId = null,
+  onHoverRunChange,
+  xMode = "step",
+  yScale = "linear",
+  smoothing = 0,
+  group,
+}: LogTrainValidationScalarChartProps) {
+  const [isInfoOpen, setIsInfoOpen] = useState(false);
+
+  const scalarSummary = useMemo(
+    () => summarizeDisplayedScalars(series, runIndexForOrder(runOrder), xMode),
+    [series, runOrder, xMode],
+  );
+
+  const lines = useMemo(
+    () =>
+      buildTrainValidationScalarLines({
+        series,
+        runsById,
+        runOrder,
+        trainTag,
+        validationTag,
+      }),
+    [runsById, runOrder, series, trainTag, validationTag],
+  );
+  const highlightedLineIds = useMemo(
+    () =>
+      highlightedRunId
+        ? [`${highlightedRunId}::${trainTag}`, `${highlightedRunId}::${validationTag}`]
+        : [],
+    [highlightedRunId, trainTag, validationTag],
+  );
+  const chartHighlightedRunId = lines.some((line) => line.runId === highlightedRunId)
+    ? highlightedRunId
+    : null;
+  const trendLabel = `${formatNumber(scalarSummary.startValue)} to ${formatNumber(
+    scalarSummary.endValue,
+  )}`;
+
+  const option = useMemo(() => {
+    const checkpointRunIds = new Set(lines.map((line) => line.runId));
+    const checkpointMarkers: ScalarCheckpointMarker[] = Array.from(
+      checkpointRunIds,
+    ).flatMap((runId) => {
+      const run = runsById.get(runId);
+      const runLabel = run ? formatRunLabel(run) : runId;
+      return (checkpointsByRunId.get(runId) ?? []).map((checkpoint) => ({
+        runId,
+        runLabel,
+        filename: checkpoint.filename,
+        epoch: checkpoint.epoch,
+        step: checkpoint.step,
+      }));
+    });
+    return buildScalarLineOption(lines, {
+      xMode,
+      yScale,
+      smoothing,
+      highlightedLineIds: chartHighlightedRunId ? highlightedLineIds : [],
+      dataZoom: true,
+      checkpointMarkers,
+    });
+  }, [
+    lines,
+    runsById,
+    checkpointsByRunId,
+    xMode,
+    yScale,
+    smoothing,
+    chartHighlightedRunId,
+    highlightedLineIds,
+  ]);
+
+  return (
+    <SurfacePanel as="section" padding="spacious" className="min-w-0">
+      <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="truncate text-sm font-bold text-ink">{suffix}</h2>
+          <div className="mt-0.5 font-mono text-xs text-ink-faint">
+            {lines.length} lines · step {scalarSummary.minStep} to{" "}
+            {scalarSummary.maxStep}
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <IconButton
+            label={`Explain metric ${suffix}`}
+            title={`Explain ${suffix}`}
+            size="sm"
+            variant="ghost"
+            aria-haspopup="dialog"
+            aria-expanded={isInfoOpen ? true : undefined}
+            className="h-6 w-6 rounded-[7px] border border-line-soft bg-white/[0.025] text-ink-faint hover:border-violet/40 hover:bg-violet/10 hover:text-violet focus-visible:ring-2 focus-visible:ring-focus"
+            icon={<Info className="h-3.5 w-3.5" aria-hidden />}
+            onClick={() => setIsInfoOpen(true)}
+          />
+          <Badge>{trendLabel}</Badge>
+        </div>
+      </div>
+
+      <div
+        className="h-56 w-full min-w-0"
+        role="img"
+        aria-label={`${suffix} train vs validation scalar chart`}
+      >
+        <EChart option={option} group={group} />
+      </div>
+
+      <div className="grid max-h-48 min-h-0 gap-1.5 overflow-y-auto pr-1 sm:grid-cols-2 xl:grid-cols-3">
+        {lines.map((line) => {
+          const hasHighlightedRun = chartHighlightedRunId !== null;
+          const isHighlightedRun = line.runId === chartHighlightedRunId;
+          return (
+            <button
+              key={line.id}
+              type="button"
+              className={cn(
+                "grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-[9px] border border-line-soft bg-black/20 px-2 py-1.5 text-left text-xs transition hover:border-line hover:bg-white/[0.035] focus:outline-none focus-visible:ring-2 focus-visible:ring-focus",
+                hasHighlightedRun && !isHighlightedRun
+                  ? "opacity-30"
+                  : "opacity-100",
+              )}
+              onClick={() => onSelectRun(line.runId)}
+              onPointerEnter={() => onHoverRunChange?.(line.runId)}
+              onPointerLeave={() => onHoverRunChange?.(null)}
+              onFocus={() => onHoverRunChange?.(line.runId)}
+              onBlur={() => onHoverRunChange?.(null)}
+            >
+              <span
+                className={cn(
+                  "h-0 w-4 border-t-2",
+                  line.phase === "Validation" && "border-dashed",
+                )}
+                style={{ borderColor: line.color }}
+                aria-hidden
+              />
+              <span className="truncate text-ink-dim">{line.name}</span>
+              {line.latest && (
+                <span className="font-mono text-ink-faint">
+                  {formatNumber(line.latest.value)}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+      {isInfoOpen && (
+        <TrainingMetricInfoDialog
+          metricKey={validationTag}
           valueTitle="Displayed trend"
           valueLabel={trendLabel}
           onClose={() => setIsInfoOpen(false)}

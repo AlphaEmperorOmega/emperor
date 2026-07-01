@@ -17,7 +17,10 @@ import { InlineStatus } from "@/features/viewer/components/shared/inline-status"
 import { SurfacePanel } from "@/features/viewer/components/shared/surface-panel";
 import { LogBestRunPanel } from "@/features/viewer/components/logs/log-best-run-panel";
 import { LogConfusionMatrixHeatmaps } from "@/features/viewer/components/logs/log-confusion-matrix-heatmap";
-import { LazyLogScalarChart } from "@/features/viewer/components/logs/log-scalar-chart";
+import {
+  LazyLogScalarChart,
+  LazyLogTrainValidationScalarChart,
+} from "@/features/viewer/components/logs/log-scalar-chart";
 import { LogTestScoresPanel } from "@/features/viewer/components/logs/log-test-scores-panel";
 import { LogValidationExamplesPanel } from "@/features/viewer/components/logs/log-validation-examples-panel";
 import {
@@ -35,12 +38,15 @@ import {
   type LogMetricsByGroup,
   type LogMetricTagsByGroup,
   type LogMetricGroupKey,
+  type TrainValidationScalarPair,
 } from "@/features/viewer/state/logs/logs-selectors";
 import {
   type LogBestRunViewModel,
   type LogMetricChartLayoutGroupKey,
   type LogMetricGroupScalarQueryStates,
   type LogScalarTagQueryState,
+  type LogMetricGroupScalarQueryState,
+  type LogTrainValidationComparisonMetric,
 } from "@/features/viewer/state/logs/logs-chart-view-model";
 import {
   type ConfusionMatrixHeatmap,
@@ -122,6 +128,10 @@ export type LogsChartEmptyState = {
 
 function metricCountLabel(count: number) {
   return `${count} ${count === 1 ? "metric" : "metrics"}`;
+}
+
+function plotCountLabel(count: number) {
+  return `${count} ${count === 1 ? "plot" : "plots"}`;
 }
 
 function mediaCountLabel(imageCount: number, textCount: number, isLoading: boolean) {
@@ -296,6 +306,16 @@ function logPlotSelectorOptions(tags: string[]): MultiSelectDropdownOption[] {
   }));
 }
 
+function trainValidationPlotSelectorOptions(
+  pairs: TrainValidationScalarPair[],
+): MultiSelectDropdownOption[] {
+  return pairs.map((pair) => ({
+    value: pair.suffix,
+    label: pair.suffix,
+    description: `${pair.trainTag} + ${pair.validationTag}`,
+  }));
+}
+
 function LogPlotSelectorControls({
   groupLabel,
   values,
@@ -369,6 +389,17 @@ export function LogsChartPanel({
   availableMetricTagsByGroup,
   selectedTagsByGroup,
   onMetricGroupTagSelectionChange,
+  trainValidationPairs,
+  trainValidationComparisonMetrics,
+  selectedTrainValidationPairSuffixes,
+  trainValidationPairQueryStates,
+  trainValidationComparisonQueryState,
+  isTrainValidationComparisonCollapsed,
+  onToggleTrainValidationComparison,
+  trainValidationComparisonGridMode,
+  onTrainValidationComparisonGridModeChange,
+  onTrainValidationPairSelectionChange,
+  onTrainValidationComparisonChartVisible,
   confusionHeatmaps,
   runsById,
   checkpointsByRunId,
@@ -419,6 +450,17 @@ export function LogsChartPanel({
     group: LogMetricGroupKey,
     selectedValues: string[],
   ) => void;
+  trainValidationPairs: TrainValidationScalarPair[];
+  trainValidationComparisonMetrics: LogTrainValidationComparisonMetric[];
+  selectedTrainValidationPairSuffixes: string[];
+  trainValidationPairQueryStates: Map<string, LogScalarTagQueryState>;
+  trainValidationComparisonQueryState: LogMetricGroupScalarQueryState;
+  isTrainValidationComparisonCollapsed: boolean;
+  onToggleTrainValidationComparison: () => void;
+  trainValidationComparisonGridMode: ScalarChartGridMode;
+  onTrainValidationComparisonGridModeChange: (mode: ScalarChartGridMode) => void;
+  onTrainValidationPairSelectionChange: (suffixes: string[]) => void;
+  onTrainValidationComparisonChartVisible: (suffix: string) => void;
   confusionHeatmaps: ConfusionMatrixHeatmap[];
   runsById: Map<string, LogRun>;
   checkpointsByRunId: Map<string, LogCheckpoint[]>;
@@ -468,6 +510,8 @@ export function LogsChartPanel({
   const [highlightedRunsByGroup, setHighlightedRunsByGroup] = useState<
     Record<LogMetricChartLayoutGroupKey, string | null>
   >(() => ({ ...EMPTY_HIGHLIGHTED_RUNS_BY_GROUP }));
+  const [highlightedTrainValidationRunId, setHighlightedTrainValidationRunId] =
+    useState<string | null>(null);
   const visibleRunIds = useMemo(() => new Set(runOrder), [runOrder]);
   const setHighlightedRunForGroup = useCallback(
     (group: LogMetricChartLayoutGroupKey, runId: string | null) => {
@@ -491,6 +535,12 @@ export function LogsChartPanel({
       }
       return didChange ? next : current;
     });
+  }, [visibleRunIds]);
+
+  useEffect(() => {
+    setHighlightedTrainValidationRunId((current) =>
+      current !== null && !visibleRunIds.has(current) ? null : current,
+    );
   }, [visibleRunIds]);
 
   const handlePlotSelectionChange = useCallback(
@@ -519,6 +569,126 @@ export function LogsChartPanel({
       group: LOG_METRIC_GROUP_BY_KEY.other as LogsChartAccordionMetricGroup,
     },
   ];
+
+  const renderTrainValidationComparisonSection = () => {
+    if (trainValidationPairs.length === 0) {
+      return null;
+    }
+    const bodyId = "logs-train-validation-comparison";
+    const options = trainValidationPlotSelectorOptions(trainValidationPairs);
+    const availableSuffixes = new Set(trainValidationPairs.map((pair) => pair.suffix));
+    const selectedSuffixes = selectedTrainValidationPairSuffixes.filter((suffix) =>
+      availableSuffixes.has(suffix),
+    );
+    const hasNoSelectedPlots = selectedSuffixes.length === 0;
+    const visibleMetrics = trainValidationComparisonMetrics.slice(
+      0,
+      LOG_METRIC_GROUP_RENDER_LIMIT,
+    );
+    const hiddenMetricCount = Math.max(
+      0,
+      trainValidationComparisonMetrics.length - visibleMetrics.length,
+    );
+    const fullSpanClass =
+      SCALAR_CHART_GRID_FULL_SPAN_CLASSES[trainValidationComparisonGridMode];
+    const headerActions = (
+      <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+        <div className="min-w-[15rem] flex-1">
+          <LogPlotSelectorControls
+            groupLabel="Train vs Validation"
+            values={selectedSuffixes}
+            options={options}
+            onChange={onTrainValidationPairSelectionChange}
+          />
+        </div>
+        <ScalarChartLayoutControl
+          ariaLabel="Train vs Validation chart layout"
+          compact
+          mode={trainValidationComparisonGridMode}
+          onModeChange={onTrainValidationComparisonGridModeChange}
+        />
+      </div>
+    );
+
+    return (
+      <section className="grid gap-3">
+        <LogsAccordionHeader
+          label="Train vs Validation"
+          badge={plotCountLabel(trainValidationPairs.length)}
+          isCollapsed={isTrainValidationComparisonCollapsed}
+          controlsId={bodyId}
+          onToggle={onToggleTrainValidationComparison}
+          actions={headerActions}
+        />
+        {!isTrainValidationComparisonCollapsed && (
+          <>
+            <div
+              id={bodyId}
+              className={
+                hasNoSelectedPlots
+                  ? "grid gap-3"
+                  : SCALAR_CHART_GRID_CLASSES[trainValidationComparisonGridMode]
+              }
+            >
+              {hasNoSelectedPlots && (
+                <InlineStatus compact>No paired plots selected</InlineStatus>
+              )}
+              {!hasNoSelectedPlots &&
+                trainValidationComparisonQueryState.isError && (
+                  <div className={fullSpanClass}>
+                    <ErrorPanel
+                      title="Train vs Validation scalar read failed"
+                      message={errorMessage(trainValidationComparisonQueryState.error)}
+                    />
+                  </div>
+                )}
+              {!hasNoSelectedPlots &&
+                visibleMetrics.map((metric) => {
+                  const pairQueryState = trainValidationPairQueryStates.get(
+                    metric.suffix,
+                  );
+                  return (
+                    <LazyLogTrainValidationScalarChart
+                      key={metric.suffix}
+                      suffix={metric.suffix}
+                      trainTag={metric.trainTag}
+                      validationTag={metric.validationTag}
+                      series={metric.series}
+                      runsById={runsById}
+                      checkpointsByRunId={checkpointsByRunId}
+                      runOrder={runOrder}
+                      onSelectRun={onSelectRun}
+                      highlightedRunId={highlightedTrainValidationRunId}
+                      onHoverRunChange={setHighlightedTrainValidationRunId}
+                      group={LOGS_SCALAR_GROUP}
+                      xMode={xMode}
+                      yScale={yScale}
+                      smoothing={smoothing}
+                      hasRequested={pairQueryState?.hasRequested ?? false}
+                      isLoading={
+                        pairQueryState?.isInitialLoading ||
+                        pairQueryState?.isFetching ||
+                        false
+                      }
+                      isError={pairQueryState?.isError ?? false}
+                      error={pairQueryState?.error}
+                      onVisible={onTrainValidationComparisonChartVisible}
+                    />
+                  );
+                })}
+            </div>
+            {hiddenMetricCount > 0 && (
+              <div className="rounded-[10px] border border-line-soft bg-white/[0.018] px-3 py-3 text-center text-xs text-ink-faint">
+                Showing {visibleMetrics.length} of{" "}
+                {trainValidationComparisonMetrics.length} paired charts. Narrow
+                selected plots to inspect the rest.
+              </div>
+            )}
+          </>
+        )}
+      </section>
+    );
+  };
 
   const renderMetricGroupSection = (group: LogsChartAccordionMetricGroup) => {
     const metrics = metricsByGroup[group.key];
@@ -825,6 +995,7 @@ export function LogsChartPanel({
       <div className="min-h-0 overflow-y-auto p-4">
         <div className="grid gap-5">
           <LogBestRunPanel bestRun={bestRun} onSelectRun={onSelectRun} />
+          {renderTrainValidationComparisonSection()}
           <LogTestScoresPanel
             metrics={metricsByGroup.test}
             selectedTags={selectedTagsByGroup.test}

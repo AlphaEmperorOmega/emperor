@@ -95,6 +95,12 @@ export type RenderableLogMetric = {
   series: LogScalarSeries[];
 };
 
+export type TrainValidationScalarPair = {
+  suffix: string;
+  trainTag: string;
+  validationTag: string;
+};
+
 export type LogMetricsByGroup = Record<LogMetricGroupKey, RenderableLogMetric[]>;
 export type LogMetricTagsByGroup = Record<LogMetricGroupKey, string[]>;
 
@@ -195,6 +201,56 @@ export function buildLogScalarTagOptions(tagRuns: LogScalarTagRun[] | undefined)
     tagOptions,
     confusionMatrixRateTags,
   };
+}
+
+function trainValidationSuffix(tag: string, prefix: "train/" | "validation/") {
+  return tag.startsWith(prefix) ? tag.slice(prefix.length) : null;
+}
+
+export function buildTrainValidationScalarPairs(
+  tagOptions: readonly Pick<ChecklistOption, "value">[],
+): TrainValidationScalarPair[] {
+  const trainSuffixes = new Set<string>();
+  const validationSuffixes = new Set<string>();
+  const orderedSuffixes: string[] = [];
+  const addSuffix = (suffix: string) => {
+    if (!orderedSuffixes.includes(suffix)) {
+      orderedSuffixes.push(suffix);
+    }
+  };
+
+  for (const option of tagOptions) {
+    const trainSuffix = trainValidationSuffix(option.value, "train/");
+    if (trainSuffix !== null) {
+      trainSuffixes.add(trainSuffix);
+      addSuffix(trainSuffix);
+      continue;
+    }
+    const validationSuffix = trainValidationSuffix(option.value, "validation/");
+    if (validationSuffix !== null) {
+      validationSuffixes.add(validationSuffix);
+      addSuffix(validationSuffix);
+    }
+  }
+
+  return orderedSuffixes
+    .filter((suffix) => trainSuffixes.has(suffix) && validationSuffixes.has(suffix))
+    .map((suffix) => ({
+      suffix,
+      trainTag: `train/${suffix}`,
+      validationTag: `validation/${suffix}`,
+    }));
+}
+
+export function defaultTrainValidationScalarPairSuffixes(
+  pairs: readonly TrainValidationScalarPair[],
+) {
+  return pairs
+    .filter(
+      (pair) =>
+        isDefaultScalarTag(pair.trainTag) && isDefaultScalarTag(pair.validationTag),
+    )
+    .map((pair) => pair.suffix);
 }
 
 export function formatRunLabel(run: LogRun) {
