@@ -44,6 +44,84 @@ type LogScalarChartProps = {
 };
 
 const LOG_SCALAR_CHART_VIEWPORT_MARGIN_PX = 360;
+const UNKNOWN_RUN_ORDER = Number.MAX_SAFE_INTEGER;
+
+type DisplayedScalarPoint = {
+  point: LogScalarSeries["points"][number];
+  runOrder: number;
+  seriesOrder: number;
+  pointOrder: number;
+};
+
+function compareDisplayedScalarPoints(
+  left: DisplayedScalarPoint,
+  right: DisplayedScalarPoint,
+  xMode: ScalarXMode,
+) {
+  const leftPrimary = xMode === "wallTime" ? left.point.wallTime : left.point.step;
+  const rightPrimary =
+    xMode === "wallTime" ? right.point.wallTime : right.point.step;
+  if (leftPrimary !== rightPrimary) {
+    return leftPrimary - rightPrimary;
+  }
+
+  const leftSecondary = xMode === "wallTime" ? left.point.step : left.point.wallTime;
+  const rightSecondary =
+    xMode === "wallTime" ? right.point.step : right.point.wallTime;
+  if (leftSecondary !== rightSecondary) {
+    return leftSecondary - rightSecondary;
+  }
+
+  if (left.runOrder !== right.runOrder) {
+    return left.runOrder - right.runOrder;
+  }
+  if (left.seriesOrder !== right.seriesOrder) {
+    return left.seriesOrder - right.seriesOrder;
+  }
+  return left.pointOrder - right.pointOrder;
+}
+
+function summarizeDisplayedScalars(
+  series: LogScalarSeries[],
+  runIndex: Map<string, number>,
+  xMode: ScalarXMode,
+) {
+  let minStep = Number.POSITIVE_INFINITY;
+  let maxStep = Number.NEGATIVE_INFINITY;
+  let earliestPoint: DisplayedScalarPoint | null = null;
+  let latestPoint: DisplayedScalarPoint | null = null;
+  let pointCount = 0;
+
+  for (const [seriesOrder, entry] of series.entries()) {
+    const runOrder = runIndex.get(entry.runId) ?? UNKNOWN_RUN_ORDER;
+    for (const [pointOrder, point] of entry.points.entries()) {
+      minStep = Math.min(minStep, point.step);
+      maxStep = Math.max(maxStep, point.step);
+      pointCount += 1;
+
+      const displayedPoint = { point, runOrder, seriesOrder, pointOrder };
+      if (
+        earliestPoint === null ||
+        compareDisplayedScalarPoints(displayedPoint, earliestPoint, xMode) < 0
+      ) {
+        earliestPoint = displayedPoint;
+      }
+      if (
+        latestPoint === null ||
+        compareDisplayedScalarPoints(displayedPoint, latestPoint, xMode) > 0
+      ) {
+        latestPoint = displayedPoint;
+      }
+    }
+  }
+
+  return {
+    minStep: pointCount ? minStep : 0,
+    maxStep: pointCount ? maxStep : 0,
+    startValue: earliestPoint?.point.value ?? 0,
+    endValue: latestPoint?.point.value ?? 0,
+  };
+}
 
 function isElementNearViewport(
   node: HTMLElement,
@@ -197,28 +275,10 @@ export function LogScalarChart({
     [runIndex],
   );
 
-  const scalarBounds = useMemo(() => {
-    let minStep = Number.POSITIVE_INFINITY;
-    let maxStep = Number.NEGATIVE_INFINITY;
-    let minValue = Number.POSITIVE_INFINITY;
-    let maxValue = Number.NEGATIVE_INFINITY;
-    let pointCount = 0;
-    for (const entry of series) {
-      for (const point of entry.points) {
-        minStep = Math.min(minStep, point.step);
-        maxStep = Math.max(maxStep, point.step);
-        minValue = Math.min(minValue, point.value);
-        maxValue = Math.max(maxValue, point.value);
-        pointCount += 1;
-      }
-    }
-    return {
-      minStep: pointCount ? minStep : 0,
-      maxStep: pointCount ? maxStep : 0,
-      minValue: pointCount ? minValue : 0,
-      maxValue: pointCount ? maxValue : 0,
-    };
-  }, [series]);
+  const scalarSummary = useMemo(
+    () => summarizeDisplayedScalars(series, runIndex, xMode),
+    [series, runIndex, xMode],
+  );
 
   const legendEntries = useMemo(
     () =>
@@ -243,8 +303,8 @@ export function LogScalarChart({
   )
     ? highlightedRunId
     : null;
-  const rangeLabel = `${formatNumber(scalarBounds.minValue)} to ${formatNumber(
-    scalarBounds.maxValue,
+  const trendLabel = `${formatNumber(scalarSummary.startValue)} to ${formatNumber(
+    scalarSummary.endValue,
   )}`;
 
   const option = useMemo(() => {
@@ -293,8 +353,8 @@ export function LogScalarChart({
         <div className="min-w-0">
           <h2 className="truncate text-sm font-bold text-ink">{tag}</h2>
           <div className="mt-0.5 font-mono text-xs text-ink-faint">
-            {series.length} lines · step {scalarBounds.minStep} to{" "}
-            {scalarBounds.maxStep}
+            {series.length} lines · step {scalarSummary.minStep} to{" "}
+            {scalarSummary.maxStep}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
@@ -309,7 +369,7 @@ export function LogScalarChart({
             icon={<Info className="h-3.5 w-3.5" aria-hidden />}
             onClick={() => setIsInfoOpen(true)}
           />
-          <Badge>{rangeLabel}</Badge>
+          <Badge>{trendLabel}</Badge>
         </div>
       </div>
 
@@ -357,8 +417,8 @@ export function LogScalarChart({
       {isInfoOpen && (
         <TrainingMetricInfoDialog
           metricKey={tag}
-          valueTitle="Visible range"
-          valueLabel={rangeLabel}
+          valueTitle="Displayed trend"
+          valueLabel={trendLabel}
           onClose={() => setIsInfoOpen(false)}
         />
       )}
