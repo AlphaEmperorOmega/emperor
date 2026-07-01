@@ -2,8 +2,11 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import {
+  buildTrainValidationScalarLines,
   LazyLogScalarChart,
+  LazyLogTrainValidationScalarChart,
   LogScalarChart,
+  LogTrainValidationScalarChart,
 } from "@/features/viewer/components/logs/log-scalar-chart";
 import { formatRunLabel } from "@/features/viewer/state/logs/logs-selectors";
 import { type LogRun, type LogScalarSeries } from "@/lib/api";
@@ -57,7 +60,138 @@ function renderScalarChart(tag: string) {
   );
 }
 
+function renderTrainValidationChart({
+  series,
+  runs = [logRun()],
+  runOrder = runs.map((run) => run.id),
+  suffix = "loss_epoch",
+  trainTag = `train/${suffix}`,
+  validationTag = `validation/${suffix}`,
+  xMode = "step",
+}: {
+  series: LogScalarSeries[];
+  runs?: LogRun[];
+  runOrder?: string[];
+  suffix?: string;
+  trainTag?: string;
+  validationTag?: string;
+  xMode?: "step" | "wallTime";
+}) {
+  return render(
+    <LogTrainValidationScalarChart
+      suffix={suffix}
+      trainTag={trainTag}
+      validationTag={validationTag}
+      series={series}
+      runsById={new Map(runs.map((run) => [run.id, run]))}
+      checkpointsByRunId={new Map()}
+      runOrder={runOrder}
+      onSelectRun={vi.fn()}
+      xMode={xMode}
+    />,
+  );
+}
+
 describe("LogScalarChart", () => {
+  it("builds train-validation comparison lines with phase labels and stable ids", () => {
+    const run = logRun();
+    const lines = buildTrainValidationScalarLines({
+      trainTag: "train/accuracy_epoch",
+      validationTag: "validation/accuracy_epoch",
+      runsById: new Map([[run.id, run]]),
+      runOrder: [run.id],
+      series: [
+        scalarSeries({ tag: "train/accuracy_epoch" }),
+        scalarSeries({ tag: "validation/accuracy_epoch" }),
+      ],
+    });
+
+    expect(lines.map((line) => line.id)).toEqual([
+      "run-1::train/accuracy_epoch",
+      "run-1::validation/accuracy_epoch",
+    ]);
+    expect(lines.map((line) => line.name)).toEqual([
+      `${formatRunLabel(run)} · Train`,
+      `${formatRunLabel(run)} · Validation`,
+    ]);
+    expect(lines[0].lineStyle?.type).toBe("solid");
+    expect(lines[1].lineStyle?.type).toBe("dashed");
+  });
+
+  it("keeps same-run train and validation lines separate across multiple runs", () => {
+    const runs = [
+      logRun({ id: "run-1", runName: "run-1" }),
+      logRun({ id: "run-2", runName: "run-2", timestamp: null }),
+    ];
+    const lines = buildTrainValidationScalarLines({
+      trainTag: "train/loss_epoch",
+      validationTag: "validation/loss_epoch",
+      runsById: new Map(runs.map((run) => [run.id, run])),
+      runOrder: runs.map((run) => run.id),
+      series: runs.flatMap((run) => [
+        scalarSeries({ runId: run.id, tag: "train/loss_epoch" }),
+        scalarSeries({ runId: run.id, tag: "validation/loss_epoch" }),
+      ]),
+    });
+
+    expect(new Set(lines.map((line) => line.id)).size).toBe(4);
+    expect(lines.map((line) => line.phase)).toEqual([
+      "Train",
+      "Validation",
+      "Train",
+      "Validation",
+    ]);
+    expect(lines.filter((line) => line.runId === "run-2").map((line) => line.tag))
+      .toEqual(["train/loss_epoch", "validation/loss_epoch"]);
+  });
+
+  it("shows train-validation loading and error states inside the lazy chart shell", async () => {
+    const originalObserver = globalThis.IntersectionObserver;
+    Reflect.deleteProperty(globalThis, "IntersectionObserver");
+
+    try {
+      const props = {
+        suffix: "accuracy_epoch",
+        trainTag: "train/accuracy_epoch",
+        validationTag: "validation/accuracy_epoch",
+        series: [],
+        runsById: new Map([["run-1", logRun()]]),
+        checkpointsByRunId: new Map(),
+        runOrder: ["run-1"],
+        onSelectRun: vi.fn(),
+      };
+      const { rerender } = render(
+        <LazyLogTrainValidationScalarChart {...props} isLoading />,
+      );
+
+      expect(await screen.findByRole("status")).toHaveTextContent(
+        "Loading accuracy_epoch train vs validation scalar points",
+      );
+
+      rerender(
+        <LazyLogTrainValidationScalarChart
+          {...props}
+          hasRequested
+          isError
+          error={new Error("read failed")}
+        />,
+      );
+
+      expect(
+        await screen.findByText("accuracy_epoch train vs validation scalar read failed"),
+      ).toBeInTheDocument();
+      expect(screen.getByText("read failed")).toBeInTheDocument();
+    } finally {
+      if (originalObserver) {
+        Object.defineProperty(globalThis, "IntersectionObserver", {
+          configurable: true,
+          writable: true,
+          value: originalObserver,
+        });
+      }
+    }
+  });
+
   it("renders lazy charts immediately when IntersectionObserver is unavailable", async () => {
     const originalObserver = globalThis.IntersectionObserver;
     Reflect.deleteProperty(globalThis, "IntersectionObserver");
@@ -270,6 +404,182 @@ describe("LogScalarChart", () => {
         Reflect.deleteProperty(globalThis, "cancelAnimationFrame");
       }
     }
+  });
+
+  it("shows the chronological displayed trend for decreasing loss", () => {
+    render(
+      <LogScalarChart
+        tag="train/loss"
+        series={[
+          scalarSeries({
+            tag: "train/loss",
+            points: [
+              { step: 1, wallTime: 1780000000, value: 2.1327 },
+              { step: 2, wallTime: 1780000001, value: 1.4535 },
+            ],
+          }),
+        ]}
+        runsById={new Map([["run-1", logRun()]])}
+        checkpointsByRunId={new Map()}
+        runOrder={["run-1"]}
+        onSelectRun={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("2.1327 to 1.4535")).toBeInTheDocument();
+    expect(screen.queryByText("1.4535 to 2.1327")).not.toBeInTheDocument();
+  });
+
+  it("shows the chronological displayed trend for decreasing train-validation loss", async () => {
+    const user = userEvent.setup();
+    renderTrainValidationChart({
+      series: [
+        scalarSeries({
+          tag: "train/loss_epoch",
+          points: [
+            { step: 1, wallTime: 1780000000, value: 2.1327 },
+            { step: 2, wallTime: 1780000002, value: 1.4535 },
+          ],
+        }),
+        scalarSeries({
+          tag: "validation/loss_epoch",
+          points: [
+            { step: 1, wallTime: 1780000001, value: 2.01 },
+            { step: 2, wallTime: 1780000001, value: 1.72 },
+          ],
+        }),
+      ],
+    });
+
+    expect(screen.getByText("2.1327 to 1.4535")).toBeInTheDocument();
+    expect(screen.queryByText("1.4535 to 2.1327")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Explain metric loss_epoch" }));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "validation/loss_epoch",
+    });
+    expect(within(dialog).getByText("Displayed trend")).toBeInTheDocument();
+    expect(within(dialog).getByText("2.1327 to 1.4535")).toBeInTheDocument();
+  });
+
+  it("summarizes overlaid runs from aggregate earliest point to aggregate latest point", () => {
+    const runs = [
+      logRun({
+        id: "run-1",
+        runName: "run-1",
+      }),
+      logRun({
+        id: "run-2",
+        runName: "run-2",
+      }),
+    ];
+
+    render(
+      <LogScalarChart
+        tag="train/loss"
+        series={[
+          scalarSeries({
+            runId: "run-1",
+            tag: "train/loss",
+            points: [
+              { step: 3, wallTime: 1780000003, value: 11 },
+              { step: 9, wallTime: 1780000009, value: 21 },
+            ],
+          }),
+          scalarSeries({
+            runId: "run-2",
+            tag: "train/loss",
+            points: [
+              { step: 1, wallTime: 1780000001, value: 101 },
+              { step: 7, wallTime: 1780000007, value: 107 },
+            ],
+          }),
+        ]}
+        runsById={new Map(runs.map((run) => [run.id, run]))}
+        checkpointsByRunId={new Map()}
+        runOrder={runs.map((run) => run.id)}
+        onSelectRun={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("101 to 21")).toBeInTheDocument();
+    expect(screen.queryByText("11 to 107")).not.toBeInTheDocument();
+  });
+
+  it("summarizes train-validation runs from aggregate earliest displayed point to latest displayed point", () => {
+    const runs = [
+      logRun({ id: "run-1", runName: "run-1" }),
+      logRun({ id: "run-2", runName: "run-2" }),
+    ];
+
+    renderTrainValidationChart({
+      runs,
+      series: [
+        scalarSeries({
+          runId: "run-1",
+          tag: "train/loss_epoch",
+          points: [
+            { step: 3, wallTime: 1780000003, value: 11 },
+            { step: 9, wallTime: 1780000009, value: 21 },
+          ],
+        }),
+        scalarSeries({
+          runId: "run-1",
+          tag: "validation/loss_epoch",
+          points: [
+            { step: 4, wallTime: 1780000004, value: 12 },
+            { step: 8, wallTime: 1780000008, value: 18 },
+          ],
+        }),
+        scalarSeries({
+          runId: "run-2",
+          tag: "train/loss_epoch",
+          points: [
+            { step: 1, wallTime: 1780000001, value: 101 },
+            { step: 7, wallTime: 1780000007, value: 107 },
+          ],
+        }),
+        scalarSeries({
+          runId: "run-2",
+          tag: "validation/loss_epoch",
+          points: [
+            { step: 2, wallTime: 1780000002, value: 202 },
+            { step: 10, wallTime: 1780000010, value: 210 },
+          ],
+        }),
+      ],
+    });
+
+    expect(screen.getByText("101 to 210")).toBeInTheDocument();
+    expect(screen.queryByText("11 to 210")).not.toBeInTheDocument();
+  });
+
+  it("orders train-validation displayed trend by wall time before step", () => {
+    renderTrainValidationChart({
+      xMode: "wallTime",
+      series: [
+        scalarSeries({
+          tag: "validation/loss_epoch",
+          points: [
+            { step: 20, wallTime: 1780000100, value: 20 },
+            { step: 1, wallTime: 1780000600, value: 1 },
+          ],
+        }),
+        scalarSeries({
+          tag: "train/loss_epoch",
+          points: [
+            { step: 10, wallTime: 1780000100, value: 10 },
+            { step: 40, wallTime: 1780000500, value: 40 },
+          ],
+        }),
+      ],
+    });
+
+    expect(screen.getByText("2 lines · step 1 to 40")).toBeInTheDocument();
+    expect(screen.getByText("10 to 1")).toBeInTheDocument();
+    expect(screen.queryByText("1 to 40")).not.toBeInTheDocument();
+    expect(screen.queryByText("20 to 1")).not.toBeInTheDocument();
   });
 
   it("bounds the run legend without removing chart or selection behavior", async () => {

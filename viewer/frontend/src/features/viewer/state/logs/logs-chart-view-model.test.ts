@@ -12,6 +12,8 @@ import {
 } from "@/features/viewer/state/logs/logs-chart-view-model";
 import {
   buildLogScalarTagOptions,
+  buildTrainValidationScalarPairs,
+  defaultTrainValidationScalarPairSuffixes,
   isDefaultScalarTag,
   groupRenderableLogMetrics,
   groupLogPlotSelectorTags,
@@ -293,6 +295,49 @@ describe("logs chart view model", () => {
       test: [],
       other: [],
     });
+  });
+
+  it("builds complete train-validation scalar pairs by suffix", () => {
+    const pairs = buildTrainValidationScalarPairs([
+      { value: "train/loss_epoch" },
+      { value: "validation/loss_epoch" },
+      { value: "train/accuracy_epoch" },
+      { value: "validation/accuracy_epoch" },
+      { value: "train/only" },
+      { value: "validation/other_only" },
+      { value: "test/accuracy" },
+    ]);
+
+    expect(pairs).toEqual([
+      {
+        suffix: "loss_epoch",
+        trainTag: "train/loss_epoch",
+        validationTag: "validation/loss_epoch",
+      },
+      {
+        suffix: "accuracy_epoch",
+        trainTag: "train/accuracy_epoch",
+        validationTag: "validation/accuracy_epoch",
+      },
+    ]);
+  });
+
+  it("defaults train-validation pairs only when both tags are default scalars", () => {
+    const pairs = buildTrainValidationScalarPairs([
+      { value: "train/loss" },
+      { value: "validation/loss" },
+      { value: "train/loss_epoch" },
+      { value: "validation/loss_epoch" },
+      { value: "train/accuracy_epoch" },
+      { value: "validation/accuracy_epoch" },
+      { value: "train/confidence/mean" },
+      { value: "validation/confidence/mean" },
+    ]);
+
+    expect(defaultTrainValidationScalarPairSuffixes(pairs)).toEqual([
+      "loss_epoch",
+      "accuracy_epoch",
+    ]);
   });
 
   it("splits confusion-matrix tags out of normal scalar tag options", () => {

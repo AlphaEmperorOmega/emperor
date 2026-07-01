@@ -17,6 +17,9 @@ export type ScalarLine = {
   id: string;
   name: string;
   color: string;
+  lineStyle?: {
+    type?: "solid" | "dashed" | "dotted";
+  };
   points: ScalarLinePoint[];
 };
 
@@ -34,6 +37,7 @@ export type ScalarLineOptions = {
   /** EMA weight in [0, 1]; 0 disables smoothing. */
   smoothing?: number;
   highlightedLineId?: string | null;
+  highlightedLineIds?: readonly string[] | ReadonlySet<string>;
   dimmedLineOpacity?: number;
   /** Show inside + slider dataZoom (used by the logs panel, not the dense modal). */
   dataZoom?: boolean;
@@ -201,12 +205,22 @@ export function buildScalarLineOption(
     domain,
     checkpointMarkers = [],
   } = options;
+  const highlightedLineIds = new Set(
+    options.highlightedLineIds instanceof Set
+      ? Array.from(options.highlightedLineIds)
+      : (options.highlightedLineIds ?? []),
+  );
+  if (highlightedLineId !== null) {
+    highlightedLineIds.add(highlightedLineId);
+  }
+  const hasHighlightedLines = highlightedLineIds.size > 0;
 
   const series: LineSeriesOption[] = [];
   const perLinePointLimit = linePointLimit(lines.length);
   for (const line of lines) {
-    const isDimmed = highlightedLineId !== null && line.id !== highlightedLineId;
+    const isDimmed = hasHighlightedLines && !highlightedLineIds.has(line.id);
     const lineOpacity = isDimmed ? dimmedLineOpacity : undefined;
+    const lineStyleBase = line.lineStyle ?? {};
     const lineStyleOpacity = lineOpacity === undefined ? {} : { opacity: lineOpacity };
     const itemStyleOpacity = lineOpacity === undefined ? {} : { opacity: lineOpacity };
     const linePoints =
@@ -228,7 +242,12 @@ export function buildScalarLineOption(
         name: line.name,
         data: smoothedData,
         showSymbol: false,
-        lineStyle: { color: line.color, width: 2, ...lineStyleOpacity },
+        lineStyle: {
+          color: line.color,
+          width: 2,
+          ...lineStyleBase,
+          ...lineStyleOpacity,
+        },
         itemStyle: { color: line.color, ...itemStyleOpacity },
         z: 2,
         ...largeOptions,
@@ -242,6 +261,7 @@ export function buildScalarLineOption(
         lineStyle: {
           color: line.color,
           width: 1,
+          ...lineStyleBase,
           opacity: isDimmed ? dimmedLineOpacity : 0.25,
         },
         itemStyle: { color: line.color, ...itemStyleOpacity },
@@ -255,7 +275,12 @@ export function buildScalarLineOption(
         data: rawData,
         showSymbol: isSinglePoint,
         symbolSize: 6,
-        lineStyle: { color: line.color, width: 2, ...lineStyleOpacity },
+        lineStyle: {
+          color: line.color,
+          width: 2,
+          ...lineStyleBase,
+          ...lineStyleOpacity,
+        },
         itemStyle: { color: line.color, ...itemStyleOpacity },
         ...largeOptions,
       });

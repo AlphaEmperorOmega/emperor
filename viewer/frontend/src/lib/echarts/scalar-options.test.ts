@@ -94,6 +94,18 @@ describe("buildScalarLineOption", () => {
     expect(seriesOf(buildScalarLineOption([multiPoint]))).toHaveLength(1);
   });
 
+  it("applies optional line style to rendered series", () => {
+    const [series] = seriesOf(
+      buildScalarLineOption([
+        { ...multiPoint, lineStyle: { type: "dashed" } },
+      ]),
+    );
+
+    expect((series.lineStyle as { type?: string } | undefined)?.type).toBe(
+      "dashed",
+    );
+  });
+
   it("keeps existing series opacity when no line is highlighted", () => {
     const series = seriesOf(buildScalarLineOption([multiPoint, secondMultiPoint]));
 
