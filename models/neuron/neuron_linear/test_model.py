@@ -30,6 +30,7 @@ from models.linears.linear.presets import (
     ExperimentPresets as SourceExperimentPresets,
 )
 from models.neuron.neuron_linear._control_config_factory import (
+    NeuronControlConfigDependencies,
     NeuronControlConfigFactory,
 )
 from models.neuron.neuron_linear._builder_options import (
@@ -42,6 +43,7 @@ from models.neuron.neuron_linear._builder_options import (
 from models.neuron.neuron_linear._controller_stack import HiddenBlockAdapter
 from models.neuron.neuron_linear._source_linear_adapter import (
     canonical_source_kwarg_aliases,
+    source_builder_kwargs_from_flat,
     source_linear_default_kwargs,
 )
 from models.neuron.neuron_linear.config_builder import NeuronLinearConfigBuilder
@@ -228,8 +230,18 @@ class TestNeuronLinearModel(unittest.TestCase):
         from models.linears.linear.config_builder import LinearConfigBuilder
 
         builder = NeuronLinearConfigBuilder()
-        source_cfg = LinearConfigBuilder(**source_linear_default_kwargs()).build()
-        cluster_cfg = NeuronControlConfigFactory(builder).build(
+        source_kwargs = source_builder_kwargs_from_flat(
+            source_linear_default_kwargs()
+        )
+        source_cfg = LinearConfigBuilder(**source_kwargs).build()
+        dependencies = NeuronControlConfigDependencies(
+            cluster_capacity_options=builder.cluster_capacity_options,
+            terminal_options=builder.terminal_options,
+            terminal_router_options=builder.terminal_router_options,
+            terminal_sampler_options=builder.terminal_sampler_options,
+            cluster_halting_options=builder.cluster_halting_options,
+        )
+        cluster_cfg = NeuronControlConfigFactory(dependencies).build(
             source_cfg.experiment_config.model_config,
             source_cfg.hidden_dim,
         )
@@ -559,18 +571,19 @@ class TestNeuronLinearModel(unittest.TestCase):
         )
         self.assertFalse(halting_stack.layer_config.layer_model_config.bias_flag)
 
-    def test_source_linear_adapter_defaults_match_source_builder_defaults(self):
+    def test_source_linear_adapter_defaults_adapt_to_source_builder(self):
         from models.linears.linear.config_builder import LinearConfigBuilder
 
-        source_defaults = {
-            name: parameter.default
-            for name, parameter in inspect.signature(
-                LinearConfigBuilder.__init__
-            ).parameters.items()
-            if name != "self" and parameter.default is not inspect.Parameter.empty
-        }
+        source_defaults = source_linear_default_kwargs()
+        source_kwargs = source_builder_kwargs_from_flat(source_defaults)
+        default_cfg = LinearConfigBuilder().build()
+        adapted_cfg = LinearConfigBuilder(**source_kwargs).build()
 
-        self.assertEqual(source_linear_default_kwargs(), source_defaults)
+        self.assertIn("stack_hidden_dim", source_defaults)
+        self.assertNotIn("stack_options", source_defaults)
+        with self.assertRaises(TypeError):
+            LinearConfigBuilder(**source_defaults).build()
+        self.assertEqual(adapted_cfg, default_cfg)
 
     def test_source_linear_adapter_exposes_legacy_aliases(self):
         self.assertEqual(
@@ -621,11 +634,13 @@ class TestNeuronLinearModel(unittest.TestCase):
         )
 
     def test_shared_gate_config_rejects_enabled_source_stack_gate(self):
-        with self.assertRaises(ValueError):
-            NeuronLinearConfigBuilder(
-                stack_gate_flag=True,
-                shared_gate_config=self.shared_gate_config(),
-            ).build()
+        cfg = NeuronLinearConfigBuilder(
+            stack_gate_flag=True,
+            shared_gate_config=self.shared_gate_config(),
+        ).build()
+
+        with self.assertRaisesRegex(ValueError, "mutually exclusive"):
+            Model(cfg)
 
     def test_shared_gate_config_allows_absent_source_stack_gate(self):
         shared_gate_config = self.shared_gate_config()
