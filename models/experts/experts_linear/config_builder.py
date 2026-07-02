@@ -26,7 +26,10 @@ from models.experts._builder_options import (
     ExpertsSamplerOptions,
     ExpertsStackOptions,
 )
-from models.experts.experts_linear._control_config_factory import ControlConfigFactory
+from models.experts.experts_linear._control_config_factory import (
+    ControlConfigDependencies,
+    ControlConfigFactory,
+)
 from models.experts.experts_linear.experiment_config import ExperimentConfig
 
 from typing import TYPE_CHECKING
@@ -400,6 +403,9 @@ class ExpertsLinearConfigBuilder:
     def build(self) -> "ModelConfig":
         from emperor.config import ModelConfig
 
+        control_dependencies = self.__control_config_dependencies()
+        control_factory = ControlConfigFactory(control_dependencies)
+
         input_model_config = LayerConfig(
             activation=self.stack_activation,
             layer_norm_position=self.layer_norm_position,
@@ -412,7 +418,7 @@ class ExpertsLinearConfigBuilder:
             ),
         )
 
-        model_config = ControlConfigFactory(self).build()
+        model_config = control_factory.build()
 
         output_model_config = LayerConfig(
             activation=ActivationOptions.DISABLED,
@@ -437,4 +443,18 @@ class ExpertsLinearConfigBuilder:
                 model_config=model_config,
                 output_model_config=output_model_config,
             ),
+        )
+
+    def __control_config_dependencies(self) -> ControlConfigDependencies:
+        return ControlConfigDependencies(
+            stack_options=self.stack_options,
+            mixture_options=self.mixture_options,
+            expert_stack_options=self.expert_stack_options,
+            sampler_options=self.sampler_options,
+            router_options=self.router_options,
+            sampler_stack_options=self.sampler_stack_options,
+            layer_controller_options=self.layer_controller_options,
+            recurrent_controller_options=self.recurrent_controller_options,
+            hidden_dim=self.hidden_dim,
+            output_dim=self.output_dim,
         )
