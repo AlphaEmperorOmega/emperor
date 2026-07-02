@@ -1,5 +1,4 @@
 import copy
-import random
 import torch
 import torch.nn as nn
 import inspect
@@ -9,7 +8,6 @@ import matplotlib.pyplot as plt
 
 from lightning import LightningDataModule, LightningModule
 
-from typing_extensions import Dict
 from dataclasses import dataclass, fields, field, asdict
 from torch.nn import Parameter, Linear, Sequential
 
@@ -102,7 +100,7 @@ def show_images(imgs, num_rows, num_cols, titles=None, scale=1.5):
     figsize = (num_cols * scale, num_rows * scale)
     _, axes = plt.subplots(num_rows, num_cols, figsize=figsize)
     axes = axes.flatten()
-    for i, (ax, img) in enumerate(zip(axes, imgs)):
+    for i, (ax, img) in enumerate(zip(axes, imgs, strict=False)):
         try:
             img = numpy(img)
         except:
@@ -118,8 +116,9 @@ def show_images(imgs, num_rows, num_cols, titles=None, scale=1.5):
 class HyperParameters:
     """The base class of hyperparameters."""
 
-    def save_hyperparameters(self, ignore=[]):
+    def save_hyperparameters(self, ignore=None):
         """Save function arguments into class attribuites."""
+        ignore = ignore or []
         frame = inspect.currentframe().f_back
         _, _, _, local_vars = inspect.getargvalues(frame)
         self.hparams = {
@@ -142,13 +141,15 @@ class ProgressBoard(HyperParameters):
         ylim=None,
         xscale="linear",
         yscale="linear",
-        ls=["-", "--", "-.", ":"],
-        colors=["C0", "C1", "C2", "C3"],
+        ls=None,
+        colors=None,
         fig=None,
         axes=None,
         figsize=(3.5, 2.5),
         display=True,
     ):
+        ls = ls or ["-", "--", "-.", ":"]
+        colors = colors or ["C0", "C1", "C2", "C3"]
         self.save_hyperparameters()
 
     def draw(self, x, y, label, every_n=1):
@@ -182,7 +183,9 @@ class ProgressBoard(HyperParameters):
             self.fig = plt.figure(figsize=self.figsize)
 
         plt_lines, labels = [], []
-        for (k, v), ls, color in zip(self.data.items(), self.ls, self.colors):
+        for (k, v), ls, color in zip(
+            self.data.items(), self.ls, self.colors, strict=False
+        ):
             plt_lines.append(
                 plt.plot([p.x for p in v], [p.y for p in v], linestyle=ls, color=color)[
                     0
@@ -482,7 +485,7 @@ class DataModule(LightningDataModule):
         dataset = torch.utils.data.TensorDataset(*tensors)
         return torch.utils.data.DataLoader(dataset, self.batch_size, shuffle=train)
 
-    def visualize(self, batch, nrows=1, ncols=8, labels=[]):
+    def visualize(self, batch, nrows=1, ncols=8, labels=None):
         X, y = batch
         if not labels:
             labels = self._text_labels(y)
@@ -612,7 +615,7 @@ class ConfigBase:
         return getattr(self, key, default)
 
     def __post_init__(self):
-        self._passed_args: Dict[str, Any] = {}
+        self._passed_args: dict[str, Any] = {}
         for f in fields(self):
             if f.name == "passed_args":
                 continue
@@ -622,7 +625,7 @@ class ConfigBase:
             ):
                 self._passed_args[f.name] = value
 
-    def get_custom_parameters(self) -> Dict[str, Any]:
+    def get_custom_parameters(self) -> dict[str, Any]:
         return self._passed_args
 
     def update(self, other: "ConfigBase") -> "ConfigBase":

@@ -5,7 +5,8 @@ import torch.nn as nn
 from dataclasses import dataclass
 from torch import Tensor
 from lightning import LightningModule
-from typing import Callable, TYPE_CHECKING
+from typing import TYPE_CHECKING
+from collections.abc import Callable
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig

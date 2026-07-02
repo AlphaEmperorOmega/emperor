@@ -4,7 +4,9 @@ import torchmetrics
 
 from torch import Tensor
 from lightning import LightningModule
-from typing import Callable, TYPE_CHECKING
+from collections.abc import Callable
+
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
@@ -34,7 +36,9 @@ class SequenceClassifierExperiment(LightningModule):
         self.metrics.log_test_step(self.log_dict, loss, logits, Y)
         return loss
 
-    def _model_step(self, batch: tuple[Tensor, Tensor]) -> tuple[Tensor, Tensor, Tensor]:
+    def _model_step(
+        self, batch: tuple[Tensor, Tensor]
+    ) -> tuple[Tensor, Tensor, Tensor]:
         tokens, Y = batch
         tokens = tokens.to(self.device)
         output = self(tokens)
@@ -57,13 +61,21 @@ class SequenceClassifierMetricsLogger(nn.Module):
         super().__init__()
         task = "multiclass"
         self.train_accuracy = torchmetrics.Accuracy(task=task, num_classes=num_classes)
-        self.train_f1_score = torchmetrics.F1Score(task=task, num_classes=num_classes, average="macro")
+        self.train_f1_score = torchmetrics.F1Score(
+            task=task, num_classes=num_classes, average="macro"
+        )
 
-        self.validation_accuracy = torchmetrics.Accuracy(task=task, num_classes=num_classes)
-        self.validation_f1_score = torchmetrics.F1Score(task=task, num_classes=num_classes, average="macro")
+        self.validation_accuracy = torchmetrics.Accuracy(
+            task=task, num_classes=num_classes
+        )
+        self.validation_f1_score = torchmetrics.F1Score(
+            task=task, num_classes=num_classes, average="macro"
+        )
 
         self.test_accuracy = torchmetrics.Accuracy(task=task, num_classes=num_classes)
-        self.test_f1_score = torchmetrics.F1Score(task=task, num_classes=num_classes, average="macro")
+        self.test_f1_score = torchmetrics.F1Score(
+            task=task, num_classes=num_classes, average="macro"
+        )
 
     def log_training_step(
         self, log_fn: Callable, loss: Tensor, logits: Tensor, Y: Tensor

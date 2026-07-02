@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 
 from torch import Tensor
-from typing import Any, Dict
+from typing import Any
 from emperor.base.utils import Module
 from emperor.embedding.absolute.core._validator import (
     AbsolutePositionalEmbeddingValidator,
@@ -86,7 +86,7 @@ class TextLearnedPositionalEmbedding(LearnedPositionalEmbedding):
     def forward(
         self,
         input_tokens: Tensor,
-        incremental_state: Dict[str, Dict[str, Tensor | None]] | None = None,
+        incremental_state: dict[str, dict[str, Tensor | None]] | None = None,
         positions: Tensor | None = None,
     ) -> Tensor:
         AbsolutePositionalEmbeddingValidator.validate_text_tokens(input_tokens)
@@ -96,7 +96,7 @@ class TextLearnedPositionalEmbedding(LearnedPositionalEmbedding):
     def __resolve_positions(
         self,
         input_tokens: Tensor,
-        incremental_state: Dict[str, Dict[str, Tensor | None]] | None,
+        incremental_state: dict[str, dict[str, Tensor | None]] | None,
         positions: Tensor | None,
     ) -> Tensor:
         if positions is not None:
