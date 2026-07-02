@@ -8,6 +8,9 @@ from emperor.experiments.base import (
 )
 
 import models.linears.linear.config as config
+from models.linears._builder_adapter import (
+    linear_builder_kwargs_from_flat,
+)
 from models.linears.linear.config_builder import LinearConfigBuilder
 from models.linears.linear.model import Model
 
@@ -249,6 +252,10 @@ class ExperimentPresets(BuilderBackedExperimentPresetsBase):
             builder_type=LinearConfigBuilder,
             default_preset=ExperimentPreset.BASELINE,
         )
+
+    def _preset(self, **kwargs):
+        builder_kwargs = linear_builder_kwargs_from_flat(kwargs, config)
+        return self._builder_type(**builder_kwargs).build()
 
     def _preset_lock_reason(self, preset: ExperimentPreset, field: str) -> str:
         behavior = _PRESET_LOCK_BEHAVIORS[field]

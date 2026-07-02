@@ -1,33 +1,14 @@
-from emperor.base.layer.residual import ResidualConnectionOptions
-import models.linears.linear_adaptive.config as config
+from typing import TYPE_CHECKING
 
-from dataclasses import dataclass
-from emperor.halting.options import HaltingHiddenStateModeOptions
-from emperor.base.layer.config import (
-    LayerConfig,
-    LayerStackConfig,
+from emperor.augmentations.adaptive_parameters.config import (
+    AdaptiveParameterAugmentationConfig,
 )
-from emperor.base.layer.gate import GateConfig, LayerGateOptions
-from models.linears.linear_adaptive._boundary_config_factory import (
-    AdaptiveBoundaryProjectionOptions,
-    BoundaryConfigFactory,
-    BoundaryLayerOptions,
-)
-from models.linears.linear_adaptive._control_config_factory import ControlConfigFactory
-from models.linears.linear_adaptive.experiment_config import ExperimentConfig
-from emperor.linears.core.config import LinearLayerConfig
-from emperor.augmentations.adaptive_parameters.core.bias import (
-    DynamicBiasConfig,
-)
+from emperor.augmentations.adaptive_parameters.core.bias import DynamicBiasConfig
 from emperor.augmentations.adaptive_parameters.core.diagonal import (
     DynamicDiagonalConfig,
 )
-from emperor.augmentations.adaptive_parameters.core.mask import (
-    AxisMaskConfig,
-)
-from emperor.augmentations.adaptive_parameters.core.weight import (
-    DynamicWeightConfig,
-)
+from emperor.augmentations.adaptive_parameters.core.mask import AxisMaskConfig
+from emperor.augmentations.adaptive_parameters.core.weight import DynamicWeightConfig
 from emperor.augmentations.adaptive_parameters.options import (
     BankExpansionFactorOptions,
     DynamicDepthOptions,
@@ -36,108 +17,53 @@ from emperor.augmentations.adaptive_parameters.options import (
     WeightNormalizationOptions,
     WeightNormalizationPositionOptions,
 )
+from emperor.base.layer.config import LayerConfig, LayerStackConfig
+from emperor.base.layer.residual import ResidualConnectionOptions
 from emperor.base.options import (
     ActivationOptions,
     LastLayerBiasOptions,
     LayerNormPositionOptions,
 )
-from emperor.memory.config import DynamicMemoryConfig
-from emperor.memory.options import MemoryPositionOptions
+from emperor.linears.core.config import LinearLayerConfig
 from models.adaptive_parameter_config_factory import (
     build_bias_config,
     build_diagonal_config,
     build_mask_config,
     build_weight_config,
 )
-from models.linears._controller_stack import (
-    ControllerStackOptions,
-    ControllerStackSource,
+from models.linears._builder_options import (
+    DynamicMemoryOptions,
+    LayerControllerOptions,
+    LinearStackOptions,
+    RecurrentControllerOptions,
 )
+from models.linears._builder_adapter import (
+    default_adaptive_generator_stack_options,
+    default_adaptive_generator_stack_source,
+    default_boundary_options,
+    default_dynamic_memory_options,
+    default_layer_controller_options,
+    default_linear_stack_options,
+    default_recurrent_controller_options,
+    default_submodule_stack_options,
+)
+from models.linears._controller_stack import ControllerStackOptions
+from models.linears.linear_adaptive._boundary_config_factory import (
+    AdaptiveBoundaryProjectionOptions,
+    BoundaryConfigDependencies,
+    BoundaryConfigFactory,
+)
+from models.linears.linear_adaptive import _builder_options as adaptive_options
+from models.linears.linear_adaptive._control_config_factory import (
+    ControlConfigDependencies,
+    ControlConfigFactory,
+)
+from models.linears.linear_adaptive.experiment_config import ExperimentConfig
 
-from typing import TYPE_CHECKING
+import models.linears.linear_adaptive.config as config
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
-
-
-@dataclass(frozen=True)
-class AdaptiveGeneratorStackSource:
-    independent_flag: bool
-    hidden_dim: int | None
-    layer_norm_position: LayerNormPositionOptions | None
-    num_layers: int | None
-    activation: ActivationOptions | None
-    residual_connection_option: ResidualConnectionOptions | None
-    dropout_probability: float | None
-    last_layer_bias_option: LastLayerBiasOptions | None
-    apply_output_pipeline_flag: bool | None
-    bias_flag: bool | None
-
-
-@dataclass(frozen=True)
-class AdaptiveGeneratorStackOptions:
-    hidden_dim: int
-    layer_norm_position: LayerNormPositionOptions
-    num_layers: int
-    activation: ActivationOptions
-    residual_connection_option: ResidualConnectionOptions
-    dropout_probability: float
-    last_layer_bias_option: LastLayerBiasOptions
-    apply_output_pipeline_flag: bool
-    bias_flag: bool
-
-
-@dataclass(frozen=True)
-class LinearAdaptiveStackOptions:
-    hidden_dim: int
-    bias_flag: bool
-    layer_norm_position: LayerNormPositionOptions
-    num_layers: int
-    activation: ActivationOptions
-    residual_connection_option: ResidualConnectionOptions
-    dropout_probability: float
-    last_layer_bias_option: LastLayerBiasOptions
-    apply_output_pipeline_flag: bool
-
-
-@dataclass(frozen=True)
-class LayerControllerOptions:
-    stack_gate_flag: bool
-    gate_option: LayerGateOptions | None
-    gate_activation: ActivationOptions | None
-    gate_stack_source: ControllerStackSource
-    stack_halting_flag: bool
-    halting_threshold: float
-    halting_dropout: float
-    halting_hidden_state_mode: HaltingHiddenStateModeOptions
-    halting_stack_source: ControllerStackSource
-    shared_gate_config: GateConfig | None = None
-
-
-@dataclass(frozen=True)
-class DynamicMemoryOptions:
-    memory_flag: bool
-    memory_option: type[DynamicMemoryConfig]
-    memory_position_option: MemoryPositionOptions
-    memory_test_time_training_learning_rate: float | None
-    memory_test_time_training_num_inner_steps: int | None
-    memory_stack_source: ControllerStackSource
-
-
-@dataclass(frozen=True)
-class RecurrentControllerOptions:
-    recurrent_flag: bool
-    recurrent_max_steps: int
-    recurrent_layer_norm_position: LayerNormPositionOptions
-    recurrent_gate_flag: bool
-    recurrent_gate_option: LayerGateOptions | None
-    recurrent_gate_activation: ActivationOptions | None
-    recurrent_gate_stack_source: ControllerStackSource
-    recurrent_halting_flag: bool
-    recurrent_halting_threshold: float
-    recurrent_halting_dropout: float
-    recurrent_halting_hidden_state_mode: HaltingHiddenStateModeOptions
-    recurrent_halting_stack_source: ControllerStackSource
 
 
 class LinearAdaptiveConfigBuilder:
@@ -146,110 +72,33 @@ class LinearAdaptiveConfigBuilder:
         batch_size: int = config.BATCH_SIZE,
         learning_rate: float = config.LEARNING_RATE,
         input_dim: int = config.INPUT_DIM,
-        stack_hidden_dim: int = config.STACK_HIDDEN_DIM,
         output_dim: int = config.OUTPUT_DIM,
-        layer_norm_position: LayerNormPositionOptions = config.STACK_LAYER_NORM_POSITION,
-        stack_bias_flag: bool = config.STACK_BIAS_FLAG,
-        stack_layer_norm_position: LayerNormPositionOptions | None = None,
         generator_depth: DynamicDepthOptions = config.WEIGHT_GENERATOR_DEPTH,
         diagonal_option_flag: bool = config.DIAGONAL_OPTION_FLAG,
         diagonal_option: type[DynamicDiagonalConfig] | None = config.DIAGONAL_OPTION,
-        diagonal_generator_stack_independent_flag: bool = config.DIAGONAL_GENERATOR_STACK_INDEPENDENT_FLAG,
-        diagonal_generator_stack_hidden_dim: int | None = (
-            config.DIAGONAL_GENERATOR_STACK_HIDDEN_DIM
-        ),
-        diagonal_generator_stack_layer_norm_position: LayerNormPositionOptions
-        | None = (config.DIAGONAL_GENERATOR_STACK_LAYER_NORM_POSITION),
-        diagonal_generator_stack_num_layers: int | None = (
-            config.DIAGONAL_GENERATOR_STACK_NUM_LAYERS
-        ),
-        diagonal_generator_stack_activation: ActivationOptions | None = (
-            config.DIAGONAL_GENERATOR_STACK_ACTIVATION
-        ),
-        diagonal_generator_stack_residual_connection_option: (
-            ResidualConnectionOptions | None
-        ) = config.DIAGONAL_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION,
-        diagonal_generator_stack_dropout_probability: float | None = (
-            config.DIAGONAL_GENERATOR_STACK_DROPOUT_PROBABILITY
-        ),
-        diagonal_generator_stack_last_layer_bias_option: (
-            LastLayerBiasOptions | None
-        ) = config.DIAGONAL_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
-        diagonal_generator_stack_apply_output_pipeline_flag: bool | None = (
-            config.DIAGONAL_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG
-        ),
-        diagonal_generator_stack_bias_flag: bool | None = (
-            config.DIAGONAL_GENERATOR_STACK_BIAS_FLAG
-        ),
         bias_option_flag: bool = config.BIAS_OPTION_FLAG,
         bias_option: type[DynamicBiasConfig] | None = config.BIAS_OPTION,
         weight_option_flag: bool = config.WEIGHT_OPTION_FLAG,
         weight_option: type[DynamicWeightConfig] | None = config.WEIGHT_OPTION,
-        weight_normalization_option: WeightNormalizationOptions = config.WEIGHT_NORMALIZATION_OPTION,
-        weight_normalization_position_option: WeightNormalizationPositionOptions = config.WEIGHT_NORMALIZATION_POSITION_OPTION,
-        weight_decay_schedule: WeightDecayScheduleOptions = config.WEIGHT_DECAY_SCHEDULE,
+        weight_normalization_option: WeightNormalizationOptions = (
+            config.WEIGHT_NORMALIZATION_OPTION
+        ),
+        weight_normalization_position_option: WeightNormalizationPositionOptions = (
+            config.WEIGHT_NORMALIZATION_POSITION_OPTION
+        ),
+        weight_decay_schedule: WeightDecayScheduleOptions = (
+            config.WEIGHT_DECAY_SCHEDULE
+        ),
         weight_decay_rate: float = config.WEIGHT_DECAY_RATE,
         weight_decay_warmup_batches: int = config.WEIGHT_DECAY_WARMUP_BATCHES,
-        weight_bank_expansion_factor: BankExpansionFactorOptions = config.WEIGHT_BANK_EXPANSION_FACTOR,
-        weight_generator_stack_independent_flag: bool = config.WEIGHT_GENERATOR_STACK_INDEPENDENT_FLAG,
-        weight_generator_stack_hidden_dim: int | None = (
-            config.WEIGHT_GENERATOR_STACK_HIDDEN_DIM
-        ),
-        weight_generator_stack_layer_norm_position: LayerNormPositionOptions | None = (
-            config.WEIGHT_GENERATOR_STACK_LAYER_NORM_POSITION
-        ),
-        weight_generator_stack_num_layers: int | None = (
-            config.WEIGHT_GENERATOR_STACK_NUM_LAYERS
-        ),
-        weight_generator_stack_activation: ActivationOptions | None = (
-            config.WEIGHT_GENERATOR_STACK_ACTIVATION
-        ),
-        weight_generator_stack_residual_connection_option: (
-            ResidualConnectionOptions | None
-        ) = config.WEIGHT_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION,
-        weight_generator_stack_dropout_probability: float | None = (
-            config.WEIGHT_GENERATOR_STACK_DROPOUT_PROBABILITY
-        ),
-        weight_generator_stack_last_layer_bias_option: (
-            LastLayerBiasOptions | None
-        ) = config.WEIGHT_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
-        weight_generator_stack_apply_output_pipeline_flag: bool | None = (
-            config.WEIGHT_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG
-        ),
-        weight_generator_stack_bias_flag: bool | None = (
-            config.WEIGHT_GENERATOR_STACK_BIAS_FLAG
+        weight_bank_expansion_factor: BankExpansionFactorOptions = (
+            config.WEIGHT_BANK_EXPANSION_FACTOR
         ),
         bias_decay_schedule: WeightDecayScheduleOptions = config.BIAS_DECAY_SCHEDULE,
         bias_decay_rate: float = config.BIAS_DECAY_RATE,
         bias_decay_warmup_batches: int = config.BIAS_DECAY_WARMUP_BATCHES,
-        bias_bank_expansion_factor: BankExpansionFactorOptions = config.BIAS_BANK_EXPANSION_FACTOR,
-        bias_generator_stack_independent_flag: bool = config.BIAS_GENERATOR_STACK_INDEPENDENT_FLAG,
-        bias_generator_stack_hidden_dim: int | None = (
-            config.BIAS_GENERATOR_STACK_HIDDEN_DIM
-        ),
-        bias_generator_stack_layer_norm_position: LayerNormPositionOptions | None = (
-            config.BIAS_GENERATOR_STACK_LAYER_NORM_POSITION
-        ),
-        bias_generator_stack_num_layers: int | None = (
-            config.BIAS_GENERATOR_STACK_NUM_LAYERS
-        ),
-        bias_generator_stack_activation: ActivationOptions | None = (
-            config.BIAS_GENERATOR_STACK_ACTIVATION
-        ),
-        bias_generator_stack_residual_connection_option: (
-            ResidualConnectionOptions | None
-        ) = config.BIAS_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION,
-        bias_generator_stack_dropout_probability: float | None = (
-            config.BIAS_GENERATOR_STACK_DROPOUT_PROBABILITY
-        ),
-        bias_generator_stack_last_layer_bias_option: LastLayerBiasOptions | None = (
-            config.BIAS_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION
-        ),
-        bias_generator_stack_apply_output_pipeline_flag: bool | None = (
-            config.BIAS_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG
-        ),
-        bias_generator_stack_bias_flag: bool | None = (
-            config.BIAS_GENERATOR_STACK_BIAS_FLAG
+        bias_bank_expansion_factor: BankExpansionFactorOptions = (
+            config.BIAS_BANK_EXPANSION_FACTOR
         ),
         mask_option_flag: bool = config.MASK_OPTION_FLAG,
         row_mask_option: type[AxisMaskConfig] | None = config.ROW_MASK_OPTION,
@@ -258,558 +107,82 @@ class LinearAdaptiveConfigBuilder:
         mask_surrogate_scale: float = config.MASK_SURROGATE_SCALE,
         mask_floor: float = config.MASK_FLOOR,
         mask_transition_width: float = config.MASK_TRANSITION_WIDTH,
-        mask_generator_stack_independent_flag: bool = config.MASK_GENERATOR_STACK_INDEPENDENT_FLAG,
-        mask_generator_stack_hidden_dim: int | None = (
-            config.MASK_GENERATOR_STACK_HIDDEN_DIM
-        ),
-        mask_generator_stack_layer_norm_position: LayerNormPositionOptions | None = (
-            config.MASK_GENERATOR_STACK_LAYER_NORM_POSITION
-        ),
-        mask_generator_stack_num_layers: int | None = (
-            config.MASK_GENERATOR_STACK_NUM_LAYERS
-        ),
-        mask_generator_stack_activation: ActivationOptions | None = (
-            config.MASK_GENERATOR_STACK_ACTIVATION
-        ),
-        mask_generator_stack_residual_connection_option: (
-            ResidualConnectionOptions | None
-        ) = config.MASK_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION,
-        mask_generator_stack_dropout_probability: float | None = (
-            config.MASK_GENERATOR_STACK_DROPOUT_PROBABILITY
-        ),
-        mask_generator_stack_last_layer_bias_option: LastLayerBiasOptions | None = (
-            config.MASK_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION
-        ),
-        mask_generator_stack_apply_output_pipeline_flag: bool | None = (
-            config.MASK_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG
-        ),
-        mask_generator_stack_bias_flag: bool | None = (
-            config.MASK_GENERATOR_STACK_BIAS_FLAG
-        ),
-        stack_num_layers: int = config.STACK_NUM_LAYERS,
-        stack_activation: ActivationOptions = config.STACK_ACTIVATION,
-        stack_residual_connection_option: ResidualConnectionOptions = config.STACK_RESIDUAL_CONNECTION_OPTION,
-        stack_dropout_probability: float = config.STACK_DROPOUT_PROBABILITY,
-        stack_last_layer_bias_option: LastLayerBiasOptions = config.STACK_LAST_LAYER_BIAS_OPTION,
-        stack_apply_output_pipeline_flag: bool = config.STACK_APPLY_OUTPUT_PIPELINE_FLAG,
-        submodule_stack_hidden_dim: int = config.SUBMODULE_STACK_HIDDEN_DIM,
-        submodule_stack_layer_norm_position: LayerNormPositionOptions = config.SUBMODULE_STACK_LAYER_NORM_POSITION,
-        submodule_stack_num_layers: int = config.SUBMODULE_STACK_NUM_LAYERS,
-        submodule_stack_activation: ActivationOptions = config.SUBMODULE_STACK_ACTIVATION,
-        submodule_stack_residual_connection_option: ResidualConnectionOptions = config.SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION,
-        submodule_stack_dropout_probability: float = config.SUBMODULE_STACK_DROPOUT_PROBABILITY,
-        submodule_stack_last_layer_bias_option: LastLayerBiasOptions = config.SUBMODULE_STACK_LAST_LAYER_BIAS_OPTION,
-        submodule_stack_apply_output_pipeline_flag: bool = config.SUBMODULE_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
-        submodule_stack_bias_flag: bool = config.SUBMODULE_STACK_BIAS_FLAG,
-        stack_gate_flag: bool = config.GATE_FLAG,
-        gate_option: LayerGateOptions | None = config.GATE_OPTION,
-        gate_activation: ActivationOptions | None = config.GATE_ACTIVATION,
-        gate_stack_independent_flag: bool = config.GATE_STACK_INDEPENDENT_FLAG,
-        gate_stack_hidden_dim: int | None = config.GATE_STACK_HIDDEN_DIM,
-        gate_stack_layer_norm_position: LayerNormPositionOptions
-        | None = config.GATE_STACK_LAYER_NORM_POSITION,
-        gate_stack_num_layers: int | None = config.GATE_STACK_NUM_LAYERS,
-        gate_stack_activation: ActivationOptions | None = config.GATE_STACK_ACTIVATION,
-        gate_stack_residual_connection_option: ResidualConnectionOptions
-        | None = config.GATE_STACK_RESIDUAL_CONNECTION_OPTION,
-        gate_stack_dropout_probability: float
-        | None = config.GATE_STACK_DROPOUT_PROBABILITY,
-        gate_stack_last_layer_bias_option: LastLayerBiasOptions
-        | None = config.GATE_STACK_LAST_LAYER_BIAS_OPTION,
-        gate_stack_apply_output_pipeline_flag: bool
-        | None = config.GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
-        gate_stack_bias_flag: bool | None = config.GATE_STACK_BIAS_FLAG,
-        stack_halting_flag: bool = config.HALTING_FLAG,
-        halting_threshold: float = config.HALTING_THRESHOLD,
-        halting_dropout: float = config.HALTING_DROPOUT,
-        halting_hidden_state_mode: HaltingHiddenStateModeOptions = (
-            config.HALTING_HIDDEN_STATE_MODE
-        ),
-        halting_stack_independent_flag: bool = config.HALTING_STACK_INDEPENDENT_FLAG,
-        halting_stack_hidden_dim: int | None = config.HALTING_STACK_HIDDEN_DIM,
-        halting_stack_layer_norm_position: LayerNormPositionOptions
-        | None = config.HALTING_STACK_LAYER_NORM_POSITION,
-        halting_stack_num_layers: int | None = config.HALTING_STACK_NUM_LAYERS,
-        halting_stack_activation: ActivationOptions
-        | None = config.HALTING_STACK_ACTIVATION,
-        halting_stack_residual_connection_option: ResidualConnectionOptions
-        | None = config.HALTING_STACK_RESIDUAL_CONNECTION_OPTION,
-        halting_stack_dropout_probability: float
-        | None = config.HALTING_STACK_DROPOUT_PROBABILITY,
-        halting_stack_last_layer_bias_option: LastLayerBiasOptions
-        | None = config.HALTING_STACK_LAST_LAYER_BIAS_OPTION,
-        halting_stack_apply_output_pipeline_flag: bool
-        | None = config.HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
-        halting_stack_bias_flag: bool | None = config.HALTING_STACK_BIAS_FLAG,
-        memory_flag: bool = config.MEMORY_FLAG,
-        memory_option: type[DynamicMemoryConfig] = config.MEMORY_OPTION,
-        memory_position_option: MemoryPositionOptions = config.MEMORY_POSITION_OPTION,
-        memory_test_time_training_learning_rate: float | None = (
-            config.MEMORY_TEST_TIME_TRAINING_LEARNING_RATE
-        ),
-        memory_test_time_training_num_inner_steps: int | None = (
-            config.MEMORY_TEST_TIME_TRAINING_NUM_INNER_STEPS
-        ),
-        memory_stack_independent_flag: bool = config.MEMORY_STACK_INDEPENDENT_FLAG,
-        memory_stack_hidden_dim: int | None = config.MEMORY_STACK_HIDDEN_DIM,
-        memory_stack_layer_norm_position: LayerNormPositionOptions | None = (
-            config.MEMORY_STACK_LAYER_NORM_POSITION
-        ),
-        memory_stack_num_layers: int | None = config.MEMORY_STACK_NUM_LAYERS,
-        memory_stack_activation: ActivationOptions
-        | None = config.MEMORY_STACK_ACTIVATION,
-        memory_stack_residual_connection_option: ResidualConnectionOptions | None = (
-            config.MEMORY_STACK_RESIDUAL_CONNECTION_OPTION
-        ),
-        memory_stack_dropout_probability: float | None = (
-            config.MEMORY_STACK_DROPOUT_PROBABILITY
-        ),
-        memory_stack_last_layer_bias_option: LastLayerBiasOptions | None = (
-            config.MEMORY_STACK_LAST_LAYER_BIAS_OPTION
-        ),
-        memory_stack_apply_output_pipeline_flag: bool | None = (
-            config.MEMORY_STACK_APPLY_OUTPUT_PIPELINE_FLAG
-        ),
-        memory_stack_bias_flag: bool | None = config.MEMORY_STACK_BIAS_FLAG,
-        adaptive_generator_stack_num_layers: int = config.ADAPTIVE_SUBMODULE_STACK_NUM_LAYERS,
-        adaptive_generator_stack_hidden_dim: int = config.ADAPTIVE_SUBMODULE_STACK_HIDDEN_DIM,
-        adaptive_generator_stack_activation: ActivationOptions = config.ADAPTIVE_SUBMODULE_STACK_ACTIVATION,
-        adaptive_generator_stack_residual_connection_option: ResidualConnectionOptions = config.ADAPTIVE_SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION,
-        adaptive_generator_stack_dropout_probability: float = config.ADAPTIVE_SUBMODULE_STACK_DROPOUT_PROBABILITY,
-        adaptive_generator_stack_layer_norm_position: LayerNormPositionOptions = config.ADAPTIVE_SUBMODULE_STACK_LAYER_NORM_POSITION,
-        adaptive_generator_stack_last_layer_bias_option: LastLayerBiasOptions = config.ADAPTIVE_SUBMODULE_STACK_LAST_LAYER_BIAS_OPTION,
-        adaptive_generator_stack_apply_output_pipeline_flag: bool = config.ADAPTIVE_SUBMODULE_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
-        adaptive_generator_stack_bias_flag: bool = config.ADAPTIVE_SUBMODULE_STACK_BIAS_FLAG,
-        recurrent_flag: bool = config.RECURRENT_FLAG,
-        recurrent_max_steps: int = config.RECURRENT_MAX_STEPS,
-        recurrent_layer_norm_position: LayerNormPositionOptions = config.RECURRENT_LAYER_NORM_POSITION,
-        recurrent_gate_flag: bool = config.RECURRENT_GATE_FLAG,
-        recurrent_gate_option: LayerGateOptions | None = config.RECURRENT_GATE_OPTION,
-        recurrent_gate_activation: ActivationOptions
-        | None = config.RECURRENT_GATE_ACTIVATION,
-        recurrent_gate_stack_independent_flag: bool = (
-            config.RECURRENT_GATE_STACK_INDEPENDENT_FLAG
-        ),
-        recurrent_gate_stack_hidden_dim: int | None = config.RECURRENT_GATE_STACK_HIDDEN_DIM,
-        recurrent_gate_stack_layer_norm_position: LayerNormPositionOptions | None = (
-            config.RECURRENT_GATE_STACK_LAYER_NORM_POSITION
-        ),
-        recurrent_gate_stack_num_layers: int | None = (
-            config.RECURRENT_GATE_STACK_NUM_LAYERS
-        ),
-        recurrent_gate_stack_activation: ActivationOptions | None = (
-            config.RECURRENT_GATE_STACK_ACTIVATION
-        ),
-        recurrent_gate_stack_residual_connection_option: (
-            ResidualConnectionOptions | None
-        ) = config.RECURRENT_GATE_STACK_RESIDUAL_CONNECTION_OPTION,
-        recurrent_gate_stack_dropout_probability: float | None = (
-            config.RECURRENT_GATE_STACK_DROPOUT_PROBABILITY
-        ),
-        recurrent_gate_stack_last_layer_bias_option: (
-            LastLayerBiasOptions | None
-        ) = config.RECURRENT_GATE_STACK_LAST_LAYER_BIAS_OPTION,
-        recurrent_gate_stack_apply_output_pipeline_flag: bool | None = (
-            config.RECURRENT_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG
-        ),
-        recurrent_gate_stack_bias_flag: bool | None = config.RECURRENT_GATE_STACK_BIAS_FLAG,
-        recurrent_halting_flag: bool = config.RECURRENT_HALTING_FLAG,
-        recurrent_halting_threshold: float = config.RECURRENT_HALTING_THRESHOLD,
-        recurrent_halting_dropout: float = config.RECURRENT_HALTING_DROPOUT,
-        recurrent_halting_hidden_state_mode: HaltingHiddenStateModeOptions = (
-            config.RECURRENT_HALTING_HIDDEN_STATE_MODE
-        ),
-        recurrent_halting_stack_independent_flag: bool = (
-            config.RECURRENT_HALTING_STACK_INDEPENDENT_FLAG
-        ),
-        recurrent_halting_stack_hidden_dim: int | None = (
-            config.RECURRENT_HALTING_STACK_HIDDEN_DIM
-        ),
-        recurrent_halting_stack_layer_norm_position: (
-            LayerNormPositionOptions | None
-        ) = config.RECURRENT_HALTING_STACK_LAYER_NORM_POSITION,
-        recurrent_halting_stack_num_layers: int | None = (
-            config.RECURRENT_HALTING_STACK_NUM_LAYERS
-        ),
-        recurrent_halting_stack_activation: ActivationOptions | None = (
-            config.RECURRENT_HALTING_STACK_ACTIVATION
-        ),
-        recurrent_halting_stack_residual_connection_option: (
-            ResidualConnectionOptions | None
-        ) = config.RECURRENT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION,
-        recurrent_halting_stack_dropout_probability: float | None = (
-            config.RECURRENT_HALTING_STACK_DROPOUT_PROBABILITY
-        ),
-        recurrent_halting_stack_last_layer_bias_option: (
-            LastLayerBiasOptions | None
-        ) = config.RECURRENT_HALTING_STACK_LAST_LAYER_BIAS_OPTION,
-        recurrent_halting_stack_apply_output_pipeline_flag: bool | None = (
-            config.RECURRENT_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG
-        ),
-        recurrent_halting_stack_bias_flag: bool | None = (config.RECURRENT_HALTING_STACK_BIAS_FLAG),
-        input_layer_weight_option: type[DynamicWeightConfig] | None = (
-            config.INPUT_LAYER_WEIGHT_OPTION
-        ),
-        input_layer_weight_generator_depth: DynamicDepthOptions = (
-            config.INPUT_LAYER_WEIGHT_GENERATOR_DEPTH
-        ),
-        input_layer_weight_decay_schedule: WeightDecayScheduleOptions = (
-            config.INPUT_LAYER_WEIGHT_DECAY_SCHEDULE
-        ),
-        input_layer_weight_decay_rate: float = config.INPUT_LAYER_WEIGHT_DECAY_RATE,
-        input_layer_weight_decay_warmup_batches: int = (
-            config.INPUT_LAYER_WEIGHT_DECAY_WARMUP_BATCHES
-        ),
-        input_layer_weight_normalization_option: WeightNormalizationOptions = (
-            config.INPUT_LAYER_WEIGHT_NORMALIZATION_OPTION
-        ),
-        input_layer_weight_normalization_position_option: WeightNormalizationPositionOptions = (
-            config.INPUT_LAYER_WEIGHT_NORMALIZATION_POSITION_OPTION
-        ),
-        input_layer_weight_bank_expansion_factor: BankExpansionFactorOptions = (
-            config.INPUT_LAYER_WEIGHT_BANK_EXPANSION_FACTOR
-        ),
-        input_layer_bias_option: type[DynamicBiasConfig] | None = (
-            config.INPUT_LAYER_BIAS_OPTION
-        ),
-        input_layer_bias_decay_schedule: WeightDecayScheduleOptions = (
-            config.INPUT_LAYER_BIAS_DECAY_SCHEDULE
-        ),
-        input_layer_bias_decay_rate: float = config.INPUT_LAYER_BIAS_DECAY_RATE,
-        input_layer_bias_decay_warmup_batches: int = (
-            config.INPUT_LAYER_BIAS_DECAY_WARMUP_BATCHES
-        ),
-        input_layer_bias_bank_expansion_factor: BankExpansionFactorOptions = (
-            config.INPUT_LAYER_BIAS_BANK_EXPANSION_FACTOR
-        ),
-        input_layer_diagonal_option: type[DynamicDiagonalConfig] | None = (
-            config.INPUT_LAYER_DIAGONAL_OPTION
-        ),
-        input_layer_row_mask_option: type[AxisMaskConfig] | None = (
-            config.INPUT_LAYER_ROW_MASK_OPTION
-        ),
-        input_layer_mask_dimension_option: MaskDimensionOptions = (
-            config.INPUT_LAYER_MASK_DIMENSION_OPTION
-        ),
-        input_layer_mask_threshold: float = config.INPUT_LAYER_MASK_THRESHOLD,
-        input_layer_mask_surrogate_scale: float = (
-            config.INPUT_LAYER_MASK_SURROGATE_SCALE
-        ),
-        input_layer_mask_floor: float = config.INPUT_LAYER_MASK_FLOOR,
-        input_layer_mask_transition_width: float = (
-            config.INPUT_LAYER_MASK_TRANSITION_WIDTH
-        ),
-        output_layer_weight_option: type[DynamicWeightConfig] | None = (
-            config.OUTPUT_LAYER_WEIGHT_OPTION
-        ),
-        output_layer_weight_generator_depth: DynamicDepthOptions = (
-            config.OUTPUT_LAYER_WEIGHT_GENERATOR_DEPTH
-        ),
-        output_layer_weight_decay_schedule: WeightDecayScheduleOptions = (
-            config.OUTPUT_LAYER_WEIGHT_DECAY_SCHEDULE
-        ),
-        output_layer_weight_decay_rate: float = config.OUTPUT_LAYER_WEIGHT_DECAY_RATE,
-        output_layer_weight_decay_warmup_batches: int = (
-            config.OUTPUT_LAYER_WEIGHT_DECAY_WARMUP_BATCHES
-        ),
-        output_layer_weight_normalization_option: WeightNormalizationOptions = (
-            config.OUTPUT_LAYER_WEIGHT_NORMALIZATION_OPTION
-        ),
-        output_layer_weight_normalization_position_option: WeightNormalizationPositionOptions = (
-            config.OUTPUT_LAYER_WEIGHT_NORMALIZATION_POSITION_OPTION
-        ),
-        output_layer_weight_bank_expansion_factor: BankExpansionFactorOptions = (
-            config.OUTPUT_LAYER_WEIGHT_BANK_EXPANSION_FACTOR
-        ),
-        output_layer_bias_option: type[DynamicBiasConfig] | None = (
-            config.OUTPUT_LAYER_BIAS_OPTION
-        ),
-        output_layer_bias_decay_schedule: WeightDecayScheduleOptions = (
-            config.OUTPUT_LAYER_BIAS_DECAY_SCHEDULE
-        ),
-        output_layer_bias_decay_rate: float = config.OUTPUT_LAYER_BIAS_DECAY_RATE,
-        output_layer_bias_decay_warmup_batches: int = (
-            config.OUTPUT_LAYER_BIAS_DECAY_WARMUP_BATCHES
-        ),
-        output_layer_bias_bank_expansion_factor: BankExpansionFactorOptions = (
-            config.OUTPUT_LAYER_BIAS_BANK_EXPANSION_FACTOR
-        ),
-        output_layer_diagonal_option: type[DynamicDiagonalConfig] | None = (
-            config.OUTPUT_LAYER_DIAGONAL_OPTION
-        ),
-        output_layer_row_mask_option: type[AxisMaskConfig] | None = (
-            config.OUTPUT_LAYER_ROW_MASK_OPTION
-        ),
-        output_layer_mask_dimension_option: MaskDimensionOptions = (
-            config.OUTPUT_LAYER_MASK_DIMENSION_OPTION
-        ),
-        output_layer_mask_threshold: float = config.OUTPUT_LAYER_MASK_THRESHOLD,
-        output_layer_mask_surrogate_scale: float = (
-            config.OUTPUT_LAYER_MASK_SURROGATE_SCALE
-        ),
-        output_layer_mask_floor: float = config.OUTPUT_LAYER_MASK_FLOOR,
-        output_layer_mask_transition_width: float = (
-            config.OUTPUT_LAYER_MASK_TRANSITION_WIDTH
-        ),
-        shared_gate_config: GateConfig | None = None,
-        stack_options: LinearAdaptiveStackOptions | None = None,
+        stack_options: LinearStackOptions | None = None,
         submodule_stack_options: ControllerStackOptions | None = None,
         layer_controller_options: LayerControllerOptions | None = None,
         dynamic_memory_options: DynamicMemoryOptions | None = None,
         recurrent_controller_options: RecurrentControllerOptions | None = None,
-        adaptive_generator_stack_options: AdaptiveGeneratorStackOptions | None = None,
+        adaptive_generator_stack_options: (
+            adaptive_options.AdaptiveGeneratorStackOptions | None
+        ) = None,
+        weight_generator_stack_source: (
+            adaptive_options.AdaptiveGeneratorStackSource | None
+        ) = None,
+        bias_generator_stack_source: (
+            adaptive_options.AdaptiveGeneratorStackSource | None
+        ) = None,
+        diagonal_generator_stack_source: (
+            adaptive_options.AdaptiveGeneratorStackSource | None
+        ) = None,
+        mask_generator_stack_source: (
+            adaptive_options.AdaptiveGeneratorStackSource | None
+        ) = None,
         input_boundary_options: AdaptiveBoundaryProjectionOptions | None = None,
         output_boundary_options: AdaptiveBoundaryProjectionOptions | None = None,
     ) -> None:
-        stack_options = stack_options or LinearAdaptiveStackOptions(
-            hidden_dim=stack_hidden_dim,
-            bias_flag=stack_bias_flag,
-            layer_norm_position=(
-                stack_layer_norm_position
-                if stack_layer_norm_position is not None
-                else layer_norm_position
-            ),
-            num_layers=stack_num_layers,
-            activation=stack_activation,
-            residual_connection_option=stack_residual_connection_option,
-            dropout_probability=stack_dropout_probability,
-            last_layer_bias_option=stack_last_layer_bias_option,
-            apply_output_pipeline_flag=stack_apply_output_pipeline_flag,
+        self.stack_options = self.__default_stack_options(stack_options)
+        self.submodule_stack_options = self.__default_submodule_stack_options(
+            submodule_stack_options
         )
-        submodule_stack_options = submodule_stack_options or ControllerStackOptions(
-            hidden_dim=submodule_stack_hidden_dim,
-            num_layers=submodule_stack_num_layers,
-            last_layer_bias_option=submodule_stack_last_layer_bias_option,
-            apply_output_pipeline_flag=submodule_stack_apply_output_pipeline_flag,
-            activation=submodule_stack_activation,
-            layer_norm_position=submodule_stack_layer_norm_position,
-            residual_connection_option=submodule_stack_residual_connection_option,
-            dropout_probability=submodule_stack_dropout_probability,
-            bias_flag=submodule_stack_bias_flag,
-        )
-        layer_controller_options = (
+        self.layer_controller_options = self.__default_layer_controller_options(
             layer_controller_options
-            or LayerControllerOptions(
-                stack_gate_flag=stack_gate_flag,
-                gate_option=gate_option,
-                gate_activation=gate_activation,
-                gate_stack_source=ControllerStackSource(
-                    independent_flag=gate_stack_independent_flag,
-                    hidden_dim=gate_stack_hidden_dim,
-                    num_layers=gate_stack_num_layers,
-                    last_layer_bias_option=gate_stack_last_layer_bias_option,
-                    apply_output_pipeline_flag=(
-                        gate_stack_apply_output_pipeline_flag
-                    ),
-                    activation=gate_stack_activation,
-                    layer_norm_position=gate_stack_layer_norm_position,
-                    residual_connection_option=(
-                        gate_stack_residual_connection_option
-                    ),
-                    dropout_probability=gate_stack_dropout_probability,
-                    bias_flag=gate_stack_bias_flag,
-                ),
-                stack_halting_flag=stack_halting_flag,
-                halting_threshold=halting_threshold,
-                halting_dropout=halting_dropout,
-                halting_hidden_state_mode=halting_hidden_state_mode,
-                halting_stack_source=ControllerStackSource(
-                    independent_flag=halting_stack_independent_flag,
-                    hidden_dim=halting_stack_hidden_dim,
-                    num_layers=halting_stack_num_layers,
-                    last_layer_bias_option=halting_stack_last_layer_bias_option,
-                    apply_output_pipeline_flag=(
-                        halting_stack_apply_output_pipeline_flag
-                    ),
-                    activation=halting_stack_activation,
-                    layer_norm_position=halting_stack_layer_norm_position,
-                    residual_connection_option=(
-                        halting_stack_residual_connection_option
-                    ),
-                    dropout_probability=halting_stack_dropout_probability,
-                    bias_flag=halting_stack_bias_flag,
-                ),
-                shared_gate_config=shared_gate_config,
-            )
         )
-        dynamic_memory_options = dynamic_memory_options or DynamicMemoryOptions(
-            memory_flag=memory_flag,
-            memory_option=memory_option,
-            memory_position_option=memory_position_option,
-            memory_test_time_training_learning_rate=(
-                memory_test_time_training_learning_rate
-            ),
-            memory_test_time_training_num_inner_steps=(
-                memory_test_time_training_num_inner_steps
-            ),
-            memory_stack_source=ControllerStackSource(
-                independent_flag=memory_stack_independent_flag,
-                hidden_dim=memory_stack_hidden_dim,
-                num_layers=memory_stack_num_layers,
-                last_layer_bias_option=memory_stack_last_layer_bias_option,
-                apply_output_pipeline_flag=memory_stack_apply_output_pipeline_flag,
-                activation=memory_stack_activation,
-                layer_norm_position=memory_stack_layer_norm_position,
-                residual_connection_option=memory_stack_residual_connection_option,
-                dropout_probability=memory_stack_dropout_probability,
-                bias_flag=memory_stack_bias_flag,
-            ),
+        self.dynamic_memory_options = self.__default_dynamic_memory_options(
+            dynamic_memory_options
         )
-        adaptive_generator_stack_options = (
-            adaptive_generator_stack_options
-            or AdaptiveGeneratorStackOptions(
-                hidden_dim=adaptive_generator_stack_hidden_dim,
-                layer_norm_position=adaptive_generator_stack_layer_norm_position,
-                num_layers=adaptive_generator_stack_num_layers,
-                activation=adaptive_generator_stack_activation,
-                residual_connection_option=(
-                    adaptive_generator_stack_residual_connection_option
-                ),
-                dropout_probability=adaptive_generator_stack_dropout_probability,
-                last_layer_bias_option=(
-                    adaptive_generator_stack_last_layer_bias_option
-                ),
-                apply_output_pipeline_flag=(
-                    adaptive_generator_stack_apply_output_pipeline_flag
-                ),
-                bias_flag=adaptive_generator_stack_bias_flag,
-            )
-        )
-        recurrent_controller_options = (
+        self.recurrent_controller_options = self.__default_recurrent_controller_options(
             recurrent_controller_options
-            or RecurrentControllerOptions(
-                recurrent_flag=recurrent_flag,
-                recurrent_max_steps=recurrent_max_steps,
-                recurrent_layer_norm_position=recurrent_layer_norm_position,
-                recurrent_gate_flag=recurrent_gate_flag,
-                recurrent_gate_option=recurrent_gate_option,
-                recurrent_gate_activation=recurrent_gate_activation,
-                recurrent_gate_stack_source=ControllerStackSource(
-                    independent_flag=recurrent_gate_stack_independent_flag,
-                    hidden_dim=recurrent_gate_stack_hidden_dim,
-                    num_layers=recurrent_gate_stack_num_layers,
-                    last_layer_bias_option=(
-                        recurrent_gate_stack_last_layer_bias_option
-                    ),
-                    apply_output_pipeline_flag=(
-                        recurrent_gate_stack_apply_output_pipeline_flag
-                    ),
-                    activation=recurrent_gate_stack_activation,
-                    layer_norm_position=recurrent_gate_stack_layer_norm_position,
-                    residual_connection_option=(
-                        recurrent_gate_stack_residual_connection_option
-                    ),
-                    dropout_probability=recurrent_gate_stack_dropout_probability,
-                    bias_flag=recurrent_gate_stack_bias_flag,
-                ),
-                recurrent_halting_flag=recurrent_halting_flag,
-                recurrent_halting_threshold=recurrent_halting_threshold,
-                recurrent_halting_dropout=recurrent_halting_dropout,
-                recurrent_halting_hidden_state_mode=(
-                    recurrent_halting_hidden_state_mode
-                ),
-                recurrent_halting_stack_source=ControllerStackSource(
-                    independent_flag=recurrent_halting_stack_independent_flag,
-                    hidden_dim=recurrent_halting_stack_hidden_dim,
-                    num_layers=recurrent_halting_stack_num_layers,
-                    last_layer_bias_option=(
-                        recurrent_halting_stack_last_layer_bias_option
-                    ),
-                    apply_output_pipeline_flag=(
-                        recurrent_halting_stack_apply_output_pipeline_flag
-                    ),
-                    activation=recurrent_halting_stack_activation,
-                    layer_norm_position=recurrent_halting_stack_layer_norm_position,
-                    residual_connection_option=(
-                        recurrent_halting_stack_residual_connection_option
-                    ),
-                    dropout_probability=recurrent_halting_stack_dropout_probability,
-                    bias_flag=recurrent_halting_stack_bias_flag,
-                ),
+        )
+        self.adaptive_generator_stack_options = (
+            self.__default_adaptive_generator_stack_options(
+                adaptive_generator_stack_options
             )
         )
-        input_boundary_options = input_boundary_options or BoundaryLayerOptions(
-            weight_option=input_layer_weight_option,
-            weight_generator_depth=input_layer_weight_generator_depth,
-            weight_decay_schedule=input_layer_weight_decay_schedule,
-            weight_decay_rate=input_layer_weight_decay_rate,
-            weight_decay_warmup_batches=input_layer_weight_decay_warmup_batches,
-            weight_normalization_option=input_layer_weight_normalization_option,
-            weight_normalization_position_option=(
-                input_layer_weight_normalization_position_option
-            ),
-            weight_bank_expansion_factor=input_layer_weight_bank_expansion_factor,
-            bias_option=input_layer_bias_option,
-            bias_decay_schedule=input_layer_bias_decay_schedule,
-            bias_decay_rate=input_layer_bias_decay_rate,
-            bias_decay_warmup_batches=input_layer_bias_decay_warmup_batches,
-            bias_bank_expansion_factor=input_layer_bias_bank_expansion_factor,
-            diagonal_option=input_layer_diagonal_option,
-            row_mask_option=input_layer_row_mask_option,
-            mask_dimension_option=input_layer_mask_dimension_option,
-            mask_threshold=input_layer_mask_threshold,
-            mask_surrogate_scale=input_layer_mask_surrogate_scale,
-            mask_floor=input_layer_mask_floor,
-            mask_transition_width=input_layer_mask_transition_width,
+        self.weight_generator_stack_source = self.__default_adaptive_generator_stack_source(
+            weight_generator_stack_source,
+            "weight_generator_stack",
         )
-        output_boundary_options = output_boundary_options or BoundaryLayerOptions(
-            weight_option=output_layer_weight_option,
-            weight_generator_depth=output_layer_weight_generator_depth,
-            weight_decay_schedule=output_layer_weight_decay_schedule,
-            weight_decay_rate=output_layer_weight_decay_rate,
-            weight_decay_warmup_batches=output_layer_weight_decay_warmup_batches,
-            weight_normalization_option=output_layer_weight_normalization_option,
-            weight_normalization_position_option=(
-                output_layer_weight_normalization_position_option
-            ),
-            weight_bank_expansion_factor=output_layer_weight_bank_expansion_factor,
-            bias_option=output_layer_bias_option,
-            bias_decay_schedule=output_layer_bias_decay_schedule,
-            bias_decay_rate=output_layer_bias_decay_rate,
-            bias_decay_warmup_batches=output_layer_bias_decay_warmup_batches,
-            bias_bank_expansion_factor=output_layer_bias_bank_expansion_factor,
-            diagonal_option=output_layer_diagonal_option,
-            row_mask_option=output_layer_row_mask_option,
-            mask_dimension_option=output_layer_mask_dimension_option,
-            mask_threshold=output_layer_mask_threshold,
-            mask_surrogate_scale=output_layer_mask_surrogate_scale,
-            mask_floor=output_layer_mask_floor,
-            mask_transition_width=output_layer_mask_transition_width,
+        self.bias_generator_stack_source = self.__default_adaptive_generator_stack_source(
+            bias_generator_stack_source,
+            "bias_generator_stack",
         )
+        self.diagonal_generator_stack_source = (
+            self.__default_adaptive_generator_stack_source(
+                diagonal_generator_stack_source,
+                "diagonal_generator_stack",
+            )
+        )
+        self.mask_generator_stack_source = self.__default_adaptive_generator_stack_source(
+            mask_generator_stack_source,
+            "mask_generator_stack",
+        )
+        self.input_boundary_options = self.__default_boundary_options(
+            input_boundary_options,
+            "input_layer",
+        )
+        self.output_boundary_options = self.__default_boundary_options(
+            output_boundary_options,
+            "output_layer",
+        )
+
         self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.input_dim = input_dim
-        self.stack_options = stack_options
-        self.hidden_dim = stack_options.hidden_dim
         self.output_dim = output_dim
-        self.bias_flag = stack_options.bias_flag
-        self.layer_norm_position = layer_norm_position
-        self.stack_layer_norm_position = stack_options.layer_norm_position
+
         self.generator_depth = generator_depth
         self.diagonal_option_flag = diagonal_option_flag
         self.diagonal_option = diagonal_option
-        self.diagonal_generator_stack_independent_flag = (
-            diagonal_generator_stack_independent_flag
-        )
-        self.diagonal_generator_stack_hidden_dim = diagonal_generator_stack_hidden_dim
-        self.diagonal_generator_stack_layer_norm_position = (
-            diagonal_generator_stack_layer_norm_position
-        )
-        self.diagonal_generator_stack_num_layers = diagonal_generator_stack_num_layers
-        self.diagonal_generator_stack_activation = diagonal_generator_stack_activation
-        self.diagonal_generator_stack_residual_connection_option = (
-            diagonal_generator_stack_residual_connection_option
-        )
-        self.diagonal_generator_stack_dropout_probability = (
-            diagonal_generator_stack_dropout_probability
-        )
-        self.diagonal_generator_stack_last_layer_bias_option = (
-            diagonal_generator_stack_last_layer_bias_option
-        )
-        self.diagonal_generator_stack_apply_output_pipeline_flag = (
-            diagonal_generator_stack_apply_output_pipeline_flag
-        )
-        self.diagonal_generator_stack_bias_flag = diagonal_generator_stack_bias_flag
         self.bias_option_flag = bias_option_flag
         self.bias_option = bias_option
         self.weight_option_flag = weight_option_flag
@@ -820,54 +193,10 @@ class LinearAdaptiveConfigBuilder:
         self.weight_decay_rate = weight_decay_rate
         self.weight_decay_warmup_batches = weight_decay_warmup_batches
         self.weight_bank_expansion_factor = weight_bank_expansion_factor
-        self.weight_generator_stack_independent_flag = (
-            weight_generator_stack_independent_flag
-        )
-        self.weight_generator_stack_hidden_dim = weight_generator_stack_hidden_dim
-        self.weight_generator_stack_layer_norm_position = (
-            weight_generator_stack_layer_norm_position
-        )
-        self.weight_generator_stack_num_layers = weight_generator_stack_num_layers
-        self.weight_generator_stack_activation = weight_generator_stack_activation
-        self.weight_generator_stack_residual_connection_option = (
-            weight_generator_stack_residual_connection_option
-        )
-        self.weight_generator_stack_dropout_probability = (
-            weight_generator_stack_dropout_probability
-        )
-        self.weight_generator_stack_last_layer_bias_option = (
-            weight_generator_stack_last_layer_bias_option
-        )
-        self.weight_generator_stack_apply_output_pipeline_flag = (
-            weight_generator_stack_apply_output_pipeline_flag
-        )
-        self.weight_generator_stack_bias_flag = weight_generator_stack_bias_flag
         self.bias_decay_schedule = bias_decay_schedule
         self.bias_decay_rate = bias_decay_rate
         self.bias_decay_warmup_batches = bias_decay_warmup_batches
         self.bias_bank_expansion_factor = bias_bank_expansion_factor
-        self.bias_generator_stack_independent_flag = (
-            bias_generator_stack_independent_flag
-        )
-        self.bias_generator_stack_hidden_dim = bias_generator_stack_hidden_dim
-        self.bias_generator_stack_layer_norm_position = (
-            bias_generator_stack_layer_norm_position
-        )
-        self.bias_generator_stack_num_layers = bias_generator_stack_num_layers
-        self.bias_generator_stack_activation = bias_generator_stack_activation
-        self.bias_generator_stack_residual_connection_option = (
-            bias_generator_stack_residual_connection_option
-        )
-        self.bias_generator_stack_dropout_probability = (
-            bias_generator_stack_dropout_probability
-        )
-        self.bias_generator_stack_last_layer_bias_option = (
-            bias_generator_stack_last_layer_bias_option
-        )
-        self.bias_generator_stack_apply_output_pipeline_flag = (
-            bias_generator_stack_apply_output_pipeline_flag
-        )
-        self.bias_generator_stack_bias_flag = bias_generator_stack_bias_flag
         self.mask_option_flag = mask_option_flag
         self.row_mask_option = row_mask_option
         self.mask_dimension_option = mask_dimension_option
@@ -875,277 +204,56 @@ class LinearAdaptiveConfigBuilder:
         self.mask_surrogate_scale = mask_surrogate_scale
         self.mask_floor = mask_floor
         self.mask_transition_width = mask_transition_width
-        self.mask_generator_stack_independent_flag = (
-            mask_generator_stack_independent_flag
-        )
-        self.mask_generator_stack_hidden_dim = mask_generator_stack_hidden_dim
-        self.mask_generator_stack_layer_norm_position = (
-            mask_generator_stack_layer_norm_position
-        )
-        self.mask_generator_stack_num_layers = mask_generator_stack_num_layers
-        self.mask_generator_stack_activation = mask_generator_stack_activation
-        self.mask_generator_stack_residual_connection_option = (
-            mask_generator_stack_residual_connection_option
-        )
-        self.mask_generator_stack_dropout_probability = (
-            mask_generator_stack_dropout_probability
-        )
-        self.mask_generator_stack_last_layer_bias_option = (
-            mask_generator_stack_last_layer_bias_option
-        )
-        self.mask_generator_stack_apply_output_pipeline_flag = (
-            mask_generator_stack_apply_output_pipeline_flag
-        )
-        self.mask_generator_stack_bias_flag = mask_generator_stack_bias_flag
-        self.stack_num_layers = stack_options.num_layers
-        self.stack_activation = stack_options.activation
-        self.stack_residual_connection_option = (
-            stack_options.residual_connection_option
-        )
-        self.stack_dropout_probability = stack_options.dropout_probability
-        self.stack_last_layer_bias_option = stack_options.last_layer_bias_option
-        self.stack_apply_output_pipeline_flag = (
-            stack_options.apply_output_pipeline_flag
-        )
-        self.submodule_stack_options = submodule_stack_options
-        self.submodule_stack_hidden_dim = submodule_stack_options.hidden_dim
-        self.submodule_stack_layer_norm_position = (
-            submodule_stack_options.layer_norm_position
-        )
-        self.submodule_stack_num_layers = submodule_stack_options.num_layers
-        self.submodule_stack_activation = submodule_stack_options.activation
-        self.submodule_stack_residual_connection_option = (
-            submodule_stack_options.residual_connection_option
-        )
-        self.submodule_stack_dropout_probability = (
-            submodule_stack_options.dropout_probability
-        )
-        self.submodule_stack_last_layer_bias_option = (
-            submodule_stack_options.last_layer_bias_option
-        )
-        self.submodule_stack_apply_output_pipeline_flag = (
-            submodule_stack_options.apply_output_pipeline_flag
-        )
-        self.submodule_stack_bias_flag = submodule_stack_options.bias_flag
-        self.layer_controller_options = layer_controller_options
-        self.stack_gate_flag = layer_controller_options.stack_gate_flag
-        self.gate_option = layer_controller_options.gate_option
-        self.gate_activation = layer_controller_options.gate_activation
-        self.gate_stack_source = layer_controller_options.gate_stack_source
-        self.gate_stack_independent_flag = self.gate_stack_source.independent_flag
-        self.gate_stack_hidden_dim = self.gate_stack_source.hidden_dim
-        self.gate_stack_layer_norm_position = (
-            self.gate_stack_source.layer_norm_position
-        )
-        self.gate_stack_num_layers = self.gate_stack_source.num_layers
-        self.gate_stack_activation = self.gate_stack_source.activation
-        self.gate_stack_residual_connection_option = (
-            self.gate_stack_source.residual_connection_option
-        )
-        self.gate_stack_dropout_probability = (
-            self.gate_stack_source.dropout_probability
-        )
-        self.gate_stack_last_layer_bias_option = (
-            self.gate_stack_source.last_layer_bias_option
-        )
-        self.gate_stack_apply_output_pipeline_flag = (
-            self.gate_stack_source.apply_output_pipeline_flag
-        )
-        self.gate_stack_bias_flag = self.gate_stack_source.bias_flag
-        self.shared_gate_config = layer_controller_options.shared_gate_config
-        self.stack_halting_flag = layer_controller_options.stack_halting_flag
-        self.halting_threshold = layer_controller_options.halting_threshold
-        self.halting_dropout = layer_controller_options.halting_dropout
-        self.halting_hidden_state_mode = (
-            layer_controller_options.halting_hidden_state_mode
-        )
-        self.halting_stack_source = layer_controller_options.halting_stack_source
-        self.halting_stack_independent_flag = (
-            self.halting_stack_source.independent_flag
-        )
-        self.halting_stack_hidden_dim = self.halting_stack_source.hidden_dim
-        self.halting_stack_layer_norm_position = (
-            self.halting_stack_source.layer_norm_position
-        )
-        self.halting_stack_num_layers = self.halting_stack_source.num_layers
-        self.halting_stack_activation = self.halting_stack_source.activation
-        self.halting_stack_residual_connection_option = (
-            self.halting_stack_source.residual_connection_option
-        )
-        self.halting_stack_dropout_probability = (
-            self.halting_stack_source.dropout_probability
-        )
-        self.halting_stack_last_layer_bias_option = (
-            self.halting_stack_source.last_layer_bias_option
-        )
-        self.halting_stack_apply_output_pipeline_flag = (
-            self.halting_stack_source.apply_output_pipeline_flag
-        )
-        self.halting_stack_bias_flag = self.halting_stack_source.bias_flag
-        self.dynamic_memory_options = dynamic_memory_options
-        self.memory_flag = dynamic_memory_options.memory_flag
-        self.memory_option = dynamic_memory_options.memory_option
-        self.memory_position_option = dynamic_memory_options.memory_position_option
-        self.memory_test_time_training_learning_rate = (
-            dynamic_memory_options.memory_test_time_training_learning_rate
-        )
-        self.memory_test_time_training_num_inner_steps = (
-            dynamic_memory_options.memory_test_time_training_num_inner_steps
-        )
-        self.memory_stack_source = dynamic_memory_options.memory_stack_source
-        self.memory_stack_independent_flag = self.memory_stack_source.independent_flag
-        self.memory_stack_hidden_dim = self.memory_stack_source.hidden_dim
-        self.memory_stack_layer_norm_position = (
-            self.memory_stack_source.layer_norm_position
-        )
-        self.memory_stack_num_layers = self.memory_stack_source.num_layers
-        self.memory_stack_activation = self.memory_stack_source.activation
-        self.memory_stack_residual_connection_option = (
-            self.memory_stack_source.residual_connection_option
-        )
-        self.memory_stack_dropout_probability = (
-            self.memory_stack_source.dropout_probability
-        )
-        self.memory_stack_last_layer_bias_option = (
-            self.memory_stack_source.last_layer_bias_option
-        )
-        self.memory_stack_apply_output_pipeline_flag = (
-            self.memory_stack_source.apply_output_pipeline_flag
-        )
-        self.memory_stack_bias_flag = self.memory_stack_source.bias_flag
-        self.adaptive_generator_stack_options = adaptive_generator_stack_options
-        self.adaptive_generator_stack_num_layers = (
-            adaptive_generator_stack_options.num_layers
-        )
-        self.adaptive_generator_stack_hidden_dim = (
-            adaptive_generator_stack_options.hidden_dim
-        )
-        self.adaptive_generator_stack_activation = (
-            adaptive_generator_stack_options.activation
-        )
-        self.adaptive_generator_stack_residual_connection_option = (
-            adaptive_generator_stack_options.residual_connection_option
-        )
-        self.adaptive_generator_stack_dropout_probability = (
-            adaptive_generator_stack_options.dropout_probability
-        )
-        self.adaptive_generator_stack_layer_norm_position = (
-            adaptive_generator_stack_options.layer_norm_position
-        )
-        self.adaptive_generator_stack_last_layer_bias_option = (
-            adaptive_generator_stack_options.last_layer_bias_option
-        )
-        self.adaptive_generator_stack_apply_output_pipeline_flag = (
-            adaptive_generator_stack_options.apply_output_pipeline_flag
-        )
-        self.adaptive_generator_stack_bias_flag = adaptive_generator_stack_options.bias_flag
-        self.recurrent_controller_options = recurrent_controller_options
-        self.recurrent_flag = recurrent_controller_options.recurrent_flag
-        self.recurrent_max_steps = recurrent_controller_options.recurrent_max_steps
-        self.recurrent_layer_norm_position = (
-            recurrent_controller_options.recurrent_layer_norm_position
-        )
-        self.recurrent_gate_flag = recurrent_controller_options.recurrent_gate_flag
-        self.recurrent_gate_option = recurrent_controller_options.recurrent_gate_option
-        self.recurrent_gate_activation = (
-            recurrent_controller_options.recurrent_gate_activation
-        )
-        self.recurrent_gate_stack_source = (
-            recurrent_controller_options.recurrent_gate_stack_source
-        )
-        self.recurrent_gate_stack_independent_flag = (
-            self.recurrent_gate_stack_source.independent_flag
-        )
-        self.recurrent_gate_stack_hidden_dim = (
-            self.recurrent_gate_stack_source.hidden_dim
-        )
-        self.recurrent_gate_stack_layer_norm_position = (
-            self.recurrent_gate_stack_source.layer_norm_position
-        )
-        self.recurrent_gate_stack_num_layers = (
-            self.recurrent_gate_stack_source.num_layers
-        )
-        self.recurrent_gate_stack_activation = (
-            self.recurrent_gate_stack_source.activation
-        )
-        self.recurrent_gate_stack_residual_connection_option = (
-            self.recurrent_gate_stack_source.residual_connection_option
-        )
-        self.recurrent_gate_stack_dropout_probability = (
-            self.recurrent_gate_stack_source.dropout_probability
-        )
-        self.recurrent_gate_stack_last_layer_bias_option = (
-            self.recurrent_gate_stack_source.last_layer_bias_option
-        )
-        self.recurrent_gate_stack_apply_output_pipeline_flag = (
-            self.recurrent_gate_stack_source.apply_output_pipeline_flag
-        )
-        self.recurrent_gate_stack_bias_flag = self.recurrent_gate_stack_source.bias_flag
-        self.recurrent_halting_flag = (
-            recurrent_controller_options.recurrent_halting_flag
-        )
-        self.recurrent_halting_threshold = (
-            recurrent_controller_options.recurrent_halting_threshold
-        )
-        self.recurrent_halting_dropout = (
-            recurrent_controller_options.recurrent_halting_dropout
-        )
-        self.recurrent_halting_hidden_state_mode = (
-            recurrent_controller_options.recurrent_halting_hidden_state_mode
-        )
-        self.recurrent_halting_stack_source = (
-            recurrent_controller_options.recurrent_halting_stack_source
-        )
-        self.recurrent_halting_stack_independent_flag = (
-            self.recurrent_halting_stack_source.independent_flag
-        )
-        self.recurrent_halting_stack_hidden_dim = (
-            self.recurrent_halting_stack_source.hidden_dim
-        )
-        self.recurrent_halting_stack_layer_norm_position = (
-            self.recurrent_halting_stack_source.layer_norm_position
-        )
-        self.recurrent_halting_stack_num_layers = (
-            self.recurrent_halting_stack_source.num_layers
-        )
-        self.recurrent_halting_stack_activation = (
-            self.recurrent_halting_stack_source.activation
-        )
-        self.recurrent_halting_stack_residual_connection_option = (
-            self.recurrent_halting_stack_source.residual_connection_option
-        )
-        self.recurrent_halting_stack_dropout_probability = (
-            self.recurrent_halting_stack_source.dropout_probability
-        )
-        self.recurrent_halting_stack_last_layer_bias_option = (
-            self.recurrent_halting_stack_source.last_layer_bias_option
-        )
-        self.recurrent_halting_stack_apply_output_pipeline_flag = (
-            self.recurrent_halting_stack_source.apply_output_pipeline_flag
-        )
-        self.recurrent_halting_stack_bias_flag = (
-            self.recurrent_halting_stack_source.bias_flag
-        )
-        self.input_boundary_options = input_boundary_options
-        self.output_boundary_options = output_boundary_options
 
     def build(self) -> "ModelConfig":
         from emperor.config import ModelConfig
 
-        boundary_factory = BoundaryConfigFactory(self)
-        control_factory = ControlConfigFactory(self)
+        boundary_dependencies = self.__boundary_config_dependencies()
+        control_dependencies = self.__control_config_dependencies()
+        boundary_factory = BoundaryConfigFactory(boundary_dependencies)
+        control_factory = ControlConfigFactory(control_dependencies)
 
         return ModelConfig(
             learning_rate=self.learning_rate,
             batch_size=self.batch_size,
             input_dim=self.input_dim,
-            hidden_dim=self.hidden_dim,
+            hidden_dim=self.stack_options.hidden_dim,
             output_dim=self.output_dim,
             experiment_config=ExperimentConfig(
                 input_model_config=boundary_factory.build_input_model_config(),
                 model_config=control_factory.build(),
                 output_model_config=boundary_factory.build_output_model_config(),
             ),
+        )
+
+    def __boundary_config_dependencies(self) -> BoundaryConfigDependencies:
+        return BoundaryConfigDependencies(
+            stack_options=self.stack_options,
+            input_boundary_options=self.input_boundary_options,
+            output_boundary_options=self.output_boundary_options,
+            model_config=self._build_model_config(),
+        )
+
+    def __control_config_dependencies(self) -> ControlConfigDependencies:
+        return ControlConfigDependencies(
+            stack_options=self.stack_options,
+            submodule_stack_options=self.submodule_stack_options,
+            layer_controller_options=self.layer_controller_options,
+            dynamic_memory_options=self.dynamic_memory_options,
+            recurrent_controller_options=self.recurrent_controller_options,
+            adaptive_augmentation_config=self.__adaptive_augmentation_config(),
+            output_dim=self.output_dim,
+        )
+
+    def __adaptive_augmentation_config(
+        self,
+    ) -> AdaptiveParameterAugmentationConfig:
+        return AdaptiveParameterAugmentationConfig(
+            weight_config=self._build_weight_config(),
+            bias_config=self._build_bias_config(),
+            diagonal_config=self._build_diagonal_config(),
+            mask_config=self._build_mask_config(),
+            model_config=self._build_model_config(),
         )
 
     @staticmethod
@@ -1330,7 +438,7 @@ class LinearAdaptiveConfigBuilder:
 
     def _build_adaptive_generator_stack_config_from_source(
         self,
-        source: AdaptiveGeneratorStackSource,
+        source: adaptive_options.AdaptiveGeneratorStackSource,
     ) -> LayerStackConfig | None:
         options = self._resolve_adaptive_generator_stack_options(source)
         if options is None:
@@ -1349,12 +457,12 @@ class LinearAdaptiveConfigBuilder:
 
     def _resolve_adaptive_generator_stack_options(
         self,
-        source: AdaptiveGeneratorStackSource,
-    ) -> AdaptiveGeneratorStackOptions | None:
+        source: adaptive_options.AdaptiveGeneratorStackSource,
+    ) -> adaptive_options.AdaptiveGeneratorStackOptions | None:
         if not source.independent_flag:
             return None
         defaults = self._shared_adaptive_generator_stack_options()
-        return AdaptiveGeneratorStackOptions(
+        return adaptive_options.AdaptiveGeneratorStackOptions(
             hidden_dim=self._resolve_adaptive_generator_stack_option(
                 source.hidden_dim,
                 defaults.hidden_dim,
@@ -1397,112 +505,43 @@ class LinearAdaptiveConfigBuilder:
     def _resolve_adaptive_generator_stack_option(override, shared_default):
         return shared_default if override is None else override
 
-    def _shared_adaptive_generator_stack_options(self) -> AdaptiveGeneratorStackOptions:
-        return AdaptiveGeneratorStackOptions(
-            hidden_dim=self.adaptive_generator_stack_hidden_dim,
-            layer_norm_position=self.adaptive_generator_stack_layer_norm_position,
-            num_layers=self.adaptive_generator_stack_num_layers,
-            activation=self.adaptive_generator_stack_activation,
-            residual_connection_option=(
-                self.adaptive_generator_stack_residual_connection_option
-            ),
-            dropout_probability=self.adaptive_generator_stack_dropout_probability,
-            last_layer_bias_option=(
-                self.adaptive_generator_stack_last_layer_bias_option
-            ),
-            apply_output_pipeline_flag=(
-                self.adaptive_generator_stack_apply_output_pipeline_flag
-            ),
-            bias_flag=self.adaptive_generator_stack_bias_flag,
-        )
+    def _shared_adaptive_generator_stack_options(
+        self,
+    ) -> adaptive_options.AdaptiveGeneratorStackOptions:
+        return self.adaptive_generator_stack_options
 
-    def _weight_generator_stack_source(self) -> AdaptiveGeneratorStackSource:
-        return AdaptiveGeneratorStackSource(
-            independent_flag=self.weight_generator_stack_independent_flag,
-            hidden_dim=self.weight_generator_stack_hidden_dim,
-            layer_norm_position=self.weight_generator_stack_layer_norm_position,
-            num_layers=self.weight_generator_stack_num_layers,
-            activation=self.weight_generator_stack_activation,
-            residual_connection_option=(
-                self.weight_generator_stack_residual_connection_option
-            ),
-            dropout_probability=self.weight_generator_stack_dropout_probability,
-            last_layer_bias_option=self.weight_generator_stack_last_layer_bias_option,
-            apply_output_pipeline_flag=(
-                self.weight_generator_stack_apply_output_pipeline_flag
-            ),
-            bias_flag=self.weight_generator_stack_bias_flag,
-        )
+    def _weight_generator_stack_source(
+        self,
+    ) -> adaptive_options.AdaptiveGeneratorStackSource:
+        return self.weight_generator_stack_source
 
-    def _bias_generator_stack_source(self) -> AdaptiveGeneratorStackSource:
-        return AdaptiveGeneratorStackSource(
-            independent_flag=self.bias_generator_stack_independent_flag,
-            hidden_dim=self.bias_generator_stack_hidden_dim,
-            layer_norm_position=self.bias_generator_stack_layer_norm_position,
-            num_layers=self.bias_generator_stack_num_layers,
-            activation=self.bias_generator_stack_activation,
-            residual_connection_option=(
-                self.bias_generator_stack_residual_connection_option
-            ),
-            dropout_probability=self.bias_generator_stack_dropout_probability,
-            last_layer_bias_option=self.bias_generator_stack_last_layer_bias_option,
-            apply_output_pipeline_flag=(
-                self.bias_generator_stack_apply_output_pipeline_flag
-            ),
-            bias_flag=self.bias_generator_stack_bias_flag,
-        )
+    def _bias_generator_stack_source(
+        self,
+    ) -> adaptive_options.AdaptiveGeneratorStackSource:
+        return self.bias_generator_stack_source
 
-    def _diagonal_generator_stack_source(self) -> AdaptiveGeneratorStackSource:
-        return AdaptiveGeneratorStackSource(
-            independent_flag=self.diagonal_generator_stack_independent_flag,
-            hidden_dim=self.diagonal_generator_stack_hidden_dim,
-            layer_norm_position=self.diagonal_generator_stack_layer_norm_position,
-            num_layers=self.diagonal_generator_stack_num_layers,
-            activation=self.diagonal_generator_stack_activation,
-            residual_connection_option=(
-                self.diagonal_generator_stack_residual_connection_option
-            ),
-            dropout_probability=self.diagonal_generator_stack_dropout_probability,
-            last_layer_bias_option=(
-                self.diagonal_generator_stack_last_layer_bias_option
-            ),
-            apply_output_pipeline_flag=(
-                self.diagonal_generator_stack_apply_output_pipeline_flag
-            ),
-            bias_flag=self.diagonal_generator_stack_bias_flag,
-        )
+    def _diagonal_generator_stack_source(
+        self,
+    ) -> adaptive_options.AdaptiveGeneratorStackSource:
+        return self.diagonal_generator_stack_source
 
-    def _mask_generator_stack_source(self) -> AdaptiveGeneratorStackSource:
-        return AdaptiveGeneratorStackSource(
-            independent_flag=self.mask_generator_stack_independent_flag,
-            hidden_dim=self.mask_generator_stack_hidden_dim,
-            layer_norm_position=self.mask_generator_stack_layer_norm_position,
-            num_layers=self.mask_generator_stack_num_layers,
-            activation=self.mask_generator_stack_activation,
-            residual_connection_option=(
-                self.mask_generator_stack_residual_connection_option
-            ),
-            dropout_probability=self.mask_generator_stack_dropout_probability,
-            last_layer_bias_option=self.mask_generator_stack_last_layer_bias_option,
-            apply_output_pipeline_flag=(
-                self.mask_generator_stack_apply_output_pipeline_flag
-            ),
-            bias_flag=self.mask_generator_stack_bias_flag,
-        )
+    def _mask_generator_stack_source(
+        self,
+    ) -> adaptive_options.AdaptiveGeneratorStackSource:
+        return self.mask_generator_stack_source
 
     def _build_model_config(self) -> LayerStackConfig:
+        options = self.adaptive_generator_stack_options
         return self._build_model_config_from_options(
-            hidden_dim=self.adaptive_generator_stack_hidden_dim,
-            num_layers=self.adaptive_generator_stack_num_layers,
-            activation=self.adaptive_generator_stack_activation,
-            residual_connection_option=self.adaptive_generator_stack_residual_connection_option,
-            dropout_probability=self.adaptive_generator_stack_dropout_probability,
-            layer_norm_position=self.adaptive_generator_stack_layer_norm_position,
-            last_layer_bias_option=self.adaptive_generator_stack_last_layer_bias_option,
-            apply_output_pipeline_flag=(
-                self.adaptive_generator_stack_apply_output_pipeline_flag
-            ),
-            bias_flag=self.adaptive_generator_stack_bias_flag,
+            hidden_dim=options.hidden_dim,
+            num_layers=options.num_layers,
+            activation=options.activation,
+            residual_connection_option=options.residual_connection_option,
+            dropout_probability=options.dropout_probability,
+            layer_norm_position=options.layer_norm_position,
+            last_layer_bias_option=options.last_layer_bias_option,
+            apply_output_pipeline_flag=options.apply_output_pipeline_flag,
+            bias_flag=options.bias_flag,
         )
 
     def _build_model_config_from_options(
@@ -1534,3 +573,66 @@ class LinearAdaptiveConfigBuilder:
                 ),
             ),
         )
+
+    @staticmethod
+    def __default_stack_options(
+        stack_options: LinearStackOptions | None,
+    ) -> LinearStackOptions:
+        return stack_options or default_linear_stack_options(config)
+
+    @staticmethod
+    def __default_submodule_stack_options(
+        submodule_stack_options: ControllerStackOptions | None,
+    ) -> ControllerStackOptions:
+        return submodule_stack_options or default_submodule_stack_options(config)
+
+    @staticmethod
+    def __default_layer_controller_options(
+        layer_controller_options: LayerControllerOptions | None,
+    ) -> LayerControllerOptions:
+        return layer_controller_options or default_layer_controller_options(config)
+
+    @staticmethod
+    def __default_dynamic_memory_options(
+        dynamic_memory_options: DynamicMemoryOptions | None,
+    ) -> DynamicMemoryOptions:
+        return dynamic_memory_options or default_dynamic_memory_options(config)
+
+    @staticmethod
+    def __default_recurrent_controller_options(
+        recurrent_controller_options: RecurrentControllerOptions | None,
+    ) -> RecurrentControllerOptions:
+        return recurrent_controller_options or default_recurrent_controller_options(
+            config
+        )
+
+    @staticmethod
+    def __default_adaptive_generator_stack_options(
+        adaptive_generator_stack_options: (
+            adaptive_options.AdaptiveGeneratorStackOptions | None
+        ),
+    ) -> (
+        adaptive_options.AdaptiveGeneratorStackOptions
+    ):
+        return adaptive_generator_stack_options or default_adaptive_generator_stack_options(
+            config
+        )
+
+    @staticmethod
+    def __default_adaptive_generator_stack_source(
+        adaptive_generator_stack_source: (
+            adaptive_options.AdaptiveGeneratorStackSource | None
+        ),
+        prefix: str,
+    ) -> adaptive_options.AdaptiveGeneratorStackSource:
+        return adaptive_generator_stack_source or default_adaptive_generator_stack_source(
+            config,
+            prefix,
+        )
+
+    @staticmethod
+    def __default_boundary_options(
+        boundary_options: AdaptiveBoundaryProjectionOptions | None,
+        prefix: str,
+    ) -> AdaptiveBoundaryProjectionOptions:
+        return boundary_options or default_boundary_options(config, prefix)

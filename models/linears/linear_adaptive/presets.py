@@ -42,6 +42,9 @@ from emperor.experiments.base import (
 )
 
 import models.linears.linear_adaptive.config as config
+from models.linears._builder_adapter import (
+    linear_adaptive_builder_kwargs_from_flat,
+)
 from models.linears.linear_adaptive.config_builder import LinearAdaptiveConfigBuilder
 from models.linears.linear_adaptive.model import Model
 
@@ -839,6 +842,10 @@ class ExperimentPresets(BuilderBackedExperimentPresetsBase):
             builder_type=LinearAdaptiveConfigBuilder,
             default_preset=ExperimentPreset.BASELINE,
         )
+
+    def _preset(self, **kwargs):
+        builder_kwargs = linear_adaptive_builder_kwargs_from_flat(kwargs, config)
+        return self._builder_type(**builder_kwargs).build()
 
 
 class Experiment(ExperimentBase):
