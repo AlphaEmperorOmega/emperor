@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Mapping
+from collections.abc import Mapping
 
 
 BERT_PAD_TOKEN = "[PAD]"

@@ -1,10 +1,12 @@
 from copy import deepcopy
 from torch import Tensor
-from typing import Callable, TYPE_CHECKING
+from collections.abc import Callable
 from emperor.base.utils import ConfigBase, Module
 from emperor.augmentations.adaptive_parameters.core._validator import (
     AdaptiveParameterAugmentationValidator,
 )
+
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.augmentations.adaptive_parameters.config import (

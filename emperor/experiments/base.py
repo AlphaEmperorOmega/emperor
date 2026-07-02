@@ -7,24 +7,25 @@ import os
 import random
 import tempfile
 import traceback
-from enum import Enum
+from collections.abc import Callable, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
+from enum import Enum
 from pathlib import Path
 
-from typing import Callable, Mapping
-from emperor.config import ModelConfig
-from emperor.base.options import BaseOptions
-from lightning import Trainer, seed_everything
-from lightning.pytorch.loggers import TensorBoardLogger
-from emperor.datasets.image.classification.mnist import Mnist
-from emperor.datasets.image.classification.cifar_10 import Cifar10
-from emperor.datasets.image.classification.cifar_100 import Cifar100
+from lightning import Trainer
 from lightning.pytorch.callbacks import Callback, EarlyStopping, ModelCheckpoint
-from emperor.datasets.image.classification.fashion_mnist import FashionMNIST
+from lightning.pytorch.loggers import TensorBoardLogger
 from models.catalog import model_identity_payload_from_id, public_id_for_module
 from models.config_overrides import canonical_config_key, config_key_to_model_param
+
+from emperor.base.options import BaseOptions
+from emperor.config import ModelConfig
+from emperor.datasets.image.classification.cifar_10 import Cifar10
+from emperor.datasets.image.classification.cifar_100 import Cifar100
+from emperor.datasets.image.classification.fashion_mnist import FashionMNIST
+from emperor.datasets.image.classification.mnist import Mnist
 from emperor.experiments.progress import sanitize_metric_payload
 
 DEFAULT_RESULT_METRIC_KEY_LIMIT = 512
@@ -165,9 +166,10 @@ def _write_json_atomic(summary_path: Path, payload: dict) -> None:
 def create_search_space(
     base_preset_callback: Callable,
     base_config: dict,
-    search_space: dict = {},
+    search_space: dict | None = None,
     search_mode: SearchMode = None,
 ) -> list["ModelConfig"]:
+    search_space = search_space or {}
     if search_space == {}:
         return [base_preset_callback(**base_config)]
 
@@ -186,7 +188,11 @@ def create_search_space(
 
     for parameter_values in all_combinations:
         updated_params = {**base_config}
-        for param_name, param_value in zip(parameter_names, parameter_values):
+        for param_name, param_value in zip(
+            parameter_names,
+            parameter_values,
+            strict=True,
+        ):
             updated_params[param_name] = param_value
         preset = base_preset_callback(**updated_params)
         experiments.append(preset)
@@ -637,7 +643,8 @@ class ExperimentBase:
 
     def _preset_generator_instance(self) -> ExperimentPresetsBase:
         raise NotImplementedError(
-            "The method '_preset_generator_instance' must be implemented in the subclass."
+            "The method '_preset_generator_instance' must be implemented in the "
+            "subclass."
         )
 
     def _experiment_preset_enum(self) -> type[BaseOptions]:
@@ -735,7 +742,13 @@ class ExperimentBase:
             mode="min" if "loss" in early_stopping_metric else "max",
         )
 
-    def _trainer_config_value(self, config, config_overrides: dict, key: str, default=None):
+    def _trainer_config_value(
+        self,
+        config,
+        config_overrides: dict,
+        key: str,
+        default=None,
+    ):
         return config_overrides.get(key.lower(), getattr(config, key, default))
 
     def _load_runtime_config(self, config_overrides: dict | None = None) -> dict:
