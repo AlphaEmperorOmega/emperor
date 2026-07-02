@@ -20,11 +20,12 @@ from models.neuron.neuron_linear._builder_options import (
     NeuronTerminalSamplerOptions,
 )
 from models.neuron.neuron_linear._control_config_factory import (
+    NeuronControlConfigDependencies,
     NeuronControlConfigFactory,
 )
 from models.neuron.neuron_linear._source_linear_adapter import (
     normalize_source_kwargs,
-    source_linear_default_kwargs,
+    source_builder_kwargs_from_flat,
 )
 from models.neuron.neuron_linear.experiment_config import ExperimentConfig
 
@@ -370,8 +371,7 @@ class NeuronLinearConfigBuilder:
     def build(self) -> ModelConfig:
         from models.linears.linear.config_builder import LinearConfigBuilder
 
-        source_kwargs = {
-            **source_linear_default_kwargs(),
+        source_flat_kwargs = {
             "gate_option": self.gate_option,
             "gate_activation": self.gate_activation,
             "recurrent_gate_option": self.recurrent_gate_option,
@@ -379,12 +379,15 @@ class NeuronLinearConfigBuilder:
             **self.source_kwargs,
         }
         if self.shared_gate_config is not None:
-            source_kwargs["shared_gate_config"] = self.shared_gate_config
+            source_flat_kwargs["shared_gate_config"] = self.shared_gate_config
+        source_kwargs = source_builder_kwargs_from_flat(source_flat_kwargs)
         source_cfg = LinearConfigBuilder(**source_kwargs).build()
         source_experiment_cfg = source_cfg.experiment_config
         self._validate_source_experiment_config(source_experiment_cfg)
 
-        neuron_cluster_config = NeuronControlConfigFactory(self).build(
+        neuron_dependencies = self.__neuron_control_config_dependencies()
+        neuron_control_factory = NeuronControlConfigFactory(neuron_dependencies)
+        neuron_cluster_config = neuron_control_factory.build(
             source_experiment_cfg.model_config,
             source_cfg.hidden_dim,
         )
@@ -400,6 +403,17 @@ class NeuronLinearConfigBuilder:
                 neuron_cluster_config=neuron_cluster_config,
                 output_model_config=source_experiment_cfg.output_model_config,
             ),
+        )
+
+    def __neuron_control_config_dependencies(
+        self,
+    ) -> NeuronControlConfigDependencies:
+        return NeuronControlConfigDependencies(
+            cluster_capacity_options=self.cluster_capacity_options,
+            terminal_options=self.terminal_options,
+            terminal_router_options=self.terminal_router_options,
+            terminal_sampler_options=self.terminal_sampler_options,
+            cluster_halting_options=self.cluster_halting_options,
         )
 
     def _validate_source_experiment_config(self, source_experiment_cfg) -> None:

@@ -1,7 +1,10 @@
-from inspect import Parameter, signature
 from typing import Any
 
-from models.linears.linear.config_builder import LinearConfigBuilder
+import models.linears.linear.config as source_config
+from models.linears._builder_adapter import (
+    linear_builder_kwargs_from_flat,
+    linear_flat_defaults,
+)
 from models.linears.linear.presets import (
     ExperimentPreset as SourceExperimentPreset,
 )
@@ -30,14 +33,15 @@ def normalize_source_kwargs(source_kwargs: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def source_builder_kwargs_from_flat(source_kwargs: dict[str, Any]) -> dict[str, Any]:
+    return linear_builder_kwargs_from_flat(
+        normalize_source_kwargs(source_kwargs),
+        source_config,
+    )
+
+
 def source_linear_default_kwargs() -> dict[str, Any]:
-    return {
-        name: parameter.default
-        for name, parameter in signature(
-            LinearConfigBuilder.__init__
-        ).parameters.items()
-        if name != "self" and parameter.default is not Parameter.empty
-    }
+    return linear_flat_defaults(source_config)
 
 
 def source_preset(preset) -> SourceExperimentPreset:
