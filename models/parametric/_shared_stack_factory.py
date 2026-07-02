@@ -69,6 +69,23 @@ def build_linear_stack_config(
     dropout_probability: float,
     apply_output_pipeline_flag: bool,
 ) -> LayerStackConfig:
+    layer_model_config = LinearLayerConfig(
+        input_dim=input_dim,
+        output_dim=output_dim,
+        bias_flag=True,
+    )
+    layer_config = LayerConfig(
+        input_dim=input_dim,
+        output_dim=output_dim,
+        activation=activation,
+        residual_connection_option=residual_connection_option,
+        dropout_probability=dropout_probability,
+        layer_norm_position=LayerNormPositionOptions.DISABLED,
+        gate_config=None,
+        halting_config=None,
+        memory_config=None,
+        layer_model_config=layer_model_config,
+    )
     return LayerStackConfig(
         input_dim=input_dim,
         hidden_dim=hidden_dim,
@@ -76,22 +93,7 @@ def build_linear_stack_config(
         num_layers=num_layers,
         last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
         apply_output_pipeline_flag=apply_output_pipeline_flag,
-        layer_config=LayerConfig(
-            input_dim=input_dim,
-            output_dim=output_dim,
-            activation=activation,
-            residual_connection_option=residual_connection_option,
-            dropout_probability=dropout_probability,
-            layer_norm_position=LayerNormPositionOptions.DISABLED,
-            gate_config=None,
-            halting_config=None,
-            memory_config=None,
-            layer_model_config=LinearLayerConfig(
-                input_dim=input_dim,
-                output_dim=output_dim,
-                bias_flag=True,
-            ),
-        ),
+        layer_config=layer_config,
     )
 
 
@@ -101,20 +103,21 @@ def build_router_config(
     mixture_options: ParametricMixtureOptions,
     router_options: ParametricRouterOptions,
 ) -> RouterConfig:
+    model_config = build_linear_stack_config(
+        input_dim=input_dim,
+        hidden_dim=router_hidden_dim(input_dim),
+        output_dim=mixture_options.num_experts,
+        num_layers=1,
+        activation=router_options.activation,
+        residual_connection_option=ResidualConnectionOptions.DISABLED,
+        dropout_probability=0.0,
+        apply_output_pipeline_flag=False,
+    )
     return RouterConfig(
         input_dim=input_dim,
         num_experts=mixture_options.num_experts,
         noisy_topk_flag=router_options.noisy_topk_flag,
-        model_config=build_linear_stack_config(
-            input_dim=input_dim,
-            hidden_dim=router_hidden_dim(input_dim),
-            output_dim=mixture_options.num_experts,
-            num_layers=1,
-            activation=router_options.activation,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
-            dropout_probability=0.0,
-            apply_output_pipeline_flag=False,
-        ),
+        model_config=model_config,
     )
 
 
