@@ -135,6 +135,21 @@ class ParametricVectorConfigBuilder:
         self.router_options = router_options
 
     def build(self) -> ModelConfig:
+        input_model_config = build_linear_layer_config(
+            activation=self.stack_activation,
+        )
+        model_config = build_parametric_stack_config(
+            input_dim=self.hidden_dim,
+            hidden_dim=self.hidden_dim,
+            output_dim=self.hidden_dim,
+            stack_options=self.stack_options,
+            mixture_options=self.mixture_options,
+            sampler_options=self.sampler_options,
+            router_options=self.router_options,
+        )
+        output_model_config = build_linear_layer_config(
+            activation=ActivationOptions.DISABLED,
+        )
         return ModelConfig(
             batch_size=self.batch_size,
             input_dim=self.input_dim,
@@ -142,21 +157,9 @@ class ParametricVectorConfigBuilder:
             hidden_dim=self.hidden_dim,
             output_dim=self.output_dim,
             experiment_config=ExperimentConfig(
-                input_model_config=build_linear_layer_config(
-                    activation=self.stack_activation,
-                ),
-                model_config=build_parametric_stack_config(
-                    input_dim=self.hidden_dim,
-                    hidden_dim=self.hidden_dim,
-                    output_dim=self.hidden_dim,
-                    stack_options=self.stack_options,
-                    mixture_options=self.mixture_options,
-                    sampler_options=self.sampler_options,
-                    router_options=self.router_options,
-                ),
-                output_model_config=build_linear_layer_config(
-                    activation=ActivationOptions.DISABLED,
-                ),
+                input_model_config=input_model_config,
+                model_config=model_config,
+                output_model_config=output_model_config,
             ),
         )
 
@@ -165,6 +168,9 @@ def build_linear_layer_config(
     *,
     activation: ActivationOptions,
 ) -> LayerConfig:
+    layer_model_config = LinearLayerConfig(
+        bias_flag=True,
+    )
     return LayerConfig(
         activation=activation,
         residual_connection_option=ResidualConnectionOptions.DISABLED,
@@ -173,7 +179,5 @@ def build_linear_layer_config(
         gate_config=None,
         halting_config=None,
         memory_config=None,
-        layer_model_config=LinearLayerConfig(
-            bias_flag=True,
-        ),
+        layer_model_config=layer_model_config,
     )
