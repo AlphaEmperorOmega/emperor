@@ -451,11 +451,13 @@ class TestExpertsLinearAdaptiveModel(unittest.TestCase):
         self.assertIsNone(stack_cfg.layer_config.gate_config)
 
     def test_shared_gate_config_rejects_enabled_stack_gate(self):
-        with self.assertRaises(ValueError):
-            ExpertsLinearAdaptiveConfigBuilder(
-                stack_gate_flag=True,
-                shared_gate_config=self.shared_gate_config(),
-            ).build()
+        cfg = ExpertsLinearAdaptiveConfigBuilder(
+            stack_gate_flag=True,
+            shared_gate_config=self.shared_gate_config(),
+        ).build()
+
+        with self.assertRaisesRegex(ValueError, "mutually exclusive"):
+            Model(cfg)
 
     def test_shared_gate_config_allows_absent_stack_gate(self):
         shared_gate_config = self.shared_gate_config()

@@ -47,6 +47,8 @@ from models.experts._builder_options import (
     ExpertsStackOptions,
 )
 from models.experts.experts_linear_adaptive._control_config_factory import (
+    AdaptiveAugmentationDependencies,
+    ControlConfigDependencies,
     ControlConfigFactory,
 )
 from models.experts.experts_linear_adaptive.experiment_config import ExperimentConfig
@@ -517,7 +519,11 @@ class ExpertsLinearAdaptiveConfigBuilder:
     def build(self) -> "ModelConfig":
         from emperor.config import ModelConfig
 
-        control_factory = ControlConfigFactory(self)
+        adaptive_dependencies = self.__adaptive_augmentation_dependencies()
+        control_dependencies = self.__control_config_dependencies(
+            adaptive_dependencies
+        )
+        control_factory = ControlConfigFactory(control_dependencies)
 
         input_model_config = LayerConfig(
             activation=self.stack_activation,
@@ -556,4 +562,53 @@ class ExpertsLinearAdaptiveConfigBuilder:
                 model_config=model_config,
                 output_model_config=output_model_config,
             ),
+        )
+
+    def __control_config_dependencies(
+        self,
+        adaptive_dependencies: AdaptiveAugmentationDependencies,
+    ) -> ControlConfigDependencies:
+        return ControlConfigDependencies(
+            stack_options=self.stack_options,
+            mixture_options=self.mixture_options,
+            expert_stack_options=self.expert_stack_options,
+            sampler_options=self.sampler_options,
+            router_options=self.router_options,
+            sampler_stack_options=self.sampler_stack_options,
+            layer_controller_options=self.layer_controller_options,
+            recurrent_controller_options=self.recurrent_controller_options,
+            adaptive_generator_stack_options=(
+                self.adaptive_generator_stack_options
+            ),
+            adaptive_augmentation_options=adaptive_dependencies,
+            hidden_dim=self.hidden_dim,
+            output_dim=self.output_dim,
+        )
+
+    def __adaptive_augmentation_dependencies(
+        self,
+    ) -> AdaptiveAugmentationDependencies:
+        return AdaptiveAugmentationDependencies(
+            generator_depth=self.generator_depth,
+            diagonal_option=self.diagonal_option,
+            bias_option=self.bias_option,
+            weight_option=self.weight_option,
+            weight_normalization_option=self.weight_normalization_option,
+            weight_normalization_position_option=(
+                self.weight_normalization_position_option
+            ),
+            weight_decay_schedule=self.weight_decay_schedule,
+            weight_decay_rate=self.weight_decay_rate,
+            weight_decay_warmup_batches=self.weight_decay_warmup_batches,
+            weight_bank_expansion_factor=self.weight_bank_expansion_factor,
+            bias_decay_schedule=self.bias_decay_schedule,
+            bias_decay_rate=self.bias_decay_rate,
+            bias_decay_warmup_batches=self.bias_decay_warmup_batches,
+            bias_bank_expansion_factor=self.bias_bank_expansion_factor,
+            row_mask_option=self.row_mask_option,
+            mask_dimension_option=self.mask_dimension_option,
+            mask_threshold=self.mask_threshold,
+            mask_surrogate_scale=self.mask_surrogate_scale,
+            mask_floor=self.mask_floor,
+            mask_transition_width=self.mask_transition_width,
         )
