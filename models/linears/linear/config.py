@@ -1,4 +1,4 @@
-from models.trainer_config import *
+from models.trainer_config import *  # noqa: F403
 from emperor.experiments.monitors import MonitorOption
 from emperor.linears.core.monitor import LinearMonitorCallback
 from emperor.base.layer.gate import LayerGateOptions
@@ -11,11 +11,11 @@ from emperor.datasets.image.classification.cifar_10 import Cifar10
 from emperor.datasets.image.classification.cifar_100 import Cifar100
 from emperor.datasets.image.classification.fashion_mnist import FashionMNIST
 from emperor.memory.config import (
-    AttentionDynamicMemoryConfig,
+    AttentionDynamicMemoryConfig,  # noqa: F401
     DynamicMemoryConfig,
-    ElementWiseWeightedDynamicMemoryConfig,
+    ElementWiseWeightedDynamicMemoryConfig,  # noqa: F401
     GatedResidualDynamicMemoryConfig,
-    WeightedDynamicMemoryConfig,
+    WeightedDynamicMemoryConfig,  # noqa: F401
 )
 from emperor.memory.options import MemoryPositionOptions
 from emperor.base.layer.monitor import (

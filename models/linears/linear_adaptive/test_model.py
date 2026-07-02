@@ -60,18 +60,11 @@ from emperor.memory.config import (
 from emperor.memory.options import MemoryPositionOptions
 
 import models.linears.linear_adaptive.config as config
-from models.linears._controller_stack import (
-    ControllerStackOptions,
-    ControllerStackSource,
+from models.linears._builder_options import (
+    LinearStackOptions,
 )
 from models.linears.linear_adaptive.config_builder import (
-    AdaptiveBoundaryProjectionOptions,
-    AdaptiveGeneratorStackOptions,
-    DynamicMemoryOptions,
-    LayerControllerOptions,
     LinearAdaptiveConfigBuilder,
-    LinearAdaptiveStackOptions,
-    RecurrentControllerOptions,
 )
 from models.linears.linear_adaptive.model import Model
 from models.linears.linear_adaptive.presets import (
@@ -92,6 +85,9 @@ from models.training_test_utils import (
 
 
 class TestAdaptiveLinearModel(unittest.TestCase):
+    def adaptive_preset(self, **kwargs):
+        return ExperimentPresets()._preset(**kwargs)
+
     def test_all_presets_forward_one_mnist_batch(self):
         batch_size = 2
         presets = ExperimentPresets()
@@ -152,8 +148,22 @@ class TestAdaptiveLinearModel(unittest.TestCase):
     def test_config_builder_builds_model_config(self):
         cfg = LinearAdaptiveConfigBuilder(
             input_dim=8,
-            stack_hidden_dim=16,
             output_dim=4,
+            stack_options=LinearStackOptions(
+                hidden_dim=16,
+                bias_flag=config.STACK_BIAS_FLAG,
+                layer_norm_position=config.STACK_LAYER_NORM_POSITION,
+                num_layers=config.STACK_NUM_LAYERS,
+                activation=config.STACK_ACTIVATION,
+                residual_connection_option=(
+                    config.STACK_RESIDUAL_CONNECTION_OPTION
+                ),
+                dropout_probability=config.STACK_DROPOUT_PROBABILITY,
+                last_layer_bias_option=config.STACK_LAST_LAYER_BIAS_OPTION,
+                apply_output_pipeline_flag=(
+                    config.STACK_APPLY_OUTPUT_PIPELINE_FLAG
+                ),
+            ),
         ).build()
 
         self.assertEqual(cfg.input_dim, 8)
@@ -172,367 +182,22 @@ class TestAdaptiveLinearModel(unittest.TestCase):
             AdaptiveLinearLayerConfig,
         )
 
-    def test_option_group_build_matches_flat_kwargs(self):
-        def source_kwargs(prefix: str, source: ControllerStackSource):
-            return {
-                f"{prefix}_independent_flag": source.independent_flag,
-                f"{prefix}_hidden_dim": source.hidden_dim,
-                f"{prefix}_num_layers": source.num_layers,
-                f"{prefix}_last_layer_bias_option": source.last_layer_bias_option,
-                f"{prefix}_apply_output_pipeline_flag": (
-                    source.apply_output_pipeline_flag
-                ),
-                f"{prefix}_activation": source.activation,
-                f"{prefix}_layer_norm_position": source.layer_norm_position,
-                f"{prefix}_residual_connection_option": (
-                    source.residual_connection_option
-                ),
-                f"{prefix}_dropout_probability": source.dropout_probability,
-                f"{prefix}_bias_flag": source.bias_flag,
-            }
-
-        def boundary_kwargs(prefix: str, options: AdaptiveBoundaryProjectionOptions):
-            return {
-                f"{prefix}_weight_option": options.weight_option,
-                f"{prefix}_weight_generator_depth": (
-                    options.weight_generator_depth
-                ),
-                f"{prefix}_weight_decay_schedule": options.weight_decay_schedule,
-                f"{prefix}_weight_decay_rate": options.weight_decay_rate,
-                f"{prefix}_weight_decay_warmup_batches": (
-                    options.weight_decay_warmup_batches
-                ),
-                f"{prefix}_weight_normalization_option": (
-                    options.weight_normalization_option
-                ),
-                f"{prefix}_weight_normalization_position_option": (
-                    options.weight_normalization_position_option
-                ),
-                f"{prefix}_weight_bank_expansion_factor": (
-                    options.weight_bank_expansion_factor
-                ),
-                f"{prefix}_bias_option": options.bias_option,
-                f"{prefix}_bias_decay_schedule": options.bias_decay_schedule,
-                f"{prefix}_bias_decay_rate": options.bias_decay_rate,
-                f"{prefix}_bias_decay_warmup_batches": (
-                    options.bias_decay_warmup_batches
-                ),
-                f"{prefix}_bias_bank_expansion_factor": (
-                    options.bias_bank_expansion_factor
-                ),
-                f"{prefix}_diagonal_option": options.diagonal_option,
-                f"{prefix}_row_mask_option": options.row_mask_option,
-                f"{prefix}_mask_dimension_option": options.mask_dimension_option,
-                f"{prefix}_mask_threshold": options.mask_threshold,
-                f"{prefix}_mask_surrogate_scale": options.mask_surrogate_scale,
-                f"{prefix}_mask_floor": options.mask_floor,
-                f"{prefix}_mask_transition_width": options.mask_transition_width,
-            }
-
-        gate_source = ControllerStackSource(
-            independent_flag=True,
-            hidden_dim=23,
-            num_layers=2,
-            last_layer_bias_option=LastLayerBiasOptions.DISABLED,
-            apply_output_pipeline_flag=True,
-            activation=ActivationOptions.SILU,
-            layer_norm_position=LayerNormPositionOptions.AFTER,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
-            dropout_probability=0.03,
-            bias_flag=False,
+    def test_flat_builder_kwargs_are_rejected(self):
+        cases = (
+            {"stack_hidden_dim": 13},
+            {"adaptive_generator_stack_hidden_dim": 19},
+            {"input_layer_weight_option": DualModelDynamicWeightConfig},
+            {"memory_flag": True},
+            {"recurrent_flag": True},
+            {"shared_gate_config": self.shared_gate_config()},
         )
-        halting_source = ControllerStackSource(
-            independent_flag=True,
-            hidden_dim=29,
-            num_layers=3,
-            last_layer_bias_option=LastLayerBiasOptions.DISABLED,
-            apply_output_pipeline_flag=False,
-            activation=ActivationOptions.MISH,
-            layer_norm_position=LayerNormPositionOptions.BEFORE,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
-            dropout_probability=0.05,
-            bias_flag=False,
-        )
-        memory_source = ControllerStackSource(
-            independent_flag=True,
-            hidden_dim=31,
-            num_layers=2,
-            last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-            apply_output_pipeline_flag=True,
-            activation=ActivationOptions.TANH,
-            layer_norm_position=LayerNormPositionOptions.AFTER,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
-            dropout_probability=0.07,
-            bias_flag=True,
-        )
-        recurrent_gate_source = ControllerStackSource(
-            independent_flag=True,
-            hidden_dim=37,
-            num_layers=2,
-            last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-            apply_output_pipeline_flag=True,
-            activation=ActivationOptions.SIGMOID,
-            layer_norm_position=LayerNormPositionOptions.BEFORE,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
-            dropout_probability=0.09,
-            bias_flag=True,
-        )
-        recurrent_halting_source = ControllerStackSource(
-            independent_flag=True,
-            hidden_dim=41,
-            num_layers=2,
-            last_layer_bias_option=LastLayerBiasOptions.DISABLED,
-            apply_output_pipeline_flag=True,
-            activation=ActivationOptions.RELU,
-            layer_norm_position=LayerNormPositionOptions.AFTER,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
-            dropout_probability=0.11,
-            bias_flag=False,
-        )
-        stack_options = LinearAdaptiveStackOptions(
-            hidden_dim=13,
-            bias_flag=False,
-            layer_norm_position=LayerNormPositionOptions.AFTER,
-            num_layers=3,
-            activation=ActivationOptions.MISH,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
-            dropout_probability=0.13,
-            last_layer_bias_option=LastLayerBiasOptions.ENABLED,
-            apply_output_pipeline_flag=True,
-        )
-        submodule_stack_options = ControllerStackOptions(
-            hidden_dim=17,
-            num_layers=2,
-            last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-            apply_output_pipeline_flag=False,
-            activation=ActivationOptions.GELU,
-            layer_norm_position=LayerNormPositionOptions.BEFORE,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
-            dropout_probability=0.02,
-            bias_flag=True,
-        )
-        generator_stack_options = AdaptiveGeneratorStackOptions(
-            hidden_dim=19,
-            layer_norm_position=LayerNormPositionOptions.BEFORE,
-            num_layers=2,
-            activation=ActivationOptions.SILU,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
-            dropout_probability=0.04,
-            last_layer_bias_option=LastLayerBiasOptions.DISABLED,
-            apply_output_pipeline_flag=True,
-            bias_flag=False,
-        )
-        input_boundary_options = AdaptiveBoundaryProjectionOptions(
-            weight_option=DualModelDynamicWeightConfig,
-            weight_generator_depth=DynamicDepthOptions.DEPTH_OF_THREE,
-            weight_decay_schedule=WeightDecayScheduleOptions.LINEAR,
-            weight_decay_rate=0.2,
-            weight_decay_warmup_batches=3,
-            weight_normalization_option=WeightNormalizationOptions.RMS,
-            weight_normalization_position_option=(
-                WeightNormalizationPositionOptions.BEFORE_OUTER_PRODUCT
-            ),
-            weight_bank_expansion_factor=BankExpansionFactorOptions.FACTOR_OF_TWO,
-            bias_option=AdditiveDynamicBiasConfig,
-            bias_decay_schedule=WeightDecayScheduleOptions.EXPONENTIAL,
-            bias_decay_rate=0.03,
-            bias_decay_warmup_batches=2,
-            bias_bank_expansion_factor=BankExpansionFactorOptions.FACTOR_OF_ONE,
-            diagonal_option=StandardDynamicDiagonalConfig,
-            row_mask_option=DiagonalAxisMaskConfig,
-            mask_dimension_option=MaskDimensionOptions.ROW,
-            mask_threshold=0.4,
-            mask_surrogate_scale=1.2,
-            mask_floor=0.01,
-            mask_transition_width=0.2,
-        )
-        output_boundary_options = AdaptiveBoundaryProjectionOptions(
-            weight_option=LowRankDynamicWeightConfig,
-            weight_generator_depth=DynamicDepthOptions.DEPTH_OF_TWO,
-            weight_decay_schedule=WeightDecayScheduleOptions.MULTIPLICATIVE,
-            weight_decay_rate=0.15,
-            weight_decay_warmup_batches=4,
-            weight_normalization_option=WeightNormalizationOptions.L2_SCALE,
-            weight_normalization_position_option=(
-                WeightNormalizationPositionOptions.AFTER_OUTER_PRODUCT
-            ),
-            weight_bank_expansion_factor=BankExpansionFactorOptions.FACTOR_OF_THREE,
-            bias_option=AffineTransformDynamicBiasConfig,
-            bias_decay_schedule=WeightDecayScheduleOptions.LINEAR,
-            bias_decay_rate=0.04,
-            bias_decay_warmup_batches=5,
-            bias_bank_expansion_factor=BankExpansionFactorOptions.FACTOR_OF_TWO,
-            diagonal_option=CombinedDynamicDiagonalConfig,
-            row_mask_option=PerAxisScoreMaskConfig,
-            mask_dimension_option=MaskDimensionOptions.COLUMN,
-            mask_threshold=0.35,
-            mask_surrogate_scale=1.4,
-            mask_floor=0.02,
-            mask_transition_width=0.25,
-        )
-        flat_kwargs = {
-            "batch_size": 3,
-            "learning_rate": 0.02,
-            "input_dim": 8,
-            "output_dim": 5,
-            "stack_hidden_dim": stack_options.hidden_dim,
-            "stack_bias_flag": stack_options.bias_flag,
-            "stack_layer_norm_position": stack_options.layer_norm_position,
-            "stack_num_layers": stack_options.num_layers,
-            "stack_activation": stack_options.activation,
-            "stack_residual_connection_option": (
-                stack_options.residual_connection_option
-            ),
-            "stack_dropout_probability": stack_options.dropout_probability,
-            "stack_last_layer_bias_option": stack_options.last_layer_bias_option,
-            "stack_apply_output_pipeline_flag": (
-                stack_options.apply_output_pipeline_flag
-            ),
-            "submodule_stack_hidden_dim": submodule_stack_options.hidden_dim,
-            "submodule_stack_num_layers": submodule_stack_options.num_layers,
-            "submodule_stack_last_layer_bias_option": (
-                submodule_stack_options.last_layer_bias_option
-            ),
-            "submodule_stack_apply_output_pipeline_flag": (
-                submodule_stack_options.apply_output_pipeline_flag
-            ),
-            "submodule_stack_activation": submodule_stack_options.activation,
-            "submodule_stack_layer_norm_position": (
-                submodule_stack_options.layer_norm_position
-            ),
-            "submodule_stack_residual_connection_option": (
-                submodule_stack_options.residual_connection_option
-            ),
-            "submodule_stack_dropout_probability": (
-                submodule_stack_options.dropout_probability
-            ),
-            "submodule_stack_bias_flag": submodule_stack_options.bias_flag,
-            "adaptive_generator_stack_hidden_dim": (
-                generator_stack_options.hidden_dim
-            ),
-            "adaptive_generator_stack_layer_norm_position": (
-                generator_stack_options.layer_norm_position
-            ),
-            "adaptive_generator_stack_num_layers": (
-                generator_stack_options.num_layers
-            ),
-            "adaptive_generator_stack_activation": (
-                generator_stack_options.activation
-            ),
-            "adaptive_generator_stack_residual_connection_option": (
-                generator_stack_options.residual_connection_option
-            ),
-            "adaptive_generator_stack_dropout_probability": (
-                generator_stack_options.dropout_probability
-            ),
-            "adaptive_generator_stack_last_layer_bias_option": (
-                generator_stack_options.last_layer_bias_option
-            ),
-            "adaptive_generator_stack_apply_output_pipeline_flag": (
-                generator_stack_options.apply_output_pipeline_flag
-            ),
-            "adaptive_generator_stack_bias_flag": generator_stack_options.bias_flag,
-            "weight_option_flag": True,
-            "weight_option": DualModelDynamicWeightConfig,
-            "bias_option_flag": True,
-            "bias_option": AdditiveDynamicBiasConfig,
-            "diagonal_option_flag": True,
-            "diagonal_option": StandardDynamicDiagonalConfig,
-            "mask_option_flag": True,
-            "row_mask_option": DiagonalAxisMaskConfig,
-            "stack_gate_flag": True,
-            "gate_option": LayerGateOptions.MULTIPLIER,
-            "gate_activation": ActivationOptions.SIGMOID,
-            "stack_halting_flag": True,
-            "halting_threshold": 0.45,
-            "halting_dropout": 0.12,
-            "halting_hidden_state_mode": HaltingHiddenStateModeOptions.ACCUMULATED,
-            "memory_flag": True,
-            "memory_option": WeightedDynamicMemoryConfig,
-            "memory_position_option": MemoryPositionOptions.BEFORE_AFFINE,
-            "memory_test_time_training_learning_rate": 0.03,
-            "memory_test_time_training_num_inner_steps": 2,
-            "recurrent_flag": True,
-            "recurrent_max_steps": 4,
-            "recurrent_layer_norm_position": LayerNormPositionOptions.BEFORE,
-            "recurrent_gate_flag": True,
-            "recurrent_gate_option": LayerGateOptions.MULTIPLIER,
-            "recurrent_gate_activation": ActivationOptions.TANH,
-            "recurrent_halting_flag": True,
-            "recurrent_halting_threshold": 0.62,
-            "recurrent_halting_dropout": 0.14,
-            "recurrent_halting_hidden_state_mode": (
-                HaltingHiddenStateModeOptions.ACCUMULATED
-            ),
-            **source_kwargs("gate_stack", gate_source),
-            **source_kwargs("halting_stack", halting_source),
-            **source_kwargs("memory_stack", memory_source),
-            **source_kwargs("recurrent_gate_stack", recurrent_gate_source),
-            **source_kwargs("recurrent_halting_stack", recurrent_halting_source),
-            **boundary_kwargs("input_layer", input_boundary_options),
-            **boundary_kwargs("output_layer", output_boundary_options),
-        }
-
-        flat_cfg = LinearAdaptiveConfigBuilder(**flat_kwargs).build()
-        grouped_cfg = LinearAdaptiveConfigBuilder(
-            batch_size=3,
-            learning_rate=0.02,
-            input_dim=8,
-            output_dim=5,
-            stack_options=stack_options,
-            submodule_stack_options=submodule_stack_options,
-            adaptive_generator_stack_options=generator_stack_options,
-            weight_option_flag=True,
-            weight_option=DualModelDynamicWeightConfig,
-            bias_option_flag=True,
-            bias_option=AdditiveDynamicBiasConfig,
-            diagonal_option_flag=True,
-            diagonal_option=StandardDynamicDiagonalConfig,
-            mask_option_flag=True,
-            row_mask_option=DiagonalAxisMaskConfig,
-            layer_controller_options=LayerControllerOptions(
-                stack_gate_flag=True,
-                gate_option=LayerGateOptions.MULTIPLIER,
-                gate_activation=ActivationOptions.SIGMOID,
-                gate_stack_source=gate_source,
-                stack_halting_flag=True,
-                halting_threshold=0.45,
-                halting_dropout=0.12,
-                halting_hidden_state_mode=HaltingHiddenStateModeOptions.ACCUMULATED,
-                halting_stack_source=halting_source,
-            ),
-            dynamic_memory_options=DynamicMemoryOptions(
-                memory_flag=True,
-                memory_option=WeightedDynamicMemoryConfig,
-                memory_position_option=MemoryPositionOptions.BEFORE_AFFINE,
-                memory_test_time_training_learning_rate=0.03,
-                memory_test_time_training_num_inner_steps=2,
-                memory_stack_source=memory_source,
-            ),
-            recurrent_controller_options=RecurrentControllerOptions(
-                recurrent_flag=True,
-                recurrent_max_steps=4,
-                recurrent_layer_norm_position=LayerNormPositionOptions.BEFORE,
-                recurrent_gate_flag=True,
-                recurrent_gate_option=LayerGateOptions.MULTIPLIER,
-                recurrent_gate_activation=ActivationOptions.TANH,
-                recurrent_gate_stack_source=recurrent_gate_source,
-                recurrent_halting_flag=True,
-                recurrent_halting_threshold=0.62,
-                recurrent_halting_dropout=0.14,
-                recurrent_halting_hidden_state_mode=(
-                    HaltingHiddenStateModeOptions.ACCUMULATED
-                ),
-                recurrent_halting_stack_source=recurrent_halting_source,
-            ),
-            input_boundary_options=input_boundary_options,
-            output_boundary_options=output_boundary_options,
-        ).build()
-
-        self.assertEqual(flat_cfg, grouped_cfg)
+        for kwargs in cases:
+            with self.subTest(kwargs=kwargs):
+                with self.assertRaises(TypeError):
+                    LinearAdaptiveConfigBuilder(**kwargs)
 
     def test_boundary_layer_pipeline_matches_linear_projection_options(self):
-        cfg = LinearAdaptiveConfigBuilder(
+        cfg = self.adaptive_preset(
             input_dim=8,
             stack_hidden_dim=16,
             output_dim=4,
@@ -553,7 +218,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
             ),
             adaptive_generator_stack_apply_output_pipeline_flag=True,
             adaptive_generator_stack_bias_flag=False,
-        ).build()
+        )
 
         input_config = cfg.experiment_config.input_model_config
         hidden_config = cfg.experiment_config.model_config.layer_config
@@ -611,12 +276,12 @@ class TestAdaptiveLinearModel(unittest.TestCase):
             )
 
     def test_config_builder_applies_stack_bias_flag_to_layer_stack(self):
-        cfg = LinearAdaptiveConfigBuilder(
+        cfg = self.adaptive_preset(
             input_dim=8,
             stack_hidden_dim=16,
             output_dim=4,
             stack_bias_flag=False,
-        ).build()
+        )
 
         layer_model_config = (
             cfg.experiment_config.model_config.layer_config.layer_model_config
@@ -718,14 +383,14 @@ class TestAdaptiveLinearModel(unittest.TestCase):
                 boundary_kwargs = {
                     boundary_weight_key: DualModelDynamicWeightConfig,
                 }
-                cfg = LinearAdaptiveConfigBuilder(
+                cfg = self.adaptive_preset(
                     input_dim=8,
                     stack_hidden_dim=16,
                     output_dim=4,
                     weight_option_flag=True,
                     weight_option=LowRankDynamicWeightConfig,
                     **boundary_kwargs,
-                ).build()
+                )
                 input_layer_model_config = (
                     cfg.experiment_config.input_model_config.layer_model_config
                 )
@@ -768,11 +433,11 @@ class TestAdaptiveLinearModel(unittest.TestCase):
                 self.assertEqual(logits.shape, (2, 4))
 
     def test_boundary_projectors_default_to_empty_adaptive_augmentation(self):
-        cfg = LinearAdaptiveConfigBuilder(
+        cfg = self.adaptive_preset(
             input_dim=8,
             stack_hidden_dim=16,
             output_dim=4,
-        ).build()
+        )
 
         input_layer_model_config = (
             cfg.experiment_config.input_model_config.layer_model_config
@@ -798,11 +463,11 @@ class TestAdaptiveLinearModel(unittest.TestCase):
         self.assertEqual(logits.shape, (2, 4))
 
     def test_empty_adaptive_boundary_projectors_behave_as_affine_layers(self):
-        cfg = LinearAdaptiveConfigBuilder(
+        cfg = self.adaptive_preset(
             input_dim=8,
             stack_hidden_dim=16,
             output_dim=4,
-        ).build()
+        )
         model = Model(cfg)
 
         for boundary_model, X in (
@@ -821,7 +486,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
                 torch.testing.assert_close(output, expected)
 
     def test_boundary_adaptive_projectors_inherit_shared_generator_stack(self):
-        cfg = LinearAdaptiveConfigBuilder(
+        cfg = self.adaptive_preset(
             input_dim=8,
             stack_hidden_dim=16,
             output_dim=4,
@@ -840,7 +505,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
             ),
             adaptive_generator_stack_apply_output_pipeline_flag=True,
             adaptive_generator_stack_bias_flag=False,
-        ).build()
+        )
 
         input_layer_model_config = (
             cfg.experiment_config.input_model_config.layer_model_config
@@ -1151,7 +816,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
                     self.assertEqual(getattr(mask_config, field), expected)
 
     def test_boundary_and_stack_weight_configs_share_constructor_kwargs(self):
-        cfg = LinearAdaptiveConfigBuilder(
+        cfg = self.adaptive_preset(
             input_dim=8,
             stack_hidden_dim=16,
             output_dim=4,
@@ -1187,7 +852,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
             output_layer_weight_normalization_position_option=(
                 WeightNormalizationPositionOptions.BEFORE_OUTER_PRODUCT
             ),
-        ).build()
+        )
         expected_values = {
             "generator_depth": DynamicDepthOptions.DEPTH_OF_THREE,
             "decay_schedule": WeightDecayScheduleOptions.MULTIPLICATIVE,
@@ -1217,11 +882,11 @@ class TestAdaptiveLinearModel(unittest.TestCase):
                     self.assertEqual(getattr(weight_config, field), expected)
 
     def test_default_adaptive_component_flags_disable_components(self):
-        cfg = LinearAdaptiveConfigBuilder(
+        cfg = self.adaptive_preset(
             input_dim=8,
             stack_hidden_dim=16,
             output_dim=4,
-        ).build()
+        )
         augmentation_config = self._augmentation_config(cfg)
 
         self.assertIsNone(augmentation_config.weight_config)
@@ -1230,7 +895,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
         self.assertIsNone(augmentation_config.mask_config)
 
     def test_adaptive_component_options_without_flags_are_ignored(self):
-        cfg = LinearAdaptiveConfigBuilder(
+        cfg = self.adaptive_preset(
             input_dim=8,
             stack_hidden_dim=16,
             output_dim=4,
@@ -1238,7 +903,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
             bias_option=AdditiveDynamicBiasConfig,
             diagonal_option=CombinedDynamicDiagonalConfig,
             row_mask_option=WeightInformedScoreAxisMaskConfig,
-        ).build()
+        )
         augmentation_config = self._augmentation_config(cfg)
 
         self.assertIsNone(augmentation_config.weight_config)
@@ -1265,12 +930,12 @@ class TestAdaptiveLinearModel(unittest.TestCase):
         for flag_key, option_key, kwargs in cases:
             with self.subTest(flag_key=flag_key):
                 with self.assertRaisesRegex(ValueError, f"{option_key}.*{flag_key}"):
-                    LinearAdaptiveConfigBuilder(
+                    self.adaptive_preset(
                         input_dim=8,
                         stack_hidden_dim=16,
                         output_dim=4,
                         **kwargs,
-                    ).build()
+                    )
 
     def test_adaptive_component_flags_build_default_concrete_options(self):
         cases = [
@@ -1314,12 +979,12 @@ class TestAdaptiveLinearModel(unittest.TestCase):
 
         for component, kwargs, attribute, expected_type in cases:
             with self.subTest(component=component):
-                cfg = LinearAdaptiveConfigBuilder(
+                cfg = self.adaptive_preset(
                     input_dim=8,
                     stack_hidden_dim=16,
                     output_dim=4,
                     **kwargs,
-                ).build()
+                )
                 augmentation_config = self._augmentation_config(cfg)
 
                 self.assertIsInstance(
@@ -1328,7 +993,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
                 )
 
     def test_adaptive_component_stacks_inherit_shared_generator_by_default(self):
-        cfg = LinearAdaptiveConfigBuilder(
+        cfg = self.adaptive_preset(
             input_dim=8,
             stack_hidden_dim=16,
             output_dim=4,
@@ -1352,7 +1017,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
             ),
             adaptive_generator_stack_apply_output_pipeline_flag=True,
             adaptive_generator_stack_bias_flag=False,
-        ).build()
+        )
 
         augmentation_config = self._augmentation_config(cfg)
 
@@ -1376,7 +1041,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
             self.assertIsNone(component_config.model_config)
 
     def test_adaptive_component_stack_overrides_require_independent_flags(self):
-        cfg = LinearAdaptiveConfigBuilder(
+        cfg = self.adaptive_preset(
             input_dim=8,
             stack_hidden_dim=16,
             output_dim=4,
@@ -1397,7 +1062,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
             bias_generator_stack_activation=ActivationOptions.MISH,
             diagonal_generator_stack_activation=ActivationOptions.TANH,
             mask_generator_stack_activation=ActivationOptions.RELU,
-        ).build()
+        )
 
         augmentation_config = self._augmentation_config(cfg)
 
@@ -1411,7 +1076,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
             self.assertIsNone(component_config.model_config)
 
     def test_adaptive_component_stack_overrides_apply_when_independent(self):
-        cfg = LinearAdaptiveConfigBuilder(
+        cfg = self.adaptive_preset(
             input_dim=8,
             stack_hidden_dim=16,
             output_dim=4,
@@ -1446,7 +1111,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
             mask_generator_stack_independent_flag=True,
             mask_generator_stack_hidden_dim=61,
             mask_generator_stack_activation=ActivationOptions.RELU,
-        ).build()
+        )
 
         augmentation_config = self._augmentation_config(cfg)
 
@@ -1481,7 +1146,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
         )
 
     def test_partial_adaptive_component_stack_overrides_fall_back_to_shared(self):
-        cfg = LinearAdaptiveConfigBuilder(
+        cfg = self.adaptive_preset(
             input_dim=8,
             stack_hidden_dim=16,
             output_dim=4,
@@ -1501,7 +1166,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
             adaptive_generator_stack_bias_flag=False,
             bias_generator_stack_independent_flag=True,
             bias_generator_stack_hidden_dim=41,
-        ).build()
+        )
 
         bias_stack = self._augmentation_config(cfg).bias_config.model_config
 
@@ -1518,7 +1183,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
         )
 
     def test_all_adaptive_component_stacks_can_forward_one_fake_batch(self):
-        cfg = LinearAdaptiveConfigBuilder(
+        cfg = self.adaptive_preset(
             input_dim=8,
             stack_hidden_dim=8,
             output_dim=4,
@@ -1539,7 +1204,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
             diagonal_generator_stack_hidden_dim=23,
             mask_generator_stack_independent_flag=True,
             mask_generator_stack_hidden_dim=29,
-        ).build()
+        )
         model = Model(cfg)
 
         logits = model(torch.randn(2, 1, 2, 4))
@@ -1547,7 +1212,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
         self.assertEqual(logits.shape, (2, 4))
 
     def test_disabled_adaptive_component_options_ignore_independent_stacks(self):
-        cfg = LinearAdaptiveConfigBuilder(
+        cfg = self.adaptive_preset(
             input_dim=8,
             stack_hidden_dim=16,
             output_dim=4,
@@ -1559,7 +1224,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
             diagonal_generator_stack_hidden_dim=51,
             mask_generator_stack_independent_flag=True,
             mask_generator_stack_hidden_dim=61,
-        ).build()
+        )
 
         augmentation_config = self._augmentation_config(cfg)
 
@@ -1831,7 +1496,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
                 self.assertIsNone(augmentation_config.mask_config)
 
     def test_gate_config_uses_builder_overrides(self):
-        cfg = LinearAdaptiveConfigBuilder(
+        cfg = self.adaptive_preset(
             stack_gate_flag=True,
             gate_option=LayerGateOptions.MULTIPLIER,
             gate_stack_independent_flag=True,
@@ -1844,7 +1509,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
             gate_stack_last_layer_bias_option=LastLayerBiasOptions.DISABLED,
             gate_stack_apply_output_pipeline_flag=True,
             gate_stack_bias_flag=False,
-        ).build()
+        )
 
         layer_cfg = cfg.experiment_config.model_config.layer_config
         gate_config = layer_cfg.gate_config
@@ -1868,32 +1533,34 @@ class TestAdaptiveLinearModel(unittest.TestCase):
 
     def test_shared_gate_config_is_stored_on_stack_config(self):
         shared_gate_config = self.shared_gate_config()
-        cfg = LinearAdaptiveConfigBuilder(shared_gate_config=shared_gate_config).build()
+        cfg = self.adaptive_preset(shared_gate_config=shared_gate_config)
         model_cfg = cfg.experiment_config.model_config
 
         self.assertIs(model_cfg.shared_gate_config, shared_gate_config)
         self.assertIsNone(model_cfg.layer_config.gate_config)
 
     def test_shared_gate_config_rejects_enabled_stack_gate(self):
-        with self.assertRaises(ValueError):
-            LinearAdaptiveConfigBuilder(
-                stack_gate_flag=True,
-                shared_gate_config=self.shared_gate_config(),
-            ).build()
+        cfg = self.adaptive_preset(
+            stack_gate_flag=True,
+            shared_gate_config=self.shared_gate_config(),
+        )
+
+        with self.assertRaisesRegex(ValueError, "mutually exclusive"):
+            Model(cfg)
 
     def test_shared_gate_config_allows_absent_stack_gate(self):
         shared_gate_config = self.shared_gate_config()
-        cfg = LinearAdaptiveConfigBuilder(
+        cfg = self.adaptive_preset(
             stack_gate_flag=False,
             shared_gate_config=shared_gate_config,
-        ).build()
+        )
         model_cfg = cfg.experiment_config.model_config
 
         self.assertIs(model_cfg.shared_gate_config, shared_gate_config)
         self.assertIsNone(model_cfg.layer_config.gate_config)
 
     def test_halting_config_uses_builder_overrides(self):
-        cfg = LinearAdaptiveConfigBuilder(
+        cfg = self.adaptive_preset(
             stack_halting_flag=True,
             halting_threshold=0.5,
             halting_dropout=0.2,
@@ -1907,7 +1574,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
             halting_stack_last_layer_bias_option=LastLayerBiasOptions.DISABLED,
             halting_stack_apply_output_pipeline_flag=True,
             halting_stack_bias_flag=False,
-        ).build()
+        )
 
         halting_cfg = cfg.experiment_config.model_config.layer_config.halting_config
         halting_stack_cfg = halting_cfg.halting_gate_config
@@ -1936,11 +1603,11 @@ class TestAdaptiveLinearModel(unittest.TestCase):
         self.assertFalse(halting_stack_cfg.layer_config.layer_model_config.bias_flag)
 
     def test_controller_stack_defaults_use_submodule_stack_options(self):
-        cfg = LinearAdaptiveConfigBuilder(
+        cfg = self.adaptive_preset(
             stack_gate_flag=True,
             stack_halting_flag=True,
             memory_flag=True,
-        ).build()
+        )
 
         model_cfg = cfg.experiment_config.model_config
         expected_last_layer_bias_options = {
@@ -1967,7 +1634,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
     def test_controller_stacks_inherit_submodule_defaults_when_overrides_are_none(
         self,
     ):
-        cfg = LinearAdaptiveConfigBuilder(
+        cfg = self.adaptive_preset(
             stack_gate_flag=True,
             stack_halting_flag=True,
             memory_flag=True,
@@ -1987,7 +1654,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
             gate_stack_bias_flag=None,
             halting_stack_layer_norm_position=None,
             halting_stack_last_layer_bias_option=None,
-        ).build()
+        )
 
         model_cfg = cfg.experiment_config.model_config
 
@@ -2007,7 +1674,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
                 )
 
     def test_controller_stack_overrides_require_independent_flags(self):
-        cfg = LinearAdaptiveConfigBuilder(
+        cfg = self.adaptive_preset(
             stack_gate_flag=True,
             stack_halting_flag=True,
             memory_flag=True,
@@ -2019,7 +1686,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
             halting_stack_activation=ActivationOptions.MISH,
             memory_stack_hidden_dim=44,
             memory_stack_activation=ActivationOptions.TANH,
-        ).build()
+        )
 
         model_cfg = cfg.experiment_config.model_config
 
@@ -2043,7 +1710,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
         )
 
     def test_controller_stack_independent_flags_enable_controller_options(self):
-        cfg = LinearAdaptiveConfigBuilder(
+        cfg = self.adaptive_preset(
             stack_gate_flag=True,
             stack_halting_flag=True,
             memory_flag=True,
@@ -2058,7 +1725,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
             memory_stack_independent_flag=True,
             memory_stack_hidden_dim=44,
             memory_stack_activation=ActivationOptions.TANH,
-        ).build()
+        )
 
         model_cfg = cfg.experiment_config.model_config
 
@@ -2082,12 +1749,12 @@ class TestAdaptiveLinearModel(unittest.TestCase):
         )
 
     def test_memory_config_uses_builder_defaults(self):
-        cfg = LinearAdaptiveConfigBuilder(
+        cfg = self.adaptive_preset(
             input_dim=8,
             stack_hidden_dim=8,
             output_dim=4,
             memory_flag=True,
-        ).build()
+        )
 
         model_cfg = cfg.experiment_config.model_config
         memory_cfg = model_cfg.shared_memory_config
@@ -2102,7 +1769,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
         self.assertIsNone(model_cfg.layer_config.memory_config)
 
     def test_memory_config_uses_builder_overrides(self):
-        cfg = LinearAdaptiveConfigBuilder(
+        cfg = self.adaptive_preset(
             input_dim=8,
             stack_hidden_dim=8,
             output_dim=4,
@@ -2123,7 +1790,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
             memory_stack_last_layer_bias_option=LastLayerBiasOptions.DISABLED,
             memory_stack_apply_output_pipeline_flag=True,
             memory_stack_bias_flag=False,
-        ).build()
+        )
 
         memory_cfg = cfg.experiment_config.model_config.shared_memory_config
         generator_cfg = memory_cfg.model_config
@@ -2160,13 +1827,13 @@ class TestAdaptiveLinearModel(unittest.TestCase):
         self.assertIsNone(generator_cfg.shared_halting_config)
 
     def test_memory_enabled_forwards_one_fake_batch(self):
-        cfg = LinearAdaptiveConfigBuilder(
+        cfg = self.adaptive_preset(
             input_dim=8,
             stack_hidden_dim=8,
             output_dim=4,
             stack_num_layers=2,
             memory_flag=True,
-        ).build()
+        )
         model = Model(cfg)
 
         logits = model(torch.randn(2, 1, 2, 4))
@@ -2174,13 +1841,13 @@ class TestAdaptiveLinearModel(unittest.TestCase):
         self.assertEqual(logits.shape, (2, 4))
 
     def test_memory_enabled_backward_produces_memory_gradients(self):
-        cfg = LinearAdaptiveConfigBuilder(
+        cfg = self.adaptive_preset(
             input_dim=8,
             stack_hidden_dim=8,
             output_dim=4,
             stack_num_layers=2,
             memory_flag=True,
-        ).build()
+        )
         model = Model(cfg)
         output = model(torch.randn(2, 1, 2, 4))
         logits = output[0] if isinstance(output, tuple) else output
@@ -2201,13 +1868,13 @@ class TestAdaptiveLinearModel(unittest.TestCase):
         self.assertTrue(len(nonzero_memory_gradients) > 0)
 
     def test_recurrent_memory_stays_on_block_config(self):
-        cfg = LinearAdaptiveConfigBuilder(
+        cfg = self.adaptive_preset(
             input_dim=8,
             stack_hidden_dim=8,
             output_dim=4,
             recurrent_flag=True,
             memory_flag=True,
-        ).build()
+        )
 
         recurrent_cfg = cfg.experiment_config.model_config
 
@@ -2216,7 +1883,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
         self.assertIsNone(recurrent_cfg.memory_config)
 
     def test_recurrent_layer_norm_position_defaults_disabled_and_uses_override(self):
-        default_cfg = LinearAdaptiveConfigBuilder(recurrent_flag=True).build()
+        default_cfg = self.adaptive_preset(recurrent_flag=True)
         default_recurrent_cfg = default_cfg.experiment_config.model_config
 
         self.assertIsInstance(default_recurrent_cfg, RecurrentLayerConfig)
@@ -2225,10 +1892,10 @@ class TestAdaptiveLinearModel(unittest.TestCase):
             LayerNormPositionOptions.DISABLED,
         )
 
-        cfg = LinearAdaptiveConfigBuilder(
+        cfg = self.adaptive_preset(
             recurrent_flag=True,
             recurrent_layer_norm_position=LayerNormPositionOptions.BEFORE,
-        ).build()
+        )
         recurrent_cfg = cfg.experiment_config.model_config
 
         self.assertIsInstance(recurrent_cfg, RecurrentLayerConfig)
@@ -2238,7 +1905,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
         )
 
     def test_recurrent_controllers_use_resolved_gate_and_halting_builders(self):
-        cfg = LinearAdaptiveConfigBuilder(
+        cfg = self.adaptive_preset(
             recurrent_flag=True,
             recurrent_gate_flag=True,
             recurrent_gate_option=LayerGateOptions.MULTIPLIER,
@@ -2259,7 +1926,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
             gate_stack_bias_flag=None,
             halting_stack_layer_norm_position=None,
             halting_stack_last_layer_bias_option=None,
-        ).build()
+        )
 
         recurrent_cfg = cfg.experiment_config.model_config
         self.assertEqual(recurrent_cfg.gate_config.option, LayerGateOptions.MULTIPLIER)
@@ -2291,7 +1958,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
                 self.assertFalse(stack_cfg.layer_config.layer_model_config.bias_flag)
 
     def test_recurrent_controller_stack_overrides_require_independent_flags(self):
-        cfg = LinearAdaptiveConfigBuilder(
+        cfg = self.adaptive_preset(
             recurrent_flag=True,
             recurrent_gate_flag=True,
             recurrent_halting_flag=True,
@@ -2301,7 +1968,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
             recurrent_gate_stack_activation=ActivationOptions.SILU,
             recurrent_halting_stack_hidden_dim=72,
             recurrent_halting_stack_activation=ActivationOptions.MISH,
-        ).build()
+        )
 
         recurrent_cfg = cfg.experiment_config.model_config
         gate_cfg = recurrent_cfg.gate_config.model_config
@@ -2316,7 +1983,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
         )
 
     def test_recurrent_gate_config_uses_recurrent_overrides(self):
-        cfg = LinearAdaptiveConfigBuilder(
+        cfg = self.adaptive_preset(
             recurrent_flag=True,
             recurrent_gate_flag=True,
             recurrent_gate_option=LayerGateOptions.MULTIPLIER,
@@ -2332,7 +1999,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
             recurrent_gate_stack_last_layer_bias_option=(LastLayerBiasOptions.DISABLED),
             recurrent_gate_stack_apply_output_pipeline_flag=False,
             recurrent_gate_stack_bias_flag=False,
-        ).build()
+        )
 
         recurrent_cfg = cfg.experiment_config.model_config
         self.assertIsInstance(recurrent_cfg, RecurrentLayerConfig)
@@ -2356,7 +2023,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
         self.assertFalse(gate_cfg.layer_config.layer_model_config.bias_flag)
 
     def test_recurrent_halting_config_uses_recurrent_overrides(self):
-        cfg = LinearAdaptiveConfigBuilder(
+        cfg = self.adaptive_preset(
             output_dim=13,
             recurrent_flag=True,
             recurrent_halting_flag=True,
@@ -2379,7 +2046,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
             ),
             recurrent_halting_stack_apply_output_pipeline_flag=True,
             recurrent_halting_stack_bias_flag=False,
-        ).build()
+        )
 
         recurrent_cfg = cfg.experiment_config.model_config
         self.assertIsInstance(recurrent_cfg, RecurrentLayerConfig)

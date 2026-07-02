@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from emperor.augmentations.adaptive_parameters.config import (
     AdaptiveParameterAugmentationConfig,
@@ -18,7 +18,7 @@ from emperor.augmentations.adaptive_parameters.options import (
     WeightNormalizationOptions,
     WeightNormalizationPositionOptions,
 )
-from emperor.base.layer.config import LayerConfig
+from emperor.base.layer.config import LayerConfig, LayerStackConfig
 from emperor.base.layer.gate import GateConfig
 from emperor.base.layer.residual import ResidualConnectionOptions
 from emperor.base.options import ActivationOptions, LayerNormPositionOptions
@@ -29,6 +29,7 @@ from models.adaptive_parameter_config_factory import (
     build_mask_config,
     build_weight_config,
 )
+from models.linears._builder_options import LinearStackOptions
 
 if TYPE_CHECKING:
     from emperor.halting.config import HaltingConfig
@@ -61,14 +62,25 @@ class AdaptiveBoundaryProjectionOptions:
 BoundaryLayerOptions = AdaptiveBoundaryProjectionOptions
 
 
+@dataclass(frozen=True)
+class BoundaryConfigDependencies:
+    stack_options: LinearStackOptions
+    input_boundary_options: AdaptiveBoundaryProjectionOptions
+    output_boundary_options: AdaptiveBoundaryProjectionOptions
+    model_config: LayerStackConfig
+
+
 class BoundaryConfigFactory:
-    def __init__(self, builder: Any) -> None:
-        self.builder = builder
+    def __init__(self, dependencies: BoundaryConfigDependencies) -> None:
+        self.stack_options = dependencies.stack_options
+        self.input_boundary_options = dependencies.input_boundary_options
+        self.output_boundary_options = dependencies.output_boundary_options
+        self.model_config = dependencies.model_config
 
     def build_input_model_config(self) -> LayerConfig:
-        return self._build_boundary_layer_config(
-            options=self.builder.input_boundary_options,
-            activation=self.builder.stack_activation,
+        return self.__build_boundary_layer_config(
+            options=self.input_boundary_options,
+            activation=self.stack_options.activation,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
             dropout_probability=0.0,
             gate_config=None,
@@ -76,8 +88,8 @@ class BoundaryConfigFactory:
         )
 
     def build_output_model_config(self) -> LayerConfig:
-        return self._build_boundary_layer_config(
-            options=self.builder.output_boundary_options,
+        return self.__build_boundary_layer_config(
+            options=self.output_boundary_options,
             activation=ActivationOptions.DISABLED,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
             dropout_probability=0.0,
@@ -85,7 +97,7 @@ class BoundaryConfigFactory:
             halting_config=None,
         )
 
-    def _build_boundary_layer_config(
+    def __build_boundary_layer_config(
         self,
         options: AdaptiveBoundaryProjectionOptions,
         activation: ActivationOptions,
@@ -94,6 +106,7 @@ class BoundaryConfigFactory:
         gate_config: GateConfig | None,
         halting_config: "HaltingConfig | None",
     ) -> LayerConfig:
+        layer_model_config = self.__build_boundary_layer_model_config(options)
         return LayerConfig(
             activation=activation,
             layer_norm_position=layer_norm_position,
@@ -101,47 +114,47 @@ class BoundaryConfigFactory:
             dropout_probability=dropout_probability,
             gate_config=gate_config,
             halting_config=halting_config,
-            layer_model_config=self._build_boundary_layer_model_config(options),
+            layer_model_config=layer_model_config,
         )
 
-    def _build_boundary_layer_model_config(
+    def __build_boundary_layer_model_config(
         self,
         options: AdaptiveBoundaryProjectionOptions,
     ) -> AdaptiveLinearLayerConfig:
-        builder = self.builder
-        return AdaptiveLinearLayerConfig(
-            bias_flag=builder.bias_flag,
-            adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
-                weight_config=build_weight_config(
-                    weight_option=options.weight_option,
-                    generator_depth=options.weight_generator_depth,
-                    decay_schedule=options.weight_decay_schedule,
-                    decay_rate=options.weight_decay_rate,
-                    decay_warmup_batches=options.weight_decay_warmup_batches,
-                    normalization_option=options.weight_normalization_option,
-                    normalization_position_option=(
-                        options.weight_normalization_position_option
-                    ),
-                    bank_expansion_factor=options.weight_bank_expansion_factor,
+        adaptive_augmentation_config = AdaptiveParameterAugmentationConfig(
+            weight_config=build_weight_config(
+                weight_option=options.weight_option,
+                generator_depth=options.weight_generator_depth,
+                decay_schedule=options.weight_decay_schedule,
+                decay_rate=options.weight_decay_rate,
+                decay_warmup_batches=options.weight_decay_warmup_batches,
+                normalization_option=options.weight_normalization_option,
+                normalization_position_option=(
+                    options.weight_normalization_position_option
                 ),
-                bias_config=build_bias_config(
-                    bias_option=options.bias_option,
-                    decay_schedule=options.bias_decay_schedule,
-                    decay_rate=options.bias_decay_rate,
-                    decay_warmup_batches=options.bias_decay_warmup_batches,
-                    bank_expansion_factor=options.bias_bank_expansion_factor,
-                ),
-                diagonal_config=build_diagonal_config(
-                    options.diagonal_option,
-                ),
-                mask_config=build_mask_config(
-                    row_mask_option=options.row_mask_option,
-                    mask_dimension_option=options.mask_dimension_option,
-                    mask_threshold=options.mask_threshold,
-                    mask_surrogate_scale=options.mask_surrogate_scale,
-                    mask_floor=options.mask_floor,
-                    mask_transition_width=options.mask_transition_width,
-                ),
-                model_config=builder._build_model_config(),
+                bank_expansion_factor=options.weight_bank_expansion_factor,
             ),
+            bias_config=build_bias_config(
+                bias_option=options.bias_option,
+                decay_schedule=options.bias_decay_schedule,
+                decay_rate=options.bias_decay_rate,
+                decay_warmup_batches=options.bias_decay_warmup_batches,
+                bank_expansion_factor=options.bias_bank_expansion_factor,
+            ),
+            diagonal_config=build_diagonal_config(
+                options.diagonal_option,
+            ),
+            mask_config=build_mask_config(
+                row_mask_option=options.row_mask_option,
+                mask_dimension_option=options.mask_dimension_option,
+                mask_threshold=options.mask_threshold,
+                mask_surrogate_scale=options.mask_surrogate_scale,
+                mask_floor=options.mask_floor,
+                mask_transition_width=options.mask_transition_width,
+            ),
+            model_config=self.model_config,
+        )
+        return AdaptiveLinearLayerConfig(
+            bias_flag=self.stack_options.bias_flag,
+            adaptive_augmentation_config=adaptive_augmentation_config,
         )
