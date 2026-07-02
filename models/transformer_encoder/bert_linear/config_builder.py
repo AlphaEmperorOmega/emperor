@@ -127,6 +127,8 @@ class BertLinearConfigBuilder:
     def build(self) -> "ModelConfig":
         from emperor.config import ModelConfig
 
+        positional_embedding_config = self.__build_positional_embedding_config()
+        encoder_config = self.__build_encoder_config()
         return ModelConfig(
             learning_rate=self.learning_rate,
             batch_size=self.batch_size,
@@ -135,15 +137,18 @@ class BertLinearConfigBuilder:
             output_dim=self.output_dim,
             sequence_length=self.sequence_length,
             experiment_config=ExperimentConfig(
-                positional_embedding_config=self._build_positional_embedding_config(),
+                positional_embedding_config=positional_embedding_config,
                 embedding_dropout_probability=self.embedding_dropout_probability,
-                encoder_config=self._build_encoder_config(),
+                encoder_config=encoder_config,
             ),
         )
 
-    def _build_positional_embedding_config(self) -> AbsolutePositionalEmbeddingConfig:
+    def __build_positional_embedding_config(
+        self,
+    ) -> AbsolutePositionalEmbeddingConfig:
         options = self.positional_embedding_options
-        return options.option(
+        positional_embedding_config = options.option
+        return positional_embedding_config(
             num_embeddings=self.sequence_length,
             embedding_dim=self.hidden_dim,
             init_size=self.sequence_length,
@@ -151,8 +156,18 @@ class BertLinearConfigBuilder:
             auto_expand_flag=options.auto_expand_flag,
         )
 
-    def _build_encoder_config(self) -> LayerStackConfig:
+    def __build_encoder_config(self) -> LayerStackConfig:
         options = self.encoder_options
+        layer_model_config = self.__build_encoder_layer_config()
+        layer_config = TransformerEncoderBlockLayerConfig(
+            activation=ActivationOptions.DISABLED,
+            layer_norm_position=LayerNormPositionOptions.DISABLED,
+            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            dropout_probability=0.0,
+            gate_config=None,
+            halting_config=None,
+            layer_model_config=layer_model_config,
+        )
         return LayerStackConfig(
             input_dim=self.hidden_dim,
             hidden_dim=self.hidden_dim,
@@ -162,32 +177,32 @@ class BertLinearConfigBuilder:
             apply_output_pipeline_flag=True,
             # The wrapped TransformerEncoderLayer owns its own norm, residual, and
             # dropout, so the generic Layer pipeline is neutralized to a pass-through.
-            layer_config=TransformerEncoderBlockLayerConfig(
-                activation=ActivationOptions.DISABLED,
-                layer_norm_position=LayerNormPositionOptions.DISABLED,
-                residual_connection_option=ResidualConnectionOptions.DISABLED,
-                dropout_probability=0.0,
-                gate_config=None,
-                halting_config=None,
-                layer_model_config=self._build_encoder_layer_config(),
-            ),
+            layer_config=layer_config,
         )
 
-    def _build_encoder_layer_config(self) -> TransformerEncoderLayerConfig:
+    def __build_encoder_layer_config(self) -> TransformerEncoderLayerConfig:
         options = self.encoder_options
+        attention_config = self.__build_attention_config()
+        feed_forward_config = self.__build_feed_forward_config()
         return TransformerEncoderLayerConfig(
             embedding_dim=self.hidden_dim,
             layer_norm_position=options.layer_norm_position,
             dropout_probability=options.dropout_probability,
             residual_connection_option=ResidualConnectionOptions.RESIDUAL,
             causal_attention_mask_flag=options.causal_attention_mask_flag,
-            attention_config=self._build_attention_config(),
-            feed_forward_config=self._build_feed_forward_config(),
+            attention_config=attention_config,
+            feed_forward_config=feed_forward_config,
         )
 
-    def _build_attention_config(self) -> SelfAttentionConfig:
+    def __build_attention_config(self) -> SelfAttentionConfig:
         encoder_options = self.encoder_options
         attention_options = self.attention_options
+        projection_model_config = self.__build_linear_stack_config(
+            num_layers=attention_options.num_layers,
+            bias_flag=attention_options.bias_flag,
+            layer_norm_position=LayerNormPositionOptions.DISABLED,
+            dropout_probability=0.0,
+        )
         return SelfAttentionConfig(
             batch_size=self.batch_size,
             num_heads=attention_options.num_heads,
@@ -203,29 +218,25 @@ class BertLinearConfigBuilder:
             add_key_value_bias_flag=attention_options.add_key_value_bias_flag,
             average_attention_weights_flag=False,
             return_attention_weights_flag=False,
-            projection_model_config=self._build_linear_stack_config(
-                num_layers=attention_options.num_layers,
-                bias_flag=attention_options.bias_flag,
-                layer_norm_position=LayerNormPositionOptions.DISABLED,
-                dropout_probability=0.0,
-            ),
+            projection_model_config=projection_model_config,
         )
 
-    def _build_feed_forward_config(self) -> FeedForwardConfig:
+    def __build_feed_forward_config(self) -> FeedForwardConfig:
         encoder_options = self.encoder_options
         feed_forward_options = self.feed_forward_options
+        stack_config = self.__build_linear_stack_config(
+            num_layers=feed_forward_options.num_layers,
+            bias_flag=feed_forward_options.bias_flag,
+            layer_norm_position=LayerNormPositionOptions.BEFORE,
+            dropout_probability=encoder_options.dropout_probability,
+        )
         return FeedForwardConfig(
             input_dim=self.hidden_dim,
             output_dim=self.hidden_dim,
-            stack_config=self._build_linear_stack_config(
-                num_layers=feed_forward_options.num_layers,
-                bias_flag=feed_forward_options.bias_flag,
-                layer_norm_position=LayerNormPositionOptions.BEFORE,
-                dropout_probability=encoder_options.dropout_probability,
-            ),
+            stack_config=stack_config,
         )
 
-    def _build_linear_stack_config(
+    def __build_linear_stack_config(
         self,
         *,
         num_layers: int,
@@ -236,6 +247,18 @@ class BertLinearConfigBuilder:
         output_dim: int | None = None,
         apply_output_pipeline_flag: bool = True,
     ) -> LayerStackConfig:
+        layer_model_config = LinearLayerConfig(
+            bias_flag=bias_flag,
+        )
+        layer_config = LayerConfig(
+            activation=self.encoder_options.activation,
+            layer_norm_position=layer_norm_position,
+            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            dropout_probability=dropout_probability,
+            gate_config=None,
+            halting_config=None,
+            layer_model_config=layer_model_config,
+        )
         return LayerStackConfig(
             input_dim=input_dim,
             hidden_dim=self.hidden_dim,
@@ -243,15 +266,5 @@ class BertLinearConfigBuilder:
             num_layers=num_layers,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
             apply_output_pipeline_flag=apply_output_pipeline_flag,
-            layer_config=LayerConfig(
-                activation=self.encoder_options.activation,
-                layer_norm_position=layer_norm_position,
-                residual_connection_option=ResidualConnectionOptions.DISABLED,
-                dropout_probability=dropout_probability,
-                gate_config=None,
-                halting_config=None,
-                layer_model_config=LinearLayerConfig(
-                    bias_flag=bias_flag,
-                ),
-            ),
+            layer_config=layer_config,
         )
