@@ -1,15 +1,16 @@
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from emperor.augmentations.adaptive_parameters.config import (
-    AdaptiveParameterAugmentationConfig,
-)
+import models.linears.linear_adaptive.config as config
+from models.linears._builder_options import LinearStackOptions
 from emperor.augmentations.adaptive_parameters.core.bias import DynamicBiasConfig
-from emperor.augmentations.adaptive_parameters.core.diagonal import (
-    DynamicDiagonalConfig,
-)
 from emperor.augmentations.adaptive_parameters.core.mask import AxisMaskConfig
 from emperor.augmentations.adaptive_parameters.core.weight import DynamicWeightConfig
+from emperor.base.layer.config import LayerConfig, LayerStackConfig
+from emperor.base.layer.gate import GateConfig
+from emperor.base.layer.residual import ResidualConnectionOptions
+from emperor.base.options import ActivationOptions, LayerNormPositionOptions
+from emperor.linears.core.config import AdaptiveLinearLayerConfig
 from emperor.augmentations.adaptive_parameters.options import (
     BankExpansionFactorOptions,
     DynamicDepthOptions,
@@ -18,26 +19,24 @@ from emperor.augmentations.adaptive_parameters.options import (
     WeightNormalizationOptions,
     WeightNormalizationPositionOptions,
 )
-from emperor.base.layer.config import LayerConfig, LayerStackConfig
-from emperor.base.layer.gate import GateConfig
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import ActivationOptions, LayerNormPositionOptions
-from emperor.linears.core.config import AdaptiveLinearLayerConfig
-from models.adaptive_parameter_config_factory import (
-    build_bias_config,
-    build_diagonal_config,
-    build_mask_config,
-    build_weight_config,
+from emperor.augmentations.adaptive_parameters.config import (
+    AdaptiveParameterAugmentationConfig,
 )
-from models.linears._builder_options import LinearStackOptions
+from emperor.augmentations.adaptive_parameters.core.diagonal import (
+    DynamicDiagonalConfig,
+)
 from models.linears.linear_adaptive._adaptive_generator_stack_config_factory import (
     AdaptiveGeneratorStackConfigFactory,
 )
 from models.linears.linear_adaptive._builder_options import (
     AdaptiveGeneratorStackOptions,
 )
-
-import models.linears.linear_adaptive.config as config
+from models.adaptive_parameter_config_factory import (
+    build_bias_config,
+    build_diagonal_config,
+    build_mask_config,
+    build_weight_config,
+)
 
 if TYPE_CHECKING:
     from emperor.halting.config import HaltingConfig
