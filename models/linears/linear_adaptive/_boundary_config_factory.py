@@ -66,9 +66,6 @@ class AdaptiveBoundaryProjectionOptions:
     mask_transition_width: float
 
 
-BoundaryLayerOptions = AdaptiveBoundaryProjectionOptions
-
-
 @dataclass(frozen=True)
 class BoundaryConfigDependencies:
     stack_options: LinearStackOptions | None
