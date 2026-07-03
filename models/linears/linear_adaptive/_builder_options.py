@@ -1,5 +1,19 @@
 from dataclasses import dataclass
 
+from emperor.augmentations.adaptive_parameters.core.bias import DynamicBiasConfig
+from emperor.augmentations.adaptive_parameters.core.diagonal import (
+    DynamicDiagonalConfig,
+)
+from emperor.augmentations.adaptive_parameters.core.mask import AxisMaskConfig
+from emperor.augmentations.adaptive_parameters.core.weight import DynamicWeightConfig
+from emperor.augmentations.adaptive_parameters.options import (
+    BankExpansionFactorOptions,
+    DynamicDepthOptions,
+    MaskDimensionOptions,
+    WeightDecayScheduleOptions,
+    WeightNormalizationOptions,
+    WeightNormalizationPositionOptions,
+)
 from emperor.base.layer.residual import ResidualConnectionOptions
 from emperor.base.options import (
     ActivationOptions,
@@ -33,3 +47,47 @@ class AdaptiveGeneratorStackOptions:
     last_layer_bias_option: LastLayerBiasOptions
     apply_output_pipeline_flag: bool
     bias_flag: bool
+
+
+@dataclass(frozen=True)
+class HiddenAdaptiveWeightOptions:
+    generator_depth: DynamicDepthOptions
+    option_flag: bool
+    option: type[DynamicWeightConfig] | None
+    normalization_option: WeightNormalizationOptions
+    normalization_position_option: WeightNormalizationPositionOptions
+    decay_schedule: WeightDecayScheduleOptions
+    decay_rate: float
+    decay_warmup_batches: int
+    bank_expansion_factor: BankExpansionFactorOptions
+    generator_stack_source: AdaptiveGeneratorStackSource
+
+
+@dataclass(frozen=True)
+class HiddenAdaptiveBiasOptions:
+    option_flag: bool
+    option: type[DynamicBiasConfig] | None
+    decay_schedule: WeightDecayScheduleOptions
+    decay_rate: float
+    decay_warmup_batches: int
+    bank_expansion_factor: BankExpansionFactorOptions
+    generator_stack_source: AdaptiveGeneratorStackSource
+
+
+@dataclass(frozen=True)
+class HiddenAdaptiveDiagonalOptions:
+    option_flag: bool
+    option: type[DynamicDiagonalConfig] | None
+    generator_stack_source: AdaptiveGeneratorStackSource
+
+
+@dataclass(frozen=True)
+class HiddenAdaptiveMaskOptions:
+    option_flag: bool
+    row_mask_option: type[AxisMaskConfig] | None
+    mask_dimension_option: MaskDimensionOptions
+    mask_threshold: float
+    mask_surrogate_scale: float
+    mask_floor: float
+    mask_transition_width: float
+    generator_stack_source: AdaptiveGeneratorStackSource
