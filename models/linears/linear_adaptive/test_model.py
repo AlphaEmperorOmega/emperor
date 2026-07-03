@@ -1,4 +1,5 @@
 import unittest
+from dataclasses import replace
 
 import torch
 from emperor.augmentations.adaptive_parameters.core.bias import (
@@ -62,6 +63,13 @@ from emperor.memory.options import MemoryPositionOptions
 import models.linears.linear_adaptive.config as config
 from models.linears._builder_options import (
     LinearStackOptions,
+)
+from models.linears.linear_adaptive._builder_options import (
+    AdaptiveGeneratorStackSource,
+    HiddenAdaptiveBiasOptions,
+    HiddenAdaptiveDiagonalOptions,
+    HiddenAdaptiveMaskOptions,
+    HiddenAdaptiveWeightOptions,
 )
 from models.linears.linear_adaptive.config_builder import (
     LinearAdaptiveConfigBuilder,
@@ -190,11 +198,133 @@ class TestAdaptiveLinearModel(unittest.TestCase):
             {"memory_flag": True},
             {"recurrent_flag": True},
             {"shared_gate_config": self.shared_gate_config()},
+            {"weight_option_flag": True},
+            {"weight_option": DualModelDynamicWeightConfig},
+            {"row_mask_option": WeightInformedScoreAxisMaskConfig},
+            {"mask_option_flag": True},
+            {"mask_generator_stack_hidden_dim": 61},
+            {"mask_generator_stack_source": self.adaptive_generator_stack_source()},
         )
         for kwargs in cases:
             with self.subTest(kwargs=kwargs):
                 with self.assertRaises(TypeError):
                     LinearAdaptiveConfigBuilder(**kwargs)
+
+    def test_config_builder_uses_grouped_hidden_adaptive_options(self):
+        cfg = LinearAdaptiveConfigBuilder(
+            input_dim=8,
+            output_dim=4,
+            hidden_adaptive_weight_options=self.hidden_adaptive_weight_options(
+                option_flag=True,
+                option=DualModelDynamicWeightConfig,
+                generator_depth=DynamicDepthOptions.DEPTH_OF_FOUR,
+                decay_schedule=WeightDecayScheduleOptions.LINEAR,
+                decay_rate=0.125,
+                decay_warmup_batches=11,
+                normalization_option=WeightNormalizationOptions.RMS,
+                normalization_position_option=(
+                    WeightNormalizationPositionOptions.AFTER_OUTER_PRODUCT
+                ),
+            ),
+            hidden_adaptive_bias_options=self.hidden_adaptive_bias_options(
+                option_flag=True,
+                option=WeightedBankDynamicBiasConfig,
+                decay_schedule=WeightDecayScheduleOptions.EXPONENTIAL,
+                decay_rate=0.25,
+                decay_warmup_batches=13,
+                bank_expansion_factor=BankExpansionFactorOptions.FACTOR_OF_FOUR,
+            ),
+            hidden_adaptive_diagonal_options=(
+                self.hidden_adaptive_diagonal_options(
+                    option_flag=True,
+                    option=CombinedDynamicDiagonalConfig,
+                )
+            ),
+            hidden_adaptive_mask_options=self.hidden_adaptive_mask_options(
+                option_flag=True,
+                row_mask_option=WeightInformedScoreAxisMaskConfig,
+                mask_dimension_option=MaskDimensionOptions.ROW,
+                mask_threshold=0.7,
+                mask_surrogate_scale=5.0,
+                mask_floor=0.1,
+            ),
+        ).build()
+
+        augmentation_config = self._augmentation_config(cfg)
+
+        self.assertIsInstance(
+            augmentation_config.weight_config, DualModelDynamicWeightConfig
+        )
+        self.assertEqual(
+            augmentation_config.weight_config.generator_depth,
+            DynamicDepthOptions.DEPTH_OF_FOUR,
+        )
+        self.assertEqual(
+            augmentation_config.weight_config.decay_schedule,
+            WeightDecayScheduleOptions.LINEAR,
+        )
+        self.assertEqual(augmentation_config.weight_config.decay_rate, 0.125)
+        self.assertEqual(augmentation_config.weight_config.decay_warmup_batches, 11)
+        self.assertEqual(
+            augmentation_config.weight_config.normalization_option,
+            WeightNormalizationOptions.RMS,
+        )
+        self.assertEqual(
+            augmentation_config.weight_config.normalization_position_option,
+            WeightNormalizationPositionOptions.AFTER_OUTER_PRODUCT,
+        )
+        self.assertIsInstance(
+            augmentation_config.bias_config, WeightedBankDynamicBiasConfig
+        )
+        self.assertEqual(
+            augmentation_config.bias_config.bank_expansion_factor,
+            BankExpansionFactorOptions.FACTOR_OF_FOUR,
+        )
+        self.assertEqual(
+            augmentation_config.bias_config.decay_schedule,
+            WeightDecayScheduleOptions.EXPONENTIAL,
+        )
+        self.assertEqual(augmentation_config.bias_config.decay_rate, 0.25)
+        self.assertEqual(augmentation_config.bias_config.decay_warmup_batches, 13)
+        self.assertIsInstance(
+            augmentation_config.diagonal_config, CombinedDynamicDiagonalConfig
+        )
+        self.assertIsInstance(
+            augmentation_config.mask_config, WeightInformedScoreAxisMaskConfig
+        )
+        self.assertEqual(
+            augmentation_config.mask_config.mask_dimension_option,
+            MaskDimensionOptions.ROW,
+        )
+        self.assertEqual(augmentation_config.mask_config.mask_threshold, 0.7)
+        self.assertEqual(augmentation_config.mask_config.mask_surrogate_scale, 5.0)
+        self.assertEqual(augmentation_config.mask_config.mask_floor, 0.1)
+
+    def test_grouped_mask_options_use_custom_generator_stack_source(self):
+        cfg = LinearAdaptiveConfigBuilder(
+            input_dim=8,
+            output_dim=4,
+            hidden_adaptive_mask_options=self.hidden_adaptive_mask_options(
+                option_flag=True,
+                row_mask_option=WeightInformedScoreAxisMaskConfig,
+                generator_stack_source=self.adaptive_generator_stack_source(
+                    "mask_generator_stack",
+                    independent_flag=True,
+                    hidden_dim=61,
+                    num_layers=3,
+                    activation=ActivationOptions.RELU,
+                ),
+            ),
+        ).build()
+
+        mask_stack = self._augmentation_config(cfg).mask_config.model_config
+
+        self.assertEqual(mask_stack.hidden_dim, 61)
+        self.assertEqual(mask_stack.num_layers, 3)
+        self.assertEqual(
+            mask_stack.layer_config.activation,
+            ActivationOptions.RELU,
+        )
 
     def test_boundary_layer_pipeline_matches_linear_projection_options(self):
         cfg = self.adaptive_preset(
@@ -2403,6 +2533,102 @@ class TestAdaptiveLinearModel(unittest.TestCase):
         if isinstance(model_config, RecurrentLayerConfig):
             model_config = model_config.block_config
         return model_config.layer_config.layer_model_config.adaptive_augmentation_config
+
+    def hidden_adaptive_weight_options(self, **overrides):
+        options = HiddenAdaptiveWeightOptions(
+            generator_depth=config.WEIGHT_GENERATOR_DEPTH,
+            option_flag=config.WEIGHT_OPTION_FLAG,
+            option=config.WEIGHT_OPTION,
+            normalization_option=config.WEIGHT_NORMALIZATION_OPTION,
+            normalization_position_option=(
+                config.WEIGHT_NORMALIZATION_POSITION_OPTION
+            ),
+            decay_schedule=config.WEIGHT_DECAY_SCHEDULE,
+            decay_rate=config.WEIGHT_DECAY_RATE,
+            decay_warmup_batches=config.WEIGHT_DECAY_WARMUP_BATCHES,
+            bank_expansion_factor=config.WEIGHT_BANK_EXPANSION_FACTOR,
+            generator_stack_source=self.adaptive_generator_stack_source(
+                "weight_generator_stack",
+            ),
+        )
+        return replace(options, **overrides)
+
+    def hidden_adaptive_bias_options(self, **overrides):
+        options = HiddenAdaptiveBiasOptions(
+            option_flag=config.BIAS_OPTION_FLAG,
+            option=config.BIAS_OPTION,
+            decay_schedule=config.BIAS_DECAY_SCHEDULE,
+            decay_rate=config.BIAS_DECAY_RATE,
+            decay_warmup_batches=config.BIAS_DECAY_WARMUP_BATCHES,
+            bank_expansion_factor=config.BIAS_BANK_EXPANSION_FACTOR,
+            generator_stack_source=self.adaptive_generator_stack_source(
+                "bias_generator_stack",
+            ),
+        )
+        return replace(options, **overrides)
+
+    def hidden_adaptive_diagonal_options(self, **overrides):
+        options = HiddenAdaptiveDiagonalOptions(
+            option_flag=config.DIAGONAL_OPTION_FLAG,
+            option=config.DIAGONAL_OPTION,
+            generator_stack_source=self.adaptive_generator_stack_source(
+                "diagonal_generator_stack",
+            ),
+        )
+        return replace(options, **overrides)
+
+    def hidden_adaptive_mask_options(self, **overrides):
+        options = HiddenAdaptiveMaskOptions(
+            option_flag=config.MASK_OPTION_FLAG,
+            row_mask_option=config.ROW_MASK_OPTION,
+            mask_dimension_option=config.MASK_DIMENSION_OPTION,
+            mask_threshold=config.MASK_THRESHOLD,
+            mask_surrogate_scale=config.MASK_SURROGATE_SCALE,
+            mask_floor=config.MASK_FLOOR,
+            mask_transition_width=config.MASK_TRANSITION_WIDTH,
+            generator_stack_source=self.adaptive_generator_stack_source(
+                "mask_generator_stack",
+            ),
+        )
+        return replace(options, **overrides)
+
+    def adaptive_generator_stack_source(
+        self,
+        prefix: str = "weight_generator_stack",
+        **overrides,
+    ) -> AdaptiveGeneratorStackSource:
+        config_prefix = prefix.upper()
+        source = AdaptiveGeneratorStackSource(
+            independent_flag=getattr(
+                config,
+                f"{config_prefix}_INDEPENDENT_FLAG",
+            ),
+            hidden_dim=getattr(config, f"{config_prefix}_HIDDEN_DIM"),
+            layer_norm_position=getattr(
+                config,
+                f"{config_prefix}_LAYER_NORM_POSITION",
+            ),
+            num_layers=getattr(config, f"{config_prefix}_NUM_LAYERS"),
+            activation=getattr(config, f"{config_prefix}_ACTIVATION"),
+            residual_connection_option=getattr(
+                config,
+                f"{config_prefix}_RESIDUAL_CONNECTION_OPTION",
+            ),
+            dropout_probability=getattr(
+                config,
+                f"{config_prefix}_DROPOUT_PROBABILITY",
+            ),
+            last_layer_bias_option=getattr(
+                config,
+                f"{config_prefix}_LAST_LAYER_BIAS_OPTION",
+            ),
+            apply_output_pipeline_flag=getattr(
+                config,
+                f"{config_prefix}_APPLY_OUTPUT_PIPELINE_FLAG",
+            ),
+            bias_flag=getattr(config, f"{config_prefix}_BIAS_FLAG"),
+        )
+        return replace(source, **overrides)
 
     def _assert_full_stack_augmentation(self, augmentation_config) -> None:
         self.assertIsInstance(

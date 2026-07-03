@@ -30,6 +30,14 @@ from models.adaptive_parameter_config_factory import (
     build_weight_config,
 )
 from models.linears._builder_options import LinearStackOptions
+from models.linears.linear_adaptive._adaptive_generator_stack_config_factory import (
+    AdaptiveGeneratorStackConfigFactory,
+)
+from models.linears.linear_adaptive._builder_options import (
+    AdaptiveGeneratorStackOptions,
+)
+
+import models.linears.linear_adaptive.config as config
 
 if TYPE_CHECKING:
     from emperor.halting.config import HaltingConfig
@@ -64,18 +72,159 @@ BoundaryLayerOptions = AdaptiveBoundaryProjectionOptions
 
 @dataclass(frozen=True)
 class BoundaryConfigDependencies:
-    stack_options: LinearStackOptions
-    input_boundary_options: AdaptiveBoundaryProjectionOptions
-    output_boundary_options: AdaptiveBoundaryProjectionOptions
-    model_config: LayerStackConfig
+    stack_options: LinearStackOptions | None
+    input_boundary_options: AdaptiveBoundaryProjectionOptions | None
+    output_boundary_options: AdaptiveBoundaryProjectionOptions | None
+    adaptive_generator_stack_options: AdaptiveGeneratorStackOptions | None
 
 
 class BoundaryConfigFactory:
     def __init__(self, dependencies: BoundaryConfigDependencies) -> None:
-        self.stack_options = dependencies.stack_options
-        self.input_boundary_options = dependencies.input_boundary_options
-        self.output_boundary_options = dependencies.output_boundary_options
-        self.model_config = dependencies.model_config
+        stack_options = self.__default_stack_options(dependencies.stack_options)
+        input_boundary_options = self.__default_input_boundary_options(
+            dependencies.input_boundary_options
+        )
+        output_boundary_options = self.__default_output_boundary_options(
+            dependencies.output_boundary_options
+        )
+        adaptive_generator_stack_options = (
+            self.__default_adaptive_generator_stack_options(
+                dependencies.adaptive_generator_stack_options
+            )
+        )
+        adaptive_generator_stack_config_factory = AdaptiveGeneratorStackConfigFactory(
+            adaptive_generator_stack_options
+        )
+
+        self.stack_options = stack_options
+        self.input_boundary_options = input_boundary_options
+        self.output_boundary_options = output_boundary_options
+        self.adaptive_generator_stack_options = adaptive_generator_stack_options
+        self.adaptive_generator_stack_config_factory = (
+            adaptive_generator_stack_config_factory
+        )
+        shared_adaptive_generator_stack_config = (
+            self.__build_shared_adaptive_generator_stack_config()
+        )
+        self.shared_adaptive_generator_stack_config = (
+            shared_adaptive_generator_stack_config
+        )
+
+    def __default_stack_options(
+        self,
+        stack_options: LinearStackOptions | None,
+    ) -> LinearStackOptions:
+        if stack_options is not None:
+            return stack_options
+        return LinearStackOptions(
+            hidden_dim=config.STACK_HIDDEN_DIM,
+            bias_flag=config.STACK_BIAS_FLAG,
+            layer_norm_position=config.STACK_LAYER_NORM_POSITION,
+            num_layers=config.STACK_NUM_LAYERS,
+            activation=config.STACK_ACTIVATION,
+            residual_connection_option=config.STACK_RESIDUAL_CONNECTION_OPTION,
+            dropout_probability=config.STACK_DROPOUT_PROBABILITY,
+            last_layer_bias_option=config.STACK_LAST_LAYER_BIAS_OPTION,
+            apply_output_pipeline_flag=config.STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+        )
+
+    def __default_adaptive_generator_stack_options(
+        self,
+        adaptive_generator_stack_options: AdaptiveGeneratorStackOptions | None,
+    ) -> AdaptiveGeneratorStackOptions:
+        if adaptive_generator_stack_options is not None:
+            return adaptive_generator_stack_options
+        return AdaptiveGeneratorStackOptions(
+            hidden_dim=config.ADAPTIVE_SUBMODULE_STACK_HIDDEN_DIM,
+            layer_norm_position=(config.ADAPTIVE_SUBMODULE_STACK_LAYER_NORM_POSITION),
+            num_layers=config.ADAPTIVE_SUBMODULE_STACK_NUM_LAYERS,
+            activation=config.ADAPTIVE_SUBMODULE_STACK_ACTIVATION,
+            residual_connection_option=(
+                config.ADAPTIVE_SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION
+            ),
+            dropout_probability=(config.ADAPTIVE_SUBMODULE_STACK_DROPOUT_PROBABILITY),
+            last_layer_bias_option=(
+                config.ADAPTIVE_SUBMODULE_STACK_LAST_LAYER_BIAS_OPTION
+            ),
+            apply_output_pipeline_flag=(
+                config.ADAPTIVE_SUBMODULE_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            ),
+            bias_flag=config.ADAPTIVE_SUBMODULE_STACK_BIAS_FLAG,
+        )
+
+    def __default_input_boundary_options(
+        self,
+        boundary_options: AdaptiveBoundaryProjectionOptions | None,
+    ) -> AdaptiveBoundaryProjectionOptions:
+        if boundary_options is not None:
+            return boundary_options
+        return AdaptiveBoundaryProjectionOptions(
+            weight_option=config.INPUT_LAYER_WEIGHT_OPTION,
+            weight_generator_depth=config.INPUT_LAYER_WEIGHT_GENERATOR_DEPTH,
+            weight_decay_schedule=config.INPUT_LAYER_WEIGHT_DECAY_SCHEDULE,
+            weight_decay_rate=config.INPUT_LAYER_WEIGHT_DECAY_RATE,
+            weight_decay_warmup_batches=(
+                config.INPUT_LAYER_WEIGHT_DECAY_WARMUP_BATCHES
+            ),
+            weight_normalization_option=(
+                config.INPUT_LAYER_WEIGHT_NORMALIZATION_OPTION
+            ),
+            weight_normalization_position_option=(
+                config.INPUT_LAYER_WEIGHT_NORMALIZATION_POSITION_OPTION
+            ),
+            weight_bank_expansion_factor=(
+                config.INPUT_LAYER_WEIGHT_BANK_EXPANSION_FACTOR
+            ),
+            bias_option=config.INPUT_LAYER_BIAS_OPTION,
+            bias_decay_schedule=config.INPUT_LAYER_BIAS_DECAY_SCHEDULE,
+            bias_decay_rate=config.INPUT_LAYER_BIAS_DECAY_RATE,
+            bias_decay_warmup_batches=(config.INPUT_LAYER_BIAS_DECAY_WARMUP_BATCHES),
+            bias_bank_expansion_factor=(config.INPUT_LAYER_BIAS_BANK_EXPANSION_FACTOR),
+            diagonal_option=config.INPUT_LAYER_DIAGONAL_OPTION,
+            row_mask_option=config.INPUT_LAYER_ROW_MASK_OPTION,
+            mask_dimension_option=config.INPUT_LAYER_MASK_DIMENSION_OPTION,
+            mask_threshold=config.INPUT_LAYER_MASK_THRESHOLD,
+            mask_surrogate_scale=config.INPUT_LAYER_MASK_SURROGATE_SCALE,
+            mask_floor=config.INPUT_LAYER_MASK_FLOOR,
+            mask_transition_width=config.INPUT_LAYER_MASK_TRANSITION_WIDTH,
+        )
+
+    def __default_output_boundary_options(
+        self,
+        boundary_options: AdaptiveBoundaryProjectionOptions | None,
+    ) -> AdaptiveBoundaryProjectionOptions:
+        if boundary_options is not None:
+            return boundary_options
+        return AdaptiveBoundaryProjectionOptions(
+            weight_option=config.OUTPUT_LAYER_WEIGHT_OPTION,
+            weight_generator_depth=config.OUTPUT_LAYER_WEIGHT_GENERATOR_DEPTH,
+            weight_decay_schedule=config.OUTPUT_LAYER_WEIGHT_DECAY_SCHEDULE,
+            weight_decay_rate=config.OUTPUT_LAYER_WEIGHT_DECAY_RATE,
+            weight_decay_warmup_batches=(
+                config.OUTPUT_LAYER_WEIGHT_DECAY_WARMUP_BATCHES
+            ),
+            weight_normalization_option=(
+                config.OUTPUT_LAYER_WEIGHT_NORMALIZATION_OPTION
+            ),
+            weight_normalization_position_option=(
+                config.OUTPUT_LAYER_WEIGHT_NORMALIZATION_POSITION_OPTION
+            ),
+            weight_bank_expansion_factor=(
+                config.OUTPUT_LAYER_WEIGHT_BANK_EXPANSION_FACTOR
+            ),
+            bias_option=config.OUTPUT_LAYER_BIAS_OPTION,
+            bias_decay_schedule=config.OUTPUT_LAYER_BIAS_DECAY_SCHEDULE,
+            bias_decay_rate=config.OUTPUT_LAYER_BIAS_DECAY_RATE,
+            bias_decay_warmup_batches=(config.OUTPUT_LAYER_BIAS_DECAY_WARMUP_BATCHES),
+            bias_bank_expansion_factor=(config.OUTPUT_LAYER_BIAS_BANK_EXPANSION_FACTOR),
+            diagonal_option=config.OUTPUT_LAYER_DIAGONAL_OPTION,
+            row_mask_option=config.OUTPUT_LAYER_ROW_MASK_OPTION,
+            mask_dimension_option=config.OUTPUT_LAYER_MASK_DIMENSION_OPTION,
+            mask_threshold=config.OUTPUT_LAYER_MASK_THRESHOLD,
+            mask_surrogate_scale=config.OUTPUT_LAYER_MASK_SURROGATE_SCALE,
+            mask_floor=config.OUTPUT_LAYER_MASK_FLOOR,
+            mask_transition_width=config.OUTPUT_LAYER_MASK_TRANSITION_WIDTH,
+        )
 
     def build_input_model_config(self) -> LayerConfig:
         return self.__build_boundary_layer_config(
@@ -152,9 +301,15 @@ class BoundaryConfigFactory:
                 mask_floor=options.mask_floor,
                 mask_transition_width=options.mask_transition_width,
             ),
-            model_config=self.model_config,
+            model_config=self.shared_adaptive_generator_stack_config,
         )
         return AdaptiveLinearLayerConfig(
             bias_flag=self.stack_options.bias_flag,
             adaptive_augmentation_config=adaptive_augmentation_config,
         )
+
+    def __build_shared_adaptive_generator_stack_config(self) -> LayerStackConfig:
+        model_config = (
+            self.adaptive_generator_stack_config_factory.build_shared_config()
+        )
+        return model_config

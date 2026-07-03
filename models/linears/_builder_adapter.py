@@ -37,31 +37,40 @@ _ADAPTIVE_GENERATOR_SOURCE_FIELD_MAP = {
     "bias_flag": "bias_flag",
 }
 
-_ADAPTIVE_SCALAR_KEYS = {
-    "generator_depth",
-    "diagonal_option_flag",
-    "diagonal_option",
-    "bias_option_flag",
-    "bias_option",
-    "weight_option_flag",
-    "weight_option",
-    "weight_normalization_option",
-    "weight_normalization_position_option",
-    "weight_decay_schedule",
-    "weight_decay_rate",
-    "weight_decay_warmup_batches",
-    "weight_bank_expansion_factor",
-    "bias_decay_schedule",
-    "bias_decay_rate",
-    "bias_decay_warmup_batches",
-    "bias_bank_expansion_factor",
-    "mask_option_flag",
-    "row_mask_option",
-    "mask_dimension_option",
-    "mask_threshold",
-    "mask_surrogate_scale",
-    "mask_floor",
-    "mask_transition_width",
+_HIDDEN_ADAPTIVE_WEIGHT_FIELD_MAP = {
+    "generator_depth": "generator_depth",
+    "weight_option_flag": "option_flag",
+    "weight_option": "option",
+    "weight_normalization_option": "normalization_option",
+    "weight_normalization_position_option": "normalization_position_option",
+    "weight_decay_schedule": "decay_schedule",
+    "weight_decay_rate": "decay_rate",
+    "weight_decay_warmup_batches": "decay_warmup_batches",
+    "weight_bank_expansion_factor": "bank_expansion_factor",
+}
+
+_HIDDEN_ADAPTIVE_BIAS_FIELD_MAP = {
+    "bias_option_flag": "option_flag",
+    "bias_option": "option",
+    "bias_decay_schedule": "decay_schedule",
+    "bias_decay_rate": "decay_rate",
+    "bias_decay_warmup_batches": "decay_warmup_batches",
+    "bias_bank_expansion_factor": "bank_expansion_factor",
+}
+
+_HIDDEN_ADAPTIVE_DIAGONAL_FIELD_MAP = {
+    "diagonal_option_flag": "option_flag",
+    "diagonal_option": "option",
+}
+
+_HIDDEN_ADAPTIVE_MASK_FIELD_MAP = {
+    "mask_option_flag": "option_flag",
+    "row_mask_option": "row_mask_option",
+    "mask_dimension_option": "mask_dimension_option",
+    "mask_threshold": "mask_threshold",
+    "mask_surrogate_scale": "mask_surrogate_scale",
+    "mask_floor": "mask_floor",
+    "mask_transition_width": "mask_transition_width",
 }
 
 
@@ -132,36 +141,32 @@ def linear_adaptive_builder_kwargs_from_flat(
                     provided=leftovers.pop("adaptive_generator_stack_options", None),
                 )
             ),
-            "weight_generator_stack_source": (
-                _adaptive_generator_stack_source_from_kwargs(
+            "hidden_adaptive_weight_options": (
+                _hidden_adaptive_weight_options_from_kwargs(
                     leftovers,
                     config_module,
-                    "weight_generator_stack",
-                    provided=leftovers.pop("weight_generator_stack_source", None),
+                    provided=leftovers.pop("hidden_adaptive_weight_options", None),
                 )
             ),
-            "bias_generator_stack_source": (
-                _adaptive_generator_stack_source_from_kwargs(
+            "hidden_adaptive_bias_options": (
+                _hidden_adaptive_bias_options_from_kwargs(
                     leftovers,
                     config_module,
-                    "bias_generator_stack",
-                    provided=leftovers.pop("bias_generator_stack_source", None),
+                    provided=leftovers.pop("hidden_adaptive_bias_options", None),
                 )
             ),
-            "diagonal_generator_stack_source": (
-                _adaptive_generator_stack_source_from_kwargs(
+            "hidden_adaptive_diagonal_options": (
+                _hidden_adaptive_diagonal_options_from_kwargs(
                     leftovers,
                     config_module,
-                    "diagonal_generator_stack",
-                    provided=leftovers.pop("diagonal_generator_stack_source", None),
+                    provided=leftovers.pop("hidden_adaptive_diagonal_options", None),
                 )
             ),
-            "mask_generator_stack_source": (
-                _adaptive_generator_stack_source_from_kwargs(
+            "hidden_adaptive_mask_options": (
+                _hidden_adaptive_mask_options_from_kwargs(
                     leftovers,
                     config_module,
-                    "mask_generator_stack",
-                    provided=leftovers.pop("mask_generator_stack_source", None),
+                    provided=leftovers.pop("hidden_adaptive_mask_options", None),
                 )
             ),
             "input_boundary_options": _boundary_options_from_kwargs(
@@ -178,9 +183,6 @@ def linear_adaptive_builder_kwargs_from_flat(
             ),
         }
     )
-    for key in _ADAPTIVE_SCALAR_KEYS:
-        if key in leftovers:
-            builder_kwargs[key] = leftovers.pop(key)
     builder_kwargs.update(leftovers)
     return builder_kwargs
 
@@ -264,7 +266,7 @@ def linear_flat_defaults(config_module: ModuleType) -> dict[str, Any]:
     }
 
 
-def default_linear_stack_options(
+def _default_linear_stack_options(
     config_module: ModuleType,
 ) -> linears_options.LinearStackOptions:
     return linears_options.LinearStackOptions(
@@ -280,7 +282,7 @@ def default_linear_stack_options(
     )
 
 
-def default_submodule_stack_options(
+def _default_submodule_stack_options(
     config_module: ModuleType,
 ) -> ControllerStackOptions:
     return ControllerStackOptions(
@@ -300,7 +302,7 @@ def default_submodule_stack_options(
     )
 
 
-def default_controller_stack_source(
+def _default_controller_stack_source(
     config_module: ModuleType,
     prefix: str,
 ) -> ControllerStackSource:
@@ -334,14 +336,14 @@ def default_controller_stack_source(
     )
 
 
-def default_layer_controller_options(
+def _default_layer_controller_options(
     config_module: ModuleType,
 ) -> linears_options.LayerControllerOptions:
     return linears_options.LayerControllerOptions(
         stack_gate_flag=config_module.GATE_FLAG,
         gate_option=config_module.GATE_OPTION,
         gate_activation=config_module.GATE_ACTIVATION,
-        gate_stack_source=default_controller_stack_source(
+        gate_stack_source=_default_controller_stack_source(
             config_module,
             "gate_stack",
         ),
@@ -349,14 +351,14 @@ def default_layer_controller_options(
         halting_threshold=config_module.HALTING_THRESHOLD,
         halting_dropout=config_module.HALTING_DROPOUT,
         halting_hidden_state_mode=config_module.HALTING_HIDDEN_STATE_MODE,
-        halting_stack_source=default_controller_stack_source(
+        halting_stack_source=_default_controller_stack_source(
             config_module,
             "halting_stack",
         ),
     )
 
 
-def default_dynamic_memory_options(
+def _default_dynamic_memory_options(
     config_module: ModuleType,
 ) -> linears_options.DynamicMemoryOptions:
     return linears_options.DynamicMemoryOptions(
@@ -369,14 +371,14 @@ def default_dynamic_memory_options(
         memory_test_time_training_num_inner_steps=(
             config_module.MEMORY_TEST_TIME_TRAINING_NUM_INNER_STEPS
         ),
-        memory_stack_source=default_controller_stack_source(
+        memory_stack_source=_default_controller_stack_source(
             config_module,
             "memory_stack",
         ),
     )
 
 
-def default_recurrent_controller_options(
+def _default_recurrent_controller_options(
     config_module: ModuleType,
 ) -> linears_options.RecurrentControllerOptions:
     return linears_options.RecurrentControllerOptions(
@@ -386,7 +388,7 @@ def default_recurrent_controller_options(
         recurrent_gate_flag=config_module.RECURRENT_GATE_FLAG,
         recurrent_gate_option=config_module.RECURRENT_GATE_OPTION,
         recurrent_gate_activation=config_module.RECURRENT_GATE_ACTIVATION,
-        recurrent_gate_stack_source=default_controller_stack_source(
+        recurrent_gate_stack_source=_default_controller_stack_source(
             config_module,
             "recurrent_gate_stack",
         ),
@@ -396,14 +398,14 @@ def default_recurrent_controller_options(
         recurrent_halting_hidden_state_mode=(
             config_module.RECURRENT_HALTING_HIDDEN_STATE_MODE
         ),
-        recurrent_halting_stack_source=default_controller_stack_source(
+        recurrent_halting_stack_source=_default_controller_stack_source(
             config_module,
             "recurrent_halting_stack",
         ),
     )
 
 
-def default_adaptive_generator_stack_options(
+def _default_adaptive_generator_stack_options(
     config_module: ModuleType,
 ) -> Any:
     adaptive_options = _adaptive_options()
@@ -428,7 +430,7 @@ def default_adaptive_generator_stack_options(
     )
 
 
-def default_adaptive_generator_stack_source(
+def _default_adaptive_generator_stack_source(
     config_module: ModuleType,
     prefix: str,
 ) -> Any:
@@ -463,7 +465,81 @@ def default_adaptive_generator_stack_source(
     )
 
 
-def default_boundary_options(
+def _default_hidden_adaptive_weight_options(
+    config_module: ModuleType,
+) -> Any:
+    adaptive_options = _adaptive_options()
+    return adaptive_options.HiddenAdaptiveWeightOptions(
+        generator_depth=config_module.WEIGHT_GENERATOR_DEPTH,
+        option_flag=config_module.WEIGHT_OPTION_FLAG,
+        option=config_module.WEIGHT_OPTION,
+        normalization_option=config_module.WEIGHT_NORMALIZATION_OPTION,
+        normalization_position_option=(
+            config_module.WEIGHT_NORMALIZATION_POSITION_OPTION
+        ),
+        decay_schedule=config_module.WEIGHT_DECAY_SCHEDULE,
+        decay_rate=config_module.WEIGHT_DECAY_RATE,
+        decay_warmup_batches=config_module.WEIGHT_DECAY_WARMUP_BATCHES,
+        bank_expansion_factor=config_module.WEIGHT_BANK_EXPANSION_FACTOR,
+        generator_stack_source=_default_adaptive_generator_stack_source(
+            config_module,
+            "weight_generator_stack",
+        ),
+    )
+
+
+def _default_hidden_adaptive_bias_options(
+    config_module: ModuleType,
+) -> Any:
+    adaptive_options = _adaptive_options()
+    return adaptive_options.HiddenAdaptiveBiasOptions(
+        option_flag=config_module.BIAS_OPTION_FLAG,
+        option=config_module.BIAS_OPTION,
+        decay_schedule=config_module.BIAS_DECAY_SCHEDULE,
+        decay_rate=config_module.BIAS_DECAY_RATE,
+        decay_warmup_batches=config_module.BIAS_DECAY_WARMUP_BATCHES,
+        bank_expansion_factor=config_module.BIAS_BANK_EXPANSION_FACTOR,
+        generator_stack_source=_default_adaptive_generator_stack_source(
+            config_module,
+            "bias_generator_stack",
+        ),
+    )
+
+
+def _default_hidden_adaptive_diagonal_options(
+    config_module: ModuleType,
+) -> Any:
+    adaptive_options = _adaptive_options()
+    return adaptive_options.HiddenAdaptiveDiagonalOptions(
+        option_flag=config_module.DIAGONAL_OPTION_FLAG,
+        option=config_module.DIAGONAL_OPTION,
+        generator_stack_source=_default_adaptive_generator_stack_source(
+            config_module,
+            "diagonal_generator_stack",
+        ),
+    )
+
+
+def _default_hidden_adaptive_mask_options(
+    config_module: ModuleType,
+) -> Any:
+    adaptive_options = _adaptive_options()
+    return adaptive_options.HiddenAdaptiveMaskOptions(
+        option_flag=config_module.MASK_OPTION_FLAG,
+        row_mask_option=config_module.ROW_MASK_OPTION,
+        mask_dimension_option=config_module.MASK_DIMENSION_OPTION,
+        mask_threshold=config_module.MASK_THRESHOLD,
+        mask_surrogate_scale=config_module.MASK_SURROGATE_SCALE,
+        mask_floor=config_module.MASK_FLOOR,
+        mask_transition_width=config_module.MASK_TRANSITION_WIDTH,
+        generator_stack_source=_default_adaptive_generator_stack_source(
+            config_module,
+            "mask_generator_stack",
+        ),
+    )
+
+
+def _default_boundary_options(
     config_module: ModuleType,
     prefix: str,
 ) -> Any:
@@ -539,7 +615,7 @@ def _linear_stack_options_from_kwargs(
     *,
     provided: linears_options.LinearStackOptions | None,
 ) -> linears_options.LinearStackOptions:
-    options = provided or default_linear_stack_options(config_module)
+    options = provided or _default_linear_stack_options(config_module)
     updates = _pop_updates(
         kwargs,
         {
@@ -564,7 +640,7 @@ def _submodule_stack_options_from_kwargs(
     *,
     provided: ControllerStackOptions | None,
 ) -> ControllerStackOptions:
-    options = provided or default_submodule_stack_options(config_module)
+    options = provided or _default_submodule_stack_options(config_module)
     updates = _pop_updates(
         kwargs,
         {
@@ -593,7 +669,7 @@ def _controller_stack_source_from_kwargs(
     *,
     provided: ControllerStackSource | None = None,
 ) -> ControllerStackSource:
-    source = provided or default_controller_stack_source(config_module, prefix)
+    source = provided or _default_controller_stack_source(config_module, prefix)
     updates = _pop_updates(
         kwargs,
         {
@@ -610,7 +686,7 @@ def _layer_controller_options_from_kwargs(
     *,
     provided: linears_options.LayerControllerOptions | None,
 ) -> linears_options.LayerControllerOptions:
-    options = provided or default_layer_controller_options(config_module)
+    options = provided or _default_layer_controller_options(config_module)
     updates = _pop_updates(
         kwargs,
         {
@@ -645,7 +721,7 @@ def _dynamic_memory_options_from_kwargs(
     *,
     provided: linears_options.DynamicMemoryOptions | None,
 ) -> linears_options.DynamicMemoryOptions:
-    options = provided or default_dynamic_memory_options(config_module)
+    options = provided or _default_dynamic_memory_options(config_module)
     updates = _pop_updates(
         kwargs,
         {
@@ -675,7 +751,7 @@ def _recurrent_controller_options_from_kwargs(
     *,
     provided: linears_options.RecurrentControllerOptions | None,
 ) -> linears_options.RecurrentControllerOptions:
-    options = provided or default_recurrent_controller_options(config_module)
+    options = provided or _default_recurrent_controller_options(config_module)
     updates = _pop_updates(
         kwargs,
         {
@@ -716,7 +792,7 @@ def _adaptive_generator_stack_options_from_kwargs(
     *,
     provided: Any,
 ) -> Any:
-    options = provided or default_adaptive_generator_stack_options(config_module)
+    options = provided or _default_adaptive_generator_stack_options(config_module)
     updates = _pop_updates(
         kwargs,
         {
@@ -751,7 +827,7 @@ def _adaptive_generator_stack_source_from_kwargs(
     *,
     provided: Any,
 ) -> Any:
-    source = provided or default_adaptive_generator_stack_source(
+    source = provided or _default_adaptive_generator_stack_source(
         config_module,
         prefix,
     )
@@ -767,6 +843,86 @@ def _adaptive_generator_stack_source_from_kwargs(
     return replace(source, **updates) if updates else source
 
 
+def _hidden_adaptive_weight_options_from_kwargs(
+    kwargs: dict[str, Any],
+    config_module: ModuleType,
+    *,
+    provided: Any,
+) -> Any:
+    options = provided or _default_hidden_adaptive_weight_options(config_module)
+    updates = _pop_updates(kwargs, _HIDDEN_ADAPTIVE_WEIGHT_FIELD_MAP)
+    updates["generator_stack_source"] = _adaptive_generator_stack_source_from_kwargs(
+        kwargs,
+        config_module,
+        "weight_generator_stack",
+        provided=kwargs.pop(
+            "weight_generator_stack_source",
+            options.generator_stack_source,
+        ),
+    )
+    return replace(options, **updates)
+
+
+def _hidden_adaptive_bias_options_from_kwargs(
+    kwargs: dict[str, Any],
+    config_module: ModuleType,
+    *,
+    provided: Any,
+) -> Any:
+    options = provided or _default_hidden_adaptive_bias_options(config_module)
+    updates = _pop_updates(kwargs, _HIDDEN_ADAPTIVE_BIAS_FIELD_MAP)
+    updates["generator_stack_source"] = _adaptive_generator_stack_source_from_kwargs(
+        kwargs,
+        config_module,
+        "bias_generator_stack",
+        provided=kwargs.pop(
+            "bias_generator_stack_source",
+            options.generator_stack_source,
+        ),
+    )
+    return replace(options, **updates)
+
+
+def _hidden_adaptive_diagonal_options_from_kwargs(
+    kwargs: dict[str, Any],
+    config_module: ModuleType,
+    *,
+    provided: Any,
+) -> Any:
+    options = provided or _default_hidden_adaptive_diagonal_options(config_module)
+    updates = _pop_updates(kwargs, _HIDDEN_ADAPTIVE_DIAGONAL_FIELD_MAP)
+    updates["generator_stack_source"] = _adaptive_generator_stack_source_from_kwargs(
+        kwargs,
+        config_module,
+        "diagonal_generator_stack",
+        provided=kwargs.pop(
+            "diagonal_generator_stack_source",
+            options.generator_stack_source,
+        ),
+    )
+    return replace(options, **updates)
+
+
+def _hidden_adaptive_mask_options_from_kwargs(
+    kwargs: dict[str, Any],
+    config_module: ModuleType,
+    *,
+    provided: Any,
+) -> Any:
+    options = provided or _default_hidden_adaptive_mask_options(config_module)
+    updates = _pop_updates(kwargs, _HIDDEN_ADAPTIVE_MASK_FIELD_MAP)
+    updates["generator_stack_source"] = _adaptive_generator_stack_source_from_kwargs(
+        kwargs,
+        config_module,
+        "mask_generator_stack",
+        provided=kwargs.pop(
+            "mask_generator_stack_source",
+            options.generator_stack_source,
+        ),
+    )
+    return replace(options, **updates)
+
+
 def _boundary_options_from_kwargs(
     kwargs: dict[str, Any],
     config_module: ModuleType,
@@ -774,7 +930,7 @@ def _boundary_options_from_kwargs(
     *,
     provided: Any,
 ) -> Any:
-    options = provided or default_boundary_options(config_module, prefix)
+    options = provided or _default_boundary_options(config_module, prefix)
     updates = _pop_updates(
         kwargs,
         {
@@ -824,7 +980,7 @@ def _controller_stack_flat_defaults(
     config_module: ModuleType,
     prefix: str,
 ) -> dict[str, Any]:
-    source = default_controller_stack_source(config_module, prefix)
+    source = _default_controller_stack_source(config_module, prefix)
     return {
         f"{prefix}_{field}": getattr(source, dataclass_field)
         for field, dataclass_field in _CONTROLLER_STACK_FIELD_MAP.items()
