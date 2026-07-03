@@ -6,15 +6,37 @@ from emperor.base.options import ActivationOptions, LayerNormPositionOptions
 from emperor.linears.core.config import LinearLayerConfig
 from models.linears._builder_options import LinearStackOptions
 
+import models.linears.linear.config as config
+
 
 @dataclass(frozen=True)
 class BoundaryConfigDependencies:
-    stack_options: LinearStackOptions
+    stack_options: LinearStackOptions | None
 
 
 class BoundaryConfigFactory:
     def __init__(self, dependencies: BoundaryConfigDependencies) -> None:
-        self.stack_options = dependencies.stack_options
+        stack_options = self.__default_stack_options(dependencies.stack_options)
+
+        self.stack_options = stack_options
+
+    def __default_stack_options(
+        self,
+        stack_options: LinearStackOptions | None,
+    ) -> LinearStackOptions:
+        if stack_options is not None:
+            return stack_options
+        return LinearStackOptions(
+            hidden_dim=config.STACK_HIDDEN_DIM,
+            bias_flag=config.STACK_BIAS_FLAG,
+            layer_norm_position=config.STACK_LAYER_NORM_POSITION,
+            num_layers=config.STACK_NUM_LAYERS,
+            activation=config.STACK_ACTIVATION,
+            residual_connection_option=config.STACK_RESIDUAL_CONNECTION_OPTION,
+            dropout_probability=config.STACK_DROPOUT_PROBABILITY,
+            last_layer_bias_option=config.STACK_LAST_LAYER_BIAS_OPTION,
+            apply_output_pipeline_flag=config.STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+        )
 
     def build_input_model_config(self) -> LayerConfig:
         return self.__build_boundary_layer_config(
@@ -26,8 +48,8 @@ class BoundaryConfigFactory:
             activation=ActivationOptions.DISABLED,
         )
 
-    @staticmethod
     def __build_boundary_layer_config(
+        self,
         *,
         activation: ActivationOptions,
     ) -> LayerConfig:
