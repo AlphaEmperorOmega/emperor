@@ -34,11 +34,20 @@ class ExperimentPreset(BaseOptions):
     NOISY_SHARED_ROUTER = 14
     RESIDUAL_SHARED_ROUTER = 15
     POST_NORM_AFTER_WEIGHT = 16
+    MEMORY = 17
+    GATING_MEMORY = 18
+    HALTING_MEMORY = 19
+    GATING_HALTING_MEMORY = 20
+    RECURRENT_MEMORY = 21
+    RECURRENT_GATING_MEMORY = 22
+    RECURRENT_HALTING_MEMORY = 23
+    RECURRENT_GATING_HALTING_MEMORY = 24
 
 
 _PRESET_LOCK_BEHAVIORS = {
     "stack_gate_flag": "stack gating",
     "stack_halting_flag": "adaptive stack halting",
+    "memory_flag": "shared stack memory",
     "recurrent_flag": "recurrent execution",
     "recurrent_gate_flag": "recurrent gating",
     "recurrent_halting_flag": "adaptive recurrent halting",
@@ -82,6 +91,38 @@ _PRESET_DEFINITIONS = {
         description="Default config with both per-layer gating and stack halting "
         "enabled in the expert stack.",
     ),
+    ExperimentPreset.MEMORY: PresetDefinition(
+        preset_values={
+            "memory_flag": True,
+        },
+        description="Default config with shared stack memory enabled in the expert "
+        "stack.",
+    ),
+    ExperimentPreset.GATING_MEMORY: PresetDefinition(
+        preset_values={
+            "stack_gate_flag": True,
+            "memory_flag": True,
+        },
+        description="Default config with both per-layer gating and shared stack "
+        "memory enabled in the expert stack.",
+    ),
+    ExperimentPreset.HALTING_MEMORY: PresetDefinition(
+        preset_values={
+            "stack_halting_flag": True,
+            "memory_flag": True,
+        },
+        description="Default config with both stack halting and shared stack memory "
+        "enabled in the expert stack.",
+    ),
+    ExperimentPreset.GATING_HALTING_MEMORY: PresetDefinition(
+        preset_values={
+            "stack_gate_flag": True,
+            "stack_halting_flag": True,
+            "memory_flag": True,
+        },
+        description="Default config with per-layer gating, stack halting, and shared "
+        "stack memory enabled in the expert stack.",
+    ),
     ExperimentPreset.RECURRENT: PresetDefinition(
         preset_values={
             "recurrent_flag": True,
@@ -113,6 +154,42 @@ _PRESET_DEFINITIONS = {
         },
         description="Default recurrent config with both step-level gating and recurrent "
         "halting enabled.",
+    ),
+    ExperimentPreset.RECURRENT_MEMORY: PresetDefinition(
+        preset_values={
+            "recurrent_flag": True,
+            "memory_flag": True,
+        },
+        description="Default recurrent config whose reused expert stack has shared "
+        "memory enabled.",
+    ),
+    ExperimentPreset.RECURRENT_GATING_MEMORY: PresetDefinition(
+        preset_values={
+            "recurrent_flag": True,
+            "recurrent_gate_flag": True,
+            "memory_flag": True,
+        },
+        description="Default recurrent config with step-level gating and shared memory "
+        "in the reused expert stack.",
+    ),
+    ExperimentPreset.RECURRENT_HALTING_MEMORY: PresetDefinition(
+        preset_values={
+            "recurrent_flag": True,
+            "recurrent_halting_flag": True,
+            "memory_flag": True,
+        },
+        description="Default recurrent config with recurrent halting and shared memory "
+        "in the reused expert stack.",
+    ),
+    ExperimentPreset.RECURRENT_GATING_HALTING_MEMORY: PresetDefinition(
+        preset_values={
+            "recurrent_flag": True,
+            "recurrent_gate_flag": True,
+            "recurrent_halting_flag": True,
+            "memory_flag": True,
+        },
+        description="Default recurrent config with step-level gating, recurrent "
+        "halting, and shared memory in the reused expert stack.",
     ),
     ExperimentPreset.SHARED_ROUTER_AFTER_WEIGHT: PresetDefinition(
         preset_values={
