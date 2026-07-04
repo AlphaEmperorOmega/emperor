@@ -62,7 +62,7 @@ from emperor.memory.options import MemoryPositionOptions
 
 import models.linears.linear_adaptive.config as config
 from models.linears._builder_options import (
-    LinearStackOptions,
+    MainLayerStackOptions,
 )
 from models.linears.linear_adaptive._builder_options import (
     AdaptiveGeneratorStackSource,
@@ -157,7 +157,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
         cfg = LinearAdaptiveConfigBuilder(
             input_dim=8,
             output_dim=4,
-            stack_options=LinearStackOptions(
+            stack_options=MainLayerStackOptions(
                 hidden_dim=16,
                 bias_flag=config.STACK_BIAS_FLAG,
                 layer_norm_position=config.STACK_LAYER_NORM_POSITION,

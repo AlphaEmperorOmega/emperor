@@ -5,11 +5,11 @@ import models.linears.linear.config as config
 from models.linears._builder_options import (
     DynamicMemoryOptions,
     LayerControllerOptions,
-    LinearStackOptions,
+    MainLayerStackOptions,
     RecurrentControllerOptions,
 )
 from models.linears._controller_stack import (
-    ControllerStackOptions,
+    SubmoduleStackOptions,
 )
 from models.linears.linear._boundary_config_factory import (
     BoundaryConfigDependencies,
@@ -32,8 +32,8 @@ class LinearConfigBuilder:
         learning_rate: float = config.LEARNING_RATE,
         input_dim: int = config.INPUT_DIM,
         output_dim: int = config.OUTPUT_DIM,
-        stack_options: LinearStackOptions | None = None,
-        submodule_stack_options: ControllerStackOptions | None = None,
+        stack_options: MainLayerStackOptions | None = None,
+        submodule_stack_options: SubmoduleStackOptions | None = None,
         layer_controller_options: LayerControllerOptions | None = None,
         dynamic_memory_options: DynamicMemoryOptions | None = None,
         recurrent_controller_options: RecurrentControllerOptions | None = None,

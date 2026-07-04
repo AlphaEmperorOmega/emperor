@@ -35,7 +35,7 @@ from emperor.memory.options import MemoryPositionOptions
 
 import models.linears.linear.config as config
 from models.linears._controller_stack import (
-    ControllerStackSource,
+    SubmoduleStackSource,
 )
 from models.linears._builder_options import (
     LayerControllerOptions,
@@ -551,7 +551,7 @@ class TestLinearModel(unittest.TestCase):
                 stack_gate_flag=False,
                 gate_option=config.GATE_OPTION,
                 gate_activation=config.GATE_ACTIVATION,
-                gate_stack_source=ControllerStackSource(
+                gate_stack_source=SubmoduleStackSource(
                     independent_flag=config.GATE_STACK_INDEPENDENT_FLAG,
                     hidden_dim=config.GATE_STACK_HIDDEN_DIM,
                     num_layers=config.GATE_STACK_NUM_LAYERS,
@@ -571,7 +571,7 @@ class TestLinearModel(unittest.TestCase):
                 halting_threshold=config.HALTING_THRESHOLD,
                 halting_dropout=config.HALTING_DROPOUT,
                 halting_hidden_state_mode=config.HALTING_HIDDEN_STATE_MODE,
-                halting_stack_source=ControllerStackSource(
+                halting_stack_source=SubmoduleStackSource(
                     independent_flag=config.HALTING_STACK_INDEPENDENT_FLAG,
                     hidden_dim=config.HALTING_STACK_HIDDEN_DIM,
                     num_layers=config.HALTING_STACK_NUM_LAYERS,
@@ -603,7 +603,7 @@ class TestLinearModel(unittest.TestCase):
                 stack_gate_flag=True,
                 gate_option=config.GATE_OPTION,
                 gate_activation=config.GATE_ACTIVATION,
-                gate_stack_source=ControllerStackSource(
+                gate_stack_source=SubmoduleStackSource(
                     independent_flag=config.GATE_STACK_INDEPENDENT_FLAG,
                     hidden_dim=config.GATE_STACK_HIDDEN_DIM,
                     num_layers=config.GATE_STACK_NUM_LAYERS,
@@ -623,7 +623,7 @@ class TestLinearModel(unittest.TestCase):
                 halting_threshold=config.HALTING_THRESHOLD,
                 halting_dropout=config.HALTING_DROPOUT,
                 halting_hidden_state_mode=config.HALTING_HIDDEN_STATE_MODE,
-                halting_stack_source=ControllerStackSource(
+                halting_stack_source=SubmoduleStackSource(
                     independent_flag=config.HALTING_STACK_INDEPENDENT_FLAG,
                     hidden_dim=config.HALTING_STACK_HIDDEN_DIM,
                     num_layers=config.HALTING_STACK_NUM_LAYERS,

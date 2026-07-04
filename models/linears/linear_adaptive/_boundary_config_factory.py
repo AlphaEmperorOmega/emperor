@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import models.linears.linear_adaptive.config as config
-from models.linears._builder_options import LinearStackOptions
+from models.linears._builder_options import MainLayerStackOptions
 from emperor.augmentations.adaptive_parameters.core.bias import DynamicBiasConfig
 from emperor.augmentations.adaptive_parameters.core.mask import AxisMaskConfig
 from emperor.augmentations.adaptive_parameters.core.weight import DynamicWeightConfig
@@ -68,7 +68,7 @@ class AdaptiveBoundaryProjectionOptions:
 
 @dataclass(frozen=True)
 class BoundaryConfigDependencies:
-    stack_options: LinearStackOptions | None
+    stack_options: MainLayerStackOptions | None
     input_boundary_options: AdaptiveBoundaryProjectionOptions | None
     output_boundary_options: AdaptiveBoundaryProjectionOptions | None
     adaptive_generator_stack_options: AdaptiveGeneratorStackOptions | None
@@ -108,11 +108,11 @@ class BoundaryConfigFactory:
 
     def __default_stack_options(
         self,
-        stack_options: LinearStackOptions | None,
-    ) -> LinearStackOptions:
+        stack_options: MainLayerStackOptions | None,
+    ) -> MainLayerStackOptions:
         if stack_options is not None:
             return stack_options
-        return LinearStackOptions(
+        return MainLayerStackOptions(
             hidden_dim=config.STACK_HIDDEN_DIM,
             bias_flag=config.STACK_BIAS_FLAG,
             layer_norm_position=config.STACK_LAYER_NORM_POSITION,

@@ -1,7 +1,5 @@
 from dataclasses import dataclass
-from typing import Any
 
-from emperor.base.layer.config import LayerConfig, LayerStackConfig
 from emperor.base.layer.residual import ResidualConnectionOptions
 from emperor.base.options import (
     ActivationOptions,
@@ -11,7 +9,7 @@ from emperor.base.options import (
 
 
 @dataclass(frozen=True)
-class ControllerStackSource:
+class SubmoduleStackSource:
     independent_flag: bool
     hidden_dim: int | None
     num_layers: int | None
@@ -25,7 +23,7 @@ class ControllerStackSource:
 
 
 @dataclass(frozen=True)
-class ControllerStackOptions:
+class SubmoduleStackOptions:
     hidden_dim: int
     num_layers: int
     last_layer_bias_option: LastLayerBiasOptions
@@ -37,76 +35,49 @@ class ControllerStackOptions:
     bias_flag: bool
 
 
-def resolve_enabled(enabled: bool | None, default: bool) -> bool:
-    return default if enabled is None else enabled
-
-
 def resolve_controller_stack_options(
-    source: ControllerStackSource,
-    defaults: ControllerStackOptions,
-) -> ControllerStackOptions:
+    source: SubmoduleStackSource,
+    defaults: SubmoduleStackOptions,
+) -> SubmoduleStackOptions:
     if not source.independent_flag:
         return defaults
-    return ControllerStackOptions(
-        hidden_dim=(
-            defaults.hidden_dim if source.hidden_dim is None else source.hidden_dim
-        ),
-        num_layers=(
-            defaults.num_layers if source.num_layers is None else source.num_layers
-        ),
-        last_layer_bias_option=(
-            defaults.last_layer_bias_option
-            if source.last_layer_bias_option is None
-            else source.last_layer_bias_option
-        ),
-        apply_output_pipeline_flag=(
-            defaults.apply_output_pipeline_flag
-            if source.apply_output_pipeline_flag is None
-            else source.apply_output_pipeline_flag
-        ),
-        activation=(
-            defaults.activation if source.activation is None else source.activation
-        ),
-        layer_norm_position=(
-            defaults.layer_norm_position
-            if source.layer_norm_position is None
-            else source.layer_norm_position
-        ),
-        residual_connection_option=(
-            defaults.residual_connection_option
-            if source.residual_connection_option is None
-            else source.residual_connection_option
-        ),
-        dropout_probability=(
-            defaults.dropout_probability
-            if source.dropout_probability is None
-            else source.dropout_probability
-        ),
-        bias_flag=defaults.bias_flag if source.bias_flag is None else source.bias_flag,
+    hidden_dim = defaults.hidden_dim if source.hidden_dim is None else source.hidden_dim
+    num_layers = defaults.num_layers if source.num_layers is None else source.num_layers
+    last_layer_bias_option = (
+        defaults.last_layer_bias_option
+        if source.last_layer_bias_option is None
+        else source.last_layer_bias_option
     )
-
-
-def build_controller_stack(
-    options: ControllerStackOptions,
-    *,
-    layer_model_config: Any,
-    hidden_dim: int | None = None,
-    output_dim: int | None = None,
-) -> LayerStackConfig:
-    return LayerStackConfig(
-        hidden_dim=options.hidden_dim if hidden_dim is None else hidden_dim,
-        output_dim=output_dim,
-        num_layers=options.num_layers,
-        last_layer_bias_option=options.last_layer_bias_option,
-        apply_output_pipeline_flag=options.apply_output_pipeline_flag,
-        layer_config=LayerConfig(
-            activation=options.activation,
-            layer_norm_position=options.layer_norm_position,
-            residual_connection_option=options.residual_connection_option,
-            dropout_probability=options.dropout_probability,
-            halting_config=None,
-            gate_config=None,
-            memory_config=None,
-            layer_model_config=layer_model_config,
-        ),
+    apply_output_pipeline_flag = (
+        defaults.apply_output_pipeline_flag
+        if source.apply_output_pipeline_flag is None
+        else source.apply_output_pipeline_flag
+    )
+    activation = defaults.activation if source.activation is None else source.activation
+    layer_norm_position = (
+        defaults.layer_norm_position
+        if source.layer_norm_position is None
+        else source.layer_norm_position
+    )
+    residual_connection_option = (
+        defaults.residual_connection_option
+        if source.residual_connection_option is None
+        else source.residual_connection_option
+    )
+    dropout_probability = (
+        defaults.dropout_probability
+        if source.dropout_probability is None
+        else source.dropout_probability
+    )
+    bias_flag = defaults.bias_flag if source.bias_flag is None else source.bias_flag
+    return SubmoduleStackOptions(
+        hidden_dim=hidden_dim,
+        num_layers=num_layers,
+        last_layer_bias_option=last_layer_bias_option,
+        apply_output_pipeline_flag=apply_output_pipeline_flag,
+        activation=activation,
+        layer_norm_position=layer_norm_position,
+        residual_connection_option=residual_connection_option,
+        dropout_probability=dropout_probability,
+        bias_flag=bias_flag,
     )
