@@ -25,7 +25,6 @@ from emperor.augmentations.adaptive_parameters.options import (
 )
 from emperor.base.layer.config import LayerConfig, LayerStackConfig, RecurrentLayerConfig
 from emperor.base.layer.gate import GateConfig
-from emperor.base.layer.residual import ResidualConnectionOptions
 from emperor.experts.config import MixtureOfExpertsModelConfig
 from emperor.experts.core.config import (
     MixtureOfExpertsConfig,
@@ -43,7 +42,8 @@ from models.adaptive_parameter_config_factory import (
 )
 from models.experts._builder_options import (
     ExpertsAdaptiveGeneratorStackOptions,
-    ExpertsControllerStackOptions,
+    ExpertsDynamicMemoryOptions,
+    ExpertsSubmoduleStackOptions,
     ExpertsLayerControllerOptions,
     ExpertsMixtureOptions,
     ExpertsRecurrentControllerOptions,
@@ -51,9 +51,13 @@ from models.experts._builder_options import (
     ExpertsSamplerOptions,
     ExpertsStackOptions,
 )
-from models.experts.experts_linear_adaptive._controller_stack import (
+from models.experts._controller_stack import (
     build_controller_stack,
 )
+from models.experts._gate_config_factory import ExpertsGateConfigFactory
+from models.experts._halting_config_factory import ExpertsHaltingConfigFactory
+from models.experts._memory_config_factory import ExpertsMemoryConfigFactory
+from models.experts._recurrent_config_factory import ExpertsRecurrentConfigFactory
 
 
 @dataclass(frozen=True)
@@ -83,12 +87,14 @@ class AdaptiveAugmentationDependencies:
 @dataclass(frozen=True)
 class ControlConfigDependencies:
     stack_options: ExpertsStackOptions
+    submodule_stack_options: ExpertsSubmoduleStackOptions
     mixture_options: ExpertsMixtureOptions
-    expert_stack_options: ExpertsControllerStackOptions
+    expert_stack_options: ExpertsSubmoduleStackOptions
     sampler_options: ExpertsSamplerOptions
     router_options: ExpertsRouterOptions
-    sampler_stack_options: ExpertsControllerStackOptions
+    sampler_stack_options: ExpertsSubmoduleStackOptions
     layer_controller_options: ExpertsLayerControllerOptions
+    dynamic_memory_options: ExpertsDynamicMemoryOptions
     recurrent_controller_options: ExpertsRecurrentControllerOptions
     adaptive_generator_stack_options: ExpertsAdaptiveGeneratorStackOptions
     adaptive_augmentation_options: AdaptiveAugmentationDependencies
@@ -99,12 +105,14 @@ class ControlConfigDependencies:
 class ControlConfigFactory:
     def __init__(self, dependencies: ControlConfigDependencies) -> None:
         self.stack_options = dependencies.stack_options
+        self.submodule_stack_options = dependencies.submodule_stack_options
         self.mixture_options = dependencies.mixture_options
         self.expert_stack_options = dependencies.expert_stack_options
         self.sampler_options = dependencies.sampler_options
         self.router_options = dependencies.router_options
         self.sampler_stack_options = dependencies.sampler_stack_options
         self.layer_controller_options = dependencies.layer_controller_options
+        self.dynamic_memory_options = dependencies.dynamic_memory_options
         self.recurrent_controller_options = dependencies.recurrent_controller_options
         self.adaptive_generator_stack_options = (
             dependencies.adaptive_generator_stack_options
@@ -114,9 +122,32 @@ class ControlConfigFactory:
         )
         self.hidden_dim = dependencies.hidden_dim
         self.output_dim = dependencies.output_dim
+        self.gate_config_factory = ExpertsGateConfigFactory(
+            layer_controller_options=self.layer_controller_options,
+            recurrent_controller_options=self.recurrent_controller_options,
+            submodule_stack_options=self.submodule_stack_options,
+        )
+        self.halting_config_factory = ExpertsHaltingConfigFactory(
+            layer_controller_options=self.layer_controller_options,
+            recurrent_controller_options=self.recurrent_controller_options,
+            submodule_stack_options=self.submodule_stack_options,
+            output_dim=self.output_dim,
+        )
+        self.memory_config_factory = ExpertsMemoryConfigFactory(
+            stack_options=self.stack_options,
+            dynamic_memory_options=self.dynamic_memory_options,
+            submodule_stack_options=self.submodule_stack_options,
+        )
+        self.recurrent_config_factory = ExpertsRecurrentConfigFactory(
+            recurrent_controller_options=self.recurrent_controller_options,
+            gate_config_factory=self.gate_config_factory,
+            halting_config_factory=self.halting_config_factory,
+        )
 
     def build(self) -> MixtureOfExpertsModelConfig | RecurrentLayerConfig:
-        return self.__maybe_wrap_recurrent(self.__build_main_model_config())
+        return self.recurrent_config_factory.build_config(
+            self.__build_main_model_config()
+        )
 
     def build_adaptive_linear_layer_config(
         self,
@@ -157,31 +188,12 @@ class ControlConfigFactory:
             stack_config=self.__build_main_stack_config(),
         )
 
-    def __maybe_wrap_recurrent(
-        self,
-        block_config: MixtureOfExpertsModelConfig,
-    ) -> MixtureOfExpertsModelConfig | RecurrentLayerConfig:
-        recurrent_options = self.recurrent_controller_options
-        if not recurrent_options.recurrent_flag:
-            return block_config
-        return RecurrentLayerConfig(
-            max_steps=recurrent_options.recurrent_max_steps,
-            recurrent_layer_norm_position=(
-                recurrent_options.recurrent_layer_norm_position
-            ),
-            block_config=block_config,
-            gate_config=self.__build_recurrent_gate_config(),
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
-            halting_config=self.__build_halting_config(
-                enabled_flag=recurrent_options.recurrent_halting_flag
-            ),
-        )
-
     def __build_main_stack_config(self) -> LayerStackConfig:
         stack_options = self.stack_options
         layer_controller = self.layer_controller_options
-        gate_config = self.__build_gate_config()
-        halting_config = self.__build_halting_config()
+        gate_config = self.gate_config_factory.build_gate_config()
+        halting_config = self.halting_config_factory.build_halting_config()
+        memory_config = self.memory_config_factory.build_memory_config()
         layer_config = self.__build_layer_config(gate_config, halting_config)
         return LayerStackConfig(
             input_dim=stack_options.hidden_dim,
@@ -191,6 +203,7 @@ class ControlConfigFactory:
             last_layer_bias_option=stack_options.last_layer_bias_option,
             apply_output_pipeline_flag=stack_options.apply_output_pipeline_flag,
             shared_gate_config=layer_controller.shared_gate_config,
+            shared_memory_config=memory_config,
             layer_config=layer_config,
         )
 
@@ -231,64 +244,6 @@ class ControlConfigFactory:
             ),
             sampler_config=self.__build_sampler_config(),
             expert_model_config=self.__build_expert_model_config(),
-        )
-
-    def __build_gate_config(
-        self,
-        enabled_flag: bool | None = None,
-    ) -> GateConfig | None:
-        layer_controller = self.layer_controller_options
-        if enabled_flag is None:
-            enabled_flag = layer_controller.stack_gate_flag
-        if not enabled_flag:
-            return None
-        model_config = self.__build_gate_model_config(enabled_flag=enabled_flag)
-        return GateConfig(
-            model_config=model_config,
-            option=layer_controller.gate_option,
-            activation=layer_controller.gate_activation,
-        )
-
-    def __build_recurrent_gate_config(self) -> GateConfig | None:
-        recurrent_options = self.recurrent_controller_options
-        if not recurrent_options.recurrent_gate_flag:
-            return None
-        model_config = self.__build_gate_model_config(
-            enabled_flag=recurrent_options.recurrent_gate_flag,
-        )
-        return GateConfig(
-            model_config=model_config,
-            option=recurrent_options.recurrent_gate_option,
-            activation=recurrent_options.recurrent_gate_activation,
-        )
-
-    def __build_gate_model_config(
-        self,
-        enabled_flag: bool,
-    ) -> LayerStackConfig | None:
-        if not enabled_flag:
-            return None
-        gate_stack_options = self.layer_controller_options.gate_stack_options
-        return self.__build_linear_controller_stack(gate_stack_options)
-
-    def __build_halting_config(
-        self,
-        enabled_flag: bool | None = None,
-    ) -> StickBreakingConfig | None:
-        layer_controller = self.layer_controller_options
-        if enabled_flag is None:
-            enabled_flag = layer_controller.stack_halting_flag
-        if not enabled_flag:
-            return None
-        halting_stack_options = layer_controller.halting_stack_options
-        halting_gate_config = self.__build_halting_gate_stack(
-            halting_stack_options
-        )
-        return StickBreakingConfig(
-            threshold=layer_controller.halting_threshold,
-            halting_dropout=layer_controller.halting_dropout,
-            hidden_state_mode=layer_controller.halting_hidden_state_mode,
-            halting_gate_config=halting_gate_config,
         )
 
     def __build_expert_model_config(self) -> LayerStackConfig:
@@ -396,33 +351,9 @@ class ControlConfigFactory:
             layer_model_config,
         )
 
-    def __build_linear_controller_stack(
-        self,
-        options: ExpertsControllerStackOptions,
-    ) -> LayerStackConfig:
-        layer_model_config = LinearLayerConfig(
-            bias_flag=options.bias_flag,
-        )
-        return self.__build_controller_stack(options, layer_model_config)
-
-    def __build_halting_gate_stack(
-        self,
-        options: ExpertsControllerStackOptions,
-    ) -> LayerStackConfig:
-        layer_controller = self.layer_controller_options
-        layer_model_config = LinearLayerConfig(
-            bias_flag=options.bias_flag,
-        )
-        return build_controller_stack(
-            options,
-            hidden_dim=options.hidden_dim or self.output_dim,
-            output_dim=layer_controller.halting_output_dim,
-            layer_model_config=layer_model_config,
-        )
-
     @staticmethod
     def __build_controller_stack(
-        options: ExpertsControllerStackOptions | ExpertsAdaptiveGeneratorStackOptions,
+        options: ExpertsSubmoduleStackOptions | ExpertsAdaptiveGeneratorStackOptions,
         layer_model_config: LinearLayerConfig | AdaptiveLinearLayerConfig,
     ) -> LayerStackConfig:
         return build_controller_stack(

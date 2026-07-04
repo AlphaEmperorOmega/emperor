@@ -26,8 +26,15 @@ from emperor.experts.core.options import (
 from emperor.experiments.base import RandomSearch
 from emperor.halting.options import HaltingHiddenStateModeOptions
 from emperor.linears.core.config import LinearLayerConfig
+from emperor.memory.config import (
+    GatedResidualDynamicMemoryConfig,
+    WeightedDynamicMemoryConfig,
+)
+from emperor.memory.options import MemoryPositionOptions
 from models.experts._builder_options import (
-    ExpertsControllerStackOptions,
+    ExpertsDynamicMemoryOptions,
+    ExpertsSubmoduleStackOptions,
+    ExpertsSubmoduleStackSource,
     ExpertsLayerControllerOptions,
     ExpertsMixtureOptions,
     ExpertsRecurrentControllerOptions,
@@ -147,6 +154,17 @@ class TestExpertsLinearModel(unittest.TestCase):
             last_layer_bias_option=LastLayerBiasOptions.ENABLED,
             apply_output_pipeline_flag=True,
         )
+        submodule_stack_options = ExpertsSubmoduleStackOptions(
+            hidden_dim=stack_options.hidden_dim,
+            num_layers=4,
+            last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
+            apply_output_pipeline_flag=False,
+            activation=ActivationOptions.ELU,
+            layer_norm_position=LayerNormPositionOptions.AFTER,
+            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            dropout_probability=0.06,
+            bias_flag=True,
+        )
         mixture_options = ExpertsMixtureOptions(
             top_k=2,
             num_experts=5,
@@ -157,7 +175,7 @@ class TestExpertsLinearModel(unittest.TestCase):
             weighting_position_option=ExpertWeightingPositionOptions.AFTER_EXPERTS,
             routing_initialization_mode=RoutingInitializationMode.SHARED,
         )
-        expert_stack_options = ExpertsControllerStackOptions(
+        expert_stack_options = ExpertsSubmoduleStackOptions(
             hidden_dim=stack_options.hidden_dim,
             num_layers=2,
             last_layer_bias_option=LastLayerBiasOptions.DISABLED,
@@ -180,7 +198,7 @@ class TestExpertsLinearModel(unittest.TestCase):
             mutual_information_loss_weight=0.14,
         )
         router_options = ExpertsRouterOptions(noisy_topk_flag=True)
-        sampler_stack_options = ExpertsControllerStackOptions(
+        sampler_stack_options = ExpertsSubmoduleStackOptions(
             hidden_dim=stack_options.hidden_dim,
             num_layers=2,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
@@ -191,7 +209,7 @@ class TestExpertsLinearModel(unittest.TestCase):
             dropout_probability=0.07,
             bias_flag=True,
         )
-        gate_stack_options = ExpertsControllerStackOptions(
+        gate_stack_options = ExpertsSubmoduleStackOptions(
             hidden_dim=18,
             num_layers=2,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
@@ -202,7 +220,7 @@ class TestExpertsLinearModel(unittest.TestCase):
             dropout_probability=0.03,
             bias_flag=False,
         )
-        halting_stack_options = ExpertsControllerStackOptions(
+        halting_stack_options = ExpertsSubmoduleStackOptions(
             hidden_dim=20,
             num_layers=2,
             last_layer_bias_option=LastLayerBiasOptions.DISABLED,
@@ -213,17 +231,55 @@ class TestExpertsLinearModel(unittest.TestCase):
             dropout_probability=0.04,
             bias_flag=False,
         )
+        memory_stack_options = ExpertsSubmoduleStackOptions(
+            hidden_dim=22,
+            num_layers=3,
+            last_layer_bias_option=LastLayerBiasOptions.DISABLED,
+            apply_output_pipeline_flag=True,
+            activation=ActivationOptions.SILU,
+            layer_norm_position=LayerNormPositionOptions.BEFORE,
+            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            dropout_probability=0.02,
+            bias_flag=False,
+        )
+
+        def stack_source(
+            options: ExpertsSubmoduleStackOptions,
+            *,
+            independent_flag: bool = True,
+        ) -> ExpertsSubmoduleStackSource:
+            return ExpertsSubmoduleStackSource(
+                independent_flag=independent_flag,
+                hidden_dim=options.hidden_dim,
+                num_layers=options.num_layers,
+                last_layer_bias_option=options.last_layer_bias_option,
+                apply_output_pipeline_flag=options.apply_output_pipeline_flag,
+                activation=options.activation,
+                layer_norm_position=options.layer_norm_position,
+                residual_connection_option=options.residual_connection_option,
+                dropout_probability=options.dropout_probability,
+                bias_flag=options.bias_flag,
+            )
+
         layer_controller_options = ExpertsLayerControllerOptions(
             stack_gate_flag=True,
             gate_option=LayerGateOptions.ADDITION,
             gate_activation=ActivationOptions.TANH,
-            gate_stack_options=gate_stack_options,
+            gate_stack_source=stack_source(gate_stack_options),
             stack_halting_flag=True,
             halting_threshold=0.63,
             halting_dropout=0.08,
             halting_hidden_state_mode=HaltingHiddenStateModeOptions.ACCUMULATED,
-            halting_stack_options=halting_stack_options,
+            halting_stack_source=stack_source(halting_stack_options),
             halting_output_dim=2,
+        )
+        dynamic_memory_options = ExpertsDynamicMemoryOptions(
+            memory_flag=True,
+            memory_option=WeightedDynamicMemoryConfig,
+            memory_position_option=MemoryPositionOptions.BEFORE_AFFINE,
+            memory_test_time_training_learning_rate=0.02,
+            memory_test_time_training_num_inner_steps=2,
+            memory_stack_source=stack_source(memory_stack_options),
         )
         recurrent_controller_options = ExpertsRecurrentControllerOptions(
             recurrent_flag=True,
@@ -232,7 +288,14 @@ class TestExpertsLinearModel(unittest.TestCase):
             recurrent_gate_flag=True,
             recurrent_gate_option=LayerGateOptions.MULTIPLIER,
             recurrent_gate_activation=ActivationOptions.SIGMOID,
+            recurrent_gate_stack_source=stack_source(gate_stack_options),
             recurrent_halting_flag=True,
+            recurrent_halting_threshold=0.71,
+            recurrent_halting_dropout=0.09,
+            recurrent_halting_hidden_state_mode=(
+                HaltingHiddenStateModeOptions.ACCUMULATED
+            ),
+            recurrent_halting_stack_source=stack_source(halting_stack_options),
         )
         flat_kwargs = {
             "batch_size": 3,
@@ -254,6 +317,25 @@ class TestExpertsLinearModel(unittest.TestCase):
             "stack_apply_output_pipeline_flag": (
                 stack_options.apply_output_pipeline_flag
             ),
+            "submodule_stack_hidden_dim": submodule_stack_options.hidden_dim,
+            "submodule_stack_num_layers": submodule_stack_options.num_layers,
+            "submodule_stack_last_layer_bias_option": (
+                submodule_stack_options.last_layer_bias_option
+            ),
+            "submodule_stack_apply_output_pipeline_flag": (
+                submodule_stack_options.apply_output_pipeline_flag
+            ),
+            "submodule_stack_activation": submodule_stack_options.activation,
+            "submodule_stack_layer_norm_position": (
+                submodule_stack_options.layer_norm_position
+            ),
+            "submodule_stack_residual_connection_option": (
+                submodule_stack_options.residual_connection_option
+            ),
+            "submodule_stack_dropout_probability": (
+                submodule_stack_options.dropout_probability
+            ),
+            "submodule_stack_bias_flag": submodule_stack_options.bias_flag,
             "top_k": mixture_options.top_k,
             "num_experts": mixture_options.num_experts,
             "capacity_factor": mixture_options.capacity_factor,
@@ -327,6 +409,7 @@ class TestExpertsLinearModel(unittest.TestCase):
             "stack_gate_flag": layer_controller_options.stack_gate_flag,
             "gate_option": layer_controller_options.gate_option,
             "gate_activation": layer_controller_options.gate_activation,
+            "gate_stack_independent_flag": True,
             "gate_stack_hidden_dim": gate_stack_options.hidden_dim,
             "gate_stack_layer_norm_position": (
                 gate_stack_options.layer_norm_position
@@ -352,6 +435,7 @@ class TestExpertsLinearModel(unittest.TestCase):
             "halting_hidden_state_mode": (
                 layer_controller_options.halting_hidden_state_mode
             ),
+            "halting_stack_independent_flag": True,
             "halting_stack_hidden_dim": halting_stack_options.hidden_dim,
             "halting_output_dim": layer_controller_options.halting_output_dim,
             "halting_stack_layer_norm_position": (
@@ -372,6 +456,35 @@ class TestExpertsLinearModel(unittest.TestCase):
                 halting_stack_options.apply_output_pipeline_flag
             ),
             "halting_stack_bias_flag": halting_stack_options.bias_flag,
+            "memory_flag": dynamic_memory_options.memory_flag,
+            "memory_option": dynamic_memory_options.memory_option,
+            "memory_position_option": dynamic_memory_options.memory_position_option,
+            "memory_test_time_training_learning_rate": (
+                dynamic_memory_options.memory_test_time_training_learning_rate
+            ),
+            "memory_test_time_training_num_inner_steps": (
+                dynamic_memory_options.memory_test_time_training_num_inner_steps
+            ),
+            "memory_stack_independent_flag": True,
+            "memory_stack_hidden_dim": memory_stack_options.hidden_dim,
+            "memory_stack_layer_norm_position": (
+                memory_stack_options.layer_norm_position
+            ),
+            "memory_stack_num_layers": memory_stack_options.num_layers,
+            "memory_stack_activation": memory_stack_options.activation,
+            "memory_stack_residual_connection_option": (
+                memory_stack_options.residual_connection_option
+            ),
+            "memory_stack_dropout_probability": (
+                memory_stack_options.dropout_probability
+            ),
+            "memory_stack_last_layer_bias_option": (
+                memory_stack_options.last_layer_bias_option
+            ),
+            "memory_stack_apply_output_pipeline_flag": (
+                memory_stack_options.apply_output_pipeline_flag
+            ),
+            "memory_stack_bias_flag": memory_stack_options.bias_flag,
             "recurrent_flag": recurrent_controller_options.recurrent_flag,
             "recurrent_max_steps": (
                 recurrent_controller_options.recurrent_max_steps
@@ -388,27 +501,85 @@ class TestExpertsLinearModel(unittest.TestCase):
             "recurrent_gate_activation": (
                 recurrent_controller_options.recurrent_gate_activation
             ),
+            "recurrent_gate_stack_independent_flag": True,
+            "recurrent_gate_stack_hidden_dim": gate_stack_options.hidden_dim,
+            "recurrent_gate_stack_layer_norm_position": (
+                gate_stack_options.layer_norm_position
+            ),
+            "recurrent_gate_stack_num_layers": gate_stack_options.num_layers,
+            "recurrent_gate_stack_activation": gate_stack_options.activation,
+            "recurrent_gate_stack_residual_connection_option": (
+                gate_stack_options.residual_connection_option
+            ),
+            "recurrent_gate_stack_dropout_probability": (
+                gate_stack_options.dropout_probability
+            ),
+            "recurrent_gate_stack_last_layer_bias_option": (
+                gate_stack_options.last_layer_bias_option
+            ),
+            "recurrent_gate_stack_apply_output_pipeline_flag": (
+                gate_stack_options.apply_output_pipeline_flag
+            ),
+            "recurrent_gate_stack_bias_flag": gate_stack_options.bias_flag,
             "recurrent_halting_flag": (
                 recurrent_controller_options.recurrent_halting_flag
             ),
+            "recurrent_halting_threshold": (
+                recurrent_controller_options.recurrent_halting_threshold
+            ),
+            "recurrent_halting_dropout": (
+                recurrent_controller_options.recurrent_halting_dropout
+            ),
+            "recurrent_halting_hidden_state_mode": (
+                recurrent_controller_options.recurrent_halting_hidden_state_mode
+            ),
+            "recurrent_halting_stack_independent_flag": True,
+            "recurrent_halting_stack_hidden_dim": halting_stack_options.hidden_dim,
+            "recurrent_halting_stack_layer_norm_position": (
+                halting_stack_options.layer_norm_position
+            ),
+            "recurrent_halting_stack_num_layers": halting_stack_options.num_layers,
+            "recurrent_halting_stack_activation": halting_stack_options.activation,
+            "recurrent_halting_stack_residual_connection_option": (
+                halting_stack_options.residual_connection_option
+            ),
+            "recurrent_halting_stack_dropout_probability": (
+                halting_stack_options.dropout_probability
+            ),
+            "recurrent_halting_stack_last_layer_bias_option": (
+                halting_stack_options.last_layer_bias_option
+            ),
+            "recurrent_halting_stack_apply_output_pipeline_flag": (
+                halting_stack_options.apply_output_pipeline_flag
+            ),
+            "recurrent_halting_stack_bias_flag": halting_stack_options.bias_flag,
         }
 
-        flat_cfg = ExpertsLinearConfigBuilder(**flat_kwargs).build()
-        grouped_cfg = ExpertsLinearConfigBuilder(
+        flat_builder = ExpertsLinearConfigBuilder(**flat_kwargs)
+        grouped_builder = ExpertsLinearConfigBuilder(
             batch_size=3,
             learning_rate=0.02,
             input_dim=8,
             output_dim=4,
             stack_options=stack_options,
+            submodule_stack_options=submodule_stack_options,
             mixture_options=mixture_options,
             expert_stack_options=expert_stack_options,
             sampler_options=sampler_options,
             router_options=router_options,
             sampler_stack_options=sampler_stack_options,
             layer_controller_options=layer_controller_options,
+            dynamic_memory_options=dynamic_memory_options,
             recurrent_controller_options=recurrent_controller_options,
-        ).build()
+        )
 
+        self.assertEqual(flat_builder.submodule_stack_options, submodule_stack_options)
+        self.assertEqual(
+            grouped_builder.submodule_stack_options,
+            submodule_stack_options,
+        )
+        flat_cfg = flat_builder.build()
+        grouped_cfg = grouped_builder.build()
         self.assertEqual(flat_cfg, grouped_cfg)
 
     def test_shared_gate_config_is_stored_on_stack_config(self):
@@ -442,12 +613,26 @@ class TestExpertsLinearModel(unittest.TestCase):
     def test_controller_stack_builder_kwargs_are_canonical(self):
         parameters = inspect.signature(ExpertsLinearConfigBuilder.__init__).parameters
         expected_names = {
+            "gate_stack_independent_flag",
             "gate_stack_hidden_dim",
             "gate_stack_layer_norm_position",
             "gate_stack_bias_flag",
+            "halting_stack_independent_flag",
             "halting_stack_hidden_dim",
             "halting_stack_layer_norm_position",
             "halting_stack_bias_flag",
+            "memory_stack_independent_flag",
+            "memory_stack_hidden_dim",
+            "memory_stack_layer_norm_position",
+            "memory_stack_bias_flag",
+            "recurrent_gate_stack_independent_flag",
+            "recurrent_gate_stack_hidden_dim",
+            "recurrent_gate_stack_layer_norm_position",
+            "recurrent_gate_stack_bias_flag",
+            "recurrent_halting_stack_independent_flag",
+            "recurrent_halting_stack_hidden_dim",
+            "recurrent_halting_stack_layer_norm_position",
+            "recurrent_halting_stack_bias_flag",
         }
         legacy_names = {name.replace("_stack_", "_") for name in expected_names}
 
@@ -466,10 +651,12 @@ class TestExpertsLinearModel(unittest.TestCase):
     def test_controller_stack_overrides_use_canonical_names(self):
         cfg = ExpertsLinearConfigBuilder(
             stack_gate_flag=True,
+            gate_stack_independent_flag=True,
             gate_stack_hidden_dim=32,
             gate_stack_layer_norm_position=LayerNormPositionOptions.AFTER,
             gate_stack_bias_flag=False,
             stack_halting_flag=True,
+            halting_stack_independent_flag=True,
             halting_stack_hidden_dim=48,
             halting_stack_layer_norm_position=LayerNormPositionOptions.BEFORE,
             halting_stack_bias_flag=False,
@@ -490,6 +677,255 @@ class TestExpertsLinearModel(unittest.TestCase):
             LayerNormPositionOptions.BEFORE,
         )
         self.assertFalse(halting_stack.layer_config.layer_model_config.bias_flag)
+
+    def test_disabled_memory_is_absent_from_stack_and_layer_configs(self):
+        cfg = ExpertsLinearConfigBuilder().build()
+        stack_cfg = cfg.experiment_config.model_config.stack_config
+
+        self.assertIsNone(stack_cfg.shared_memory_config)
+        self.assertIsNone(stack_cfg.layer_config.memory_config)
+
+    def test_memory_config_is_shared_on_stack_config(self):
+        cfg = ExpertsLinearConfigBuilder(memory_flag=True).build()
+        stack_cfg = cfg.experiment_config.model_config.stack_config
+        memory_cfg = stack_cfg.shared_memory_config
+
+        self.assertIsInstance(memory_cfg, GatedResidualDynamicMemoryConfig)
+        self.assertEqual(memory_cfg.input_dim, config.STACK_HIDDEN_DIM)
+        self.assertEqual(memory_cfg.output_dim, config.STACK_HIDDEN_DIM)
+        self.assertEqual(
+            memory_cfg.memory_position_option,
+            MemoryPositionOptions.AFTER_AFFINE,
+        )
+        self.assertIsNone(memory_cfg.test_time_training_learning_rate)
+        self.assertIsNone(memory_cfg.test_time_training_num_inner_steps)
+        self.assertIsNone(stack_cfg.layer_config.memory_config)
+        self.assertIsInstance(
+            memory_cfg.model_config.layer_config.layer_model_config,
+            LinearLayerConfig,
+        )
+
+    def test_memory_stack_overrides_require_independent_flag(self):
+        cfg = ExpertsLinearConfigBuilder(
+            memory_flag=True,
+            submodule_stack_hidden_dim=11,
+            submodule_stack_activation=ActivationOptions.RELU,
+            memory_stack_hidden_dim=44,
+            memory_stack_activation=ActivationOptions.TANH,
+        ).build()
+        memory_stack = (
+            cfg.experiment_config.model_config.stack_config.shared_memory_config
+            .model_config
+        )
+
+        self.assertEqual(memory_stack.hidden_dim, 11)
+        self.assertEqual(
+            memory_stack.layer_config.activation,
+            ActivationOptions.RELU,
+        )
+
+    def test_memory_config_uses_overrides_when_independent(self):
+        cfg = ExpertsLinearConfigBuilder(
+            memory_flag=True,
+            memory_option=WeightedDynamicMemoryConfig,
+            memory_position_option=MemoryPositionOptions.BEFORE_AFFINE,
+            memory_test_time_training_learning_rate=0.02,
+            memory_test_time_training_num_inner_steps=2,
+            memory_stack_independent_flag=True,
+            memory_stack_hidden_dim=12,
+            memory_stack_layer_norm_position=LayerNormPositionOptions.AFTER,
+            memory_stack_num_layers=3,
+            memory_stack_activation=ActivationOptions.SILU,
+            memory_stack_residual_connection_option=(
+                ResidualConnectionOptions.DISABLED
+            ),
+            memory_stack_dropout_probability=0.1,
+            memory_stack_last_layer_bias_option=LastLayerBiasOptions.DISABLED,
+            memory_stack_apply_output_pipeline_flag=True,
+            memory_stack_bias_flag=False,
+        ).build()
+        memory_cfg = cfg.experiment_config.model_config.stack_config.shared_memory_config
+        memory_stack = memory_cfg.model_config
+
+        self.assertIsInstance(memory_cfg, WeightedDynamicMemoryConfig)
+        self.assertEqual(
+            memory_cfg.memory_position_option,
+            MemoryPositionOptions.BEFORE_AFFINE,
+        )
+        self.assertEqual(memory_cfg.test_time_training_learning_rate, 0.02)
+        self.assertEqual(memory_cfg.test_time_training_num_inner_steps, 2)
+        self.assertEqual(memory_stack.hidden_dim, 12)
+        self.assertEqual(memory_stack.num_layers, 3)
+        self.assertEqual(
+            memory_stack.last_layer_bias_option,
+            LastLayerBiasOptions.DISABLED,
+        )
+        self.assertTrue(memory_stack.apply_output_pipeline_flag)
+        self.assertEqual(
+            memory_stack.layer_config.layer_norm_position,
+            LayerNormPositionOptions.AFTER,
+        )
+        self.assertEqual(memory_stack.layer_config.activation, ActivationOptions.SILU)
+        self.assertFalse(memory_stack.layer_config.layer_model_config.bias_flag)
+        self.assertIsNone(memory_stack.layer_config.memory_config)
+
+    def test_controller_stack_overrides_require_independent_flags(self):
+        cfg = ExpertsLinearConfigBuilder(
+            stack_gate_flag=True,
+            stack_halting_flag=True,
+            memory_flag=True,
+            submodule_stack_hidden_dim=11,
+            submodule_stack_activation=ActivationOptions.RELU,
+            gate_stack_hidden_dim=22,
+            gate_stack_activation=ActivationOptions.SILU,
+            halting_stack_hidden_dim=33,
+            halting_stack_activation=ActivationOptions.MISH,
+            memory_stack_hidden_dim=44,
+            memory_stack_activation=ActivationOptions.TANH,
+        ).build()
+        stack_cfg = cfg.experiment_config.model_config.stack_config
+
+        self.assertEqual(stack_cfg.layer_config.gate_config.model_config.hidden_dim, 11)
+        self.assertEqual(
+            stack_cfg.layer_config.gate_config.model_config.layer_config.activation,
+            ActivationOptions.RELU,
+        )
+        self.assertEqual(
+            stack_cfg.layer_config.halting_config.halting_gate_config.hidden_dim,
+            11,
+        )
+        self.assertEqual(
+            stack_cfg.layer_config.halting_config.halting_gate_config.layer_config.activation,
+            ActivationOptions.RELU,
+        )
+        self.assertEqual(stack_cfg.shared_memory_config.model_config.hidden_dim, 11)
+        self.assertEqual(
+            stack_cfg.shared_memory_config.model_config.layer_config.activation,
+            ActivationOptions.RELU,
+        )
+
+    def test_controller_stack_independent_flags_enable_controller_options(self):
+        cfg = ExpertsLinearConfigBuilder(
+            stack_gate_flag=True,
+            stack_halting_flag=True,
+            memory_flag=True,
+            submodule_stack_hidden_dim=11,
+            submodule_stack_activation=ActivationOptions.RELU,
+            gate_stack_independent_flag=True,
+            gate_stack_hidden_dim=22,
+            gate_stack_activation=ActivationOptions.SILU,
+            halting_stack_independent_flag=True,
+            halting_stack_hidden_dim=33,
+            halting_stack_activation=ActivationOptions.MISH,
+            memory_stack_independent_flag=True,
+            memory_stack_hidden_dim=44,
+            memory_stack_activation=ActivationOptions.TANH,
+        ).build()
+        stack_cfg = cfg.experiment_config.model_config.stack_config
+
+        self.assertEqual(stack_cfg.layer_config.gate_config.model_config.hidden_dim, 22)
+        self.assertEqual(
+            stack_cfg.layer_config.gate_config.model_config.layer_config.activation,
+            ActivationOptions.SILU,
+        )
+        self.assertEqual(
+            stack_cfg.layer_config.halting_config.halting_gate_config.hidden_dim,
+            33,
+        )
+        self.assertEqual(
+            stack_cfg.layer_config.halting_config.halting_gate_config.layer_config.activation,
+            ActivationOptions.MISH,
+        )
+        self.assertEqual(stack_cfg.shared_memory_config.model_config.hidden_dim, 44)
+        self.assertEqual(
+            stack_cfg.shared_memory_config.model_config.layer_config.activation,
+            ActivationOptions.TANH,
+        )
+
+    def test_recurrent_controllers_use_separate_stack_and_scalar_overrides(self):
+        cfg = ExpertsLinearConfigBuilder(
+            recurrent_flag=True,
+            stack_gate_flag=True,
+            gate_stack_independent_flag=True,
+            gate_stack_hidden_dim=32,
+            recurrent_gate_flag=True,
+            recurrent_gate_stack_independent_flag=True,
+            recurrent_gate_stack_hidden_dim=64,
+            stack_halting_flag=True,
+            halting_stack_independent_flag=True,
+            halting_threshold=0.55,
+            halting_stack_hidden_dim=40,
+            recurrent_halting_flag=True,
+            recurrent_halting_threshold=0.75,
+            recurrent_halting_dropout=0.2,
+            recurrent_halting_hidden_state_mode=(
+                HaltingHiddenStateModeOptions.ACCUMULATED
+            ),
+            recurrent_halting_stack_independent_flag=True,
+            recurrent_halting_stack_hidden_dim=72,
+        ).build()
+        recurrent_cfg = cfg.experiment_config.model_config
+        block_stack = recurrent_cfg.block_config.stack_config
+
+        self.assertIsInstance(recurrent_cfg, RecurrentLayerConfig)
+        self.assertEqual(block_stack.layer_config.gate_config.model_config.hidden_dim, 32)
+        self.assertEqual(recurrent_cfg.gate_config.model_config.hidden_dim, 64)
+        self.assertEqual(block_stack.layer_config.halting_config.threshold, 0.55)
+        self.assertEqual(recurrent_cfg.halting_config.threshold, 0.75)
+        self.assertEqual(recurrent_cfg.halting_config.halting_dropout, 0.2)
+        self.assertEqual(
+            recurrent_cfg.halting_config.hidden_state_mode,
+            HaltingHiddenStateModeOptions.ACCUMULATED,
+        )
+        self.assertEqual(
+            recurrent_cfg.halting_config.halting_gate_config.hidden_dim,
+            72,
+        )
+
+    def test_memory_enabled_forward_pass(self):
+        cfg = ExpertsLinearConfigBuilder(
+            input_dim=8,
+            stack_hidden_dim=8,
+            output_dim=4,
+            stack_num_layers=2,
+            memory_flag=True,
+        ).build()
+        model = Model(cfg)
+
+        output = model(torch.randn(2, 1, 2, 4))
+        logits = output[0] if isinstance(output, tuple) else output
+
+        self.assertEqual(logits.shape, (2, 4))
+
+    def test_controller_memory_presets_wire_expected_stack_configs(self):
+        expected_controllers = {
+            ExperimentPreset.MEMORY: (False, False, True),
+            ExperimentPreset.GATING_MEMORY: (True, False, True),
+            ExperimentPreset.HALTING_MEMORY: (False, True, True),
+            ExperimentPreset.GATING_HALTING_MEMORY: (True, True, True),
+        }
+
+        for preset, (
+            expected_gate,
+            expected_halting,
+            expected_memory,
+        ) in expected_controllers.items():
+            with self.subTest(preset=preset.name):
+                cfg = ExperimentPresets().get_config(preset)[0]
+                stack_cfg = cfg.experiment_config.model_config.stack_config
+
+                self.assertEqual(
+                    stack_cfg.layer_config.gate_config is not None,
+                    expected_gate,
+                )
+                self.assertEqual(
+                    stack_cfg.layer_config.halting_config is not None,
+                    expected_halting,
+                )
+                self.assertEqual(
+                    stack_cfg.shared_memory_config is not None,
+                    expected_memory,
+                )
 
     def test_gate_options_propagate_to_outer_stack_and_recurrent_wrapper(self):
         cfg = ExpertsLinearConfigBuilder(
@@ -533,13 +969,21 @@ class TestExpertsLinearModel(unittest.TestCase):
 
     def test_recurrent_presets_wrap_full_moe_model(self):
         expected_controllers = {
-            ExperimentPreset.RECURRENT: (False, False),
-            ExperimentPreset.RECURRENT_GATING: (True, False),
-            ExperimentPreset.RECURRENT_HALTING: (False, True),
-            ExperimentPreset.RECURRENT_GATING_HALTING: (True, True),
+            ExperimentPreset.RECURRENT: (False, False, False),
+            ExperimentPreset.RECURRENT_GATING: (True, False, False),
+            ExperimentPreset.RECURRENT_HALTING: (False, True, False),
+            ExperimentPreset.RECURRENT_GATING_HALTING: (True, True, False),
+            ExperimentPreset.RECURRENT_MEMORY: (False, False, True),
+            ExperimentPreset.RECURRENT_GATING_MEMORY: (True, False, True),
+            ExperimentPreset.RECURRENT_HALTING_MEMORY: (False, True, True),
+            ExperimentPreset.RECURRENT_GATING_HALTING_MEMORY: (True, True, True),
         }
 
-        for preset, (expected_gate, expected_halting) in expected_controllers.items():
+        for preset, (
+            expected_gate,
+            expected_halting,
+            expected_memory,
+        ) in expected_controllers.items():
             with self.subTest(preset=preset.name):
                 cfg = ExperimentPresets().get_config(preset)[0]
                 recurrent_cfg = cfg.experiment_config.model_config
@@ -554,6 +998,11 @@ class TestExpertsLinearModel(unittest.TestCase):
                 self.assertEqual(
                     recurrent_cfg.halting_config is not None,
                     expected_halting,
+                )
+                self.assertEqual(
+                    recurrent_cfg.block_config.stack_config.shared_memory_config
+                    is not None,
+                    expected_memory,
                 )
                 inner_layer_config = (
                     recurrent_cfg.block_config.stack_config.layer_config
