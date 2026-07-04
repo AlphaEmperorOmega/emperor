@@ -10,11 +10,11 @@ from emperor.base.options import (
 from emperor.halting.options import HaltingHiddenStateModeOptions
 from emperor.memory.config import DynamicMemoryConfig
 from emperor.memory.options import MemoryPositionOptions
-from models.linears._controller_stack import ControllerStackSource
+from models.linears._controller_stack import SubmoduleStackSource
 
 
 @dataclass(frozen=True)
-class LinearStackOptions:
+class MainLayerStackOptions:
     hidden_dim: int
     bias_flag: bool
     layer_norm_position: LayerNormPositionOptions
@@ -31,12 +31,12 @@ class LayerControllerOptions:
     stack_gate_flag: bool
     gate_option: LayerGateOptions | None
     gate_activation: ActivationOptions | None
-    gate_stack_source: ControllerStackSource
+    gate_stack_source: SubmoduleStackSource
     stack_halting_flag: bool
     halting_threshold: float
     halting_dropout: float
     halting_hidden_state_mode: HaltingHiddenStateModeOptions
-    halting_stack_source: ControllerStackSource
+    halting_stack_source: SubmoduleStackSource
     shared_gate_config: GateConfig | None = None
 
 
@@ -47,7 +47,7 @@ class DynamicMemoryOptions:
     memory_position_option: MemoryPositionOptions
     memory_test_time_training_learning_rate: float | None
     memory_test_time_training_num_inner_steps: int | None
-    memory_stack_source: ControllerStackSource
+    memory_stack_source: SubmoduleStackSource
 
 
 @dataclass(frozen=True)
@@ -58,9 +58,9 @@ class RecurrentControllerOptions:
     recurrent_gate_flag: bool
     recurrent_gate_option: LayerGateOptions | None
     recurrent_gate_activation: ActivationOptions | None
-    recurrent_gate_stack_source: ControllerStackSource
+    recurrent_gate_stack_source: SubmoduleStackSource
     recurrent_halting_flag: bool
     recurrent_halting_threshold: float
     recurrent_halting_dropout: float
     recurrent_halting_hidden_state_mode: HaltingHiddenStateModeOptions
-    recurrent_halting_stack_source: ControllerStackSource
+    recurrent_halting_stack_source: SubmoduleStackSource

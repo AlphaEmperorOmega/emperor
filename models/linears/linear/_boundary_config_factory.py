@@ -4,14 +4,14 @@ from emperor.base.layer.config import LayerConfig
 from emperor.base.layer.residual import ResidualConnectionOptions
 from emperor.base.options import ActivationOptions, LayerNormPositionOptions
 from emperor.linears.core.config import LinearLayerConfig
-from models.linears._builder_options import LinearStackOptions
+from models.linears._builder_options import MainLayerStackOptions
 
 import models.linears.linear.config as config
 
 
 @dataclass(frozen=True)
 class BoundaryConfigDependencies:
-    stack_options: LinearStackOptions | None
+    stack_options: MainLayerStackOptions | None
 
 
 class BoundaryConfigFactory:
@@ -22,11 +22,11 @@ class BoundaryConfigFactory:
 
     def __default_stack_options(
         self,
-        stack_options: LinearStackOptions | None,
-    ) -> LinearStackOptions:
+        stack_options: MainLayerStackOptions | None,
+    ) -> MainLayerStackOptions:
         if stack_options is not None:
             return stack_options
-        return LinearStackOptions(
+        return MainLayerStackOptions(
             hidden_dim=config.STACK_HIDDEN_DIM,
             bias_flag=config.STACK_BIAS_FLAG,
             layer_norm_position=config.STACK_LAYER_NORM_POSITION,

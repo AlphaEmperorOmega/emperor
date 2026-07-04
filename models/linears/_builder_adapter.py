@@ -6,7 +6,10 @@ from types import ModuleType
 from typing import Any
 
 from models.linears import _builder_options as linears_options
-from models.linears._controller_stack import ControllerStackOptions, ControllerStackSource
+from models.linears._controller_stack import (
+    SubmoduleStackOptions,
+    SubmoduleStackSource,
+)
 
 
 _TOP_LEVEL_KEYS = ("batch_size", "learning_rate", "input_dim", "output_dim")
@@ -268,8 +271,8 @@ def linear_flat_defaults(config_module: ModuleType) -> dict[str, Any]:
 
 def _default_linear_stack_options(
     config_module: ModuleType,
-) -> linears_options.LinearStackOptions:
-    return linears_options.LinearStackOptions(
+) -> linears_options.MainLayerStackOptions:
+    return linears_options.MainLayerStackOptions(
         hidden_dim=config_module.STACK_HIDDEN_DIM,
         bias_flag=config_module.STACK_BIAS_FLAG,
         layer_norm_position=config_module.STACK_LAYER_NORM_POSITION,
@@ -284,8 +287,8 @@ def _default_linear_stack_options(
 
 def _default_submodule_stack_options(
     config_module: ModuleType,
-) -> ControllerStackOptions:
-    return ControllerStackOptions(
+) -> SubmoduleStackOptions:
+    return SubmoduleStackOptions(
         hidden_dim=config_module.SUBMODULE_STACK_HIDDEN_DIM,
         num_layers=config_module.SUBMODULE_STACK_NUM_LAYERS,
         last_layer_bias_option=config_module.SUBMODULE_STACK_LAST_LAYER_BIAS_OPTION,
@@ -305,9 +308,9 @@ def _default_submodule_stack_options(
 def _default_controller_stack_source(
     config_module: ModuleType,
     prefix: str,
-) -> ControllerStackSource:
+) -> SubmoduleStackSource:
     config_prefix = prefix.upper()
-    return ControllerStackSource(
+    return SubmoduleStackSource(
         independent_flag=getattr(config_module, f"{config_prefix}_INDEPENDENT_FLAG"),
         hidden_dim=getattr(config_module, f"{config_prefix}_HIDDEN_DIM"),
         num_layers=getattr(config_module, f"{config_prefix}_NUM_LAYERS"),
@@ -613,8 +616,8 @@ def _linear_stack_options_from_kwargs(
     kwargs: dict[str, Any],
     config_module: ModuleType,
     *,
-    provided: linears_options.LinearStackOptions | None,
-) -> linears_options.LinearStackOptions:
+    provided: linears_options.MainLayerStackOptions | None,
+) -> linears_options.MainLayerStackOptions:
     options = provided or _default_linear_stack_options(config_module)
     updates = _pop_updates(
         kwargs,
@@ -638,8 +641,8 @@ def _submodule_stack_options_from_kwargs(
     kwargs: dict[str, Any],
     config_module: ModuleType,
     *,
-    provided: ControllerStackOptions | None,
-) -> ControllerStackOptions:
+    provided: SubmoduleStackOptions | None,
+) -> SubmoduleStackOptions:
     options = provided or _default_submodule_stack_options(config_module)
     updates = _pop_updates(
         kwargs,
@@ -667,8 +670,8 @@ def _controller_stack_source_from_kwargs(
     config_module: ModuleType,
     prefix: str,
     *,
-    provided: ControllerStackSource | None = None,
-) -> ControllerStackSource:
+    provided: SubmoduleStackSource | None = None,
+) -> SubmoduleStackSource:
     source = provided or _default_controller_stack_source(config_module, prefix)
     updates = _pop_updates(
         kwargs,
