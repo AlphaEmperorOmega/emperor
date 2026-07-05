@@ -59,15 +59,15 @@ MODEL_CATALOG: dict[str, ModelCatalogEntry] = {
         model="linear_adaptive",
         module_path="models.linears.linear_adaptive",
     ),
-    "experts/experts_linear": ModelCatalogEntry(
+    "experts/linear": ModelCatalogEntry(
         model_type="experts",
-        model="experts_linear",
-        module_path="models.experts.experts_linear",
+        model="linear",
+        module_path="models.experts.linear",
     ),
-    "experts/experts_linear_adaptive": ModelCatalogEntry(
+    "experts/linear_adaptive": ModelCatalogEntry(
         model_type="experts",
-        model="experts_linear_adaptive",
-        module_path="models.experts.experts_linear_adaptive",
+        model="linear_adaptive",
+        module_path="models.experts.linear_adaptive",
     ),
     "parametric/parametric_vector": ModelCatalogEntry(
         model_type="parametric",
@@ -110,9 +110,11 @@ _MODULE_TO_PUBLIC_ID = {
     entry.module_path: public_id for public_id, entry in MODEL_CATALOG.items()
 }
 
-FLAT_TO_PUBLIC_ID = {
-    public_id.rsplit("/", 1)[-1]: public_id for public_id in MODEL_CATALOG
-}
+FLAT_TO_PUBLIC_ID: dict[str, str] = {}
+for public_id in MODEL_CATALOG:
+    flat_name = public_id.rsplit("/", 1)[-1]
+    # Preserve legacy flat log names for the original catalog owner when names collide.
+    FLAT_TO_PUBLIC_ID.setdefault(flat_name, public_id)
 
 
 def is_safe_model_segment(value: str) -> bool:
