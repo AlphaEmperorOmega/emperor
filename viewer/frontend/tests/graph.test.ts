@@ -1224,6 +1224,78 @@ describe("buildChildSummaries", () => {
       { label: "Gate", kind: "child", sourceNodeId: "ctrl.gate_model" },
     ]);
   });
+
+  it("groups sampler summaries through router and the router logit stack", () => {
+    const g = graph(
+      [
+        node("moe", { typeName: "MixtureOfExperts", path: "moe" }),
+        node("moe.sampler", { typeName: "SamplerModel", path: "moe.sampler" }),
+        node("moe.sampler.sampler_model", {
+          typeName: "SamplerTopk",
+          path: "moe.sampler.sampler_model",
+        }),
+        node("moe.sampler.router", {
+          typeName: "RouterModel",
+          path: "moe.sampler.router",
+        }),
+        node("moe.sampler.router.model", {
+          typeName: "LayerStack",
+          path: "moe.sampler.router.model",
+        }),
+        node("moe.sampler.router.model.layers.0", {
+          typeName: "Layer",
+          path: "moe.sampler.router.model.layers.0",
+          details: { dims: "64 -> 4" },
+        }),
+        node("moe.sampler.router.model.layers.0.model", {
+          typeName: "LinearLayer",
+          path: "moe.sampler.router.model.layers.0.model",
+        }),
+      ],
+      [
+        ["moe", "moe.sampler"],
+        ["moe.sampler", "moe.sampler.sampler_model"],
+        ["moe.sampler", "moe.sampler.router"],
+        ["moe.sampler.router", "moe.sampler.router.model"],
+        ["moe.sampler.router.model", "moe.sampler.router.model.layers.0"],
+        [
+          "moe.sampler.router.model.layers.0",
+          "moe.sampler.router.model.layers.0.model",
+        ],
+      ],
+    );
+    const summaries = buildChildSummaries(g, buildGraphNavigation(g));
+
+    expect(summaries.get("moe.sampler")).toEqual([
+      {
+        label: "SamplerTopk",
+        kind: "child",
+        sourceNodeId: "moe.sampler.sampler_model",
+      },
+      {
+        label: "RouterModel",
+        kind: "child",
+        sourceNodeId: "moe.sampler.router",
+      },
+    ]);
+    expect(summaries.get("moe.sampler.router")).toEqual([
+      {
+        label: "LayerStack",
+        kind: "child",
+        sourceNodeId: "moe.sampler.router.model",
+      },
+    ]);
+    expect(summaries.get("moe.sampler.router.model")).toEqual([
+      {
+        label: "Layer 0",
+        nestedLabel: "LinearLayer",
+        dims: "64 -> 4",
+        kind: "child",
+        stackKind: "layer",
+        sourceNodeId: "moe.sampler.router.model.layers.0",
+      },
+    ]);
+  });
 });
 
 describe("buildExpertDiagrams", () => {
@@ -2196,6 +2268,55 @@ describe("filterGraphByDetail", () => {
     );
 
     expect(filterGraphByDetail(g, "simple")).toEqual(filterGraphByDetail(g, "basic"));
+  });
+
+  it("keeps sampler, router, and router logit stack grouped in basic views", () => {
+    const g = graph(
+      [
+        node("moe", { typeName: "MixtureOfExperts", path: "moe" }),
+        node("moe.sampler", {
+          typeName: "SamplerModel",
+          path: "moe.sampler",
+          graphRole: "internal",
+        }),
+        node("moe.sampler.router", {
+          typeName: "RouterModel",
+          path: "moe.sampler.router",
+          graphRole: "internal",
+        }),
+        node("moe.sampler.router.model", {
+          typeName: "LayerStack",
+          path: "moe.sampler.router.model",
+          graphRole: "internal",
+        }),
+        node("moe.sampler.router.model.layers.0", {
+          typeName: "Layer",
+          path: "moe.sampler.router.model.layers.0",
+        }),
+      ],
+      [
+        ["moe", "moe.sampler"],
+        ["moe.sampler", "moe.sampler.router"],
+        ["moe.sampler.router", "moe.sampler.router.model"],
+        ["moe.sampler.router.model", "moe.sampler.router.model.layers.0"],
+      ],
+    );
+
+    const filtered = filterGraphByDetail(g, "basic");
+
+    expect(filtered?.nodes.map((n) => n.id)).toEqual([
+      "moe",
+      "moe.sampler",
+      "moe.sampler.router",
+      "moe.sampler.router.model",
+      "moe.sampler.router.model.layers.0",
+    ]);
+    expect(filtered?.edges.map((edge) => [edge.source, edge.target])).toEqual([
+      ["moe", "moe.sampler"],
+      ["moe.sampler", "moe.sampler.router"],
+      ["moe.sampler.router", "moe.sampler.router.model"],
+      ["moe.sampler.router.model", "moe.sampler.router.model.layers.0"],
+    ]);
   });
 
   it("returns the graph untouched in full mode", () => {
