@@ -1,10 +1,8 @@
 import copy
 from dataclasses import dataclass
 
-from emperor.base.layer import LayerConfig, LayerStackConfig
 from emperor.base.utils import ConfigBase
 from emperor.halting.config import StickBreakingConfig
-from emperor.linears.core.config import LinearLayerConfig
 from emperor.neuron.core.config import (
     AxonsConfig,
     NeuronClusterConfig,
@@ -17,9 +15,12 @@ from emperor.sampler.core.config import RouterConfig, SamplerConfig
 from models.neuron.neuron_linear._builder_options import (
     ClusterRouteHaltingOptions,
     NeuronClusterCapacityOptions,
-    NeuronControllerStackOptions,
+    NeuronSubmoduleStackOptions,
     NeuronTerminalOptions,
     NeuronTerminalSamplerOptions,
+)
+from models.neuron.neuron_linear._controller_stack_config_factory import (
+    NeuronControllerStackConfigFactory,
 )
 from models.neuron.neuron_linear.experiment_config import HiddenBlockConfig
 
@@ -28,7 +29,7 @@ from models.neuron.neuron_linear.experiment_config import HiddenBlockConfig
 class NeuronControlConfigDependencies:
     cluster_capacity_options: NeuronClusterCapacityOptions
     terminal_options: NeuronTerminalOptions
-    terminal_router_options: NeuronControllerStackOptions
+    terminal_router_options: NeuronSubmoduleStackOptions
     terminal_sampler_options: NeuronTerminalSamplerOptions
     cluster_halting_options: ClusterRouteHaltingOptions
 
@@ -40,6 +41,7 @@ class NeuronControlConfigFactory:
         self.terminal_router_options = dependencies.terminal_router_options
         self.terminal_sampler_options = dependencies.terminal_sampler_options
         self.cluster_halting_options = dependencies.cluster_halting_options
+        self.controller_stack_config_factory = NeuronControllerStackConfigFactory()
 
     def build(
         self,
@@ -145,7 +147,7 @@ class NeuronControlConfigFactory:
             hidden_dim,
             num_experts,
         )
-        model_config = self.__build_controller_stack(
+        model_config = self.controller_stack_config_factory.build_config(
             router_options,
             input_dim=hidden_dim,
             hidden_dim=router_hidden_dim,
@@ -167,7 +169,7 @@ class NeuronControlConfigFactory:
         if not enabled_flag:
             return None
         stack_options = halting_options.stack_options
-        halting_gate_config = self.__build_controller_stack(
+        halting_gate_config = self.controller_stack_config_factory.build_config(
             stack_options,
             input_dim=hidden_dim,
             hidden_dim=stack_options.hidden_dim,
@@ -179,43 +181,6 @@ class NeuronControlConfigFactory:
             halting_dropout=halting_options.dropout,
             hidden_state_mode=halting_options.hidden_state_mode,
             halting_gate_config=halting_gate_config,
-        )
-
-    def __build_controller_stack(
-        self,
-        options: NeuronControllerStackOptions,
-        *,
-        input_dim: int,
-        hidden_dim: int,
-        output_dim: int,
-    ) -> LayerStackConfig:
-        layer_config = self.__build_layer_config(options)
-        return LayerStackConfig(
-            input_dim=input_dim,
-            hidden_dim=hidden_dim,
-            output_dim=output_dim,
-            num_layers=options.num_layers,
-            last_layer_bias_option=options.last_layer_bias_option,
-            apply_output_pipeline_flag=options.apply_output_pipeline_flag,
-            layer_config=layer_config,
-        )
-
-    @staticmethod
-    def __build_layer_config(
-        options: NeuronControllerStackOptions,
-    ) -> LayerConfig:
-        layer_model_config = LinearLayerConfig(
-            bias_flag=options.bias_flag,
-        )
-        return LayerConfig(
-            activation=options.activation,
-            residual_connection_option=options.residual_connection_option,
-            dropout_probability=options.dropout_probability,
-            layer_norm_position=options.layer_norm_position,
-            gate_config=None,
-            halting_config=None,
-            memory_config=None,
-            layer_model_config=layer_model_config,
         )
 
     def __terminal_num_experts(self) -> int:

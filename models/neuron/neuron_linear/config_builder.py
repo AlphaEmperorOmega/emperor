@@ -15,7 +15,7 @@ import models.neuron.neuron_linear.config as config
 from models.neuron.neuron_linear._builder_options import (
     ClusterRouteHaltingOptions,
     NeuronClusterCapacityOptions,
-    NeuronControllerStackOptions,
+    NeuronSubmoduleStackOptions,
     NeuronTerminalOptions,
     NeuronTerminalSamplerOptions,
 )
@@ -152,7 +152,7 @@ class NeuronLinearConfigBuilder:
         shared_gate_config: GateConfig | None = None,
         cluster_capacity_options: NeuronClusterCapacityOptions | None = None,
         terminal_options: NeuronTerminalOptions | None = None,
-        terminal_router_options: NeuronControllerStackOptions | None = None,
+        terminal_router_options: NeuronSubmoduleStackOptions | None = None,
         terminal_sampler_options: NeuronTerminalSamplerOptions | None = None,
         cluster_halting_options: ClusterRouteHaltingOptions | None = None,
         **source_kwargs: Any,
@@ -184,7 +184,7 @@ class NeuronLinearConfigBuilder:
         )
         terminal_router_options = (
             terminal_router_options
-            or NeuronControllerStackOptions(
+            or NeuronSubmoduleStackOptions(
                 hidden_dim=cluster_terminal_router_hidden_dim,
                 num_layers=cluster_terminal_router_num_layers,
                 last_layer_bias_option=(
@@ -233,7 +233,7 @@ class NeuronLinearConfigBuilder:
                 threshold=cluster_halting_threshold,
                 dropout=cluster_halting_dropout,
                 hidden_state_mode=cluster_halting_hidden_state_mode,
-                stack_options=NeuronControllerStackOptions(
+                stack_options=NeuronSubmoduleStackOptions(
                     hidden_dim=cluster_halting_stack_hidden_dim,
                     num_layers=cluster_halting_stack_num_layers,
                     last_layer_bias_option=(
