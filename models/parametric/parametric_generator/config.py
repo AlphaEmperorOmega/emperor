@@ -46,7 +46,7 @@ INPUT_DIM: int = 28**2
 OUTPUT_DIM: int = 10
 
 # Layer stack options
-STACK_HIDDEN_DIM: int = 64
+STACK_HIDDEN_DIM: int = 32
 STACK_NUM_LAYERS: int = 1
 STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
 STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
