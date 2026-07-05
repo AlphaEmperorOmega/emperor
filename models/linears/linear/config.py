@@ -41,13 +41,10 @@ TRAINER_ACCELERATOR: str = "cpu"
 TRAINER_DEVICES: int = 1
 TRAINER_GRADIENT_CLIP_VAL: float = 1.0
 
-# Callback
-CALLBACK_EARLY_STOPPING_METRIC: str = "validation/accuracy"
-CALLBACK_EARLY_STOPPING_PATIENCE: int = 10
 
 #########################################################################
 # LAYER STACK OPTIONS
-STACK_HIDDEN_DIM: int = 256
+STACK_HIDDEN_DIM: int = 32
 STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = LayerNormPositionOptions.BEFORE
 STACK_NUM_LAYERS: int = 5
 STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
