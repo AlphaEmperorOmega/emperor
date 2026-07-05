@@ -4,8 +4,8 @@ from dataclasses import fields
 import io
 import unittest
 
-import models.experts.experts_linear.config as experts_linear_config
-import models.linears.linear.config as linear_config
+import models.experts.linear.config as expert_linear_config
+import models.linears.linear.config as linears_linear_config
 import models.linears.linear_adaptive.config as linear_adaptive_config
 import models.transformer_encoder.bert_linear.config as bert_linear_config
 import models.transformer_encoder.vit_linear.config as vit_linear_config
@@ -21,8 +21,8 @@ from emperor.datasets.image.classification.mnist import Mnist
 from emperor.experiments.base import GridSearch
 from lightning.pytorch.callbacks import EarlyStopping
 from models.config_overrides import iter_supported_config_keys, print_config_options
-from models.experts.experts_linear import (
-    ExperimentPreset as ExpertsLinearExperimentPreset,
+from models.experts.linear import (
+    ExperimentPreset as ExpertLinearExperimentPreset,
 )
 from models.linears.linear import ExperimentPreset as LinearExperimentPreset
 from models.linears.linear_adaptive import ExperimentPreset
@@ -240,22 +240,22 @@ class TestExperimentConfigOverrideParsing(
         self.assertFalse(
             any(key.startswith(boundary_stack_prefixes) for key in supported_keys)
         )
-        self.assertIn("ADAPTIVE_SUBMODULE_STACK_HIDDEN_DIM", supported_keys)
-        self.assertIn("ADAPTIVE_SUBMODULE_STACK_BIAS_FLAG", supported_keys)
+        self.assertIn("ADAPTIVE_GENERATOR_STACK_HIDDEN_DIM", supported_keys)
+        self.assertIn("ADAPTIVE_GENERATOR_STACK_BIAS_FLAG", supported_keys)
         self.assertFalse(
             any(key.endswith("_LAYER_ADAPTIVE_FLAG") for key in supported_keys)
         )
 
-    def test_global_adaptive_submodule_stack_flags_parse_to_builder_params(self):
+    def test_global_adaptive_generator_stack_flags_parse_to_builder_params(self):
         args = self.make_parser().parse_args(
             [
                 "--preset",
                 "single-model-weight",
-                "--adaptive-submodule-stack-hidden-dim",
+                "--adaptive-generator-stack-hidden-dim",
                 "21",
-                "--adaptive-submodule-stack-num-layers",
+                "--adaptive-generator-stack-num-layers",
                 "3",
-                "--adaptive-submodule-stack-bias-flag",
+                "--adaptive-generator-stack-bias-flag",
                 "false",
             ]
         )
@@ -274,6 +274,27 @@ class TestExperimentConfigOverrideParsing(
             mode.config_overrides["adaptive_generator_stack_bias_flag"],
             False,
         )
+
+    def test_removed_adaptive_generator_alias_flags_are_rejected(self):
+        old_submodule_stack_flag = "adaptive-" + "submodule-stack"
+        old_stack_flag = "adaptive-" + "stack"
+        removed_flags = [
+            f"--{old_submodule_stack_flag}-hidden-dim",
+            f"--{old_stack_flag}-hidden-dim",
+        ]
+
+        for removed_flag in removed_flags:
+            with self.subTest(flag=removed_flag):
+                with contextlib.redirect_stderr(io.StringIO()):
+                    with self.assertRaises(SystemExit):
+                        self.make_parser().parse_args(
+                            [
+                                "--preset",
+                                "single-model-weight",
+                                removed_flag,
+                                "21",
+                            ]
+                        )
 
     def test_named_config_flags_parse_bool_and_string_values(self):
         args = self.make_parser().parse_args(
@@ -342,70 +363,97 @@ class TestExperimentConfigOverrideParsing(
                     ]
                 )
 
-    def test_legacy_controller_stack_flags_parse_to_canonical_params(self):
+    def test_controller_stack_flags_parse_to_builder_params(self):
         parser = get_experiment_parser(
-            ExpertsLinearExperimentPreset.names(),
-            "models.experts.experts_linear",
+            ExpertLinearExperimentPreset.names(),
+            "models.experts.linear",
         )
         args = parser.parse_args(
             [
                 "--preset",
                 "baseline",
-                "--gate-hidden-dim",
+                "--gate-stack-hidden-dim",
                 "32",
-                "--gate-layer-norm-position",
+                "--gate-stack-layer-norm-position",
                 "AFTER",
-                "--gate-bias-flag",
+                "--gate-stack-bias-flag",
                 "false",
-                "--halting-hidden-dim",
+                "--halting-stack-hidden-dim",
                 "48",
-                "--halting-layer-norm-position",
+                "--halting-stack-layer-norm-position",
                 "BEFORE",
-                "--halting-bias-flag",
+                "--halting-stack-bias-flag",
                 "false",
             ]
         )
 
-        mode = resolve_experiment_mode(args, ExpertsLinearExperimentPreset)
+        mode = resolve_experiment_mode(args, ExpertLinearExperimentPreset)
 
         self.assertEqual(mode.config_overrides["gate_stack_hidden_dim"], 32)
         self.assertIs(
             mode.config_overrides["gate_stack_layer_norm_position"],
-            experts_linear_config.LayerNormPositionOptions.AFTER,
+            expert_linear_config.LayerNormPositionOptions.AFTER,
         )
         self.assertFalse(mode.config_overrides["gate_stack_bias_flag"])
         self.assertEqual(mode.config_overrides["halting_stack_hidden_dim"], 48)
         self.assertIs(
             mode.config_overrides["halting_stack_layer_norm_position"],
-            experts_linear_config.LayerNormPositionOptions.BEFORE,
+            expert_linear_config.LayerNormPositionOptions.BEFORE,
         )
         self.assertFalse(mode.config_overrides["halting_stack_bias_flag"])
 
+    def test_legacy_controller_stack_flags_are_rejected(self):
+        parser = get_experiment_parser(
+            ExpertLinearExperimentPreset.names(),
+            "models.experts.linear",
+        )
+        removed_flags = [
+            "--gate-" + "hidden-dim",
+            "--gate-" + "layer-norm-position",
+            "--gate-" + "bias-flag",
+            "--halting-" + "hidden-dim",
+            "--halting-" + "layer-norm-position",
+            "--halting-" + "bias-flag",
+        ]
+
+        for removed_flag in removed_flags:
+            with self.subTest(flag=removed_flag):
+                with contextlib.redirect_stderr(io.StringIO()):
+                    with self.assertRaises(SystemExit):
+                        parser.parse_args(
+                            [
+                                "--preset",
+                                "baseline",
+                                removed_flag,
+                                "32",
+                            ]
+                        )
+
     def test_monitor_resolver_builds_callbacks_for_valid_names(self):
         callbacks = resolve_monitor_callbacks(
-            linear_config,
+            linears_linear_config,
             ["linear", "halting"],
         )
 
         self.assertEqual(
             [type(callback) for callback in callbacks],
             [
-                linear_config.LinearMonitorCallback,
-                linear_config.HaltingMonitorCallback,
+                linears_linear_config.LinearMonitorCallback,
+                linears_linear_config.HaltingMonitorCallback,
             ],
         )
 
     def test_monitor_resolver_deduplicates_repeated_names(self):
         callbacks = resolve_monitor_callbacks(
-            linear_config,
+            linears_linear_config,
             ["linear", "linear", "halting", "linear"],
         )
 
         self.assertEqual(
             [type(callback) for callback in callbacks],
             [
-                linear_config.LinearMonitorCallback,
-                linear_config.HaltingMonitorCallback,
+                linears_linear_config.LinearMonitorCallback,
+                linears_linear_config.HaltingMonitorCallback,
             ],
         )
 
@@ -419,7 +467,7 @@ class TestExperimentConfigOverrideParsing(
             ),
         ):
             resolve_monitor_callbacks(
-                linear_config,
+                linears_linear_config,
                 ["linear", "does-not-exist"],
             )
 
@@ -445,8 +493,8 @@ class TestExperimentConfigOverrideParsing(
         self.assertEqual(
             [type(callback) for callback in mode.monitor_callbacks],
             [
-                linear_config.LinearMonitorCallback,
-                linear_config.HaltingMonitorCallback,
+                linears_linear_config.LinearMonitorCallback,
+                linears_linear_config.HaltingMonitorCallback,
             ],
         )
 
@@ -582,6 +630,39 @@ class TestExperimentConfigOverrideParsing(
 
         with self.assertRaises(argparse.ArgumentTypeError):
             self.resolve_args(args)
+
+    def test_legacy_search_set_keys_raise_argument_error(self):
+        cases = [
+            (
+                self.make_parser(),
+                ExperimentPreset,
+                "single-model-weight",
+                "adaptive_" + "submodule_stack_hidden_dim=21,22",
+            ),
+            (
+                get_experiment_parser(
+                    ExpertLinearExperimentPreset.names(),
+                    "models.experts.linear",
+                ),
+                ExpertLinearExperimentPreset,
+                "baseline",
+                "gate_" + "hidden_dim=32,64",
+            ),
+        ]
+
+        for parser, preset_enum, preset, search_set in cases:
+            with self.subTest(search_set=search_set):
+                args = parser.parse_args(
+                    [
+                        "--preset",
+                        preset,
+                        "--grid-search",
+                        "--search-set",
+                        search_set,
+                    ]
+                )
+                with self.assertRaises(argparse.ArgumentTypeError):
+                    resolve_experiment_mode(args, preset_enum)
 
     def test_fixed_override_and_search_axis_conflict_raises(self):
         args = self.make_parser().parse_args(

@@ -1065,7 +1065,7 @@ class TestLinearLayerAdaptiveStack(unittest.TestCase):
                                     non_none_grads = [g for g in grads if g is not None]
                                     self.assertTrue(len(non_none_grads) > 0)
 
-    def test_active_adaptive_stack_components_receive_gradients(self):
+    def test_active_adaptive_generator_components_receive_gradients(self):
         input_dim = hidden_dim = output_dim = 4
         cfg = self.preset(
             input_dim=input_dim,
