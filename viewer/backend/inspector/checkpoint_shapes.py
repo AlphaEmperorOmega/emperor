@@ -312,6 +312,7 @@ def _config_overrides(
         label="sampler_stack_num_layers",
     )
     if sampler_layer_count is not None:
+        overrides["sampler_stack_independent_flag"] = True
         overrides["sampler_stack_num_layers"] = sampler_layer_count
 
     expert_count = _expert_count(tensor_shapes, diagnostics)

@@ -128,8 +128,8 @@ class InspectorDiscoveryTests(unittest.TestCase):
         self.assertGreaterEqual(
             models,
             {
-                "experts/experts_linear",
-                "experts/experts_linear_adaptive",
+                "experts/linear",
+                "experts/linear_adaptive",
                 "linears/linear",
                 "linears/linear_adaptive",
                 "neuron/neuron_linear",
@@ -167,7 +167,7 @@ class InspectorDiscoveryTests(unittest.TestCase):
         }
         adaptive_monitor_by_name = {
             monitor["name"]: monitor
-            for monitor in list_model_monitors("experts/experts_linear_adaptive")
+            for monitor in list_model_monitors("experts/linear_adaptive")
         }
         attention_monitor_by_name = {
             monitor["name"]: monitor
@@ -216,6 +216,7 @@ class InspectorDiscoveryTests(unittest.TestCase):
                 "weight-bank",
                 "recurrent-layer",
                 "layer-controller",
+                "memory",
             },
         )
         self.assertIn("image", adaptive_monitor_by_name["sampler"]["kinds"])

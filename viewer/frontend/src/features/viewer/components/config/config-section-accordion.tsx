@@ -12,6 +12,7 @@ import {
   controlledSectionState,
   fieldValue,
   hasOverride as fieldHasOverride,
+  inheritedStackSectionHint,
   modifiedCount,
   presetOwnedCount,
   sectionCountLabel,
@@ -304,6 +305,10 @@ export function ConfigSectionAccordion({
   const hasBoth = sectionHasOverride && hasPreset;
   const isDisabled = Boolean(disabledReason);
   const panelId = `${id}-fields`;
+  const stackInheritanceHint = inheritedStackSectionHint(
+    { title, fields, controlFieldKey: controlField?.key },
+    overrides,
+  );
   const stateContainerClass = hasBoth
     ? "border-amber/35 bg-[linear-gradient(135deg,rgba(255,209,102,0.075),rgba(167,139,250,0.105))] shadow-[0_20px_46px_-32px_rgba(167,139,250,0.35)] ring-1 ring-violet/25 hover:border-violet/45"
     : sectionHasOverride
@@ -471,6 +476,17 @@ export function ConfigSectionAccordion({
               onReset={onFieldReset}
               controlId={controlFieldId}
             />
+          )}
+          {stackInheritanceHint && (
+            <Badge
+              variant={stackInheritanceHint.isCustom ? "success" : "info"}
+              data-config-section-stack-hint={stackInheritanceHint.sourceTitle}
+              title={stackInheritanceHint.title}
+              aria-label={stackInheritanceHint.title}
+              className="h-[23px] shrink-0 items-center px-1.5 py-0"
+            >
+              {stackInheritanceHint.label}
+            </Badge>
           )}
           <ConfigMetricBadge count={fields.length} kind="fields" focusable={false} />
           <ConfigMetricBadge

@@ -812,6 +812,9 @@ class InspectorGraphTests(unittest.TestCase):
             checkpoint_shapes.config_overrides["sampler_stack_num_layers"],
             4,
         )
+        self.assertTrue(
+            checkpoint_shapes.config_overrides["sampler_stack_independent_flag"]
+        )
         self.assertEqual(checkpoint_shapes.config_overrides["expert_num_experts"], 3)
 
     def test_checkpoint_shape_extractor_counts_transformer_layers(self) -> None:
@@ -1762,7 +1765,7 @@ class InspectorGraphTests(unittest.TestCase):
                 self.assertTrue(node_by_id[node_id]["details"]["gate"])
 
     def test_graph_serializer_reports_expert_metadata(self) -> None:
-        result = inspect_model("experts/experts_linear", "baseline")
+        result = inspect_model("experts/linear", "baseline")
         expert_model = next(
             node for node in result["nodes"] if node["typeName"] == "MixtureOfExperts"
         )
@@ -1779,7 +1782,7 @@ class InspectorGraphTests(unittest.TestCase):
                 self.assertEqual(node["details"]["routingMode"], "LAYER")
 
     def test_inspect_experts_then_linear_keeps_linear_graph_identity(self) -> None:
-        experts_result = inspect_model("experts/experts_linear", "baseline")
+        experts_result = inspect_model("experts/linear", "baseline")
         experts_type_names = {node["typeName"] for node in experts_result["nodes"]}
         self.assertIn("MixtureOfExperts", experts_type_names)
 

@@ -36,6 +36,13 @@ export type ConfigSearchState = {
   selectedFieldKey?: string | null;
 };
 
+export type InheritedStackSectionHint = {
+  label: string;
+  title: string;
+  sourceTitle: string;
+  isCustom: boolean;
+};
+
 export function configKeyToken(key: string) {
   return key.trim().replace(/-/g, "_").toLowerCase();
 }
@@ -87,6 +94,24 @@ const CONTROLLED_SECTION_FLAG_KEYS_BY_TITLE = new Map([
   ["Halting Stack Options", "halting_stack_independent_flag"],
   ["Memory Options", "memory_flag"],
   ["Memory Stack Options", "memory_stack_independent_flag"],
+  ["Router Stack Options", "sampler_stack_independent_flag"],
+  ["Expert Gate Options", "expert_gate_flag"],
+  ["Expert Gate Stack Options", "expert_gate_stack_independent_flag"],
+  ["Expert Halting Options", "expert_halting_flag"],
+  ["Expert Halting Stack Options", "expert_halting_stack_independent_flag"],
+  ["Expert Memory Options", "expert_memory_flag"],
+  ["Expert Memory Stack Options", "expert_memory_stack_independent_flag"],
+  ["Expert Recurrent Layer Options", "expert_recurrent_flag"],
+  ["Expert Recurrent Gate Options", "expert_recurrent_gate_flag"],
+  [
+    "Expert Recurrent Gate Stack Options",
+    "expert_recurrent_gate_stack_independent_flag",
+  ],
+  ["Expert Recurrent Halting Options", "expert_recurrent_halting_flag"],
+  [
+    "Expert Recurrent Halting Stack Options",
+    "expert_recurrent_halting_stack_independent_flag",
+  ],
   ["Recurrent Layer Options", "recurrent_flag"],
   ["Recurrent Gate Options", "recurrent_gate_flag"],
   ["Recurrent Gate Stack Options", "recurrent_gate_stack_independent_flag"],
@@ -103,6 +128,26 @@ const CONTROLLED_SECTION_FLAG_KEYS_BY_TITLE = new Map([
   ["Diagonal Generator Stack Options", "diagonal_generator_stack_independent_flag"],
   ["Mask Options", "mask_option_flag"],
   ["Mask Stack Options", "mask_generator_stack_independent_flag"],
+  ["Router Weight Generator Options", "router_weight_option_flag"],
+  [
+    "Router Weight Generator Stack Options",
+    "router_weight_generator_stack_independent_flag",
+  ],
+  ["Router Bias Generator Options", "router_bias_option_flag"],
+  [
+    "Router Bias Generator Stack Options",
+    "router_bias_generator_stack_independent_flag",
+  ],
+  ["Router Diagonal Generator Options", "router_diagonal_option_flag"],
+  [
+    "Router Diagonal Generator Stack Options",
+    "router_diagonal_generator_stack_independent_flag",
+  ],
+  ["Router Mask Options", "router_mask_option_flag"],
+  [
+    "Router Mask Stack Options",
+    "router_mask_generator_stack_independent_flag",
+  ],
 ]);
 
 const FALLBACK_CONTROLLED_SECTION_FLAG_KEYS = new Set([
@@ -110,6 +155,142 @@ const FALLBACK_CONTROLLED_SECTION_FLAG_KEYS = new Set([
   "halting_flag",
   "memory_flag",
   "recurrent_flag",
+]);
+
+const INHERITED_STACK_SECTIONS_BY_TITLE = new Map([
+  [
+    "Gate Stack Options",
+    {
+      sourceTitle: "Layer Stack Submodule Options",
+      inheritedLabel: "Inherits Submodule Stack",
+    },
+  ],
+  [
+    "Halting Stack Options",
+    {
+      sourceTitle: "Layer Stack Submodule Options",
+      inheritedLabel: "Inherits Submodule Stack",
+    },
+  ],
+  [
+    "Memory Stack Options",
+    {
+      sourceTitle: "Layer Stack Submodule Options",
+      inheritedLabel: "Inherits Submodule Stack",
+    },
+  ],
+  [
+    "Router Stack Options",
+    {
+      sourceTitle: "Layer Stack Submodule Options",
+      inheritedLabel: "Inherits Submodule Stack",
+    },
+  ],
+  [
+    "Expert Gate Stack Options",
+    {
+      sourceTitle: "Expert Stack Options",
+      inheritedLabel: "Inherits Expert Stack",
+    },
+  ],
+  [
+    "Expert Halting Stack Options",
+    {
+      sourceTitle: "Expert Stack Options",
+      inheritedLabel: "Inherits Expert Stack",
+    },
+  ],
+  [
+    "Expert Memory Stack Options",
+    {
+      sourceTitle: "Expert Stack Options",
+      inheritedLabel: "Inherits Expert Stack",
+    },
+  ],
+  [
+    "Expert Recurrent Gate Stack Options",
+    {
+      sourceTitle: "Expert Stack Options",
+      inheritedLabel: "Inherits Expert Stack",
+    },
+  ],
+  [
+    "Expert Recurrent Halting Stack Options",
+    {
+      sourceTitle: "Expert Stack Options",
+      inheritedLabel: "Inherits Expert Stack",
+    },
+  ],
+  [
+    "Recurrent Gate Stack Options",
+    {
+      sourceTitle: "Gate Stack Options",
+      inheritedLabel: "Inherits Gate Stack",
+    },
+  ],
+  [
+    "Recurrent Halting Stack Options",
+    {
+      sourceTitle: "Halting Stack Options",
+      inheritedLabel: "Inherits Halting Stack",
+    },
+  ],
+  [
+    "Weight Generator Stack Options",
+    {
+      sourceTitle: "Adaptive Submodule Stack Options",
+      inheritedLabel: "Inherits Adaptive Stack",
+    },
+  ],
+  [
+    "Bias Generator Stack Options",
+    {
+      sourceTitle: "Adaptive Submodule Stack Options",
+      inheritedLabel: "Inherits Adaptive Stack",
+    },
+  ],
+  [
+    "Diagonal Generator Stack Options",
+    {
+      sourceTitle: "Adaptive Submodule Stack Options",
+      inheritedLabel: "Inherits Adaptive Stack",
+    },
+  ],
+  [
+    "Mask Stack Options",
+    {
+      sourceTitle: "Adaptive Submodule Stack Options",
+      inheritedLabel: "Inherits Adaptive Stack",
+    },
+  ],
+  [
+    "Router Weight Generator Stack Options",
+    {
+      sourceTitle: "Adaptive Submodule Stack Options",
+      inheritedLabel: "Inherits Adaptive Stack",
+    },
+  ],
+  [
+    "Router Bias Generator Stack Options",
+    {
+      sourceTitle: "Adaptive Submodule Stack Options",
+      inheritedLabel: "Inherits Adaptive Stack",
+    },
+  ],
+  [
+    "Router Diagonal Generator Stack Options",
+    {
+      sourceTitle: "Adaptive Submodule Stack Options",
+      inheritedLabel: "Inherits Adaptive Stack",
+    },
+  ],
+  [
+    "Router Mask Stack Options",
+    {
+      sourceTitle: "Adaptive Submodule Stack Options",
+      inheritedLabel: "Inherits Adaptive Stack",
+    },
+  ],
 ]);
 
 const GENERAL_CONFIG_SECTION = "General";
@@ -198,6 +379,10 @@ export const ADAPTIVE_OPTION_PAIRS = [
   { flagKey: "bias_option_flag", optionKey: "bias_option" },
   { flagKey: "diagonal_option_flag", optionKey: "diagonal_option" },
   { flagKey: "mask_option_flag", optionKey: "row_mask_option" },
+  { flagKey: "router_weight_option_flag", optionKey: "router_weight_option" },
+  { flagKey: "router_bias_option_flag", optionKey: "router_bias_option" },
+  { flagKey: "router_diagonal_option_flag", optionKey: "router_diagonal_option" },
+  { flagKey: "router_mask_option_flag", optionKey: "router_row_mask_option" },
 ] as const;
 
 function configFieldByKey(fields: ConfigField[], key: string) {
@@ -365,7 +550,9 @@ function isEnabledConfigValue(value: string) {
   return ["true", "1", "yes", "on"].includes(value.trim().toLowerCase());
 }
 
-export function controlledSectionFlagField(section: ConfigSection) {
+export function controlledSectionFlagField(
+  section: Pick<ConfigSection, "title" | "fields" | "controlFieldKey">,
+) {
   const controlFieldKey =
     section.controlFieldKey ?? CONTROLLED_SECTION_FLAG_KEYS_BY_TITLE.get(section.title);
   if (controlFieldKey) {
@@ -410,6 +597,33 @@ export function controlledSectionState(
       controlField && !isEnabled
         ? controlledSectionDisabledReason(section, controlField)
         : undefined,
+  };
+}
+
+export function inheritedStackSectionHint(
+  section: Pick<ConfigSection, "title" | "fields" | "controlFieldKey">,
+  overrides: OverrideValues,
+): InheritedStackSectionHint | undefined {
+  const inheritance = INHERITED_STACK_SECTIONS_BY_TITLE.get(section.title);
+  if (!inheritance) {
+    return undefined;
+  }
+
+  const controlField = controlledSectionFlagField(section);
+  if (!controlField) {
+    return undefined;
+  }
+
+  const isCustom = isEnabledConfigValue(fieldValue(controlField, overrides));
+  const title = isCustom
+    ? `Uses ${section.title} values while ${controlField.label} is on. Disable it to inherit ${inheritance.sourceTitle}.`
+    : `Uses ${inheritance.sourceTitle} while ${controlField.label} is off. Enable it to use ${section.title} values.`;
+
+  return {
+    label: isCustom ? "Custom Stack" : inheritance.inheritedLabel,
+    title,
+    sourceTitle: inheritance.sourceTitle,
+    isCustom,
   };
 }
 
@@ -710,12 +924,21 @@ const STACK_CHILD_TITLE_BY_PREFIX = new Map([
   ["gate_", "Gate Stack Options"],
   ["halting_", "Halting Stack Options"],
   ["memory_", "Memory Stack Options"],
+  ["expert_gate_", "Expert Gate Stack Options"],
+  ["expert_halting_", "Expert Halting Stack Options"],
+  ["expert_memory_", "Expert Memory Stack Options"],
+  ["expert_recurrent_gate_", "Expert Recurrent Gate Stack Options"],
+  ["expert_recurrent_halting_", "Expert Recurrent Halting Stack Options"],
   ["recurrent_gate_", "Recurrent Gate Stack Options"],
   ["recurrent_halting_", "Recurrent Halting Stack Options"],
   ["weight_generator_", "Weight Generator Stack Options"],
   ["bias_generator_", "Bias Generator Stack Options"],
   ["diagonal_generator_", "Diagonal Generator Stack Options"],
   ["mask_generator_", "Mask Stack Options"],
+  ["router_weight_generator_", "Router Weight Generator Stack Options"],
+  ["router_bias_generator_", "Router Bias Generator Stack Options"],
+  ["router_diagonal_generator_", "Router Diagonal Generator Stack Options"],
+  ["router_mask_generator_", "Router Mask Stack Options"],
 ]);
 
 function sectionTitleImpliesStackPrefix(section: ConfigSection, prefix: string) {
@@ -732,12 +955,29 @@ const SECTION_OWNED_STACK_PREFIXES_BY_TITLE = new Map([
   ["Gate Stack Options", new Set(["gate_"])],
   ["Halting Stack Options", new Set(["halting_"])],
   ["Memory Stack Options", new Set(["memory_"])],
+  ["Expert Stack Options", new Set(["expert_"])],
+  ["Expert Gate Stack Options", new Set(["expert_gate_"])],
+  ["Expert Halting Stack Options", new Set(["expert_halting_"])],
+  ["Expert Memory Stack Options", new Set(["expert_memory_"])],
+  ["Expert Recurrent Gate Stack Options", new Set(["expert_recurrent_gate_"])],
+  [
+    "Expert Recurrent Halting Stack Options",
+    new Set(["expert_recurrent_halting_"]),
+  ],
   ["Recurrent Gate Stack Options", new Set(["recurrent_gate_"])],
   ["Recurrent Halting Stack Options", new Set(["recurrent_halting_"])],
   ["Weight Generator Stack Options", new Set(["weight_generator_"])],
   ["Bias Generator Stack Options", new Set(["bias_generator_"])],
   ["Diagonal Generator Stack Options", new Set(["diagonal_generator_"])],
   ["Mask Stack Options", new Set(["mask_generator_"])],
+  ["Router Weight Generator Stack Options", new Set(["router_weight_generator_"])],
+  ["Router Bias Generator Stack Options", new Set(["router_bias_generator_"])],
+  [
+    "Router Diagonal Generator Stack Options",
+    new Set(["router_diagonal_generator_"]),
+  ],
+  ["Router Mask Stack Options", new Set(["router_mask_generator_"])],
+  ["Router Stack Options", new Set(["sampler_"])],
 ]);
 
 function sectionTitleOwnsStackPrefix(
@@ -910,6 +1150,56 @@ const CHILD_SECTION_TITLES_BY_TITLE = new Map([
   ["Bias Generator Options", ["Bias Generator Stack Options"]],
   ["Diagonal Generator Options", ["Diagonal Generator Stack Options"]],
   ["Mask Options", ["Mask Stack Options"]],
+  ["Mixture Of Experts Model Options", ["Expert Stack Options"]],
+  [
+    "Expert Stack Options",
+    [
+      "Expert Gate Options",
+      "Expert Halting Options",
+      "Expert Memory Options",
+      "Expert Recurrent Layer Options",
+      "Weight Generator Options",
+      "Bias Generator Options",
+      "Diagonal Generator Options",
+      "Mask Options",
+    ],
+  ],
+  ["Expert Gate Options", ["Expert Gate Stack Options"]],
+  ["Expert Halting Options", ["Expert Halting Stack Options"]],
+  ["Expert Memory Options", ["Expert Memory Stack Options"]],
+  [
+    "Expert Recurrent Layer Options",
+    ["Expert Recurrent Gate Options", "Expert Recurrent Halting Options"],
+  ],
+  [
+    "Expert Recurrent Gate Options",
+    ["Expert Recurrent Gate Stack Options"],
+  ],
+  [
+    "Expert Recurrent Halting Options",
+    ["Expert Recurrent Halting Stack Options"],
+  ],
+  ["Sampler Model Options", ["Router Options"]],
+  ["Router Options", ["Router Stack Options"]],
+  [
+    "Router Stack Options",
+    [
+      "Router Weight Generator Options",
+      "Router Bias Generator Options",
+      "Router Diagonal Generator Options",
+      "Router Mask Options",
+    ],
+  ],
+  [
+    "Router Weight Generator Options",
+    ["Router Weight Generator Stack Options"],
+  ],
+  ["Router Bias Generator Options", ["Router Bias Generator Stack Options"]],
+  [
+    "Router Diagonal Generator Options",
+    ["Router Diagonal Generator Stack Options"],
+  ],
+  ["Router Mask Options", ["Router Mask Stack Options"]],
 ]);
 
 function parentSectionTitlesByChildTitle() {

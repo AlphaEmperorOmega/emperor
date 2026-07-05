@@ -539,11 +539,15 @@ export function useTargetConfigState({
     (modelType: string) => {
       setSelectedModelType(modelType);
       const firstModel = modelsForType(catalogModels, modelType)[0];
-      if (firstModel && firstModel.model !== selectedModel) {
+      if (
+        firstModel &&
+        (firstModel.modelType !== selectedModelType ||
+          firstModel.model !== selectedModel)
+      ) {
         selectModel(firstModel.model, firstModel.modelType);
       }
     },
-    [catalogModels, selectModel, selectedModel],
+    [catalogModels, selectModel, selectedModel, selectedModelType],
   );
 
   const resetTrainingSelectionsForModel = useCallback(() => {
@@ -608,6 +612,7 @@ export function useTargetConfigState({
     const modelsInSelectedType = modelsForType(catalogModels, nextModelType);
     if (
       !selectedModel ||
+      selectedModelType !== nextModelType ||
       !modelsInSelectedType.some((model) => model.model === selectedModel)
     ) {
       const firstModel = modelsInSelectedType[0];

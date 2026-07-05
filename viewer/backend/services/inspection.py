@@ -26,6 +26,10 @@ _ADAPTIVE_FLAG_KEYS = {
     "bias_option_flag",
     "diagonal_option_flag",
     "mask_option_flag",
+    "router_weight_option_flag",
+    "router_bias_option_flag",
+    "router_diagonal_option_flag",
+    "router_mask_option_flag",
 }
 _ADAPTIVE_OPTION_KEYS = {
     "weight_option",
@@ -40,6 +44,10 @@ _ADAPTIVE_OPTION_KEYS = {
     "output_layer_bias_option",
     "output_layer_diagonal_option",
     "output_layer_row_mask_option",
+    "router_weight_option",
+    "router_bias_option",
+    "router_diagonal_option",
+    "router_row_mask_option",
 }
 
 

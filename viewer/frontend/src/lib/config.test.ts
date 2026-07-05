@@ -8,6 +8,7 @@ import {
   disabledConfigFieldReasons,
   effectivePresetOverrides,
   filterConfigSectionsForSearch,
+  inheritedStackSectionHint,
   isDefaultConfigFieldValue,
   lockedOverrideKeys,
   normalizeAdaptiveOptionOverrides,
@@ -50,6 +51,27 @@ function stackFieldFromCanonical(
     type: canonical.type,
     choices: canonical.choices,
   });
+}
+
+function inheritedStackHintSection(
+  title: string,
+  controlFieldKey: string,
+  controlFieldLabel: string,
+): ConfigSection {
+  return {
+    title,
+    controlFieldKey,
+    fields: [
+      field({
+        key: controlFieldKey,
+        label: controlFieldLabel,
+        type: "bool",
+        default: false,
+        choices: [true, false],
+        section: title,
+      }),
+    ],
+  };
 }
 
 const adaptiveOptionFields = [
@@ -219,6 +241,45 @@ describe("adaptive option override helpers", () => {
     }
   });
 
+  it("selects and clears router adaptive options with their own flags", () => {
+    const routerFields = [
+      field({
+        key: "router_weight_option_flag",
+        type: "bool",
+        default: false,
+        choices: [true, false],
+        section: "Router Weight Generator Options",
+      }),
+      field({
+        key: "router_weight_option",
+        type: "class",
+        default: null,
+        nullable: true,
+        choices: [
+          "DualModelDynamicWeightConfig",
+          "LayeredWeightedBankDynamicWeightConfig",
+        ],
+        section: "Router Weight Generator Options",
+      }),
+    ];
+
+    expect(
+      normalizeAdaptiveOptionOverrides(routerFields, {
+        router_weight_option_flag: "true",
+      }),
+    ).toMatchObject({
+      router_weight_option_flag: "true",
+      router_weight_option: "DualModelDynamicWeightConfig",
+    });
+
+    expect(
+      normalizeAdaptiveOptionOverrides(routerFields, {
+        router_weight_option_flag: "false",
+        router_weight_option: "LayeredWeightedBankDynamicWeightConfig",
+      }),
+    ).toEqual({ router_weight_option_flag: "false" });
+  });
+
   it("clears only the paired adaptive option when a flag is disabled", () => {
     const normalized = normalizeAdaptiveOptionOverrides(adaptiveOptionFields, {
       weight_option_flag: "false",
@@ -297,6 +358,108 @@ describe("preset override helpers", () => {
 });
 
 describe("config section controls", () => {
+  it("reports router stack inheritance while its independent flag is off", () => {
+    const section = inheritedStackHintSection(
+      "Router Stack Options",
+      "sampler_stack_independent_flag",
+      "sampler stack independent flag",
+    );
+
+    expect(inheritedStackSectionHint(section, {})).toEqual({
+      label: "Inherits Submodule Stack",
+      title:
+        "Uses Layer Stack Submodule Options while sampler stack independent flag is off. Enable it to use Router Stack Options values.",
+      sourceTitle: "Layer Stack Submodule Options",
+      isCustom: false,
+    });
+  });
+
+  it("reports router stack customization while its independent flag is on", () => {
+    const section = inheritedStackHintSection(
+      "Router Stack Options",
+      "sampler_stack_independent_flag",
+      "sampler stack independent flag",
+    );
+
+    expect(
+      inheritedStackSectionHint(section, {
+        sampler_stack_independent_flag: "true",
+      }),
+    ).toEqual({
+      label: "Custom Stack",
+      title:
+        "Uses Router Stack Options values while sampler stack independent flag is on. Disable it to inherit Layer Stack Submodule Options.",
+      sourceTitle: "Layer Stack Submodule Options",
+      isCustom: true,
+    });
+  });
+
+  it("reports immediate inherited sources for recurrent stack sections", () => {
+    const recurrentGateSection = inheritedStackHintSection(
+      "Recurrent Gate Stack Options",
+      "recurrent_gate_stack_independent_flag",
+      "recurrent gate stack independent flag",
+    );
+    const recurrentHaltingSection = inheritedStackHintSection(
+      "Recurrent Halting Stack Options",
+      "recurrent_halting_stack_independent_flag",
+      "recurrent halting stack independent flag",
+    );
+
+    expect(inheritedStackSectionHint(recurrentGateSection, {})).toMatchObject({
+      label: "Inherits Gate Stack",
+      sourceTitle: "Gate Stack Options",
+      isCustom: false,
+    });
+    expect(inheritedStackSectionHint(recurrentHaltingSection, {})).toMatchObject({
+      label: "Inherits Halting Stack",
+      sourceTitle: "Halting Stack Options",
+      isCustom: false,
+    });
+  });
+
+  it("reports expert controller stack inheritance from expert stack options", () => {
+    const expertGateSection = inheritedStackHintSection(
+      "Expert Gate Stack Options",
+      "expert_gate_stack_independent_flag",
+      "expert gate stack independent flag",
+    );
+    const expertRecurrentGateSection = inheritedStackHintSection(
+      "Expert Recurrent Gate Stack Options",
+      "expert_recurrent_gate_stack_independent_flag",
+      "expert recurrent gate stack independent flag",
+    );
+
+    expect(inheritedStackSectionHint(expertGateSection, {})).toMatchObject({
+      label: "Inherits Expert Stack",
+      sourceTitle: "Expert Stack Options",
+      isCustom: false,
+    });
+    expect(
+      inheritedStackSectionHint(expertRecurrentGateSection, {
+        expert_recurrent_gate_stack_independent_flag: "true",
+      }),
+    ).toMatchObject({
+      label: "Custom Stack",
+      sourceTitle: "Expert Stack Options",
+      isCustom: true,
+    });
+  });
+
+  it("does not report inheritance hints for non-inherited sections", () => {
+    const section: ConfigSection = {
+      title: "Layer Stack Options",
+      fields: [
+        field({
+          key: "stack_hidden_dim",
+          section: "Layer Stack Options",
+        }),
+      ],
+    };
+
+    expect(inheritedStackSectionHint(section, {})).toBeUndefined();
+  });
+
   it("keeps exact comment-section ancestors visible for nested search matches", () => {
     const sections: ConfigSection[] = [
       {
@@ -353,6 +516,614 @@ describe("config section controls", () => {
     expect(recurrentSection.children?.[0]?.children?.[0]?.title).toBe(
       "Recurrent Gate Stack Options",
     );
+  });
+
+  it("nests experts sampler router sections under the sampler model section", () => {
+    const sections: ConfigSection[] = [
+      {
+        title: "Sampler Model Options",
+        fields: [
+          field({
+            key: "sampler_threshold",
+            type: "float",
+            default: 0,
+            section: "Sampler Model Options",
+          }),
+          field({
+            key: "sampler_switch_loss_weight",
+            type: "float",
+            default: 0,
+            section: "Sampler Model Options",
+          }),
+        ],
+      },
+      {
+        title: "Router Options",
+        fields: [
+          field({
+            key: "router_noisy_topk_flag",
+            type: "bool",
+            default: false,
+            choices: [true, false],
+            section: "Router Options",
+          }),
+        ],
+      },
+      {
+        title: "Router Stack Options",
+        fields: [
+          field({
+            key: "sampler_stack_independent_flag",
+            type: "bool",
+            default: false,
+            choices: [true, false],
+            section: "Router Stack Options",
+          }),
+          field({
+            key: "sampler_stack_hidden_dim",
+            default: null,
+            nullable: true,
+            section: "Router Stack Options",
+          }),
+          field({
+            key: "sampler_stack_num_layers",
+            default: null,
+            nullable: true,
+            section: "Router Stack Options",
+          }),
+          field({
+            key: "sampler_bias_flag",
+            type: "bool",
+            default: true,
+            choices: [true, false],
+            section: "Router Stack Options",
+          }),
+        ],
+      },
+    ];
+
+    const [samplerSection] = deriveNestedConfigSections(sections);
+    const routerSection = samplerSection.children?.[0];
+    const routerStackSection = routerSection?.children?.[0];
+
+    expect(samplerSection.title).toBe("Sampler Model Options");
+    expect(samplerSection.fields.map((item) => item.key)).toEqual([
+      "sampler_threshold",
+      "sampler_switch_loss_weight",
+    ]);
+    expect(samplerSection.children?.map((section) => section.title)).toEqual([
+      "Router Options",
+    ]);
+    expect(routerSection?.fields.map((item) => item.key)).toEqual([
+      "router_noisy_topk_flag",
+    ]);
+    expect(routerSection?.children?.map((section) => section.title)).toEqual([
+      "Router Stack Options",
+    ]);
+    expect(routerStackSection?.controlFieldKey).toBe(
+      "sampler_stack_independent_flag",
+    );
+    expect(routerStackSection?.fields.map((item) => item.key)).toEqual([
+      "sampler_stack_independent_flag",
+      "sampler_stack_hidden_dim",
+      "sampler_stack_num_layers",
+      "sampler_bias_flag",
+    ]);
+    expect(routerStackSection?.children).toBeUndefined();
+
+    const disabledByDefault = disabledConfigFieldReasons(sections, {});
+    expect(disabledByDefault.has("sampler_stack_independent_flag")).toBe(false);
+    expect(disabledByDefault.get("sampler_stack_hidden_dim")).toContain(
+      "sampler_stack_independent_flag",
+    );
+
+    const enabled = disabledConfigFieldReasons(sections, {
+      sampler_stack_independent_flag: "true",
+    });
+    expect(enabled.has("sampler_stack_hidden_dim")).toBe(false);
+  });
+
+  it("keeps experts sampler and router ancestors visible for router stack search matches", () => {
+    const sections: ConfigSection[] = [
+      {
+        title: "Sampler Model Options",
+        fields: [
+          field({
+            key: "sampler_threshold",
+            type: "float",
+            default: 0,
+            section: "Sampler Model Options",
+          }),
+        ],
+      },
+      {
+        title: "Router Options",
+        fields: [
+          field({
+            key: "router_noisy_topk_flag",
+            type: "bool",
+            default: false,
+            choices: [true, false],
+            section: "Router Options",
+          }),
+        ],
+      },
+      {
+        title: "Router Stack Options",
+        fields: [
+          field({
+            key: "sampler_stack_independent_flag",
+            type: "bool",
+            default: false,
+            choices: [true, false],
+            section: "Router Stack Options",
+          }),
+          field({
+            key: "sampler_stack_hidden_dim",
+            label: "sampler stack hidden dim",
+            default: null,
+            nullable: true,
+            section: "Router Stack Options",
+          }),
+        ],
+      },
+    ];
+
+    const filtered = filterConfigSectionsForSearch(sections, {
+      query: "sampler stack hidden dim",
+    });
+    const [samplerSection] = deriveNestedConfigSections(filtered, sections);
+
+    expect(filtered.map((section) => section.title)).toEqual([
+      "Sampler Model Options",
+      "Router Options",
+      "Router Stack Options",
+    ]);
+    expect(samplerSection.title).toBe("Sampler Model Options");
+    expect(samplerSection.children?.[0]?.title).toBe("Router Options");
+    expect(samplerSection.children?.[0]?.children?.[0]?.title).toBe(
+      "Router Stack Options",
+    );
+  });
+
+  it("nests expert stack options under mixture of experts model options", () => {
+    const mixtureFields = [
+      field({
+        key: "expert_top_k",
+        type: "int",
+        default: 2,
+        section: "Mixture Of Experts Model Options",
+      }),
+      field({
+        key: "expert_num_experts",
+        type: "int",
+        default: 4,
+        section: "Mixture Of Experts Model Options",
+      }),
+      field({
+        key: "expert_compute_expert_mixture_flag",
+        type: "bool",
+        default: true,
+        choices: [true, false],
+        section: "Mixture Of Experts Model Options",
+      }),
+      field({
+        key: "expert_weighted_parameters_flag",
+        type: "bool",
+        default: true,
+        choices: [true, false],
+        section: "Mixture Of Experts Model Options",
+      }),
+    ];
+    const expertStackFields = [
+      field({
+        key: "expert_stack_hidden_dim",
+        type: "int",
+        default: 256,
+        section: "Expert Stack Options",
+      }),
+      field({
+        key: "expert_stack_num_layers",
+        type: "int",
+        default: 2,
+        section: "Expert Stack Options",
+      }),
+      field({
+        key: "expert_stack_activation",
+        type: "enum",
+        default: "GELU",
+        choices: ["GELU", "TANH"],
+        section: "Expert Stack Options",
+      }),
+      field({
+        key: "expert_stack_residual_connection_option",
+        type: "enum",
+        default: "DISABLED",
+        choices: ["DISABLED", "RESIDUAL"],
+        section: "Expert Stack Options",
+      }),
+      field({
+        key: "expert_stack_dropout_probability",
+        type: "float",
+        default: 0,
+        section: "Expert Stack Options",
+      }),
+      field({
+        key: "expert_stack_layer_norm_position",
+        type: "enum",
+        default: "DISABLED",
+        choices: ["DISABLED", "BEFORE", "AFTER"],
+        section: "Expert Stack Options",
+      }),
+      field({
+        key: "expert_stack_last_layer_bias_option",
+        type: "enum",
+        default: "DEFAULT",
+        choices: ["DEFAULT", "DISABLED"],
+        section: "Expert Stack Options",
+      }),
+      field({
+        key: "expert_stack_apply_output_pipeline_flag",
+        type: "bool",
+        default: true,
+        choices: [true, false],
+        section: "Expert Stack Options",
+      }),
+      field({
+        key: "expert_bias_flag",
+        type: "bool",
+        default: true,
+        choices: [true, false],
+        section: "Expert Stack Options",
+      }),
+    ];
+    const sections: ConfigSection[] = [
+      {
+        title: "Mixture Of Experts Model Options",
+        fields: mixtureFields,
+      },
+      {
+        title: "Expert Stack Options",
+        fields: expertStackFields,
+      },
+    ];
+
+    const [mixtureSection] = deriveNestedConfigSections(sections);
+    const expertStackSection = mixtureSection.children?.[0];
+
+    expect(mixtureSection.title).toBe("Mixture Of Experts Model Options");
+    expect(mixtureSection.fields.map((item) => item.key)).toEqual(
+      mixtureFields.map((item) => item.key),
+    );
+    expect(mixtureSection.children?.map((section) => section.title)).toEqual([
+      "Expert Stack Options",
+    ]);
+    expect(expertStackSection?.controlFieldKey).toBeUndefined();
+    expect(expertStackSection?.fields.map((item) => item.key)).toEqual(
+      expertStackFields.map((item) => item.key),
+    );
+    expect(expertStackSection?.children).toBeUndefined();
+    expect(disabledConfigFieldReasons(sections, {}).size).toBe(0);
+  });
+
+  it("nests expert-internal controller sections under expert stack options", () => {
+    const sections: ConfigSection[] = [
+      {
+        title: "Mixture Of Experts Model Options",
+        fields: [
+          field({
+            key: "expert_top_k",
+            type: "int",
+            default: 2,
+            section: "Mixture Of Experts Model Options",
+          }),
+        ],
+      },
+      {
+        title: "Expert Stack Options",
+        fields: [
+          field({
+            key: "expert_stack_hidden_dim",
+            type: "int",
+            default: 32,
+            section: "Expert Stack Options",
+          }),
+        ],
+      },
+      {
+        title: "Expert Gate Options",
+        fields: [
+          field({
+            key: "expert_gate_flag",
+            label: "expert gate flag",
+            type: "bool",
+            default: false,
+            choices: [true, false],
+            section: "Expert Gate Options",
+          }),
+        ],
+      },
+      {
+        title: "Expert Gate Stack Options",
+        fields: [
+          field({
+            key: "expert_gate_stack_independent_flag",
+            label: "expert gate stack independent flag",
+            type: "bool",
+            default: false,
+            choices: [true, false],
+            section: "Expert Gate Stack Options",
+          }),
+          field({
+            key: "expert_gate_stack_hidden_dim",
+            default: null,
+            nullable: true,
+            section: "Expert Gate Stack Options",
+          }),
+        ],
+      },
+      {
+        title: "Expert Memory Options",
+        fields: [
+          field({
+            key: "expert_memory_flag",
+            type: "bool",
+            default: false,
+            choices: [true, false],
+            section: "Expert Memory Options",
+          }),
+        ],
+      },
+      {
+        title: "Expert Memory Stack Options",
+        fields: [
+          field({
+            key: "expert_memory_stack_independent_flag",
+            type: "bool",
+            default: false,
+            choices: [true, false],
+            section: "Expert Memory Stack Options",
+          }),
+          field({
+            key: "expert_memory_stack_hidden_dim",
+            default: null,
+            nullable: true,
+            section: "Expert Memory Stack Options",
+          }),
+        ],
+      },
+      {
+        title: "Expert Recurrent Layer Options",
+        fields: [
+          field({
+            key: "expert_recurrent_flag",
+            type: "bool",
+            default: false,
+            choices: [true, false],
+            section: "Expert Recurrent Layer Options",
+          }),
+        ],
+      },
+      {
+        title: "Expert Recurrent Gate Options",
+        fields: [
+          field({
+            key: "expert_recurrent_gate_flag",
+            type: "bool",
+            default: false,
+            choices: [true, false],
+            section: "Expert Recurrent Gate Options",
+          }),
+        ],
+      },
+      {
+        title: "Expert Recurrent Gate Stack Options",
+        fields: [
+          field({
+            key: "expert_recurrent_gate_stack_independent_flag",
+            type: "bool",
+            default: false,
+            choices: [true, false],
+            section: "Expert Recurrent Gate Stack Options",
+          }),
+          field({
+            key: "expert_recurrent_gate_stack_hidden_dim",
+            default: null,
+            nullable: true,
+            section: "Expert Recurrent Gate Stack Options",
+          }),
+        ],
+      },
+    ];
+
+    const [mixtureSection] = deriveNestedConfigSections(sections);
+    const expertStackSection = mixtureSection.children?.[0];
+    const expertGateSection = expertStackSection?.children?.find(
+      (section) => section.title === "Expert Gate Options",
+    );
+    const expertMemorySection = expertStackSection?.children?.find(
+      (section) => section.title === "Expert Memory Options",
+    );
+    const expertRecurrentSection = expertStackSection?.children?.find(
+      (section) => section.title === "Expert Recurrent Layer Options",
+    );
+
+    expect(mixtureSection.title).toBe("Mixture Of Experts Model Options");
+    expect(expertStackSection?.children?.map((section) => section.title)).toEqual([
+      "Expert Gate Options",
+      "Expert Memory Options",
+      "Expert Recurrent Layer Options",
+    ]);
+    expect(expertGateSection?.children?.[0]?.title).toBe(
+      "Expert Gate Stack Options",
+    );
+    expect(expertMemorySection?.children?.[0]?.title).toBe(
+      "Expert Memory Stack Options",
+    );
+    expect(expertRecurrentSection?.children?.[0]?.title).toBe(
+      "Expert Recurrent Gate Options",
+    );
+    expect(
+      expertRecurrentSection?.children?.[0]?.children?.[0]?.title,
+    ).toBe("Expert Recurrent Gate Stack Options");
+
+    const disabledByDefault = disabledConfigFieldReasons(sections, {});
+    expect(disabledByDefault.get("expert_gate_stack_independent_flag")).toContain(
+      "expert gate flag",
+    );
+
+    const gateEnabled = disabledConfigFieldReasons(sections, {
+      expert_gate_flag: "true",
+    });
+    expect(gateEnabled.has("expert_gate_stack_independent_flag")).toBe(false);
+    expect(gateEnabled.get("expert_gate_stack_hidden_dim")).toContain(
+      "expert gate stack independent flag",
+    );
+
+    const customGateStack = disabledConfigFieldReasons(sections, {
+      expert_gate_flag: "true",
+      expert_gate_stack_independent_flag: "true",
+    });
+    expect(customGateStack.has("expert_gate_stack_hidden_dim")).toBe(false);
+  });
+
+  it("keeps mixture and expert stack ancestors visible for expert stack search matches", () => {
+    const sections: ConfigSection[] = [
+      {
+        title: "Mixture Of Experts Model Options",
+        fields: [
+          field({
+            key: "expert_top_k",
+            type: "int",
+            default: 2,
+            section: "Mixture Of Experts Model Options",
+          }),
+        ],
+      },
+      {
+        title: "Expert Stack Options",
+        fields: [
+          field({
+            key: "expert_stack_hidden_dim",
+            label: "expert stack hidden dim",
+            type: "int",
+            default: 256,
+            section: "Expert Stack Options",
+          }),
+          field({
+            key: "expert_bias_flag",
+            label: "expert bias flag",
+            type: "bool",
+            default: true,
+            choices: [true, false],
+            section: "Expert Stack Options",
+          }),
+        ],
+      },
+    ];
+
+    const filtered = filterConfigSectionsForSearch(sections, {
+      query: "expert bias flag",
+    });
+    const [mixtureSection] = deriveNestedConfigSections(filtered, sections);
+
+    expect(filtered.map((section) => section.title)).toEqual([
+      "Mixture Of Experts Model Options",
+      "Expert Stack Options",
+    ]);
+    expect(mixtureSection.title).toBe("Mixture Of Experts Model Options");
+    expect(mixtureSection.fields.map((item) => item.key)).toEqual([
+      "expert_bias_flag",
+    ]);
+    expect(mixtureSection.children?.[0]?.title).toBe("Expert Stack Options");
+    expect(mixtureSection.children?.[0]?.fields.map((item) => item.key)).toEqual([
+      "expert_bias_flag",
+    ]);
+  });
+
+  it("keeps the expert stack path visible for expert controller search matches", () => {
+    const sections: ConfigSection[] = [
+      {
+        title: "Mixture Of Experts Model Options",
+        fields: [
+          field({
+            key: "expert_top_k",
+            type: "int",
+            default: 2,
+            section: "Mixture Of Experts Model Options",
+          }),
+        ],
+      },
+      {
+        title: "Expert Stack Options",
+        fields: [
+          field({
+            key: "expert_stack_hidden_dim",
+            section: "Expert Stack Options",
+          }),
+        ],
+      },
+      {
+        title: "Expert Recurrent Layer Options",
+        fields: [
+          field({
+            key: "expert_recurrent_flag",
+            type: "bool",
+            default: false,
+            choices: [true, false],
+            section: "Expert Recurrent Layer Options",
+          }),
+        ],
+      },
+      {
+        title: "Expert Recurrent Gate Options",
+        fields: [
+          field({
+            key: "expert_recurrent_gate_flag",
+            type: "bool",
+            default: false,
+            choices: [true, false],
+            section: "Expert Recurrent Gate Options",
+          }),
+        ],
+      },
+      {
+        title: "Expert Recurrent Gate Stack Options",
+        fields: [
+          field({
+            key: "expert_recurrent_gate_stack_hidden_dim",
+            label: "expert recurrent gate stack hidden dim",
+            default: null,
+            nullable: true,
+            section: "Expert Recurrent Gate Stack Options",
+          }),
+        ],
+      },
+    ];
+
+    const filtered = filterConfigSectionsForSearch(sections, {
+      query: "expert recurrent gate stack hidden dim",
+    });
+    const [mixtureSection] = deriveNestedConfigSections(filtered, sections);
+
+    expect(filtered.map((section) => section.title)).toEqual([
+      "Mixture Of Experts Model Options",
+      "Expert Stack Options",
+      "Expert Recurrent Layer Options",
+      "Expert Recurrent Gate Options",
+      "Expert Recurrent Gate Stack Options",
+    ]);
+    expect(mixtureSection.children?.[0]?.title).toBe("Expert Stack Options");
+    expect(mixtureSection.children?.[0]?.children?.[0]?.title).toBe(
+      "Expert Recurrent Layer Options",
+    );
+    expect(
+      mixtureSection.children?.[0]?.children?.[0]?.children?.[0]?.title,
+    ).toBe("Expert Recurrent Gate Options");
+    expect(
+      mixtureSection.children?.[0]?.children?.[0]?.children?.[0]?.children?.[0]
+        ?.title,
+    ).toBe("Expert Recurrent Gate Stack Options");
   });
 
   it("uses independent stack flags to enable controller stack fields", () => {
@@ -757,6 +1528,186 @@ describe("config section controls", () => {
     });
     expect(stackEnabled.has("weight_generator_stack_hidden_dim")).toBe(false);
     expect(stackEnabled.has("mask_generator_stack_hidden_dim")).toBe(false);
+  });
+
+  it("nests expert and router adaptive sections under their stack owners", () => {
+    const sections: ConfigSection[] = [
+      {
+        title: "Mixture Of Experts Model Options",
+        fields: [
+          field({
+            key: "expert_top_k",
+            type: "int",
+            default: 2,
+            section: "Mixture Of Experts Model Options",
+          }),
+        ],
+      },
+      {
+        title: "Expert Stack Options",
+        fields: [
+          field({
+            key: "expert_stack_num_layers",
+            type: "int",
+            default: 2,
+            section: "Expert Stack Options",
+          }),
+        ],
+      },
+      {
+        title: "Weight Generator Options",
+        fields: [
+          field({
+            key: "weight_option_flag",
+            type: "bool",
+            default: false,
+            choices: [true, false],
+            section: "Weight Generator Options",
+          }),
+          field({
+            key: "weight_option",
+            type: "class",
+            default: null,
+            nullable: true,
+            section: "Weight Generator Options",
+          }),
+        ],
+      },
+      {
+        title: "Weight Generator Stack Options",
+        fields: [
+          field({
+            key: "weight_generator_stack_independent_flag",
+            type: "bool",
+            default: false,
+            choices: [true, false],
+            section: "Weight Generator Stack Options",
+          }),
+          field({
+            key: "weight_generator_stack_hidden_dim",
+            default: null,
+            nullable: true,
+            section: "Weight Generator Stack Options",
+          }),
+        ],
+      },
+      {
+        title: "Sampler Model Options",
+        fields: [
+          field({
+            key: "sampler_threshold",
+            type: "float",
+            default: 0,
+            section: "Sampler Model Options",
+          }),
+        ],
+      },
+      {
+        title: "Router Options",
+        fields: [
+          field({
+            key: "router_noisy_topk_flag",
+            type: "bool",
+            default: false,
+            choices: [true, false],
+            section: "Router Options",
+          }),
+        ],
+      },
+      {
+        title: "Router Stack Options",
+        fields: [
+          field({
+            key: "sampler_stack_independent_flag",
+            type: "bool",
+            default: false,
+            choices: [true, false],
+            section: "Router Stack Options",
+          }),
+        ],
+      },
+      {
+        title: "Router Weight Generator Options",
+        fields: [
+          field({
+            key: "router_weight_option_flag",
+            type: "bool",
+            default: false,
+            choices: [true, false],
+            section: "Router Weight Generator Options",
+          }),
+          field({
+            key: "router_weight_option",
+            type: "class",
+            default: null,
+            nullable: true,
+            section: "Router Weight Generator Options",
+          }),
+        ],
+      },
+      {
+        title: "Router Weight Generator Stack Options",
+        fields: [
+          field({
+            key: "router_weight_generator_stack_independent_flag",
+            type: "bool",
+            default: false,
+            choices: [true, false],
+            section: "Router Weight Generator Stack Options",
+          }),
+          field({
+            key: "router_weight_generator_stack_hidden_dim",
+            label: "router weight generator stack hidden dim",
+            default: null,
+            nullable: true,
+            section: "Router Weight Generator Stack Options",
+          }),
+        ],
+      },
+    ];
+
+    const [mixtureSection, samplerSection] = deriveNestedConfigSections(sections);
+    const expertSection = mixtureSection.children?.find(
+      (section) => section.title === "Expert Stack Options",
+    );
+    const expertWeightSection = expertSection?.children?.find(
+      (section) => section.title === "Weight Generator Options",
+    );
+    const expertWeightStackSection = expertWeightSection?.children?.[0];
+    const routerStackSection =
+      samplerSection.children?.[0]?.children?.find(
+        (section) => section.title === "Router Stack Options",
+      );
+    const routerWeightSection = routerStackSection?.children?.find(
+      (section) => section.title === "Router Weight Generator Options",
+    );
+    const routerWeightStackSection = routerWeightSection?.children?.[0];
+
+    expect(expertWeightSection?.controlFieldKey).toBe("weight_option_flag");
+    expect(expertWeightStackSection?.controlFieldKey).toBe(
+      "weight_generator_stack_independent_flag",
+    );
+    expect(routerWeightSection?.controlFieldKey).toBe(
+      "router_weight_option_flag",
+    );
+    expect(routerWeightStackSection?.controlFieldKey).toBe(
+      "router_weight_generator_stack_independent_flag",
+    );
+    expect(inheritedStackSectionHint(routerWeightStackSection!, {})).toMatchObject({
+      sourceTitle: "Adaptive Submodule Stack Options",
+      isCustom: false,
+    });
+
+    const filtered = filterConfigSectionsForSearch(sections, {
+      query: "router weight generator stack hidden dim",
+    });
+    expect(filtered.map((section) => section.title)).toEqual([
+      "Sampler Model Options",
+      "Router Options",
+      "Router Stack Options",
+      "Router Weight Generator Options",
+      "Router Weight Generator Stack Options",
+    ]);
   });
 
   it("uses divider groups for boundary projector sections", () => {

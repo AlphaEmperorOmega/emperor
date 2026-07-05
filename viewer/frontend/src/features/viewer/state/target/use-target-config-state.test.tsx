@@ -192,14 +192,14 @@ beforeEach(() => {
       selectedPreset: string,
     ) => {
       const presets =
-        selectedModelType === "experts" && selectedModel === "experts_linear"
+        selectedModelType === "experts" && selectedModel === "linear"
           ? [{ name: "expert-baseline", label: "Expert baseline", description: "" }]
           : [
               { name: "baseline", label: "Baseline", description: "" },
               { name: "fast", label: "Fast", description: "" },
             ];
       const datasets =
-        selectedModelType === "experts" && selectedModel === "experts_linear"
+        selectedModelType === "experts" && selectedModel === "linear"
           ? [{ name: "ExpertToy", label: "Expert Toy", inputDim: 64, outputDim: 4 }]
           : [
               { name: "Mnist", label: "MNIST", inputDim: 784, outputDim: 10 },
@@ -217,7 +217,7 @@ beforeEach(() => {
         modelsQuery: query({
           models: [
             { modelType: "linears", model: "linear" },
-            { modelType: "experts", model: "experts_linear" },
+            { modelType: "experts", model: "linear" },
           ],
         }),
         presetsQuery: query({
@@ -596,12 +596,12 @@ describe("useTargetConfigState", () => {
     expect(result.current.target.presetOverrides).toEqual({ hidden_size: "128" });
 
     act(() => {
-      result.current.target.selectModel("experts_linear", "experts");
+      result.current.target.selectModel("linear", "experts");
     });
 
     await waitFor(() => {
       expect(result.current.target.selectedModelType).toBe("experts");
-      expect(result.current.target.selectedModel).toBe("experts_linear");
+      expect(result.current.target.selectedModel).toBe("linear");
     });
     expect(result.current.target.presetOverrides).toEqual({});
     expect(result.current.target.overrides).toEqual({});
@@ -629,7 +629,7 @@ describe("useTargetConfigState", () => {
 
     await waitFor(() => {
       expect(result.current.target.selectedTrainingModelType).toBe("experts");
-      expect(result.current.target.selectedTrainingModel).toBe("experts_linear");
+      expect(result.current.target.selectedTrainingModel).toBe("linear");
       expect(result.current.target.selectedTrainingPrimaryPreset).toBe(
         "expert-baseline",
       );
@@ -690,7 +690,7 @@ describe("useTargetConfigState", () => {
 
     await waitFor(() => {
       expect(result.current.target.selectedTrainingModelType).toBe("experts");
-      expect(result.current.target.selectedTrainingModel).toBe("experts_linear");
+      expect(result.current.target.selectedTrainingModel).toBe("linear");
       expect(result.current.target.selectedTrainingPrimaryPreset).toBe(
         "expert-baseline",
       );
@@ -716,7 +716,7 @@ describe("useTargetConfigState", () => {
 
     await waitFor(() => {
       expect(result.current.target.selectedModelType).toBe("experts");
-      expect(result.current.target.selectedModel).toBe("experts_linear");
+      expect(result.current.target.selectedModel).toBe("linear");
       expect(result.current.target.selectedPreset).toBe("expert-baseline");
       expect(result.current.target.selectedDatasets).toEqual(["ExpertToy"]);
     });
@@ -1391,7 +1391,7 @@ describe("useTargetConfigState", () => {
         id: "expert-snapshot",
         name: "Expert tuned",
         modelType: "experts",
-        model: "experts_linear",
+        model: "linear",
         preset: "expert-baseline",
         overrides: { expert_width: "4" },
         createdAt: "2026-06-01T00:00:00.000Z",
@@ -1411,7 +1411,7 @@ describe("useTargetConfigState", () => {
 
     await waitFor(() => {
       expect(result.current.target.selectedModelType).toBe("experts");
-      expect(result.current.target.selectedModel).toBe("experts_linear");
+      expect(result.current.target.selectedModel).toBe("linear");
       expect(result.current.target.selectedPreset).toBe("expert-baseline");
       expect(result.current.target.selectedTrainingPresets).toEqual(["baseline"]);
       expect(result.current.target.selectedDatasets).toEqual(["ExpertToy"]);

@@ -5,8 +5,8 @@ import unittest
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
-import models.experts.experts_linear.config as experts_linear_config
-import models.linears.linear.config as linear_config
+import models.experts.linear.config as expert_linear_config
+import models.linears.linear.config as linears_linear_config
 import models.neuron.neuron_linear.config as neuron_linear_config
 import models.transformer_encoder.vit_linear.config as vit_linear_config
 from emperor.base.layer.gate import LayerGateOptions
@@ -78,7 +78,10 @@ class InspectorServiceTests(unittest.TestCase):
         result = inspect_model("linears/linear", "baseline", dataset="Cifar100")
         node_by_id = {node["id"]: node for node in result["nodes"]}
 
-        self.assertEqual(node_by_id["output_model"]["details"]["dims"], "256 -> 100")
+        self.assertEqual(
+            node_by_id["output_model"]["details"]["dims"],
+            f"{linears_linear_config.STACK_HIDDEN_DIM} -> 100",
+        )
 
     def test_inspect_rejects_path_like_dataset_input(self) -> None:
         with self.assertRaises(InspectorError) as context:
@@ -115,11 +118,14 @@ class InspectorServiceTests(unittest.TestCase):
         self.assertNotIn("biasShape", node_by_id["main_model.layers.0"]["details"])
         self.assertEqual(
             node_by_id["main_model.layers.0.model"]["details"]["weightShape"],
-            "256 x 256",
+            (
+                f"{linears_linear_config.STACK_HIDDEN_DIM} x "
+                f"{linears_linear_config.STACK_HIDDEN_DIM}"
+            ),
         )
         self.assertEqual(
             node_by_id["main_model.layers.0.model"]["details"]["biasShape"],
-            "256",
+            str(linears_linear_config.STACK_HIDDEN_DIM),
         )
 
     def test_config_override_aliases_match_builder_parameter_names(self) -> None:
@@ -132,7 +138,7 @@ class InspectorServiceTests(unittest.TestCase):
 
     def test_gate_option_overrides_parse_to_builder_parameter_names(self) -> None:
         parsed = parse_override_mapping(
-            linear_config,
+            linears_linear_config,
             {
                 "gate_option": "ADDITION",
                 "recurrent_gate_option": "MULTIPLIER",
@@ -144,7 +150,7 @@ class InspectorServiceTests(unittest.TestCase):
 
     def test_stack_alias_overrides_parse_to_builder_parameter_names(self) -> None:
         parsed = parse_override_mapping(
-            linear_config,
+            linears_linear_config,
             {
                 "stack_hidden_dim": "128",
                 "stack_layer_norm_position": "AFTER",
@@ -185,7 +191,7 @@ class InspectorServiceTests(unittest.TestCase):
 
     def test_legacy_controller_stack_overrides_still_parse(self) -> None:
         parsed = parse_override_mapping(
-            linear_config,
+            linears_linear_config,
             {
                 "layer_norm_position": "AFTER",
                 "gate_hidden_dim": "32",
@@ -204,7 +210,7 @@ class InspectorServiceTests(unittest.TestCase):
 
     def test_legacy_controller_stack_overrides_parse_for_experts(self) -> None:
         parsed = parse_override_mapping(
-            experts_linear_config,
+            expert_linear_config,
             {
                 "gate_hidden_dim": "32",
                 "gate_layer_norm_position": "BEFORE",

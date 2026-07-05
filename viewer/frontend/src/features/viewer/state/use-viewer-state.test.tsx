@@ -435,7 +435,7 @@ function mockPublicModelCatalog() {
       [{ name: "adaptive", label: "Adaptive", description: "" }],
     ],
     [
-      "experts/experts_linear",
+      "experts/linear",
       [{ name: "expert-baseline", label: "Expert baseline", description: "" }],
     ],
     [
@@ -461,7 +461,7 @@ function mockPublicModelCatalog() {
       [{ name: "Mnist", label: "MNIST", inputDim: 784, outputDim: 10 }],
     ],
     [
-      "experts/experts_linear",
+      "experts/linear",
       [
         {
           name: "ExpertToy",
@@ -481,7 +481,7 @@ function mockPublicModelCatalog() {
     models: [
       { modelType: "linears", model: "linear" },
       { modelType: "linears", model: "linear_adaptive" },
-      { modelType: "experts", model: "experts_linear" },
+      { modelType: "experts", model: "linear" },
       { modelType: "transformer_encoder", model: "bert_linear" },
     ],
   });
@@ -978,27 +978,27 @@ describe("useViewerState", () => {
 
     await waitFor(() => {
       expect(result.current.target.selectedModelType).toBe("experts");
-      expect(result.current.target.selectedModel).toBe("experts_linear");
+      expect(result.current.target.selectedModel).toBe("linear");
       expect(result.current.target.selectedPreset).toBe("expert-baseline");
       expect(result.current.target.selectedDatasets).toEqual(["ExpertToy"]);
       expect(result.current.target.overrides).toEqual({});
     });
     expect(mocks.fetchPresets).toHaveBeenCalledWith({
       modelType: "experts",
-      model: "experts_linear",
+      model: "linear",
     });
     expect(mocks.fetchDatasets).toHaveBeenCalledWith({
       modelType: "experts",
-      model: "experts_linear",
+      model: "linear",
     });
     expect(mocks.fetchMonitors).toHaveBeenCalledWith({
       modelType: "experts",
-      model: "experts_linear",
+      model: "linear",
     });
     expect(mocks.inspectModel.mock.calls.map(([request]) => request))
       .toContainEqual({
         modelType: "experts",
-        model: "experts_linear",
+        model: "linear",
         preset: "expert-baseline",
         dataset: "ExpertToy",
         overrides: {},
@@ -1010,7 +1010,7 @@ describe("useViewerState", () => {
     mocks.inspectModel.mockImplementation(
       (request: { modelType: string; model: string; preset: string }) =>
         Promise.resolve(
-          request.modelType === "experts" && request.model === "experts_linear"
+          request.modelType === "experts" && request.model === "linear"
             ? expertsPreviewGraph(request)
             : linearPreviewGraph(request),
         ),
@@ -1030,10 +1030,10 @@ describe("useViewerState", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.target.selectedModel).toBe("experts_linear");
+      expect(result.current.target.selectedModel).toBe("linear");
       expect(result.current.graph.graph).toMatchObject({
         modelType: "experts",
-        model: "experts_linear",
+        model: "linear",
       });
     });
     expect(result.current.graph.graph?.nodes.map((node) => node.typeName))
@@ -1162,7 +1162,7 @@ describe("useViewerState", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.target.selectedModel).toBe("experts_linear");
+      expect(result.current.target.selectedModel).toBe("linear");
       expect(result.current.history.selectedLogRunId).toBeNull();
       expect(result.current.history.selectedHistoricalExperimentFilter).toBe("");
       expect(result.current.history.selectedHistoricalDatasetFilter).toBe("");
@@ -2705,10 +2705,10 @@ describe("useViewerState", () => {
       within(modelListbox).queryByRole("option", { name: "linears/linear" }),
     ).not.toBeInTheDocument();
     expect(
-      within(modelListbox).queryByRole("option", {
-        name: "experts_linear",
-      }),
-    ).not.toBeInTheDocument();
+      within(modelListbox)
+        .getAllByRole("option")
+        .map((option) => option.textContent),
+    ).toEqual(["linear", "linear_adaptive"]);
     await user.keyboard("{Escape}");
 
     await user.click(modelTypeControl);
@@ -2719,11 +2719,27 @@ describe("useViewerState", () => {
 
     await waitFor(() => {
       expect(modelTypeControl).toHaveTextContent("Experts");
-      expect(modelControl).toHaveTextContent("experts_linear");
-      expect(modelControl).not.toHaveTextContent("experts/experts_linear");
+      expect(modelControl).toHaveTextContent("linear");
+      expect(modelControl).not.toHaveTextContent("experts/linear");
       expect(screen.getByRole("combobox", { name: /^preset$/i }))
         .toHaveTextContent("expert-baseline");
     });
+
+    await user.click(modelControl);
+    const expertModelListbox = await screen.findByRole("listbox", {
+      name: /^model options$/i,
+    });
+    expect(
+      within(expertModelListbox)
+        .getAllByRole("option")
+        .map((option) => option.textContent),
+    ).toEqual(["linear"]);
+    expect(
+      within(expertModelListbox).queryByRole("option", {
+        name: "linear_adaptive",
+      }),
+    ).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
   });
 
   it("renders preset snapshot creation under the active preset selector", async () => {
@@ -2878,10 +2894,10 @@ describe("useViewerState", () => {
       within(modelListbox).getByRole("option", { name: "linear_adaptive" }),
     ).toBeInTheDocument();
     expect(
-      within(modelListbox).queryByRole("option", {
-        name: "experts_linear",
-      }),
-    ).not.toBeInTheDocument();
+      within(modelListbox)
+        .getAllByRole("option")
+        .map((option) => option.textContent),
+    ).toEqual(["linear", "linear_adaptive"]);
     await user.keyboard("{Escape}");
 
     await user.click(modelTypeControl);
@@ -2892,14 +2908,30 @@ describe("useViewerState", () => {
 
     await waitFor(() => {
       expect(modelTypeControl).toHaveTextContent("Experts");
-      expect(modelControl).toHaveTextContent("experts_linear");
-      expect(modelControl).not.toHaveTextContent("experts/experts_linear");
+      expect(modelControl).toHaveTextContent("linear");
+      expect(modelControl).not.toHaveTextContent("experts/linear");
       expect(
         within(panel).getByRole("combobox", {
           name: /^presets\s+1\s*\/\s*1 selected$/i,
         }),
       ).toHaveTextContent("expert-baseline");
     });
+
+    await user.click(modelControl);
+    const expertModelListbox = await within(panel).findByRole("listbox", {
+      name: /^training model options$/i,
+    });
+    expect(
+      within(expertModelListbox)
+        .getAllByRole("option")
+        .map((option) => option.textContent),
+    ).toEqual(["linear"]);
+    expect(
+      within(expertModelListbox).queryByRole("option", {
+        name: "linear_adaptive",
+      }),
+    ).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
   });
 
   it("allows training while a historical experiment run is selected", async () => {
