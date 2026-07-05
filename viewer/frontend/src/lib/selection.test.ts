@@ -47,7 +47,7 @@ describe("modelTypeOptions", () => {
       modelTypeOptions([
         "linears/linear",
         "linears/linear_adaptive",
-        "experts/experts_linear",
+        "experts/linear",
         "transformer_encoder/bert_linear",
       ]),
     ).toEqual([
@@ -65,7 +65,7 @@ describe("modelsForType", () => {
         [
           "linears/linear",
           "linears/linear_adaptive",
-          "experts/experts_linear",
+          "experts/linear",
         ],
         "linears",
       ),
@@ -73,8 +73,8 @@ describe("modelsForType", () => {
   });
 
   it("returns the full catalog when no type is selected", () => {
-    expect(modelsForType(["linears/linear", "experts/experts_linear"], ""))
-      .toEqual(["linears/linear", "experts/experts_linear"]);
+    expect(modelsForType(["linears/linear", "experts/linear"], ""))
+      .toEqual(["linears/linear", "experts/linear"]);
   });
 });
 

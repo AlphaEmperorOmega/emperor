@@ -92,7 +92,7 @@ describe("useGraphPreviewOrchestration", () => {
     const { result } = renderOrchestration({
       ...baseInput,
       controller: controller({
-        graph: graph("experts_linear", "baseline", "experts"),
+        graph: graph("linear", "baseline", "experts"),
       }),
     });
 

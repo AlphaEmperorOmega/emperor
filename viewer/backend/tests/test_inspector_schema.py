@@ -114,7 +114,10 @@ class InspectorSchemaTests(unittest.TestCase):
     def test_config_schema_exposes_supported_field_types(self) -> None:
         linear_fields = _fields_by_key(config_schema("linears/linear"))
         self.assertEqual(linear_fields["stack_hidden_dim"]["type"], "int")
-        self.assertEqual(linear_fields["stack_hidden_dim"]["default"], 256)
+        self.assertEqual(
+            linear_fields["stack_hidden_dim"]["default"],
+            linear_config.STACK_HIDDEN_DIM,
+        )
         self.assertEqual(linear_fields["stack_layer_norm_position"]["type"], "enum")
         self.assertEqual(linear_fields["stack_bias_flag"]["type"], "bool")
         adaptive_fields = _fields_by_key(config_schema("linears/linear_adaptive"))
@@ -345,7 +348,10 @@ class InspectorSchemaTests(unittest.TestCase):
         adaptive_fields = _fields_by_key(config_schema("linears/linear_adaptive"))
         vit_fields = _fields_by_key(config_schema("transformer_encoder/vit_linear"))
 
-        self.assertEqual(linear_fields["stack_hidden_dim"]["default"], 256)
+        self.assertEqual(
+            linear_fields["stack_hidden_dim"]["default"],
+            linear_config.STACK_HIDDEN_DIM,
+        )
         self.assertEqual(linear_fields["stack_activation"]["default"], "GELU")
         self.assertEqual(
             vit_fields["positional_embedding_option"]["default"],
@@ -408,23 +414,54 @@ class InspectorSchemaTests(unittest.TestCase):
                 self.assertNotIn(field_name, fields)
 
     def test_model_schemas_use_controller_stack_field_names(self) -> None:
+        experts_controller_stack_fields = {
+            "gate_stack_independent_flag",
+            "gate_stack_hidden_dim",
+            "gate_stack_layer_norm_position",
+            "gate_stack_bias_flag",
+            "halting_stack_independent_flag",
+            "halting_stack_hidden_dim",
+            "halting_stack_layer_norm_position",
+            "halting_stack_bias_flag",
+            "memory_stack_independent_flag",
+            "memory_stack_hidden_dim",
+            "memory_stack_layer_norm_position",
+            "memory_stack_bias_flag",
+            "recurrent_gate_stack_independent_flag",
+            "recurrent_gate_stack_hidden_dim",
+            "recurrent_gate_stack_layer_norm_position",
+            "recurrent_gate_stack_bias_flag",
+            "recurrent_halting_stack_independent_flag",
+            "recurrent_halting_stack_hidden_dim",
+            "recurrent_halting_stack_layer_norm_position",
+            "recurrent_halting_stack_bias_flag",
+            "sampler_stack_independent_flag",
+            "sampler_stack_hidden_dim",
+            "sampler_stack_layer_norm_position",
+            "expert_gate_stack_independent_flag",
+            "expert_gate_stack_hidden_dim",
+            "expert_gate_stack_layer_norm_position",
+            "expert_gate_stack_bias_flag",
+            "expert_halting_stack_independent_flag",
+            "expert_halting_stack_hidden_dim",
+            "expert_halting_stack_layer_norm_position",
+            "expert_halting_stack_bias_flag",
+            "expert_memory_stack_independent_flag",
+            "expert_memory_stack_hidden_dim",
+            "expert_memory_stack_layer_norm_position",
+            "expert_memory_stack_bias_flag",
+            "expert_recurrent_gate_stack_independent_flag",
+            "expert_recurrent_gate_stack_hidden_dim",
+            "expert_recurrent_gate_stack_layer_norm_position",
+            "expert_recurrent_gate_stack_bias_flag",
+            "expert_recurrent_halting_stack_independent_flag",
+            "expert_recurrent_halting_stack_hidden_dim",
+            "expert_recurrent_halting_stack_layer_norm_position",
+            "expert_recurrent_halting_stack_bias_flag",
+        }
         expected_by_model = {
-            "experts/experts_linear": {
-                "gate_stack_hidden_dim",
-                "gate_stack_layer_norm_position",
-                "gate_stack_bias_flag",
-                "halting_stack_hidden_dim",
-                "halting_stack_layer_norm_position",
-                "halting_stack_bias_flag",
-            },
-            "experts/experts_linear_adaptive": {
-                "gate_stack_hidden_dim",
-                "gate_stack_layer_norm_position",
-                "gate_stack_bias_flag",
-                "halting_stack_hidden_dim",
-                "halting_stack_layer_norm_position",
-                "halting_stack_bias_flag",
-            },
+            "experts/linear": experts_controller_stack_fields,
+            "experts/linear_adaptive": experts_controller_stack_fields,
             "neuron/neuron_linear": {
                 "gate_stack_hidden_dim",
                 "gate_stack_layer_norm_position",
@@ -449,6 +486,296 @@ class InspectorSchemaTests(unittest.TestCase):
                     self.assertIn(field_name, fields)
                 for field_name in legacy_fields:
                     self.assertNotIn(field_name, fields)
+                if model_name.startswith("experts/"):
+                    self.assertEqual(
+                        fields["memory_flag"]["section"],
+                        "Memory Options",
+                    )
+                    self.assertEqual(
+                        fields["memory_stack_hidden_dim"]["section"],
+                        "Memory Stack Options",
+                    )
+                    self.assertEqual(
+                        fields["recurrent_halting_threshold"]["section"],
+                        "Recurrent Halting Options",
+                    )
+                    self.assertEqual(
+                        fields["recurrent_halting_stack_hidden_dim"]["section"],
+                        "Recurrent Halting Stack Options",
+                    )
+                    self.assertIsNone(fields["memory_stack_hidden_dim"]["default"])
+                    self.assertTrue(fields["memory_stack_hidden_dim"]["nullable"])
+                    self.assertFalse(
+                        fields["memory_stack_independent_flag"]["default"]
+                    )
+                    self.assertFalse(
+                        fields["recurrent_halting_stack_independent_flag"][
+                            "default"
+                        ]
+                    )
+
+    def test_experts_schemas_use_sampler_router_section_labels(self) -> None:
+        for model_name in (
+            "experts/linear",
+            "experts/linear_adaptive",
+        ):
+            fields = _fields_by_key(config_schema(model_name))
+
+            with self.subTest(model_name=model_name):
+                self.assertEqual(
+                    fields["sampler_threshold"]["section"],
+                    "Sampler Model Options",
+                )
+                self.assertEqual(
+                    fields["sampler_switch_loss_weight"]["section"],
+                    "Sampler Model Options",
+                )
+                self.assertEqual(
+                    fields["router_noisy_topk_flag"]["section"],
+                    "Router Options",
+                )
+                self.assertEqual(
+                    fields["sampler_stack_independent_flag"]["section"],
+                    "Router Stack Options",
+                )
+                self.assertEqual(
+                    fields["sampler_stack_independent_flag"]["type"],
+                    "bool",
+                )
+                self.assertFalse(fields["sampler_stack_independent_flag"]["default"])
+                self.assertEqual(
+                    fields["sampler_stack_hidden_dim"]["section"],
+                    "Router Stack Options",
+                )
+                self.assertIsNone(fields["sampler_stack_hidden_dim"]["default"])
+                self.assertTrue(fields["sampler_stack_hidden_dim"]["nullable"])
+                self.assertEqual(
+                    fields["sampler_bias_flag"]["section"],
+                    "Router Stack Options",
+                )
+                self.assertIsNone(fields["sampler_bias_flag"]["default"])
+                self.assertTrue(fields["sampler_bias_flag"]["nullable"])
+
+    def test_experts_schemas_use_mixture_and_expert_stack_section_labels(self) -> None:
+        expected = {
+            "expert_top_k": {
+                "section": "Mixture Of Experts Model Options",
+                "type": "int",
+                "default": 2,
+                "nullable": False,
+            },
+            "expert_num_experts": {
+                "section": "Mixture Of Experts Model Options",
+                "type": "int",
+                "default": 4,
+                "nullable": False,
+            },
+            "expert_capacity_factor": {
+                "section": "Mixture Of Experts Model Options",
+                "type": "float",
+                "default": 0.0,
+                "nullable": False,
+            },
+            "expert_dropped_token_behavior": {
+                "section": "Mixture Of Experts Model Options",
+                "type": "enum",
+                "default": "ZEROS",
+                "nullable": False,
+            },
+            "expert_compute_expert_mixture_flag": {
+                "section": "Mixture Of Experts Model Options",
+                "type": "bool",
+                "default": True,
+                "nullable": False,
+            },
+            "expert_weighted_parameters_flag": {
+                "section": "Mixture Of Experts Model Options",
+                "type": "bool",
+                "default": True,
+                "nullable": False,
+            },
+            "expert_weighting_position_option": {
+                "section": "Mixture Of Experts Model Options",
+                "type": "enum",
+                "default": "BEFORE_EXPERTS",
+                "nullable": False,
+            },
+            "expert_routing_initialization_mode": {
+                "section": "Mixture Of Experts Model Options",
+                "type": "enum",
+                "default": "LAYER",
+                "nullable": False,
+            },
+            "expert_stack_hidden_dim": {
+                "section": "Expert Stack Options",
+                "type": "int",
+                "default": 32,
+                "nullable": False,
+            },
+            "expert_stack_num_layers": {
+                "section": "Expert Stack Options",
+                "type": "int",
+                "default": 2,
+                "nullable": False,
+            },
+            "expert_bias_flag": {
+                "section": "Expert Stack Options",
+                "type": "bool",
+                "default": True,
+                "nullable": False,
+            },
+        }
+
+        for model_name in (
+            "experts/linear",
+            "experts/linear_adaptive",
+        ):
+            fields = _fields_by_key(config_schema(model_name))
+
+            with self.subTest(model_name=model_name):
+                for field_key, expected_values in expected.items():
+                    field = fields[field_key]
+                    self.assertEqual(field["key"], field["configKey"])
+                    self.assertEqual(
+                        field["flag"],
+                        f"--{field_key.replace('_', '-')}",
+                    )
+                    for property_name, expected_value in expected_values.items():
+                        with self.subTest(
+                            model_name=model_name,
+                            field_key=field_key,
+                            property_name=property_name,
+                        ):
+                            self.assertEqual(field[property_name], expected_value)
+
+    def test_experts_schemas_expose_expert_internal_controller_sections(self) -> None:
+        expected = {
+            "expert_gate_flag": {
+                "section": "Expert Gate Options",
+                "type": "bool",
+                "default": False,
+                "nullable": False,
+            },
+            "expert_gate_option": {
+                "section": "Expert Gate Options",
+                "type": "enum",
+                "default": "MULTIPLIER",
+                "nullable": True,
+            },
+            "expert_gate_stack_independent_flag": {
+                "section": "Expert Gate Stack Options",
+                "type": "bool",
+                "default": False,
+                "nullable": False,
+            },
+            "expert_gate_stack_hidden_dim": {
+                "section": "Expert Gate Stack Options",
+                "type": "int",
+                "default": None,
+                "nullable": True,
+            },
+            "expert_halting_flag": {
+                "section": "Expert Halting Options",
+                "type": "bool",
+                "default": False,
+                "nullable": False,
+            },
+            "expert_halting_threshold": {
+                "section": "Expert Halting Options",
+                "type": "float",
+                "default": 0.99,
+                "nullable": False,
+            },
+            "expert_halting_stack_hidden_dim": {
+                "section": "Expert Halting Stack Options",
+                "type": "int",
+                "default": None,
+                "nullable": True,
+            },
+            "expert_memory_flag": {
+                "section": "Expert Memory Options",
+                "type": "bool",
+                "default": False,
+                "nullable": False,
+            },
+            "expert_memory_option": {
+                "section": "Expert Memory Options",
+                "type": "class",
+                "default": "GatedResidualDynamicMemoryConfig",
+                "nullable": False,
+            },
+            "expert_memory_stack_hidden_dim": {
+                "section": "Expert Memory Stack Options",
+                "type": "int",
+                "default": None,
+                "nullable": True,
+            },
+            "expert_recurrent_flag": {
+                "section": "Expert Recurrent Layer Options",
+                "type": "bool",
+                "default": False,
+                "nullable": False,
+            },
+            "expert_recurrent_layer_norm_position": {
+                "section": "Expert Recurrent Layer Options",
+                "type": "enum",
+                "default": "DISABLED",
+                "nullable": False,
+            },
+            "expert_recurrent_gate_flag": {
+                "section": "Expert Recurrent Gate Options",
+                "type": "bool",
+                "default": False,
+                "nullable": False,
+            },
+            "expert_recurrent_gate_stack_hidden_dim": {
+                "section": "Expert Recurrent Gate Stack Options",
+                "type": "int",
+                "default": None,
+                "nullable": True,
+            },
+            "expert_recurrent_halting_flag": {
+                "section": "Expert Recurrent Halting Options",
+                "type": "bool",
+                "default": False,
+                "nullable": False,
+            },
+            "expert_recurrent_halting_stack_hidden_dim": {
+                "section": "Expert Recurrent Halting Stack Options",
+                "type": "int",
+                "default": None,
+                "nullable": True,
+            },
+        }
+
+        for model_name in (
+            "experts/linear",
+            "experts/linear_adaptive",
+        ):
+            fields = _fields_by_key(config_schema(model_name))
+
+            with self.subTest(model_name=model_name):
+                for field_key, expected_values in expected.items():
+                    field = fields[field_key]
+                    self.assertEqual(
+                        field["flag"],
+                        f"--{field_key.replace('_', '-')}",
+                    )
+                    for property_name, expected_value in expected_values.items():
+                        with self.subTest(
+                            model_name=model_name,
+                            field_key=field_key,
+                            property_name=property_name,
+                        ):
+                            self.assertEqual(field[property_name], expected_value)
+                self.assertIn(
+                    "MULTIPLIER",
+                    fields["expert_recurrent_gate_option"]["choices"],
+                )
+                self.assertIn(
+                    "GatedResidualDynamicMemoryConfig",
+                    fields["expert_memory_option"]["choices"],
+                )
 
     def test_config_schema_excludes_abstract_class_choices(self) -> None:
         fields = _fields_by_key(config_schema("linears/linear_adaptive"))
@@ -591,6 +918,119 @@ class InspectorSchemaTests(unittest.TestCase):
                 self.assertTrue(fields[field_key]["nullable"])
                 self.assertNotIn("searchChoices", fields[field_key])
 
+    def test_linear_adaptive_schema_exposes_full_adaptive_surface(self) -> None:
+        fields = _fields_by_key(config_schema("experts/linear_adaptive"))
+        linear_fields = _fields_by_key(config_schema("linears/linear_adaptive"))
+
+        linear_parity_keys = [
+            "weight_option_flag",
+            "weight_option",
+            "weight_generator_stack_independent_flag",
+            "weight_generator_stack_hidden_dim",
+            "bias_option_flag",
+            "bias_option",
+            "bias_generator_stack_independent_flag",
+            "diagonal_option_flag",
+            "diagonal_option",
+            "diagonal_generator_stack_independent_flag",
+            "mask_option_flag",
+            "row_mask_option",
+            "mask_generator_stack_independent_flag",
+            "input_layer_weight_option",
+            "input_layer_bias_option",
+            "input_layer_diagonal_option",
+            "input_layer_row_mask_option",
+            "output_layer_weight_option",
+            "output_layer_bias_option",
+            "output_layer_diagonal_option",
+            "output_layer_row_mask_option",
+            "adaptive_submodule_stack_hidden_dim",
+        ]
+        for field_key in linear_parity_keys:
+            with self.subTest(field_key=field_key):
+                self.assertIn(field_key, fields)
+                self.assertEqual(fields[field_key]["type"], linear_fields[field_key]["type"])
+                self.assertEqual(
+                    fields[field_key]["nullable"],
+                    linear_fields[field_key]["nullable"],
+                )
+                self.assertEqual(
+                    fields[field_key]["choices"],
+                    linear_fields[field_key]["choices"],
+                )
+
+        self.assertIn("adaptive_stack_hidden_dim", fields)
+        self.assertEqual(
+            fields["adaptive_stack_hidden_dim"]["section"],
+            "Legacy Adaptive Stack Options",
+        )
+
+        expected_router_pairs = {
+            "router_weight_option_flag": "weight_option_flag",
+            "router_weight_option": "weight_option",
+            "router_weight_generator_stack_independent_flag": (
+                "weight_generator_stack_independent_flag"
+            ),
+            "router_weight_generator_stack_hidden_dim": (
+                "weight_generator_stack_hidden_dim"
+            ),
+            "router_bias_option_flag": "bias_option_flag",
+            "router_bias_option": "bias_option",
+            "router_bias_generator_stack_independent_flag": (
+                "bias_generator_stack_independent_flag"
+            ),
+            "router_diagonal_option_flag": "diagonal_option_flag",
+            "router_diagonal_option": "diagonal_option",
+            "router_diagonal_generator_stack_independent_flag": (
+                "diagonal_generator_stack_independent_flag"
+            ),
+            "router_mask_option_flag": "mask_option_flag",
+            "router_row_mask_option": "row_mask_option",
+            "router_mask_generator_stack_independent_flag": (
+                "mask_generator_stack_independent_flag"
+            ),
+        }
+        for router_key, linear_key in expected_router_pairs.items():
+            with self.subTest(router_key=router_key):
+                self.assertIn(router_key, fields)
+                self.assertEqual(fields[router_key]["type"], linear_fields[linear_key]["type"])
+                self.assertEqual(
+                    fields[router_key]["nullable"],
+                    linear_fields[linear_key]["nullable"],
+                )
+                self.assertEqual(
+                    fields[router_key]["choices"],
+                    linear_fields[linear_key]["choices"],
+                )
+
+        self.assertEqual(
+            fields["router_weight_option_flag"]["section"],
+            "Router Weight Generator Options",
+        )
+        self.assertEqual(
+            fields["router_weight_generator_stack_hidden_dim"]["section"],
+            "Router Weight Generator Stack Options",
+        )
+        self.assertEqual(
+            fields["router_mask_generator_stack_hidden_dim"]["section"],
+            "Router Mask Stack Options",
+        )
+
+    def test_linear_adaptive_schema_locks_router_adaptive_preset_flags(
+        self,
+    ) -> None:
+        fields = _fields_by_key(
+            config_schema("experts/linear_adaptive", "adaptive-bank-router")
+        )
+
+        self.assertTrue(fields["router_weight_option_flag"]["locked"])
+        self.assertEqual(fields["router_weight_option_flag"]["lockedValue"], True)
+        self.assertTrue(fields["router_weight_option"]["locked"])
+        self.assertEqual(
+            fields["router_weight_option"]["lockedValue"],
+            "LayeredWeightedBankDynamicWeightConfig",
+        )
+
     def test_config_schema_exposes_nullable_controller_stack_overrides(self) -> None:
         fields = _fields_by_key(config_schema("linears/linear"))
 
@@ -692,7 +1132,10 @@ class InspectorSchemaTests(unittest.TestCase):
                     self.assertNotEqual(field["section"], canonical["section"])
 
         linear_fields = _fields_by_key(config_schema("linears/linear"))
-        self.assertEqual(linear_fields["stack_hidden_dim"]["default"], 256)
+        self.assertEqual(
+            linear_fields["stack_hidden_dim"]["default"],
+            linear_config.STACK_HIDDEN_DIM,
+        )
         self.assertFalse(linear_fields["stack_hidden_dim"]["nullable"])
         self.assertIsNone(linear_fields["gate_stack_hidden_dim"]["default"])
         self.assertTrue(linear_fields["gate_stack_hidden_dim"]["nullable"])

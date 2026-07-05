@@ -13,7 +13,7 @@ from viewer.backend.config_snapshots import (
 
 def make_record(
     snapshot_id: str = "snap-1",
-    model: str = "experts/experts_linear",
+    model: str = "experts/linear",
     preset: str = "base",
     name: str = "tuned",
     overrides: dict[str, str] | None = None,

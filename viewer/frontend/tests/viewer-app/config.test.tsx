@@ -134,6 +134,16 @@ function expectHeaderControlBeforeMetric(
   ).toBe(true);
 }
 
+function stackHintBadgeFor(section: HTMLElement) {
+  const badge = section.querySelector("[data-config-section-stack-hint]");
+
+  if (!(badge instanceof HTMLElement)) {
+    throw new Error("Expected section stack inheritance hint to render");
+  }
+
+  return badge;
+}
+
 function expectNoHeaderControlInAccordionBody(
   accordion: HTMLElement,
   controlLabel: string,
@@ -473,6 +483,145 @@ function nestedControlledSchemaResponse() {
         section: "Recurrent Halting Stack Options",
         default: "BEFORE",
         nullable: false,
+      }),
+    ],
+  };
+}
+
+function expertsSamplerSchemaResponse() {
+  return {
+    ...schemaResponse,
+    fields: [
+      ...schemaResponse.fields,
+      configFixtureField({
+        key: "sampler_threshold",
+        configKey: "SAMPLER_THRESHOLD",
+        flag: "--sampler-threshold",
+        label: "sampler threshold",
+        section: "Sampler Model Options",
+        type: "float",
+        default: 0,
+      }),
+      configFixtureField({
+        key: "sampler_switch_loss_weight",
+        configKey: "SAMPLER_SWITCH_LOSS_WEIGHT",
+        flag: "--sampler-switch-loss-weight",
+        label: "sampler switch loss weight",
+        section: "Sampler Model Options",
+        type: "float",
+        default: 0,
+      }),
+      configFixtureField({
+        key: "router_noisy_topk_flag",
+        configKey: "ROUTER_NOISY_TOPK_FLAG",
+        flag: "--router-noisy-topk-flag",
+        label: "router noisy topk flag",
+        section: "Router Options",
+        type: "bool",
+        default: false,
+        choices: [true, false],
+      }),
+      configFixtureField({
+        key: "sampler_stack_independent_flag",
+        configKey: "SAMPLER_STACK_INDEPENDENT_FLAG",
+        flag: "--sampler-stack-independent-flag",
+        label: "sampler stack independent flag",
+        section: "Router Stack Options",
+        type: "bool",
+        default: false,
+        choices: [true, false],
+      }),
+      stackFixtureField({
+        key: "sampler_stack_hidden_dim",
+        configKey: "SAMPLER_STACK_HIDDEN_DIM",
+        flag: "--sampler-stack-hidden-dim",
+        label: "sampler stack hidden dim",
+        section: "Router Stack Options",
+        default: null,
+        nullable: true,
+      }),
+      stackFixtureField({
+        key: "sampler_stack_num_layers",
+        configKey: "SAMPLER_STACK_NUM_LAYERS",
+        flag: "--sampler-stack-num-layers",
+        label: "sampler stack num layers",
+        section: "Router Stack Options",
+        default: null,
+        nullable: true,
+      }),
+      configFixtureField({
+        key: "sampler_bias_flag",
+        configKey: "SAMPLER_BIAS_FLAG",
+        flag: "--sampler-bias-flag",
+        label: "sampler bias flag",
+        section: "Router Stack Options",
+        type: "bool",
+        default: null,
+        nullable: true,
+        choices: [true, false],
+      }),
+    ],
+  };
+}
+
+function expertsMixtureSchemaResponse() {
+  return {
+    ...schemaResponse,
+    fields: [
+      ...schemaResponse.fields,
+      configFixtureField({
+        key: "expert_top_k",
+        configKey: "EXPERT_TOP_K",
+        flag: "--expert-top-k",
+        label: "expert top k",
+        section: "Mixture Of Experts Model Options",
+        type: "int",
+        default: 2,
+      }),
+      configFixtureField({
+        key: "expert_num_experts",
+        configKey: "EXPERT_NUM_EXPERTS",
+        flag: "--expert-num-experts",
+        label: "expert num experts",
+        section: "Mixture Of Experts Model Options",
+        type: "int",
+        default: 4,
+      }),
+      configFixtureField({
+        key: "expert_compute_expert_mixture_flag",
+        configKey: "EXPERT_COMPUTE_EXPERT_MIXTURE_FLAG",
+        flag: "--expert-compute-expert-mixture-flag",
+        label: "expert compute expert mixture flag",
+        section: "Mixture Of Experts Model Options",
+        type: "bool",
+        default: true,
+        choices: [true, false],
+      }),
+      stackFixtureField({
+        key: "expert_stack_hidden_dim",
+        configKey: "EXPERT_STACK_HIDDEN_DIM",
+        flag: "--expert-stack-hidden-dim",
+        label: "expert stack hidden dim",
+        section: "Expert Stack Options",
+        default: 256,
+      }),
+      stackFixtureField({
+        key: "expert_stack_num_layers",
+        configKey: "EXPERT_STACK_NUM_LAYERS",
+        flag: "--expert-stack-num-layers",
+        label: "expert stack num layers",
+        section: "Expert Stack Options",
+        default: 2,
+      }),
+      configFixtureField({
+        key: "expert_bias_flag",
+        configKey: "EXPERT_BIAS_FLAG",
+        flag: "--expert-bias-flag",
+        label: "expert bias flag",
+        section: "Expert Stack Options",
+        type: "bool",
+        default: true,
+        choices: [true, false],
       }),
     ],
   };
@@ -2103,6 +2252,272 @@ describe("ViewerApp Full Config", () => {
       enabledRecurrentHaltingAccordion,
       "recurrent halting flag",
     );
+  });
+
+  it("renders experts sampler router options as nested config accordions", async () => {
+    installFetchMock({ schemaResponse: expertsSamplerSchemaResponse() });
+    renderViewer();
+    const user = userEvent.setup();
+
+    const dialog = await openFullConfig(user);
+    const sectionNav = within(dialog).getByRole("navigation", {
+      name: /full config sections/i,
+    });
+
+    expect(
+      within(sectionNav).getByRole("button", {
+        name: /jump to router options/i,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(sectionNav).getByRole("button", {
+        name: /jump to router stack options/i,
+      }),
+    ).toBeInTheDocument();
+
+    const samplerAccordion = within(dialog).getByRole("button", {
+      name: /sampler model options section, 7 fields, 0 overrides/i,
+    });
+    await user.click(samplerAccordion);
+
+    const samplerSection = fullConfigSectionFor(samplerAccordion);
+    const routerAccordion = within(samplerSection).getByRole("button", {
+      name: /router options section, 5 fields, 0 overrides/i,
+    });
+    const routerStackAccordion = within(samplerSection).getByRole("button", {
+      name: /router stack options section, 4 fields, 0 overrides/i,
+    });
+    const routerStackSection = fullConfigSectionFor(routerStackAccordion);
+    const routerStackHint = stackHintBadgeFor(routerStackSection);
+    const samplerDirectGrid = directFieldGridFor(samplerAccordion);
+    const routerDirectGrid = directFieldGridFor(routerAccordion);
+
+    expect(routerAccordion).toHaveAttribute("aria-expanded", "true");
+    expect(routerStackAccordion).toBeDisabled();
+    expect(routerStackAccordion).toHaveAttribute("aria-expanded", "false");
+    expect(routerStackHint).toHaveTextContent("Inherits Submodule Stack");
+    expect(routerStackHint).toHaveAttribute(
+      "aria-label",
+      "Uses Layer Stack Submodule Options while sampler stack independent flag is off. Enable it to use Router Stack Options values.",
+    );
+    expect(routerStackHint).toHaveAttribute(
+      "title",
+      "Uses Layer Stack Submodule Options while sampler stack independent flag is off. Enable it to use Router Stack Options values.",
+    );
+    expect(within(samplerDirectGrid).getByLabelText(/sampler threshold/i))
+      .toBeInTheDocument();
+    expect(
+      within(samplerDirectGrid).getByLabelText(/sampler switch loss weight/i),
+    ).toBeInTheDocument();
+    expect(within(samplerDirectGrid).queryByLabelText(/router noisy topk flag/i))
+      .not.toBeInTheDocument();
+    expect(
+      within(samplerDirectGrid).queryByLabelText(/sampler stack independent flag/i),
+    ).not.toBeInTheDocument();
+    expect(within(samplerDirectGrid).queryByLabelText(/sampler stack hidden dim/i))
+      .not.toBeInTheDocument();
+    expect(within(samplerDirectGrid).queryByLabelText(/sampler bias flag/i))
+      .not.toBeInTheDocument();
+
+    expect(within(routerDirectGrid).getByLabelText(/router noisy topk flag/i))
+      .toBeInTheDocument();
+    expect(within(routerDirectGrid).queryByLabelText(/sampler threshold/i))
+      .not.toBeInTheDocument();
+    expect(
+      within(routerDirectGrid).queryByLabelText(/sampler stack independent flag/i),
+    ).not.toBeInTheDocument();
+    expect(within(routerDirectGrid).queryByLabelText(/sampler stack hidden dim/i))
+      .not.toBeInTheDocument();
+    expect(within(routerDirectGrid).queryByLabelText(/sampler bias flag/i))
+      .not.toBeInTheDocument();
+
+    await user.click(
+      within(samplerSection).getByRole("switch", {
+        name: /sampler stack independent flag/i,
+      }),
+    );
+
+    const enabledRouterStackAccordion = within(samplerSection).getByRole("button", {
+      name: /router stack options section, 4 fields, 1 override/i,
+    });
+    const enabledRouterStackHint = stackHintBadgeFor(
+      fullConfigSectionFor(enabledRouterStackAccordion),
+    );
+    const routerStackPanel = accordionPanelFor(enabledRouterStackAccordion);
+
+    expect(enabledRouterStackHint).toHaveTextContent("Custom Stack");
+    expect(enabledRouterStackHint).toHaveAttribute(
+      "aria-label",
+      "Uses Router Stack Options values while sampler stack independent flag is on. Disable it to inherit Layer Stack Submodule Options.",
+    );
+    expect(within(routerStackPanel).getByLabelText(/sampler stack hidden dim/i))
+      .toBeInTheDocument();
+    expect(within(routerStackPanel).getByLabelText(/sampler stack num layers/i))
+      .toBeInTheDocument();
+    expectBooleanSegmentedControl(routerStackPanel, /sampler bias flag/i);
+  });
+
+  it("auto-opens the experts sampler router path for router stack search matches", async () => {
+    installFetchMock({ schemaResponse: expertsSamplerSchemaResponse() });
+    renderViewer();
+    const user = userEvent.setup();
+
+    const dialog = await openFullConfig(user);
+    const search = within(dialog).getByRole("combobox", {
+      name: /search config fields/i,
+    });
+
+    await user.type(search, "sampler stack hidden dim");
+
+    const searchPopup = fullConfigSearchPopup(dialog);
+    const hiddenDimRow = fullConfigSearchResultRow(
+      searchPopup,
+      /sampler stack hidden dim/i,
+    );
+    expect(
+      within(hiddenDimRow).getByRole("textbox", {
+        name: /current value/i,
+      }),
+    ).toBeDisabled();
+    expect(hiddenDimRow).toHaveTextContent(
+      /enable sampler stack independent flag before editing router stack options/i,
+    );
+
+    const samplerAccordion = within(dialog).getByRole("button", {
+      name: /sampler model options section/i,
+    });
+    const samplerSection = fullConfigSectionFor(samplerAccordion);
+    const routerAccordion = within(samplerSection).getByRole("button", {
+      name: /router options section/i,
+    });
+    const routerStackAccordion = within(samplerSection).getByRole("button", {
+      name: /router stack options section, 2 fields, 0 overrides/i,
+    });
+
+    expect(samplerAccordion).toHaveAttribute("aria-expanded", "true");
+    expect(routerAccordion).toHaveAttribute("aria-expanded", "true");
+    expect(routerStackAccordion).toBeDisabled();
+    expect(routerStackAccordion).toHaveAttribute("aria-expanded", "false");
+
+    await user.click(
+      within(samplerSection).getByRole("switch", {
+        name: /sampler stack independent flag/i,
+      }),
+    );
+
+    const enabledRouterStackAccordion = within(samplerSection).getByRole("button", {
+      name: /router stack options section, 2 fields, 1 override/i,
+    });
+    expect(enabledRouterStackAccordion).toHaveAttribute("aria-expanded", "true");
+    expect(
+      within(accordionPanelFor(enabledRouterStackAccordion)).getByLabelText(
+        /sampler stack hidden dim/i,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("renders mixture of experts stack options as nested config accordions", async () => {
+    installFetchMock({ schemaResponse: expertsMixtureSchemaResponse() });
+    renderViewer();
+    const user = userEvent.setup();
+
+    const dialog = await openFullConfig(user);
+    const sectionNav = within(dialog).getByRole("navigation", {
+      name: /full config sections/i,
+    });
+
+    expect(
+      within(sectionNav).getByRole("button", {
+        name: /jump to mixture of experts model options/i,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(sectionNav).getByRole("button", {
+        name: /jump to expert stack options/i,
+      }),
+    ).toBeInTheDocument();
+
+    const mixtureAccordion = within(dialog).getByRole("button", {
+      name: /mixture of experts model options section, 6 fields, 0 overrides/i,
+    });
+    await user.click(mixtureAccordion);
+
+    const mixtureSection = fullConfigSectionFor(mixtureAccordion);
+    const expertStackAccordion = within(mixtureSection).getByRole("button", {
+      name: /expert stack options section, 3 fields, 0 overrides/i,
+    });
+    const mixtureDirectGrid = directFieldGridFor(mixtureAccordion);
+
+    expect(expertStackAccordion).not.toBeDisabled();
+    expect(expertStackAccordion).toHaveAttribute("aria-expanded", "true");
+    expect(within(mixtureDirectGrid).getByLabelText(/expert top k/i))
+      .toBeInTheDocument();
+    expect(within(mixtureDirectGrid).getByLabelText(/expert num experts/i))
+      .toBeInTheDocument();
+    expectBooleanSegmentedControl(
+      mixtureDirectGrid,
+      /expert compute expert mixture flag/i,
+    );
+    expect(within(mixtureDirectGrid).queryByLabelText(/expert stack hidden dim/i))
+      .not.toBeInTheDocument();
+    expect(within(mixtureDirectGrid).queryByLabelText(/expert stack num layers/i))
+      .not.toBeInTheDocument();
+    expect(within(mixtureDirectGrid).queryByLabelText(/expert bias flag/i))
+      .not.toBeInTheDocument();
+
+    const expertStackPanel = accordionPanelFor(expertStackAccordion);
+    expect(
+      within(expertStackPanel).getByLabelText(/expert stack hidden dim/i),
+    ).toBeEnabled();
+    expect(
+      within(expertStackPanel).getByLabelText(/expert stack num layers/i),
+    ).toBeEnabled();
+    expectBooleanSegmentedControl(expertStackPanel, /expert bias flag/i);
+    expect(
+      within(fullConfigSectionFor(expertStackAccordion)).queryByRole("switch"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("auto-opens the mixture expert stack path for expert stack search matches", async () => {
+    installFetchMock({ schemaResponse: expertsMixtureSchemaResponse() });
+    renderViewer();
+    const user = userEvent.setup();
+
+    const dialog = await openFullConfig(user);
+    const search = within(dialog).getByRole("combobox", {
+      name: /search config fields/i,
+    });
+
+    await user.type(search, "expert stack hidden dim");
+
+    const searchPopup = fullConfigSearchPopup(dialog);
+    const hiddenDimRow = fullConfigSearchResultRow(
+      searchPopup,
+      /expert stack hidden dim/i,
+    );
+    expect(
+      within(hiddenDimRow).getByRole("textbox", {
+        name: /current value/i,
+      }),
+    ).toBeEnabled();
+    expect(hiddenDimRow).not.toHaveTextContent(/enable .* before editing/i);
+
+    const mixtureAccordion = within(dialog).getByRole("button", {
+      name: /mixture of experts model options section, 1 field, 0 overrides/i,
+    });
+    const mixtureSection = fullConfigSectionFor(mixtureAccordion);
+    const expertStackAccordion = within(mixtureSection).getByRole("button", {
+      name: /expert stack options section, 1 field, 0 overrides/i,
+    });
+
+    expect(mixtureAccordion).toHaveAttribute("aria-expanded", "true");
+    expect(expertStackAccordion).not.toBeDisabled();
+    expect(expertStackAccordion).toHaveAttribute("aria-expanded", "true");
+    expect(
+      within(accordionPanelFor(expertStackAccordion)).getByLabelText(
+        /expert stack hidden dim/i,
+      ),
+    ).toBeEnabled();
   });
 
   it("renders stack booleans as two-option segmented controls", async () => {

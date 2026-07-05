@@ -29,7 +29,7 @@ describe("training panel options", () => {
     const models = [
       { modelType: "linears", model: "linear" },
       { modelType: "linears", model: "linear_adaptive" },
-      { modelType: "experts", model: "experts_linear" },
+      { modelType: "experts", model: "linear" },
     ];
 
     expect(buildTrainingModelTypeOptions(models)).toEqual([
