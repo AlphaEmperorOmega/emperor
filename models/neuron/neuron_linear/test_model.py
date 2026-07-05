@@ -36,7 +36,7 @@ from models.neuron.neuron_linear._control_config_factory import (
 from models.neuron.neuron_linear._builder_options import (
     ClusterRouteHaltingOptions,
     NeuronClusterCapacityOptions,
-    NeuronControllerStackOptions,
+    NeuronSubmoduleStackOptions,
     NeuronTerminalOptions,
     NeuronTerminalSamplerOptions,
 )
@@ -319,7 +319,7 @@ class TestNeuronLinearModel(unittest.TestCase):
             z_axis_offset=TerminalZAxisOffsetOptions.ZERO,
             top_k=2,
         )
-        terminal_router_options = NeuronControllerStackOptions(
+        terminal_router_options = NeuronSubmoduleStackOptions(
             hidden_dim=18,
             num_layers=2,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
@@ -341,7 +341,7 @@ class TestNeuronLinearModel(unittest.TestCase):
             zero_centred_loss_weight=0.13,
             mutual_information_loss_weight=0.14,
         )
-        halting_stack_options = NeuronControllerStackOptions(
+        halting_stack_options = NeuronSubmoduleStackOptions(
             hidden_dim=20,
             num_layers=2,
             last_layer_bias_option=LastLayerBiasOptions.DISABLED,

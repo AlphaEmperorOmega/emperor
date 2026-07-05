@@ -31,7 +31,7 @@ class NeuronTerminalOptions:
 
 
 @dataclass(frozen=True)
-class NeuronControllerStackOptions:
+class NeuronSubmoduleStackOptions:
     hidden_dim: int
     num_layers: int
     last_layer_bias_option: LastLayerBiasOptions
@@ -62,5 +62,5 @@ class ClusterRouteHaltingOptions:
     threshold: float
     dropout: float
     hidden_state_mode: HaltingHiddenStateModeOptions
-    stack_options: NeuronControllerStackOptions
+    stack_options: NeuronSubmoduleStackOptions
     output_dim: int
