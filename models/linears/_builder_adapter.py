@@ -412,7 +412,7 @@ def _default_adaptive_generator_stack_options(
     config_module: ModuleType,
 ) -> Any:
     adaptive_options = _adaptive_options()
-    config_prefix = _shared_adaptive_generator_stack_config_prefix(config_module)
+    config_prefix = "ADAPTIVE_GENERATOR_STACK"
     return adaptive_options.AdaptiveGeneratorStackOptions(
         hidden_dim=getattr(config_module, f"{config_prefix}_HIDDEN_DIM"),
         layer_norm_position=getattr(
@@ -438,12 +438,6 @@ def _default_adaptive_generator_stack_options(
         ),
         bias_flag=getattr(config_module, f"{config_prefix}_BIAS_FLAG"),
     )
-
-
-def _shared_adaptive_generator_stack_config_prefix(config_module: ModuleType) -> str:
-    if hasattr(config_module, "ADAPTIVE_SUBMODULE_STACK_HIDDEN_DIM"):
-        return "ADAPTIVE_SUBMODULE_STACK"
-    return "ADAPTIVE_STACK"
 
 
 def _default_adaptive_generator_stack_source(
@@ -888,44 +882,6 @@ def _adaptive_generator_stack_options_from_kwargs(
     updates = _pop_updates(
         kwargs,
         {
-            "adaptive_stack_hidden_dim": "hidden_dim",
-            "adaptive_stack_layer_norm_position": (
-                "layer_norm_position"
-            ),
-            "adaptive_stack_num_layers": "num_layers",
-            "adaptive_stack_activation": "activation",
-            "adaptive_stack_residual_connection_option": (
-                "residual_connection_option"
-            ),
-            "adaptive_stack_dropout_probability": (
-                "dropout_probability"
-            ),
-            "adaptive_stack_last_layer_bias_option": (
-                "last_layer_bias_option"
-            ),
-            "adaptive_stack_apply_output_pipeline_flag": (
-                "apply_output_pipeline_flag"
-            ),
-            "adaptive_stack_bias_flag": "bias_flag",
-            "adaptive_submodule_stack_hidden_dim": "hidden_dim",
-            "adaptive_submodule_stack_layer_norm_position": (
-                "layer_norm_position"
-            ),
-            "adaptive_submodule_stack_num_layers": "num_layers",
-            "adaptive_submodule_stack_activation": "activation",
-            "adaptive_submodule_stack_residual_connection_option": (
-                "residual_connection_option"
-            ),
-            "adaptive_submodule_stack_dropout_probability": (
-                "dropout_probability"
-            ),
-            "adaptive_submodule_stack_last_layer_bias_option": (
-                "last_layer_bias_option"
-            ),
-            "adaptive_submodule_stack_apply_output_pipeline_flag": (
-                "apply_output_pipeline_flag"
-            ),
-            "adaptive_submodule_stack_bias_flag": "bias_flag",
             "adaptive_generator_stack_hidden_dim": "hidden_dim",
             "adaptive_generator_stack_layer_norm_position": (
                 "layer_norm_position"

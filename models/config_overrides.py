@@ -21,25 +21,6 @@ SKIP_CONFIG_KEYS = {
 }
 
 MODEL_PARAM_ALIASES = {
-    "adaptive_submodule_stack_activation": "adaptive_generator_stack_activation",
-    "adaptive_submodule_stack_apply_output_pipeline_flag": (
-        "adaptive_generator_stack_apply_output_pipeline_flag"
-    ),
-    "adaptive_submodule_stack_bias_flag": "adaptive_generator_stack_bias_flag",
-    "adaptive_submodule_stack_dropout_probability": (
-        "adaptive_generator_stack_dropout_probability"
-    ),
-    "adaptive_submodule_stack_hidden_dim": "adaptive_generator_stack_hidden_dim",
-    "adaptive_submodule_stack_last_layer_bias_option": (
-        "adaptive_generator_stack_last_layer_bias_option"
-    ),
-    "adaptive_submodule_stack_layer_norm_position": (
-        "adaptive_generator_stack_layer_norm_position"
-    ),
-    "adaptive_submodule_stack_num_layers": "adaptive_generator_stack_num_layers",
-    "adaptive_submodule_stack_residual_connection_option": (
-        "adaptive_generator_stack_residual_connection_option"
-    ),
     "expert_capacity_factor": "capacity_factor",
     "expert_compute_expert_mixture_flag": "compute_expert_mixture_flag",
     "expert_dropped_token_behavior": "dropped_token_behavior",
@@ -52,48 +33,6 @@ MODEL_PARAM_ALIASES = {
     "halting_flag": "stack_halting_flag",
     "stack_layer_norm_position": "layer_norm_position",
     "weight_generator_depth": "generator_depth",
-}
-
-LEGACY_CONFIG_KEY_ALIASES = {
-    "adaptive_stack_activation": "adaptive_submodule_stack_activation",
-    "adaptive_stack_apply_output_pipeline_flag": (
-        "adaptive_submodule_stack_apply_output_pipeline_flag"
-    ),
-    "adaptive_stack_dropout_probability": (
-        "adaptive_submodule_stack_dropout_probability"
-    ),
-    "adaptive_stack_hidden_dim": "adaptive_submodule_stack_hidden_dim",
-    "adaptive_stack_last_layer_bias_option": (
-        "adaptive_submodule_stack_last_layer_bias_option"
-    ),
-    "adaptive_stack_layer_norm_position": (
-        "adaptive_submodule_stack_layer_norm_position"
-    ),
-    "adaptive_stack_num_layers": "adaptive_submodule_stack_num_layers",
-    "adaptive_stack_residual_connection_option": (
-        "adaptive_submodule_stack_residual_connection_option"
-    ),
-    "layer_norm_position": "stack_layer_norm_position",
-    "gate_bias_flag": "gate_stack_bias_flag",
-    "gate_hidden_dim": "gate_stack_hidden_dim",
-    "gate_layer_norm_position": "gate_stack_layer_norm_position",
-    "halting_bias_flag": "halting_stack_bias_flag",
-    "halting_hidden_dim": "halting_stack_hidden_dim",
-    "halting_layer_norm_position": "halting_stack_layer_norm_position",
-    "memory_bias_flag": "memory_stack_bias_flag",
-    "memory_hidden_dim": "memory_stack_hidden_dim",
-    "memory_layer_norm_position": "memory_stack_layer_norm_position",
-    "recurrent_gate_bias_flag": "recurrent_gate_stack_bias_flag",
-    "recurrent_gate_hidden_dim": "recurrent_gate_stack_hidden_dim",
-    "recurrent_gate_layer_norm_position": "recurrent_gate_stack_layer_norm_position",
-    "recurrent_halting_bias_flag": "recurrent_halting_stack_bias_flag",
-    "recurrent_halting_hidden_dim": "recurrent_halting_stack_hidden_dim",
-    "recurrent_halting_layer_norm_position": (
-        "recurrent_halting_stack_layer_norm_position"
-    ),
-    "submodule_bias_flag": "submodule_stack_bias_flag",
-    "submodule_hidden_dim": "submodule_stack_hidden_dim",
-    "submodule_layer_norm_position": "submodule_stack_layer_norm_position",
 }
 
 
@@ -122,8 +61,7 @@ def canonical_config_key(key: str) -> str:
     stripped_key = key.strip().replace("-", "_")
     if stripped_key.isupper():
         return stripped_key
-    normalized_key = normalize_key(key)
-    return LEGACY_CONFIG_KEY_ALIASES.get(normalized_key, normalized_key).upper()
+    return normalize_key(key).upper()
 
 
 def _is_supported_constant(value: Any) -> bool:
@@ -175,26 +113,22 @@ def parse_search_set(
     if not values:
         raise argparse.ArgumentTypeError("--search-set requires at least one value")
 
-    candidate_keys = list(
-        dict.fromkeys([canonical_config_key(raw_key), raw_config_key])
-    )
+    value_config_key = canonical_config_key(raw_key)
     supported_keys = set(iter_supported_config_keys(config_module))
-    for value_config_key in candidate_keys:
-        search_config_key = search_key_to_config_key(value_config_key)
-        if (
-            not hasattr(config_module, search_config_key)
-            and value_config_key not in supported_keys
-        ):
-            continue
-        parse_key = (
-            search_config_key
-            if hasattr(config_module, search_config_key)
-            else value_config_key
-        )
-        return config_key_to_model_param(value_config_key), [
-            parse_config_value(config_module, parse_key, value) for value in values
-        ]
-    raise argparse.ArgumentTypeError(f"unknown config key '{raw_key}'")
+    search_config_key = search_key_to_config_key(value_config_key)
+    if (
+        not hasattr(config_module, search_config_key)
+        and value_config_key not in supported_keys
+    ):
+        raise argparse.ArgumentTypeError(f"unknown config key '{raw_key}'")
+    parse_key = (
+        search_config_key
+        if hasattr(config_module, search_config_key)
+        else value_config_key
+    )
+    return config_key_to_model_param(value_config_key), [
+        parse_config_value(config_module, parse_key, value) for value in values
+    ]
 
 
 def add_config_override_arguments(
@@ -203,7 +137,6 @@ def add_config_override_arguments(
 ) -> dict[str, str]:
     dest_to_key = {}
     supported_keys = iter_supported_config_keys(config_module)
-    registered_flags = set()
     for key in supported_keys:
         dest = f"override_{key.lower()}"
         flag = config_key_to_flag(key)
@@ -214,24 +147,7 @@ def add_config_override_arguments(
             metavar="VALUE",
             help=argparse.SUPPRESS,
         )
-        registered_flags.add(flag)
         dest_to_key[dest] = key
-    for legacy_key, canonical_key in LEGACY_CONFIG_KEY_ALIASES.items():
-        key = canonical_key.upper()
-        if key not in supported_keys:
-            continue
-        flag = config_key_to_flag(legacy_key)
-        if flag in registered_flags:
-            continue
-        dest = f"override_{key.lower()}"
-        parser.add_argument(
-            flag,
-            dest=dest,
-            default=None,
-            metavar="VALUE",
-            help=argparse.SUPPRESS,
-        )
-        registered_flags.add(flag)
     parser.add_argument(
         "--search-set",
         action="append",

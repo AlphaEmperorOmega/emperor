@@ -265,21 +265,21 @@ class ControlConfigFactory:
         if adaptive_generator_stack_options is not None:
             return adaptive_generator_stack_options
         return AdaptiveGeneratorStackOptions(
-            hidden_dim=config.ADAPTIVE_SUBMODULE_STACK_HIDDEN_DIM,
-            layer_norm_position=config.ADAPTIVE_SUBMODULE_STACK_LAYER_NORM_POSITION,
-            num_layers=config.ADAPTIVE_SUBMODULE_STACK_NUM_LAYERS,
-            activation=config.ADAPTIVE_SUBMODULE_STACK_ACTIVATION,
+            hidden_dim=config.ADAPTIVE_GENERATOR_STACK_HIDDEN_DIM,
+            layer_norm_position=config.ADAPTIVE_GENERATOR_STACK_LAYER_NORM_POSITION,
+            num_layers=config.ADAPTIVE_GENERATOR_STACK_NUM_LAYERS,
+            activation=config.ADAPTIVE_GENERATOR_STACK_ACTIVATION,
             residual_connection_option=(
-                config.ADAPTIVE_SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION
+                config.ADAPTIVE_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION
             ),
-            dropout_probability=config.ADAPTIVE_SUBMODULE_STACK_DROPOUT_PROBABILITY,
+            dropout_probability=config.ADAPTIVE_GENERATOR_STACK_DROPOUT_PROBABILITY,
             last_layer_bias_option=(
-                config.ADAPTIVE_SUBMODULE_STACK_LAST_LAYER_BIAS_OPTION
+                config.ADAPTIVE_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION
             ),
             apply_output_pipeline_flag=(
-                config.ADAPTIVE_SUBMODULE_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+                config.ADAPTIVE_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG
             ),
-            bias_flag=config.ADAPTIVE_SUBMODULE_STACK_BIAS_FLAG,
+            bias_flag=config.ADAPTIVE_GENERATOR_STACK_BIAS_FLAG,
         )
 
     def __default_controller_stack_source(
