@@ -2724,6 +2724,7 @@ export function semanticMonitorPayload(nodePath: string): MockMonitorPayload {
       mockScalarSeries(nodePath, "input/mean", [0.1, 0.15]),
       mockScalarSeries(nodePath, "bias/grad_mean", [0.01, 0.02]),
       mockScalarSeries(nodePath, "bias/mean", [0.03, 0.04]),
+      mockScalarSeries(nodePath, "weights/grad_norm", [0.09, 0.12]),
       mockScalarSeries(nodePath, "weights/l2_norm", [1.2, 1.4]),
       mockScalarSeries(nodePath, "attention/entropy_mean", [0.8, 0.7]),
       mockScalarSeries(nodePath, "recurrent/actual_steps", [2, 3]),

@@ -51,9 +51,11 @@ export type MetricPair<T> = {
 
 export const monitorGroupOrder = [
   "Activations",
-  "Gradients",
-  "Bias",
   "Weights",
+  "Weight gradients",
+  "Bias",
+  "Bias gradients",
+  "Gradients",
   "Attention",
   "Recurrent",
   "Controllers",

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { RefreshCw, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import {
 } from "@/lib/graph/monitor-targets";
 import {
   type HistoricalMonitorRunData,
+  type MonitorGroup,
   type MonitorChartsSource,
   monitorGroupOrder,
 } from "@/types/monitor";
@@ -61,6 +62,10 @@ type ChartGridItem = {
   key: string;
   label: string;
   render: () => ReactNode;
+};
+
+type ComparisonPairItem = {
+  render: (index: number) => ReactNode;
 };
 
 const LARGE_MONITOR_COLLAPSE_THRESHOLD = 24;
@@ -192,14 +197,59 @@ function HistoricalMonitorProgressRow({
   );
 }
 
-function pushChartItem(
-  items: ChartGridItem[],
-  item: ChartGridItem,
-  limit = MONITOR_CHART_RENDER_LIMIT,
-) {
-  if (items.length < limit) {
-    items.push(item);
+function pushChartItem(items: ChartGridItem[], item: ChartGridItem) {
+  items.push(item);
+}
+
+function ChartGrid({ charts }: { charts: ChartGridItem[] }) {
+  return (
+    <div className="grid md:grid-cols-2">
+      {charts.map(({ key, label, render }, index) => (
+        <div key={key} className={chartGridItemClass(index)}>
+          <LazyMonitorChart label={label} render={render} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+type MonitorAccordionBand = "activations" | "weights" | "bias" | "signals";
+
+function monitorAccordionBand(group: MonitorGroup): MonitorAccordionBand {
+  if (group === "Activations") {
+    return "activations";
   }
+  if (group === "Weights" || group === "Weight gradients") {
+    return "weights";
+  }
+  if (group === "Bias" || group === "Bias gradients") {
+    return "bias";
+  }
+  return "signals";
+}
+
+function renderMonitorAccordionBands(
+  items: Array<{ group: MonitorGroup; accordion: ReactNode }>,
+) {
+  return items.map((item, index) => {
+    const previousItem = items[index - 1];
+    const showDivider =
+      previousItem &&
+      monitorAccordionBand(previousItem.group) !== monitorAccordionBand(item.group);
+
+    return (
+      <Fragment key={item.group}>
+        {showDivider && (
+          <div
+            className="h-px bg-line-soft"
+            data-testid="monitor-accordion-band-divider"
+            aria-hidden
+          />
+        )}
+        {item.accordion}
+      </Fragment>
+    );
+  });
 }
 
 function SingleNodeCharts({ data }: { data: MonitorData }) {
@@ -208,43 +258,43 @@ function SingleNodeCharts({ data }: { data: MonitorData }) {
   const { isGroupOpen, toggleGroup } = useMonitorGroupAccordion(groupCounts, {
     startCollapsed: totalGroupCount(groupCounts) > LARGE_MONITOR_COLLAPSE_THRESHOLD,
   });
+  const accordionItems = monitorGroupOrder.flatMap((group) => {
+    const chartCount = groupCounts[group];
+    if (chartCount === 0) {
+      return [];
+    }
+    const groupData = groups[group];
+    const isOpen = isGroupOpen(group);
+    const charts: ChartGridItem[] = [];
+    for (const series of groupData.scalarSeries) {
+      pushChartItem(charts, {
+        key: `scalar-${series.tag}`,
+        label: series.tag,
+        render: () => <ScalarChart series={series} />,
+      });
+    }
+    for (const histogram of groupData.histograms) {
+      pushChartItem(charts, {
+        key: `histogram-${histogram.tag}`,
+        label: histogram.tag,
+        render: () => <HistogramChart histogram={histogram} />,
+      });
+    }
+    for (const image of groupData.images) {
+      pushChartItem(charts, {
+        key: `image-${image.tag}`,
+        label: image.tag,
+        render: () => <MonitorImage image={image} />,
+      });
+    }
+    const visibleCharts = charts.slice(0, MONITOR_CHART_RENDER_LIMIT);
+    const hiddenCount = Math.max(0, chartCount - visibleCharts.length);
 
-  return (
-    <div className="grid gap-3">
-      {monitorGroupOrder.map((group) => {
-        const chartCount = groupCounts[group];
-        if (chartCount === 0) {
-          return null;
-        }
-        const groupData = groups[group];
-        const isOpen = isGroupOpen(group);
-        const charts: ChartGridItem[] = [];
-        for (const series of groupData.scalarSeries) {
-          pushChartItem(charts, {
-            key: `scalar-${series.tag}`,
-            label: series.tag,
-            render: () => <ScalarChart series={series} />,
-          });
-        }
-        for (const histogram of groupData.histograms) {
-          pushChartItem(charts, {
-            key: `histogram-${histogram.tag}`,
-            label: histogram.tag,
-            render: () => <HistogramChart histogram={histogram} />,
-          });
-        }
-        for (const image of groupData.images) {
-          pushChartItem(charts, {
-            key: `image-${image.tag}`,
-            label: image.tag,
-            render: () => <MonitorImage image={image} />,
-          });
-        }
-        const hiddenCount = Math.max(0, chartCount - charts.length);
-
-        return (
+    return [
+      {
+        group,
+        accordion: (
           <MonitorGroupAccordion
-            key={group}
             idPrefix="single-monitor"
             group={group}
             count={chartCount}
@@ -252,17 +302,17 @@ function SingleNodeCharts({ data }: { data: MonitorData }) {
             isOpen={isOpen}
             onToggle={() => toggleGroup(group)}
           >
-            <div className="grid md:grid-cols-2">
-              {charts.map(({ key, label, render }, index) => (
-                <div key={key} className={chartGridItemClass(index)}>
-                  <LazyMonitorChart label={label} render={render} />
-                </div>
-              ))}
-            </div>
+            <ChartGrid charts={visibleCharts} />
             <ChartLimitNotice hiddenCount={hiddenCount} />
           </MonitorGroupAccordion>
-        );
-      })}
+        ),
+      },
+    ];
+  });
+
+  return (
+    <div className="grid gap-3">
+      {renderMonitorAccordionBands(accordionItems)}
     </div>
   );
 }
@@ -279,51 +329,51 @@ function MultiRunMonitorCharts({
   const { isGroupOpen, toggleGroup } = useMonitorGroupAccordion(groupCounts, {
     startCollapsed: totalGroupCount(groupCounts) > LARGE_MONITOR_COLLAPSE_THRESHOLD,
   });
+  const accordionItems = monitorGroupOrder.flatMap((group) => {
+    const chartCount = groupCounts[group];
+    if (chartCount === 0) {
+      return [];
+    }
+    const groupData = groups[group];
+    const isOpen = isGroupOpen(group);
+    const charts: ChartGridItem[] = [];
+    for (const metric of groupData.scalarMetrics) {
+      pushChartItem(charts, {
+        key: `scalar-${metric.key}`,
+        label: metric.key,
+        render: () => <MultiRunScalarChart metric={metric} />,
+      });
+    }
+    for (const entry of groupData.histograms) {
+      pushChartItem(charts, {
+        key: `histogram-${entry.run.id}-${entry.item.tag}`,
+        label: entry.item.tag,
+        render: () => (
+          <RunVisualCard run={entry.run}>
+            <HistogramChart histogram={entry.item} />
+          </RunVisualCard>
+        ),
+      });
+    }
+    for (const entry of groupData.images) {
+      pushChartItem(charts, {
+        key: `image-${entry.run.id}-${entry.item.tag}`,
+        label: entry.item.tag,
+        render: () => (
+          <RunVisualCard run={entry.run}>
+            <MonitorImage image={entry.item} />
+          </RunVisualCard>
+        ),
+      });
+    }
+    const visibleCharts = charts.slice(0, MONITOR_CHART_RENDER_LIMIT);
+    const hiddenCount = Math.max(0, chartCount - visibleCharts.length);
 
-  return (
-    <div className="grid gap-3">
-      {monitorGroupOrder.map((group) => {
-        const chartCount = groupCounts[group];
-        if (chartCount === 0) {
-          return null;
-        }
-        const groupData = groups[group];
-        const isOpen = isGroupOpen(group);
-        const charts: ChartGridItem[] = [];
-        for (const metric of groupData.scalarMetrics) {
-          pushChartItem(charts, {
-            key: `scalar-${metric.key}`,
-            label: metric.key,
-            render: () => <MultiRunScalarChart metric={metric} />,
-          });
-        }
-        for (const entry of groupData.histograms) {
-          pushChartItem(charts, {
-            key: `histogram-${entry.run.id}-${entry.item.tag}`,
-            label: entry.item.tag,
-            render: () => (
-              <RunVisualCard run={entry.run}>
-                <HistogramChart histogram={entry.item} />
-              </RunVisualCard>
-            ),
-          });
-        }
-        for (const entry of groupData.images) {
-          pushChartItem(charts, {
-            key: `image-${entry.run.id}-${entry.item.tag}`,
-            label: entry.item.tag,
-            render: () => (
-              <RunVisualCard run={entry.run}>
-                <MonitorImage image={entry.item} />
-              </RunVisualCard>
-            ),
-          });
-        }
-        const hiddenCount = Math.max(0, chartCount - charts.length);
-
-        return (
+    return [
+      {
+        group,
+        accordion: (
           <MonitorGroupAccordion
-            key={group}
             idPrefix={idPrefix}
             group={group}
             count={chartCount}
@@ -331,17 +381,17 @@ function MultiRunMonitorCharts({
             isOpen={isOpen}
             onToggle={() => toggleGroup(group)}
           >
-            <div className="grid md:grid-cols-2">
-              {charts.map(({ key, label, render }, index) => (
-                <div key={key} className={chartGridItemClass(index)}>
-                  <LazyMonitorChart label={label} render={render} />
-                </div>
-              ))}
-            </div>
+            <ChartGrid charts={visibleCharts} />
             <ChartLimitNotice hiddenCount={hiddenCount} />
           </MonitorGroupAccordion>
-        );
-      })}
+        ),
+      },
+    ];
+  });
+
+  return (
+    <div className="grid gap-3">
+      {renderMonitorAccordionBands(accordionItems)}
     </div>
   );
 }
@@ -415,6 +465,152 @@ function ComparisonCharts({
   const { isGroupOpen, toggleGroup } = useMonitorGroupAccordion(groupCounts, {
     startCollapsed: totalGroupCount(groupCounts) > LARGE_MONITOR_COLLAPSE_THRESHOLD,
   });
+  const accordionItems = monitorGroupOrder.flatMap((group) => {
+    const pairCount = groupCounts[group];
+    if (pairCount === 0) {
+      return [];
+    }
+    const groupData = groups[group];
+    const isOpen = isGroupOpen(group);
+    const pairItems: ComparisonPairItem[] = [];
+    for (const pair of groupData.scalarPairs) {
+      pairItems.push({
+        render: (index) => {
+          const domain = scalarDomainFor(pair.primary, pair.comparison);
+          return (
+            <div key={`scalar-${pair.key}`} className={comparisonPairRowClass(index)}>
+              <div className={comparisonPairCellClass(0)}>
+                <LazyMonitorChart
+                  label={`${pair.key} primary`}
+                  render={() =>
+                    pair.primary ? (
+                      <ScalarChart series={pair.primary} domain={domain} />
+                    ) : (
+                      <MissingMetricCard metric={pair.key} nodePath={primaryNode.path} />
+                    )
+                  }
+                />
+              </div>
+              <div className={comparisonPairCellClass(1)}>
+                <LazyMonitorChart
+                  label={`${pair.key} comparison`}
+                  render={() =>
+                    pair.comparison ? (
+                      <ScalarChart series={pair.comparison} domain={domain} />
+                    ) : (
+                      <MissingMetricCard
+                        metric={pair.key}
+                        nodePath={comparisonNode.path}
+                        busy={comparisonLoading}
+                      />
+                    )
+                  }
+                />
+              </div>
+            </div>
+          );
+        },
+      });
+    }
+    for (const pair of groupData.histogramPairs) {
+      pairItems.push({
+        render: (index) => {
+          const maxCount = histogramMaxCountFor(pair.primary, pair.comparison);
+          return (
+            <div key={`histogram-${pair.key}`} className={comparisonPairRowClass(index)}>
+              <div className={comparisonPairCellClass(0)}>
+                <LazyMonitorChart
+                  label={`${pair.key} primary`}
+                  render={() =>
+                    pair.primary ? (
+                      <HistogramChart histogram={pair.primary} maxCount={maxCount} />
+                    ) : (
+                      <MissingMetricCard metric={pair.key} nodePath={primaryNode.path} />
+                    )
+                  }
+                />
+              </div>
+              <div className={comparisonPairCellClass(1)}>
+                <LazyMonitorChart
+                  label={`${pair.key} comparison`}
+                  render={() =>
+                    pair.comparison ? (
+                      <HistogramChart histogram={pair.comparison} maxCount={maxCount} />
+                    ) : (
+                      <MissingMetricCard
+                        metric={pair.key}
+                        nodePath={comparisonNode.path}
+                        busy={comparisonLoading}
+                      />
+                    )
+                  }
+                />
+              </div>
+            </div>
+          );
+        },
+      });
+    }
+    for (const pair of groupData.imagePairs) {
+      pairItems.push({
+        render: (index) => (
+          <div key={`image-${pair.key}`} className={comparisonPairRowClass(index)}>
+            <div className={comparisonPairCellClass(0)}>
+              <LazyMonitorChart
+                label={`${pair.key} primary`}
+                render={() =>
+                  pair.primary ? (
+                    <MonitorImage image={pair.primary} />
+                  ) : (
+                    <MissingMetricCard metric={pair.key} nodePath={primaryNode.path} />
+                  )
+                }
+              />
+            </div>
+            <div className={comparisonPairCellClass(1)}>
+              <LazyMonitorChart
+                label={`${pair.key} comparison`}
+                render={() =>
+                  pair.comparison ? (
+                    <MonitorImage image={pair.comparison} />
+                  ) : (
+                    <MissingMetricCard
+                      metric={pair.key}
+                      nodePath={comparisonNode.path}
+                      busy={comparisonLoading}
+                    />
+                  )
+                }
+              />
+            </div>
+          </div>
+        ),
+      });
+    }
+    const visiblePairs = pairItems.slice(0, MONITOR_CHART_RENDER_LIMIT);
+    const hiddenCount = Math.max(0, pairCount - visiblePairs.length);
+
+    return [
+      {
+        group,
+        accordion: (
+          <MonitorGroupAccordion
+            idPrefix="comparison-monitor"
+            group={group}
+            count={pairCount}
+            countUnit="pair"
+            isOpen={isOpen}
+            onToggle={() => toggleGroup(group)}
+          >
+            <div>
+              {visiblePairs.map((item, index) => item.render(index))}
+              <ChartLimitNotice hiddenCount={hiddenCount} unit="pairs" />
+            </div>
+          </MonitorGroupAccordion>
+        ),
+      },
+    ];
+  });
 
   return (
     <div className="grid gap-4">
@@ -436,156 +632,7 @@ function ComparisonCharts({
       </div>
 
       <div className="grid gap-3">
-        {monitorGroupOrder.map((group) => {
-          const pairCount = groupCounts[group];
-          if (pairCount === 0) {
-            return null;
-          }
-          const groupData = groups[group];
-          const isOpen = isGroupOpen(group);
-          const scalarPairs = groupData.scalarPairs.slice(0, MONITOR_CHART_RENDER_LIMIT);
-          const remainingAfterScalars = Math.max(
-            0,
-            MONITOR_CHART_RENDER_LIMIT - scalarPairs.length,
-          );
-          const histogramPairs = groupData.histogramPairs.slice(
-            0,
-            remainingAfterScalars,
-          );
-          const remainingAfterHistograms = Math.max(
-            0,
-            remainingAfterScalars - histogramPairs.length,
-          );
-          const imagePairs = groupData.imagePairs.slice(0, remainingAfterHistograms);
-          const histogramPairOffset = scalarPairs.length;
-          const imagePairOffset = scalarPairs.length + histogramPairs.length;
-          const visiblePairCount =
-            scalarPairs.length + histogramPairs.length + imagePairs.length;
-          const hiddenCount = Math.max(0, pairCount - visiblePairCount);
-
-          return (
-            <MonitorGroupAccordion
-              key={group}
-              idPrefix="comparison-monitor"
-              group={group}
-              count={pairCount}
-              countUnit="pair"
-              isOpen={isOpen}
-              onToggle={() => toggleGroup(group)}
-            >
-              <div>
-                {scalarPairs.map((pair, index) => {
-                  return (
-                    <div key={pair.key} className={comparisonPairRowClass(index)}>
-                      <div className={comparisonPairCellClass(0)}>
-                        <LazyMonitorChart
-                          label={`${pair.key} primary`}
-                          render={() => {
-                            const domain = scalarDomainFor(pair.primary, pair.comparison);
-                            return pair.primary ? (
-                              <ScalarChart series={pair.primary} domain={domain} />
-                            ) : (
-                              <MissingMetricCard metric={pair.key} nodePath={primaryNode.path} />
-                            );
-                          }}
-                        />
-                      </div>
-                      <div className={comparisonPairCellClass(1)}>
-                        <LazyMonitorChart
-                          label={`${pair.key} comparison`}
-                          render={() => {
-                            const domain = scalarDomainFor(pair.primary, pair.comparison);
-                            return pair.comparison ? (
-                              <ScalarChart series={pair.comparison} domain={domain} />
-                            ) : (
-                              <MissingMetricCard
-                                metric={pair.key}
-                                nodePath={comparisonNode.path}
-                                busy={comparisonLoading}
-                              />
-                            );
-                          }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-                {histogramPairs.map((pair, index) => {
-                  const maxCount = histogramMaxCountFor(pair.primary, pair.comparison);
-                  const rowIndex = histogramPairOffset + index;
-                  return (
-                    <div key={pair.key} className={comparisonPairRowClass(rowIndex)}>
-                      <div className={comparisonPairCellClass(0)}>
-                        <LazyMonitorChart
-                          label={`${pair.key} primary`}
-                          render={() =>
-                            pair.primary ? (
-                              <HistogramChart histogram={pair.primary} maxCount={maxCount} />
-                            ) : (
-                              <MissingMetricCard metric={pair.key} nodePath={primaryNode.path} />
-                            )
-                          }
-                        />
-                      </div>
-                      <div className={comparisonPairCellClass(1)}>
-                        <LazyMonitorChart
-                          label={`${pair.key} comparison`}
-                          render={() =>
-                            pair.comparison ? (
-                              <HistogramChart histogram={pair.comparison} maxCount={maxCount} />
-                            ) : (
-                              <MissingMetricCard
-                                metric={pair.key}
-                                nodePath={comparisonNode.path}
-                                busy={comparisonLoading}
-                              />
-                            )
-                          }
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-                {imagePairs.map((pair, index) => (
-                  <div
-                    key={pair.key}
-                    className={comparisonPairRowClass(imagePairOffset + index)}
-                  >
-                    <div className={comparisonPairCellClass(0)}>
-                      <LazyMonitorChart
-                        label={`${pair.key} primary`}
-                        render={() =>
-                          pair.primary ? (
-                            <MonitorImage image={pair.primary} />
-                          ) : (
-                            <MissingMetricCard metric={pair.key} nodePath={primaryNode.path} />
-                          )
-                        }
-                      />
-                    </div>
-                    <div className={comparisonPairCellClass(1)}>
-                      <LazyMonitorChart
-                        label={`${pair.key} comparison`}
-                        render={() =>
-                          pair.comparison ? (
-                            <MonitorImage image={pair.comparison} />
-                          ) : (
-                            <MissingMetricCard
-                              metric={pair.key}
-                              nodePath={comparisonNode.path}
-                              busy={comparisonLoading}
-                            />
-                          )
-                        }
-                      />
-                    </div>
-                  </div>
-                ))}
-                <ChartLimitNotice hiddenCount={hiddenCount} unit="pairs" />
-              </div>
-            </MonitorGroupAccordion>
-          );
-        })}
+        {renderMonitorAccordionBands(accordionItems)}
       </div>
     </div>
   );
