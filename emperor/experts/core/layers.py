@@ -3,7 +3,7 @@ import torch.nn as nn
 
 from torch import Tensor
 from dataclasses import dataclass
-from emperor.base.layer import Layer, LayerStackConfig
+from emperor.base.layer import Layer, LayerStackConfig, RecurrentLayerConfig
 from emperor.base.utils import Module
 from emperor.experts.core.config import MixtureOfExpertsConfig
 from emperor.experts.core._expert_capacity import ExpertCapacityHandler
@@ -41,11 +41,15 @@ class MixtureOfExperts(Module):
     ):
         super().__init__()
         self.cfg: "MixtureOfExpertsConfig" = self._override_config(cfg, overrides)
-        self.main_cfg: "LayerStackConfig" = self.cfg.expert_model_config
+        self.main_cfg: "LayerStackConfig | RecurrentLayerConfig" = (
+            self.cfg.expert_model_config
+        )
 
         self.input_dim: int = self.cfg.input_dim
         self.output_dim: int = self.cfg.output_dim
-        self.expert_model_config: "LayerStackConfig" = self.cfg.expert_model_config
+        self.expert_model_config: "LayerStackConfig | RecurrentLayerConfig" = (
+            self.cfg.expert_model_config
+        )
         self.top_k: int = self.cfg.top_k
         self.num_experts: int = self.cfg.num_experts
         self.capacity_factor: float = self.cfg.capacity_factor

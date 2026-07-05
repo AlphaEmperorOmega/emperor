@@ -33,12 +33,15 @@ class MixtureOfExpertsValidator(ValidatorBase):
 
     @staticmethod
     def validate_forward_reference_types(model: "MixtureOfExperts") -> None:
-        from emperor.base.layer import LayerStackConfig
+        from emperor.base.layer import LayerStackConfig, RecurrentLayerConfig
 
-        if not isinstance(model.expert_model_config, LayerStackConfig):
+        if not isinstance(
+            model.expert_model_config,
+            (LayerStackConfig, RecurrentLayerConfig),
+        ):
             raise TypeError(
                 "Configuration Error: 'expert_model_config' must be of type "
-                "LayerStackConfig, received type "
+                "LayerStackConfig or RecurrentLayerConfig, received type "
                 f"{type(model.expert_model_config).__name__}"
             )
         if not isinstance(
@@ -447,4 +450,3 @@ class MixtureOfExpertsModelValidator(ValidatorBase):
                 "type RouterConfig when 'routing_initialization_mode' is SHARED, "
                 f"received type {type(model.sampler_config.router_config).__name__}"
             )
-
