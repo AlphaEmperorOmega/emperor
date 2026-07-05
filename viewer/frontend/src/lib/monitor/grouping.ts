@@ -39,14 +39,30 @@ export function createMonitorGroups<T>(factory: () => T): Record<MonitorGroup, T
   return groups;
 }
 
-function isGradientSuffix(suffix: string) {
-  const parts = suffix.split("/").filter(Boolean);
+function normalizeSuffix(suffix: string) {
+  return suffix.trim().replace(/^\/+/, "");
+}
+
+function suffixParts(suffix: string) {
+  return normalizeSuffix(suffix).split("/").filter(Boolean);
+}
+
+function gradientGroupForSuffix(suffix: string): MonitorGroup | undefined {
+  const parts = suffixParts(suffix);
+  const channel = parts[0] ?? "";
   const metric = parts.at(-1) ?? "";
-  return (
-    metric.startsWith("grad_") ||
-    suffix.startsWith("grad_") ||
-    suffix.endsWith("/update_ratio")
-  );
+  const normalized = normalizeSuffix(suffix);
+
+  if (channel === "weights" && (metric.startsWith("grad_") || metric === "update_ratio")) {
+    return "Weight gradients";
+  }
+  if (channel === "bias" && metric.startsWith("grad_")) {
+    return "Bias gradients";
+  }
+  if (metric.startsWith("grad_") || normalized.startsWith("grad_")) {
+    return "Gradients";
+  }
+  return undefined;
 }
 
 export function semanticGroupForSuffix(
@@ -57,14 +73,15 @@ export function semanticGroupForSuffix(
     return "Visual summaries";
   }
 
-  const normalized = suffix.trim().replace(/^\/+/, "");
+  const normalized = normalizeSuffix(suffix);
   const prefix = normalized.split("/")[0] ?? "";
 
   if (prefix === "histogram" || prefix === "heatmap") {
     return "Visual summaries";
   }
-  if (isGradientSuffix(normalized)) {
-    return "Gradients";
+  const gradientGroup = gradientGroupForSuffix(normalized);
+  if (gradientGroup) {
+    return gradientGroup;
   }
   if (prefix === "input" || prefix === "output") {
     return "Activations";

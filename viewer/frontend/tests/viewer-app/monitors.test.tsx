@@ -92,6 +92,12 @@ describe("ViewerApp Monitor Charts And Errors", () => {
     });
   }
 
+  function expectElementBefore(first: HTMLElement, second: HTMLElement) {
+    expect(
+      first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  }
+
   it("opens selected-node monitor charts for the active training job", async () => {
     const { monitorDataRequests } = installFetchMock();
     renderViewer();
@@ -169,12 +175,15 @@ describe("ViewerApp Monitor Charts And Errors", () => {
     const activations = within(dialog).getByRole("button", {
       name: /Activations\s+1 chart/i,
     });
-    const gradients = within(dialog).getByRole("button", {
-      name: /Gradients\s+1 chart/i,
-    });
-    const bias = within(dialog).getByRole("button", { name: /Bias\s+1 chart/i });
     const weights = within(dialog).getByRole("button", {
       name: /Weights\s+1 chart/i,
+    });
+    const weightGradients = within(dialog).getByRole("button", {
+      name: /Weight gradients\s+1 chart/i,
+    });
+    const bias = within(dialog).getByRole("button", { name: /Bias\s+1 chart/i });
+    const biasGradients = within(dialog).getByRole("button", {
+      name: /Bias gradients\s+1 chart/i,
     });
     const attention = within(dialog).getByRole("button", {
       name: /Attention\s+1 chart/i,
@@ -196,30 +205,86 @@ describe("ViewerApp Monitor Charts And Errors", () => {
     });
 
     expect(activations).toHaveAttribute("aria-expanded", "true");
-    expect(gradients).toHaveAttribute("aria-expanded", "false");
-    expect(bias).toHaveAttribute("aria-expanded", "false");
     expect(weights).toHaveAttribute("aria-expanded", "false");
+    expect(weightGradients).toHaveAttribute("aria-expanded", "false");
+    expect(bias).toHaveAttribute("aria-expanded", "false");
+    expect(biasGradients).toHaveAttribute("aria-expanded", "false");
     expect(attention).toHaveAttribute("aria-expanded", "false");
     expect(recurrent).toHaveAttribute("aria-expanded", "false");
     expect(controllers).toHaveAttribute("aria-expanded", "false");
     expect(parametric).toHaveAttribute("aria-expanded", "false");
     expect(routing).toHaveAttribute("aria-expanded", "false");
     expect(visualSummaries).toHaveAttribute("aria-expanded", "false");
+    expectElementBefore(activations, weights);
+    expectElementBefore(weights, weightGradients);
+    expectElementBefore(weightGradients, bias);
+    expectElementBefore(bias, biasGradients);
+    expectElementBefore(biasGradients, attention);
+    const bandDividers = within(dialog).getAllByTestId(
+      "monitor-accordion-band-divider",
+    );
+    expect(bandDividers).toHaveLength(3);
+    for (const divider of bandDividers) {
+      expect(divider).toHaveAttribute("aria-hidden", "true");
+    }
     expect(within(dialog).queryByRole("button", { name: /Other/i })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: /^Gradients\s/i }))
+      .not.toBeInTheDocument();
     expect(within(dialog).getByText("input/mean")).toBeInTheDocument();
     expect(within(dialog).queryByText("bias/grad_mean")).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("weights/grad_norm")).not.toBeInTheDocument();
 
-    await user.click(gradients);
-    const gradientSection = gradients.closest("section");
-    expect(gradientSection).not.toBeNull();
-    expect(within(gradientSection as HTMLElement).getByText("bias/grad_mean"))
+    await user.click(weights);
+    const weightsSection = weights.closest("section");
+    expect(weightsSection).not.toBeNull();
+    expect(within(weightsSection as HTMLElement).queryByText(/^Data$/))
+      .not.toBeInTheDocument();
+    expect(within(weightsSection as HTMLElement).queryByText(/^Gradients$/))
+      .not.toBeInTheDocument();
+    expect(within(weightsSection as HTMLElement).getByText("weights/l2_norm"))
       .toBeInTheDocument();
+    expect(within(weightsSection as HTMLElement).queryByText("weights/grad_norm"))
+      .not.toBeInTheDocument();
+    expect(within(weightsSection as HTMLElement).queryByText("bias/grad_mean"))
+      .not.toBeInTheDocument();
+
+    await user.click(weightGradients);
+    const weightGradientsSection = weightGradients.closest("section");
+    expect(weightGradientsSection).not.toBeNull();
+    expect(within(weightGradientsSection as HTMLElement).queryByText(/^Data$/))
+      .not.toBeInTheDocument();
+    expect(within(weightGradientsSection as HTMLElement).queryByText(/^Gradients$/))
+      .not.toBeInTheDocument();
+    expect(
+      within(weightGradientsSection as HTMLElement).getByText("weights/grad_norm"),
+    ).toBeInTheDocument();
+    expect(
+      within(weightGradientsSection as HTMLElement).queryByText("weights/l2_norm"),
+    ).not.toBeInTheDocument();
 
     await user.click(bias);
     const biasSection = bias.closest("section");
     expect(biasSection).not.toBeNull();
+    expect(within(biasSection as HTMLElement).queryByText(/^Data$/))
+      .not.toBeInTheDocument();
+    expect(within(biasSection as HTMLElement).queryByText(/^Gradients$/))
+      .not.toBeInTheDocument();
     expect(within(biasSection as HTMLElement).getByText("bias/mean")).toBeInTheDocument();
     expect(within(biasSection as HTMLElement).queryByText("bias/grad_mean"))
+      .not.toBeInTheDocument();
+    expect(within(biasSection as HTMLElement).queryByText("weights/grad_norm"))
+      .not.toBeInTheDocument();
+
+    await user.click(biasGradients);
+    const biasGradientsSection = biasGradients.closest("section");
+    expect(biasGradientsSection).not.toBeNull();
+    expect(within(biasGradientsSection as HTMLElement).queryByText(/^Data$/))
+      .not.toBeInTheDocument();
+    expect(within(biasGradientsSection as HTMLElement).queryByText(/^Gradients$/))
+      .not.toBeInTheDocument();
+    expect(within(biasGradientsSection as HTMLElement).getByText("bias/grad_mean"))
+      .toBeInTheDocument();
+    expect(within(biasGradientsSection as HTMLElement).queryByText("bias/mean"))
       .not.toBeInTheDocument();
 
     await user.click(visualSummaries);
@@ -277,16 +342,114 @@ describe("ViewerApp Monitor Charts And Errors", () => {
       .toHaveAttribute("aria-expanded", "true");
     expect(within(dialog).getAllByText("input/mean").length).toBeGreaterThanOrEqual(2);
 
-    const gradients = within(dialog).getByRole("button", { name: /Gradients\s+1 pair/i });
-    expect(gradients).toHaveAttribute("aria-expanded", "false");
+    const weights = within(dialog).getByRole("button", {
+      name: /Weights\s+1 pair/i,
+    });
+    const weightGradients = within(dialog).getByRole("button", {
+      name: /Weight gradients\s+1 pair/i,
+    });
+    const bias = within(dialog).getByRole("button", {
+      name: /Bias\s+1 pair/i,
+    });
+    const biasGradients = within(dialog).getByRole("button", {
+      name: /Bias gradients\s+1 pair/i,
+    });
+    expect(weights).toHaveAttribute("aria-expanded", "false");
+    expect(weightGradients).toHaveAttribute("aria-expanded", "false");
+    expect(bias).toHaveAttribute("aria-expanded", "false");
+    expect(biasGradients).toHaveAttribute("aria-expanded", "false");
+    expectElementBefore(weights, weightGradients);
+    expectElementBefore(weightGradients, bias);
+    expectElementBefore(bias, biasGradients);
     expect(within(dialog).queryByText("bias/grad_mean")).not.toBeInTheDocument();
-    await user.click(gradients);
-    const gradientSection = gradients.closest("section");
-    expect(gradientSection).not.toBeNull();
-    expect(within(gradientSection as HTMLElement).getByText("main_model.0.model/bias/grad_mean"))
-      .toBeInTheDocument();
-    expect(within(gradientSection as HTMLElement).getByText("main_model.1.model/bias/grad_mean"))
-      .toBeInTheDocument();
+    expect(within(dialog).queryByText("weights/grad_norm")).not.toBeInTheDocument();
+    await user.click(weights);
+    const weightsSection = weights.closest("section");
+    expect(weightsSection).not.toBeNull();
+    expect(within(weightsSection as HTMLElement).queryByText(/^Data$/))
+      .not.toBeInTheDocument();
+    expect(within(weightsSection as HTMLElement).queryByText(/^Gradients$/))
+      .not.toBeInTheDocument();
+    expect(
+      within(weightsSection as HTMLElement).getByText(
+        "main_model.0.model/weights/l2_norm",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(weightsSection as HTMLElement).getByText(
+        "main_model.1.model/weights/l2_norm",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(weightsSection as HTMLElement).queryByText(
+        "main_model.0.model/weights/grad_norm",
+      ),
+    ).not.toBeInTheDocument();
+
+    await user.click(weightGradients);
+    const weightGradientsSection = weightGradients.closest("section");
+    expect(weightGradientsSection).not.toBeNull();
+    expect(within(weightGradientsSection as HTMLElement).queryByText(/^Data$/))
+      .not.toBeInTheDocument();
+    expect(within(weightGradientsSection as HTMLElement).queryByText(/^Gradients$/))
+      .not.toBeInTheDocument();
+    expect(
+      within(weightGradientsSection as HTMLElement).getByText(
+        "main_model.0.model/weights/grad_norm",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(weightGradientsSection as HTMLElement).getByText(
+        "main_model.1.model/weights/grad_norm",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(weightGradientsSection as HTMLElement).queryByText(
+        "main_model.0.model/weights/l2_norm",
+      ),
+    ).not.toBeInTheDocument();
+
+    await user.click(bias);
+    const biasSection = bias.closest("section");
+    expect(biasSection).not.toBeNull();
+    expect(within(biasSection as HTMLElement).queryByText(/^Data$/))
+      .not.toBeInTheDocument();
+    expect(within(biasSection as HTMLElement).queryByText(/^Gradients$/))
+      .not.toBeInTheDocument();
+    expect(
+      within(biasSection as HTMLElement).getByText("main_model.0.model/bias/mean"),
+    ).toBeInTheDocument();
+    expect(
+      within(biasSection as HTMLElement).getByText("main_model.1.model/bias/mean"),
+    ).toBeInTheDocument();
+    expect(
+      within(biasSection as HTMLElement).queryByText(
+        "main_model.0.model/bias/grad_mean",
+      ),
+    ).not.toBeInTheDocument();
+
+    await user.click(biasGradients);
+    const biasGradientsSection = biasGradients.closest("section");
+    expect(biasGradientsSection).not.toBeNull();
+    expect(within(biasGradientsSection as HTMLElement).queryByText(/^Data$/))
+      .not.toBeInTheDocument();
+    expect(within(biasGradientsSection as HTMLElement).queryByText(/^Gradients$/))
+      .not.toBeInTheDocument();
+    expect(
+      within(biasGradientsSection as HTMLElement).getByText(
+        "main_model.0.model/bias/grad_mean",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(biasGradientsSection as HTMLElement).getByText(
+        "main_model.1.model/bias/grad_mean",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(biasGradientsSection as HTMLElement).queryByText(
+        "main_model.0.model/bias/mean",
+      ),
+    ).not.toBeInTheDocument();
   });
 
   it("switches selected-node comparison scope to input and output linear layers", async () => {
