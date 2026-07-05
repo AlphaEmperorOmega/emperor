@@ -1376,18 +1376,18 @@ describe("config section controls", () => {
     ).not.toBe(true);
   });
 
-  it("keeps adaptive submodule stack fields on their comment-titled section", () => {
+  it("keeps adaptive generator stack fields on their comment-titled section", () => {
     const sections: ConfigSection[] = [
       {
-        title: "Adaptive Submodule Stack Options",
+        title: "Adaptive Generator Stack Options",
         fields: [
           field({
-            key: "adaptive_submodule_stack_hidden_dim",
-            section: "Adaptive Submodule Stack Options",
+            key: "adaptive_generator_stack_hidden_dim",
+            section: "Adaptive Generator Stack Options",
           }),
           field({
-            key: "adaptive_submodule_stack_num_layers",
-            section: "Adaptive Submodule Stack Options",
+            key: "adaptive_generator_stack_num_layers",
+            section: "Adaptive Generator Stack Options",
           }),
         ],
       },
@@ -1395,11 +1395,11 @@ describe("config section controls", () => {
 
     const [section] = deriveNestedConfigSections(sections);
 
-    expect(section.title).toBe("Adaptive Submodule Stack Options");
+    expect(section.title).toBe("Adaptive Generator Stack Options");
     expect(section.children).toBeUndefined();
     expect(section.fields.map((item) => item.key)).toEqual([
-      "adaptive_submodule_stack_hidden_dim",
-      "adaptive_submodule_stack_num_layers",
+      "adaptive_generator_stack_hidden_dim",
+      "adaptive_generator_stack_num_layers",
     ]);
     expect(disabledConfigFieldReasons(sections, {}).size).toBe(0);
   });
@@ -1694,7 +1694,7 @@ describe("config section controls", () => {
       "router_weight_generator_stack_independent_flag",
     );
     expect(inheritedStackSectionHint(routerWeightStackSection!, {})).toMatchObject({
-      sourceTitle: "Adaptive Submodule Stack Options",
+      sourceTitle: "Adaptive Generator Stack Options",
       isCustom: false,
     });
 

@@ -390,7 +390,7 @@ class TrainingRunPlanTests(unittest.TestCase):
                 self.assertIn("--stack-hidden-dim 64", run["command"])
                 self.assertIn("--stack-activation RELU", run["command"])
                 self.assertIn(
-                    f"--adaptive-submodule-stack-num-layers {num_layers}",
+                    f"--adaptive-generator-stack-num-layers {num_layers}",
                     run["command"],
                 )
 

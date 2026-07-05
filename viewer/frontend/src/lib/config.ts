@@ -238,56 +238,56 @@ const INHERITED_STACK_SECTIONS_BY_TITLE = new Map([
   [
     "Weight Generator Stack Options",
     {
-      sourceTitle: "Adaptive Submodule Stack Options",
+      sourceTitle: "Adaptive Generator Stack Options",
       inheritedLabel: "Inherits Adaptive Stack",
     },
   ],
   [
     "Bias Generator Stack Options",
     {
-      sourceTitle: "Adaptive Submodule Stack Options",
+      sourceTitle: "Adaptive Generator Stack Options",
       inheritedLabel: "Inherits Adaptive Stack",
     },
   ],
   [
     "Diagonal Generator Stack Options",
     {
-      sourceTitle: "Adaptive Submodule Stack Options",
+      sourceTitle: "Adaptive Generator Stack Options",
       inheritedLabel: "Inherits Adaptive Stack",
     },
   ],
   [
     "Mask Stack Options",
     {
-      sourceTitle: "Adaptive Submodule Stack Options",
+      sourceTitle: "Adaptive Generator Stack Options",
       inheritedLabel: "Inherits Adaptive Stack",
     },
   ],
   [
     "Router Weight Generator Stack Options",
     {
-      sourceTitle: "Adaptive Submodule Stack Options",
+      sourceTitle: "Adaptive Generator Stack Options",
       inheritedLabel: "Inherits Adaptive Stack",
     },
   ],
   [
     "Router Bias Generator Stack Options",
     {
-      sourceTitle: "Adaptive Submodule Stack Options",
+      sourceTitle: "Adaptive Generator Stack Options",
       inheritedLabel: "Inherits Adaptive Stack",
     },
   ],
   [
     "Router Diagonal Generator Stack Options",
     {
-      sourceTitle: "Adaptive Submodule Stack Options",
+      sourceTitle: "Adaptive Generator Stack Options",
       inheritedLabel: "Inherits Adaptive Stack",
     },
   ],
   [
     "Router Mask Stack Options",
     {
-      sourceTitle: "Adaptive Submodule Stack Options",
+      sourceTitle: "Adaptive Generator Stack Options",
       inheritedLabel: "Inherits Adaptive Stack",
     },
   ],
@@ -951,7 +951,7 @@ function sectionTitleImpliesStackPrefix(section: ConfigSection, prefix: string) 
 const SECTION_OWNED_STACK_PREFIXES_BY_TITLE = new Map([
   ["Layer Stack Options", new Set(["stack_"])],
   ["Layer Stack Submodule Options", new Set(["submodule_"])],
-  ["Adaptive Submodule Stack Options", new Set(["adaptive_submodule_"])],
+  ["Adaptive Generator Stack Options", new Set(["adaptive_generator_"])],
   ["Gate Stack Options", new Set(["gate_"])],
   ["Halting Stack Options", new Set(["halting_"])],
   ["Memory Stack Options", new Set(["memory_"])],

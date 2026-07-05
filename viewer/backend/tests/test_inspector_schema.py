@@ -840,15 +840,15 @@ class InspectorSchemaTests(unittest.TestCase):
                 self.assertEqual(fields[field_key]["section"], section)
 
         self.assertEqual(
-            fields["adaptive_submodule_stack_hidden_dim"]["section"],
-            "Adaptive Submodule Stack Options",
+            fields["adaptive_generator_stack_hidden_dim"]["section"],
+            "Adaptive Generator Stack Options",
         )
         self.assertEqual(
-            fields["adaptive_submodule_stack_num_layers"]["section"],
-            "Adaptive Submodule Stack Options",
+            fields["adaptive_generator_stack_num_layers"]["section"],
+            "Adaptive Generator Stack Options",
         )
         self.assertNotEqual(
-            fields["adaptive_submodule_stack_hidden_dim"]["section"],
+            fields["adaptive_generator_stack_hidden_dim"]["section"],
             "Mask Options",
         )
 
@@ -944,7 +944,7 @@ class InspectorSchemaTests(unittest.TestCase):
             "output_layer_bias_option",
             "output_layer_diagonal_option",
             "output_layer_row_mask_option",
-            "adaptive_submodule_stack_hidden_dim",
+            "adaptive_generator_stack_hidden_dim",
         ]
         for field_key in linear_parity_keys:
             with self.subTest(field_key=field_key):
@@ -959,11 +959,8 @@ class InspectorSchemaTests(unittest.TestCase):
                     linear_fields[field_key]["choices"],
                 )
 
-        self.assertIn("adaptive_stack_hidden_dim", fields)
-        self.assertEqual(
-            fields["adaptive_stack_hidden_dim"]["section"],
-            "Legacy Adaptive Stack Options",
-        )
+        removed_legacy_key = "adaptive_" + "stack_hidden_dim"
+        self.assertNotIn(removed_legacy_key, fields)
 
         expected_router_pairs = {
             "router_weight_option_flag": "weight_option_flag",

@@ -5,7 +5,7 @@
   "modelType": "linears",
   "name": "test_linear_adaptive",
   "overrides": {
-    "ADAPTIVE_SUBMODULE_STACK_HIDDEN_DIM": "64",
+    "ADAPTIVE_GENERATOR_STACK_HIDDEN_DIM": "64",
     "BIAS_OPTION": "AdditiveDynamicBiasConfig",
     "BIAS_OPTION_FLAG": "true",
     "DIAGONAL_OPTION": "StandardDynamicDiagonalConfig",

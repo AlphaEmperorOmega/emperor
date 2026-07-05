@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from models.catalog import model_identity_payload_from_id
-from models.config_overrides import LEGACY_CONFIG_KEY_ALIASES, normalize_key
+from models.config_overrides import normalize_key
 
 from viewer.backend.config_snapshots import ConfigSnapshotRecord
 from viewer.backend.inspector.errors import InspectorError
@@ -319,10 +319,6 @@ def _fields_by_override_key(
         for key_name in (field.get("key"), field.get("configKey")):
             if isinstance(key_name, str) and key_name:
                 fields_by_key.setdefault(normalize_key(key_name), field)
-    for legacy_key, canonical_key in LEGACY_CONFIG_KEY_ALIASES.items():
-        field = fields_by_key.get(normalize_key(canonical_key))
-        if field is not None:
-            fields_by_key.setdefault(normalize_key(legacy_key), field)
     return fields_by_key
 
 
