@@ -21,11 +21,17 @@ class ExpertsHaltingConfigFactory:
         recurrent_controller_options: ExpertsRecurrentControllerOptions,
         submodule_stack_options: ExpertsSubmoduleStackOptions,
         output_dim: int,
+        halting_stack_defaults: ExpertsSubmoduleStackOptions | None = None,
+        recurrent_stack_inherits_halting_stack: bool = True,
     ) -> None:
         self.layer_controller_options = layer_controller_options
         self.recurrent_controller_options = recurrent_controller_options
         self.submodule_stack_options = submodule_stack_options
         self.output_dim = output_dim
+        self.halting_stack_defaults = halting_stack_defaults
+        self.recurrent_stack_inherits_halting_stack = (
+            recurrent_stack_inherits_halting_stack
+        )
 
     def build_halting_config(self) -> StickBreakingConfig | None:
         if not self.layer_controller_options.stack_halting_flag:
@@ -50,10 +56,7 @@ class ExpertsHaltingConfigFactory:
             return None
         layer_controller = self.layer_controller_options
         recurrent_controller = self.recurrent_controller_options
-        halting_stack_defaults = resolve_experts_controller_stack_options(
-            layer_controller.halting_stack_source,
-            self.__halting_stack_defaults(),
-        )
+        halting_stack_defaults = self.__recurrent_halting_stack_defaults()
         recurrent_halting_stack_options = resolve_experts_controller_stack_options(
             recurrent_controller.recurrent_halting_stack_source,
             halting_stack_defaults,
@@ -81,7 +84,17 @@ class ExpertsHaltingConfigFactory:
         )
 
     def __halting_stack_defaults(self) -> ExpertsSubmoduleStackOptions:
+        if self.halting_stack_defaults is not None:
+            return self.halting_stack_defaults
         return replace(
             self.submodule_stack_options,
             last_layer_bias_option=LastLayerBiasOptions.DISABLED,
+        )
+
+    def __recurrent_halting_stack_defaults(self) -> ExpertsSubmoduleStackOptions:
+        if not self.recurrent_stack_inherits_halting_stack:
+            return self.__halting_stack_defaults()
+        return resolve_experts_controller_stack_options(
+            self.layer_controller_options.halting_stack_source,
+            self.__halting_stack_defaults(),
         )
