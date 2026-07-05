@@ -305,7 +305,4 @@ class BoundaryConfigFactory:
         )
 
     def __build_shared_adaptive_generator_stack_config(self) -> LayerStackConfig:
-        model_config = (
-            self.adaptive_generator_stack_config_factory.build_shared_config()
-        )
-        return model_config
+        return self.adaptive_generator_stack_config_factory.build_shared_config()
