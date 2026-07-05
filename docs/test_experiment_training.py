@@ -1,7 +1,9 @@
 import json
 import os
+import random
 import tempfile
 import unittest
+from collections.abc import Sequence
 from enum import Enum
 from pathlib import Path
 
@@ -10,6 +12,8 @@ from emperor.experiments.base import (
     ExperimentBase,
     ExperimentPresetsBase,
     PresetDefinition,
+    RandomSearch,
+    create_search_space,
     _result_metrics_payload,
 )
 from emperor.experiments.monitors import MonitorOption
@@ -171,6 +175,78 @@ class FakeExperiment(ExperimentBase):
 
     def _load_trainer_config(self, config_overrides=None):
         return {"trainer_args": {}, "callbacks": []}
+
+
+class HugeSearchAxis(Sequence):
+    def __init__(self, prefix: str, size: int = 1_000_000_000) -> None:
+        self.prefix = prefix
+        self.size = size
+
+    def __len__(self) -> int:
+        return self.size
+
+    def __getitem__(self, index: int) -> str:
+        if index < 0 or index >= self.size:
+            raise IndexError(index)
+        return f"{self.prefix}-{index}"
+
+
+class TestCreateSearchSpace(unittest.TestCase):
+    def test_random_search_samples_without_replacement(self):
+        state = random.getstate()
+        random.seed(7)
+        try:
+            configs = create_search_space(
+                lambda **kwargs: (kwargs["first"], kwargs["second"]),
+                {},
+                {
+                    "first": [1, 2],
+                    "second": ["a", "b"],
+                },
+                RandomSearch(num_samples=10),
+            )
+        finally:
+            random.setstate(state)
+
+        self.assertEqual(len(configs), 4)
+        self.assertEqual(
+            set(configs),
+            {
+                (1, "a"),
+                (1, "b"),
+                (2, "a"),
+                (2, "b"),
+            },
+        )
+
+    def test_random_search_samples_huge_space_without_materializing_product(self):
+        state = random.getstate()
+        random.seed(11)
+        try:
+            configs = create_search_space(
+                lambda **kwargs: dict(kwargs),
+                {"fixed": True},
+                {
+                    "first": HugeSearchAxis("first"),
+                    "second": HugeSearchAxis("second"),
+                    "third": HugeSearchAxis("third"),
+                },
+                RandomSearch(num_samples=2),
+            )
+        finally:
+            random.setstate(state)
+
+        self.assertEqual(len(configs), 2)
+        self.assertEqual({config["fixed"] for config in configs}, {True})
+        self.assertEqual(
+            len(
+                {
+                    (config["first"], config["second"], config["third"])
+                    for config in configs
+                }
+            ),
+            2,
+        )
 
 
 class TestExperimentTraining(unittest.TestCase):
