@@ -5,7 +5,6 @@ from types import NoneType
 from typing import Any, get_args
 
 from models.config_overrides import (
-    LEGACY_CONFIG_KEY_ALIASES,
     config_key_to_model_param,
     iter_supported_config_keys,
     normalize_key,
@@ -32,9 +31,6 @@ def resolve_override_key(
     if config_key is not None:
         return config_key, False
 
-    alias = LEGACY_CONFIG_KEY_ALIASES.get(normalized_key)
-    if alias is not None:
-        return supported.get(normalize_key(alias)), False
     for config_key in supported.values():
         if config_key_to_model_param(config_key) == normalized_key:
             return config_key, False

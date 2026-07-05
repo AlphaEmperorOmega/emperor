@@ -189,50 +189,34 @@ class InspectorServiceTests(unittest.TestCase):
         self.assertTrue(parsed["recurrent_halting_stack_independent_flag"])
         self.assertEqual(parsed["recurrent_halting_stack_hidden_dim"], 112)
 
-    def test_legacy_controller_stack_overrides_still_parse(self) -> None:
-        parsed = parse_override_mapping(
-            linears_linear_config,
-            {
-                "layer_norm_position": "AFTER",
-                "gate_hidden_dim": "32",
-                "gate_layer_norm_position": "BEFORE",
-                "gate_bias_flag": "true",
-            },
-        )
+    def test_legacy_controller_stack_overrides_are_rejected(self) -> None:
+        for override_key in (
+            "gate_hidden_dim",
+            "gate_layer_norm_position",
+            "gate_bias_flag",
+        ):
+            with self.subTest(override_key=override_key):
+                with self.assertRaisesRegex(InspectorError, "Unknown override"):
+                    parse_override_mapping(
+                        linears_linear_config,
+                        {override_key: "32"},
+                    )
 
-        self.assertIs(parsed["layer_norm_position"], LayerNormPositionOptions.AFTER)
-        self.assertEqual(parsed["gate_stack_hidden_dim"], 32)
-        self.assertIs(
-            parsed["gate_stack_layer_norm_position"],
-            LayerNormPositionOptions.BEFORE,
-        )
-        self.assertTrue(parsed["gate_stack_bias_flag"])
-
-    def test_legacy_controller_stack_overrides_parse_for_experts(self) -> None:
-        parsed = parse_override_mapping(
-            expert_linear_config,
-            {
-                "gate_hidden_dim": "32",
-                "gate_layer_norm_position": "BEFORE",
-                "gate_bias_flag": "false",
-                "halting_hidden_dim": "48",
-                "halting_layer_norm_position": "AFTER",
-                "halting_bias_flag": "false",
-            },
-        )
-
-        self.assertEqual(parsed["gate_stack_hidden_dim"], 32)
-        self.assertIs(
-            parsed["gate_stack_layer_norm_position"],
-            LayerNormPositionOptions.BEFORE,
-        )
-        self.assertFalse(parsed["gate_stack_bias_flag"])
-        self.assertEqual(parsed["halting_stack_hidden_dim"], 48)
-        self.assertIs(
-            parsed["halting_stack_layer_norm_position"],
-            LayerNormPositionOptions.AFTER,
-        )
-        self.assertFalse(parsed["halting_stack_bias_flag"])
+    def test_legacy_controller_stack_overrides_are_rejected_for_experts(self) -> None:
+        for override_key in (
+            "gate_hidden_dim",
+            "gate_layer_norm_position",
+            "gate_bias_flag",
+            "halting_hidden_dim",
+            "halting_layer_norm_position",
+            "halting_bias_flag",
+        ):
+            with self.subTest(override_key=override_key):
+                with self.assertRaisesRegex(InspectorError, "Unknown override"):
+                    parse_override_mapping(
+                        expert_linear_config,
+                        {override_key: "32"},
+                    )
 
     def test_nullable_empty_string_override_parses_as_none(self) -> None:
         parsed = parse_override_mapping(

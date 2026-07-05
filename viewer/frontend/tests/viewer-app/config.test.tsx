@@ -815,13 +815,13 @@ function adaptiveComponentSchemaResponse() {
         default: null,
       }),
       stackFixtureField({
-        key: "adaptive_submodule_stack_hidden_dim",
-        section: "Adaptive Submodule Stack Options",
+        key: "adaptive_generator_stack_hidden_dim",
+        section: "Adaptive Generator Stack Options",
         default: 256,
       }),
       stackFixtureField({
-        key: "adaptive_submodule_stack_num_layers",
-        section: "Adaptive Submodule Stack Options",
+        key: "adaptive_generator_stack_num_layers",
+        section: "Adaptive Generator Stack Options",
         default: 2,
       }),
     ],
@@ -1685,14 +1685,14 @@ describe("ViewerApp Full Config", () => {
     );
 
     const adaptiveStackOptionsAccordion = within(dialog).getByRole("button", {
-      name: /^adaptive submodule stack options section, 2 fields, 0 overrides/i,
+      name: /^adaptive generator stack options section, 2 fields, 0 overrides/i,
     });
     await user.click(adaptiveStackOptionsAccordion);
     const adaptiveStackDirectGrid = directFieldGridFor(adaptiveStackOptionsAccordion);
 
     expect(
       within(adaptiveStackDirectGrid).getByLabelText(
-        /adaptive submodule stack hidden dim/i,
+        /adaptive generator stack hidden dim/i,
       ),
     ).toBeInTheDocument();
 

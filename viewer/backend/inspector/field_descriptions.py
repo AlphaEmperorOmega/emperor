@@ -182,7 +182,7 @@ EXPLICIT_FIELD_DESCRIPTIONS = {
 SECTION_CONTEXT = {
     "Layer Stack Options": "main layer stack",
     "Layer Stack Submodule Options": "shared layer-stack submodules",
-    "Adaptive Submodule Stack Options": "adaptive-parameter generator submodules",
+    "Adaptive Generator Stack Options": "adaptive-parameter generator submodules",
     "Gate Options": "layer gating controller",
     "Gate Stack Options": "dedicated gate stack",
     "Halting Options": "halting controller",
