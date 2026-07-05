@@ -127,7 +127,7 @@ OUTPUT_DIM: int = 10
 
 #########################################################################
 # LAYER STACK OPTIONS
-STACK_HIDDEN_DIM: int = 64
+STACK_HIDDEN_DIM: int = 32
 LAYER_NORM_POSITION: LayerNormPositionOptions = LayerNormPositionOptions.BEFORE
 STACK_NUM_LAYERS: int = 2
 STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
