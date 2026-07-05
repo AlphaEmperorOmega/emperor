@@ -13,7 +13,7 @@ class ExpertsMemoryConfigFactory:
     def __init__(
         self,
         *,
-        stack_options: ExpertsStackOptions,
+        stack_options: ExpertsStackOptions | ExpertsSubmoduleStackOptions,
         dynamic_memory_options: ExpertsDynamicMemoryOptions,
         submodule_stack_options: ExpertsSubmoduleStackOptions,
     ) -> None:

@@ -1,6 +1,6 @@
 from emperor.base.layer.config import RecurrentLayerConfig
 from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.experts.config import MixtureOfExpertsModelConfig
+from emperor.base.utils import ConfigBase
 
 from models.experts._builder_options import ExpertsRecurrentControllerOptions
 from models.experts._gate_config_factory import ExpertsGateConfigFactory
@@ -21,8 +21,8 @@ class ExpertsRecurrentConfigFactory:
 
     def build_config(
         self,
-        block_config: MixtureOfExpertsModelConfig,
-    ) -> MixtureOfExpertsModelConfig | RecurrentLayerConfig:
+        block_config: ConfigBase,
+    ) -> ConfigBase | RecurrentLayerConfig:
         if not self.recurrent_controller_options.recurrent_flag:
             return block_config
         return RecurrentLayerConfig(
