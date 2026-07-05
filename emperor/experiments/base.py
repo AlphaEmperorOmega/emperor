@@ -7,7 +7,7 @@ import os
 import random
 import tempfile
 import traceback
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
@@ -111,6 +111,57 @@ def _validate_log_folder(log_folder: str | None) -> str | None:
     return folder
 
 
+def _random_access_search_axes(parameter_value_options: list) -> list:
+    axes = []
+    for options in parameter_value_options:
+        if isinstance(options, Sequence):
+            axes.append(options)
+        else:
+            axes.append(tuple(options))
+    return axes
+
+
+def _search_space_combination_count(parameter_value_options: list) -> int:
+    combination_count = 1
+    for options in parameter_value_options:
+        combination_count *= len(options)
+    return combination_count
+
+
+def _sample_unique_combination_indices(
+    total_combinations: int,
+    num_samples: int,
+) -> list[int]:
+    sample_count = min(num_samples, total_combinations)
+    if sample_count < 0:
+        raise ValueError("Sample larger than population or is negative")
+
+    try:
+        return random.sample(range(total_combinations), sample_count)
+    except OverflowError:
+        pass
+
+    selected_indices = []
+    selected_index_set = set()
+    start = total_combinations - sample_count
+    for offset in range(sample_count):
+        upper_bound = start + offset
+        candidate = random.randrange(upper_bound + 1)
+        if candidate in selected_index_set:
+            candidate = upper_bound
+        selected_index_set.add(candidate)
+        selected_indices.append(candidate)
+    return selected_indices
+
+
+def _combination_at_index(parameter_value_options: list, index: int) -> tuple:
+    parameter_values = []
+    for options in reversed(parameter_value_options):
+        index, option_index = divmod(index, len(options))
+        parameter_values.append(options[option_index])
+    return tuple(reversed(parameter_values))
+
+
 def _result_metrics_payload(metrics: dict) -> dict:
     sanitized, original_count, dropped_count = sanitize_metric_payload(
         metrics,
@@ -178,10 +229,14 @@ def create_search_space(
     parameter_value_options = list(search_space.values())
 
     if isinstance(search_mode, RandomSearch):
-        all_combinations_list = list(itertools.product(*parameter_value_options))
-        all_combinations = random.sample(
-            all_combinations_list,
-            min(search_mode.num_samples, len(all_combinations_list)),
+        parameter_value_options = _random_access_search_axes(parameter_value_options)
+        total_combinations = _search_space_combination_count(parameter_value_options)
+        all_combinations = (
+            _combination_at_index(parameter_value_options, combination_index)
+            for combination_index in _sample_unique_combination_indices(
+                total_combinations,
+                search_mode.num_samples,
+            )
         )
     else:
         all_combinations = itertools.product(*parameter_value_options)
