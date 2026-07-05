@@ -1,5 +1,29 @@
-import { type InspectResponse } from "@/lib/api";
+import { type GraphNode, type InspectResponse } from "@/lib/api";
 import { type GraphDetailMode, type GraphNavigation, type GraphScope } from "@/lib/graph/types";
+
+function isRouterModelStack(
+  node: GraphNode,
+  nodesById: Map<string, GraphNode>,
+  parentByChildId: Map<string, string>,
+) {
+  const parentId = parentByChildId.get(node.id);
+  const parent = parentId ? nodesById.get(parentId) : undefined;
+  const pathParts = node.path.split(".");
+  return parent?.typeName === "RouterModel" && pathParts[pathParts.length - 1] === "model";
+}
+
+function isStructuralRoutingNode(
+  node: GraphNode,
+  nodesById: Map<string, GraphNode>,
+  parentByChildId: Map<string, string>,
+) {
+  return (
+    node.graphRole === "architecture" ||
+    node.typeName === "SamplerModel" ||
+    node.typeName === "RouterModel" ||
+    isRouterModelStack(node, nodesById, parentByChildId)
+  );
+}
 
 export function filterGraphByDetail(
   graph: InspectResponse | undefined,
@@ -9,11 +33,7 @@ export function filterGraphByDetail(
     return graph;
   }
 
-  const visibleNodeIds = new Set(
-    graph.nodes
-      .filter((node) => node.graphRole === "architecture")
-      .map((node) => node.id),
-  );
+  const nodesById = new Map(graph.nodes.map((node) => [node.id, node]));
   const parentByChildId = new Map<string, string>();
 
   for (const edge of graph.edges) {
@@ -21,6 +41,12 @@ export function filterGraphByDetail(
       parentByChildId.set(edge.target, edge.source);
     }
   }
+
+  const visibleNodeIds = new Set(
+    graph.nodes
+      .filter((node) => isStructuralRoutingNode(node, nodesById, parentByChildId))
+      .map((node) => node.id),
+  );
 
   const edges: InspectResponse["edges"] = [];
   const edgeIds = new Set<string>();
