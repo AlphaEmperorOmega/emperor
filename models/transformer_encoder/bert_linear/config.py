@@ -91,7 +91,7 @@ CALLBACK_EARLY_STOPPING_METRIC: str = "validation/loss"
 INPUT_DIM: int = BERT_PRETRAINING_TARGET_VOCAB_SIZE
 OUTPUT_DIM: int = BERT_PRETRAINING_TARGET_VOCAB_SIZE
 SEQUENCE_LENGTH: int = 35
-STACK_HIDDEN_DIM: int = 128
+STACK_HIDDEN_DIM: int = 32
 
 #########################################################################
 # MAIN ENCODER STACK (transformer encoder of self-attention + feed-forward)
