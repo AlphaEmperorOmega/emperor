@@ -95,6 +95,23 @@ const CONTROLLED_SECTION_FLAG_KEYS_BY_TITLE = new Map([
   ["Memory Options", "memory_flag"],
   ["Memory Stack Options", "memory_stack_independent_flag"],
   ["Router Stack Options", "sampler_stack_independent_flag"],
+  ["Router Gate Options", "router_gate_flag"],
+  ["Router Gate Stack Options", "router_gate_stack_independent_flag"],
+  ["Router Halting Options", "router_halting_flag"],
+  ["Router Halting Stack Options", "router_halting_stack_independent_flag"],
+  ["Router Memory Options", "router_memory_flag"],
+  ["Router Memory Stack Options", "router_memory_stack_independent_flag"],
+  ["Router Recurrent Layer Options", "router_recurrent_flag"],
+  ["Router Recurrent Gate Options", "router_recurrent_gate_flag"],
+  [
+    "Router Recurrent Gate Stack Options",
+    "router_recurrent_gate_stack_independent_flag",
+  ],
+  ["Router Recurrent Halting Options", "router_recurrent_halting_flag"],
+  [
+    "Router Recurrent Halting Stack Options",
+    "router_recurrent_halting_stack_independent_flag",
+  ],
   ["Expert Gate Options", "expert_gate_flag"],
   ["Expert Gate Stack Options", "expert_gate_stack_independent_flag"],
   ["Expert Halting Options", "expert_halting_flag"],
@@ -184,6 +201,41 @@ const INHERITED_STACK_SECTIONS_BY_TITLE = new Map([
     {
       sourceTitle: "Layer Stack Submodule Options",
       inheritedLabel: "Inherits Submodule Stack",
+    },
+  ],
+  [
+    "Router Gate Stack Options",
+    {
+      sourceTitle: "Router Stack Options",
+      inheritedLabel: "Inherits Router Stack",
+    },
+  ],
+  [
+    "Router Halting Stack Options",
+    {
+      sourceTitle: "Router Stack Options",
+      inheritedLabel: "Inherits Router Stack",
+    },
+  ],
+  [
+    "Router Memory Stack Options",
+    {
+      sourceTitle: "Router Stack Options",
+      inheritedLabel: "Inherits Router Stack",
+    },
+  ],
+  [
+    "Router Recurrent Gate Stack Options",
+    {
+      sourceTitle: "Router Stack Options",
+      inheritedLabel: "Inherits Router Stack",
+    },
+  ],
+  [
+    "Router Recurrent Halting Stack Options",
+    {
+      sourceTitle: "Router Stack Options",
+      inheritedLabel: "Inherits Router Stack",
     },
   ],
   [
@@ -639,6 +691,9 @@ export function disabledConfigFieldReasons(
       !state.isEnabled && state.disabledReason ? state.disabledReason : undefined;
     const sectionDisabledReason =
       inheritedReason ?? ownDisabledReason;
+    const shouldPropagateOwnDisabledReason =
+      !state.controlField ||
+      !configKeyToken(state.controlField.key).endsWith("_stack_independent_flag");
 
     if (sectionDisabledReason) {
       for (const field of section.fields) {
@@ -671,7 +726,11 @@ export function disabledConfigFieldReasons(
     }
 
     for (const child of section.children ?? []) {
-      collect(child, sectionDisabledReason);
+      collect(
+        child,
+        inheritedReason ??
+          (shouldPropagateOwnDisabledReason ? ownDisabledReason : undefined),
+      );
     }
   }
 
@@ -924,6 +983,11 @@ const STACK_CHILD_TITLE_BY_PREFIX = new Map([
   ["gate_", "Gate Stack Options"],
   ["halting_", "Halting Stack Options"],
   ["memory_", "Memory Stack Options"],
+  ["router_gate_", "Router Gate Stack Options"],
+  ["router_halting_", "Router Halting Stack Options"],
+  ["router_memory_", "Router Memory Stack Options"],
+  ["router_recurrent_gate_", "Router Recurrent Gate Stack Options"],
+  ["router_recurrent_halting_", "Router Recurrent Halting Stack Options"],
   ["expert_gate_", "Expert Gate Stack Options"],
   ["expert_halting_", "Expert Halting Stack Options"],
   ["expert_memory_", "Expert Memory Stack Options"],
@@ -955,6 +1019,14 @@ const SECTION_OWNED_STACK_PREFIXES_BY_TITLE = new Map([
   ["Gate Stack Options", new Set(["gate_"])],
   ["Halting Stack Options", new Set(["halting_"])],
   ["Memory Stack Options", new Set(["memory_"])],
+  ["Router Gate Stack Options", new Set(["router_gate_"])],
+  ["Router Halting Stack Options", new Set(["router_halting_"])],
+  ["Router Memory Stack Options", new Set(["router_memory_"])],
+  ["Router Recurrent Gate Stack Options", new Set(["router_recurrent_gate_"])],
+  [
+    "Router Recurrent Halting Stack Options",
+    new Set(["router_recurrent_halting_"]),
+  ],
   ["Expert Stack Options", new Set(["expert_"])],
   ["Expert Gate Stack Options", new Set(["expert_gate_"])],
   ["Expert Halting Stack Options", new Set(["expert_halting_"])],
@@ -1184,11 +1256,30 @@ const CHILD_SECTION_TITLES_BY_TITLE = new Map([
   [
     "Router Stack Options",
     [
+      "Router Gate Options",
+      "Router Halting Options",
+      "Router Memory Options",
+      "Router Recurrent Layer Options",
       "Router Weight Generator Options",
       "Router Bias Generator Options",
       "Router Diagonal Generator Options",
       "Router Mask Options",
     ],
+  ],
+  ["Router Gate Options", ["Router Gate Stack Options"]],
+  ["Router Halting Options", ["Router Halting Stack Options"]],
+  ["Router Memory Options", ["Router Memory Stack Options"]],
+  [
+    "Router Recurrent Layer Options",
+    ["Router Recurrent Gate Options", "Router Recurrent Halting Options"],
+  ],
+  [
+    "Router Recurrent Gate Options",
+    ["Router Recurrent Gate Stack Options"],
+  ],
+  [
+    "Router Recurrent Halting Options",
+    ["Router Recurrent Halting Stack Options"],
   ],
   [
     "Router Weight Generator Options",
