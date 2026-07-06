@@ -26,14 +26,6 @@ class ExperimentPreset(BaseOptions):
     ATTENTION_BIAS = 6
 
 
-_PRESET_LOCK_BEHAVIORS = {
-    "layer_norm_position": "the selected encoder normalization position",
-    "positional_embedding_option": "fixed sinusoidal positional embeddings",
-    "causal_attention_mask_flag": "causal attention masking",
-    "attn_bias_flag": "attention projection bias",
-    "attn_add_key_value_bias_flag": "attention key/value bias",
-}
-
 _PRESET_DEFINITIONS = {
     ExperimentPreset.BASELINE: PresetDefinition(
         preset_values={},
@@ -93,14 +85,6 @@ class ExperimentPresets(BuilderBackedExperimentPresetsBase):
             **super()._dataset_config(dataset),
             "sequence_length": dataset.sequence_length,
         }
-
-    def _preset_lock_reason(self, preset: ExperimentPreset, field: str) -> str:
-        behavior = _PRESET_LOCK_BEHAVIORS[field]
-        return (
-            f"Locked by the {preset.name} preset because this preset enables "
-            f"{behavior}."
-        )
-
 
 class Experiment(ExperimentBase):
     def __init__(

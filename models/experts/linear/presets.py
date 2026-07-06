@@ -47,27 +47,6 @@ class ExperimentPreset(BaseOptions):
     RECURRENT_GATING_HALTING_MEMORY = 24
 
 
-_PRESET_LOCK_BEHAVIORS = {
-    "stack_gate_flag": "stack gating",
-    "stack_halting_flag": "adaptive stack halting",
-    "memory_flag": "shared stack memory",
-    "recurrent_flag": "recurrent execution",
-    "recurrent_gate_flag": "recurrent gating",
-    "recurrent_halting_flag": "adaptive recurrent halting",
-    "routing_initialization_mode": "shared expert routing",
-    "weighting_position_option": "expert weighting after experts",
-    "top_k": "expert routing",
-    "sampler_normalize_probabilities_flag": "switch-style routing probabilities",
-    "sampler_switch_loss_weight": "switch auxiliary loss",
-    "sampler_coefficient_of_variation_loss_weight": "balance auxiliary loss",
-    "capacity_factor": "expert capacity limiting",
-    "dropped_token_behavior": "dropped-token behavior",
-    "sampler_noisy_topk_flag": "noisy sampler top-k routing",
-    "router_noisy_topk_flag": "noisy router top-k routing",
-    "stack_residual_connection_option": "stack residuals",
-    "layer_norm_position": "post-layer normalization",
-}
-
 _PRESET_DEFINITIONS = {
     ExperimentPreset.BASELINE: PresetDefinition(
         preset_values={},
@@ -290,14 +269,6 @@ class ExperimentPresets(BuilderBackedExperimentPresetsBase):
     def _preset(self, **kwargs):
         builder_kwargs = linear_builder_kwargs_from_flat(kwargs, config)
         return self._builder_type(**builder_kwargs).build()
-
-    def _preset_lock_reason(self, preset: ExperimentPreset, field: str) -> str:
-        behavior = _PRESET_LOCK_BEHAVIORS[field]
-        return (
-            f"Locked by the {preset.name} preset because this preset enables "
-            f"{behavior}."
-        )
-
 
 class Experiment(ExperimentBase):
     def __init__(
