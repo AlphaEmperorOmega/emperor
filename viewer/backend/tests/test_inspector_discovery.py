@@ -128,16 +128,25 @@ class InspectorDiscoveryTests(unittest.TestCase):
         self.assertGreaterEqual(
             models,
             {
+                "bert/linear",
+                "bert/linear_adaptive",
+                "bert/expert_linear",
+                "bert/expert_linear_adaptive",
                 "experts/linear",
                 "experts/linear_adaptive",
                 "linears/linear",
                 "linears/linear_adaptive",
-                "neuron/neuron_linear",
+                "neuron/linear",
+                "neuron/linear_adaptive",
+                "neuron/expert_linear",
+                "neuron/expert_linear_adaptive",
                 "parametric/parametric_generator",
                 "parametric/parametric_matrix",
                 "parametric/parametric_vector",
-                "transformer_encoder/bert_linear",
-                "transformer_encoder/vit_linear",
+                "vit/linear",
+                "vit/linear_adaptive",
+                "vit/expert_linear",
+                "vit/expert_linear_adaptive",
             },
         )
 
@@ -150,6 +159,14 @@ class InspectorDiscoveryTests(unittest.TestCase):
     def test_flat_model_ids_are_rejected(self) -> None:
         with self.assertRaisesRegex(InspectorError, "Invalid model name"):
             list_model_presets("linear")
+
+    def test_removed_neuron_model_ids_are_rejected(self) -> None:
+        removed_flat_name = "neuron" + "_linear"
+        with self.assertRaisesRegex(InspectorError, "Unknown model"):
+            list_model_presets(f"neuron/{removed_flat_name}")
+
+        with self.assertRaisesRegex(InspectorError, "Invalid model name"):
+            list_model_presets(removed_flat_name)
 
     def test_dataset_discovery_for_linear(self) -> None:
         datasets = list_model_datasets("linears/linear")
@@ -171,7 +188,7 @@ class InspectorDiscoveryTests(unittest.TestCase):
         }
         attention_monitor_by_name = {
             monitor["name"]: monitor
-            for monitor in list_model_monitors("transformer_encoder/bert_linear")
+            for monitor in list_model_monitors("bert/linear")
         }
         parametric_monitor_by_name = {
             monitor["name"]: monitor
@@ -222,7 +239,7 @@ class InspectorDiscoveryTests(unittest.TestCase):
         self.assertIn("image", adaptive_monitor_by_name["sampler"]["kinds"])
         self.assertEqual(
             set(attention_monitor_by_name),
-            {"attention", "layer-controller"},
+            {"attention", "recurrent-layer", "layer-controller", "memory"},
         )
         self.assertFalse(attention_monitor_by_name["attention"]["defaultEnabled"])
         self.assertIn("image", attention_monitor_by_name["attention"]["kinds"])

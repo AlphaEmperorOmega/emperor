@@ -7,8 +7,8 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
 import models.experts.linear.config as expert_linear_config
 import models.linears.linear.config as linears_linear_config
-import models.neuron.neuron_linear.config as neuron_linear_config
-import models.transformer_encoder.vit_linear.config as vit_linear_config
+import models.neuron.linear.config as neuron_config
+import models.vit.linear.config as vit_config
 from emperor.base.layer.gate import LayerGateOptions
 from emperor.base.options import LayerNormPositionOptions
 
@@ -18,7 +18,7 @@ from viewer.backend.inspector.service import inspect_model
 
 
 class InspectorServiceTests(unittest.TestCase):
-    def assert_neuron_linear_graph_dims(
+    def assert_neuron_graph_dims(
         self,
         result,
         hidden_dim: int,
@@ -57,22 +57,22 @@ class InspectorServiceTests(unittest.TestCase):
         self.assertNotIn("outputShape", output_layer_details)
         self.assertNotIn("shapeTransition", output_layer_details)
 
-    def test_neuron_linear_baseline_uses_wrapper_source_defaults(self) -> None:
-        result = inspect_model("neuron/neuron_linear", "baseline")
+    def test_neuron_baseline_uses_wrapper_source_defaults(self) -> None:
+        result = inspect_model("neuron/linear", "baseline")
 
-        self.assert_neuron_linear_graph_dims(
+        self.assert_neuron_graph_dims(
             result,
-            hidden_dim=neuron_linear_config.STACK_HIDDEN_DIM,
+            hidden_dim=neuron_config.STACK_HIDDEN_DIM,
         )
 
-    def test_neuron_linear_hidden_dim_override_flows_through_graph(self) -> None:
+    def test_neuron_hidden_dim_override_flows_through_graph(self) -> None:
         result = inspect_model(
-            "neuron/neuron_linear",
+            "neuron/linear",
             "baseline",
             {"stack_hidden_dim": "64"},
         )
 
-        self.assert_neuron_linear_graph_dims(result, hidden_dim=64)
+        self.assert_neuron_graph_dims(result, hidden_dim=64)
 
     def test_inspect_uses_selected_dataset_dimensions(self) -> None:
         result = inspect_model("linears/linear", "baseline", dataset="Cifar100")
@@ -220,7 +220,7 @@ class InspectorServiceTests(unittest.TestCase):
 
     def test_nullable_empty_string_override_parses_as_none(self) -> None:
         parsed = parse_override_mapping(
-            vit_linear_config,
+            vit_config,
             {"positional_embedding_padding_idx": ""},
         )
 
@@ -228,7 +228,7 @@ class InspectorServiceTests(unittest.TestCase):
 
     def test_empty_string_override_still_rejects_non_nullable_fields(self) -> None:
         with self.assertRaises(InspectorError):
-            parse_override_mapping(vit_linear_config, {"stack_hidden_dim": ""})
+            parse_override_mapping(vit_config, {"stack_hidden_dim": ""})
 
     def test_legacy_residual_flag_override_maps_to_connection_option(self) -> None:
         cases = (

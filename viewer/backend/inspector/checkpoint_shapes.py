@@ -49,7 +49,7 @@ _EXPERT_MODULE_RE = re.compile(
     r"^main_model\.expert_stack\.layers\.(?P<outer>\d+)\.model"
     r"\.expert_modules\.(?P<expert>\d+)(?:\.|$)"
 )
-_SAMPLER_STACK_RE = re.compile(
+_ROUTER_STACK_RE = re.compile(
     r"^(?P<parent>main_model\.expert_stack\.layers\.\d+\.model"
     r"\.sampler\.router\.model)\.layers\.(?P<index>\d+)(?:\.|$)"
 )
@@ -305,15 +305,14 @@ def _config_overrides(
     if expert_layer_count is not None:
         overrides["expert_stack_num_layers"] = expert_layer_count
 
-    sampler_layer_count = _grouped_stack_layer_count(
+    router_layer_count = _grouped_stack_layer_count(
         tensor_shapes,
-        _SAMPLER_STACK_RE,
+        _ROUTER_STACK_RE,
         diagnostics=diagnostics,
-        label="sampler_stack_num_layers",
+        label="router_stack_num_layers",
     )
-    if sampler_layer_count is not None:
-        overrides["sampler_stack_independent_flag"] = True
-        overrides["sampler_stack_num_layers"] = sampler_layer_count
+    if router_layer_count is not None:
+        overrides["router_stack_num_layers"] = router_layer_count
 
     expert_count = _expert_count(tensor_shapes, diagnostics)
     if expert_count is not None:
@@ -581,7 +580,7 @@ def _router_output_expert_count(
             {index: () for index in layer_shapes}
         )
         if contiguous_layers is None:
-            diagnostics.append("sampler_stack_num_layers:nonContiguous")
+            diagnostics.append("router_stack_num_layers:nonContiguous")
             return None
         final_layer_shapes = layer_shapes[contiguous_layers[-1]]
         for parameter, shape in final_layer_shapes:

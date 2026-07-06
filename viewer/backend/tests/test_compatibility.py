@@ -248,16 +248,11 @@ class CliCompatibilityImportTests(unittest.TestCase):
 
 
 class ModelPackageCompatibilityTests(unittest.TestCase):
-    def test_bert_linear_and_vit_linear_no_deleted_transformer_utils_imports(
-        self,
-    ) -> None:
-        for module_name in (
-            "models.transformer_encoder.bert_linear.presets",
-            "models.transformer_encoder.vit_linear.presets",
-        ):
-            with self.subTest(module=module_name):
-                module = importlib.import_module(module_name)
-                self.assertTrue(hasattr(module, "ExperimentPresets"))
+    def test_old_vit_transformer_encoder_package_import_is_unsupported(self) -> None:
+        old_package = "models.transformer_encoder." + "vit" + "_linear.presets"
+
+        with self.assertRaises(ModuleNotFoundError):
+            importlib.import_module(old_package)
 
 
 if __name__ == "__main__":
