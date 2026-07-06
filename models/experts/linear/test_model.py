@@ -257,7 +257,7 @@ class TestLinearModel(unittest.TestCase):
             mutual_information_loss_weight=0.14,
         )
         router_options = ExpertsRouterOptions(noisy_topk_flag=True)
-        sampler_stack_options = ExpertsSubmoduleStackOptions(
+        router_stack_options = ExpertsSubmoduleStackOptions(
             hidden_dim=stack_options.hidden_dim,
             num_layers=2,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
@@ -441,25 +441,25 @@ class TestLinearModel(unittest.TestCase):
                 sampler_options.mutual_information_loss_weight
             ),
             "router_noisy_topk_flag": router_options.noisy_topk_flag,
-            "sampler_stack_independent_flag": True,
-            "sampler_stack_num_layers": sampler_stack_options.num_layers,
-            "sampler_stack_activation": sampler_stack_options.activation,
-            "sampler_stack_residual_connection_option": (
-                sampler_stack_options.residual_connection_option
+            "router_stack_hidden_dim": router_stack_options.hidden_dim,
+            "router_stack_num_layers": router_stack_options.num_layers,
+            "router_stack_activation": router_stack_options.activation,
+            "router_stack_residual_connection_option": (
+                router_stack_options.residual_connection_option
             ),
-            "sampler_stack_dropout_probability": (
-                sampler_stack_options.dropout_probability
+            "router_stack_dropout_probability": (
+                router_stack_options.dropout_probability
             ),
-            "sampler_stack_layer_norm_position": (
-                sampler_stack_options.layer_norm_position
+            "router_stack_layer_norm_position": (
+                router_stack_options.layer_norm_position
             ),
-            "sampler_stack_last_layer_bias_option": (
-                sampler_stack_options.last_layer_bias_option
+            "router_stack_last_layer_bias_option": (
+                router_stack_options.last_layer_bias_option
             ),
-            "sampler_stack_apply_output_pipeline_flag": (
-                sampler_stack_options.apply_output_pipeline_flag
+            "router_stack_apply_output_pipeline_flag": (
+                router_stack_options.apply_output_pipeline_flag
             ),
-            "sampler_bias_flag": sampler_stack_options.bias_flag,
+            "router_bias_flag": router_stack_options.bias_flag,
             "stack_gate_flag": layer_controller_options.stack_gate_flag,
             "gate_option": layer_controller_options.gate_option,
             "gate_activation": layer_controller_options.gate_activation,
@@ -613,7 +613,7 @@ class TestLinearModel(unittest.TestCase):
             expert_stack_options=expert_stack_options,
             sampler_options=sampler_options,
             router_options=router_options,
-            sampler_stack_options=sampler_stack_options,
+            router_stack_options=router_stack_options,
             layer_controller_options=layer_controller_options,
             dynamic_memory_options=dynamic_memory_options,
             recurrent_controller_options=recurrent_controller_options,
@@ -663,7 +663,7 @@ class TestLinearModel(unittest.TestCase):
             "expert_stack_options",
             "sampler_options",
             "router_options",
-            "sampler_stack_options",
+            "router_stack_options",
             "layer_controller_options",
             "dynamic_memory_options",
             "recurrent_controller_options",
@@ -674,7 +674,10 @@ class TestLinearModel(unittest.TestCase):
             "top_k",
             "gate_stack_independent_flag",
             "gate_stack_hidden_dim",
+            "router_stack_independent_flag",
             "sampler_stack_independent_flag",
+            "sampler_stack_options",
+            "sampler_bias_flag",
             "shared_gate_config",
         }
 
@@ -690,11 +693,33 @@ class TestLinearModel(unittest.TestCase):
             {"stack_hidden_dim": 13},
             {"memory_flag": True},
             {"top_k": 1},
+            {"router_stack_independent_flag": True},
+            {"sampler_stack_options": ExpertsSubmoduleStackOptions(
+                hidden_dim=8,
+                num_layers=1,
+                last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
+                apply_output_pipeline_flag=False,
+                activation=ActivationOptions.RELU,
+                layer_norm_position=LayerNormPositionOptions.DISABLED,
+                residual_connection_option=ResidualConnectionOptions.DISABLED,
+                dropout_probability=0.0,
+                bias_flag=True,
+            )},
             {"shared_gate_config": self.shared_gate_config()},
         ):
             with self.subTest(kwargs=kwargs):
                 with self.assertRaises(TypeError):
                     LinearConfigBuilder(**kwargs)
+
+        for kwargs in (
+            {"router_stack_independent_flag": True},
+            {"sampler_stack_independent_flag": True},
+            {"sampler_stack_hidden_dim": 13},
+            {"sampler_bias_flag": False},
+        ):
+            with self.subTest(kwargs=kwargs):
+                with self.assertRaises(TypeError):
+                    self.experts_preset(**kwargs)
 
     def test_controller_stack_overrides_use_canonical_names(self):
         cfg = self.experts_preset(
@@ -726,53 +751,70 @@ class TestLinearModel(unittest.TestCase):
         )
         self.assertFalse(halting_stack.layer_config.layer_model_config.bias_flag)
 
-    def test_router_stack_overrides_require_independent_flag(self):
-        inherited_cfg = self.experts_preset(
+    def test_router_stack_defaults_do_not_inherit_submodule_overrides(self):
+        cfg = self.experts_preset(
+            submodule_stack_hidden_dim=44,
+            submodule_stack_layer_norm_position=LayerNormPositionOptions.AFTER,
+            submodule_stack_apply_output_pipeline_flag=True,
+            submodule_stack_bias_flag=False,
+        )
+        router_stack = (
+            cfg.experiment_config.model_config.sampler_config.router_config.model_config
+        )
+
+        self.assertEqual(router_stack.hidden_dim, config.ROUTER_STACK_HIDDEN_DIM)
+        self.assertEqual(router_stack.num_layers, config.ROUTER_STACK_NUM_LAYERS)
+        self.assertEqual(
+            router_stack.layer_config.activation,
+            config.ROUTER_STACK_ACTIVATION,
+        )
+        self.assertEqual(
+            router_stack.layer_config.residual_connection_option,
+            config.ROUTER_STACK_RESIDUAL_CONNECTION_OPTION,
+        )
+        self.assertEqual(
+            router_stack.layer_config.dropout_probability,
+            config.ROUTER_STACK_DROPOUT_PROBABILITY,
+        )
+        self.assertEqual(
+            router_stack.layer_config.layer_norm_position,
+            config.ROUTER_STACK_LAYER_NORM_POSITION,
+        )
+        self.assertEqual(
+            router_stack.last_layer_bias_option,
+            config.ROUTER_STACK_LAST_LAYER_BIAS_OPTION,
+        )
+        self.assertEqual(
+            router_stack.apply_output_pipeline_flag,
+            config.ROUTER_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+        )
+        self.assertEqual(
+            router_stack.layer_config.layer_model_config.bias_flag,
+            config.ROUTER_BIAS_FLAG,
+        )
+
+    def test_router_stack_overrides_apply_without_independent_flag(self):
+        cfg = self.experts_preset(
             submodule_stack_hidden_dim=44,
             submodule_stack_layer_norm_position=LayerNormPositionOptions.AFTER,
             submodule_stack_apply_output_pipeline_flag=False,
             submodule_stack_bias_flag=True,
-            sampler_stack_hidden_dim=88,
-            sampler_stack_layer_norm_position=LayerNormPositionOptions.BEFORE,
-            sampler_stack_apply_output_pipeline_flag=True,
-            sampler_bias_flag=False,
+            router_stack_hidden_dim=88,
+            router_stack_layer_norm_position=LayerNormPositionOptions.AFTER,
+            router_stack_apply_output_pipeline_flag=True,
+            router_bias_flag=False,
         )
-        inherited_router_stack = (
-            inherited_cfg.experiment_config.model_config.sampler_config.router_config.model_config
+        router_stack = (
+            cfg.experiment_config.model_config.sampler_config.router_config.model_config
         )
 
-        self.assertEqual(inherited_router_stack.hidden_dim, 44)
+        self.assertEqual(router_stack.hidden_dim, 88)
         self.assertEqual(
-            inherited_router_stack.layer_config.layer_norm_position,
+            router_stack.layer_config.layer_norm_position,
             LayerNormPositionOptions.AFTER,
         )
-        self.assertFalse(inherited_router_stack.apply_output_pipeline_flag)
-        self.assertTrue(
-            inherited_router_stack.layer_config.layer_model_config.bias_flag
-        )
-
-        custom_cfg = self.experts_preset(
-            submodule_stack_hidden_dim=44,
-            submodule_stack_layer_norm_position=LayerNormPositionOptions.AFTER,
-            submodule_stack_apply_output_pipeline_flag=False,
-            submodule_stack_bias_flag=True,
-            sampler_stack_independent_flag=True,
-            sampler_stack_hidden_dim=88,
-            sampler_stack_layer_norm_position=LayerNormPositionOptions.BEFORE,
-            sampler_stack_apply_output_pipeline_flag=True,
-            sampler_bias_flag=False,
-        )
-        custom_router_stack = (
-            custom_cfg.experiment_config.model_config.sampler_config.router_config.model_config
-        )
-
-        self.assertEqual(custom_router_stack.hidden_dim, 88)
-        self.assertEqual(
-            custom_router_stack.layer_config.layer_norm_position,
-            LayerNormPositionOptions.BEFORE,
-        )
-        self.assertTrue(custom_router_stack.apply_output_pipeline_flag)
-        self.assertFalse(custom_router_stack.layer_config.layer_model_config.bias_flag)
+        self.assertTrue(router_stack.apply_output_pipeline_flag)
+        self.assertFalse(router_stack.layer_config.layer_model_config.bias_flag)
 
     def test_disabled_memory_is_absent_from_stack_and_layer_configs(self):
         cfg = LinearConfigBuilder().build()

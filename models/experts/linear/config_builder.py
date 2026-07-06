@@ -38,7 +38,7 @@ class LinearConfigBuilder:
         expert_stack_options: ExpertsSubmoduleStackOptions | None = None,
         sampler_options: ExpertsSamplerOptions | None = None,
         router_options: ExpertsRouterOptions | None = None,
-        sampler_stack_options: ExpertsSubmoduleStackOptions | None = None,
+        router_stack_options: ExpertsSubmoduleStackOptions | None = None,
         layer_controller_options: ExpertsLayerControllerOptions | None = None,
         dynamic_memory_options: ExpertsDynamicMemoryOptions | None = None,
         recurrent_controller_options: ExpertsRecurrentControllerOptions | None = None,
@@ -58,7 +58,7 @@ class LinearConfigBuilder:
         self.expert_stack_options = expert_stack_options
         self.sampler_options = sampler_options
         self.router_options = router_options
-        self.sampler_stack_options = sampler_stack_options
+        self.router_stack_options = router_stack_options
         self.layer_controller_options = layer_controller_options
         self.dynamic_memory_options = dynamic_memory_options
         self.recurrent_controller_options = recurrent_controller_options
@@ -102,7 +102,7 @@ class LinearConfigBuilder:
             expert_stack_options=self.expert_stack_options,
             sampler_options=self.sampler_options,
             router_options=self.router_options,
-            sampler_stack_options=self.sampler_stack_options,
+            router_stack_options=self.router_stack_options,
             layer_controller_options=self.layer_controller_options,
             dynamic_memory_options=self.dynamic_memory_options,
             recurrent_controller_options=self.recurrent_controller_options,

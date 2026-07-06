@@ -26,7 +26,6 @@ from models.experts._builder_options import (
     ExpertsStackOptions,
     ExpertsSubmoduleStackOptions,
     ExpertsSubmoduleStackSource,
-    resolve_experts_controller_stack_options,
     resolve_experts_submodule_stack_options,
 )
 from models.experts._controller_stack import (
@@ -46,7 +45,7 @@ class ControlConfigDependencies:
     expert_stack_options: ExpertsSubmoduleStackOptions | None
     sampler_options: ExpertsSamplerOptions | None
     router_options: ExpertsRouterOptions | None
-    sampler_stack_options: ExpertsSubmoduleStackOptions | None
+    router_stack_options: ExpertsSubmoduleStackOptions | None
     layer_controller_options: ExpertsLayerControllerOptions | None
     dynamic_memory_options: ExpertsDynamicMemoryOptions | None
     recurrent_controller_options: ExpertsRecurrentControllerOptions | None
@@ -72,8 +71,8 @@ class ControlConfigFactory:
             dependencies.sampler_options
         )
         self.router_options = self.__default_router_options(dependencies.router_options)
-        self.sampler_stack_options = self.__default_sampler_stack_options(
-            dependencies.sampler_stack_options
+        self.router_stack_options = self.__default_router_stack_options(
+            dependencies.router_stack_options
         )
         self.layer_controller_options = self.__default_layer_controller_options(
             dependencies.layer_controller_options
@@ -248,30 +247,26 @@ class ControlConfigFactory:
             noisy_topk_flag=config.ROUTER_NOISY_TOPK_FLAG,
         )
 
-    def __default_sampler_stack_options(
+    def __default_router_stack_options(
         self,
-        sampler_stack_options: ExpertsSubmoduleStackOptions | None,
+        router_stack_options: ExpertsSubmoduleStackOptions | None,
     ) -> ExpertsSubmoduleStackOptions:
-        if sampler_stack_options is not None:
-            return sampler_stack_options
-        return resolve_experts_controller_stack_options(
-            ExpertsSubmoduleStackSource(
-                independent_flag=config.SAMPLER_STACK_INDEPENDENT_FLAG,
-                hidden_dim=config.SAMPLER_STACK_HIDDEN_DIM,
-                num_layers=config.SAMPLER_STACK_NUM_LAYERS,
-                last_layer_bias_option=config.SAMPLER_STACK_LAST_LAYER_BIAS_OPTION,
-                apply_output_pipeline_flag=(
-                    config.SAMPLER_STACK_APPLY_OUTPUT_PIPELINE_FLAG
-                ),
-                activation=config.SAMPLER_STACK_ACTIVATION,
-                layer_norm_position=config.SAMPLER_STACK_LAYER_NORM_POSITION,
-                residual_connection_option=(
-                    config.SAMPLER_STACK_RESIDUAL_CONNECTION_OPTION
-                ),
-                dropout_probability=config.SAMPLER_STACK_DROPOUT_PROBABILITY,
-                bias_flag=config.SAMPLER_BIAS_FLAG,
+        if router_stack_options is not None:
+            return router_stack_options
+        return ExpertsSubmoduleStackOptions(
+            hidden_dim=config.ROUTER_STACK_HIDDEN_DIM,
+            num_layers=config.ROUTER_STACK_NUM_LAYERS,
+            last_layer_bias_option=config.ROUTER_STACK_LAST_LAYER_BIAS_OPTION,
+            apply_output_pipeline_flag=(
+                config.ROUTER_STACK_APPLY_OUTPUT_PIPELINE_FLAG
             ),
-            self.submodule_stack_options,
+            activation=config.ROUTER_STACK_ACTIVATION,
+            layer_norm_position=config.ROUTER_STACK_LAYER_NORM_POSITION,
+            residual_connection_option=(
+                config.ROUTER_STACK_RESIDUAL_CONNECTION_OPTION
+            ),
+            dropout_probability=config.ROUTER_STACK_DROPOUT_PROBABILITY,
+            bias_flag=config.ROUTER_BIAS_FLAG,
         )
 
     def __default_layer_controller_options(
@@ -570,7 +565,7 @@ class ControlConfigFactory:
     def __build_router_config(self) -> RouterConfig:
         mixture_options = self.mixture_options
         router_options = self.router_options
-        model_config = self.__build_controller_stack(self.sampler_stack_options)
+        model_config = self.__build_controller_stack(self.router_stack_options)
         return RouterConfig(
             input_dim=self.hidden_dim,
             num_experts=mixture_options.num_experts,

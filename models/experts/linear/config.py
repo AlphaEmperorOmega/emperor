@@ -376,19 +376,21 @@ ROUTER_NOISY_TOPK_FLAG: bool = False
 
 #########################################################################
 # ROUTER STACK OPTIONS
-# If False, router model stack options inherit the layer stack submodule options.
-SAMPLER_STACK_INDEPENDENT_FLAG: bool = False
-SAMPLER_STACK_HIDDEN_DIM: int | None = None
-SAMPLER_STACK_NUM_LAYERS: int | None = None
-SAMPLER_STACK_ACTIVATION: ActivationOptions | None = None
-SAMPLER_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions | None = None
-SAMPLER_STACK_DROPOUT_PROBABILITY: float | None = None
-SAMPLER_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = (
-    LayerNormPositionOptions.DISABLED
+ROUTER_STACK_HIDDEN_DIM: int = STACK_HIDDEN_DIM
+ROUTER_STACK_NUM_LAYERS: int = 2
+ROUTER_STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
+ROUTER_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
+    ResidualConnectionOptions.DISABLED
 )
-SAMPLER_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions | None = None
-SAMPLER_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool | None = True
-SAMPLER_BIAS_FLAG: bool | None = None
+ROUTER_STACK_DROPOUT_PROBABILITY: float = 0.0
+ROUTER_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = (
+    STACK_LAYER_NORM_POSITION
+)
+ROUTER_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = (
+    LastLayerBiasOptions.DEFAULT
+)
+ROUTER_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = False
+ROUTER_BIAS_FLAG: bool = STACK_BIAS_FLAG
 
 #########################################################################
 # HYPERPARAMETER SEARCH SPACE

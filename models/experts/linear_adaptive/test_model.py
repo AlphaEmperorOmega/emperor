@@ -1,3 +1,4 @@
+import inspect
 import unittest
 
 import torch
@@ -191,8 +192,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
             weight_option=DualModelDynamicWeightConfig,
             router_weight_option=LayeredWeightedBankDynamicWeightConfig,
             expert_bias_flag=False,
-            sampler_stack_independent_flag=True,
-            sampler_bias_flag=False,
+            router_bias_flag=False,
         )
 
         moe_layer_cfg = self._moe_layer_config(cfg)
@@ -281,7 +281,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
             mutual_information_loss_weight=0.14,
         )
         router_options = ExpertsRouterOptions(noisy_topk_flag=True)
-        sampler_stack_options = ExpertsSubmoduleStackOptions(
+        router_stack_options = ExpertsSubmoduleStackOptions(
             hidden_dim=16,
             num_layers=2,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
@@ -502,11 +502,10 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
                 sampler_options.mutual_information_loss_weight
             ),
             "router_noisy_topk_flag": router_options.noisy_topk_flag,
-            "sampler_stack_independent_flag": True,
             **self.flat_stack_kwargs(
-                "sampler_stack",
-                sampler_stack_options,
-                bias_name="sampler_bias_flag",
+                "router_stack",
+                router_stack_options,
+                bias_name="router_bias_flag",
             ),
             "stack_gate_flag": layer_controller_options.stack_gate_flag,
             "gate_option": layer_controller_options.gate_option,
@@ -647,7 +646,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
             expert_stack_options=expert_stack_options,
             sampler_options=sampler_options,
             router_options=router_options,
-            sampler_stack_options=sampler_stack_options,
+            router_stack_options=router_stack_options,
             layer_controller_options=layer_controller_options,
             dynamic_memory_options=dynamic_memory_options,
             recurrent_controller_options=recurrent_controller_options,
@@ -660,6 +659,55 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
         ).build()
 
         self.assertEqual(flat_cfg, grouped_cfg)
+
+    def test_removed_router_stack_independent_and_sampler_names_are_rejected(self):
+        parameters = inspect.signature(
+            LinearAdaptiveConfigBuilder.__init__
+        ).parameters
+        new_names = {
+            "router_stack_options",
+            "router_stack_hidden_dim",
+            "router_bias_flag",
+        }
+        old_names = {
+            "router_stack_independent_flag",
+            "sampler_stack_options",
+            "sampler_stack_independent_flag",
+            "sampler_stack_hidden_dim",
+            "sampler_bias_flag",
+        }
+
+        for name in new_names:
+            with self.subTest(name=name):
+                self.assertIn(name, parameters)
+
+        for name in old_names:
+            with self.subTest(name=name):
+                self.assertNotIn(name, parameters)
+
+        for kwargs in (
+            {"router_stack_independent_flag": True},
+            {"sampler_stack_options": ExpertsSubmoduleStackOptions(
+                hidden_dim=8,
+                num_layers=1,
+                last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
+                apply_output_pipeline_flag=False,
+                activation=ActivationOptions.RELU,
+                layer_norm_position=LayerNormPositionOptions.DISABLED,
+                residual_connection_option=ResidualConnectionOptions.DISABLED,
+                dropout_probability=0.0,
+                bias_flag=True,
+            )},
+            {"sampler_stack_independent_flag": True},
+            {"sampler_stack_hidden_dim": 13},
+            {"sampler_bias_flag": False},
+        ):
+            with self.subTest(kwargs=kwargs):
+                with self.assertRaises(TypeError):
+                    LinearAdaptiveConfigBuilder(**kwargs)
+
+                with self.assertRaises(TypeError):
+                    self.experts_preset(**kwargs)
 
     def test_shared_gate_config_is_stored_on_stack_config(self):
         shared_gate_config = self.shared_gate_config()
@@ -719,49 +767,66 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
         )
         self.assertFalse(halting_stack.layer_config.layer_model_config.bias_flag)
 
-    def test_router_stack_overrides_require_independent_flag(self):
-        inherited_cfg = self.experts_preset(
+    def test_router_stack_defaults_do_not_inherit_submodule_overrides(self):
+        cfg = self.experts_preset(
+            submodule_stack_hidden_dim=44,
+            submodule_stack_layer_norm_position=LayerNormPositionOptions.AFTER,
+            submodule_stack_apply_output_pipeline_flag=True,
+            submodule_stack_bias_flag=False,
+        )
+        router_stack = cfg.experiment_config.model_config.sampler_config.router_config.model_config
+
+        self.assertEqual(router_stack.hidden_dim, config.ROUTER_STACK_HIDDEN_DIM)
+        self.assertEqual(router_stack.num_layers, config.ROUTER_STACK_NUM_LAYERS)
+        self.assertEqual(
+            router_stack.layer_config.activation,
+            config.ROUTER_STACK_ACTIVATION,
+        )
+        self.assertEqual(
+            router_stack.layer_config.residual_connection_option,
+            config.ROUTER_STACK_RESIDUAL_CONNECTION_OPTION,
+        )
+        self.assertEqual(
+            router_stack.layer_config.dropout_probability,
+            config.ROUTER_STACK_DROPOUT_PROBABILITY,
+        )
+        self.assertEqual(
+            router_stack.layer_config.layer_norm_position,
+            config.ROUTER_STACK_LAYER_NORM_POSITION,
+        )
+        self.assertEqual(
+            router_stack.last_layer_bias_option,
+            config.ROUTER_STACK_LAST_LAYER_BIAS_OPTION,
+        )
+        self.assertEqual(
+            router_stack.apply_output_pipeline_flag,
+            config.ROUTER_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+        )
+        self.assertEqual(
+            router_stack.layer_config.layer_model_config.bias_flag,
+            config.ROUTER_BIAS_FLAG,
+        )
+
+    def test_router_stack_overrides_apply_without_independent_flag(self):
+        cfg = self.experts_preset(
             submodule_stack_hidden_dim=44,
             submodule_stack_layer_norm_position=LayerNormPositionOptions.AFTER,
             submodule_stack_apply_output_pipeline_flag=False,
             submodule_stack_bias_flag=True,
-            sampler_stack_hidden_dim=88,
-            sampler_stack_layer_norm_position=LayerNormPositionOptions.BEFORE,
-            sampler_stack_apply_output_pipeline_flag=True,
-            sampler_bias_flag=False,
+            router_stack_hidden_dim=88,
+            router_stack_layer_norm_position=LayerNormPositionOptions.AFTER,
+            router_stack_apply_output_pipeline_flag=True,
+            router_bias_flag=False,
         )
-        inherited_router_stack = inherited_cfg.experiment_config.model_config.sampler_config.router_config.model_config
+        router_stack = cfg.experiment_config.model_config.sampler_config.router_config.model_config
 
-        self.assertEqual(inherited_router_stack.hidden_dim, 44)
+        self.assertEqual(router_stack.hidden_dim, 88)
         self.assertEqual(
-            inherited_router_stack.layer_config.layer_norm_position,
+            router_stack.layer_config.layer_norm_position,
             LayerNormPositionOptions.AFTER,
         )
-        self.assertFalse(inherited_router_stack.apply_output_pipeline_flag)
-        self.assertTrue(
-            inherited_router_stack.layer_config.layer_model_config.bias_flag
-        )
-
-        custom_cfg = self.experts_preset(
-            submodule_stack_hidden_dim=44,
-            submodule_stack_layer_norm_position=LayerNormPositionOptions.AFTER,
-            submodule_stack_apply_output_pipeline_flag=False,
-            submodule_stack_bias_flag=True,
-            sampler_stack_independent_flag=True,
-            sampler_stack_hidden_dim=88,
-            sampler_stack_layer_norm_position=LayerNormPositionOptions.BEFORE,
-            sampler_stack_apply_output_pipeline_flag=True,
-            sampler_bias_flag=False,
-        )
-        custom_router_stack = custom_cfg.experiment_config.model_config.sampler_config.router_config.model_config
-
-        self.assertEqual(custom_router_stack.hidden_dim, 88)
-        self.assertEqual(
-            custom_router_stack.layer_config.layer_norm_position,
-            LayerNormPositionOptions.BEFORE,
-        )
-        self.assertTrue(custom_router_stack.apply_output_pipeline_flag)
-        self.assertFalse(custom_router_stack.layer_config.layer_model_config.bias_flag)
+        self.assertTrue(router_stack.apply_output_pipeline_flag)
+        self.assertFalse(router_stack.layer_config.layer_model_config.bias_flag)
 
     def test_router_controller_flags_build_stable_trunk_and_logits_head(self):
         cfg = self.experts_preset(
@@ -814,11 +879,74 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
             LayeredWeightedBankDynamicWeightConfig,
         )
 
+    def test_router_controller_stacks_inherit_submodule_defaults(self):
+        cfg = self.experts_preset(
+            submodule_stack_hidden_dim=32,
+            submodule_stack_layer_norm_position=LayerNormPositionOptions.AFTER,
+            submodule_stack_apply_output_pipeline_flag=False,
+            submodule_stack_bias_flag=False,
+            router_stack_hidden_dim=64,
+            router_stack_layer_norm_position=LayerNormPositionOptions.BEFORE,
+            router_stack_apply_output_pipeline_flag=True,
+            router_bias_flag=True,
+            router_gate_flag=True,
+            router_halting_flag=True,
+            router_memory_flag=True,
+            router_recurrent_flag=True,
+            router_recurrent_gate_flag=True,
+            router_recurrent_halting_flag=True,
+        )
+        router_model_cfg = self._moe_model_config(
+            cfg
+        ).sampler_config.router_config.model_config
+        recurrent_cfg = router_model_cfg.trunk_config
+        trunk_stack = recurrent_cfg.block_config
+
+        self.assertEqual(router_model_cfg.hidden_dim, 64)
+        self.assertEqual(trunk_stack.hidden_dim, 64)
+        self.assertEqual(
+            trunk_stack.layer_config.layer_norm_position,
+            LayerNormPositionOptions.BEFORE,
+        )
+        self.assertTrue(trunk_stack.apply_output_pipeline_flag)
+        self.assertTrue(trunk_stack.layer_config.layer_model_config.bias_flag)
+
+        inherited_stacks = (
+            trunk_stack.layer_config.gate_config.model_config,
+            trunk_stack.layer_config.halting_config.halting_gate_config,
+            trunk_stack.shared_memory_config.model_config,
+            recurrent_cfg.gate_config.model_config,
+            recurrent_cfg.halting_config.halting_gate_config,
+        )
+        for stack_cfg in inherited_stacks:
+            with self.subTest(stack_cfg=stack_cfg):
+                self.assertEqual(stack_cfg.hidden_dim, 32)
+                self.assertEqual(
+                    stack_cfg.layer_config.layer_norm_position,
+                    LayerNormPositionOptions.AFTER,
+                )
+                self.assertFalse(stack_cfg.apply_output_pipeline_flag)
+                self.assertFalse(stack_cfg.layer_config.layer_model_config.bias_flag)
+
+        halting_stacks = (
+            trunk_stack.layer_config.halting_config.halting_gate_config,
+            recurrent_cfg.halting_config.halting_gate_config,
+        )
+        for stack_cfg in halting_stacks:
+            with self.subTest(halting_stack=stack_cfg):
+                self.assertEqual(
+                    stack_cfg.last_layer_bias_option,
+                    LastLayerBiasOptions.DISABLED,
+                )
+
     def test_flat_router_controller_kwargs_reach_controller_stacks(self):
         cfg = self.experts_preset(
             router_gate_flag=True,
             router_gate_stack_independent_flag=True,
             router_gate_stack_hidden_dim=41,
+            router_halting_flag=True,
+            router_halting_stack_independent_flag=True,
+            router_halting_stack_hidden_dim=45,
             router_memory_flag=True,
             router_memory_stack_independent_flag=True,
             router_memory_stack_hidden_dim=43,
@@ -826,6 +954,9 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
             router_recurrent_gate_flag=True,
             router_recurrent_gate_stack_independent_flag=True,
             router_recurrent_gate_stack_hidden_dim=47,
+            router_recurrent_halting_flag=True,
+            router_recurrent_halting_stack_independent_flag=True,
+            router_recurrent_halting_stack_hidden_dim=49,
         )
         router_model_cfg = self._moe_model_config(
             cfg
@@ -838,12 +969,20 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
             41,
         )
         self.assertEqual(
+            trunk_stack.layer_config.halting_config.halting_gate_config.hidden_dim,
+            45,
+        )
+        self.assertEqual(
             trunk_stack.shared_memory_config.model_config.hidden_dim,
             43,
         )
         self.assertEqual(
             recurrent_cfg.gate_config.model_config.hidden_dim,
             47,
+        )
+        self.assertEqual(
+            recurrent_cfg.halting_config.halting_gate_config.hidden_dim,
+            49,
         )
 
     def test_router_recurrent_forwards_when_hidden_dim_differs_from_num_experts(self):
@@ -1500,6 +1639,132 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
         self.assertEqual(
             custom_augmentation.bias_config.model_config.layer_config.activation,
             ActivationOptions.MISH,
+        )
+        self.assertEqual(
+            custom_augmentation.diagonal_config.model_config.hidden_dim,
+            51,
+        )
+        self.assertEqual(
+            custom_augmentation.diagonal_config.model_config.layer_config.activation,
+            ActivationOptions.TANH,
+        )
+        self.assertEqual(custom_augmentation.mask_config.model_config.hidden_dim, 61)
+        self.assertEqual(
+            custom_augmentation.mask_config.model_config.layer_config.activation,
+            ActivationOptions.ELU,
+        )
+
+    def test_router_adaptive_generator_stacks_inherit_adaptive_defaults(self):
+        inherited_cfg = self.experts_preset(
+            router_weight_option=DualModelDynamicWeightConfig,
+            router_bias_option=AdditiveDynamicBiasConfig,
+            router_diagonal_option=CombinedDynamicDiagonalConfig,
+            router_row_mask_option=WeightInformedScoreAxisMaskConfig,
+            adaptive_generator_stack_hidden_dim=21,
+            adaptive_generator_stack_num_layers=3,
+            adaptive_generator_stack_activation=ActivationOptions.RELU,
+            adaptive_generator_stack_layer_norm_position=(
+                LayerNormPositionOptions.AFTER
+            ),
+            adaptive_generator_stack_dropout_probability=0.2,
+            adaptive_generator_stack_last_layer_bias_option=(
+                LastLayerBiasOptions.DISABLED
+            ),
+            adaptive_generator_stack_apply_output_pipeline_flag=True,
+            adaptive_generator_stack_bias_flag=False,
+            router_stack_hidden_dim=64,
+            router_stack_num_layers=5,
+            router_stack_activation=ActivationOptions.MISH,
+            router_weight_generator_stack_hidden_dim=31,
+            router_bias_generator_stack_hidden_dim=41,
+            router_diagonal_generator_stack_hidden_dim=51,
+            router_mask_generator_stack_hidden_dim=61,
+        )
+        inherited_augmentation = self._router_augmentation_config(inherited_cfg)
+
+        self._assert_generator_stack(
+            inherited_augmentation.model_config,
+            hidden_dim=21,
+            num_layers=3,
+            activation=ActivationOptions.RELU,
+            layer_norm_position=LayerNormPositionOptions.AFTER,
+            dropout_probability=0.2,
+            last_layer_bias_option=LastLayerBiasOptions.DISABLED,
+            apply_output_pipeline_flag=True,
+            bias_flag=False,
+        )
+        for component_config in (
+            inherited_augmentation.weight_config,
+            inherited_augmentation.bias_config,
+            inherited_augmentation.diagonal_config,
+            inherited_augmentation.mask_config,
+        ):
+            self.assertIsNone(component_config.model_config)
+
+        custom_cfg = self.experts_preset(
+            router_weight_option=DualModelDynamicWeightConfig,
+            router_bias_option=AdditiveDynamicBiasConfig,
+            router_diagonal_option=CombinedDynamicDiagonalConfig,
+            router_row_mask_option=WeightInformedScoreAxisMaskConfig,
+            adaptive_generator_stack_hidden_dim=21,
+            adaptive_generator_stack_num_layers=3,
+            adaptive_generator_stack_activation=ActivationOptions.RELU,
+            adaptive_generator_stack_layer_norm_position=(
+                LayerNormPositionOptions.AFTER
+            ),
+            adaptive_generator_stack_dropout_probability=0.2,
+            adaptive_generator_stack_last_layer_bias_option=(
+                LastLayerBiasOptions.DISABLED
+            ),
+            adaptive_generator_stack_apply_output_pipeline_flag=True,
+            adaptive_generator_stack_bias_flag=False,
+            router_stack_hidden_dim=64,
+            router_stack_num_layers=5,
+            router_stack_activation=ActivationOptions.MISH,
+            router_weight_generator_stack_independent_flag=True,
+            router_weight_generator_stack_hidden_dim=31,
+            router_weight_generator_stack_num_layers=4,
+            router_weight_generator_stack_activation=ActivationOptions.SILU,
+            router_weight_generator_stack_layer_norm_position=(
+                LayerNormPositionOptions.BEFORE
+            ),
+            router_weight_generator_stack_dropout_probability=0.15,
+            router_weight_generator_stack_last_layer_bias_option=(
+                LastLayerBiasOptions.DISABLED
+            ),
+            router_weight_generator_stack_apply_output_pipeline_flag=True,
+            router_weight_generator_stack_bias_flag=False,
+            router_bias_generator_stack_independent_flag=True,
+            router_bias_generator_stack_hidden_dim=41,
+            router_bias_generator_stack_activation=ActivationOptions.MISH,
+            router_diagonal_generator_stack_independent_flag=True,
+            router_diagonal_generator_stack_hidden_dim=51,
+            router_diagonal_generator_stack_activation=ActivationOptions.TANH,
+            router_mask_generator_stack_independent_flag=True,
+            router_mask_generator_stack_hidden_dim=61,
+            router_mask_generator_stack_activation=ActivationOptions.ELU,
+        )
+        custom_augmentation = self._router_augmentation_config(custom_cfg)
+
+        self._assert_generator_stack(
+            custom_augmentation.weight_config.model_config,
+            hidden_dim=31,
+            num_layers=4,
+            activation=ActivationOptions.SILU,
+            layer_norm_position=LayerNormPositionOptions.BEFORE,
+            dropout_probability=0.15,
+            last_layer_bias_option=LastLayerBiasOptions.DISABLED,
+            apply_output_pipeline_flag=True,
+            bias_flag=False,
+        )
+        self.assertEqual(custom_augmentation.bias_config.model_config.hidden_dim, 41)
+        self.assertEqual(
+            custom_augmentation.bias_config.model_config.layer_config.activation,
+            ActivationOptions.MISH,
+        )
+        self.assertEqual(
+            custom_augmentation.bias_config.model_config.num_layers,
+            3,
         )
         self.assertEqual(
             custom_augmentation.diagonal_config.model_config.hidden_dim,

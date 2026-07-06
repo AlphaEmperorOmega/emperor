@@ -253,19 +253,25 @@ class LinearAdaptiveConfigBuilder:
         sampler_zero_centred_loss_weight: float = config.SAMPLER_ZERO_CENTRED_LOSS_WEIGHT,
         sampler_mutual_information_loss_weight: float = config.SAMPLER_MUTUAL_INFORMATION_LOSS_WEIGHT,
         router_noisy_topk_flag: bool = config.ROUTER_NOISY_TOPK_FLAG,
-        sampler_stack_independent_flag: bool = config.SAMPLER_STACK_INDEPENDENT_FLAG,
-        sampler_stack_hidden_dim: int | None = None,
-        sampler_stack_num_layers: int | None = None,
-        sampler_stack_activation: ActivationOptions | None = None,
-        sampler_stack_residual_connection_option: ResidualConnectionOptions
-        | None = None,
-        sampler_stack_dropout_probability: float | None = None,
-        sampler_stack_layer_norm_position: LayerNormPositionOptions
-        | None = config.SAMPLER_STACK_LAYER_NORM_POSITION,
-        sampler_stack_last_layer_bias_option: LastLayerBiasOptions | None = None,
-        sampler_stack_apply_output_pipeline_flag: bool
-        | None = config.SAMPLER_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
-        sampler_bias_flag: bool | None = None,
+        router_stack_hidden_dim: int = config.ROUTER_STACK_HIDDEN_DIM,
+        router_stack_num_layers: int = config.ROUTER_STACK_NUM_LAYERS,
+        router_stack_activation: ActivationOptions = config.ROUTER_STACK_ACTIVATION,
+        router_stack_residual_connection_option: ResidualConnectionOptions = (
+            config.ROUTER_STACK_RESIDUAL_CONNECTION_OPTION
+        ),
+        router_stack_dropout_probability: float = (
+            config.ROUTER_STACK_DROPOUT_PROBABILITY
+        ),
+        router_stack_layer_norm_position: LayerNormPositionOptions = (
+            config.ROUTER_STACK_LAYER_NORM_POSITION
+        ),
+        router_stack_last_layer_bias_option: LastLayerBiasOptions = (
+            config.ROUTER_STACK_LAST_LAYER_BIAS_OPTION
+        ),
+        router_stack_apply_output_pipeline_flag: bool = (
+            config.ROUTER_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+        ),
+        router_bias_flag: bool = config.ROUTER_BIAS_FLAG,
         router_gate_flag: bool = config.ROUTER_GATE_FLAG,
         router_gate_option: LayerGateOptions | None = config.ROUTER_GATE_OPTION,
         router_gate_activation: ActivationOptions
@@ -765,7 +771,7 @@ class LinearAdaptiveConfigBuilder:
         expert_stack_options: ExpertsSubmoduleStackOptions | None = None,
         sampler_options: ExpertsSamplerOptions | None = None,
         router_options: ExpertsRouterOptions | None = None,
-        sampler_stack_options: ExpertsSubmoduleStackOptions | None = None,
+        router_stack_options: ExpertsSubmoduleStackOptions | None = None,
         router_layer_controller_options: ExpertsLayerControllerOptions | None = None,
         router_dynamic_memory_options: ExpertsDynamicMemoryOptions | None = None,
         router_recurrent_controller_options: (
@@ -995,24 +1001,16 @@ class LinearAdaptiveConfigBuilder:
         router_options = router_options or ExpertsRouterOptions(
             noisy_topk_flag=router_noisy_topk_flag,
         )
-        sampler_stack_source = ExpertsSubmoduleStackSource(
-            independent_flag=sampler_stack_independent_flag,
-            hidden_dim=sampler_stack_hidden_dim,
-            num_layers=sampler_stack_num_layers,
-            last_layer_bias_option=sampler_stack_last_layer_bias_option,
-            apply_output_pipeline_flag=sampler_stack_apply_output_pipeline_flag,
-            activation=sampler_stack_activation,
-            layer_norm_position=sampler_stack_layer_norm_position,
-            residual_connection_option=sampler_stack_residual_connection_option,
-            dropout_probability=sampler_stack_dropout_probability,
-            bias_flag=sampler_bias_flag,
-        )
-        sampler_stack_options = (
-            sampler_stack_options
-            or resolve_experts_controller_stack_options(
-                sampler_stack_source,
-                submodule_stack_options,
-            )
+        router_stack_options = router_stack_options or ExpertsSubmoduleStackOptions(
+            hidden_dim=router_stack_hidden_dim,
+            num_layers=router_stack_num_layers,
+            last_layer_bias_option=router_stack_last_layer_bias_option,
+            apply_output_pipeline_flag=router_stack_apply_output_pipeline_flag,
+            activation=router_stack_activation,
+            layer_norm_position=router_stack_layer_norm_position,
+            residual_connection_option=router_stack_residual_connection_option,
+            dropout_probability=router_stack_dropout_probability,
+            bias_flag=router_bias_flag,
         )
         router_layer_controller_options = (
             router_layer_controller_options
@@ -1806,27 +1804,26 @@ class LinearAdaptiveConfigBuilder:
         )
         self.router_options = router_options
         self.router_noisy_topk_flag = router_options.noisy_topk_flag
-        self.sampler_stack_source = sampler_stack_source
-        self.sampler_stack_independent_flag = sampler_stack_source.independent_flag
-        self.sampler_stack_options = sampler_stack_options
-        self.sampler_stack_num_layers = sampler_stack_options.num_layers
-        self.sampler_stack_activation = sampler_stack_options.activation
-        self.sampler_stack_residual_connection_option = (
-            sampler_stack_options.residual_connection_option
+        self.router_stack_options = router_stack_options
+        self.router_stack_hidden_dim = router_stack_options.hidden_dim
+        self.router_stack_num_layers = router_stack_options.num_layers
+        self.router_stack_activation = router_stack_options.activation
+        self.router_stack_residual_connection_option = (
+            router_stack_options.residual_connection_option
         )
-        self.sampler_stack_dropout_probability = (
-            sampler_stack_options.dropout_probability
+        self.router_stack_dropout_probability = (
+            router_stack_options.dropout_probability
         )
-        self.sampler_stack_layer_norm_position = (
-            sampler_stack_options.layer_norm_position
+        self.router_stack_layer_norm_position = (
+            router_stack_options.layer_norm_position
         )
-        self.sampler_stack_last_layer_bias_option = (
-            sampler_stack_options.last_layer_bias_option
+        self.router_stack_last_layer_bias_option = (
+            router_stack_options.last_layer_bias_option
         )
-        self.sampler_stack_apply_output_pipeline_flag = (
-            sampler_stack_options.apply_output_pipeline_flag
+        self.router_stack_apply_output_pipeline_flag = (
+            router_stack_options.apply_output_pipeline_flag
         )
-        self.sampler_bias_flag = sampler_stack_options.bias_flag
+        self.router_bias_flag = router_stack_options.bias_flag
         self.router_layer_controller_options = router_layer_controller_options
         self.router_gate_flag = router_layer_controller_options.stack_gate_flag
         self.router_gate_option = router_layer_controller_options.gate_option
@@ -1836,7 +1833,7 @@ class LinearAdaptiveConfigBuilder:
         )
         self.router_gate_stack_options = resolve_experts_controller_stack_options(
             self.router_gate_stack_source,
-            self.sampler_stack_options,
+            self.submodule_stack_options,
         )
         self.router_halting_flag = router_layer_controller_options.stack_halting_flag
         self.router_halting_threshold = (
@@ -1855,7 +1852,7 @@ class LinearAdaptiveConfigBuilder:
         self.router_halting_stack_options = resolve_experts_controller_stack_options(
             self.router_halting_stack_source,
             replace(
-                self.sampler_stack_options,
+                self.submodule_stack_options,
                 last_layer_bias_option=LastLayerBiasOptions.DISABLED,
             ),
         )
@@ -1870,7 +1867,7 @@ class LinearAdaptiveConfigBuilder:
         )
         self.router_memory_stack_options = resolve_experts_controller_stack_options(
             self.router_memory_stack_source,
-            self.sampler_stack_options,
+            self.submodule_stack_options,
         )
         self.router_recurrent_controller_options = router_recurrent_controller_options
         self.router_recurrent_flag = router_recurrent_controller_options.recurrent_flag
@@ -1889,7 +1886,7 @@ class LinearAdaptiveConfigBuilder:
         self.router_recurrent_gate_stack_options = (
             resolve_experts_controller_stack_options(
                 self.router_recurrent_gate_stack_source,
-                self.sampler_stack_options,
+                self.submodule_stack_options,
             )
         )
         self.router_recurrent_halting_flag = (
@@ -1901,7 +1898,10 @@ class LinearAdaptiveConfigBuilder:
         self.router_recurrent_halting_stack_options = (
             resolve_experts_controller_stack_options(
                 self.router_recurrent_halting_stack_source,
-                self.sampler_stack_options,
+                replace(
+                    self.submodule_stack_options,
+                    last_layer_bias_option=LastLayerBiasOptions.DISABLED,
+                ),
             )
         )
         self.layer_controller_options = layer_controller_options
@@ -2166,7 +2166,7 @@ class LinearAdaptiveConfigBuilder:
             expert_stack_options=self.expert_stack_options,
             sampler_options=self.sampler_options,
             router_options=self.router_options,
-            sampler_stack_options=self.sampler_stack_options,
+            router_stack_options=self.router_stack_options,
             router_layer_controller_options=self.router_layer_controller_options,
             router_dynamic_memory_options=self.router_dynamic_memory_options,
             router_recurrent_controller_options=(
