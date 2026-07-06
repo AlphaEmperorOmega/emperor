@@ -197,6 +197,17 @@ function BoundaryProjectorGroupAccordion({
               onCheckedChange={onEnabledChange}
             />
           )}
+          {group.stackHint && (
+            <Badge
+              variant="info"
+              data-config-boundary-stack-hint={group.stackHint.sourceTitle}
+              title={group.stackHint.title}
+              aria-label={group.stackHint.title}
+              className="h-[23px] items-center px-1.5 py-0"
+            >
+              {group.stackHint.label}
+            </Badge>
+          )}
           <ConfigMetricBadge count={fieldCount} kind="fields" focusable={false} />
           <ConfigMetricBadge
             count={overrideCount}

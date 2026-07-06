@@ -17,6 +17,11 @@ export type ConfigFieldGroup = {
   controlField?: ConfigField;
   isEnabled?: boolean;
   disabledReason?: string;
+  stackHint?: {
+    label: string;
+    title: string;
+    sourceTitle: string;
+  };
 };
 
 export type ConfigSearchOption = {
@@ -349,6 +354,7 @@ const GENERAL_CONFIG_SECTION = "General";
 const RECURRENT_LAYER_CONFIG_SECTION = "Recurrent Layer Options";
 const INPUT_BOUNDARY_PROJECTOR_SECTION = "Input Boundary Projector Options";
 const OUTPUT_BOUNDARY_PROJECTOR_SECTION = "Output Boundary Projector Options";
+const ADAPTIVE_GENERATOR_STACK_SECTION = "Adaptive Generator Stack Options";
 
 export function displayConfigFieldSection(field: ConfigField) {
   return field.section || GENERAL_CONFIG_SECTION;
@@ -913,6 +919,14 @@ function boundaryProjectorControlFieldKey(prefix: string, groupTitle: string) {
   return undefined;
 }
 
+function boundaryProjectorStackHint(): NonNullable<ConfigFieldGroup["stackHint"]> {
+  return {
+    label: "Uses Adaptive Stack",
+    title: `Boundary generator stack settings come from ${ADAPTIVE_GENERATOR_STACK_SECTION}.`,
+    sourceTitle: ADAPTIVE_GENERATOR_STACK_SECTION,
+  };
+}
+
 export function boundaryProjectorFieldGroups(
   sectionTitle: string,
   fields: ConfigField[],
@@ -952,6 +966,7 @@ export function boundaryProjectorFieldGroups(
       fields: groupFields,
       controlField,
       isEnabled,
+      stackHint: boundaryProjectorStackHint(),
       disabledReason:
         controlField && !isEnabled
           ? `Select ${controlField.label} before editing ${title.toLowerCase()} boundary settings.`

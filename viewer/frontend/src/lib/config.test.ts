@@ -1986,6 +1986,21 @@ describe("config section controls", () => {
     ]);
     expect(groups?.[0]?.controlField?.key).toBe("input_layer_weight_option");
     expect(groups?.[0]?.isEnabled).toBe(false);
+    for (const group of groups ?? []) {
+      expect(group.stackHint).toMatchObject({
+        label: "Uses Adaptive Stack",
+        sourceTitle: "Adaptive Generator Stack Options",
+      });
+    }
+
+    const outputGroups = boundaryProjectorFieldGroups(
+      outputSection.title,
+      outputSection.fields,
+    );
+    expect(outputGroups?.[0]?.stackHint).toMatchObject({
+      label: "Uses Adaptive Stack",
+      sourceTitle: "Adaptive Generator Stack Options",
+    });
 
     const disabledByDefault = disabledConfigFieldReasons(sections, {});
     expect(disabledByDefault.has("input_layer_weight_option")).toBe(false);
