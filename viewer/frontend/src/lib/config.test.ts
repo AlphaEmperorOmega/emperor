@@ -686,6 +686,202 @@ describe("config section controls", () => {
     );
   });
 
+  it("nests router controller sections under router stack options", () => {
+    const sections: ConfigSection[] = [
+      {
+        title: "Sampler Model Options",
+        fields: [
+          field({
+            key: "sampler_threshold",
+            type: "float",
+            default: 0,
+            section: "Sampler Model Options",
+          }),
+        ],
+      },
+      {
+        title: "Router Options",
+        fields: [
+          field({
+            key: "router_noisy_topk_flag",
+            type: "bool",
+            default: false,
+            choices: [true, false],
+            section: "Router Options",
+          }),
+        ],
+      },
+      {
+        title: "Router Stack Options",
+        fields: [
+          field({
+            key: "sampler_stack_independent_flag",
+            type: "bool",
+            default: false,
+            choices: [true, false],
+            section: "Router Stack Options",
+          }),
+        ],
+      },
+      {
+        title: "Router Gate Options",
+        fields: [
+          field({
+            key: "router_gate_flag",
+            label: "router gate flag",
+            type: "bool",
+            default: false,
+            choices: [true, false],
+            section: "Router Gate Options",
+          }),
+        ],
+      },
+      {
+        title: "Router Gate Stack Options",
+        fields: [
+          field({
+            key: "router_gate_stack_independent_flag",
+            label: "router gate stack independent flag",
+            type: "bool",
+            default: false,
+            choices: [true, false],
+            section: "Router Gate Stack Options",
+          }),
+          field({
+            key: "router_gate_stack_hidden_dim",
+            label: "router gate stack hidden dim",
+            default: null,
+            nullable: true,
+            section: "Router Gate Stack Options",
+          }),
+        ],
+      },
+      {
+        title: "Router Memory Options",
+        fields: [
+          field({
+            key: "router_memory_flag",
+            type: "bool",
+            default: false,
+            choices: [true, false],
+            section: "Router Memory Options",
+          }),
+        ],
+      },
+      {
+        title: "Router Recurrent Layer Options",
+        fields: [
+          field({
+            key: "router_recurrent_flag",
+            type: "bool",
+            default: false,
+            choices: [true, false],
+            section: "Router Recurrent Layer Options",
+          }),
+        ],
+      },
+      {
+        title: "Router Recurrent Gate Options",
+        fields: [
+          field({
+            key: "router_recurrent_gate_flag",
+            type: "bool",
+            default: false,
+            choices: [true, false],
+            section: "Router Recurrent Gate Options",
+          }),
+        ],
+      },
+      {
+        title: "Router Recurrent Gate Stack Options",
+        fields: [
+          field({
+            key: "router_recurrent_gate_stack_independent_flag",
+            type: "bool",
+            default: false,
+            choices: [true, false],
+            section: "Router Recurrent Gate Stack Options",
+          }),
+          field({
+            key: "router_recurrent_gate_stack_hidden_dim",
+            label: "router recurrent gate stack hidden dim",
+            default: null,
+            nullable: true,
+            section: "Router Recurrent Gate Stack Options",
+          }),
+        ],
+      },
+    ];
+
+    const [samplerSection] = deriveNestedConfigSections(sections);
+    const routerStackSection = samplerSection.children?.[0]?.children?.[0];
+    const routerGateSection = routerStackSection?.children?.find(
+      (section) => section.title === "Router Gate Options",
+    );
+    const routerMemorySection = routerStackSection?.children?.find(
+      (section) => section.title === "Router Memory Options",
+    );
+    const routerRecurrentSection = routerStackSection?.children?.find(
+      (section) => section.title === "Router Recurrent Layer Options",
+    );
+
+    expect(routerStackSection?.children?.map((section) => section.title)).toEqual([
+      "Router Gate Options",
+      "Router Memory Options",
+      "Router Recurrent Layer Options",
+    ]);
+    expect(routerGateSection?.children?.[0]?.title).toBe(
+      "Router Gate Stack Options",
+    );
+    expect(routerMemorySection?.controlFieldKey).toBe("router_memory_flag");
+    expect(routerRecurrentSection?.children?.[0]?.title).toBe(
+      "Router Recurrent Gate Options",
+    );
+    expect(
+      routerRecurrentSection?.children?.[0]?.children?.[0]?.title,
+    ).toBe("Router Recurrent Gate Stack Options");
+
+    expect(
+      inheritedStackSectionHint(routerGateSection?.children?.[0]!, {}),
+    ).toMatchObject({
+      label: "Inherits Router Stack",
+      sourceTitle: "Router Stack Options",
+      isCustom: false,
+    });
+
+    const disabledByDefault = disabledConfigFieldReasons(sections, {});
+    expect(disabledByDefault.get("router_gate_stack_independent_flag")).toContain(
+      "router gate flag",
+    );
+
+    const gateEnabled = disabledConfigFieldReasons(sections, {
+      router_gate_flag: "true",
+    });
+    expect(gateEnabled.has("router_gate_stack_independent_flag")).toBe(false);
+    expect(gateEnabled.get("router_gate_stack_hidden_dim")).toContain(
+      "router gate stack independent flag",
+    );
+
+    const customGateStack = disabledConfigFieldReasons(sections, {
+      router_gate_flag: "true",
+      router_gate_stack_independent_flag: "true",
+    });
+    expect(customGateStack.has("router_gate_stack_hidden_dim")).toBe(false);
+
+    const filtered = filterConfigSectionsForSearch(sections, {
+      query: "router recurrent gate stack hidden dim",
+    });
+
+    expect(filtered.map((section) => section.title)).toEqual([
+      "Sampler Model Options",
+      "Router Options",
+      "Router Stack Options",
+      "Router Recurrent Layer Options",
+      "Router Recurrent Gate Options",
+      "Router Recurrent Gate Stack Options",
+    ]);
+  });
+
   it("nests expert stack options under mixture of experts model options", () => {
     const mixtureFields = [
       field({

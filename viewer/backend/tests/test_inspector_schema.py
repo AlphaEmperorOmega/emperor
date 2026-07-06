@@ -334,9 +334,7 @@ class InspectorSchemaTests(unittest.TestCase):
         )
         self.assertIn(
             "output pipeline",
-            adaptive_fields["halting_stack_apply_output_pipeline_flag"][
-                "description"
-            ],
+            adaptive_fields["halting_stack_apply_output_pipeline_flag"]["description"],
         )
         self.assertIn(
             "smoke tests",
@@ -401,9 +399,7 @@ class InspectorSchemaTests(unittest.TestCase):
             "recurrent_halting_stack_layer_norm_position",
             "recurrent_halting_stack_bias_flag",
         }
-        legacy_fields = {
-            name.replace("_stack_", "_") for name in expected_stack_fields
-        }
+        legacy_fields = {name.replace("_stack_", "_") for name in expected_stack_fields}
 
         for field_name in expected_stack_fields:
             with self.subTest(field_name=field_name):
@@ -505,13 +501,9 @@ class InspectorSchemaTests(unittest.TestCase):
                     )
                     self.assertIsNone(fields["memory_stack_hidden_dim"]["default"])
                     self.assertTrue(fields["memory_stack_hidden_dim"]["nullable"])
+                    self.assertFalse(fields["memory_stack_independent_flag"]["default"])
                     self.assertFalse(
-                        fields["memory_stack_independent_flag"]["default"]
-                    )
-                    self.assertFalse(
-                        fields["recurrent_halting_stack_independent_flag"][
-                            "default"
-                        ]
+                        fields["recurrent_halting_stack_independent_flag"]["default"]
                     )
 
     def test_experts_schemas_use_sampler_router_section_labels(self) -> None:
@@ -555,6 +547,52 @@ class InspectorSchemaTests(unittest.TestCase):
                 )
                 self.assertIsNone(fields["sampler_bias_flag"]["default"])
                 self.assertTrue(fields["sampler_bias_flag"]["nullable"])
+
+    def test_experts_linear_adaptive_schema_exposes_router_controller_sections(
+        self,
+    ) -> None:
+        fields = _fields_by_key(config_schema("experts/linear_adaptive"))
+        expected_sections = {
+            "router_gate_flag": "Router Gate Options",
+            "router_gate_stack_hidden_dim": "Router Gate Stack Options",
+            "router_halting_flag": "Router Halting Options",
+            "router_halting_stack_hidden_dim": "Router Halting Stack Options",
+            "router_memory_flag": "Router Memory Options",
+            "router_memory_stack_hidden_dim": "Router Memory Stack Options",
+            "router_recurrent_flag": "Router Recurrent Layer Options",
+            "router_recurrent_gate_flag": "Router Recurrent Gate Options",
+            "router_recurrent_gate_stack_hidden_dim": (
+                "Router Recurrent Gate Stack Options"
+            ),
+            "router_recurrent_halting_flag": "Router Recurrent Halting Options",
+            "router_recurrent_halting_stack_hidden_dim": (
+                "Router Recurrent Halting Stack Options"
+            ),
+        }
+
+        for field_key, section in expected_sections.items():
+            with self.subTest(field_key=field_key):
+                self.assertIn(field_key, fields)
+                self.assertEqual(fields[field_key]["section"], section)
+
+        self.assertFalse(fields["router_gate_flag"]["default"])
+        self.assertFalse(fields["router_memory_flag"]["default"])
+        self.assertFalse(fields["router_recurrent_flag"]["default"])
+        self.assertFalse(fields["router_gate_stack_independent_flag"]["default"])
+        self.assertIsNone(fields["router_gate_stack_hidden_dim"]["default"])
+        self.assertTrue(fields["router_gate_stack_hidden_dim"]["nullable"])
+        self.assertEqual(
+            fields["router_gate_flag"]["flag"],
+            "--router-gate-flag",
+        )
+        self.assertEqual(
+            fields["router_memory_flag"]["flag"],
+            "--router-memory-flag",
+        )
+        self.assertEqual(
+            fields["router_recurrent_flag"]["flag"],
+            "--router-recurrent-flag",
+        )
 
     def test_experts_schemas_use_mixture_and_expert_stack_section_labels(self) -> None:
         expected = {
@@ -949,7 +987,9 @@ class InspectorSchemaTests(unittest.TestCase):
         for field_key in linear_parity_keys:
             with self.subTest(field_key=field_key):
                 self.assertIn(field_key, fields)
-                self.assertEqual(fields[field_key]["type"], linear_fields[field_key]["type"])
+                self.assertEqual(
+                    fields[field_key]["type"], linear_fields[field_key]["type"]
+                )
                 self.assertEqual(
                     fields[field_key]["nullable"],
                     linear_fields[field_key]["nullable"],
@@ -990,7 +1030,9 @@ class InspectorSchemaTests(unittest.TestCase):
         for router_key, linear_key in expected_router_pairs.items():
             with self.subTest(router_key=router_key):
                 self.assertIn(router_key, fields)
-                self.assertEqual(fields[router_key]["type"], linear_fields[linear_key]["type"])
+                self.assertEqual(
+                    fields[router_key]["type"], linear_fields[linear_key]["type"]
+                )
                 self.assertEqual(
                     fields[router_key]["nullable"],
                     linear_fields[linear_key]["nullable"],
@@ -1136,12 +1178,8 @@ class InspectorSchemaTests(unittest.TestCase):
         self.assertFalse(linear_fields["stack_hidden_dim"]["nullable"])
         self.assertIsNone(linear_fields["gate_stack_hidden_dim"]["default"])
         self.assertTrue(linear_fields["gate_stack_hidden_dim"]["nullable"])
-        self.assertTrue(
-            linear_fields["stack_apply_output_pipeline_flag"]["default"]
-        )
-        self.assertFalse(
-            linear_fields["stack_apply_output_pipeline_flag"]["nullable"]
-        )
+        self.assertTrue(linear_fields["stack_apply_output_pipeline_flag"]["default"])
+        self.assertFalse(linear_fields["stack_apply_output_pipeline_flag"]["nullable"])
         self.assertIsNone(
             linear_fields["memory_stack_apply_output_pipeline_flag"]["default"]
         )
@@ -1239,9 +1277,7 @@ class InspectorSchemaTests(unittest.TestCase):
         )
 
     def test_config_schema_locks_adaptive_component_flags_for_presets(self) -> None:
-        fields = _fields_by_key(
-            config_schema("linears/linear_adaptive", "full-stack")
-        )
+        fields = _fields_by_key(config_schema("linears/linear_adaptive", "full-stack"))
 
         expected_locked_fields = {
             "weight_option_flag": True,
