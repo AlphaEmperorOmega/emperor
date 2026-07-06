@@ -1230,7 +1230,13 @@ class InspectorSchemaTests(unittest.TestCase):
         self.assertFalse(baseline_fields["gate_flag"]["locked"])
         self.assertTrue(gating_fields["gate_flag"]["locked"])
         self.assertEqual(gating_fields["gate_flag"]["lockedValue"], True)
-        self.assertIn("GATING preset", gating_fields["gate_flag"]["lockedReason"])
+        self.assertEqual(
+            gating_fields["gate_flag"]["lockedReason"],
+            (
+                "Locked by the GATING preset because this preset locks "
+                "`stack_gate_flag`."
+            ),
+        )
 
     def test_config_schema_locks_adaptive_component_flags_for_presets(self) -> None:
         fields = _fields_by_key(
@@ -1252,6 +1258,7 @@ class InspectorSchemaTests(unittest.TestCase):
                 self.assertTrue(fields[field_key]["locked"])
                 self.assertEqual(fields[field_key]["lockedValue"], locked_value)
                 self.assertIn("FULL_STACK preset", fields[field_key]["lockedReason"])
+                self.assertIn(f"`{field_key}`", fields[field_key]["lockedReason"])
 
     def test_search_space_schema_exposes_linear_axes(self) -> None:
         axes = _axes_by_key(search_space_schema("linears/linear", "baseline"))
@@ -1301,9 +1308,12 @@ class InspectorSchemaTests(unittest.TestCase):
             ["POST_NORM"],
         )
         self.assertEqual(len(axes["stack_layer_norm_position"]["lockReasons"]), 1)
-        self.assertIn(
-            "POST_NORM preset",
+        self.assertEqual(
             axes["stack_layer_norm_position"]["lockedReason"],
+            (
+                "Locked by the POST_NORM preset because this preset locks "
+                "`layer_norm_position`."
+            ),
         )
 
     def test_search_space_schema_locks_union_of_selected_presets(self) -> None:

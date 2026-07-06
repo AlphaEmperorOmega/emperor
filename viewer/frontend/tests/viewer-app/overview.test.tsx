@@ -630,7 +630,7 @@ describe("ViewerApp Overview", () => {
                 locked: true,
                 lockedValue: true,
                 lockedReason:
-                  "Locked by the GATING preset because this preset enables stack gating.",
+                  "Locked by the GATING preset because this preset locks `stack_gate_flag`.",
               }
             : field,
         ),

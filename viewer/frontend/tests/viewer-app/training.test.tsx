@@ -138,11 +138,13 @@ function searchSpaceWithPresetLocks(url: string) {
         locked: hiddenLocked,
         lockedValue: hiddenLocked ? 128 : null,
         lockedReason: hiddenLocked
-          ? "Locked by the GATING preset because this preset fixes hidden dim."
+          ? "Locked by the GATING preset because this preset locks `stack_hidden_dim`."
           : "",
         lockedByPresets: hiddenLocked ? ["GATING"] : [],
         lockReasons: hiddenLocked
-          ? ["Locked by the GATING preset because this preset fixes hidden dim."]
+          ? [
+              "Locked by the GATING preset because this preset locks `stack_hidden_dim`.",
+            ]
           : [],
       },
       {
@@ -150,12 +152,12 @@ function searchSpaceWithPresetLocks(url: string) {
         locked: layerNormLocked,
         lockedValue: layerNormLocked ? "AFTER" : null,
         lockedReason: layerNormLocked
-          ? "Locked by the POST_NORM preset because this preset enables post-layer normalization."
+          ? "Locked by the POST_NORM preset because this preset locks `layer_norm_position`."
           : "",
         lockedByPresets: layerNormLocked ? ["POST_NORM"] : [],
         lockReasons: layerNormLocked
           ? [
-              "Locked by the POST_NORM preset because this preset enables post-layer normalization.",
+              "Locked by the POST_NORM preset because this preset locks `layer_norm_position`.",
             ]
           : [],
       },
@@ -488,7 +490,7 @@ describe("ViewerApp Training And Preview", () => {
                 locked: true,
                 lockedValue: true,
                 lockedReason:
-                  "Locked by the GATING preset because this preset enables stack gating.",
+                  "Locked by the GATING preset because this preset locks `stack_gate_flag`.",
               }
             : field,
         ),
