@@ -5,9 +5,11 @@ import unittest
 from pathlib import Path
 
 from models.catalog import (
+    catalog_entry,
     discover_model_identities_for_type,
     discover_model_types,
     model_type_exists,
+    public_id_for_flat_name,
 )
 
 
@@ -21,11 +23,12 @@ class TestModelCatalogDiscovery(unittest.TestCase):
         self.assertEqual(
             model_types,
             [
+                "bert",
                 "experts",
                 "linears",
                 "neuron",
                 "parametric",
-                "transformer_encoder",
+                "vit",
             ],
         )
         self.assertEqual(model_types, sorted(model_types))
@@ -51,6 +54,25 @@ class TestModelCatalogDiscovery(unittest.TestCase):
                     [],
                 )
 
+    def test_legacy_vit_id_and_flat_name_are_unsupported(self):
+        self.assertIsNone(catalog_entry("transformer_encoder/" + "vit" + "_linear"))
+        self.assertIsNone(public_id_for_flat_name("vit" + "_linear"))
+        self.assertEqual(public_id_for_flat_name("linear"), "linears/linear")
+        self.assertEqual(
+            public_id_for_flat_name("linear_adaptive"),
+            "linears/linear_adaptive",
+        )
+        self.assertEqual(
+            public_id_for_flat_name("expert_linear"),
+            "bert/expert_linear",
+        )
+        self.assertEqual(
+            public_id_for_flat_name("expert_linear_adaptive"),
+            "bert/expert_linear_adaptive",
+        )
+        removed_neuron_flat_name = "neuron" + "_linear"
+        self.assertIsNone(public_id_for_flat_name(removed_neuron_flat_name))
+
 
 class TestModelCatalogCli(unittest.TestCase):
     def run_catalog(self, *args):
@@ -71,11 +93,12 @@ class TestModelCatalogCli(unittest.TestCase):
         self.assertEqual(
             completed.stdout.splitlines(),
             [
+                "bert",
                 "experts",
                 "linears",
                 "neuron",
                 "parametric",
-                "transformer_encoder",
+                "vit",
             ],
         )
 
@@ -90,7 +113,51 @@ class TestModelCatalogCli(unittest.TestCase):
             completed.stdout,
         )
         self.assertIn(
-            "--model-type transformer_encoder --model vit_linear",
+            "--model-type bert --model linear",
+            completed.stdout,
+        )
+        self.assertIn(
+            "--model-type bert --model linear_adaptive",
+            completed.stdout,
+        )
+        self.assertIn(
+            "--model-type bert --model expert_linear",
+            completed.stdout,
+        )
+        self.assertIn(
+            "--model-type bert --model expert_linear_adaptive",
+            completed.stdout,
+        )
+        self.assertIn(
+            "--model-type vit --model linear",
+            completed.stdout,
+        )
+        self.assertIn(
+            "--model-type vit --model linear_adaptive",
+            completed.stdout,
+        )
+        self.assertIn(
+            "--model-type vit --model expert_linear",
+            completed.stdout,
+        )
+        self.assertIn(
+            "--model-type vit --model expert_linear_adaptive",
+            completed.stdout,
+        )
+        self.assertIn(
+            "--model-type neuron --model linear",
+            completed.stdout,
+        )
+        self.assertIn(
+            "--model-type neuron --model linear_adaptive",
+            completed.stdout,
+        )
+        self.assertIn(
+            "--model-type neuron --model expert_linear",
+            completed.stdout,
+        )
+        self.assertIn(
+            "--model-type neuron --model expert_linear_adaptive",
             completed.stdout,
         )
 
@@ -104,6 +171,51 @@ class TestModelCatalogCli(unittest.TestCase):
             [
                 "--model linear",
                 "--model linear_adaptive",
+            ],
+        )
+
+    def test_list_for_bert_model_type_prints_canonical_backend_flags(self):
+        completed = self.run_catalog("--list", "--model-type", "bert")
+
+        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(completed.stderr, "")
+        self.assertEqual(
+            completed.stdout.splitlines(),
+            [
+                "--model linear",
+                "--model linear_adaptive",
+                "--model expert_linear",
+                "--model expert_linear_adaptive",
+            ],
+        )
+
+    def test_list_for_vit_model_type_prints_canonical_backend_flags(self):
+        completed = self.run_catalog("--list", "--model-type", "vit")
+
+        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(completed.stderr, "")
+        self.assertEqual(
+            completed.stdout.splitlines(),
+            [
+                "--model linear",
+                "--model linear_adaptive",
+                "--model expert_linear",
+                "--model expert_linear_adaptive",
+            ],
+        )
+
+    def test_list_for_neuron_model_type_prints_canonical_backend_flags(self):
+        completed = self.run_catalog("--list", "--model-type", "neuron")
+
+        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(completed.stderr, "")
+        self.assertEqual(
+            completed.stdout.splitlines(),
+            [
+                "--model linear",
+                "--model linear_adaptive",
+                "--model expert_linear",
+                "--model expert_linear_adaptive",
             ],
         )
 
@@ -189,11 +301,12 @@ class TestExperimentShellCatalogCli(unittest.TestCase):
                 ),
                 "",
                 "Available model types:",
+                "  --model-type bert",
                 "  --model-type experts",
                 "  --model-type linears",
                 "  --model-type neuron",
                 "  --model-type parametric",
-                "  --model-type transformer_encoder",
+                "  --model-type vit",
             ],
         )
 
@@ -203,9 +316,40 @@ class TestExperimentShellCatalogCli(unittest.TestCase):
         self.assertEqual(completed.returncode, 0)
         self.assertEqual(completed.stderr, "")
         self.assertIn("Available models:", completed.stdout)
+        self.assertIn("  --model-type bert --model linear", completed.stdout)
+        self.assertIn(
+            "  --model-type bert --model linear_adaptive",
+            completed.stdout,
+        )
         self.assertIn("  --model-type linears --model linear", completed.stdout)
         self.assertIn(
             "  --model-type linears --model linear_adaptive",
+            completed.stdout,
+        )
+        self.assertIn("  --model-type vit --model linear", completed.stdout)
+        self.assertIn(
+            "  --model-type vit --model linear_adaptive",
+            completed.stdout,
+        )
+        self.assertIn(
+            "  --model-type vit --model expert_linear",
+            completed.stdout,
+        )
+        self.assertIn(
+            "  --model-type vit --model expert_linear_adaptive",
+            completed.stdout,
+        )
+        self.assertIn("  --model-type neuron --model linear", completed.stdout)
+        self.assertIn(
+            "  --model-type neuron --model linear_adaptive",
+            completed.stdout,
+        )
+        self.assertIn(
+            "  --model-type neuron --model expert_linear",
+            completed.stdout,
+        )
+        self.assertIn(
+            "  --model-type neuron --model expert_linear_adaptive",
             completed.stdout,
         )
 
@@ -225,6 +369,69 @@ class TestExperimentShellCatalogCli(unittest.TestCase):
                 "Available models for --model-type linears:",
                 "  --model linear",
                 "  --model linear_adaptive",
+            ],
+        )
+
+    def test_list_models_for_bert_model_type_prints_backend_flags(self):
+        completed = self.run_experiment("--model-type", "bert", "--list-models")
+
+        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(completed.stderr, "")
+        self.assertEqual(
+            completed.stdout.splitlines(),
+            [
+                (
+                    "Usage: source experiment.sh --model-type bert "
+                    "--model <name> [options]"
+                ),
+                "",
+                "Available models for --model-type bert:",
+                "  --model linear",
+                "  --model linear_adaptive",
+                "  --model expert_linear",
+                "  --model expert_linear_adaptive",
+            ],
+        )
+
+    def test_list_models_for_vit_model_type_prints_backend_flags(self):
+        completed = self.run_experiment("--model-type", "vit", "--list-models")
+
+        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(completed.stderr, "")
+        self.assertEqual(
+            completed.stdout.splitlines(),
+            [
+                (
+                    "Usage: source experiment.sh --model-type vit "
+                    "--model <name> [options]"
+                ),
+                "",
+                "Available models for --model-type vit:",
+                "  --model linear",
+                "  --model linear_adaptive",
+                "  --model expert_linear",
+                "  --model expert_linear_adaptive",
+            ],
+        )
+
+    def test_list_models_for_neuron_model_type_prints_backend_flags(self):
+        completed = self.run_experiment("--model-type", "neuron", "--list-models")
+
+        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(completed.stderr, "")
+        self.assertEqual(
+            completed.stdout.splitlines(),
+            [
+                (
+                    "Usage: source experiment.sh --model-type neuron "
+                    "--model <name> [options]"
+                ),
+                "",
+                "Available models for --model-type neuron:",
+                "  --model linear",
+                "  --model linear_adaptive",
+                "  --model expert_linear",
+                "  --model expert_linear_adaptive",
             ],
         )
 
