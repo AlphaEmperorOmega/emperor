@@ -15,8 +15,14 @@ from emperor.augmentations.adaptive_parameters.core.mask import (
 from emperor.augmentations.adaptive_parameters.core.weight import (
     DynamicWeightConfig,
 )
-from emperor.base.layer.config import LayerConfig, LayerStackConfig, RecurrentLayerConfig
+from emperor.base.options import ActivationOptions, LayerNormPositionOptions
+from emperor.base.layer.config import (
+    LayerConfig,
+    LayerStackConfig,
+    RecurrentLayerConfig,
+)
 from emperor.base.layer.gate import GateConfig
+from emperor.base.layer.residual import ResidualConnectionOptions
 from emperor.experts.config import MixtureOfExpertsModelConfig
 from emperor.experts.core.config import (
     MixtureOfExpertsConfig,
@@ -26,6 +32,9 @@ from emperor.halting.config import StickBreakingConfig
 from emperor.linears.core.config import AdaptiveLinearLayerConfig, LinearLayerConfig
 from emperor.sampler.core.config import RouterConfig, SamplerConfig
 
+from models.experts.linear_adaptive._router_controller_config import (
+    RouterControllerModelConfig,
+)
 from models.adaptive_parameter_config_factory import (
     build_bias_config,
     build_diagonal_config,
@@ -71,6 +80,9 @@ class ControlConfigDependencies:
     sampler_options: ExpertsSamplerOptions
     router_options: ExpertsRouterOptions
     sampler_stack_options: ExpertsSubmoduleStackOptions
+    router_layer_controller_options: ExpertsLayerControllerOptions
+    router_dynamic_memory_options: ExpertsDynamicMemoryOptions
+    router_recurrent_controller_options: ExpertsRecurrentControllerOptions
     layer_controller_options: ExpertsLayerControllerOptions
     dynamic_memory_options: ExpertsDynamicMemoryOptions
     recurrent_controller_options: ExpertsRecurrentControllerOptions
@@ -99,6 +111,13 @@ class ControlConfigFactory:
         self.sampler_options = dependencies.sampler_options
         self.router_options = dependencies.router_options
         self.sampler_stack_options = dependencies.sampler_stack_options
+        self.router_layer_controller_options = (
+            dependencies.router_layer_controller_options
+        )
+        self.router_dynamic_memory_options = dependencies.router_dynamic_memory_options
+        self.router_recurrent_controller_options = (
+            dependencies.router_recurrent_controller_options
+        )
         self.layer_controller_options = dependencies.layer_controller_options
         self.dynamic_memory_options = dependencies.dynamic_memory_options
         self.recurrent_controller_options = dependencies.recurrent_controller_options
@@ -113,9 +132,7 @@ class ControlConfigFactory:
             dependencies.adaptive_generator_stack_options
         )
         self.adaptive_generator_stack_config_factory = (
-            AdaptiveGeneratorStackConfigFactory(
-                self.adaptive_generator_stack_options
-            )
+            AdaptiveGeneratorStackConfigFactory(self.adaptive_generator_stack_options)
         )
         self.hidden_adaptive_weight_options = (
             dependencies.hidden_adaptive_weight_options
@@ -196,6 +213,30 @@ class ControlConfigFactory:
             gate_config_factory=self.expert_gate_config_factory,
             halting_config_factory=self.expert_halting_config_factory,
         )
+        self.router_gate_config_factory = ExpertsGateConfigFactory(
+            layer_controller_options=self.router_layer_controller_options,
+            recurrent_controller_options=self.router_recurrent_controller_options,
+            submodule_stack_options=self.sampler_stack_options,
+            recurrent_stack_inherits_gate_stack=False,
+        )
+        self.router_halting_config_factory = ExpertsHaltingConfigFactory(
+            layer_controller_options=self.router_layer_controller_options,
+            recurrent_controller_options=self.router_recurrent_controller_options,
+            submodule_stack_options=self.sampler_stack_options,
+            output_dim=self.sampler_stack_options.hidden_dim,
+            halting_stack_defaults=self.sampler_stack_options,
+            recurrent_stack_inherits_halting_stack=False,
+        )
+        self.router_memory_config_factory = ExpertsMemoryConfigFactory(
+            stack_options=self.sampler_stack_options,
+            dynamic_memory_options=self.router_dynamic_memory_options,
+            submodule_stack_options=self.sampler_stack_options,
+        )
+        self.router_recurrent_config_factory = ExpertsRecurrentConfigFactory(
+            recurrent_controller_options=self.router_recurrent_controller_options,
+            gate_config_factory=self.router_gate_config_factory,
+            halting_config_factory=self.router_halting_config_factory,
+        )
 
     def build(self) -> MixtureOfExpertsModelConfig | RecurrentLayerConfig:
         return self.recurrent_config_factory.build_config(
@@ -263,9 +304,7 @@ class ControlConfigFactory:
             input_dim=self.hidden_dim,
             output_dim=self.hidden_dim,
             top_k=mixture_options.top_k,
-            routing_initialization_mode=(
-                mixture_options.routing_initialization_mode
-            ),
+            routing_initialization_mode=(mixture_options.routing_initialization_mode),
             sampler_config=self.__build_sampler_config(),
             stack_config=self.__build_main_stack_config(),
         )
@@ -298,9 +337,7 @@ class ControlConfigFactory:
         return MixtureOfExpertsLayerConfig(
             activation=stack_options.activation,
             layer_norm_position=stack_options.layer_norm_position,
-            residual_connection_option=(
-                stack_options.residual_connection_option
-            ),
+            residual_connection_option=(stack_options.residual_connection_option),
             dropout_probability=stack_options.dropout_probability,
             gate_config=gate_config,
             halting_config=halting_config,
@@ -316,14 +353,10 @@ class ControlConfigFactory:
             num_experts=mixture_options.num_experts,
             capacity_factor=mixture_options.capacity_factor,
             dropped_token_behavior=mixture_options.dropped_token_behavior,
-            compute_expert_mixture_flag=(
-                mixture_options.compute_expert_mixture_flag
-            ),
+            compute_expert_mixture_flag=(mixture_options.compute_expert_mixture_flag),
             weighted_parameters_flag=mixture_options.weighted_parameters_flag,
             weighting_position_option=mixture_options.weighting_position_option,
-            routing_initialization_mode=(
-                mixture_options.routing_initialization_mode
-            ),
+            routing_initialization_mode=(mixture_options.routing_initialization_mode),
             sampler_config=self.__build_sampler_config(),
             expert_model_config=self.__build_expert_model_config(),
         )
@@ -374,9 +407,7 @@ class ControlConfigFactory:
             threshold=sampler_options.threshold,
             filter_above_threshold=sampler_options.filter_above_threshold,
             num_topk_samples=sampler_options.num_topk_samples,
-            normalize_probabilities_flag=(
-                sampler_options.normalize_probabilities_flag
-            ),
+            normalize_probabilities_flag=(sampler_options.normalize_probabilities_flag),
             noisy_topk_flag=sampler_options.noisy_topk_flag,
             num_experts=mixture_options.num_experts,
             coefficient_of_variation_loss_weight=(
@@ -397,15 +428,100 @@ class ControlConfigFactory:
         layer_model_config = self.build_router_adaptive_linear_layer_config(
             sampler_stack_options.bias_flag
         )
-        model_config = self.__build_controller_stack(
-            sampler_stack_options,
-            layer_model_config,
-        )
+        if self.__router_controller_enabled():
+            model_config = self.__build_controlled_router_model_config(
+                layer_model_config
+            )
+        else:
+            model_config = self.__build_controller_stack(
+                sampler_stack_options,
+                layer_model_config,
+            )
         return RouterConfig(
             input_dim=self.hidden_dim,
             num_experts=mixture_options.num_experts,
             noisy_topk_flag=router_options.noisy_topk_flag,
             model_config=model_config,
+        )
+
+    def __router_controller_enabled(self) -> bool:
+        return (
+            self.router_layer_controller_options.stack_gate_flag
+            or self.router_layer_controller_options.stack_halting_flag
+            or self.router_dynamic_memory_options.memory_flag
+            or self.router_recurrent_controller_options.recurrent_flag
+        )
+
+    def __build_controlled_router_model_config(
+        self,
+        layer_model_config: AdaptiveLinearLayerConfig,
+    ) -> RouterControllerModelConfig:
+        trunk_dim = self.sampler_stack_options.hidden_dim
+        trunk_config = self.router_recurrent_config_factory.build_config(
+            self.__build_router_trunk_stack_config(layer_model_config)
+        )
+        return RouterControllerModelConfig(
+            input_dim=self.hidden_dim,
+            hidden_dim=trunk_dim,
+            output_dim=self.__router_output_dim(),
+            adapter_config=self.__build_router_projection_layer_config(
+                layer_model_config
+            ),
+            trunk_config=trunk_config,
+            head_config=self.__build_router_projection_layer_config(layer_model_config),
+        )
+
+    def __router_output_dim(self) -> int:
+        num_experts = self.mixture_options.num_experts
+        if self.router_options.noisy_topk_flag:
+            return 2 * num_experts
+        return num_experts
+
+    def __build_router_trunk_stack_config(
+        self,
+        layer_model_config: AdaptiveLinearLayerConfig,
+    ) -> LayerStackConfig:
+        sampler_stack_options = self.sampler_stack_options
+        gate_config = self.router_gate_config_factory.build_gate_config()
+        halting_config = self.router_halting_config_factory.build_halting_config()
+        memory_config = self.router_memory_config_factory.build_memory_config()
+        return LayerStackConfig(
+            input_dim=sampler_stack_options.hidden_dim,
+            hidden_dim=sampler_stack_options.hidden_dim,
+            output_dim=sampler_stack_options.hidden_dim,
+            num_layers=sampler_stack_options.num_layers,
+            last_layer_bias_option=sampler_stack_options.last_layer_bias_option,
+            apply_output_pipeline_flag=(
+                sampler_stack_options.apply_output_pipeline_flag
+            ),
+            shared_memory_config=memory_config,
+            layer_config=LayerConfig(
+                activation=sampler_stack_options.activation,
+                layer_norm_position=sampler_stack_options.layer_norm_position,
+                residual_connection_option=(
+                    sampler_stack_options.residual_connection_option
+                ),
+                dropout_probability=sampler_stack_options.dropout_probability,
+                gate_config=gate_config,
+                halting_config=halting_config,
+                memory_config=None,
+                layer_model_config=layer_model_config,
+            ),
+        )
+
+    @staticmethod
+    def __build_router_projection_layer_config(
+        layer_model_config: AdaptiveLinearLayerConfig,
+    ) -> LayerConfig:
+        return LayerConfig(
+            activation=ActivationOptions.DISABLED,
+            layer_norm_position=LayerNormPositionOptions.DISABLED,
+            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            dropout_probability=0.0,
+            gate_config=None,
+            halting_config=None,
+            memory_config=None,
+            layer_model_config=layer_model_config,
         )
 
     def __build_weight_config(
