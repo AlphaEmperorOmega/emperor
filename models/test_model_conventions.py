@@ -14,6 +14,41 @@ MODELS_ROOT = PROJECT_ROOT / "models"
 
 
 class TestModelConventions(unittest.TestCase):
+    def test_non_init_modules_are_not_pure_reexports(self):
+        def is_docstring(node: ast.AST) -> bool:
+            return (
+                isinstance(node, ast.Expr)
+                and isinstance(node.value, ast.Constant)
+                and isinstance(node.value.value, str)
+            )
+
+        def is_reexport_statement(node: ast.AST) -> bool:
+            if isinstance(node, (ast.Import, ast.ImportFrom)):
+                return True
+            if isinstance(node, ast.Assign):
+                return all(
+                    isinstance(target, ast.Name) and target.id == "__all__"
+                    for target in node.targets
+                )
+            if isinstance(node, ast.AnnAssign):
+                return (
+                    isinstance(node.target, ast.Name)
+                    and node.target.id == "__all__"
+                )
+            return False
+
+        pure_reexport_modules = []
+        for path in sorted(MODELS_ROOT.glob("**/*.py")):
+            if path.name == "__init__.py":
+                continue
+            source = path.read_text()
+            tree = ast.parse(source)
+            body = [node for node in tree.body if not is_docstring(node)]
+            if body and all(is_reexport_statement(node) for node in body):
+                pure_reexport_modules.append(path.relative_to(PROJECT_ROOT))
+
+        self.assertEqual(pure_reexport_modules, [])
+
     def test_model_constructors_use_linear_config_naming(self):
         for path in sorted(MODELS_ROOT.glob("**/model.py")):
             source = path.read_text()
