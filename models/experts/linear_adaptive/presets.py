@@ -59,39 +59,6 @@ class ExperimentPreset(BaseOptions):
     RECURRENT_GATING_HALTING_MEMORY = 22
 
 
-_PRESET_LOCK_BEHAVIORS = {
-    "stack_gate_flag": "stack gating",
-    "stack_halting_flag": "adaptive stack halting",
-    "memory_flag": "shared stack memory",
-    "recurrent_flag": "recurrent execution",
-    "recurrent_gate_flag": "recurrent gating",
-    "recurrent_halting_flag": "adaptive recurrent halting",
-    "weight_option_flag": "dynamic weights",
-    "weight_option": "dynamic weights",
-    "bias_option_flag": "dynamic bias",
-    "bias_option": "dynamic bias",
-    "diagonal_option_flag": "dynamic diagonal",
-    "diagonal_option": "dynamic diagonal",
-    "mask_option_flag": "adaptive row masking",
-    "row_mask_option": "adaptive row masking",
-    "router_weight_option_flag": "router dynamic weights",
-    "router_weight_option": "router dynamic weights",
-    "router_bias_option_flag": "router dynamic bias",
-    "router_bias_option": "router dynamic bias",
-    "router_diagonal_option_flag": "router dynamic diagonal",
-    "router_diagonal_option": "router dynamic diagonal",
-    "router_mask_option_flag": "router adaptive row masking",
-    "router_row_mask_option": "router adaptive row masking",
-    "routing_initialization_mode": "shared expert routing",
-    "weighting_position_option": "expert weighting after experts",
-    "top_k": "expert routing",
-    "sampler_normalize_probabilities_flag": "switch-style routing probabilities",
-    "sampler_switch_loss_weight": "switch auxiliary loss",
-    "capacity_factor": "expert capacity limiting",
-    "dropped_token_behavior": "dropped-token behavior",
-}
-
-
 _ADAPTIVE_OPTION_FLAGS = {
     "weight_option": "weight_option_flag",
     "bias_option": "bias_option_flag",
@@ -320,14 +287,6 @@ class ExperimentPresets(BuilderBackedExperimentPresetsBase):
             config,
         )
         return self._builder_type(**builder_kwargs).build()
-
-    def _preset_lock_reason(self, preset: ExperimentPreset, field: str) -> str:
-        behavior = _PRESET_LOCK_BEHAVIORS[field]
-        return (
-            f"Locked by the {preset.name} preset because this preset enables "
-            f"{behavior}."
-        )
-
 
 class Experiment(ExperimentBase):
     def __init__(

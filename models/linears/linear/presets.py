@@ -42,17 +42,6 @@ class ExperimentPreset(BaseOptions):
     RECURRENT_POST_NORM = 24
 
 
-_PRESET_LOCK_BEHAVIORS = {
-    "stack_gate_flag": "stack gating",
-    "stack_halting_flag": "adaptive stack halting",
-    "memory_flag": "shared stack memory",
-    "stack_residual_connection_option": "stack residuals",
-    "layer_norm_position": "post-layer normalization",
-    "recurrent_flag": "recurrent execution",
-    "recurrent_gate_flag": "recurrent gating",
-    "recurrent_halting_flag": "adaptive recurrent halting",
-}
-
 _PRESET_DEFINITIONS = {
     ExperimentPreset.BASELINE: PresetDefinition(
         preset_values={},
@@ -256,14 +245,6 @@ class ExperimentPresets(BuilderBackedExperimentPresetsBase):
     def _preset(self, **kwargs):
         builder_kwargs = linear_builder_kwargs_from_flat(kwargs, config)
         return self._builder_type(**builder_kwargs).build()
-
-    def _preset_lock_reason(self, preset: ExperimentPreset, field: str) -> str:
-        behavior = _PRESET_LOCK_BEHAVIORS[field]
-        return (
-            f"Locked by the {preset.name} preset because this preset enables "
-            f"{behavior}."
-        )
-
 
 class Experiment(ExperimentBase):
     def __init__(
