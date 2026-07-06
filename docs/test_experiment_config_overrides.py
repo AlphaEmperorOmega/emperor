@@ -7,8 +7,8 @@ import unittest
 import models.experts.linear.config as expert_linear_config
 import models.linears.linear.config as linears_linear_config
 import models.linears.linear_adaptive.config as linear_adaptive_config
-import models.transformer_encoder.bert_linear.config as bert_linear_config
-import models.transformer_encoder.vit_linear.config as vit_linear_config
+import models.bert.linear.config as bert_config
+import models.vit.linear.config as vit_config
 from emperor.augmentations.adaptive_parameters.core.monitor import (
     AdaptiveParameterMonitorCallback,
 )
@@ -405,6 +405,47 @@ class TestExperimentConfigOverrideParsing(
         )
         self.assertFalse(mode.config_overrides["halting_stack_bias_flag"])
 
+    def test_router_stack_flags_parse_without_independent_flag(self):
+        parser = get_experiment_parser(
+            ExpertLinearExperimentPreset.names(),
+            "models.experts.linear",
+        )
+        args = parser.parse_args(
+            [
+                "--preset",
+                "baseline",
+                "--router-stack-hidden-dim",
+                "40",
+                "--router-stack-num-layers",
+                "3",
+                "--router-bias-flag",
+                "false",
+            ]
+        )
+
+        mode = resolve_experiment_mode(args, ExpertLinearExperimentPreset)
+
+        self.assertEqual(mode.config_overrides["router_stack_hidden_dim"], 40)
+        self.assertEqual(mode.config_overrides["router_stack_num_layers"], 3)
+        self.assertFalse(mode.config_overrides["router_bias_flag"])
+
+    def test_router_stack_independent_flag_is_rejected(self):
+        parser = get_experiment_parser(
+            ExpertLinearExperimentPreset.names(),
+            "models.experts.linear",
+        )
+
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                parser.parse_args(
+                    [
+                        "--preset",
+                        "baseline",
+                        "--router-stack-independent-flag",
+                        "true",
+                    ]
+                )
+
     def test_legacy_controller_stack_flags_are_rejected(self):
         parser = get_experiment_parser(
             ExpertLinearExperimentPreset.names(),
@@ -683,18 +724,19 @@ class TestExperimentConfigOverrideParsing(
         with self.assertRaises(ValueError):
             self.resolve_args(args)
 
-    def test_transformer_configs_hide_builder_unsupported_override_keys(self):
-        bert_keys = set(iter_supported_config_keys(bert_linear_config))
-        vit_keys = set(iter_supported_config_keys(vit_linear_config))
+    def test_transformer_config_override_keys_match_supported_builder_surface(self):
+        bert_keys = set(iter_supported_config_keys(bert_config))
+        vit_keys = set(iter_supported_config_keys(vit_config))
         removed_bias_constant = "BIAS" + "_FLAG"
 
-        self.assertNotIn("GATE_FLAG", bert_keys)
+        self.assertIn("GATE_FLAG", bert_keys)
         self.assertNotIn("GATE_HIDDEN_DIM", bert_keys)
-        self.assertNotIn("GATE_STACK_HIDDEN_DIM", bert_keys)
-        self.assertNotIn("HALTING_FLAG", bert_keys)
+        self.assertIn("GATE_STACK_HIDDEN_DIM", bert_keys)
+        self.assertIn("HALTING_FLAG", bert_keys)
         self.assertNotIn("HALTING_HIDDEN_DIM", bert_keys)
-        self.assertNotIn("HALTING_STACK_HIDDEN_DIM", bert_keys)
-        self.assertNotIn("RECURRENT_FLAG", bert_keys)
+        self.assertIn("HALTING_STACK_HIDDEN_DIM", bert_keys)
+        self.assertIn("MEMORY_FLAG", bert_keys)
+        self.assertIn("RECURRENT_FLAG", bert_keys)
         self.assertNotIn("BERT_PRETRAINING_TARGET_VOCAB_SIZE", bert_keys)
         self.assertNotIn(removed_bias_constant, bert_keys)
         self.assertNotIn("SEQUENCE_LENGTH", vit_keys)
