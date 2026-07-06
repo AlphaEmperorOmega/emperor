@@ -2,15 +2,50 @@ from emperor.base.layer.residual import ResidualConnectionOptions
 import torch
 import unittest
 
+from dataclasses import dataclass
 from emperor.base.options import (
     ActivationOptions,
     LastLayerBiasOptions,
     LayerNormPositionOptions,
 )
 from emperor.base.layer import LayerConfig, LayerStackConfig
+from emperor.base.layer.state import LayerState
+from emperor.base.utils import ConfigBase, Module, optional_field
 from emperor.linears.core.config import LinearLayerConfig
 from emperor.sampler.core.config import RouterConfig
 from emperor.sampler.core.routers import RouterModel
+
+
+@dataclass
+class ConstantRouterConfig(ConfigBase):
+    input_dim: int | None = optional_field("Input feature dimension.")
+    output_dim: int | None = optional_field("Output feature dimension.")
+
+    def _registry_owner(self) -> type:
+        return ConstantRouterModel
+
+
+class ConstantRouterModel(Module):
+    def __init__(
+        self,
+        cfg: ConstantRouterConfig,
+        overrides: ConstantRouterConfig | None = None,
+    ) -> None:
+        super().__init__()
+        self.cfg: ConstantRouterConfig = self._override_config(cfg, overrides)
+        self.output_dim = self.cfg.output_dim
+
+    def forward(self, state: LayerState) -> LayerState:
+        return LayerState(
+            hidden=torch.zeros(
+                *state.hidden.shape[:-1],
+                self.output_dim,
+                dtype=state.hidden.dtype,
+                device=state.hidden.device,
+            ),
+            loss=state.loss,
+            halting_state=state.halting_state,
+        )
 
 
 class TestRouterModel(unittest.TestCase):
@@ -21,7 +56,7 @@ class TestRouterModel(unittest.TestCase):
         num_experts: int = 4,
         noisy_topk_flag: bool = False,
         num_layers: int = 2,
-        model_config: LayerStackConfig | None = None,
+        model_config: ConfigBase | None = None,
     ) -> RouterConfig:
         if model_config is None:
             model_config = self.layer_stack_config(
@@ -126,6 +161,18 @@ class TestRouterModel(unittest.TestCase):
 
                 self.assertIsInstance(output, torch.Tensor)
                 self.assertEqual(output.shape, (3, expected_dim))
+
+    def test_compute_logit_scores_accepts_config_base_model_config(self):
+        cfg = self.preset(
+            input_dim=8,
+            num_experts=4,
+            model_config=ConstantRouterConfig(input_dim=8, output_dim=4),
+        )
+        model = RouterModel(cfg)
+
+        output = model.compute_logit_scores(torch.randn(3, 8))
+
+        self.assertEqual(output.shape, (3, 4))
 
     def test_compute_logit_scores_rejects_invalid_input_shape(self):
         model = RouterModel(self.preset(input_dim=8))
