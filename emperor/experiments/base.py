@@ -306,10 +306,9 @@ class ExperimentPresetsBase:
         }
 
     def _preset_lock_reason(self, model_config_preset, field: str) -> str:
-        label = field.replace("_", " ")
         return (
             f"Locked by the {model_config_preset.name} preset because this preset "
-            f"sets {label}."
+            f"locks `{field}`."
         )
 
     def locked_fields(self, model_config_preset) -> dict[str, PresetLock]:
