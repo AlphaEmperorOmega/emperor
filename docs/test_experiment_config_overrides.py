@@ -25,6 +25,9 @@ from models.experts.linear import (
     ExperimentPreset as ExpertLinearExperimentPreset,
 )
 from models.linears.linear import ExperimentPreset as LinearExperimentPreset
+from models.linears.linear.presets import (
+    ExperimentPresets as LinearExperimentPresets,
+)
 from models.linears.linear_adaptive import ExperimentPreset
 from models.linears.linear_adaptive.presets import Experiment, ExperimentPresets
 from models.parametric.parametric_vector import (
@@ -705,6 +708,31 @@ class TestExperimentConfigOverrideParsing(
 
 
 class TestExperimentConfigOverrideApplication(unittest.TestCase):
+    def test_preset_lock_reasons_use_exact_backticked_field_names(self):
+        locks = LinearExperimentPresets().locks_for_preset(
+            LinearExperimentPreset.GATING
+        )
+
+        self.assertEqual(
+            locks["stack_gate_flag"].reason,
+            (
+                "Locked by the GATING preset because this preset locks "
+                "`stack_gate_flag`."
+            ),
+        )
+
+        adaptive_locks = ExperimentPresets().locks_for_preset(
+            ExperimentPreset.SINGLE_MODEL_WEIGHT
+        )
+
+        self.assertEqual(
+            adaptive_locks["weight_option"].reason,
+            (
+                "Locked by the SINGLE_MODEL_WEIGHT preset because this preset "
+                "locks `weight_option`."
+            ),
+        )
+
     def test_unlocked_override_wins_but_preset_locked_override_raises(self):
         cfg = ExperimentPresets().get_config(
             ExperimentPreset.SINGLE_MODEL_WEIGHT,
