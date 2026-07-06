@@ -93,7 +93,7 @@ _PRESET_DEFINITIONS = {
     ExperimentPreset.BASELINE: PresetDefinition(
         preset_values={},
         description="Default config: a mixture-of-experts classifier with adaptive linear "
-        "input, output, expert, and sampler stacks.",
+        "input, output, expert, and router stacks.",
     ),
     ExperimentPreset.GATING: PresetDefinition(
         preset_values={

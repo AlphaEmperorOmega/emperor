@@ -439,19 +439,21 @@ ROUTER_NOISY_TOPK_FLAG: bool = False
 
 #########################################################################
 # ROUTER STACK OPTIONS
-# If False, router model stack options inherit the layer stack submodule options.
-SAMPLER_STACK_INDEPENDENT_FLAG: bool = False
-SAMPLER_STACK_HIDDEN_DIM: int | None = None
-SAMPLER_STACK_NUM_LAYERS: int | None = None
-SAMPLER_STACK_ACTIVATION: ActivationOptions | None = None
-SAMPLER_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions | None = None
-SAMPLER_STACK_DROPOUT_PROBABILITY: float | None = None
-SAMPLER_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = (
-    LayerNormPositionOptions.DISABLED
+ROUTER_STACK_HIDDEN_DIM: int = STACK_HIDDEN_DIM
+ROUTER_STACK_NUM_LAYERS: int = 2
+ROUTER_STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
+ROUTER_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
+    ResidualConnectionOptions.DISABLED
 )
-SAMPLER_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions | None = None
-SAMPLER_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool | None = True
-SAMPLER_BIAS_FLAG: bool | None = None
+ROUTER_STACK_DROPOUT_PROBABILITY: float = 0.0
+ROUTER_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = (
+    STACK_LAYER_NORM_POSITION
+)
+ROUTER_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = (
+    LastLayerBiasOptions.DEFAULT
+)
+ROUTER_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = False
+ROUTER_BIAS_FLAG: bool = STACK_BIAS_FLAG
 
 #########################################################################
 # ROUTER GATE OPTIONS
@@ -460,7 +462,7 @@ ROUTER_GATE_FLAG: bool = False
 ROUTER_GATE_OPTION: LayerGateOptions | None = EXPERT_GATE_OPTION
 ROUTER_GATE_ACTIVATION: ActivationOptions | None = EXPERT_GATE_ACTIVATION
 # ROUTER GATE STACK OPTIONS
-# If False, router gate stack options inherit router stack options.
+# If False, router gate stack options inherit layer stack submodule options.
 ROUTER_GATE_STACK_INDEPENDENT_FLAG: bool = False
 ROUTER_GATE_STACK_HIDDEN_DIM: int | None = None
 ROUTER_GATE_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = None
@@ -485,7 +487,7 @@ ROUTER_HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
 )
 ROUTER_HALTING_OUTPUT_DIM: int = EXPERT_HALTING_OUTPUT_DIM
 # ROUTER HALTING STACK OPTIONS
-# If False, router halting stack options inherit router stack options.
+# If False, router halting stack options inherit layer stack submodule options.
 ROUTER_HALTING_STACK_INDEPENDENT_FLAG: bool = False
 ROUTER_HALTING_STACK_HIDDEN_DIM: int | None = None
 ROUTER_HALTING_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = (
@@ -514,7 +516,7 @@ ROUTER_MEMORY_TEST_TIME_TRAINING_NUM_INNER_STEPS: int | None = (
     EXPERT_MEMORY_TEST_TIME_TRAINING_NUM_INNER_STEPS
 )
 # ROUTER MEMORY STACK OPTIONS
-# If False, router memory stack options inherit router stack options.
+# If False, router memory stack options inherit layer stack submodule options.
 ROUTER_MEMORY_STACK_INDEPENDENT_FLAG: bool = False
 ROUTER_MEMORY_STACK_HIDDEN_DIM: int | None = None
 ROUTER_MEMORY_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = None
@@ -543,7 +545,7 @@ ROUTER_RECURRENT_GATE_ACTIVATION: ActivationOptions | None = (
     EXPERT_RECURRENT_GATE_ACTIVATION
 )
 # ROUTER RECURRENT GATE STACK OPTIONS
-# If False, router recurrent gate stack options inherit router stack options.
+# If False, router recurrent gate stack options inherit layer stack submodule options.
 ROUTER_RECURRENT_GATE_STACK_INDEPENDENT_FLAG: bool = False
 ROUTER_RECURRENT_GATE_STACK_HIDDEN_DIM: int | None = None
 ROUTER_RECURRENT_GATE_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = None
@@ -566,7 +568,7 @@ ROUTER_RECURRENT_HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
     EXPERT_RECURRENT_HALTING_HIDDEN_STATE_MODE
 )
 # ROUTER RECURRENT HALTING STACK OPTIONS
-# If False, router recurrent halting stack options inherit router stack options.
+# If False, router recurrent halting stack options inherit layer stack submodule options.
 ROUTER_RECURRENT_HALTING_STACK_INDEPENDENT_FLAG: bool = False
 ROUTER_RECURRENT_HALTING_STACK_HIDDEN_DIM: int | None = None
 ROUTER_RECURRENT_HALTING_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = (
@@ -731,7 +733,9 @@ OUTPUT_LAYER_WEIGHT_DECAY_WARMUP_BATCHES: int = WEIGHT_DECAY_WARMUP_BATCHES
 OUTPUT_LAYER_WEIGHT_NORMALIZATION_OPTION: WeightNormalizationOptions = (
     WEIGHT_NORMALIZATION_OPTION
 )
-OUTPUT_LAYER_WEIGHT_NORMALIZATION_POSITION_OPTION: WeightNormalizationPositionOptions = WEIGHT_NORMALIZATION_POSITION_OPTION
+OUTPUT_LAYER_WEIGHT_NORMALIZATION_POSITION_OPTION: (
+    WeightNormalizationPositionOptions
+) = WEIGHT_NORMALIZATION_POSITION_OPTION
 OUTPUT_LAYER_WEIGHT_BANK_EXPANSION_FACTOR: BankExpansionFactorOptions = (
     WEIGHT_BANK_EXPANSION_FACTOR
 )

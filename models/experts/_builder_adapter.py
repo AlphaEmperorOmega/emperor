@@ -24,7 +24,7 @@ _LINEAR_GROUPED_KEYS = {
     "expert_stack_options",
     "sampler_options",
     "router_options",
-    "sampler_stack_options",
+    "router_stack_options",
     "router_layer_controller_options",
     "router_dynamic_memory_options",
     "router_recurrent_controller_options",
@@ -126,22 +126,13 @@ def linear_builder_kwargs_from_flat(
                 config_module,
                 provided=kwargs.pop("router_options", None),
             ),
-            "sampler_stack_options": _role_stack_options_from_kwargs(
+            "router_stack_options": _role_stack_options_from_kwargs(
                 kwargs,
                 config_module,
-                "sampler_stack",
-                defaults=submodule_stack_options,
-                provided=kwargs.pop("sampler_stack_options", None),
-                independent_flag_key="sampler_stack_independent_flag",
-                extra_mapping={"sampler_bias_flag": "bias_flag"},
-                default_overrides={
-                    "layer_norm_position": (
-                        config_module.SAMPLER_STACK_LAYER_NORM_POSITION
-                    ),
-                    "apply_output_pipeline_flag": (
-                        config_module.SAMPLER_STACK_APPLY_OUTPUT_PIPELINE_FLAG
-                    ),
-                },
+                "router_stack",
+                defaults=_router_stack_options_from_config(config_module),
+                provided=kwargs.pop("router_stack_options", None),
+                extra_mapping={"router_bias_flag": "bias_flag"},
             ),
             "layer_controller_options": _layer_controller_options_from_kwargs(
                 kwargs,
@@ -397,16 +388,9 @@ def _role_stack_options_from_kwargs(
     *,
     defaults: expert_options.ExpertsSubmoduleStackOptions,
     provided: expert_options.ExpertsSubmoduleStackOptions | None,
-    independent_flag_key: str | None = None,
     extra_mapping: dict[str, str] | None = None,
     default_overrides: dict[str, Any] | None = None,
 ) -> expert_options.ExpertsSubmoduleStackOptions:
-    independent_flag = True
-    if independent_flag_key is not None:
-        independent_flag = kwargs.pop(
-            independent_flag_key,
-            getattr(config_module, independent_flag_key.upper()),
-        )
     options = provided or replace(defaults, **(default_overrides or {}))
     mapping = {
         f"{prefix}_{flat_field}": dataclass_field
@@ -415,9 +399,25 @@ def _role_stack_options_from_kwargs(
     if extra_mapping:
         mapping.update(extra_mapping)
     updates = _pop_updates(kwargs, mapping)
-    if provided is None and independent_flag_key is not None and not independent_flag:
-        return defaults
     return replace(options, **updates) if updates else options
+
+
+def _router_stack_options_from_config(
+    config_module: ModuleType,
+) -> expert_options.ExpertsSubmoduleStackOptions:
+    return expert_options.ExpertsSubmoduleStackOptions(
+        hidden_dim=config_module.ROUTER_STACK_HIDDEN_DIM,
+        num_layers=config_module.ROUTER_STACK_NUM_LAYERS,
+        last_layer_bias_option=config_module.ROUTER_STACK_LAST_LAYER_BIAS_OPTION,
+        apply_output_pipeline_flag=(
+            config_module.ROUTER_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+        ),
+        activation=config_module.ROUTER_STACK_ACTIVATION,
+        layer_norm_position=config_module.ROUTER_STACK_LAYER_NORM_POSITION,
+        residual_connection_option=config_module.ROUTER_STACK_RESIDUAL_CONNECTION_OPTION,
+        dropout_probability=config_module.ROUTER_STACK_DROPOUT_PROBABILITY,
+        bias_flag=config_module.ROUTER_BIAS_FLAG,
+    )
 
 
 def _mixture_options_from_kwargs(

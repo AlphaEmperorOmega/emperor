@@ -79,7 +79,7 @@ class ControlConfigDependencies:
     expert_stack_options: ExpertsSubmoduleStackOptions
     sampler_options: ExpertsSamplerOptions
     router_options: ExpertsRouterOptions
-    sampler_stack_options: ExpertsSubmoduleStackOptions
+    router_stack_options: ExpertsSubmoduleStackOptions
     router_layer_controller_options: ExpertsLayerControllerOptions
     router_dynamic_memory_options: ExpertsDynamicMemoryOptions
     router_recurrent_controller_options: ExpertsRecurrentControllerOptions
@@ -110,7 +110,7 @@ class ControlConfigFactory:
         self.expert_stack_options = dependencies.expert_stack_options
         self.sampler_options = dependencies.sampler_options
         self.router_options = dependencies.router_options
-        self.sampler_stack_options = dependencies.sampler_stack_options
+        self.router_stack_options = dependencies.router_stack_options
         self.router_layer_controller_options = (
             dependencies.router_layer_controller_options
         )
@@ -216,21 +216,20 @@ class ControlConfigFactory:
         self.router_gate_config_factory = ExpertsGateConfigFactory(
             layer_controller_options=self.router_layer_controller_options,
             recurrent_controller_options=self.router_recurrent_controller_options,
-            submodule_stack_options=self.sampler_stack_options,
+            submodule_stack_options=self.submodule_stack_options,
             recurrent_stack_inherits_gate_stack=False,
         )
         self.router_halting_config_factory = ExpertsHaltingConfigFactory(
             layer_controller_options=self.router_layer_controller_options,
             recurrent_controller_options=self.router_recurrent_controller_options,
-            submodule_stack_options=self.sampler_stack_options,
-            output_dim=self.sampler_stack_options.hidden_dim,
-            halting_stack_defaults=self.sampler_stack_options,
+            submodule_stack_options=self.submodule_stack_options,
+            output_dim=self.router_stack_options.hidden_dim,
             recurrent_stack_inherits_halting_stack=False,
         )
         self.router_memory_config_factory = ExpertsMemoryConfigFactory(
-            stack_options=self.sampler_stack_options,
+            stack_options=self.router_stack_options,
             dynamic_memory_options=self.router_dynamic_memory_options,
-            submodule_stack_options=self.sampler_stack_options,
+            submodule_stack_options=self.submodule_stack_options,
         )
         self.router_recurrent_config_factory = ExpertsRecurrentConfigFactory(
             recurrent_controller_options=self.router_recurrent_controller_options,
@@ -424,9 +423,9 @@ class ControlConfigFactory:
     def __build_router_config(self) -> RouterConfig:
         mixture_options = self.mixture_options
         router_options = self.router_options
-        sampler_stack_options = self.sampler_stack_options
+        router_stack_options = self.router_stack_options
         layer_model_config = self.build_router_adaptive_linear_layer_config(
-            sampler_stack_options.bias_flag
+            router_stack_options.bias_flag
         )
         if self.__router_controller_enabled():
             model_config = self.__build_controlled_router_model_config(
@@ -434,7 +433,7 @@ class ControlConfigFactory:
             )
         else:
             model_config = self.__build_controller_stack(
-                sampler_stack_options,
+                router_stack_options,
                 layer_model_config,
             )
         return RouterConfig(
@@ -456,7 +455,7 @@ class ControlConfigFactory:
         self,
         layer_model_config: AdaptiveLinearLayerConfig,
     ) -> RouterControllerModelConfig:
-        trunk_dim = self.sampler_stack_options.hidden_dim
+        trunk_dim = self.router_stack_options.hidden_dim
         trunk_config = self.router_recurrent_config_factory.build_config(
             self.__build_router_trunk_stack_config(layer_model_config)
         )
@@ -481,27 +480,27 @@ class ControlConfigFactory:
         self,
         layer_model_config: AdaptiveLinearLayerConfig,
     ) -> LayerStackConfig:
-        sampler_stack_options = self.sampler_stack_options
+        router_stack_options = self.router_stack_options
         gate_config = self.router_gate_config_factory.build_gate_config()
         halting_config = self.router_halting_config_factory.build_halting_config()
         memory_config = self.router_memory_config_factory.build_memory_config()
         return LayerStackConfig(
-            input_dim=sampler_stack_options.hidden_dim,
-            hidden_dim=sampler_stack_options.hidden_dim,
-            output_dim=sampler_stack_options.hidden_dim,
-            num_layers=sampler_stack_options.num_layers,
-            last_layer_bias_option=sampler_stack_options.last_layer_bias_option,
+            input_dim=router_stack_options.hidden_dim,
+            hidden_dim=router_stack_options.hidden_dim,
+            output_dim=router_stack_options.hidden_dim,
+            num_layers=router_stack_options.num_layers,
+            last_layer_bias_option=router_stack_options.last_layer_bias_option,
             apply_output_pipeline_flag=(
-                sampler_stack_options.apply_output_pipeline_flag
+                router_stack_options.apply_output_pipeline_flag
             ),
             shared_memory_config=memory_config,
             layer_config=LayerConfig(
-                activation=sampler_stack_options.activation,
-                layer_norm_position=sampler_stack_options.layer_norm_position,
+                activation=router_stack_options.activation,
+                layer_norm_position=router_stack_options.layer_norm_position,
                 residual_connection_option=(
-                    sampler_stack_options.residual_connection_option
+                    router_stack_options.residual_connection_option
                 ),
-                dropout_probability=sampler_stack_options.dropout_probability,
+                dropout_probability=router_stack_options.dropout_probability,
                 gate_config=gate_config,
                 halting_config=halting_config,
                 memory_config=None,
