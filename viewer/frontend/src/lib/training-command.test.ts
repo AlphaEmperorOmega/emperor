@@ -53,4 +53,40 @@ describe("training command generation", () => {
     expect(command).toContain("--router-memory-flag true");
     expect(command).toContain("--router-recurrent-flag true");
   });
+
+  it("includes router stack override flags without an independent flag", () => {
+    const sections: ConfigSection[] = [
+      {
+        title: "Router Stack Options",
+        fields: [
+          {
+            ...field("router_stack_hidden_dim"),
+            type: "int",
+            default: 32,
+            nullable: false,
+          },
+          {
+            ...field("router_bias_flag"),
+            default: true,
+            nullable: false,
+          },
+        ],
+      },
+    ];
+
+    const command = buildTrainingCommand({
+      modelType: "experts",
+      model: "linear",
+      preset: "baseline",
+      sections,
+      overrides: {
+        router_stack_hidden_dim: "64",
+        router_bias_flag: "false",
+      },
+    });
+
+    expect(command).toContain("--router-stack-hidden-dim 64");
+    expect(command).toContain("--router-bias-flag false");
+    expect(command).not.toContain("--router-stack-independent-flag");
+  });
 });

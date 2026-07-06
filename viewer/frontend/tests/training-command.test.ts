@@ -121,6 +121,45 @@ describe("buildTrainingCommand", () => {
     );
   });
 
+  it("emits router stack overrides without an independent flag", () => {
+    const routerSections: ConfigSection[] = [
+      {
+        title: "Router Stack Options",
+        fields: [
+          field({
+            key: "router_stack_hidden_dim",
+            flag: "--router-stack-hidden-dim",
+            type: "int",
+            default: 32,
+          }),
+          field({
+            key: "router_bias_flag",
+            flag: "--router-bias-flag",
+            type: "bool",
+            default: true,
+            choices: [true, false],
+          }),
+        ],
+      },
+    ];
+
+    const command = buildTrainingCommand({
+      modelType: "experts",
+      model: "linear",
+      preset: "baseline",
+      sections: routerSections,
+      overrides: {
+        router_stack_hidden_dim: "64",
+        router_bias_flag: "false",
+      },
+    });
+
+    expect(command).toBe(
+      "source experiment.sh --model-type experts --model linear --preset baseline --config --router-stack-hidden-dim 64 --router-bias-flag false",
+    );
+    expect(command).not.toContain("--router-stack-independent-flag");
+  });
+
   it("quotes values with spaces and shell-sensitive characters", () => {
     expect(
       buildTrainingCommand({

@@ -16,9 +16,8 @@ import {
 describe("modelTypeForId", () => {
   it("uses the first public ID path segment as the model type", () => {
     expect(modelTypeForId("linears/linear")).toBe("linears");
-    expect(modelTypeForId("transformer_encoder/bert_linear")).toBe(
-      "transformer_encoder",
-    );
+    expect(modelTypeForId("bert/linear")).toBe("bert");
+    expect(modelTypeForId("vit/linear")).toBe("vit");
   });
 
   it("falls back to a shared legacy type for flat or malformed IDs", () => {
@@ -31,9 +30,8 @@ describe("modelTypeForId", () => {
 describe("modelNameForId", () => {
   it("returns the public ID suffix when a type prefix is present", () => {
     expect(modelNameForId("linears/linear")).toBe("linear");
-    expect(modelNameForId("transformer_encoder/bert_linear")).toBe(
-      "bert_linear",
-    );
+    expect(modelNameForId("bert/linear")).toBe("linear");
+    expect(modelNameForId("vit/expert_linear")).toBe("expert_linear");
   });
 
   it("preserves flat IDs", () => {
@@ -48,28 +46,51 @@ describe("modelTypeOptions", () => {
         "linears/linear",
         "linears/linear_adaptive",
         "experts/linear",
-        "transformer_encoder/bert_linear",
+        "bert/linear",
+        "vit/linear",
       ]),
     ).toEqual([
       { value: "linears", label: "Linears" },
       { value: "experts", label: "Experts" },
-      { value: "transformer_encoder", label: "Transformer encoder" },
+      { value: "bert", label: "Bert" },
+      { value: "vit", label: "Vit" },
     ]);
   });
 });
 
 describe("modelsForType", () => {
   it("filters public model IDs by type", () => {
+    const catalog = [
+      "linears/linear",
+      "linears/linear_adaptive",
+      "experts/linear",
+      "bert/linear",
+      "bert/linear_adaptive",
+      "bert/expert_linear",
+      "bert/expert_linear_adaptive",
+      "vit/linear",
+      "vit/linear_adaptive",
+      "vit/expert_linear",
+      "vit/expert_linear_adaptive",
+    ];
+
     expect(
-      modelsForType(
-        [
-          "linears/linear",
-          "linears/linear_adaptive",
-          "experts/linear",
-        ],
-        "linears",
-      ),
+      modelsForType(catalog, "linears"),
     ).toEqual(["linears/linear", "linears/linear_adaptive"]);
+
+    expect(modelsForType(catalog, "bert")).toEqual([
+      "bert/linear",
+      "bert/linear_adaptive",
+      "bert/expert_linear",
+      "bert/expert_linear_adaptive",
+    ]);
+
+    expect(modelsForType(catalog, "vit")).toEqual([
+      "vit/linear",
+      "vit/linear_adaptive",
+      "vit/expert_linear",
+      "vit/expert_linear_adaptive",
+    ]);
   });
 
   it("returns the full catalog when no type is selected", () => {

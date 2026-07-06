@@ -682,8 +682,8 @@ describe("viewer state selectors", () => {
   it("uses the resolved monitor name for active-job chart source selection", () => {
     const attention = node("attention-0", "encoder.0.attention", "SelfAttention");
     const graph: InspectResponse = {
-      modelType: "transformer_encoder",
-      model: "bert",
+      modelType: "bert",
+      model: "linear",
       preset: "baseline",
       parameterCount: 0,
       parameterSizeBytes: 0,

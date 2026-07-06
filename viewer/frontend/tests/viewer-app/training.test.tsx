@@ -973,7 +973,7 @@ describe("ViewerApp Training And Preview", () => {
     expect(screen.getAllByText(/1 overrides?/i).length).toBeGreaterThan(0);
     details = await expandedTrainingDetailsReady(user);
 
-    await selectTrainingTargetOption(user, "model type", "Transformer encoder");
+    await selectTrainingTargetOption(user, "model type", "Bert");
 
     await user.click(screen.getByRole("button", { name: /^model$/i }));
     expect(await waitForTargetValue("model", "linear")).toHaveTextContent("linear");
@@ -984,7 +984,7 @@ describe("ViewerApp Training And Preview", () => {
         within(details).getByRole("combobox", {
           name: /^training model$/i,
         }),
-      ).toHaveTextContent("bert_linear");
+      ).toHaveTextContent("linear");
       expect(
         within(details).getByRole("combobox", {
           name: /^presets\s+1\s*\/\s*1 selected$/i,
@@ -1012,8 +1012,8 @@ describe("ViewerApp Training And Preview", () => {
 
     await waitFor(() => {
       expect(trainingBodies[0]).toMatchObject({
-        modelType: "transformer_encoder",
-        model: "bert_linear",
+        modelType: "bert",
+        model: "linear",
         preset: "bert-baseline",
         presets: ["bert-baseline"],
         datasets: ["ToyText"],

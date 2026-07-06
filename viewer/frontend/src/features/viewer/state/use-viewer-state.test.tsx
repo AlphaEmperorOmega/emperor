@@ -439,8 +439,36 @@ function mockPublicModelCatalog() {
       [{ name: "expert-baseline", label: "Expert baseline", description: "" }],
     ],
     [
-      "transformer_encoder/bert_linear",
+      "bert/linear",
       [{ name: "bert-baseline", label: "BERT baseline", description: "" }],
+    ],
+    [
+      "bert/linear_adaptive",
+      [{ name: "bert-baseline", label: "BERT baseline", description: "" }],
+    ],
+    [
+      "bert/expert_linear",
+      [{ name: "bert-baseline", label: "BERT baseline", description: "" }],
+    ],
+    [
+      "bert/expert_linear_adaptive",
+      [{ name: "bert-baseline", label: "BERT baseline", description: "" }],
+    ],
+    [
+      "vit/linear",
+      [{ name: "baseline", label: "ViT baseline", description: "" }],
+    ],
+    [
+      "vit/linear_adaptive",
+      [{ name: "baseline", label: "ViT baseline", description: "" }],
+    ],
+    [
+      "vit/expert_linear",
+      [{ name: "baseline", label: "ViT baseline", description: "" }],
+    ],
+    [
+      "vit/expert_linear_adaptive",
+      [{ name: "baseline", label: "ViT baseline", description: "" }],
     ],
   ]);
   const datasetsByModel = new Map([
@@ -472,8 +500,36 @@ function mockPublicModelCatalog() {
       ],
     ],
     [
-      "transformer_encoder/bert_linear",
+      "bert/linear",
       [{ name: "ToyText", label: "Toy Text", inputDim: 128, outputDim: 2 }],
+    ],
+    [
+      "bert/linear_adaptive",
+      [{ name: "ToyText", label: "Toy Text", inputDim: 128, outputDim: 2 }],
+    ],
+    [
+      "bert/expert_linear",
+      [{ name: "ToyText", label: "Toy Text", inputDim: 128, outputDim: 2 }],
+    ],
+    [
+      "bert/expert_linear_adaptive",
+      [{ name: "ToyText", label: "Toy Text", inputDim: 128, outputDim: 2 }],
+    ],
+    [
+      "vit/linear",
+      [{ name: "Mnist", label: "MNIST", inputDim: 784, outputDim: 10 }],
+    ],
+    [
+      "vit/linear_adaptive",
+      [{ name: "Mnist", label: "MNIST", inputDim: 784, outputDim: 10 }],
+    ],
+    [
+      "vit/expert_linear",
+      [{ name: "Mnist", label: "MNIST", inputDim: 784, outputDim: 10 }],
+    ],
+    [
+      "vit/expert_linear_adaptive",
+      [{ name: "Mnist", label: "MNIST", inputDim: 784, outputDim: 10 }],
     ],
   ]);
 
@@ -482,7 +538,14 @@ function mockPublicModelCatalog() {
       { modelType: "linears", model: "linear" },
       { modelType: "linears", model: "linear_adaptive" },
       { modelType: "experts", model: "linear" },
-      { modelType: "transformer_encoder", model: "bert_linear" },
+      { modelType: "bert", model: "linear" },
+      { modelType: "bert", model: "linear_adaptive" },
+      { modelType: "bert", model: "expert_linear" },
+      { modelType: "bert", model: "expert_linear_adaptive" },
+      { modelType: "vit", model: "linear" },
+      { modelType: "vit", model: "linear_adaptive" },
+      { modelType: "vit", model: "expert_linear" },
+      { modelType: "vit", model: "expert_linear_adaptive" },
     ],
   });
   mocks.fetchPresets.mockImplementation((identity: ModelIdentity) =>
@@ -572,18 +635,32 @@ beforeEach(() => {
   mocks.fetchModels.mockReset().mockResolvedValue({
     models: [
       { modelType: "linears", model: "linear" },
-      { modelType: "transformer_encoder", model: "bert_linear" },
+      { modelType: "bert", model: "linear" },
+      { modelType: "bert", model: "linear_adaptive" },
+      { modelType: "bert", model: "expert_linear" },
+      { modelType: "bert", model: "expert_linear_adaptive" },
+      { modelType: "vit", model: "linear" },
+      { modelType: "vit", model: "linear_adaptive" },
+      { modelType: "vit", model: "expert_linear" },
+      { modelType: "vit", model: "expert_linear_adaptive" },
     ],
   });
   mocks.fetchPresets.mockReset().mockImplementation((identity: ModelIdentity) =>
     Promise.resolve(
-      identity.model === "bert_linear"
+      identity.modelType === "bert"
         ? {
             ...identity,
             presets: [
               { name: "bert-baseline", label: "BERT baseline", description: "" },
             ],
           }
+        : identity.modelType === "vit"
+          ? {
+              ...identity,
+              presets: [
+                { name: "baseline", label: "ViT baseline", description: "" },
+              ],
+            }
         : {
             modelType: "linears",
             model: "linear",
@@ -596,13 +673,20 @@ beforeEach(() => {
   );
   mocks.fetchDatasets.mockReset().mockImplementation((identity: ModelIdentity) =>
     Promise.resolve(
-      identity.model === "bert_linear"
+      identity.modelType === "bert"
         ? {
             ...identity,
             datasets: [
               { name: "ToyText", label: "Toy Text", inputDim: 128, outputDim: 2 },
             ],
           }
+        : identity.modelType === "vit"
+          ? {
+              ...identity,
+              datasets: [
+                { name: "Mnist", label: "MNIST", inputDim: 784, outputDim: 10 },
+              ],
+            }
         : {
             modelType: "linears",
             model: "linear",
@@ -1182,11 +1266,11 @@ describe("useViewerState", () => {
     });
 
     act(() => {
-      result.current.target.selectModel("bert_linear", "transformer_encoder");
+      result.current.target.selectModel("linear", "bert");
     });
 
     await waitFor(() => {
-      expect(result.current.target.selectedModel).toBe("bert_linear");
+      expect(result.current.target.selectedModel).toBe("linear");
       expect(result.current.target.selectedPreset).toBe("bert-baseline");
       expect(result.current.target.selectedDatasets).toEqual(["ToyText"]);
       expect(result.current.target.selectedTrainingModel).toBe("linear");
@@ -1194,8 +1278,8 @@ describe("useViewerState", () => {
       expect(result.current.target.selectedTrainingDatasets).toEqual(["Mnist"]);
     });
     expect(mocks.inspectModel.mock.calls.map(([request]) => request)).toContainEqual({
-      modelType: "transformer_encoder",
-      model: "bert_linear",
+      modelType: "bert",
+      model: "linear",
       preset: "bert-baseline",
       dataset: "ToyText",
       overrides: {},
@@ -1222,11 +1306,11 @@ describe("useViewerState", () => {
     });
 
     act(() => {
-      result.current.target.selectModel("bert_linear", "transformer_encoder");
+      result.current.target.selectModel("linear", "bert");
     });
 
     await waitFor(() => {
-      expect(result.current.target.selectedModel).toBe("bert_linear");
+      expect(result.current.target.selectedModel).toBe("linear");
       expect(result.current.graph.selectedNodeId).toBeNull();
       expect(result.current.graph.expandedGraphNodeIds.size).toBe(0);
     });
@@ -1235,7 +1319,7 @@ describe("useViewerState", () => {
   it("does not auto-select a run, then syncs target config once when one is picked", async () => {
     mocks.fetchModels.mockResolvedValueOnce({
       models: [
-        { modelType: "transformer_encoder", model: "bert_linear" },
+        { modelType: "bert", model: "linear" },
         { modelType: "linears", model: "linear" },
       ],
     });
@@ -1259,7 +1343,7 @@ describe("useViewerState", () => {
     const { result } = renderViewerState();
 
     await waitFor(() => {
-      expect(result.current.target.selectedModel).toBe("bert_linear");
+      expect(result.current.target.selectedModel).toBe("linear");
       expect(result.current.target.selectedPreset).toBe("bert-baseline");
       expect(result.current.target.selectedDatasets).toEqual(["ToyText"]);
     });
@@ -2715,6 +2799,8 @@ describe("useViewerState", () => {
     const typeListbox = await screen.findByRole("listbox", {
       name: /^model type options$/i,
     });
+    expect(within(typeListbox).getByRole("option", { name: "Vit" }))
+      .toBeInTheDocument();
     await user.click(within(typeListbox).getByRole("option", { name: "Experts" }));
 
     await waitFor(() => {
@@ -2739,6 +2825,35 @@ describe("useViewerState", () => {
         name: "linear_adaptive",
       }),
     ).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
+
+    await user.click(modelTypeControl);
+    const vitTypeListbox = await screen.findByRole("listbox", {
+      name: /^model type options$/i,
+    });
+    await user.click(within(vitTypeListbox).getByRole("option", { name: "Vit" }));
+
+    await waitFor(() => {
+      expect(modelTypeControl).toHaveTextContent("Vit");
+      expect(modelControl).toHaveTextContent("linear");
+      expect(screen.getByRole("combobox", { name: /^preset$/i }))
+        .toHaveTextContent("baseline");
+    });
+
+    await user.click(modelControl);
+    const vitModelListbox = await screen.findByRole("listbox", {
+      name: /^model options$/i,
+    });
+    expect(
+      within(vitModelListbox)
+        .getAllByRole("option")
+        .map((option) => option.textContent),
+    ).toEqual([
+      "linear",
+      "linear_adaptive",
+      "expert_linear",
+      "expert_linear_adaptive",
+    ]);
     await user.keyboard("{Escape}");
   });
 
@@ -2904,6 +3019,8 @@ describe("useViewerState", () => {
     const typeListbox = await within(panel).findByRole("listbox", {
       name: /^training model type options$/i,
     });
+    expect(within(typeListbox).getByRole("option", { name: "Vit" }))
+      .toBeInTheDocument();
     await user.click(within(typeListbox).getByRole("option", { name: "Experts" }));
 
     await waitFor(() => {
@@ -2931,6 +3048,38 @@ describe("useViewerState", () => {
         name: "linear_adaptive",
       }),
     ).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
+
+    await user.click(modelTypeControl);
+    const vitTypeListbox = await within(panel).findByRole("listbox", {
+      name: /^training model type options$/i,
+    });
+    await user.click(within(vitTypeListbox).getByRole("option", { name: "Vit" }));
+
+    await waitFor(() => {
+      expect(modelTypeControl).toHaveTextContent("Vit");
+      expect(modelControl).toHaveTextContent("linear");
+      expect(
+        within(panel).getByRole("combobox", {
+          name: /^presets\s+1\s*\/\s*1 selected$/i,
+        }),
+      ).toHaveTextContent("baseline");
+    });
+
+    await user.click(modelControl);
+    const vitModelListbox = await within(panel).findByRole("listbox", {
+      name: /^training model options$/i,
+    });
+    expect(
+      within(vitModelListbox)
+        .getAllByRole("option")
+        .map((option) => option.textContent),
+    ).toEqual([
+      "linear",
+      "linear_adaptive",
+      "expert_linear",
+      "expert_linear_adaptive",
+    ]);
     await user.keyboard("{Escape}");
   });
 

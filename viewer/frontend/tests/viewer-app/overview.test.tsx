@@ -63,7 +63,7 @@ describe("ViewerApp Overview", () => {
     expect(model).toHaveAttribute("aria-expanded", "true");
 	    expect(within(modelOptions).getByRole("option", { name: "linear" }))
 	      .toBeInTheDocument();
-	    expect(within(modelOptions).queryByRole("option", { name: "bert_linear" }))
+	    expect(within(modelOptions).queryByRole("option", { name: "expert_linear" }))
 	      .not.toBeInTheDocument();
 
     await user.keyboard("{Escape}");
@@ -782,8 +782,8 @@ describe("ViewerApp Overview", () => {
           },
           {
             id: "bert-wide",
-            modelType: "transformer_encoder",
-            model: "bert_linear",
+            modelType: "bert",
+            model: "linear",
             preset: "bert-baseline",
             name: "Bert snapshot",
             overrides: { stack_hidden_dim: "64" },
@@ -913,8 +913,8 @@ describe("ViewerApp Overview", () => {
           },
           {
             id: "bert-wide",
-            modelType: "transformer_encoder",
-            model: "bert_linear",
+            modelType: "bert",
+            model: "linear",
             preset: "bert-baseline",
             name: "Bert snapshot",
             overrides: { stack_hidden_dim: "64" },
@@ -928,8 +928,8 @@ describe("ViewerApp Overview", () => {
     const user = userEvent.setup();
 
     await waitForTargetValue("model", "linear");
-    await selectTargetOption(user, "model type", "Transformer encoder");
-    await waitForTargetValue("model", "bert_linear");
+    await selectTargetOption(user, "model type", "Bert");
+    await waitForTargetValue("model", "linear");
     await waitForTargetValue("preset", "bert-baseline");
     await waitFor(() =>
       expect(screen.getByRole("radio", { name: "Snapshots" })).toBeEnabled(),
@@ -939,8 +939,8 @@ describe("ViewerApp Overview", () => {
       .toHaveTextContent("Bert snapshot");
 	    await waitFor(() => {
 	      expect(readPersistedTargetSelection()).toMatchObject({
-	        selectedModelType: "transformer_encoder",
-	        selectedModel: "bert_linear",
+	        selectedModelType: "bert",
+	        selectedModel: "linear",
         selectedPreset: "bert-baseline",
         selectedTargetMode: "snapshot",
         selectedSnapshotId: "bert-wide",
@@ -951,16 +951,16 @@ describe("ViewerApp Overview", () => {
     inspectBodies.length = 0;
     renderViewer();
 
-    expect(await waitForTargetValue("model", "bert_linear"))
-      .toHaveTextContent("bert_linear");
+    expect(await waitForTargetValue("model", "linear"))
+      .toHaveTextContent("linear");
     expect(screen.getByRole("radio", { name: "Snapshots" }))
       .toHaveAttribute("aria-checked", "true");
     expect(await screen.findByRole("combobox", { name: /^snapshot$/i }))
       .toHaveTextContent("Bert snapshot");
     await waitFor(() => {
       expect(inspectBodies.at(-1)).toEqual({
-        modelType: "transformer_encoder",
-        model: "bert_linear",
+        modelType: "bert",
+        model: "linear",
         preset: "bert-baseline",
         dataset: "ToyText",
         overrides: { stack_hidden_dim: "64" },
@@ -1037,8 +1037,8 @@ describe("ViewerApp Overview", () => {
           },
           {
             id: "bert-wide",
-            modelType: "transformer_encoder",
-            model: "bert_linear",
+            modelType: "bert",
+            model: "linear",
             preset: "bert-baseline",
             name: "Bert snapshot",
             overrides: { stack_hidden_dim: "64" },
@@ -1052,8 +1052,8 @@ describe("ViewerApp Overview", () => {
     const user = userEvent.setup();
 
     await waitForTargetValue("preset", "baseline");
-    await selectTargetOption(user, "model type", "Transformer encoder");
-    await waitForTargetValue("model", "bert_linear");
+    await selectTargetOption(user, "model type", "Bert");
+    await waitForTargetValue("model", "linear");
     await waitForTargetValue("preset", "bert-baseline");
 
     await waitFor(() =>
@@ -1325,12 +1325,12 @@ describe("ViewerApp Overview", () => {
             id: "bert-run",
             group: "bert_experiment",
             experiment: "bert_experiment",
-            modelType: "transformer_encoder",
-            model: "bert_linear",
+            modelType: "bert",
+            model: "linear",
             preset: "BERT_BASELINE",
             dataset: "ToyText",
             relativePath:
-              "bert_experiment/bert_linear/BERT_BASELINE/ToyText/ccc_20260601_030405/version_0",
+              "bert_experiment/bert/linear/BERT_BASELINE/ToyText/ccc_20260601_030405/version_0",
           },
         ],
       },
@@ -1427,14 +1427,14 @@ describe("ViewerApp Overview", () => {
             id: "bert-run",
             experiment: "exp_bert",
             group: "exp_bert",
-            modelType: "transformer_encoder",
-            model: "bert_linear",
+            modelType: "bert",
+            model: "linear",
             preset: "BERT_BASELINE",
             dataset: "ToyText",
             timestamp: "2026-06-01 03:00:00",
             runName: "bert_20260601_030000",
             relativePath:
-              "exp_bert/bert_linear/BERT_BASELINE/ToyText/bert_20260601_030000/version_0",
+              "exp_bert/bert/linear/BERT_BASELINE/ToyText/bert_20260601_030000/version_0",
           },
         ],
       },
@@ -1457,10 +1457,10 @@ describe("ViewerApp Overview", () => {
     await selectTargetOption(user, "dataset", "Mnist");
     await selectTargetOption(user, "preset", "BASELINE");
 
-    await selectTargetOption(user, "model type", "Transformer encoder");
+    await selectTargetOption(user, "model type", "Bert");
     await waitFor(() =>
       expect(screen.getByRole("combobox", { name: /^model$/i }))
-        .toHaveTextContent("bert_linear"),
+        .toHaveTextContent("linear"),
     );
     const refreshedExperimentsTab = screen.getByRole("radio", { name: "Experiments" });
     await waitFor(() => expect(refreshedExperimentsTab).not.toBeDisabled());

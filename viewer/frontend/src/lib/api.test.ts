@@ -825,7 +825,8 @@ describe("successful API fixtures", () => {
       {
         models: [
           linearIdentity,
-          { modelType: "transformer_encoder", model: "bert_linear" },
+          { modelType: "bert", model: "linear" },
+          { modelType: "vit", model: "linear" },
         ],
       },
       fetchModels,
@@ -833,7 +834,8 @@ describe("successful API fixtures", () => {
 
     expect(result.models).toEqual([
       linearIdentity,
-      { modelType: "transformer_encoder", model: "bert_linear" },
+      { modelType: "bert", model: "linear" },
+      { modelType: "vit", model: "linear" },
     ]);
   });
 
