@@ -567,7 +567,7 @@ class InspectorSchemaTests(unittest.TestCase):
             "expert_num_experts": {
                 "section": "Mixture Of Experts Model Options",
                 "type": "int",
-                "default": 4,
+                "default": 12,
                 "nullable": False,
             },
             "expert_capacity_factor": {
@@ -597,7 +597,7 @@ class InspectorSchemaTests(unittest.TestCase):
             "expert_weighting_position_option": {
                 "section": "Mixture Of Experts Model Options",
                 "type": "enum",
-                "default": "BEFORE_EXPERTS",
+                "default": "AFTER_EXPERTS",
                 "nullable": False,
             },
             "expert_routing_initialization_mode": {
