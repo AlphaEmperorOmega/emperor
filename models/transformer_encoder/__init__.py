@@ -1,1 +1,0 @@
-"""Transformer encoder model packages."""

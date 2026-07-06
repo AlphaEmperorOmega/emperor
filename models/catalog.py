@@ -49,6 +49,46 @@ class ModelIdentity:
 
 
 MODEL_CATALOG: dict[str, ModelCatalogEntry] = {
+    "bert/linear": ModelCatalogEntry(
+        model_type="bert",
+        model="linear",
+        module_path="models.bert.linear",
+    ),
+    "bert/linear_adaptive": ModelCatalogEntry(
+        model_type="bert",
+        model="linear_adaptive",
+        module_path="models.bert.linear_adaptive",
+    ),
+    "bert/expert_linear": ModelCatalogEntry(
+        model_type="bert",
+        model="expert_linear",
+        module_path="models.bert.expert_linear",
+    ),
+    "bert/expert_linear_adaptive": ModelCatalogEntry(
+        model_type="bert",
+        model="expert_linear_adaptive",
+        module_path="models.bert.expert_linear_adaptive",
+    ),
+    "vit/linear": ModelCatalogEntry(
+        model_type="vit",
+        model="linear",
+        module_path="models.vit.linear",
+    ),
+    "vit/linear_adaptive": ModelCatalogEntry(
+        model_type="vit",
+        model="linear_adaptive",
+        module_path="models.vit.linear_adaptive",
+    ),
+    "vit/expert_linear": ModelCatalogEntry(
+        model_type="vit",
+        model="expert_linear",
+        module_path="models.vit.expert_linear",
+    ),
+    "vit/expert_linear_adaptive": ModelCatalogEntry(
+        model_type="vit",
+        model="expert_linear_adaptive",
+        module_path="models.vit.expert_linear_adaptive",
+    ),
     "linears/linear": ModelCatalogEntry(
         model_type="linears",
         model="linear",
@@ -84,34 +124,65 @@ MODEL_CATALOG: dict[str, ModelCatalogEntry] = {
         model="parametric_generator",
         module_path="models.parametric.parametric_generator",
     ),
-    "neuron/neuron_linear": ModelCatalogEntry(
+    "neuron/linear": ModelCatalogEntry(
         model_type="neuron",
-        model="neuron_linear",
-        module_path="models.neuron.neuron_linear",
+        model="linear",
+        module_path="models.neuron.linear",
     ),
-    "transformer_encoder/bert_linear": ModelCatalogEntry(
-        model_type="transformer_encoder",
-        model="bert_linear",
-        module_path="models.transformer_encoder.bert_linear",
+    "neuron/linear_adaptive": ModelCatalogEntry(
+        model_type="neuron",
+        model="linear_adaptive",
+        module_path="models.neuron.linear_adaptive",
     ),
-    "transformer_encoder/vit_linear": ModelCatalogEntry(
-        model_type="transformer_encoder",
-        model="vit_linear",
-        module_path="models.transformer_encoder.vit_linear",
+    "neuron/expert_linear": ModelCatalogEntry(
+        model_type="neuron",
+        model="expert_linear",
+        module_path="models.neuron.expert_linear",
     ),
+    "neuron/expert_linear_adaptive": ModelCatalogEntry(
+        model_type="neuron",
+        model="expert_linear_adaptive",
+        module_path="models.neuron.expert_linear_adaptive",
+    ),
+}
+
+MODEL_ORDER: dict[str, int] = {
+    "bert/linear": 0,
+    "bert/linear_adaptive": 1,
+    "bert/expert_linear": 2,
+    "bert/expert_linear_adaptive": 3,
+    "vit/linear": 0,
+    "vit/linear_adaptive": 1,
+    "vit/expert_linear": 2,
+    "vit/expert_linear_adaptive": 3,
+    "neuron/linear": 0,
+    "neuron/linear_adaptive": 1,
+    "neuron/expert_linear": 2,
+    "neuron/expert_linear_adaptive": 3,
 }
 
 EMPTY_CATEGORY_PACKAGES = {
     "models.transformer",
-    "models.transformer_decoder",
 }
 
 _MODULE_TO_PUBLIC_ID = {
     entry.module_path: public_id for public_id, entry in MODEL_CATALOG.items()
 }
 
+def _flat_name_priority(public_id: str) -> int:
+    if public_id.startswith("linears/") or public_id.startswith("experts/"):
+        return 0
+    if public_id.startswith("bert/"):
+        return 1
+    if public_id.startswith("vit/"):
+        return 2
+    if public_id.startswith("neuron/"):
+        return 3
+    return 4
+
+
 FLAT_TO_PUBLIC_ID: dict[str, str] = {}
-for public_id in MODEL_CATALOG:
+for public_id in sorted(MODEL_CATALOG, key=_flat_name_priority):
     flat_name = public_id.rsplit("/", 1)[-1]
     # Preserve legacy flat log names for the original catalog owner when names collide.
     FLAT_TO_PUBLIC_ID.setdefault(flat_name, public_id)
@@ -177,7 +248,10 @@ def model_id_from_parts(model_type: str, model: str) -> str | None:
 
 
 def discover_model_ids() -> list[str]:
-    return sorted(MODEL_CATALOG)
+    return sorted(
+        MODEL_CATALOG,
+        key=lambda key: (key.split("/", 1)[0], MODEL_ORDER.get(key, key)),
+    )
 
 
 def discover_model_types() -> list[str]:
