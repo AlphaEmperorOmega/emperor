@@ -29,15 +29,15 @@ class MixtureOfExpertsModel(Module):
         self.stack_config = self.cfg.stack_config
 
         MixtureOfExpertsModelValidator.validate(self)
-        self.shared_sampler = self._maybe_create_shared_sampler()
-        self.expert_stack = self._build_expert_stack()
+        self.shared_sampler = self.__maybe_create_shared_sampler()
+        self.expert_stack = self.__build_expert_stack()
 
-    def _maybe_create_shared_sampler(self) -> "SamplerModel | None":
+    def __maybe_create_shared_sampler(self) -> "SamplerModel | None":
         if self.routing_initialization_mode != RoutingInitializationMode.SHARED:
             return None
         return self.sampler_config.build_with_router_input_dim(self.input_dim)
 
-    def _build_expert_stack(self) -> Module:
+    def __build_expert_stack(self) -> Module:
         return self.stack_config.build()
 
     def forward(self, state: LayerState) -> MixtureOfExpertsLayerState:
