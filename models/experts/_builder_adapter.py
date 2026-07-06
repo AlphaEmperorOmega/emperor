@@ -25,6 +25,9 @@ _LINEAR_GROUPED_KEYS = {
     "sampler_options",
     "router_options",
     "sampler_stack_options",
+    "router_layer_controller_options",
+    "router_dynamic_memory_options",
+    "router_recurrent_controller_options",
     "layer_controller_options",
     "dynamic_memory_options",
     "recurrent_controller_options",
@@ -178,6 +181,36 @@ def linear_adaptive_builder_kwargs_from_flat(
 
     builder_kwargs.update(
         {
+            "router_layer_controller_options": (
+                _router_layer_controller_options_from_kwargs(
+                    leftovers,
+                    config_module,
+                    provided=builder_kwargs.pop(
+                        "router_layer_controller_options",
+                        None,
+                    ),
+                )
+            ),
+            "router_dynamic_memory_options": (
+                _router_dynamic_memory_options_from_kwargs(
+                    leftovers,
+                    config_module,
+                    provided=builder_kwargs.pop(
+                        "router_dynamic_memory_options",
+                        None,
+                    ),
+                )
+            ),
+            "router_recurrent_controller_options": (
+                _router_recurrent_controller_options_from_kwargs(
+                    leftovers,
+                    config_module,
+                    provided=builder_kwargs.pop(
+                        "router_recurrent_controller_options",
+                        None,
+                    ),
+                )
+            ),
             "adaptive_generator_stack_options": (
                 _adaptive_generator_stack_options_from_kwargs(
                     leftovers,
@@ -770,9 +803,7 @@ def _expert_recurrent_controller_options_from_kwargs(
             "expert_recurrent_gate_stack",
         ),
         recurrent_halting_flag=config_module.EXPERT_RECURRENT_HALTING_FLAG,
-        recurrent_halting_threshold=(
-            config_module.EXPERT_RECURRENT_HALTING_THRESHOLD
-        ),
+        recurrent_halting_threshold=(config_module.EXPERT_RECURRENT_HALTING_THRESHOLD),
         recurrent_halting_dropout=config_module.EXPERT_RECURRENT_HALTING_DROPOUT,
         recurrent_halting_hidden_state_mode=(
             config_module.EXPERT_RECURRENT_HALTING_HIDDEN_STATE_MODE
@@ -787,16 +818,12 @@ def _expert_recurrent_controller_options_from_kwargs(
         {
             "expert_recurrent_flag": "recurrent_flag",
             "expert_recurrent_max_steps": "recurrent_max_steps",
-            "expert_recurrent_layer_norm_position": (
-                "recurrent_layer_norm_position"
-            ),
+            "expert_recurrent_layer_norm_position": ("recurrent_layer_norm_position"),
             "expert_recurrent_gate_flag": "recurrent_gate_flag",
             "expert_recurrent_gate_option": "recurrent_gate_option",
             "expert_recurrent_gate_activation": "recurrent_gate_activation",
             "expert_recurrent_halting_flag": "recurrent_halting_flag",
-            "expert_recurrent_halting_threshold": (
-                "recurrent_halting_threshold"
-            ),
+            "expert_recurrent_halting_threshold": ("recurrent_halting_threshold"),
             "expert_recurrent_halting_dropout": "recurrent_halting_dropout",
             "expert_recurrent_halting_hidden_state_mode": (
                 "recurrent_halting_hidden_state_mode"
@@ -813,6 +840,164 @@ def _expert_recurrent_controller_options_from_kwargs(
         kwargs,
         config_module,
         "expert_recurrent_halting_stack",
+        provided=options.recurrent_halting_stack_source,
+    )
+    return replace(options, **updates)
+
+
+def _router_layer_controller_options_from_kwargs(
+    kwargs: dict[str, Any],
+    config_module: ModuleType,
+    *,
+    provided: expert_options.ExpertsLayerControllerOptions | None,
+) -> expert_options.ExpertsLayerControllerOptions:
+    options = provided or expert_options.ExpertsLayerControllerOptions(
+        stack_gate_flag=config_module.ROUTER_GATE_FLAG,
+        gate_option=config_module.ROUTER_GATE_OPTION,
+        gate_activation=config_module.ROUTER_GATE_ACTIVATION,
+        gate_stack_source=_default_controller_stack_source(
+            config_module,
+            "router_gate_stack",
+        ),
+        stack_halting_flag=config_module.ROUTER_HALTING_FLAG,
+        halting_threshold=config_module.ROUTER_HALTING_THRESHOLD,
+        halting_dropout=config_module.ROUTER_HALTING_DROPOUT,
+        halting_hidden_state_mode=config_module.ROUTER_HALTING_HIDDEN_STATE_MODE,
+        halting_stack_source=_default_controller_stack_source(
+            config_module,
+            "router_halting_stack",
+        ),
+        halting_output_dim=config_module.ROUTER_HALTING_OUTPUT_DIM,
+    )
+    updates = _pop_updates(
+        kwargs,
+        {
+            "router_gate_flag": "stack_gate_flag",
+            "router_gate_option": "gate_option",
+            "router_gate_activation": "gate_activation",
+            "router_halting_flag": "stack_halting_flag",
+            "router_halting_threshold": "halting_threshold",
+            "router_halting_dropout": "halting_dropout",
+            "router_halting_hidden_state_mode": "halting_hidden_state_mode",
+            "router_halting_output_dim": "halting_output_dim",
+        },
+    )
+    updates["gate_stack_source"] = _controller_stack_source_from_kwargs(
+        kwargs,
+        config_module,
+        "router_gate_stack",
+        provided=options.gate_stack_source,
+    )
+    updates["halting_stack_source"] = _controller_stack_source_from_kwargs(
+        kwargs,
+        config_module,
+        "router_halting_stack",
+        provided=options.halting_stack_source,
+    )
+    return replace(options, **updates)
+
+
+def _router_dynamic_memory_options_from_kwargs(
+    kwargs: dict[str, Any],
+    config_module: ModuleType,
+    *,
+    provided: expert_options.ExpertsDynamicMemoryOptions | None,
+) -> expert_options.ExpertsDynamicMemoryOptions:
+    options = provided or expert_options.ExpertsDynamicMemoryOptions(
+        memory_flag=config_module.ROUTER_MEMORY_FLAG,
+        memory_option=config_module.ROUTER_MEMORY_OPTION,
+        memory_position_option=config_module.ROUTER_MEMORY_POSITION_OPTION,
+        memory_test_time_training_learning_rate=(
+            config_module.ROUTER_MEMORY_TEST_TIME_TRAINING_LEARNING_RATE
+        ),
+        memory_test_time_training_num_inner_steps=(
+            config_module.ROUTER_MEMORY_TEST_TIME_TRAINING_NUM_INNER_STEPS
+        ),
+        memory_stack_source=_default_controller_stack_source(
+            config_module,
+            "router_memory_stack",
+        ),
+    )
+    updates = _pop_updates(
+        kwargs,
+        {
+            "router_memory_flag": "memory_flag",
+            "router_memory_option": "memory_option",
+            "router_memory_position_option": "memory_position_option",
+            "router_memory_test_time_training_learning_rate": (
+                "memory_test_time_training_learning_rate"
+            ),
+            "router_memory_test_time_training_num_inner_steps": (
+                "memory_test_time_training_num_inner_steps"
+            ),
+        },
+    )
+    updates["memory_stack_source"] = _controller_stack_source_from_kwargs(
+        kwargs,
+        config_module,
+        "router_memory_stack",
+        provided=options.memory_stack_source,
+    )
+    return replace(options, **updates)
+
+
+def _router_recurrent_controller_options_from_kwargs(
+    kwargs: dict[str, Any],
+    config_module: ModuleType,
+    *,
+    provided: expert_options.ExpertsRecurrentControllerOptions | None,
+) -> expert_options.ExpertsRecurrentControllerOptions:
+    options = provided or expert_options.ExpertsRecurrentControllerOptions(
+        recurrent_flag=config_module.ROUTER_RECURRENT_FLAG,
+        recurrent_max_steps=config_module.ROUTER_RECURRENT_MAX_STEPS,
+        recurrent_layer_norm_position=(
+            config_module.ROUTER_RECURRENT_LAYER_NORM_POSITION
+        ),
+        recurrent_gate_flag=config_module.ROUTER_RECURRENT_GATE_FLAG,
+        recurrent_gate_option=config_module.ROUTER_RECURRENT_GATE_OPTION,
+        recurrent_gate_activation=config_module.ROUTER_RECURRENT_GATE_ACTIVATION,
+        recurrent_gate_stack_source=_default_controller_stack_source(
+            config_module,
+            "router_recurrent_gate_stack",
+        ),
+        recurrent_halting_flag=config_module.ROUTER_RECURRENT_HALTING_FLAG,
+        recurrent_halting_threshold=(config_module.ROUTER_RECURRENT_HALTING_THRESHOLD),
+        recurrent_halting_dropout=config_module.ROUTER_RECURRENT_HALTING_DROPOUT,
+        recurrent_halting_hidden_state_mode=(
+            config_module.ROUTER_RECURRENT_HALTING_HIDDEN_STATE_MODE
+        ),
+        recurrent_halting_stack_source=_default_controller_stack_source(
+            config_module,
+            "router_recurrent_halting_stack",
+        ),
+    )
+    updates = _pop_updates(
+        kwargs,
+        {
+            "router_recurrent_flag": "recurrent_flag",
+            "router_recurrent_max_steps": "recurrent_max_steps",
+            "router_recurrent_layer_norm_position": ("recurrent_layer_norm_position"),
+            "router_recurrent_gate_flag": "recurrent_gate_flag",
+            "router_recurrent_gate_option": "recurrent_gate_option",
+            "router_recurrent_gate_activation": "recurrent_gate_activation",
+            "router_recurrent_halting_flag": "recurrent_halting_flag",
+            "router_recurrent_halting_threshold": ("recurrent_halting_threshold"),
+            "router_recurrent_halting_dropout": "recurrent_halting_dropout",
+            "router_recurrent_halting_hidden_state_mode": (
+                "recurrent_halting_hidden_state_mode"
+            ),
+        },
+    )
+    updates["recurrent_gate_stack_source"] = _controller_stack_source_from_kwargs(
+        kwargs,
+        config_module,
+        "router_recurrent_gate_stack",
+        provided=options.recurrent_gate_stack_source,
+    )
+    updates["recurrent_halting_stack_source"] = _controller_stack_source_from_kwargs(
+        kwargs,
+        config_module,
+        "router_recurrent_halting_stack",
         provided=options.recurrent_halting_stack_source,
     )
     return replace(options, **updates)

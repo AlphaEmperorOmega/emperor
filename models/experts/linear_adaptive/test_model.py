@@ -68,6 +68,9 @@ from models.experts.linear_adaptive.config_builder import (
     LinearAdaptiveConfigBuilder,
 )
 from models.experts.linear_adaptive.model import Model
+from models.experts.linear_adaptive._router_controller_config import (
+    RouterControllerModelConfig,
+)
 from models.experts.linear_adaptive.presets import (
     ExperimentPreset,
     ExperimentPresets,
@@ -195,10 +198,9 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
         moe_layer_cfg = self._moe_layer_config(cfg)
         expert_stack_cfg = self._expert_stack_config(cfg)
         expert_layer_model_cfg = expert_stack_cfg.layer_config.layer_model_config
-        router_layer_model_cfg = (
-            self._moe_model_config(cfg)
-            .sampler_config.router_config.model_config.layer_config.layer_model_config
-        )
+        router_layer_model_cfg = self._moe_model_config(
+            cfg
+        ).sampler_config.router_config.model_config.layer_config.layer_model_config
 
         self.assertIsInstance(moe_layer_cfg, MixtureOfExpertsConfig)
         self.assertIsInstance(expert_layer_model_cfg, AdaptiveLinearLayerConfig)
@@ -456,9 +458,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
                 stack_options.residual_connection_option
             ),
             "stack_dropout_probability": stack_options.dropout_probability,
-            "stack_last_layer_bias_option": (
-                stack_options.last_layer_bias_option
-            ),
+            "stack_last_layer_bias_option": (stack_options.last_layer_bias_option),
             "stack_apply_output_pipeline_flag": (
                 stack_options.apply_output_pipeline_flag
             ),
@@ -475,9 +475,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
                 mixture_options.compute_expert_mixture_flag
             ),
             "weighted_parameters_flag": mixture_options.weighted_parameters_flag,
-            "weighting_position_option": (
-                mixture_options.weighting_position_option
-            ),
+            "weighting_position_option": (mixture_options.weighting_position_option),
             "routing_initialization_mode": (
                 mixture_options.routing_initialization_mode
             ),
@@ -487,9 +485,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
                 bias_name="expert_bias_flag",
             ),
             "sampler_threshold": sampler_options.threshold,
-            "sampler_filter_above_threshold": (
-                sampler_options.filter_above_threshold
-            ),
+            "sampler_filter_above_threshold": (sampler_options.filter_above_threshold),
             "sampler_num_topk_samples": sampler_options.num_topk_samples,
             "sampler_normalize_probabilities_flag": (
                 sampler_options.normalize_probabilities_flag
@@ -550,15 +546,11 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
                 bias_name="memory_stack_bias_flag",
             ),
             "recurrent_flag": recurrent_controller_options.recurrent_flag,
-            "recurrent_max_steps": (
-                recurrent_controller_options.recurrent_max_steps
-            ),
+            "recurrent_max_steps": (recurrent_controller_options.recurrent_max_steps),
             "recurrent_layer_norm_position": (
                 recurrent_controller_options.recurrent_layer_norm_position
             ),
-            "recurrent_gate_flag": (
-                recurrent_controller_options.recurrent_gate_flag
-            ),
+            "recurrent_gate_flag": (recurrent_controller_options.recurrent_gate_flag),
             "recurrent_gate_option": (
                 recurrent_controller_options.recurrent_gate_option
             ),
@@ -738,9 +730,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
             sampler_stack_apply_output_pipeline_flag=True,
             sampler_bias_flag=False,
         )
-        inherited_router_stack = (
-            inherited_cfg.experiment_config.model_config.sampler_config.router_config.model_config
-        )
+        inherited_router_stack = inherited_cfg.experiment_config.model_config.sampler_config.router_config.model_config
 
         self.assertEqual(inherited_router_stack.hidden_dim, 44)
         self.assertEqual(
@@ -763,9 +753,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
             sampler_stack_apply_output_pipeline_flag=True,
             sampler_bias_flag=False,
         )
-        custom_router_stack = (
-            custom_cfg.experiment_config.model_config.sampler_config.router_config.model_config
-        )
+        custom_router_stack = custom_cfg.experiment_config.model_config.sampler_config.router_config.model_config
 
         self.assertEqual(custom_router_stack.hidden_dim, 88)
         self.assertEqual(
@@ -774,6 +762,105 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
         )
         self.assertTrue(custom_router_stack.apply_output_pipeline_flag)
         self.assertFalse(custom_router_stack.layer_config.layer_model_config.bias_flag)
+
+    def test_router_controller_flags_build_stable_trunk_and_logits_head(self):
+        cfg = self.experts_preset(
+            router_gate_flag=True,
+            router_halting_flag=True,
+            router_memory_flag=True,
+            router_recurrent_flag=True,
+            router_recurrent_gate_flag=True,
+            router_recurrent_halting_flag=True,
+            router_weight_option=LayeredWeightedBankDynamicWeightConfig,
+        )
+        router_model_cfg = self._moe_model_config(
+            cfg
+        ).sampler_config.router_config.model_config
+
+        self.assertIsInstance(router_model_cfg, RouterControllerModelConfig)
+        self.assertEqual(router_model_cfg.input_dim, config.STACK_HIDDEN_DIM)
+        self.assertEqual(router_model_cfg.hidden_dim, config.SUBMODULE_STACK_HIDDEN_DIM)
+        self.assertEqual(router_model_cfg.output_dim, config.EXPERT_NUM_EXPERTS)
+        self.assertIsInstance(router_model_cfg.trunk_config, RecurrentLayerConfig)
+        self.assertIsInstance(router_model_cfg.head_config, LayerConfig)
+
+        recurrent_cfg = router_model_cfg.trunk_config
+        trunk_stack = recurrent_cfg.block_config
+        self.assertIsInstance(trunk_stack, LayerStackConfig)
+        self.assertEqual(trunk_stack.input_dim, router_model_cfg.hidden_dim)
+        self.assertEqual(trunk_stack.hidden_dim, router_model_cfg.hidden_dim)
+        self.assertEqual(trunk_stack.output_dim, router_model_cfg.hidden_dim)
+        self.assertIsNotNone(trunk_stack.layer_config.gate_config)
+        self.assertIsNotNone(trunk_stack.layer_config.halting_config)
+        self.assertIsNotNone(trunk_stack.shared_memory_config)
+        self.assertIsNotNone(recurrent_cfg.gate_config)
+        self.assertIsNotNone(recurrent_cfg.halting_config)
+        self.assertIsNone(router_model_cfg.head_config.gate_config)
+        self.assertIsNone(router_model_cfg.head_config.halting_config)
+        self.assertIsInstance(
+            trunk_stack.layer_config.layer_model_config,
+            AdaptiveLinearLayerConfig,
+        )
+        self.assertIsInstance(
+            router_model_cfg.head_config.layer_model_config,
+            AdaptiveLinearLayerConfig,
+        )
+        self.assertIsInstance(
+            trunk_stack.layer_config.layer_model_config.adaptive_augmentation_config.weight_config,
+            LayeredWeightedBankDynamicWeightConfig,
+        )
+        self.assertIsInstance(
+            router_model_cfg.head_config.layer_model_config.adaptive_augmentation_config.weight_config,
+            LayeredWeightedBankDynamicWeightConfig,
+        )
+
+    def test_flat_router_controller_kwargs_reach_controller_stacks(self):
+        cfg = self.experts_preset(
+            router_gate_flag=True,
+            router_gate_stack_independent_flag=True,
+            router_gate_stack_hidden_dim=41,
+            router_memory_flag=True,
+            router_memory_stack_independent_flag=True,
+            router_memory_stack_hidden_dim=43,
+            router_recurrent_flag=True,
+            router_recurrent_gate_flag=True,
+            router_recurrent_gate_stack_independent_flag=True,
+            router_recurrent_gate_stack_hidden_dim=47,
+        )
+        router_model_cfg = self._moe_model_config(
+            cfg
+        ).sampler_config.router_config.model_config
+        recurrent_cfg = router_model_cfg.trunk_config
+        trunk_stack = recurrent_cfg.block_config
+
+        self.assertEqual(
+            trunk_stack.layer_config.gate_config.model_config.hidden_dim,
+            41,
+        )
+        self.assertEqual(
+            trunk_stack.shared_memory_config.model_config.hidden_dim,
+            43,
+        )
+        self.assertEqual(
+            recurrent_cfg.gate_config.model_config.hidden_dim,
+            47,
+        )
+
+    def test_router_recurrent_forwards_when_hidden_dim_differs_from_num_experts(self):
+        cfg = self.experts_preset(
+            stack_hidden_dim=32,
+            submodule_stack_hidden_dim=32,
+            num_experts=7,
+            top_k=2,
+            router_recurrent_flag=True,
+        )
+        model = Model(cfg)
+        X = self._fake_batch(config.DATASET_OPTIONS[0], batch_size=2)
+
+        output = model(X)
+        logits = output[0] if isinstance(output, tuple) else output
+
+        self.assertEqual(logits.shape, (2, config.DATASET_OPTIONS[0].num_classes))
 
     def test_disabled_memory_is_absent_from_stack_and_layer_configs(self):
         cfg = LinearAdaptiveConfigBuilder().build()
@@ -1296,12 +1383,8 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
             output_layer_bias_option=AdditiveDynamicBiasConfig,
         )
 
-        input_augmentation = (
-            cfg.experiment_config.input_model_config.layer_model_config.adaptive_augmentation_config
-        )
-        output_augmentation = (
-            cfg.experiment_config.output_model_config.layer_model_config.adaptive_augmentation_config
-        )
+        input_augmentation = cfg.experiment_config.input_model_config.layer_model_config.adaptive_augmentation_config
+        output_augmentation = cfg.experiment_config.output_model_config.layer_model_config.adaptive_augmentation_config
         hidden_augmentation = self._expert_augmentation_config(cfg)
         router_augmentation = self._router_augmentation_config(cfg)
 
@@ -1445,9 +1528,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
             {
                 "preset": ExperimentPreset.ADAPTIVE_AFTER_WEIGHT,
                 "config_role": "adaptive after weight",
-                "weighting_position": (
-                    ExpertWeightingPositionOptions.AFTER_EXPERTS
-                ),
+                "weighting_position": (ExpertWeightingPositionOptions.AFTER_EXPERTS),
                 "expert_weight": DualModelDynamicWeightConfig,
             },
             {
@@ -1538,9 +1619,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
                         case["expert_weight"],
                     )
                 if case.get("full_adaptive"):
-                    self._assert_full_adaptive_augmentation(
-                        expert_augmentation_config
-                    )
+                    self._assert_full_adaptive_augmentation(expert_augmentation_config)
                 if "router_weight" in case:
                     router_augmentation_config = self._router_augmentation_config(cfg)
                     self.assertIsInstance(
@@ -1666,14 +1745,10 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
             f"{prefix}_layer_norm_position": source.layer_norm_position,
             f"{prefix}_num_layers": source.num_layers,
             f"{prefix}_activation": source.activation,
-            f"{prefix}_residual_connection_option": (
-                source.residual_connection_option
-            ),
+            f"{prefix}_residual_connection_option": (source.residual_connection_option),
             f"{prefix}_dropout_probability": source.dropout_probability,
             f"{prefix}_last_layer_bias_option": source.last_layer_bias_option,
-            f"{prefix}_apply_output_pipeline_flag": (
-                source.apply_output_pipeline_flag
-            ),
+            f"{prefix}_apply_output_pipeline_flag": (source.apply_output_pipeline_flag),
             f"{prefix}_bias_flag": source.bias_flag,
         }
 
@@ -1694,12 +1769,8 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
             ),
             f"{option_prefix}_decay_schedule": options.decay_schedule,
             f"{option_prefix}_decay_rate": options.decay_rate,
-            f"{option_prefix}_decay_warmup_batches": (
-                options.decay_warmup_batches
-            ),
-            f"{option_prefix}_bank_expansion_factor": (
-                options.bank_expansion_factor
-            ),
+            f"{option_prefix}_decay_warmup_batches": (options.decay_warmup_batches),
+            f"{option_prefix}_bank_expansion_factor": (options.bank_expansion_factor),
             **self.flat_adaptive_source_kwargs(
                 stack_prefix,
                 options.generator_stack_source,
@@ -1719,9 +1790,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
             f"{option_prefix}_decay_schedule": options.decay_schedule,
             f"{option_prefix}_decay_rate": options.decay_rate,
             f"{option_prefix}_decay_warmup_batches": options.decay_warmup_batches,
-            f"{option_prefix}_bank_expansion_factor": (
-                options.bank_expansion_factor
-            ),
+            f"{option_prefix}_bank_expansion_factor": (options.bank_expansion_factor),
             **self.flat_adaptive_source_kwargs(
                 stack_prefix,
                 options.generator_stack_source,
@@ -1785,16 +1854,14 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
         return expert_cfg
 
     def _expert_augmentation_config(self, cfg):
-        return (
-            self._expert_stack_config(cfg)
-            .layer_config.layer_model_config.adaptive_augmentation_config
-        )
+        return self._expert_stack_config(
+            cfg
+        ).layer_config.layer_model_config.adaptive_augmentation_config
 
     def _router_augmentation_config(self, cfg):
-        return (
-            self._moe_model_config(cfg)
-            .sampler_config.router_config.model_config.layer_config.layer_model_config.adaptive_augmentation_config
-        )
+        return self._moe_model_config(
+            cfg
+        ).sampler_config.router_config.model_config.layer_config.layer_model_config.adaptive_augmentation_config
 
     def _assert_empty_adaptive_augmentation(self, augmentation_config) -> None:
         self.assertIsNone(augmentation_config.weight_config)
