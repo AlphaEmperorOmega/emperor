@@ -3654,7 +3654,7 @@ describe("ViewerApp Full Config", () => {
                 locked: true,
                 lockedValue: "GELU",
                 lockedReason:
-                  "Locked by the ACTIVATION preset because this preset fixes stack activation.",
+                  "Locked by the ACTIVATION preset because this preset locks `stack_activation`.",
               }
             : field,
         ),

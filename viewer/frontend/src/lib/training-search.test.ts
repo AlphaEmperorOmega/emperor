@@ -31,10 +31,10 @@ const axes: SearchAxis[] = [
     locked: true,
     lockedValue: "AFTER",
     lockedReason:
-      "Locked by the POST_NORM preset because this preset enables post-layer normalization.",
+      "Locked by the POST_NORM preset because this preset locks `layer_norm_position`.",
     lockedByPresets: ["POST_NORM"],
     lockReasons: [
-      "Locked by the POST_NORM preset because this preset enables post-layer normalization.",
+      "Locked by the POST_NORM preset because this preset locks `layer_norm_position`.",
     ],
   },
 ];
