@@ -80,7 +80,7 @@ const baseInput = {
   logRunTags: [],
   filteredHistoricalRunIds: [],
   targetModelType: "neuron",
-  targetModel: "neuron_linear",
+  targetModel: "linear",
   targetPreset: "baseline",
   targetDatasets: ["Mnist"],
   targetMode: "preset" as const,
@@ -101,14 +101,14 @@ describe("useGraphPreviewOrchestration", () => {
   });
 
   it("exposes the graph when its identity matches the target", async () => {
-    const matchingGraph = graph("neuron_linear");
+    const matchingGraph = graph("linear");
     const { result } = renderOrchestration({
       ...baseInput,
       controller: controller({
         graph: matchingGraph,
         previewRequest: {
           modelType: "neuron",
-          model: "neuron_linear",
+          model: "linear",
           preset: "baseline",
           dataset: "Mnist",
           overrides: {},
@@ -155,10 +155,10 @@ describe("useGraphPreviewOrchestration", () => {
     const { result } = renderOrchestration({
       ...baseInput,
       controller: controller({
-        graph: graph("neuron_linear"),
+        graph: graph("linear"),
         previewRequest: {
           modelType: "neuron",
-          model: "neuron_linear",
+          model: "linear",
           preset: "baseline",
           dataset: "Cifar10",
           overrides: {},
@@ -178,10 +178,10 @@ describe("useGraphPreviewOrchestration", () => {
       targetMode: "experiment",
       targetId: "run-new",
       controller: controller({
-        graph: graph("neuron_linear"),
+        graph: graph("linear"),
         previewRequest: {
           modelType: "neuron",
-          model: "neuron_linear",
+          model: "linear",
           preset: "baseline",
           dataset: "Mnist",
           overrides: {},

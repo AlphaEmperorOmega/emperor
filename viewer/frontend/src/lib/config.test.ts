@@ -358,37 +358,37 @@ describe("preset override helpers", () => {
 });
 
 describe("config section controls", () => {
-  it("reports router stack inheritance while its independent flag is off", () => {
+  it("reports controller stack inheritance while its independent flag is off", () => {
     const section = inheritedStackHintSection(
-      "Router Stack Options",
-      "sampler_stack_independent_flag",
-      "sampler stack independent flag",
+      "Gate Stack Options",
+      "gate_stack_independent_flag",
+      "gate stack independent flag",
     );
 
     expect(inheritedStackSectionHint(section, {})).toEqual({
-      label: "Inherits Submodule Stack",
+      label: "Inherits Layer Stack Submodule",
       title:
-        "Uses Layer Stack Submodule Options while sampler stack independent flag is off. Enable it to use Router Stack Options values.",
+        "Uses Layer Stack Submodule Options while gate stack independent flag is off. Enable it to use Gate Stack Options values.",
       sourceTitle: "Layer Stack Submodule Options",
       isCustom: false,
     });
   });
 
-  it("reports router stack customization while its independent flag is on", () => {
+  it("reports controller stack customization while its independent flag is on", () => {
     const section = inheritedStackHintSection(
-      "Router Stack Options",
-      "sampler_stack_independent_flag",
-      "sampler stack independent flag",
+      "Gate Stack Options",
+      "gate_stack_independent_flag",
+      "gate stack independent flag",
     );
 
     expect(
       inheritedStackSectionHint(section, {
-        sampler_stack_independent_flag: "true",
+        gate_stack_independent_flag: "true",
       }),
     ).toEqual({
       label: "Custom Stack",
       title:
-        "Uses Router Stack Options values while sampler stack independent flag is on. Disable it to inherit Layer Stack Submodule Options.",
+        "Uses Gate Stack Options values while gate stack independent flag is on. Disable it to inherit Layer Stack Submodule Options.",
       sourceTitle: "Layer Stack Submodule Options",
       isCustom: true,
     });
@@ -553,26 +553,19 @@ describe("config section controls", () => {
         title: "Router Stack Options",
         fields: [
           field({
-            key: "sampler_stack_independent_flag",
-            type: "bool",
-            default: false,
-            choices: [true, false],
+            key: "router_stack_hidden_dim",
+            default: 32,
+            nullable: false,
             section: "Router Stack Options",
           }),
           field({
-            key: "sampler_stack_hidden_dim",
-            default: null,
-            nullable: true,
+            key: "router_stack_num_layers",
+            default: 2,
+            nullable: false,
             section: "Router Stack Options",
           }),
           field({
-            key: "sampler_stack_num_layers",
-            default: null,
-            nullable: true,
-            section: "Router Stack Options",
-          }),
-          field({
-            key: "sampler_bias_flag",
+            key: "router_bias_flag",
             type: "bool",
             default: true,
             choices: [true, false],
@@ -600,27 +593,18 @@ describe("config section controls", () => {
     expect(routerSection?.children?.map((section) => section.title)).toEqual([
       "Router Stack Options",
     ]);
-    expect(routerStackSection?.controlFieldKey).toBe(
-      "sampler_stack_independent_flag",
-    );
+    expect(routerStackSection?.controlFieldKey).toBeUndefined();
     expect(routerStackSection?.fields.map((item) => item.key)).toEqual([
-      "sampler_stack_independent_flag",
-      "sampler_stack_hidden_dim",
-      "sampler_stack_num_layers",
-      "sampler_bias_flag",
+      "router_stack_hidden_dim",
+      "router_stack_num_layers",
+      "router_bias_flag",
     ]);
     expect(routerStackSection?.children).toBeUndefined();
 
     const disabledByDefault = disabledConfigFieldReasons(sections, {});
-    expect(disabledByDefault.has("sampler_stack_independent_flag")).toBe(false);
-    expect(disabledByDefault.get("sampler_stack_hidden_dim")).toContain(
-      "sampler_stack_independent_flag",
-    );
-
-    const enabled = disabledConfigFieldReasons(sections, {
-      sampler_stack_independent_flag: "true",
-    });
-    expect(enabled.has("sampler_stack_hidden_dim")).toBe(false);
+    expect(disabledByDefault.has("router_stack_hidden_dim")).toBe(false);
+    expect(disabledByDefault.has("router_stack_num_layers")).toBe(false);
+    expect(disabledByDefault.has("router_bias_flag")).toBe(false);
   });
 
   it("keeps experts sampler and router ancestors visible for router stack search matches", () => {
@@ -652,17 +636,10 @@ describe("config section controls", () => {
         title: "Router Stack Options",
         fields: [
           field({
-            key: "sampler_stack_independent_flag",
-            type: "bool",
-            default: false,
-            choices: [true, false],
-            section: "Router Stack Options",
-          }),
-          field({
-            key: "sampler_stack_hidden_dim",
-            label: "sampler stack hidden dim",
-            default: null,
-            nullable: true,
+            key: "router_stack_hidden_dim",
+            label: "router stack hidden dim",
+            default: 32,
+            nullable: false,
             section: "Router Stack Options",
           }),
         ],
@@ -670,7 +647,7 @@ describe("config section controls", () => {
     ];
 
     const filtered = filterConfigSectionsForSearch(sections, {
-      query: "sampler stack hidden dim",
+      query: "router stack hidden dim",
     });
     const [samplerSection] = deriveNestedConfigSections(filtered, sections);
 
@@ -686,7 +663,7 @@ describe("config section controls", () => {
     );
   });
 
-  it("nests router controller sections under router stack options", () => {
+  it("nests router controller sections under router options alongside router stack options", () => {
     const sections: ConfigSection[] = [
       {
         title: "Sampler Model Options",
@@ -715,10 +692,9 @@ describe("config section controls", () => {
         title: "Router Stack Options",
         fields: [
           field({
-            key: "sampler_stack_independent_flag",
-            type: "bool",
-            default: false,
-            choices: [true, false],
+            key: "router_stack_hidden_dim",
+            default: 32,
+            nullable: false,
             section: "Router Stack Options",
           }),
         ],
@@ -814,22 +790,27 @@ describe("config section controls", () => {
     ];
 
     const [samplerSection] = deriveNestedConfigSections(sections);
-    const routerStackSection = samplerSection.children?.[0]?.children?.[0];
-    const routerGateSection = routerStackSection?.children?.find(
+    const routerSection = samplerSection.children?.[0];
+    const routerStackSection = routerSection?.children?.find(
+      (section) => section.title === "Router Stack Options",
+    );
+    const routerGateSection = routerSection?.children?.find(
       (section) => section.title === "Router Gate Options",
     );
-    const routerMemorySection = routerStackSection?.children?.find(
+    const routerMemorySection = routerSection?.children?.find(
       (section) => section.title === "Router Memory Options",
     );
-    const routerRecurrentSection = routerStackSection?.children?.find(
+    const routerRecurrentSection = routerSection?.children?.find(
       (section) => section.title === "Router Recurrent Layer Options",
     );
 
-    expect(routerStackSection?.children?.map((section) => section.title)).toEqual([
+    expect(routerSection?.children?.map((section) => section.title)).toEqual([
+      "Router Stack Options",
       "Router Gate Options",
       "Router Memory Options",
       "Router Recurrent Layer Options",
     ]);
+    expect(routerStackSection?.children).toBeUndefined();
     expect(routerGateSection?.children?.[0]?.title).toBe(
       "Router Gate Stack Options",
     );
@@ -844,8 +825,8 @@ describe("config section controls", () => {
     expect(
       inheritedStackSectionHint(routerGateSection?.children?.[0]!, {}),
     ).toMatchObject({
-      label: "Inherits Router Stack",
-      sourceTitle: "Router Stack Options",
+      label: "Inherits Layer Stack Submodule",
+      sourceTitle: "Layer Stack Submodule Options",
       isCustom: false,
     });
 
@@ -875,7 +856,6 @@ describe("config section controls", () => {
     expect(filtered.map((section) => section.title)).toEqual([
       "Sampler Model Options",
       "Router Options",
-      "Router Stack Options",
       "Router Recurrent Layer Options",
       "Router Recurrent Gate Options",
       "Router Recurrent Gate Stack Options",
@@ -1002,7 +982,7 @@ describe("config section controls", () => {
     expect(disabledConfigFieldReasons(sections, {}).size).toBe(0);
   });
 
-  it("nests expert-internal controller sections under expert stack options", () => {
+  it("nests expert-internal controller sections under mixture options alongside expert stack options", () => {
     const sections: ConfigSection[] = [
       {
         title: "Mixture Of Experts Model Options",
@@ -1133,23 +1113,27 @@ describe("config section controls", () => {
     ];
 
     const [mixtureSection] = deriveNestedConfigSections(sections);
-    const expertStackSection = mixtureSection.children?.[0];
-    const expertGateSection = expertStackSection?.children?.find(
+    const expertStackSection = mixtureSection.children?.find(
+      (section) => section.title === "Expert Stack Options",
+    );
+    const expertGateSection = mixtureSection.children?.find(
       (section) => section.title === "Expert Gate Options",
     );
-    const expertMemorySection = expertStackSection?.children?.find(
+    const expertMemorySection = mixtureSection.children?.find(
       (section) => section.title === "Expert Memory Options",
     );
-    const expertRecurrentSection = expertStackSection?.children?.find(
+    const expertRecurrentSection = mixtureSection.children?.find(
       (section) => section.title === "Expert Recurrent Layer Options",
     );
 
     expect(mixtureSection.title).toBe("Mixture Of Experts Model Options");
-    expect(expertStackSection?.children?.map((section) => section.title)).toEqual([
+    expect(mixtureSection.children?.map((section) => section.title)).toEqual([
+      "Expert Stack Options",
       "Expert Gate Options",
       "Expert Memory Options",
       "Expert Recurrent Layer Options",
     ]);
+    expect(expertStackSection?.children).toBeUndefined();
     expect(expertGateSection?.children?.[0]?.title).toBe(
       "Expert Gate Stack Options",
     );
@@ -1237,7 +1221,7 @@ describe("config section controls", () => {
     ]);
   });
 
-  it("keeps the expert stack path visible for expert controller search matches", () => {
+  it("keeps the mixture expert controller path visible for expert controller search matches", () => {
     const sections: ConfigSection[] = [
       {
         title: "Mixture Of Experts Model Options",
@@ -1304,21 +1288,18 @@ describe("config section controls", () => {
 
     expect(filtered.map((section) => section.title)).toEqual([
       "Mixture Of Experts Model Options",
-      "Expert Stack Options",
       "Expert Recurrent Layer Options",
       "Expert Recurrent Gate Options",
       "Expert Recurrent Gate Stack Options",
     ]);
-    expect(mixtureSection.children?.[0]?.title).toBe("Expert Stack Options");
-    expect(mixtureSection.children?.[0]?.children?.[0]?.title).toBe(
+    expect(mixtureSection.children?.[0]?.title).toBe(
       "Expert Recurrent Layer Options",
     );
     expect(
-      mixtureSection.children?.[0]?.children?.[0]?.children?.[0]?.title,
+      mixtureSection.children?.[0]?.children?.[0]?.title,
     ).toBe("Expert Recurrent Gate Options");
     expect(
-      mixtureSection.children?.[0]?.children?.[0]?.children?.[0]?.children?.[0]
-        ?.title,
+      mixtureSection.children?.[0]?.children?.[0]?.children?.[0]?.title,
     ).toBe("Expert Recurrent Gate Stack Options");
   });
 
@@ -1726,7 +1707,7 @@ describe("config section controls", () => {
     expect(stackEnabled.has("mask_generator_stack_hidden_dim")).toBe(false);
   });
 
-  it("nests expert and router adaptive sections under their stack owners", () => {
+  it("nests expert and router adaptive sections alongside their stack owners", () => {
     const sections: ConfigSection[] = [
       {
         title: "Mixture Of Experts Model Options",
@@ -1814,10 +1795,9 @@ describe("config section controls", () => {
         title: "Router Stack Options",
         fields: [
           field({
-            key: "sampler_stack_independent_flag",
-            type: "bool",
-            default: false,
-            choices: [true, false],
+            key: "router_stack_hidden_dim",
+            default: 32,
+            nullable: false,
             section: "Router Stack Options",
           }),
         ],
@@ -1863,26 +1843,28 @@ describe("config section controls", () => {
     ];
 
     const [mixtureSection, samplerSection] = deriveNestedConfigSections(sections);
-    const expertSection = mixtureSection.children?.find(
+    const expertStackSection = mixtureSection.children?.find(
       (section) => section.title === "Expert Stack Options",
     );
-    const expertWeightSection = expertSection?.children?.find(
+    const expertWeightSection = mixtureSection.children?.find(
       (section) => section.title === "Weight Generator Options",
     );
     const expertWeightStackSection = expertWeightSection?.children?.[0];
-    const routerStackSection =
-      samplerSection.children?.[0]?.children?.find(
-        (section) => section.title === "Router Stack Options",
-      );
-    const routerWeightSection = routerStackSection?.children?.find(
+    const routerSection = samplerSection.children?.[0];
+    const routerStackSection = routerSection?.children?.find(
+      (section) => section.title === "Router Stack Options",
+    );
+    const routerWeightSection = routerSection?.children?.find(
       (section) => section.title === "Router Weight Generator Options",
     );
     const routerWeightStackSection = routerWeightSection?.children?.[0];
 
+    expect(expertStackSection?.children).toBeUndefined();
     expect(expertWeightSection?.controlFieldKey).toBe("weight_option_flag");
     expect(expertWeightStackSection?.controlFieldKey).toBe(
       "weight_generator_stack_independent_flag",
     );
+    expect(routerStackSection?.children).toBeUndefined();
     expect(routerWeightSection?.controlFieldKey).toBe(
       "router_weight_option_flag",
     );
@@ -1900,7 +1882,6 @@ describe("config section controls", () => {
     expect(filtered.map((section) => section.title)).toEqual([
       "Sampler Model Options",
       "Router Options",
-      "Router Stack Options",
       "Router Weight Generator Options",
       "Router Weight Generator Stack Options",
     ]);

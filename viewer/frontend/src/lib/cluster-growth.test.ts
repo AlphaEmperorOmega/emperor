@@ -7,7 +7,7 @@ function job(events: TrainingProgressEvent[]): TrainingJob {
     id: "job-1",
     status: "running",
     modelType: "neuron",
-    model: "neuron_linear",
+    model: "linear",
     preset: "baseline",
     datasets: ["Mnist"],
     overrides: {},

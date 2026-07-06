@@ -645,11 +645,23 @@ vi.mock("@xyflow/react", () => ({
 export const modelsResponse = {
   models: [
     { modelType: "linears", model: "linear" },
-    { modelType: "transformer_encoder", model: "bert_linear" },
+    { modelType: "bert", model: "linear" },
+    { modelType: "bert", model: "linear_adaptive" },
+    { modelType: "bert", model: "expert_linear" },
+    { modelType: "bert", model: "expert_linear_adaptive" },
+    { modelType: "vit", model: "linear" },
+    { modelType: "vit", model: "linear_adaptive" },
+    { modelType: "vit", model: "expert_linear" },
+    { modelType: "vit", model: "expert_linear_adaptive" },
   ],
 };
 export const neuronModelsResponse = {
-  models: [{ modelType: "neuron", model: "neuron_linear" }],
+  models: [
+    { modelType: "neuron", model: "linear" },
+    { modelType: "neuron", model: "linear_adaptive" },
+    { modelType: "neuron", model: "expert_linear" },
+    { modelType: "neuron", model: "expert_linear_adaptive" },
+  ],
 };
 export const presetsResponse = {
   modelType: "linears",
@@ -664,13 +676,18 @@ export const presetsResponse = {
   ],
 };
 export const bertPresetsResponse = {
-  modelType: "transformer_encoder",
-  model: "bert_linear",
+  modelType: "bert",
+  model: "linear",
   presets: [{ name: "bert-baseline", label: "BERT_BASELINE", description: "Bert baseline" }],
+};
+export const vitPresetsResponse = {
+  modelType: "vit",
+  model: "linear",
+  presets: [{ name: "baseline", label: "BASELINE", description: "ViT baseline" }],
 };
 export const neuronPresetsResponse = {
   modelType: "neuron",
-  model: "neuron_linear",
+  model: "linear",
   presets: [{ name: "baseline", label: "BASELINE", description: "Baseline" }],
 };
 export const datasetsResponse = {
@@ -682,13 +699,18 @@ export const datasetsResponse = {
   ],
 };
 export const bertDatasetsResponse = {
-  modelType: "transformer_encoder",
-  model: "bert_linear",
+  modelType: "bert",
+  model: "linear",
   datasets: [{ name: "ToyText", label: "Toy Text", inputDim: 128, outputDim: 2 }],
+};
+export const vitDatasetsResponse = {
+  modelType: "vit",
+  model: "linear",
+  datasets: [{ name: "Mnist", label: "MNIST", inputDim: 784, outputDim: 10 }],
 };
 export const neuronDatasetsResponse = {
   modelType: "neuron",
-  model: "neuron_linear",
+  model: "linear",
   datasets: [
     { name: "Mnist", label: "Mnist", inputDim: 784, outputDim: 10 },
   ],
@@ -715,7 +737,7 @@ export const monitorsResponse = {
 };
 export const neuronMonitorsResponse = {
   modelType: "neuron",
-  model: "neuron_linear",
+  model: "linear",
   monitors: [] as Array<{
     name: string;
     label: string;
@@ -3161,29 +3183,35 @@ export function installFetchMock(
 	      const model = parsedUrl.searchParams.get("model") ?? "linear";
 	      return jsonResponse({ ...configSnapshotResponse, modelType, model });
 	    }
-    if (url.endsWith("/models/neuron/neuron_linear/presets")) {
-      return jsonResponse(neuronPresetsResponse);
+    const neuronModel = [
+      "linear",
+      "linear_adaptive",
+      "expert_linear",
+      "expert_linear_adaptive",
+    ].find((model) => url.includes(`/models/neuron/${model}/`));
+    if (neuronModel && url.endsWith(`/models/neuron/${neuronModel}/presets`)) {
+      return jsonResponse({ ...neuronPresetsResponse, model: neuronModel });
     }
-    if (url.endsWith("/models/neuron/neuron_linear/datasets")) {
-      return jsonResponse(neuronDatasetsResponse);
+    if (neuronModel && url.endsWith(`/models/neuron/${neuronModel}/datasets`)) {
+      return jsonResponse({ ...neuronDatasetsResponse, model: neuronModel });
     }
-    if (url.endsWith("/models/neuron/neuron_linear/monitors")) {
-      return jsonResponse(neuronMonitorsResponse);
+    if (neuronModel && url.endsWith(`/models/neuron/${neuronModel}/monitors`)) {
+      return jsonResponse({ ...neuronMonitorsResponse, model: neuronModel });
     }
-    if (url.includes("/models/neuron/neuron_linear/config-schema")) {
+    if (neuronModel && url.includes(`/models/neuron/${neuronModel}/config-schema`)) {
       const schemaPayload = options.schemaResponse ?? schemaResponse;
       return jsonResponse(
 	        typeof schemaPayload === "object" && schemaPayload !== null
-	          ? { ...schemaPayload, modelType: "neuron", model: "neuron_linear" }
+	          ? { ...schemaPayload, modelType: "neuron", model: neuronModel }
 	          : schemaPayload,
       );
     }
-    if (url.includes("/models/neuron/neuron_linear/search-space")) {
+    if (neuronModel && url.includes(`/models/neuron/${neuronModel}/search-space`)) {
       const searchPayload = options.searchSpaceResponse ?? searchSpaceResponse;
       return jsonResponse({
         ...searchPayload,
         modelType: "neuron",
-        model: "neuron_linear",
+        model: neuronModel,
         preset: "baseline",
       });
     }
@@ -3221,61 +3249,139 @@ export function installFetchMock(
     }
     if (
       endsWithAny([
-        "/models/bert_linear/presets",
-        "/models/transformer_encoder/bert_linear/presets",
+        "/models/bert/linear/presets",
+        "/models/bert/linear_adaptive/presets",
+        "/models/bert/expert_linear/presets",
+        "/models/bert/expert_linear_adaptive/presets",
       ])
     ) {
       return jsonResponse(bertPresetsResponse);
     }
     if (
       endsWithAny([
-        "/models/bert_linear/datasets",
-        "/models/transformer_encoder/bert_linear/datasets",
+        "/models/vit/linear/presets",
+        "/models/vit/linear_adaptive/presets",
+        "/models/vit/expert_linear/presets",
+        "/models/vit/expert_linear_adaptive/presets",
+      ])
+    ) {
+      return jsonResponse(vitPresetsResponse);
+    }
+    if (
+      endsWithAny([
+        "/models/bert/linear/datasets",
+        "/models/bert/linear_adaptive/datasets",
+        "/models/bert/expert_linear/datasets",
+        "/models/bert/expert_linear_adaptive/datasets",
       ])
     ) {
       return jsonResponse(bertDatasetsResponse);
     }
     if (
       endsWithAny([
-        "/models/bert_linear/monitors",
-        "/models/transformer_encoder/bert_linear/monitors",
+        "/models/vit/linear/datasets",
+        "/models/vit/linear_adaptive/datasets",
+        "/models/vit/expert_linear/datasets",
+        "/models/vit/expert_linear_adaptive/datasets",
       ])
     ) {
-	      return jsonResponse({
-	        modelType: "transformer_encoder",
-	        model: "bert_linear",
-	        monitors: [],
-	      });
+      return jsonResponse(vitDatasetsResponse);
+    }
+    if (
+      endsWithAny([
+        "/models/bert/linear/monitors",
+        "/models/bert/linear_adaptive/monitors",
+        "/models/bert/expert_linear/monitors",
+        "/models/bert/expert_linear_adaptive/monitors",
+      ])
+    ) {
+      return jsonResponse({
+        modelType: "bert",
+        model: "linear",
+        monitors: [],
+      });
+    }
+    if (
+      endsWithAny([
+        "/models/vit/linear/monitors",
+        "/models/vit/linear_adaptive/monitors",
+        "/models/vit/expert_linear/monitors",
+        "/models/vit/expert_linear_adaptive/monitors",
+      ])
+    ) {
+      return jsonResponse({
+        modelType: "vit",
+        model: "linear",
+        monitors: [],
+      });
     }
     if (
       includesAny([
-        "/models/bert_linear/config-schema",
-        "/models/transformer_encoder/bert_linear/config-schema",
+        "/models/bert/linear/config-schema",
+        "/models/bert/linear_adaptive/config-schema",
+        "/models/bert/expert_linear/config-schema",
+        "/models/bert/expert_linear_adaptive/config-schema",
       ])
     ) {
       const schemaPayload = options.schemaResponse ?? schemaResponse;
       return jsonResponse(
-	        typeof schemaPayload === "object" && schemaPayload !== null
-	          ? {
-	              ...schemaPayload,
-	              modelType: "transformer_encoder",
-	              model: "bert_linear",
-	            }
-	          : schemaPayload,
+        typeof schemaPayload === "object" && schemaPayload !== null
+          ? {
+              ...schemaPayload,
+              modelType: "bert",
+              model: "linear",
+            }
+          : schemaPayload,
       );
     }
     if (
       includesAny([
-        "/models/bert_linear/search-space",
-        "/models/transformer_encoder/bert_linear/search-space",
+        "/models/vit/linear/config-schema",
+        "/models/vit/linear_adaptive/config-schema",
+        "/models/vit/expert_linear/config-schema",
+        "/models/vit/expert_linear_adaptive/config-schema",
       ])
     ) {
-	      return jsonResponse({
-	        modelType: "transformer_encoder",
-	        model: "bert_linear",
-	        preset: "bert-baseline",
-	        axes: [],
-	      });
+      const schemaPayload = options.schemaResponse ?? schemaResponse;
+      return jsonResponse(
+        typeof schemaPayload === "object" && schemaPayload !== null
+          ? {
+              ...schemaPayload,
+              modelType: "vit",
+              model: "linear",
+            }
+          : schemaPayload,
+      );
+    }
+    if (
+      includesAny([
+        "/models/bert/linear/search-space",
+        "/models/bert/linear_adaptive/search-space",
+        "/models/bert/expert_linear/search-space",
+        "/models/bert/expert_linear_adaptive/search-space",
+      ])
+    ) {
+      return jsonResponse({
+        modelType: "bert",
+        model: "linear",
+        preset: "bert-baseline",
+        axes: [],
+      });
+    }
+    if (
+      includesAny([
+        "/models/vit/linear/search-space",
+        "/models/vit/linear_adaptive/search-space",
+        "/models/vit/expert_linear/search-space",
+        "/models/vit/expert_linear_adaptive/search-space",
+      ])
+    ) {
+      return jsonResponse({
+        modelType: "vit",
+        model: "linear",
+        preset: "baseline",
+        axes: [],
+      });
     }
     if (url.endsWith("/training/run-plan")) {
       const request = JSON.parse(String(init?.body)) as MockTrainingPlanRequest;

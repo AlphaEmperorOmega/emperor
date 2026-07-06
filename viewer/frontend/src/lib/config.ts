@@ -99,7 +99,6 @@ const CONTROLLED_SECTION_FLAG_KEYS_BY_TITLE = new Map([
   ["Halting Stack Options", "halting_stack_independent_flag"],
   ["Memory Options", "memory_flag"],
   ["Memory Stack Options", "memory_stack_independent_flag"],
-  ["Router Stack Options", "sampler_stack_independent_flag"],
   ["Router Gate Options", "router_gate_flag"],
   ["Router Gate Stack Options", "router_gate_stack_independent_flag"],
   ["Router Halting Options", "router_halting_flag"],
@@ -184,63 +183,56 @@ const INHERITED_STACK_SECTIONS_BY_TITLE = new Map([
     "Gate Stack Options",
     {
       sourceTitle: "Layer Stack Submodule Options",
-      inheritedLabel: "Inherits Submodule Stack",
+      inheritedLabel: "Inherits Layer Stack Submodule",
     },
   ],
   [
     "Halting Stack Options",
     {
       sourceTitle: "Layer Stack Submodule Options",
-      inheritedLabel: "Inherits Submodule Stack",
+      inheritedLabel: "Inherits Layer Stack Submodule",
     },
   ],
   [
     "Memory Stack Options",
     {
       sourceTitle: "Layer Stack Submodule Options",
-      inheritedLabel: "Inherits Submodule Stack",
-    },
-  ],
-  [
-    "Router Stack Options",
-    {
-      sourceTitle: "Layer Stack Submodule Options",
-      inheritedLabel: "Inherits Submodule Stack",
+      inheritedLabel: "Inherits Layer Stack Submodule",
     },
   ],
   [
     "Router Gate Stack Options",
     {
-      sourceTitle: "Router Stack Options",
-      inheritedLabel: "Inherits Router Stack",
+      sourceTitle: "Layer Stack Submodule Options",
+      inheritedLabel: "Inherits Layer Stack Submodule",
     },
   ],
   [
     "Router Halting Stack Options",
     {
-      sourceTitle: "Router Stack Options",
-      inheritedLabel: "Inherits Router Stack",
+      sourceTitle: "Layer Stack Submodule Options",
+      inheritedLabel: "Inherits Layer Stack Submodule",
     },
   ],
   [
     "Router Memory Stack Options",
     {
-      sourceTitle: "Router Stack Options",
-      inheritedLabel: "Inherits Router Stack",
+      sourceTitle: "Layer Stack Submodule Options",
+      inheritedLabel: "Inherits Layer Stack Submodule",
     },
   ],
   [
     "Router Recurrent Gate Stack Options",
     {
-      sourceTitle: "Router Stack Options",
-      inheritedLabel: "Inherits Router Stack",
+      sourceTitle: "Layer Stack Submodule Options",
+      inheritedLabel: "Inherits Layer Stack Submodule",
     },
   ],
   [
     "Router Recurrent Halting Stack Options",
     {
-      sourceTitle: "Router Stack Options",
-      inheritedLabel: "Inherits Router Stack",
+      sourceTitle: "Layer Stack Submodule Options",
+      inheritedLabel: "Inherits Layer Stack Submodule",
     },
   ],
   [
@@ -1064,7 +1056,7 @@ const SECTION_OWNED_STACK_PREFIXES_BY_TITLE = new Map([
     new Set(["router_diagonal_generator_"]),
   ],
   ["Router Mask Stack Options", new Set(["router_mask_generator_"])],
-  ["Router Stack Options", new Set(["sampler_"])],
+  ["Router Stack Options", new Set(["router_"])],
 ]);
 
 function sectionTitleOwnsStackPrefix(
@@ -1237,10 +1229,10 @@ const CHILD_SECTION_TITLES_BY_TITLE = new Map([
   ["Bias Generator Options", ["Bias Generator Stack Options"]],
   ["Diagonal Generator Options", ["Diagonal Generator Stack Options"]],
   ["Mask Options", ["Mask Stack Options"]],
-  ["Mixture Of Experts Model Options", ["Expert Stack Options"]],
   [
-    "Expert Stack Options",
+    "Mixture Of Experts Model Options",
     [
+      "Expert Stack Options",
       "Expert Gate Options",
       "Expert Halting Options",
       "Expert Memory Options",
@@ -1267,10 +1259,10 @@ const CHILD_SECTION_TITLES_BY_TITLE = new Map([
     ["Expert Recurrent Halting Stack Options"],
   ],
   ["Sampler Model Options", ["Router Options"]],
-  ["Router Options", ["Router Stack Options"]],
   [
-    "Router Stack Options",
+    "Router Options",
     [
+      "Router Stack Options",
       "Router Gate Options",
       "Router Halting Options",
       "Router Memory Options",
