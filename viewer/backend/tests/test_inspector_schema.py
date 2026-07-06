@@ -295,7 +295,7 @@ class InspectorSchemaTests(unittest.TestCase):
             "Layer Stack Submodule Options",
         )
 
-        vit_fields = _fields_by_key(config_schema("transformer_encoder/vit_linear"))
+        vit_fields = _fields_by_key(config_schema("vit/linear"))
         self.assertEqual(vit_fields["positional_embedding_option"]["type"], "class")
         self.assertIn(
             "ImageLearnedPositionalEmbeddingConfig",
@@ -344,7 +344,7 @@ class InspectorSchemaTests(unittest.TestCase):
     def test_config_schema_serializes_value_defaults(self) -> None:
         linear_fields = _fields_by_key(config_schema("linears/linear"))
         adaptive_fields = _fields_by_key(config_schema("linears/linear_adaptive"))
-        vit_fields = _fields_by_key(config_schema("transformer_encoder/vit_linear"))
+        vit_fields = _fields_by_key(config_schema("vit/linear"))
 
         self.assertEqual(
             linear_fields["stack_hidden_dim"]["default"],
@@ -431,9 +431,8 @@ class InspectorSchemaTests(unittest.TestCase):
             "recurrent_halting_stack_hidden_dim",
             "recurrent_halting_stack_layer_norm_position",
             "recurrent_halting_stack_bias_flag",
-            "sampler_stack_independent_flag",
-            "sampler_stack_hidden_dim",
-            "sampler_stack_layer_norm_position",
+            "router_stack_hidden_dim",
+            "router_stack_layer_norm_position",
             "expert_gate_stack_independent_flag",
             "expert_gate_stack_hidden_dim",
             "expert_gate_stack_layer_norm_position",
@@ -458,13 +457,45 @@ class InspectorSchemaTests(unittest.TestCase):
         expected_by_model = {
             "experts/linear": experts_controller_stack_fields,
             "experts/linear_adaptive": experts_controller_stack_fields,
-            "neuron/neuron_linear": {
+            "neuron/linear": {
                 "gate_stack_hidden_dim",
                 "gate_stack_layer_norm_position",
                 "gate_stack_bias_flag",
                 "halting_stack_hidden_dim",
                 "halting_stack_layer_norm_position",
                 "halting_stack_bias_flag",
+                "cluster_halting_stack_hidden_dim",
+                "cluster_halting_stack_layer_norm_position",
+                "cluster_halting_stack_bias_flag",
+            },
+            "neuron/linear_adaptive": {
+                "gate_stack_hidden_dim",
+                "gate_stack_layer_norm_position",
+                "gate_stack_bias_flag",
+                "halting_stack_hidden_dim",
+                "halting_stack_layer_norm_position",
+                "halting_stack_bias_flag",
+                "memory_stack_hidden_dim",
+                "memory_stack_layer_norm_position",
+                "memory_stack_bias_flag",
+                "recurrent_gate_stack_hidden_dim",
+                "recurrent_gate_stack_layer_norm_position",
+                "recurrent_gate_stack_bias_flag",
+                "recurrent_halting_stack_hidden_dim",
+                "recurrent_halting_stack_layer_norm_position",
+                "recurrent_halting_stack_bias_flag",
+                "cluster_halting_stack_hidden_dim",
+                "cluster_halting_stack_layer_norm_position",
+                "cluster_halting_stack_bias_flag",
+            },
+            "neuron/expert_linear": {
+                *experts_controller_stack_fields,
+                "cluster_halting_stack_hidden_dim",
+                "cluster_halting_stack_layer_norm_position",
+                "cluster_halting_stack_bias_flag",
+            },
+            "neuron/expert_linear_adaptive": {
+                *experts_controller_stack_fields,
                 "cluster_halting_stack_hidden_dim",
                 "cluster_halting_stack_layer_norm_position",
                 "cluster_halting_stack_bias_flag",
@@ -527,26 +558,26 @@ class InspectorSchemaTests(unittest.TestCase):
                     "Router Options",
                 )
                 self.assertEqual(
-                    fields["sampler_stack_independent_flag"]["section"],
+                    fields["router_stack_hidden_dim"]["section"],
                     "Router Stack Options",
                 )
+                self.assertEqual(fields["router_stack_hidden_dim"]["default"], 32)
+                self.assertFalse(fields["router_stack_hidden_dim"]["nullable"])
                 self.assertEqual(
-                    fields["sampler_stack_independent_flag"]["type"],
-                    "bool",
+                    fields["router_stack_num_layers"]["default"],
+                    2,
                 )
-                self.assertFalse(fields["sampler_stack_independent_flag"]["default"])
+                self.assertFalse(fields["router_stack_num_layers"]["nullable"])
                 self.assertEqual(
-                    fields["sampler_stack_hidden_dim"]["section"],
+                    fields["router_bias_flag"]["section"],
                     "Router Stack Options",
                 )
-                self.assertIsNone(fields["sampler_stack_hidden_dim"]["default"])
-                self.assertTrue(fields["sampler_stack_hidden_dim"]["nullable"])
-                self.assertEqual(
-                    fields["sampler_bias_flag"]["section"],
-                    "Router Stack Options",
-                )
-                self.assertIsNone(fields["sampler_bias_flag"]["default"])
-                self.assertTrue(fields["sampler_bias_flag"]["nullable"])
+                self.assertTrue(fields["router_bias_flag"]["default"])
+                self.assertFalse(fields["router_bias_flag"]["nullable"])
+                self.assertNotIn("router_stack_independent_flag", fields)
+                self.assertNotIn("sampler_stack_independent_flag", fields)
+                self.assertNotIn("sampler_stack_hidden_dim", fields)
+                self.assertNotIn("sampler_bias_flag", fields)
 
     def test_experts_linear_adaptive_schema_exposes_router_controller_sections(
         self,

@@ -35,6 +35,7 @@ from emperor.base.options import (
 from emperor.linears.core.config import AdaptiveLinearLayerConfig, LinearLayerConfig
 from torch import nn
 
+import models.experts.linear.config as experts_linear_config
 from viewer.backend.inspector.checkpoint_shapes import (
     MAX_CHECKPOINT_GRAPH_SHAPE_BYTES,
     checkpoint_graph_shapes_from_state_dict,
@@ -809,11 +810,12 @@ class InspectorGraphTests(unittest.TestCase):
             2,
         )
         self.assertEqual(
-            checkpoint_shapes.config_overrides["sampler_stack_num_layers"],
+            checkpoint_shapes.config_overrides["router_stack_num_layers"],
             4,
         )
-        self.assertTrue(
-            checkpoint_shapes.config_overrides["sampler_stack_independent_flag"]
+        self.assertNotIn(
+            "router_stack_independent_flag",
+            checkpoint_shapes.config_overrides,
         )
         self.assertEqual(checkpoint_shapes.config_overrides["expert_num_experts"], 3)
 
@@ -1778,7 +1780,10 @@ class InspectorGraphTests(unittest.TestCase):
         for node in (expert_model, expert_stack_model):
             with self.subTest(node=node["id"]):
                 self.assertEqual(node["details"]["topK"], 2)
-                self.assertEqual(node["details"]["numExperts"], 4)
+                self.assertEqual(
+                    node["details"]["numExperts"],
+                    experts_linear_config.EXPERT_NUM_EXPERTS,
+                )
                 self.assertEqual(node["details"]["routingMode"], "LAYER")
 
     def test_inspect_experts_then_linear_keeps_linear_graph_identity(self) -> None:
@@ -1802,7 +1807,7 @@ class InspectorGraphTests(unittest.TestCase):
 
     def test_graph_serializer_reports_neuron_cluster_grid(self) -> None:
         result = inspect_model(
-            "neuron/neuron_linear",
+            "neuron/linear",
             "baseline",
             {
                 "cluster_x_axis_total_neurons": "3",
@@ -1829,7 +1834,7 @@ class InspectorGraphTests(unittest.TestCase):
         self.assertNotIn("recurrent", cluster_node["details"])
 
     def test_graph_serializer_reports_terminal_reachable_area(self) -> None:
-        result = inspect_model("neuron/neuron_linear", "baseline")
+        result = inspect_model("neuron/linear", "baseline")
         terminal_node = next(
             node for node in result["nodes"] if node["typeName"] == "Terminal"
         )
@@ -1846,6 +1851,20 @@ class InspectorGraphTests(unittest.TestCase):
         self.assertTrue(
             all(len(coordinate) == 3 for coordinate in reach["connections"])
         )
+
+    def test_graph_serializer_serializes_all_neuron_variants(self) -> None:
+        for model_name in (
+            "neuron/linear",
+            "neuron/linear_adaptive",
+            "neuron/expert_linear",
+            "neuron/expert_linear_adaptive",
+        ):
+            with self.subTest(model_name=model_name):
+                result = inspect_model(model_name, "baseline")
+                type_names = {node["typeName"] for node in result["nodes"]}
+
+                self.assertEqual(result["modelType"], "neuron")
+                self.assertIn("NeuronCluster", type_names)
 
     def test_graph_serializer_skips_uninitialized_lazy_parameters(self) -> None:
         nodes, _edges = serialize_graph(nn.Sequential(nn.LazyLinear(3)))
