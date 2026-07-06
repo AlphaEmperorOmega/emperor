@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import {
   type ConfigSearchOption,
+  type ConfigSection,
   controlledSectionState,
   deriveNestedConfigSections,
   disabledConfigFieldReasons,
@@ -166,35 +167,49 @@ export function FullConfigDialog({
   );
   const disabledSectionTitles = useMemo(() => {
     const titles = new Set<string>();
-    for (const section of visibleSections) {
-      const sourceSection = sectionsByTitle.get(section.title) ?? section;
-      const state = controlledSectionState(sourceSection, dialogOverrides);
+    for (const section of visibleRenderSections) {
+      const state = controlledSectionState(section, dialogOverrides);
       if (state.isControlled && !state.isEnabled) {
         titles.add(section.title);
       }
     }
     return titles;
-  }, [dialogOverrides, sectionsByTitle, visibleSections]);
+  }, [dialogOverrides, visibleRenderSections]);
+  const rootSectionTitleBySectionTitle = useMemo(() => {
+    const titleMap = new Map<string, string>();
+
+    function collect(section: ConfigSection, rootTitle: string) {
+      titleMap.set(section.title, rootTitle);
+      for (const child of section.children ?? []) {
+        collect(child, rootTitle);
+      }
+    }
+
+    for (const section of visibleRenderSections) {
+      collect(section, section.title);
+    }
+
+    return titleMap;
+  }, [visibleRenderSections]);
   const searchOpenKey = isSearchActive
     ? `${selectedFieldKey ?? ""}\u0000${searchQuery.trim()}`
     : "all";
   const defaultOpenSectionTitles = useMemo(() => {
     if (isSearchActive) {
-      return visibleSections.map((section) => section.title);
+      return visibleRenderSections.map((section) => section.title);
     }
     const titles = new Set<string>();
-    const firstSection = visibleSections[0];
+    const firstSection = visibleRenderSections[0];
     if (firstSection) {
       titles.add(firstSection.title);
     }
-    for (const section of visibleSections) {
-      const sourceSection = sectionsByTitle.get(section.title) ?? section;
-      if (modifiedCount(sourceSection.fields, dialogOverrides) > 0) {
+    for (const section of visibleRenderSections) {
+      if (modifiedCount(section.fields, dialogOverrides) > 0) {
         titles.add(section.title);
       }
     }
     return Array.from(titles);
-  }, [dialogOverrides, isSearchActive, sectionsByTitle, visibleSections]);
+  }, [dialogOverrides, isSearchActive, visibleRenderSections]);
   const {
     openSectionTitles,
     sectionRefs,
@@ -202,7 +217,7 @@ export function FullConfigDialog({
     setOpenSections,
     jumpToSection,
   } = useConfigDialogSections(
-    visibleSections,
+    visibleRenderSections,
     searchOpenKey,
     defaultOpenSectionTitles,
   );
@@ -217,10 +232,10 @@ export function FullConfigDialog({
   }, [disabledSectionTitles, openSectionTitles]);
   const enabledVisibleSections = useMemo(
     () =>
-      visibleSections.filter(
+      visibleRenderSections.filter(
         (section) => !disabledSectionTitles.has(section.title),
       ),
-    [disabledSectionTitles, visibleSections],
+    [disabledSectionTitles, visibleRenderSections],
   );
   const areAllEnabledSectionsOpen =
     enabledVisibleSections.length > 0 &&
@@ -346,7 +361,9 @@ export function FullConfigDialog({
   function handleSearchSelect(option: ConfigSearchOption) {
     setSearchQuery(option.label);
     setSelectedFieldKey(option.key);
-    jumpToSection(option.sectionTitle);
+    jumpToSection(
+      rootSectionTitleBySectionTitle.get(option.sectionTitle) ?? option.sectionTitle,
+    );
   }
 
   return (
@@ -584,7 +601,7 @@ export function FullConfigDialog({
               />
             </div>
             <SectionNavigation
-              sections={visibleSections}
+              sections={visibleRenderSections}
               overrides={dialogOverrides}
               openSectionTitles={effectiveOpenSectionTitles}
               disabledSectionTitles={disabledSectionTitles}
@@ -595,7 +612,7 @@ export function FullConfigDialog({
               onToggleAllSections={handleToggleAllSections}
             />
             <div className="grid auto-rows-max items-start gap-3">
-              {visibleSections.length > 0 ? (
+              {visibleRenderSections.length > 0 ? (
                 visibleRenderSections.map((section, index) => {
                   const sectionId = sectionElementId(index, section.title);
                   const sourceSection = sectionsByTitle.get(section.title) ?? section;

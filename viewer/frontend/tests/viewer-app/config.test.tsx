@@ -1866,14 +1866,24 @@ describe("ViewerApp Full Config", () => {
 
     expect(
       within(sectionNav).getByRole("button", {
+        name: /jump to gate options/i,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(sectionNav).queryByRole("button", {
+        name: /jump to gate stack options/i,
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(sectionNav).getByRole("button", {
         name: /jump to recurrent gate options/i,
       }),
     ).toBeInTheDocument();
     expect(
-      within(sectionNav).getByRole("button", {
+      within(sectionNav).queryByRole("button", {
         name: /jump to recurrent gate stack options/i,
       }),
-    ).toBeInTheDocument();
+    ).not.toBeInTheDocument();
     expect(gateAccordion).toBeDisabled();
     expect(recurrentGateAccordion).toBeDisabled();
     expect(within(dialog).queryByLabelText(/^gate option$/i))
@@ -2030,24 +2040,39 @@ describe("ViewerApp Full Config", () => {
 
     expect(
       within(sectionNav).getByRole("button", {
+        name: /jump to halting options/i,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(sectionNav).getByRole("button", {
+        name: /jump to memory options/i,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(sectionNav).getByRole("button", {
+        name: /jump to recurrent layer options/i,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(sectionNav).queryByRole("button", {
         name: /jump to halting stack options/i,
       }),
-    ).toBeInTheDocument();
+    ).not.toBeInTheDocument();
     expect(
-      within(sectionNav).getByRole("button", {
+      within(sectionNav).queryByRole("button", {
         name: /jump to memory stack options/i,
       }),
-    ).toBeInTheDocument();
+    ).not.toBeInTheDocument();
     expect(
-      within(sectionNav).getByRole("button", {
+      within(sectionNav).queryByRole("button", {
         name: /jump to recurrent gate stack options/i,
       }),
-    ).toBeInTheDocument();
+    ).not.toBeInTheDocument();
     expect(
-      within(sectionNav).getByRole("button", {
+      within(sectionNav).queryByRole("button", {
         name: /jump to recurrent halting options/i,
       }),
-    ).toBeInTheDocument();
+    ).not.toBeInTheDocument();
 
     await user.click(within(dialog).getByRole("switch", { name: /halting flag/i }));
     await user.click(within(dialog).getByRole("switch", { name: /memory flag/i }));
@@ -2266,14 +2291,19 @@ describe("ViewerApp Full Config", () => {
 
     expect(
       within(sectionNav).getByRole("button", {
-        name: /jump to router options/i,
+        name: /jump to sampler model options/i,
       }),
     ).toBeInTheDocument();
     expect(
-      within(sectionNav).getByRole("button", {
+      within(sectionNav).queryByRole("button", {
+        name: /jump to router options/i,
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(sectionNav).queryByRole("button", {
         name: /jump to router stack options/i,
       }),
-    ).toBeInTheDocument();
+    ).not.toBeInTheDocument();
 
     const samplerAccordion = within(dialog).getByRole("button", {
       name: /sampler model options section, 7 fields, 0 overrides/i,
@@ -2432,10 +2462,10 @@ describe("ViewerApp Full Config", () => {
       }),
     ).toBeInTheDocument();
     expect(
-      within(sectionNav).getByRole("button", {
+      within(sectionNav).queryByRole("button", {
         name: /jump to expert stack options/i,
       }),
-    ).toBeInTheDocument();
+    ).not.toBeInTheDocument();
 
     const mixtureAccordion = within(dialog).getByRole("button", {
       name: /mixture of experts model options section, 6 fields, 0 overrides/i,
@@ -2612,11 +2642,29 @@ describe("ViewerApp Full Config", () => {
     const user = userEvent.setup();
 
     const dialog = await openFullConfig(user);
+    const sectionNav = within(dialog).getByRole("navigation", {
+      name: /full config sections/i,
+    });
     const search = within(dialog).getByRole("combobox", {
       name: /search config fields/i,
     });
 
     await user.type(search, "recurrent gate stack hidden");
+    expect(
+      within(sectionNav).getByRole("button", {
+        name: /jump to recurrent layer options/i,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(sectionNav).queryByRole("button", {
+        name: /jump to recurrent gate options/i,
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(sectionNav).queryByRole("button", {
+        name: /jump to recurrent gate stack options/i,
+      }),
+    ).not.toBeInTheDocument();
     let searchPopup = fullConfigSearchPopup(dialog);
     let recurrentGateRow = fullConfigSearchResultRow(
       searchPopup,
@@ -2679,6 +2727,7 @@ describe("ViewerApp Full Config", () => {
       fullConfigSearchPopup(dialog),
       /recurrent gate stack hidden dim/i,
     );
+    scrollIntoViewMock.mockClear();
     await user.click(
       within(recurrentGateRow).getByRole("button", {
         name: /recurrent gate stack hidden dim/i,
@@ -2686,6 +2735,10 @@ describe("ViewerApp Full Config", () => {
     );
 
     expect(search).toHaveValue("recurrent gate stack hidden dim");
+    expect(scrollIntoViewMock).toHaveBeenCalledWith({
+      block: "start",
+      behavior: "smooth",
+    });
     expect(
       within(dialog).getByRole("button", {
         name: /recurrent layer options section, 3 fields, 2 overrides/i,
