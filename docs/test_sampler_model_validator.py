@@ -12,6 +12,7 @@ from emperor.linears.core.config import LinearLayerConfig
 from emperor.sampler.model import SamplerModel
 from emperor.sampler.core.config import RouterConfig, SamplerConfig
 from emperor.sampler.core.variants import SamplerFull, SamplerSparse, SamplerTopk
+from docs.test_routers import ConstantRouterConfig
 
 
 class TestSamplerModelValidator(unittest.TestCase):
@@ -81,6 +82,21 @@ class TestSamplerModelValidator(unittest.TestCase):
         model = SamplerModel(cfg)
 
         self.assertIsNotNone(model.router)
+
+    def test_accepts_router_config_with_config_base_model_config(self):
+        router_config = self.router_config(input_dim=6)
+        router_config.model_config = ConstantRouterConfig(input_dim=6, output_dim=4)
+        cfg = self.sampler_config(router_config=router_config)
+        model = SamplerModel(cfg)
+
+        probabilities, indices, skip_mask, loss = (
+            model.sample_probabilities_and_indices(torch.randn(3, 6))
+        )
+
+        self.assertEqual(probabilities.shape, (3, 2))
+        self.assertEqual(indices.shape, (3, 2))
+        self.assertIsNone(skip_mask)
+        self.assertIsInstance(loss, torch.Tensor)
 
     def test_sample_probabilities_and_indices_runs_with_router(self):
         cases = [

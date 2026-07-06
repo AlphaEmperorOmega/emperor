@@ -1,7 +1,6 @@
 import copy
 
 from dataclasses import dataclass
-from emperor.base.layer import LayerStackConfig
 from emperor.base.utils import ConfigBase, optional_field
 
 from typing import TYPE_CHECKING
@@ -17,7 +16,7 @@ class RouterConfig(ConfigBase):
     noisy_topk_flag: bool | None = optional_field(
         "When True, the router emits an additional noise scale per expert."
     )
-    model_config: "LayerStackConfig | None" = optional_field(
+    model_config: "ConfigBase | None" = optional_field(
         "Internal router network config."
     )
 

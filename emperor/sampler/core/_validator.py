@@ -96,11 +96,11 @@ class RouterModelValidator(ValidatorBase):
 
     @staticmethod
     def validate_model_config(model_config: object) -> None:
-        from emperor.base.layer import LayerStackConfig
+        from emperor.base.utils import ConfigBase
 
-        if not isinstance(model_config, LayerStackConfig):
+        if not isinstance(model_config, ConfigBase):
             raise TypeError(
-                "model_config must be a LayerStackConfig for RouterConfig, "
+                "model_config must be a ConfigBase for RouterConfig, "
                 f"got {type(model_config).__name__}."
             )
 
