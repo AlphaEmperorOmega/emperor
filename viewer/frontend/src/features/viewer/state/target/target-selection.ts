@@ -1,6 +1,7 @@
 import { type ConfigField, type Dataset, type Preset } from "@/lib/api";
 import {
-  normalizeConfigFieldForDisplay,
+  configSectionsFields,
+  groupConfigFieldsBySectionPath,
   presetOwnedCount,
   type ConfigSection,
   type OverrideValues,
@@ -48,16 +49,8 @@ export function deriveTargetSelectionState(
     (preset) => preset.name === input.selectedPreset,
   );
 
-  const groups = new Map<string, ConfigField[]>();
-  for (const field of input.schemaFields ?? []) {
-    const displayField = normalizeConfigFieldForDisplay(field);
-    groups.set(displayField.section, [
-      ...(groups.get(displayField.section) ?? []),
-      displayField,
-    ]);
-  }
-  const configSections = Array.from(groups, ([title, fields]) => ({ title, fields }));
-  const configFields = configSections.flatMap((section) => section.fields);
+  const configSections = groupConfigFieldsBySectionPath(input.schemaFields ?? []);
+  const configFields = configSectionsFields(configSections);
   const modelConfigSnapshots = input.configSnapshots.filter(
     (snapshot) =>
       snapshot.modelType === input.selectedModelType &&
@@ -78,13 +71,10 @@ export function deriveTargetSelectionState(
     input.selectedTrainingPresets,
   );
   const presetOwnedFieldCount = configSections.reduce(
-    (total, section) => total + presetOwnedCount(section.fields),
+    (total, section) => total + presetOwnedCount(configSectionsFields([section])),
     0,
   );
-  const fieldCount = configSections.reduce(
-    (total, section) => total + section.fields.length,
-    0,
-  );
+  const fieldCount = configFields.length;
 
   return {
     datasetNames,

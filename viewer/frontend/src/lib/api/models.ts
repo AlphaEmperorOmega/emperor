@@ -21,6 +21,12 @@ export const datasetSchema = z.object({
   outputDim: z.number(),
 });
 
+export const datasetGroupSchema = z.object({
+  experimentTask: z.string(),
+  label: z.string(),
+  datasets: z.array(datasetSchema),
+});
+
 export const monitorOptionSchema = z.object({
   name: z.string(),
   label: z.string(),
@@ -35,6 +41,7 @@ export const configFieldSchema = z.object({
   flag: z.string(),
   label: z.string(),
   section: z.string(),
+  sectionPath: z.array(z.string()).min(1),
   description: z.string().default(""),
   type: z.string(),
   default: configValueSchema,
@@ -69,7 +76,8 @@ const presetsSchema = z.object({
 const datasetsSchema = z.object({
   modelType: z.string(),
   model: z.string(),
-  datasets: z.array(datasetSchema),
+  defaultExperimentTask: z.string(),
+  datasetGroups: z.array(datasetGroupSchema),
 });
 const monitorsSchema = z.object({
   modelType: z.string(),
@@ -91,6 +99,7 @@ const searchSpaceSchema = z.object({
 export type ModelIdentity = z.infer<typeof modelIdentitySchema>;
 export type Preset = z.infer<typeof presetSchema>;
 export type Dataset = z.infer<typeof datasetSchema>;
+export type DatasetGroup = z.infer<typeof datasetGroupSchema>;
 export type MonitorOption = z.infer<typeof monitorOptionSchema>;
 export type ConfigField = Omit<
   z.infer<typeof configFieldSchema>,

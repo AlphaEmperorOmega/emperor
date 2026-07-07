@@ -1,6 +1,7 @@
 import { type LogRun, type LogRunTags } from "@/lib/api";
 import {
   filterHistoricalRuns,
+  filterLogRunsByExperimentTask,
   historicalDatasetOptions as buildHistoricalDatasetOptions,
   historicalExperimentRunOptions,
   historicalPresetOptions as buildHistoricalPresetOptions,
@@ -18,6 +19,7 @@ export type DatasetSelectionInput = {
   includeRunsWithoutMonitorTags?: boolean;
   selectedModelType?: string;
   selectedModel: string;
+  selectedExperimentTask?: string;
   selectedHistoricalExperimentFilter?: string;
   selectedHistoricalDatasetFilter?: string;
   selectedHistoricalPreset: string;
@@ -86,10 +88,13 @@ export function deriveDatasetSelectionState(
   const selectedHistoricalDatasetFilter =
     input.selectedHistoricalDatasetFilter ?? "";
   const modelLogRuns = sortLogRunsNewestFirst(
-    (input.logRuns ?? []).filter(
-      (run) =>
-        run.model === input.selectedModel &&
-        (!input.selectedModelType || run.modelType === input.selectedModelType),
+    filterLogRunsByExperimentTask(
+      (input.logRuns ?? []).filter(
+        (run) =>
+          run.model === input.selectedModel &&
+          (!input.selectedModelType || run.modelType === input.selectedModelType),
+      ),
+      input.selectedExperimentTask ?? "",
     ),
   );
   const modelRunTagsByRunId = tagsByRunId(input.modelRunTags);

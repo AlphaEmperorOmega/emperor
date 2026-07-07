@@ -37,6 +37,8 @@ export function TargetPresetPanel({
     selectedPreset,
     selectedSnapshotId,
     selectedConfigSnapshot,
+    selectedExperimentTask,
+    experimentTaskOptions,
     configSnapshotsEnabled,
     isSchemaReady,
     selectedDatasets,
@@ -49,6 +51,7 @@ export function TargetPresetPanel({
     selectModel: onSelectModel,
     selectPreset: onSelectPreset,
     selectSnapshot: onSelectSnapshot,
+    selectExperimentTask: onSelectExperimentTask,
     preparePresetSnapshotDraft,
     prepareSelectedSnapshotEdit,
     models,
@@ -70,6 +73,7 @@ export function TargetPresetPanel({
     useState<TrainingCommandMode | null>(null);
   const [includeAllMonitors, setIncludeAllMonitors] = useState(false);
   const presetSelectId = "target-preset-select";
+  const experimentTaskSelectId = "target-experiment-task-select";
   const snapshotSelectId = "target-snapshot-select";
   const experimentSelectId = "target-experiment-select";
   const experimentDatasetSelectId = "target-experiment-dataset-select";
@@ -133,6 +137,7 @@ export function TargetPresetPanel({
             modelType: selectedModelType,
             model: selectedModel,
             preset: commandPreset,
+            experimentTask: selectedExperimentTask,
             datasets: selectedDatasets,
             monitors: includeAllMonitors ? targetMonitorNames : undefined,
             sections: configSections,
@@ -145,6 +150,7 @@ export function TargetPresetPanel({
       configSections,
       includeAllMonitors,
       selectedDatasets,
+      selectedExperimentTask,
       selectedModel,
       selectedModelType,
       targetMonitorNames,
@@ -200,16 +206,19 @@ export function TargetPresetPanel({
         selectedHistoricalExperimentFilter={selectedHistoricalExperimentFilter}
         selectedHistoricalDatasetFilter={selectedHistoricalDatasetFilter}
         selectedHistoricalPreset={selectedHistoricalPreset}
+        selectedExperimentTask={selectedExperimentTask}
         configSnapshotsEnabled={configSnapshotsEnabled}
         isSchemaReady={isSchemaReady}
         modelTypeOptions={modelTypeOptions}
         modelOptions={modelOptions}
         presetOptions={presetOptions}
         snapshotOptions={snapshotOptions}
+        experimentTaskOptions={experimentTaskOptions}
         experimentOptions={experimentOptions}
         experimentDatasetOptions={experimentDatasetOptions}
         experimentPresetOptions={experimentPresetOptions}
         presetSelectId={presetSelectId}
+        experimentTaskSelectId={experimentTaskSelectId}
         snapshotSelectId={snapshotSelectId}
         experimentSelectId={experimentSelectId}
         experimentDatasetSelectId={experimentDatasetSelectId}
@@ -223,6 +232,7 @@ export function TargetPresetPanel({
         onActivateExperimentMode={activateTargetExperimentMode}
         onSelectPreset={onSelectPreset}
         onSelectSnapshot={onSelectSnapshot}
+        onSelectExperimentTask={onSelectExperimentTask}
         onSelectHistoricalExperimentFilter={setSelectedHistoricalExperimentFilter}
         onSelectHistoricalDatasetFilter={setSelectedHistoricalDatasetFilter}
         onSelectHistoricalPreset={setSelectedHistoricalPreset}

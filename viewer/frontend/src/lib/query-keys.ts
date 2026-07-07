@@ -21,6 +21,7 @@ export type TrainingRunPlanQueryKeyInput = {
   model: string;
   preset: string;
   presets: StringList;
+  experimentTask?: string;
   datasets: StringList;
   overrides: OverrideValues;
   logFolder: string;
@@ -66,6 +67,7 @@ function trainingRunPlanInputKey({
   modelType,
   preset,
   presets,
+  experimentTask = "",
   datasets,
   overrides,
   logFolder,
@@ -82,6 +84,7 @@ function trainingRunPlanInputKey({
     overrides: normalizedQueryValue(overrides),
     preset,
     presets: [...presets],
+    experimentTask,
     search: normalizedQueryValue(search ?? null),
     submittedRunPlan: normalizedQueryValue(submittedRunPlan ?? null),
   };

@@ -144,14 +144,14 @@ describe("shared API value schemas", () => {
   it("accepts only primitive config override values", () => {
     expect(
       configOverridesSchema.parse({
-        stack_hidden_dim: 128,
+        hidden_dim: 128,
         learning_rate: 0.01,
         use_bias: true,
         activation: "RELU",
         optional_layer: null,
       }),
     ).toEqual({
-      stack_hidden_dim: 128,
+      hidden_dim: 128,
       learning_rate: 0.01,
       use_bias: true,
       activation: "RELU",
@@ -306,12 +306,19 @@ const successfulPresetResponse = {
 const successfulDatasetResponse = {
   modelType: "linears",
   model: "linear",
-  datasets: [
+  defaultExperimentTask: "image-classification",
+  datasetGroups: [
     {
-      name: "Mnist",
-      label: "MNIST",
-      inputDim: 784,
-      outputDim: 10,
+      experimentTask: "image-classification",
+      label: "Image Classification",
+      datasets: [
+        {
+          name: "Mnist",
+          label: "MNIST",
+          inputDim: 784,
+          outputDim: 10,
+        },
+      ],
     },
   ],
 };
@@ -347,6 +354,7 @@ const successfulConfigSchemaResponse = {
       flag: "--learning-rate",
       label: "Learning rate",
       section: "Optimisation",
+      sectionPath: ["Optimisation"],
       type: "float",
       default: 0.01,
       nullable: false,
@@ -361,6 +369,7 @@ const successfulConfigSchemaResponse = {
       flag: "--checkpoint",
       label: "Checkpoint",
       section: "Runtime",
+      sectionPath: ["Runtime"],
       type: "str",
       default: null,
       nullable: true,
@@ -378,9 +387,9 @@ const successfulSearchSpaceResponse = {
   preset: "baseline",
   axes: [
     {
-      key: "stack_hidden_dim",
-      configKey: "STACK_HIDDEN_DIM",
-      searchKey: "SEARCH_SPACE_STACK_HIDDEN_DIM",
+      key: "hidden_dim",
+      configKey: "HIDDEN_DIM",
+      searchKey: "SEARCH_SPACE_HIDDEN_DIM",
       label: "Hidden dimension",
       section: "Layer Stack Options",
       type: "int",
@@ -464,7 +473,7 @@ const successfulTrainingRunFixture = {
       source: "override",
     },
     {
-      key: "stack_hidden_dim",
+      key: "hidden_dim",
       label: "Hidden dimension",
       value: 128,
       source: "search",
@@ -502,7 +511,7 @@ const successfulTrainingRunPlanFixture = {
   search: {
     mode: "grid",
     values: {
-      stack_hidden_dim: [64, 128],
+      hidden_dim: [64, 128],
       use_bias: [true, false],
       activation: ["relu"],
     },
@@ -540,7 +549,7 @@ const successfulTrainingJobFixture = {
   search: {
     mode: "grid",
     values: {
-      stack_hidden_dim: [64, 128],
+      hidden_dim: [64, 128],
       use_bias: [true, false],
     },
     randomSamples: null,
@@ -855,7 +864,8 @@ describe("successful API fixtures", () => {
       fetchDatasets(linearIdentity),
     );
 
-    expect(result.datasets[0]).toMatchObject({
+    expect(result.defaultExperimentTask).toBe("image-classification");
+    expect(result.datasetGroups[0]?.datasets[0]).toMatchObject({
       name: "Mnist",
       inputDim: 784,
       outputDim: 10,
@@ -1772,9 +1782,9 @@ describe("URL and query construction", () => {
             preset: "baseline",
             axes: [
               {
-                key: "stack_hidden_dim",
-                configKey: "STACK_HIDDEN_DIM",
-                searchKey: "SEARCH_SPACE_STACK_HIDDEN_DIM",
+                key: "hidden_dim",
+                configKey: "HIDDEN_DIM",
+                searchKey: "SEARCH_SPACE_HIDDEN_DIM",
                 label: "hidden dim",
                 section: "Layer Stack Options",
                 type: "int",
@@ -1797,7 +1807,7 @@ describe("URL and query construction", () => {
       `${BASE}/models/linears/linear/search-space?preset=baseline%2Fpreset&presets=baseline%2Fpreset%2Cpost-norm`,
     );
     expect(result.axes[0]).toMatchObject({
-      key: "stack_hidden_dim",
+      key: "hidden_dim",
       values: [64, 128],
     });
   });

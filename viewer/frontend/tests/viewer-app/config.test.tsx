@@ -114,15 +114,24 @@ function expectHeaderControlBeforeMetric(
   controlLabel: string,
   metricLabel: string,
 ) {
-  const switchControl = within(section).getByRole("switch", {
-    name: controlLabel,
-  });
-  const headerControl = switchControl.closest("[data-config-section-header-control]");
-  const metric = within(section).getByLabelText(metricLabel);
+  const headerControl = Array.from(
+    section.querySelectorAll<HTMLElement>("[data-config-section-header-control]"),
+  ).find((candidate) => candidate.closest("section") === section);
 
   if (!(headerControl instanceof HTMLElement)) {
     throw new Error(`Expected ${controlLabel} header control to render`);
   }
+
+  const switchControl = within(headerControl).getByRole("switch", {
+    name: controlLabel,
+  });
+  const headerActions = headerControl?.parentElement;
+
+  if (!(headerActions instanceof HTMLElement)) {
+    throw new Error(`Expected ${controlLabel} header actions to render`);
+  }
+
+  const metric = within(headerActions).getByLabelText(metricLabel);
 
   expect(switchControl).toBeInTheDocument();
   expect(headerControl).toContainElement(switchControl);
@@ -134,14 +143,16 @@ function expectHeaderControlBeforeMetric(
   ).toBe(true);
 }
 
-function stackHintBadgeFor(section: HTMLElement) {
-  const badge = section.querySelector("[data-config-section-stack-hint]");
+function sectionHeaderSwitchFor(section: HTMLElement, controlLabel: string | RegExp) {
+  const headerControl = Array.from(
+    section.querySelectorAll<HTMLElement>("[data-config-section-header-control]"),
+  ).find((candidate) => candidate.closest("section") === section);
 
-  if (!(badge instanceof HTMLElement)) {
-    throw new Error("Expected section stack inheritance hint to render");
+  if (!(headerControl instanceof HTMLElement)) {
+    throw new Error(`Expected ${String(controlLabel)} header control to render`);
   }
 
-  return badge;
+  return within(headerControl).getByRole("switch", { name: controlLabel });
 }
 
 function expectNoHeaderControlInAccordionBody(
@@ -184,12 +195,86 @@ function expectBooleanSegmentedControl(container: HTMLElement, name: string | Re
 type ConfigFieldFixture = Partial<ConfigField> &
   Pick<ConfigField, "key" | "section" | "type" | "default">;
 
+const FIXTURE_SECTION_PATHS_BY_TITLE = new Map<string, string[]>([
+  ["Gate Stack Options", ["Gate Options", "Gate Stack Options"]],
+  ["Halting Stack Options", ["Halting Options", "Halting Stack Options"]],
+  ["Memory Stack Options", ["Memory Options", "Memory Stack Options"]],
+  ["Recurrent Gate Options", ["Recurrent Layer Options", "Recurrent Gate Options"]],
+  [
+    "Recurrent Gate Stack Options",
+    ["Recurrent Layer Options", "Recurrent Gate Options", "Recurrent Gate Stack Options"],
+  ],
+  [
+    "Recurrent Halting Options",
+    ["Recurrent Layer Options", "Recurrent Halting Options"],
+  ],
+  [
+    "Recurrent Halting Stack Options",
+    [
+      "Recurrent Layer Options",
+      "Recurrent Halting Options",
+      "Recurrent Halting Stack Options",
+    ],
+  ],
+  [
+    "Expert Stack Options",
+    ["Mixture Of Experts Model Options", "Expert Stack Options"],
+  ],
+  [
+    "Expert Gate Options",
+    ["Mixture Of Experts Model Options", "Expert Gate Options"],
+  ],
+  [
+    "Expert Gate Stack Options",
+    ["Mixture Of Experts Model Options", "Expert Gate Options", "Expert Gate Stack Options"],
+  ],
+  [
+    "Router Options",
+    ["Sampler Model Options", "Router Options"],
+  ],
+  [
+    "Router Stack Options",
+    ["Sampler Model Options", "Router Options", "Router Stack Options"],
+  ],
+  [
+    "Router Gate Options",
+    ["Sampler Model Options", "Router Options", "Router Gate Options"],
+  ],
+  [
+    "Router Gate Stack Options",
+    ["Sampler Model Options", "Router Options", "Router Gate Options", "Router Gate Stack Options"],
+  ],
+  [
+    "Weight Generator Stack Options",
+    ["Weight Generator Options", "Weight Generator Stack Options"],
+  ],
+  ["Mask Stack Options", ["Mask Options", "Mask Stack Options"]],
+  [
+    "Router Weight Generator Options",
+    ["Sampler Model Options", "Router Options", "Router Weight Generator Options"],
+  ],
+  [
+    "Router Weight Generator Stack Options",
+    [
+      "Sampler Model Options",
+      "Router Options",
+      "Router Weight Generator Options",
+      "Router Weight Generator Stack Options",
+    ],
+  ],
+]);
+
+function fixtureSectionPath(section: string) {
+  return FIXTURE_SECTION_PATHS_BY_TITLE.get(section) ?? [section || "General"];
+}
+
 function configFixtureField({
   key,
   configKey,
   flag,
   label,
   section,
+  sectionPath,
   description,
   type,
   default: defaultValue,
@@ -205,6 +290,7 @@ function configFixtureField({
     flag: flag ?? `--${key.replace(/_/g, "-")}`,
     label: label ?? key.replace(/_/g, " "),
     section,
+    sectionPath: sectionPath ?? fixtureSectionPath(section),
     description: description ?? "",
     type,
     default: defaultValue,
@@ -218,7 +304,7 @@ function configFixtureField({
 
 const canonicalStackFixtureFields = [
   configFixtureField({
-    key: "stack_hidden_dim",
+    key: "hidden_dim",
     section: "Layer Stack Options",
     type: "int",
     default: 256,
@@ -263,6 +349,13 @@ function stackFixtureField(
   overrides: Partial<ConfigField> & Pick<ConfigField, "key" | "section" | "default">,
 ): ConfigField {
   const suffix = overrides.key.split("_stack_", 2)[1];
+  if (suffix === "hidden_dim") {
+    return configFixtureField({
+      ...overrides,
+      type: "int",
+      choices: [],
+    });
+  }
   const canonical = canonicalStackFixtureFields.find(
     (field) => field.key === `stack_${suffix}`,
   );
@@ -283,7 +376,7 @@ function nestedControlledSchemaResponse() {
     ...schemaResponse,
     fields: [
       ...schemaResponse.fields,
-      {
+      configFixtureField({
         key: "halting_flag",
         configKey: "HALTING_FLAG",
         flag: "--halting-flag",
@@ -293,8 +386,8 @@ function nestedControlledSchemaResponse() {
         default: false,
         nullable: false,
         choices: [true, false],
-      },
-      {
+      }),
+      configFixtureField({
         key: "halting_threshold",
         configKey: "HALTING_THRESHOLD",
         flag: "--halting-threshold",
@@ -304,7 +397,7 @@ function nestedControlledSchemaResponse() {
         default: 0.99,
         nullable: false,
         choices: [],
-      },
+      }),
       stackFixtureField({
         key: "halting_stack_num_layers",
         section: "Halting Stack Options",
@@ -323,7 +416,7 @@ function nestedControlledSchemaResponse() {
         default: "BEFORE",
         nullable: false,
       }),
-      {
+      configFixtureField({
         key: "memory_flag",
         configKey: "MEMORY_FLAG",
         flag: "--memory-flag",
@@ -333,8 +426,8 @@ function nestedControlledSchemaResponse() {
         default: false,
         nullable: false,
         choices: [true, false],
-      },
-      {
+      }),
+      configFixtureField({
         key: "memory_option",
         configKey: "MEMORY_OPTION",
         flag: "--memory-option",
@@ -347,8 +440,8 @@ function nestedControlledSchemaResponse() {
           "GatedResidualDynamicMemoryConfig",
           "WeightedDynamicMemoryConfig",
         ],
-      },
-      {
+      }),
+      configFixtureField({
         key: "memory_position_option",
         configKey: "MEMORY_POSITION_OPTION",
         flag: "--memory-position-option",
@@ -358,8 +451,8 @@ function nestedControlledSchemaResponse() {
         default: "AFTER_AFFINE",
         nullable: false,
         choices: ["BEFORE_AFFINE", "AFTER_AFFINE"],
-      },
-      {
+      }),
+      configFixtureField({
         key: "memory_test_time_training_learning_rate",
         configKey: "MEMORY_TEST_TIME_TRAINING_LEARNING_RATE",
         flag: "--memory-test-time-training-learning-rate",
@@ -369,7 +462,7 @@ function nestedControlledSchemaResponse() {
         default: null,
         nullable: true,
         choices: [],
-      },
+      }),
       stackFixtureField({
         key: "memory_stack_hidden_dim",
         section: "Memory Stack Options",
@@ -394,7 +487,7 @@ function nestedControlledSchemaResponse() {
         default: "GELU",
         nullable: false,
       }),
-      {
+      configFixtureField({
         key: "memory_stack_dropout_probability",
         configKey: "MEMORY_STACK_DROPOUT_PROBABILITY",
         flag: "--memory-stack-dropout-probability",
@@ -404,8 +497,8 @@ function nestedControlledSchemaResponse() {
         default: 0,
         nullable: false,
         choices: [],
-      },
-      {
+      }),
+      configFixtureField({
         key: "recurrent_flag",
         configKey: "RECURRENT_FLAG",
         flag: "--recurrent-flag",
@@ -415,8 +508,8 @@ function nestedControlledSchemaResponse() {
         default: false,
         nullable: false,
         choices: [true, false],
-      },
-      {
+      }),
+      configFixtureField({
         key: "recurrent_max_steps",
         configKey: "RECURRENT_MAX_STEPS",
         flag: "--recurrent-max-steps",
@@ -426,8 +519,8 @@ function nestedControlledSchemaResponse() {
         default: 4,
         nullable: false,
         choices: [],
-      },
-      {
+      }),
+      configFixtureField({
         key: "recurrent_gate_flag",
         configKey: "RECURRENT_GATE_FLAG",
         flag: "--recurrent-gate-flag",
@@ -437,14 +530,14 @@ function nestedControlledSchemaResponse() {
         default: false,
         nullable: false,
         choices: [true, false],
-      },
+      }),
       stackFixtureField({
         key: "recurrent_gate_stack_hidden_dim",
         section: "Recurrent Gate Stack Options",
         default: 128,
         nullable: false,
       }),
-      {
+      configFixtureField({
         key: "recurrent_halting_flag",
         configKey: "RECURRENT_HALTING_FLAG",
         flag: "--recurrent-halting-flag",
@@ -454,8 +547,8 @@ function nestedControlledSchemaResponse() {
         default: false,
         nullable: false,
         choices: [true, false],
-      },
-      {
+      }),
+      configFixtureField({
         key: "recurrent_halting_threshold",
         configKey: "RECURRENT_HALTING_THRESHOLD",
         flag: "--recurrent-halting-threshold",
@@ -465,7 +558,7 @@ function nestedControlledSchemaResponse() {
         default: 0.95,
         nullable: false,
         choices: [],
-      },
+      }),
       stackFixtureField({
         key: "recurrent_halting_stack_num_layers",
         section: "Recurrent Halting Stack Options",
@@ -682,7 +775,7 @@ function gateOptionSchemaResponse() {
     ...schemaResponse,
     fields: [
       ...schemaResponse.fields,
-      {
+      configFixtureField({
         key: "gate_option",
         configKey: "GATE_OPTION",
         flag: "--gate-option",
@@ -692,8 +785,8 @@ function gateOptionSchemaResponse() {
         default: "MULTIPLIER",
         nullable: true,
         choices: ["MULTIPLIER", "ADDITION"],
-      },
-      {
+      }),
+      configFixtureField({
         key: "gate_activation",
         configKey: "GATE_ACTIVATION",
         flag: "--gate-activation",
@@ -703,7 +796,7 @@ function gateOptionSchemaResponse() {
         default: "SIGMOID",
         nullable: true,
         choices: ["None", "SIGMOID", "TANH"],
-      },
+      }),
       stackFixtureField({
         key: "gate_stack_hidden_dim",
         section: "Gate Stack Options",
@@ -728,7 +821,7 @@ function gateOptionSchemaResponse() {
         default: 2,
         nullable: false,
       }),
-      {
+      configFixtureField({
         key: "recurrent_gate_flag",
         configKey: "RECURRENT_GATE_FLAG",
         flag: "--recurrent-gate-flag",
@@ -738,8 +831,8 @@ function gateOptionSchemaResponse() {
         default: false,
         nullable: false,
         choices: [true, false],
-      },
-      {
+      }),
+      configFixtureField({
         key: "recurrent_gate_option",
         configKey: "RECURRENT_GATE_OPTION",
         flag: "--recurrent-gate-option",
@@ -749,8 +842,8 @@ function gateOptionSchemaResponse() {
         default: "MULTIPLIER",
         nullable: true,
         choices: ["MULTIPLIER", "ADDITION"],
-      },
-      {
+      }),
+      configFixtureField({
         key: "recurrent_gate_activation",
         configKey: "RECURRENT_GATE_ACTIVATION",
         flag: "--recurrent-gate-activation",
@@ -760,7 +853,7 @@ function gateOptionSchemaResponse() {
         default: "SIGMOID",
         nullable: true,
         choices: ["None", "SIGMOID", "TANH"],
-      },
+      }),
       stackFixtureField({
         key: "recurrent_gate_stack_hidden_dim",
         section: "Recurrent Gate Stack Options",
@@ -796,7 +889,7 @@ function adaptiveComponentSchemaResponse() {
     type: "bool" | "class" | "int",
     defaultValue: boolean | string | number | null,
     choices: Array<boolean | string> = [],
-  ) => ({
+  ) => configFixtureField({
     key,
     configKey: key.toUpperCase(),
     flag: `--${key.replace(/_/g, "-")}`,
@@ -878,14 +971,14 @@ function adaptiveComponentSchemaResponse() {
   };
 }
 
-function boundaryProjectorSchemaResponse() {
+function boundaryModelSchemaResponse() {
   const boundaryField = (
     key: string,
     section: string,
     type: "bool" | "class" | "float" | "int",
     defaultValue: boolean | string | number | null,
     choices: Array<boolean | string> = [],
-  ) => ({
+  ) => configFixtureField({
     key,
     configKey: key.toUpperCase(),
     flag: `--${key.replace(/_/g, "-")}`,
@@ -903,68 +996,68 @@ function boundaryProjectorSchemaResponse() {
       ...schemaResponse.fields,
       boundaryField(
         "input_layer_weight_option",
-        "Input Boundary Projector Options",
+        "Input Boundary Model Options",
         "class",
         null,
         ["DualModelDynamicWeightConfig"],
       ),
       boundaryField(
         "input_layer_weight_decay_warmup_batches",
-        "Input Boundary Projector Options",
+        "Input Boundary Model Options",
         "int",
         0,
       ),
       boundaryField(
         "input_layer_weight_decay_rate",
-        "Input Boundary Projector Options",
+        "Input Boundary Model Options",
         "float",
         0,
       ),
       boundaryField(
         "input_layer_bias_option",
-        "Input Boundary Projector Options",
+        "Input Boundary Model Options",
         "class",
         null,
         ["AdditiveDynamicBiasConfig"],
       ),
       boundaryField(
         "input_layer_diagonal_option",
-        "Input Boundary Projector Options",
+        "Input Boundary Model Options",
         "class",
         null,
         ["CombinedDynamicDiagonalConfig"],
       ),
       boundaryField(
         "input_layer_row_mask_option",
-        "Input Boundary Projector Options",
+        "Input Boundary Model Options",
         "class",
         null,
         ["WeightInformedScoreAxisMaskConfig"],
       ),
       boundaryField(
         "output_layer_weight_option",
-        "Output Boundary Projector Options",
+        "Output Boundary Model Options",
         "class",
         null,
         ["DualModelDynamicWeightConfig"],
       ),
       boundaryField(
         "output_layer_bias_option",
-        "Output Boundary Projector Options",
+        "Output Boundary Model Options",
         "class",
         null,
         ["AdditiveDynamicBiasConfig"],
       ),
       boundaryField(
         "output_layer_diagonal_option",
-        "Output Boundary Projector Options",
+        "Output Boundary Model Options",
         "class",
         null,
         ["CombinedDynamicDiagonalConfig"],
       ),
       boundaryField(
         "output_layer_row_mask_option",
-        "Output Boundary Projector Options",
+        "Output Boundary Model Options",
         "class",
         null,
         ["WeightInformedScoreAxisMaskConfig"],
@@ -1028,7 +1121,7 @@ describe("ViewerApp Full Config", () => {
             model: "linear",
             preset: "bert-baseline",
             name: "Bert tuned",
-            overrides: { stack_hidden_dim: "128" },
+            overrides: { hidden_dim: "128" },
             createdAt: "2026-06-01T00:00:00.000Z",
             updatedAt: "2026-06-01T00:00:00.000Z",
           },
@@ -1077,7 +1170,7 @@ describe("ViewerApp Full Config", () => {
               model: "linear",
               preset: "baseline",
               name: "Wide",
-              overrides: { stack_hidden_dim: "128" },
+              overrides: { hidden_dim: "128" },
               createdAt: "2026-06-01T00:00:00.000Z",
               updatedAt: "2026-06-01T00:00:00.000Z",
             },
@@ -1123,7 +1216,7 @@ describe("ViewerApp Full Config", () => {
       model: "linear",
       preset: "baseline",
       name: "Wide copy",
-      overrides: { stack_hidden_dim: "192" },
+      overrides: { hidden_dim: "192" },
     });
     expect(configSnapshotUpdateRequests).toHaveLength(0);
   });
@@ -1141,7 +1234,7 @@ describe("ViewerApp Full Config", () => {
               model: "linear",
               preset: "baseline",
               name: "Wide",
-              overrides: { stack_hidden_dim: "128" },
+              overrides: { hidden_dim: "128" },
               createdAt: "2026-06-01T00:00:00.000Z",
               updatedAt: "2026-06-01T00:00:00.000Z",
             },
@@ -1180,7 +1273,7 @@ describe("ViewerApp Full Config", () => {
       id: "snapshot-wide",
       body: {
         name: "Wide",
-        overrides: { stack_hidden_dim: "192" },
+        overrides: { hidden_dim: "192" },
       },
     });
     expect(configSnapshotCreateRequests).toHaveLength(0);
@@ -1196,20 +1289,11 @@ describe("ViewerApp Full Config", () => {
     const dialogHeader = dialog.querySelector("header");
     const dialogBody = dialog.querySelector(".full-config-dialog-body");
     const dialogFooter = dialog.querySelector("footer");
-    const sectionNav = within(dialog).getByRole("navigation", {
-      name: /full config sections/i,
-    });
     const layerAccordion = within(dialog).getByRole("button", {
-      name: /layer stack options section, 3 fields, 0 overrides/i,
+      name: /layer hidden stack options section, 3 fields, 0 overrides/i,
     });
     const gateAccordion = within(dialog).getByRole("button", {
       name: /gate options section, 1 field, 0 overrides/i,
-    });
-    const layerNavToggle = within(sectionNav).getByRole("button", {
-      name: /close layer stack options/i,
-    });
-    const gateNavToggle = within(sectionNav).getByRole("button", {
-      name: /open gate options/i,
     });
     const layerSection = layerAccordion.closest("section");
     const gateSection = gateAccordion.closest("section");
@@ -1301,11 +1385,14 @@ describe("ViewerApp Full Config", () => {
     );
     expect(gateSection).not.toHaveClass("overflow-hidden");
     expect(gateSection).not.toHaveClass("rounded-[12px]", "bg-panel/70");
-    expect(layerNavToggle).toHaveAttribute("aria-expanded", "true");
-    expect(layerNavToggle).toHaveAttribute("aria-controls");
-    expect(gateNavToggle).toHaveAttribute("aria-expanded", "false");
-    expect(gateNavToggle).toHaveAttribute("aria-controls");
-    expect(gateNavToggle).toBeDisabled();
+    const sectionNav = within(dialog).getByRole("navigation", {
+      name: /full config sections/i,
+    });
+    expect(
+      within(sectionNav).getByRole("button", {
+        name: /jump to layer hidden stack options/i,
+      }),
+    ).toBeInTheDocument();
     expect(layerAccordion).not.toHaveTextContent(/3 fields|0 overrides/i);
     expect(within(layerSection).getByLabelText("3 fields")).not.toHaveAttribute("tabindex");
     expect(within(layerSection).getByLabelText("0 overrides")).not.toHaveAttribute("tabindex");
@@ -1313,47 +1400,26 @@ describe("ViewerApp Full Config", () => {
     expect(within(gateSection).getByLabelText("0 overrides")).not.toHaveAttribute("tabindex");
     expect(within(dialog).getByLabelText("4 fields")).toHaveTextContent("4");
     expect(within(dialog).getByLabelText("4 fields")).not.toHaveTextContent("4 fields");
-    const layerJump = within(sectionNav).getByRole("button", {
-      name: /jump to layer stack options/i,
-    });
-    const gateJump = within(sectionNav).getByRole("button", {
-      name: /jump to gate options/i,
-    });
-    const layerNavRow = layerJump.parentElement?.parentElement;
-    expect(layerNavRow).toHaveClass("group/section-row");
-    expect(layerNavRow).toHaveClass("focus-within:ring-2", "hover:bg-violet/10");
-    expect(layerJump).not.toHaveClass("peer/title", "group/title");
-    expect(layerJump).not.toHaveClass("pr-[7.75rem]");
-    expect(gateJump).not.toHaveClass("pr-[7.75rem]");
-    expect(within(sectionNav).getByLabelText("3 fields")).toHaveTextContent("3");
-    expect(within(sectionNav).getByLabelText("3 fields")).not.toHaveAttribute("tabindex");
-    within(sectionNav)
-      .getAllByLabelText("0 overrides")
-      .forEach((metric) => expect(metric).not.toHaveAttribute("tabindex"));
-    expect(layerJump).not.toHaveTextContent(/3 fields|0 overrides/i);
-    expect(within(sectionNav).getByLabelText("1 field")).toHaveTextContent("1");
-    expect(within(sectionNav).getByLabelText("1 field")).not.toHaveAttribute("tabindex");
-    expect(gateJump).not.toHaveTextContent(/1 field|0 overrides/i);
     const hiddenDimControl = within(dialog).getByLabelText(/hidden dim/i);
-    const gateSwitch = within(dialog).getByRole("switch", { name: /gate flag/i });
+    const gateSwitch = within(gateSection).getByRole("switch", { name: /enabled/i });
 
     expect(hiddenDimControl).toBeInTheDocument();
     expectResponsiveConfigFieldGrid(configFieldGridFor(hiddenDimControl));
     expect(hiddenDimControl).toHaveClass("h-10", "px-3", "py-2");
-    expect(within(dialog).getByLabelText(/stack activation/i)).toBeInTheDocument();
+    expect(within(dialog).getByLabelText(/activation/i)).toBeInTheDocument();
     expect(gateSwitch).toBeInTheDocument();
     expect(gateAccordion).not.toContainElement(gateSwitch);
     expect(gateSwitch.parentElement).toHaveClass("inline-flex", "items-center", "px-2.5");
     expect(gateSwitch.parentElement).not.toHaveTextContent(/gate flag\s*Off/i);
-    expectHeaderControlBeforeMetric(gateSection, "gate flag", "1 field");
-    expect(within(dialog).queryByText("--stack-hidden-dim")).not.toBeInTheDocument();
+    expectHeaderControlBeforeMetric(gateSection, "Enabled", "1 field");
+    expect(within(dialog).queryByText("--hidden-dim")).not.toBeInTheDocument();
     expect(within(dialog).queryByText("--gate-flag")).not.toBeInTheDocument();
   });
 
   it("shows backend field descriptions from the full config label help button", async () => {
     installFetchMock({
       schemaResponse: schemaResponseWithDescriptions({
-        stack_hidden_dim:
+        hidden_dim:
           "Sets the hidden feature width used by the main layer stack.",
       }),
     });
@@ -1362,7 +1428,7 @@ describe("ViewerApp Full Config", () => {
 
     const dialog = await openFullConfig(user);
     const helpButton = within(dialog).getByRole("button", {
-      name: /show description for stack hidden dim/i,
+      name: /show description for hidden dim/i,
     });
     const tooltipId = helpButton.getAttribute("aria-describedby");
     const tooltip = tooltipId ? document.getElementById(tooltipId) : null;
@@ -1395,7 +1461,7 @@ describe("ViewerApp Full Config", () => {
         ...schemaResponse,
         fields: [
           ...schemaResponse.fields,
-          {
+          configFixtureField({
             key: "stack_dropout_probability",
             configKey: "STACK_DROPOUT_PROBABILITY",
             flag: "--stack-dropout-probability",
@@ -1405,7 +1471,7 @@ describe("ViewerApp Full Config", () => {
             default: 0.2,
             nullable: false,
             choices: [],
-          },
+          }),
         ],
       },
     });
@@ -1414,7 +1480,7 @@ describe("ViewerApp Full Config", () => {
 
     const dialog = await openFullConfig(user);
     const layerAccordion = within(dialog).getByRole("button", {
-      name: /^layer stack options section, 4 fields, 0 overrides/i,
+      name: /^layer hidden stack options section, 4 fields, 0 overrides/i,
     });
 
     if (layerAccordion.getAttribute("aria-expanded") !== "true") {
@@ -1429,11 +1495,11 @@ describe("ViewerApp Full Config", () => {
     ).not.toBeInTheDocument();
 
     const layerDirectGrid = directFieldGridFor(layerAccordion);
-    expect(within(layerDirectGrid).getByLabelText(/stack hidden dim/i))
+    expect(within(layerDirectGrid).getByLabelText(/hidden dim/i))
       .toBeInTheDocument();
-    expect(within(layerDirectGrid).getByLabelText(/stack num layers/i))
+    expect(within(layerDirectGrid).getByLabelText(/num layers/i))
       .toBeInTheDocument();
-    expect(within(layerDirectGrid).getByLabelText(/stack activation/i))
+    expect(within(layerDirectGrid).getByLabelText(/activation/i))
       .toBeInTheDocument();
   });
 
@@ -1443,7 +1509,7 @@ describe("ViewerApp Full Config", () => {
         ...schemaResponse,
         fields: [
           ...schemaResponse.fields,
-          {
+          configFixtureField({
             key: "submodule_stack_hidden_dim",
             configKey: "SUBMODULE_STACK_HIDDEN_DIM",
             flag: "--submodule-hidden-dim",
@@ -1453,8 +1519,8 @@ describe("ViewerApp Full Config", () => {
             default: 256,
             nullable: false,
             choices: [],
-          },
-          {
+          }),
+          configFixtureField({
             key: "submodule_stack_activation",
             configKey: "SUBMODULE_STACK_ACTIVATION",
             flag: "--submodule-stack-activation",
@@ -1464,7 +1530,7 @@ describe("ViewerApp Full Config", () => {
             default: "GELU",
             nullable: false,
             choices: ["GELU", "MISH"],
-          },
+          }),
         ],
       },
     });
@@ -1472,19 +1538,11 @@ describe("ViewerApp Full Config", () => {
     const user = userEvent.setup();
 
     const dialog = await openFullConfig(user);
-    const sectionNav = within(dialog).getByRole("navigation", {
-      name: /full config sections/i,
-    });
     const submoduleAccordion = within(dialog).getByRole("button", {
-      name: /layer stack submodule options section, 2 fields, 0 overrides/i,
+      name: /shared submodule stack defaults section, 2 fields, 0 overrides/i,
     });
 
     expect(submoduleAccordion).toHaveAttribute("aria-expanded", "false");
-    expect(
-      within(sectionNav).getByRole("button", {
-        name: /jump to layer stack submodule options/i,
-      }),
-    ).toBeInTheDocument();
     await user.click(submoduleAccordion);
     expect(
       within(dialog).queryByRole("button", {
@@ -1494,7 +1552,7 @@ describe("ViewerApp Full Config", () => {
     const submoduleDirectGrid = directFieldGridFor(submoduleAccordion);
     expect(within(submoduleDirectGrid).getByLabelText(/submodule hidden dim/i))
       .toBeInTheDocument();
-    expect(within(submoduleDirectGrid).getByLabelText(/submodule stack activation/i))
+    expect(within(submoduleDirectGrid).getByLabelText(/activation/i))
       .toBeInTheDocument();
   });
 
@@ -1510,7 +1568,7 @@ describe("ViewerApp Full Config", () => {
             default: 256,
             nullable: false,
           }),
-          {
+          configFixtureField({
             key: "halting_flag",
             configKey: "HALTING_FLAG",
             flag: "--halting-flag",
@@ -1520,8 +1578,8 @@ describe("ViewerApp Full Config", () => {
             default: false,
             nullable: false,
             choices: [true, false],
-          },
-          {
+          }),
+          configFixtureField({
             key: "halting_threshold",
             configKey: "HALTING_THRESHOLD",
             flag: "--halting-threshold",
@@ -1531,8 +1589,8 @@ describe("ViewerApp Full Config", () => {
             default: 0.99,
             nullable: false,
             choices: [],
-          },
-          {
+          }),
+          configFixtureField({
             key: "recurrent_flag",
             configKey: "RECURRENT_FLAG",
             flag: "--recurrent-flag",
@@ -1542,8 +1600,8 @@ describe("ViewerApp Full Config", () => {
             default: false,
             nullable: false,
             choices: [true, false],
-          },
-          {
+          }),
+          configFixtureField({
             key: "recurrent_max_steps",
             configKey: "RECURRENT_MAX_STEPS",
             flag: "--recurrent-max-steps",
@@ -1553,7 +1611,7 @@ describe("ViewerApp Full Config", () => {
             default: 4,
             nullable: false,
             choices: [],
-          },
+          }),
         ],
       },
     });
@@ -1562,7 +1620,7 @@ describe("ViewerApp Full Config", () => {
 
     const dialog = await openFullConfig(user);
     const gateAccordion = within(dialog).getByRole("button", {
-      name: /gate options section, 2 fields, 0 overrides/i,
+      name: /gate options section, 1 field, 0 overrides/i,
     });
     const haltingAccordion = within(dialog).getByRole("button", {
       name: /halting options section, 2 fields, 0 overrides/i,
@@ -1580,15 +1638,15 @@ describe("ViewerApp Full Config", () => {
     expect(gateAccordion).toBeDisabled();
     expect(haltingAccordion).toBeDisabled();
     expect(recurrentAccordion).toBeDisabled();
-    expectHeaderControlBeforeMetric(gateSection, "gate flag", "2 fields");
-    expectHeaderControlBeforeMetric(haltingSection, "halting flag", "2 fields");
-    expectHeaderControlBeforeMetric(recurrentSection, "recurrent flag", "2 fields");
+    expectHeaderControlBeforeMetric(gateSection, "Enabled", "1 field");
+    expectHeaderControlBeforeMetric(haltingSection, "Enabled", "2 fields");
+    expectHeaderControlBeforeMetric(recurrentSection, "Enabled", "2 fields");
     expect(within(gateSection).getByLabelText("0 overrides")).toBeInTheDocument();
     expect(within(haltingSection).getByLabelText("0 overrides")).toBeInTheDocument();
     expect(within(recurrentSection).getByLabelText("0 overrides")).toBeInTheDocument();
-    expect(within(dialog).queryByLabelText(/gate stack hidden dim/i)).not.toBeInTheDocument();
-    expect(within(dialog).queryByLabelText(/halting threshold/i)).not.toBeInTheDocument();
-    expect(within(dialog).queryByLabelText(/recurrent max steps/i)).not.toBeInTheDocument();
+    expect(within(gateSection).queryByLabelText(/hidden dim/i)).not.toBeInTheDocument();
+    expect(within(haltingSection).queryByLabelText(/halting threshold/i)).not.toBeInTheDocument();
+    expect(within(recurrentSection).queryByLabelText(/recurrent max steps/i)).not.toBeInTheDocument();
 
     const search = within(dialog).getByRole("combobox", {
       name: /search config fields/i,
@@ -1597,7 +1655,7 @@ describe("ViewerApp Full Config", () => {
     const searchPopup = fullConfigSearchPopup(dialog);
     const gateHiddenSearchRow = fullConfigSearchResultRow(
       searchPopup,
-      /gate stack hidden dim/i,
+      /hidden dim/i,
     );
     expect(
       within(gateHiddenSearchRow).getByRole("textbox", {
@@ -1609,12 +1667,22 @@ describe("ViewerApp Full Config", () => {
     );
 
     await user.click(within(dialog).getByRole("button", { name: /clear config search/i }));
-    await user.click(within(dialog).getByRole("switch", { name: /gate flag/i }));
-    await user.click(within(dialog).getByRole("switch", { name: /halting flag/i }));
-    await user.click(within(dialog).getByRole("switch", { name: /recurrent flag/i }));
+    await user.click(sectionHeaderSwitchFor(gateSection, /enabled/i));
+    const currentHaltingSection = fullConfigSectionFor(
+      within(dialog).getByRole("button", {
+        name: /halting options section, 2 fields, 0 overrides/i,
+      }),
+    );
+    await user.click(sectionHeaderSwitchFor(currentHaltingSection, /enabled/i));
+    const currentRecurrentSection = fullConfigSectionFor(
+      within(dialog).getByRole("button", {
+        name: /recurrent layer options section, 2 fields, 0 overrides/i,
+      }),
+    );
+    await user.click(sectionHeaderSwitchFor(currentRecurrentSection, /enabled/i));
 
     const enabledGateAccordion = within(dialog).getByRole("button", {
-      name: /gate options section, 2 fields, 1 override/i,
+      name: /gate options section, 1 field, 1 override/i,
     });
     const enabledHaltingAccordion = within(dialog).getByRole("button", {
       name: /halting options section, 2 fields, 1 override/i,
@@ -1629,18 +1697,21 @@ describe("ViewerApp Full Config", () => {
     expect(enabledGateAccordion).toHaveAttribute("aria-expanded", "true");
     expect(enabledHaltingAccordion).toHaveAttribute("aria-expanded", "true");
     expect(enabledRecurrentAccordion).toHaveAttribute("aria-expanded", "true");
-    expectHeaderControlBeforeMetric(enabledGateSection, "gate flag", "2 fields");
-    expectHeaderControlBeforeMetric(enabledHaltingSection, "halting flag", "2 fields");
-    expectHeaderControlBeforeMetric(enabledRecurrentSection, "recurrent flag", "2 fields");
+    expectHeaderControlBeforeMetric(enabledGateSection, "Enabled", "1 field");
+    expectHeaderControlBeforeMetric(enabledHaltingSection, "Enabled", "2 fields");
+    expectHeaderControlBeforeMetric(enabledRecurrentSection, "Enabled", "2 fields");
     expect(within(enabledGateSection).getByLabelText("1 override")).toBeInTheDocument();
     expect(within(enabledHaltingSection).getByLabelText("1 override")).toBeInTheDocument();
     expect(within(enabledRecurrentSection).getByLabelText("1 override")).toBeInTheDocument();
-    expectNoHeaderControlInAccordionBody(enabledGateAccordion, "gate flag");
-    expectNoHeaderControlInAccordionBody(enabledHaltingAccordion, "halting flag");
-    expectNoHeaderControlInAccordionBody(enabledRecurrentAccordion, "recurrent flag");
-    expect(within(dialog).getByLabelText(/gate stack hidden dim/i)).toBeInTheDocument();
-    expect(within(dialog).getByLabelText(/halting threshold/i)).toBeInTheDocument();
-    expect(within(dialog).getByLabelText(/recurrent max steps/i)).toBeInTheDocument();
+    expectNoHeaderControlInAccordionBody(enabledGateAccordion, "Enabled");
+    expectNoHeaderControlInAccordionBody(enabledHaltingAccordion, "Enabled");
+    expectNoHeaderControlInAccordionBody(enabledRecurrentAccordion, "Enabled");
+    expect(within(enabledGateSection).getAllByLabelText(/hidden dim/i).length)
+      .toBeGreaterThan(0);
+    expect(within(enabledHaltingSection).getByLabelText(/^threshold$/i))
+      .toBeInTheDocument();
+    expect(within(enabledRecurrentSection).getByLabelText(/^max steps$/i))
+      .toBeInTheDocument();
   });
 
   it("uses adaptive option flags as section header controls", async () => {
@@ -1650,7 +1721,7 @@ describe("ViewerApp Full Config", () => {
 
     const dialog = await openFullConfig(user);
     const weightAccordion = within(dialog).getByRole("button", {
-      name: /^weight generator options section, 4 fields, 0 overrides/i,
+      name: /^weight generator options section, 2 fields, 0 overrides/i,
     });
     const biasAccordion = within(dialog).getByRole("button", {
       name: /^bias generator options section, 2 fields, 0 overrides/i,
@@ -1659,7 +1730,7 @@ describe("ViewerApp Full Config", () => {
       name: /^diagonal generator options section, 2 fields, 0 overrides/i,
     });
     const maskAccordion = within(dialog).getByRole("button", {
-      name: /^mask options section, 4 fields, 0 overrides/i,
+      name: /^mask options section, 2 fields, 0 overrides/i,
     });
     const weightSection = fullConfigSectionFor(weightAccordion);
     const biasSection = fullConfigSectionFor(biasAccordion);
@@ -1672,19 +1743,19 @@ describe("ViewerApp Full Config", () => {
     expect(maskAccordion).toBeDisabled();
     expectHeaderControlBeforeMetric(
       weightSection,
-      "weight option flag",
-      "4 fields",
+      "Enabled",
+      "2 fields",
     );
-    expectHeaderControlBeforeMetric(biasSection, "bias option flag", "2 fields");
+    expectHeaderControlBeforeMetric(biasSection, "Enabled", "2 fields");
     expectHeaderControlBeforeMetric(
       diagonalSection,
-      "diagonal option flag",
+      "Enabled",
       "2 fields",
     );
     expectHeaderControlBeforeMetric(
       maskSection,
-      "mask option flag",
-      "4 fields",
+      "Enabled",
+      "2 fields",
     );
     expect(within(dialog).queryByLabelText(/^weight option$/i))
       .not.toBeInTheDocument();
@@ -1692,17 +1763,17 @@ describe("ViewerApp Full Config", () => {
       .not.toBeInTheDocument();
 
     await user.click(
-      within(dialog).getByRole("switch", { name: /^weight option flag$/i }),
+      within(weightSection).getByRole("switch", { name: /^enabled$/i }),
     );
     await user.click(
-      within(dialog).getByRole("switch", { name: /^mask option flag$/i }),
+      within(maskSection).getByRole("switch", { name: /^enabled$/i }),
     );
 
     const enabledWeightAccordion = within(dialog).getByRole("button", {
-      name: /^weight generator options section, 4 fields, 2 overrides/i,
+      name: /^weight generator options section, 2 fields, 2 overrides/i,
     });
     const enabledMaskAccordion = within(dialog).getByRole("button", {
-      name: /^mask options section, 4 fields, 2 overrides/i,
+      name: /^mask options section, 2 fields, 2 overrides/i,
     });
     const weightDirectGrid = directFieldGridFor(enabledWeightAccordion);
     const maskDirectGrid = directFieldGridFor(enabledMaskAccordion);
@@ -1725,12 +1796,12 @@ describe("ViewerApp Full Config", () => {
     expect(maskGeneratorAccordion).toBeDisabled();
     expectHeaderControlBeforeMetric(
       fullConfigSectionFor(weightGeneratorAccordion),
-      "weight generator stack independent flag",
+      "Use custom stack",
       "2 fields",
     );
     expectHeaderControlBeforeMetric(
       fullConfigSectionFor(maskGeneratorAccordion),
-      "mask generator stack independent flag",
+      "Use custom stack",
       "2 fields",
     );
 
@@ -1742,18 +1813,18 @@ describe("ViewerApp Full Config", () => {
 
     expect(
       within(adaptiveStackDirectGrid).getByLabelText(
-        /adaptive generator stack hidden dim/i,
+        /hidden dim/i,
       ),
     ).toBeInTheDocument();
 
     await user.click(
       within(fullConfigSectionFor(enabledMaskAccordion)).getByRole("switch", {
-        name: /^mask generator stack independent flag$/i,
+        name: /^use custom stack$/i,
       }),
     );
     expect(
       within(accordionPanelFor(maskGeneratorAccordion)).getByLabelText(
-        /mask generator stack hidden dim/i,
+        /hidden dim/i,
       ),
     ).toBeInTheDocument();
 
@@ -1763,7 +1834,7 @@ describe("ViewerApp Full Config", () => {
     await user.type(search, "weight generator stack hidden");
     const hiddenDimRow = fullConfigSearchResultRow(
       fullConfigSearchPopup(dialog),
-      /weight generator stack hidden dim/i,
+      /hidden dim/i,
     );
     expect(
       within(hiddenDimRow).getByRole("textbox", {
@@ -1776,8 +1847,8 @@ describe("ViewerApp Full Config", () => {
     await user.click(within(dialog).getByRole("button", { name: /clear config search/i }));
 
     await user.click(
-      within(dialog).getByRole("switch", {
-        name: /^weight generator stack independent flag$/i,
+      within(fullConfigSectionFor(enabledWeightAccordion)).getByRole("switch", {
+        name: /^use custom stack$/i,
       }),
     );
     const enabledWeightGeneratorAccordion = within(dialog).getByRole("button", {
@@ -1786,22 +1857,22 @@ describe("ViewerApp Full Config", () => {
 
     expect(
       within(accordionPanelFor(enabledWeightGeneratorAccordion)).getByLabelText(
-        /weight generator stack hidden dim/i,
+        /hidden dim/i,
       ),
     ).toBeInTheDocument();
   });
 
-  it("uses nested option accordions for boundary projector sections", async () => {
-    installFetchMock({ schemaResponse: boundaryProjectorSchemaResponse() });
+  it("uses nested option accordions for boundary model sections", async () => {
+    installFetchMock({ schemaResponse: boundaryModelSchemaResponse() });
     renderViewer();
     const user = userEvent.setup();
 
     const dialog = await openFullConfig(user);
     const inputAccordion = within(dialog).getByRole("button", {
-      name: /^input boundary projector options section, 6 fields, 0 overrides/i,
+      name: /^input boundary model options section, 6 fields, 0 overrides/i,
     });
     const outputAccordion = within(dialog).getByRole("button", {
-      name: /^output boundary projector options section, 4 fields, 0 overrides/i,
+      name: /^output boundary model options section, 4 fields, 0 overrides/i,
     });
 
     expect(inputAccordion).toBeEnabled();
@@ -1814,7 +1885,7 @@ describe("ViewerApp Full Config", () => {
     const outputPanel = accordionPanelFor(outputAccordion);
 
     const disabledWeightGroup = within(inputPanel).getByRole("button", {
-      name: /^weight boundary projector group, 3 fields, 0 overrides/i,
+      name: /^weight boundary model group, 3 fields, 0 overrides/i,
     });
     const inputWeightGroup = configFieldGroupFor(inputAccordion, "Weight");
     const inputWeightSwitch = within(inputWeightGroup).getByRole("switch", {
@@ -1849,7 +1920,7 @@ describe("ViewerApp Full Config", () => {
     await user.click(inputWeightSwitch);
 
     const enabledWeightGroup = within(inputPanel).getByRole("button", {
-      name: /^weight boundary projector group, 3 fields, 1 override/i,
+      name: /^weight boundary model group, 3 fields, 1 override/i,
     });
     const enabledWeightPanel = accordionPanelFor(enabledWeightGroup);
     const inputWeightOption = within(enabledWeightPanel).getByRole("combobox", {
@@ -1883,7 +1954,7 @@ describe("ViewerApp Full Config", () => {
 
     expect(
       within(inputPanel).getByRole("button", {
-        name: /^weight boundary projector group, 3 fields, 0 overrides/i,
+        name: /^weight boundary model group, 3 fields, 0 overrides/i,
       }),
     ).toBeDisabled();
     expect(
@@ -1893,7 +1964,7 @@ describe("ViewerApp Full Config", () => {
     ).not.toBeInTheDocument();
     expect(
       within(outputPanel).getByRole("button", {
-        name: /^weight boundary projector group, 1 field, 0 overrides/i,
+        name: /^weight boundary model group, 1 field, 0 overrides/i,
       }),
     ).toBeDisabled();
   });
@@ -1904,37 +1975,21 @@ describe("ViewerApp Full Config", () => {
     const user = userEvent.setup();
 
     const dialog = await openFullConfig(user);
-    const sectionNav = within(dialog).getByRole("navigation", {
-      name: /full config sections/i,
-    });
     const gateAccordion = within(dialog).getByRole("button", {
-      name: /^gate options section, 7 fields, 0 overrides/i,
+      name: /^gate options section, 3 fields, 0 overrides/i,
     });
-    const recurrentGateAccordion = within(dialog).getByRole("button", {
-      name: /^recurrent gate options section, 7 fields, 0 overrides/i,
+    const gateSection = fullConfigSectionFor(gateAccordion);
+    const recurrentLayerAccordion = within(dialog).getByRole("button", {
+      name: /^recurrent layer options section, 0 fields, 0 overrides/i,
     });
+    const recurrentLayerSection = fullConfigSectionFor(recurrentLayerAccordion);
 
-    expect(
-      within(sectionNav).getByRole("button", {
-        name: /jump to gate options/i,
-      }),
-    ).toBeInTheDocument();
-    expect(
-      within(sectionNav).queryByRole("button", {
-        name: /jump to gate stack options/i,
-      }),
-    ).not.toBeInTheDocument();
-    expect(
-      within(sectionNav).getByRole("button", {
-        name: /jump to recurrent gate options/i,
-      }),
-    ).toBeInTheDocument();
-    expect(
-      within(sectionNav).queryByRole("button", {
-        name: /jump to recurrent gate stack options/i,
-      }),
-    ).not.toBeInTheDocument();
     expect(gateAccordion).toBeDisabled();
+    expect(recurrentLayerAccordion).toBeEnabled();
+    await user.click(recurrentLayerAccordion);
+    const recurrentGateAccordion = within(recurrentLayerSection).getByRole("button", {
+      name: /^recurrent gate options section, 3 fields, 0 overrides/i,
+    });
     expect(recurrentGateAccordion).toBeDisabled();
     expect(within(dialog).queryByLabelText(/^gate option$/i))
       .not.toBeInTheDocument();
@@ -1951,10 +2006,10 @@ describe("ViewerApp Full Config", () => {
     expect(within(dialog).queryByLabelText(/^recurrent gate activation$/i))
       .not.toBeInTheDocument();
 
-    await user.click(within(dialog).getByRole("switch", { name: /^gate flag$/i }));
+    await user.click(sectionHeaderSwitchFor(gateSection, /^enabled$/i));
 
     const enabledGateAccordion = within(dialog).getByRole("button", {
-      name: /^gate options section, 7 fields, 1 override/i,
+      name: /^gate options section, 3 fields, 1 override/i,
     });
     if (enabledGateAccordion.getAttribute("aria-expanded") !== "true") {
       await user.click(enabledGateAccordion);
@@ -1965,29 +2020,29 @@ describe("ViewerApp Full Config", () => {
     ).getByRole("button", {
       name: /gate stack options section, 4 fields, 0 overrides/i,
     });
-    const gateOption = within(gateDirectGrid).getByLabelText(/gate option/i);
+    const gateOption = within(gateDirectGrid).getByLabelText(/^option$/i);
     expect(gateOption).toHaveTextContent("MULTIPLIER");
-    const gateActivation = within(gateDirectGrid).getByLabelText(/gate activation/i);
+    const gateActivation = within(gateDirectGrid).getByLabelText(/^activation$/i);
     expect(gateActivation).toHaveTextContent("SIGMOID");
-    expect(within(gateDirectGrid).queryByLabelText(/gate stack hidden dim/i))
+    expect(within(gateDirectGrid).queryByLabelText(/hidden dim/i))
       .not.toBeInTheDocument();
     expect(
       within(accordionPanelFor(gateModelStackAccordion)).getByLabelText(
-        /gate stack hidden dim/i,
+        /hidden dim/i,
       ),
     ).toBeInTheDocument();
     expect(
       within(accordionPanelFor(gateModelStackAccordion)).getByLabelText(
-        /gate stack layer norm position/i,
+        /layer norm position/i,
       ),
     ).toBeInTheDocument();
     expectBooleanSegmentedControl(
       accordionPanelFor(gateModelStackAccordion),
-      /gate stack bias flag/i,
+      /bias flag/i,
     );
     expect(
       within(accordionPanelFor(gateModelStackAccordion)).getByLabelText(
-        /gate stack num layers/i,
+        /num layers/i,
       ),
     ).toBeInTheDocument();
 
@@ -2006,7 +2061,7 @@ describe("ViewerApp Full Config", () => {
     await user.click(gateOption);
     expect(gateOption).toHaveAttribute("aria-expanded", "true");
     const gateOptions = await within(gateOptionRoot).findByRole("listbox", {
-      name: /gate option options/i,
+      name: /option options/i,
     });
     expect(within(gateOptions).getByRole("option", { name: "ADDITION" }))
       .toBeInTheDocument();
@@ -2017,51 +2072,58 @@ describe("ViewerApp Full Config", () => {
     expect(gateOption).toHaveTextContent("ADDITION");
 
     await user.click(
-      within(dialog).getByRole("switch", { name: /^recurrent gate flag$/i }),
+      within(recurrentLayerSection).getByRole("switch", {
+        name: /^enabled$/i,
+      }),
     );
 
-    const enabledRecurrentGateAccordion = within(dialog).getByRole("button", {
-      name: /^recurrent gate options section, 7 fields, 1 override/i,
-    });
+    const enabledRecurrentGateAccordion = within(recurrentLayerSection).getByRole(
+      "button",
+      {
+        name: /^recurrent gate options section, 3 fields, 1 override/i,
+      },
+    );
     if (enabledRecurrentGateAccordion.getAttribute("aria-expanded") !== "true") {
       await user.click(enabledRecurrentGateAccordion);
     }
     const recurrentGateDirectGrid = directFieldGridFor(
       enabledRecurrentGateAccordion,
     );
-    const recurrentGateModelStackAccordion = within(dialog).getByRole("button", {
+    const recurrentGateModelStackAccordion = within(
+      fullConfigSectionFor(enabledRecurrentGateAccordion),
+    ).getByRole("button", {
       name: /recurrent gate stack options section, 4 fields, 0 overrides/i,
     });
     const recurrentGateOption = within(recurrentGateDirectGrid).getByLabelText(
-      /recurrent gate option/i,
+      /^option$/i,
     );
     const recurrentGateActivation = within(
       recurrentGateDirectGrid,
-    ).getByLabelText(/recurrent gate activation/i);
+    ).getByLabelText(/^activation$/i);
     expect(recurrentGateOption).toHaveTextContent("MULTIPLIER");
     expect(recurrentGateActivation).toHaveTextContent("SIGMOID");
     expect(
       within(recurrentGateDirectGrid).queryByLabelText(
-        /recurrent gate stack hidden dim/i,
+        /hidden dim/i,
       ),
     ).not.toBeInTheDocument();
     expect(
       within(accordionPanelFor(recurrentGateModelStackAccordion)).getByLabelText(
-        /recurrent gate stack hidden dim/i,
+        /hidden dim/i,
       ),
     ).toBeInTheDocument();
     expect(
       within(accordionPanelFor(recurrentGateModelStackAccordion)).getByLabelText(
-        /recurrent gate stack layer norm position/i,
+        /layer norm position/i,
       ),
     ).toBeInTheDocument();
     expectBooleanSegmentedControl(
       accordionPanelFor(recurrentGateModelStackAccordion),
-      /recurrent gate stack bias flag/i,
+      /bias flag/i,
     );
     expect(
       within(accordionPanelFor(recurrentGateModelStackAccordion)).getByLabelText(
-        /recurrent gate stack num layers/i,
+        /num layers/i,
       ),
     ).toBeInTheDocument();
   });
@@ -2072,70 +2134,31 @@ describe("ViewerApp Full Config", () => {
     const user = userEvent.setup();
 
     const dialog = await openFullConfig(user);
-    const sectionNav = within(dialog).getByRole("navigation", {
-      name: /full config sections/i,
-    });
     const haltingAccordion = within(dialog).getByRole("button", {
-      name: /halting options section, 5 fields, 0 overrides/i,
+      name: /halting options section, 2 fields, 0 overrides/i,
     });
     const memoryAccordion = within(dialog).getByRole("button", {
-      name: /memory options section, 9 fields, 0 overrides/i,
+      name: /memory options section, 4 fields, 0 overrides/i,
     });
     const recurrentAccordion = within(dialog).getByRole("button", {
-      name: /recurrent layer options section, 9 fields, 0 overrides/i,
+      name: /recurrent layer options section, 2 fields, 0 overrides/i,
     });
     const haltingSection = fullConfigSectionFor(haltingAccordion);
     const memorySection = fullConfigSectionFor(memoryAccordion);
     const recurrentSection = fullConfigSectionFor(recurrentAccordion);
 
-    expect(
-      within(sectionNav).getByRole("button", {
-        name: /jump to halting options/i,
-      }),
-    ).toBeInTheDocument();
-    expect(
-      within(sectionNav).getByRole("button", {
-        name: /jump to memory options/i,
-      }),
-    ).toBeInTheDocument();
-    expect(
-      within(sectionNav).getByRole("button", {
-        name: /jump to recurrent layer options/i,
-      }),
-    ).toBeInTheDocument();
-    expect(
-      within(sectionNav).queryByRole("button", {
-        name: /jump to halting stack options/i,
-      }),
-    ).not.toBeInTheDocument();
-    expect(
-      within(sectionNav).queryByRole("button", {
-        name: /jump to memory stack options/i,
-      }),
-    ).not.toBeInTheDocument();
-    expect(
-      within(sectionNav).queryByRole("button", {
-        name: /jump to recurrent gate stack options/i,
-      }),
-    ).not.toBeInTheDocument();
-    expect(
-      within(sectionNav).queryByRole("button", {
-        name: /jump to recurrent halting options/i,
-      }),
-    ).not.toBeInTheDocument();
-
-    await user.click(within(dialog).getByRole("switch", { name: /halting flag/i }));
-    await user.click(within(dialog).getByRole("switch", { name: /memory flag/i }));
-    await user.click(within(dialog).getByRole("switch", { name: /recurrent flag/i }));
+    await user.click(sectionHeaderSwitchFor(haltingSection, /enabled/i));
+    await user.click(sectionHeaderSwitchFor(memorySection, /enabled/i));
+    await user.click(sectionHeaderSwitchFor(recurrentSection, /enabled/i));
 
     const enabledHaltingAccordion = within(dialog).getByRole("button", {
-      name: /halting options section, 5 fields, 1 override/i,
+      name: /halting options section, 2 fields, 1 override/i,
     });
     const enabledMemoryAccordion = within(dialog).getByRole("button", {
-      name: /memory options section, 9 fields, 1 override/i,
+      name: /memory options section, 4 fields, 1 override/i,
     });
     const enabledRecurrentAccordion = within(dialog).getByRole("button", {
-      name: /recurrent layer options section, 9 fields, 1 override/i,
+      name: /recurrent layer options section, 2 fields, 1 override/i,
     });
     const haltingDirectGrid = directFieldGridFor(enabledHaltingAccordion);
     const memoryDirectGrid = directFieldGridFor(enabledMemoryAccordion);
@@ -2147,44 +2170,44 @@ describe("ViewerApp Full Config", () => {
       name: /memory stack options section, 5 fields, 0 overrides/i,
     });
     const recurrentGateAccordion = within(recurrentSection).getByRole("button", {
-      name: /recurrent gate options section, 2 fields, 0 overrides/i,
+      name: /recurrent gate options section, 1 field, 0 overrides/i,
     });
     const recurrentHaltingAccordion = within(recurrentSection).getByRole("button", {
-      name: /recurrent halting options section, 5 fields, 0 overrides/i,
+      name: /recurrent halting options section, 2 fields, 0 overrides/i,
     });
 
     expect(haltingAccordion).toHaveAttribute("aria-expanded", "true");
     expect(memoryAccordion).toHaveAttribute("aria-expanded", "true");
     expect(recurrentAccordion).toHaveAttribute("aria-expanded", "true");
-    expectHeaderControlBeforeMetric(haltingSection, "halting flag", "5 fields");
-    expectHeaderControlBeforeMetric(memorySection, "memory flag", "9 fields");
-    expectHeaderControlBeforeMetric(recurrentSection, "recurrent flag", "9 fields");
-    expect(within(haltingDirectGrid).getByLabelText(/halting threshold/i))
+    expectHeaderControlBeforeMetric(haltingSection, "Enabled", "2 fields");
+    expectHeaderControlBeforeMetric(memorySection, "Enabled", "4 fields");
+    expectHeaderControlBeforeMetric(recurrentSection, "Enabled", "2 fields");
+    expect(within(haltingDirectGrid).getByLabelText(/^threshold$/i))
       .toBeInTheDocument();
-    expect(within(haltingDirectGrid).queryByLabelText(/halting stack hidden dim/i))
+    expect(within(haltingDirectGrid).queryByLabelText(/hidden dim/i))
       .not.toBeInTheDocument();
-    expect(within(haltingDirectGrid).queryByLabelText(/halting stack layer norm position/i))
+    expect(within(haltingDirectGrid).queryByLabelText(/layer norm position/i))
       .not.toBeInTheDocument();
-    expect(within(memoryDirectGrid).getByLabelText(/memory option/i))
+    expect(within(memoryDirectGrid).getByLabelText(/^option$/i))
       .toBeInTheDocument();
-    expect(within(memoryDirectGrid).getByLabelText(/memory position option/i))
+    expect(within(memoryDirectGrid).getByLabelText(/^position option$/i))
       .toBeInTheDocument();
     expect(
       within(memoryDirectGrid).getByLabelText(
-        /memory test time training learning rate/i,
+        /test time training learning rate/i,
       ),
     ).toBeInTheDocument();
-    expect(within(memoryDirectGrid).queryByLabelText(/memory stack hidden dim/i))
+    expect(within(memoryDirectGrid).queryByLabelText(/hidden dim/i))
       .not.toBeInTheDocument();
-    expect(within(memoryDirectGrid).queryByLabelText(/memory stack num layers/i))
+    expect(within(memoryDirectGrid).queryByLabelText(/num layers/i))
       .not.toBeInTheDocument();
-    expect(within(memoryDirectGrid).queryByLabelText(/memory stack activation/i))
+    expect(within(memoryDirectGrid).queryByLabelText(/activation/i))
       .not.toBeInTheDocument();
-    expect(within(recurrentDirectGrid).getByLabelText(/recurrent max steps/i))
+    expect(within(recurrentDirectGrid).getByLabelText(/^max steps$/i))
       .toBeInTheDocument();
-    expect(within(recurrentDirectGrid).queryByLabelText(/recurrent gate stack hidden dim/i))
+    expect(within(recurrentDirectGrid).queryByLabelText(/hidden dim/i))
       .not.toBeInTheDocument();
-    expect(within(recurrentDirectGrid).queryByLabelText(/recurrent halting threshold/i))
+    expect(within(recurrentDirectGrid).queryByLabelText(/^threshold$/i))
       .not.toBeInTheDocument();
     expect(fullConfigSectionGridFor(haltingStackAccordion)).not.toBe(
       fullConfigSectionGridFor(enabledHaltingAccordion),
@@ -2198,66 +2221,62 @@ describe("ViewerApp Full Config", () => {
 
     expect(
       within(accordionPanelFor(haltingStackAccordion)).getByLabelText(
-        /halting stack hidden dim/i,
+        /hidden dim/i,
       ),
     ).toBeInTheDocument();
     expect(
       within(accordionPanelFor(haltingStackAccordion)).getByLabelText(
-        /halting stack layer norm position/i,
+        /layer norm position/i,
       ),
     ).toBeInTheDocument();
     expect(
       within(accordionPanelFor(memoryStackAccordion)).getByLabelText(
-        /memory stack hidden dim/i,
+        /hidden dim/i,
       ),
     ).toBeInTheDocument();
     expect(
       within(accordionPanelFor(memoryStackAccordion)).getByLabelText(
-        /memory stack layer norm position/i,
+        /layer norm position/i,
       ),
     ).toBeInTheDocument();
     expect(
       within(accordionPanelFor(memoryStackAccordion)).getByLabelText(
-        /memory stack num layers/i,
+        /num layers/i,
       ),
     ).toBeInTheDocument();
     expect(
       within(accordionPanelFor(memoryStackAccordion)).getByLabelText(
-        /memory stack activation/i,
+        /activation/i,
       ),
     ).toBeInTheDocument();
     expect(
       within(accordionPanelFor(memoryStackAccordion)).getByLabelText(
-        /memory stack dropout probability/i,
+        /dropout probability/i,
       ),
     ).toBeInTheDocument();
     expect(recurrentGateAccordion).toBeDisabled();
     expect(recurrentHaltingAccordion).toBeDisabled();
-    expect(within(recurrentSection).getByRole("switch", {
-      name: /recurrent gate flag/i,
-    })).toBeInTheDocument();
-    expect(within(recurrentSection).getByRole("switch", {
-      name: /recurrent halting flag/i,
-    })).toBeInTheDocument();
+    const recurrentGateSection = fullConfigSectionFor(recurrentGateAccordion);
+    expect(sectionHeaderSwitchFor(recurrentGateSection, /enabled/i))
+      .toBeInTheDocument();
+    const recurrentHaltingSection = fullConfigSectionFor(recurrentHaltingAccordion);
+    expect(sectionHeaderSwitchFor(recurrentHaltingSection, /enabled/i))
+      .toBeInTheDocument();
 
     await user.click(
-      within(recurrentSection).getByRole("switch", {
-        name: /recurrent gate flag/i,
-      }),
+      sectionHeaderSwitchFor(recurrentGateSection, /enabled/i),
     );
     await user.click(
-      within(recurrentSection).getByRole("switch", {
-        name: /recurrent halting flag/i,
-      }),
+      sectionHeaderSwitchFor(recurrentHaltingSection, /enabled/i),
     );
 
     const enabledRecurrentGateAccordion = within(recurrentSection).getByRole("button", {
-      name: /recurrent gate options section, 2 fields, 1 override/i,
+      name: /recurrent gate options section, 1 field, 1 override/i,
     });
     const enabledRecurrentHaltingAccordion = within(recurrentSection).getByRole(
       "button",
       {
-        name: /recurrent halting options section, 5 fields, 1 override/i,
+        name: /recurrent halting options section, 2 fields, 1 override/i,
       },
     );
     const recurrentHaltingStackAccordion = within(recurrentSection).getByRole(
@@ -2281,51 +2300,51 @@ describe("ViewerApp Full Config", () => {
     expect(recurrentGateModelStackAccordion).toHaveAttribute("aria-expanded", "true");
     expect(
       within(accordionPanelFor(recurrentGateModelStackAccordion)).getByLabelText(
-        /recurrent gate stack hidden dim/i,
+        /hidden dim/i,
       ),
     ).toBeInTheDocument();
     expect(
       within(recurrentHaltingDirectGrid).getByLabelText(
-        /recurrent halting threshold/i,
+        /^threshold$/i,
       ),
     ).toBeInTheDocument();
     expect(
       within(recurrentHaltingDirectGrid).queryByLabelText(
-        /recurrent halting stack num layers/i,
+        /num layers/i,
       ),
     ).not.toBeInTheDocument();
     expect(
       within(recurrentHaltingDirectGrid).queryByLabelText(
-        /recurrent halting stack hidden dim/i,
+        /hidden dim/i,
       ),
     ).not.toBeInTheDocument();
     expect(
       within(recurrentHaltingDirectGrid).queryByLabelText(
-        /recurrent halting stack layer norm position/i,
+        /layer norm position/i,
       ),
     ).not.toBeInTheDocument();
     expect(
       within(accordionPanelFor(recurrentHaltingStackAccordion)).getByLabelText(
-        /recurrent halting stack num layers/i,
+        /num layers/i,
       ),
     ).toBeInTheDocument();
     expect(
       within(accordionPanelFor(recurrentHaltingStackAccordion)).getByLabelText(
-        /recurrent halting stack hidden dim/i,
+        /hidden dim/i,
       ),
     ).toBeInTheDocument();
     expect(
       within(accordionPanelFor(recurrentHaltingStackAccordion)).getByLabelText(
-        /recurrent halting stack layer norm position/i,
+        /layer norm position/i,
       ),
     ).toBeInTheDocument();
     expectNoHeaderControlInAccordionBody(
       enabledRecurrentGateAccordion,
-      "recurrent gate flag",
+      "Enabled",
     );
     expectNoHeaderControlInAccordionBody(
       enabledRecurrentHaltingAccordion,
-      "recurrent halting flag",
+      "Enabled",
     );
   });
 
@@ -2335,34 +2354,15 @@ describe("ViewerApp Full Config", () => {
     const user = userEvent.setup();
 
     const dialog = await openFullConfig(user);
-    const sectionNav = within(dialog).getByRole("navigation", {
-      name: /full config sections/i,
-    });
-
-    expect(
-      within(sectionNav).getByRole("button", {
-        name: /jump to sampler model options/i,
-      }),
-    ).toBeInTheDocument();
-    expect(
-      within(sectionNav).queryByRole("button", {
-        name: /jump to router options/i,
-      }),
-    ).not.toBeInTheDocument();
-    expect(
-      within(sectionNav).queryByRole("button", {
-        name: /jump to router stack options/i,
-      }),
-    ).not.toBeInTheDocument();
 
     const samplerAccordion = within(dialog).getByRole("button", {
-      name: /sampler model options section, 6 fields, 0 overrides/i,
+      name: /sampler model options section, 2 fields, 0 overrides/i,
     });
     await user.click(samplerAccordion);
 
     const samplerSection = fullConfigSectionFor(samplerAccordion);
     const routerAccordion = within(samplerSection).getByRole("button", {
-      name: /router options section, 4 fields, 0 overrides/i,
+      name: /router options section, 1 field, 0 overrides/i,
     });
     const routerStackAccordion = within(samplerSection).getByRole("button", {
       name: /router stack options section, 3 fields, 0 overrides/i,
@@ -2383,25 +2383,25 @@ describe("ViewerApp Full Config", () => {
     expect(
       within(samplerDirectGrid).getByLabelText(/sampler switch loss weight/i),
     ).toBeInTheDocument();
-    expect(within(samplerDirectGrid).queryByLabelText(/router noisy topk flag/i))
+    expect(within(samplerDirectGrid).queryByLabelText(/noisy topk flag/i))
       .not.toBeInTheDocument();
-    expect(within(samplerDirectGrid).queryByLabelText(/router stack hidden dim/i))
+    expect(within(samplerDirectGrid).queryByLabelText(/hidden dim/i))
       .not.toBeInTheDocument();
     expect(within(samplerDirectGrid).queryByLabelText(/router bias flag/i))
       .not.toBeInTheDocument();
 
-    expect(within(routerDirectGrid).getByLabelText(/router noisy topk flag/i))
+    expect(within(routerDirectGrid).getByLabelText(/noisy topk flag/i))
       .toBeInTheDocument();
     expect(within(routerDirectGrid).queryByLabelText(/sampler threshold/i))
       .not.toBeInTheDocument();
-    expect(within(routerDirectGrid).queryByLabelText(/router stack hidden dim/i))
+    expect(within(routerDirectGrid).queryByLabelText(/hidden dim/i))
       .not.toBeInTheDocument();
     expect(within(routerDirectGrid).queryByLabelText(/router bias flag/i))
       .not.toBeInTheDocument();
 
-    expect(within(routerStackPanel).getByLabelText(/router stack hidden dim/i))
+    expect(within(routerStackPanel).getByLabelText(/hidden dim/i))
       .toBeInTheDocument();
-    expect(within(routerStackPanel).getByLabelText(/router stack num layers/i))
+    expect(within(routerStackPanel).getByLabelText(/num layers/i))
       .toBeInTheDocument();
     expectBooleanSegmentedControl(routerStackPanel, /router bias flag/i);
   });
@@ -2435,7 +2435,7 @@ describe("ViewerApp Full Config", () => {
     expect(routerGateAccordion).toBeInTheDocument();
     expect(
       within(routerGateSection).getByRole("switch", {
-        name: /router gate flag/i,
+        name: /enabled/i,
       }),
     ).toBeInTheDocument();
     expect(
@@ -2445,7 +2445,7 @@ describe("ViewerApp Full Config", () => {
     ).not.toBeInTheDocument();
     expect(
       within(routerStackSection).queryByRole("switch", {
-        name: /router gate flag/i,
+        name: /enabled/i,
       }),
     ).not.toBeInTheDocument();
   });
@@ -2465,7 +2465,7 @@ describe("ViewerApp Full Config", () => {
     const searchPopup = fullConfigSearchPopup(dialog);
     const hiddenDimRow = fullConfigSearchResultRow(
       searchPopup,
-      /router stack hidden dim/i,
+      /hidden dim/i,
     );
     expect(
       within(hiddenDimRow).getByRole("textbox", {
@@ -2491,7 +2491,7 @@ describe("ViewerApp Full Config", () => {
     expect(routerStackAccordion).toHaveAttribute("aria-expanded", "true");
     expect(
       within(accordionPanelFor(routerStackAccordion)).getByLabelText(
-        /router stack hidden dim/i,
+        /hidden dim/i,
       ),
     ).toBeInTheDocument();
   });
@@ -2502,23 +2502,9 @@ describe("ViewerApp Full Config", () => {
     const user = userEvent.setup();
 
     const dialog = await openFullConfig(user);
-    const sectionNav = within(dialog).getByRole("navigation", {
-      name: /full config sections/i,
-    });
-
-    expect(
-      within(sectionNav).getByRole("button", {
-        name: /jump to mixture of experts model options/i,
-      }),
-    ).toBeInTheDocument();
-    expect(
-      within(sectionNav).queryByRole("button", {
-        name: /jump to expert stack options/i,
-      }),
-    ).not.toBeInTheDocument();
 
     const mixtureAccordion = within(dialog).getByRole("button", {
-      name: /mixture of experts model options section, 6 fields, 0 overrides/i,
+      name: /mixture of experts model options section, 3 fields, 0 overrides/i,
     });
     await user.click(mixtureAccordion);
 
@@ -2538,19 +2524,19 @@ describe("ViewerApp Full Config", () => {
       mixtureDirectGrid,
       /expert compute expert mixture flag/i,
     );
-    expect(within(mixtureDirectGrid).queryByLabelText(/expert stack hidden dim/i))
+    expect(within(mixtureDirectGrid).queryByLabelText(/hidden dim/i))
       .not.toBeInTheDocument();
-    expect(within(mixtureDirectGrid).queryByLabelText(/expert stack num layers/i))
+    expect(within(mixtureDirectGrid).queryByLabelText(/num layers/i))
       .not.toBeInTheDocument();
     expect(within(mixtureDirectGrid).queryByLabelText(/expert bias flag/i))
       .not.toBeInTheDocument();
 
     const expertStackPanel = accordionPanelFor(expertStackAccordion);
     expect(
-      within(expertStackPanel).getByLabelText(/expert stack hidden dim/i),
+      within(expertStackPanel).getByLabelText(/hidden dim/i),
     ).toBeEnabled();
     expect(
-      within(expertStackPanel).getByLabelText(/expert stack num layers/i),
+      within(expertStackPanel).getByLabelText(/num layers/i),
     ).toBeEnabled();
     expectBooleanSegmentedControl(expertStackPanel, /expert bias flag/i);
     expect(
@@ -2582,13 +2568,13 @@ describe("ViewerApp Full Config", () => {
     expect(expertStackAccordion).toHaveAttribute("aria-expanded", "true");
     expect(
       within(directFieldGridFor(expertStackAccordion)).getByLabelText(
-        /expert stack hidden dim/i,
+        /hidden dim/i,
       ),
     ).toBeEnabled();
     expect(expertGateAccordion).toBeInTheDocument();
     expect(
       within(expertGateSection).getByRole("switch", {
-        name: /expert gate flag/i,
+        name: /enabled/i,
       }),
     ).toBeInTheDocument();
     expect(
@@ -2598,7 +2584,7 @@ describe("ViewerApp Full Config", () => {
     ).not.toBeInTheDocument();
     expect(
       within(expertStackSection).queryByRole("switch", {
-        name: /expert gate flag/i,
+        name: /enabled/i,
       }),
     ).not.toBeInTheDocument();
   });
@@ -2618,7 +2604,7 @@ describe("ViewerApp Full Config", () => {
     const searchPopup = fullConfigSearchPopup(dialog);
     const hiddenDimRow = fullConfigSearchResultRow(
       searchPopup,
-      /expert stack hidden dim/i,
+      /hidden dim/i,
     );
     expect(
       within(hiddenDimRow).getByRole("textbox", {
@@ -2628,7 +2614,7 @@ describe("ViewerApp Full Config", () => {
     expect(hiddenDimRow).not.toHaveTextContent(/enable .* before editing/i);
 
     const mixtureAccordion = within(dialog).getByRole("button", {
-      name: /mixture of experts model options section, 1 field, 0 overrides/i,
+      name: /mixture of experts model options section, 0 fields, 0 overrides/i,
     });
     const mixtureSection = fullConfigSectionFor(mixtureAccordion);
     const expertStackAccordion = within(mixtureSection).getByRole("button", {
@@ -2640,7 +2626,7 @@ describe("ViewerApp Full Config", () => {
     expect(expertStackAccordion).toHaveAttribute("aria-expanded", "true");
     expect(
       within(accordionPanelFor(expertStackAccordion)).getByLabelText(
-        /expert stack hidden dim/i,
+        /hidden dim/i,
       ),
     ).toBeEnabled();
   });
@@ -2675,19 +2661,24 @@ describe("ViewerApp Full Config", () => {
 
     const dialog = await openFullConfig(user);
     const layerAccordion = within(dialog).getByRole("button", {
-      name: /^layer stack options section,/i,
+      name: /^layer hidden stack options section,/i,
     });
     if (layerAccordion.getAttribute("aria-expanded") !== "true") {
       await user.click(layerAccordion);
     }
     const layerPanel = accordionPanelFor(layerAccordion);
-    expectBooleanSegmentedControl(layerPanel, /stack apply output pipeline flag/i);
-    expectBooleanSegmentedControl(layerPanel, /stack bias flag/i);
+    expectBooleanSegmentedControl(layerPanel, /apply output pipeline flag/i);
+    expectBooleanSegmentedControl(layerPanel, /bias flag/i);
 
-    await user.click(within(dialog).getByRole("switch", { name: /gate flag/i }));
+    const gateSection = fullConfigSectionFor(
+      within(dialog).getByRole("button", {
+        name: /^gate options section, 1 field, 0 overrides/i,
+      }),
+    );
+    await user.click(sectionHeaderSwitchFor(gateSection, /enabled/i));
 
     const gateAccordion = within(dialog).getByRole("button", {
-      name: /^gate options section, 3 fields, 1 override/i,
+      name: /^gate options section, 1 field, 1 override/i,
     });
     const gateModelStackAccordion = within(fullConfigSectionFor(gateAccordion))
       .getByRole("button", {
@@ -2699,11 +2690,11 @@ describe("ViewerApp Full Config", () => {
     const gateModelStackPanel = accordionPanelFor(gateModelStackAccordion);
     const gateBias = expectBooleanSegmentedControl(
       gateModelStackPanel,
-      /gate stack bias flag/i,
+      /bias flag/i,
     );
     const gatePipeline = expectBooleanSegmentedControl(
       gateModelStackPanel,
-      /gate stack apply output pipeline flag/i,
+      /apply output pipeline flag/i,
     );
 
     expect(gateBias.on).toHaveAttribute("aria-checked", "true");
@@ -2737,33 +2728,15 @@ describe("ViewerApp Full Config", () => {
     const user = userEvent.setup();
 
     const dialog = await openFullConfig(user);
-    const sectionNav = within(dialog).getByRole("navigation", {
-      name: /full config sections/i,
-    });
     const search = within(dialog).getByRole("combobox", {
       name: /search config fields/i,
     });
 
     await user.type(search, "recurrent gate stack hidden");
-    expect(
-      within(sectionNav).getByRole("button", {
-        name: /jump to recurrent layer options/i,
-      }),
-    ).toBeInTheDocument();
-    expect(
-      within(sectionNav).queryByRole("button", {
-        name: /jump to recurrent gate options/i,
-      }),
-    ).not.toBeInTheDocument();
-    expect(
-      within(sectionNav).queryByRole("button", {
-        name: /jump to recurrent gate stack options/i,
-      }),
-    ).not.toBeInTheDocument();
     let searchPopup = fullConfigSearchPopup(dialog);
     let recurrentGateRow = fullConfigSearchResultRow(
       searchPopup,
-      /recurrent gate stack hidden dim/i,
+      /hidden dim/i,
     );
 
     expect(
@@ -2775,13 +2748,18 @@ describe("ViewerApp Full Config", () => {
       /enable recurrent flag before editing recurrent layer options/i,
     );
 
-    await user.click(within(dialog).getByRole("switch", { name: /recurrent flag/i }));
+    const recurrentSection = fullConfigSectionFor(
+      within(dialog).getByRole("button", {
+        name: /recurrent layer options section, 1 field, 0 overrides/i,
+      }),
+    );
+    await user.click(sectionHeaderSwitchFor(recurrentSection, /enabled/i));
     await user.click(search);
 
     searchPopup = fullConfigSearchPopup(dialog);
     recurrentGateRow = fullConfigSearchResultRow(
       searchPopup,
-      /recurrent gate stack hidden dim/i,
+      /hidden dim/i,
     );
     expect(
       within(recurrentGateRow).getByRole("textbox", {
@@ -2792,40 +2770,37 @@ describe("ViewerApp Full Config", () => {
       /enable recurrent gate flag before editing recurrent gate options/i,
     );
 
-    const recurrentSection = fullConfigSectionFor(
+    const enabledRecurrentSection = fullConfigSectionFor(
       within(dialog).getByRole("button", {
-        name: /recurrent layer options section, 3 fields, 1 override/i,
+        name: /recurrent layer options section, 1 field, 1 override/i,
       }),
     );
-    const recurrentGateAccordion = within(recurrentSection).getByRole("button", {
-      name: /recurrent gate options section, 2 fields, 0 overrides/i,
+    const recurrentGateAccordion = within(enabledRecurrentSection).getByRole("button", {
+      name: /recurrent gate options section, 1 field, 0 overrides/i,
     });
+    const recurrentGateSection = fullConfigSectionFor(recurrentGateAccordion);
 
     expect(recurrentGateAccordion).toHaveAttribute("aria-expanded", "false");
     expect(recurrentGateAccordion).toBeDisabled();
-    expect(within(recurrentSection).getByRole("switch", {
-      name: /recurrent gate flag/i,
-    })).toBeInTheDocument();
+    expect(sectionHeaderSwitchFor(recurrentGateSection, /enabled/i)).toBeInTheDocument();
 
     await user.click(
-      within(recurrentSection).getByRole("switch", {
-        name: /recurrent gate flag/i,
-      }),
+      sectionHeaderSwitchFor(recurrentGateSection, /enabled/i),
     );
     await user.click(
       within(dialog).getByRole("button", {
-        name: /recurrent layer options section, 3 fields, 2 overrides/i,
+        name: /recurrent layer options section, 1 field, 1 override/i,
       }),
     );
     await user.click(search);
     recurrentGateRow = fullConfigSearchResultRow(
       fullConfigSearchPopup(dialog),
-      /recurrent gate stack hidden dim/i,
+      /hidden dim/i,
     );
     scrollIntoViewMock.mockClear();
     await user.click(
       within(recurrentGateRow).getByRole("button", {
-        name: /recurrent gate stack hidden dim/i,
+        name: /hidden dim/i,
       }),
     );
 
@@ -2836,15 +2811,15 @@ describe("ViewerApp Full Config", () => {
     });
     expect(
       within(dialog).getByRole("button", {
-        name: /recurrent layer options section, 3 fields, 2 overrides/i,
+        name: /recurrent layer options section, 1 field, 1 override/i,
       }),
     ).toHaveAttribute("aria-expanded", "true");
     expect(
-      within(recurrentSection).getByRole("button", {
-        name: /recurrent gate options section, 2 fields, 1 override/i,
+      within(enabledRecurrentSection).getByRole("button", {
+        name: /recurrent gate options section, 1 field, 1 override/i,
       }),
     ).toHaveAttribute("aria-expanded", "true");
-    const recurrentGateModelStackAccordion = within(recurrentSection).getByRole(
+    const recurrentGateModelStackAccordion = within(enabledRecurrentSection).getByRole(
       "button",
       {
         name: /recurrent gate stack options section, 1 field, 0 overrides/i,
@@ -2856,7 +2831,7 @@ describe("ViewerApp Full Config", () => {
     );
     expect(
       within(accordionPanelFor(recurrentGateModelStackAccordion)).getByLabelText(
-        /recurrent gate stack hidden dim/i,
+        /hidden dim/i,
       ),
     ).toBeInTheDocument();
   });
@@ -2939,9 +2914,6 @@ describe("ViewerApp Full Config", () => {
     const user = userEvent.setup();
 
     const dialog = await openFullConfig(user);
-    const sectionNav = within(dialog).getByRole("navigation", {
-      name: /full config sections/i,
-    });
     const search = within(dialog).getByRole("combobox", {
       name: /search config fields/i,
     });
@@ -2949,26 +2921,19 @@ describe("ViewerApp Full Config", () => {
     await user.type(search, "hidden");
 
     expect(within(dialog).getByLabelText(/hidden dim/i)).toBeInTheDocument();
-    expect(within(dialog).queryByLabelText(/stack activation/i)).not.toBeInTheDocument();
-    expect(within(dialog).queryByRole("switch", { name: /gate flag/i })).not.toBeInTheDocument();
+    expect(within(dialog).queryByLabelText(/activation/i)).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("switch", { name: /enabled/i })).not.toBeInTheDocument();
     expect(
       within(dialog).getByRole("button", {
-        name: /layer stack options section, 1 field, 0 overrides/i,
+        name: /layer hidden stack options section, 1 field, 0 overrides/i,
       }),
     ).toBeInTheDocument();
     const layerAccordion = within(dialog).getByRole("button", {
-      name: /layer stack options section, 1 field, 0 overrides/i,
+      name: /layer hidden stack options section, 1 field, 0 overrides/i,
     });
     const sectionGrid = fullConfigSectionGridFor(layerAccordion);
     expectFullConfigSectionGrid(sectionGrid);
     expect(sectionGrid.children).toHaveLength(1);
-    expect(
-      within(sectionNav).getByRole("button", { name: /jump to layer stack options/i }),
-    ).toBeInTheDocument();
-    expect(
-      within(sectionNav).queryByRole("button", { name: /jump to gate options/i }),
-    ).not.toBeInTheDocument();
-    expect(within(sectionNav).getByLabelText("1 field")).toHaveTextContent("1");
   });
 
   it("finds full config fields by flag and key", async () => {
@@ -2983,14 +2948,14 @@ describe("ViewerApp Full Config", () => {
 
     await user.type(search, "--gate-flag");
 
-    expect(within(dialog).getByRole("switch", { name: /gate flag/i })).toBeInTheDocument();
+    expect(within(dialog).getByRole("switch", { name: /enabled/i })).toBeInTheDocument();
     expect(within(dialog).queryByLabelText(/hidden dim/i)).not.toBeInTheDocument();
     expect(within(dialog).queryByText("--gate-flag")).not.toBeInTheDocument();
 
     await user.clear(search);
     await user.type(search, "gate_flag");
 
-    expect(within(dialog).getByRole("switch", { name: /gate flag/i })).toBeInTheDocument();
+    expect(within(dialog).getByRole("switch", { name: /enabled/i })).toBeInTheDocument();
     expect(
       within(dialog).getByRole("button", {
         name: /gate options section, 1 field, 0 overrides/i,
@@ -3004,9 +2969,6 @@ describe("ViewerApp Full Config", () => {
     const user = userEvent.setup();
 
     const dialog = await openFullConfig(user);
-    const sectionNav = within(dialog).getByRole("navigation", {
-      name: /full config sections/i,
-    });
     const search = within(dialog).getByRole("combobox", {
       name: /search config fields/i,
     });
@@ -3019,7 +2981,6 @@ describe("ViewerApp Full Config", () => {
       within(searchPopup).queryByRole("group", { name: /hidden dim/i }),
     ).not.toBeInTheDocument();
     expect(within(dialog).queryByLabelText(/hidden dim/i)).not.toBeInTheDocument();
-    expect(within(sectionNav).getByText("No matching sections")).toBeInTheDocument();
   });
 
   it("selects a dropdown field and filters to exactly that field", async () => {
@@ -3034,15 +2995,15 @@ describe("ViewerApp Full Config", () => {
 
     await user.type(search, "activation");
     const searchPopup = fullConfigSearchPopup(dialog);
-    const stackActivationRow = fullConfigSearchResultRow(searchPopup, /stack activation/i);
+    const stackActivationRow = fullConfigSearchResultRow(searchPopup, /activation/i);
     await user.click(
-      within(stackActivationRow).getByRole("button", { name: /stack activation/i }),
+      within(stackActivationRow).getByRole("button", { name: /activation/i }),
     );
 
     expect(search).toHaveValue("stack activation");
-    expect(within(dialog).getByLabelText(/stack activation/i)).toBeInTheDocument();
+    expect(within(dialog).getByLabelText(/activation/i)).toBeInTheDocument();
     expect(within(dialog).queryByLabelText(/hidden dim/i)).not.toBeInTheDocument();
-    expect(within(dialog).queryByRole("switch", { name: /gate flag/i })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("switch", { name: /enabled/i })).not.toBeInTheDocument();
     expect(
       within(dialog).queryByRole("dialog", { name: /matching config fields/i }),
     ).not.toBeInTheDocument();
@@ -3094,8 +3055,9 @@ describe("ViewerApp Full Config", () => {
         modelType: "linears",
         model: "linear",
         preset: "baseline",
+        experimentTask: "image-classification",
         dataset: "Mnist",
-        overrides: { stack_hidden_dim: "128" },
+        overrides: { hidden_dim: "128" },
       });
     });
 
@@ -3138,6 +3100,7 @@ describe("ViewerApp Full Config", () => {
         modelType: "linears",
         model: "linear",
         preset: "baseline",
+        experimentTask: "image-classification",
         dataset: "Mnist",
         overrides: {},
       });
@@ -3156,7 +3119,7 @@ describe("ViewerApp Full Config", () => {
 
     await user.type(search, "activation");
     let searchPopup = fullConfigSearchPopup(dialog);
-    const stackActivationRow = fullConfigSearchResultRow(searchPopup, /stack activation/i);
+    const stackActivationRow = fullConfigSearchResultRow(searchPopup, /activation/i);
     const stackActivationSelect = within(stackActivationRow).getByRole("combobox", {
       name: /current value/i,
     });
@@ -3169,7 +3132,7 @@ describe("ViewerApp Full Config", () => {
     );
 
     expect(stackActivationRow).toHaveTextContent(/current\s*RELU/i);
-    expect(within(dialog).getByLabelText(/stack activation/i))
+    expect(within(dialog).getByLabelText(/activation/i))
       .toHaveTextContent("RELU");
 
     await user.click(within(dialog).getByRole("button", { name: /clear config search/i }));
@@ -3190,7 +3153,7 @@ describe("ViewerApp Full Config", () => {
     expect(configFieldOverrideIconFor(gateFlagRow)).toHaveClass("text-violet");
     expect(within(gateFlagRow).queryByText("override")).not.toBeInTheDocument();
     expectModifiedFieldControl(gateFlagControl.control);
-    expect(within(dialog).getByRole("switch", { name: /gate flag/i }))
+    expect(within(dialog).getByRole("switch", { name: /enabled/i }))
       .toHaveAttribute("aria-checked", "true");
     expect(within(dialog).getAllByLabelText("2 overrides").length).toBeGreaterThan(0);
 
@@ -3206,7 +3169,7 @@ describe("ViewerApp Full Config", () => {
     expect(within(gateFlagRow).queryByText("override")).not.toBeInTheDocument();
     expectUnmodifiedFieldControl(gateFlagControl.control);
     expect(gateFlagRow).not.toHaveTextContent(/current\s*false/i);
-    expect(within(dialog).getByRole("switch", { name: /gate flag/i }))
+    expect(within(dialog).getByRole("switch", { name: /enabled/i }))
       .toHaveAttribute("aria-checked", "false");
     expect(within(dialog).getAllByLabelText("1 override").length).toBeGreaterThan(0);
   });
@@ -3223,7 +3186,7 @@ describe("ViewerApp Full Config", () => {
 
     await user.type(search, "activation");
     const searchPopup = fullConfigSearchPopup(dialog);
-    const stackActivationRow = fullConfigSearchResultRow(searchPopup, /stack activation/i);
+    const stackActivationRow = fullConfigSearchResultRow(searchPopup, /activation/i);
     const stackActivationSelect = within(stackActivationRow).getByRole("combobox", {
       name: /current value/i,
     });
@@ -3245,7 +3208,7 @@ describe("ViewerApp Full Config", () => {
     });
 
     expect(stackActivationRow).toHaveTextContent(/current\s*RELU/i);
-    expect(configFieldLabelFor(stackActivationRow, /stack activation/i))
+    expect(configFieldLabelFor(stackActivationRow, /activation/i))
       .toHaveClass("text-violet");
     expect(configFieldOverrideIconFor(stackActivationRow)).toHaveClass("text-violet");
     expect(within(stackActivationRow).queryByText("override"))
@@ -3261,16 +3224,16 @@ describe("ViewerApp Full Config", () => {
       expect(queryConfigFieldOverrideIcon(stackActivationRow))
         .not.toBeInTheDocument();
     });
-    expect(configFieldLabelFor(stackActivationRow, /stack activation/i))
+    expect(configFieldLabelFor(stackActivationRow, /activation/i))
       .toHaveClass("text-ink");
-    expect(configFieldLabelFor(stackActivationRow, /stack activation/i))
+    expect(configFieldLabelFor(stackActivationRow, /activation/i))
       .not.toHaveClass("text-violet");
     expect(within(stackActivationRow).queryByText("override"))
       .not.toBeInTheDocument();
     expectUnmodifiedFieldControl(stackActivationSelect);
     expect(stackActivationRow).not.toHaveTextContent(/current\s*GELU/i);
     expect(stackActivationSelect).toHaveTextContent("GELU");
-    expect(within(dialog).getByLabelText(/stack activation/i)).toHaveTextContent("GELU");
+    expect(within(dialog).getByLabelText(/activation/i)).toHaveTextContent("GELU");
     expect(
       within(stackActivationRow).queryByRole("button", {
         name: /reset search result override/i,
@@ -3285,28 +3248,19 @@ describe("ViewerApp Full Config", () => {
     const user = userEvent.setup();
 
     const dialog = await openFullConfig(user);
-    const sectionNav = within(dialog).getByRole("navigation", {
-      name: /full config sections/i,
-    });
     const search = within(dialog).getByRole("combobox", {
       name: /search config fields/i,
     });
 
     await user.type(search, "hidden");
-    expect(within(dialog).queryByRole("switch", { name: /gate flag/i })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("switch", { name: /enabled/i })).not.toBeInTheDocument();
 
     await user.click(within(dialog).getByRole("button", { name: /clear config search/i }));
 
     expect(search).toHaveValue("");
     expect(within(dialog).getByLabelText(/hidden dim/i)).toBeInTheDocument();
-    expect(within(dialog).getByLabelText(/stack activation/i)).toBeInTheDocument();
-    expect(within(dialog).getByRole("switch", { name: /gate flag/i })).toBeInTheDocument();
-    expect(
-      within(sectionNav).getByRole("button", { name: /jump to layer stack options/i }),
-    ).toBeInTheDocument();
-    expect(
-      within(sectionNav).getByRole("button", { name: /jump to gate options/i }),
-    ).toBeInTheDocument();
+    expect(within(dialog).getByLabelText(/activation/i)).toBeInTheDocument();
+    expect(within(dialog).getByRole("switch", { name: /enabled/i })).toBeInTheDocument();
   });
 
   it("shows empty states when full config search has no matches", async () => {
@@ -3315,9 +3269,6 @@ describe("ViewerApp Full Config", () => {
     const user = userEvent.setup();
 
     const dialog = await openFullConfig(user);
-    const sectionNav = within(dialog).getByRole("navigation", {
-      name: /full config sections/i,
-    });
     const search = within(dialog).getByRole("combobox", {
       name: /search config fields/i,
     });
@@ -3331,16 +3282,9 @@ describe("ViewerApp Full Config", () => {
     const sectionGrid = noResults.parentElement;
     expect(sectionGrid).toBeInstanceOf(HTMLElement);
     expectFullConfigSectionGrid(sectionGrid as HTMLElement);
-    expect(within(sectionNav).getByText("No matching sections")).toBeInTheDocument();
-    expect(
-      within(sectionNav).queryByRole("button", { name: /jump to layer stack options/i }),
-    ).not.toBeInTheDocument();
-    expect(
-      within(sectionNav).queryByRole("button", { name: /jump to gate options/i }),
-    ).not.toBeInTheDocument();
   });
 
-  it("keeps sidebar jumps and toggles working while full config search is filtered", async () => {
+  it("sidebar section clicks reopen collapsed sections and scroll to them", async () => {
     installFetchMock();
     renderViewer();
     const user = userEvent.setup();
@@ -3349,36 +3293,28 @@ describe("ViewerApp Full Config", () => {
     const sectionNav = within(dialog).getByRole("navigation", {
       name: /full config sections/i,
     });
-    const search = within(dialog).getByRole("combobox", {
-      name: /search config fields/i,
-    });
-
-    await user.type(search, "hidden");
     const layerAccordion = within(dialog).getByRole("button", {
-      name: /layer stack options section, 1 field, 0 overrides/i,
+      name: /layer hidden stack options section, 3 fields, 0 overrides/i,
     });
-
-    await user.click(within(sectionNav).getByRole("button", { name: /^close all$/i }));
-
-    expect(layerAccordion).toHaveAttribute("aria-expanded", "false");
-    expect(within(dialog).queryByLabelText(/hidden dim/i)).not.toBeInTheDocument();
-    expect(within(dialog).queryByRole("switch", { name: /gate flag/i })).not.toBeInTheDocument();
-
-    await user.click(within(sectionNav).getByRole("button", { name: /^open all$/i }));
-
-    expect(layerAccordion).toHaveAttribute("aria-expanded", "true");
-    expect(within(dialog).getByLabelText(/hidden dim/i)).toBeInTheDocument();
-    expect(within(dialog).queryByRole("switch", { name: /gate flag/i })).not.toBeInTheDocument();
+    const layerNavRow = fullConfigSectionNavRowFor(
+      sectionNav,
+      /jump to layer hidden stack options/i,
+    );
 
     await user.click(
-      within(sectionNav).getByRole("button", { name: /close layer stack options/i }),
+      within(layerNavRow).getByRole("button", {
+        name: /close layer hidden stack options/i,
+      }),
     );
 
     expect(layerAccordion).toHaveAttribute("aria-expanded", "false");
     expect(within(dialog).queryByLabelText(/hidden dim/i)).not.toBeInTheDocument();
+    expect(scrollIntoViewMock).not.toHaveBeenCalled();
 
     await user.click(
-      within(sectionNav).getByRole("button", { name: /jump to layer stack options/i }),
+      within(layerNavRow).getByRole("button", {
+        name: /jump to layer hidden stack options/i,
+      }),
     );
 
     expect(layerAccordion).toHaveAttribute("aria-expanded", "true");
@@ -3401,7 +3337,7 @@ describe("ViewerApp Full Config", () => {
 
     await user.type(search, "hidden");
     const layerAccordion = within(dialog).getByRole("button", {
-      name: /layer stack options section, 1 field, 0 overrides/i,
+      name: /layer hidden stack options section, 1 field, 0 overrides/i,
     });
     const layerSection = fullConfigSectionFor(layerAccordion);
 
@@ -3438,79 +3374,6 @@ describe("ViewerApp Full Config", () => {
     expect(within(dialog).queryByRole("tooltip")).not.toBeInTheDocument();
   });
 
-  it("global section toggle closes and opens every popup config accordion", async () => {
-    installFetchMock();
-    renderViewer();
-    const user = userEvent.setup();
-
-    const dialog = await openFullConfig(user);
-    const sectionNav = within(dialog).getByRole("navigation", {
-      name: /full config sections/i,
-    });
-    const layerAccordion = within(dialog).getByRole("button", {
-      name: /layer stack options section, 3 fields, 0 overrides/i,
-    });
-    const gateAccordion = within(dialog).getByRole("button", {
-      name: /gate options section, 1 field, 0 overrides/i,
-    });
-
-    const closeAllButton = within(sectionNav).getByRole("button", { name: /^close all$/i });
-    expect(closeAllButton).toBeInTheDocument();
-    expect(closeAllButton).toHaveClass("whitespace-nowrap", "min-w-[5.75rem]");
-
-    await user.click(closeAllButton);
-
-    expect(layerAccordion).toHaveAttribute("aria-expanded", "false");
-    expect(gateAccordion).toHaveAttribute("aria-expanded", "false");
-    expect(within(sectionNav).getByRole("button", { name: /^open all$/i })).toBeInTheDocument();
-    expect(within(dialog).queryByLabelText(/hidden dim/i)).not.toBeInTheDocument();
-    expect(within(dialog).queryByLabelText(/stack activation/i)).not.toBeInTheDocument();
-    expect(within(dialog).getByRole("switch", { name: /gate flag/i })).toBeInTheDocument();
-
-    await user.click(within(sectionNav).getByRole("button", { name: /^open all$/i }));
-
-    expect(layerAccordion).toHaveAttribute("aria-expanded", "true");
-    expect(gateAccordion).toHaveAttribute("aria-expanded", "false");
-    expect(gateAccordion).toBeDisabled();
-    expect(within(sectionNav).getByRole("button", { name: /^close all$/i })).toBeInTheDocument();
-    expect(within(dialog).getByLabelText(/hidden dim/i)).toBeInTheDocument();
-    expect(within(dialog).getByLabelText(/stack activation/i)).toBeInTheDocument();
-    expect(within(dialog).getByRole("switch", { name: /gate flag/i })).toBeInTheDocument();
-  });
-
-  it("global section toggle opens every popup config accordion from a partial state", async () => {
-    installFetchMock();
-    renderViewer();
-    const user = userEvent.setup();
-
-    const dialog = await openFullConfig(user);
-    const sectionNav = within(dialog).getByRole("navigation", {
-      name: /full config sections/i,
-    });
-    const layerAccordion = within(dialog).getByRole("button", {
-      name: /layer stack options section, 3 fields, 0 overrides/i,
-    });
-    const gateAccordion = within(dialog).getByRole("button", {
-      name: /gate options section, 1 field, 0 overrides/i,
-    });
-
-    await user.click(layerAccordion);
-
-    expect(layerAccordion).toHaveAttribute("aria-expanded", "false");
-    expect(gateAccordion).toHaveAttribute("aria-expanded", "false");
-    expect(gateAccordion).toBeDisabled();
-    expect(within(sectionNav).getByRole("button", { name: /^open all$/i })).toBeInTheDocument();
-
-    await user.click(within(sectionNav).getByRole("button", { name: /^open all$/i }));
-
-    expect(layerAccordion).toHaveAttribute("aria-expanded", "true");
-    expect(gateAccordion).toHaveAttribute("aria-expanded", "false");
-    expect(within(sectionNav).getByRole("button", { name: /^close all$/i })).toBeInTheDocument();
-    expect(within(dialog).getByLabelText(/hidden dim/i)).toBeInTheDocument();
-    expect(within(dialog).getByLabelText(/stack activation/i)).toBeInTheDocument();
-    expect(within(dialog).getByRole("switch", { name: /gate flag/i })).toBeInTheDocument();
-  });
-
   it("collapsing a popup config section hides its field controls", async () => {
     installFetchMock();
     renderViewer();
@@ -3519,7 +3382,7 @@ describe("ViewerApp Full Config", () => {
     await user.click(await waitForOpenFullConfigButton());
     const dialog = await screen.findByRole("dialog", { name: /full configuration/i });
     const layerAccordion = within(dialog).getByRole("button", {
-      name: /layer stack options section, 3 fields, 0 overrides/i,
+      name: /layer hidden stack options section, 3 fields, 0 overrides/i,
     });
 
     await user.click(layerAccordion);
@@ -3536,75 +3399,10 @@ describe("ViewerApp Full Config", () => {
       "bg-white/[0.012]",
     );
     expect(within(dialog).queryByLabelText(/hidden dim/i)).not.toBeInTheDocument();
-    expect(within(dialog).queryByLabelText(/stack activation/i)).not.toBeInTheDocument();
-    expect(within(dialog).getByRole("switch", { name: /gate flag/i })).toBeInTheDocument();
+    expect(within(dialog).queryByLabelText(/activation/i)).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("switch", { name: /enabled/i })).toBeInTheDocument();
   });
 
-  it("sidebar section clicks reopen collapsed sections and scroll to them", async () => {
-    installFetchMock();
-    renderViewer();
-    const user = userEvent.setup();
-
-    await user.click(await waitForOpenFullConfigButton());
-    const dialog = await screen.findByRole("dialog", { name: /full configuration/i });
-    const layerAccordion = within(dialog).getByRole("button", {
-      name: /layer stack options section, 3 fields, 0 overrides/i,
-    });
-    const sectionNav = within(dialog).getByRole("navigation", {
-      name: /full config sections/i,
-    });
-
-    await user.click(layerAccordion);
-    expect(layerAccordion).toHaveAttribute("aria-expanded", "false");
-
-    await user.click(
-      within(sectionNav).getByRole("button", { name: /jump to layer stack options/i }),
-    );
-
-    expect(layerAccordion).toHaveAttribute("aria-expanded", "true");
-    expect(within(dialog).getByLabelText(/hidden dim/i)).toBeInTheDocument();
-    expect(scrollIntoViewMock).toHaveBeenCalledWith({
-      block: "start",
-      behavior: "smooth",
-    });
-  });
-
-  it("sidebar section triggers toggle their matching accordion", async () => {
-    installFetchMock();
-    renderViewer();
-    const user = userEvent.setup();
-
-    await user.click(await waitForOpenFullConfigButton());
-    const dialog = await screen.findByRole("dialog", { name: /full configuration/i });
-    const layerAccordion = within(dialog).getByRole("button", {
-      name: /layer stack options section, 3 fields, 0 overrides/i,
-    });
-    const sectionNav = within(dialog).getByRole("navigation", {
-      name: /full config sections/i,
-    });
-
-    await user.click(
-      within(sectionNav).getByRole("button", { name: /close layer stack options/i }),
-    );
-
-    expect(layerAccordion).toHaveAttribute("aria-expanded", "false");
-    expect(
-      within(sectionNav).getByRole("button", { name: /open layer stack options/i }),
-    ).toHaveAttribute("aria-expanded", "false");
-    expect(within(dialog).queryByLabelText(/hidden dim/i)).not.toBeInTheDocument();
-    expect(scrollIntoViewMock).not.toHaveBeenCalled();
-
-    await user.click(
-      within(sectionNav).getByRole("button", { name: /open layer stack options/i }),
-    );
-
-    expect(layerAccordion).toHaveAttribute("aria-expanded", "true");
-    expect(
-      within(sectionNav).getByRole("button", { name: /close layer stack options/i }),
-    ).toHaveAttribute("aria-expanded", "true");
-    expect(within(dialog).getByLabelText(/hidden dim/i)).toBeInTheDocument();
-    expect(scrollIntoViewMock).not.toHaveBeenCalled();
-  });
 
   it("editing a popup field updates overrides", async () => {
     installFetchMock();
@@ -3613,21 +3411,13 @@ describe("ViewerApp Full Config", () => {
 
     await user.click(await waitForOpenFullConfigButton());
     const dialog = await screen.findByRole("dialog", { name: /full configuration/i });
-    const sectionNav = within(dialog).getByRole("navigation", {
-      name: /full config sections/i,
-    });
-
     const hiddenDimInput = await typeConfigFieldValue(user, dialog, /hidden dim/i, "128");
     const hiddenDimRow = configFieldRowFor(hiddenDimInput);
-    const hiddenDimLabel = configFieldLabelFor(hiddenDimRow, /stack hidden dim/i);
+    const hiddenDimLabel = configFieldLabelFor(hiddenDimRow, /hidden dim/i);
     const layerAccordion = within(dialog).getByRole("button", {
-      name: /layer stack options section, 3 fields, 1 override/i,
+      name: /layer hidden stack options section, 3 fields, 1 override/i,
     });
     const layerSection = fullConfigSectionFor(layerAccordion);
-    const layerNavRow = fullConfigSectionNavRowFor(
-      sectionNav,
-      /jump to layer stack options/i,
-    );
 
     expect(within(dialog).getAllByLabelText("1 override").length).toBeGreaterThan(0);
     expect(within(dialog).queryByText("1 override")).not.toBeInTheDocument();
@@ -3636,14 +3426,6 @@ describe("ViewerApp Full Config", () => {
     expect(within(layerSection).queryByText("1 preset")).not.toBeInTheDocument();
     expect(layerSection).toHaveClass("border-violet/35", "bg-violet/[0.06]");
     expect(layerSection).not.toHaveClass("border-amber/35", "bg-amber/[0.045]");
-    expect(layerNavRow).toHaveClass(
-      "border-violet/30",
-      "bg-violet/[0.055]",
-      "hover:bg-violet/15",
-    );
-    expect(layerNavRow).not.toHaveClass("border-amber/30", "bg-amber/[0.055]");
-    expect(within(layerNavRow).getByLabelText("1 override")).toHaveClass("text-violet");
-    expect(within(layerNavRow).queryByText("1 preset")).not.toBeInTheDocument();
     expect(within(hiddenDimRow).queryByText("override")).not.toBeInTheDocument();
     expect(hiddenDimLabel).toHaveClass("text-violet");
     expect(configFieldOverrideIconFor(hiddenDimRow)).toHaveClass("text-violet");
@@ -3652,7 +3434,7 @@ describe("ViewerApp Full Config", () => {
     expect(hiddenDimRow).not.toHaveClass("border-amber/55", "bg-amber/[0.055]");
     expect(within(hiddenDimRow).queryByText("preset")).not.toBeInTheDocument();
     expect(within(dialog).queryByText(/\d+ preset/i)).not.toBeInTheDocument();
-    expect(within(dialog).getAllByText("stack hidden dim")).toHaveLength(1);
+    expect(within(dialog).getAllByText("Hidden dim").length).toBeGreaterThan(0);
   });
 
   it("clears only the reverted popup field override when it returns to default", async () => {
@@ -3665,7 +3447,7 @@ describe("ViewerApp Full Config", () => {
     const stackLayersInput = await typeConfigFieldValue(
       user,
       dialog,
-      /stack num layers/i,
+      /num layers/i,
       "7",
     );
 
@@ -3679,16 +3461,16 @@ describe("ViewerApp Full Config", () => {
       expect(queryConfigFieldOverrideIcon(hiddenDimRow)).not.toBeInTheDocument();
     });
     expect(hiddenDimInput).toHaveValue("256");
-    expect(configFieldLabelFor(hiddenDimRow, /stack hidden dim/i)).toHaveClass(
+    expect(configFieldLabelFor(hiddenDimRow, /hidden dim/i)).toHaveClass(
       "text-ink",
     );
-    expect(configFieldLabelFor(hiddenDimRow, /stack hidden dim/i))
+    expect(configFieldLabelFor(hiddenDimRow, /hidden dim/i))
       .not.toHaveClass("text-violet");
     expect(within(hiddenDimRow).queryByText("override")).not.toBeInTheDocument();
     expectNoModifiedFieldInset(hiddenDimRow);
     expectUnmodifiedFieldControl(hiddenDimInput);
     expect(stackLayersInput).toHaveValue("7");
-    expect(configFieldLabelFor(stackLayersRow, /stack num layers/i)).toHaveClass(
+    expect(configFieldLabelFor(stackLayersRow, /num layers/i)).toHaveClass(
       "text-violet",
     );
     expect(configFieldOverrideIconFor(stackLayersRow)).toHaveClass("text-violet");
@@ -3699,7 +3481,7 @@ describe("ViewerApp Full Config", () => {
     expect(within(dialog).getAllByLabelText("1 override").length).toBeGreaterThan(0);
     expect(
       within(dialog).getByRole("button", {
-        name: /layer stack options section, 3 fields, 1 override/i,
+        name: /layer hidden stack options section, 3 fields, 1 override/i,
       }),
     ).toBeInTheDocument();
   });
@@ -3710,7 +3492,7 @@ describe("ViewerApp Full Config", () => {
     const user = userEvent.setup();
 
     const dialog = await openFullConfig(user);
-    const gateSwitch = within(dialog).getByRole("switch", { name: /^gate flag$/i });
+    const gateSwitch = within(dialog).getByRole("switch", { name: /^enabled$/i });
 
     await user.click(gateSwitch);
 
@@ -3759,20 +3541,12 @@ describe("ViewerApp Full Config", () => {
     const user = userEvent.setup();
 
     const dialog = await openFullConfig(user);
-    const sectionNav = within(dialog).getByRole("navigation", {
-      name: /full config sections/i,
-    });
-
     await typeConfigFieldValue(user, dialog, /hidden dim/i, "128");
 
     const layerAccordion = within(dialog).getByRole("button", {
-      name: /layer stack options section, 3 fields, 1 override, 1 preset/i,
+      name: /layer hidden stack options section, 3 fields, 1 override, 1 preset/i,
     });
     const layerSection = fullConfigSectionFor(layerAccordion);
-    const layerNavRow = fullConfigSectionNavRowFor(
-      sectionNav,
-      /jump to layer stack options/i,
-    );
 
     expect(layerAccordion).toHaveClass(
       "bg-[linear-gradient(90deg,rgba(255,209,102,0.12),rgba(167,139,250,0.13))]",
@@ -3786,14 +3560,6 @@ describe("ViewerApp Full Config", () => {
       "ring-violet/25",
     );
     expect(layerSection).not.toHaveClass("bg-amber/[0.045]", "bg-violet/[0.06]");
-    expect(layerNavRow).toHaveClass(
-      "border-amber/35",
-      "bg-[linear-gradient(90deg,rgba(255,209,102,0.075),rgba(167,139,250,0.095))]",
-      "hover:bg-[linear-gradient(90deg,rgba(255,209,102,0.11),rgba(167,139,250,0.13))]",
-      "ring-violet/20",
-    );
-    expect(within(layerNavRow).getByLabelText("1 override")).toHaveClass("text-violet");
-    expect(within(layerNavRow).getByText("1 preset")).toHaveClass("text-amber");
   });
 
   it("renders stack layer count as an editable text input with inline reset", async () => {
@@ -3803,9 +3569,9 @@ describe("ViewerApp Full Config", () => {
 
     const dialog = await openFullConfig(user);
     const layerAccordion = within(dialog).getByRole("button", {
-      name: /layer stack options section, 3 fields, 0 overrides/i,
+      name: /layer hidden stack options section, 3 fields, 0 overrides/i,
     });
-    const stackLayersInput = within(dialog).getByLabelText(/stack num layers/i);
+    const stackLayersInput = within(dialog).getByLabelText(/num layers/i);
     const stackLayersRow = configFieldRowFor(stackLayersInput);
 
     expect(layerAccordion).toHaveAttribute("aria-expanded", "true");
@@ -3857,7 +3623,7 @@ describe("ViewerApp Full Config", () => {
     const stackLayersInput = await typeConfigFieldValue(
       user,
       dialog,
-      /stack num layers/i,
+      /num layers/i,
       "7",
     );
     const hiddenDimRow = configFieldRowFor(hiddenDimInput);
@@ -3903,8 +3669,9 @@ describe("ViewerApp Full Config", () => {
         modelType: "linears",
         model: "linear",
         preset: "baseline",
+        experimentTask: "image-classification",
         dataset: "Mnist",
-        overrides: { stack_hidden_dim: "128" },
+        overrides: { hidden_dim: "128" },
       });
     });
     expect(screen.getByRole("dialog", { name: /full configuration/i })).toBeInTheDocument();
@@ -3950,16 +3717,16 @@ describe("ViewerApp Full Config", () => {
     await typeConfigFieldValue(user, dialog, /hidden dim/i, "128");
     await selectSearchableDropdownOption(
       user,
-      within(dialog).getByLabelText(/stack activation/i),
+      within(dialog).getByLabelText(/activation/i),
       "RELU",
       "RELU",
     );
-    await user.click(within(dialog).getByRole("switch", { name: /gate flag/i }));
+    await user.click(within(dialog).getByRole("switch", { name: /enabled/i }));
 
     const commandDialog = await openTrainingCommand(user, dialog);
 
     expect(commandField(commandDialog)).toHaveValue(
-      "source experiment.sh --model-type linears --model linear --preset baseline --config --stack-hidden-dim 128 --stack-activation RELU --gate-flag true",
+      "source experiment.sh --model-type linears --model linear --preset baseline --config --hidden-dim 128 --stack-activation RELU --gate-flag true",
     );
   });
 
@@ -3984,15 +3751,16 @@ describe("ViewerApp Full Config", () => {
         modelType: "linears",
         model: "linear",
         preset: "baseline",
+        experimentTask: "image-classification",
         dataset: "Mnist",
-        overrides: { stack_hidden_dim: "abc" },
+        overrides: { hidden_dim: "abc" },
       });
     });
 
     const commandDialog = await openTrainingCommand(user, dialog);
 
     expect(commandField(commandDialog)).toHaveValue(
-      "source experiment.sh --model-type linears --model linear --preset baseline --config --stack-hidden-dim abc",
+      "source experiment.sh --model-type linears --model linear --preset baseline --config --hidden-dim abc",
     );
   });
 
@@ -4005,7 +3773,7 @@ describe("ViewerApp Full Config", () => {
     await typeConfigFieldValue(user, dialog, /hidden dim/i, "128");
     let commandDialog = await openTrainingCommand(user, dialog);
     expect(commandField(commandDialog)).toHaveValue(
-      "source experiment.sh --model-type linears --model linear --preset baseline --config --stack-hidden-dim 128",
+      "source experiment.sh --model-type linears --model linear --preset baseline --config --hidden-dim 128",
     );
 
     await user.click(within(commandDialog).getByRole("button", { name: /close training command/i }));
@@ -4023,7 +3791,7 @@ describe("ViewerApp Full Config", () => {
         ...schemaResponse,
         fields: [
           ...schemaResponse.fields,
-          {
+          configFixtureField({
             key: "dropout_schedule",
             configKey: "DROPOUT_SCHEDULE",
             flag: "--dropout-schedule",
@@ -4033,7 +3801,7 @@ describe("ViewerApp Full Config", () => {
             default: null,
             nullable: true,
             choices: ["cosine decay"],
-          },
+          }),
         ],
       },
     });
@@ -4075,7 +3843,7 @@ describe("ViewerApp Full Config", () => {
     const dialog = await openFullConfig(user);
     await typeConfigFieldValue(user, dialog, /hidden dim/i, "128");
     const commandDialog = await openTrainingCommand(user, dialog);
-    const expectedCommand = "source experiment.sh --model-type linears --model linear --preset baseline --config --stack-hidden-dim 128";
+    const expectedCommand = "source experiment.sh --model-type linears --model linear --preset baseline --config --hidden-dim 128";
 
     await user.click(within(commandDialog).getByRole("button", { name: /copy command/i }));
 

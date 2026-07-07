@@ -692,6 +692,7 @@ describe("ViewerApp Overview", () => {
       modelType: "linears",
       model: "linear",
       preset: "baseline",
+      experimentTask: "image-classification",
       dataset: "Mnist",
       overrides: {},
     });
@@ -776,7 +777,7 @@ describe("ViewerApp Overview", () => {
             model: "linear",
             preset: "baseline",
             name: "Wide snapshot",
-            overrides: { stack_hidden_dim: "128", num_epochs: "5" },
+            overrides: { hidden_dim: "128", num_epochs: "5" },
             createdAt: "2026-06-01T00:00:00.000Z",
             updatedAt: "2026-06-01T00:00:00.000Z",
           },
@@ -786,7 +787,7 @@ describe("ViewerApp Overview", () => {
             model: "linear",
             preset: "bert-baseline",
             name: "Bert snapshot",
-            overrides: { stack_hidden_dim: "64" },
+            overrides: { hidden_dim: "64" },
             createdAt: "2026-06-01T00:00:00.000Z",
             updatedAt: "2026-06-01T00:00:00.000Z",
           },
@@ -832,7 +833,7 @@ describe("ViewerApp Overview", () => {
             model: "linear",
             preset: "baseline",
             name: "Wide snapshot",
-            overrides: { stack_hidden_dim: "128", num_epochs: "5" },
+            overrides: { hidden_dim: "128", num_epochs: "5" },
             createdAt: "2026-06-01T00:00:00.000Z",
             updatedAt: "2026-06-01T00:00:00.000Z",
           },
@@ -842,7 +843,7 @@ describe("ViewerApp Overview", () => {
             model: "linear",
             preset: "recurrent-gating-halting",
             name: "Recurrent snapshot",
-            overrides: { stack_hidden_dim: "64" },
+            overrides: { hidden_dim: "64" },
             createdAt: "2026-06-01T00:00:00.000Z",
             updatedAt: "2026-06-01T00:00:00.000Z",
           },
@@ -883,8 +884,9 @@ describe("ViewerApp Overview", () => {
         modelType: "linears",
         model: "linear",
         preset: "recurrent-gating-halting",
+        experimentTask: "image-classification",
         dataset: "Mnist",
-        overrides: { stack_hidden_dim: "64" },
+        overrides: { hidden_dim: "64" },
       });
     });
     await waitFor(() => {
@@ -907,7 +909,7 @@ describe("ViewerApp Overview", () => {
             model: "linear",
             preset: "baseline",
             name: "Wide snapshot",
-            overrides: { stack_hidden_dim: "128" },
+            overrides: { hidden_dim: "128" },
             createdAt: "2026-06-01T00:00:00.000Z",
             updatedAt: "2026-06-01T00:00:00.000Z",
           },
@@ -917,7 +919,7 @@ describe("ViewerApp Overview", () => {
             model: "linear",
             preset: "bert-baseline",
             name: "Bert snapshot",
-            overrides: { stack_hidden_dim: "64" },
+            overrides: { hidden_dim: "64" },
             createdAt: "2026-06-01T00:00:00.000Z",
             updatedAt: "2026-06-01T00:00:00.000Z",
           },
@@ -962,8 +964,9 @@ describe("ViewerApp Overview", () => {
         modelType: "bert",
         model: "linear",
         preset: "bert-baseline",
+        experimentTask: "bert-pretraining",
         dataset: "ToyText",
-        overrides: { stack_hidden_dim: "64" },
+        overrides: { hidden_dim: "64" },
       });
     });
   });
@@ -980,7 +983,7 @@ describe("ViewerApp Overview", () => {
             model: "linear",
             preset: "baseline",
             name: "Wide snapshot",
-            overrides: { stack_hidden_dim: "128", num_epochs: "5" },
+            overrides: { hidden_dim: "128", num_epochs: "5" },
             createdAt: "2026-06-01T00:00:00.000Z",
             updatedAt: "2026-06-01T00:00:00.000Z",
           },
@@ -997,8 +1000,9 @@ describe("ViewerApp Overview", () => {
         modelType: "linears",
         model: "linear",
         preset: "baseline",
+        experimentTask: "image-classification",
         dataset: "Mnist",
-        overrides: { stack_hidden_dim: "128", num_epochs: "5" },
+        overrides: { hidden_dim: "128", num_epochs: "5" },
       });
     });
 
@@ -1009,6 +1013,7 @@ describe("ViewerApp Overview", () => {
         modelType: "linears",
         model: "linear",
         preset: "baseline",
+        experimentTask: "image-classification",
         dataset: "Mnist",
         overrides: {},
       });
@@ -1031,7 +1036,7 @@ describe("ViewerApp Overview", () => {
             model: "linear",
             preset: "baseline",
             name: "Wide snapshot",
-            overrides: { stack_hidden_dim: "128" },
+            overrides: { hidden_dim: "128" },
             createdAt: "2026-06-01T00:00:00.000Z",
             updatedAt: "2026-06-01T00:00:00.000Z",
           },
@@ -1041,7 +1046,7 @@ describe("ViewerApp Overview", () => {
             model: "linear",
             preset: "bert-baseline",
             name: "Bert snapshot",
-            overrides: { stack_hidden_dim: "64" },
+            overrides: { hidden_dim: "64" },
             createdAt: "2026-06-01T00:00:00.000Z",
             updatedAt: "2026-06-01T00:00:00.000Z",
           },
@@ -1099,7 +1104,7 @@ describe("ViewerApp Overview", () => {
 
     let dialog = await screen.findByRole("dialog", { name: /training command/i });
     expect(commandField(dialog)).toHaveValue(
-      "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist",
+      "source experiment.sh --model-type linears --model linear --preset baseline --experiment-task image-classification --datasets Mnist",
     );
     const overlayRoot = dialog.parentElement;
     const workspaceContent = document.getElementById("viewer-workspace-content");
@@ -1132,7 +1137,7 @@ describe("ViewerApp Overview", () => {
 
     await waitFor(() => {
       expect(commandField(dialog)).toHaveValue(
-        "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist --monitors linear sampler",
+        "source experiment.sh --model-type linears --model linear --preset baseline --experiment-task image-classification --datasets Mnist --monitors linear sampler",
       );
     });
     expect(monitorToggle).toHaveAttribute("aria-pressed", "true");
@@ -1146,7 +1151,7 @@ describe("ViewerApp Overview", () => {
     expect(within(dialog).getByRole("button", { name: /include all monitors/i }))
       .toHaveAttribute("aria-pressed", "false");
     expect(commandField(dialog)).toHaveValue(
-      "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist",
+      "source experiment.sh --model-type linears --model linear --preset baseline --experiment-task image-classification --datasets Mnist",
     );
     await user.click(
       within(dialog).getByRole("button", { name: /close training command/i }),
@@ -1182,7 +1187,7 @@ describe("ViewerApp Overview", () => {
             model: "linear",
             preset: "baseline",
             name: "Wide snapshot",
-            overrides: { stack_hidden_dim: "128", stack_num_layers: "7" },
+            overrides: { hidden_dim: "128", stack_num_layers: "7" },
             createdAt: "2026-06-01T00:00:00.000Z",
             updatedAt: "2026-06-01T00:00:00.000Z",
           },
@@ -1208,7 +1213,7 @@ describe("ViewerApp Overview", () => {
       name: /training command/i,
     });
     expect(commandField(dialog)).toHaveValue(
-      "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist --config --stack-hidden-dim 128 --stack-num-layers 7",
+      "source experiment.sh --model-type linears --model linear --preset baseline --experiment-task image-classification --datasets Mnist --config --hidden-dim 128 --stack-num-layers 7",
     );
   });
 
@@ -1217,7 +1222,14 @@ describe("ViewerApp Overview", () => {
       datasetsResponse: {
         modelType: "linears",
         model: "linear",
-        datasets: [],
+        defaultExperimentTask: "image-classification",
+        datasetGroups: [
+          {
+            experimentTask: "image-classification",
+            label: "Image Classification",
+            datasets: [],
+          },
+        ],
       },
     });
     renderViewer();

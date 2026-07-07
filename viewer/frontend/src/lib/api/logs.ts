@@ -23,6 +23,7 @@ const logRunFields = {
   modelType: z.string(),
   model: z.string(),
   preset: z.string(),
+  experimentTask: z.string().nullable().optional(),
   dataset: z.string(),
   runName: z.string(),
   timestamp: z.string().nullable(),

@@ -7,11 +7,15 @@ import {
   type ConfigFieldGroup,
   type ConfigSection,
   type OverrideValues,
-  boundaryProjectorFieldGroups,
+  boundaryModelFieldGroups,
   concreteConfigOptionChoice,
   controlledSectionState,
+  displayConfigFieldLabel,
+  displayConfigSectionDescription,
+  displayConfigSectionTitle,
   fieldValue,
   hasOverride as fieldHasOverride,
+  inheritedHiddenModelFieldHint,
   inheritedStackSectionHint,
   modifiedCount,
   presetOwnedCount,
@@ -32,18 +36,21 @@ function isEnabledConfigValue(value: string) {
 
 function SectionHeaderControl({
   field,
+  displayLabel,
   overrides,
   controlId,
   onChange,
   onReset,
 }: {
   field: ConfigField;
+  displayLabel?: string;
   overrides: OverrideValues;
   controlId: string;
   onChange: (key: string, value: string) => void;
   onReset: (key: string) => void;
 }) {
   const value = fieldValue(field, overrides);
+  const label = displayLabel ?? field.label;
   const isEnabled = isEnabledConfigValue(value);
   const isModified = fieldHasOverride(overrides, field.key);
   const isLocked = Boolean(field.locked);
@@ -56,7 +63,7 @@ function SectionHeaderControl({
     >
       <Switch
         id={controlId}
-        aria-label={field.label}
+        aria-label={label}
         disabled={isLocked}
         checked={isEnabled}
         onCheckedChange={(checked) => onChange(field.key, String(checked))}
@@ -64,8 +71,8 @@ function SectionHeaderControl({
       {isModified && (
         <button
           type="button"
-          aria-label={`Reset ${field.label}`}
-          title={`Reset ${field.label}`}
+          aria-label={`Reset ${label}`}
+          title={`Reset ${label}`}
           disabled={isResetDisabled}
           onClick={() => onReset(field.key)}
           className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] border border-line bg-white/[0.035] text-ink-faint transition hover:bg-white/[0.07] hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-white/[0.035] disabled:hover:text-ink-faint"
@@ -107,8 +114,51 @@ function descendantFieldKeys(sections: ConfigSection[]) {
   return keys;
 }
 
-function BoundaryProjectorGroupAccordion({
+function InheritedConfigFieldRow({
+  hint,
+  overrides,
+}: {
+  hint: NonNullable<ReturnType<typeof inheritedHiddenModelFieldHint>>;
+  overrides: OverrideValues;
+}) {
+  const value = fieldValue(hint.sourceField, overrides);
+  const isModified = fieldHasOverride(overrides, hint.sourceField.key);
+
+  return (
+    <div
+      className="grid gap-1.5 rounded-[10px] border-l-2 border-line bg-white/[0.025] px-2.5 py-2"
+      data-config-inherited-field={hint.sourceField.key}
+      title={hint.title}
+    >
+      <div className="flex min-w-0 items-start justify-between gap-2">
+        <span className="min-w-0 text-[13px] font-semibold leading-5 text-ink">
+          {hint.label}
+        </span>
+        <span className="flex shrink-0 items-center gap-1.5">
+          {isModified && (
+            <Badge variant="override" className="px-1 py-0.5 text-xs">
+              override
+            </Badge>
+          )}
+          <Badge
+            variant="info"
+            className="px-1 py-0.5 text-xs"
+            aria-label={hint.title}
+          >
+            From {hint.sourceTitle}
+          </Badge>
+        </span>
+      </div>
+      <div className="flex h-10 min-w-0 items-center rounded-control border border-line-soft bg-black/25 px-3 text-[13.5px] font-medium text-ink-dim">
+        <span className="min-w-0 truncate">{value}</span>
+      </div>
+    </div>
+  );
+}
+
+function BoundaryModelGroupAccordion({
   id,
+  sectionTitle,
   group,
   overrides,
   isOpen,
@@ -118,6 +168,7 @@ function BoundaryProjectorGroupAccordion({
   onFieldReset,
 }: {
   id: string;
+  sectionTitle: string;
   group: ConfigFieldGroup;
   overrides: OverrideValues;
   isOpen: boolean;
@@ -128,6 +179,9 @@ function BoundaryProjectorGroupAccordion({
 }) {
   const isEnabled = group.isEnabled === true;
   const controlField = group.controlField;
+  const controlFieldLabel = controlField
+    ? displayConfigFieldLabel(controlField, sectionTitle, group.title)
+    : undefined;
   const fieldCount = group.fields.length;
   const overrideCount = modifiedCount(group.fields, overrides);
   const presetCount = presetOwnedCount(group.fields);
@@ -159,12 +213,12 @@ function BoundaryProjectorGroupAccordion({
             type="button"
             aria-expanded={isEnabled && isOpen}
             aria-controls={panelId}
-            aria-label={`${group.title} boundary projector group, ${sectionCountLabel(
+            aria-label={`${group.title} boundary model group, ${sectionCountLabel(
               fieldCount,
               "field",
             )}, ${sectionCountLabel(overrideCount, "override")}${
               hasPreset ? `, ${sectionCountLabel(presetCount, "preset")}` : ""
-            }${!isEnabled && controlField ? `, select ${controlField.label} to open` : ""}`}
+            }${!isEnabled && controlFieldLabel ? `, select ${controlFieldLabel} to open` : ""}`}
             disabled={!isEnabled}
             onClick={onToggle}
             className={cn(
@@ -191,7 +245,7 @@ function BoundaryProjectorGroupAccordion({
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 border-l border-line-soft bg-black/15 px-3 py-2">
           {controlField && (
             <Switch
-              aria-label={controlField.label}
+              aria-label={controlFieldLabel}
               checked={isEnabled}
               disabled={isSwitchDisabled}
               onCheckedChange={onEnabledChange}
@@ -237,6 +291,7 @@ function BoundaryProjectorGroupAccordion({
             <ConfigFieldControl
               key={field.key}
               field={field}
+              displayLabel={displayConfigFieldLabel(field, sectionTitle, group.title)}
               overrides={overrides}
               onChange={onFieldChange}
               onReset={onFieldReset}
@@ -254,6 +309,8 @@ export function ConfigSectionAccordion({
   refCallback,
   title,
   fields,
+  allFields: allFieldsProp,
+  showInheritedFields = true,
   childSections: childSectionsProp,
   overrides,
   isOpen,
@@ -268,6 +325,8 @@ export function ConfigSectionAccordion({
   refCallback: (element: HTMLElement | null) => void;
   title: string;
   fields: ConfigField[];
+  allFields?: ConfigField[];
+  showInheritedFields?: boolean;
   childSections?: ConfigSection[];
   overrides: OverrideValues;
   isOpen: boolean;
@@ -279,9 +338,15 @@ export function ConfigSectionAccordion({
   onFieldReset: (key: string) => void;
 }) {
   const childSections = childSectionsProp ?? EMPTY_CONFIG_SECTIONS;
+  const allFields = allFieldsProp ?? fields;
   const sectionModifiedCount = modifiedCount(fields, overrides);
   const sectionPresetOwnedCount = presetOwnedCount(fields);
+  const displayTitle = displayConfigSectionTitle(title);
+  const displayDescription = displayConfigSectionDescription(title);
   const controlFieldId = controlField ? `${id}-control-${controlField.key}` : undefined;
+  const controlFieldDisplayLabel = controlField
+    ? displayConfigFieldLabel(controlField, title)
+    : undefined;
   const childFieldKeys = useMemo(
     () => descendantFieldKeys(childSections),
     [childSections],
@@ -289,7 +354,7 @@ export function ConfigSectionAccordion({
   const bodyFields = fields.filter(
     (field) => field.key !== controlField?.key && !childFieldKeys.has(field.key),
   );
-  const bodyFieldGroups = boundaryProjectorFieldGroups(title, bodyFields, overrides);
+  const bodyFieldGroups = boundaryModelFieldGroups(title, bodyFields, overrides);
   const boundaryGroupTitleSignature = (
     bodyFieldGroups?.map((group) => group.title) ?? []
   ).join(String.fromCharCode(0));
@@ -320,6 +385,12 @@ export function ConfigSectionAccordion({
     { title, fields, controlFieldKey: controlField?.key },
     overrides,
   );
+  const inheritedHiddenFieldHint = showInheritedFields
+    ? inheritedHiddenModelFieldHint(
+        { title, fields },
+        allFields,
+      )
+    : undefined;
   const stateContainerClass = hasBoth
     ? "border-amber/35 bg-[linear-gradient(135deg,rgba(255,209,102,0.075),rgba(167,139,250,0.105))] shadow-[0_20px_46px_-32px_rgba(167,139,250,0.35)] ring-1 ring-violet/25 hover:border-violet/45"
     : sectionHasOverride
@@ -441,14 +512,14 @@ export function ConfigSectionAccordion({
             type="button"
             aria-expanded={isOpen}
             aria-controls={panelId}
-            aria-label={`${title} section, ${sectionCountLabel(
+            aria-label={`${displayTitle} section, ${sectionCountLabel(
               fields.length,
               "field",
             )}, ${sectionCountLabel(sectionModifiedCount, "override")}${
               hasPreset
                 ? `, ${sectionCountLabel(sectionPresetOwnedCount, "preset")}`
                 : ""
-            }${isDisabled && controlField ? `, enable ${controlField.label} to open` : ""}`}
+            }${isDisabled && controlFieldDisplayLabel ? `, enable ${controlFieldDisplayLabel} to open` : ""}`}
             disabled={isDisabled}
             onClick={onToggle}
             className={cn(
@@ -468,7 +539,16 @@ export function ConfigSectionAccordion({
                 )}
                 aria-hidden
               />
-              <span className="min-w-0 truncate text-sm font-semibold text-ink">{title}</span>
+              <span className="grid min-w-0 gap-0.5">
+                <span className="min-w-0 truncate text-sm font-semibold text-ink">
+                  {displayTitle}
+                </span>
+                {displayDescription && (
+                  <span className="min-w-0 truncate text-xs font-medium text-ink-dim">
+                    {displayDescription}
+                  </span>
+                )}
+              </span>
             </span>
           </button>
         </h3>
@@ -482,6 +562,7 @@ export function ConfigSectionAccordion({
           {controlField && controlFieldId && (
             <SectionHeaderControl
               field={controlField}
+              displayLabel={controlFieldDisplayLabel}
               overrides={overrides}
               onChange={onFieldChange}
               onReset={onFieldReset}
@@ -525,9 +606,10 @@ export function ConfigSectionAccordion({
         {bodyFields.length > 0 && bodyFieldGroups && bodyFieldGroups.length > 0 && (
           <div className="grid gap-2.5">
             {bodyFieldGroups.map((group, index) => (
-              <BoundaryProjectorGroupAccordion
+              <BoundaryModelGroupAccordion
                 key={group.title}
                 id={sectionElementId(index, group.title, `${id}-boundary-group`)}
+                sectionTitle={title}
                 group={group}
                 overrides={overrides}
                 isOpen={openBoundaryGroupTitles.has(group.title)}
@@ -541,11 +623,18 @@ export function ConfigSectionAccordion({
         )}
         {bodyFields.length > 0 && (!bodyFieldGroups || bodyFieldGroups.length === 0) && (
           <div className="grid gap-x-3 gap-y-3 md:grid-cols-2 2xl:grid-cols-3">
+            {inheritedHiddenFieldHint && (
+              <InheritedConfigFieldRow
+                hint={inheritedHiddenFieldHint}
+                overrides={overrides}
+              />
+            )}
             {isOpen &&
               bodyFields.map((field) => (
                 <ConfigFieldControl
                   key={field.key}
                   field={field}
+                  displayLabel={displayConfigFieldLabel(field, title)}
                   overrides={overrides}
                   onChange={onFieldChange}
                   onReset={onFieldReset}
@@ -575,6 +664,8 @@ export function ConfigSectionAccordion({
                   refCallback={() => undefined}
                   title={childSection.title}
                   fields={childSection.fields}
+                  allFields={allFields}
+                  showInheritedFields={showInheritedFields}
                   childSections={childSection.children}
                   overrides={overrides}
                   isOpen={isChildOpen}
@@ -608,11 +699,14 @@ export function ConfigSectionFields({
   onFieldReset: (key: string) => void;
 }) {
   const sectionModifiedCount = modifiedCount(fields, overrides);
+  const displayTitle = displayConfigSectionTitle(title);
 
   return (
     <section className="grid gap-3 border-b border-line-soft pb-5 last:border-b-0 last:pb-0">
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
-        <h3 className="min-w-0 truncate text-sm font-semibold text-ink">{title}</h3>
+        <h3 className="min-w-0 truncate text-sm font-semibold text-ink">
+          {displayTitle}
+        </h3>
         <span className="flex shrink-0 items-center gap-1">
           {sectionModifiedCount > 0 && (
             <Badge variant="override">{sectionModifiedCount} set</Badge>
@@ -625,6 +719,7 @@ export function ConfigSectionFields({
           <ConfigFieldControl
             key={field.key}
             field={field}
+            displayLabel={displayConfigFieldLabel(field, title)}
             overrides={overrides}
             onChange={onFieldChange}
             onReset={onFieldReset}

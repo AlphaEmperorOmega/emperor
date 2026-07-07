@@ -7,15 +7,18 @@ import {
   type Dataset,
   type Preset,
 } from "@/lib/api";
+import { configSectionsFields } from "@/lib/config";
 import { type ConfigSnapshot } from "@/lib/config-snapshots";
 
 function field(overrides: Partial<ConfigField> & Pick<ConfigField, "key">): ConfigField {
+  const section = overrides.section ?? "General";
   return {
     key: overrides.key,
     configKey: overrides.configKey ?? overrides.key.toUpperCase(),
     flag: overrides.flag ?? `--${overrides.key.replace(/_/g, "-")}`,
     label: overrides.label ?? overrides.key,
-    section: overrides.section ?? "General",
+    section,
+    sectionPath: overrides.sectionPath ?? [section || "General"],
     type: overrides.type ?? "int",
     default: overrides.default ?? 0,
     nullable: overrides.nullable ?? false,
@@ -61,7 +64,7 @@ describe("target selection", () => {
       datasets: [dataset("Mnist"), dataset("Cifar10")],
       presets: [preset("baseline"), preset("fast", "Fast preset")],
       schemaFields: [
-        field({ key: "stack_hidden_dim", section: "Model" }),
+        field({ key: "hidden_dim", section: "Model" }),
         field({
           key: "layer_norm",
           label: "Layer Norm",
@@ -81,7 +84,7 @@ describe("target selection", () => {
       selectedModel: "linear",
       selectedPreset: "fast",
       selectedTrainingPresets: ["fast", "baseline"],
-      overrides: { stack_hidden_dim: "128", dropout: "0.1" },
+      overrides: { hidden_dim: "128", dropout: "0.1" },
     });
 
     expect(state.datasetNames).toEqual(["Mnist", "Cifar10"]);
@@ -93,7 +96,7 @@ describe("target selection", () => {
       "General",
     ]);
     expect(state.configFields.map((configField) => configField.key)).toEqual([
-      "stack_hidden_dim",
+      "hidden_dim",
       "layer_norm",
       "dropout",
     ]);
@@ -163,7 +166,7 @@ describe("target selection", () => {
       "Recurrent Gate Stack Options",
       "Recurrent Halting Options",
     ]);
-    expect(state.configSections.flatMap((section) => section.fields.map((field) => field.key)))
+    expect(configSectionsFields(state.configSections).map((field) => field.key))
       .toEqual([
         "recurrent_flag",
         "recurrent_layer_norm_position",
@@ -171,8 +174,8 @@ describe("target selection", () => {
         "recurrent_halting_threshold",
       ]);
     expect(
-      state.configSections.flatMap((section) =>
-        section.fields.map((configField) => configField.section),
+      configSectionsFields(state.configSections).map(
+        (configField) => configField.section,
       ),
     ).toEqual([
       "Recurrent Layer Options",
@@ -180,5 +183,54 @@ describe("target selection", () => {
       "Recurrent Gate Stack Options",
       "Recurrent Halting Options",
     ]);
+  });
+
+  it("builds nested config sections from backend section paths", () => {
+    const state = deriveTargetSelectionState({
+      datasets: [],
+      presets: [],
+      schemaFields: [
+        field({
+          key: "recurrent_flag",
+          section: "Recurrent Layer Options",
+          sectionPath: ["Recurrent Layer Options"],
+        }),
+        field({
+          key: "recurrent_gate_flag",
+          section: "Recurrent Gate Options",
+          sectionPath: ["Recurrent Layer Options", "Recurrent Gate Options"],
+        }),
+        field({
+          key: "recurrent_gate_stack_hidden_dim",
+          section: "Recurrent Gate Stack Options",
+          sectionPath: [
+            "Recurrent Layer Options",
+            "Recurrent Gate Options",
+            "Recurrent Gate Stack Options",
+          ],
+        }),
+      ],
+      configSnapshots: [],
+      selectedModelType: "linears",
+      selectedModel: "linear",
+      selectedPreset: "baseline",
+      selectedTrainingPresets: [],
+      overrides: {},
+    });
+
+    expect(state.configSections).toHaveLength(1);
+    expect(state.configSections[0].title).toBe("Recurrent Layer Options");
+    expect(state.configSections[0].children?.[0].title).toBe(
+      "Recurrent Gate Options",
+    );
+    expect(state.configSections[0].children?.[0].children?.[0].title).toBe(
+      "Recurrent Gate Stack Options",
+    );
+    expect(configSectionsFields(state.configSections).map((item) => item.key))
+      .toEqual([
+        "recurrent_flag",
+        "recurrent_gate_flag",
+        "recurrent_gate_stack_hidden_dim",
+      ]);
   });
 });

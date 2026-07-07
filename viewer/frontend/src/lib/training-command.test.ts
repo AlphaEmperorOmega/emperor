@@ -11,6 +11,7 @@ function field(key: string): ConfigField {
     flag: `--${key.replace(/_/g, "-")}`,
     label: key,
     section: "Router Options",
+    sectionPath: ["Router Options"],
     type: "bool",
     default: false,
     nullable: false,

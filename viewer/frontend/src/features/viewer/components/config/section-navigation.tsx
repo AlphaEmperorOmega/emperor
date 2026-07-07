@@ -3,6 +3,8 @@ import { Badge } from "@/components/ui/badge";
 import {
   type ConfigSection,
   type OverrideValues,
+  configSectionFields,
+  displayConfigSectionTitle,
   modifiedCount,
   presetOwnedCount,
   sectionElementId,
@@ -86,8 +88,10 @@ export function SectionNavigation({
           </div>
         )}
         {sections.map((section, index) => {
-          const sectionModifiedCount = modifiedCount(section.fields, overrides);
-          const sectionPresetOwnedCount = presetOwnedCount(section.fields);
+          const fields = configSectionFields(section);
+          const sectionModifiedCount = modifiedCount(fields, overrides);
+          const sectionPresetOwnedCount = presetOwnedCount(fields);
+          const displayTitle = displayConfigSectionTitle(section.title);
           const hasOverride = sectionModifiedCount > 0;
           const hasPreset = sectionPresetOwnedCount > 0;
           const hasBoth = hasOverride && hasPreset;
@@ -118,17 +122,17 @@ export function SectionNavigation({
               <div className="relative grid min-w-0 grid-cols-[minmax(0,1fr)_auto]">
                 <button
                   type="button"
-                  aria-label={`Jump to ${section.title}`}
+                  aria-label={`Jump to ${displayTitle}`}
                   onClick={() => onJumpToSection(section.title)}
                   className="min-h-11 min-w-0 px-2.5 py-2 text-left focus:outline-none"
                 >
                   <span className="block min-w-0 truncate text-sm font-semibold text-ink transition-opacity group-hover/section-row:opacity-0 group-focus-within/section-row:opacity-0">
-                    {section.title}
+                    {displayTitle}
                   </span>
                 </button>
                 <span className="flex shrink-0 items-center gap-1 px-2 transition-opacity group-hover/section-row:pointer-events-none group-hover/section-row:opacity-0 group-focus-within/section-row:pointer-events-none group-focus-within/section-row:opacity-0">
                   <ConfigMetricBadge
-                    count={section.fields.length}
+                    count={fields.length}
                     kind="fields"
                     focusable={false}
                     tooltipPosition="bottom"
@@ -153,12 +157,12 @@ export function SectionNavigation({
                   aria-hidden
                   className="pointer-events-none absolute left-2.5 right-2.5 top-1/2 z-20 -translate-y-1/2 truncate text-sm font-semibold text-ink opacity-0 transition-opacity group-hover/section-row:opacity-100 group-focus-within/section-row:opacity-100"
                 >
-                  {section.title}
+                  {displayTitle}
                 </span>
               </div>
               <button
                 type="button"
-                aria-label={`${isSectionOpen ? "Close" : "Open"} ${section.title}`}
+                aria-label={`${isSectionOpen ? "Close" : "Open"} ${displayTitle}`}
                 aria-expanded={isSectionOpen}
                 aria-controls={panelId}
                 disabled={isSectionDisabled}

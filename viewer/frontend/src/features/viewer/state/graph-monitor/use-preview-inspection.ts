@@ -11,6 +11,7 @@ export type PreviewInspectionRequest = {
   modelType: string;
   model: string;
   preset: string;
+  experimentTask?: string;
   dataset?: string;
   overrides: OverrideValues;
   targetMode?: "preset" | "snapshot" | "experiment";
@@ -23,6 +24,7 @@ function previewInspectionRequestKey(request: PreviewInspectionRequest) {
     modelType: request.modelType,
     model: request.model,
     preset: request.preset,
+    experimentTask: request.experimentTask ?? null,
     dataset: request.dataset ?? null,
     overrides: Object.fromEntries(
       Object.entries(request.overrides).sort(([left], [right]) =>
@@ -40,6 +42,7 @@ function previewInspectionPayload(request: PreviewInspectionRequest) {
     modelType: request.modelType,
     model: request.model,
     preset: request.preset,
+    experimentTask: request.experimentTask,
     dataset: request.dataset,
     overrides: request.overrides,
   };

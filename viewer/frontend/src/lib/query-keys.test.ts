@@ -167,6 +167,7 @@ describe("query key factories", () => {
       2,
       {
         datasets: ["Mnist"],
+        experimentTask: "",
         logFolder: "runs",
         modelType: "linears",
         model: "linear",

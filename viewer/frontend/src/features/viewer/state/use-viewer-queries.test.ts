@@ -70,7 +70,17 @@ beforeEach(() => {
     Promise.resolve({ ...identity, presets: [] }),
   );
   mocks.fetchDatasets.mockReset().mockImplementation((identity: ModelIdentity) =>
-    Promise.resolve({ ...identity, datasets: [] }),
+    Promise.resolve({
+      ...identity,
+      defaultExperimentTask: "image-classification",
+      datasetGroups: [
+        {
+          experimentTask: "image-classification",
+          label: "Image Classification",
+          datasets: [],
+        },
+      ],
+    }),
   );
   mocks.fetchMonitors.mockReset().mockImplementation((identity: ModelIdentity) =>
     Promise.resolve({ ...identity, monitors: [] }),

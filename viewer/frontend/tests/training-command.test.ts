@@ -4,10 +4,12 @@ import { type ConfigField } from "@/lib/api";
 import { type ConfigSection } from "@/lib/config";
 
 function field(overrides: Partial<ConfigField> & Pick<ConfigField, "key" | "flag">): ConfigField {
+  const section = overrides.section ?? "General";
   return {
     configKey: overrides.configKey ?? overrides.key.toUpperCase(),
     label: overrides.label ?? overrides.key,
-    section: overrides.section ?? "General",
+    section,
+    sectionPath: overrides.sectionPath ?? [section || "General"],
     description: overrides.description ?? "",
     type: overrides.type ?? "string",
     default: overrides.default ?? "",
@@ -21,7 +23,7 @@ const sections: ConfigSection[] = [
   {
     title: "Layer",
     fields: [
-      field({ key: "stack_hidden_dim", flag: "--stack-hidden-dim", type: "int", default: 256 }),
+      field({ key: "hidden_dim", flag: "--hidden-dim", type: "int", default: 256 }),
       field({ key: "activation", flag: "--activation", default: "GELU" }),
     ],
   },
@@ -80,11 +82,11 @@ describe("buildTrainingCommand", () => {
         monitors: ["linear", "halting"],
         sections,
         overrides: {
-          stack_hidden_dim: "128",
+          hidden_dim: "128",
         },
       }),
     ).toBe(
-      "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist --logdir monitor_run --monitors linear halting --config --stack-hidden-dim 128",
+      "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist --logdir monitor_run --monitors linear halting --config --hidden-dim 128",
     );
   });
 
@@ -97,11 +99,11 @@ describe("buildTrainingCommand", () => {
         sections,
         overrides: {
           activation: "RELU",
-          stack_hidden_dim: "128",
+          hidden_dim: "128",
         },
       }),
     ).toBe(
-      "source experiment.sh --model-type linears --model linear --preset baseline --config --stack-hidden-dim 128 --activation RELU",
+      "source experiment.sh --model-type linears --model linear --preset baseline --config --hidden-dim 128 --activation RELU",
     );
   });
 

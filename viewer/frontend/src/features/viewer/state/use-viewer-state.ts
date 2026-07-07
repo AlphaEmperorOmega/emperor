@@ -127,7 +127,7 @@ export function useViewerState(options: ViewerStateOptions = {}) {
 
   const targetConfig = useTargetConfigState(cascadeRules);
   const { selectedModel } = targetConfig.selection;
-  const { selectedModelType } = targetConfig.target;
+  const { selectedExperimentTask, selectedModelType } = targetConfig.target;
 
   const activeTrainingJobState = useActiveTrainingJobState({ onJobStarted });
   const historicalTagsEnabled =
@@ -136,6 +136,7 @@ export function useViewerState(options: ViewerStateOptions = {}) {
   const historicalRuns = useHistoricalRunsState({
     selectedModelType,
     selectedModel,
+    selectedExperimentTask,
     tagsEnabled: historicalTagsEnabled,
     syncSelectedLogRun: targetConfig.syncSelectedLogRun,
     clearSelectedExperimentRun: targetConfig.clearSelectedExperimentRun,

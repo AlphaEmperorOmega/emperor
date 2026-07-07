@@ -42,10 +42,12 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
   const { input, logFolder, options, request, status, training } = viewModel;
   const {
     datasetOptions,
+    experimentTaskOptions,
     selectedModelType,
     selectedModel,
     selectedPreset,
     selectedTrainingPresets,
+    selectedExperimentTask,
     selectedTrainingSnapshotIds,
     selectedDatasets,
     overrides,
@@ -68,6 +70,7 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
     onMakeTrainingPresetPrimary,
     onSelectAllTrainingPresets,
     onSelectPrimaryTrainingPreset,
+    onSelectExperimentTask,
     onSetDatasets,
     onToggleDataset,
     onSelectAllDatasets,
@@ -282,6 +285,8 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
                 selectedTrainingPresets={selectedTrainingPresets}
                 configSnapshots={allConfigSnapshots}
                 selectedTrainingSnapshotIds={selectedTrainingSnapshotIds}
+                experimentTaskOptions={experimentTaskOptions}
+                selectedExperimentTask={selectedExperimentTask}
                 datasetOptions={datasetOptions}
                 selectedDatasets={selectedDatasets}
                 onSelectModelType={onSelectModelType}
@@ -293,6 +298,7 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
                 onMakeTrainingPresetPrimary={onMakeTrainingPresetPrimary}
                 onSelectAllTrainingPresets={onSelectAllTrainingPresets}
                 onSelectPrimaryTrainingPreset={onSelectPrimaryTrainingPreset}
+                onSelectExperimentTask={onSelectExperimentTask}
                 onSetDatasets={onSetDatasets}
                 onToggleDataset={onToggleDataset}
                 onSelectAllDatasets={onSelectAllDatasets}

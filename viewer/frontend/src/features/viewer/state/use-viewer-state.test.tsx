@@ -557,7 +557,14 @@ function mockPublicModelCatalog() {
   mocks.fetchDatasets.mockImplementation((identity: ModelIdentity) =>
     Promise.resolve({
       ...identity,
-      datasets: datasetsByModel.get(modelIdentityKey(identity)) ?? [],
+      defaultExperimentTask: "image-classification",
+      datasetGroups: [
+        {
+          experimentTask: "image-classification",
+          label: "Image Classification",
+          datasets: datasetsByModel.get(modelIdentityKey(identity)) ?? [],
+        },
+      ],
     }),
   );
   mocks.fetchMonitors.mockImplementation((identity: ModelIdentity) =>
@@ -676,27 +683,48 @@ beforeEach(() => {
       identity.modelType === "bert"
         ? {
             ...identity,
-            datasets: [
-              { name: "ToyText", label: "Toy Text", inputDim: 128, outputDim: 2 },
+            defaultExperimentTask: "bert-pretraining",
+            datasetGroups: [
+              {
+                experimentTask: "bert-pretraining",
+                label: "Bert Pretraining",
+                datasets: [
+                  { name: "ToyText", label: "Toy Text", inputDim: 128, outputDim: 2 },
+                ],
+              },
             ],
           }
         : identity.modelType === "vit"
           ? {
               ...identity,
-              datasets: [
-                { name: "Mnist", label: "MNIST", inputDim: 784, outputDim: 10 },
+              defaultExperimentTask: "image-classification",
+              datasetGroups: [
+                {
+                  experimentTask: "image-classification",
+                  label: "Image Classification",
+                  datasets: [
+                    { name: "Mnist", label: "MNIST", inputDim: 784, outputDim: 10 },
+                  ],
+                },
               ],
             }
         : {
             modelType: "linears",
             model: "linear",
-            datasets: [
-              { name: "Mnist", label: "MNIST", inputDim: 784, outputDim: 10 },
+            defaultExperimentTask: "image-classification",
+            datasetGroups: [
               {
-                name: "FashionMnist",
-                label: "Fashion MNIST",
-                inputDim: 784,
-                outputDim: 10,
+                experimentTask: "image-classification",
+                label: "Image Classification",
+                datasets: [
+                  { name: "Mnist", label: "MNIST", inputDim: 784, outputDim: 10 },
+                  {
+                    name: "FashionMnist",
+                    label: "Fashion MNIST",
+                    inputDim: 784,
+                    outputDim: 10,
+                  },
+                ],
               },
             ],
           },
@@ -1035,6 +1063,7 @@ describe("useViewerState", () => {
         modelType: "linears",
         model: "linear",
         preset: "baseline",
+        experimentTask: "image-classification",
         dataset: "Mnist",
         overrides: {},
       });
@@ -1084,6 +1113,7 @@ describe("useViewerState", () => {
         modelType: "experts",
         model: "linear",
         preset: "expert-baseline",
+        experimentTask: "image-classification",
         dataset: "ExpertToy",
         overrides: {},
       });
@@ -1281,6 +1311,7 @@ describe("useViewerState", () => {
       modelType: "bert",
       model: "linear",
       preset: "bert-baseline",
+      experimentTask: "bert-pretraining",
       dataset: "ToyText",
       overrides: {},
     });
@@ -2251,6 +2282,7 @@ describe("useViewerState", () => {
       modelType: "linears",
       model: "linear",
       preset: "baseline",
+      experimentTask: "image-classification",
       dataset: "FashionMnist",
       overrides: {},
     });
@@ -2327,6 +2359,7 @@ describe("useViewerState", () => {
       modelType: "linears",
       model: "linear",
       preset: "baseline",
+      experimentTask: "image-classification",
       dataset: "FashionMnist",
       overrides: { hidden_size: "256" },
     });
@@ -2359,6 +2392,7 @@ describe("useViewerState", () => {
           flag: "--hidden-size",
           label: "Hidden size",
           section: "Model",
+          sectionPath: ["Model"],
           type: "int",
           default: 64,
           nullable: false,

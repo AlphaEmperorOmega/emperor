@@ -1,6 +1,7 @@
 import {
   type ConfigSection,
   type OverrideValues,
+  configSectionFields,
   hasOverride,
   overrideValue,
 } from "@/lib/config";
@@ -19,7 +20,7 @@ function shellQuote(value: string) {
 function orderedOverrideEntries(sections: ConfigSection[], overrides: OverrideValues) {
   const entries: Array<{ field: ConfigField; value: string }> = [];
   for (const section of sections) {
-    for (const field of section.fields) {
+    for (const field of configSectionFields(section)) {
       if (hasOverride(overrides, field.key)) {
         entries.push({ field, value: overrideValue(overrides, field.key) ?? "" });
       }
@@ -37,6 +38,7 @@ export function buildTrainingCommand({
   model,
   preset,
   presets,
+  experimentTask,
   datasets,
   logFolder,
   monitors,
@@ -47,6 +49,7 @@ export function buildTrainingCommand({
   model: string;
   preset: string;
   presets?: string[];
+  experimentTask?: string;
   datasets?: string[];
   logFolder?: string;
   monitors?: string[];
@@ -69,6 +72,9 @@ export function buildTrainingCommand({
     parts.push("--presets", ...selectedPresets.map(shellQuote));
   } else {
     parts.push("--preset", shellQuote(selectedPresets[0] ?? preset));
+  }
+  if (experimentTask) {
+    parts.push("--experiment-task", shellQuote(experimentTask));
   }
   if (datasets && datasets.length > 0) {
     parts.push("--datasets", ...datasets.map(shellQuote));

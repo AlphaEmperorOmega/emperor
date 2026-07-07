@@ -29,6 +29,7 @@ type HistoricalRunSelectionState = {
 type HistoricalRunsStateInput = {
   selectedModelType: string;
   selectedModel: string;
+  selectedExperimentTask?: string;
   tagsEnabled?: boolean;
   syncSelectedLogRun: (selectedLogRun: LogRun) => void;
   clearSelectedExperimentRun: () => void;
@@ -169,6 +170,7 @@ export function useHistoricalRunSelectionState(): HistoricalRunSelectionState {
 export function useHistoricalRunsState({
   selectedModelType,
   selectedModel,
+  selectedExperimentTask = "",
   tagsEnabled = true,
   syncSelectedLogRun,
   clearSelectedExperimentRun,
@@ -214,6 +216,7 @@ export function useHistoricalRunsState({
         includeRunsWithoutMonitorTags: !tagsEnabled,
         selectedModelType,
         selectedModel,
+        selectedExperimentTask,
         selectedHistoricalExperimentFilter,
         selectedHistoricalDatasetFilter,
         selectedHistoricalPreset,
@@ -224,6 +227,7 @@ export function useHistoricalRunsState({
       selectedHistoricalDatasetFilter,
       selectedHistoricalExperimentFilter,
       selectedHistoricalPreset,
+      selectedExperimentTask,
       selectedLogRunId,
       selectedModel,
       selectedModelType,
@@ -262,6 +266,7 @@ export function useHistoricalRunsState({
         includeRunsWithoutMonitorTags: !tagsEnabled,
         selectedModelType,
         selectedModel,
+        selectedExperimentTask,
         selectedHistoricalExperimentFilter,
         selectedHistoricalDatasetFilter,
         selectedHistoricalPreset,
@@ -273,6 +278,7 @@ export function useHistoricalRunsState({
       selectedHistoricalDatasetFilter,
       selectedHistoricalExperimentFilter,
       selectedHistoricalPreset,
+      selectedExperimentTask,
       selectedLogRunId,
       selectedModel,
       selectedModelType,

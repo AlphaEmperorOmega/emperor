@@ -109,6 +109,7 @@ function BooleanSegmentedControl({
 
 function ConfigFieldLabelContent({
   field,
+  displayLabel,
   labelTextId,
   isModified,
   isLocked,
@@ -117,6 +118,7 @@ function ConfigFieldLabelContent({
   statusBadgeClassName,
 }: {
   field: ConfigField;
+  displayLabel?: string;
   labelTextId?: string;
   isModified: boolean;
   isLocked: boolean;
@@ -125,6 +127,7 @@ function ConfigFieldLabelContent({
   statusBadgeClassName?: string;
 }) {
   const description = field.description?.trim() ?? "";
+  const label = displayLabel ?? field.label;
 
   return (
     <>
@@ -137,7 +140,7 @@ function ConfigFieldLabelContent({
           )}
         >
           <span id={labelTextId} className="min-w-0 [overflow-wrap:anywhere]">
-            {field.label}
+            {label}
           </span>
           {description && (
             <HoverTooltip
@@ -150,7 +153,7 @@ function ConfigFieldLabelContent({
                 <button
                   {...tooltipProps}
                   type="button"
-                  aria-label={`Show description for ${field.label}`}
+                  aria-label={`Show description for ${label}`}
                   className={descriptionButtonClassName}
                 >
                   <CircleHelp className="h-3.5 w-3.5" aria-hidden />
@@ -313,6 +316,7 @@ export function ConfigFieldValueEditor({
 
 export function ConfigFieldControl({
   field,
+  displayLabel,
   overrides,
   onChange,
   onReset,
@@ -322,6 +326,7 @@ export function ConfigFieldControl({
   disabledReason,
 }: {
   field: ConfigField;
+  displayLabel?: string;
   overrides: OverrideValues;
   onChange: (key: string, value: string) => void;
   onReset: (key: string) => void;
@@ -337,6 +342,7 @@ export function ConfigFieldControl({
   const isControlDisabled = disabled && !isLocked;
   const isCompact = density === "compact";
   const statusBadgeClassName = isCompact ? "px-1 py-0.5 text-xs" : undefined;
+  const label = displayLabel ?? field.label;
 
   return (
     <div
@@ -352,6 +358,7 @@ export function ConfigFieldControl({
       <div className={cn("grid", isCompact ? "gap-1" : "gap-1.5")}>
         <ConfigFieldLabelContent
           field={field}
+          displayLabel={label}
           labelTextId={labelTextId}
           isModified={isModified}
           isLocked={isLocked}
@@ -371,10 +378,10 @@ export function ConfigFieldControl({
             ? labelTextId
             : undefined
         }
-        controlLabel={field.label}
+        controlLabel={label}
         density={density}
         disabled={disabled}
-        resetTitle={`Reset ${field.label}`}
+        resetTitle={`Reset ${label}`}
       />
     </div>
   );
