@@ -21,11 +21,13 @@ export type TrainingPanelViewModelInput = {
   models: ModelIdentity[];
   presets: Preset[];
   datasetOptions: Dataset[];
+  experimentTaskOptions?: Array<{ value: string; label: string }>;
   configSections: ConfigSection[];
   selectedModelType: string;
   selectedModel: string;
   selectedPreset: string;
   selectedTrainingPresets: string[];
+  selectedExperimentTask?: string;
   selectedDatasets: string[];
   overrides: OverrideValues;
   allConfigSnapshots: ConfigSnapshot[];
@@ -55,6 +57,7 @@ export type TrainingPanelViewModelInput = {
   onMakeTrainingPresetPrimary: (preset: string) => void;
   onSelectAllTrainingPresets: () => void;
   onSelectPrimaryTrainingPreset: () => void;
+  onSelectExperimentTask?: (experimentTask: string) => void;
   onSetDatasets: (datasets: string[]) => void;
   onToggleDataset: (dataset: string) => void;
   onSelectAllDatasets: () => void;
@@ -76,11 +79,13 @@ export function useTrainingPanelViewModel({
   models,
   presets,
   datasetOptions,
+  experimentTaskOptions = [],
   configSections,
   selectedModelType,
   selectedModel,
   selectedPreset,
   selectedTrainingPresets,
+  selectedExperimentTask = "",
   selectedDatasets,
   overrides,
   allConfigSnapshots,
@@ -110,6 +115,7 @@ export function useTrainingPanelViewModel({
   onMakeTrainingPresetPrimary,
   onSelectAllTrainingPresets,
   onSelectPrimaryTrainingPreset,
+  onSelectExperimentTask,
   onSetDatasets,
   onToggleDataset,
   onSelectAllDatasets,
@@ -153,6 +159,7 @@ export function useTrainingPanelViewModel({
     selectedModel,
     selectedPreset,
     selectedTrainingPresets,
+    selectedExperimentTask,
     selectedDatasets,
     trainingSearch,
     searchAxes,
@@ -165,6 +172,7 @@ export function useTrainingPanelViewModel({
     selectedModel,
     selectedPreset,
     selectedTrainingPresets,
+    selectedExperimentTask,
     selectedDatasets,
     effectiveOverrides: requestState.effectiveOverrides,
     logFolder: logFolder.value,
@@ -218,10 +226,12 @@ export function useTrainingPanelViewModel({
   return {
     input: {
       datasetOptions,
+      experimentTaskOptions,
       selectedModelType,
       selectedModel,
       selectedPreset,
       selectedTrainingPresets,
+      selectedExperimentTask,
       selectedTrainingSnapshotIds,
       selectedDatasets,
       overrides,
@@ -247,6 +257,7 @@ export function useTrainingPanelViewModel({
       onMakeTrainingPresetPrimary,
       onSelectAllTrainingPresets,
       onSelectPrimaryTrainingPreset,
+      onSelectExperimentTask,
       onSetDatasets,
       onToggleDataset,
       onSelectAllDatasets,

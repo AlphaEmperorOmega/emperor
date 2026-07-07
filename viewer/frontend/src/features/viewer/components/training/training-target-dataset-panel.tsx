@@ -51,6 +51,8 @@ export function TrainingTargetDatasetPanel({
   selectedTrainingPresets = selectedPreset ? [selectedPreset] : [],
   configSnapshots = [],
   selectedTrainingSnapshotIds = [],
+  experimentTaskOptions = [],
+  selectedExperimentTask = "",
   datasetOptions,
   selectedDatasets,
   monitorOptions = [],
@@ -65,6 +67,7 @@ export function TrainingTargetDatasetPanel({
   onMakeTrainingPresetPrimary,
   onSelectAllTrainingPresets,
   onSelectPrimaryTrainingPreset,
+  onSelectExperimentTask,
   onSetDatasets,
   onToggleDataset,
   onSelectAllDatasets,
@@ -88,6 +91,8 @@ export function TrainingTargetDatasetPanel({
   selectedTrainingPresets?: string[];
   configSnapshots?: ConfigSnapshot[];
   selectedTrainingSnapshotIds?: string[];
+  experimentTaskOptions?: SelectOption[];
+  selectedExperimentTask?: string;
   datasetOptions: Dataset[];
   selectedDatasets: string[];
   monitorOptions?: MonitorOption[];
@@ -102,6 +107,7 @@ export function TrainingTargetDatasetPanel({
   onMakeTrainingPresetPrimary?: (preset: string) => void;
   onSelectAllTrainingPresets?: () => void;
   onSelectPrimaryTrainingPreset?: () => void;
+  onSelectExperimentTask?: (experimentTask: string) => void;
   onSetDatasets?: (datasets: string[]) => void;
   onToggleDataset?: (dataset: string) => void;
   onSelectAllDatasets: () => void;
@@ -135,6 +141,7 @@ export function TrainingTargetDatasetPanel({
       : [];
   const datasetDisabledValues =
     selectedDatasets.length === 1 ? selectedDatasets : [];
+  const showExperimentTaskControl = experimentTaskOptions.length > 0;
   const trainingPresetOptions = presetOptions.map((preset) => ({
     value: preset.value,
     label: preset.label,
@@ -533,6 +540,16 @@ export function TrainingTargetDatasetPanel({
 
   const datasetsControls = (
     <>
+      {showExperimentTaskControl && (
+        <SelectOnlyDropdown
+          label="Experiment task"
+          value={selectedExperimentTask}
+          options={experimentTaskOptions}
+          onChange={onSelectExperimentTask ?? (() => undefined)}
+          placeholder="Select task"
+          disabled={disabled || !onSelectExperimentTask}
+        />
+      )}
       <MultiSelectDropdown
         label="Training datasets"
         values={selectedDatasets}

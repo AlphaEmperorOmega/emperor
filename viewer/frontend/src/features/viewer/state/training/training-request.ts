@@ -12,6 +12,7 @@ export type TrainingRunPlanRequestInput = {
   selectedModel: string;
   selectedPreset: string;
   selectedTrainingPresets: string[];
+  selectedExperimentTask?: string;
   selectedDatasets: string[];
   effectiveOverrides: OverrideValues;
   logFolder: string;
@@ -26,6 +27,7 @@ export function buildTrainingRunPlanRequest({
   selectedModel,
   selectedPreset,
   selectedTrainingPresets,
+  selectedExperimentTask = "",
   selectedDatasets,
   effectiveOverrides,
   logFolder,
@@ -41,6 +43,7 @@ export function buildTrainingRunPlanRequest({
     model: selectedModel,
     preset: selectedPreset,
     presets: selectedTrainingPresets,
+    ...(selectedExperimentTask ? { experimentTask: selectedExperimentTask } : {}),
     datasets: selectedDatasets,
     overrides: effectiveOverrides,
     logFolder,
@@ -54,6 +57,7 @@ export type TrainingJobRequestInput = {
   selectedModel: string;
   selectedPreset: string;
   selectedTrainingPresets: string[];
+  selectedExperimentTask?: string;
   selectedDatasets: string[];
   effectiveOverrides: OverrideValues;
   logFolder: string;
@@ -67,6 +71,7 @@ export function buildTrainingJobRequest({
   selectedModelType,
   selectedPreset,
   selectedTrainingPresets,
+  selectedExperimentTask = "",
   selectedDatasets,
   effectiveOverrides,
   logFolder,
@@ -80,11 +85,13 @@ export function buildTrainingJobRequest({
   const presets = runPlan.presets.length > 0
     ? runPlan.presets
     : selectedTrainingPresets;
+  const experimentTask = runPlan.experimentTask || selectedExperimentTask;
   return {
     modelType: selectedModelType,
     model: selectedModel,
     preset: runPlan.preset || selectedPreset,
     presets,
+    ...(experimentTask ? { experimentTask } : {}),
     datasets: selectedDatasets,
     overrides: effectiveOverrides,
     logFolder,

@@ -57,6 +57,7 @@ export function inspectModel(input: {
   model: string;
   preset: string;
   overrides: ConfigOverrides;
+  experimentTask?: string;
   dataset?: string;
   logRunId?: string;
 }) {

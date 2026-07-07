@@ -1,4 +1,5 @@
 import {
+  Activity,
   Copy,
   Cpu,
   FilePlus2,
@@ -34,16 +35,19 @@ export function TargetSelectorSection({
   selectedHistoricalExperimentFilter,
   selectedHistoricalDatasetFilter,
   selectedHistoricalPreset,
+  selectedExperimentTask,
   configSnapshotsEnabled,
   isSchemaReady,
   modelTypeOptions,
   modelOptions,
   presetOptions,
   snapshotOptions,
+  experimentTaskOptions,
   experimentOptions,
   experimentDatasetOptions,
   experimentPresetOptions,
   presetSelectId,
+  experimentTaskSelectId,
   snapshotSelectId,
   experimentSelectId,
   experimentDatasetSelectId,
@@ -57,6 +61,7 @@ export function TargetSelectorSection({
   onActivateExperimentMode,
   onSelectPreset,
   onSelectSnapshot,
+  onSelectExperimentTask,
   onSelectHistoricalExperimentFilter,
   onSelectHistoricalDatasetFilter,
   onSelectHistoricalPreset,
@@ -75,16 +80,19 @@ export function TargetSelectorSection({
   selectedHistoricalExperimentFilter: string;
   selectedHistoricalDatasetFilter: string;
   selectedHistoricalPreset: string;
+  selectedExperimentTask: string;
   configSnapshotsEnabled: boolean;
   isSchemaReady: boolean;
   modelTypeOptions: SelectOption[];
   modelOptions: SelectOption[];
   presetOptions: SelectOption[];
   snapshotOptions: SelectOption[];
+  experimentTaskOptions: SelectOption[];
   experimentOptions: SelectOption[];
   experimentDatasetOptions: SelectOption[];
   experimentPresetOptions: SelectOption[];
   presetSelectId: string;
+  experimentTaskSelectId: string;
   snapshotSelectId: string;
   experimentSelectId: string;
   experimentDatasetSelectId: string;
@@ -98,6 +106,7 @@ export function TargetSelectorSection({
   onActivateExperimentMode: () => void;
   onSelectPreset: (preset: string) => void;
   onSelectSnapshot: (snapshotId: string) => boolean | void;
+  onSelectExperimentTask: (experimentTask: string) => void;
   onSelectHistoricalExperimentFilter: (experiment: string) => void;
   onSelectHistoricalDatasetFilter: (dataset: string) => void;
   onSelectHistoricalPreset: (preset: string) => void;
@@ -108,6 +117,7 @@ export function TargetSelectorSection({
   onOpenSnapshotTrainingCommand: () => void;
 }) {
   const hasSnapshots = snapshotOptions.length > 0;
+  const hasExperimentTasks = experimentTaskOptions.length > 0;
   const hasExperimentRuns = experimentOptions.length > 0;
   const canActivateExperimentMode = Boolean(selectedModel) || hasExperimentRuns;
   const activeTargetMode =
@@ -177,6 +187,22 @@ export function TargetSelectorSection({
             placeholder="Select model"
           />
         </div>
+        {hasExperimentTasks && (
+          <div className="grid min-w-0 gap-1.5">
+            <SectionHeading
+              icon={<Activity className={fieldIconClassName} aria-hidden />}
+              title="Experiment Task"
+            />
+            <SelectOnlyDropdown
+              id={experimentTaskSelectId}
+              label="Experiment Task"
+              value={selectedExperimentTask}
+              options={experimentTaskOptions}
+              onChange={onSelectExperimentTask}
+              placeholder="Select task"
+            />
+          </div>
+        )}
       </div>
       <div className="grid gap-1.5">
         <SectionHeading

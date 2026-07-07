@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { type SearchAxis } from "@/lib/api";
 import {
+  configSectionsFields,
   effectivePresetOverrides,
   type ConfigSection,
   type OverrideValues,
@@ -33,6 +34,7 @@ type TrainingRequestStateInput = {
   selectedModel: string;
   selectedPreset: string;
   selectedTrainingPresets: string[];
+  selectedExperimentTask?: string;
   selectedDatasets: string[];
   trainingSearch: TrainingSearchState;
   searchAxes: SearchAxis[];
@@ -50,6 +52,7 @@ export function useTrainingRequestState({
   selectedModel,
   selectedPreset,
   selectedTrainingPresets,
+  selectedExperimentTask = "",
   selectedDatasets,
   trainingSearch,
   searchAxes,
@@ -58,7 +61,7 @@ export function useTrainingRequestState({
   logFolder,
 }: TrainingRequestStateInput) {
   const configFields = useMemo(
-    () => configSections.flatMap((section) => section.fields),
+    () => configSectionsFields(configSections),
     [configSections],
   );
   const fieldCount = configFields.length;
@@ -129,6 +132,7 @@ export function useTrainingRequestState({
             model: selectedModel,
             selectedPreset,
             selectedTrainingPresets,
+            selectedExperimentTask,
             selectedDatasets,
             snapshots: selectedTrainingSnapshots,
             fields: configFields,
@@ -142,6 +146,7 @@ export function useTrainingRequestState({
       logFolder,
       editablePresetOverrides,
       selectedDatasets,
+      selectedExperimentTask,
       selectedTrainingSnapshots,
       selectedModelType,
       selectedModel,

@@ -49,12 +49,14 @@ function runPlan(overrides: ConfigOverrides = {}): TrainingRunPlan {
 }
 
 function field(overrides: Partial<ConfigField> & Pick<ConfigField, "key">): ConfigField {
+  const section = overrides.section ?? "General";
   return {
     key: overrides.key,
     configKey: overrides.configKey ?? overrides.key,
     flag: overrides.flag ?? `--${overrides.key.replace(/_/g, "-")}`,
     label: overrides.label ?? overrides.key,
-    section: overrides.section ?? "General",
+    section,
+    sectionPath: overrides.sectionPath ?? [section || "General"],
     type: overrides.type ?? "int",
     default: overrides.default ?? 10,
     nullable: overrides.nullable ?? false,

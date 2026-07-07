@@ -405,6 +405,7 @@ function trainingCommand({
   modelType,
   model,
   preset,
+  experimentTask,
   dataset,
   overrides,
   logFolder,
@@ -412,6 +413,7 @@ function trainingCommand({
   modelType: string;
   model: string;
   preset: string;
+  experimentTask: string;
   dataset: string;
   overrides: OverrideValues;
   logFolder: string;
@@ -425,9 +427,14 @@ function trainingCommand({
     shellQuote(model),
     "--preset",
     shellQuote(preset),
+  ];
+  if (experimentTask) {
+    parts.push("--experiment-task", shellQuote(experimentTask));
+  }
+  parts.push(
     "--datasets",
     shellQuote(dataset),
-  ];
+  );
   if (logFolder) {
     parts.push("--logdir", shellQuote(logFolder));
   }
@@ -482,6 +489,7 @@ function baseRun({
   modelType,
   model,
   preset,
+  experimentTask,
   dataset,
   index,
   fieldsByKey,
@@ -491,6 +499,7 @@ function baseRun({
   modelType: string;
   model: string;
   preset: string;
+  experimentTask: string;
   dataset: string;
   index: number;
   fieldsByKey: Map<string, ConfigField>;
@@ -503,6 +512,7 @@ function baseRun({
     index,
     status: "Pending",
     preset,
+    experimentTask,
     dataset,
     changes: snapshotRunChanges(runOverrides, fieldsByKey),
     overrides: runOverrides,
@@ -510,6 +520,7 @@ function baseRun({
       model,
       modelType,
       preset,
+      experimentTask,
       dataset,
       overrides: runOverrides,
       logFolder,
@@ -554,6 +565,7 @@ export function buildConfigSnapshotRunPlan({
   model,
   selectedPreset,
   selectedTrainingPresets,
+  selectedExperimentTask = "",
   selectedDatasets,
   snapshots,
   fields,
@@ -565,6 +577,7 @@ export function buildConfigSnapshotRunPlan({
   model: string;
   selectedPreset: string;
   selectedTrainingPresets: string[];
+  selectedExperimentTask?: string;
   selectedDatasets: string[];
   snapshots: ConfigSnapshot[];
   fields: ConfigField[];
@@ -604,6 +617,7 @@ export function buildConfigSnapshotRunPlan({
           model,
           modelType,
           preset,
+          experimentTask: selectedExperimentTask,
           dataset,
           index,
           fieldsByKey,
@@ -631,12 +645,14 @@ export function buildConfigSnapshotRunPlan({
         snapshotId: snapshot.id,
         snapshotName: snapshot.name,
         dataset,
+        experimentTask: selectedExperimentTask,
         changes: snapshotRunChanges(mergedSnapshotOverrides, fieldsByKey),
         overrides: mergedSnapshotOverrides,
         command: trainingCommand({
           model,
           modelType,
           preset: snapshot.preset,
+          experimentTask: selectedExperimentTask,
           dataset,
           overrides: mergedSnapshotOverrides,
           logFolder,
@@ -665,6 +681,7 @@ export function buildConfigSnapshotRunPlan({
     model,
     preset: primaryPreset,
     presets,
+    experimentTask: selectedExperimentTask,
     datasets: selectedDatasets,
     overrides: {},
     search: null,

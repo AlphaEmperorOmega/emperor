@@ -6,6 +6,7 @@ import { IconButton } from "@/components/ui/icon-button";
 import {
   type ConfigSearchOption,
   type ConfigSection,
+  configSectionsFields,
   controlledSectionState,
   deriveNestedConfigSections,
   disabledConfigFieldReasons,
@@ -59,7 +60,6 @@ export function FullConfigDialog({
     fieldCount: modelFieldCount,
     overrides: modelOverrides,
     snapshotEditorDraft,
-    activeOverrideScopeLabel,
     inactiveLockedOverrideCount,
     snapshotOverrideWarning,
     selectedConfigSnapshot,
@@ -110,12 +110,14 @@ export function FullConfigDialog({
   const sections = isTrainingScope ? trainingConfigSections : configSections;
   const fieldCount = isTrainingScope ? trainingFieldCount : modelFieldCount;
   const overrides = isTrainingScope ? trainingOverrides : modelOverrides;
-  const activeScopeLabel = isTrainingScope
-    ? "Training bulk"
-    : activeOverrideScopeLabel;
   const lockedOverrideCount = isTrainingScope
     ? trainingInactiveLockedOverrideCount
     : inactiveLockedOverrideCount;
+  const snapshotModeLabel = isSnapshotDraftMode
+    ? "Snapshot draft"
+    : isSnapshotEditMode
+      ? "Snapshot edit"
+      : "";
   const isLoading = isTrainingScope ? trainingSchemaLoading : schemaLoading;
   const dialogOverrides = isSnapshotSaveMode ? snapshotEditorDraft : overrides;
   const dialogOverrideCount = Object.keys(dialogOverrides).length;
@@ -126,11 +128,7 @@ export function FullConfigDialog({
   const [selectedFieldKey, setSelectedFieldKey] = useState<string | null>(null);
   const isSearchActive = searchQuery.trim().length > 0 || selectedFieldKey !== null;
   const presetOwnedFieldCount = useMemo(
-    () =>
-      sections.reduce(
-        (count, section) => count + presetOwnedCount(section.fields),
-        0,
-      ),
+    () => presetOwnedCount(configSectionsFields(sections)),
     [sections],
   );
   const searchOptions = useMemo(
@@ -138,7 +136,7 @@ export function FullConfigDialog({
     [sections, dialogOverrides],
   );
   const configFields = useMemo(
-    () => sections.flatMap((section) => section.fields),
+    () => configSectionsFields(sections),
     [sections],
   );
   const configFieldsByKey = useMemo(
@@ -204,7 +202,7 @@ export function FullConfigDialog({
       titles.add(firstSection.title);
     }
     for (const section of visibleRenderSections) {
-      if (modifiedCount(section.fields, dialogOverrides) > 0) {
+      if (modifiedCount(configSectionsFields([section]), dialogOverrides) > 0) {
         titles.add(section.title);
       }
     }
@@ -394,7 +392,6 @@ export function FullConfigDialog({
               </div>
             </div>
             <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-              <Badge>{sections.length} sections</Badge>
               <ConfigMetricBadge
                 count={fieldCount}
                 kind="fields"
@@ -406,7 +403,7 @@ export function FullConfigDialog({
                 variant={dialogOverrideCount > 0 ? "override" : "default"}
                 tooltipPosition="bottom"
               />
-              <Badge>{isSnapshotSaveMode ? "Snapshot draft" : activeScopeLabel}</Badge>
+              {snapshotModeLabel && <Badge>{snapshotModeLabel}</Badge>}
               {lockedOverrideCount > 0 && !isSnapshotSaveMode && (
                 <Badge variant="preset">
                   {lockedOverrideCount} inactive
@@ -630,6 +627,8 @@ export function FullConfigDialog({
                       }}
                       title={section.title}
                       fields={section.fields}
+                      allFields={configFields}
+                      showInheritedFields={!isSearchActive}
                       childSections={section.children}
                       overrides={dialogOverrides}
                       isOpen={isSectionOpen}

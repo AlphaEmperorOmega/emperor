@@ -141,6 +141,7 @@ type UseTrainingJobControllerInput = {
   selectedModel: string;
   selectedPreset: string;
   selectedTrainingPresets: string[];
+  selectedExperimentTask: string;
   selectedDatasets: string[];
   effectiveOverrides: OverrideValues;
   logFolder: string;
@@ -163,6 +164,7 @@ export function useTrainingJobController({
   selectedModel,
   selectedPreset,
   selectedTrainingPresets,
+  selectedExperimentTask,
   selectedDatasets,
   effectiveOverrides,
   logFolder,
@@ -233,6 +235,7 @@ export function useTrainingJobController({
         selectedModel,
         selectedPreset,
         selectedTrainingPresets,
+        selectedExperimentTask,
         selectedDatasets,
         effectiveOverrides,
         logFolder,
@@ -245,6 +248,7 @@ export function useTrainingJobController({
       effectiveOverrides,
       logFolder,
       searchPayload,
+      selectedExperimentTask,
       selectedDatasets,
       selectedModelType,
       selectedModel,
@@ -260,6 +264,7 @@ export function useTrainingJobController({
       model: selectedModel,
       preset: selectedPreset,
       presets: selectedTrainingPresets,
+      experimentTask: selectedExperimentTask,
       datasets: selectedDatasets,
       overrides: effectiveOverrides,
       logFolder,
@@ -271,6 +276,7 @@ export function useTrainingJobController({
       effectiveOverrides,
       logFolder,
       searchPayload,
+      selectedExperimentTask,
       selectedDatasets,
       selectedModelType,
       selectedModel,
@@ -345,6 +351,7 @@ export function useTrainingJobController({
       selectedModel,
       selectedPreset,
       selectedTrainingPresets,
+      selectedExperimentTask,
       selectedDatasets,
       effectiveOverrides,
       logFolder,

@@ -114,12 +114,14 @@ function logRun(overrides: Partial<LogRun> & Pick<LogRun, "id">): LogRun {
 function configField(
   overrides: Partial<ConfigField> & Pick<ConfigField, "key">,
 ): ConfigField {
+  const section = overrides.section ?? "Model";
   return {
     key: overrides.key,
     configKey: overrides.configKey ?? overrides.key.toUpperCase(),
     flag: overrides.flag ?? `--${overrides.key.replace(/_/g, "-")}`,
     label: overrides.label ?? overrides.key,
-    section: overrides.section ?? "Model",
+    section,
+    sectionPath: overrides.sectionPath ?? [section || "General"],
     type: overrides.type ?? "int",
     default: "default" in overrides ? overrides.default ?? null : 64,
     nullable: overrides.nullable ?? false,
@@ -228,7 +230,16 @@ beforeEach(() => {
         datasetsQuery: query({
           modelType: selectedModelType,
           model: selectedModel,
-          datasets: selectedModel ? datasets : [],
+          defaultExperimentTask: "image-classification",
+          datasetGroups: selectedModel
+            ? [
+                {
+                  experimentTask: "image-classification",
+                  label: "Image Classification",
+                  datasets,
+                },
+              ]
+            : [],
         }),
         monitorsQuery: query({
           modelType: selectedModelType,
@@ -281,6 +292,7 @@ describe("useTargetConfigState", () => {
       modelType: "linears",
       model: "linear",
       preset: "baseline",
+      experimentTask: "image-classification",
       dataset: "Mnist",
       overrides: {},
       targetMode: "preset",
@@ -313,6 +325,7 @@ describe("useTargetConfigState", () => {
         modelType: "linears",
         model: "linear",
         preset: "baseline",
+        experimentTask: "image-classification",
         dataset: "FashionMnist",
         overrides: {},
         targetMode: "preset",
@@ -575,6 +588,7 @@ describe("useTargetConfigState", () => {
       modelType: "linears",
       model: "linear",
       preset: "fast",
+      experimentTask: "image-classification",
       dataset: "Mnist",
       overrides: { hidden_size: "128" },
       targetMode: "preset",
@@ -651,8 +665,8 @@ describe("useTargetConfigState", () => {
 
   it("keeps training overrides independent and resets them for a new training model", async () => {
     schemaFieldsByPreset = {
-      baseline: [configField({ key: "stack_hidden_dim" })],
-      "expert-baseline": [configField({ key: "stack_hidden_dim" })],
+      baseline: [configField({ key: "hidden_dim" })],
+      "expert-baseline": [configField({ key: "hidden_dim" })],
     };
     const { result } = renderTargetState();
 
@@ -662,11 +676,11 @@ describe("useTargetConfigState", () => {
     });
 
     act(() => {
-      result.current.target.updateTrainingOverride("stack_hidden_dim", "128");
+      result.current.target.updateTrainingOverride("hidden_dim", "128");
     });
 
     expect(result.current.target.trainingOverrides).toEqual({
-      stack_hidden_dim: "128",
+      hidden_dim: "128",
     });
     expect(result.current.target.presetOverrides).toEqual({});
     expect(result.current.target.overrides).toEqual({});
@@ -678,10 +692,10 @@ describe("useTargetConfigState", () => {
     expect(result.current.target.trainingOverrides).toEqual({});
 
     act(() => {
-      result.current.target.updateTrainingOverride("stack_hidden_dim", "192");
+      result.current.target.updateTrainingOverride("hidden_dim", "192");
     });
     expect(result.current.target.trainingOverrides).toEqual({
-      stack_hidden_dim: "192",
+      hidden_dim: "192",
     });
 
     act(() => {
@@ -768,6 +782,7 @@ describe("useTargetConfigState", () => {
         modelType: "linears",
         model: "linear",
         preset: "fast",
+        experimentTask: "image-classification",
         dataset: "Mnist",
         overrides: {},
         targetMode: "preset",
@@ -872,6 +887,7 @@ describe("useTargetConfigState", () => {
       modelType: "linears",
       model: "linear",
       preset: "baseline",
+      experimentTask: "image-classification",
       dataset: "Mnist",
       overrides: {
         weight_option_flag: "true",
@@ -1030,6 +1046,7 @@ describe("useTargetConfigState", () => {
       modelType: "linears",
       model: "linear",
       preset: "baseline",
+      experimentTask: "image-classification",
       dataset: "Mnist",
       overrides: {},
       targetMode: "snapshot",

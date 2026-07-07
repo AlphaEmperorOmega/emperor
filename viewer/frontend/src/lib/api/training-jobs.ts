@@ -32,6 +32,7 @@ export const trainingRunSchema = z.object({
   snapshotId: z.string().nullable().optional(),
   snapshotName: z.string().nullable().optional(),
   dataset: z.string(),
+  experimentTask: z.string().optional(),
   changes: z.array(trainingRunChangeSchema),
   overrides: configOverridesSchema,
   command: z.string(),
@@ -61,6 +62,7 @@ export const trainingRunPlanSchema = z.object({
   model: z.string(),
   preset: z.string(),
   presets: z.array(z.string()),
+  experimentTask: z.string().optional(),
   datasets: z.array(z.string()),
   overrides: configOverridesSchema,
   search: z
@@ -120,6 +122,7 @@ const trainingProgressEventBaseSchema = z
     status: trainingProgressStatusSchema.nullable().optional(),
     jobId: z.string().nullable().optional(),
     dataset: z.string().nullable().optional(),
+    experimentTask: z.string().nullable().optional(),
     preset: z.string().nullable().optional(),
     presetKey: z.string().nullable().optional(),
     logDir: z.string().nullable().optional(),
@@ -267,6 +270,7 @@ export const trainingJobSchema = z.object({
   model: z.string(),
   preset: z.string(),
   presets: z.array(z.string()).optional(),
+  experimentTask: z.string().optional(),
   datasets: z.array(z.string()),
   overrides: configOverridesSchema,
   search: z
@@ -354,6 +358,7 @@ export type TrainingRunSubmitInput = {
   snapshotId?: string | null;
   snapshotName?: string | null;
   dataset: string;
+  experimentTask?: string;
   changes: TrainingRunSubmitChangeInput[];
   overrides: ConfigOverrides;
   command: string;
@@ -383,6 +388,7 @@ export type TrainingRunPlanSubmitInput = {
   model: string;
   preset: string;
   presets: string[];
+  experimentTask?: string;
   datasets: string[];
   overrides: ConfigOverrides;
   search: TrainingSearchSubmitInput | null;
@@ -397,6 +403,7 @@ export type TrainingJobCreateInput = {
   model: string;
   preset: string;
   presets?: string[];
+  experimentTask?: string;
   datasets: string[];
   overrides: ConfigOverrides;
   logFolder: string;
@@ -410,6 +417,7 @@ export type TrainingRunPlanCreateInput = {
   model: string;
   preset: string;
   presets?: string[];
+  experimentTask?: string;
   datasets: string[];
   overrides: ConfigOverrides;
   logFolder?: string;

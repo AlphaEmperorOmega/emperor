@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  boundaryProjectorFieldGroups,
+  boundaryModelFieldGroups,
   configFieldSelectOptions,
   defaultConfigFieldValue,
   deriveNestedConfigSections,
   disabledConfigFieldReasons,
   effectivePresetOverrides,
   filterConfigSectionsForSearch,
+  inheritedHiddenModelFieldHint,
   inheritedStackSectionHint,
   isDefaultConfigFieldValue,
   lockedOverrideKeys,
@@ -19,13 +20,156 @@ import {
 } from "@/lib/config";
 import { type ConfigField } from "@/lib/api";
 
+const FIXTURE_SECTION_PATHS_BY_TITLE = new Map<string, string[]>([
+  ["Gate Stack Options", ["Gate Options", "Gate Stack Options"]],
+  ["Halting Stack Options", ["Halting Options", "Halting Stack Options"]],
+  ["Memory Stack Options", ["Memory Options", "Memory Stack Options"]],
+  ["Recurrent Gate Options", ["Recurrent Layer Options", "Recurrent Gate Options"]],
+  [
+    "Recurrent Gate Stack Options",
+    ["Recurrent Layer Options", "Recurrent Gate Options", "Recurrent Gate Stack Options"],
+  ],
+  [
+    "Recurrent Halting Options",
+    ["Recurrent Layer Options", "Recurrent Halting Options"],
+  ],
+  [
+    "Recurrent Halting Stack Options",
+    [
+      "Recurrent Layer Options",
+      "Recurrent Halting Options",
+      "Recurrent Halting Stack Options",
+    ],
+  ],
+  [
+    "Expert Stack Options",
+    ["Mixture Of Experts Model Options", "Expert Stack Options"],
+  ],
+  [
+    "Expert Gate Options",
+    ["Mixture Of Experts Model Options", "Expert Gate Options"],
+  ],
+  [
+    "Expert Gate Stack Options",
+    ["Mixture Of Experts Model Options", "Expert Gate Options", "Expert Gate Stack Options"],
+  ],
+  [
+    "Expert Memory Options",
+    ["Mixture Of Experts Model Options", "Expert Memory Options"],
+  ],
+  [
+    "Expert Memory Stack Options",
+    [
+      "Mixture Of Experts Model Options",
+      "Expert Memory Options",
+      "Expert Memory Stack Options",
+    ],
+  ],
+  [
+    "Expert Recurrent Layer Options",
+    ["Mixture Of Experts Model Options", "Expert Recurrent Layer Options"],
+  ],
+  [
+    "Expert Recurrent Gate Options",
+    [
+      "Mixture Of Experts Model Options",
+      "Expert Recurrent Layer Options",
+      "Expert Recurrent Gate Options",
+    ],
+  ],
+  [
+    "Expert Recurrent Gate Stack Options",
+    [
+      "Mixture Of Experts Model Options",
+      "Expert Recurrent Layer Options",
+      "Expert Recurrent Gate Options",
+      "Expert Recurrent Gate Stack Options",
+    ],
+  ],
+  [
+    "Router Options",
+    ["Sampler Model Options", "Router Options"],
+  ],
+  [
+    "Router Stack Options",
+    ["Sampler Model Options", "Router Options", "Router Stack Options"],
+  ],
+  [
+    "Router Gate Options",
+    ["Sampler Model Options", "Router Options", "Router Gate Options"],
+  ],
+  [
+    "Router Gate Stack Options",
+    ["Sampler Model Options", "Router Options", "Router Gate Options", "Router Gate Stack Options"],
+  ],
+  [
+    "Router Memory Options",
+    ["Sampler Model Options", "Router Options", "Router Memory Options"],
+  ],
+  [
+    "Router Recurrent Layer Options",
+    ["Sampler Model Options", "Router Options", "Router Recurrent Layer Options"],
+  ],
+  [
+    "Router Recurrent Gate Options",
+    [
+      "Sampler Model Options",
+      "Router Options",
+      "Router Recurrent Layer Options",
+      "Router Recurrent Gate Options",
+    ],
+  ],
+  [
+    "Router Recurrent Gate Stack Options",
+    [
+      "Sampler Model Options",
+      "Router Options",
+      "Router Recurrent Layer Options",
+      "Router Recurrent Gate Options",
+      "Router Recurrent Gate Stack Options",
+    ],
+  ],
+  [
+    "Weight Generator Stack Options",
+    ["Weight Generator Options", "Weight Generator Stack Options"],
+  ],
+  [
+    "Bias Generator Stack Options",
+    ["Bias Generator Options", "Bias Generator Stack Options"],
+  ],
+  [
+    "Diagonal Generator Stack Options",
+    ["Diagonal Generator Options", "Diagonal Generator Stack Options"],
+  ],
+  ["Mask Stack Options", ["Mask Options", "Mask Stack Options"]],
+  [
+    "Router Weight Generator Options",
+    ["Sampler Model Options", "Router Options", "Router Weight Generator Options"],
+  ],
+  [
+    "Router Weight Generator Stack Options",
+    [
+      "Sampler Model Options",
+      "Router Options",
+      "Router Weight Generator Options",
+      "Router Weight Generator Stack Options",
+    ],
+  ],
+]);
+
+function fixtureSectionPath(section: string) {
+  return FIXTURE_SECTION_PATHS_BY_TITLE.get(section) ?? [section || "General"];
+}
+
 function field(overrides: Partial<ConfigField> & Pick<ConfigField, "key">): ConfigField {
+  const section = overrides.section ?? "Gate Stack Options";
   return {
     key: overrides.key,
     configKey: overrides.configKey ?? overrides.key.toUpperCase(),
     flag: overrides.flag ?? `--${overrides.key.replace(/_/g, "-")}`,
     label: overrides.label ?? overrides.key,
-    section: overrides.section ?? "Gate Stack Options",
+    section,
+    sectionPath: overrides.sectionPath ?? fixtureSectionPath(section),
     type: overrides.type ?? "int",
     default: "default" in overrides ? overrides.default ?? null : 0,
     nullable: overrides.nullable ?? false,
@@ -140,7 +284,7 @@ const adaptiveOptionFields = [
 describe("config field value normalization", () => {
   it("matches int defaults against equivalent string input", () => {
     const intField = field({
-      key: "stack_hidden_dim",
+      key: "hidden_dim",
       type: "int",
       default: 256,
     });
@@ -162,7 +306,7 @@ describe("config field value normalization", () => {
 
   it("preserves invalid numeric text as a raw override value", () => {
     const intField = field({
-      key: "stack_hidden_dim",
+      key: "hidden_dim",
       type: "int",
       default: 256,
     });
@@ -201,6 +345,50 @@ describe("config field value normalization", () => {
     expect(normalizeConfigFieldValue(nullableField, "")).toBe("null");
     expect(isDefaultConfigFieldValue(nullableField, "")).toBe(true);
     expect(overrideValueForConfigField(nullableField, "")).toBe("");
+  });
+});
+
+describe("inherited hidden model field hint", () => {
+  it("shows the global hidden dim source for layer stack options", () => {
+    const hiddenDim = field({
+      key: "hidden_dim",
+      configKey: "HIDDEN_DIM",
+      label: "hidden dim",
+      section: "Global",
+      default: 32,
+    });
+    const stackSection: ConfigSection = {
+      title: "Layer Stack Options",
+      fields: [
+        field({
+          key: "stack_num_layers",
+          configKey: "STACK_NUM_LAYERS",
+          section: "Layer Stack Options",
+        }),
+      ],
+    };
+
+    expect(inheritedHiddenModelFieldHint(stackSection, [hiddenDim])).toEqual({
+      label: "hidden dim",
+      title: "hidden dim comes from Global / HIDDEN_DIM.",
+      sourceTitle: "Global",
+      sourceField: hiddenDim,
+    });
+  });
+
+  it("does not show the hint when the stack owns its own hidden dim", () => {
+    const stackSection: ConfigSection = {
+      title: "Layer Stack Options",
+      fields: [
+        field({
+          key: "hidden_dim",
+          configKey: "HIDDEN_DIM",
+          section: "Layer Stack Options",
+        }),
+      ],
+    };
+
+    expect(inheritedHiddenModelFieldHint(stackSection, [])).toBeUndefined();
   });
 });
 
@@ -284,22 +472,22 @@ describe("adaptive option override helpers", () => {
     const normalized = normalizeAdaptiveOptionOverrides(adaptiveOptionFields, {
       weight_option_flag: "false",
       weight_option: "DualModelDynamicWeightConfig",
-      stack_hidden_dim: "128",
+      hidden_dim: "128",
     });
 
     expect(normalized).toEqual({
       weight_option_flag: "false",
-      stack_hidden_dim: "128",
+      hidden_dim: "128",
     });
   });
 
   it("clears paired adaptive options when the flag is at its inactive default", () => {
     const normalized = normalizeAdaptiveOptionOverrides(adaptiveOptionFields, {
       row_mask_option: "OuterProductMaskConfig",
-      stack_hidden_dim: "128",
+      hidden_dim: "128",
     });
 
-    expect(normalized).toEqual({ stack_hidden_dim: "128" });
+    expect(normalized).toEqual({ hidden_dim: "128" });
   });
 
   it("omits the nullable None option only while the adaptive flag is enabled", () => {
@@ -327,14 +515,14 @@ describe("adaptive option override helpers", () => {
 
 describe("preset override helpers", () => {
   it("filters locked fields from effective preset overrides without mutating the draft", () => {
-    const unlockedField = field({ key: "stack_hidden_dim" });
+    const unlockedField = field({ key: "hidden_dim" });
     const lockedField = field({
       key: "layer_norm",
       locked: true,
       lockedValue: true,
     });
     const overrides = {
-      stack_hidden_dim: "128",
+      hidden_dim: "128",
       layer_norm: "false",
     };
 
@@ -342,10 +530,10 @@ describe("preset override helpers", () => {
       "layer_norm",
     ]);
     expect(effectivePresetOverrides([unlockedField, lockedField], overrides)).toEqual({
-      stack_hidden_dim: "128",
+      hidden_dim: "128",
     });
     expect(overrides).toEqual({
-      stack_hidden_dim: "128",
+      hidden_dim: "128",
       layer_norm: "false",
     });
   });
@@ -451,7 +639,7 @@ describe("config section controls", () => {
       title: "Layer Stack Options",
       fields: [
         field({
-          key: "stack_hidden_dim",
+          key: "hidden_dim",
           section: "Layer Stack Options",
         }),
       ],
@@ -496,22 +684,16 @@ describe("config section controls", () => {
       },
     ];
 
-    const filtered = filterConfigSectionsForSearch(sections, {
+    const nestedSections = deriveNestedConfigSections(sections);
+    const filtered = filterConfigSectionsForSearch(nestedSections, {
       query: "recurrent gate stack hidden",
     });
-    const [recurrentSection] = deriveNestedConfigSections(filtered, sections);
+    const [recurrentSection] = deriveNestedConfigSections(filtered, nestedSections);
 
     expect(filtered.map((section) => section.title)).toEqual([
       "Recurrent Layer Options",
-      "Recurrent Gate Options",
-      "Recurrent Gate Stack Options",
     ]);
     expect(recurrentSection.title).toBe("Recurrent Layer Options");
-    expect(recurrentSection.fields.map((item) => item.key)).toEqual([
-      "recurrent_flag",
-      "recurrent_gate_flag",
-      "recurrent_gate_stack_hidden_dim",
-    ]);
     expect(recurrentSection.children?.[0]?.title).toBe("Recurrent Gate Options");
     expect(recurrentSection.children?.[0]?.children?.[0]?.title).toBe(
       "Recurrent Gate Stack Options",
@@ -646,15 +828,14 @@ describe("config section controls", () => {
       },
     ];
 
-    const filtered = filterConfigSectionsForSearch(sections, {
+    const nestedSections = deriveNestedConfigSections(sections);
+    const filtered = filterConfigSectionsForSearch(nestedSections, {
       query: "router stack hidden dim",
     });
-    const [samplerSection] = deriveNestedConfigSections(filtered, sections);
+    const [samplerSection] = deriveNestedConfigSections(filtered, nestedSections);
 
     expect(filtered.map((section) => section.title)).toEqual([
       "Sampler Model Options",
-      "Router Options",
-      "Router Stack Options",
     ]);
     expect(samplerSection.title).toBe("Sampler Model Options");
     expect(samplerSection.children?.[0]?.title).toBe("Router Options");
@@ -811,9 +992,8 @@ describe("config section controls", () => {
       "Router Recurrent Layer Options",
     ]);
     expect(routerStackSection?.children).toBeUndefined();
-    expect(routerGateSection?.children?.[0]?.title).toBe(
-      "Router Gate Stack Options",
-    );
+    const routerGateStackSection = routerGateSection?.children?.[0];
+    expect(routerGateStackSection?.title).toBe("Router Gate Stack Options");
     expect(routerMemorySection?.controlFieldKey).toBe("router_memory_flag");
     expect(routerRecurrentSection?.children?.[0]?.title).toBe(
       "Router Recurrent Gate Options",
@@ -822,9 +1002,11 @@ describe("config section controls", () => {
       routerRecurrentSection?.children?.[0]?.children?.[0]?.title,
     ).toBe("Router Recurrent Gate Stack Options");
 
-    expect(
-      inheritedStackSectionHint(routerGateSection?.children?.[0]!, {}),
-    ).toMatchObject({
+    if (!routerGateStackSection) {
+      throw new Error("Expected router gate stack section to render");
+    }
+
+    expect(inheritedStackSectionHint(routerGateStackSection, {})).toMatchObject({
       label: "Inherits Layer Stack Submodule",
       sourceTitle: "Layer Stack Submodule Options",
       isCustom: false,
@@ -849,16 +1031,13 @@ describe("config section controls", () => {
     });
     expect(customGateStack.has("router_gate_stack_hidden_dim")).toBe(false);
 
-    const filtered = filterConfigSectionsForSearch(sections, {
+    const nestedSections = deriveNestedConfigSections(sections);
+    const filtered = filterConfigSectionsForSearch(nestedSections, {
       query: "router recurrent gate stack hidden dim",
     });
 
     expect(filtered.map((section) => section.title)).toEqual([
       "Sampler Model Options",
-      "Router Options",
-      "Router Recurrent Layer Options",
-      "Router Recurrent Gate Options",
-      "Router Recurrent Gate Stack Options",
     ]);
   });
 
@@ -1202,17 +1381,17 @@ describe("config section controls", () => {
       },
     ];
 
-    const filtered = filterConfigSectionsForSearch(sections, {
+    const nestedSections = deriveNestedConfigSections(sections);
+    const filtered = filterConfigSectionsForSearch(nestedSections, {
       query: "expert bias flag",
     });
-    const [mixtureSection] = deriveNestedConfigSections(filtered, sections);
+    const [mixtureSection] = deriveNestedConfigSections(filtered, nestedSections);
 
     expect(filtered.map((section) => section.title)).toEqual([
       "Mixture Of Experts Model Options",
-      "Expert Stack Options",
     ]);
     expect(mixtureSection.title).toBe("Mixture Of Experts Model Options");
-    expect(mixtureSection.fields.map((item) => item.key)).toEqual([
+    expect(mixtureSection.children?.[0]?.fields.map((item) => item.key)).toEqual([
       "expert_bias_flag",
     ]);
     expect(mixtureSection.children?.[0]?.title).toBe("Expert Stack Options");
@@ -1281,16 +1460,14 @@ describe("config section controls", () => {
       },
     ];
 
-    const filtered = filterConfigSectionsForSearch(sections, {
+    const nestedSections = deriveNestedConfigSections(sections);
+    const filtered = filterConfigSectionsForSearch(nestedSections, {
       query: "expert recurrent gate stack hidden dim",
     });
-    const [mixtureSection] = deriveNestedConfigSections(filtered, sections);
+    const [mixtureSection] = deriveNestedConfigSections(filtered, nestedSections);
 
     expect(filtered.map((section) => section.title)).toEqual([
       "Mixture Of Experts Model Options",
-      "Expert Recurrent Layer Options",
-      "Expert Recurrent Gate Options",
-      "Expert Recurrent Gate Stack Options",
     ]);
     expect(mixtureSection.children?.[0]?.title).toBe(
       "Expert Recurrent Layer Options",
@@ -1432,7 +1609,7 @@ describe("config section controls", () => {
     expect(gatePipeline?.nullable).toBe(true);
   });
 
-  it("derives stack child sections from config field prefixes", () => {
+  it("does not infer stack child sections from config field prefixes", () => {
     const sections: ConfigSection[] = [
       {
         title: "Experimental Options",
@@ -1466,12 +1643,9 @@ describe("config section controls", () => {
     ];
 
     const [section] = deriveNestedConfigSections(sections);
-    const stackSection = section.children?.find(
-      (child) => child.title === "Custom Stack Options",
-    );
-
-    expect(stackSection?.controlFieldKey).toBe("custom_stack_independent_flag");
-    expect(stackSection?.fields.map((item) => item.key)).toEqual([
+    expect(section.children).toBeUndefined();
+    expect(section.fields.map((item) => item.key)).toEqual([
+      "custom_rate",
       "custom_stack_independent_flag",
       "custom_stack_hidden_dim",
       "custom_stack_num_layers",
@@ -1479,9 +1653,7 @@ describe("config section controls", () => {
 
     const disabledByDefault = disabledConfigFieldReasons(sections, {});
     expect(disabledByDefault.has("custom_stack_independent_flag")).toBe(false);
-    expect(disabledByDefault.get("custom_stack_hidden_dim")).toContain(
-      "custom_stack_independent_flag",
-    );
+    expect(disabledByDefault.has("custom_stack_hidden_dim")).toBe(false);
     expect(disabledByDefault.has("custom_rate")).toBe(false);
   });
 
@@ -1491,7 +1663,7 @@ describe("config section controls", () => {
         title: "Layer Stack Options",
         fields: [
           field({
-            key: "stack_hidden_dim",
+            key: "hidden_dim",
             section: "Layer Stack Options",
           }),
           field({
@@ -1513,7 +1685,7 @@ describe("config section controls", () => {
 
     expect(section.title).toBe("Layer Stack Options");
     expect(section.fields.map((item) => item.key)).toEqual([
-      "stack_hidden_dim",
+      "hidden_dim",
       "stack_num_layers",
       "stack_activation",
     ]);
@@ -1842,12 +2014,10 @@ describe("config section controls", () => {
       },
     ];
 
-    const [mixtureSection, samplerSection] = deriveNestedConfigSections(sections);
+    const [mixtureSection, expertWeightSection, samplerSection] =
+      deriveNestedConfigSections(sections);
     const expertStackSection = mixtureSection.children?.find(
       (section) => section.title === "Expert Stack Options",
-    );
-    const expertWeightSection = mixtureSection.children?.find(
-      (section) => section.title === "Weight Generator Options",
     );
     const expertWeightStackSection = expertWeightSection?.children?.[0];
     const routerSection = samplerSection.children?.[0];
@@ -1876,21 +2046,19 @@ describe("config section controls", () => {
       isCustom: false,
     });
 
-    const filtered = filterConfigSectionsForSearch(sections, {
+    const nestedSections = deriveNestedConfigSections(sections);
+    const filtered = filterConfigSectionsForSearch(nestedSections, {
       query: "router weight generator stack hidden dim",
     });
     expect(filtered.map((section) => section.title)).toEqual([
       "Sampler Model Options",
-      "Router Options",
-      "Router Weight Generator Options",
-      "Router Weight Generator Stack Options",
     ]);
   });
 
-  it("uses divider groups for boundary projector sections", () => {
+  it("uses divider groups for boundary model sections", () => {
     const sections: ConfigSection[] = [
       {
-        title: "Input Boundary Projector Options",
+        title: "Input Boundary Model Options",
         fields: [
           field({
             key: "input_layer_weight_option",
@@ -1898,53 +2066,53 @@ describe("config section controls", () => {
             default: null,
             nullable: true,
             choices: ["DualModelDynamicWeightConfig"],
-            section: "Input Boundary Projector Options",
+            section: "Input Boundary Model Options",
           }),
           field({
             key: "input_layer_weight_decay_warmup_batches",
             type: "int",
             default: 0,
-            section: "Input Boundary Projector Options",
+            section: "Input Boundary Model Options",
           }),
           field({
             key: "input_layer_bias_option",
             type: "class",
             default: null,
             nullable: true,
-            section: "Input Boundary Projector Options",
+            section: "Input Boundary Model Options",
           }),
           field({
             key: "input_layer_diagonal_option",
             type: "class",
             default: null,
             nullable: true,
-            section: "Input Boundary Projector Options",
+            section: "Input Boundary Model Options",
           }),
           field({
             key: "input_layer_row_mask_option",
             type: "class",
             default: null,
             nullable: true,
-            section: "Input Boundary Projector Options",
+            section: "Input Boundary Model Options",
           }),
         ],
       },
       {
-        title: "Output Boundary Projector Options",
+        title: "Output Boundary Model Options",
         fields: [
           field({
             key: "output_layer_weight_option",
             type: "class",
             default: null,
             nullable: true,
-            section: "Output Boundary Projector Options",
+            section: "Output Boundary Model Options",
           }),
         ],
       },
     ];
 
     const [inputSection, outputSection] = deriveNestedConfigSections(sections);
-    const groups = boundaryProjectorFieldGroups(
+    const groups = boundaryModelFieldGroups(
       inputSection.title,
       inputSection.fields,
     );
@@ -1974,7 +2142,7 @@ describe("config section controls", () => {
       });
     }
 
-    const outputGroups = boundaryProjectorFieldGroups(
+    const outputGroups = boundaryModelFieldGroups(
       outputSection.title,
       outputSection.fields,
     );
@@ -1990,7 +2158,7 @@ describe("config section controls", () => {
     ).toContain("input_layer_weight_option");
     expect(disabledByDefault.has("output_layer_weight_option")).toBe(false);
 
-    const enabledGroups = boundaryProjectorFieldGroups(
+    const enabledGroups = boundaryModelFieldGroups(
       inputSection.title,
       inputSection.fields,
       { input_layer_weight_option: "DualModelDynamicWeightConfig" },

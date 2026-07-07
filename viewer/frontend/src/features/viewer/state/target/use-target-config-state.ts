@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type ConfigSnapshotRecord,
   type Dataset,
+  type DatasetGroup,
   type LogRun,
   type ModelIdentity,
   type MonitorOption,
@@ -66,6 +67,7 @@ import {
 const EMPTY_MODEL_IDS: ModelIdentity[] = [];
 const EMPTY_PRESETS: Preset[] = [];
 const EMPTY_DATASETS: Dataset[] = [];
+const EMPTY_DATASET_GROUPS: DatasetGroup[] = [];
 const EMPTY_MONITORS: MonitorOption[] = [];
 const EMPTY_SEARCH_AXES: SearchAxis[] = [];
 
@@ -76,6 +78,7 @@ type HistoricalExperimentTarget = {
   experiment: string;
   preset: string;
   dataset: string;
+  experimentTask?: string | null;
 };
 
 type TargetConfigStateOptions = {
@@ -110,6 +113,38 @@ function withoutOverride(overrides: OverrideValues, key: string): OverrideValues
   );
 }
 
+function experimentTaskOptions(groups: DatasetGroup[]) {
+  return groups.map((group) => ({
+    value: group.experimentTask,
+    label: group.label || group.experimentTask,
+  }));
+}
+
+function normalizeExperimentTask(
+  current: string,
+  defaultExperimentTask: string,
+  groups: DatasetGroup[],
+) {
+  const taskNames = groups.map((group) => group.experimentTask);
+  if (current && taskNames.includes(current)) {
+    return current;
+  }
+  if (defaultExperimentTask && taskNames.includes(defaultExperimentTask)) {
+    return defaultExperimentTask;
+  }
+  return taskNames[0] ?? "";
+}
+
+function datasetsForExperimentTask(
+  groups: DatasetGroup[],
+  experimentTask: string,
+) {
+  return (
+    groups.find((group) => group.experimentTask === experimentTask)?.datasets ??
+    EMPTY_DATASETS
+  );
+}
+
 function createSnapshotId() {
   return globalThis.crypto?.randomUUID?.() ?? `snapshot-${Date.now()}`;
 }
@@ -126,6 +161,7 @@ function previewTargetKey({
   modelType,
   model,
   preset,
+  experimentTask,
   dataset,
   mode,
   target,
@@ -134,12 +170,13 @@ function previewTargetKey({
   modelType: string;
   model: string;
   preset: string;
+  experimentTask?: string | null;
   dataset: string;
   mode: TargetMode;
   target: string;
   overrides: OverrideValues;
 }) {
-  return `${modelType}\u0000${model}\u0000${preset}\u0000${dataset}\u0000${mode}\u0000${target}\u0000${overrideDigest(overrides)}`;
+  return `${modelType}\u0000${model}\u0000${preset}\u0000${experimentTask ?? ""}\u0000${dataset}\u0000${mode}\u0000${target}\u0000${overrideDigest(overrides)}`;
 }
 
 function resolvePreviewTarget({
@@ -147,12 +184,14 @@ function resolvePreviewTarget({
   selectedSnapshotId,
   selectedExperimentTarget,
   selectedPreset,
+  selectedExperimentTask,
   selectedDatasets,
 }: {
   selectedTargetMode: TargetMode;
   selectedSnapshotId: string;
   selectedExperimentTarget: HistoricalExperimentTarget | null;
   selectedPreset: string;
+  selectedExperimentTask: string;
   selectedDatasets: string[];
 }) {
   const catalogDataset = selectedDatasets[0] ?? "";
@@ -161,6 +200,7 @@ function resolvePreviewTarget({
       targetMode: "snapshot" as const,
       targetId: selectedSnapshotId,
       preset: selectedPreset,
+      experimentTask: selectedExperimentTask,
       dataset: catalogDataset,
     };
   }
@@ -169,6 +209,7 @@ function resolvePreviewTarget({
       targetMode: "experiment" as const,
       targetId: selectedExperimentTarget?.runId ?? "",
       preset: selectedExperimentTarget?.preset ?? selectedPreset,
+      experimentTask: selectedExperimentTarget?.experimentTask ?? "",
       dataset: selectedExperimentTarget?.dataset ?? catalogDataset,
     };
   }
@@ -176,6 +217,7 @@ function resolvePreviewTarget({
     targetMode: "preset" as const,
     targetId: selectedPreset,
     preset: selectedPreset,
+    experimentTask: selectedExperimentTask,
     dataset: catalogDataset,
   };
 }
@@ -225,6 +267,7 @@ export function useTargetConfigState({
   const clearExperimentTarget = useCallback(() => {
     setSelectedExperimentTarget((current) => (current === null ? current : null));
   }, []);
+  const [selectedExperimentTask, setSelectedExperimentTask] = useState("");
   const [selectedDatasets, setSelectedDatasets] = useState<string[]>([]);
   const initialTrainingPrimaryPreset =
     initialTargetSelection?.selectedPreset &&
@@ -242,6 +285,8 @@ export function useTargetConfigState({
   const [selectedTrainingPresets, setSelectedTrainingPresets] = useState<string[]>(
     initialTrainingPrimaryPreset ? [initialTrainingPrimaryPreset] : [],
   );
+  const [selectedTrainingExperimentTask, setSelectedTrainingExperimentTask] =
+    useState("");
   const [selectedTrainingDatasets, setSelectedTrainingDatasets] = useState<string[]>([]);
   const [selectedTrainingMonitors, setSelectedTrainingMonitors] = useState<string[]>([]);
   const [trainingBulkOverrides, setTrainingBulkOverrides] =
@@ -327,7 +372,18 @@ export function useTargetConfigState({
   const presetsReady = presetsQuery.isSuccess;
   const isPresetsError = presetsQuery.isError;
   const presetsError = presetsQuery.error;
-  const datasets = datasetsQuery.data?.datasets ?? EMPTY_DATASETS;
+  const datasetGroups = datasetsQuery.data?.datasetGroups ?? EMPTY_DATASET_GROUPS;
+  const defaultExperimentTask = datasetsQuery.data?.defaultExperimentTask ?? "";
+  const activeExperimentTask = normalizeExperimentTask(
+    selectedExperimentTask,
+    defaultExperimentTask,
+    datasetGroups,
+  );
+  const experimentTaskOptionsList = useMemo(
+    () => experimentTaskOptions(datasetGroups),
+    [datasetGroups],
+  );
+  const datasets = datasetsForExperimentTask(datasetGroups, activeExperimentTask);
   const isDatasetsError = datasetsQuery.isError;
   const datasetsError = datasetsQuery.error;
   const targetMonitors = monitorsQuery.data?.monitors ?? EMPTY_MONITORS;
@@ -337,7 +393,23 @@ export function useTargetConfigState({
   const isSchemaError = schemaQuery.isError;
   const schemaError = schemaQuery.error;
   const trainingPresets = trainingPresetsQuery.data?.presets ?? EMPTY_PRESETS;
-  const trainingDatasets = trainingDatasetsQuery.data?.datasets ?? EMPTY_DATASETS;
+  const trainingDatasetGroups =
+    trainingDatasetsQuery.data?.datasetGroups ?? EMPTY_DATASET_GROUPS;
+  const trainingDefaultExperimentTask =
+    trainingDatasetsQuery.data?.defaultExperimentTask ?? "";
+  const activeTrainingExperimentTask = normalizeExperimentTask(
+    selectedTrainingExperimentTask,
+    trainingDefaultExperimentTask,
+    trainingDatasetGroups,
+  );
+  const trainingExperimentTaskOptions = useMemo(
+    () => experimentTaskOptions(trainingDatasetGroups),
+    [trainingDatasetGroups],
+  );
+  const trainingDatasets = datasetsForExperimentTask(
+    trainingDatasetGroups,
+    activeTrainingExperimentTask,
+  );
   const trainingMonitors = trainingMonitorsQuery.data?.monitors ?? EMPTY_MONITORS;
   const trainingMonitorsLoading = trainingMonitorsQuery.isLoading;
   const trainingSearchAxes = trainingSearchSpaceQuery.data?.axes ?? EMPTY_SEARCH_AXES;
@@ -521,6 +593,7 @@ export function useTargetConfigState({
       clearExperimentTarget();
       selectTargetModel(nextModel);
       setSnapshotEditorDraft({});
+      setSelectedExperimentTask("");
       setSelectedDatasets([]);
       onModelSelected?.();
       resetGraphSelectionAndExpansion();
@@ -555,6 +628,7 @@ export function useTargetConfigState({
     setSelectedTrainingPrimaryPreset("");
     setSelectedTrainingPresets([]);
     setSelectedTrainingSnapshotIds([]);
+    setSelectedTrainingExperimentTask("");
     setSelectedTrainingDatasets([]);
     setSelectedTrainingMonitors([]);
     setTrainingBulkOverrides({});
@@ -591,6 +665,24 @@ export function useTargetConfigState({
   // Selection cascade: model types/models load -> first type/model auto-selected -> presets/datasets
   // load -> first preset + dataset auto-selected and the initial preview is
   // requested -> dataset/monitor lists are pruned to what the model supports.
+  useEffect(() => {
+    setSelectedExperimentTask((current) => {
+      const validTaskNames = datasetGroups.map((group) => group.experimentTask);
+      const next = current && !validTaskNames.includes(current) ? "" : current;
+      return current === next ? current : next;
+    });
+  }, [datasetGroups]);
+
+  useEffect(() => {
+    setSelectedTrainingExperimentTask((current) => {
+      const validTaskNames = trainingDatasetGroups.map(
+        (group) => group.experimentTask,
+      );
+      const next = current && !validTaskNames.includes(current) ? "" : current;
+      return current === next ? current : next;
+    });
+  }, [trainingDatasetGroups]);
+
   useEffect(() => {
     if (catalogModels.length === 0) {
       return;
@@ -880,12 +972,14 @@ export function useTargetConfigState({
       targetMode,
       targetId,
       preset: previewPreset,
+      experimentTask: previewExperimentTask,
       dataset: previewDataset,
     } = resolvePreviewTarget({
       selectedTargetMode,
       selectedSnapshotId,
       selectedExperimentTarget,
       selectedPreset,
+      selectedExperimentTask: activeExperimentTask,
       selectedDatasets,
     });
     if (!selectedModel) {
@@ -896,6 +990,7 @@ export function useTargetConfigState({
         modelType: selectedModelType,
         model: selectedModel,
         preset: previewPreset,
+        experimentTask: previewExperimentTask,
         dataset: previewDataset,
         mode: targetMode,
         target: targetId,
@@ -916,6 +1011,7 @@ export function useTargetConfigState({
       modelType: selectedModelType,
       model: selectedModel,
       preset: previewPreset,
+      experimentTask: previewExperimentTask,
       dataset: previewDataset,
       mode: targetMode,
       target: targetId,
@@ -937,6 +1033,7 @@ export function useTargetConfigState({
       modelType: selectedModelType,
       model: selectedModel,
       preset: previewPreset,
+      experimentTask: previewExperimentTask || undefined,
       dataset: previewDataset,
       overrides: { ...activeOverrides },
       targetMode,
@@ -949,6 +1046,7 @@ export function useTargetConfigState({
     );
   }, [
     activeOverrides,
+    activeExperimentTask,
     clearPreview,
     isRestoringTargetSelection,
     pendingConfigSnapshot,
@@ -1084,6 +1182,7 @@ export function useTargetConfigState({
       }
       const rawPreset = selectedLogRun.preset;
       const rawDataset = selectedLogRun.dataset;
+      const runExperimentTask = selectedLogRun.experimentTask ?? null;
       const catalogPreset = resolveRunPresetName(
         selectedLogRun,
         presets,
@@ -1103,6 +1202,7 @@ export function useTargetConfigState({
         selectedExperimentName === selectedLogRun.experiment &&
         selectedExperimentPreset === rawPreset &&
         selectedExperimentDataset === rawDataset &&
+        (selectedExperimentTarget?.experimentTask ?? null) === runExperimentTask &&
         selectedSnapshotId === "" &&
         catalogPresetSynced &&
         catalogDatasetSynced &&
@@ -1118,7 +1218,11 @@ export function useTargetConfigState({
         experiment: selectedLogRun.experiment,
         preset: rawPreset,
         dataset: rawDataset,
+        experimentTask: runExperimentTask,
       });
+      if (runExperimentTask) {
+        setSelectedExperimentTask(runExperimentTask);
+      }
       if (catalogPreset && selectedPreset !== catalogPreset) {
         setSelectedPreset(catalogPreset);
       }
@@ -1136,6 +1240,7 @@ export function useTargetConfigState({
         modelType: selectedModelType,
         model: selectedModel,
         preset: rawPreset,
+        experimentTask: runExperimentTask,
         dataset: rawDataset,
         mode: "experiment",
         target: selectedLogRun.id,
@@ -1146,6 +1251,7 @@ export function useTargetConfigState({
         modelType: selectedModelType,
         model: selectedModel,
         preset: rawPreset,
+        experimentTask: runExperimentTask || undefined,
         dataset: rawDataset,
         overrides: {},
         targetMode: "experiment",
@@ -1165,6 +1271,7 @@ export function useTargetConfigState({
       selectedExperimentName,
       selectedExperimentPreset,
       selectedExperimentRunId,
+      selectedExperimentTarget,
       selectedModel,
       selectedModelType,
       selectedPreset,
@@ -1416,6 +1523,7 @@ export function useTargetConfigState({
               modelType: selectedModelType,
               model: selectedModel,
               preset,
+              experimentTask: activeExperimentTask,
               dataset: previewDataset,
               mode: "preset",
               target: preset,
@@ -1425,6 +1533,7 @@ export function useTargetConfigState({
     },
     [
       effectivePresetOverrideValues,
+      activeExperimentTask,
       selectedDatasets,
       selectedExperimentDataset,
       selectedModel,
@@ -1490,6 +1599,7 @@ export function useTargetConfigState({
         modelType: selectedModelType,
         model: selectedModel,
         preset,
+        experimentTask: activeExperimentTask || undefined,
         dataset: previewDataset,
         mode: "preset",
         target: preset,
@@ -1500,6 +1610,7 @@ export function useTargetConfigState({
         modelType: selectedModelType,
         model: selectedModel,
         preset,
+        experimentTask: activeExperimentTask,
         dataset: previewDataset,
         overrides: { ...effectivePresetOverrideValues },
         targetMode: "preset",
@@ -1508,6 +1619,7 @@ export function useTargetConfigState({
     },
     [
       effectivePresetOverrideValues,
+      activeExperimentTask,
       requestPreview,
       resetGraphSelectionAndExpansion,
       selectPreviewPreset,
@@ -1560,6 +1672,7 @@ export function useTargetConfigState({
         modelType: selectedModelType,
         model: selectedModel,
         preset: snapshot.preset,
+        experimentTask: activeExperimentTask || undefined,
         dataset: previewDataset,
         mode: "snapshot",
         target: snapshot.id,
@@ -1570,6 +1683,7 @@ export function useTargetConfigState({
         modelType: selectedModelType,
         model: selectedModel,
         preset: snapshot.preset,
+        experimentTask: activeExperimentTask,
         dataset: previewDataset,
         overrides: { ...normalizedSnapshotOverrides },
         targetMode: "snapshot",
@@ -1579,6 +1693,7 @@ export function useTargetConfigState({
     },
     [
       modelConfigSnapshots,
+      activeExperimentTask,
       clearExperimentTarget,
       configFields,
       presetNames,
@@ -1622,6 +1737,7 @@ export function useTargetConfigState({
       modelType: selectedModelType,
       model: selectedModel,
       preset: selectedPreset,
+      experimentTask: activeExperimentTask || undefined,
       dataset: previewDataset,
       mode: "preset",
       target: selectedPreset,
@@ -1632,6 +1748,7 @@ export function useTargetConfigState({
       modelType: selectedModelType,
       model: selectedModel,
       preset: selectedPreset,
+      experimentTask: activeExperimentTask,
       dataset: previewDataset,
       overrides: { ...effectivePresetOverrideValues },
       targetMode: "preset",
@@ -1639,6 +1756,7 @@ export function useTargetConfigState({
     });
   }, [
     effectivePresetOverrideValues,
+    activeExperimentTask,
     clearExperimentTarget,
     onTargetPresetSelected,
     requestPreview,
@@ -1914,6 +2032,44 @@ export function useTargetConfigState({
     setSelectedDatasets(datasetNames[0] ? [datasetNames[0]] : []);
   }, [datasetNames]);
 
+  const selectExperimentTask = useCallback(
+    (experimentTask: string) => {
+      const nextTask = normalizeExperimentTask(
+        experimentTask,
+        defaultExperimentTask,
+        datasetGroups,
+      );
+      const nextDatasetNames = datasetsForExperimentTask(
+        datasetGroups,
+        nextTask,
+      ).map((dataset) => dataset.name);
+      setSelectedExperimentTask(nextTask);
+      setSelectedDatasets((current) =>
+        normalizeSelection(current, nextDatasetNames),
+      );
+    },
+    [datasetGroups, defaultExperimentTask],
+  );
+
+  const selectTrainingExperimentTask = useCallback(
+    (experimentTask: string) => {
+      const nextTask = normalizeExperimentTask(
+        experimentTask,
+        trainingDefaultExperimentTask,
+        trainingDatasetGroups,
+      );
+      const nextDatasetNames = datasetsForExperimentTask(
+        trainingDatasetGroups,
+        nextTask,
+      ).map((dataset) => dataset.name);
+      setSelectedTrainingExperimentTask(nextTask);
+      setSelectedTrainingDatasets((current) =>
+        normalizeSelection(current, nextDatasetNames),
+      );
+    },
+    [trainingDatasetGroups, trainingDefaultExperimentTask],
+  );
+
   const setTrainingDatasetSelection = useCallback(
     (datasets: string[]) => {
       setSelectedTrainingDatasets((current) =>
@@ -1976,12 +2132,14 @@ export function useTargetConfigState({
       targetMode,
       targetId,
       preset: previewPreset,
+      experimentTask: previewExperimentTask,
       dataset: previewDataset,
     } = resolvePreviewTarget({
       selectedTargetMode,
       selectedSnapshotId,
       selectedExperimentTarget,
       selectedPreset,
+      selectedExperimentTask: activeExperimentTask,
       selectedDatasets,
     });
     if (!selectedModel || !previewPreset || !previewDataset) {
@@ -1991,6 +2149,7 @@ export function useTargetConfigState({
       modelType: selectedModelType,
       model: selectedModel,
       preset: previewPreset,
+      experimentTask: previewExperimentTask,
       dataset: previewDataset,
       mode: targetMode,
       target: targetId,
@@ -2005,6 +2164,7 @@ export function useTargetConfigState({
       modelType: selectedModelType,
       model: selectedModel,
       preset: previewPreset,
+      experimentTask: previewExperimentTask || undefined,
       dataset: previewDataset,
       overrides: { ...activeOverrides },
       targetMode,
@@ -2013,6 +2173,7 @@ export function useTargetConfigState({
     });
   }, [
     activeOverrides,
+    activeExperimentTask,
     clearPreview,
     requestPreview,
     resetGraphSelectionAndExpansion,
@@ -2049,18 +2210,21 @@ export function useTargetConfigState({
               selectedSnapshotId,
               selectedExperimentTarget,
               selectedPreset,
+              selectedExperimentTask: activeExperimentTask,
               selectedDatasets,
             })
           : {
               targetMode: "preset" as const,
               targetId: selectedPreset,
               preset: selectedPreset,
+              experimentTask: activeExperimentTask,
               dataset: selectedDatasets[0] ?? "",
             };
       const {
         targetMode,
         targetId,
         preset: previewPreset,
+        experimentTask: previewExperimentTask,
         dataset: previewDataset,
       } = resolvedTarget;
       if (selectedModel && previewPreset && previewDataset) {
@@ -2069,6 +2233,7 @@ export function useTargetConfigState({
           modelType: selectedModelType,
           model: selectedModel,
           preset: previewPreset,
+          experimentTask: previewExperimentTask,
           dataset: previewDataset,
           mode: targetMode,
           target: targetId,
@@ -2082,6 +2247,7 @@ export function useTargetConfigState({
           modelType: selectedModelType,
           model: selectedModel,
           preset: previewPreset,
+          experimentTask: previewExperimentTask || undefined,
           dataset: previewDataset,
           overrides: nextOverrides,
           targetMode,
@@ -2097,6 +2263,7 @@ export function useTargetConfigState({
     [
       clearPreview,
       clearPresetOverrides,
+      activeExperimentTask,
       requestPreview,
       resetGraphExpansion,
       clearExperimentTarget,
@@ -2290,11 +2457,13 @@ export function useTargetConfigState({
       toggleDataset,
       selectAllDatasets,
       selectFirstDataset,
+      selectExperimentTask,
       selectedTrainingDatasets,
       setTrainingDatasetSelection,
       toggleTrainingDataset,
       selectAllTrainingDatasets,
       selectFirstTrainingDataset,
+      selectTrainingExperimentTask,
       selectedMonitors: selectedTrainingMonitors,
       selectedTrainingMonitors,
       toggleMonitor,
@@ -2371,6 +2540,10 @@ export function useTargetConfigState({
       presetsReady,
       isPresetsError,
       presetsError,
+      selectedExperimentTask: activeExperimentTask,
+      experimentTaskOptions: experimentTaskOptionsList,
+      selectedTrainingExperimentTask: activeTrainingExperimentTask,
+      trainingExperimentTaskOptions,
       datasets,
       trainingDatasets,
       isDatasetsError,
@@ -2400,7 +2573,9 @@ export function useTargetConfigState({
       activateTargetPresetMode,
       activateTargetSnapshotMode,
       addConfigSnapshot,
+      activeExperimentTask,
       apiOnline,
+      activeTrainingExperimentTask,
       capabilities,
       clearSnapshotEditorDraftOverride,
       clearMonitors,
@@ -2413,6 +2588,7 @@ export function useTargetConfigState({
       datasetsError,
       excludeConfigSnapshot,
       excludeDraftTrainingPreset,
+      experimentTaskOptionsList,
       fieldCount,
       includeConfigSnapshot,
       isDatasetsError,
@@ -2458,7 +2634,9 @@ export function useTargetConfigState({
       selectAllTrainingDatasets,
       selectAllTrainingPresets,
       selectFirstDataset,
+      selectExperimentTask,
       selectFirstTrainingDataset,
+      selectTrainingExperimentTask,
       selectModel,
       selectModelType,
       selectPrimaryTrainingPreset,
@@ -2504,6 +2682,7 @@ export function useTargetConfigState({
       trainingConfigSections,
       trainingConfigSnapshotGroups,
       trainingDatasets,
+      trainingExperimentTaskOptions,
       trainingModelConfigSnapshotGroups,
       trainingModelConfigSnapshots,
       trainingMonitors,

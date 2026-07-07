@@ -140,8 +140,9 @@ describe("ViewerApp Graph Workspace", () => {
       modelType: "linears",
       model: "linear",
       preset: "recurrent-gating-halting",
+      experimentTask: "image-classification",
       dataset: "Mnist",
-      overrides: { stack_hidden_dim: "128" },
+      overrides: { hidden_dim: "128" },
     });
     const refreshedModelNode = await screen.findByTestId("node-model");
     expect(within(refreshedModelNode).getByTitle("2,097,152 bytes of parameter tensors"))

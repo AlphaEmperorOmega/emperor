@@ -67,6 +67,24 @@ export function groupModelLogRunsByExperiment(
   }));
 }
 
+export function filterLogRunsByExperimentTask(
+  runs: LogRun[],
+  selectedExperimentTask: string,
+) {
+  if (!selectedExperimentTask) {
+    return runs;
+  }
+
+  const taskAwareRuns = runs.filter((run) => Boolean(run.experimentTask));
+  if (taskAwareRuns.length === 0) {
+    return runs;
+  }
+
+  return taskAwareRuns.filter(
+    (run) => run.experimentTask === selectedExperimentTask,
+  );
+}
+
 export function monitorEligibilityDescription(
   monitorEligibility: MonitorEligibility,
 ) {

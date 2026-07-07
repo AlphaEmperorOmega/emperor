@@ -693,26 +693,58 @@ export const neuronPresetsResponse = {
 export const datasetsResponse = {
   modelType: "linears",
   model: "linear",
-  datasets: [
-    { name: "Mnist", label: "Mnist", inputDim: 784, outputDim: 10 },
-    { name: "Cifar10", label: "Cifar 10", inputDim: 3072, outputDim: 10 },
+  defaultExperimentTask: "image-classification",
+  datasetGroups: [
+    {
+      experimentTask: "image-classification",
+      label: "Image Classification",
+      datasets: [
+        { name: "Mnist", label: "Mnist", inputDim: 784, outputDim: 10 },
+        { name: "Cifar10", label: "Cifar 10", inputDim: 3072, outputDim: 10 },
+      ],
+    },
   ],
 };
 export const bertDatasetsResponse = {
   modelType: "bert",
   model: "linear",
-  datasets: [{ name: "ToyText", label: "Toy Text", inputDim: 128, outputDim: 2 }],
+  defaultExperimentTask: "bert-pretraining",
+  datasetGroups: [
+    {
+      experimentTask: "bert-pretraining",
+      label: "Bert Pretraining",
+      datasets: [
+        { name: "ToyText", label: "Toy Text", inputDim: 128, outputDim: 2 },
+      ],
+    },
+  ],
 };
 export const vitDatasetsResponse = {
   modelType: "vit",
   model: "linear",
-  datasets: [{ name: "Mnist", label: "MNIST", inputDim: 784, outputDim: 10 }],
+  defaultExperimentTask: "image-classification",
+  datasetGroups: [
+    {
+      experimentTask: "image-classification",
+      label: "Image Classification",
+      datasets: [
+        { name: "Mnist", label: "MNIST", inputDim: 784, outputDim: 10 },
+      ],
+    },
+  ],
 };
 export const neuronDatasetsResponse = {
   modelType: "neuron",
   model: "linear",
-  datasets: [
-    { name: "Mnist", label: "Mnist", inputDim: 784, outputDim: 10 },
+  defaultExperimentTask: "image-classification",
+  datasetGroups: [
+    {
+      experimentTask: "image-classification",
+      label: "Image Classification",
+      datasets: [
+        { name: "Mnist", label: "Mnist", inputDim: 784, outputDim: 10 },
+      ],
+    },
   ],
 };
 export const monitorsResponse = {
@@ -1436,11 +1468,12 @@ export const schemaResponse = {
   model: "linear",
   fields: [
     {
-      key: "stack_hidden_dim",
-      configKey: "STACK_HIDDEN_DIM",
-      flag: "--stack-hidden-dim",
+      key: "hidden_dim",
+      configKey: "HIDDEN_DIM",
+      flag: "--hidden-dim",
       label: "stack hidden dim",
       section: "Layer Stack Options",
+      sectionPath: ["Layer Stack Options"],
       type: "int",
       default: 256,
       nullable: false,
@@ -1452,6 +1485,7 @@ export const schemaResponse = {
       flag: "--stack-num-layers",
       label: "stack num layers",
       section: "Layer Stack Options",
+      sectionPath: ["Layer Stack Options"],
       type: "int",
       default: 5,
       nullable: false,
@@ -1463,6 +1497,7 @@ export const schemaResponse = {
       flag: "--gate-flag",
       label: "gate flag",
       section: "Gate Options",
+      sectionPath: ["Gate Options"],
       type: "bool",
       default: false,
       nullable: false,
@@ -1474,6 +1509,7 @@ export const schemaResponse = {
       flag: "--stack-activation",
       label: "stack activation",
       section: "Layer Stack Options",
+      sectionPath: ["Layer Stack Options"],
       type: "enum",
       default: "GELU",
       nullable: false,
@@ -1496,9 +1532,9 @@ export const searchSpaceResponse = {
   preset: "baseline",
   axes: [
     {
-      key: "stack_hidden_dim",
-      configKey: "STACK_HIDDEN_DIM",
-      searchKey: "SEARCH_SPACE_STACK_HIDDEN_DIM",
+      key: "hidden_dim",
+      configKey: "HIDDEN_DIM",
+      searchKey: "SEARCH_SPACE_HIDDEN_DIM",
       label: "stack hidden dim",
       section: "Layer Stack Options",
       type: "int",
