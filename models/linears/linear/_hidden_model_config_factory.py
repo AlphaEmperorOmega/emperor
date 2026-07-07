@@ -29,7 +29,8 @@ import models.linears.linear.config as config
 
 
 @dataclass(frozen=True)
-class ControlConfigDependencies:
+class HiddenModelConfigDependencies:
+    hidden_dim: int
     stack_options: MainLayerStackOptions | None
     submodule_stack_options: SubmoduleStackOptions | None
     layer_controller_options: LayerControllerOptions | None
@@ -38,14 +39,16 @@ class ControlConfigDependencies:
     output_dim: int
 
 
-class ControlConfigFactory:
-    def __init__(self, dependencies: ControlConfigDependencies) -> None:
+class HiddenModelConfigFactory:
+    def __init__(self, dependencies: HiddenModelConfigDependencies) -> None:
+        hidden_dim = dependencies.hidden_dim
         stack_options = dependencies.stack_options
         submodule_stack_options = dependencies.submodule_stack_options
         layer_controller_options = dependencies.layer_controller_options
         dynamic_memory_options = dependencies.dynamic_memory_options
         recurrent_controller_options = dependencies.recurrent_controller_options
         output_dim = dependencies.output_dim
+        self._hidden_dim = hidden_dim
         self.stack_options = self.__default_stack_options(stack_options)
         self.submodule_stack_options = self.__default_submodule_stack_options(
             submodule_stack_options
@@ -71,6 +74,7 @@ class ControlConfigFactory:
             output_dim=output_dim,
         )
         self.memory_config_factory = MemoryConfigFactory(
+            hidden_dim=self.hidden_dim,
             stack_options=self.stack_options,
             dynamic_memory_options=self.dynamic_memory_options,
             submodule_stack_options=self.submodule_stack_options,
@@ -81,6 +85,10 @@ class ControlConfigFactory:
             halting_config_factory=self.halting_config_factory,
         )
 
+    @property
+    def hidden_dim(self) -> int:
+        return self._hidden_dim
+
     def __default_stack_options(
         self,
         stack_options: MainLayerStackOptions | None,
@@ -88,7 +96,6 @@ class ControlConfigFactory:
         if stack_options is not None:
             return stack_options
         return MainLayerStackOptions(
-            hidden_dim=config.STACK_HIDDEN_DIM,
             bias_flag=config.STACK_BIAS_FLAG,
             layer_norm_position=config.STACK_LAYER_NORM_POSITION,
             num_layers=config.STACK_NUM_LAYERS,
@@ -241,7 +248,7 @@ class ControlConfigFactory:
         layer_config: LayerConfig,
     ) -> LayerStackConfig:
         return LayerStackConfig(
-            hidden_dim=self.stack_options.hidden_dim,
+            hidden_dim=self.hidden_dim,
             num_layers=self.stack_options.num_layers,
             last_layer_bias_option=self.stack_options.last_layer_bias_option,
             apply_output_pipeline_flag=self.stack_options.apply_output_pipeline_flag,

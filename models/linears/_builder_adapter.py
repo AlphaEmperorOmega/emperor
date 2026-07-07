@@ -12,7 +12,13 @@ from models.linears._controller_stack import (
 )
 
 
-_TOP_LEVEL_KEYS = ("batch_size", "learning_rate", "input_dim", "output_dim")
+_TOP_LEVEL_KEYS = (
+    "batch_size",
+    "learning_rate",
+    "input_dim",
+    "hidden_dim",
+    "output_dim",
+)
 
 _CONTROLLER_STACK_FIELD_MAP = {
     "independent_flag": "independent_flag",
@@ -195,8 +201,8 @@ def linear_flat_defaults(config_module: ModuleType) -> dict[str, Any]:
         "batch_size": config_module.BATCH_SIZE,
         "learning_rate": config_module.LEARNING_RATE,
         "input_dim": config_module.INPUT_DIM,
+        "hidden_dim": config_module.HIDDEN_DIM,
         "output_dim": config_module.OUTPUT_DIM,
-        "stack_hidden_dim": config_module.STACK_HIDDEN_DIM,
         "stack_bias_flag": config_module.STACK_BIAS_FLAG,
         "stack_layer_norm_position": config_module.STACK_LAYER_NORM_POSITION,
         "stack_num_layers": config_module.STACK_NUM_LAYERS,
@@ -273,7 +279,6 @@ def _default_linear_stack_options(
     config_module: ModuleType,
 ) -> linears_options.MainLayerStackOptions:
     return linears_options.MainLayerStackOptions(
-        hidden_dim=config_module.STACK_HIDDEN_DIM,
         bias_flag=config_module.STACK_BIAS_FLAG,
         layer_norm_position=config_module.STACK_LAYER_NORM_POSITION,
         num_layers=config_module.STACK_NUM_LAYERS,
@@ -631,7 +636,7 @@ def _default_boundary_options(
 ) -> Any:
     boundary_options = _boundary_options()
     config_prefix = prefix.upper()
-    return boundary_options.AdaptiveBoundaryProjectionOptions(
+    return boundary_options.AdaptiveBoundaryModelOptions(
         weight_option=getattr(config_module, f"{config_prefix}_WEIGHT_OPTION"),
         weight_generator_depth=getattr(
             config_module,
@@ -705,7 +710,6 @@ def _linear_stack_options_from_kwargs(
     updates = _pop_updates(
         kwargs,
         {
-            "stack_hidden_dim": "hidden_dim",
             "stack_bias_flag": "bias_flag",
             "layer_norm_position": "layer_norm_position",
             "stack_layer_norm_position": "layer_norm_position",
@@ -1127,4 +1131,4 @@ def _adaptive_options():
 
 
 def _boundary_options():
-    return import_module("models.linears.linear_adaptive._boundary_config_factory")
+    return import_module("models.linears.linear_adaptive._boundary_model_config_factory")

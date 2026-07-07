@@ -25,7 +25,9 @@ from emperor.experiments.base import (
     PresetLock,
     RandomSearch,
 )
+from emperor.halting.core.monitor import HaltingMonitorCallback
 from emperor.halting.options import HaltingHiddenStateModeOptions
+from emperor.linears.core.monitor import LinearMonitorCallback
 from emperor.linears.core.config import LinearLayerConfig
 from emperor.memory.config import (
     GatedResidualDynamicMemoryConfig,
@@ -56,6 +58,11 @@ from models.training_test_utils import (
     RandomImageClassificationDataModule,
     tiny_cpu_trainer,
 )
+
+
+import models.linears.linear.dataset_options as dataset_options
+import models.linears.linear.monitor_options as monitor_options
+import models.linears.linear.search_space as search_space
 
 
 class TestLinearModel(unittest.TestCase):
@@ -113,7 +120,7 @@ class TestLinearModel(unittest.TestCase):
 
     def test_flat_builder_kwargs_are_rejected(self):
         cases = (
-            {"stack_hidden_dim": 13},
+            {"hidden_width": 13},
             {"memory_flag": True},
             {"recurrent_flag": True},
             {"shared_gate_config": self.shared_gate_config()},
@@ -159,7 +166,7 @@ class TestLinearModel(unittest.TestCase):
         self.assertIsNone(kwargs["search_keys"])
         self.assertEqual(kwargs["config_overrides"], {})
         self.assertEqual(kwargs["search_overrides"], {})
-        self.assertEqual(kwargs["selected_datasets"], config.DATASET_OPTIONS)
+        self.assertEqual(kwargs["selected_datasets"], dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK])
         self.assertIsNone(kwargs["selected_presets"])
         self.assertEqual(kwargs["callbacks"], [])
 
@@ -191,15 +198,15 @@ class TestLinearModel(unittest.TestCase):
         self.assertEqual(
             [type(callback) for callback in kwargs["callbacks"]],
             [
-                config.LinearMonitorCallback,
-                config.HaltingMonitorCallback,
+                LinearMonitorCallback,
+                HaltingMonitorCallback,
             ],
         )
 
     def test_monitor_options_expose_callback_factories(self):
-        self.assertTrue(config.MONITOR_OPTIONS)
+        self.assertTrue(monitor_options.MONITOR_OPTIONS)
 
-        for option in config.MONITOR_OPTIONS:
+        for option in monitor_options.MONITOR_OPTIONS:
             with self.subTest(option=option.name):
                 self.assertTrue(option.name)
                 self.assertTrue(option.label)
@@ -207,14 +214,14 @@ class TestLinearModel(unittest.TestCase):
                 self.assertTrue(callable(option.callback_factory))
                 self.assertIsNotNone(option.callback_factory())
 
-    def test_cli_stack_hidden_dim_flag_uses_canonical_override(self):
+    def test_cli_hidden_dim_flags_use_canonical_override(self):
         parser = get_experiment_parser(
             ExperimentPreset.names(),
             "models.linears.linear",
         )
         cases = (
             ("--stack-bias-flag", "false", "stack_bias_flag", False),
-            ("--stack-hidden-dim", "64", "stack_hidden_dim", 64),
+            ("--hidden-dim", "64", "hidden_dim", 64),
             (
                 "--layer-norm-position",
                 "AFTER",
@@ -241,16 +248,14 @@ class TestLinearModel(unittest.TestCase):
                 self.assertEqual(mode.config_overrides[override_key], expected_value)
                 self.assertEqual(mode.search_overrides, {})
 
-    def test_cli_rejects_top_level_hidden_dim_alias(self):
+    def test_cli_rejects_legacy_stack_hidden_dim_flag(self):
         parser = get_experiment_parser(
             ExperimentPreset.names(),
             "models.linears.linear",
         )
-        removed_flag = "--" + "hidden-dim"
-
         with contextlib.redirect_stderr(io.StringIO()):
             with self.assertRaises(SystemExit):
-                parser.parse_args(["--preset", "baseline", removed_flag, "64"])
+                parser.parse_args(["--preset", "baseline", "--stack-hidden-dim", "64"])
 
     def test_cli_rejects_top_level_bias_flag_alias(self):
         parser = get_experiment_parser(
@@ -266,7 +271,7 @@ class TestLinearModel(unittest.TestCase):
     def test_all_presets_forward_one_mnist_batch(self):
         batch_size = 4
         presets = ExperimentPresets()
-        dataset = config.DATASET_OPTIONS[0]
+        dataset = dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0]
 
         for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
@@ -283,7 +288,7 @@ class TestLinearModel(unittest.TestCase):
         batch_size = 4
         presets = ExperimentPresets()
 
-        for dataset in config.DATASET_OPTIONS:
+        for dataset in dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK]:
             with self.subTest(dataset=dataset.__name__):
                 cfg = presets.get_config(ExperimentPreset.BASELINE, dataset)[0]
                 model = Model(cfg)
@@ -295,7 +300,7 @@ class TestLinearModel(unittest.TestCase):
 
     def test_all_presets_train_one_epoch(self):
         presets = ExperimentPresets()
-        dataset = config.DATASET_OPTIONS[0]
+        dataset = dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0]
 
         for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
@@ -409,7 +414,7 @@ class TestLinearModel(unittest.TestCase):
     def test_preset_accepts_search_flags(self):
         configs = ExperimentPresets().get_config(
             ExperimentPreset.BASELINE,
-            config.DATASET_OPTIONS[0],
+            dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
             RandomSearch(num_samples=2),
         )
 
@@ -428,7 +433,7 @@ class TestLinearModel(unittest.TestCase):
             with self.subTest(preset=preset.name):
                 configs = presets.get_config(
                     preset,
-                    config.DATASET_OPTIONS[0],
+                    dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
                     RandomSearch(num_samples=2),
                 )
 
@@ -719,7 +724,7 @@ class TestLinearModel(unittest.TestCase):
             with self.subTest(config_role=role):
                 self._assert_controller_stack_options(
                     stack_cfg,
-                    hidden_dim=config.STACK_HIDDEN_DIM,
+                    hidden_dim=config.HIDDEN_DIM,
                     num_layers=2,
                     activation=ActivationOptions.GELU,
                     layer_norm_position=config.STACK_LAYER_NORM_POSITION,
@@ -731,7 +736,7 @@ class TestLinearModel(unittest.TestCase):
                 )
 
     def test_stack_defaults_match_submodule_defaults(self):
-        self.assertEqual(config.SUBMODULE_STACK_HIDDEN_DIM, config.STACK_HIDDEN_DIM)
+        self.assertEqual(config.SUBMODULE_STACK_HIDDEN_DIM, config.HIDDEN_DIM)
         self.assertEqual(
             config.SUBMODULE_STACK_LAYER_NORM_POSITION,
             config.STACK_LAYER_NORM_POSITION,
@@ -741,7 +746,7 @@ class TestLinearModel(unittest.TestCase):
         cfg = LinearConfigBuilder().build()
         model_cfg = cfg.experiment_config.model_config
 
-        self.assertEqual(cfg.hidden_dim, config.STACK_HIDDEN_DIM)
+        self.assertEqual(cfg.hidden_dim, config.HIDDEN_DIM)
         self.assertEqual(
             model_cfg.layer_config.layer_norm_position,
             config.STACK_LAYER_NORM_POSITION,
@@ -871,7 +876,7 @@ class TestLinearModel(unittest.TestCase):
     def test_linear_and_adaptive_controller_stack_fallback_semantics_match(self):
         common_kwargs = {
             "input_dim": 8,
-            "stack_hidden_dim": 8,
+            "hidden_dim": 8,
             "output_dim": 4,
             "stack_gate_flag": True,
             "stack_halting_flag": True,
@@ -952,22 +957,22 @@ class TestLinearModel(unittest.TestCase):
     def test_search_keys_restrict_sweep_to_subset_of_axes(self):
         configs = ExperimentPresets().get_config(
             ExperimentPreset.BASELINE,
-            config.DATASET_OPTIONS[0],
+            dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
             RandomSearch(num_samples=20),
-            search_keys=["stack_hidden_dim"],
+            search_keys=["hidden_dim"],
         )
 
         learning_rates = {cfg.learning_rate for cfg in configs}
         hidden_dims = {cfg.hidden_dim for cfg in configs}
 
         self.assertEqual(len(learning_rates), 1)
-        self.assertEqual(hidden_dims, set(config.SEARCH_SPACE_STACK_HIDDEN_DIM))
+        self.assertEqual(hidden_dims, set(search_space.SEARCH_SPACE_HIDDEN_DIM))
 
     def test_search_keys_unknown_axis_raises(self):
         with self.assertRaises(ValueError) as ctx:
             ExperimentPresets().get_config(
                 ExperimentPreset.BASELINE,
-                config.DATASET_OPTIONS[0],
+                dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
                 RandomSearch(num_samples=2),
                 search_keys=["bogus_axis"],
             )
@@ -978,14 +983,14 @@ class TestLinearModel(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "GATING.*stack_gate_flag.*True.*False"):
             ExperimentPresets().get_config(
                 ExperimentPreset.GATING,
-                config.DATASET_OPTIONS[0],
+                dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
                 config_overrides={"stack_gate_flag": False},
             )
 
     def test_gating_allows_unlocked_config_override(self):
         cfg = ExperimentPresets().get_config(
             ExperimentPreset.GATING,
-            config.DATASET_OPTIONS[0],
+            dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
             config_overrides={"learning_rate": 2e-3},
         )[0]
 
@@ -1001,43 +1006,43 @@ class TestLinearModel(unittest.TestCase):
         ):
             ExperimentPresets().get_config(
                 ExperimentPreset.POST_NORM,
-                config.DATASET_OPTIONS[0],
+                dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
                 GridSearch(),
                 search_keys=["stack_layer_norm_position"],
             )
 
     def test_post_norm_implicit_search_prunes_locked_layer_norm_axis(self):
         original_search_spaces = {
-            "SEARCH_SPACE_LEARNING_RATE": config.SEARCH_SPACE_LEARNING_RATE,
-            "SEARCH_SPACE_STACK_HIDDEN_DIM": config.SEARCH_SPACE_STACK_HIDDEN_DIM,
-            "SEARCH_SPACE_STACK_NUM_LAYERS": config.SEARCH_SPACE_STACK_NUM_LAYERS,
+            "SEARCH_SPACE_LEARNING_RATE": search_space.SEARCH_SPACE_LEARNING_RATE,
+            "SEARCH_SPACE_HIDDEN_DIM": search_space.SEARCH_SPACE_HIDDEN_DIM,
+            "SEARCH_SPACE_STACK_NUM_LAYERS": search_space.SEARCH_SPACE_STACK_NUM_LAYERS,
             "SEARCH_SPACE_STACK_DROPOUT_PROBABILITY": (
-                config.SEARCH_SPACE_STACK_DROPOUT_PROBABILITY
+                search_space.SEARCH_SPACE_STACK_DROPOUT_PROBABILITY
             ),
             "SEARCH_SPACE_STACK_LAYER_NORM_POSITION": (
-                config.SEARCH_SPACE_STACK_LAYER_NORM_POSITION
+                search_space.SEARCH_SPACE_STACK_LAYER_NORM_POSITION
             ),
-            "SEARCH_SPACE_STACK_ACTIVATION": config.SEARCH_SPACE_STACK_ACTIVATION,
+            "SEARCH_SPACE_STACK_ACTIVATION": search_space.SEARCH_SPACE_STACK_ACTIVATION,
         }
         try:
-            config.SEARCH_SPACE_LEARNING_RATE = [1e-4, 1e-3]
-            config.SEARCH_SPACE_STACK_HIDDEN_DIM = [16, 32]
-            config.SEARCH_SPACE_STACK_NUM_LAYERS = [2]
-            config.SEARCH_SPACE_STACK_DROPOUT_PROBABILITY = [0.0]
-            config.SEARCH_SPACE_STACK_LAYER_NORM_POSITION = [
+            search_space.SEARCH_SPACE_LEARNING_RATE = [1e-4, 1e-3]
+            search_space.SEARCH_SPACE_HIDDEN_DIM = [16, 32]
+            search_space.SEARCH_SPACE_STACK_NUM_LAYERS = [2]
+            search_space.SEARCH_SPACE_STACK_DROPOUT_PROBABILITY = [0.0]
+            search_space.SEARCH_SPACE_STACK_LAYER_NORM_POSITION = [
                 LayerNormPositionOptions.DISABLED,
                 LayerNormPositionOptions.BEFORE,
             ]
-            config.SEARCH_SPACE_STACK_ACTIVATION = [ActivationOptions.RELU]
+            search_space.SEARCH_SPACE_STACK_ACTIVATION = [ActivationOptions.RELU]
 
             configs = ExperimentPresets().get_config(
                 ExperimentPreset.POST_NORM,
-                config.DATASET_OPTIONS[0],
+                dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
                 GridSearch(),
             )
         finally:
             for key, value in original_search_spaces.items():
-                setattr(config, key, value)
+                setattr(search_space, key, value)
 
         self.assertEqual(len(configs), 4)
         self.assertEqual({cfg.learning_rate for cfg in configs}, {1e-4, 1e-3})
@@ -1065,7 +1070,7 @@ class TestLinearModel(unittest.TestCase):
     def test_memory_config_uses_builder_defaults(self):
         cfg = self.linear_preset(
             input_dim=8,
-            stack_hidden_dim=8,
+            hidden_dim=8,
             output_dim=4,
             memory_flag=True,
         )
@@ -1085,7 +1090,7 @@ class TestLinearModel(unittest.TestCase):
     def test_memory_config_uses_builder_overrides(self):
         cfg = self.linear_preset(
             input_dim=8,
-            stack_hidden_dim=8,
+            hidden_dim=8,
             output_dim=4,
             memory_flag=True,
             memory_option=WeightedDynamicMemoryConfig,
@@ -1143,7 +1148,7 @@ class TestLinearModel(unittest.TestCase):
     def test_memory_enabled_forwards_one_fake_batch(self):
         cfg = self.linear_preset(
             input_dim=8,
-            stack_hidden_dim=8,
+            hidden_dim=8,
             output_dim=4,
             stack_num_layers=2,
             memory_flag=True,
@@ -1157,7 +1162,7 @@ class TestLinearModel(unittest.TestCase):
     def test_memory_enabled_backward_produces_memory_gradients(self):
         cfg = self.linear_preset(
             input_dim=8,
-            stack_hidden_dim=8,
+            hidden_dim=8,
             output_dim=4,
             stack_num_layers=2,
             memory_flag=True,
@@ -1184,7 +1189,7 @@ class TestLinearModel(unittest.TestCase):
     def test_recurrent_memory_stays_on_block_config(self):
         cfg = self.linear_preset(
             input_dim=8,
-            stack_hidden_dim=8,
+            hidden_dim=8,
             output_dim=4,
             recurrent_flag=True,
             memory_flag=True,

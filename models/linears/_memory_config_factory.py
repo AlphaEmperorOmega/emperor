@@ -16,10 +16,12 @@ class MemoryConfigFactory:
     def __init__(
         self,
         *,
+        hidden_dim: int,
         stack_options: MainLayerStackOptions,
         dynamic_memory_options: DynamicMemoryOptions,
         submodule_stack_options: SubmoduleStackOptions,
     ) -> None:
+        self.hidden_dim = hidden_dim
         self.stack_options = stack_options
         self.dynamic_memory_options = dynamic_memory_options
         self.submodule_stack_options = submodule_stack_options
@@ -37,8 +39,8 @@ class MemoryConfigFactory:
             resolved_memory_stack_options,
         )
         return self.dynamic_memory_options.memory_option(
-            input_dim=self.stack_options.hidden_dim,
-            output_dim=self.stack_options.hidden_dim,
+            input_dim=self.hidden_dim,
+            output_dim=self.hidden_dim,
             memory_position_option=self.dynamic_memory_options.memory_position_option,
             test_time_training_learning_rate=(
                 self.dynamic_memory_options.memory_test_time_training_learning_rate

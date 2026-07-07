@@ -43,7 +43,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
-class AdaptiveBoundaryProjectionOptions:
+class AdaptiveBoundaryModelOptions:
     weight_option: type[DynamicWeightConfig] | None
     weight_generator_depth: DynamicDepthOptions
     weight_decay_schedule: WeightDecayScheduleOptions
@@ -67,15 +67,15 @@ class AdaptiveBoundaryProjectionOptions:
 
 
 @dataclass(frozen=True)
-class BoundaryConfigDependencies:
+class BoundaryModelConfigDependencies:
     stack_options: MainLayerStackOptions | None
-    input_boundary_options: AdaptiveBoundaryProjectionOptions | None
-    output_boundary_options: AdaptiveBoundaryProjectionOptions | None
+    input_boundary_options: AdaptiveBoundaryModelOptions | None
+    output_boundary_options: AdaptiveBoundaryModelOptions | None
     adaptive_generator_stack_options: AdaptiveGeneratorStackOptions | None
 
 
-class BoundaryConfigFactory:
-    def __init__(self, dependencies: BoundaryConfigDependencies) -> None:
+class BoundaryModelConfigFactory:
+    def __init__(self, dependencies: BoundaryModelConfigDependencies) -> None:
         stack_options = self.__default_stack_options(dependencies.stack_options)
         input_boundary_options = self.__default_input_boundary_options(
             dependencies.input_boundary_options
@@ -113,7 +113,6 @@ class BoundaryConfigFactory:
         if stack_options is not None:
             return stack_options
         return MainLayerStackOptions(
-            hidden_dim=config.STACK_HIDDEN_DIM,
             bias_flag=config.STACK_BIAS_FLAG,
             layer_norm_position=config.STACK_LAYER_NORM_POSITION,
             num_layers=config.STACK_NUM_LAYERS,
@@ -150,11 +149,11 @@ class BoundaryConfigFactory:
 
     def __default_input_boundary_options(
         self,
-        boundary_options: AdaptiveBoundaryProjectionOptions | None,
-    ) -> AdaptiveBoundaryProjectionOptions:
+        boundary_options: AdaptiveBoundaryModelOptions | None,
+    ) -> AdaptiveBoundaryModelOptions:
         if boundary_options is not None:
             return boundary_options
-        return AdaptiveBoundaryProjectionOptions(
+        return AdaptiveBoundaryModelOptions(
             weight_option=config.INPUT_LAYER_WEIGHT_OPTION,
             weight_generator_depth=config.INPUT_LAYER_WEIGHT_GENERATOR_DEPTH,
             weight_decay_schedule=config.INPUT_LAYER_WEIGHT_DECAY_SCHEDULE,
@@ -187,11 +186,11 @@ class BoundaryConfigFactory:
 
     def __default_output_boundary_options(
         self,
-        boundary_options: AdaptiveBoundaryProjectionOptions | None,
-    ) -> AdaptiveBoundaryProjectionOptions:
+        boundary_options: AdaptiveBoundaryModelOptions | None,
+    ) -> AdaptiveBoundaryModelOptions:
         if boundary_options is not None:
             return boundary_options
-        return AdaptiveBoundaryProjectionOptions(
+        return AdaptiveBoundaryModelOptions(
             weight_option=config.OUTPUT_LAYER_WEIGHT_OPTION,
             weight_generator_depth=config.OUTPUT_LAYER_WEIGHT_GENERATOR_DEPTH,
             weight_decay_schedule=config.OUTPUT_LAYER_WEIGHT_DECAY_SCHEDULE,
@@ -244,7 +243,7 @@ class BoundaryConfigFactory:
 
     def __build_boundary_layer_config(
         self,
-        options: AdaptiveBoundaryProjectionOptions,
+        options: AdaptiveBoundaryModelOptions,
         activation: ActivationOptions,
         layer_norm_position: LayerNormPositionOptions,
         dropout_probability: float,
@@ -264,7 +263,7 @@ class BoundaryConfigFactory:
 
     def __build_boundary_layer_model_config(
         self,
-        options: AdaptiveBoundaryProjectionOptions,
+        options: AdaptiveBoundaryModelOptions,
     ) -> AdaptiveLinearLayerConfig:
         adaptive_augmentation_config = AdaptiveParameterAugmentationConfig(
             weight_config=build_weight_config(

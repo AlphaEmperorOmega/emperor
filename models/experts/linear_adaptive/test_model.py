@@ -4,18 +4,32 @@ import unittest
 import torch
 from emperor.augmentations.adaptive_parameters.core.bias import (
     AdditiveDynamicBiasConfig,
+    AffineTransformDynamicBiasConfig,
+    GeneratorDynamicBiasConfig,
+    MultiplicativeDynamicBiasConfig,
+    SigmoidGatedDynamicBiasConfig,
+    TanhGatedDynamicBiasConfig,
     WeightedBankDynamicBiasConfig,
 )
 from emperor.augmentations.adaptive_parameters.core.diagonal import (
+    AntiDynamicDiagonalConfig,
     CombinedDynamicDiagonalConfig,
+    StandardDynamicDiagonalConfig,
 )
 from emperor.augmentations.adaptive_parameters.core.mask import (
+    DiagonalAxisMaskConfig,
+    OuterProductMaskConfig,
+    PerAxisScoreMaskConfig,
+    TopSliceAxisMaskConfig,
     WeightInformedScoreAxisMaskConfig,
 )
 from emperor.augmentations.adaptive_parameters.core.weight import (
     DualModelDynamicWeightConfig,
+    HypernetworkDynamicWeightConfig,
     LayeredWeightedBankDynamicWeightConfig,
     LowRankDynamicWeightConfig,
+    SingleModelDynamicWeightConfig,
+    SoftWeightedBankDynamicWeightConfig,
 )
 from emperor.augmentations.adaptive_parameters.options import (
     BankExpansionFactorOptions,
@@ -75,6 +89,7 @@ from models.experts.linear_adaptive._router_controller_config import (
 from models.experts.linear_adaptive.presets import (
     ExperimentPreset,
     ExperimentPresets,
+    _PRESET_DEFINITIONS as EXPERT_ADAPTIVE_PRESET_DEFINITIONS,
 )
 from models.linears.linear_adaptive._builder_options import (
     AdaptiveGeneratorStackOptions,
@@ -84,8 +99,13 @@ from models.linears.linear_adaptive._builder_options import (
     HiddenAdaptiveMaskOptions,
     HiddenAdaptiveWeightOptions,
 )
+from models.linears.linear_adaptive.presets import (
+    ExperimentPreset as LinearAdaptiveExperimentPreset,
+    _PRESET_DEFINITIONS as LINEAR_ADAPTIVE_PRESET_DEFINITIONS,
+)
 
 
+import models.experts.linear_adaptive.dataset_options as dataset_options
 class TestLinearAdaptiveExpertModel(unittest.TestCase):
     def experts_preset(self, **kwargs):
         return ExperimentPresets()._preset(**kwargs)
@@ -93,7 +113,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
     def test_all_presets_forward_one_mnist_batch(self):
         batch_size = 2
         presets = ExperimentPresets()
-        dataset = config.DATASET_OPTIONS[0]
+        dataset = dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0]
 
         for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
@@ -106,11 +126,30 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
 
                 self.assertEqual(logits.shape, (batch_size, dataset.num_classes))
 
+    def test_expert_adaptive_presets_include_linear_adaptive_family_names(self):
+        self.assertEqual(
+            set(LinearAdaptiveExperimentPreset.names())
+            - set(ExperimentPreset.names()),
+            set(),
+        )
+
+    def test_shared_linear_adaptive_preset_values_match_expert_adaptive(self):
+        for linear_preset in LinearAdaptiveExperimentPreset:
+            with self.subTest(preset=linear_preset.name):
+                expert_preset = ExperimentPreset[linear_preset.name]
+
+                self.assertEqual(
+                    EXPERT_ADAPTIVE_PRESET_DEFINITIONS[expert_preset].preset_values,
+                    LINEAR_ADAPTIVE_PRESET_DEFINITIONS[
+                        linear_preset
+                    ].preset_values,
+                )
+
     def test_baseline_forwards_all_datasets(self):
         batch_size = 2
         presets = ExperimentPresets()
 
-        for dataset in config.DATASET_OPTIONS:
+        for dataset in dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK]:
             with self.subTest(dataset=dataset.__name__):
                 cfg = presets.get_config(ExperimentPreset.BASELINE, dataset)[0]
                 model = Model(cfg)
@@ -123,7 +162,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
 
     def test_auxiliary_loss_preset_returns_finite_loss(self):
         batch_size = 2
-        dataset = config.DATASET_OPTIONS[0]
+        dataset = dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0]
         cfg = ExperimentPresets().get_config(
             ExperimentPreset.ADAPTIVE_TOP1_SWITCH,
             dataset,
@@ -219,7 +258,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
     def test_preset_accepts_search_flags(self):
         configs = ExperimentPresets().get_config(
             ExperimentPreset.BASELINE,
-            config.DATASET_OPTIONS[0],
+            dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
             RandomSearch(num_samples=2),
         )
 
@@ -449,7 +488,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
             "learning_rate": 0.02,
             "input_dim": 8,
             "output_dim": 4,
-            "stack_hidden_dim": stack_options.hidden_dim,
+            "hidden_dim": stack_options.hidden_dim,
             "stack_bias_flag": stack_options.bias_flag,
             "layer_norm_position": stack_options.layer_norm_position,
             "stack_num_layers": stack_options.num_layers,
@@ -843,7 +882,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
         ).sampler_config.router_config.model_config
 
         self.assertIsInstance(router_model_cfg, RouterControllerModelConfig)
-        self.assertEqual(router_model_cfg.input_dim, config.STACK_HIDDEN_DIM)
+        self.assertEqual(router_model_cfg.input_dim, config.HIDDEN_DIM)
         self.assertEqual(router_model_cfg.hidden_dim, config.SUBMODULE_STACK_HIDDEN_DIM)
         self.assertEqual(router_model_cfg.output_dim, config.EXPERT_NUM_EXPERTS)
         self.assertIsInstance(router_model_cfg.trunk_config, RecurrentLayerConfig)
@@ -987,19 +1026,19 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
 
     def test_router_recurrent_forwards_when_hidden_dim_differs_from_num_experts(self):
         cfg = self.experts_preset(
-            stack_hidden_dim=32,
+            hidden_dim=32,
             submodule_stack_hidden_dim=32,
             num_experts=7,
             top_k=2,
             router_recurrent_flag=True,
         )
         model = Model(cfg)
-        X = self._fake_batch(config.DATASET_OPTIONS[0], batch_size=2)
+        X = self._fake_batch(dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0], batch_size=2)
 
         output = model(X)
         logits = output[0] if isinstance(output, tuple) else output
 
-        self.assertEqual(logits.shape, (2, config.DATASET_OPTIONS[0].num_classes))
+        self.assertEqual(logits.shape, (2, dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0].num_classes))
 
     def test_disabled_memory_is_absent_from_stack_and_layer_configs(self):
         cfg = LinearAdaptiveConfigBuilder().build()
@@ -1014,8 +1053,8 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
         memory_cfg = stack_cfg.shared_memory_config
 
         self.assertIsInstance(memory_cfg, GatedResidualDynamicMemoryConfig)
-        self.assertEqual(memory_cfg.input_dim, config.STACK_HIDDEN_DIM)
-        self.assertEqual(memory_cfg.output_dim, config.STACK_HIDDEN_DIM)
+        self.assertEqual(memory_cfg.input_dim, config.HIDDEN_DIM)
+        self.assertEqual(memory_cfg.output_dim, config.HIDDEN_DIM)
         self.assertEqual(
             memory_cfg.memory_position_option,
             MemoryPositionOptions.AFTER_AFFINE,
@@ -1318,7 +1357,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
     def test_memory_enabled_forward_pass(self):
         cfg = self.experts_preset(
             input_dim=8,
-            stack_hidden_dim=8,
+            hidden_dim=8,
             output_dim=4,
             stack_num_layers=2,
             memory_flag=True,
@@ -1353,6 +1392,107 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
                 )
                 self.assertEqual(
                     stack_cfg.layer_config.halting_config is not None,
+                    expected_halting,
+                )
+                self.assertEqual(
+                    stack_cfg.shared_memory_config is not None,
+                    expected_memory,
+                )
+
+    def test_residual_and_post_norm_presets_wire_expert_stack_config(self):
+        cases = {
+            ExperimentPreset.RESIDUAL: (
+                ResidualConnectionOptions.RESIDUAL,
+                config.STACK_LAYER_NORM_POSITION,
+                False,
+                False,
+                False,
+                False,
+            ),
+            ExperimentPreset.POST_NORM: (
+                ResidualConnectionOptions.DISABLED,
+                LayerNormPositionOptions.AFTER,
+                False,
+                False,
+                False,
+                False,
+            ),
+            ExperimentPreset.RESIDUAL_POST_NORM: (
+                ResidualConnectionOptions.RESIDUAL,
+                LayerNormPositionOptions.AFTER,
+                False,
+                False,
+                False,
+                False,
+            ),
+            ExperimentPreset.RESIDUAL_GATING: (
+                ResidualConnectionOptions.RESIDUAL,
+                config.STACK_LAYER_NORM_POSITION,
+                True,
+                False,
+                False,
+                False,
+            ),
+            ExperimentPreset.RESIDUAL_HALTING: (
+                ResidualConnectionOptions.RESIDUAL,
+                config.STACK_LAYER_NORM_POSITION,
+                False,
+                True,
+                False,
+                False,
+            ),
+            ExperimentPreset.RESIDUAL_MEMORY: (
+                ResidualConnectionOptions.RESIDUAL,
+                config.STACK_LAYER_NORM_POSITION,
+                False,
+                False,
+                True,
+                False,
+            ),
+            ExperimentPreset.RECURRENT_RESIDUAL: (
+                ResidualConnectionOptions.RESIDUAL,
+                config.STACK_LAYER_NORM_POSITION,
+                False,
+                False,
+                False,
+                True,
+            ),
+            ExperimentPreset.RECURRENT_POST_NORM: (
+                ResidualConnectionOptions.DISABLED,
+                LayerNormPositionOptions.AFTER,
+                False,
+                False,
+                False,
+                True,
+            ),
+        }
+
+        for preset, (
+            expected_residual,
+            expected_norm,
+            expected_gate,
+            expected_halting,
+            expected_memory,
+            expected_recurrent,
+        ) in cases.items():
+            with self.subTest(preset=preset.name):
+                cfg = ExperimentPresets().get_config(preset)[0]
+                model_cfg = cfg.experiment_config.model_config
+                stack_cfg = self._moe_model_config(cfg).stack_config
+                layer_cfg = stack_cfg.layer_config
+
+                self.assertEqual(
+                    isinstance(model_cfg, RecurrentLayerConfig),
+                    expected_recurrent,
+                )
+                self.assertEqual(
+                    layer_cfg.residual_connection_option,
+                    expected_residual,
+                )
+                self.assertEqual(layer_cfg.layer_norm_position, expected_norm)
+                self.assertEqual(layer_cfg.gate_config is not None, expected_gate)
+                self.assertEqual(
+                    layer_cfg.halting_config is not None,
                     expected_halting,
                 )
                 self.assertEqual(
@@ -1410,6 +1550,9 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
             ExperimentPreset.RECURRENT_GATING_MEMORY: (True, False, True),
             ExperimentPreset.RECURRENT_HALTING_MEMORY: (False, True, True),
             ExperimentPreset.RECURRENT_GATING_HALTING_MEMORY: (True, True, True),
+            ExperimentPreset.RECURRENT_RESIDUAL: (False, False, False),
+            ExperimentPreset.RECURRENT_POST_NORM: (False, False, False),
+            ExperimentPreset.FULL_STACK_RECURRENT: (False, False, False),
         }
 
         for preset, (
@@ -1477,6 +1620,261 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
             augmentation_config.mask_config.mask_dimension_option,
             MaskDimensionOptions.ROW,
         )
+
+    def test_individual_linear_adaptive_presets_wire_expert_augmentation_type(self):
+        cases_by_family = {
+            "weight": [
+                (
+                    ExperimentPreset.SINGLE_MODEL_WEIGHT,
+                    SingleModelDynamicWeightConfig,
+                ),
+                (
+                    ExperimentPreset.DUAL_MODEL_WEIGHT,
+                    DualModelDynamicWeightConfig,
+                ),
+                (
+                    ExperimentPreset.LOW_RANK_WEIGHT,
+                    LowRankDynamicWeightConfig,
+                ),
+                (
+                    ExperimentPreset.HYPERNETWORK_WEIGHT,
+                    HypernetworkDynamicWeightConfig,
+                ),
+                (
+                    ExperimentPreset.LAYERED_WEIGHTED_BANK_WEIGHT,
+                    LayeredWeightedBankDynamicWeightConfig,
+                ),
+                (
+                    ExperimentPreset.SOFT_WEIGHTED_BANK_WEIGHT,
+                    SoftWeightedBankDynamicWeightConfig,
+                ),
+            ],
+            "bias": [
+                (
+                    ExperimentPreset.AFFINE_TRANSFORM_BIAS,
+                    AffineTransformDynamicBiasConfig,
+                ),
+                (ExperimentPreset.ADDITIVE_BIAS, AdditiveDynamicBiasConfig),
+                (ExperimentPreset.GENERATOR_BIAS, GeneratorDynamicBiasConfig),
+                (
+                    ExperimentPreset.MULTIPLICATIVE_BIAS,
+                    MultiplicativeDynamicBiasConfig,
+                ),
+                (
+                    ExperimentPreset.SIGMOID_GATED_BIAS,
+                    SigmoidGatedDynamicBiasConfig,
+                ),
+                (ExperimentPreset.TANH_GATED_BIAS, TanhGatedDynamicBiasConfig),
+                (ExperimentPreset.WEIGHTED_BANK_BIAS, WeightedBankDynamicBiasConfig),
+            ],
+            "diagonal": [
+                (
+                    ExperimentPreset.STANDARD_DIAGONAL,
+                    StandardDynamicDiagonalConfig,
+                ),
+                (ExperimentPreset.ANTI_DIAGONAL, AntiDynamicDiagonalConfig),
+                (
+                    ExperimentPreset.COMBINED_DIAGONAL,
+                    CombinedDynamicDiagonalConfig,
+                ),
+            ],
+            "mask": [
+                (ExperimentPreset.DIAGONAL_AXIS_MASK, DiagonalAxisMaskConfig),
+                (ExperimentPreset.OUTER_PRODUCT_MASK, OuterProductMaskConfig),
+                (ExperimentPreset.PER_AXIS_SCORE_MASK, PerAxisScoreMaskConfig),
+                (ExperimentPreset.TOP_SLICE_AXIS_MASK, TopSliceAxisMaskConfig),
+                (
+                    ExperimentPreset.WEIGHT_INFORMED_SCORE_MASK,
+                    WeightInformedScoreAxisMaskConfig,
+                ),
+            ],
+        }
+
+        for family, cases in cases_by_family.items():
+            expected_field = f"{family}_config"
+            for preset, expected_type in cases:
+                with self.subTest(
+                    family=family,
+                    preset=preset.name,
+                    expected_config_role=expected_field,
+                ):
+                    cfg = ExperimentPresets().get_config(preset)[0]
+                    augmentation_config = self._expert_augmentation_config(cfg)
+
+                    for field in (
+                        "weight_config",
+                        "bias_config",
+                        "diagonal_config",
+                        "mask_config",
+                    ):
+                        value = getattr(augmentation_config, field)
+                        if field == expected_field:
+                            self.assertIsInstance(value, expected_type)
+                        else:
+                            self.assertIsNone(value)
+
+    def test_specialized_weight_presets_wire_expert_weight_knobs(self):
+        cases = [
+            (
+                ExperimentPreset.DECAY_EXPONENTIAL_WEIGHT,
+                {
+                    "decay_schedule": WeightDecayScheduleOptions.EXPONENTIAL,
+                    "decay_rate": 1e-3,
+                    "decay_warmup_batches": 500,
+                },
+            ),
+            (
+                ExperimentPreset.NORM_L2_WEIGHT,
+                {
+                    "normalization_option": WeightNormalizationOptions.L2_SCALE,
+                },
+            ),
+            (
+                ExperimentPreset.DEEP_GENERATOR,
+                {
+                    "generator_depth": DynamicDepthOptions.DEPTH_OF_EIGHT,
+                },
+            ),
+        ]
+
+        for preset, expected_values in cases:
+            with self.subTest(preset=preset.name):
+                cfg = ExperimentPresets().get_config(preset)[0]
+                weight_config = self._expert_augmentation_config(cfg).weight_config
+
+                self.assertIsInstance(weight_config, DualModelDynamicWeightConfig)
+                for field, expected in expected_values.items():
+                    self.assertEqual(getattr(weight_config, field), expected)
+
+    def test_linear_adaptive_combination_presets_wire_expert_config(self):
+        presets = ExperimentPresets()
+        cases = [
+            {
+                "preset": ExperimentPreset.FULL_STACK,
+                "config_role": "full stack",
+                "full_stack": True,
+            },
+            {
+                "preset": ExperimentPreset.DUAL_WEIGHT_GATING,
+                "config_role": "dual weight gate",
+                "weight": DualModelDynamicWeightConfig,
+                "gate": True,
+            },
+            {
+                "preset": ExperimentPreset.DUAL_WEIGHT_HALTING,
+                "config_role": "dual weight halting",
+                "weight": DualModelDynamicWeightConfig,
+                "halting": True,
+            },
+            {
+                "preset": ExperimentPreset.DUAL_WEIGHT_GATING_HALTING,
+                "config_role": "dual weight gate halting",
+                "weight": DualModelDynamicWeightConfig,
+                "gate": True,
+                "halting": True,
+            },
+            {
+                "preset": ExperimentPreset.DUAL_WEIGHT_MEMORY,
+                "config_role": "dual weight memory",
+                "weight": DualModelDynamicWeightConfig,
+                "memory": True,
+            },
+            {
+                "preset": ExperimentPreset.DUAL_WEIGHT_GATING_MEMORY,
+                "config_role": "dual weight gate memory",
+                "weight": DualModelDynamicWeightConfig,
+                "gate": True,
+                "memory": True,
+            },
+            {
+                "preset": ExperimentPreset.DUAL_WEIGHT_HALTING_MEMORY,
+                "config_role": "dual weight halting memory",
+                "weight": DualModelDynamicWeightConfig,
+                "halting": True,
+                "memory": True,
+            },
+            {
+                "preset": ExperimentPreset.FULL_STACK_GATING,
+                "config_role": "full stack gate",
+                "full_stack": True,
+                "gate": True,
+            },
+            {
+                "preset": ExperimentPreset.FULL_STACK_HALTING,
+                "config_role": "full stack halting",
+                "full_stack": True,
+                "halting": True,
+            },
+            {
+                "preset": ExperimentPreset.FULL_STACK_MEMORY,
+                "config_role": "full stack memory",
+                "full_stack": True,
+                "memory": True,
+            },
+            {
+                "preset": ExperimentPreset.FULL_STACK_GATING_HALTING,
+                "config_role": "full stack gate halting",
+                "full_stack": True,
+                "gate": True,
+                "halting": True,
+            },
+            {
+                "preset": ExperimentPreset.FULL_STACK_RECURRENT,
+                "config_role": "full stack recurrent",
+                "full_stack": True,
+                "recurrent": True,
+            },
+            {
+                "preset": ExperimentPreset.BANK_WEIGHT_MASK,
+                "config_role": "bank weight mask",
+                "weight": LayeredWeightedBankDynamicWeightConfig,
+                "mask": WeightInformedScoreAxisMaskConfig,
+                "bias_none": True,
+                "diagonal_none": True,
+            },
+            {
+                "preset": ExperimentPreset.LOW_RANK_POST_NORM,
+                "config_role": "low rank post norm",
+                "weight": LowRankDynamicWeightConfig,
+                "layer_norm": LayerNormPositionOptions.AFTER,
+            },
+        ]
+
+        for case in cases:
+            preset = case["preset"]
+            with self.subTest(
+                preset=preset.name,
+                expected_config_role=case["config_role"],
+            ):
+                cfg = presets.get_config(preset)[0]
+                model_cfg = cfg.experiment_config.model_config
+                moe_model_cfg = self._moe_model_config(cfg)
+                layer_cfg = moe_model_cfg.stack_config.layer_config
+                augmentation_config = self._expert_augmentation_config(cfg)
+
+                if case.get("recurrent"):
+                    self.assertIsInstance(model_cfg, RecurrentLayerConfig)
+                if case.get("full_stack"):
+                    self._assert_full_adaptive_augmentation(augmentation_config)
+                if "weight" in case:
+                    self.assertIsInstance(
+                        augmentation_config.weight_config,
+                        case["weight"],
+                    )
+                if "mask" in case:
+                    self.assertIsInstance(augmentation_config.mask_config, case["mask"])
+                if case.get("bias_none"):
+                    self.assertIsNone(augmentation_config.bias_config)
+                if case.get("diagonal_none"):
+                    self.assertIsNone(augmentation_config.diagonal_config)
+                if case.get("gate"):
+                    self.assertIsNotNone(layer_cfg.gate_config)
+                if case.get("halting"):
+                    self.assertIsNotNone(layer_cfg.halting_config)
+                if case.get("memory"):
+                    self.assertIsNotNone(moe_model_cfg.stack_config.shared_memory_config)
+                if "layer_norm" in case:
+                    self.assertEqual(layer_cfg.layer_norm_position, case["layer_norm"])
 
     def test_router_adaptive_options_are_independent_from_hidden_options(self):
         cfg = self.experts_preset(

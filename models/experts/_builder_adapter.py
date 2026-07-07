@@ -322,7 +322,7 @@ def _stack_options_from_kwargs(
     provided: expert_options.ExpertsStackOptions | None,
 ) -> expert_options.ExpertsStackOptions:
     options = provided or expert_options.ExpertsStackOptions(
-        hidden_dim=config_module.STACK_HIDDEN_DIM,
+        hidden_dim=config_module.HIDDEN_DIM,
         bias_flag=config_module.STACK_BIAS_FLAG,
         layer_norm_position=config_module.STACK_LAYER_NORM_POSITION,
         num_layers=config_module.STACK_NUM_LAYERS,
@@ -335,7 +335,7 @@ def _stack_options_from_kwargs(
     updates = _pop_updates(
         kwargs,
         {
-            "stack_hidden_dim": "hidden_dim",
+            "hidden_dim": "hidden_dim",
             "stack_bias_flag": "bias_flag",
             "layer_norm_position": "layer_norm_position",
             "stack_layer_norm_position": "layer_norm_position",

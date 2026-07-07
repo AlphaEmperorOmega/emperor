@@ -15,7 +15,6 @@ from models.linears._controller_stack import SubmoduleStackSource
 
 @dataclass(frozen=True)
 class MainLayerStackOptions:
-    hidden_dim: int
     bias_flag: bool
     layer_norm_position: LayerNormPositionOptions
     num_layers: int

@@ -31,6 +31,7 @@ class LinearConfigBuilder:
         batch_size: int = config.BATCH_SIZE,
         learning_rate: float = config.LEARNING_RATE,
         input_dim: int = config.INPUT_DIM,
+        hidden_dim: int = config.HIDDEN_DIM,
         output_dim: int = config.OUTPUT_DIM,
         stack_options: ExpertsStackOptions | None = None,
         submodule_stack_options: ExpertsSubmoduleStackOptions | None = None,
@@ -51,6 +52,7 @@ class LinearConfigBuilder:
         self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
         self.output_dim = output_dim
         self.stack_options = stack_options
         self.submodule_stack_options = submodule_stack_options
@@ -91,11 +93,13 @@ class LinearConfigBuilder:
 
     def __boundary_config_dependencies(self) -> BoundaryConfigDependencies:
         return BoundaryConfigDependencies(
+            hidden_dim=self.hidden_dim,
             stack_options=self.stack_options,
         )
 
     def __control_config_dependencies(self) -> ControlConfigDependencies:
         return ControlConfigDependencies(
+            hidden_dim=self.hidden_dim,
             stack_options=self.stack_options,
             submodule_stack_options=self.submodule_stack_options,
             mixture_options=self.mixture_options,

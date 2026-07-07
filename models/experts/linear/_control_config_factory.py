@@ -39,6 +39,7 @@ from models.experts._recurrent_config_factory import ExpertsRecurrentConfigFacto
 
 @dataclass(frozen=True)
 class ControlConfigDependencies:
+    hidden_dim: int
     stack_options: ExpertsStackOptions | None
     submodule_stack_options: ExpertsSubmoduleStackOptions | None
     mixture_options: ExpertsMixtureOptions | None
@@ -57,6 +58,7 @@ class ControlConfigDependencies:
 
 class ControlConfigFactory:
     def __init__(self, dependencies: ControlConfigDependencies) -> None:
+        self._hidden_dim = dependencies.hidden_dim
         self.stack_options = self.__default_stack_options(dependencies.stack_options)
         self.submodule_stack_options = self.__default_submodule_stack_options(
             dependencies.submodule_stack_options
@@ -153,7 +155,7 @@ class ControlConfigFactory:
         if stack_options is not None:
             return stack_options
         return ExpertsStackOptions(
-            hidden_dim=config.STACK_HIDDEN_DIM,
+            hidden_dim=self._hidden_dim,
             bias_flag=config.STACK_BIAS_FLAG,
             layer_norm_position=config.STACK_LAYER_NORM_POSITION,
             num_layers=config.STACK_NUM_LAYERS,

@@ -20,6 +20,7 @@ from models.experts.linear.config_builder import LinearConfigBuilder
 from models.experts.linear.model import Model
 
 
+import models.experts.linear.dataset_options as dataset_options
 class ExperimentPreset(BaseOptions):
     BASELINE = 1
     GATING = 2
@@ -45,6 +46,14 @@ class ExperimentPreset(BaseOptions):
     RECURRENT_GATING_MEMORY = 22
     RECURRENT_HALTING_MEMORY = 23
     RECURRENT_GATING_HALTING_MEMORY = 24
+    RESIDUAL = 25
+    POST_NORM = 26
+    RESIDUAL_POST_NORM = 27
+    RESIDUAL_GATING = 28
+    RESIDUAL_HALTING = 29
+    RESIDUAL_MEMORY = 30
+    RECURRENT_RESIDUAL = 31
+    RECURRENT_POST_NORM = 32
 
 
 _PRESET_DEFINITIONS = {
@@ -104,6 +113,52 @@ _PRESET_DEFINITIONS = {
         },
         description="Default config with per-layer gating, stack halting, and shared "
         "stack memory enabled in the expert stack.",
+    ),
+    ExperimentPreset.RESIDUAL: PresetDefinition(
+        preset_values={
+            "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+        },
+        description="Default config with residual skip connections enabled in the "
+        "expert stack.",
+    ),
+    ExperimentPreset.POST_NORM: PresetDefinition(
+        preset_values={
+            "layer_norm_position": LayerNormPositionOptions.AFTER,
+        },
+        description="Default config with layer norm applied after expert stack layers "
+        "instead of before them.",
+    ),
+    ExperimentPreset.RESIDUAL_POST_NORM: PresetDefinition(
+        preset_values={
+            "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+            "layer_norm_position": LayerNormPositionOptions.AFTER,
+        },
+        description="Default config with residual skip connections and post-layer "
+        "normalization enabled in the expert stack.",
+    ),
+    ExperimentPreset.RESIDUAL_GATING: PresetDefinition(
+        preset_values={
+            "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+            "stack_gate_flag": True,
+        },
+        description="Default config with residual skip connections and per-layer "
+        "gating enabled in the expert stack.",
+    ),
+    ExperimentPreset.RESIDUAL_HALTING: PresetDefinition(
+        preset_values={
+            "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+            "stack_halting_flag": True,
+        },
+        description="Default config with residual skip connections and stack halting "
+        "enabled in the expert stack.",
+    ),
+    ExperimentPreset.RESIDUAL_MEMORY: PresetDefinition(
+        preset_values={
+            "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+            "memory_flag": True,
+        },
+        description="Default config with residual skip connections and shared stack "
+        "memory enabled in the expert stack.",
     ),
     ExperimentPreset.RECURRENT: PresetDefinition(
         preset_values={
@@ -178,6 +233,22 @@ _PRESET_DEFINITIONS = {
         },
         description="Default recurrent config with step-level gating, recurrent "
         "halting, and shared memory in the reused expert stack.",
+    ),
+    ExperimentPreset.RECURRENT_RESIDUAL: PresetDefinition(
+        preset_values={
+            "recurrent_flag": True,
+            "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+        },
+        description="Default recurrent config using a residual expert stack at each "
+        "recurrent step.",
+    ),
+    ExperimentPreset.RECURRENT_POST_NORM: PresetDefinition(
+        preset_values={
+            "recurrent_flag": True,
+            "layer_norm_position": LayerNormPositionOptions.AFTER,
+        },
+        description="Default recurrent config using a post-normalized expert stack at "
+        "each recurrent step.",
     ),
     ExperimentPreset.SHARED_ROUTER_AFTER_WEIGHT: PresetDefinition(
         preset_values={
@@ -274,14 +345,15 @@ class Experiment(ExperimentBase):
     def __init__(
         self,
         experiment_preset: ExperimentPreset | None = None,
+        experiment_task=None,
     ) -> None:
-        super().__init__(experiment_preset)
+        super().__init__(experiment_preset, experiment_task=experiment_task)
 
     def _num_epochs(self) -> int:
         return config.NUM_EPOCHS
 
     def _dataset_options(self) -> list:
-        return config.DATASET_OPTIONS
+        return dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK]
 
     def _model_type(self) -> type:
         return Model

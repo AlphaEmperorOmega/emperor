@@ -44,12 +44,14 @@ from models.experts._builder_options import (
 from models.experts.linear.config_builder import LinearConfigBuilder
 from models.experts.linear.model import Model
 from models.experts.linear.presets import ExperimentPreset, ExperimentPresets
+from models.linears.linear.presets import ExperimentPreset as LinearExperimentPreset
 from models.training_test_utils import (
     RandomImageClassificationDataModule,
     tiny_cpu_trainer,
 )
 
 
+import models.experts.linear.dataset_options as dataset_options
 class TestLinearModel(unittest.TestCase):
     def experts_preset(self, **kwargs):
         return ExperimentPresets()._preset(**kwargs)
@@ -57,7 +59,7 @@ class TestLinearModel(unittest.TestCase):
     def test_all_presets_forward_one_mnist_batch(self):
         batch_size = 4
         presets = ExperimentPresets()
-        dataset = config.DATASET_OPTIONS[0]
+        dataset = dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0]
 
         for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
@@ -74,7 +76,7 @@ class TestLinearModel(unittest.TestCase):
         batch_size = 4
         presets = ExperimentPresets()
 
-        for dataset in config.DATASET_OPTIONS:
+        for dataset in dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK]:
             with self.subTest(dataset=dataset.__name__):
                 cfg = presets.get_config(ExperimentPreset.BASELINE, dataset)[0]
                 model = Model(cfg)
@@ -87,7 +89,7 @@ class TestLinearModel(unittest.TestCase):
 
     def test_all_presets_train_one_epoch(self):
         presets = ExperimentPresets()
-        dataset = config.DATASET_OPTIONS[0]
+        dataset = dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0]
 
         for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
@@ -96,6 +98,12 @@ class TestLinearModel(unittest.TestCase):
                 datamodule = RandomImageClassificationDataModule(dataset)
 
                 tiny_cpu_trainer().fit(model, datamodule=datamodule)
+
+    def test_expert_presets_include_linear_family_names(self):
+        self.assertEqual(
+            set(LinearExperimentPreset.names()) - set(ExperimentPreset.names()),
+            set(),
+        )
 
     def _fake_batch(self, dataset: type, batch_size: int) -> torch.Tensor:
         return torch.randn(
@@ -195,7 +203,7 @@ class TestLinearModel(unittest.TestCase):
     def test_preset_accepts_search_flags(self):
         configs = ExperimentPresets().get_config(
             ExperimentPreset.BASELINE,
-            config.DATASET_OPTIONS[0],
+            dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
             RandomSearch(num_samples=2),
         )
 
@@ -361,7 +369,7 @@ class TestLinearModel(unittest.TestCase):
             "learning_rate": 0.02,
             "input_dim": 8,
             "output_dim": 4,
-            "stack_hidden_dim": stack_options.hidden_dim,
+            "hidden_dim": stack_options.hidden_dim,
             "stack_bias_flag": stack_options.bias_flag,
             "layer_norm_position": stack_options.layer_norm_position,
             "stack_num_layers": stack_options.num_layers,
@@ -669,7 +677,6 @@ class TestLinearModel(unittest.TestCase):
             "recurrent_controller_options",
         }
         flat_names = {
-            "stack_hidden_dim",
             "memory_flag",
             "top_k",
             "gate_stack_independent_flag",
@@ -690,7 +697,6 @@ class TestLinearModel(unittest.TestCase):
                 self.assertNotIn(name, parameters)
 
         for kwargs in (
-            {"stack_hidden_dim": 13},
             {"memory_flag": True},
             {"top_k": 1},
             {"router_stack_independent_flag": True},
@@ -829,8 +835,8 @@ class TestLinearModel(unittest.TestCase):
         memory_cfg = stack_cfg.shared_memory_config
 
         self.assertIsInstance(memory_cfg, GatedResidualDynamicMemoryConfig)
-        self.assertEqual(memory_cfg.input_dim, config.STACK_HIDDEN_DIM)
-        self.assertEqual(memory_cfg.output_dim, config.STACK_HIDDEN_DIM)
+        self.assertEqual(memory_cfg.input_dim, config.HIDDEN_DIM)
+        self.assertEqual(memory_cfg.output_dim, config.HIDDEN_DIM)
         self.assertEqual(
             memory_cfg.memory_position_option,
             MemoryPositionOptions.AFTER_AFFINE,
@@ -1133,7 +1139,7 @@ class TestLinearModel(unittest.TestCase):
     def test_memory_enabled_forward_pass(self):
         cfg = self.experts_preset(
             input_dim=8,
-            stack_hidden_dim=8,
+            hidden_dim=8,
             output_dim=4,
             stack_num_layers=2,
             memory_flag=True,
@@ -1225,6 +1231,8 @@ class TestLinearModel(unittest.TestCase):
             ExperimentPreset.RECURRENT_GATING_MEMORY: (True, False, True),
             ExperimentPreset.RECURRENT_HALTING_MEMORY: (False, True, True),
             ExperimentPreset.RECURRENT_GATING_HALTING_MEMORY: (True, True, True),
+            ExperimentPreset.RECURRENT_RESIDUAL: (False, False, False),
+            ExperimentPreset.RECURRENT_POST_NORM: (False, False, False),
         }
 
         for preset, (
@@ -1257,6 +1265,91 @@ class TestLinearModel(unittest.TestCase):
                 )
                 self.assertIsNone(inner_layer_config.gate_config)
                 self.assertIsNone(inner_layer_config.halting_config)
+
+    def test_linear_family_presets_wire_expert_stack_config(self):
+        presets = ExperimentPresets()
+        cases = [
+            {
+                "preset": ExperimentPreset.RESIDUAL,
+                "config_role": "expert stack residual",
+                "residual": ResidualConnectionOptions.RESIDUAL,
+            },
+            {
+                "preset": ExperimentPreset.POST_NORM,
+                "config_role": "expert stack post norm",
+                "layer_norm": LayerNormPositionOptions.AFTER,
+            },
+            {
+                "preset": ExperimentPreset.RESIDUAL_POST_NORM,
+                "config_role": "expert stack residual post norm",
+                "residual": ResidualConnectionOptions.RESIDUAL,
+                "layer_norm": LayerNormPositionOptions.AFTER,
+            },
+            {
+                "preset": ExperimentPreset.RESIDUAL_GATING,
+                "config_role": "expert stack residual gating",
+                "residual": ResidualConnectionOptions.RESIDUAL,
+                "gate": True,
+            },
+            {
+                "preset": ExperimentPreset.RESIDUAL_HALTING,
+                "config_role": "expert stack residual halting",
+                "residual": ResidualConnectionOptions.RESIDUAL,
+                "halting": True,
+            },
+            {
+                "preset": ExperimentPreset.RESIDUAL_MEMORY,
+                "config_role": "expert stack residual memory",
+                "residual": ResidualConnectionOptions.RESIDUAL,
+                "memory": True,
+            },
+            {
+                "preset": ExperimentPreset.RECURRENT_RESIDUAL,
+                "config_role": "recurrent expert stack residual",
+                "recurrent": True,
+                "residual": ResidualConnectionOptions.RESIDUAL,
+            },
+            {
+                "preset": ExperimentPreset.RECURRENT_POST_NORM,
+                "config_role": "recurrent expert stack post norm",
+                "recurrent": True,
+                "layer_norm": LayerNormPositionOptions.AFTER,
+            },
+        ]
+
+        for case in cases:
+            preset = case["preset"]
+            with self.subTest(
+                preset=preset.name,
+                expected_config_role=case["config_role"],
+            ):
+                cfg = presets.get_config(preset)[0]
+                model_cfg = cfg.experiment_config.model_config
+                if case.get("recurrent"):
+                    self.assertIsInstance(model_cfg, RecurrentLayerConfig)
+                    moe_model_cfg = model_cfg.block_config
+                else:
+                    self.assertIsInstance(model_cfg, MixtureOfExpertsModelConfig)
+                    moe_model_cfg = model_cfg
+                stack_cfg = moe_model_cfg.stack_config
+                layer_cfg = stack_cfg.layer_config
+
+                if "residual" in case:
+                    self.assertEqual(
+                        layer_cfg.residual_connection_option,
+                        case["residual"],
+                    )
+                if "layer_norm" in case:
+                    self.assertEqual(
+                        layer_cfg.layer_norm_position,
+                        case["layer_norm"],
+                    )
+                if case.get("gate"):
+                    self.assertIsNotNone(layer_cfg.gate_config)
+                if case.get("halting"):
+                    self.assertIsNotNone(layer_cfg.halting_config)
+                if case.get("memory"):
+                    self.assertIsNotNone(stack_cfg.shared_memory_config)
 
     def test_new_moe_combination_presets_wire_config(self):
         presets = ExperimentPresets()
@@ -1392,7 +1485,7 @@ class TestLinearModel(unittest.TestCase):
 
     def test_auxiliary_loss_presets_return_finite_loss(self):
         batch_size = 4
-        dataset = config.DATASET_OPTIONS[0]
+        dataset = dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0]
         presets = ExperimentPresets()
 
         for preset in (

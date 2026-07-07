@@ -58,10 +58,10 @@ from models.experts.linear_adaptive._control_config_factory import (
     ControlConfigFactory,
 )
 from models.experts.linear_adaptive.experiment_config import ExperimentConfig
-from models.linears.linear_adaptive._boundary_config_factory import (
-    AdaptiveBoundaryProjectionOptions,
-    BoundaryConfigDependencies,
-    BoundaryConfigFactory,
+from models.linears.linear_adaptive._boundary_model_config_factory import (
+    AdaptiveBoundaryModelOptions,
+    BoundaryModelConfigDependencies,
+    BoundaryModelConfigFactory,
 )
 from models.linears.linear_adaptive._builder_options import (
     AdaptiveGeneratorStackOptions,
@@ -84,7 +84,7 @@ class LinearAdaptiveConfigBuilder:
         batch_size: int = config.BATCH_SIZE,
         learning_rate: float = config.LEARNING_RATE,
         input_dim: int = config.INPUT_DIM,
-        stack_hidden_dim: int = config.STACK_HIDDEN_DIM,
+        hidden_dim: int = config.HIDDEN_DIM,
         output_dim: int = config.OUTPUT_DIM,
         stack_bias_flag: bool = config.STACK_BIAS_FLAG,
         layer_norm_position: LayerNormPositionOptions = config.STACK_LAYER_NORM_POSITION,
@@ -789,8 +789,8 @@ class LinearAdaptiveConfigBuilder:
         hidden_adaptive_bias_options: HiddenAdaptiveBiasOptions | None = None,
         hidden_adaptive_diagonal_options: HiddenAdaptiveDiagonalOptions | None = None,
         hidden_adaptive_mask_options: HiddenAdaptiveMaskOptions | None = None,
-        input_boundary_options: AdaptiveBoundaryProjectionOptions | None = None,
-        output_boundary_options: AdaptiveBoundaryProjectionOptions | None = None,
+        input_boundary_options: AdaptiveBoundaryModelOptions | None = None,
+        output_boundary_options: AdaptiveBoundaryModelOptions | None = None,
         router_adaptive_weight_options: HiddenAdaptiveWeightOptions | None = None,
         router_adaptive_bias_options: HiddenAdaptiveBiasOptions | None = None,
         router_adaptive_diagonal_options: HiddenAdaptiveDiagonalOptions | None = None,
@@ -798,7 +798,7 @@ class LinearAdaptiveConfigBuilder:
         recurrent_controller_options: ExpertsRecurrentControllerOptions | None = None,
     ) -> None:
         stack_options = stack_options or ExpertsStackOptions(
-            hidden_dim=stack_hidden_dim,
+            hidden_dim=hidden_dim,
             bias_flag=stack_bias_flag,
             layer_norm_position=layer_norm_position,
             num_layers=stack_num_layers,
@@ -1399,7 +1399,7 @@ class LinearAdaptiveConfigBuilder:
         )
         input_boundary_options = (
             input_boundary_options
-            or AdaptiveBoundaryProjectionOptions(
+            or AdaptiveBoundaryModelOptions(
                 weight_option=input_layer_weight_option,
                 weight_generator_depth=input_layer_weight_generator_depth,
                 weight_decay_schedule=input_layer_weight_decay_schedule,
@@ -1426,7 +1426,7 @@ class LinearAdaptiveConfigBuilder:
         )
         output_boundary_options = (
             output_boundary_options
-            or AdaptiveBoundaryProjectionOptions(
+            or AdaptiveBoundaryModelOptions(
                 weight_option=output_layer_weight_option,
                 weight_generator_depth=output_layer_weight_generator_depth,
                 weight_decay_schedule=output_layer_weight_decay_schedule,
@@ -2130,8 +2130,8 @@ class LinearAdaptiveConfigBuilder:
 
         control_dependencies = self.__control_config_dependencies()
         control_factory = ControlConfigFactory(control_dependencies)
-        boundary_factory = BoundaryConfigFactory(
-            BoundaryConfigDependencies(
+        boundary_factory = BoundaryModelConfigFactory(
+            BoundaryModelConfigDependencies(
                 stack_options=self.stack_options,
                 input_boundary_options=self.input_boundary_options,
                 output_boundary_options=self.output_boundary_options,
