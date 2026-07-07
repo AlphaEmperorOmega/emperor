@@ -159,8 +159,8 @@ appear there only when checkpointing is enabled.
 
 Important scaling rules:
 
-- Without `--datasets`, a command trains once for every dataset in the model's
-  `DATASET_OPTIONS`.
+- Without `--datasets`, a command trains once for every dataset listed by the
+  model's `dataset_options.py`.
 - Without `--config --num-epochs 1`, a command uses the model's configured epoch
   count.
 - `--config` marks the following flags as model-config overrides.
@@ -328,8 +328,8 @@ Use the same `--logdir` across runs to group TensorBoard logs for comparison.
 
 ### Datasets
 
-Each model package defines a `DATASET_OPTIONS` list in its `config.py`. For
-`linears/linear`, the default image-classification datasets are:
+Each model package defines a `DATASET_OPTIONS` list in `dataset_options.py`.
+For `linears/linear`, the default image-classification datasets are:
 
 ```python
 DATASET_OPTIONS: list = [Mnist, FashionMNIST, Cifar10, Cifar100]
