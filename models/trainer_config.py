@@ -1,4 +1,4 @@
-# Shared trainer configuration defaults for all models
+# Trainer
 TRAINER_ACCELERATOR: str = "auto"
 TRAINER_DEVICES: str | int = "auto"
 TRAINER_GRADIENT_CLIP_VAL: float = 0.0
@@ -20,11 +20,11 @@ TRAINER_ENABLE_CHECKPOINTING: bool = False
 TRAINER_ENABLE_MODEL_SUMMARY: bool = False
 TRAINER_PROFILER: str | None = None
 
-# Run/data configuration
+# Run
 DATA_NUM_WORKERS: int = 4
 RUN_TEST_AFTER_FIT: bool = True
 
-# Callback configuration
+# Callback
 CALLBACK_EARLY_STOPPING_PATIENCE: int = 0
 CALLBACK_EARLY_STOPPING_METRIC: str = "validation/accuracy"
 CALLBACK_EARLY_STOPPING_MIN_DELTA: float = 0.0
