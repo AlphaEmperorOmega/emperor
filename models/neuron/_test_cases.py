@@ -39,6 +39,14 @@ class NeuronPackageTestMixin:
     source_adapter = None
     expected_builder_type_name: str
 
+    def dataset_options(self) -> list[type]:
+        dataset_options = importlib.import_module(f"{self.package_module}.dataset_options")
+        return list(
+            dataset_options.DATASET_OPTIONS_BY_TASK[
+                dataset_options.DEFAULT_EXPERIMENT_TASK
+            ]
+        )
+
     def shared_gate_config(self, dim: int = 16) -> GateConfig:
         return GateConfig(
             model_config=LayerStackConfig(
@@ -256,7 +264,7 @@ class NeuronPackageTestMixin:
             "learning_rate": 0.02,
             "input_dim": 8,
             "output_dim": 4,
-            "stack_hidden_dim": 12,
+            "hidden_dim": 12,
             "stack_num_layers": 1,
             "stack_activation": ActivationOptions.MISH,
         }
@@ -439,7 +447,7 @@ class NeuronPackageTestMixin:
 
     def test_baseline_forwards_one_batch(self):
         batch_size = 2
-        dataset = self.config_module.DATASET_OPTIONS[0]
+        dataset = self.dataset_options()[0]
         cfg = self.experiment_presets_type().get_config(
             self.experiment_preset_type.BASELINE,
             dataset,

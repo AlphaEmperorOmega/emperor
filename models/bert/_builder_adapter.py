@@ -110,7 +110,7 @@ def _encoder_options_from_kwargs(
     provided: TransformerEncoderOptions | None,
 ) -> TransformerEncoderOptions:
     options = provided or TransformerEncoderOptions(
-        hidden_dim=config_module.STACK_HIDDEN_DIM,
+        hidden_dim=config_module.HIDDEN_DIM,
         num_layers=config_module.STACK_NUM_LAYERS,
         activation=config_module.STACK_ACTIVATION,
         dropout_probability=config_module.STACK_DROPOUT_PROBABILITY,
@@ -120,7 +120,7 @@ def _encoder_options_from_kwargs(
     updates = _pop_updates(
         kwargs,
         {
-            "stack_hidden_dim": "hidden_dim",
+            "hidden_dim": "hidden_dim",
             "stack_num_layers": "num_layers",
             "stack_activation": "activation",
             "stack_dropout_probability": "dropout_probability",

@@ -141,6 +141,7 @@ class VitExpertLinearConfigBuilder(VitLinearConfigBuilder):
                 expert_recurrent_controller_options=(
                     self.expert_recurrent_controller_options
                 ),
+                hidden_dim=self.hidden_dim,
                 output_dim=self.hidden_dim,
             )
         )

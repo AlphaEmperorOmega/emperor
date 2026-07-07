@@ -36,7 +36,7 @@ class TestNeuronLinearModel(NeuronPackageTestMixin, unittest.TestCase):
         default_cfg = LinearConfigBuilder().build()
         adapted_cfg = LinearConfigBuilder(**source_kwargs).build()
 
-        self.assertIn("stack_hidden_dim", source_defaults)
+        self.assertIn("hidden_dim", source_defaults)
         self.assertNotIn("stack_options", source_defaults)
         with self.assertRaises(TypeError):
             LinearConfigBuilder(**source_defaults).build()
@@ -58,9 +58,9 @@ class TestNeuronLinearModel(NeuronPackageTestMixin, unittest.TestCase):
     def test_builder_uses_source_linear_adapter_defaults(self):
         source_defaults = source_linear_default_kwargs()
         cfg = NeuronLinearConfigBuilder().build()
-        override_cfg = NeuronLinearConfigBuilder(stack_hidden_dim=128).build()
+        override_cfg = NeuronLinearConfigBuilder(hidden_dim=128).build()
 
-        self.assertEqual(cfg.hidden_dim, source_defaults["stack_hidden_dim"])
+        self.assertEqual(cfg.hidden_dim, source_defaults["hidden_dim"])
         self.assertEqual(override_cfg.hidden_dim, 128)
 
 

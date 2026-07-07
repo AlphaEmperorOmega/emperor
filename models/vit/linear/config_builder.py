@@ -20,7 +20,7 @@ class VitLinearConfigBuilder(VitBackendConfigBuilder):
         batch_size: int = config.BATCH_SIZE,
         learning_rate: float = config.LEARNING_RATE,
         input_dim: int = config.INPUT_DIM,
-        stack_hidden_dim: int = config.STACK_HIDDEN_DIM,
+        hidden_dim: int = config.HIDDEN_DIM,
         output_dim: int = config.OUTPUT_DIM,
         image_patch_size: int = config.IMAGE_PATCH_SIZE,
         input_channels: int = config.INPUT_CHANNELS,
@@ -63,7 +63,7 @@ class VitLinearConfigBuilder(VitBackendConfigBuilder):
             bias_flag=patch_bias_flag,
         )
         encoder_options = encoder_options or TransformerEncoderOptions(
-            hidden_dim=stack_hidden_dim,
+            hidden_dim=hidden_dim,
             num_layers=stack_num_layers,
             activation=stack_activation,
             dropout_probability=stack_dropout_probability,

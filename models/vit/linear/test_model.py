@@ -38,6 +38,8 @@ from models.training_test_utils import (
 )
 
 
+import models.vit.linear.dataset_options as dataset_options
+import models.vit.linear.search_space as search_space
 class TestVitLinearModel(unittest.TestCase):
     def test_public_imports_remain_available(self):
         for module_name in (
@@ -96,7 +98,7 @@ class TestVitLinearModel(unittest.TestCase):
             "batch_size": 2,
             "learning_rate": 0.02,
             "input_dim": 192,
-            "stack_hidden_dim": encoder_options.hidden_dim,
+            "hidden_dim": encoder_options.hidden_dim,
             "output_dim": 5,
             "image_patch_size": patch_options.patch_size,
             "input_channels": patch_options.input_channels,
@@ -165,7 +167,7 @@ class TestVitLinearModel(unittest.TestCase):
         self.assertIsNone(kwargs["search_keys"])
         self.assertEqual(kwargs["config_overrides"], {})
         self.assertEqual(kwargs["search_overrides"], {})
-        self.assertEqual(kwargs["selected_datasets"], config.DATASET_OPTIONS)
+        self.assertEqual(kwargs["selected_datasets"], dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK])
         self.assertIsNone(kwargs["selected_presets"])
 
     def test_modern_preset_contract_is_exposed(self):
@@ -224,7 +226,7 @@ class TestVitLinearModel(unittest.TestCase):
     def test_all_presets_forward_one_batch(self):
         batch_size = 2
         presets = ExperimentPresets()
-        dataset = config.DATASET_OPTIONS[0]
+        dataset = dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0]
 
         for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
@@ -245,7 +247,7 @@ class TestVitLinearModel(unittest.TestCase):
         batch_size = 2
         presets = ExperimentPresets()
 
-        for dataset in config.DATASET_OPTIONS:
+        for dataset in dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK]:
             with self.subTest(dataset=dataset.__name__):
                 cfg = presets.get_config(
                     ExperimentPreset.BASELINE,
@@ -263,7 +265,7 @@ class TestVitLinearModel(unittest.TestCase):
     def test_all_presets_train_one_epoch(self):
         batch_size = 2
         presets = ExperimentPresets()
-        dataset = config.DATASET_OPTIONS[0]
+        dataset = dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0]
 
         for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
@@ -283,7 +285,7 @@ class TestVitLinearModel(unittest.TestCase):
     def test_search_applies_stack_axes(self):
         configs = ExperimentPresets().get_config(
             ExperimentPreset.BASELINE,
-            config.DATASET_OPTIONS[0],
+            dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
             GridSearch(),
             search_keys=["stack_num_layers"],
             config_overrides=self._test_overrides(batch_size=2),
@@ -291,18 +293,18 @@ class TestVitLinearModel(unittest.TestCase):
 
         self.assertEqual(
             len(configs),
-            len(config.SEARCH_SPACE_STACK_NUM_LAYERS),
+            len(search_space.SEARCH_SPACE_STACK_NUM_LAYERS),
         )
         self.assertEqual(
             {cfg.experiment_config.encoder_config.num_layers for cfg in configs},
-            set(config.SEARCH_SPACE_STACK_NUM_LAYERS),
+            set(search_space.SEARCH_SPACE_STACK_NUM_LAYERS),
         )
 
     def test_search_keys_unknown_axis_raises(self):
         with self.assertRaises(ValueError) as ctx:
             ExperimentPresets().get_config(
                 ExperimentPreset.BASELINE,
-                config.DATASET_OPTIONS[0],
+                dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
                 GridSearch(),
                 search_keys=["bogus_axis"],
                 config_overrides=self._test_overrides(batch_size=2),
@@ -313,10 +315,10 @@ class TestVitLinearModel(unittest.TestCase):
     def test_unlocked_overrides_update_flat_and_nested_config(self):
         cfg = ExperimentPresets().get_config(
             ExperimentPreset.BASELINE,
-            config.DATASET_OPTIONS[0],
+            dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
             config_overrides={
                 "batch_size": 2,
-                "stack_hidden_dim": 24,
+                "hidden_dim": 24,
                 "stack_num_layers": 2,
                 "stack_activation": ActivationOptions.RELU,
                 "stack_dropout_probability": 0.2,
@@ -344,7 +346,7 @@ class TestVitLinearModel(unittest.TestCase):
         with self.assertRaises(ValueError):
             presets.get_config(
                 ExperimentPreset.POST_NORM,
-                config.DATASET_OPTIONS[0],
+                dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
                 config_overrides={
                     **self._test_overrides(batch_size=2),
                     "layer_norm_position": LayerNormPositionOptions.BEFORE,
@@ -354,7 +356,7 @@ class TestVitLinearModel(unittest.TestCase):
         with self.assertRaises(ValueError):
             presets.get_config(
                 ExperimentPreset.POST_NORM,
-                config.DATASET_OPTIONS[0],
+                dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
                 GridSearch(),
                 search_keys=["layer_norm_position"],
                 config_overrides=self._test_overrides(batch_size=2),
@@ -363,7 +365,7 @@ class TestVitLinearModel(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "POST_NORM.*layer_norm_position"):
             presets.get_config(
                 ExperimentPreset.POST_NORM,
-                config.DATASET_OPTIONS[0],
+                dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
                 GridSearch(),
                 search_overrides={
                     "layer_norm_position": [LayerNormPositionOptions.BEFORE],
@@ -374,7 +376,7 @@ class TestVitLinearModel(unittest.TestCase):
     def test_model_inherits_classifier_experiment(self):
         cfg = ExperimentPresets().get_config(
             ExperimentPreset.BASELINE,
-            config.DATASET_OPTIONS[0],
+            dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
             config_overrides=self._test_overrides(batch_size=2),
         )[0]
         model = Model(cfg)
@@ -388,7 +390,7 @@ class TestVitLinearModel(unittest.TestCase):
 
     def test_patch_embedding_prepends_class_token(self):
         batch_size = 2
-        dataset = config.DATASET_OPTIONS[0]
+        dataset = dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0]
         cfg = ExperimentPresets().get_config(
             ExperimentPreset.BASELINE,
             dataset,
@@ -416,7 +418,7 @@ class TestVitLinearModel(unittest.TestCase):
     def test_class_token_positional_embedding_is_trainable(self):
         cfg = ExperimentPresets().get_config(
             ExperimentPreset.BASELINE,
-            config.DATASET_OPTIONS[0],
+            dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
             config_overrides=self._test_overrides(batch_size=2),
         )[0]
         model = Model(cfg)
@@ -429,7 +431,7 @@ class TestVitLinearModel(unittest.TestCase):
     def test_encoder_is_built_from_transformer_encoder_block_layers(self):
         cfg = ExperimentPresets().get_config(
             ExperimentPreset.BASELINE,
-            config.DATASET_OPTIONS[0],
+            dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
             config_overrides=self._test_overrides(batch_size=2),
         )[0]
         model = Model(cfg)
@@ -443,7 +445,7 @@ class TestVitLinearModel(unittest.TestCase):
 
     def test_model_step_accepts_classifier_batch(self):
         batch_size = 2
-        dataset = config.DATASET_OPTIONS[0]
+        dataset = dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0]
         cfg = ExperimentPresets().get_config(
             ExperimentPreset.BASELINE,
             dataset,
@@ -462,7 +464,7 @@ class TestVitLinearModel(unittest.TestCase):
 
     def test_auxiliary_loss_from_encoder_is_included_by_classifier_experiment(self):
         batch_size = 2
-        dataset = config.DATASET_OPTIONS[0]
+        dataset = dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0]
         cfg = ExperimentPresets().get_config(
             ExperimentPreset.BASELINE,
             dataset,
@@ -481,7 +483,7 @@ class TestVitLinearModel(unittest.TestCase):
     def test_dataset_metadata_drives_channels_classes_and_sequence_length(self):
         presets = ExperimentPresets()
 
-        for dataset in config.DATASET_OPTIONS:
+        for dataset in dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK]:
             with self.subTest(dataset=dataset.__name__):
                 cfg = presets.get_config(
                     ExperimentPreset.BASELINE,
@@ -551,7 +553,7 @@ class TestVitLinearModel(unittest.TestCase):
     def _test_overrides(self, batch_size: int) -> dict:
         return {
             "batch_size": batch_size,
-            "stack_hidden_dim": 16,
+            "hidden_dim": 16,
             "stack_num_layers": 1,
             "attn_num_heads": 4,
             "stack_dropout_probability": 0.0,

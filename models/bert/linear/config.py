@@ -1,25 +1,15 @@
-from emperor.attention.core.monitor import AttentionMonitorCallback
 from emperor.base.layer.gate import LayerGateOptions
-from emperor.base.layer.monitor import (
-    LayerControllerMonitorCallback,
-    RecurrentLayerMonitorCallback,
-)
 from emperor.base.layer.residual import ResidualConnectionOptions
 from emperor.base.options import (
     ActivationOptions,
     LastLayerBiasOptions,
     LayerNormPositionOptions,
 )
-from emperor.datasets.text.bert_pretraining import (
-    BERT_PRETRAINING_TARGET_VOCAB_SIZE,
-    PennTreebankBertPretraining,
-    WikiText2BertPretraining,
-)
+from emperor.datasets.text.bert_pretraining import BERT_PRETRAINING_TARGET_VOCAB_SIZE
 from emperor.embedding.absolute.core.config import (
     AbsolutePositionalEmbeddingConfig,
     TextLearnedPositionalEmbeddingConfig,
 )
-from emperor.experiments.monitors import MonitorOption
 from emperor.halting.options import HaltingHiddenStateModeOptions
 from emperor.memory.config import (
     AttentionDynamicMemoryConfig,  # noqa: F401
@@ -28,7 +18,6 @@ from emperor.memory.config import (
     GatedResidualDynamicMemoryConfig,
     WeightedDynamicMemoryConfig,  # noqa: F401
 )
-from emperor.memory.core.monitor import MemoryMonitorCallback
 from emperor.memory.options import MemoryPositionOptions
 
 from models.trainer_config import *  # noqa: F403
@@ -37,7 +26,6 @@ from models.trainer_config import *  # noqa: F403
 BATCH_SIZE: int = 64
 LEARNING_RATE: float = 1e-3
 NUM_EPOCHS: int = 10
-DATASET_OPTIONS: list = [PennTreebankBertPretraining, WikiText2BertPretraining]
 CONFIG_OVERRIDE_SKIP_KEYS: set[str] = {
     "BERT_PRETRAINING_TARGET_VOCAB_SIZE",
 }
@@ -55,10 +43,11 @@ CALLBACK_EARLY_STOPPING_METRIC: str = "validation/loss"
 INPUT_DIM: int = BERT_PRETRAINING_TARGET_VOCAB_SIZE
 OUTPUT_DIM: int = BERT_PRETRAINING_TARGET_VOCAB_SIZE
 SEQUENCE_LENGTH: int = 35
-STACK_HIDDEN_DIM: int = 32
+HIDDEN_DIM: int = 32
 
 #########################################################################
-# MAIN ENCODER STACK (transformer encoder of self-attention + feed-forward)
+# Layer Stack Options
+# - hidden_dim comes from the global HIDDEN_DIM field above.
 STACK_NUM_LAYERS: int = 2
 STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
 STACK_DROPOUT_PROBABILITY: float = 0.1
@@ -90,8 +79,8 @@ FF_NUM_LAYERS: int = 2
 FF_BIAS_FLAG: bool = True
 
 #########################################################################
-# ENCODER-LAYER CONTROLLER SUBMODULE OPTIONS
-SUBMODULE_STACK_HIDDEN_DIM: int = STACK_HIDDEN_DIM
+# Layer Stack Submodule Options
+SUBMODULE_STACK_HIDDEN_DIM: int = HIDDEN_DIM
 SUBMODULE_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = LAYER_NORM_POSITION
 SUBMODULE_STACK_NUM_LAYERS: int = 2
 SUBMODULE_STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
@@ -106,11 +95,11 @@ SUBMODULE_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = False
 SUBMODULE_STACK_BIAS_FLAG: bool = True
 
 #########################################################################
-# GATE OPTIONS
+# Gate Options
 GATE_FLAG: bool = False
 GATE_OPTION: LayerGateOptions | None = LayerGateOptions.MULTIPLIER
 GATE_ACTIVATION: ActivationOptions | None = ActivationOptions.SIGMOID
-# GATE STACK OPTIONS
+## Gate Stack Options
 GATE_STACK_INDEPENDENT_FLAG: bool = False
 GATE_STACK_HIDDEN_DIM: int | None = None
 GATE_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = None
@@ -123,7 +112,7 @@ GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool | None = True
 GATE_STACK_BIAS_FLAG: bool | None = True
 
 #########################################################################
-# HALTING OPTIONS
+# Halting Options
 HALTING_FLAG: bool = False
 HALTING_THRESHOLD: float = 0.99
 HALTING_DROPOUT: float = 0.0
@@ -131,7 +120,7 @@ HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
     HaltingHiddenStateModeOptions.RAW
 )
 HALTING_OUTPUT_DIM: int = 2
-# HALTING STACK OPTIONS
+## Halting Stack Options
 HALTING_STACK_INDEPENDENT_FLAG: bool = False
 HALTING_STACK_HIDDEN_DIM: int | None = None
 HALTING_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = (
@@ -148,13 +137,13 @@ HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool | None = None
 HALTING_STACK_BIAS_FLAG: bool | None = None
 
 #########################################################################
-# MEMORY OPTIONS
+# Memory Options
 MEMORY_FLAG: bool = False
 MEMORY_OPTION: type[DynamicMemoryConfig] = GatedResidualDynamicMemoryConfig
 MEMORY_POSITION_OPTION: MemoryPositionOptions = MemoryPositionOptions.AFTER_AFFINE
 MEMORY_TEST_TIME_TRAINING_LEARNING_RATE: float | None = None
 MEMORY_TEST_TIME_TRAINING_NUM_INNER_STEPS: int | None = None
-# MEMORY STACK OPTIONS
+## Memory Stack Options
 MEMORY_STACK_INDEPENDENT_FLAG: bool = False
 MEMORY_STACK_HIDDEN_DIM: int | None = None
 MEMORY_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = None
@@ -167,7 +156,7 @@ MEMORY_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool | None = None
 MEMORY_STACK_BIAS_FLAG: bool | None = None
 
 #########################################################################
-# RECURRENT LAYER OPTIONS
+# Recurrent Layer Options
 RECURRENT_FLAG: bool = False
 RECURRENT_MAX_STEPS: int = 4
 RECURRENT_LAYER_NORM_POSITION: LayerNormPositionOptions = (
@@ -175,11 +164,11 @@ RECURRENT_LAYER_NORM_POSITION: LayerNormPositionOptions = (
 )
 
 #########################################################################
-# RECURRENT GATE OPTIONS
+## Recurrent Gate Options
 RECURRENT_GATE_FLAG: bool = False
 RECURRENT_GATE_OPTION: LayerGateOptions | None = LayerGateOptions.MULTIPLIER
 RECURRENT_GATE_ACTIVATION: ActivationOptions | None = ActivationOptions.SIGMOID
-# RECURRENT GATE STACK OPTIONS
+### Recurrent Gate Stack Options
 RECURRENT_GATE_STACK_INDEPENDENT_FLAG: bool = False
 RECURRENT_GATE_STACK_HIDDEN_DIM: int | None = None
 RECURRENT_GATE_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = None
@@ -192,14 +181,14 @@ RECURRENT_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool | None = None
 RECURRENT_GATE_STACK_BIAS_FLAG: bool | None = None
 
 #########################################################################
-# RECURRENT HALTING OPTIONS
+## Recurrent Halting Options
 RECURRENT_HALTING_FLAG: bool = False
 RECURRENT_HALTING_THRESHOLD: float = HALTING_THRESHOLD
 RECURRENT_HALTING_DROPOUT: float = HALTING_DROPOUT
 RECURRENT_HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
     HALTING_HIDDEN_STATE_MODE
 )
-# RECURRENT HALTING STACK OPTIONS
+### Recurrent Halting Stack Options
 RECURRENT_HALTING_STACK_INDEPENDENT_FLAG: bool = False
 RECURRENT_HALTING_STACK_HIDDEN_DIM: int | None = None
 RECURRENT_HALTING_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = None
@@ -212,68 +201,3 @@ RECURRENT_HALTING_STACK_DROPOUT_PROBABILITY: float | None = None
 RECURRENT_HALTING_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions | None = None
 RECURRENT_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool | None = None
 RECURRENT_HALTING_STACK_BIAS_FLAG: bool | None = None
-
-#########################################################################
-# HYPERPARAMETER SEARCH SPACE
-SEARCH_SPACE_LEARNING_RATE: list = [1e-4, 1e-3, 1e-2]
-SEARCH_SPACE_STACK_HIDDEN_DIM: list = [16, 32, 64, 128, 256, 512]
-SEARCH_SPACE_STACK_NUM_LAYERS: list = [2, 4, 8, 16, 32]
-SEARCH_SPACE_STACK_DROPOUT_PROBABILITY: list = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
-SEARCH_SPACE_LAYER_NORM_POSITION: list = [
-    LayerNormPositionOptions.DISABLED,
-    LayerNormPositionOptions.DEFAULT,
-    LayerNormPositionOptions.BEFORE,
-    LayerNormPositionOptions.AFTER,
-]
-SEARCH_SPACE_STACK_ACTIVATION: list = [
-    ActivationOptions.RELU,
-    ActivationOptions.LEAKY_RELU,
-    ActivationOptions.ELU,
-    ActivationOptions.GELU,
-    ActivationOptions.TANH,
-]
-
-#########################################################################
-# MONITOR OPTIONS
-MONITOR_OPTIONS: list[MonitorOption] = [
-    MonitorOption(
-        name="attention",
-        label="Attention",
-        description=(
-            "Logs Q/K/V norms, attention entropy, max probability, dropout and "
-            "mask coverage, auxiliary loss, and attention head visual summaries."
-        ),
-        kinds=["scalar", "histogram", "image"],
-        callback_factory=lambda: AttentionMonitorCallback(log_every_n_steps=100),
-    ),
-    MonitorOption(
-        name="recurrent-layer",
-        label="Recurrent layers",
-        description=(
-            "Logs recurrent step count, hidden-state convergence, recurrent gate "
-            "openness, halted-state preservation, and step-delta visual summaries."
-        ),
-        kinds=["scalar", "histogram", "image"],
-        callback_factory=lambda: RecurrentLayerMonitorCallback(log_every_n_steps=100),
-    ),
-    MonitorOption(
-        name="layer-controller",
-        label="Layer controllers",
-        description=(
-            "Logs Layer gate, residual, dropout, layer-norm, and activation "
-            "controller statistics without duplicating memory metrics."
-        ),
-        kinds=["scalar"],
-        callback_factory=lambda: LayerControllerMonitorCallback(log_every_n_steps=100),
-    ),
-    MonitorOption(
-        name="memory",
-        label="Memory modules",
-        description=(
-            "Logs gating, blend-weight, and state statistics for Emperor memory "
-            "modules. Inactive until a memory config is enabled."
-        ),
-        kinds=["scalar"],
-        callback_factory=lambda: MemoryMonitorCallback(log_every_n_steps=100),
-    ),
-]

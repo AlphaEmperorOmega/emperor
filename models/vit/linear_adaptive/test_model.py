@@ -14,6 +14,7 @@ from models.vit.linear_adaptive.presets import (
 )
 
 
+import models.vit.linear_adaptive.dataset_options as dataset_options
 class TestVitLinearAdaptiveModel(unittest.TestCase):
     def test_public_surface_and_catalog_id(self):
         for module_name in (
@@ -72,14 +73,14 @@ class TestVitLinearAdaptiveModel(unittest.TestCase):
     def _config(self, preset: ExperimentPreset):
         return ExperimentPresets().get_config(
             preset,
-            config.DATASET_OPTIONS[0],
+            dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
             config_overrides=self._test_overrides(),
         )[0]
 
     def _test_overrides(self) -> dict:
         return {
             "batch_size": 2,
-            "stack_hidden_dim": 16,
+            "hidden_dim": 16,
             "stack_num_layers": 1,
             "attn_num_heads": 4,
             "stack_dropout_probability": 0.0,

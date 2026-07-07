@@ -20,6 +20,7 @@ from models.vit.expert_linear_adaptive.config_builder import (
 )
 from models.vit.expert_linear_adaptive.model import Model
 
+import models.vit.expert_linear_adaptive.dataset_options as dataset_options
 _BUILDER_KEYS = {
     "batch_size",
     "learning_rate",
@@ -133,14 +134,15 @@ class Experiment(ExperimentBase):
     def __init__(
         self,
         experiment_preset: ExperimentPreset | None = None,
+        experiment_task=None,
     ) -> None:
-        super().__init__(experiment_preset)
+        super().__init__(experiment_preset, experiment_task=experiment_task)
 
     def _num_epochs(self) -> int:
         return config.NUM_EPOCHS
 
     def _dataset_options(self) -> list:
-        return config.DATASET_OPTIONS
+        return dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK]
 
     def _model_type(self) -> type:
         return Model

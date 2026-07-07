@@ -43,6 +43,8 @@ from models.training_test_utils import (
 )
 
 
+import models.bert.linear.dataset_options as dataset_options
+import models.bert.linear.search_space as search_space
 class TestBertLinearModel(unittest.TestCase):
     def test_public_imports_remain_available(self):
         for module_name in (
@@ -91,7 +93,7 @@ class TestBertLinearModel(unittest.TestCase):
             "batch_size": 2,
             "learning_rate": 0.02,
             "input_dim": 32,
-            "stack_hidden_dim": encoder_options.hidden_dim,
+            "hidden_dim": encoder_options.hidden_dim,
             "output_dim": 32,
             "sequence_length": 8,
             "stack_num_layers": encoder_options.num_layers,
@@ -158,7 +160,7 @@ class TestBertLinearModel(unittest.TestCase):
         self.assertIsNone(kwargs["search_keys"])
         self.assertEqual(kwargs["config_overrides"], {})
         self.assertEqual(kwargs["search_overrides"], {})
-        self.assertEqual(kwargs["selected_datasets"], config.DATASET_OPTIONS)
+        self.assertEqual(kwargs["selected_datasets"], dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK])
         self.assertIsNone(kwargs["selected_presets"])
 
     def test_modern_preset_contract_is_exposed(self):
@@ -250,7 +252,7 @@ class TestBertLinearModel(unittest.TestCase):
     def test_all_presets_forward_one_batch(self):
         batch_size = 2
         presets = ExperimentPresets()
-        dataset = config.DATASET_OPTIONS[0]
+        dataset = dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0]
 
         for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
@@ -275,7 +277,7 @@ class TestBertLinearModel(unittest.TestCase):
         batch_size = 2
         presets = ExperimentPresets()
 
-        for dataset in config.DATASET_OPTIONS:
+        for dataset in dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK]:
             with self.subTest(dataset=dataset.__name__):
                 cfg = presets.get_config(
                     ExperimentPreset.BASELINE,
@@ -297,7 +299,7 @@ class TestBertLinearModel(unittest.TestCase):
     def test_all_presets_train_one_epoch(self):
         batch_size = 2
         presets = ExperimentPresets()
-        dataset = config.DATASET_OPTIONS[0]
+        dataset = dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0]
 
         for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
@@ -314,7 +316,7 @@ class TestBertLinearModel(unittest.TestCase):
     def _test_overrides(self, batch_size: int) -> dict:
         return {
             "batch_size": batch_size,
-            "stack_hidden_dim": 16,
+            "hidden_dim": 16,
             "sequence_length": 8,
             "stack_num_layers": 2,
             "attn_num_heads": 4,
@@ -339,7 +341,7 @@ class TestBertLinearModel(unittest.TestCase):
     def test_preset_accepts_search_flags(self):
         configs = ExperimentPresets().get_config(
             ExperimentPreset.BASELINE,
-            config.DATASET_OPTIONS[0],
+            dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
             RandomSearch(num_samples=2),
         )
 
@@ -349,7 +351,7 @@ class TestBertLinearModel(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             ExperimentPresets().get_config(
                 ExperimentPreset.BASELINE,
-                config.DATASET_OPTIONS[0],
+                dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
                 RandomSearch(num_samples=2),
                 search_keys=["bogus_axis"],
             )
@@ -359,23 +361,23 @@ class TestBertLinearModel(unittest.TestCase):
     def test_search_applies_encoder_axes(self):
         configs = ExperimentPresets().get_config(
             ExperimentPreset.BASELINE,
-            config.DATASET_OPTIONS[0],
+            dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
             GridSearch(),
-            search_keys=["stack_hidden_dim"],
+            search_keys=["hidden_dim"],
         )
 
-        self.assertEqual(len(configs), len(config.SEARCH_SPACE_STACK_HIDDEN_DIM))
+        self.assertEqual(len(configs), len(search_space.SEARCH_SPACE_HIDDEN_DIM))
         self.assertEqual(
             {cfg.hidden_dim for cfg in configs},
-            set(config.SEARCH_SPACE_STACK_HIDDEN_DIM),
+            set(search_space.SEARCH_SPACE_HIDDEN_DIM),
         )
 
     def test_unlocked_overrides_update_flat_and_nested_config(self):
         cfg = ExperimentPresets().get_config(
             ExperimentPreset.BASELINE,
-            config.DATASET_OPTIONS[0],
+            dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
             config_overrides={
-                "stack_hidden_dim": 24,
+                "hidden_dim": 24,
                 "sequence_length": 8,
                 "stack_num_layers": 1,
                 "stack_dropout_probability": 0.2,
@@ -400,7 +402,7 @@ class TestBertLinearModel(unittest.TestCase):
         with self.assertRaises(ValueError):
             presets.get_config(
                 ExperimentPreset.PRE_NORM,
-                config.DATASET_OPTIONS[0],
+                dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
                 config_overrides={
                     "layer_norm_position": LayerNormPositionOptions.AFTER,
                 },
@@ -409,7 +411,7 @@ class TestBertLinearModel(unittest.TestCase):
         with self.assertRaises(ValueError):
             presets.get_config(
                 ExperimentPreset.PRE_NORM,
-                config.DATASET_OPTIONS[0],
+                dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
                 search_keys=["layer_norm_position"],
                 search_mode=GridSearch(),
             )
@@ -417,7 +419,7 @@ class TestBertLinearModel(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "PRE_NORM.*layer_norm_position"):
             presets.get_config(
                 ExperimentPreset.PRE_NORM,
-                config.DATASET_OPTIONS[0],
+                dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
                 GridSearch(),
                 search_overrides={
                     "layer_norm_position": [LayerNormPositionOptions.AFTER],
@@ -466,7 +468,7 @@ class TestBertLinearModel(unittest.TestCase):
     def test_model_uses_bert_pretraining_base_class_and_heads(self):
         cfg = ExperimentPresets().get_config(
             ExperimentPreset.BASELINE,
-            config.DATASET_OPTIONS[0],
+            dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
             config_overrides=self._test_overrides(batch_size=2),
         )[0]
         model = Model(cfg)
@@ -491,7 +493,7 @@ class TestBertLinearModel(unittest.TestCase):
         batch_size = 2
         cfg = ExperimentPresets().get_config(
             ExperimentPreset.BASELINE,
-            config.DATASET_OPTIONS[0],
+            dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
             config_overrides=self._test_overrides(batch_size),
         )[0]
         model = Model(cfg)
@@ -520,7 +522,7 @@ class TestBertLinearModel(unittest.TestCase):
         batch_size = 2
         cfg = ExperimentPresets().get_config(
             ExperimentPreset.BASELINE,
-            config.DATASET_OPTIONS[0],
+            dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
             config_overrides=self._test_overrides(batch_size),
         )[0]
         model = Model(cfg)
@@ -557,7 +559,7 @@ class TestBertLinearModel(unittest.TestCase):
     def test_encoder_built_from_block_layers(self):
         cfg = ExperimentPresets().get_config(
             ExperimentPreset.BASELINE,
-            config.DATASET_OPTIONS[0],
+            dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
             config_overrides=self._test_overrides(batch_size=2),
         )[0]
         model = Model(cfg)

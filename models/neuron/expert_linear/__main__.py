@@ -14,7 +14,7 @@ if __name__ == "__main__":
         args,
         ExperimentPreset,
     )
-    experiment = Experiment(mode.preset)
+    experiment = Experiment(mode.preset, experiment_task=mode.experiment_task)
     experiment.train_model(
         search_mode=mode.search_mode,
         log_folder=args.logdir,
