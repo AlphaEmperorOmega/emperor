@@ -23,47 +23,53 @@ class TrainingJobRepository:
         self._manager = manager
 
     def create_job(self, command: CreateTrainingJobCommand) -> TrainingJobView:
+        kwargs: dict[str, Any] = {
+            "model": command.model,
+            "preset": command.preset,
+            "presets": command.presets,
+            "datasets": command.datasets,
+            "overrides": command.overrides,
+            "log_folder": command.log_folder,
+            "monitors": command.monitors,
+            "search": (
+                command.search.to_api_payload()
+                if command.search is not None
+                else None
+            ),
+            "run_plan": (
+                command.run_plan.to_api_payload()
+                if command.run_plan is not None
+                else None
+            ),
+        }
+        if command.experiment_task is not None:
+            kwargs["experiment_task"] = command.experiment_task
         return TrainingJobView.from_payload(
-            self._manager.create_job(
-                model=command.model,
-                preset=command.preset,
-                presets=command.presets,
-                datasets=command.datasets,
-                overrides=command.overrides,
-                log_folder=command.log_folder,
-                monitors=command.monitors,
-                search=(
-                    command.search.to_api_payload()
-                    if command.search is not None
-                    else None
-                ),
-                run_plan=(
-                    command.run_plan.to_api_payload()
-                    if command.run_plan is not None
-                    else None
-                ),
-            )
+            self._manager.create_job(**kwargs)
         )
 
     def create_run_plan(
         self,
         command: CreateTrainingRunPlanCommand,
     ) -> TrainingRunPlanView:
+        kwargs: dict[str, Any] = {
+            "model": command.model,
+            "preset": command.preset,
+            "presets": command.presets,
+            "datasets": command.datasets,
+            "overrides": command.overrides,
+            "log_folder": command.log_folder,
+            "monitors": command.monitors,
+            "search": (
+                command.search.to_api_payload()
+                if command.search is not None
+                else None
+            ),
+        }
+        if command.experiment_task is not None:
+            kwargs["experiment_task"] = command.experiment_task
         return TrainingRunPlanView.from_payload(
-            self._manager.create_run_plan(
-                model=command.model,
-                preset=command.preset,
-                presets=command.presets,
-                datasets=command.datasets,
-                overrides=command.overrides,
-                log_folder=command.log_folder,
-                monitors=command.monitors,
-                search=(
-                    command.search.to_api_payload()
-                    if command.search is not None
-                    else None
-                ),
-            )
+            self._manager.create_run_plan(**kwargs)
         )
 
     def get_job(self, job_id: str) -> TrainingJobView:

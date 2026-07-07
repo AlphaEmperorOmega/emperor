@@ -327,6 +327,7 @@ CONFIG_FIELD_FIELDS = (
     "flag",
     "label",
     "section",
+    "sectionPath",
     "description",
     "type",
     "default",
@@ -342,6 +343,7 @@ CONFIG_FIELD_REQUIRED_FIELDS = (
     "flag",
     "label",
     "section",
+    "sectionPath",
     "type",
     "default",
     "nullable",
@@ -413,6 +415,7 @@ TRAINING_RUN_FIELDS = (
     "snapshotId",
     "snapshotName",
     "dataset",
+    "experimentTask",
     "changes",
     "overrides",
     "command",
@@ -429,6 +432,7 @@ TRAINING_RUN_REQUIRED_FIELDS = (
     "status",
     "preset",
     "dataset",
+    "experimentTask",
     "changes",
     "overrides",
     "command",
@@ -455,6 +459,7 @@ TRAINING_RUN_PLAN_FIELDS = (
     "model",
     "preset",
     "presets",
+    "experimentTask",
     "datasets",
     "overrides",
     "search",
@@ -470,6 +475,7 @@ TRAINING_JOB_FIELDS = (
     "model",
     "preset",
     "presets",
+    "experimentTask",
     "datasets",
     "overrides",
     "search",
@@ -502,6 +508,7 @@ TRAINING_JOB_REQUIRED_FIELDS = (
     "modelType",
     "model",
     "preset",
+    "experimentTask",
     "datasets",
     "overrides",
     "monitors",
@@ -574,6 +581,7 @@ LOG_RUN_FIELDS = (
     "modelType",
     "model",
     "preset",
+    "experimentTask",
     "dataset",
     "runName",
     "timestamp",
@@ -769,8 +777,8 @@ SCHEMA_PARITY_CASES = (
     SchemaParityCase(
         schemas.DatasetsResponse,
         "datasetsSchema",
-        ("modelType", "model", "datasets"),
-        ("modelType", "model", "datasets"),
+        ("modelType", "model", "defaultExperimentTask", "datasetGroups"),
+        ("modelType", "model", "defaultExperimentTask", "datasetGroups"),
     ),
     SchemaParityCase(
         schemas.MonitorOptionResponse,
@@ -836,7 +844,15 @@ SCHEMA_PARITY_CASES = (
     SchemaParityCase(
         schemas.InspectRequest,
         "inspectModel input",
-        ("modelType", "model", "preset", "overrides", "dataset", "logRunId"),
+        (
+            "modelType",
+            "model",
+            "preset",
+            "overrides",
+            "experimentTask",
+            "dataset",
+            "logRunId",
+        ),
         ("modelType", "model", "preset", "overrides"),
     ),
     SchemaParityCase(
@@ -869,6 +885,7 @@ SCHEMA_PARITY_CASES = (
             "model",
             "preset",
             "presets",
+            "experimentTask",
             "datasets",
             "overrides",
             "logFolder",
@@ -894,6 +911,7 @@ SCHEMA_PARITY_CASES = (
             "model",
             "preset",
             "presets",
+            "experimentTask",
             "datasets",
             "overrides",
             "logFolder",
@@ -1897,12 +1915,25 @@ class ApiIntegrationContractTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
 
         payload = response.json()
-        self.assertEqual(tuple(payload), ("modelType", "model", "datasets"))
+        self.assertEqual(
+            tuple(payload),
+            ("modelType", "model", "defaultExperimentTask", "datasetGroups"),
+        )
         self.assertEqual(payload["modelType"], "linears")
         self.assertEqual(payload["model"], "linear")
-        self.assertTrue(payload["datasets"])
+        self.assertEqual(payload["defaultExperimentTask"], "image-classification")
+        self.assertTrue(payload["datasetGroups"])
 
-        for dataset in payload["datasets"]:
+        group = payload["datasetGroups"][0]
+        self.assertEqual(
+            tuple(group),
+            ("experimentTask", "label", "datasets"),
+        )
+        self.assertEqual(group["experimentTask"], "image-classification")
+        self.assertEqual(group["label"], "Image Classification")
+        self.assertTrue(group["datasets"])
+
+        for dataset in group["datasets"]:
             with self.subTest(dataset=dataset.get("name")):
                 self.assertEqual(
                     tuple(dataset),
@@ -1913,7 +1944,7 @@ class ApiIntegrationContractTests(unittest.TestCase):
                     f"Dataset payload exposed path-like fields: {dataset}",
                 )
 
-        dataset_by_name = {dataset["name"]: dataset for dataset in payload["datasets"]}
+        dataset_by_name = {dataset["name"]: dataset for dataset in group["datasets"]}
         self.assertIn("Mnist", dataset_by_name)
         self.assertEqual(dataset_by_name["Mnist"]["inputDim"], 784)
         self.assertEqual(dataset_by_name["Mnist"]["outputDim"], 10)
@@ -1948,7 +1979,7 @@ class ApiIntegrationContractTests(unittest.TestCase):
                     model="linear",
                     preset="baseline",
                     dataset="Mnist",
-                    overrides={"stack_hidden_dim": "128"},
+                    overrides={"hidden_dim": "128"},
                 ),
                 InspectionService(),
             )
@@ -1959,7 +1990,7 @@ class ApiIntegrationContractTests(unittest.TestCase):
         self.assertEqual(search_space_response.status_code, 200)
         search_space_payload = search_space_response.json()
         self.assertIn(
-            "STACK_HIDDEN_DIM", {axis["key"] for axis in search_space_payload["axes"]}
+            "HIDDEN_DIM", {axis["key"] for axis in search_space_payload["axes"]}
         )
         payload = response.model_dump(mode="json")
         self.assertEqual(payload["modelType"], "linears")

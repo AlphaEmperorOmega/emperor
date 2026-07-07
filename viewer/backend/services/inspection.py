@@ -67,6 +67,7 @@ class InspectionService:
         preset: str,
         overrides: dict[str, Any],
         dataset: str | None,
+        experiment_task: str | None = None,
         log_run_id: str | None = None,
     ) -> dict[str, Any]:
         from viewer.backend.inspector.service import inspect_model
@@ -111,6 +112,7 @@ class InspectionService:
                 model_id,
                 preset,
                 dataset=dataset,
+                experiment_task=experiment_task,
                 parsed_overrides=effective_overrides,
             )
         except InspectorError as exc:
@@ -125,6 +127,7 @@ class InspectionService:
                     model_id,
                     preset,
                     dataset=dataset,
+                    experiment_task=experiment_task,
                     parsed_overrides=fallback_overrides,
                 )
             except InspectorError as fallback_exc:

@@ -29,10 +29,6 @@ EXPLICIT_FIELD_DESCRIPTIONS = {
         "Defines the number of output logits produced by the model. For "
         "classification runs this should match the selected dataset class count."
     ),
-    "DATASET_OPTIONS": (
-        "Lists the datasets this model package can train against. The Viewer and "
-        "CLI use these options to populate dataset selectors."
-    ),
     "RUN_TEST_AFTER_FIT": (
         "Controls whether the trainer runs the test loop after fitting finishes. "
         "Disable this for quick smoke tests when you only need to verify training "
@@ -202,8 +198,8 @@ SECTION_CONTEXT = {
     "Diagonal Generator Stack Options": "dedicated diagonal-generator stack",
     "Mask Options": "row or column mask controller",
     "Mask Stack Options": "dedicated mask-generator stack",
-    "Input Boundary Projector Options": "input boundary projector",
-    "Output Boundary Projector Options": "output boundary projector",
+    "Input Boundary Model Options": "input boundary model",
+    "Output Boundary Model Options": "output boundary model",
 }
 
 FLAG_DISABLED_PREFIXES = (

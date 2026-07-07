@@ -16,6 +16,7 @@ from models.parser import (
 )
 
 from viewer.backend.inspector.discovery import (
+    dataset_options_for_task,
     load_model_parts,
     preset_cli_name,
     preset_description,
@@ -149,7 +150,10 @@ def main() -> None:
         if args.all_presets
         else [parts.experiment_preset_enum.get_member(args.preset)]
     )
-    datasets = resolve_dataset_names(parts.dataset_options, args.datasets)
+    datasets = resolve_dataset_names(
+        dataset_options_for_task(parts, mode.experiment_task),
+        args.datasets,
+    )
     dataset = datasets[0].__name__
 
     results = []

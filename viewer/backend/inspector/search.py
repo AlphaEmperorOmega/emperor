@@ -7,7 +7,6 @@ from typing import Any
 
 from models.config_overrides import (
     config_key_to_model_param,
-    iter_supported_config_keys,
     normalize_key,
     parse_config_value,
 )
@@ -15,7 +14,7 @@ from models.config_overrides import (
 from viewer.backend.inspector.config_classes import abstract_config_class_error
 from viewer.backend.inspector.discovery import load_model_parts
 from viewer.backend.inspector.errors import InspectorError
-from viewer.backend.inspector.overrides import resolve_override_key
+from viewer.backend.inspector.overrides import resolve_override_key, supported_config_keys
 from viewer.backend.inspector.schema import search_space_schema
 from viewer.backend.inspector.values import serialize_config_value
 from viewer.backend.training_limits import (
@@ -50,12 +49,16 @@ def _axis_by_key(model_name: str, preset_name: str) -> dict[str, dict[str, Any]]
     return {normalize_key(axis["key"]): axis for axis in axes}
 
 
-def _parse_search_value(config_module, axis: Mapping[str, Any], raw_value: Any) -> Any:
+def _parse_search_value(
+    search_space_module,
+    axis: Mapping[str, Any],
+    raw_value: Any,
+) -> Any:
     if raw_value is None:
         return None
     try:
         parsed_value = parse_config_value(
-            config_module,
+            search_space_module,
             str(axis["searchKey"]),
             str(raw_value),
         )
@@ -143,7 +146,11 @@ def parse_training_search(
             serialize_config_value(value) for value in axis.get("values", [])
         }
         parsed_axis_values = [
-            _parse_search_value(parts.config_module, axis, raw_value)
+            _parse_search_value(
+                getattr(parts, "search_space_module", parts.config_module),
+                axis,
+                raw_value,
+            )
             for raw_value in raw_values
         ]
         (
@@ -198,10 +205,7 @@ def strip_search_overrides(
     if not overrides or not search_model_params:
         return dict(overrides or {})
 
-    supported = {
-        normalize_key(config_key): config_key
-        for config_key in iter_supported_config_keys(config_module)
-    }
+    supported = supported_config_keys(config_module)
     filtered: dict[str, Any] = {}
     for raw_key, raw_value in overrides.items():
         config_key, _legacy_residual_flag = resolve_override_key(

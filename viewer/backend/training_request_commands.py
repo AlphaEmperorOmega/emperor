@@ -30,6 +30,7 @@ def create_run_plan_command(
         model=require_model_id(request.modelType, request.model),
         preset=request.preset,
         presets=request.presets,
+        experiment_task=request.experimentTask,
         datasets=request.datasets,
         overrides=request.overrides,
         log_folder=request.logFolder,
@@ -41,20 +42,26 @@ def create_run_plan_command(
 def create_training_job_command(
     request: TrainingJobCreateRequest,
 ) -> CreateTrainingJobCommand:
+    run_plan = (
+        TrainingRunPlanView.from_payload(request.runPlan.model_dump())
+        if request.runPlan is not None
+        else None
+    )
     return CreateTrainingJobCommand(
         model=require_model_id(request.modelType, request.model),
         preset=request.preset,
         presets=request.presets,
+        experiment_task=(
+            request.experimentTask
+            if request.experimentTask is not None
+            else (run_plan.experiment_task if run_plan is not None else None)
+        ),
         datasets=request.datasets,
         overrides=request.overrides,
         log_folder=request.logFolder,
         monitors=request.monitors,
         search=_search_from_request(request),
-        run_plan=(
-            TrainingRunPlanView.from_payload(request.runPlan.model_dump())
-            if request.runPlan is not None
-            else None
-        ),
+        run_plan=run_plan,
     )
 
 

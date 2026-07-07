@@ -105,6 +105,7 @@ class TrainingRunView:
     status: TrainingRunStatus
     preset: str
     dataset: str
+    experiment_task: str
     changes: list[TrainingRunChangeView]
     overrides: dict[str, Any]
     command: str
@@ -132,6 +133,7 @@ class TrainingRunView:
             snapshot_id=str(snapshot_id) if snapshot_id is not None else None,
             snapshot_name=str(snapshot_name) if snapshot_name is not None else None,
             dataset=str(payload.get("dataset") or ""),
+            experiment_task=str(payload.get("experimentTask") or ""),
             changes=[
                 TrainingRunChangeView.from_payload(item)
                 for item in _mapping_items(payload.get("changes"))
@@ -157,6 +159,7 @@ class TrainingRunView:
             "snapshotId": self.snapshot_id,
             "snapshotName": self.snapshot_name,
             "dataset": self.dataset,
+            "experimentTask": self.experiment_task,
             "changes": [change.to_api_payload() for change in self.changes],
             "overrides": self.overrides,
             "command": self.command,
@@ -221,6 +224,7 @@ class TrainingRunPlanView:
     model: str
     preset: str
     presets: list[str]
+    experiment_task: str
     datasets: list[str]
     overrides: dict[str, Any]
     search: TrainingSearch | None
@@ -235,6 +239,7 @@ class TrainingRunPlanView:
             model=_payload_model_id(payload),
             preset=str(payload.get("preset") or ""),
             presets=[str(item) for item in payload.get("presets") or []],
+            experiment_task=str(payload.get("experimentTask") or ""),
             datasets=[str(item) for item in payload.get("datasets") or []],
             overrides=dict(payload.get("overrides") or {}),
             search=TrainingSearch.from_payload(
@@ -256,6 +261,7 @@ class TrainingRunPlanView:
             **model_identity_payload_from_id(self.model),
             "preset": self.preset,
             "presets": self.presets,
+            "experimentTask": self.experiment_task,
             "datasets": self.datasets,
             "overrides": self.overrides,
             "search": self.search.to_api_payload() if self.search else None,
@@ -298,6 +304,7 @@ class TrainingJobView:
     model: str
     preset: str
     presets: list[str]
+    experiment_task: str
     datasets: list[str]
     overrides: dict[str, Any]
     search: TrainingSearch | None
@@ -338,6 +345,7 @@ class TrainingJobView:
             model=_payload_model_id(payload),
             preset=str(payload.get("preset") or ""),
             presets=[str(item) for item in payload.get("presets") or []],
+            experiment_task=str(payload.get("experimentTask") or ""),
             datasets=[str(item) for item in payload.get("datasets") or []],
             overrides=dict(payload.get("overrides") or {}),
             search=TrainingSearch.from_payload(
@@ -394,6 +402,7 @@ class TrainingJobView:
             **model_identity_payload_from_id(self.model),
             "preset": self.preset,
             "presets": self.presets,
+            "experimentTask": self.experiment_task,
             "datasets": self.datasets,
             "overrides": self.overrides,
             "search": self.search.to_api_payload() if self.search else None,
@@ -455,6 +464,7 @@ class CreateTrainingRunPlanCommand:
     datasets: list[str]
     overrides: dict[str, Any]
     log_folder: str
+    experiment_task: str | None = None
     monitors: list[str] = field(default_factory=list)
     search: TrainingSearch | None = None
 

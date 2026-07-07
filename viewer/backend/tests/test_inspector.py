@@ -42,7 +42,7 @@ class InspectorServiceTests(unittest.TestCase):
         result = inspect_model(
             "linears/linear",
             "baseline",
-            {"stack_hidden_dim": "128"},
+            {"hidden_dim": "128"},
         )
         node_by_id = {node["id"]: node for node in result["nodes"]}
         main_layer_details = node_by_id["main_model.layers.0"]["details"]
@@ -62,14 +62,14 @@ class InspectorServiceTests(unittest.TestCase):
 
         self.assert_neuron_graph_dims(
             result,
-            hidden_dim=neuron_config.STACK_HIDDEN_DIM,
+            hidden_dim=neuron_config.HIDDEN_DIM,
         )
 
     def test_neuron_hidden_dim_override_flows_through_graph(self) -> None:
         result = inspect_model(
             "neuron/linear",
             "baseline",
-            {"stack_hidden_dim": "64"},
+            {"hidden_dim": "64"},
         )
 
         self.assert_neuron_graph_dims(result, hidden_dim=64)
@@ -80,7 +80,7 @@ class InspectorServiceTests(unittest.TestCase):
 
         self.assertEqual(
             node_by_id["output_model"]["details"]["dims"],
-            f"{linears_linear_config.STACK_HIDDEN_DIM} -> 100",
+            f"{linears_linear_config.HIDDEN_DIM} -> 100",
         )
 
     def test_inspect_rejects_path_like_dataset_input(self) -> None:
@@ -119,13 +119,13 @@ class InspectorServiceTests(unittest.TestCase):
         self.assertEqual(
             node_by_id["main_model.layers.0.model"]["details"]["weightShape"],
             (
-                f"{linears_linear_config.STACK_HIDDEN_DIM} x "
-                f"{linears_linear_config.STACK_HIDDEN_DIM}"
+                f"{linears_linear_config.HIDDEN_DIM} x "
+                f"{linears_linear_config.HIDDEN_DIM}"
             ),
         )
         self.assertEqual(
             node_by_id["main_model.layers.0.model"]["details"]["biasShape"],
-            str(linears_linear_config.STACK_HIDDEN_DIM),
+            str(linears_linear_config.HIDDEN_DIM),
         )
 
     def test_config_override_aliases_match_builder_parameter_names(self) -> None:
@@ -152,7 +152,7 @@ class InspectorServiceTests(unittest.TestCase):
         parsed = parse_override_mapping(
             linears_linear_config,
             {
-                "stack_hidden_dim": "128",
+                "hidden_dim": "128",
                 "stack_layer_norm_position": "AFTER",
                 "stack_bias_flag": "false",
                 "gate_stack_independent_flag": "true",
@@ -170,7 +170,7 @@ class InspectorServiceTests(unittest.TestCase):
             },
         )
 
-        self.assertEqual(parsed["stack_hidden_dim"], 128)
+        self.assertEqual(parsed["hidden_dim"], 128)
         self.assertIs(parsed["layer_norm_position"], LayerNormPositionOptions.AFTER)
         self.assertFalse(parsed["stack_bias_flag"])
         self.assertTrue(parsed["gate_stack_independent_flag"])
@@ -228,7 +228,7 @@ class InspectorServiceTests(unittest.TestCase):
 
     def test_empty_string_override_still_rejects_non_nullable_fields(self) -> None:
         with self.assertRaises(InspectorError):
-            parse_override_mapping(vit_config, {"stack_hidden_dim": ""})
+            parse_override_mapping(vit_config, {"hidden_dim": ""})
 
     def test_legacy_residual_flag_override_maps_to_connection_option(self) -> None:
         cases = (

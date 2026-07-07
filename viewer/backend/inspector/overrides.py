@@ -16,11 +16,15 @@ from viewer.backend.inspector.errors import InspectorError
 from viewer.backend.inspector.values import serialize_config_value
 
 
-def _supported_config_keys(config_module: Any) -> dict[str, str]:
+def supported_config_keys(config_module: Any) -> dict[str, str]:
     return {
         normalize_key(config_key): config_key
         for config_key in iter_supported_config_keys(config_module)
     }
+
+
+def _supported_config_keys(config_module: Any) -> dict[str, str]:
+    return supported_config_keys(config_module)
 
 
 def resolve_override_key(

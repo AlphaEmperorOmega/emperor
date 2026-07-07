@@ -14,6 +14,7 @@ from models.catalog import MODEL_CATALOG, public_id_for_flat_name
 
 from viewer.backend.inspector.errors import InspectorError
 from viewer.backend.log_run_artifacts import (
+    _read_result_experiment_task,
     _read_result_metrics,
     _safe_artifact_file,
     _safe_artifact_files,
@@ -246,6 +247,9 @@ class LogRunScanner:
             experiment=experiment,
             model=model,
             preset=preset,
+            experimentTask=(
+                _read_result_experiment_task(result_path) if result_path else None
+            ),
             dataset=dataset,
             runName=run_name,
             timestamp=_display_timestamp(run_name),

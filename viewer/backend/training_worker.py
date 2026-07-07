@@ -92,7 +92,18 @@ def _materialized_run_from_row(
 ) -> dict:
     preset_name = str(row.get("preset") or "")
     preset = parts.experiment_preset_enum.get_member(preset_name)
-    dataset_type = resolve_dataset(parts, str(row.get("dataset") or ""))
+    payload_experiment_task = payload.get("experimentTask") or None
+    row_experiment_task = row.get("experimentTask") or None
+    if row_experiment_task and row_experiment_task != payload_experiment_task:
+        raise ValueError(
+            "Submitted run plan contains an experimentTask that does not match "
+            "the training job experimentTask."
+        )
+    dataset_type = resolve_dataset(
+        parts,
+        str(row.get("dataset") or ""),
+        payload_experiment_task,
+    )
     config_overrides = parse_override_mapping(
         parts.config_module,
         row.get("overrides") or {},
@@ -127,24 +138,30 @@ def main() -> None:
         step_interval=VIEWER_PROGRESS_STEP_INTERVAL,
     )
     growth = NeuronClusterGrowthCallback(progress.write_event)
+    experiment_task = payload.get("experimentTask") or None
     try:
-        progress.write_event(
-            {
-                "type": "started",
-                "status": "running",
-                "jobId": payload["id"],
-                **identity,
-                "preset": payload["preset"],
-                "presets": payload.get("presets") or [payload["preset"]],
-                "datasets": payload["datasets"],
-                "monitors": payload.get("monitors") or [],
-            }
-        )
+        started_event = {
+            "type": "started",
+            "status": "running",
+            "jobId": payload["id"],
+            **identity,
+            "preset": payload["preset"],
+            "presets": payload.get("presets") or [payload["preset"]],
+            "datasets": payload["datasets"],
+            "monitors": payload.get("monitors") or [],
+        }
+        if experiment_task is not None:
+            started_event["experimentTask"] = experiment_task
+        progress.write_event(started_event)
         parts = load_model_parts(model_id)
         selected_preset_names, selected_presets = _resolve_payload_presets(
             parts, payload
         )
-        selected_datasets = resolve_datasets(parts, payload["datasets"])
+        selected_datasets = resolve_datasets(
+            parts,
+            payload["datasets"],
+            experiment_task,
+        )
         monitor_callbacks = [
             monitor.build_callback()
             for monitor in resolve_model_monitors(parts, payload.get("monitors") or [])
@@ -184,7 +201,14 @@ def main() -> None:
             else search_mode_from_parsed_search(parsed_search)
         )
         experiment_type = parts.presets_module.Experiment
-        experiment = experiment_type(selected_presets[0])
+        experiment = (
+            experiment_type(selected_presets[0])
+            if experiment_task is None
+            else experiment_type(
+                selected_presets[0],
+                experiment_task=experiment_task,
+            )
+        )
         experiment.train_model(
             search_mode=search_mode,
             log_folder=payload.get("logFolder"),
@@ -199,25 +223,27 @@ def main() -> None:
             callbacks=[progress, growth, *monitor_callbacks],
             materialized_runs=materialized_runs,
         )
-        progress.write_event(
-            {
-                "type": "completed",
-                "status": "completed",
-                "jobId": payload["id"],
-                "preset": selected_preset_names[-1],
-                "presets": selected_preset_names,
-            }
-        )
+        completed_event = {
+            "type": "completed",
+            "status": "completed",
+            "jobId": payload["id"],
+            "preset": selected_preset_names[-1],
+            "presets": selected_preset_names,
+        }
+        if experiment_task is not None:
+            completed_event["experimentTask"] = experiment_task
+        progress.write_event(completed_event)
     except Exception as exc:
-        progress.write_event(
-            {
-                "type": "error",
-                "status": "failed",
-                "jobId": payload.get("id"),
-                "error": str(exc),
-                "traceback": traceback.format_exc(),
-            }
-        )
+        error_event = {
+            "type": "error",
+            "status": "failed",
+            "jobId": payload.get("id"),
+            "error": str(exc),
+            "traceback": traceback.format_exc(),
+        }
+        if experiment_task is not None:
+            error_event["experimentTask"] = experiment_task
+        progress.write_event(error_event)
         traceback.print_exc()
         raise SystemExit(1) from exc
 

@@ -27,6 +27,7 @@ class LogRun:
     eventFileCount: int
     checkpointCount: int
     hasHparams: bool
+    experimentTask: str | None = None
     metrics: dict[str, Any] = field(default_factory=dict)
     path: Path = field(repr=False, compare=False, default=Path())
 
@@ -37,6 +38,7 @@ class LogRun:
             "experiment": self.experiment,
             **model_identity_payload_from_id(self.model),
             "preset": self.preset,
+            "experimentTask": self.experimentTask,
             "dataset": self.dataset,
             "runName": self.runName,
             "timestamp": self.timestamp,

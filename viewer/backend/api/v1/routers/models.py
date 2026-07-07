@@ -67,10 +67,11 @@ async def datasets(
     model: str,
     service: Annotated[ModelCatalogService, Depends(get_model_catalog_service)],
 ) -> DatasetsResponse:
+    dataset_payload = await run_blocking_io(service.list_datasets, modelType, model)
     return DatasetsResponse(
         modelType=modelType,
         model=model,
-        datasets=await run_blocking_io(service.list_datasets, modelType, model),
+        **dataset_payload,
     )
 
 

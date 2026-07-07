@@ -32,6 +32,7 @@ EXPECTED_TRAINING_JOB_RESPONSE_FIELDS = (
     "model",
     "preset",
     "presets",
+    "experimentTask",
     "datasets",
     "overrides",
     "search",
@@ -64,6 +65,7 @@ EXPECTED_TRAINING_RUN_PLAN_RESPONSE_FIELDS = (
     "model",
     "preset",
     "presets",
+    "experimentTask",
     "datasets",
     "overrides",
     "search",
@@ -81,6 +83,7 @@ EXPECTED_TRAINING_RUN_RESPONSE_FIELDS = (
     "snapshotId",
     "snapshotName",
     "dataset",
+    "experimentTask",
     "changes",
     "overrides",
     "command",
@@ -176,7 +179,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
             "logFolder": "api_schema",
         }
         overrides = {
-            "stack_hidden_dim": 128,
+            "hidden_dim": 128,
             "learning_rate": 0.01,
             "use_bias": True,
             "activation": "RELU",
@@ -221,7 +224,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
             "preset": "baseline",
             "presets": ["baseline"],
             "datasets": ["Mnist"],
-            "overrides": {"stack_hidden_dim": 128, "use_bias": True},
+            "overrides": {"hidden_dim": 128, "use_bias": True},
             "search": None,
             "logFolder": "api_schema",
             "isRandomSearch": False,
@@ -244,7 +247,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
 
         self.assertEqual(
             request.overrides,
-            {"stack_hidden_dim": 128, "use_bias": True},
+            {"hidden_dim": 128, "use_bias": True},
         )
         with self.assertRaises(ValidationError):
             SubmittedTrainingRunPlanRequest.model_validate(
@@ -438,7 +441,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                             "search": {
                                 "mode": "grid",
                                 "values": {
-                                    "stack_hidden_dim": [128 for _ in range(51)]
+                                    "hidden_dim": [128 for _ in range(51)]
                                 },
                             },
                         },
@@ -474,7 +477,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                                 "mode": "grid",
                                 "values": {
                                     "learning_rate": [0.0001, 0.001, 0.01],
-                                    "stack_hidden_dim": [16, 32, 64, 128, 256, 512],
+                                    "hidden_dim": [16, 32, 64, 128, 256, 512],
                                     "stack_num_layers": [2, 4, 8, 16, 32],
                                     "stack_dropout_probability": [
                                         0.0,
@@ -523,7 +526,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                             "logFolder": "search_limit",
                             "search": {
                                 "mode": "grid",
-                                "values": {"stack_hidden_dim": [128, 128, 128]},
+                                "values": {"hidden_dim": [128, 128, 128]},
                             },
                         },
                     )
@@ -532,7 +535,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.json()["summary"]["totalRuns"], 1)
-        self.assertEqual(response.json()["search"]["values"]["STACK_HIDDEN_DIM"], [128])
+        self.assertEqual(response.json()["search"]["values"]["HIDDEN_DIM"], [128])
 
     def test_training_random_search_samples_without_rejecting_large_grid(
         self,
@@ -562,7 +565,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                                 "randomSamples": 3,
                                 "values": {
                                     "learning_rate": [0.0001, 0.001, 0.01],
-                                    "stack_hidden_dim": [16, 32, 64, 128, 256, 512],
+                                    "hidden_dim": [16, 32, 64, 128, 256, 512],
                                     "stack_num_layers": [2, 4, 8, 16, 32],
                                     "stack_dropout_probability": [
                                         0.0,
@@ -617,7 +620,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                                 "randomSamples": 1000,
                                 "values": {
                                     "learning_rate": [0.0001, 0.001, 0.01],
-                                    "stack_hidden_dim": [16, 32, 64, 128, 256, 512],
+                                    "hidden_dim": [16, 32, 64, 128, 256, 512],
                                     "stack_num_layers": [2, 4, 8, 16, 32],
                                     "stack_dropout_probability": [
                                         0.0,
@@ -662,7 +665,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
             "preset": "baseline",
             "presets": ["baseline"],
             "datasets": ["Mnist"],
-            "overrides": {"stack_hidden_dim": 128},
+            "overrides": {"hidden_dim": 128},
             "search": None,
             "logFolder": "api_schema",
             "isRandomSearch": False,
@@ -677,7 +680,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
             "preset": "baseline",
             "presets": ["baseline"],
             "datasets": ["Mnist"],
-            "overrides": {"stack_hidden_dim": 128},
+            "overrides": {"hidden_dim": 128},
             "search": None,
             "plannedRunCount": 0,
             "runPlan": run_plan_payload,
@@ -700,11 +703,11 @@ class TrainingApiLifecycleTests(unittest.TestCase):
 
         self.assertEqual(
             TrainingRunPlanResponse.model_validate(run_plan_payload).overrides,
-            {"stack_hidden_dim": 128},
+            {"hidden_dim": 128},
         )
         self.assertEqual(
             TrainingJobResponse.model_validate(job_payload).overrides,
-            {"stack_hidden_dim": 128},
+            {"hidden_dim": 128},
         )
         with self.assertRaises(ValidationError):
             TrainingRunPlanResponse.model_validate(
@@ -811,7 +814,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                             "preset": "baseline",
                             "presets": ["baseline"],
                             "datasets": ["Mnist"],
-                            "overrides": {"stack_hidden_dim": "128"},
+                            "overrides": {"hidden_dim": "128"},
                             "logFolder": "api_schema",
                             "search": None,
                         },
@@ -824,7 +827,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                             "preset": "baseline",
                             "presets": ["baseline"],
                             "datasets": ["Mnist"],
-                            "overrides": {"stack_hidden_dim": "128"},
+                            "overrides": {"hidden_dim": "128"},
                             "logFolder": "api_schema",
                             "monitors": ["linear"],
                             "search": None,
