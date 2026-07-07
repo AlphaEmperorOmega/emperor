@@ -7,6 +7,7 @@ data/
 nul
 torchenv/
 CONTEXT.md
+conventions/
 logs
 !viewer/frontend/src/components/features/viewer/logs/
 !viewer/frontend/src/components/features/viewer/logs/**
