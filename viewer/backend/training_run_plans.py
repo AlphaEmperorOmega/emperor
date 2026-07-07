@@ -5,14 +5,19 @@ import random
 from dataclasses import dataclass
 from typing import Any
 
+from emperor.experiments.tasks import experiment_task_name
 from models.catalog import model_identity_payload_from_id
-from models.config_overrides import config_key_to_model_param, normalize_key
+from models.config_overrides import (
+    config_key_to_model_param,
+    normalize_key,
+)
 
 from viewer.backend.inspector.discovery import (
     dataset_name,
     load_model_parts,
     preset_cli_name,
     resolve_datasets,
+    resolve_model_experiment_task,
 )
 from viewer.backend.inspector.errors import InspectorError
 from viewer.backend.inspector.overrides import (
@@ -56,6 +61,7 @@ def _build_training_command(
     by_key: dict[str, dict[str, Any]],
     model: str,
     preset: str,
+    experiment_task: str,
     dataset: str,
     overrides: dict[str, Any],
     log_folder: str,
@@ -77,6 +83,8 @@ def _build_training_command(
         _shell_quote(identity["model"]),
         "--preset",
         _shell_quote(preset),
+        "--experiment-task",
+        _shell_quote(experiment_task),
         "--datasets",
         _shell_quote(dataset),
     ]
@@ -106,6 +114,8 @@ def _build_training_command(
 @dataclass(frozen=True)
 class SelectedTrainingInputs:
     parts: Any
+    experiment_task: Any
+    experiment_task_name: str
     selected_preset_names: list[str]
     selected_presets: list[Any]
     selected_datasets: list[type]
@@ -125,6 +135,7 @@ class TrainingRunPlanBuilder:
         model: str,
         preset: str,
         presets: list[str] | None,
+        experiment_task: str | None = None,
         datasets: list[str],
         overrides: dict[str, Any],
         search: dict[str, Any] | None,
@@ -133,6 +144,7 @@ class TrainingRunPlanBuilder:
             model=model,
             preset=preset,
             presets=presets,
+            experiment_task=experiment_task,
             datasets=datasets,
             overrides=overrides,
             search=search,
@@ -144,6 +156,7 @@ class TrainingRunPlanBuilder:
         model: str,
         preset: str,
         presets: list[str] | None,
+        experiment_task: str | None = None,
         datasets: list[str],
         overrides: dict[str, Any],
         search: dict[str, Any] | None,
@@ -152,13 +165,18 @@ class TrainingRunPlanBuilder:
             raise InspectorError("Training requires at least one selected dataset.")
 
         parts = load_model_parts(model)
+        selected_experiment_task = resolve_model_experiment_task(
+            parts,
+            experiment_task,
+        )
+        selected_experiment_task_name = experiment_task_name(selected_experiment_task)
         selected_preset_names, selected_presets = self._resolve_presets(
             parts,
             model,
             preset,
             presets,
         )
-        selected_datasets = resolve_datasets(parts, datasets)
+        selected_datasets = resolve_datasets(parts, datasets, selected_experiment_task)
         parsed_searches = self._parse_selected_searches(
             model=model,
             selected_preset_names=selected_preset_names,
@@ -183,6 +201,8 @@ class TrainingRunPlanBuilder:
         )
         return SelectedTrainingInputs(
             parts=parts,
+            experiment_task=selected_experiment_task,
+            experiment_task_name=selected_experiment_task_name,
             selected_preset_names=selected_preset_names,
             selected_presets=selected_presets,
             selected_datasets=selected_datasets,
@@ -342,6 +362,7 @@ class TrainingRunPlanBuilder:
                             model=model,
                             index=row_index,
                             preset=selected_preset,
+                            experiment_task=selected.experiment_task_name,
                             dataset=dataset_display_name,
                             changes=[*fixed_changes, *search_changes],
                             overrides=row_overrides,
@@ -411,6 +432,7 @@ class TrainingRunPlanBuilder:
                     "snapshotName": str(snapshot_name)
                     if snapshot_name is not None
                     else None,
+                    "experimentTask": selected.experiment_task_name,
                     "dataset": dataset,
                     "changes": self._canonical_submitted_changes(
                         model=model,
@@ -422,6 +444,7 @@ class TrainingRunPlanBuilder:
                     "command": self._training_command(
                         model=model,
                         preset=preset,
+                        experiment_task=selected.experiment_task_name,
                         dataset=dataset,
                         overrides=canonical_row_overrides,
                         log_folder=log_folder,
@@ -685,6 +708,7 @@ class TrainingRunPlanBuilder:
         *,
         model: str,
         preset: str,
+        experiment_task: str,
         dataset: str,
         overrides: dict[str, Any],
         log_folder: str,
@@ -696,6 +720,7 @@ class TrainingRunPlanBuilder:
             by_key=by_key,
             model=model,
             preset=preset,
+            experiment_task=experiment_task,
             dataset=dataset,
             overrides=overrides,
             log_folder=log_folder,
@@ -718,6 +743,7 @@ class TrainingRunPlanBuilder:
         model: str,
         index: int,
         preset: str,
+        experiment_task: str,
         dataset: str,
         changes: list[dict[str, Any]],
         overrides: dict[str, Any],
@@ -730,12 +756,14 @@ class TrainingRunPlanBuilder:
             "index": index,
             "status": "Pending",
             "preset": preset,
+            "experimentTask": experiment_task,
             "dataset": dataset,
             "changes": changes,
             "overrides": overrides,
             "command": self._training_command(
                 model=model,
                 preset=preset,
+                experiment_task=experiment_task,
                 dataset=dataset,
                 overrides=overrides,
                 log_folder=log_folder,
@@ -761,6 +789,7 @@ class TrainingRunPlanBuilder:
             **model_identity_payload_from_id(model),
             "preset": selected.selected_preset_names[0],
             "presets": selected.selected_preset_names,
+            "experimentTask": selected.experiment_task_name,
             "datasets": [
                 dataset_name(dataset) for dataset in selected.selected_datasets
             ],

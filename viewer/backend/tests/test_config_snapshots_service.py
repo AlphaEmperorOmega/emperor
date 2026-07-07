@@ -34,7 +34,7 @@ class ConfigSnapshotServiceAdaptiveValidationTests(unittest.TestCase):
             model="linears/linear_adaptive",
             preset="baseline",
             name="wider stack",
-            overrides={"STACK_HIDDEN_DIM": "384"},
+            overrides={"HIDDEN_DIM": "384"},
         )
 
         with self.assertRaisesRegex(
@@ -52,7 +52,7 @@ class ConfigSnapshotServiceAdaptiveValidationTests(unittest.TestCase):
         stored = self.store.get(snapshot["id"])
         self.assertIsNotNone(stored)
         assert stored is not None
-        self.assertEqual(stored.overrides, {"STACK_HIDDEN_DIM": "384"})
+        self.assertEqual(stored.overrides, {"HIDDEN_DIM": "384"})
 
     def test_create_accepts_adaptive_flag_with_matching_option(self) -> None:
         snapshot = self.service.create_snapshot(

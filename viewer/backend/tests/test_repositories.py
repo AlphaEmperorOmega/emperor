@@ -329,13 +329,13 @@ class TrainingJobRepositoryTests(unittest.TestCase):
             self.assertIsInstance(result, expected_result_type)
 
     def test_public_methods_delegate_to_injected_training_job_manager(self) -> None:
-        search = TrainingSearch(mode="grid", values={"stack_hidden_dim": [128]})
+        search = TrainingSearch(mode="grid", values={"hidden_dim": [128]})
         run_plan_payload = {
             "model": "linears/linear",
             "preset": "baseline",
             "presets": ["baseline"],
             "datasets": ["Mnist"],
-            "overrides": {"stack_hidden_dim": "128"},
+            "overrides": {"hidden_dim": "128"},
             "search": search.to_api_payload(),
             "logFolder": "repository_test",
             "isRandomSearch": False,
@@ -372,7 +372,7 @@ class TrainingJobRepositoryTests(unittest.TestCase):
             "preset": "baseline",
             "presets": ["baseline"],
             "datasets": ["Mnist"],
-            "overrides": {"stack_hidden_dim": "128"},
+            "overrides": {"hidden_dim": "128"},
             "search": search.to_api_payload(),
             "plannedRunCount": 1,
             "runPlan": run_plan_payload,
@@ -404,7 +404,7 @@ class TrainingJobRepositoryTests(unittest.TestCase):
             preset="baseline",
             presets=["baseline"],
             datasets=["Mnist"],
-            overrides={"stack_hidden_dim": "128"},
+            overrides={"hidden_dim": "128"},
             log_folder="repository_test",
             search=search,
             monitors=["linear"],
@@ -415,7 +415,7 @@ class TrainingJobRepositoryTests(unittest.TestCase):
             preset="baseline",
             presets=["baseline"],
             datasets=["Mnist"],
-            overrides={"stack_hidden_dim": "128"},
+            overrides={"hidden_dim": "128"},
             log_folder="repository_test",
             monitors=["linear"],
             search=search,
@@ -425,7 +425,7 @@ class TrainingJobRepositoryTests(unittest.TestCase):
             "preset": "baseline",
             "presets": ["baseline"],
             "datasets": ["Mnist"],
-            "overrides": {"stack_hidden_dim": "128"},
+            "overrides": {"hidden_dim": "128"},
             "log_folder": "repository_test",
             "monitors": ["linear"],
             "search": search.to_api_payload(),
@@ -436,7 +436,7 @@ class TrainingJobRepositoryTests(unittest.TestCase):
             "preset": "baseline",
             "presets": ["baseline"],
             "datasets": ["Mnist"],
-            "overrides": {"stack_hidden_dim": "128"},
+            "overrides": {"hidden_dim": "128"},
             "log_folder": "repository_test",
             "monitors": ["linear"],
             "search": search.to_api_payload(),

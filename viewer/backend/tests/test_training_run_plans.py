@@ -36,10 +36,10 @@ class TrainingRunPlanTests(unittest.TestCase):
                 preset="baseline",
                 presets=["baseline", "gating"],
                 datasets=["Mnist"],
-                overrides={"stack_hidden_dim": "999", "stack_num_layers": "4"},
+                overrides={"hidden_dim": "999", "stack_num_layers": "4"},
                 search={
                     "mode": "grid",
-                    "values": {"stack_hidden_dim": [64, 128]},
+                    "values": {"hidden_dim": [64, 128]},
                 },
                 log_folder="grid_search",
             )
@@ -48,7 +48,7 @@ class TrainingRunPlanTests(unittest.TestCase):
 
         self.assertEqual(payload["overrides"], {"STACK_NUM_LAYERS": 4})
         self.assertEqual(payload["search"]["mode"], "grid")
-        self.assertEqual(payload["search"]["values"], {"STACK_HIDDEN_DIM": [64, 128]})
+        self.assertEqual(payload["search"]["values"], {"HIDDEN_DIM": [64, 128]})
         self.assertEqual(payload["plannedRunCount"], 4)
         self.assertEqual(worker_payload["overrides"], {"STACK_NUM_LAYERS": 4})
         self.assertEqual(worker_payload["search"], payload["search"])
@@ -60,7 +60,7 @@ class TrainingRunPlanTests(unittest.TestCase):
             {
                 "mode": "grid",
                 "values": {
-                    "stack_hidden_dim": [64],
+                    "hidden_dim": [64],
                     "stack_activation": ["RELU"],
                     "adaptive_generator_stack_num_layers": [1, 2],
                 },
@@ -72,7 +72,7 @@ class TrainingRunPlanTests(unittest.TestCase):
         self.assertEqual(
             parsed.values,
             {
-                "STACK_HIDDEN_DIM": [64],
+                "HIDDEN_DIM": [64],
                 "STACK_ACTIVATION": ["RELU"],
                 "ADAPTIVE_GENERATOR_STACK_NUM_LAYERS": [1, 2],
             },
@@ -82,13 +82,13 @@ class TrainingRunPlanTests(unittest.TestCase):
             {
                 "mode": "grid",
                 "values": {
-                    "STACK_HIDDEN_DIM": [64],
+                    "HIDDEN_DIM": [64],
                     "STACK_ACTIVATION": ["RELU"],
                     "ADAPTIVE_GENERATOR_STACK_NUM_LAYERS": [1, 2],
                 },
             },
         )
-        self.assertEqual(parsed.search_overrides["stack_hidden_dim"], [64])
+        self.assertEqual(parsed.search_overrides["hidden_dim"], [64])
         self.assertIs(
             parsed.search_overrides["stack_activation"][0],
             ActivationOptions.RELU,
@@ -106,10 +106,10 @@ class TrainingRunPlanTests(unittest.TestCase):
             preset="baseline",
             presets=["baseline", "gating"],
             datasets=["Mnist"],
-            overrides={"stack_hidden_dim": "999", "stack_num_layers": "4"},
+            overrides={"hidden_dim": "999", "stack_num_layers": "4"},
             search={
                 "mode": "grid",
-                "values": {"stack_hidden_dim": [64, 128]},
+                "values": {"hidden_dim": [64, 128]},
             },
             log_folder="",
         )
@@ -120,14 +120,14 @@ class TrainingRunPlanTests(unittest.TestCase):
         self.assertEqual(plan["runs"][0]["preset"], "baseline")
         self.assertEqual(plan["runs"][0]["dataset"], "Mnist")
         self.assertEqual(plan["runs"][0]["status"], "Pending")
-        self.assertEqual(plan["runs"][0]["overrides"]["STACK_HIDDEN_DIM"], 64)
+        self.assertEqual(plan["runs"][0]["overrides"]["HIDDEN_DIM"], 64)
         self.assertEqual(plan["runs"][0]["overrides"]["STACK_NUM_LAYERS"], "4")
         self.assertEqual(
             [change["source"] for change in plan["runs"][0]["changes"]],
             ["override", "search"],
         )
         self.assertIn("--datasets Mnist", plan["runs"][0]["command"])
-        self.assertIn("--stack-hidden-dim 64", plan["runs"][0]["command"])
+        self.assertIn("--hidden-dim 64", plan["runs"][0]["command"])
         self.assertIn("--stack-num-layers 4", plan["runs"][0]["command"])
         self.assertNotIn("--logdir", plan["runs"][0]["command"])
 
@@ -138,7 +138,7 @@ class TrainingRunPlanTests(unittest.TestCase):
             model="linears/linear",
             preset="baseline",
             datasets=["Mnist"],
-            overrides={"stack_hidden_dim": "128"},
+            overrides={"hidden_dim": "128"},
             log_folder="monitor_plan",
             monitors=["linear"],
         )
@@ -146,8 +146,8 @@ class TrainingRunPlanTests(unittest.TestCase):
         self.assertEqual(
             plan["runs"][0]["command"],
             "source experiment.sh --model-type linears --model linear "
-            "--preset baseline --datasets Mnist --logdir monitor_plan "
-            "--monitors linear --config --stack-hidden-dim 128",
+            "--preset baseline --experiment-task image-classification --datasets Mnist --logdir monitor_plan "
+            "--monitors linear --config --hidden-dim 128",
         )
 
     def test_training_run_plan_rejects_path_like_dataset_input(self) -> None:
@@ -178,14 +178,14 @@ class TrainingRunPlanTests(unittest.TestCase):
             presets=["baseline", "gating"],
             datasets=["Mnist", "Cifar10"],
             overrides={
-                "stack_hidden_dim": "999",
+                "hidden_dim": "999",
                 "stack_activation": "TANH",
                 "stack_num_layers": "4",
             },
             search={
                 "mode": "grid",
                 "values": {
-                    "stack_hidden_dim": [64, 128],
+                    "hidden_dim": [64, 128],
                     "stack_activation": ["RELU", "GELU"],
                 },
             },
@@ -201,7 +201,7 @@ class TrainingRunPlanTests(unittest.TestCase):
             {
                 "mode": "grid",
                 "values": {
-                    "STACK_HIDDEN_DIM": [64, 128],
+                    "HIDDEN_DIM": [64, 128],
                     "STACK_ACTIVATION": ["RELU", "GELU"],
                 },
             },
@@ -228,7 +228,7 @@ class TrainingRunPlanTests(unittest.TestCase):
                 (
                     run["preset"],
                     run["dataset"],
-                    run["overrides"]["STACK_HIDDEN_DIM"],
+                    run["overrides"]["HIDDEN_DIM"],
                     run["overrides"]["STACK_ACTIVATION"],
                 )
                 for run in plan["runs"]
@@ -267,6 +267,7 @@ class TrainingRunPlanTests(unittest.TestCase):
                 "index",
                 "status",
                 "preset",
+                "experimentTask",
                 "dataset",
                 "changes",
                 "overrides",
@@ -296,8 +297,8 @@ class TrainingRunPlanTests(unittest.TestCase):
                     "source": "override",
                 },
                 {
-                    "key": "STACK_HIDDEN_DIM",
-                    "label": "stack hidden dim",
+                    "key": "HIDDEN_DIM",
+                    "label": "hidden dim",
                     "value": 64,
                     "source": "search",
                 },
@@ -312,15 +313,15 @@ class TrainingRunPlanTests(unittest.TestCase):
         self.assertEqual(
             plan["runs"][0]["command"],
             "source experiment.sh --model-type linears --model linear "
-            "--preset baseline --datasets Mnist "
-            "--logdir grid_plan --config --stack-hidden-dim 64 "
+            "--preset baseline --experiment-task image-classification --datasets Mnist "
+            "--logdir grid_plan --config --hidden-dim 64 "
             "--stack-num-layers 4 --stack-activation RELU",
         )
         self.assertEqual(
             plan["runs"][-1]["command"],
             "source experiment.sh --model-type linears --model linear "
-            "--preset gating --datasets Cifar10 "
-            "--logdir grid_plan --config --stack-hidden-dim 128 "
+            "--preset gating --experiment-task image-classification --datasets Cifar10 "
+            "--logdir grid_plan --config --hidden-dim 128 "
             "--stack-num-layers 4 --stack-activation GELU",
         )
 
@@ -337,7 +338,7 @@ class TrainingRunPlanTests(unittest.TestCase):
             search={
                 "mode": "grid",
                 "values": {
-                    "stack_hidden_dim": [64],
+                    "hidden_dim": [64],
                     "stack_activation": ["RELU"],
                     "adaptive_generator_stack_num_layers": [1, 2],
                 },
@@ -350,7 +351,7 @@ class TrainingRunPlanTests(unittest.TestCase):
             {
                 "mode": "grid",
                 "values": {
-                    "STACK_HIDDEN_DIM": [64],
+                    "HIDDEN_DIM": [64],
                     "STACK_ACTIVATION": ["RELU"],
                     "ADAPTIVE_GENERATOR_STACK_NUM_LAYERS": [1, 2],
                 },
@@ -372,13 +373,13 @@ class TrainingRunPlanTests(unittest.TestCase):
             with self.subTest(num_layers=num_layers):
                 changes_by_key = {change["key"]: change for change in run["changes"]}
 
-                self.assertEqual(run["overrides"]["STACK_HIDDEN_DIM"], 64)
+                self.assertEqual(run["overrides"]["HIDDEN_DIM"], 64)
                 self.assertEqual(run["overrides"]["STACK_ACTIVATION"], "RELU")
                 self.assertEqual(
                     run["overrides"]["ADAPTIVE_GENERATOR_STACK_NUM_LAYERS"],
                     num_layers,
                 )
-                self.assertEqual(changes_by_key["STACK_HIDDEN_DIM"]["value"], 64)
+                self.assertEqual(changes_by_key["HIDDEN_DIM"]["value"], 64)
                 self.assertEqual(changes_by_key["STACK_ACTIVATION"]["value"], "RELU")
                 self.assertEqual(
                     changes_by_key["ADAPTIVE_GENERATOR_STACK_NUM_LAYERS"]["value"],
@@ -387,7 +388,7 @@ class TrainingRunPlanTests(unittest.TestCase):
                 self.assertTrue(
                     all(change["source"] == "search" for change in run["changes"])
                 )
-                self.assertIn("--stack-hidden-dim 64", run["command"])
+                self.assertIn("--hidden-dim 64", run["command"])
                 self.assertIn("--stack-activation RELU", run["command"])
                 self.assertIn(
                     f"--adaptive-generator-stack-num-layers {num_layers}",
@@ -410,7 +411,7 @@ class TrainingRunPlanTests(unittest.TestCase):
                 search={
                     "mode": "random",
                     "values": {
-                        "stack_hidden_dim": [64, 128],
+                        "hidden_dim": [64, 128],
                         "stack_activation": ["RELU", "GELU"],
                     },
                     "randomSamples": 3,
@@ -433,7 +434,7 @@ class TrainingRunPlanTests(unittest.TestCase):
             search={
                 "mode": "random",
                 "values": {
-                    "stack_hidden_dim": [64, 128],
+                    "hidden_dim": [64, 128],
                     "stack_activation": ["RELU", "GELU"],
                 },
                 "randomSamples": 3,
@@ -506,14 +507,14 @@ class TrainingRunPlanTests(unittest.TestCase):
                 presets=["baseline", "gating"],
                 datasets=["Mnist", "Cifar10"],
                 overrides={
-                    "stack_hidden_dim": "999",
+                    "hidden_dim": "999",
                     "stack_activation": "TANH",
                     "stack_num_layers": "4",
                 },
                 search={
                     "mode": "random",
                     "values": {
-                        "stack_hidden_dim": [64, 128],
+                        "hidden_dim": [64, 128],
                         "stack_activation": ["RELU", "GELU"],
                     },
                     "randomSamples": 3,
@@ -526,7 +527,7 @@ class TrainingRunPlanTests(unittest.TestCase):
         expected_search = {
             "mode": "random",
             "values": {
-                "STACK_HIDDEN_DIM": [64, 128],
+                "HIDDEN_DIM": [64, 128],
                 "STACK_ACTIVATION": ["RELU", "GELU"],
             },
             "randomSamples": 3,
@@ -575,7 +576,7 @@ class TrainingRunPlanTests(unittest.TestCase):
                 (
                     run["preset"],
                     run["dataset"],
-                    run["overrides"]["STACK_HIDDEN_DIM"],
+                    run["overrides"]["HIDDEN_DIM"],
                     run["overrides"]["STACK_ACTIVATION"],
                 )
                 for run in plan["runs"]
@@ -605,8 +606,8 @@ class TrainingRunPlanTests(unittest.TestCase):
                     "source": "override",
                 },
                 {
-                    "key": "STACK_HIDDEN_DIM",
-                    "label": "stack hidden dim",
+                    "key": "HIDDEN_DIM",
+                    "label": "hidden dim",
                     "value": 128,
                     "source": "search",
                 },
@@ -621,15 +622,15 @@ class TrainingRunPlanTests(unittest.TestCase):
         self.assertEqual(
             plan["runs"][0]["command"],
             "source experiment.sh --model-type linears --model linear "
-            "--preset baseline --datasets Mnist "
-            "--logdir random_plan --config --stack-hidden-dim 128 "
+            "--preset baseline --experiment-task image-classification --datasets Mnist "
+            "--logdir random_plan --config --hidden-dim 128 "
             "--stack-num-layers 4 --stack-activation RELU",
         )
         self.assertEqual(
             plan["runs"][-1]["command"],
             "source experiment.sh --model-type linears --model linear "
-            "--preset gating --datasets Cifar10 "
-            "--logdir random_plan --config --stack-hidden-dim 128 "
+            "--preset gating --experiment-task image-classification --datasets Cifar10 "
+            "--logdir random_plan --config --hidden-dim 128 "
             "--stack-num-layers 4 --stack-activation RELU",
         )
 
@@ -645,7 +646,7 @@ class TrainingRunPlanTests(unittest.TestCase):
                 preset="baseline",
                 presets=["baseline", "gating"],
                 datasets=["Mnist"],
-                overrides={"stack_hidden_dim": "128"},
+                overrides={"hidden_dim": "128"},
                 log_folder="draft_plan",
             )
             self.assertEqual(len(plan["runs"]), 2)
@@ -671,7 +672,7 @@ class TrainingRunPlanTests(unittest.TestCase):
                 preset="baseline",
                 presets=["baseline", "gating"],
                 datasets=["Mnist"],
-                overrides={"stack_hidden_dim": "128"},
+                overrides={"hidden_dim": "128"},
                 log_folder="submitted_plan",
                 monitors=["linear"],
                 run_plan=plan,
@@ -703,13 +704,13 @@ class TrainingRunPlanTests(unittest.TestCase):
             [
                 "source experiment.sh --model-type linears --model linear "
                 "--preset baseline "
-                "--datasets Mnist "
+                "--experiment-task image-classification --datasets Mnist "
                 "--logdir submitted_plan --monitors linear "
-                "--config --stack-hidden-dim 128",
+                "--config --hidden-dim 128",
                 "source experiment.sh --model-type linears --model linear "
-                "--preset gating --datasets Mnist "
+                "--preset gating --experiment-task image-classification --datasets Mnist "
                 "--logdir submitted_plan --monitors linear "
-                "--config --stack-hidden-dim 128",
+                "--config --hidden-dim 128",
             ],
         )
         for run in normalized_plan["runs"]:

@@ -41,6 +41,7 @@ async def inspect(
             model=request.model,
             preset=request.preset,
             overrides=request.overrides,
+            experiment_task=request.experimentTask,
             dataset=request.dataset,
             log_run_id=request.logRunId,
             limiter=named_blocking_work_limiter(

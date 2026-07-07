@@ -31,6 +31,7 @@ class LogRunResponse(ApiResponseModel):
     modelType: str
     model: str
     preset: str
+    experimentTask: str | None = None
     dataset: str
     runName: str
     timestamp: str | None = None

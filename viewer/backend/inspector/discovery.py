@@ -8,6 +8,12 @@ from types import ModuleType
 from typing import Any
 
 from emperor.experiments.monitors import MonitorOption
+from emperor.experiments.tasks import (
+    ExperimentTask,
+    experiment_task_label,
+    experiment_task_name,
+    resolve_experiment_task,
+)
 from models.catalog import (
     discover_model_ids,
     is_safe_model_id,
@@ -19,6 +25,7 @@ from models.dataset_naming import (
     dataset_name,
     normalize_dataset_name,
 )
+from models.model_metadata import ModelMetadata, load_model_metadata
 from torch.nn import Module
 
 from viewer.backend.inspector.errors import InspectorError
@@ -34,14 +41,18 @@ def _is_path_like_dataset_input(dataset: str) -> bool:
 @dataclass(frozen=True)
 class ModelParts:
     name: str
+    metadata: ModelMetadata
     config_module: ModuleType
+    dataset_options_module: ModuleType
+    monitor_options_module: ModuleType
+    search_space_module: ModuleType
     presets_module: ModuleType
     model_module: ModuleType
     experiment_preset_enum: type[Enum]
     presets: Any
     model_type: type[Module]
-    dataset_options: list[type]
-    dataset: type
+    default_experiment_task: ExperimentTask
+    dataset_options_by_task: dict[ExperimentTask, list[type]]
 
 
 def discover_models() -> list[str]:
@@ -61,7 +72,8 @@ def load_model_parts(model_name: str) -> ModelParts:
     if module_path is None:
         raise InspectorError(f"Unknown model: {model_name}")
     try:
-        config_module = importlib.import_module(f"{module_path}.config")
+        metadata = load_model_metadata(model_name)
+        config_module = metadata.config_module
         presets_module = importlib.import_module(f"{module_path}.presets")
         model_module = importlib.import_module(f"{module_path}.model")
     except Exception as exc:
@@ -79,22 +91,27 @@ def load_model_parts(model_name: str) -> ModelParts:
             "ExperimentPresets, or Model."
         ) from exc
 
-    dataset_options = getattr(config_module, "DATASET_OPTIONS", None)
-    if not dataset_options:
+    dataset_options_by_task = metadata.dataset_options_by_task
+    if not dataset_options_by_task:
         raise InspectorError(
-            f"Model package '{model_name}' does not define DATASET_OPTIONS."
+            f"Model package '{model_name}' does not define DATASET_OPTIONS_BY_TASK."
         )
+    default_experiment_task = metadata.default_experiment_task
 
     return ModelParts(
         name=model_name,
+        metadata=metadata,
         config_module=config_module,
+        dataset_options_module=metadata.dataset_options_module,
+        monitor_options_module=metadata.monitor_options_module,
+        search_space_module=metadata.search_space_module,
         presets_module=presets_module,
         model_module=model_module,
         experiment_preset_enum=experiment_preset_enum,
         presets=presets,
         model_type=model_type,
-        dataset_options=list(dataset_options),
-        dataset=dataset_options[0],
+        default_experiment_task=default_experiment_task,
+        dataset_options_by_task=dataset_options_by_task,
     )
 
 
@@ -115,11 +132,53 @@ def preset_description(preset: Enum, presets: Any | None = None) -> str:
     return preset.value if isinstance(preset.value, str) else ""
 
 
-def resolve_dataset(parts: ModelParts, dataset: str | None) -> type:
+def resolve_model_experiment_task(
+    parts: ModelParts,
+    experiment_task: str | ExperimentTask | None,
+) -> ExperimentTask:
+    if experiment_task is None:
+        return parts.default_experiment_task
+    try:
+        task = resolve_experiment_task(experiment_task)
+    except ValueError as exc:
+        valid = ", ".join(
+            experiment_task_name(candidate) for candidate in parts.dataset_options_by_task
+        )
+        raise InspectorError(
+            f"Unknown experiment task '{experiment_task}' for model '{parts.name}'. "
+            f"Valid tasks: {valid}."
+        ) from exc
+    if task not in parts.dataset_options_by_task:
+        valid = ", ".join(
+            experiment_task_name(candidate) for candidate in parts.dataset_options_by_task
+        )
+        raise InspectorError(
+            f"Unknown experiment task '{experiment_task}' for model '{parts.name}'. "
+            f"Valid tasks: {valid}."
+        )
+    return task
+
+
+def dataset_options_for_task(
+    parts: ModelParts,
+    experiment_task: str | ExperimentTask | None,
+) -> list[type]:
+    if not hasattr(parts, "dataset_options_by_task"):
+        return list(getattr(parts, "dataset_options", []) or [])
+    task = resolve_model_experiment_task(parts, experiment_task)
+    return list(parts.dataset_options_by_task[task])
+
+
+def resolve_dataset(
+    parts: ModelParts,
+    dataset: str | None,
+    experiment_task: str | ExperimentTask | None = None,
+) -> type:
+    dataset_options = dataset_options_for_task(parts, experiment_task)
     if dataset is None:
-        return parts.dataset
+        return dataset_options[0]
     normalized = normalize_dataset_name(dataset)
-    for dataset_type in parts.dataset_options:
+    for dataset_type in dataset_options:
         names = {
             dataset_name(dataset_type),
             dataset_name(dataset_type).lower(),
@@ -128,13 +187,13 @@ def resolve_dataset(parts: ModelParts, dataset: str | None) -> type:
         if dataset in names or dataset.lower() in names:
             return dataset_type
     if _is_path_like_dataset_input(dataset):
-        valid = ", ".join(dataset_name(item) for item in parts.dataset_options)
+        valid = ", ".join(dataset_name(item) for item in dataset_options)
         raise InspectorError(
             f"Dataset input '{dataset}' for model '{parts.name}' looks like a "
             "filesystem path. Use a server-known dataset name instead. "
             f"Valid datasets: {valid}."
         )
-    for dataset_type in parts.dataset_options:
+    for dataset_type in dataset_options:
         names = {
             dataset_name(dataset_type),
             dataset_name(dataset_type).lower(),
@@ -142,17 +201,23 @@ def resolve_dataset(parts: ModelParts, dataset: str | None) -> type:
         }
         if normalized in names:
             return dataset_type
-    valid = ", ".join(dataset_name(item) for item in parts.dataset_options)
+    valid = ", ".join(dataset_name(item) for item in dataset_options)
     raise InspectorError(
         f"Unknown dataset '{dataset}' for model '{parts.name}'. "
         f"Valid datasets: {valid}."
     )
 
 
-def resolve_datasets(parts: ModelParts, datasets: list[str] | None) -> list[type]:
+def resolve_datasets(
+    parts: ModelParts,
+    datasets: list[str] | None,
+    experiment_task: str | ExperimentTask | None = None,
+) -> list[type]:
     if not datasets:
-        return [parts.dataset]
-    resolved = [resolve_dataset(parts, dataset) for dataset in datasets]
+        return [resolve_dataset(parts, None, experiment_task)]
+    resolved = [
+        resolve_dataset(parts, dataset, experiment_task) for dataset in datasets
+    ]
     seen = set()
     unique = []
     for dataset in resolved:
@@ -174,7 +239,12 @@ def serialize_dataset(dataset: type) -> dict[str, Any]:
 
 
 def model_monitor_options(parts: ModelParts) -> list[MonitorOption]:
-    raw_options = getattr(parts.config_module, "MONITOR_OPTIONS", [])
+    monitor_options_module = getattr(
+        parts,
+        "monitor_options_module",
+        parts.config_module,
+    )
+    raw_options = getattr(monitor_options_module, "MONITOR_OPTIONS", [])
     if raw_options is None:
         return []
     options = list(raw_options)
@@ -233,9 +303,26 @@ def resolve_model_monitors(
     return selected
 
 
-def list_model_datasets(model_name: str) -> list[dict[str, Any]]:
+def serialize_dataset_group(
+    task: ExperimentTask,
+    datasets: list[type],
+) -> dict[str, Any]:
+    return {
+        "experimentTask": experiment_task_name(task),
+        "label": experiment_task_label(task),
+        "datasets": [serialize_dataset(dataset) for dataset in datasets],
+    }
+
+
+def list_model_datasets(model_name: str) -> dict[str, Any]:
     parts = load_model_parts(model_name)
-    return [serialize_dataset(dataset) for dataset in parts.dataset_options]
+    return {
+        "defaultExperimentTask": experiment_task_name(parts.default_experiment_task),
+        "datasetGroups": [
+            serialize_dataset_group(task, datasets)
+            for task, datasets in parts.dataset_options_by_task.items()
+        ],
+    }
 
 
 def list_model_presets(model_name: str) -> list[dict[str, str]]:

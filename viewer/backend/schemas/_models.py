@@ -35,10 +35,17 @@ class DatasetResponse(ApiResponseModel):
     outputDim: int
 
 
+class DatasetGroupResponse(ApiResponseModel):
+    experimentTask: str
+    label: str
+    datasets: list[DatasetResponse]
+
+
 class DatasetsResponse(ApiResponseModel):
     modelType: str
     model: str
-    datasets: list[DatasetResponse]
+    defaultExperimentTask: str
+    datasetGroups: list[DatasetGroupResponse]
 
 
 class MonitorOptionResponse(ApiResponseModel):
@@ -61,6 +68,7 @@ class ConfigFieldResponse(ApiResponseModel):
     flag: str
     label: str
     section: str
+    sectionPath: list[str] = Field(min_length=1)
     description: str = ""
     type: str
     default: ConfigValue

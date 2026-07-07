@@ -401,7 +401,7 @@ class InspectorGraphTests(unittest.TestCase):
                 ],
             )
             (run_dir / "result.json").write_text(
-                json.dumps({"params": {"stack_hidden_dim": 12}}),
+                json.dumps({"params": {"hidden_dim": 12}}),
                 encoding="utf-8",
             )
             run = LogRunIndex(logs_root=logs_root).list_runs()[0]
@@ -427,7 +427,7 @@ class InspectorGraphTests(unittest.TestCase):
             expected_result = inspect_model(
                 "linears/linear",
                 "baseline",
-                {"stack_hidden_dim": 12},
+                {"hidden_dim": 12},
                 dataset="Mnist",
             )
 
@@ -463,7 +463,7 @@ class InspectorGraphTests(unittest.TestCase):
                         "params": {
                             "input_dim": 20,
                             "output_dim": 9,
-                            "stack_hidden_dim": 12,
+                            "hidden_dim": 12,
                             "stack_num_layers": 4,
                         },
                         "metrics": {},
@@ -523,7 +523,7 @@ class InspectorGraphTests(unittest.TestCase):
                 {
                     "input_dim": 14,
                     "output_dim": 6,
-                    "stack_hidden_dim": 32,
+                    "hidden_dim": 32,
                     "stack_num_layers": 3,
                 },
                 dataset="Mnist",
@@ -534,7 +534,7 @@ class InspectorGraphTests(unittest.TestCase):
                 {
                     "input_dim": 20,
                     "output_dim": 9,
-                    "stack_hidden_dim": 12,
+                    "hidden_dim": 12,
                     "stack_num_layers": 4,
                 },
                 dataset="Mnist",
@@ -602,7 +602,7 @@ class InspectorGraphTests(unittest.TestCase):
             {
                 "input_dim": 8,
                 "output_dim": 4,
-                "stack_hidden_dim": 16,
+                "hidden_dim": 16,
                 "stack_num_layers": 2,
             },
         )
@@ -1031,7 +1031,7 @@ class InspectorGraphTests(unittest.TestCase):
                 model="linear",
                 preset="baseline",
                 dataset="Mnist",
-                overrides={"stack_hidden_dim": 32, "stack_num_layers": 1},
+                overrides={"hidden_dim": 32, "stack_num_layers": 1},
                 log_run_id=run.id,
             )
 
@@ -1066,7 +1066,7 @@ class InspectorGraphTests(unittest.TestCase):
                 json.dumps(
                     {
                         "params": {
-                            "stack_hidden_dim": 32,
+                            "hidden_dim": 32,
                             "stack_num_layers": 1,
                             "submodule_stack_hidden_dim": 256,
                         }
@@ -1188,7 +1188,7 @@ class InspectorGraphTests(unittest.TestCase):
                         "params": {
                             "input_dim": 3072,
                             "output_dim": 10,
-                            "stack_hidden_dim": 12,
+                            "hidden_dim": 12,
                             "gather_frequency_flag": False,
                         }
                     }
@@ -1214,7 +1214,7 @@ class InspectorGraphTests(unittest.TestCase):
                 {
                     "input_dim": 3072,
                     "output_dim": 10,
-                    "stack_hidden_dim": 12,
+                    "hidden_dim": 12,
                 },
                 dataset="Cifar10",
             )
@@ -1245,7 +1245,7 @@ class InspectorGraphTests(unittest.TestCase):
                         "params": {
                             "input_dim": 3072,
                             "output_dim": 10,
-                            "stack_hidden_dim": 12,
+                            "hidden_dim": 12,
                         }
                     }
                 ),
@@ -1276,7 +1276,7 @@ class InspectorGraphTests(unittest.TestCase):
                 {
                     "input_dim": 3072,
                     "output_dim": 10,
-                    "stack_hidden_dim": 12,
+                    "hidden_dim": 12,
                 },
                 dataset="Cifar10",
             )

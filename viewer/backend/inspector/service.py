@@ -46,6 +46,7 @@ def build_config(
     model_name: str,
     preset_name: str,
     dataset_name: str | None = None,
+    experiment_task: str | None = None,
     config_overrides: dict[str, Any] | None = None,
 ):
     parts = load_model_parts(model_name)
@@ -54,6 +55,7 @@ def build_config(
         model_name,
         preset_name,
         dataset_name=dataset_name,
+        experiment_task=experiment_task,
         config_overrides=config_overrides,
     )
     return parts, preset, cfg
@@ -65,6 +67,7 @@ def _build_config_from_parts(
     preset_name: str,
     *,
     dataset_name: str | None = None,
+    experiment_task: str | None = None,
     config_overrides: dict[str, Any] | None = None,
 ) -> tuple[Any, Any, type]:
     try:
@@ -75,7 +78,7 @@ def _build_config_from_parts(
         ) from exc
 
     try:
-        dataset = resolve_dataset(parts, dataset_name)
+        dataset = resolve_dataset(parts, dataset_name, experiment_task)
         configs = parts.presets.get_config(
             preset,
             dataset,
@@ -98,6 +101,7 @@ def build_inspection_target(
     preset_name: str,
     overrides: Mapping[str, Any] | None = None,
     dataset: str | None = None,
+    experiment_task: str | None = None,
     *,
     parsed_overrides: dict[str, Any] | None = None,
 ) -> InspectionTarget:
@@ -113,6 +117,7 @@ def build_inspection_target(
         model_name,
         preset_name,
         dataset_name=dataset,
+        experiment_task=experiment_task,
         config_overrides=config_overrides,
     )
 
@@ -137,6 +142,7 @@ def inspect_model(
     preset_name: str,
     overrides: Mapping[str, Any] | None = None,
     dataset: str | None = None,
+    experiment_task: str | None = None,
     *,
     parsed_overrides: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -145,6 +151,7 @@ def inspect_model(
         preset_name,
         overrides,
         dataset=dataset,
+        experiment_task=experiment_task,
         parsed_overrides=parsed_overrides,
     )
     nodes, edges = serialize_graph(target.model)

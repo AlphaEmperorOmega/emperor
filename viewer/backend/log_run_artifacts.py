@@ -39,6 +39,11 @@ def _read_result_metrics(result_path: Path) -> dict[str, Any]:
     return _read_result_object(result_path, "metrics")
 
 
+def _read_result_experiment_task(result_path: Path) -> str | None:
+    value = _read_result_payload(result_path).get("experimentTask")
+    return value if isinstance(value, str) and value else None
+
+
 def _read_result_params(result_path: Path) -> dict[str, Any]:
     return _read_result_object(result_path, "params")
 
@@ -179,6 +184,7 @@ __all__ = [
     "_file_modified_at",
     "_parse_checkpoint_epoch",
     "_parse_checkpoint_step",
+    "_read_result_experiment_task",
     "_read_hparams_flat",
     "_read_result_metrics",
     "_read_result_params",

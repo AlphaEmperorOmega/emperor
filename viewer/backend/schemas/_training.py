@@ -25,6 +25,7 @@ class TrainingJobCreateRequest(ApiResponseModel):
     model: str
     preset: str
     presets: list[str] | None = None
+    experimentTask: str | None = None
     datasets: list[str] = Field(
         default_factory=list,
         max_length=MAX_TRAINING_DATASETS,
@@ -44,6 +45,7 @@ class TrainingRunPlanCreateRequest(ApiResponseModel):
     model: str
     preset: str
     presets: list[str] | None = None
+    experimentTask: str | None = None
     datasets: list[str] = Field(
         default_factory=list,
         max_length=MAX_TRAINING_DATASETS,
@@ -102,6 +104,7 @@ class TrainingRunResponse(ApiResponseModel):
     snapshotId: str | None = None
     snapshotName: str | None = None
     dataset: str
+    experimentTask: str = ""
     changes: list[TrainingRunChangeResponse] = Field(default_factory=list)
     overrides: ConfigOverrides = Field(default_factory=dict)
     command: str
@@ -128,6 +131,7 @@ class SubmittedTrainingRunRequest(ApiResponseModel):
     snapshotId: str | None = None
     snapshotName: str | None = None
     dataset: str
+    experimentTask: str = ""
     changes: list[SubmittedTrainingRunChangeRequest] = Field(default_factory=list)
     overrides: ConfigOverrides = Field(default_factory=dict)
     command: str
@@ -170,6 +174,7 @@ class TrainingRunPlanResponse(ApiResponseModel):
     model: str
     preset: str
     presets: list[str] = Field(default_factory=list)
+    experimentTask: str = ""
     datasets: list[str] = Field(default_factory=list)
     overrides: ConfigOverrides = Field(default_factory=dict)
     search: TrainingSearchResponse | None = None
@@ -184,6 +189,7 @@ class SubmittedTrainingRunPlanRequest(ApiResponseModel):
     model: str
     preset: str
     presets: list[str] = Field(default_factory=list)
+    experimentTask: str = ""
     datasets: list[str] = Field(
         default_factory=list,
         max_length=MAX_TRAINING_DATASETS,
@@ -232,6 +238,7 @@ class TrainingProgressEventBaseResponse(ApiResponseModel):
     status: TrainingProgressStatus | None = None
     jobId: str | None = None
     dataset: str | None = None
+    experimentTask: str | None = None
     preset: str | None = None
     presetKey: str | None = None
     logDir: str | None = None
@@ -362,6 +369,7 @@ class TrainingJobResponse(ApiResponseModel):
     model: str
     preset: str
     presets: list[str] = Field(default_factory=list)
+    experimentTask: str = ""
     datasets: list[str]
     overrides: ConfigOverrides
     search: TrainingSearchResponse | None = None

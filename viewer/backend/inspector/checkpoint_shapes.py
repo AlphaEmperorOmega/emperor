@@ -210,9 +210,9 @@ def _config_overrides(
         layer_shapes=layer_shapes,
     )
     if hidden_candidates and len(set(hidden_candidates)) == 1:
-        overrides["stack_hidden_dim"] = hidden_candidates[0]
+        overrides["hidden_dim"] = hidden_candidates[0]
     elif len(set(hidden_candidates)) > 1:
-        diagnostics.append("stack_hidden_dim:conflictingShapes")
+        diagnostics.append("hidden_dim:conflictingShapes")
 
     layer_count = _stack_layer_count_from_patterns(
         tensor_shapes,

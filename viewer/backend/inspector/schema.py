@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import ast
+import importlib.util
 import inspect
+import re
 from enum import Enum
 from pathlib import Path
 from types import ModuleType, NoneType, UnionType
@@ -20,10 +22,6 @@ from viewer.backend.inspector.field_descriptions import config_field_description
 from viewer.backend.inspector.values import serialize_config_value
 
 DEFAULT_SECTION = "General"
-PREFIX_SECTIONS = {
-    "CALLBACK_": "Callback",
-    "TRAINER_": "Trainer",
-}
 PRIMITIVE_ANNOTATION_KINDS = {
     bool: "bool",
     int: "int",
@@ -48,11 +46,11 @@ def _assignment_key(node: ast.AST) -> str | None:
     return None
 
 
-def _section_title(comment: str) -> str | None:
-    title = comment.strip()
+def _section_title(title: str) -> str | None:
+    title = title.strip()
     if not title or set(title) <= {"#", "-", "=", "_", "*"}:
         return None
-    if "=" in title or "`" in title or title.endswith("."):
+    if "=" in title or "`" in title or ":" in title or title.endswith("."):
         return None
     if title.lower().startswith(("if ", "these ", "this ", "when ", "for ")):
         return None
@@ -79,21 +77,204 @@ def _section_title(comment: str) -> str | None:
     return None
 
 
+HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
+
+
+def _markdown_heading(line: str) -> tuple[int, str] | None:
+    match = HEADING_RE.match(line.strip())
+    if match is None:
+        return None
+    title = _section_title(match.group(2))
+    if title is None:
+        return None
+    return len(match.group(1)), title
+
+
+def _absolute_import_module_name(
+    node: ast.ImportFrom,
+    current_module_name: str,
+) -> str | None:
+    if node.level == 0:
+        return node.module
+    package_parts = current_module_name.split(".")[:-node.level]
+    if node.module:
+        package_parts.extend(node.module.split("."))
+    return ".".join(package_parts) if package_parts else None
+
+
+def _star_import_module_names(
+    tree: ast.Module,
+    current_module_name: str,
+    *,
+    include_search_space: bool,
+) -> list[tuple[int, str]]:
+    module_names = []
+    for node in tree.body:
+        if not isinstance(node, ast.ImportFrom):
+            continue
+        if not any(alias.name == "*" for alias in node.names):
+            continue
+        module_name = _absolute_import_module_name(node, current_module_name)
+        if not module_name:
+            continue
+        if include_search_space:
+            if module_name.endswith(".search_space"):
+                module_names.append((node.lineno, module_name))
+            continue
+        if module_name.endswith(
+            (".dataset_options", ".monitor_options", ".search_space")
+        ):
+            continue
+        module_names.append((node.lineno, module_name))
+    return module_names
+
+
+def _explicit_uppercase_imports(
+    tree: ast.Module,
+    current_module_name: str,
+) -> list[tuple[int, str, list[str]]]:
+    imports = []
+    for node in tree.body:
+        if not isinstance(node, ast.ImportFrom):
+            continue
+        imported_names = []
+        for alias in node.names:
+            if alias.name == "*" or not alias.name.isupper():
+                continue
+            if alias.asname is not None:
+                raise InspectorError(
+                    "Config fields imported with uppercase names cannot use "
+                    f"`as` aliases: {current_module_name}:{node.lineno} imports "
+                    f"{alias.name} as {alias.asname}."
+                )
+            imported_names.append(alias.name)
+        if not imported_names:
+            continue
+        module_name = _absolute_import_module_name(node, current_module_name)
+        if module_name:
+            imports.append((node.lineno, module_name, imported_names))
+    return imports
+
+
+def _config_module_alias_imports(
+    tree: ast.Module,
+    current_module_name: str,
+) -> list[tuple[int, str]]:
+    module_names = []
+    for node in tree.body:
+        if not isinstance(node, ast.Import):
+            continue
+        for alias in node.names:
+            if alias.asname is None:
+                continue
+            if not alias.name.endswith(".config"):
+                continue
+            module_names.append((node.lineno, alias.name))
+    return module_names
+
+
+def _module_path(module_name: str) -> Path | None:
+    spec = importlib.util.find_spec(module_name)
+    origin = getattr(spec, "origin", None) if spec is not None else None
+    if not origin or origin in {"built-in", "frozen"}:
+        return None
+    return Path(origin)
+
+
 def _source_metadata(
     config_module: ModuleType,
     *,
     include_search_space: bool = False,
-) -> dict[str, dict[str, int | str]]:
-    config_file = getattr(config_module, "__file__", None)
-    if not config_file:
+) -> dict[str, dict[str, Any]]:
+    return _source_metadata_for_module(
+        config_module.__name__,
+        include_search_space=include_search_space,
+        visited=set(),
+    )
+
+
+def _source_metadata_for_module(
+    module_name: str,
+    *,
+    include_search_space: bool,
+    visited: set[str],
+) -> dict[str, dict[str, int | str | list[str]]]:
+    if module_name in visited:
+        return {}
+    visited.add(module_name)
+
+    config_path = _module_path(module_name)
+    if config_path is None:
         return {}
 
-    config_path = Path(config_file)
     try:
         source = config_path.read_text()
         tree = ast.parse(source)
     except (OSError, SyntaxError):
         return {}
+
+    metadata: dict[str, dict[str, Any]] = {}
+
+    def import_metadata(
+        line_number: int,
+        source_metadata: dict[str, dict[str, Any]],
+        imported_names: set[str] | None = None,
+        *,
+        overwrite: bool,
+    ) -> None:
+        for key, entry in source_metadata.items():
+            if imported_names is not None and key not in imported_names:
+                continue
+            if not overwrite and key in metadata:
+                continue
+            metadata[key] = {
+                **entry,
+                "sortKey": [line_number, *entry.get("sortKey", [entry.get("line", 0)])],
+            }
+
+    for line_number, import_module_name in _star_import_module_names(
+        tree,
+        module_name,
+        include_search_space=include_search_space,
+    ):
+        import_metadata(
+            line_number,
+            _source_metadata_for_module(
+                import_module_name,
+                include_search_space=include_search_space,
+                visited=set(visited),
+            ),
+            overwrite=True,
+        )
+
+    for line_number, import_module_name, imported_names in _explicit_uppercase_imports(
+        tree,
+        module_name,
+    ):
+        import_metadata(
+            line_number,
+            _source_metadata_for_module(
+                import_module_name,
+                include_search_space=include_search_space,
+                visited=set(visited),
+            ),
+            set(imported_names),
+            overwrite=True,
+        )
+
+    for line_number, import_module_name in _config_module_alias_imports(
+        tree,
+        module_name,
+    ):
+        import_metadata(
+            line_number,
+            _source_metadata_for_module(
+                import_module_name,
+                include_search_space=include_search_space,
+                visited=set(visited),
+            ),
+            overwrite=False,
+        )
 
     assignments_by_line: dict[int, list[str]] = {}
     for node in tree.body:
@@ -104,27 +285,39 @@ def _source_metadata(
             continue
         assignments_by_line.setdefault(node.lineno, []).append(key)
 
-    metadata: dict[str, dict[str, int | str]] = {}
-    current_section = DEFAULT_SECTION
+    current_path: list[str] = []
     for line_number, line in enumerate(source.splitlines(), start=1):
         stripped = line.strip()
-        if stripped.startswith("#"):
-            title = _section_title(stripped.lstrip("#"))
-            if title:
-                current_section = title
+        heading = _markdown_heading(stripped)
+        if heading is not None:
+            level, title = heading
+            current_path = [*current_path[: level - 1], title]
         for key in assignments_by_line.get(line_number, []):
-            metadata[key] = {"line": line_number, "section": current_section}
+            if not current_path:
+                continue
+            section_path = list(current_path)
+            metadata[key] = {
+                "line": line_number,
+                "sortKey": [line_number],
+                "section": section_path[-1],
+                "sectionPath": section_path,
+            }
     return metadata
 
 
-def _field_section(key: str, field_metadata: dict[str, int | str]) -> str:
-    section = field_metadata.get("section")
-    if isinstance(section, str) and section:
-        return section
-    for prefix, prefix_section in PREFIX_SECTIONS.items():
-        if key.startswith(prefix):
-            return prefix_section
-    return DEFAULT_SECTION
+def _field_section_path(key: str, field_metadata: dict[str, Any]) -> list[str]:
+    raw_section_path = field_metadata.get("sectionPath")
+    if isinstance(raw_section_path, list):
+        section_path = [
+            section for section in raw_section_path if isinstance(section, str) and section
+        ]
+        if section_path:
+            return section_path
+    raise InspectorError(
+        f"Config field {key!r} is missing source heading metadata. "
+        "Add a markdown heading comment above the field or preserve imported "
+        "config field names."
+    )
 
 
 def _annotation_classes(annotation: Any) -> list[type]:
@@ -210,14 +403,14 @@ def _class_choice_name(value: Any) -> str | None:
 
 
 def _search_space_class_choices(
-    config_module: ModuleType,
+    search_space_module: ModuleType,
     key: str | None,
     available_choices: set[str],
 ) -> list[str]:
     if key is None:
         return []
     search_key = f"SEARCH_SPACE_{key}"
-    search_values = getattr(config_module, search_key, None)
+    search_values = getattr(search_space_module, search_key, None)
     if not isinstance(search_values, list):
         return []
 
@@ -234,6 +427,7 @@ def _search_space_class_choices(
 
 def _class_choices(
     config_module: ModuleType,
+    search_space_module: ModuleType,
     annotation: Any,
     current_value: Any,
     key: str | None = None,
@@ -262,7 +456,7 @@ def _class_choices(
             choices.append(candidate.__name__)
     available_choices = set(choices)
     ordered_choices = _search_space_class_choices(
-        config_module,
+        search_space_module,
         key,
         available_choices,
     )
@@ -274,6 +468,7 @@ def _class_choices(
 
 def _choices_for(
     config_module: ModuleType,
+    search_space_module: ModuleType,
     value: Any,
     annotation: Any,
     kind: str,
@@ -284,7 +479,7 @@ def _choices_for(
     if kind == "enum":
         return _enum_choices(value, annotation)
     if kind == "class":
-        return _class_choices(config_module, annotation, value, key)
+        return _class_choices(config_module, search_space_module, annotation, value, key)
     return []
 
 
@@ -368,9 +563,16 @@ def config_schema(model_name: str, preset_name: str | None = None) -> dict[str, 
     locks = preset_locks(model_name, preset_name)
     annotations = getattr(parts.config_module, "__annotations__", {})
     metadata = _source_metadata(parts.config_module)
+    supported_keys = iter_supported_config_keys(parts.config_module)
+    missing_metadata_keys = [key for key in supported_keys if key not in metadata]
+    if missing_metadata_keys:
+        raise InspectorError(
+            f"Config fields for model {model_name!r} are missing source heading "
+            f"metadata: {', '.join(missing_metadata_keys)}"
+        )
     supported_keys = sorted(
-        iter_supported_config_keys(parts.config_module),
-        key=lambda key: int(metadata.get(key, {}).get("line", 10**9)),
+        supported_keys,
+        key=lambda key: tuple(metadata[key].get("sortKey", [10**9])),
     )
     fields = []
     for key in supported_keys:
@@ -378,7 +580,8 @@ def config_schema(model_name: str, preset_name: str | None = None) -> dict[str, 
         annotation = annotations.get(key)
         kind = _value_kind(value, annotation)
         field_metadata = metadata.get(key, {})
-        section = _field_section(key, field_metadata)
+        section_path = _field_section_path(key, field_metadata)
+        section = section_path[-1]
         nullable = value is None or _annotation_is_nullable(annotation)
         model_param = config_key_to_model_param(key)
         lock = locks.get(model_param)
@@ -391,6 +594,7 @@ def config_schema(model_name: str, preset_name: str | None = None) -> dict[str, 
                 "flag": config_key_to_flag(key),
                 "label": key.lower().replace("_", " "),
                 "section": section,
+                "sectionPath": section_path,
                 "description": config_field_description(
                     key,
                     section=section,
@@ -403,6 +607,7 @@ def config_schema(model_name: str, preset_name: str | None = None) -> dict[str, 
                 "nullable": nullable,
                 "choices": _choices_for(
                     parts.config_module,
+                    getattr(parts, "search_space_module", parts.config_module),
                     value,
                     annotation,
                     kind,
@@ -419,7 +624,10 @@ def config_schema(model_name: str, preset_name: str | None = None) -> dict[str, 
 
 
 def _search_axis_kind(
-    config_module: ModuleType, config_key: str, values: list[Any]
+    config_module: ModuleType,
+    search_space_module: ModuleType,
+    config_key: str,
+    values: list[Any],
 ) -> str:
     annotations = getattr(config_module, "__annotations__", {})
     if hasattr(config_module, config_key):
@@ -427,8 +635,12 @@ def _search_axis_kind(
             getattr(config_module, config_key, None),
             annotations.get(config_key),
         )
+    search_annotations = getattr(search_space_module, "__annotations__", {})
     sample = next((value for value in values if value is not None), None)
-    return _value_kind(sample, annotations.get(config_key))
+    return _value_kind(
+        sample,
+        annotations.get(config_key) or search_annotations.get(config_key),
+    )
 
 
 def search_space_schema(
@@ -442,7 +654,8 @@ def search_space_schema(
         preset_name,
         preset_names,
     )
-    metadata = _source_metadata(parts.config_module, include_search_space=True)
+    search_space_module = getattr(parts, "search_space_module", parts.config_module)
+    metadata = _source_metadata(search_space_module, include_search_space=True)
     config_fields = {
         field["configKey"]: field
         for field in config_schema(model_name, preset_name)["fields"]
@@ -451,7 +664,7 @@ def search_space_schema(
     search_keys = sorted(
         (
             key
-            for key, value in vars(parts.config_module).items()
+            for key, value in vars(search_space_module).items()
             if key.startswith(prefix) and isinstance(value, list)
         ),
         key=lambda key: int(metadata.get(key, {}).get("line", 10**9)),
@@ -460,7 +673,7 @@ def search_space_schema(
     axes = []
     for search_key in search_keys:
         config_key = search_key[len(prefix) :]
-        values = getattr(parts.config_module, search_key, [])
+        values = getattr(search_space_module, search_key, [])
         field = config_fields.get(config_key)
         model_param = config_key_to_model_param(config_key)
         lock_details = lock_details_by_param.get(model_param, [])
@@ -491,7 +704,12 @@ def search_space_schema(
                     if field is not None
                     else metadata.get(search_key, {}).get("section", DEFAULT_SECTION)
                 ),
-                "type": _search_axis_kind(parts.config_module, config_key, values),
+                "type": _search_axis_kind(
+                    parts.config_module,
+                    search_space_module,
+                    config_key,
+                    values,
+                ),
                 "values": [serialize_config_value(value) for value in values],
                 "locked": len(lock_details) > 0,
                 "lockedValue": locked_value if lock_details else None,

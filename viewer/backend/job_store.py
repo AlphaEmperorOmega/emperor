@@ -42,6 +42,7 @@ class TrainingJobRecord:
     command: list[str]
     root: Path
     pid: int
+    experiment_task: str = ""
     cancellation_mode: str = "process-group"
     worker_pid: int | None = None
     process_group_id: int | None = None
@@ -170,6 +171,7 @@ def _record_to_metadata(job: TrainingJobRecord) -> dict[str, Any]:
         **model_identity_payload_from_id(job.model),
         "preset": job.preset,
         "presets": job.presets,
+        "experiment_task": job.experiment_task,
         "datasets": job.datasets,
         "overrides": job.overrides,
         "search": job.search,
@@ -207,6 +209,9 @@ def _record_from_metadata(
         model=model_id,
         preset=str(payload["preset"]),
         presets=[str(item) for item in payload["presets"]],
+        experiment_task=str(
+            payload.get("experiment_task") or payload.get("experimentTask") or ""
+        ),
         datasets=[str(item) for item in payload["datasets"]],
         overrides=dict(payload["overrides"]),
         search=(dict(payload["search"]) if payload.get("search") is not None else None),

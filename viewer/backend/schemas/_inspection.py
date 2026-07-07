@@ -49,6 +49,7 @@ class InspectRequest(ApiResponseModel):
     model: str
     preset: str
     overrides: ConfigOverrides = Field(default_factory=dict)
+    experimentTask: str | None = None
     dataset: str | None = None
     logRunId: str | None = None
 
