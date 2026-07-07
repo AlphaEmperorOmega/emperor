@@ -471,6 +471,10 @@ checking planned runs, watching monitor signals while a job is active, and
 reviewing logs once there are completed results. The terminal CLI remains the
 simpler path for scripted or repeatable runs.
 
+The Viewer should be treated as a vibecoded prototype: it is useful for local
+research workflows today, but its implementation is expected to be refactored
+as the experiment workflow and architecture settle.
+
 See [`viewer/README.md`](viewer/README.md) for the focused Viewer guide.
 
 Hosted or non-local deployments should configure explicit CORS origins in the
