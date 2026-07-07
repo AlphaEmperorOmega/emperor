@@ -5,6 +5,7 @@ from types import ModuleType
 from emperor.base.options import BaseOptions
 from emperor.experiments.base import GridSearch, RandomSearch, SearchMode
 from emperor.experiments.monitors import MonitorOption
+from emperor.experiments.tasks import ExperimentTask, resolve_experiment_task
 
 from models.config_overrides import (
     extract_config_overrides,
@@ -12,10 +13,19 @@ from models.config_overrides import (
     print_config_options,
 )
 from models.experiment_cli_parser import preset_name_to_cli
+from models.model_metadata import load_model_metadata_for_config_module
 
 
 @dataclass(frozen=True)
 class ExperimentMode:
+    experiment_task: ExperimentTask | None = field(
+        metadata={
+            "help": (
+                "Experiment task selected by --experiment-task, or the model "
+                "package default task when omitted."
+            )
+        }
+    )
     preset: BaseOptions | None = field(
         metadata={
             "help": (
@@ -61,10 +71,26 @@ class ExperimentMode:
     )
 
 
-def model_monitor_options(config_module: ModuleType | None) -> list[MonitorOption]:
+def _monitor_options_module_for_config_module(
+    config_module: ModuleType,
+) -> ModuleType:
+    return load_model_metadata_for_config_module(config_module).monitor_options_module
+
+
+def model_monitor_options(
+    config_module: ModuleType | None,
+    monitor_options_module: ModuleType | None = None,
+) -> list[MonitorOption]:
     if config_module is None:
         return []
-    raw_options = getattr(config_module, "MONITOR_OPTIONS", [])
+    if monitor_options_module is None:
+        try:
+            monitor_options_module = _monitor_options_module_for_config_module(
+                config_module
+            )
+        except Exception:
+            monitor_options_module = config_module
+    raw_options = getattr(monitor_options_module, "MONITOR_OPTIONS", [])
     if raw_options is None:
         return []
     options = list(raw_options)
@@ -75,8 +101,8 @@ def model_monitor_options(config_module: ModuleType | None) -> list[MonitorOptio
     ]
     if invalid_options:
         raise ValueError(
-            f"Model config '{config_module.__name__}' has invalid MONITOR_OPTIONS "
-            f"entries: {', '.join(invalid_options)}."
+            f"Model monitor options '{monitor_options_module.__name__}' has invalid "
+            f"MONITOR_OPTIONS entries: {', '.join(invalid_options)}."
         )
     option_names = [option.name for option in options]
     duplicate_names = sorted(
@@ -84,8 +110,8 @@ def model_monitor_options(config_module: ModuleType | None) -> list[MonitorOptio
     )
     if duplicate_names:
         raise ValueError(
-            f"Model config '{config_module.__name__}' has duplicate monitor "
-            f"options: {', '.join(duplicate_names)}."
+            f"Model monitor options '{monitor_options_module.__name__}' has "
+            f"duplicate monitor options: {', '.join(duplicate_names)}."
         )
     return options
 
@@ -93,11 +119,13 @@ def model_monitor_options(config_module: ModuleType | None) -> list[MonitorOptio
 def resolve_monitor_options(
     config_module: ModuleType | None,
     monitor_names: list[str] | None,
+    monitor_options_module: ModuleType | None = None,
 ) -> list[MonitorOption]:
     if not monitor_names:
         return []
     options_by_name = {
-        option.name: option for option in model_monitor_options(config_module)
+        option.name: option
+        for option in model_monitor_options(config_module, monitor_options_module)
     }
     selected = []
     unknown = []
@@ -120,10 +148,15 @@ def resolve_monitor_options(
 def resolve_monitor_callbacks(
     config_module: ModuleType | None,
     monitor_names: list[str] | None,
+    monitor_options_module: ModuleType | None = None,
 ) -> list:
     return [
         option.build_callback()
-        for option in resolve_monitor_options(config_module, monitor_names)
+        for option in resolve_monitor_options(
+            config_module,
+            monitor_names,
+            monitor_options_module,
+        )
     ]
 
 
@@ -135,6 +168,18 @@ def resolve_experiment_mode(
     if getattr(args, "list_config", False):
         print_config_options(getattr(args, "_config_experiment", ""))
         raise SystemExit(0)
+
+    metadata = getattr(args, "_model_metadata", None)
+    raw_experiment_task = getattr(args, "experiment_task", None)
+    if metadata is not None:
+        experiment_task = (
+            metadata.default_experiment_task
+            if raw_experiment_task is None
+            else resolve_experiment_task(raw_experiment_task)
+        )
+        metadata.dataset_options_for_task(experiment_task)
+    else:
+        experiment_task = resolve_experiment_task(raw_experiment_task)
 
     selected_presets = None
     if args.all_presets:
@@ -193,12 +238,15 @@ def resolve_experiment_mode(
             args,
             config_module,
             getattr(args, "_config_override_dests", {}),
+            getattr(metadata, "search_space_module", None),
         )
     monitor_options = resolve_monitor_options(
         config_module,
         getattr(args, "monitors", None),
+        getattr(metadata, "monitor_options_module", None),
     )
     return ExperimentMode(
+        experiment_task=experiment_task,
         preset=preset,
         selected_presets=selected_presets,
         search_mode=search_mode,

@@ -8,20 +8,21 @@ from torch.nn import Module
 from models.catalog import model_id_from_parts, module_path_for_model_id
 from models.experiment_cli_parser import get_experiment_parser
 from models.experiment_mode import resolve_experiment_mode
+from models.model_metadata import load_model_metadata
 
 
 def _load_model_parts(model_name: str) -> tuple[type[Enum], Any, type[Module], type]:
     module_path = module_path_for_model_id(model_name)
     if module_path is None:
         raise ValueError(f"Unknown model: {model_name}")
-    config_module = importlib.import_module(f"{module_path}.config")
+    metadata = load_model_metadata(model_name)
     presets_module = importlib.import_module(f"{module_path}.presets")
     model_module = importlib.import_module(f"{module_path}.model")
     return (
         presets_module.ExperimentPreset,
         presets_module.ExperimentPresets(),
         model_module.Model,
-        config_module.DATASET_OPTIONS[0],
+        metadata.dataset_options_for_task(metadata.default_experiment_task)[0],
     )
 
 

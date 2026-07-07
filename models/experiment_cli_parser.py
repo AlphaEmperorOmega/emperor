@@ -1,8 +1,9 @@
 import argparse
-import importlib
 
 from models.catalog import public_id_for_module
 from models.config_overrides import add_config_override_arguments
+from models.model_metadata import load_model_metadata_from_module_path
+from emperor.experiments.tasks import experiment_task_name
 
 
 class _ExperimentParser(argparse.ArgumentParser):
@@ -87,7 +88,7 @@ def get_experiment_parser(
         metavar="KEY",
         help=(
             "Restrict sweep to named SEARCH_SPACE_* axes "
-            "(e.g. STACK_HIDDEN_DIM STACK_NUM_LAYERS).\n"
+            "(e.g. HIDDEN_DIM STACK_NUM_LAYERS).\n"
             "Requires --grid-search or --random-search."
         ),
     )
@@ -131,14 +132,36 @@ def get_experiment_parser(
 
     parser.set_defaults(_config_override_dests={})
     if experiment_package is not None:
-        config_module = importlib.import_module(f"{experiment_package}.config")
+        metadata = load_model_metadata_from_module_path(experiment_package)
+        config_module = metadata.config_module
         experiment_id = public_id_for_module(experiment_package)
         if experiment_id is None:
             experiment_id = experiment_package.removeprefix("models.").replace(".", "/")
+        task_choices = [
+            experiment_task_name(task) for task in metadata.experiment_tasks
+        ]
+        parser.add_argument(
+            "--experiment-task",
+            type=str,
+            default=None,
+            choices=task_choices,
+            metavar="TASK",
+            help=(
+                "Experiment task to run. Defaults to the model package default "
+                f"task. Available tasks: {', '.join(task_choices)}."
+            ),
+        )
         parser.set_defaults(
             _config_module=config_module,
+            _model_metadata=metadata,
+            _search_space_module=metadata.search_space_module,
+            _monitor_options_module=metadata.monitor_options_module,
             _config_experiment=experiment_id,
-            _config_override_dests=add_config_override_arguments(parser, config_module),
+            _config_override_dests=add_config_override_arguments(
+                parser,
+                config_module,
+                metadata.search_space_module,
+            ),
         )
 
     return parser

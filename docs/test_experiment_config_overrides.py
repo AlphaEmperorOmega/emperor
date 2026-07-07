@@ -19,6 +19,8 @@ from emperor.base.layer.gate import LayerGateOptions
 from emperor.base.options import ActivationOptions
 from emperor.datasets.image.classification.mnist import Mnist
 from emperor.experiments.base import GridSearch
+from emperor.halting.core.monitor import HaltingMonitorCallback
+from emperor.linears.core.monitor import LinearMonitorCallback
 from lightning.pytorch.callbacks import EarlyStopping
 from models.config_overrides import iter_supported_config_keys, print_config_options
 from models.experts.linear import (
@@ -103,6 +105,7 @@ class TestExperimentConfigOverrideParsing(
 
     def test_experiment_mode_fields_document_help_metadata(self):
         expected_names = [
+            "experiment_task",
             "preset",
             "selected_presets",
             "search_mode",
@@ -163,7 +166,7 @@ class TestExperimentConfigOverrideParsing(
                 "0",
                 "--learning-rate",
                 "1e-4",
-                "--stack-hidden-dim",
+                "--hidden-dim",
                 "128",
                 "--stack-activation",
                 "GELU",
@@ -183,7 +186,7 @@ class TestExperimentConfigOverrideParsing(
         self.assertEqual(mode.config_overrides["num_epochs"], 30)
         self.assertEqual(mode.config_overrides["callback_early_stopping_patience"], 0)
         self.assertEqual(mode.config_overrides["learning_rate"], 1e-4)
-        self.assertEqual(mode.config_overrides["stack_hidden_dim"], 128)
+        self.assertEqual(mode.config_overrides["hidden_dim"], 128)
         self.assertIs(mode.config_overrides["stack_activation"], ActivationOptions.GELU)
         self.assertIs(mode.config_overrides["gate_option"], LayerGateOptions.ADDITION)
         self.assertIs(
@@ -200,16 +203,28 @@ class TestExperimentConfigOverrideParsing(
         )
         self.assertEqual(mode.search_overrides, {})
 
-    def test_top_level_hidden_dim_alias_is_rejected(self):
-        removed_flag = "--" + "hidden-dim"
+    def test_hidden_dim_flag_sets_hidden_dim_override(self):
+        args = self.make_parser().parse_args(
+            [
+                "--preset",
+                "single-model-weight",
+                "--hidden-dim",
+                "128",
+            ]
+        )
 
+        mode = self.resolve_args(args)
+
+        self.assertEqual(mode.config_overrides["hidden_dim"], 128)
+
+    def test_legacy_stack_hidden_dim_flag_is_rejected(self):
         with contextlib.redirect_stderr(io.StringIO()):
             with self.assertRaises(SystemExit):
                 self.make_parser().parse_args(
                     [
                         "--preset",
                         "single-model-weight",
-                        removed_flag,
+                        "--stack-hidden-dim",
                         "128",
                     ]
                 )
@@ -482,8 +497,8 @@ class TestExperimentConfigOverrideParsing(
         self.assertEqual(
             [type(callback) for callback in callbacks],
             [
-                linears_linear_config.LinearMonitorCallback,
-                linears_linear_config.HaltingMonitorCallback,
+                LinearMonitorCallback,
+                HaltingMonitorCallback,
             ],
         )
 
@@ -496,8 +511,8 @@ class TestExperimentConfigOverrideParsing(
         self.assertEqual(
             [type(callback) for callback in callbacks],
             [
-                linears_linear_config.LinearMonitorCallback,
-                linears_linear_config.HaltingMonitorCallback,
+                LinearMonitorCallback,
+                HaltingMonitorCallback,
             ],
         )
 
@@ -537,8 +552,8 @@ class TestExperimentConfigOverrideParsing(
         self.assertEqual(
             [type(callback) for callback in mode.monitor_callbacks],
             [
-                linears_linear_config.LinearMonitorCallback,
-                linears_linear_config.HaltingMonitorCallback,
+                LinearMonitorCallback,
+                HaltingMonitorCallback,
             ],
         )
 
@@ -560,7 +575,7 @@ class TestExperimentConfigOverrideParsing(
                 "single-model-weight",
                 "--grid-search",
                 "--search-set",
-                "stack-hidden-dim=64,128",
+                "hidden-dim=64,128",
                 "--search-set",
                 "stack_activation=RELU,GELU",
                 "--search-set",
@@ -577,7 +592,7 @@ class TestExperimentConfigOverrideParsing(
         mode = self.resolve_args(args)
 
         self.assertIsInstance(mode.search_mode, GridSearch)
-        self.assertEqual(mode.search_overrides["stack_hidden_dim"], [64, 128])
+        self.assertEqual(mode.search_overrides["hidden_dim"], [64, 128])
         self.assertEqual(
             mode.search_overrides["stack_activation"],
             [ActivationOptions.RELU, ActivationOptions.GELU],
@@ -611,7 +626,7 @@ class TestExperimentConfigOverrideParsing(
                 "--preset",
                 "single-model-weight",
                 "--search-set",
-                "stack_hidden_dim=64,128",
+                "hidden_dim=64,128",
             ]
         )
 
@@ -713,11 +728,11 @@ class TestExperimentConfigOverrideParsing(
             [
                 "--preset",
                 "single-model-weight",
-                "--stack-hidden-dim",
+                "--hidden-dim",
                 "128",
                 "--grid-search",
                 "--search-set",
-                "stack_hidden_dim=64,128",
+                "hidden_dim=64,128",
             ]
         )
 
@@ -780,7 +795,7 @@ class TestExperimentConfigOverrideApplication(unittest.TestCase):
             ExperimentPreset.SINGLE_MODEL_WEIGHT,
             Mnist,
             config_overrides={
-                "stack_hidden_dim": 64,
+                "hidden_dim": 64,
             },
         )[0]
 
@@ -801,7 +816,7 @@ class TestExperimentConfigOverrideApplication(unittest.TestCase):
             Mnist,
             search_mode=GridSearch(),
             search_overrides={
-                "stack_hidden_dim": [64, 128],
+                "hidden_dim": [64, 128],
                 "stack_num_layers": [2, 4],
             },
         )

@@ -26,6 +26,11 @@ from emperor.datasets.image.classification.cifar_10 import Cifar10
 from emperor.datasets.image.classification.cifar_100 import Cifar100
 from emperor.datasets.image.classification.fashion_mnist import FashionMNIST
 from emperor.datasets.image.classification.mnist import Mnist
+from emperor.experiments.tasks import (
+    ExperimentTask,
+    experiment_task_name,
+    resolve_experiment_task,
+)
 from emperor.experiments.progress import sanitize_metric_payload
 
 DEFAULT_RESULT_METRIC_KEY_LIMIT = 512
@@ -76,6 +81,7 @@ _DEFAULT_DATASET = object()
 
 @dataclass
 class _TrainingRun:
+    experiment_task: ExperimentTask | None
     preset: BaseOptions
     dataset_type: type
     config: ModelConfig
@@ -418,11 +424,11 @@ class ExperimentPresetsBase:
         if search_mode is None:
             return {}
         package = type(self).__module__.rsplit(".", 1)[0]
-        config = importlib.import_module(f"{package}.config")
+        search_space_module = importlib.import_module(f"{package}.search_space")
         prefix = "SEARCH_SPACE_"
         full_space = {
             key[len(prefix) :].lower(): value
-            for key, value in vars(config).items()
+            for key, value in vars(search_space_module).items()
             if key.startswith(prefix)
         }
         if search_keys is not None:
@@ -676,10 +682,15 @@ class BuilderBackedExperimentPresetsBase(ExperimentPresetsBase):
 
 
 class ExperimentBase:
-    def __init__(self, preset: BaseOptions | None = None) -> None:
+    def __init__(
+        self,
+        preset: BaseOptions | None = None,
+        experiment_task: ExperimentTask | str | None = None,
+    ) -> None:
         self.preset = preset
         self.num_epochs = self._num_epochs()
-        self.dataset_options = self._dataset_options()
+        self.experiment_task = self._resolve_experiment_task(experiment_task)
+        self.dataset_options = self._dataset_options_for_task(self.experiment_task)
         self.model_type = self._model_type()
         self.preset_generator = self._preset_generator_instance()
         self.preset_enum = self._experiment_preset_enum()
@@ -689,6 +700,33 @@ class ExperimentBase:
 
     def _dataset_options(self) -> list:
         return [Mnist, FashionMNIST, Cifar10, Cifar100]
+
+    def _resolve_experiment_task(
+        self,
+        experiment_task: ExperimentTask | str | None,
+    ) -> ExperimentTask | None:
+        try:
+            metadata = self._model_metadata()
+        except Exception:
+            return resolve_experiment_task(experiment_task)
+        if experiment_task is None:
+            return metadata.default_experiment_task
+        return resolve_experiment_task(experiment_task)
+
+    def _dataset_options_for_task(
+        self,
+        experiment_task: ExperimentTask | None,
+    ) -> list:
+        try:
+            return self._model_metadata().dataset_options_for_task(experiment_task)
+        except Exception:
+            return self._dataset_options()
+
+    def _model_metadata(self):
+        from models.model_metadata import load_model_metadata_from_module_path
+
+        package = type(self).__module__.rsplit(".", 1)[0]
+        return load_model_metadata_from_module_path(package)
 
     def _model_type(self) -> type:
         raise NotImplementedError(
@@ -943,6 +981,7 @@ class ExperimentBase:
                 ):
                     training_runs.append(
                         _TrainingRun(
+                            experiment_task=self.experiment_task,
                             preset=preset,
                             dataset_type=dataset_type,
                             config=config,
@@ -975,6 +1014,7 @@ class ExperimentBase:
             ):
                 training_runs.append(
                     _TrainingRun(
+                        experiment_task=self.experiment_task,
                         preset=preset,
                         dataset_type=dataset_type,
                         config=config,
@@ -1103,7 +1143,13 @@ class ExperimentBase:
         )
 
     def _training_run_event_fields(self, training_run: _TrainingRun) -> dict:
+        experiment_task = (
+            experiment_task_name(training_run.experiment_task)
+            if training_run.experiment_task is not None
+            else None
+        )
         return {
+            "experimentTask": experiment_task,
             "dataset": training_run.dataset_type.__name__,
             "preset": self._preset_cli_name(training_run.preset),
             "presetKey": training_run.preset.name,
@@ -1124,8 +1170,14 @@ class ExperimentBase:
                 write_event(event)
 
     def _training_result(self, training_run: _TrainingRun, trainer) -> dict:
+        experiment_task = (
+            experiment_task_name(training_run.experiment_task)
+            if training_run.experiment_task is not None
+            else None
+        )
         return {
             **self._public_model_identity_payload(),
+            "experimentTask": experiment_task,
             "dataset": training_run.dataset_type.__name__,
             "preset": self._preset_cli_name(training_run.preset),
             "presetKey": training_run.preset.name,
