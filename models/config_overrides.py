@@ -7,16 +7,18 @@ from typing import Any
 
 from models.catalog import model_identity_payload_from_id, module_path_for_model_id
 from models.config_ast_listing import (
-    dataset_option_names_from_source,
+    dataset_option_names_from_path,
     iter_config_assignments,
-    monitor_option_names_from_source,
+    monitor_option_names_from_path,
     preset_option_rows_from_source,
 )
 from models.config_value_parser import parse_config_value
+from models.model_metadata import load_model_metadata_for_config_module
 
 SKIP_CONFIG_KEYS = {
     "CONFIG_OVERRIDE_SKIP_KEYS",
-    "DATASET_OPTIONS",
+    "DEFAULT_EXPERIMENT_TASK",
+    "DATASET_OPTIONS_BY_TASK",
     "MONITOR_OPTIONS",
 }
 
@@ -34,7 +36,6 @@ MODEL_PARAM_ALIASES = {
     "stack_layer_norm_position": "layer_norm_position",
     "weight_generator_depth": "generator_depth",
 }
-
 
 def normalize_key(key: str) -> str:
     return key.strip().replace("-", "_").lower()
@@ -64,6 +65,11 @@ def canonical_config_key(key: str) -> str:
     return normalize_key(key).upper()
 
 
+def canonical_config_key_for_module(config_module: ModuleType, key: str) -> str:
+    config_key = canonical_config_key(key)
+    return config_key
+
+
 def _is_supported_constant(value: Any) -> bool:
     if value is None:
         return True
@@ -86,7 +92,7 @@ def iter_supported_config_keys(config_module: ModuleType) -> list[str]:
     keys = []
     skip_keys = SKIP_CONFIG_KEYS | _module_skip_keys(config_module)
     for key, value in vars(config_module).items():
-        if not key.isupper():
+        if key.startswith("_") or not key.isupper():
             continue
         if key.startswith("SEARCH_SPACE_"):
             continue
@@ -100,6 +106,7 @@ def iter_supported_config_keys(config_module: ModuleType) -> list[str]:
 def parse_search_set(
     config_module: ModuleType,
     raw_value: str,
+    search_space_module: ModuleType | None = None,
 ) -> tuple[str, list[Any]]:
     if "=" not in raw_value:
         raise argparse.ArgumentTypeError(
@@ -113,30 +120,40 @@ def parse_search_set(
     if not values:
         raise argparse.ArgumentTypeError("--search-set requires at least one value")
 
-    value_config_key = canonical_config_key(raw_key)
+    value_config_key = canonical_config_key_for_module(config_module, raw_key)
     supported_keys = set(iter_supported_config_keys(config_module))
     search_config_key = search_key_to_config_key(value_config_key)
+    if search_space_module is None:
+        try:
+            search_space_module = load_model_metadata_for_config_module(
+                config_module
+            ).search_space_module
+        except Exception:
+            search_space_module = config_module
     if (
-        not hasattr(config_module, search_config_key)
+        not hasattr(search_space_module, search_config_key)
         and value_config_key not in supported_keys
     ):
         raise argparse.ArgumentTypeError(f"unknown config key '{raw_key}'")
     parse_key = (
         search_config_key
-        if hasattr(config_module, search_config_key)
+        if hasattr(search_space_module, search_config_key)
         else value_config_key
     )
+    parse_module = search_space_module if parse_key == search_config_key else config_module
     return config_key_to_model_param(value_config_key), [
-        parse_config_value(config_module, parse_key, value) for value in values
+        parse_config_value(parse_module, parse_key, value) for value in values
     ]
 
 
 def add_config_override_arguments(
     parser: argparse.ArgumentParser,
     config_module: ModuleType,
+    search_space_module: ModuleType | None = None,
 ) -> dict[str, str]:
     dest_to_key = {}
     supported_keys = iter_supported_config_keys(config_module)
+    supported_key_set = set(supported_keys)
     for key in supported_keys:
         dest = f"override_{key.lower()}"
         flag = config_key_to_flag(key)
@@ -148,6 +165,37 @@ def add_config_override_arguments(
             help=argparse.SUPPRESS,
         )
         dest_to_key[dest] = key
+    if search_space_module is None:
+        try:
+            search_space_module = load_model_metadata_for_config_module(
+                config_module
+            ).search_space_module
+        except Exception:
+            search_space_module = None
+    if search_space_module is not None:
+        supported_by_model_param = {
+            config_key_to_model_param(key): key for key in supported_keys
+        }
+        for search_key, value in vars(search_space_module).items():
+            if not search_key.startswith("SEARCH_SPACE_") or not isinstance(value, list):
+                continue
+            alias_key = search_key[len("SEARCH_SPACE_") :]
+            if alias_key in supported_key_set:
+                continue
+            target_key = supported_by_model_param.get(
+                config_key_to_model_param(alias_key)
+            )
+            if target_key is None:
+                continue
+            dest = f"override_{alias_key.lower()}"
+            parser.add_argument(
+                config_key_to_flag(alias_key),
+                dest=dest,
+                default=None,
+                metavar="VALUE",
+                help=argparse.SUPPRESS,
+            )
+            dest_to_key[dest] = target_key
     parser.add_argument(
         "--search-set",
         action="append",
@@ -162,6 +210,7 @@ def extract_config_overrides(
     args: argparse.Namespace,
     config_module: ModuleType,
     dest_to_key: dict[str, str],
+    search_space_module: ModuleType | None = None,
 ) -> tuple[dict[str, Any], dict[str, list[Any]]]:
     overrides = {}
     for dest, key in dest_to_key.items():
@@ -172,8 +221,14 @@ def extract_config_overrides(
             )
 
     search_overrides = {}
+    if search_space_module is None:
+        search_space_module = getattr(args, "_search_space_module", None)
     for raw_search_set in getattr(args, "search_set", []) or []:
-        key, values = parse_search_set(config_module, raw_search_set)
+        key, values = parse_search_set(
+            config_module,
+            raw_search_set,
+            search_space_module,
+        )
         search_overrides[key] = values
 
     duplicates = set(overrides) & set(search_overrides)
@@ -211,10 +266,16 @@ def print_config_options(experiment: str, models_dir: str = "models") -> None:
     if not config_path.exists():
         raise SystemExit(f"Config file not found: {config_path}")
 
+    search_space_path = _catalog_source_path(experiment, "search_space.py", models_dir)
+    if not search_space_path.exists():
+        raise SystemExit(f"Search space file not found: {search_space_path}")
+
     config_options, search_options = iter_config_assignments(
         config_path,
+        search_space_path=search_space_path,
         shared_config_path=Path(__file__).with_name("trainer_config.py"),
         base_skip_keys=SKIP_CONFIG_KEYS,
+        models_dir=Path(models_dir),
     )
 
     print(f"Config options for {_display_model_selector(experiment)}:")
@@ -248,27 +309,39 @@ def print_preset_options(experiment: str, models_dir: str = "models") -> None:
 
 
 def print_dataset_options(experiment: str, models_dir: str = "models") -> None:
-    config_path = _catalog_source_path(experiment, "config.py", models_dir)
-    if not config_path.exists():
-        raise SystemExit(f"Config file not found: {config_path}")
+    dataset_options_path = _catalog_source_path(
+        experiment,
+        "dataset_options.py",
+        models_dir,
+    )
+    if not dataset_options_path.exists():
+        raise SystemExit(f"Dataset options file not found: {dataset_options_path}")
 
-    source = config_path.read_text()
-    dataset_names = dataset_option_names_from_source(source)
+    dataset_names = dataset_option_names_from_path(
+        dataset_options_path,
+        models_dir=Path(models_dir),
+    )
     if dataset_names:
         for dataset_name in dataset_names:
             print(dataset_name)
         return
 
-    raise SystemExit(f"No DATASET_OPTIONS found for {experiment}")
+    raise SystemExit(f"No DATASET_OPTIONS_BY_TASK found for {experiment}")
 
 
 def print_monitor_options(experiment: str, models_dir: str = "models") -> None:
-    config_path = _catalog_source_path(experiment, "config.py", models_dir)
-    if not config_path.exists():
-        raise SystemExit(f"Config file not found: {config_path}")
+    monitor_options_path = _catalog_source_path(
+        experiment,
+        "monitor_options.py",
+        models_dir,
+    )
+    if not monitor_options_path.exists():
+        raise SystemExit(f"Monitor options file not found: {monitor_options_path}")
 
-    source = config_path.read_text()
-    monitor_names = monitor_option_names_from_source(source)
+    monitor_names = monitor_option_names_from_path(
+        monitor_options_path,
+        models_dir=Path(models_dir),
+    )
     if monitor_names is None:
         return
     for name in monitor_names:
