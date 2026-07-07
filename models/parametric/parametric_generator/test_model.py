@@ -5,6 +5,8 @@ import sys
 import unittest
 from unittest.mock import patch
 
+import models.parametric.parametric_generator.dataset_options as dataset_options
+import models.parametric.parametric_generator.search_space as search_space
 os.environ.setdefault("MPLCONFIGDIR", "/tmp")
 
 import torch
@@ -82,7 +84,7 @@ class TestParametricGeneratorModel(unittest.TestCase):
         self.assertIsNone(kwargs["search_keys"])
         self.assertEqual(kwargs["config_overrides"], {})
         self.assertEqual(kwargs["search_overrides"], {})
-        self.assertEqual(kwargs["selected_datasets"], config.DATASET_OPTIONS)
+        self.assertEqual(kwargs["selected_datasets"], dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK])
         self.assertIsNone(kwargs["selected_presets"])
 
     def test_modern_preset_contract_is_exposed(self):
@@ -114,7 +116,7 @@ class TestParametricGeneratorModel(unittest.TestCase):
     def test_builder_returns_boundary_style_experiment_config(self):
         cfg = ParametricGeneratorConfigBuilder(
             input_dim=8,
-            stack_hidden_dim=4,
+            hidden_dim=4,
             output_dim=3,
         ).build()
 
@@ -139,7 +141,7 @@ class TestParametricGeneratorModel(unittest.TestCase):
         hidden_dim = 5
         cfg = ExperimentPresets()._preset(
             input_dim=8,
-            stack_hidden_dim=hidden_dim,
+            hidden_dim=hidden_dim,
             output_dim=3,
         )
         stack_config = cfg.experiment_config.model_config
@@ -180,7 +182,7 @@ class TestParametricGeneratorModel(unittest.TestCase):
     def test_generator_weight_and_bias_configs_use_matching_moe_configs(self):
         cfg = ExperimentPresets()._preset(
             input_dim=8,
-            stack_hidden_dim=5,
+            hidden_dim=5,
             output_dim=3,
             adaptive_mixture_top_k=1,
             adaptive_mixture_num_experts=2,
@@ -224,7 +226,7 @@ class TestParametricGeneratorModel(unittest.TestCase):
         batch_size = 2
         presets = ExperimentPresets()
 
-        for dataset in config.DATASET_OPTIONS:
+        for dataset in dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK]:
             with self.subTest(dataset=dataset.__name__):
                 cfg = presets.get_config(ExperimentPreset.PRESET, dataset)[0]
                 model = Model(cfg)
@@ -239,7 +241,7 @@ class TestParametricGeneratorModel(unittest.TestCase):
 
     def test_all_presets_train_one_epoch(self):
         presets = ExperimentPresets()
-        dataset = config.DATASET_OPTIONS[0]
+        dataset = dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0]
 
         for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
@@ -257,7 +259,7 @@ class TestParametricGeneratorModel(unittest.TestCase):
     def test_config_search_space_builds_configs(self):
         configs = ExperimentPresets().get_config(
             ExperimentPreset.CONFIG,
-            config.DATASET_OPTIONS[0],
+            dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
             RandomSearch(num_samples=2),
         )
 
@@ -284,7 +286,7 @@ class TestParametricGeneratorModel(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             ExperimentPresets().get_config(
                 ExperimentPreset.CONFIG,
-                config.DATASET_OPTIONS[0],
+                dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
                 RandomSearch(num_samples=2),
                 search_keys=["bogus_axis"],
             )
@@ -294,40 +296,40 @@ class TestParametricGeneratorModel(unittest.TestCase):
     def test_preset_accepts_grid_search_over_unlocked_axis(self):
         configs = ExperimentPresets().get_config(
             ExperimentPreset.PRESET,
-            config.DATASET_OPTIONS[0],
+            dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
             GridSearch(),
             search_keys=["learning_rate"],
         )
 
-        self.assertEqual(len(configs), len(config.SEARCH_SPACE_LEARNING_RATE))
+        self.assertEqual(len(configs), len(search_space.SEARCH_SPACE_LEARNING_RATE))
         self.assertEqual(
             {cfg.learning_rate for cfg in configs},
-            set(config.SEARCH_SPACE_LEARNING_RATE),
+            set(search_space.SEARCH_SPACE_LEARNING_RATE),
         )
 
     def test_config_search_sweeps_hidden_dim_axis(self):
         configs = ExperimentPresets().get_config(
             ExperimentPreset.CONFIG,
-            config.DATASET_OPTIONS[0],
+            dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
             GridSearch(),
-            search_keys=["stack_hidden_dim"],
+            search_keys=["hidden_dim"],
         )
 
-        self.assertEqual(len(configs), len(config.SEARCH_SPACE_STACK_HIDDEN_DIM))
+        self.assertEqual(len(configs), len(search_space.SEARCH_SPACE_HIDDEN_DIM))
         self.assertEqual(
             {cfg.hidden_dim for cfg in configs},
-            set(config.SEARCH_SPACE_STACK_HIDDEN_DIM),
+            set(search_space.SEARCH_SPACE_HIDDEN_DIM),
         )
 
     def test_config_search_applies_generator_specific_axes(self):
         configs = ExperimentPresets().get_config(
             ExperimentPreset.CONFIG,
-            config.DATASET_OPTIONS[0],
+            dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
             GridSearch(),
             search_keys=["adaptive_bias_option"],
         )
 
-        self.assertEqual(len(configs), len(config.SEARCH_SPACE_ADAPTIVE_BIAS_OPTION))
+        self.assertEqual(len(configs), len(search_space.SEARCH_SPACE_ADAPTIVE_BIAS_OPTION))
         self.assertEqual(
             {
                 type(
@@ -343,7 +345,7 @@ class TestParametricGeneratorModel(unittest.TestCase):
 
     def test_model_step_accepts_tuple_output(self):
         batch_size = 2
-        cfg = ExperimentPresets()._preset(input_dim=8, stack_hidden_dim=4, output_dim=3)
+        cfg = ExperimentPresets()._preset(input_dim=8, hidden_dim=4, output_dim=3)
         model = Model(cfg)
         X = torch.randn(batch_size, 1, 2, 4)
         y = torch.tensor([0, 2])

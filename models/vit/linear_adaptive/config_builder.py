@@ -15,9 +15,9 @@ from models.linears.linear_adaptive._builder_options import (
     HiddenAdaptiveMaskOptions,
     HiddenAdaptiveWeightOptions,
 )
-from models.linears.linear_adaptive._control_config_factory import (
-    ControlConfigDependencies,
-    ControlConfigFactory,
+from models.linears.linear_adaptive._hidden_model_config_factory import (
+    HiddenModelConfigDependencies,
+    HiddenModelConfigFactory,
 )
 from models.vit.linear.config_builder import VitLinearConfigBuilder
 from models.vit.linear_adaptive.experiment_config import ExperimentConfig
@@ -75,8 +75,9 @@ class VitLinearAdaptiveConfigBuilder(VitLinearConfigBuilder):
     def _build_adaptive_augmentation_config(
         self,
     ) -> AdaptiveParameterAugmentationConfig:
-        factory = ControlConfigFactory(
-            ControlConfigDependencies(
+        factory = HiddenModelConfigFactory(
+            HiddenModelConfigDependencies(
+                hidden_dim=self.hidden_dim,
                 stack_options=None,
                 submodule_stack_options=None,
                 layer_controller_options=None,

@@ -23,6 +23,7 @@ from models.training_test_utils import (
 )
 
 
+import models.bert.expert_linear.dataset_options as dataset_options
 class TestBertExpertLinearModel(unittest.TestCase):
     def test_public_surface_and_catalog_id(self):
         for module_name in (
@@ -100,14 +101,14 @@ class TestBertExpertLinearModel(unittest.TestCase):
     def _config(self, preset: ExperimentPreset):
         return ExperimentPresets().get_config(
             preset,
-            config.DATASET_OPTIONS[0],
+            dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
             config_overrides=self._test_overrides(),
         )[0]
 
     def _test_overrides(self) -> dict:
         return {
             "batch_size": 2,
-            "stack_hidden_dim": 16,
+            "hidden_dim": 16,
             "sequence_length": 8,
             "stack_num_layers": 2,
             "attn_num_heads": 4,

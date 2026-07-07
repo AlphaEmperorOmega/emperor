@@ -25,7 +25,7 @@ class BertLinearConfigBuilder(BertBackendConfigBuilder):
         batch_size: int = config.BATCH_SIZE,
         learning_rate: float = config.LEARNING_RATE,
         input_dim: int = config.INPUT_DIM,
-        stack_hidden_dim: int = config.STACK_HIDDEN_DIM,
+        hidden_dim: int = config.HIDDEN_DIM,
         output_dim: int = config.OUTPUT_DIM,
         sequence_length: int = config.SEQUENCE_LENGTH,
         stack_num_layers: int = config.STACK_NUM_LAYERS,
@@ -58,7 +58,7 @@ class BertLinearConfigBuilder(BertBackendConfigBuilder):
     ) -> None:
         defaults = linear_builder_kwargs_from_flat({}, config)
         encoder_options = encoder_options or TransformerEncoderOptions(
-            hidden_dim=stack_hidden_dim,
+            hidden_dim=hidden_dim,
             num_layers=stack_num_layers,
             activation=stack_activation,
             dropout_probability=stack_dropout_probability,

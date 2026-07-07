@@ -18,6 +18,7 @@ from models.neuron.expert_linear.config_builder import (
 from models.neuron.expert_linear.model import Model
 
 
+import models.neuron.expert_linear.dataset_options as dataset_options
 ExperimentPreset = create_experiment_preset(SourceExperimentPreset, __name__)
 _PRESET_DEFINITIONS = create_preset_definitions(ExperimentPreset, SOURCE_ADAPTER)
 
@@ -28,7 +29,7 @@ class ExperimentPresets(BuilderBackedExperimentPresetsBase):
             _PRESET_DEFINITIONS,
             builder_type=NeuronExpertLinearConfigBuilder,
             default_preset=ExperimentPreset.BASELINE,
-            default_dataset=config.DATASET_OPTIONS[0],
+            default_dataset=dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
         )
 
     def _normalize_model_config_preset(self, preset):
@@ -42,14 +43,15 @@ class Experiment(ExperimentBase):
     def __init__(
         self,
         experiment_preset: ExperimentPreset | None = None,
+        experiment_task=None,
     ) -> None:
-        super().__init__(experiment_preset)
+        super().__init__(experiment_preset, experiment_task=experiment_task)
 
     def _num_epochs(self) -> int:
         return config.NUM_EPOCHS
 
     def _dataset_options(self) -> list:
-        return config.DATASET_OPTIONS
+        return dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK]
 
     def _model_type(self) -> type:
         return Model

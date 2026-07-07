@@ -1,13 +1,6 @@
 from emperor.augmentations.adaptive_parameters import (
     LowRankDynamicWeightConfig,  # noqa: F401
 )
-from emperor.augmentations.adaptive_parameters.core.bank_monitor import (
-    WeightBankUtilizationMonitorCallback,
-)
-from emperor.augmentations.adaptive_parameters.core.monitor import (
-    AdaptiveParameterMonitorCallback,
-)
-from emperor.experiments.monitors import MonitorOption
 
 from models.vit.linear.config import *  # noqa: F401,F403
 from models.linears.linear_adaptive.config import (  # noqa: F401
@@ -85,31 +78,3 @@ from models.linears.linear_adaptive.config import (  # noqa: F401
     WEIGHT_OPTION,
     WEIGHT_OPTION_FLAG,
 )
-
-MONITOR_OPTIONS = [
-    *MONITOR_OPTIONS,
-    MonitorOption(
-        name="adaptive",
-        label="Adaptive parameters",
-        description=(
-            "Logs adaptive weight, bias, diagonal, and mask controller statistics "
-            "for adaptive linear layers."
-        ),
-        kinds=["scalar", "histogram"],
-        callback_factory=lambda: AdaptiveParameterMonitorCallback(
-            log_every_n_steps=100
-        ),
-    ),
-    MonitorOption(
-        name="weight-bank",
-        label="Weight banks",
-        description=(
-            "Logs adaptive parameter bank usage and utilization for bank-backed "
-            "dynamic weights and biases."
-        ),
-        kinds=["scalar", "histogram"],
-        callback_factory=lambda: WeightBankUtilizationMonitorCallback(
-            log_every_n_steps=100
-        ),
-    ),
-]

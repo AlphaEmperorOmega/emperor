@@ -5,26 +5,8 @@ from emperor.base.options import (
     LastLayerBiasOptions,
     LayerNormPositionOptions,
 )
-from emperor.datasets.image.classification.mnist import Mnist
 from emperor.halting.options import HaltingHiddenStateModeOptions
-from emperor.datasets.image.classification.cifar_10 import Cifar10
-from emperor.datasets.image.classification.cifar_100 import Cifar100
-from emperor.datasets.image.classification.fashion_mnist import FashionMNIST
-from emperor.experiments.monitors import MonitorOption
-from emperor.base.layer.monitor import (
-    LayerControllerMonitorCallback,
-    RecurrentLayerMonitorCallback,
-)
 from emperor.base.layer.gate import LayerGateOptions
-from emperor.halting.core.monitor import HaltingMonitorCallback
-from emperor.augmentations.adaptive_parameters.core.monitor import (
-    AdaptiveParameterMonitorCallback,
-)
-from emperor.augmentations.adaptive_parameters.core.bank_monitor import (
-    WeightBankUtilizationMonitorCallback,
-)
-from emperor.linears.core.monitor import LinearMonitorCallback
-from emperor.memory.core.monitor import MemoryMonitorCallback
 from emperor.memory.config import (
     AttentionDynamicMemoryConfig,  # noqa: F401
     DynamicMemoryConfig,
@@ -72,9 +54,9 @@ from emperor.augmentations.adaptive_parameters import (
 BATCH_SIZE: int = 128
 NUM_EPOCHS: int = 10
 INPUT_DIM: int = 28**2
+HIDDEN_DIM: int = 32
 OUTPUT_DIM: int = 10
 LEARNING_RATE: float = 1e-3
-DATASET_OPTIONS: list = [Mnist, FashionMNIST, Cifar10, Cifar100]
 
 # Trainer
 TRAINER_ACCELERATOR: str = "cpu"
@@ -83,8 +65,8 @@ TRAINER_GRADIENT_CLIP_VAL: float = 1.0
 
 
 #########################################################################
-# LAYER STACK OPTIONS
-STACK_HIDDEN_DIM: int = 32
+# Layer Stack Options
+# - hidden_dim comes from the global HIDDEN_DIM field above.
 STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = LayerNormPositionOptions.BEFORE
 STACK_NUM_LAYERS: int = 5
 STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
@@ -97,8 +79,8 @@ STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = True
 STACK_BIAS_FLAG: bool = True
 
 #########################################################################
-# LAYER STACK SUBMODULE OPTIONS
-SUBMODULE_STACK_HIDDEN_DIM: int = STACK_HIDDEN_DIM
+# Layer Stack Submodule Options
+SUBMODULE_STACK_HIDDEN_DIM: int = HIDDEN_DIM
 SUBMODULE_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = (
     STACK_LAYER_NORM_POSITION
 )
@@ -115,8 +97,8 @@ SUBMODULE_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = False
 SUBMODULE_STACK_BIAS_FLAG: bool = STACK_BIAS_FLAG
 
 #########################################################################
-# ADAPTIVE GENERATOR STACK OPTIONS
-ADAPTIVE_GENERATOR_STACK_HIDDEN_DIM: int = STACK_HIDDEN_DIM
+# Adaptive Generator Stack Options
+ADAPTIVE_GENERATOR_STACK_HIDDEN_DIM: int = HIDDEN_DIM
 ADAPTIVE_GENERATOR_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = (
     STACK_LAYER_NORM_POSITION
 )
@@ -133,12 +115,12 @@ ADAPTIVE_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = False
 ADAPTIVE_GENERATOR_STACK_BIAS_FLAG: bool = STACK_BIAS_FLAG
 
 #########################################################################
-# GATE OPTIONS
+# Gate Options
 # If `GATE_FLAG` is False, the gate-specific parameters below are ignored.
 GATE_FLAG: bool = False
 GATE_OPTION: LayerGateOptions | None = LayerGateOptions.MULTIPLIER
 GATE_ACTIVATION: ActivationOptions | None = ActivationOptions.SIGMOID
-# GATE STACK OPTIONS
+## Gate Stack Options
 # If False, gate model stack options inherit the layer stack submodule options.
 GATE_STACK_INDEPENDENT_FLAG: bool = False
 GATE_STACK_HIDDEN_DIM: int | None = None
@@ -152,7 +134,7 @@ GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool | None = True
 GATE_STACK_BIAS_FLAG: bool | None = True
 
 #########################################################################
-# HALTING OPTIONS
+# Halting Options
 # If `HALTING_FLAG` is False, the halting-specific parameters below are ignored.
 HALTING_FLAG: bool = False
 HALTING_THRESHOLD: float = 0.99
@@ -160,7 +142,7 @@ HALTING_DROPOUT: float = 0.0
 HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
     HaltingHiddenStateModeOptions.RAW
 )
-# HALTING STACK OPTIONS
+## Halting Stack Options
 # If False, halting model stack options inherit the layer stack submodule options.
 HALTING_STACK_INDEPENDENT_FLAG: bool = False
 HALTING_STACK_HIDDEN_DIM: int | None = None
@@ -178,14 +160,14 @@ HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool | None = None
 HALTING_STACK_BIAS_FLAG: bool | None = None
 
 #########################################################################
-# MEMORY OPTIONS
+# Memory Options
 # If `MEMORY_FLAG` is False, the memory-specific parameters below are ignored.
 MEMORY_FLAG: bool = False
 MEMORY_OPTION: type[DynamicMemoryConfig] = GatedResidualDynamicMemoryConfig
 MEMORY_POSITION_OPTION: MemoryPositionOptions = MemoryPositionOptions.AFTER_AFFINE
 MEMORY_TEST_TIME_TRAINING_LEARNING_RATE: float | None = None
 MEMORY_TEST_TIME_TRAINING_NUM_INNER_STEPS: int | None = None
-# MEMORY STACK OPTIONS
+## Memory Stack Options
 # If False, memory model stack options inherit the layer stack submodule options.
 MEMORY_STACK_INDEPENDENT_FLAG: bool = False
 MEMORY_STACK_HIDDEN_DIM: int | None = None
@@ -199,7 +181,7 @@ MEMORY_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool | None = None
 MEMORY_STACK_BIAS_FLAG: bool | None = None
 
 #########################################################################
-# RECURRENT LAYER OPTIONS
+# Recurrent Layer Options
 # If `RECURRENT_FLAG` is False, the recurrent-specific parameters below are ignored.
 RECURRENT_FLAG: bool = False
 RECURRENT_MAX_STEPS: int = 4
@@ -208,11 +190,11 @@ RECURRENT_LAYER_NORM_POSITION: LayerNormPositionOptions = (
 )
 
 #########################################################################
-# RECURRENT GATE OPTIONS
+## Recurrent Gate Options
 RECURRENT_GATE_FLAG: bool = False
 RECURRENT_GATE_OPTION: LayerGateOptions | None = LayerGateOptions.MULTIPLIER
 RECURRENT_GATE_ACTIVATION: ActivationOptions | None = ActivationOptions.SIGMOID
-# RECURRENT GATE STACK OPTIONS
+### Recurrent Gate Stack Options
 # If False, recurrent gate stack options inherit gate/submodule stack options.
 RECURRENT_GATE_STACK_INDEPENDENT_FLAG: bool = False
 RECURRENT_GATE_STACK_HIDDEN_DIM: int | None = None
@@ -226,14 +208,14 @@ RECURRENT_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool | None = None
 RECURRENT_GATE_STACK_BIAS_FLAG: bool | None = None
 
 #########################################################################
-# RECURRENT HALTING OPTIONS
+## Recurrent Halting Options
 RECURRENT_HALTING_FLAG: bool = False
 RECURRENT_HALTING_THRESHOLD: float = HALTING_THRESHOLD
 RECURRENT_HALTING_DROPOUT: float = HALTING_DROPOUT
 RECURRENT_HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
     HALTING_HIDDEN_STATE_MODE
 )
-# RECURRENT HALTING STACK OPTIONS
+### Recurrent Halting Stack Options
 # If False, recurrent halting stack options inherit halting/submodule stack options.
 RECURRENT_HALTING_STACK_INDEPENDENT_FLAG: bool = False
 RECURRENT_HALTING_STACK_HIDDEN_DIM: int | None = None
@@ -249,7 +231,7 @@ RECURRENT_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool | None = None
 RECURRENT_HALTING_STACK_BIAS_FLAG: bool | None = None
 
 #########################################################################
-# WEIGHT GENERATOR OPTIONS
+# Weight Generator Options
 # If `WEIGHT_OPTION_FLAG` is False, the weight-specific parameters below are ignored.
 WEIGHT_OPTION_FLAG: bool = False
 WEIGHT_OPTION: type[DynamicWeightConfig] | None = None
@@ -266,7 +248,7 @@ WEIGHT_NORMALIZATION_POSITION_OPTION: WeightNormalizationPositionOptions = (
 WEIGHT_BANK_EXPANSION_FACTOR: BankExpansionFactorOptions = (
     BankExpansionFactorOptions.FACTOR_OF_THREE
 )
-# WEIGHT GENERATOR STACK OPTIONS
+## Weight Generator Stack Options
 # If False, weight generator stack options inherit ADAPTIVE_GENERATOR_STACK_*.
 WEIGHT_GENERATOR_STACK_INDEPENDENT_FLAG: bool = False
 WEIGHT_GENERATOR_STACK_HIDDEN_DIM: int | None = None
@@ -283,7 +265,7 @@ WEIGHT_GENERATOR_STACK_BIAS_FLAG: bool | None = None
 
 
 #########################################################################
-# BIAS GENERATOR OPTIONS
+# Bias Generator Options
 # If `BIAS_OPTION_FLAG` is False, the bias-specific parameters below are ignored.
 BIAS_OPTION_FLAG: bool = False
 BIAS_OPTION: type[DynamicBiasConfig] | None = None
@@ -293,7 +275,7 @@ BIAS_DECAY_WARMUP_BATCHES: int = 0
 BIAS_BANK_EXPANSION_FACTOR: BankExpansionFactorOptions = (
     BankExpansionFactorOptions.FACTOR_OF_TWO
 )
-# BIAS GENERATOR STACK OPTIONS
+## Bias Generator Stack Options
 # If False, bias generator stack options inherit ADAPTIVE_GENERATOR_STACK_*.
 BIAS_GENERATOR_STACK_INDEPENDENT_FLAG: bool = False
 BIAS_GENERATOR_STACK_HIDDEN_DIM: int | None = None
@@ -307,12 +289,12 @@ BIAS_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool | None = None
 BIAS_GENERATOR_STACK_BIAS_FLAG: bool | None = None
 
 #########################################################################
-# DIAGONAL GENERATOR OPTIONS
+# Diagonal Generator Options
 # If `DIAGONAL_OPTION_FLAG` is False, the diagonal-specific parameters below are
 # ignored.
 DIAGONAL_OPTION_FLAG: bool = False
 DIAGONAL_OPTION: type[DynamicDiagonalConfig] | None = None
-# DIAGONAL GENERATOR STACK OPTIONS
+## Diagonal Generator Stack Options
 # If False, diagonal generator stack options inherit ADAPTIVE_GENERATOR_STACK_*.
 DIAGONAL_GENERATOR_STACK_INDEPENDENT_FLAG: bool = False
 DIAGONAL_GENERATOR_STACK_HIDDEN_DIM: int | None = None
@@ -328,7 +310,7 @@ DIAGONAL_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool | None = None
 DIAGONAL_GENERATOR_STACK_BIAS_FLAG: bool | None = None
 
 #########################################################################
-# MASK OPTIONS
+# Mask Options
 # If `MASK_OPTION_FLAG` is False, the mask-specific parameters below are ignored.
 MASK_OPTION_FLAG: bool = False
 ROW_MASK_OPTION: type[AxisMaskConfig] | None = None
@@ -337,7 +319,7 @@ MASK_FLOOR: float = 0.0
 MASK_TRANSITION_WIDTH: float = 0.1
 MASK_SURROGATE_SCALE: float = 10.0
 MASK_DIMENSION_OPTION: MaskDimensionOptions = MaskDimensionOptions.COLUMN
-# MASK STACK OPTIONS
+## Mask Stack Options
 # If False, mask generator stack options inherit ADAPTIVE_GENERATOR_STACK_*.
 MASK_GENERATOR_STACK_INDEPENDENT_FLAG: bool = False
 MASK_GENERATOR_STACK_HIDDEN_DIM: int | None = None
@@ -352,7 +334,7 @@ MASK_GENERATOR_STACK_BIAS_FLAG: bool | None = None
 
 
 #########################################################################
-# INPUT BOUNDARY PROJECTOR OPTIONS
+# Input Boundary Model Options
 # Input boundary dynamic weight options.
 INPUT_LAYER_WEIGHT_OPTION: type[DynamicWeightConfig] | None = None
 INPUT_LAYER_WEIGHT_GENERATOR_DEPTH: DynamicDepthOptions = WEIGHT_GENERATOR_DEPTH
@@ -387,7 +369,7 @@ INPUT_LAYER_MASK_SURROGATE_SCALE: float = MASK_SURROGATE_SCALE
 INPUT_LAYER_MASK_DIMENSION_OPTION: MaskDimensionOptions = MASK_DIMENSION_OPTION
 
 #########################################################################
-# OUTPUT BOUNDARY PROJECTOR OPTIONS
+# Output Boundary Model Options
 # Output boundary dynamic weight options.
 OUTPUT_LAYER_WEIGHT_OPTION: type[DynamicWeightConfig] | None = None
 OUTPUT_LAYER_WEIGHT_GENERATOR_DEPTH: DynamicDepthOptions = WEIGHT_GENERATOR_DEPTH
@@ -420,278 +402,16 @@ OUTPUT_LAYER_MASK_FLOOR: float = MASK_FLOOR
 OUTPUT_LAYER_MASK_TRANSITION_WIDTH: float = MASK_TRANSITION_WIDTH
 OUTPUT_LAYER_MASK_SURROGATE_SCALE: float = MASK_SURROGATE_SCALE
 OUTPUT_LAYER_MASK_DIMENSION_OPTION: MaskDimensionOptions = MASK_DIMENSION_OPTION
-#########################################################################
-# HYPERPARAMETER SEARCH SPACE
-# These values define the parameter ranges explored when search mode is enabled.
 
 #########################################################################
-# GLOBAL TRAINING AND MAIN LAYER STACK HYPERPARAMETERS
-# Global training hyperparameters.
-SEARCH_SPACE_LEARNING_RATE: list = [1e-4, 1e-3, 1e-2]
-# Main stack shape and regularization hyperparameters.
-SEARCH_SPACE_STACK_HIDDEN_DIM: list = [16, 32, 64, 128, 256, 512]
-SEARCH_SPACE_STACK_NUM_LAYERS: list = [2, 4, 8, 16, 32]
-SEARCH_SPACE_STACK_DROPOUT_PROBABILITY: list = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
-# Main stack normalization and activation hyperparameters.
-SEARCH_SPACE_STACK_LAYER_NORM_POSITION: list = [
-    LayerNormPositionOptions.DISABLED,
-    LayerNormPositionOptions.DEFAULT,
-    LayerNormPositionOptions.BEFORE,
-    LayerNormPositionOptions.AFTER,
-]
-SEARCH_SPACE_STACK_ACTIVATION: list = [
-    ActivationOptions.RELU,
-    ActivationOptions.LEAKY_RELU,
-    ActivationOptions.ELU,
-    ActivationOptions.GELU,
-    ActivationOptions.TANH,
-]
-
-#########################################################################
-# DYNAMIC WEIGHT GENERATOR OPTION, DEPTH, DECAY, AND NORMALIZATION HYPERPARAMETERS
-SEARCH_SPACE_WEIGHT_OPTION: list = [
-    None,
-    SingleModelDynamicWeightConfig,
-    DualModelDynamicWeightConfig,
-    LowRankDynamicWeightConfig,
-    HypernetworkDynamicWeightConfig,
-    LayeredWeightedBankDynamicWeightConfig,
-    SoftWeightedBankDynamicWeightConfig,
-]
-SEARCH_SPACE_WEIGHT_GENERATOR_DEPTH: list = [
-    DynamicDepthOptions.DEPTH_OF_ONE,
-    DynamicDepthOptions.DEPTH_OF_TWO,
-    DynamicDepthOptions.DEPTH_OF_FOUR,
-    DynamicDepthOptions.DEPTH_OF_SIX,
-    DynamicDepthOptions.DEPTH_OF_EIGHT,
-    DynamicDepthOptions.DEPTH_OF_TEN,
-]
-SEARCH_SPACE_WEIGHT_DECAY_SCHEDULE: list = [
-    WeightDecayScheduleOptions.DISABLED,
-    WeightDecayScheduleOptions.EXPONENTIAL,
-    WeightDecayScheduleOptions.LINEAR,
-    WeightDecayScheduleOptions.MULTIPLICATIVE,
-]
-SEARCH_SPACE_WEIGHT_DECAY_RATE: list = [1e-5, 1e-4, 1e-3, 1e-2]
-SEARCH_SPACE_WEIGHT_DECAY_WARMUP_BATCHES: list = [0, 100, 500, 1000]
-SEARCH_SPACE_WEIGHT_NORMALIZATION_OPTION: list = [
-    WeightNormalizationOptions.DISABLED,
-    WeightNormalizationOptions.CLAMP,
-    WeightNormalizationOptions.L2_SCALE,
-    WeightNormalizationOptions.SOFT_CLAMP,
-    WeightNormalizationOptions.RMS,
-    WeightNormalizationOptions.SIGMOID_SCALE,
-]
-SEARCH_SPACE_WEIGHT_NORMALIZATION_POSITION_OPTION: list = [
-    WeightNormalizationPositionOptions.DISABLED,
-    WeightNormalizationPositionOptions.BEFORE_OUTER_PRODUCT,
-    WeightNormalizationPositionOptions.AFTER_OUTER_PRODUCT,
-]
-SEARCH_SPACE_WEIGHT_BANK_EXPANSION_FACTOR: list = [
-    BankExpansionFactorOptions.FACTOR_OF_ONE,
-    BankExpansionFactorOptions.FACTOR_OF_TWO,
-    BankExpansionFactorOptions.FACTOR_OF_THREE,
-    BankExpansionFactorOptions.FACTOR_OF_FOUR,
-]
-
-#########################################################################
-# DYNAMIC BIAS GENERATOR OPTION, DECAY, AND BANK EXPANSION HYPERPARAMETERS
-SEARCH_SPACE_BIAS_OPTION: list = [
-    None,
-    AffineTransformDynamicBiasConfig,
-    AdditiveDynamicBiasConfig,
-    SigmoidGatedDynamicBiasConfig,
-    WeightedBankDynamicBiasConfig,
-    MultiplicativeDynamicBiasConfig,
-    TanhGatedDynamicBiasConfig,
-]
-SEARCH_SPACE_BIAS_DECAY_SCHEDULE: list = [
-    WeightDecayScheduleOptions.DISABLED,
-    WeightDecayScheduleOptions.EXPONENTIAL,
-    WeightDecayScheduleOptions.LINEAR,
-    WeightDecayScheduleOptions.MULTIPLICATIVE,
-]
-SEARCH_SPACE_BIAS_DECAY_RATE: list = [1e-5, 1e-4, 1e-3, 1e-2]
-SEARCH_SPACE_BIAS_DECAY_WARMUP_BATCHES: list = [0, 100, 500, 1000]
-SEARCH_SPACE_BIAS_BANK_EXPANSION_FACTOR: list = [
-    BankExpansionFactorOptions.FACTOR_OF_ONE,
-    BankExpansionFactorOptions.FACTOR_OF_TWO,
-    BankExpansionFactorOptions.FACTOR_OF_THREE,
-    BankExpansionFactorOptions.FACTOR_OF_FOUR,
-]
-
-#########################################################################
-# DYNAMIC DIAGONAL GENERATOR OPTION AND DEPTH HYPERPARAMETERS
-SEARCH_SPACE_DIAGONAL_OPTION: list = [
-    None,
-    StandardDynamicDiagonalConfig,
-    AntiDynamicDiagonalConfig,
-    CombinedDynamicDiagonalConfig,
-]
-
-#########################################################################
-# DYNAMIC MASK GENERATOR OPTION, DEPTH, DIMENSION, AND SURROGATE SHAPING HYPERPARAMETERS
-SEARCH_SPACE_ROW_MASK_OPTION: list = [
-    None,
-    DiagonalAxisMaskConfig,
-    OuterProductMaskConfig,
-    PerAxisScoreMaskConfig,
-    TopSliceAxisMaskConfig,
-    WeightInformedScoreAxisMaskConfig,
-]
-SEARCH_SPACE_MASK_THRESHOLD: list = [0.1, 0.3, 0.5, 0.7, 0.9]
-SEARCH_SPACE_MASK_SURROGATE_SCALE: list = [1.0, 5.0, 10.0, 20.0]
-SEARCH_SPACE_MASK_FLOOR: list = [0.0, 0.1, 0.25, 0.5]
-SEARCH_SPACE_MASK_TRANSITION_WIDTH: list = [0.05, 0.1, 0.2, 0.5]
-SEARCH_SPACE_MASK_DIMENSION_OPTION: list = [
-    MaskDimensionOptions.ROW,
-    MaskDimensionOptions.COLUMN,
-]
-
-#########################################################################
-# AUGMENTATION GENERATOR LAYER STACK HYPERPARAMETERS
-SEARCH_SPACE_ADAPTIVE_GENERATOR_STACK_NUM_LAYERS: list = [1, 2, 3]
-SEARCH_SPACE_ADAPTIVE_GENERATOR_STACK_HIDDEN_DIM: list = [64, 128, 256]
-SEARCH_SPACE_ADAPTIVE_GENERATOR_STACK_DROPOUT_PROBABILITY: list = [0.0, 0.1, 0.2]
-SEARCH_SPACE_ADAPTIVE_GENERATOR_STACK_ACTIVATION: list = [
-    ActivationOptions.RELU,
-    ActivationOptions.SILU,
-    ActivationOptions.GELU,
-    ActivationOptions.MISH,
-]
-SEARCH_SPACE_ADAPTIVE_GENERATOR_STACK_LAYER_NORM_POSITION: list = [
-    LayerNormPositionOptions.DISABLED,
-    LayerNormPositionOptions.DEFAULT,
-    LayerNormPositionOptions.BEFORE,
-    LayerNormPositionOptions.AFTER,
-]
-
-
-MONITOR_OPTIONS: list[MonitorOption] = [
-    MonitorOption(
-        name="linear",
-        label="Linear layers",
-        description=(
-            "Logs activation, parameter, gradient, weight-conditioning "
-            "(spectral norm / condition number / effective rank), and dead-feature "
-            "stats for Emperor linear layers."
-        ),
-        kinds=["scalar"],
-        callback_factory=lambda: LinearMonitorCallback(log_every_n_steps=100),
-    ),
-    MonitorOption(
-        name="recurrent-layer",
-        label="Recurrent layers",
-        description=(
-            "Logs recurrent step count, hidden-state convergence, recurrent gate "
-            "openness, halted-state preservation, and step-delta visual summaries."
-        ),
-        kinds=["scalar", "histogram", "image"],
-        callback_factory=lambda: RecurrentLayerMonitorCallback(log_every_n_steps=100),
-    ),
-    MonitorOption(
-        name="layer-controller",
-        label="Layer controllers",
-        description=(
-            "Logs Layer gate, residual, dropout, layer-norm, and activation "
-            "controller statistics without duplicating memory metrics."
-        ),
-        kinds=["scalar"],
-        callback_factory=lambda: LayerControllerMonitorCallback(log_every_n_steps=100),
-    ),
-    MonitorOption(
-        name="halting",
-        label="Halting (adaptive compute)",
-        description=(
-            "Logs recurrence depth, halting fraction, max-steps saturation, ponder "
-            "loss, plus survival heatmap and ponder-cost histogram for "
-            "stick-breaking / soft halting modules."
-        ),
-        kinds=["scalar", "histogram", "image"],
-        callback_factory=lambda: HaltingMonitorCallback(log_every_n_steps=100),
-    ),
-    MonitorOption(
-        name="memory",
-        label="Memory modules",
-        description=(
-            "Logs gating, blend-weight, and state statistics for Emperor memory "
-            "modules. Inactive until a memory config is enabled."
-        ),
-        kinds=["scalar"],
-        callback_factory=lambda: MemoryMonitorCallback(log_every_n_steps=100),
-    ),
-    MonitorOption(
-        name="adaptive",
-        label="Adaptive parameters",
-        description=(
-            "Logs dynamic weight, bias, diagonal, and mask parameter statistics, "
-            "plus input-adaptivity (cross-sample variation / collapse detection)."
-        ),
-        kinds=["scalar", "histogram"],
-        callback_factory=lambda: AdaptiveParameterMonitorCallback(
-            log_every_n_steps=100,
-            log_histograms=True,
-            log_internal_stats=True,
-        ),
-    ),
-    MonitorOption(
-        name="weight-bank",
-        label="Weight bank utilization",
-        description=(
-            "Logs bank-slot selection entropy, utilization, and routing heatmaps "
-            "for weighted-bank dynamic params."
-        ),
-        kinds=["scalar", "histogram", "image"],
-        callback_factory=lambda: WeightBankUtilizationMonitorCallback(
-            log_every_n_steps=100,
-        ),
-    ),
-]
-
-#########################################################################
-# NEURON WRAPPER OPTIONS
-from emperor.neuron.core.monitor import NeuronClusterMonitorCallback
+# Neuron Wrapper Options
 from emperor.neuron.core.optimizer_sync import NeuronClusterOptimizerSyncCallback
 from emperor.neuron.core.options import TerminalRangeOptions, TerminalZAxisOffsetOptions
-from emperor.sampler.core.monitor import SamplerMonitorCallback
 
 CALLBACK_NEURON_CLUSTER_OPTIMIZER_SYNC = NeuronClusterOptimizerSyncCallback()
 
-_neuron_monitor_options = [
-    MonitorOption(
-        name="neuron_cluster",
-        label="Neuron cluster growth",
-        description=(
-            "Logs cluster growth (count, capacity, fill, growth pressure) plus "
-            "routing dynamics: route depth, escape/halt fractions, entry-routing "
-            "entropy, survival curve, and per-neuron utilization heatmap."
-        ),
-        kinds=["scalar", "histogram", "image"],
-        callback_factory=lambda: NeuronClusterMonitorCallback(log_every_n_steps=100),
-        default_enabled=True,
-    ),
-    MonitorOption(
-        name="sampler",
-        label="Routing samplers",
-        description=(
-            "Logs router/sampler internals for the cluster entry sampler and "
-            "per-neuron terminal samplers: probability distributions, per-expert "
-            "utilization, and auxiliary load-balancing loss components."
-        ),
-        kinds=["scalar", "histogram", "image"],
-        callback_factory=lambda: SamplerMonitorCallback(log_every_n_steps=100),
-    ),
-]
-_existing_monitor_names = {option.name for option in MONITOR_OPTIONS}
-MONITOR_OPTIONS = [
-    *MONITOR_OPTIONS,
-    *[
-        option
-        for option in _neuron_monitor_options
-        if option.name not in _existing_monitor_names
-    ],
-]
 
+## Cluster Geometry Options
 CLUSTER_X_AXIS_TOTAL_NEURONS: int = 10
 CLUSTER_Y_AXIS_TOTAL_NEURONS: int = 10
 CLUSTER_Z_AXIS_TOTAL_NEURONS: int = 1
@@ -701,14 +421,17 @@ CLUSTER_INITIAL_Z_AXIS_TOTAL_NEURONS: int = 1
 CLUSTER_MAX_STEPS: int = 4
 CLUSTER_GROWTH_THRESHOLD: int | None = 250
 
+## Cluster Terminal Options
 CLUSTER_TERMINAL_XY_AXIS_RANGE: TerminalRangeOptions = TerminalRangeOptions.ONE
 CLUSTER_TERMINAL_Z_AXIS_RANGE: TerminalRangeOptions = TerminalRangeOptions.ONE
 CLUSTER_TERMINAL_Z_AXIS_OFFSET: TerminalZAxisOffsetOptions = (
     TerminalZAxisOffsetOptions.ZERO
 )
 CLUSTER_TERMINAL_TOP_K: int = 1
+
+### Cluster Terminal Router Options
 CLUSTER_TERMINAL_ROUTER_NUM_LAYERS: int = 1
-CLUSTER_TERMINAL_ROUTER_HIDDEN_DIM: int = STACK_HIDDEN_DIM
+CLUSTER_TERMINAL_ROUTER_HIDDEN_DIM: int = HIDDEN_DIM
 CLUSTER_TERMINAL_ROUTER_ACTIVATION: ActivationOptions = ActivationOptions.DISABLED
 CLUSTER_TERMINAL_ROUTER_LAYER_NORM_POSITION: LayerNormPositionOptions = (
     LayerNormPositionOptions.DISABLED
@@ -723,6 +446,7 @@ CLUSTER_TERMINAL_ROUTER_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = (
 CLUSTER_TERMINAL_ROUTER_APPLY_OUTPUT_PIPELINE_FLAG: bool = False
 CLUSTER_TERMINAL_ROUTER_BIAS_FLAG: bool = True
 
+### Cluster Terminal Sampler Options
 CLUSTER_TERMINAL_SAMPLER_THRESHOLD: float = 0.0
 CLUSTER_TERMINAL_SAMPLER_FILTER_ABOVE_THRESHOLD: bool = False
 CLUSTER_TERMINAL_SAMPLER_NUM_TOPK_SAMPLES: int = 0
@@ -733,13 +457,14 @@ CLUSTER_TERMINAL_SAMPLER_SWITCH_LOSS_WEIGHT: float = 0.0
 CLUSTER_TERMINAL_SAMPLER_ZERO_CENTRED_LOSS_WEIGHT: float = 0.0
 CLUSTER_TERMINAL_SAMPLER_MUTUAL_INFORMATION_LOSS_WEIGHT: float = 0.0
 
+## Cluster Halting Options
 CLUSTER_HALTING_FLAG: bool = True
 CLUSTER_HALTING_THRESHOLD: float = 0.95
 CLUSTER_HALTING_DROPOUT: float = 0.0
 CLUSTER_HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
     HaltingHiddenStateModeOptions.RAW
 )
-CLUSTER_HALTING_STACK_HIDDEN_DIM: int = STACK_HIDDEN_DIM
+CLUSTER_HALTING_STACK_HIDDEN_DIM: int = HIDDEN_DIM
 CLUSTER_HALTING_OUTPUT_DIM: int = 2
 CLUSTER_HALTING_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = (
     LayerNormPositionOptions.DISABLED
@@ -755,7 +480,3 @@ CLUSTER_HALTING_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = (
 )
 CLUSTER_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = False
 CLUSTER_HALTING_STACK_BIAS_FLAG: bool = True
-
-SEARCH_SPACE_CLUSTER_MAX_STEPS: list = [1, 2, 4, 6]
-SEARCH_SPACE_CLUSTER_TERMINAL_TOP_K: list = [1, 2]
-SEARCH_SPACE_CLUSTER_GROWTH_THRESHOLD: list = [100, 250, 500, None]

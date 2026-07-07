@@ -24,7 +24,7 @@ class ParametricMatrixConfigBuilder:
         batch_size: int = config.BATCH_SIZE,
         learning_rate: float = config.LEARNING_RATE,
         input_dim: int = config.INPUT_DIM,
-        stack_hidden_dim: int = config.STACK_HIDDEN_DIM,
+        hidden_dim: int = config.HIDDEN_DIM,
         output_dim: int = config.OUTPUT_DIM,
         stack_num_layers: int = config.STACK_NUM_LAYERS,
         stack_activation: ActivationOptions = config.STACK_ACTIVATION,
@@ -67,7 +67,7 @@ class ParametricMatrixConfigBuilder:
         router_options: ParametricRouterOptions | None = None,
     ) -> None:
         stack_options = stack_options or ParametricStackOptions(
-            hidden_dim=stack_hidden_dim,
+            hidden_dim=hidden_dim,
             num_layers=stack_num_layers,
             activation=stack_activation,
             residual_connection_option=stack_residual_connection_option,

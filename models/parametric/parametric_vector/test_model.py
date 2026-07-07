@@ -6,6 +6,8 @@ import sys
 from copy import deepcopy
 from unittest.mock import patch
 
+import models.parametric.parametric_vector.dataset_options as dataset_options
+import models.parametric.parametric_vector.search_space as search_space
 os.environ.setdefault("MPLCONFIGDIR", "/tmp")
 
 import torch
@@ -100,7 +102,7 @@ class TestParametricVectorModel(unittest.TestCase):
         self.assertIsNone(kwargs["search_keys"])
         self.assertEqual(kwargs["config_overrides"], {})
         self.assertEqual(kwargs["search_overrides"], {})
-        self.assertEqual(kwargs["selected_datasets"], config.DATASET_OPTIONS)
+        self.assertEqual(kwargs["selected_datasets"], dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK])
         self.assertIsNone(kwargs["selected_presets"])
 
     def test_modern_preset_contract_is_exposed(self):
@@ -132,7 +134,7 @@ class TestParametricVectorModel(unittest.TestCase):
     def test_builder_returns_boundary_style_experiment_config(self):
         cfg = ParametricVectorConfigBuilder(
             input_dim=8,
-            stack_hidden_dim=4,
+            hidden_dim=4,
             output_dim=3,
         ).build()
 
@@ -192,7 +194,7 @@ class TestParametricVectorModel(unittest.TestCase):
             "batch_size": 3,
             "learning_rate": 0.02,
             "input_dim": 8,
-            "stack_hidden_dim": stack_options.hidden_dim,
+            "hidden_dim": stack_options.hidden_dim,
             "output_dim": 5,
             "stack_num_layers": stack_options.num_layers,
             "stack_activation": stack_options.activation,
@@ -284,7 +286,7 @@ class TestParametricVectorModel(unittest.TestCase):
         hidden_dim = 5
         cfg = ExperimentPresets()._preset(
             input_dim=8,
-            stack_hidden_dim=hidden_dim,
+            hidden_dim=hidden_dim,
             output_dim=3,
         )
         stack_config = cfg.experiment_config.model_config
@@ -323,7 +325,7 @@ class TestParametricVectorModel(unittest.TestCase):
         )
 
     def test_vector_shared_router_is_rejected(self):
-        cfg = ExperimentPresets()._preset(input_dim=8, stack_hidden_dim=4, output_dim=3)
+        cfg = ExperimentPresets()._preset(input_dim=8, hidden_dim=4, output_dim=3)
         parametric_config = deepcopy(
             cfg.experiment_config.model_config.layer_config.layer_model_config
         )
@@ -342,7 +344,7 @@ class TestParametricVectorModel(unittest.TestCase):
         }
         summaries = {
             variant: self._router_sampler_summary(
-                builder(input_dim=8, stack_hidden_dim=9, output_dim=3).build()
+                builder(input_dim=8, hidden_dim=9, output_dim=3).build()
             )
             for variant, builder in builders.items()
         }
@@ -375,7 +377,7 @@ class TestParametricVectorModel(unittest.TestCase):
         batch_size = 2
         presets = ExperimentPresets()
 
-        for dataset in config.DATASET_OPTIONS:
+        for dataset in dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK]:
             with self.subTest(dataset=dataset.__name__):
                 cfg = presets.get_config(ExperimentPreset.PRESET, dataset)[0]
                 model = Model(cfg)
@@ -390,7 +392,7 @@ class TestParametricVectorModel(unittest.TestCase):
 
     def test_all_presets_train_one_epoch(self):
         presets = ExperimentPresets()
-        dataset = config.DATASET_OPTIONS[0]
+        dataset = dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0]
 
         for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
@@ -408,7 +410,7 @@ class TestParametricVectorModel(unittest.TestCase):
     def test_config_search_space_builds_configs(self):
         configs = ExperimentPresets().get_config(
             ExperimentPreset.CONFIG,
-            config.DATASET_OPTIONS[0],
+            dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
             RandomSearch(num_samples=2),
         )
 
@@ -428,42 +430,42 @@ class TestParametricVectorModel(unittest.TestCase):
     def test_preset_accepts_grid_search_over_unlocked_axis(self):
         configs = ExperimentPresets().get_config(
             ExperimentPreset.PRESET,
-            config.DATASET_OPTIONS[0],
+            dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
             GridSearch(),
             search_keys=["learning_rate"],
         )
 
-        self.assertEqual(len(configs), len(config.SEARCH_SPACE_LEARNING_RATE))
+        self.assertEqual(len(configs), len(search_space.SEARCH_SPACE_LEARNING_RATE))
         self.assertEqual(
             {cfg.learning_rate for cfg in configs},
-            set(config.SEARCH_SPACE_LEARNING_RATE),
+            set(search_space.SEARCH_SPACE_LEARNING_RATE),
         )
 
     def test_config_search_applies_parametric_axes(self):
         configs = ExperimentPresets().get_config(
             ExperimentPreset.CONFIG,
-            config.DATASET_OPTIONS[0],
+            dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
             GridSearch(),
             search_keys=["adaptive_mixture_num_experts"],
         )
 
         self.assertEqual(
             len(configs),
-            len(config.SEARCH_SPACE_ADAPTIVE_MIXTURE_NUM_EXPERTS),
+            len(search_space.SEARCH_SPACE_ADAPTIVE_MIXTURE_NUM_EXPERTS),
         )
         self.assertEqual(
             {
                 cfg.experiment_config.model_config.layer_config.layer_model_config.weight_mixture_config.num_experts
                 for cfg in configs
             },
-            set(config.SEARCH_SPACE_ADAPTIVE_MIXTURE_NUM_EXPERTS),
+            set(search_space.SEARCH_SPACE_ADAPTIVE_MIXTURE_NUM_EXPERTS),
         )
 
     def test_search_keys_unknown_axis_raises(self):
         with self.assertRaises(ValueError) as ctx:
             ExperimentPresets().get_config(
                 ExperimentPreset.CONFIG,
-                config.DATASET_OPTIONS[0],
+                dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
                 RandomSearch(num_samples=2),
                 search_keys=["bogus_axis"],
             )
@@ -472,7 +474,7 @@ class TestParametricVectorModel(unittest.TestCase):
 
     def test_model_step_accepts_tuple_output(self):
         batch_size = 2
-        cfg = ExperimentPresets()._preset(input_dim=8, stack_hidden_dim=4, output_dim=3)
+        cfg = ExperimentPresets()._preset(input_dim=8, hidden_dim=4, output_dim=3)
         model = Model(cfg)
         X = torch.randn(batch_size, 1, 2, 4)
         y = torch.tensor([0, 2])
