@@ -11,7 +11,7 @@ if __name__ == "__main__":
     parser = get_experiment_parser(ExperimentPreset.names(), EXPERIMENT_MODULE_PATH)
     args = parser.parse_args()
     mode = resolve_experiment_mode(args, ExperimentPreset)
-    experiment = Experiment(mode.preset)
+    experiment = Experiment(mode.preset, experiment_task=mode.experiment_task)
     experiment.train_model(
         search_mode=mode.search_mode,
         log_folder=args.logdir,

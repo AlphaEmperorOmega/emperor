@@ -11,11 +11,13 @@ from models.experts._builder_options import ExpertsStackOptions
 
 @dataclass(frozen=True)
 class BoundaryConfigDependencies:
+    hidden_dim: int
     stack_options: ExpertsStackOptions | None
 
 
 class BoundaryConfigFactory:
     def __init__(self, dependencies: BoundaryConfigDependencies) -> None:
+        self.hidden_dim = dependencies.hidden_dim
         self.stack_options = self.__default_stack_options(dependencies.stack_options)
 
     def __default_stack_options(
@@ -25,7 +27,7 @@ class BoundaryConfigFactory:
         if stack_options is not None:
             return stack_options
         return ExpertsStackOptions(
-            hidden_dim=config.STACK_HIDDEN_DIM,
+            hidden_dim=self.hidden_dim,
             bias_flag=config.STACK_BIAS_FLAG,
             layer_norm_position=config.STACK_LAYER_NORM_POSITION,
             num_layers=config.STACK_NUM_LAYERS,

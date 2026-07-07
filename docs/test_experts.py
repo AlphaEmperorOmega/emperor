@@ -48,16 +48,14 @@ class MixtureOfExpertsPresetMixin:
         bias_flag: bool = False,
         noisy_topk_flag: bool = False,
         stack_num_layers: int = 2,
-        stack_hidden_dim: int = 0,
+        stack_width: int = 0,
         stack_activation: ActivationOptions = ActivationOptions.RELU,
         stack_residual_connection_option: ResidualConnectionOptions = (
             ResidualConnectionOptions.DISABLED
         ),
         stack_dropout_probability: float = 0.0,
     ) -> RouterConfig:
-        hidden_dim = (
-            stack_hidden_dim if stack_hidden_dim > 0 else max(input_dim, num_experts)
-        )
+        hidden_dim = stack_width if stack_width > 0 else max(input_dim, num_experts)
         output_dim = num_experts * 2 if noisy_topk_flag else num_experts
         return RouterConfig(
             input_dim=input_dim,
@@ -119,16 +117,14 @@ class MixtureOfExpertsPresetMixin:
         output_dim: int = 6,
         bias_flag: bool = False,
         stack_num_layers: int = 2,
-        stack_hidden_dim: int = 0,
+        stack_width: int = 0,
         stack_activation: ActivationOptions = ActivationOptions.RELU,
         stack_residual_connection_option: ResidualConnectionOptions = (
             ResidualConnectionOptions.DISABLED
         ),
         stack_dropout_probability: float = 0.0,
     ) -> LayerStackConfig:
-        hidden_dim = (
-            stack_hidden_dim if stack_hidden_dim > 0 else max(input_dim, output_dim)
-        )
+        hidden_dim = stack_width if stack_width > 0 else max(input_dim, output_dim)
         return LayerStackConfig(
             input_dim=input_dim,
             hidden_dim=hidden_dim,
@@ -172,7 +168,7 @@ class MixtureOfExpertsPresetMixin:
         experts_dropped_token_behavior: DroppedTokenOptions = DroppedTokenOptions.ZEROS,
         experts_model_bias_flag: bool = False,
         stack_num_layers: int = 2,
-        stack_hidden_dim: int = 0,
+        stack_width: int = 0,
         stack_activation: ActivationOptions = ActivationOptions.RELU,
         stack_residual_connection_option: ResidualConnectionOptions = (
             ResidualConnectionOptions.DISABLED
@@ -187,7 +183,7 @@ class MixtureOfExpertsPresetMixin:
                 output_dim=output_dim,
                 bias_flag=experts_model_bias_flag,
                 stack_num_layers=stack_num_layers,
-                stack_hidden_dim=stack_hidden_dim,
+                stack_width=stack_width,
                 stack_activation=stack_activation,
                 stack_residual_connection_option=stack_residual_connection_option,
                 stack_dropout_probability=stack_dropout_probability,
@@ -218,7 +214,7 @@ class MixtureOfExpertsPresetMixin:
                     bias_flag=router_model_bias_flag,
                     noisy_topk_flag=router_model_noisy_topk_flag,
                     stack_num_layers=stack_num_layers,
-                    stack_hidden_dim=stack_hidden_dim,
+                    stack_width=stack_width,
                     stack_activation=stack_activation,
                     stack_residual_connection_option=stack_residual_connection_option,
                     stack_dropout_probability=stack_dropout_probability,

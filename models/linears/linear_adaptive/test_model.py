@@ -92,6 +92,10 @@ from models.training_test_utils import (
 )
 
 
+import models.linears.linear_adaptive.dataset_options as dataset_options
+import models.linears.linear_adaptive.search_space as search_space
+
+
 class TestAdaptiveLinearModel(unittest.TestCase):
     def adaptive_preset(self, **kwargs):
         return ExperimentPresets()._preset(**kwargs)
@@ -99,7 +103,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
     def test_all_presets_forward_one_mnist_batch(self):
         batch_size = 2
         presets = ExperimentPresets()
-        dataset = config.DATASET_OPTIONS[0]
+        dataset = dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0]
 
         for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
@@ -116,7 +120,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
         batch_size = 2
         presets = ExperimentPresets()
 
-        for dataset in config.DATASET_OPTIONS:
+        for dataset in dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK]:
             with self.subTest(dataset=dataset.__name__):
                 cfg = presets.get_config(ExperimentPreset.BASELINE, dataset)[0]
                 model = Model(cfg)
@@ -128,7 +132,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
 
     def test_all_presets_train_one_epoch(self):
         presets = ExperimentPresets()
-        dataset = config.DATASET_OPTIONS[0]
+        dataset = dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0]
 
         for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
@@ -141,7 +145,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
     def test_preset_builds_adaptive_linear_layer_config(self):
         cfg = ExperimentPresets()._preset(
             input_dim=8,
-            stack_hidden_dim=16,
+            hidden_dim=16,
             output_dim=4,
         )
         layer_model_config = (
@@ -156,9 +160,9 @@ class TestAdaptiveLinearModel(unittest.TestCase):
     def test_config_builder_builds_model_config(self):
         cfg = LinearAdaptiveConfigBuilder(
             input_dim=8,
+            hidden_dim=16,
             output_dim=4,
             stack_options=MainLayerStackOptions(
-                hidden_dim=16,
                 bias_flag=config.STACK_BIAS_FLAG,
                 layer_norm_position=config.STACK_LAYER_NORM_POSITION,
                 num_layers=config.STACK_NUM_LAYERS,
@@ -192,7 +196,6 @@ class TestAdaptiveLinearModel(unittest.TestCase):
 
     def test_flat_builder_kwargs_are_rejected(self):
         cases = (
-            {"stack_hidden_dim": 13},
             {"adaptive_generator_stack_hidden_dim": 19},
             {"input_layer_weight_option": DualModelDynamicWeightConfig},
             {"memory_flag": True},
@@ -326,10 +329,10 @@ class TestAdaptiveLinearModel(unittest.TestCase):
             ActivationOptions.RELU,
         )
 
-    def test_boundary_layer_pipeline_matches_linear_projection_options(self):
+    def test_boundary_layer_pipeline_matches_linear_model_options(self):
         cfg = self.adaptive_preset(
             input_dim=8,
-            stack_hidden_dim=16,
+            hidden_dim=16,
             output_dim=4,
             stack_activation=ActivationOptions.RELU,
             layer_norm_position=LayerNormPositionOptions.AFTER,
@@ -408,7 +411,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
     def test_config_builder_applies_stack_bias_flag_to_layer_stack(self):
         cfg = self.adaptive_preset(
             input_dim=8,
-            stack_hidden_dim=16,
+            hidden_dim=16,
             output_dim=4,
             stack_bias_flag=False,
         )
@@ -496,7 +499,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
             bias_flag,
         )
 
-    def test_boundary_projectors_enable_adaptive_options_independently(self):
+    def test_boundary_models_enable_adaptive_options_independently(self):
         cases = [
             (
                 "input_layer_weight_option",
@@ -515,7 +518,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
                 }
                 cfg = self.adaptive_preset(
                     input_dim=8,
-                    stack_hidden_dim=16,
+                    hidden_dim=16,
                     output_dim=4,
                     weight_option_flag=True,
                     weight_option=LowRankDynamicWeightConfig,
@@ -562,10 +565,10 @@ class TestAdaptiveLinearModel(unittest.TestCase):
                 logits = output[0] if isinstance(output, tuple) else output
                 self.assertEqual(logits.shape, (2, 4))
 
-    def test_boundary_projectors_default_to_empty_adaptive_augmentation(self):
+    def test_boundary_models_default_to_empty_adaptive_augmentation(self):
         cfg = self.adaptive_preset(
             input_dim=8,
-            stack_hidden_dim=16,
+            hidden_dim=16,
             output_dim=4,
         )
 
@@ -592,10 +595,10 @@ class TestAdaptiveLinearModel(unittest.TestCase):
         logits = output[0] if isinstance(output, tuple) else output
         self.assertEqual(logits.shape, (2, 4))
 
-    def test_empty_adaptive_boundary_projectors_behave_as_affine_layers(self):
+    def test_empty_adaptive_boundary_models_behave_as_affine_layers(self):
         cfg = self.adaptive_preset(
             input_dim=8,
-            stack_hidden_dim=16,
+            hidden_dim=16,
             output_dim=4,
         )
         model = Model(cfg)
@@ -618,7 +621,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
     def test_boundary_adaptive_projectors_inherit_shared_generator_stack(self):
         cfg = self.adaptive_preset(
             input_dim=8,
-            stack_hidden_dim=16,
+            hidden_dim=16,
             output_dim=4,
             stack_bias_flag=True,
             input_layer_weight_option=DualModelDynamicWeightConfig,
@@ -681,7 +684,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
     def test_stack_layer_norm_position_is_searchable(self):
         configs = ExperimentPresets().get_config(
             ExperimentPreset.BASELINE,
-            config.DATASET_OPTIONS[0],
+            dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
             GridSearch(),
             search_keys=["stack_layer_norm_position"],
         )
@@ -691,17 +694,17 @@ class TestAdaptiveLinearModel(unittest.TestCase):
         }
 
         self.assertEqual(
-            len(configs), len(config.SEARCH_SPACE_STACK_LAYER_NORM_POSITION)
+            len(configs), len(search_space.SEARCH_SPACE_STACK_LAYER_NORM_POSITION)
         )
         self.assertEqual(
             layer_norm_positions,
-            set(config.SEARCH_SPACE_STACK_LAYER_NORM_POSITION),
+            set(search_space.SEARCH_SPACE_STACK_LAYER_NORM_POSITION),
         )
 
     def test_weight_generator_depth_search_key_uses_builder_alias(self):
         configs = ExperimentPresets().get_config(
             ExperimentPreset.DUAL_MODEL_WEIGHT,
-            config.DATASET_OPTIONS[0],
+            dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
             GridSearch(),
             search_keys=["weight_generator_depth"],
         )
@@ -712,11 +715,11 @@ class TestAdaptiveLinearModel(unittest.TestCase):
 
         self.assertEqual(
             len(configs),
-            len(config.SEARCH_SPACE_WEIGHT_GENERATOR_DEPTH),
+            len(search_space.SEARCH_SPACE_WEIGHT_GENERATOR_DEPTH),
         )
         self.assertEqual(
             generator_depths,
-            set(config.SEARCH_SPACE_WEIGHT_GENERATOR_DEPTH),
+            set(search_space.SEARCH_SPACE_WEIGHT_GENERATOR_DEPTH),
         )
 
     def test_single_model_weight_rejects_locked_search_override(self):
@@ -726,7 +729,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
         ):
             ExperimentPresets().get_config(
                 ExperimentPreset.SINGLE_MODEL_WEIGHT,
-                config.DATASET_OPTIONS[0],
+                dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
                 GridSearch(),
                 search_overrides={"weight_option": [LowRankDynamicWeightConfig]},
             )
@@ -734,7 +737,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
     def test_adaptive_sub_configs_match_options(self):
         cfg = ExperimentPresets()._preset(
             input_dim=8,
-            stack_hidden_dim=16,
+            hidden_dim=16,
             output_dim=4,
             weight_option_flag=True,
             weight_option=DualModelDynamicWeightConfig,
@@ -948,7 +951,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
     def test_boundary_and_stack_weight_configs_share_constructor_kwargs(self):
         cfg = self.adaptive_preset(
             input_dim=8,
-            stack_hidden_dim=16,
+            hidden_dim=16,
             output_dim=4,
             weight_option_flag=True,
             weight_option=DualModelDynamicWeightConfig,
@@ -1014,7 +1017,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
     def test_default_adaptive_component_flags_disable_components(self):
         cfg = self.adaptive_preset(
             input_dim=8,
-            stack_hidden_dim=16,
+            hidden_dim=16,
             output_dim=4,
         )
         augmentation_config = self._augmentation_config(cfg)
@@ -1027,7 +1030,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
     def test_adaptive_component_options_without_flags_are_ignored(self):
         cfg = self.adaptive_preset(
             input_dim=8,
-            stack_hidden_dim=16,
+            hidden_dim=16,
             output_dim=4,
             weight_option=DualModelDynamicWeightConfig,
             bias_option=AdditiveDynamicBiasConfig,
@@ -1062,7 +1065,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, f"{option_key}.*{flag_key}"):
                     self.adaptive_preset(
                         input_dim=8,
-                        stack_hidden_dim=16,
+                        hidden_dim=16,
                         output_dim=4,
                         **kwargs,
                     )
@@ -1111,7 +1114,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
             with self.subTest(component=component):
                 cfg = self.adaptive_preset(
                     input_dim=8,
-                    stack_hidden_dim=16,
+                    hidden_dim=16,
                     output_dim=4,
                     **kwargs,
                 )
@@ -1125,7 +1128,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
     def test_adaptive_component_stacks_inherit_shared_generator_by_default(self):
         cfg = self.adaptive_preset(
             input_dim=8,
-            stack_hidden_dim=16,
+            hidden_dim=16,
             output_dim=4,
             weight_option_flag=True,
             weight_option=DualModelDynamicWeightConfig,
@@ -1173,7 +1176,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
     def test_adaptive_component_stack_overrides_require_independent_flags(self):
         cfg = self.adaptive_preset(
             input_dim=8,
-            stack_hidden_dim=16,
+            hidden_dim=16,
             output_dim=4,
             weight_option_flag=True,
             weight_option=DualModelDynamicWeightConfig,
@@ -1208,7 +1211,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
     def test_adaptive_component_stack_overrides_apply_when_independent(self):
         cfg = self.adaptive_preset(
             input_dim=8,
-            stack_hidden_dim=16,
+            hidden_dim=16,
             output_dim=4,
             weight_option_flag=True,
             weight_option=DualModelDynamicWeightConfig,
@@ -1278,7 +1281,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
     def test_partial_adaptive_component_stack_overrides_fall_back_to_shared(self):
         cfg = self.adaptive_preset(
             input_dim=8,
-            stack_hidden_dim=16,
+            hidden_dim=16,
             output_dim=4,
             bias_option_flag=True,
             bias_option=AdditiveDynamicBiasConfig,
@@ -1315,7 +1318,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
     def test_all_adaptive_component_stacks_can_forward_one_fake_batch(self):
         cfg = self.adaptive_preset(
             input_dim=8,
-            stack_hidden_dim=8,
+            hidden_dim=8,
             output_dim=4,
             stack_num_layers=2,
             weight_option_flag=True,
@@ -1344,7 +1347,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
     def test_disabled_adaptive_component_options_ignore_independent_stacks(self):
         cfg = self.adaptive_preset(
             input_dim=8,
-            stack_hidden_dim=16,
+            hidden_dim=16,
             output_dim=4,
             weight_generator_stack_independent_flag=True,
             weight_generator_stack_hidden_dim=31,
@@ -1750,7 +1753,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
             with self.subTest(config_role=role):
                 self._assert_controller_stack_options(
                     stack_cfg,
-                    hidden_dim=config.STACK_HIDDEN_DIM,
+                    hidden_dim=config.HIDDEN_DIM,
                     num_layers=2,
                     activation=ActivationOptions.GELU,
                     layer_norm_position=config.STACK_LAYER_NORM_POSITION,
@@ -1881,7 +1884,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
     def test_memory_config_uses_builder_defaults(self):
         cfg = self.adaptive_preset(
             input_dim=8,
-            stack_hidden_dim=8,
+            hidden_dim=8,
             output_dim=4,
             memory_flag=True,
         )
@@ -1901,7 +1904,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
     def test_memory_config_uses_builder_overrides(self):
         cfg = self.adaptive_preset(
             input_dim=8,
-            stack_hidden_dim=8,
+            hidden_dim=8,
             output_dim=4,
             memory_flag=True,
             memory_option=WeightedDynamicMemoryConfig,
@@ -1959,7 +1962,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
     def test_memory_enabled_forwards_one_fake_batch(self):
         cfg = self.adaptive_preset(
             input_dim=8,
-            stack_hidden_dim=8,
+            hidden_dim=8,
             output_dim=4,
             stack_num_layers=2,
             memory_flag=True,
@@ -1973,7 +1976,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
     def test_memory_enabled_backward_produces_memory_gradients(self):
         cfg = self.adaptive_preset(
             input_dim=8,
-            stack_hidden_dim=8,
+            hidden_dim=8,
             output_dim=4,
             stack_num_layers=2,
             memory_flag=True,
@@ -2000,7 +2003,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
     def test_recurrent_memory_stays_on_block_config(self):
         cfg = self.adaptive_preset(
             input_dim=8,
-            stack_hidden_dim=8,
+            hidden_dim=8,
             output_dim=4,
             recurrent_flag=True,
             memory_flag=True,
