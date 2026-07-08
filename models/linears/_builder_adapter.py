@@ -125,6 +125,8 @@ def linear_builder_kwargs_from_flat(
 def linear_adaptive_builder_kwargs_from_flat(
     flat_kwargs: dict[str, Any],
     config_module: ModuleType,
+    *,
+    include_boundary_options: bool = True,
 ) -> dict[str, Any]:
     kwargs = dict(flat_kwargs)
     builder_kwargs = linear_builder_kwargs_from_flat(kwargs, config_module)
@@ -141,57 +143,61 @@ def linear_adaptive_builder_kwargs_from_flat(
             "recurrent_controller_options",
         }
     }
-    builder_kwargs.update(
-        {
-            "adaptive_generator_stack_options": (
-                _adaptive_generator_stack_options_from_kwargs(
-                    leftovers,
-                    config_module,
-                    provided=leftovers.pop("adaptive_generator_stack_options", None),
-                )
-            ),
-            "hidden_adaptive_weight_options": (
-                _hidden_adaptive_weight_options_from_kwargs(
-                    leftovers,
-                    config_module,
-                    provided=leftovers.pop("hidden_adaptive_weight_options", None),
-                )
-            ),
-            "hidden_adaptive_bias_options": (
-                _hidden_adaptive_bias_options_from_kwargs(
-                    leftovers,
-                    config_module,
-                    provided=leftovers.pop("hidden_adaptive_bias_options", None),
-                )
-            ),
-            "hidden_adaptive_diagonal_options": (
-                _hidden_adaptive_diagonal_options_from_kwargs(
-                    leftovers,
-                    config_module,
-                    provided=leftovers.pop("hidden_adaptive_diagonal_options", None),
-                )
-            ),
-            "hidden_adaptive_mask_options": (
-                _hidden_adaptive_mask_options_from_kwargs(
-                    leftovers,
-                    config_module,
-                    provided=leftovers.pop("hidden_adaptive_mask_options", None),
-                )
-            ),
-            "input_boundary_options": _boundary_options_from_kwargs(
+    adaptive_kwargs = {
+        "adaptive_generator_stack_options": (
+            _adaptive_generator_stack_options_from_kwargs(
                 leftovers,
                 config_module,
-                "input_layer",
-                provided=leftovers.pop("input_boundary_options", None),
-            ),
-            "output_boundary_options": _boundary_options_from_kwargs(
+                provided=leftovers.pop("adaptive_generator_stack_options", None),
+            )
+        ),
+        "hidden_adaptive_weight_options": (
+            _hidden_adaptive_weight_options_from_kwargs(
                 leftovers,
                 config_module,
-                "output_layer",
-                provided=leftovers.pop("output_boundary_options", None),
-            ),
-        }
-    )
+                provided=leftovers.pop("hidden_adaptive_weight_options", None),
+            )
+        ),
+        "hidden_adaptive_bias_options": (
+            _hidden_adaptive_bias_options_from_kwargs(
+                leftovers,
+                config_module,
+                provided=leftovers.pop("hidden_adaptive_bias_options", None),
+            )
+        ),
+        "hidden_adaptive_diagonal_options": (
+            _hidden_adaptive_diagonal_options_from_kwargs(
+                leftovers,
+                config_module,
+                provided=leftovers.pop("hidden_adaptive_diagonal_options", None),
+            )
+        ),
+        "hidden_adaptive_mask_options": (
+            _hidden_adaptive_mask_options_from_kwargs(
+                leftovers,
+                config_module,
+                provided=leftovers.pop("hidden_adaptive_mask_options", None),
+            )
+        ),
+    }
+    if include_boundary_options:
+        adaptive_kwargs.update(
+            {
+                "input_boundary_options": _boundary_options_from_kwargs(
+                    leftovers,
+                    config_module,
+                    "input_layer",
+                    provided=leftovers.pop("input_boundary_options", None),
+                ),
+                "output_boundary_options": _boundary_options_from_kwargs(
+                    leftovers,
+                    config_module,
+                    "output_layer",
+                    provided=leftovers.pop("output_boundary_options", None),
+                ),
+            }
+        )
+    builder_kwargs.update(adaptive_kwargs)
     builder_kwargs.update(leftovers)
     return builder_kwargs
 

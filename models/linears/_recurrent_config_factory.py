@@ -21,12 +21,17 @@ class RecurrentConfigFactory:
     def build_config(
         self,
         block_config: LayerStackConfig,
+        *,
+        input_dim: int | None = None,
+        output_dim: int | None = None,
     ) -> LayerStackConfig | RecurrentLayerConfig:
         if not self.recurrent_controller_options.recurrent_flag:
             return block_config
         gate_config = self.gate_config_factory.build_recurrent_gate_config()
         halting_config = self.halting_config_factory.build_recurrent_halting_config()
         return RecurrentLayerConfig(
+            input_dim=input_dim,
+            output_dim=output_dim,
             max_steps=self.recurrent_controller_options.recurrent_max_steps,
             recurrent_layer_norm_position=(
                 self.recurrent_controller_options.recurrent_layer_norm_position

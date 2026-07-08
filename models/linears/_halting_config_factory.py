@@ -25,11 +25,17 @@ class HaltingConfigFactory:
         recurrent_controller_options: RecurrentControllerOptions,
         submodule_stack_options: SubmoduleStackOptions,
         output_dim: int,
+        halting_stack_defaults: SubmoduleStackOptions | None = None,
+        recurrent_stack_inherits_halting_stack: bool = True,
     ) -> None:
         self.layer_controller_options = layer_controller_options
         self.recurrent_controller_options = recurrent_controller_options
         self.submodule_stack_options = submodule_stack_options
         self.output_dim = output_dim
+        self.halting_stack_defaults = halting_stack_defaults
+        self.recurrent_stack_inherits_halting_stack = (
+            recurrent_stack_inherits_halting_stack
+        )
 
     def build_halting_config(self) -> StickBreakingConfig | None:
         if not self.layer_controller_options.stack_halting_flag:
@@ -55,14 +61,7 @@ class HaltingConfigFactory:
     def build_recurrent_halting_config(self) -> StickBreakingConfig | None:
         if not self.recurrent_controller_options.recurrent_halting_flag:
             return None
-        halting_stack_source = self.layer_controller_options.halting_stack_source
-        halting_stack_defaults = self.__submodule_stack_defaults(
-            last_layer_bias_option=LastLayerBiasOptions.DISABLED
-        )
-        resolved_halting_stack_defaults = resolve_controller_stack_options(
-            halting_stack_source,
-            halting_stack_defaults,
-        )
+        resolved_halting_stack_defaults = self.__recurrent_halting_stack_defaults()
         recurrent_halting_stack_source = (
             self.recurrent_controller_options.recurrent_halting_stack_source
         )
@@ -125,9 +124,22 @@ class HaltingConfigFactory:
         *,
         last_layer_bias_option: LastLayerBiasOptions | None = None,
     ) -> SubmoduleStackOptions:
+        if self.halting_stack_defaults is not None:
+            return self.halting_stack_defaults
         if last_layer_bias_option is None:
             return self.submodule_stack_options
         return replace(
             self.submodule_stack_options,
             last_layer_bias_option=last_layer_bias_option,
+        )
+
+    def __recurrent_halting_stack_defaults(self) -> SubmoduleStackOptions:
+        halting_stack_defaults = self.__submodule_stack_defaults(
+            last_layer_bias_option=LastLayerBiasOptions.DISABLED
+        )
+        if not self.recurrent_stack_inherits_halting_stack:
+            return halting_stack_defaults
+        return resolve_controller_stack_options(
+            self.layer_controller_options.halting_stack_source,
+            halting_stack_defaults,
         )
