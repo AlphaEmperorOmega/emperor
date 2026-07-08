@@ -27,8 +27,8 @@ from emperor.experiments.base import (
 )
 from emperor.halting.core.monitor import HaltingMonitorCallback
 from emperor.halting.options import HaltingHiddenStateModeOptions
-from emperor.linears.core.monitor import LinearMonitorCallback
 from emperor.linears.core.config import LinearLayerConfig
+from emperor.linears.core.monitor import LinearMonitorCallback
 from emperor.memory.config import (
     GatedResidualDynamicMemoryConfig,
     WeightedDynamicMemoryConfig,
@@ -36,19 +36,22 @@ from emperor.memory.config import (
 from emperor.memory.options import MemoryPositionOptions
 
 import models.linears.linear.config as config
-from models.linears._controller_stack import (
-    SubmoduleStackSource,
-)
+import models.linears.linear.dataset_options as dataset_options
+import models.linears.linear.monitor_options as monitor_options
+import models.linears.linear.search_space as search_space
 from models.linears._builder_options import (
     LayerControllerOptions,
+)
+from models.linears._controller_stack import (
+    SubmoduleStackSource,
 )
 from models.linears.linear.config_builder import LinearConfigBuilder
 from models.linears.linear.model import Model
 from models.linears.linear.presets import (
+    _PRESET_DEFINITIONS,
     Experiment,
     ExperimentPreset,
     ExperimentPresets,
-    _PRESET_DEFINITIONS,
 )
 from models.linears.linear_adaptive.presets import (
     ExperimentPresets as LinearAdaptiveExperimentPresets,
@@ -58,11 +61,6 @@ from models.training_test_utils import (
     RandomImageClassificationDataModule,
     tiny_cpu_trainer,
 )
-
-
-import models.linears.linear.dataset_options as dataset_options
-import models.linears.linear.monitor_options as monitor_options
-import models.linears.linear.search_space as search_space
 
 
 class TestLinearModel(unittest.TestCase):
@@ -166,7 +164,12 @@ class TestLinearModel(unittest.TestCase):
         self.assertIsNone(kwargs["search_keys"])
         self.assertEqual(kwargs["config_overrides"], {})
         self.assertEqual(kwargs["search_overrides"], {})
-        self.assertEqual(kwargs["selected_datasets"], dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK])
+        self.assertEqual(
+            kwargs["selected_datasets"],
+            dataset_options.DATASET_OPTIONS_BY_TASK[
+                dataset_options.DEFAULT_EXPERIMENT_TASK
+            ],
+        )
         self.assertIsNone(kwargs["selected_presets"])
         self.assertEqual(kwargs["callbacks"], [])
 
@@ -271,7 +274,9 @@ class TestLinearModel(unittest.TestCase):
     def test_all_presets_forward_one_mnist_batch(self):
         batch_size = 4
         presets = ExperimentPresets()
-        dataset = dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0]
+        dataset = dataset_options.DATASET_OPTIONS_BY_TASK[
+            dataset_options.DEFAULT_EXPERIMENT_TASK
+        ][0]
 
         for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
@@ -288,7 +293,9 @@ class TestLinearModel(unittest.TestCase):
         batch_size = 4
         presets = ExperimentPresets()
 
-        for dataset in dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK]:
+        for dataset in dataset_options.DATASET_OPTIONS_BY_TASK[
+            dataset_options.DEFAULT_EXPERIMENT_TASK
+        ]:
             with self.subTest(dataset=dataset.__name__):
                 cfg = presets.get_config(ExperimentPreset.BASELINE, dataset)[0]
                 model = Model(cfg)
@@ -300,7 +307,9 @@ class TestLinearModel(unittest.TestCase):
 
     def test_all_presets_train_one_epoch(self):
         presets = ExperimentPresets()
-        dataset = dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0]
+        dataset = dataset_options.DATASET_OPTIONS_BY_TASK[
+            dataset_options.DEFAULT_EXPERIMENT_TASK
+        ][0]
 
         for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
@@ -414,7 +423,9 @@ class TestLinearModel(unittest.TestCase):
     def test_preset_accepts_search_flags(self):
         configs = ExperimentPresets().get_config(
             ExperimentPreset.BASELINE,
-            dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
+            dataset_options.DATASET_OPTIONS_BY_TASK[
+                dataset_options.DEFAULT_EXPERIMENT_TASK
+            ][0],
             RandomSearch(num_samples=2),
         )
 
@@ -433,7 +444,9 @@ class TestLinearModel(unittest.TestCase):
             with self.subTest(preset=preset.name):
                 configs = presets.get_config(
                     preset,
-                    dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
+                    dataset_options.DATASET_OPTIONS_BY_TASK[
+                        dataset_options.DEFAULT_EXPERIMENT_TASK
+                    ][0],
                     RandomSearch(num_samples=2),
                 )
 
@@ -957,7 +970,9 @@ class TestLinearModel(unittest.TestCase):
     def test_search_keys_restrict_sweep_to_subset_of_axes(self):
         configs = ExperimentPresets().get_config(
             ExperimentPreset.BASELINE,
-            dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
+            dataset_options.DATASET_OPTIONS_BY_TASK[
+                dataset_options.DEFAULT_EXPERIMENT_TASK
+            ][0],
             RandomSearch(num_samples=20),
             search_keys=["hidden_dim"],
         )
@@ -972,7 +987,9 @@ class TestLinearModel(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             ExperimentPresets().get_config(
                 ExperimentPreset.BASELINE,
-                dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
+                dataset_options.DATASET_OPTIONS_BY_TASK[
+                    dataset_options.DEFAULT_EXPERIMENT_TASK
+                ][0],
                 RandomSearch(num_samples=2),
                 search_keys=["bogus_axis"],
             )
@@ -983,14 +1000,18 @@ class TestLinearModel(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "GATING.*stack_gate_flag.*True.*False"):
             ExperimentPresets().get_config(
                 ExperimentPreset.GATING,
-                dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
+                dataset_options.DATASET_OPTIONS_BY_TASK[
+                    dataset_options.DEFAULT_EXPERIMENT_TASK
+                ][0],
                 config_overrides={"stack_gate_flag": False},
             )
 
     def test_gating_allows_unlocked_config_override(self):
         cfg = ExperimentPresets().get_config(
             ExperimentPreset.GATING,
-            dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
+            dataset_options.DATASET_OPTIONS_BY_TASK[
+                dataset_options.DEFAULT_EXPERIMENT_TASK
+            ][0],
             config_overrides={"learning_rate": 2e-3},
         )[0]
 
@@ -1006,7 +1027,9 @@ class TestLinearModel(unittest.TestCase):
         ):
             ExperimentPresets().get_config(
                 ExperimentPreset.POST_NORM,
-                dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
+                dataset_options.DATASET_OPTIONS_BY_TASK[
+                    dataset_options.DEFAULT_EXPERIMENT_TASK
+                ][0],
                 GridSearch(),
                 search_keys=["stack_layer_norm_position"],
             )
@@ -1037,7 +1060,9 @@ class TestLinearModel(unittest.TestCase):
 
             configs = ExperimentPresets().get_config(
                 ExperimentPreset.POST_NORM,
-                dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
+                dataset_options.DATASET_OPTIONS_BY_TASK[
+                    dataset_options.DEFAULT_EXPERIMENT_TASK
+                ][0],
                 GridSearch(),
             )
         finally:

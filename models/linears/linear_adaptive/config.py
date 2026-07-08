@@ -1,12 +1,46 @@
-from emperor.base.layer.residual import ResidualConnectionOptions
 from models.trainer_config import *  # noqa: F403
+from emperor.augmentations.adaptive_parameters import (
+    AdditiveDynamicBiasConfig,  # noqa: F401
+    AffineTransformDynamicBiasConfig,  # noqa: F401
+    AntiDynamicDiagonalConfig,  # noqa: F401
+    AxisMaskConfig,
+    CombinedDynamicDiagonalConfig,  # noqa: F401
+    DiagonalAxisMaskConfig,  # noqa: F401
+    DualModelDynamicWeightConfig,  # noqa: F401
+    DynamicBiasConfig,
+    DynamicDiagonalConfig,
+    DynamicWeightConfig,
+    HypernetworkDynamicWeightConfig,  # noqa: F401
+    LayeredWeightedBankDynamicWeightConfig,  # noqa: F401
+    LowRankDynamicWeightConfig,  # noqa: F401
+    MultiplicativeDynamicBiasConfig,  # noqa: F401
+    OuterProductMaskConfig,  # noqa: F401
+    PerAxisScoreMaskConfig,  # noqa: F401
+    SigmoidGatedDynamicBiasConfig,  # noqa: F401
+    SingleModelDynamicWeightConfig,  # noqa: F401
+    SoftWeightedBankDynamicWeightConfig,  # noqa: F401
+    StandardDynamicDiagonalConfig,  # noqa: F401
+    TanhGatedDynamicBiasConfig,  # noqa: F401
+    TopSliceAxisMaskConfig,  # noqa: F401
+    WeightedBankDynamicBiasConfig,  # noqa: F401
+    WeightInformedScoreAxisMaskConfig,  # noqa: F401
+)
+from emperor.augmentations.adaptive_parameters.options import (
+    BankExpansionFactorOptions,
+    DynamicDepthOptions,
+    MaskDimensionOptions,
+    WeightDecayScheduleOptions,
+    WeightNormalizationOptions,
+    WeightNormalizationPositionOptions,
+)
+from emperor.base.layer.gate import LayerGateOptions
+from emperor.base.layer.residual import ResidualConnectionOptions
 from emperor.base.options import (
     ActivationOptions,
     LastLayerBiasOptions,
     LayerNormPositionOptions,
 )
 from emperor.halting.options import HaltingHiddenStateModeOptions
-from emperor.base.layer.gate import LayerGateOptions
 from emperor.memory.config import (
     AttentionDynamicMemoryConfig,  # noqa: F401
     DynamicMemoryConfig,
@@ -15,40 +49,6 @@ from emperor.memory.config import (
     WeightedDynamicMemoryConfig,  # noqa: F401
 )
 from emperor.memory.options import MemoryPositionOptions
-from emperor.augmentations.adaptive_parameters.options import (
-    DynamicDepthOptions,
-    WeightNormalizationOptions,
-    WeightNormalizationPositionOptions,
-    WeightDecayScheduleOptions,
-    MaskDimensionOptions,
-    BankExpansionFactorOptions,
-)
-from emperor.augmentations.adaptive_parameters import (
-    AdditiveDynamicBiasConfig,
-    AffineTransformDynamicBiasConfig,
-    AntiDynamicDiagonalConfig,
-    AxisMaskConfig,
-    CombinedDynamicDiagonalConfig,
-    DiagonalAxisMaskConfig,
-    DualModelDynamicWeightConfig,
-    DynamicBiasConfig,
-    DynamicDiagonalConfig,
-    DynamicWeightConfig,
-    HypernetworkDynamicWeightConfig,
-    LayeredWeightedBankDynamicWeightConfig,
-    LowRankDynamicWeightConfig,
-    MultiplicativeDynamicBiasConfig,
-    OuterProductMaskConfig,
-    PerAxisScoreMaskConfig,
-    SigmoidGatedDynamicBiasConfig,
-    SingleModelDynamicWeightConfig,
-    SoftWeightedBankDynamicWeightConfig,
-    StandardDynamicDiagonalConfig,
-    TanhGatedDynamicBiasConfig,
-    TopSliceAxisMaskConfig,
-    WeightInformedScoreAxisMaskConfig,
-    WeightedBankDynamicBiasConfig,
-)
 
 # Global
 BATCH_SIZE: int = 128
