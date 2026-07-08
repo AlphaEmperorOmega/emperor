@@ -186,7 +186,7 @@ RECURRENT_HALTING_STACK_BIAS_FLAG: bool | None = None
 
 #########################################################################
 # Mixture Of Experts Model Options
-EXPERT_TOP_K: int = 2
+EXPERT_TOP_K: int = 3
 EXPERT_NUM_EXPERTS: int = 12
 EXPERT_CAPACITY_FACTOR: float = 0.0
 EXPERT_DROPPED_TOKEN_BEHAVIOR: DroppedTokenOptions = DroppedTokenOptions.ZEROS
