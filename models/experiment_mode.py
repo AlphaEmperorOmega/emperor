@@ -4,7 +4,7 @@ from types import ModuleType
 
 from emperor.base.options import BaseOptions
 from emperor.experiments.base import GridSearch, RandomSearch, SearchMode
-from emperor.experiments.monitors import MonitorOption
+from emperor.experiments.monitors import MonitorOption, MonitorSettings
 from emperor.experiments.tasks import ExperimentTask, resolve_experiment_task
 
 from models.config_overrides import (
@@ -145,13 +145,31 @@ def resolve_monitor_options(
     return selected
 
 
+def monitor_settings_from_config(
+    config_module: ModuleType | None,
+    config_overrides: dict | None = None,
+) -> MonitorSettings:
+    default_log_every_n_steps = (
+        getattr(config_module, "MONITOR_LOG_EVERY_N_STEPS", 100)
+        if config_module is not None
+        else 100
+    )
+    log_every_n_steps = (config_overrides or {}).get(
+        "monitor_log_every_n_steps",
+        default_log_every_n_steps,
+    )
+    return MonitorSettings(log_every_n_steps=int(log_every_n_steps))
+
+
 def resolve_monitor_callbacks(
     config_module: ModuleType | None,
     monitor_names: list[str] | None,
     monitor_options_module: ModuleType | None = None,
+    config_overrides: dict | None = None,
 ) -> list:
+    settings = monitor_settings_from_config(config_module, config_overrides)
     return [
-        option.build_callback()
+        option.build_callback(settings)
         for option in resolve_monitor_options(
             config_module,
             monitor_names,
@@ -245,6 +263,7 @@ def resolve_experiment_mode(
         getattr(args, "monitors", None),
         getattr(metadata, "monitor_options_module", None),
     )
+    monitor_settings = monitor_settings_from_config(config_module, config_overrides)
     return ExperimentMode(
         experiment_task=experiment_task,
         preset=preset,
@@ -254,5 +273,7 @@ def resolve_experiment_mode(
         config_overrides=config_overrides,
         search_overrides=search_overrides,
         monitor_names=[option.name for option in monitor_options],
-        monitor_callbacks=[option.build_callback() for option in monitor_options],
+        monitor_callbacks=[
+            option.build_callback(monitor_settings) for option in monitor_options
+        ],
     )

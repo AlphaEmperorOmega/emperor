@@ -5,6 +5,7 @@ from emperor.augmentations.adaptive_parameters.core.monitor import (
     AdaptiveParameterMonitorCallback,
 )
 from emperor.experiments.monitors import MonitorOption
+
 from models.bert.expert_linear.monitor_options import (
     MONITOR_OPTIONS as BASE_MONITOR_OPTIONS,
 )
@@ -19,8 +20,8 @@ MONITOR_OPTIONS = [
             "for adaptive expert linear layers."
         ),
         kinds=["scalar", "histogram"],
-        callback_factory=lambda: AdaptiveParameterMonitorCallback(
-            log_every_n_steps=100
+        callback_factory=lambda settings: AdaptiveParameterMonitorCallback(
+            log_every_n_steps=settings.log_every_n_steps
         ),
     ),
     MonitorOption(
@@ -31,8 +32,8 @@ MONITOR_OPTIONS = [
             "dynamic expert weights and biases."
         ),
         kinds=["scalar", "histogram"],
-        callback_factory=lambda: WeightBankUtilizationMonitorCallback(
-            log_every_n_steps=100
+        callback_factory=lambda settings: WeightBankUtilizationMonitorCallback(
+            log_every_n_steps=settings.log_every_n_steps
         ),
     ),
 ]

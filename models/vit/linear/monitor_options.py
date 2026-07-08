@@ -11,7 +11,9 @@ MONITOR_OPTIONS: list[MonitorOption] = [
             "mask coverage, auxiliary loss, and attention head visual summaries."
         ),
         kinds=["scalar", "histogram", "image"],
-        callback_factory=lambda: AttentionMonitorCallback(log_every_n_steps=100),
+        callback_factory=lambda settings: AttentionMonitorCallback(
+            log_every_n_steps=settings.log_every_n_steps
+        ),
     ),
     MonitorOption(
         name="layer-controller",
@@ -21,8 +23,8 @@ MONITOR_OPTIONS: list[MonitorOption] = [
             "controller statistics without duplicating memory metrics."
         ),
         kinds=["scalar"],
-        callback_factory=lambda: LayerControllerMonitorCallback(
-            log_every_n_steps=100
+        callback_factory=lambda settings: LayerControllerMonitorCallback(
+            log_every_n_steps=settings.log_every_n_steps
         ),
     ),
 ]

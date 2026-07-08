@@ -24,7 +24,9 @@ MONITOR_OPTIONS: list[MonitorOption] = [
             "stats for Emperor linear layers."
         ),
         kinds=["scalar"],
-        callback_factory=lambda: LinearMonitorCallback(log_every_n_steps=100),
+        callback_factory=lambda settings: LinearMonitorCallback(
+            log_every_n_steps=settings.log_every_n_steps
+        ),
     ),
     MonitorOption(
         name="recurrent-layer",
@@ -34,7 +36,9 @@ MONITOR_OPTIONS: list[MonitorOption] = [
             "openness, halted-state preservation, and step-delta visual summaries."
         ),
         kinds=["scalar", "histogram", "image"],
-        callback_factory=lambda: RecurrentLayerMonitorCallback(log_every_n_steps=100),
+        callback_factory=lambda settings: RecurrentLayerMonitorCallback(
+            log_every_n_steps=settings.log_every_n_steps
+        ),
     ),
     MonitorOption(
         name="layer-controller",
@@ -44,7 +48,9 @@ MONITOR_OPTIONS: list[MonitorOption] = [
             "controller statistics without duplicating memory metrics."
         ),
         kinds=["scalar"],
-        callback_factory=lambda: LayerControllerMonitorCallback(log_every_n_steps=100),
+        callback_factory=lambda settings: LayerControllerMonitorCallback(
+            log_every_n_steps=settings.log_every_n_steps
+        ),
     ),
     MonitorOption(
         name="adaptive",
@@ -54,8 +60,8 @@ MONITOR_OPTIONS: list[MonitorOption] = [
             "plus input-adaptivity (cross-sample variation / collapse detection)."
         ),
         kinds=["scalar", "histogram"],
-        callback_factory=lambda: AdaptiveParameterMonitorCallback(
-            log_every_n_steps=100,
+        callback_factory=lambda settings: AdaptiveParameterMonitorCallback(
+            log_every_n_steps=settings.log_every_n_steps,
             log_histograms=True,
             log_internal_stats=True,
         ),
@@ -68,8 +74,8 @@ MONITOR_OPTIONS: list[MonitorOption] = [
             "for weighted-bank dynamic params."
         ),
         kinds=["scalar", "histogram", "image"],
-        callback_factory=lambda: WeightBankUtilizationMonitorCallback(
-            log_every_n_steps=100,
+        callback_factory=lambda settings: WeightBankUtilizationMonitorCallback(
+            log_every_n_steps=settings.log_every_n_steps,
         ),
     ),
     MonitorOption(
@@ -80,7 +86,9 @@ MONITOR_OPTIONS: list[MonitorOption] = [
             "load-balancing loss, usage histograms, and routing heatmaps."
         ),
         kinds=["scalar", "histogram", "image"],
-        callback_factory=lambda: SamplerMonitorCallback(log_every_n_steps=100),
+        callback_factory=lambda settings: SamplerMonitorCallback(
+            log_every_n_steps=settings.log_every_n_steps
+        ),
     ),
     MonitorOption(
         name="memory",
@@ -90,7 +98,9 @@ MONITOR_OPTIONS: list[MonitorOption] = [
             "modules. Inactive until a memory config is enabled."
         ),
         kinds=["scalar"],
-        callback_factory=lambda: MemoryMonitorCallback(log_every_n_steps=100),
+        callback_factory=lambda settings: MemoryMonitorCallback(
+            log_every_n_steps=settings.log_every_n_steps
+        ),
     ),
 ]
 
@@ -104,7 +114,9 @@ _neuron_monitor_options = [
             "entropy, survival curve, and per-neuron utilization heatmap."
         ),
         kinds=["scalar", "histogram", "image"],
-        callback_factory=lambda: NeuronClusterMonitorCallback(log_every_n_steps=100),
+        callback_factory=lambda settings: NeuronClusterMonitorCallback(
+            log_every_n_steps=settings.log_every_n_steps
+        ),
         default_enabled=True,
     ),
     MonitorOption(
@@ -116,7 +128,9 @@ _neuron_monitor_options = [
             "utilization, and auxiliary load-balancing loss components."
         ),
         kinds=["scalar", "histogram", "image"],
-        callback_factory=lambda: SamplerMonitorCallback(log_every_n_steps=100),
+        callback_factory=lambda settings: SamplerMonitorCallback(
+            log_every_n_steps=settings.log_every_n_steps
+        ),
     ),
 ]
 

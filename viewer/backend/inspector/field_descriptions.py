@@ -109,6 +109,11 @@ EXPLICIT_FIELD_DESCRIPTIONS = {
         "Controls how often trainer metrics are logged in training steps. Lower "
         "values give more granular logs but increase logging overhead."
     ),
+    "MONITOR_LOG_EVERY_N_STEPS": (
+        "Controls how often selected monitor callbacks emit TensorBoard data in "
+        "training steps. Lower values make monitor charts denser but add logging "
+        "overhead."
+    ),
     "TRAINER_ENABLE_PROGRESS_BAR": (
         "Controls whether PyTorch Lightning renders a progress bar. Disable it "
         "for quieter logs in automated or Viewer-launched runs."

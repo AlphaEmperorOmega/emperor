@@ -11,6 +11,7 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 from emperor.experiments.base import GridSearch, RandomSearch
 from emperor.experiments.progress import JsonlTrainingProgressCallback
 from models.catalog import model_id_from_payload, model_identity_payload_from_id
+from models.experiment_mode import monitor_settings_from_config
 
 from viewer.backend.inspector.discovery import (
     load_model_parts,
@@ -162,10 +163,7 @@ def main() -> None:
             payload["datasets"],
             experiment_task,
         )
-        monitor_callbacks = [
-            monitor.build_callback()
-            for monitor in resolve_model_monitors(parts, payload.get("monitors") or [])
-        ]
+        selected_monitors = resolve_model_monitors(parts, payload.get("monitors") or [])
         parsed_searches = [
             parse_training_search(
                 model_id,
@@ -192,6 +190,13 @@ def main() -> None:
             parts.config_module,
             effective_override_payload,
         )
+        monitor_settings = monitor_settings_from_config(
+            parts.config_module,
+            config_overrides,
+        )
+        monitor_callbacks = [
+            monitor.build_callback(monitor_settings) for monitor in selected_monitors
+        ]
         for selected_preset in selected_preset_names:
             reject_locked_overrides(model_id, selected_preset, config_overrides)
         materialized_runs = _materialized_runs_from_plan(parts, payload)

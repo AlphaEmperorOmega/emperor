@@ -1,5 +1,6 @@
 from emperor.experiments.monitors import MonitorOption
 from emperor.sampler.core.monitor import SamplerMonitorCallback
+
 from models.vit.linear.monitor_options import MONITOR_OPTIONS as BASE_MONITOR_OPTIONS
 
 MONITOR_OPTIONS = [
@@ -12,6 +13,8 @@ MONITOR_OPTIONS = [
             "and expert utilization for MoE-backed encoder sub-stacks."
         ),
         kinds=["scalar", "histogram", "image"],
-        callback_factory=lambda: SamplerMonitorCallback(log_every_n_steps=100),
+        callback_factory=lambda settings: SamplerMonitorCallback(
+            log_every_n_steps=settings.log_every_n_steps
+        ),
     ),
 ]

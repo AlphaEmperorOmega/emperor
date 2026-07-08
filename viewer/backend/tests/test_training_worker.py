@@ -70,7 +70,9 @@ COMMON_PROGRESS_EVENT_KEYS = {
 
 
 class FakeMonitorCallback(Callback):
-    pass
+    def __init__(self, log_every_n_steps: int) -> None:
+        super().__init__()
+        self.log_every_n_steps = log_every_n_steps
 
 
 class FakeExperiment:
@@ -93,13 +95,16 @@ def fake_model_parts(*, locked_fields=None):
     monitor_options_module = ModuleType("fake_monitor_options")
     config_module.HIDDEN_DIM = 256
     config_module.GATE_FLAG = False
+    config_module.MONITOR_LOG_EVERY_N_STEPS = 100
     monitor_options_module.MONITOR_OPTIONS = [
         MonitorOption(
             name="fake-monitor",
             label="Fake Monitor",
             description="Fake monitor callback",
             kinds=["scalar"],
-            callback_factory=FakeMonitorCallback,
+            callback_factory=lambda settings: FakeMonitorCallback(
+                settings.log_every_n_steps
+            ),
         )
     ]
     return SimpleNamespace(
@@ -434,6 +439,7 @@ class TrainingWorkerPayloadProgressTests(unittest.TestCase):
             )
             self.assertIsInstance(callbacks[1], NeuronClusterGrowthCallback)
             self.assertIsInstance(callbacks[2], FakeMonitorCallback)
+            self.assertEqual(callbacks[2].log_every_n_steps, 100)
 
             events = read_jsonl(progress_path)
             self.assertEqual(
@@ -471,6 +477,29 @@ class TrainingWorkerPayloadProgressTests(unittest.TestCase):
             self.assertEqual(events[1]["jobId"], "job-123")
             self.assertEqual(events[1]["preset"], "wide")
             self.assertEqual(events[1]["presets"], ["baseline", "wide"])
+
+    def test_worker_applies_monitor_log_cadence_override(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            progress_path = Path(tmp) / "progress.jsonl"
+            payload = {
+                "id": "job-monitor-cadence",
+                **FAKE_PAYLOAD_IDENTITY,
+                "preset": "baseline",
+                "datasets": ["Mnist"],
+                "overrides": {"monitor-log-every-n-steps": "7"},
+                "search": None,
+                "monitors": ["fake-monitor"],
+            }
+
+            self.run_worker(payload, progress_path)
+
+            train_call = FakeExperiment.instances[0].train_calls[0]
+            callbacks = train_call["callbacks"]
+            self.assertEqual(
+                train_call["config_overrides"]["monitor_log_every_n_steps"], 7
+            )
+            self.assertIsInstance(callbacks[2], FakeMonitorCallback)
+            self.assertEqual(callbacks[2].log_every_n_steps, 7)
 
     def test_neuron_cluster_growth_callback_caps_coordinate_payloads(self) -> None:
         events: list[dict[str, object]] = []

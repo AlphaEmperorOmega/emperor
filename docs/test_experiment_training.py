@@ -579,7 +579,7 @@ class TestExperimentTraining(unittest.TestCase):
             label="Fake monitor",
             description="Test monitor.",
             kinds=["scalar"],
-            callback_factory=FakeMonitorCallback,
+            callback_factory=lambda _settings: FakeMonitorCallback(),
         )
 
         first = option.build_callback()

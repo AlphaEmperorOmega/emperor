@@ -215,7 +215,37 @@ class TestLinearModel(unittest.TestCase):
                 self.assertTrue(option.label)
                 self.assertTrue(option.kinds)
                 self.assertTrue(callable(option.callback_factory))
-                self.assertIsNotNone(option.callback_factory())
+                self.assertIsNotNone(option.build_callback())
+
+    def test_module_entrypoint_applies_monitor_log_cadence_override(self):
+        with (
+            patch.object(
+                sys,
+                "argv",
+                [
+                    "linear",
+                    "--preset",
+                    "baseline",
+                    "--monitors",
+                    "linear",
+                    "--monitor-log-every-n-steps",
+                    "7",
+                ],
+            ),
+            patch(
+                "models.linears.linear.presets.Experiment.train_model",
+                autospec=True,
+            ) as train_model,
+        ):
+            runpy.run_module("models.linears.linear.__main__", run_name="__main__")
+
+        train_model.assert_called_once()
+        kwargs = train_model.call_args.kwargs
+
+        self.assertEqual(kwargs["config_overrides"]["monitor_log_every_n_steps"], 7)
+        self.assertEqual(len(kwargs["callbacks"]), 1)
+        self.assertIsInstance(kwargs["callbacks"][0], LinearMonitorCallback)
+        self.assertEqual(kwargs["callbacks"][0].log_every_n_steps, 7)
 
     def test_cli_hidden_dim_flags_use_canonical_override(self):
         parser = get_experiment_parser(
