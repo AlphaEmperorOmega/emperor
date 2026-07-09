@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 class NeuronClusterMonitorCallback(Callback):
     """Logs how a neuron cluster grows and routes signals over training.
 
-    Emits scalars under each cluster module's path so the viewer surfaces them
+    Emits scalars under each cluster module's path so the workbench surfaces them
     in the cluster node's monitor charts. Beyond capacity (``neuron_count`` vs
     ``capacity``), it captures the cluster's routing dynamics by wrapping
     ``forward`` to request its ``NeuronClusterTrace`` (entry + per recurrent

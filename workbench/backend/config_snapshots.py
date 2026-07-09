@@ -1,0 +1,252 @@
+"""Config snapshot record storage interfaces and local adapters.
+
+A config snapshot captures a named set of config overrides for a given
+``model + preset`` so it can be reused and trained later. The Workbench backend has
+no database, so persistence mirrors :mod:`workbench.backend.job_store`: records are
+serialized to JSON on disk, one file per snapshot under
+``<root>/<model>/<id>.json``.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Protocol
+
+from models.catalog import model_id_from_payload, model_identity_payload_from_id
+
+from workbench.backend.storage.local_files import (
+    read_json_object,
+    require_safe_name,
+    resolve_root,
+    resolve_under_root,
+    safe_child_path,
+    write_json_atomic,
+)
+
+SNAPSHOT_FILENAME_SUFFIX = ".json"
+
+
+def _now() -> str:
+    return datetime.now(UTC).isoformat()
+
+
+@dataclass
+class ConfigSnapshotRecord:
+    id: str
+    model: str
+    preset: str
+    name: str
+    overrides: dict[str, str]
+    created_at: str = field(default_factory=_now)
+    updated_at: str = field(default_factory=_now)
+
+
+class ConfigSnapshotStore(Protocol):
+    def save(self, snapshot: ConfigSnapshotRecord) -> None:
+        ...
+
+    def get(self, snapshot_id: str) -> ConfigSnapshotRecord | None:
+        ...
+
+    def list(self, model: str) -> list[ConfigSnapshotRecord]:
+        ...
+
+    def list_all(self) -> list[ConfigSnapshotRecord]:
+        ...
+
+    def delete(self, snapshot_id: str) -> bool:
+        ...
+
+
+class InMemoryConfigSnapshotStore:
+    def __init__(self) -> None:
+        self._snapshots: dict[str, ConfigSnapshotRecord] = {}
+
+    @property
+    def snapshots(self) -> dict[str, ConfigSnapshotRecord]:
+        return self._snapshots
+
+    def save(self, snapshot: ConfigSnapshotRecord) -> None:
+        self._snapshots[snapshot.id] = snapshot
+
+    def get(self, snapshot_id: str) -> ConfigSnapshotRecord | None:
+        return self._snapshots.get(snapshot_id)
+
+    def list(self, model: str) -> list[ConfigSnapshotRecord]:
+        snapshots = [
+            snapshot
+            for snapshot in self._snapshots.values()
+            if snapshot.model == model
+        ]
+        return sorted(snapshots, key=lambda snapshot: snapshot.created_at)
+
+    def list_all(self) -> list[ConfigSnapshotRecord]:
+        return sorted(self._snapshots.values(), key=_snapshot_sort_key)
+
+    def delete(self, snapshot_id: str) -> bool:
+        return self._snapshots.pop(snapshot_id, None) is not None
+
+
+class FileSystemConfigSnapshotStore:
+    def __init__(self, root: Path) -> None:
+        self.root = Path(root)
+
+    def save(self, snapshot: ConfigSnapshotRecord) -> None:
+        snapshot_path = self._snapshot_path(snapshot.model, snapshot.id)
+        write_json_atomic(snapshot_path, _record_to_metadata(snapshot))
+
+    def get(self, snapshot_id: str) -> ConfigSnapshotRecord | None:
+        snapshot_path = self._find_snapshot_path(snapshot_id)
+        if snapshot_path is None:
+            return None
+        return self._read_metadata(snapshot_path)
+
+    def list(self, model: str) -> list[ConfigSnapshotRecord]:
+        model_root = self._model_root(model)
+        if not model_root.exists():
+            return []
+        snapshots: list[ConfigSnapshotRecord] = []
+        for snapshot_path in sorted(model_root.glob(f"*{SNAPSHOT_FILENAME_SUFFIX}")):
+            resolved_path = self._resolve_existing_snapshot_path(snapshot_path)
+            if resolved_path is None:
+                continue
+            snapshot = self._read_metadata(resolved_path)
+            if snapshot is not None and snapshot.model == model:
+                snapshots.append(snapshot)
+        return sorted(snapshots, key=lambda snapshot: snapshot.created_at)
+
+    def list_all(self) -> list[ConfigSnapshotRecord]:
+        if not self.root.exists():
+            return []
+        snapshots: list[ConfigSnapshotRecord] = []
+        for snapshot_path in sorted(self._root().rglob(f"*{SNAPSHOT_FILENAME_SUFFIX}")):
+            resolved_path = self._resolve_existing_snapshot_path(snapshot_path)
+            if resolved_path is None:
+                continue
+            snapshot = self._read_metadata(resolved_path)
+            if snapshot is None:
+                continue
+            if not self._is_canonical_snapshot_path(resolved_path, snapshot):
+                continue
+            snapshots.append(snapshot)
+        return sorted(snapshots, key=_snapshot_sort_key)
+
+    def delete(self, snapshot_id: str) -> bool:
+        snapshot_path = self._find_snapshot_path(snapshot_id)
+        if snapshot_path is None:
+            return False
+        snapshot_path.unlink()
+        return True
+
+    def _snapshot_path(self, model: str, snapshot_id: str) -> Path:
+        model_root = self._model_root(model)
+        return resolve_under_root(
+            self._root(),
+            model_root / self._snapshot_filename(snapshot_id),
+        )
+
+    def _find_snapshot_path(self, snapshot_id: str) -> Path | None:
+        filename = self._snapshot_filename(snapshot_id)
+        if not self.root.exists():
+            return None
+        for candidate in sorted(self._root().rglob(f"*{SNAPSHOT_FILENAME_SUFFIX}")):
+            if candidate.name != filename:
+                continue
+            snapshot_path = self._resolve_existing_snapshot_path(candidate)
+            if snapshot_path is None:
+                continue
+            snapshot = self._read_metadata(snapshot_path)
+            if snapshot is None or snapshot.id != snapshot_id:
+                continue
+            if not self._is_canonical_snapshot_path(snapshot_path, snapshot):
+                continue
+            return snapshot_path
+        return None
+
+    def _read_metadata(self, snapshot_path: Path) -> ConfigSnapshotRecord | None:
+        resolved_path = self._resolve_existing_snapshot_path(snapshot_path)
+        if resolved_path is None:
+            return None
+        payload = read_json_object(resolved_path)
+        if payload is None:
+            return None
+        try:
+            snapshot = _record_from_metadata(payload)
+            self._model_root(snapshot.model)
+            self._snapshot_filename(snapshot.id)
+            return snapshot
+        except (KeyError, TypeError, ValueError):
+            return None
+
+    def _root(self) -> Path:
+        return resolve_root(self.root)
+
+    def _model_root(self, model: str) -> Path:
+        return safe_child_path(self._root(), model)
+
+    def _snapshot_filename(self, snapshot_id: str) -> str:
+        safe_id = require_safe_name(snapshot_id, "config snapshot id")
+        if safe_id.endswith(SNAPSHOT_FILENAME_SUFFIX):
+            raise ValueError("config snapshot id must be a filename stem")
+        return f"{safe_id}{SNAPSHOT_FILENAME_SUFFIX}"
+
+    def _resolve_existing_snapshot_path(self, snapshot_path: Path) -> Path | None:
+        if Path(snapshot_path).is_symlink():
+            return None
+        try:
+            resolved = resolve_under_root(self._root(), snapshot_path)
+        except ValueError:
+            return None
+        if not resolved.is_file():
+            return None
+        return resolved
+
+    def _is_canonical_snapshot_path(
+        self,
+        snapshot_path: Path,
+        snapshot: ConfigSnapshotRecord,
+    ) -> bool:
+        try:
+            return snapshot_path == self._snapshot_path(snapshot.model, snapshot.id)
+        except ValueError:
+            return False
+
+
+def _record_to_metadata(snapshot: ConfigSnapshotRecord) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "id": snapshot.id,
+        "preset": snapshot.preset,
+        "name": snapshot.name,
+        "overrides": snapshot.overrides,
+        "created_at": snapshot.created_at,
+        "updated_at": snapshot.updated_at,
+    }
+    try:
+        payload.update(model_identity_payload_from_id(snapshot.model))
+    except ValueError:
+        payload["model"] = snapshot.model
+    return payload
+
+
+def _record_from_metadata(payload: dict[str, object]) -> ConfigSnapshotRecord:
+    overrides = payload["overrides"]
+    if not isinstance(overrides, dict):
+        raise TypeError("Config snapshot overrides must be a mapping.")
+    model_id = model_id_from_payload(payload)
+    if model_id is None:
+        model_id = str(payload["model"])
+    return ConfigSnapshotRecord(
+        id=str(payload["id"]),
+        model=model_id,
+        preset=str(payload["preset"]),
+        name=str(payload["name"]),
+        overrides={str(key): str(value) for key, value in overrides.items()},
+        created_at=str(payload["created_at"]),
+        updated_at=str(payload["updated_at"]),
+    )
+
+
+def _snapshot_sort_key(snapshot: ConfigSnapshotRecord) -> tuple[str, str, str, str]:
+    return (snapshot.model, snapshot.preset, snapshot.created_at, snapshot.id)

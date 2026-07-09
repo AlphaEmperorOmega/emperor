@@ -2,31 +2,31 @@
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_PATH="$PROJECT_ROOT/torchenv"
-FRONTEND_PATH="$PROJECT_ROOT/viewer/frontend"
-VIEWER_RUNTIME_PATH="$PROJECT_ROOT/viewer/.runtime"
-VIEWER_BACKEND_PID="$VIEWER_RUNTIME_PATH/backend.pid"
-VIEWER_FRONTEND_PID="$VIEWER_RUNTIME_PATH/frontend.pid"
-VIEWER_BACKEND_LOG="$VIEWER_RUNTIME_PATH/backend.log"
-VIEWER_FRONTEND_LOG="$VIEWER_RUNTIME_PATH/frontend.log"
-VIEWER_DEPENDENCY_MARKER="$VENV_PATH/.emperor-pyproject.cksum"
-VIEWER_BACKEND_PORT="${VIEWER_BACKEND_PORT:-9999}"
-VIEWER_FRONTEND_PORT="${VIEWER_FRONTEND_PORT:-9000}"
-VIEWER_API_URL="${NEXT_PUBLIC_VIEWER_API_URL:-http://127.0.0.1:$VIEWER_BACKEND_PORT}"
-VIEWER_ACTION="start"
+FRONTEND_PATH="$PROJECT_ROOT/workbench/frontend"
+WORKBENCH_RUNTIME_PATH="$PROJECT_ROOT/workbench/.runtime"
+WORKBENCH_BACKEND_PID="$WORKBENCH_RUNTIME_PATH/backend.pid"
+WORKBENCH_FRONTEND_PID="$WORKBENCH_RUNTIME_PATH/frontend.pid"
+WORKBENCH_BACKEND_LOG="$WORKBENCH_RUNTIME_PATH/backend.log"
+WORKBENCH_FRONTEND_LOG="$WORKBENCH_RUNTIME_PATH/frontend.log"
+WORKBENCH_DEPENDENCY_MARKER="$VENV_PATH/.emperor-pyproject.cksum"
+WORKBENCH_BACKEND_PORT="${WORKBENCH_BACKEND_PORT:-9999}"
+WORKBENCH_FRONTEND_PORT="${WORKBENCH_FRONTEND_PORT:-9000}"
+WORKBENCH_API_URL="${NEXT_PUBLIC_WORKBENCH_API_URL:-http://127.0.0.1:$WORKBENCH_BACKEND_PORT}"
+WORKBENCH_ACTION="start"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --viewer-stop)
-      VIEWER_ACTION="stop"
+    --workbench-stop)
+      WORKBENCH_ACTION="stop"
       ;;
-    --viewer-status)
-      VIEWER_ACTION="status"
+    --workbench-status)
+      WORKBENCH_ACTION="status"
       ;;
     -h|--help)
-      echo "Usage: source env.sh [--viewer-stop] [--viewer-status]"
+      echo "Usage: source env.sh [--workbench-stop] [--workbench-status]"
       echo ""
-      echo "  --viewer-stop    Stop viewer servers started by env.sh."
-      echo "  --viewer-status  Print viewer server PID status."
+      echo "  --workbench-stop    Stop workbench servers started by env.sh."
+      echo "  --workbench-status  Print workbench server PID status."
       return 0
       ;;
     *)
@@ -82,7 +82,7 @@ install_frontend_dependencies() {
     return 0
   fi
 
-  echo "Installing viewer frontend dependencies..."
+  echo "Installing workbench frontend dependencies..."
   (
     cd "$FRONTEND_PATH" || exit 1
     if [ -f package-lock.json ]; then
@@ -110,7 +110,7 @@ missing = [
 
 if missing:
     print(
-        "Missing viewer backend Python dependencies: "
+        "Missing workbench backend Python dependencies: "
         + ", ".join(missing)
     )
     raise SystemExit(1)
@@ -121,12 +121,12 @@ project_dependencies_current() {
   local current_signature
   local installed_signature
 
-  if [ ! -f "$VIEWER_DEPENDENCY_MARKER" ]; then
+  if [ ! -f "$WORKBENCH_DEPENDENCY_MARKER" ]; then
     return 1
   fi
 
   current_signature="$(pyproject_dependency_signature)" || return 1
-  installed_signature="$(cat "$VIEWER_DEPENDENCY_MARKER" 2>/dev/null)"
+  installed_signature="$(cat "$WORKBENCH_DEPENDENCY_MARKER" 2>/dev/null)"
 
   if [ "$current_signature" != "$installed_signature" ]; then
     return 1
@@ -145,7 +145,7 @@ install_project_dependencies() {
     "$VENV_PATH/bin/python" -m pip install -e ".[dev]"
   ) || return 1
 
-  pyproject_dependency_signature > "$VIEWER_DEPENDENCY_MARKER" || return 1
+  pyproject_dependency_signature > "$WORKBENCH_DEPENDENCY_MARKER" || return 1
   backend_python_dependencies_available || return 1
 }
 
@@ -216,17 +216,17 @@ process_group_id() {
   ps -p "$pid" -o pgid= 2>/dev/null | tr -d ' ' || true
 }
 
-viewer_service_command_matches() {
+workbench_service_command_matches() {
   local name="$1"
   local command="$2"
 
   case "$name" in
     backend)
-      [[ "$command" == *"viewer.backend.api:app"* ]] ||
+      [[ "$command" == *"workbench.backend.api:app"* ]] ||
         [[ "$command" == *"spawn_main"* && "$command" == *"--multiprocessing-fork"* ]]
       ;;
     frontend)
-      [[ "$command" == *"next dev"* && "$command" == *"-p $VIEWER_FRONTEND_PORT"* ]]
+      [[ "$command" == *"next dev"* && "$command" == *"-p $WORKBENCH_FRONTEND_PORT"* ]]
       ;;
     *)
       return 1
@@ -234,11 +234,11 @@ viewer_service_command_matches() {
   esac
 }
 
-viewer_service_group_command_matches() {
+workbench_service_group_command_matches() {
   local name="$1"
   local command="$2"
 
-  if viewer_service_command_matches "$name" "$command"; then
+  if workbench_service_command_matches "$name" "$command"; then
     return 0
   fi
 
@@ -252,7 +252,7 @@ viewer_service_group_command_matches() {
   esac
 }
 
-viewer_service_pids_for_port() {
+workbench_service_pids_for_port() {
   local name="$1"
   local port="$2"
   local pid
@@ -263,13 +263,13 @@ viewer_service_pids_for_port() {
       continue
     fi
     command="$(process_command "$pid")"
-    if viewer_service_command_matches "$name" "$command"; then
+    if workbench_service_command_matches "$name" "$command"; then
       echo "$pid"
     fi
   done < <(listener_pids_for_port "$port")
 }
 
-can_signal_viewer_process_group() {
+can_signal_workbench_process_group() {
   local name="$1"
   local pid="$2"
   local pgid="$3"
@@ -284,17 +284,17 @@ can_signal_viewer_process_group() {
   fi
 
   group_command="$(process_command "$pgid")"
-  viewer_service_group_command_matches "$name" "$group_command"
+  workbench_service_group_command_matches "$name" "$group_command"
 }
 
-signal_viewer_pid() {
+signal_workbench_pid() {
   local name="$1"
   local signal="$2"
   local pid="$3"
   local pgid
 
   pgid="$(process_group_id "$pid")"
-  if can_signal_viewer_process_group "$name" "$pid" "$pgid"; then
+  if can_signal_workbench_process_group "$name" "$pid" "$pgid"; then
     kill "-$signal" -- "-$pgid" 2>/dev/null ||
       kill "-$signal" "$pid" 2>/dev/null ||
       true
@@ -304,26 +304,26 @@ signal_viewer_pid() {
   kill "-$signal" "$pid" 2>/dev/null || true
 }
 
-stop_discovered_viewer_service() {
+stop_discovered_workbench_service() {
   local name="$1"
   local port="$2"
   local signal="${3:-TERM}"
   local -a pids=()
   local pid
 
-  mapfile -t pids < <(viewer_service_pids_for_port "$name" "$port")
+  mapfile -t pids < <(workbench_service_pids_for_port "$name" "$port")
   if [ "${#pids[@]}" -eq 0 ]; then
-    echo "Viewer $name is listening on port $port, but no env.sh pid file was found and the listener was not recognized as a viewer process"
+    echo "Workbench $name is listening on port $port, but no env.sh pid file was found and the listener was not recognized as a workbench process"
     return 1
   fi
 
   for pid in "${pids[@]}"; do
-    signal_viewer_pid "$name" "$signal" "$pid"
+    signal_workbench_pid "$name" "$signal" "$pid"
   done
   if [ "$signal" = "KILL" ]; then
-    echo "Force-stopped viewer $name (${pids[*]}, discovered from port $port)"
+    echo "Force-stopped workbench $name (${pids[*]}, discovered from port $port)"
   else
-    echo "Stopped viewer $name (${pids[*]}, discovered from port $port)"
+    echo "Stopped workbench $name (${pids[*]}, discovered from port $port)"
   fi
 }
 
@@ -376,25 +376,25 @@ print_log_tail() {
   tail -n "$line_count" "$log_path" >&2
 }
 
-viewer_status() {
-  if pid_running "$VIEWER_BACKEND_PID"; then
-    echo "Viewer backend running (pid $(cat "$VIEWER_BACKEND_PID"))"
-  elif port_listening "$VIEWER_BACKEND_PORT"; then
-    echo "Viewer backend listening on port $VIEWER_BACKEND_PORT (no env.sh pid file)"
+workbench_status() {
+  if pid_running "$WORKBENCH_BACKEND_PID"; then
+    echo "Workbench backend running (pid $(cat "$WORKBENCH_BACKEND_PID"))"
+  elif port_listening "$WORKBENCH_BACKEND_PORT"; then
+    echo "Workbench backend listening on port $WORKBENCH_BACKEND_PORT (no env.sh pid file)"
   else
-    echo "Viewer backend stopped"
+    echo "Workbench backend stopped"
   fi
 
-  if pid_running "$VIEWER_FRONTEND_PID"; then
-    echo "Viewer frontend running (pid $(cat "$VIEWER_FRONTEND_PID"))"
-  elif port_listening "$VIEWER_FRONTEND_PORT"; then
-    echo "Viewer frontend listening on port $VIEWER_FRONTEND_PORT (no env.sh pid file)"
+  if pid_running "$WORKBENCH_FRONTEND_PID"; then
+    echo "Workbench frontend running (pid $(cat "$WORKBENCH_FRONTEND_PID"))"
+  elif port_listening "$WORKBENCH_FRONTEND_PORT"; then
+    echo "Workbench frontend listening on port $WORKBENCH_FRONTEND_PORT (no env.sh pid file)"
   else
-    echo "Viewer frontend stopped"
+    echo "Workbench frontend stopped"
   fi
 }
 
-stop_viewer_service() {
+stop_workbench_service() {
   local name="$1"
   local pid_file="$2"
   local port="$3"
@@ -403,137 +403,137 @@ stop_viewer_service() {
   if ! pid_running "$pid_file"; then
     rm -f "$pid_file"
     if port_listening "$port"; then
-      stop_discovered_viewer_service "$name" "$port"
+      stop_discovered_workbench_service "$name" "$port"
       return $?
     fi
-    echo "Viewer $name already stopped"
+    echo "Workbench $name already stopped"
     return 0
   fi
 
   pid="$(cat "$pid_file")"
   kill "$pid" 2>/dev/null || true
   rm -f "$pid_file"
-  echo "Stopped viewer $name (pid $pid)"
+  echo "Stopped workbench $name (pid $pid)"
 }
 
-stop_viewer() {
-  stop_viewer_service "backend" "$VIEWER_BACKEND_PID" "$VIEWER_BACKEND_PORT"
-  stop_viewer_service "frontend" "$VIEWER_FRONTEND_PID" "$VIEWER_FRONTEND_PORT"
+stop_workbench() {
+  stop_workbench_service "backend" "$WORKBENCH_BACKEND_PID" "$WORKBENCH_BACKEND_PORT"
+  stop_workbench_service "frontend" "$WORKBENCH_FRONTEND_PID" "$WORKBENCH_FRONTEND_PORT"
 }
 
-start_viewer_backend() {
+start_workbench_backend() {
   local -a reload_args=(
     --reload
     --reload-dir "$PROJECT_ROOT/emperor"
     --reload-dir "$PROJECT_ROOT/models"
-    --reload-dir "$PROJECT_ROOT/viewer/backend"
+    --reload-dir "$PROJECT_ROOT/workbench/backend"
   )
 
-  if pid_running "$VIEWER_BACKEND_PID"; then
-    if port_listening "$VIEWER_BACKEND_PORT"; then
-      echo "Viewer backend already started; reusing existing server (pid $(cat "$VIEWER_BACKEND_PID"), port $VIEWER_BACKEND_PORT)"
+  if pid_running "$WORKBENCH_BACKEND_PID"; then
+    if port_listening "$WORKBENCH_BACKEND_PORT"; then
+      echo "Workbench backend already started; reusing existing server (pid $(cat "$WORKBENCH_BACKEND_PID"), port $WORKBENCH_BACKEND_PORT)"
       return 0
     fi
 
-    echo "Viewer backend pid file exists, but port $VIEWER_BACKEND_PORT is not listening."
-    print_log_tail "$VIEWER_BACKEND_LOG"
-    rm -f "$VIEWER_BACKEND_PID"
+    echo "Workbench backend pid file exists, but port $WORKBENCH_BACKEND_PORT is not listening."
+    print_log_tail "$WORKBENCH_BACKEND_LOG"
+    rm -f "$WORKBENCH_BACKEND_PID"
     return 1
   fi
 
-  rm -f "$VIEWER_BACKEND_PID"
-  if port_listening "$VIEWER_BACKEND_PORT"; then
-    echo "Viewer backend is listening on port $VIEWER_BACKEND_PORT without a pid file; restarting it to apply current launcher settings."
-    stop_discovered_viewer_service "backend" "$VIEWER_BACKEND_PORT" || return 1
-    if ! wait_for_port_to_close "$VIEWER_BACKEND_PORT"; then
-      echo "Viewer backend port $VIEWER_BACKEND_PORT did not close after TERM; forcing the discovered viewer backend to stop." >&2
-      stop_discovered_viewer_service "backend" "$VIEWER_BACKEND_PORT" "KILL" || return 1
-      if ! wait_for_port_to_close "$VIEWER_BACKEND_PORT"; then
-        echo "Viewer backend port $VIEWER_BACKEND_PORT did not close after force-stopping the discovered process." >&2
+  rm -f "$WORKBENCH_BACKEND_PID"
+  if port_listening "$WORKBENCH_BACKEND_PORT"; then
+    echo "Workbench backend is listening on port $WORKBENCH_BACKEND_PORT without a pid file; restarting it to apply current launcher settings."
+    stop_discovered_workbench_service "backend" "$WORKBENCH_BACKEND_PORT" || return 1
+    if ! wait_for_port_to_close "$WORKBENCH_BACKEND_PORT"; then
+      echo "Workbench backend port $WORKBENCH_BACKEND_PORT did not close after TERM; forcing the discovered workbench backend to stop." >&2
+      stop_discovered_workbench_service "backend" "$WORKBENCH_BACKEND_PORT" "KILL" || return 1
+      if ! wait_for_port_to_close "$WORKBENCH_BACKEND_PORT"; then
+        echo "Workbench backend port $WORKBENCH_BACKEND_PORT did not close after force-stopping the discovered process." >&2
         return 1
       fi
     fi
   fi
 
-  echo "Starting viewer backend in the background on port $VIEWER_BACKEND_PORT..."
+  echo "Starting workbench backend in the background on port $WORKBENCH_BACKEND_PORT..."
   (
     cd "$PROJECT_ROOT" || exit 1
     if command -v setsid >/dev/null 2>&1; then
       MPLCONFIGDIR="${MPLCONFIGDIR:-/tmp/matplotlib}" \
-        VIEWER_API_ALLOW_UNSAFE_LOCAL_MUTATIONS="${VIEWER_API_ALLOW_UNSAFE_LOCAL_MUTATIONS:-true}" \
-        setsid nohup "$VENV_PATH/bin/python" -m uvicorn viewer.backend.api:app \
-          "${reload_args[@]}" --host 127.0.0.1 --port "$VIEWER_BACKEND_PORT" \
-          </dev/null > "$VIEWER_BACKEND_LOG" 2>&1 &
+        WORKBENCH_API_ALLOW_UNSAFE_LOCAL_MUTATIONS="${WORKBENCH_API_ALLOW_UNSAFE_LOCAL_MUTATIONS:-true}" \
+        setsid nohup "$VENV_PATH/bin/python" -m uvicorn workbench.backend.api:app \
+          "${reload_args[@]}" --host 127.0.0.1 --port "$WORKBENCH_BACKEND_PORT" \
+          </dev/null > "$WORKBENCH_BACKEND_LOG" 2>&1 &
     else
       MPLCONFIGDIR="${MPLCONFIGDIR:-/tmp/matplotlib}" \
-        VIEWER_API_ALLOW_UNSAFE_LOCAL_MUTATIONS="${VIEWER_API_ALLOW_UNSAFE_LOCAL_MUTATIONS:-true}" \
-        nohup "$VENV_PATH/bin/python" -m uvicorn viewer.backend.api:app \
-          "${reload_args[@]}" --host 127.0.0.1 --port "$VIEWER_BACKEND_PORT" \
-          </dev/null > "$VIEWER_BACKEND_LOG" 2>&1 &
+        WORKBENCH_API_ALLOW_UNSAFE_LOCAL_MUTATIONS="${WORKBENCH_API_ALLOW_UNSAFE_LOCAL_MUTATIONS:-true}" \
+        nohup "$VENV_PATH/bin/python" -m uvicorn workbench.backend.api:app \
+          "${reload_args[@]}" --host 127.0.0.1 --port "$WORKBENCH_BACKEND_PORT" \
+          </dev/null > "$WORKBENCH_BACKEND_LOG" 2>&1 &
     fi
-    echo "$!" > "$VIEWER_BACKEND_PID"
+    echo "$!" > "$WORKBENCH_BACKEND_PID"
   ) || return 1
 
-  if wait_for_port "$VIEWER_BACKEND_PORT"; then
+  if wait_for_port "$WORKBENCH_BACKEND_PORT"; then
     return 0
   fi
 
-  echo "Viewer backend did not start listening on port $VIEWER_BACKEND_PORT." >&2
-  print_log_tail "$VIEWER_BACKEND_LOG"
-  rm -f "$VIEWER_BACKEND_PID"
+  echo "Workbench backend did not start listening on port $WORKBENCH_BACKEND_PORT." >&2
+  print_log_tail "$WORKBENCH_BACKEND_LOG"
+  rm -f "$WORKBENCH_BACKEND_PID"
   return 1
 }
 
-start_viewer_frontend() {
-  if pid_running "$VIEWER_FRONTEND_PID"; then
-    echo "Viewer frontend already started; reusing existing server (pid $(cat "$VIEWER_FRONTEND_PID"), port $VIEWER_FRONTEND_PORT)"
+start_workbench_frontend() {
+  if pid_running "$WORKBENCH_FRONTEND_PID"; then
+    echo "Workbench frontend already started; reusing existing server (pid $(cat "$WORKBENCH_FRONTEND_PID"), port $WORKBENCH_FRONTEND_PORT)"
     return 0
   fi
 
-  rm -f "$VIEWER_FRONTEND_PID"
-  if port_listening "$VIEWER_FRONTEND_PORT"; then
-    echo "Viewer frontend already started; port $VIEWER_FRONTEND_PORT is listening (no env.sh pid file)"
+  rm -f "$WORKBENCH_FRONTEND_PID"
+  if port_listening "$WORKBENCH_FRONTEND_PORT"; then
+    echo "Workbench frontend already started; port $WORKBENCH_FRONTEND_PORT is listening (no env.sh pid file)"
     return 0
   fi
 
-  echo "Starting viewer frontend in the background on port $VIEWER_FRONTEND_PORT..."
+  echo "Starting workbench frontend in the background on port $WORKBENCH_FRONTEND_PORT..."
   (
     cd "$FRONTEND_PATH" || exit 1
     if command -v setsid >/dev/null 2>&1; then
-      NEXT_PUBLIC_VIEWER_API_URL="$VIEWER_API_URL" \
-        PORT="$VIEWER_FRONTEND_PORT" setsid nohup mise exec -- npm run dev \
-          </dev/null > "$VIEWER_FRONTEND_LOG" 2>&1 &
+      NEXT_PUBLIC_WORKBENCH_API_URL="$WORKBENCH_API_URL" \
+        PORT="$WORKBENCH_FRONTEND_PORT" setsid nohup mise exec -- npm run dev \
+          </dev/null > "$WORKBENCH_FRONTEND_LOG" 2>&1 &
     else
-      NEXT_PUBLIC_VIEWER_API_URL="$VIEWER_API_URL" \
-        PORT="$VIEWER_FRONTEND_PORT" nohup mise exec -- npm run dev \
-          </dev/null > "$VIEWER_FRONTEND_LOG" 2>&1 &
+      NEXT_PUBLIC_WORKBENCH_API_URL="$WORKBENCH_API_URL" \
+        PORT="$WORKBENCH_FRONTEND_PORT" nohup mise exec -- npm run dev \
+          </dev/null > "$WORKBENCH_FRONTEND_LOG" 2>&1 &
     fi
-    echo "$!" > "$VIEWER_FRONTEND_PID"
+    echo "$!" > "$WORKBENCH_FRONTEND_PID"
   )
 }
 
-start_viewer() {
+start_workbench() {
   ensure_mise || return 1
   mise install || return 1
   ensure_project_dependencies || return 1
   install_frontend_dependencies || return 1
-  mkdir -p "$VIEWER_RUNTIME_PATH"
+  mkdir -p "$WORKBENCH_RUNTIME_PATH"
 
-  start_viewer_backend || return 1
-  start_viewer_frontend || return 1
+  start_workbench_backend || return 1
+  start_workbench_frontend || return 1
 
-  echo "Viewer running in the background at http://localhost:$VIEWER_FRONTEND_PORT"
-  echo "Backend log: $VIEWER_BACKEND_LOG"
-  echo "Frontend log: $VIEWER_FRONTEND_LOG"
+  echo "Workbench running in the background at http://localhost:$WORKBENCH_FRONTEND_PORT"
+  echo "Backend log: $WORKBENCH_BACKEND_LOG"
+  echo "Frontend log: $WORKBENCH_FRONTEND_LOG"
 }
 
-if [ "$VIEWER_ACTION" = "stop" ]; then
-  stop_viewer
+if [ "$WORKBENCH_ACTION" = "stop" ]; then
+  stop_workbench
   return 0
 fi
 
-if [ "$VIEWER_ACTION" = "status" ]; then
-  viewer_status
+if [ "$WORKBENCH_ACTION" = "status" ]; then
+  workbench_status
   return 0
 fi
 
@@ -561,4 +561,4 @@ ensure_project_dependencies || return 1
 install_frontend_dependencies || return 1
 
 echo "Environment is ready"
-start_viewer || return 1
+start_workbench || return 1

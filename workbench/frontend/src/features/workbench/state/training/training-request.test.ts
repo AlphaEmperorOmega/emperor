@@ -1,0 +1,286 @@
+import { describe, expect, it } from "vitest";
+import {
+  buildTrainingJobRequest,
+  buildTrainingRunPlanRequest,
+} from "@/features/workbench/state/training/training-request";
+import {
+  type ConfigOverrides,
+  type ConfigField,
+  type TrainingRunPlan,
+} from "@/lib/api";
+import {
+  buildConfigSnapshotRunPlan,
+  type ConfigSnapshot,
+} from "@/lib/config-snapshots";
+import {
+  buildEffectiveOverrides,
+  buildTrainingSearchPayload,
+  searchOverrideConflictKeys,
+  type TrainingSearchState,
+} from "@/lib/training-search";
+
+const summary = {
+  totalRuns: 1,
+  completedRuns: 0,
+  runningRuns: 0,
+  pendingRuns: 1,
+  failedRuns: 0,
+  cancelledRuns: 0,
+  skippedRuns: 0,
+  totalEpochs: 10,
+  completedEpochs: 0,
+  remainingEpochs: 10,
+};
+
+function runPlan(overrides: ConfigOverrides = {}): TrainingRunPlan {
+  return {
+    modelType: "linears",
+    model: "linear",
+    preset: "baseline",
+    presets: ["baseline"],
+    datasets: ["Mnist"],
+    overrides,
+    search: null,
+    logFolder: "runs",
+    isRandomSearch: false,
+    runs: [],
+    summary,
+  };
+}
+
+function field(overrides: Partial<ConfigField> & Pick<ConfigField, "key">): ConfigField {
+  const section = overrides.section ?? "General";
+  return {
+    key: overrides.key,
+    configKey: overrides.configKey ?? overrides.key,
+    flag: overrides.flag ?? `--${overrides.key.replace(/_/g, "-")}`,
+    label: overrides.label ?? overrides.key,
+    section,
+    sectionPath: overrides.sectionPath ?? [section || "General"],
+    type: overrides.type ?? "int",
+    default: overrides.default ?? 10,
+    nullable: overrides.nullable ?? false,
+    choices: overrides.choices ?? [],
+    locked: overrides.locked ?? false,
+    lockedValue: overrides.lockedValue,
+    lockedReason: overrides.lockedReason,
+  };
+}
+
+function snapshot(overrides: Partial<ConfigSnapshot> & Pick<ConfigSnapshot, "id">): ConfigSnapshot {
+  return {
+    id: overrides.id,
+    name: overrides.name ?? overrides.id,
+    modelType: overrides.modelType ?? "linears",
+    model: overrides.model ?? "linear",
+    preset: overrides.preset ?? "baseline",
+    overrides: overrides.overrides ?? {},
+    createdAt: overrides.createdAt ?? "2026-06-01T00:00:00.000Z",
+  };
+}
+
+describe("training requests", () => {
+  it("builds run-plan requests from the selected model, presets, datasets, and overrides", () => {
+    expect(
+      buildTrainingRunPlanRequest({
+        canPlan: true,
+        selectedModelType: "linears",
+        selectedModel: "linear",
+        selectedPreset: "baseline",
+        selectedTrainingPresets: ["baseline", "fast"],
+        selectedDatasets: ["Mnist", "FashionMnist"],
+        effectiveOverrides: { hidden_size: "128" },
+        logFolder: "runs",
+        selectedMonitors: ["linear_layers", "gradient_norm"],
+      }),
+    ).toEqual({
+      modelType: "linears",
+      model: "linear",
+      preset: "baseline",
+      presets: ["baseline", "fast"],
+      datasets: ["Mnist", "FashionMnist"],
+      overrides: { hidden_size: "128" },
+      logFolder: "runs",
+      monitors: ["linear_layers", "gradient_norm"],
+    });
+  });
+
+  it("builds Training Job requests with monitors and the current run plan", () => {
+    expect(
+      buildTrainingJobRequest({
+        selectedModelType: "linears",
+        selectedModel: "linear",
+        selectedPreset: "baseline",
+        selectedTrainingPresets: ["baseline"],
+        selectedDatasets: ["Mnist"],
+        effectiveOverrides: { hidden_size: "128" },
+        logFolder: "runs",
+        selectedMonitors: ["linear_layers", "gradient_norm"],
+        runPlan: runPlan({ hidden_size: "128" }),
+      }),
+    ).toMatchObject({
+      modelType: "linears",
+      model: "linear",
+      preset: "baseline",
+      presets: ["baseline"],
+      datasets: ["Mnist"],
+      overrides: { hidden_size: "128" },
+      logFolder: "runs",
+      monitors: ["linear_layers", "gradient_norm"],
+      runPlan: { overrides: { hidden_size: "128" } },
+    });
+  });
+
+  it("omits overrides controlled by search axes and includes the search payload", () => {
+    const search: TrainingSearchState = {
+      mode: "grid",
+      selectedValues: {
+        hidden_size: [128, 256],
+        dropout: [0.1],
+      },
+      randomSamples: 10,
+    };
+    const overrides = {
+      hidden_size: "64",
+      learning_rate: "0.001",
+    };
+    const effectiveOverrides = buildEffectiveOverrides(overrides, search);
+    const searchPayload = buildTrainingSearchPayload(search);
+
+    expect(searchOverrideConflictKeys(overrides, search)).toEqual(["hidden_size"]);
+    expect(effectiveOverrides).toEqual({ learning_rate: "0.001" });
+    expect(
+      buildTrainingRunPlanRequest({
+        canPlan: true,
+        selectedModelType: "linears",
+        selectedModel: "linear",
+        selectedPreset: "baseline",
+        selectedTrainingPresets: ["baseline"],
+        selectedDatasets: ["Mnist"],
+        effectiveOverrides,
+        logFolder: "search_runs",
+        selectedMonitors: [],
+        searchPayload,
+      }),
+    ).toEqual({
+      modelType: "linears",
+      model: "linear",
+      preset: "baseline",
+      presets: ["baseline"],
+      datasets: ["Mnist"],
+      overrides: { learning_rate: "0.001" },
+      logFolder: "search_runs",
+      monitors: [],
+      search: {
+        mode: "grid",
+        values: {
+          hidden_size: [128, 256],
+          dropout: [0.1],
+        },
+      },
+    });
+  });
+
+  it("submits mixed Config Snapshot run plans without direct overrides or search payloads", () => {
+    const snapshotRunPlan = buildConfigSnapshotRunPlan({
+      modelType: "linears",
+      model: "linear",
+      selectedPreset: "baseline",
+      selectedTrainingPresets: ["baseline", "fast"],
+      selectedDatasets: ["Mnist", "FashionMnist"],
+      snapshots: [
+        snapshot({
+          id: "wide",
+          name: "Wide",
+          preset: "baseline",
+          overrides: { hidden_size: "256" },
+        }),
+        snapshot({
+          id: "dropout",
+          name: "Dropout",
+          preset: "fast",
+          overrides: { dropout: "0.2" },
+        }),
+      ],
+      fields: [field({ key: "hidden_size" }), field({ key: "dropout" })],
+      presetOverrides: { hidden_size: "192" },
+      logFolder: "snapshots",
+    });
+
+    const request = buildTrainingJobRequest({
+      selectedModelType: "linears",
+      selectedModel: "linear",
+      selectedPreset: "baseline",
+      selectedTrainingPresets: ["baseline", "fast"],
+      selectedDatasets: ["Mnist", "FashionMnist"],
+      effectiveOverrides: {},
+      logFolder: "snapshots",
+      selectedMonitors: ["linear_layers"],
+      runPlan: snapshotRunPlan,
+    });
+
+    expect(request?.overrides).toEqual({});
+    expect(request).not.toHaveProperty("search");
+    expect(request?.monitors).toEqual(["linear_layers"]);
+    expect(request?.runPlan?.search).toBeNull();
+    expect(request?.runPlan?.summary.totalRuns).toBe(8);
+    expect(request?.runPlan?.runs.map((run) => run.snapshotName)).toEqual([
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      "Wide",
+      "Wide",
+      "Dropout",
+      "Dropout",
+    ]);
+    expect(request?.runPlan?.runs[0]).not.toHaveProperty("snapshotId");
+    expect(request?.runPlan?.runs[0].overrides).toEqual({ hidden_size: "192" });
+    expect(request?.runPlan?.runs[4]).toMatchObject({
+      snapshotId: "wide",
+      snapshotName: "Wide",
+      overrides: { hidden_size: "256" },
+    });
+  });
+
+  it("submits snapshot source presets even when the base preset is not selected", () => {
+    const snapshotRunPlan = buildConfigSnapshotRunPlan({
+      modelType: "linears",
+      model: "linear",
+      selectedPreset: "baseline",
+      selectedTrainingPresets: ["baseline"],
+      selectedDatasets: ["Mnist"],
+      snapshots: [
+        snapshot({
+          id: "fast-wide",
+          name: "Fast wide",
+          preset: "fast",
+          overrides: { hidden_size: "256" },
+        }),
+      ],
+      fields: [field({ key: "hidden_size" })],
+      logFolder: "snapshots",
+    });
+
+    const request = buildTrainingJobRequest({
+      selectedModelType: "linears",
+      selectedModel: "linear",
+      selectedPreset: "baseline",
+      selectedTrainingPresets: ["baseline"],
+      selectedDatasets: ["Mnist"],
+      effectiveOverrides: {},
+      logFolder: "snapshots",
+      selectedMonitors: [],
+      runPlan: snapshotRunPlan,
+    });
+
+    expect(request?.preset).toBe("baseline");
+    expect(request?.presets).toEqual(["baseline", "fast"]);
+    expect(request?.runPlan?.presets).toEqual(["baseline", "fast"]);
+    expect(request?.runPlan?.runs[1]).toMatchObject({
+      preset: "fast",
+      snapshotId: "fast-wide",
+      snapshotName: "Fast wide",
+    });
+  });
+});

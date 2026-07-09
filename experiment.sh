@@ -277,7 +277,7 @@ run_model_command() {
     show_monitor_print_model_error "$model_type" "$model"
     return 1
   elif [ "$print_model" = true ]; then
-    python3 -m viewer.backend.cli --model-type "$model_type" --model "$model" "${args[@]}"
+    python3 -m workbench.backend.cli --model-type "$model_type" --model "$model" "${args[@]}"
   else
     local module
     module="$(model_module "$model_type" "$model")" || return 1

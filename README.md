@@ -9,7 +9,7 @@ network models from reusable, inspectable components. The repository combines:
   helpers, and monitor callbacks.
 - `models/` - reference experiment packages that compose the core modules into
   runnable architectures.
-- `viewer/` - a local browser-based Model Visualizer for inspecting presets,
+- `workbench/` - a local browser-based Model Visualizer for inspecting presets,
   editing config overrides, planning training runs, launching local jobs, and
   reviewing live or historical monitor data.
 
@@ -36,37 +36,37 @@ source env.sh
 
 On first run, `env.sh` installs `mise` if needed, provisions the pinned Python
 and Node versions, creates `./torchenv`, installs the project from
-`pyproject.toml`, installs Viewer frontend dependencies, activates the
-virtualenv, and starts the Viewer backend and frontend in the background.
+`pyproject.toml`, installs Workbench frontend dependencies, activates the
+virtualenv, and starts the Workbench backend and frontend in the background.
 
-On later runs, it reuses the virtualenv and already-running Viewer servers when
-possible. Runtime logs and PID files are written under `viewer/.runtime/`.
+On later runs, it reuses the virtualenv and already-running Workbench servers when
+possible. Runtime logs and PID files are written under `workbench/.runtime/`.
 
-After `source env.sh`, the Viewer is available at:
+After `source env.sh`, the Workbench is available at:
 
 ```text
 http://localhost:9000
 ```
 
-The local Viewer API defaults to:
+The local Workbench API defaults to:
 
 ```text
 http://127.0.0.1:9999
 ```
 
-Stop or inspect Viewer servers:
+Stop or inspect Workbench servers:
 
 ```bash
-source env.sh --viewer-stop
-source env.sh --viewer-status
+source env.sh --workbench-stop
+source env.sh --workbench-status
 ```
 
 Default ports can be overridden with:
 
 ```bash
-export VIEWER_BACKEND_PORT=9999
-export VIEWER_FRONTEND_PORT=9000
-export NEXT_PUBLIC_VIEWER_API_URL=http://127.0.0.1:9999
+export WORKBENCH_BACKEND_PORT=9999
+export WORKBENCH_FRONTEND_PORT=9000
+export NEXT_PUBLIC_WORKBENCH_API_URL=http://127.0.0.1:9999
 ```
 
 ## Current State
@@ -87,7 +87,7 @@ implementations for adaptive parameters, experts, neuron clusters, and
 transformer experiments. Before using one for a long run, verify the exact
 preset with `--print-model` and a small one-epoch run.
 
-The Viewer has grown into a local experiment workbench with three workspaces:
+The Workbench has grown into a local experiment workbench with three workspaces:
 
 - **Model** - choose a model/preset/dataset, inspect module and operation
   graphs, review parameters, create config snapshots, and inspect historical
@@ -458,9 +458,9 @@ source experiment.sh \
 `--grid-search` and `--random-search` are mutually exclusive and can be combined
 with `--preset`, `--presets`, or `--all-presets`.
 
-## Viewer
+## Workbench
 
-The Viewer is the local workbench for model experiments. Use it when you want to
+The Workbench is the local workbench for model experiments. Use it when you want to
 pick a model, preset, and dataset visually; inspect what a preset builds before
 training; adjust config overrides without assembling a long terminal command;
 start or monitor local training jobs; and review historical runs after the
@@ -471,46 +471,46 @@ checking planned runs, watching monitor signals while a job is active, and
 reviewing logs once there are completed results. The terminal CLI remains the
 simpler path for scripted or repeatable runs.
 
-The Viewer should be treated as a vibecoded prototype: it is useful for local
+The Workbench should be treated as a vibecoded prototype: it is useful for local
 research workflows today, but its implementation is expected to be refactored
 as the experiment workflow and architecture settle.
 
-See [`viewer/README.md`](viewer/README.md) for the focused Viewer guide.
+See [`workbench/README.md`](workbench/README.md) for the focused Workbench guide.
 
 Hosted or non-local deployments should configure explicit CORS origins in the
-Viewer backend environment:
+Workbench backend environment:
 
 ```bash
-export VIEWER_API_CORS_ORIGINS='["https://viewer.example.com"]'
+export WORKBENCH_API_CORS_ORIGINS='["https://workbench.example.com"]'
 ```
 
-Hosted frontend builds should also set `NEXT_PUBLIC_VIEWER_API_URL` and, when
-multiple API origins are allowed, `NEXT_PUBLIC_VIEWER_API_ALLOWED_ORIGINS` so
+Hosted frontend builds should also set `NEXT_PUBLIC_WORKBENCH_API_URL` and, when
+multiple API origins are allowed, `NEXT_PUBLIC_WORKBENCH_API_ALLOWED_ORIGINS` so
 browser requests and bearer tokens cannot be redirected to arbitrary origins.
 
 Bearer auth can be enabled with:
 
 ```bash
-export VIEWER_API_AUTH_MODE=bearer
-export VIEWER_API_TOKEN=<token>
+export WORKBENCH_API_AUTH_MODE=bearer
+export WORKBENCH_API_TOKEN=<token>
 ```
 
 Example hosted pairing:
 
 ```bash
 # Frontend build env
-export NEXT_PUBLIC_VIEWER_API_URL=https://api.example.com
-export NEXT_PUBLIC_VIEWER_API_ALLOWED_ORIGINS='["https://api.example.com"]'
+export NEXT_PUBLIC_WORKBENCH_API_URL=https://api.example.com
+export NEXT_PUBLIC_WORKBENCH_API_ALLOWED_ORIGINS='["https://api.example.com"]'
 
 # Backend runtime env
-export VIEWER_API_CORS_ORIGINS='["https://viewer.example.com"]'
-export VIEWER_API_AUTH_MODE=bearer
-export VIEWER_API_TOKEN='<replace-with-a-secret-token>'
+export WORKBENCH_API_CORS_ORIGINS='["https://workbench.example.com"]'
+export WORKBENCH_API_AUTH_MODE=bearer
+export WORKBENCH_API_TOKEN='<replace-with-a-secret-token>'
 ```
 
-The Viewer backend is local-file-backed. Its in-process locks protect shared
+The Workbench backend is local-file-backed. Its in-process locks protect shared
 caches inside one backend worker; they are not cross-worker invalidation. Prefer
-one backend worker for hosted Viewer deployments unless you add a shared
+one backend worker for hosted Workbench deployments unless you add a shared
 cache/invalidation design.
 
 ## Results and Logs
@@ -541,15 +541,15 @@ bash download_logs.sh logs emperor_logs.zip
 bash download_logs.sh logs /tmp/emperor_logs.zip
 ```
 
-To restore that archive into another local project, start the Viewer backend,
-open the Viewer, choose **Import Logs** in the top navigation, and select the
+To restore that archive into another local project, start the Workbench backend,
+open the Workbench, choose **Import Logs** in the top navigation, and select the
 produced `.zip` file. Local unauthenticated backends allow log imports by
 default; hosted or read-only bearer-mode backends require
-`VIEWER_API_ALLOW_LOG_IMPORTS=true`. The import extracts into that project's
+`WORKBENCH_API_ALLOW_LOG_IMPORTS=true`. The import extracts into that project's
 server-side `logs/` directory and overwrites files that already exist at the
 same archive paths. Compressed archive uploads and extracted archive contents
-are uncapped by default. Set `VIEWER_API_MAX_UPLOAD_SIZE=<bytes>` or
-`VIEWER_API_MAX_LOG_ARCHIVE_EXTRACTED_SIZE=<bytes>` only when a deployment
+are uncapped by default. Set `WORKBENCH_API_MAX_UPLOAD_SIZE=<bytes>` or
+`WORKBENCH_API_MAX_LOG_ARCHIVE_EXTRACTED_SIZE=<bytes>` only when a deployment
 needs to reject large imports.
 
 ## Test and Quality Commands
@@ -574,7 +574,7 @@ bash run_test.sh layer TestLayer test_forward_shape
 The script maps the first argument to `docs/test_<name>.py` and then passes any
 class or method name through to `python3 -m unittest -f`.
 
-For Viewer-specific changes, run the relevant backend or frontend checks from
+For Workbench-specific changes, run the relevant backend or frontend checks from
 the package being changed after the unit suite is green.
 
 ## License
