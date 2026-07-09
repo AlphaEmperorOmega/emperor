@@ -2128,23 +2128,6 @@ class LinearAdaptiveConfigBuilder:
     def build(self) -> "ModelConfig":
         from emperor.config import ModelConfig
 
-        control_dependencies = self.__control_config_dependencies()
-        control_factory = ControlConfigFactory(control_dependencies)
-        boundary_factory = BoundaryModelConfigFactory(
-            BoundaryModelConfigDependencies(
-                stack_options=self.stack_options,
-                input_boundary_options=self.input_boundary_options,
-                output_boundary_options=self.output_boundary_options,
-                adaptive_generator_stack_options=(
-                    self.adaptive_generator_stack_options
-                ),
-            )
-        )
-
-        input_model_config = boundary_factory.build_input_model_config()
-        model_config = control_factory.build()
-        output_model_config = boundary_factory.build_output_model_config()
-
         return ModelConfig(
             learning_rate=self.learning_rate,
             batch_size=self.batch_size,
@@ -2152,9 +2135,44 @@ class LinearAdaptiveConfigBuilder:
             hidden_dim=self.hidden_dim,
             output_dim=self.output_dim,
             experiment_config=ExperimentConfig(
-                input_model_config=input_model_config,
-                model_config=model_config,
-                output_model_config=output_model_config,
+                input_model_config=self.__input_model_config(),
+                model_config=self.__model_config(),
+                output_model_config=self.__output_model_config(),
+            ),
+        )
+
+    def __input_model_config(self):
+        boundary_model_config_dependencies = (
+            self.__boundary_model_config_dependencies()
+        )
+        boundary_model_config_factory = BoundaryModelConfigFactory(
+            boundary_model_config_dependencies
+        )
+        return boundary_model_config_factory.build_input_model_config()
+
+    def __model_config(self):
+        control_dependencies = self.__control_config_dependencies()
+        control_factory = ControlConfigFactory(control_dependencies)
+        return control_factory.build()
+
+    def __output_model_config(self):
+        boundary_model_config_dependencies = (
+            self.__boundary_model_config_dependencies()
+        )
+        boundary_model_config_factory = BoundaryModelConfigFactory(
+            boundary_model_config_dependencies
+        )
+        return boundary_model_config_factory.build_output_model_config()
+
+    def __boundary_model_config_dependencies(
+        self,
+    ) -> BoundaryModelConfigDependencies:
+        return BoundaryModelConfigDependencies(
+            stack_options=self.stack_options,
+            input_boundary_options=self.input_boundary_options,
+            output_boundary_options=self.output_boundary_options,
+            adaptive_generator_stack_options=(
+                self.adaptive_generator_stack_options
             ),
         )
 

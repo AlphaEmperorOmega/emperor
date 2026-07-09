@@ -76,11 +76,6 @@ class LinearAdaptiveConfigBuilder:
     def build(self) -> "ModelConfig":
         from emperor.config import ModelConfig
 
-        hidden_model_dependencies = self.__hidden_model_config_dependencies()
-        hidden_model_factory = HiddenModelConfigFactory(hidden_model_dependencies)
-        boundary_model_dependencies = self.__boundary_model_config_dependencies()
-        boundary_model_factory = BoundaryModelConfigFactory(boundary_model_dependencies)
-
         return ModelConfig(
             learning_rate=self.learning_rate,
             batch_size=self.batch_size,
@@ -88,11 +83,26 @@ class LinearAdaptiveConfigBuilder:
             hidden_dim=self.hidden_dim,
             output_dim=self.output_dim,
             experiment_config=ExperimentConfig(
-                input_model_config=boundary_model_factory.build_input_model_config(),
-                model_config=hidden_model_factory.build_hidden_model_config(),
-                output_model_config=boundary_model_factory.build_output_model_config(),
+                input_model_config=self.__input_model_config(),
+                model_config=self.__model_config(),
+                output_model_config=self.__output_model_config(),
             ),
         )
+
+    def __input_model_config(self):
+        boundary_model_dependencies = self.__boundary_model_config_dependencies()
+        boundary_model_factory = BoundaryModelConfigFactory(boundary_model_dependencies)
+        return boundary_model_factory.build_input_model_config()
+
+    def __model_config(self):
+        hidden_model_dependencies = self.__hidden_model_config_dependencies()
+        hidden_model_factory = HiddenModelConfigFactory(hidden_model_dependencies)
+        return hidden_model_factory.build_hidden_model_config()
+
+    def __output_model_config(self):
+        boundary_model_dependencies = self.__boundary_model_config_dependencies()
+        boundary_model_factory = BoundaryModelConfigFactory(boundary_model_dependencies)
+        return boundary_model_factory.build_output_model_config()
 
     def __boundary_model_config_dependencies(self) -> BoundaryModelConfigDependencies:
         return BoundaryModelConfigDependencies(

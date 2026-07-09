@@ -71,25 +71,38 @@ class LinearConfigBuilder:
     def build(self) -> "ModelConfig":
         from emperor.config import ModelConfig
 
-        control_dependencies = self.__control_config_dependencies()
-        control_factory = ControlConfigFactory(control_dependencies)
-        boundary_dependencies = self.__boundary_config_dependencies()
-        boundary_factory = BoundaryConfigFactory(boundary_dependencies)
-
-        model_config = control_factory.build()
-
         return ModelConfig(
             learning_rate=self.learning_rate,
             batch_size=self.batch_size,
             input_dim=self.input_dim,
-            hidden_dim=control_factory.stack_options.hidden_dim,
+            hidden_dim=self.__model_hidden_dim(),
             output_dim=self.output_dim,
             experiment_config=ExperimentConfig(
-                input_model_config=boundary_factory.build_input_model_config(),
-                model_config=model_config,
-                output_model_config=boundary_factory.build_output_model_config(),
+                input_model_config=self.__input_model_config(),
+                model_config=self.__model_config(),
+                output_model_config=self.__output_model_config(),
             ),
         )
+
+    def __input_model_config(self):
+        boundary_dependencies = self.__boundary_config_dependencies()
+        boundary_factory = BoundaryConfigFactory(boundary_dependencies)
+        return boundary_factory.build_input_model_config()
+
+    def __model_config(self):
+        control_dependencies = self.__control_config_dependencies()
+        control_factory = ControlConfigFactory(control_dependencies)
+        return control_factory.build()
+
+    def __output_model_config(self):
+        boundary_dependencies = self.__boundary_config_dependencies()
+        boundary_factory = BoundaryConfigFactory(boundary_dependencies)
+        return boundary_factory.build_output_model_config()
+
+    def __model_hidden_dim(self) -> int:
+        control_dependencies = self.__control_config_dependencies()
+        control_factory = ControlConfigFactory(control_dependencies)
+        return control_factory.stack_options.hidden_dim
 
     def __boundary_config_dependencies(self) -> BoundaryConfigDependencies:
         return BoundaryConfigDependencies(
