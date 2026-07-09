@@ -87,6 +87,99 @@ const FIXTURE_SECTION_PATHS_BY_TITLE = new Map<string, string[]>([
     ],
   ],
   [
+    "Feed-Forward Gate Options",
+    ["Feed-Forward Stack Options", "Feed-Forward Gate Options"],
+  ],
+  [
+    "Feed-Forward Gate Stack Options",
+    [
+      "Feed-Forward Stack Options",
+      "Feed-Forward Gate Options",
+      "Feed-Forward Gate Stack Options",
+    ],
+  ],
+  [
+    "Feed-Forward Memory Options",
+    ["Feed-Forward Stack Options", "Feed-Forward Memory Options"],
+  ],
+  [
+    "Feed-Forward Memory Stack Options",
+    [
+      "Feed-Forward Stack Options",
+      "Feed-Forward Memory Options",
+      "Feed-Forward Memory Stack Options",
+    ],
+  ],
+  [
+    "Feed-Forward Recurrent Layer Options",
+    ["Feed-Forward Stack Options", "Feed-Forward Recurrent Layer Options"],
+  ],
+  [
+    "Feed-Forward Recurrent Gate Options",
+    [
+      "Feed-Forward Stack Options",
+      "Feed-Forward Recurrent Layer Options",
+      "Feed-Forward Recurrent Gate Options",
+    ],
+  ],
+  [
+    "Feed-Forward Recurrent Gate Stack Options",
+    [
+      "Feed-Forward Stack Options",
+      "Feed-Forward Recurrent Layer Options",
+      "Feed-Forward Recurrent Gate Options",
+      "Feed-Forward Recurrent Gate Stack Options",
+    ],
+  ],
+  [
+    "Attention Projection Gate Options",
+    ["Attention Projection Stack Options", "Attention Projection Gate Options"],
+  ],
+  [
+    "Attention Projection Gate Stack Options",
+    [
+      "Attention Projection Stack Options",
+      "Attention Projection Gate Options",
+      "Attention Projection Gate Stack Options",
+    ],
+  ],
+  [
+    "Attention Projection Memory Options",
+    ["Attention Projection Stack Options", "Attention Projection Memory Options"],
+  ],
+  [
+    "Attention Projection Memory Stack Options",
+    [
+      "Attention Projection Stack Options",
+      "Attention Projection Memory Options",
+      "Attention Projection Memory Stack Options",
+    ],
+  ],
+  [
+    "Attention Projection Recurrent Layer Options",
+    [
+      "Attention Projection Stack Options",
+      "Attention Projection Recurrent Layer Options",
+    ],
+  ],
+  [
+    "Attention Projection Recurrent Gate Options",
+    [
+      "Attention Projection Stack Options",
+      "Attention Projection Recurrent Layer Options",
+      "Attention Projection Recurrent Gate Options",
+    ],
+  ],
+  [
+    "Attention Projection Recurrent Gate Stack Options",
+    [
+      "Attention Projection Stack Options",
+      "Attention Projection Recurrent Layer Options",
+      "Attention Projection Recurrent Gate Options",
+      "Attention Projection Recurrent Gate Stack Options",
+    ],
+  ],
+  [
     "Router Options",
     ["Sampler Model Options", "Router Options"],
   ],
@@ -632,6 +725,354 @@ describe("config section controls", () => {
       sourceTitle: "Expert Stack Options",
       isCustom: true,
     });
+  });
+
+  it("reports feed-forward controller stack inheritance from feed-forward stack options", () => {
+    const feedForwardGateSection = inheritedStackHintSection(
+      "Feed-Forward Gate Stack Options",
+      "ff_gate_stack_independent_flag",
+      "ff gate stack independent flag",
+    );
+    const feedForwardRecurrentGateSection = inheritedStackHintSection(
+      "Feed-Forward Recurrent Gate Stack Options",
+      "ff_recurrent_gate_stack_independent_flag",
+      "ff recurrent gate stack independent flag",
+    );
+
+    expect(inheritedStackSectionHint(feedForwardGateSection, {})).toMatchObject({
+      label: "Inherits Feed-Forward Stack",
+      sourceTitle: "Feed-Forward Stack Options",
+      isCustom: false,
+    });
+    expect(inheritedStackSectionHint(feedForwardRecurrentGateSection, {}))
+      .toMatchObject({
+        label: "Inherits Feed-Forward Stack",
+        sourceTitle: "Feed-Forward Stack Options",
+        isCustom: false,
+      });
+    expect(
+      inheritedStackSectionHint(feedForwardRecurrentGateSection, {
+        ff_recurrent_gate_stack_independent_flag: "true",
+      }),
+    ).toMatchObject({
+      label: "Custom Stack",
+      sourceTitle: "Feed-Forward Stack Options",
+      isCustom: true,
+    });
+  });
+
+  it("reports attention projection controller stack inheritance from attention projection stack options", () => {
+    const attentionGateSection = inheritedStackHintSection(
+      "Attention Projection Gate Stack Options",
+      "attn_gate_stack_independent_flag",
+      "attn gate stack independent flag",
+    );
+    const attentionRecurrentGateSection = inheritedStackHintSection(
+      "Attention Projection Recurrent Gate Stack Options",
+      "attn_recurrent_gate_stack_independent_flag",
+      "attn recurrent gate stack independent flag",
+    );
+
+    expect(inheritedStackSectionHint(attentionGateSection, {})).toMatchObject({
+      label: "Inherits Attention Projection Stack",
+      sourceTitle: "Attention Projection Stack Options",
+      isCustom: false,
+    });
+    expect(inheritedStackSectionHint(attentionRecurrentGateSection, {}))
+      .toMatchObject({
+        label: "Inherits Attention Projection Stack",
+        sourceTitle: "Attention Projection Stack Options",
+        isCustom: false,
+      });
+    expect(
+      inheritedStackSectionHint(attentionRecurrentGateSection, {
+        attn_recurrent_gate_stack_independent_flag: "true",
+      }),
+    ).toMatchObject({
+      label: "Custom Stack",
+      sourceTitle: "Attention Projection Stack Options",
+      isCustom: true,
+    });
+  });
+
+  it("nests feed-forward controller sections under feed-forward stack options", () => {
+    const sections: ConfigSection[] = [
+      {
+        title: "Feed-Forward Stack Options",
+        fields: [
+          field({
+            key: "ff_stack_hidden_dim",
+            label: "ff stack hidden dim",
+            section: "Feed-Forward Stack Options",
+          }),
+        ],
+      },
+      {
+        title: "Feed-Forward Gate Options",
+        fields: [
+          field({
+            key: "ff_gate_flag",
+            label: "ff gate flag",
+            type: "bool",
+            default: false,
+            choices: [true, false],
+            section: "Feed-Forward Gate Options",
+          }),
+        ],
+      },
+      {
+        title: "Feed-Forward Gate Stack Options",
+        fields: [
+          field({
+            key: "ff_gate_stack_independent_flag",
+            label: "ff gate stack independent flag",
+            type: "bool",
+            default: false,
+            choices: [true, false],
+            section: "Feed-Forward Gate Stack Options",
+          }),
+          field({
+            key: "ff_gate_stack_hidden_dim",
+            label: "ff gate stack hidden dim",
+            default: null,
+            nullable: true,
+            section: "Feed-Forward Gate Stack Options",
+          }),
+        ],
+      },
+      {
+        title: "Feed-Forward Recurrent Layer Options",
+        fields: [
+          field({
+            key: "ff_recurrent_flag",
+            label: "ff recurrent flag",
+            type: "bool",
+            default: false,
+            choices: [true, false],
+            section: "Feed-Forward Recurrent Layer Options",
+          }),
+        ],
+      },
+      {
+        title: "Feed-Forward Recurrent Gate Options",
+        fields: [
+          field({
+            key: "ff_recurrent_gate_flag",
+            label: "ff recurrent gate flag",
+            type: "bool",
+            default: false,
+            choices: [true, false],
+            section: "Feed-Forward Recurrent Gate Options",
+          }),
+        ],
+      },
+      {
+        title: "Feed-Forward Recurrent Gate Stack Options",
+        fields: [
+          field({
+            key: "ff_recurrent_gate_stack_independent_flag",
+            label: "ff recurrent gate stack independent flag",
+            type: "bool",
+            default: false,
+            choices: [true, false],
+            section: "Feed-Forward Recurrent Gate Stack Options",
+          }),
+          field({
+            key: "ff_recurrent_gate_stack_hidden_dim",
+            label: "ff recurrent gate stack hidden dim",
+            default: null,
+            nullable: true,
+            section: "Feed-Forward Recurrent Gate Stack Options",
+          }),
+        ],
+      },
+    ];
+
+    const [feedForwardSection] = deriveNestedConfigSections(sections);
+    const gateSection = feedForwardSection.children?.find(
+      (section) => section.title === "Feed-Forward Gate Options",
+    );
+    const recurrentSection = feedForwardSection.children?.find(
+      (section) => section.title === "Feed-Forward Recurrent Layer Options",
+    );
+    const disabledByDefault = disabledConfigFieldReasons(sections, {});
+
+    expect(feedForwardSection.title).toBe("Feed-Forward Stack Options");
+    expect(feedForwardSection.fields.map((item) => item.key)).toEqual([
+      "ff_stack_hidden_dim",
+    ]);
+    expect(feedForwardSection.children?.map((section) => section.title)).toEqual([
+      "Feed-Forward Gate Options",
+      "Feed-Forward Recurrent Layer Options",
+    ]);
+    expect(gateSection?.controlFieldKey).toBe("ff_gate_flag");
+    expect(gateSection?.children?.[0]?.title).toBe(
+      "Feed-Forward Gate Stack Options",
+    );
+    expect(recurrentSection?.controlFieldKey).toBe("ff_recurrent_flag");
+    expect(recurrentSection?.children?.[0]?.title).toBe(
+      "Feed-Forward Recurrent Gate Options",
+    );
+    expect(
+      recurrentSection?.children?.[0]?.children?.[0]?.title,
+    ).toBe("Feed-Forward Recurrent Gate Stack Options");
+    expect(disabledByDefault.get("ff_gate_stack_independent_flag")).toContain(
+      "ff gate flag",
+    );
+    expect(
+      disabledByDefault.get("ff_recurrent_gate_stack_independent_flag"),
+    ).toContain("ff recurrent flag");
+    expect(
+      disabledConfigFieldReasons(sections, {
+        ff_gate_flag: "true",
+      }).get("ff_gate_stack_hidden_dim"),
+    ).toContain("ff gate stack independent flag");
+    expect(
+      disabledConfigFieldReasons(sections, {
+        ff_gate_flag: "true",
+        ff_gate_stack_independent_flag: "true",
+      }).has("ff_gate_stack_hidden_dim"),
+    ).toBe(false);
+  });
+
+  it("nests attention projection controller sections under attention projection stack options", () => {
+    const sections: ConfigSection[] = [
+      {
+        title: "Attention Projection Stack Options",
+        fields: [
+          field({
+            key: "attn_stack_hidden_dim",
+            label: "attn stack hidden dim",
+            section: "Attention Projection Stack Options",
+          }),
+        ],
+      },
+      {
+        title: "Attention Projection Gate Options",
+        fields: [
+          field({
+            key: "attn_gate_flag",
+            label: "attn gate flag",
+            type: "bool",
+            default: false,
+            choices: [true, false],
+            section: "Attention Projection Gate Options",
+          }),
+        ],
+      },
+      {
+        title: "Attention Projection Gate Stack Options",
+        fields: [
+          field({
+            key: "attn_gate_stack_independent_flag",
+            label: "attn gate stack independent flag",
+            type: "bool",
+            default: false,
+            choices: [true, false],
+            section: "Attention Projection Gate Stack Options",
+          }),
+          field({
+            key: "attn_gate_stack_hidden_dim",
+            label: "attn gate stack hidden dim",
+            default: null,
+            nullable: true,
+            section: "Attention Projection Gate Stack Options",
+          }),
+        ],
+      },
+      {
+        title: "Attention Projection Recurrent Layer Options",
+        fields: [
+          field({
+            key: "attn_recurrent_flag",
+            label: "attn recurrent flag",
+            type: "bool",
+            default: false,
+            choices: [true, false],
+            section: "Attention Projection Recurrent Layer Options",
+          }),
+        ],
+      },
+      {
+        title: "Attention Projection Recurrent Gate Options",
+        fields: [
+          field({
+            key: "attn_recurrent_gate_flag",
+            label: "attn recurrent gate flag",
+            type: "bool",
+            default: false,
+            choices: [true, false],
+            section: "Attention Projection Recurrent Gate Options",
+          }),
+        ],
+      },
+      {
+        title: "Attention Projection Recurrent Gate Stack Options",
+        fields: [
+          field({
+            key: "attn_recurrent_gate_stack_independent_flag",
+            label: "attn recurrent gate stack independent flag",
+            type: "bool",
+            default: false,
+            choices: [true, false],
+            section: "Attention Projection Recurrent Gate Stack Options",
+          }),
+          field({
+            key: "attn_recurrent_gate_stack_hidden_dim",
+            label: "attn recurrent gate stack hidden dim",
+            default: null,
+            nullable: true,
+            section: "Attention Projection Recurrent Gate Stack Options",
+          }),
+        ],
+      },
+    ];
+
+    const [attentionSection] = deriveNestedConfigSections(sections);
+    const gateSection = attentionSection.children?.find(
+      (section) => section.title === "Attention Projection Gate Options",
+    );
+    const recurrentSection = attentionSection.children?.find(
+      (section) => section.title === "Attention Projection Recurrent Layer Options",
+    );
+    const disabledByDefault = disabledConfigFieldReasons(sections, {});
+
+    expect(attentionSection.title).toBe("Attention Projection Stack Options");
+    expect(attentionSection.fields.map((item) => item.key)).toEqual([
+      "attn_stack_hidden_dim",
+    ]);
+    expect(attentionSection.children?.map((section) => section.title)).toEqual([
+      "Attention Projection Gate Options",
+      "Attention Projection Recurrent Layer Options",
+    ]);
+    expect(gateSection?.controlFieldKey).toBe("attn_gate_flag");
+    expect(gateSection?.children?.[0]?.title).toBe(
+      "Attention Projection Gate Stack Options",
+    );
+    expect(recurrentSection?.controlFieldKey).toBe("attn_recurrent_flag");
+    expect(recurrentSection?.children?.[0]?.title).toBe(
+      "Attention Projection Recurrent Gate Options",
+    );
+    expect(
+      recurrentSection?.children?.[0]?.children?.[0]?.title,
+    ).toBe("Attention Projection Recurrent Gate Stack Options");
+    expect(
+      disabledByDefault.get("attn_gate_stack_independent_flag"),
+    ).toContain("attn gate flag");
+    expect(
+      disabledByDefault.get("attn_recurrent_gate_stack_independent_flag"),
+    ).toContain("attn recurrent flag");
+    expect(
+      disabledConfigFieldReasons(sections, {
+        attn_gate_flag: "true",
+      }).get("attn_gate_stack_hidden_dim"),
+    ).toContain("attn gate stack independent flag");
+    expect(
+      disabledConfigFieldReasons(sections, {
+        attn_gate_flag: "true",
+        attn_gate_stack_independent_flag: "true",
+      }).has("attn_gate_stack_hidden_dim"),
+    ).toBe(false);
   });
 
   it("does not report inheritance hints for non-inherited sections", () => {

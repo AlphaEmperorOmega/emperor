@@ -140,6 +140,55 @@ const CONTROLLED_SECTION_FLAG_KEYS_BY_TITLE = new Map([
     "Expert Recurrent Halting Stack Options",
     "expert_recurrent_halting_stack_independent_flag",
   ],
+  ["Feed-Forward Gate Options", "ff_gate_flag"],
+  ["Feed-Forward Gate Stack Options", "ff_gate_stack_independent_flag"],
+  ["Feed-Forward Halting Options", "ff_halting_flag"],
+  ["Feed-Forward Halting Stack Options", "ff_halting_stack_independent_flag"],
+  ["Feed-Forward Memory Options", "ff_memory_flag"],
+  ["Feed-Forward Memory Stack Options", "ff_memory_stack_independent_flag"],
+  ["Feed-Forward Recurrent Layer Options", "ff_recurrent_flag"],
+  ["Feed-Forward Recurrent Gate Options", "ff_recurrent_gate_flag"],
+  [
+    "Feed-Forward Recurrent Gate Stack Options",
+    "ff_recurrent_gate_stack_independent_flag",
+  ],
+  ["Feed-Forward Recurrent Halting Options", "ff_recurrent_halting_flag"],
+  [
+    "Feed-Forward Recurrent Halting Stack Options",
+    "ff_recurrent_halting_stack_independent_flag",
+  ],
+  ["Attention Projection Gate Options", "attn_gate_flag"],
+  [
+    "Attention Projection Gate Stack Options",
+    "attn_gate_stack_independent_flag",
+  ],
+  ["Attention Projection Halting Options", "attn_halting_flag"],
+  [
+    "Attention Projection Halting Stack Options",
+    "attn_halting_stack_independent_flag",
+  ],
+  ["Attention Projection Memory Options", "attn_memory_flag"],
+  [
+    "Attention Projection Memory Stack Options",
+    "attn_memory_stack_independent_flag",
+  ],
+  ["Attention Projection Recurrent Layer Options", "attn_recurrent_flag"],
+  [
+    "Attention Projection Recurrent Gate Options",
+    "attn_recurrent_gate_flag",
+  ],
+  [
+    "Attention Projection Recurrent Gate Stack Options",
+    "attn_recurrent_gate_stack_independent_flag",
+  ],
+  [
+    "Attention Projection Recurrent Halting Options",
+    "attn_recurrent_halting_flag",
+  ],
+  [
+    "Attention Projection Recurrent Halting Stack Options",
+    "attn_recurrent_halting_stack_independent_flag",
+  ],
   ["Recurrent Layer Options", "recurrent_flag"],
   ["Recurrent Gate Options", "recurrent_gate_flag"],
   ["Recurrent Gate Stack Options", "recurrent_gate_stack_independent_flag"],
@@ -278,6 +327,76 @@ const INHERITED_STACK_SECTIONS_BY_TITLE = new Map([
     },
   ],
   [
+    "Feed-Forward Gate Stack Options",
+    {
+      sourceTitle: "Feed-Forward Stack Options",
+      inheritedLabel: "Inherits Feed-Forward Stack",
+    },
+  ],
+  [
+    "Feed-Forward Halting Stack Options",
+    {
+      sourceTitle: "Feed-Forward Stack Options",
+      inheritedLabel: "Inherits Feed-Forward Stack",
+    },
+  ],
+  [
+    "Feed-Forward Memory Stack Options",
+    {
+      sourceTitle: "Feed-Forward Stack Options",
+      inheritedLabel: "Inherits Feed-Forward Stack",
+    },
+  ],
+  [
+    "Feed-Forward Recurrent Gate Stack Options",
+    {
+      sourceTitle: "Feed-Forward Stack Options",
+      inheritedLabel: "Inherits Feed-Forward Stack",
+    },
+  ],
+  [
+    "Feed-Forward Recurrent Halting Stack Options",
+    {
+      sourceTitle: "Feed-Forward Stack Options",
+      inheritedLabel: "Inherits Feed-Forward Stack",
+    },
+  ],
+  [
+    "Attention Projection Gate Stack Options",
+    {
+      sourceTitle: "Attention Projection Stack Options",
+      inheritedLabel: "Inherits Attention Projection Stack",
+    },
+  ],
+  [
+    "Attention Projection Halting Stack Options",
+    {
+      sourceTitle: "Attention Projection Stack Options",
+      inheritedLabel: "Inherits Attention Projection Stack",
+    },
+  ],
+  [
+    "Attention Projection Memory Stack Options",
+    {
+      sourceTitle: "Attention Projection Stack Options",
+      inheritedLabel: "Inherits Attention Projection Stack",
+    },
+  ],
+  [
+    "Attention Projection Recurrent Gate Stack Options",
+    {
+      sourceTitle: "Attention Projection Stack Options",
+      inheritedLabel: "Inherits Attention Projection Stack",
+    },
+  ],
+  [
+    "Attention Projection Recurrent Halting Stack Options",
+    {
+      sourceTitle: "Attention Projection Stack Options",
+      inheritedLabel: "Inherits Attention Projection Stack",
+    },
+  ],
+  [
     "Recurrent Gate Stack Options",
     {
       sourceTitle: "Gate Stack Options",
@@ -400,10 +519,15 @@ function sectionTitleLabelPrefixes(sectionTitle: string) {
     .trim()
     .replace(/\s+options$/i, "")
     .toLowerCase();
+  const abbreviatedPrefix = prefix
+    .replace(/\bfeed-forward\b/g, "ff")
+    .replace(/\battention projection\b/g, "attn");
 
   return [
     prefix,
+    abbreviatedPrefix,
     prefix.replace(/\blayer\b\s*/g, "").trim(),
+    abbreviatedPrefix.replace(/\blayer\b\s*/g, "").trim(),
   ].filter((candidate, index, candidates) =>
     candidate.length > 0 && candidates.indexOf(candidate) === index
   );
