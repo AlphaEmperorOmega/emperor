@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# ruff: noqa: I001
+
 import argparse
 import importlib
 import os
@@ -198,7 +200,10 @@ class InspectorSchemaTests(unittest.TestCase):
                             for section in field["sectionPath"]
                             for term in forbidden_section_terms
                         ),
-                        f"{field['key']} uses forbidden sectionPath {field['sectionPath']}",
+                        (
+                            f"{field['key']} uses forbidden sectionPath "
+                            f"{field['sectionPath']}"
+                        ),
                     )
                 for field_key, expected_path in expected_paths.get(
                     model_name,
@@ -206,17 +211,45 @@ class InspectorSchemaTests(unittest.TestCase):
                 ).items():
                     self.assertEqual(fields[field_key]["sectionPath"], expected_path)
 
-    def test_config_schema_preserves_explicit_imported_config_metadata(self) -> None:
-        fields = _fields_by_key(config_schema("vit/linear_adaptive"))
+    def test_vit_schemas_hide_grouped_builder_internals(self) -> None:
+        hidden_fields = {
+            "hidden_dim",
+            "image_patch_size",
+            "positional_embedding_option",
+            "stack_num_layers",
+            "submodule_stack_hidden_dim",
+            "ff_num_layers",
+            "ff_gate_flag",
+            "attn_num_layers",
+            "attn_gate_flag",
+            "adaptive_generator_stack_hidden_dim",
+            "weight_option",
+            "expert_top_k",
+            "router_noisy_topk_flag",
+        }
+        public_fields = {
+            "input_dim",
+            "output_dim",
+            "batch_size",
+            "learning_rate",
+            "num_epochs",
+            "trainer_accelerator",
+            "trainer_devices",
+        }
 
-        self.assertEqual(
-            fields["weight_generator_stack_hidden_dim"]["sectionPath"],
-            ["Weight Generator Options", "Weight Generator Stack Options"],
-        )
-        self.assertEqual(
-            fields["diagonal_option"]["sectionPath"],
-            ["Diagonal Generator Options"],
-        )
+        for model_name in (
+            "vit/linear",
+            "vit/linear_adaptive",
+            "vit/expert_linear",
+            "vit/expert_linear_adaptive",
+        ):
+            fields = _fields_by_key(config_schema(model_name))
+
+            with self.subTest(model_name=model_name):
+                for field_key in public_fields:
+                    self.assertIn(field_key, fields)
+                for field_key in hidden_fields:
+                    self.assertNotIn(field_key, fields)
 
     def test_config_schema_rejects_uppercase_config_import_aliases(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -439,15 +472,9 @@ class InspectorSchemaTests(unittest.TestCase):
         )
 
         vit_fields = _fields_by_key(config_schema("vit/linear"))
-        self.assertEqual(vit_fields["positional_embedding_option"]["type"], "class")
-        self.assertIn(
-            "ImageLearnedPositionalEmbeddingConfig",
-            vit_fields["positional_embedding_option"]["choices"],
-        )
-        self.assertNotIn(
-            "AbsolutePositionalEmbeddingConfig",
-            vit_fields["positional_embedding_option"]["choices"],
-        )
+        self.assertEqual(vit_fields["input_dim"]["type"], "int")
+        self.assertNotIn("positional_embedding_option", vit_fields)
+        self.assertNotIn("hidden_dim", vit_fields)
 
     def test_config_schema_exposes_field_descriptions(self) -> None:
         adaptive_fields = _fields_by_key(config_schema("linears/linear_adaptive"))
@@ -487,20 +514,161 @@ class InspectorSchemaTests(unittest.TestCase):
     def test_config_schema_serializes_value_defaults(self) -> None:
         linear_fields = _fields_by_key(config_schema("linears/linear"))
         adaptive_fields = _fields_by_key(config_schema("linears/linear_adaptive"))
-        vit_fields = _fields_by_key(config_schema("vit/linear"))
 
         self.assertEqual(
             linear_fields["hidden_dim"]["default"],
             linear_config.HIDDEN_DIM,
         )
         self.assertEqual(linear_fields["stack_activation"]["default"], "GELU")
-        self.assertEqual(
-            vit_fields["positional_embedding_option"]["default"],
-            "ImageLearnedPositionalEmbeddingConfig",
-        )
+        vit_fields = _fields_by_key(config_schema("vit/linear"))
+        self.assertEqual(vit_fields["input_dim"]["default"], 224 * 224 * 3)
+        self.assertNotIn("positional_embedding_option", vit_fields)
         self.assertFalse(
             any(key.endswith("_layer_adaptive_flag") for key in adaptive_fields)
         )
+
+    def test_transformer_schemas_expose_feed_forward_controller_sections(self) -> None:
+        expected_sections = {
+            "ff_num_layers": "Feed-Forward Stack Options",
+            "ff_bias_flag": "Feed-Forward Stack Options",
+            "ff_stack_hidden_dim": "Feed-Forward Stack Options",
+            "ff_stack_activation": "Feed-Forward Stack Options",
+            "ff_gate_flag": "Feed-Forward Gate Options",
+            "ff_gate_stack_hidden_dim": "Feed-Forward Gate Stack Options",
+            "ff_halting_flag": "Feed-Forward Halting Options",
+            "ff_halting_stack_hidden_dim": "Feed-Forward Halting Stack Options",
+            "ff_memory_flag": "Feed-Forward Memory Options",
+            "ff_memory_stack_hidden_dim": "Feed-Forward Memory Stack Options",
+            "ff_recurrent_flag": "Feed-Forward Recurrent Layer Options",
+            "ff_recurrent_gate_flag": "Feed-Forward Recurrent Gate Options",
+            "ff_recurrent_gate_stack_hidden_dim": (
+                "Feed-Forward Recurrent Gate Stack Options"
+            ),
+            "ff_recurrent_halting_flag": (
+                "Feed-Forward Recurrent Halting Options"
+            ),
+            "ff_recurrent_halting_stack_hidden_dim": (
+                "Feed-Forward Recurrent Halting Stack Options"
+            ),
+        }
+
+        for model_name in (
+            "bert/linear",
+            "bert/linear_adaptive",
+            "bert/expert_linear",
+            "bert/expert_linear_adaptive",
+        ):
+            fields = _fields_by_key(config_schema(model_name))
+
+            with self.subTest(model_name=model_name):
+                for field_key, section in expected_sections.items():
+                    self.assertIn(field_key, fields)
+                    self.assertEqual(fields[field_key]["section"], section)
+                self.assertNotIn("ff_stack_num_layers", fields)
+                self.assertNotIn("ff_stack_bias_flag", fields)
+                self.assertEqual(fields["ff_gate_flag"]["flag"], "--ff-gate-flag")
+                self.assertFalse(fields["ff_gate_flag"]["default"])
+                self.assertFalse(fields["ff_memory_flag"]["default"])
+                self.assertFalse(fields["ff_recurrent_flag"]["default"])
+                self.assertFalse(fields["ff_gate_stack_independent_flag"]["default"])
+                self.assertIsNone(fields["ff_gate_stack_hidden_dim"]["default"])
+                self.assertTrue(fields["ff_gate_stack_hidden_dim"]["nullable"])
+                self.assertIn(
+                    "feed-forward gate",
+                    fields["ff_gate_option"]["description"],
+                )
+
+        for model_name in (
+            "vit/linear",
+            "vit/linear_adaptive",
+            "vit/expert_linear",
+            "vit/expert_linear_adaptive",
+        ):
+            fields = _fields_by_key(config_schema(model_name))
+
+            with self.subTest(model_name=model_name):
+                for field_key in expected_sections:
+                    self.assertNotIn(field_key, fields)
+
+    def test_transformer_schemas_expose_attention_projection_controller_sections(
+        self,
+    ) -> None:
+        expected_sections = {
+            "attn_num_layers": "Attention Projection Stack Options",
+            "attn_bias_flag": "Attention Projection Stack Options",
+            "attn_stack_hidden_dim": "Attention Projection Stack Options",
+            "attn_stack_activation": "Attention Projection Stack Options",
+            "attn_gate_flag": "Attention Projection Gate Options",
+            "attn_gate_stack_hidden_dim": (
+                "Attention Projection Gate Stack Options"
+            ),
+            "attn_halting_flag": "Attention Projection Halting Options",
+            "attn_halting_stack_hidden_dim": (
+                "Attention Projection Halting Stack Options"
+            ),
+            "attn_memory_flag": "Attention Projection Memory Options",
+            "attn_memory_stack_hidden_dim": (
+                "Attention Projection Memory Stack Options"
+            ),
+            "attn_recurrent_flag": (
+                "Attention Projection Recurrent Layer Options"
+            ),
+            "attn_recurrent_gate_flag": (
+                "Attention Projection Recurrent Gate Options"
+            ),
+            "attn_recurrent_gate_stack_hidden_dim": (
+                "Attention Projection Recurrent Gate Stack Options"
+            ),
+            "attn_recurrent_halting_flag": (
+                "Attention Projection Recurrent Halting Options"
+            ),
+            "attn_recurrent_halting_stack_hidden_dim": (
+                "Attention Projection Recurrent Halting Stack Options"
+            ),
+        }
+
+        for model_name in (
+            "bert/linear",
+            "bert/linear_adaptive",
+            "bert/expert_linear",
+            "bert/expert_linear_adaptive",
+        ):
+            fields = _fields_by_key(config_schema(model_name))
+
+            with self.subTest(model_name=model_name):
+                for field_key, section in expected_sections.items():
+                    self.assertIn(field_key, fields)
+                    self.assertEqual(fields[field_key]["section"], section)
+                self.assertNotIn("attn_stack_num_layers", fields)
+                self.assertNotIn("attn_stack_bias_flag", fields)
+                self.assertEqual(
+                    fields["attn_gate_flag"]["flag"],
+                    "--attn-gate-flag",
+                )
+                self.assertFalse(fields["attn_gate_flag"]["default"])
+                self.assertFalse(fields["attn_memory_flag"]["default"])
+                self.assertFalse(fields["attn_recurrent_flag"]["default"])
+                self.assertFalse(
+                    fields["attn_gate_stack_independent_flag"]["default"]
+                )
+                self.assertIsNone(fields["attn_gate_stack_hidden_dim"]["default"])
+                self.assertTrue(fields["attn_gate_stack_hidden_dim"]["nullable"])
+                self.assertIn(
+                    "attention projection gate",
+                    fields["attn_gate_option"]["description"],
+                )
+
+        for model_name in (
+            "vit/linear",
+            "vit/linear_adaptive",
+            "vit/expert_linear",
+            "vit/expert_linear_adaptive",
+        ):
+            fields = _fields_by_key(config_schema(model_name))
+
+            with self.subTest(model_name=model_name):
+                for field_key in expected_sections:
+                    self.assertNotIn(field_key, fields)
 
     def test_linear_schemas_do_not_expose_halting_output_dims(self) -> None:
         removed_field_keys = {
@@ -773,7 +941,7 @@ class InspectorSchemaTests(unittest.TestCase):
             "expert_top_k": {
                 "section": "Mixture Of Experts Model Options",
                 "type": "int",
-                "default": 2,
+                "default": 3,
                 "nullable": False,
             },
             "expert_num_experts": {

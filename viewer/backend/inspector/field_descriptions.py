@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-
 EXPLICIT_FIELD_DESCRIPTIONS = {
     "BATCH_SIZE": (
         "Sets the number of examples processed in each training batch. Larger "
@@ -195,6 +194,62 @@ SECTION_CONTEXT = {
     "Recurrent Gate Stack Options": "dedicated recurrent gate stack",
     "Recurrent Halting Options": "recurrent halting controller",
     "Recurrent Halting Stack Options": "dedicated recurrent halting stack",
+    "Feed-Forward Stack Options": "transformer feed-forward stack",
+    "Feed-Forward Gate Options": "feed-forward gate controller",
+    "Feed-Forward Gate Stack Options": "dedicated feed-forward gate stack",
+    "Feed-Forward Halting Options": "feed-forward halting controller",
+    "Feed-Forward Halting Stack Options": (
+        "dedicated feed-forward halting stack"
+    ),
+    "Feed-Forward Memory Options": "feed-forward dynamic memory controller",
+    "Feed-Forward Memory Stack Options": (
+        "dedicated feed-forward memory stack"
+    ),
+    "Feed-Forward Recurrent Layer Options": "feed-forward recurrent wrapper",
+    "Feed-Forward Recurrent Gate Options": (
+        "feed-forward recurrent gate controller"
+    ),
+    "Feed-Forward Recurrent Gate Stack Options": (
+        "dedicated feed-forward recurrent gate stack"
+    ),
+    "Feed-Forward Recurrent Halting Options": (
+        "feed-forward recurrent halting controller"
+    ),
+    "Feed-Forward Recurrent Halting Stack Options": (
+        "dedicated feed-forward recurrent halting stack"
+    ),
+    "Attention Projection Stack Options": "attention projection stack",
+    "Attention Projection Gate Options": "attention projection gate controller",
+    "Attention Projection Gate Stack Options": (
+        "dedicated attention projection gate stack"
+    ),
+    "Attention Projection Halting Options": (
+        "attention projection halting controller"
+    ),
+    "Attention Projection Halting Stack Options": (
+        "dedicated attention projection halting stack"
+    ),
+    "Attention Projection Memory Options": (
+        "attention projection dynamic memory controller"
+    ),
+    "Attention Projection Memory Stack Options": (
+        "dedicated attention projection memory stack"
+    ),
+    "Attention Projection Recurrent Layer Options": (
+        "attention projection recurrent wrapper"
+    ),
+    "Attention Projection Recurrent Gate Options": (
+        "attention projection recurrent gate controller"
+    ),
+    "Attention Projection Recurrent Gate Stack Options": (
+        "dedicated attention projection recurrent gate stack"
+    ),
+    "Attention Projection Recurrent Halting Options": (
+        "attention projection recurrent halting controller"
+    ),
+    "Attention Projection Recurrent Halting Stack Options": (
+        "dedicated attention projection recurrent halting stack"
+    ),
     "Weight Generator Options": "dynamic weight generator",
     "Weight Generator Stack Options": "dedicated weight-generator stack",
     "Bias Generator Options": "dynamic bias generator",
@@ -224,6 +279,16 @@ INHERITED_STACK_SECTIONS = {
     "Memory Stack Options",
     "Recurrent Gate Stack Options",
     "Recurrent Halting Stack Options",
+    "Feed-Forward Gate Stack Options",
+    "Feed-Forward Halting Stack Options",
+    "Feed-Forward Memory Stack Options",
+    "Feed-Forward Recurrent Gate Stack Options",
+    "Feed-Forward Recurrent Halting Stack Options",
+    "Attention Projection Gate Stack Options",
+    "Attention Projection Halting Stack Options",
+    "Attention Projection Memory Stack Options",
+    "Attention Projection Recurrent Gate Stack Options",
+    "Attention Projection Recurrent Halting Stack Options",
     "Weight Generator Stack Options",
     "Bias Generator Stack Options",
     "Diagonal Generator Stack Options",
@@ -369,11 +434,24 @@ def _applicability_caveat(
 ) -> str:
     if key.endswith("_INDEPENDENT_FLAG"):
         return ""
-    if (
-        section in INHERITED_STACK_SECTIONS
-        and not key.endswith("_INDEPENDENT_FLAG")
-    ):
+    if section in INHERITED_STACK_SECTIONS and not key.endswith("_INDEPENDENT_FLAG"):
         return "Only matters when this stack is configured independently."
+    if key.startswith("FF_GATE_") and not key.endswith("_FLAG"):
+        return "Only applies when the feed-forward gate feature is enabled."
+    if key.startswith("FF_HALTING_") and not key.endswith("_FLAG"):
+        return "Only applies when the feed-forward halting feature is enabled."
+    if key.startswith("FF_MEMORY_") and not key.endswith("_FLAG"):
+        return "Only applies when the feed-forward memory feature is enabled."
+    if key.startswith("FF_RECURRENT_") and not key.endswith("_FLAG"):
+        return "Only applies when feed-forward recurrence is enabled."
+    if key.startswith("ATTN_GATE_") and not key.endswith("_FLAG"):
+        return "Only applies when the attention projection gate feature is enabled."
+    if key.startswith("ATTN_HALTING_") and not key.endswith("_FLAG"):
+        return "Only applies when the attention projection halting feature is enabled."
+    if key.startswith("ATTN_MEMORY_") and not key.endswith("_FLAG"):
+        return "Only applies when the attention projection memory feature is enabled."
+    if key.startswith("ATTN_RECURRENT_") and not key.endswith("_FLAG"):
+        return "Only applies when attention projection recurrence is enabled."
     if (
         any(key.startswith(prefix) for prefix in FLAG_DISABLED_PREFIXES)
         and not key.endswith("_FLAG")
