@@ -161,6 +161,22 @@ export function TargetSelectorSection({
   return (
     <section className="grid gap-3">
       <div className="grid min-w-0 gap-2">
+        {hasExperimentTasks && (
+          <div className="grid min-w-0 gap-1.5">
+            <SectionHeading
+              icon={<Activity className={fieldIconClassName} aria-hidden />}
+              title="Experiment Task"
+            />
+            <SelectOnlyDropdown
+              id={experimentTaskSelectId}
+              label="Experiment Task"
+              value={selectedExperimentTask}
+              options={experimentTaskOptions}
+              onChange={onSelectExperimentTask}
+              placeholder="Select task"
+            />
+          </div>
+        )}
         <div className="grid min-w-0 gap-1.5">
           <SectionHeading
             icon={<Layers className={fieldIconClassName} aria-hidden />}
@@ -187,22 +203,6 @@ export function TargetSelectorSection({
             placeholder="Select model"
           />
         </div>
-        {hasExperimentTasks && (
-          <div className="grid min-w-0 gap-1.5">
-            <SectionHeading
-              icon={<Activity className={fieldIconClassName} aria-hidden />}
-              title="Experiment Task"
-            />
-            <SelectOnlyDropdown
-              id={experimentTaskSelectId}
-              label="Experiment Task"
-              value={selectedExperimentTask}
-              options={experimentTaskOptions}
-              onChange={onSelectExperimentTask}
-              placeholder="Select task"
-            />
-          </div>
-        )}
       </div>
       <div className="grid gap-1.5">
         <SectionHeading

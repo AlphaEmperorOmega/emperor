@@ -660,6 +660,10 @@ describe("ViewerApp Training And Preview", () => {
 
     expect(within(setupSidebar).getByText("Log Folder")).toBeInTheDocument();
     expect(within(setupSidebar).queryByText("Target")).not.toBeInTheDocument();
+    const experimentTaskHeading =
+      within(setupSidebar).getByText("Experiment Task");
+    const modelTypeHeading = within(setupSidebar).getByText("Model Type");
+    expect(experimentTaskHeading).toBeInTheDocument();
     expect(within(setupSidebar).getByText("Model Type")).toBeInTheDocument();
     expect(within(setupSidebar).getByText("Model Name")).toBeInTheDocument();
     expect(within(setupSidebar).getByText("Variants")).toBeInTheDocument();
@@ -676,6 +680,10 @@ describe("ViewerApp Training And Preview", () => {
     expect(
       within(setupSidebar).queryByRole("button", { name: /^reset$/i }),
     ).not.toBeInTheDocument();
+    expect(
+      experimentTaskHeading.compareDocumentPosition(modelTypeHeading) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
 
     const modelSelector = within(setupSidebar).getByRole("combobox", {
       name: /^training model$/i,

@@ -312,6 +312,47 @@ export function TrainingTargetDatasetPanel({
       Model
     </span>
   );
+  const experimentTaskControl = showExperimentTaskControl ? (
+    <SelectOnlyDropdown
+      label="Experiment task"
+      value={selectedExperimentTask}
+      options={experimentTaskOptions}
+      onChange={onSelectExperimentTask ?? (() => undefined)}
+      placeholder="Select task"
+      disabled={disabled || !onSelectExperimentTask}
+    />
+  ) : null;
+  const experimentTaskLabel = (
+    <span className={fieldLabelWithIconClass}>
+      <Activity className={inlineFieldIconClass} aria-hidden />
+      Experiment Task
+    </span>
+  );
+
+  const experimentTaskField = !experimentTaskControl ? null : isFooterPresentation ? (
+    <SurfacePanel
+      className="min-w-0"
+      icon={<Activity className={footerIconClass} aria-hidden />}
+      title="Experiment Task"
+    >
+      {experimentTaskControl}
+    </SurfacePanel>
+  ) : isSetupPresentation ? (
+    <div className="grid min-w-0 gap-2">
+      <div className="flex min-h-[28px] flex-wrap items-center justify-between gap-2">
+        <SectionHeading
+          icon={<Activity className={footerIconClass} aria-hidden />}
+          title="Experiment Task"
+        />
+      </div>
+      {experimentTaskControl}
+    </div>
+  ) : (
+    <div className="grid min-w-0 gap-1.5">
+      {experimentTaskLabel}
+      {experimentTaskControl}
+    </div>
+  );
 
   const modelField = isFooterPresentation ? (
     <SurfacePanel
@@ -540,16 +581,6 @@ export function TrainingTargetDatasetPanel({
 
   const datasetsControls = (
     <>
-      {showExperimentTaskControl && (
-        <SelectOnlyDropdown
-          label="Experiment task"
-          value={selectedExperimentTask}
-          options={experimentTaskOptions}
-          onChange={onSelectExperimentTask ?? (() => undefined)}
-          placeholder="Select task"
-          disabled={disabled || !onSelectExperimentTask}
-        />
-      )}
       <MultiSelectDropdown
         label="Training datasets"
         values={selectedDatasets}
@@ -697,6 +728,7 @@ export function TrainingTargetDatasetPanel({
   if (isFooterPresentation) {
     return (
       <>
+        {experimentTaskField}
         {modelField}
         {presetsField}
         {datasetsField}
@@ -708,6 +740,7 @@ export function TrainingTargetDatasetPanel({
   if (isSetupPresentation) {
     return (
       <div className="grid min-w-0 gap-3">
+        {experimentTaskField}
         {modelField}
         {presetsField}
         {datasetsField}
@@ -719,6 +752,11 @@ export function TrainingTargetDatasetPanel({
   return (
     <div className="grid content-start gap-3 xl:h-full xl:grid-rows-[auto_minmax(0,1fr)] xl:content-stretch">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+        {experimentTaskField && (
+          <div className="sm:col-span-2 xl:col-span-1 2xl:col-span-2">
+            {experimentTaskField}
+          </div>
+        )}
         {modelField}
         {presetsField}
       </div>
