@@ -8,6 +8,8 @@
   "scripts": {
     "dev": "next dev -p ${PORT:-9000}",
     "build": "next build",
+    "performance:budget": "node scripts/check-performance-budgets.mjs",
+    "performance:logs": "vite-node --config vitest.config.ts scripts/benchmark-log-scalar-plan.ts",
     "start": "next start -p ${PORT:-9000}",
     "lint": "eslint . --max-warnings 0",
     "typecheck": "next typegen && tsc --noEmit",
