@@ -214,7 +214,7 @@ class SoftHalting(HaltingBase[SoftHaltingState]):
         pad_mask: Tensor,
     ) -> tuple[Tensor, Tensor]:
         if state.step_count == 0:
-            return current_hidden, torch.tensor(0.0)
+            return current_hidden, current_hidden.new_zeros(())
         self_attn_input = self.__blend_attn_input(
             state, current_hidden, self_attn_input, state.continuation_probability
         )
