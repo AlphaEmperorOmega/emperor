@@ -1,11 +1,11 @@
 import math
+from collections.abc import Callable
+from typing import TYPE_CHECKING
+
 import torch
 import torch.nn as nn
-
-from torch import Tensor
 from lightning import LightningModule
-from typing import TYPE_CHECKING
-from collections.abc import Callable
+from torch import Tensor
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
@@ -40,7 +40,8 @@ class LanguageModelExperiment(LightningModule):
         tokens = tokens.to(self.device)
         targets = targets.to(self.device)
         output = self(tokens)
-        # output: (batch, seq_len, vocab_size) → CrossEntropyLoss expects (batch, vocab_size, seq_len)
+        # Output is [batch, sequence, vocabulary]; CrossEntropyLoss expects
+        # [batch, vocabulary, sequence].
         loss = self.loss_fn(output.transpose(1, 2), targets)
         return loss
 

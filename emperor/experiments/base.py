@@ -26,12 +26,12 @@ from emperor.datasets.image.classification.cifar_10 import Cifar10
 from emperor.datasets.image.classification.cifar_100 import Cifar100
 from emperor.datasets.image.classification.fashion_mnist import FashionMNIST
 from emperor.datasets.image.classification.mnist import Mnist
+from emperor.experiments.progress import sanitize_metric_payload
 from emperor.experiments.tasks import (
     ExperimentTask,
     experiment_task_name,
     resolve_experiment_task,
 )
-from emperor.experiments.progress import sanitize_metric_payload
 
 DEFAULT_RESULT_METRIC_KEY_LIMIT = 512
 DEFAULT_RESULT_STRING_VALUE_LIMIT = 20_000
@@ -602,20 +602,18 @@ class ExperimentPresetsBase:
     def _format_preset_lock_value(self, value: object) -> str:
         if isinstance(value, list):
             return (
-                "["
-                + ", ".join(self._format_preset_lock_value(v) for v in value)
-                + "]"
+                "[" + ", ".join(self._format_preset_lock_value(v) for v in value) + "]"
             )
         if isinstance(value, tuple):
             return (
-                "("
-                + ", ".join(self._format_preset_lock_value(v) for v in value)
-                + ")"
+                "(" + ", ".join(self._format_preset_lock_value(v) for v in value) + ")"
             )
         if isinstance(value, set):
-            return "{" + ", ".join(
-                sorted(self._format_preset_lock_value(v) for v in value)
-            ) + "}"
+            return (
+                "{"
+                + ", ".join(sorted(self._format_preset_lock_value(v) for v in value))
+                + "}"
+            )
         if isinstance(value, Enum):
             return value.name
         if isinstance(value, type):
@@ -783,7 +781,8 @@ class ExperimentBase:
         early_stopping_metric = self._trainer_config_value(
             config,
             config_overrides,
-            "CALLBACK_EARLY_STOPPING_METRIC", "validation/loss"
+            "CALLBACK_EARLY_STOPPING_METRIC",
+            "validation/loss",
         )
         return EarlyStopping(
             monitor=early_stopping_metric,
@@ -1221,9 +1220,7 @@ class ExperimentBase:
                     for i, run in enumerate(
                         sorted(
                             runs,
-                            key=lambda r: r["metrics"].get(
-                                "validation_accuracy", 0
-                            ),
+                            key=lambda r: r["metrics"].get("validation_accuracy", 0),
                             reverse=True,
                         )[:5]
                     )

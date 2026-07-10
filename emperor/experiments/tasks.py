@@ -14,7 +14,9 @@ def experiment_task_label(task: ExperimentTask) -> str:
     return task.name.replace("_", " ").title()
 
 
-def resolve_experiment_task(value: str | ExperimentTask | None) -> ExperimentTask | None:
+def resolve_experiment_task(
+    value: str | ExperimentTask | None,
+) -> ExperimentTask | None:
     if value is None:
         return None
     if isinstance(value, ExperimentTask):
