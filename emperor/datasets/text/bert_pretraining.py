@@ -284,6 +284,7 @@ class _TorchTextBertPretraining(DataModule):
         self.special_token_ids: BertSpecialTokenIds | None = None
         self.collator: BertPretrainingCollator | None = None
         self.actual_vocab_size = 0
+        self._legacy_split_text_units: dict[str, tuple[str, ...]] | None = None
 
     def prepare_data(self) -> None:
         self._dataset(self.train_split)
@@ -319,7 +320,25 @@ class _TorchTextBertPretraining(DataModule):
         return self._dataloader(self.test, train=False)
 
     def _dataset(self, split: str):
-        return type(self).torchtext_dataset(root=self.root, split=split)
+        dataset_source = type(self).torchtext_dataset
+        if isinstance(dataset_source, type) and hasattr(dataset_source, "splits"):
+            return iter(self._load_legacy_split_text_units()[split])
+        return dataset_source(root=self.root, split=split)
+
+    def _load_legacy_split_text_units(self) -> dict[str, tuple[str, ...]]:
+        if self._legacy_split_text_units is not None:
+            return self._legacy_split_text_units
+        dataset_source = type(self).torchtext_dataset
+        datasets = dataset_source.splits(_legacy_text_field(), root=self.root)
+        self._legacy_split_text_units = {
+            split: tuple(_legacy_dataset_text_units(dataset))
+            for split, dataset in zip(
+                (self.train_split, self.validation_split, self.test_split),
+                datasets,
+                strict=True,
+            )
+        }
+        return self._legacy_split_text_units
 
     def _build_tokenizer(self) -> None:
         if self.tokenizer is not None:
@@ -402,6 +421,30 @@ class PennTreebankBertPretraining(_TorchTextBertPretraining):
 
 class WikiText2BertPretraining(_TorchTextBertPretraining):
     torchtext_dataset = staticmethod(WikiText2Dataset)
+
+
+def _legacy_text_field():
+    from torchtext.data import Field
+
+    return Field(tokenize=_split_on_whitespace)
+
+
+def _split_on_whitespace(text: str) -> list[str]:
+    return text.split()
+
+
+def _legacy_dataset_text_units(dataset) -> Iterable[str]:
+    for example in dataset.examples:
+        text_unit_tokens = []
+        for token in example.text:
+            if token == "<eos>":
+                if text_unit_tokens:
+                    yield " ".join(text_unit_tokens)
+                    text_unit_tokens = []
+                continue
+            text_unit_tokens.append(str(token))
+        if text_unit_tokens:
+            yield " ".join(text_unit_tokens)
 
 
 def _normalise_text_units(text_units: Iterable[str]) -> Iterable[str]:
