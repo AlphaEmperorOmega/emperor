@@ -46,7 +46,7 @@ export type ScalarLineOptions = {
   checkpointMarkers?: readonly ScalarCheckpointMarker[];
 };
 
-export const MAX_SCALAR_OPTION_POINTS = 100_000;
+const MAX_SCALAR_OPTION_POINTS = 100_000;
 export const SCALAR_OPTION_DOWNSAMPLE_THRESHOLD = 5_000;
 
 function escapeTooltipHtml(value: string): string {
@@ -224,7 +224,7 @@ export function buildScalarLineOption(
     const lineStyleOpacity = lineOpacity === undefined ? {} : { opacity: lineOpacity };
     const itemStyleOpacity = lineOpacity === undefined ? {} : { opacity: lineOpacity };
     const linePoints =
-      line.points.length > SCALAR_OPTION_DOWNSAMPLE_THRESHOLD
+      line.points.length > perLinePointLimit
         ? downsamplePoints(line.points, perLinePointLimit)
         : line.points;
     const isSinglePoint = linePoints.length === 1;

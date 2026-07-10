@@ -292,6 +292,29 @@ describe("buildScalarLineOption", () => {
     expect(data.at(-1)).toEqual([100_000, 10_000]);
   });
 
+  it("enforces the total point budget across many individually smaller lines", () => {
+    const points = Array.from({ length: 4_000 }, (_, index) => ({
+      step: index,
+      wallTime: 1_000 + index,
+      value: index,
+    }));
+    const lines = Array.from({ length: 50 }, (_, index): ScalarLine => ({
+      id: `run-${index}`,
+      name: `Run ${index}`,
+      color: "#7c6dff",
+      points,
+    }));
+    const emittedSeries = seriesOf(buildScalarLineOption(lines));
+    const emittedPointCount = emittedSeries.reduce(
+      (total, series) => total + ((series.data as number[][] | undefined)?.length ?? 0),
+      0,
+    );
+
+    expect(emittedPointCount).toBeLessThanOrEqual(100_000);
+    expect(emittedSeries).toHaveLength(50);
+    expect((emittedSeries[0].data as number[][]).at(-1)).toEqual([3_999, 3_999]);
+  });
+
   it("downsamples before smoothing so raw and smoothed series stay bounded", () => {
     const points = Array.from({ length: 100_001 }, (_, index) => ({
       step: index,
