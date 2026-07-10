@@ -1,5 +1,5 @@
 import { type ReactNode } from "react";
-import { StatusCard } from "@/features/workbench/components/shared/status-card";
+import { StatusCard } from "@/components/ui/status-card";
 
 export function EmptyState({
   title,

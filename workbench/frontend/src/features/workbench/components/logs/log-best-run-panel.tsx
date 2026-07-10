@@ -10,7 +10,7 @@ import {
   type SelectOnlyDropdownOption,
 } from "@/features/workbench/components/screen/select-only-dropdown";
 import { InlineStatus } from "@/features/workbench/components/shared/inline-status";
-import { SurfacePanel } from "@/features/workbench/components/shared/surface-panel";
+import { SurfacePanel } from "@/components/ui/surface-panel";
 import { ViewModeButton } from "@/features/workbench/components/view-mode-button";
 import {
   type LogBestRunViewModel,

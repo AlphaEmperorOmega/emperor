@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { IconButton } from "@/components/ui/icon-button";
 import { EChart } from "@/features/workbench/components/charts/echart";
 import { ErrorPanel } from "@/features/workbench/components/error-panel";
-import { SurfacePanel } from "@/features/workbench/components/shared/surface-panel";
+import { SurfacePanel } from "@/components/ui/surface-panel";
 import { TrainingMetricInfoDialog } from "@/features/workbench/components/shared/training-metric-info-dialog";
 import { type LogCheckpoint, type LogRun, type LogScalarSeries } from "@/lib/api";
 import { scalarSeriesColors } from "@/lib/charts";

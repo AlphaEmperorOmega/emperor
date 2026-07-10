@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SegmentedControl } from "@/components/ui/segmented-control";
-import { SectionHeading } from "@/features/workbench/components/shared/section-heading";
+import { SectionHeading } from "@/components/ui/section-heading";
 import { InlineStatus } from "@/features/workbench/components/shared/inline-status";
 import { TrainingSearchAxisList } from "@/features/workbench/components/training-search-axis-list";
 import { ViewModeButton } from "@/features/workbench/components/view-mode-button";

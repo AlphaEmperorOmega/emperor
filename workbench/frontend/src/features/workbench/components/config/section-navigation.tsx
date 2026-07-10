@@ -11,8 +11,8 @@ import {
 } from "@/lib/config";
 import { cn } from "@/lib/utils";
 import { ConfigMetricBadge } from "@/features/workbench/components/config/config-metric-badge";
-import { SectionHeading } from "@/features/workbench/components/shared/section-heading";
-import { surfacePanelClassName } from "@/features/workbench/components/shared/surface-panel";
+import { SectionHeading } from "@/components/ui/section-heading";
+import { surfacePanelClassName } from "@/components/ui/surface-panel";
 
 export function SectionNavigation({
   sections,

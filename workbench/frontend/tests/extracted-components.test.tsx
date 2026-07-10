@@ -11,9 +11,9 @@ import { DialogShell } from "@/features/workbench/components/shared/dialog-shell
 import { InlineStatus } from "@/features/workbench/components/shared/inline-status";
 import { KeyValueRow } from "@/features/workbench/components/shared/key-value-row";
 import { MetricCard } from "@/features/workbench/components/shared/metric-card";
-import { SectionHeading } from "@/features/workbench/components/shared/section-heading";
+import { SectionHeading } from "@/components/ui/section-heading";
 import { StatChip } from "@/features/workbench/components/shared/stat-chip";
-import { SurfacePanel } from "@/features/workbench/components/shared/surface-panel";
+import { SurfacePanel } from "@/components/ui/surface-panel";
 import { WorkbenchWorkspaceNav } from "@/features/workbench/components/workbench-workspace-nav";
 import { IMPLEMENTED_FEATURES } from "@/lib/feature-catalog";
 

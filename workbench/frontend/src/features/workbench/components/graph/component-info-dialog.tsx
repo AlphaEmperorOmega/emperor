@@ -2,7 +2,7 @@ import { Info, X } from "lucide-react";
 import { createPortal } from "react-dom";
 import { IconButton } from "@/components/ui/icon-button";
 import { DialogShell } from "@/features/workbench/components/shared/dialog-shell";
-import { SurfacePanel } from "@/features/workbench/components/shared/surface-panel";
+import { SurfacePanel } from "@/components/ui/surface-panel";
 import { type GraphNode } from "@/lib/api";
 import { configDetailText } from "@/lib/graph";
 

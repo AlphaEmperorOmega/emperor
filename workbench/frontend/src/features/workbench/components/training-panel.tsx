@@ -18,8 +18,8 @@ import { ViewModeButton } from "@/features/workbench/components/view-mode-button
 import { SelectOnlyDropdown } from "@/features/workbench/components/screen/select-only-dropdown";
 import { DialogShell } from "@/features/workbench/components/shared/dialog-shell";
 import { InlineStatus } from "@/features/workbench/components/shared/inline-status";
-import { SectionHeading } from "@/features/workbench/components/shared/section-heading";
-import { SurfacePanel } from "@/features/workbench/components/shared/surface-panel";
+import { SectionHeading } from "@/components/ui/section-heading";
+import { SurfacePanel } from "@/components/ui/surface-panel";
 import { TrainingTargetDatasetPanel } from "@/features/workbench/components/training/training-target-dataset-panel";
 import {
   TrainingAllCommandsButton,

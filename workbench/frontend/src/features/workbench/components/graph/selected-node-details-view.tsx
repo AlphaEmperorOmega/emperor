@@ -2,7 +2,7 @@ import { LineChart } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { KeyValueRow } from "@/features/workbench/components/shared/key-value-row";
-import { SurfacePanel } from "@/features/workbench/components/shared/surface-panel";
+import { SurfacePanel } from "@/components/ui/surface-panel";
 import { type GraphNode } from "@/lib/api";
 import {
   type TerminalReachGrid,

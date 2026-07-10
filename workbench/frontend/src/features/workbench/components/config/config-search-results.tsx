@@ -4,7 +4,7 @@ import {
   ConfigFieldOverrideIcon,
   ConfigFieldValueEditor,
 } from "@/features/workbench/components/config/config-field-control";
-import { surfacePanelClassName } from "@/features/workbench/components/shared/surface-panel";
+import { surfacePanelClassName } from "@/components/ui/surface-panel";
 import {
   type ConfigSearchOption,
   type OverrideValues,

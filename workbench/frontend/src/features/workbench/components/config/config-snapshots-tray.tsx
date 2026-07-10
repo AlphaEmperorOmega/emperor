@@ -16,11 +16,11 @@ import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
 import { SnapshotRestoreDialog } from "@/features/workbench/components/config/config-snapshot-dialogs";
 import { DialogShell } from "@/features/workbench/components/shared/dialog-shell";
-import { SectionHeading } from "@/features/workbench/components/shared/section-heading";
+import { SectionHeading } from "@/components/ui/section-heading";
 import {
   SurfacePanel,
   surfacePanelClassName,
-} from "@/features/workbench/components/shared/surface-panel";
+} from "@/components/ui/surface-panel";
 import {
   configSnapshotOverrideEntries,
   draftMatchesConfigSnapshot,

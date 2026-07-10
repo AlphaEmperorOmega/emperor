@@ -1,5 +1,5 @@
 import { type ReactNode } from "react";
-import { SurfacePanel } from "@/features/workbench/components/shared/surface-panel";
+import { SurfacePanel } from "@/components/ui/surface-panel";
 import { cn } from "@/lib/utils";
 
 export type MetricCardProps = {

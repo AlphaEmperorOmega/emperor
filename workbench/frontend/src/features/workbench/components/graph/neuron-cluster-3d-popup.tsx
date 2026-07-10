@@ -17,7 +17,7 @@ import {
   type ReactNode,
 } from "react";
 import { DialogShell } from "@/features/workbench/components/shared/dialog-shell";
-import { SectionHeading } from "@/features/workbench/components/shared/section-heading";
+import { SectionHeading } from "@/components/ui/section-heading";
 import { StatChip } from "@/features/workbench/components/shared/stat-chip";
 import {
   useActiveTrainingJob,

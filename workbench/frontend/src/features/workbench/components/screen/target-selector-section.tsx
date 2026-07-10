@@ -13,7 +13,7 @@ import { IconButton } from "@/components/ui/icon-button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { ViewModeButton } from "@/features/workbench/components/view-mode-button";
 import { SelectOnlyDropdown } from "@/features/workbench/components/screen/select-only-dropdown";
-import { SectionHeading } from "@/features/workbench/components/shared/section-heading";
+import { SectionHeading } from "@/components/ui/section-heading";
 
 type TargetMode = "preset" | "snapshot" | "experiment";
 

@@ -7,7 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ErrorPanel } from "@/features/workbench/components/error-panel";
 import { LogTestLeaderboardSection } from "@/features/workbench/components/logs/log-test-leaderboard-table";
 import { InlineStatus } from "@/features/workbench/components/shared/inline-status";
-import { SurfacePanel } from "@/features/workbench/components/shared/surface-panel";
+import { SurfacePanel } from "@/components/ui/surface-panel";
 import { type LogMetricGroupScalarQueryState } from "@/features/workbench/state/logs/logs-chart-view-model";
 import { type RenderableLogMetric } from "@/features/workbench/state/logs/logs-selectors";
 import { type LogRun, type LogScalarSeries } from "@/lib/api";

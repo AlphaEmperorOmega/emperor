@@ -4,7 +4,7 @@ import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
 import { ChartFrame } from "@/features/workbench/components/monitor/chart-frame";
 import { EChart } from "@/features/workbench/components/charts/echart";
-import { SurfacePanel } from "@/features/workbench/components/shared/surface-panel";
+import { SurfacePanel } from "@/components/ui/surface-panel";
 import { buildScalarLineOption } from "@/lib/echarts/scalar-options";
 import { buildHistogramBarOption } from "@/lib/echarts/histogram-options";
 import { multiRunLineColors } from "@/lib/charts";

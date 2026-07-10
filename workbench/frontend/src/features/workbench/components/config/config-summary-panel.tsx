@@ -2,7 +2,7 @@ import { Maximize2, SlidersHorizontal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { InlineStatus } from "@/features/workbench/components/shared/inline-status";
-import { SectionHeading } from "@/features/workbench/components/shared/section-heading";
+import { SectionHeading } from "@/components/ui/section-heading";
 import { workbenchStatusCopy } from "@/features/workbench/components/shared/status-copy";
 import {
   useTargetConfigSummaryState,

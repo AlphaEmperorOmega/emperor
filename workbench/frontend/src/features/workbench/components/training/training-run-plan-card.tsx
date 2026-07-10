@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { IconButton } from "@/components/ui/icon-button";
 import { InlineStatus } from "@/features/workbench/components/shared/inline-status";
 import { StatChip, type StatChipTone } from "@/features/workbench/components/shared/stat-chip";
-import { SurfacePanel } from "@/features/workbench/components/shared/surface-panel";
+import { SurfacePanel } from "@/components/ui/surface-panel";
 import { TrainingMetricInfoDialog } from "@/features/workbench/components/shared/training-metric-info-dialog";
 import {
   formatTrainingMetricValue,

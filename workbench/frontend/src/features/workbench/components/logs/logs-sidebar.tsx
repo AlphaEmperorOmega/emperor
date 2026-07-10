@@ -20,7 +20,7 @@ import {
   type SubsetDeleteTarget,
 } from "@/features/workbench/components/logs/delete-dialogs";
 import { InlineStatus } from "@/features/workbench/components/shared/inline-status";
-import { SectionHeading } from "@/features/workbench/components/shared/section-heading";
+import { SectionHeading } from "@/components/ui/section-heading";
 import { StatChip } from "@/features/workbench/components/shared/stat-chip";
 import {
   MultiSelectDropdown,

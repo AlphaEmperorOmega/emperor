@@ -1,6 +1,6 @@
 import { Terminal } from "lucide-react";
 import { StatChip } from "@/features/workbench/components/shared/stat-chip";
-import { SurfacePanel } from "@/features/workbench/components/shared/surface-panel";
+import { SurfacePanel } from "@/components/ui/surface-panel";
 
 export const TRAINING_LOG_TAIL_LINE_LIMIT = 200;
 export const TRAINING_LOG_TAIL_CHAR_LIMIT = 20_000;

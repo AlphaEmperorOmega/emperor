@@ -29,7 +29,7 @@ import {
 } from "@/features/workbench/components/config/config-snapshots-tray";
 import { DialogShell } from "@/features/workbench/components/shared/dialog-shell";
 import { InlineStatus } from "@/features/workbench/components/shared/inline-status";
-import { surfacePanelClassName } from "@/features/workbench/components/shared/surface-panel";
+import { surfacePanelClassName } from "@/components/ui/surface-panel";
 import {
   configFieldsNoMatchCopy,
   workbenchStatusCopy,

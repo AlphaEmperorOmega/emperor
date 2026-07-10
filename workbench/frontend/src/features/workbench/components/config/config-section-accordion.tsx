@@ -26,7 +26,7 @@ import {
 import { cn } from "@/lib/utils";
 import { ConfigFieldControl } from "@/features/workbench/components/config/config-field-control";
 import { ConfigMetricBadge } from "@/features/workbench/components/config/config-metric-badge";
-import { surfacePanelClassName } from "@/features/workbench/components/shared/surface-panel";
+import { surfacePanelClassName } from "@/components/ui/surface-panel";
 
 const EMPTY_CONFIG_SECTIONS: ConfigSection[] = [];
 
