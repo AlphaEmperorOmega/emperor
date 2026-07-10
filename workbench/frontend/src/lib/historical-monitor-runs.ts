@@ -37,6 +37,19 @@ function numericVersion(run: LogRun) {
   return match ? Number(match[1]) : -1;
 }
 
+function appendGroupedRun(
+  groups: Map<string, LogRun[]>,
+  key: string,
+  run: LogRun,
+) {
+  const group = groups.get(key);
+  if (group) {
+    group.push(run);
+  } else {
+    groups.set(key, [run]);
+  }
+}
+
 export function sortLogRunsNewestFirst(runs: LogRun[]) {
   return [...runs].sort((left, right) => {
     const leftTimestamp = left.timestamp ?? "";
@@ -59,7 +72,7 @@ export function groupModelLogRunsByExperiment(
 ): HistoricalExperimentRunGroup[] {
   const groups = new Map<string, LogRun[]>();
   for (const run of sortLogRunsNewestFirst(runs)) {
-    groups.set(run.experiment, [...(groups.get(run.experiment) ?? []), run]);
+    appendGroupedRun(groups, run.experiment, run);
   }
   return Array.from(groups, ([experiment, experimentRuns]) => ({
     experiment,
@@ -165,10 +178,7 @@ export function historicalDatasetOptions(
   );
 
   for (const run of experimentRuns) {
-    runsByDataset.set(run.dataset, [
-      ...(runsByDataset.get(run.dataset) ?? []),
-      run,
-    ]);
+    appendGroupedRun(runsByDataset, run.dataset, run);
   }
 
   return Array.from(runsByDataset, ([dataset, datasetRuns]) =>
@@ -187,10 +197,7 @@ export function historicalPresetOptions(
 ): HistoricalRunOption[] {
   const runsByPreset = new Map<string, LogRun[]>();
   for (const run of sortLogRunsNewestFirst(runs)) {
-    runsByPreset.set(run.preset, [
-      ...(runsByPreset.get(run.preset) ?? []),
-      run,
-    ]);
+    appendGroupedRun(runsByPreset, run.preset, run);
   }
   return Array.from(runsByPreset, ([preset, presetRuns]) =>
     historicalRunOption(
@@ -254,7 +261,7 @@ export function historicalMonitorRunGroups(
   const groups = new Map<string, LogRun[]>();
   for (const run of sortLogRunsNewestFirst(runs)) {
     const key = historicalMonitorRunGroupKey(run);
-    groups.set(key, [...(groups.get(key) ?? []), run]);
+    appendGroupedRun(groups, key, run);
   }
 
   return Array.from(groups, ([key, groupRuns]) => {
@@ -265,7 +272,7 @@ export function historicalMonitorRunGroups(
       dataset: firstRun.dataset,
       preset: firstRun.preset,
       model: firstRun.model,
-      runs: latestHistoricalMonitorRuns(groupRuns, limit),
+      runs: groupRuns.slice(0, limit),
       cardRunIds: groupRuns.map((run) => run.id),
     };
   });

@@ -152,7 +152,12 @@ export function groupLogScalarSeriesByTag(seriesList: LogScalarSeries[]) {
     if (series.points.length === 0) {
       continue;
     }
-    byTag.set(series.tag, [...(byTag.get(series.tag) ?? []), series]);
+    const groupedSeries = byTag.get(series.tag);
+    if (groupedSeries) {
+      groupedSeries.push(series);
+    } else {
+      byTag.set(series.tag, [series]);
+    }
   }
   return byTag;
 }
@@ -284,10 +289,12 @@ function runsById(runs: LogRun[]) {
 function checkpointsByRunId(checkpoints: LogCheckpoint[]) {
   const byRunId = new Map<string, LogCheckpoint[]>();
   for (const checkpoint of checkpoints) {
-    byRunId.set(checkpoint.runId, [
-      ...(byRunId.get(checkpoint.runId) ?? []),
-      checkpoint,
-    ]);
+    const runCheckpoints = byRunId.get(checkpoint.runId);
+    if (runCheckpoints) {
+      runCheckpoints.push(checkpoint);
+    } else {
+      byRunId.set(checkpoint.runId, [checkpoint]);
+    }
   }
   return byRunId;
 }

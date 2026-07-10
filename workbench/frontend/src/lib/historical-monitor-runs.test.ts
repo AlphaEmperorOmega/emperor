@@ -208,6 +208,7 @@ describe("historical monitor run helpers", () => {
         dataset: group.dataset,
         preset: group.preset,
         runIds: group.runs.map((item) => item.id),
+        cardRunIds: group.cardRunIds,
       })),
     ).toEqual([
       {
@@ -215,12 +216,14 @@ describe("historical monitor run helpers", () => {
         dataset: "Mnist",
         preset: "baseline",
         runIds: ["baseline-new", "baseline-old"],
+        cardRunIds: ["baseline-new", "baseline-old"],
       },
       {
         experiment: "exp_a",
         dataset: "Mnist",
         preset: "fast",
         runIds: ["fast"],
+        cardRunIds: ["fast"],
       },
     ]);
   });
