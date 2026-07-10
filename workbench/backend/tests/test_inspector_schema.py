@@ -53,9 +53,7 @@ class InspectorSchemaTests(unittest.TestCase):
         axes = search_space_schema("linears/linear", "baseline")["axes"]
 
         stack_axis = next(
-            axis
-            for axis in axes
-            if axis["searchKey"] == "SEARCH_SPACE_HIDDEN_DIM"
+            axis for axis in axes if axis["searchKey"] == "SEARCH_SPACE_HIDDEN_DIM"
         )
         self.assertEqual(stack_axis["key"], "HIDDEN_DIM")
         self.assertEqual(stack_axis["key"], stack_axis["configKey"])
@@ -600,9 +598,7 @@ class InspectorSchemaTests(unittest.TestCase):
             "ff_recurrent_gate_stack_hidden_dim": (
                 "Feed-Forward Recurrent Gate Stack Options"
             ),
-            "ff_recurrent_halting_flag": (
-                "Feed-Forward Recurrent Halting Options"
-            ),
+            "ff_recurrent_halting_flag": ("Feed-Forward Recurrent Halting Options"),
             "ff_recurrent_halting_stack_hidden_dim": (
                 "Feed-Forward Recurrent Halting Stack Options"
             ),
@@ -655,9 +651,7 @@ class InspectorSchemaTests(unittest.TestCase):
             "attn_stack_hidden_dim": "Attention Projection Stack Options",
             "attn_stack_activation": "Attention Projection Stack Options",
             "attn_gate_flag": "Attention Projection Gate Options",
-            "attn_gate_stack_hidden_dim": (
-                "Attention Projection Gate Stack Options"
-            ),
+            "attn_gate_stack_hidden_dim": ("Attention Projection Gate Stack Options"),
             "attn_halting_flag": "Attention Projection Halting Options",
             "attn_halting_stack_hidden_dim": (
                 "Attention Projection Halting Stack Options"
@@ -666,12 +660,8 @@ class InspectorSchemaTests(unittest.TestCase):
             "attn_memory_stack_hidden_dim": (
                 "Attention Projection Memory Stack Options"
             ),
-            "attn_recurrent_flag": (
-                "Attention Projection Recurrent Layer Options"
-            ),
-            "attn_recurrent_gate_flag": (
-                "Attention Projection Recurrent Gate Options"
-            ),
+            "attn_recurrent_flag": ("Attention Projection Recurrent Layer Options"),
+            "attn_recurrent_gate_flag": ("Attention Projection Recurrent Gate Options"),
             "attn_recurrent_gate_stack_hidden_dim": (
                 "Attention Projection Recurrent Gate Stack Options"
             ),
@@ -702,9 +692,7 @@ class InspectorSchemaTests(unittest.TestCase):
                 self.assertFalse(fields["attn_gate_flag"]["default"])
                 self.assertFalse(fields["attn_memory_flag"]["default"])
                 self.assertFalse(fields["attn_recurrent_flag"]["default"])
-                self.assertFalse(
-                    fields["attn_gate_stack_independent_flag"]["default"]
-                )
+                self.assertFalse(fields["attn_gate_stack_independent_flag"]["default"])
                 self.assertIsNone(fields["attn_gate_stack_hidden_dim"]["default"])
                 self.assertTrue(fields["attn_gate_stack_hidden_dim"]["nullable"])
                 self.assertIn(
