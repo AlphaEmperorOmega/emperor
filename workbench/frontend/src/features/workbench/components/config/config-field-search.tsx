@@ -52,6 +52,10 @@ export function ConfigFieldSearch({
         : [],
     [options, trimmedQuery],
   );
+  const matchingOptionsKey = useMemo(
+    () => matchingOptions.map((option) => option.key).join("\u0000"),
+    [matchingOptions],
+  );
   const {
     scrollContainerRef,
     visibleOptions,
@@ -61,6 +65,7 @@ export function ConfigFieldSearch({
     handleScroll,
   } = useIncrementalVisibleOptions({
     options: matchingOptions,
+    resetKey: matchingOptionsKey,
     initialVisibleCount: RESULT_LIMIT,
     pageSize: RESULT_LIMIT,
   });
@@ -70,7 +75,7 @@ export function ConfigFieldSearch({
 
   useEffect(() => {
     setActiveIndex(matchingOptions.length > 0 ? 0 : -1);
-  }, [matchingOptions]);
+  }, [matchingOptions.length, matchingOptionsKey]);
 
   useEffect(() => {
     const pendingIndex = pendingActiveIndexRef.current;
@@ -90,7 +95,7 @@ export function ConfigFieldSearch({
 
   useEffect(() => {
     pendingActiveIndexRef.current = null;
-  }, [matchingOptions]);
+  }, [matchingOptionsKey]);
 
   function updateQuery(value: string) {
     onQueryChange(value);

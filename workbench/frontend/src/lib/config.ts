@@ -32,8 +32,6 @@ export type ConfigSearchOption = {
   configKey: string;
   flag: string;
   type: string;
-  isModified: boolean;
-  isLocked: boolean;
 };
 
 export type ConfigSearchState = {
@@ -1128,7 +1126,6 @@ export function fieldsByKey(sections: ConfigSection[]) {
 
 export function flattenConfigSearchOptions(
   sections: ConfigSection[],
-  overrides: OverrideValues,
 ) {
   const options: ConfigSearchOption[] = [];
   function collect(section: ConfigSection) {
@@ -1141,8 +1138,6 @@ export function flattenConfigSearchOptions(
         configKey: field.configKey,
         flag: field.flag,
         type: field.type,
-        isModified: hasOverride(overrides, field.key),
-        isLocked: Boolean(field.locked),
       });
     }
     for (const child of section.children ?? []) {

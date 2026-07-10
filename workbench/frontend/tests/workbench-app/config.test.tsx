@@ -3004,6 +3004,25 @@ describe("WorkbenchApp Full Config", () => {
         fullConfigSearchResultRow(searchPopup, /recurrent gate stack hidden dim/i),
       ).toBeInTheDocument();
     });
+    const recurrentGateRow = fullConfigSearchResultRow(
+      searchPopup,
+      /recurrent gate flag/i,
+    );
+    const recurrentGateControl = expectBooleanSegmentedControl(
+      recurrentGateRow,
+      /current value/i,
+    );
+
+    await user.click(recurrentGateControl.on);
+
+    expect(
+      fullConfigSearchResultRow(searchPopup, /recurrent gate stack hidden dim/i),
+    ).toBeInTheDocument();
+    expect(
+      within(searchPopup).getAllByRole("group", {
+        name: /config search result/i,
+      }).length,
+    ).toBeGreaterThan(8);
     expect(within(searchPopup).queryByText(/more matches/i)).not.toBeInTheDocument();
   });
 

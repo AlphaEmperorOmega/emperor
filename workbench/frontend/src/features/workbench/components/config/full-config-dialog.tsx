@@ -132,8 +132,8 @@ export function FullConfigDialog({
     [sections],
   );
   const searchOptions = useMemo(
-    () => flattenConfigSearchOptions(sections, dialogOverrides),
-    [sections, dialogOverrides],
+    () => flattenConfigSearchOptions(sections),
+    [sections],
   );
   const configFields = useMemo(
     () => configSectionsFields(sections),

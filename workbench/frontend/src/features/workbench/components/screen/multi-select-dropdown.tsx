@@ -155,6 +155,7 @@ export function MultiSelectDropdown({
     handleScroll,
   } = useIncrementalVisibleOptions({
     options: filteredOptions,
+    resetKey: filteredOptionsKey,
     initialVisibleCount,
     pageSize,
   });

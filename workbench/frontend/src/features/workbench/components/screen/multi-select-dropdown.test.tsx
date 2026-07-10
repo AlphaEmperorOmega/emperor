@@ -79,17 +79,22 @@ function renderDropdown({
 
 function renderLazyDropdown() {
   const onChange = vi.fn();
-  render(
+  const renderWithOptions = (nextOptions: ReturnType<typeof manyOptions>) => (
     <MultiSelectDropdown
       label="Targets"
       values={[]}
-      options={manyOptions(18)}
+      options={nextOptions}
       onChange={onChange}
       initialVisibleCount={5}
       pageSize={5}
-    />,
+    />
   );
-  return { onChange };
+  const rendered = render(renderWithOptions(manyOptions(18)));
+  return {
+    onChange,
+    rerenderOptions: (nextOptions: ReturnType<typeof manyOptions>) =>
+      rendered.rerender(renderWithOptions(nextOptions)),
+  };
 }
 
 async function openDropdown(user: ReturnType<typeof userEvent.setup>) {
@@ -330,6 +335,35 @@ describe("MultiSelectDropdown", () => {
         within(listbox).getByRole("option", { name: /target 10/i }),
       ).toBeInTheDocument();
     });
+  });
+
+  it("preserves loaded pages for value-equivalent options and resets for semantic changes", async () => {
+    const user = userEvent.setup();
+    const { rerenderOptions } = renderLazyDropdown();
+
+    const listbox = await openDropdown(user);
+    setScrollable(listbox);
+    fireEvent.scroll(listbox);
+    await waitFor(() => {
+      expect(
+        within(listbox).getByRole("option", { name: /target 10/i }),
+      ).toBeInTheDocument();
+    });
+
+    rerenderOptions(manyOptions(18));
+
+    expect(
+      within(listbox).getByRole("option", { name: /target 10/i }),
+    ).toBeInTheDocument();
+
+    rerenderOptions(manyOptions(19));
+
+    await waitFor(() => {
+      expect(
+        within(listbox).queryByRole("option", { name: /target 10/i }),
+      ).not.toBeInTheDocument();
+    });
+    expect(within(listbox).getAllByRole("option")).toHaveLength(5);
   });
 
   it("resets the lazy window after searching and can append filtered rows", async () => {

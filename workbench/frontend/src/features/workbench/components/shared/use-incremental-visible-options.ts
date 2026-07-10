@@ -5,10 +5,12 @@ const LOCAL_APPEND_DELAY_MS = 100;
 
 export function useIncrementalVisibleOptions<T>({
   options,
+  resetKey,
   initialVisibleCount,
   pageSize,
 }: {
   options: T[];
+  resetKey: string;
   initialVisibleCount: number;
   pageSize: number;
 }) {
@@ -78,7 +80,7 @@ export function useIncrementalVisibleOptions<T>({
     clearAppendTimer();
     setIsLoadingMore(false);
     setVisibleCount(Math.min(initialVisibleCount, options.length));
-  }, [clearAppendTimer, initialVisibleCount, options]);
+  }, [clearAppendTimer, initialVisibleCount, options.length, resetKey]);
 
   useEffect(() => {
     const scrollContainer = scrollContainerRef.current;
