@@ -1,15 +1,15 @@
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
 from torch import Tensor
-from dataclasses import dataclass, field
+
 from emperor.base.layer import Layer, LayerStack, LayerStackConfig
 from emperor.base.options import LastLayerBiasOptions
-from emperor.halting.options import HaltingHiddenStateModeOptions
 from emperor.halting.core.base import HaltingBase, HaltingStateBase
-
-from typing import TYPE_CHECKING
+from emperor.halting.options import HaltingHiddenStateModeOptions
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
@@ -20,27 +20,42 @@ if TYPE_CHECKING:
 class SoftHaltingState(HaltingStateBase):
     step_count: int = field(
         metadata={
-            "help": "Current step index, used to compute the expected number of steps for regularisation"
+            "help": (
+                "Current step index, used to compute the expected number of "
+                "steps for regularisation"
+            )
         },
     )
     log_continuation: Tensor = field(
         metadata={
-            "help": "Log of the remaining stick length after all breaks so far; the cumulative log probability of not yet having halted"
+            "help": (
+                "Log of the remaining stick length after all breaks so far; "
+                "the cumulative log probability of not yet having halted"
+            )
         },
     )
     accumulated_hidden: Tensor = field(
         metadata={
-            "help": "Weighted sum of hidden states accumulated so far, where each step contributes proportionally to its halt probability"
+            "help": (
+                "Weighted sum of hidden states accumulated so far, where each "
+                "step contributes proportionally to its halt probability"
+            )
         },
     )
     accumulated_ponder_cost: Tensor = field(
         metadata={
-            "help": "Running sum of halt_prob * step across all steps; used to compute the expected computation depth"
+            "help": (
+                "Running sum of halt_prob * step across all steps; used to "
+                "compute the expected computation depth"
+            )
         },
     )
     continuation_probability: Tensor = field(
         metadata={
-            "help": "Masked probability of not having halted at this step; used by compute_output to blend the final representation"
+            "help": (
+                "Masked probability of not having halted at this step; used "
+                "by compute_output to blend the final representation"
+            )
         },
     )
 
@@ -53,12 +68,14 @@ class SoftHalting(HaltingBase[SoftHaltingState]):
     ):
         super().__init__()
         config = getattr(cfg, "halting_config", cfg)
-        self.cfg: "HaltingConfig" = self._override_config(config, overrides)
+        self.cfg: HaltingConfig = self._override_config(config, overrides)
         self.main_cfg = self._resolve_main_config(self.cfg, cfg)
 
         self.input_dim: int = self.cfg.input_dim
         self.threshold: float = self.cfg.threshold
-        self.hidden_state_mode: HaltingHiddenStateModeOptions = self.cfg.hidden_state_mode
+        self.hidden_state_mode: HaltingHiddenStateModeOptions = (
+            self.cfg.hidden_state_mode
+        )
 
         self._gate: Layer | LayerStack = self.__build_gate()
         self.__init_gate_weights()
