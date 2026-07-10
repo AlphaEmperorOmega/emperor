@@ -2,10 +2,8 @@ import {
   type KeyboardEvent,
   useCallback,
   useEffect,
-  useId,
   useMemo,
   useRef,
-  useState,
 } from "react";
 import { ChevronDown, Search } from "lucide-react";
 import {
@@ -15,7 +13,10 @@ import {
   selectTriggerClassName,
 } from "@/components/ui/control-styles";
 import { DropdownShell } from "@/features/workbench/components/shared/dropdown-shell";
-import { usePopupDismissal } from "@/features/workbench/components/shared/use-popup-dismissal";
+import {
+  useDropdownOptionNavigation,
+  useSearchableDropdownCore,
+} from "@/features/workbench/components/shared/use-searchable-dropdown";
 import { cn } from "@/lib/utils";
 
 export type SelectOnlyDropdownOption = {
@@ -50,15 +51,6 @@ export function SelectOnlyDropdown({
   className?: string;
   triggerClassName?: string;
 }) {
-  const generatedId = useId();
-  const triggerId = id ?? `${generatedId}-select`;
-  const listboxId = `${triggerId}-options`;
-  const searchId = `${triggerId}-search`;
-  const rootRef = useRef<HTMLDivElement | null>(null);
-  const triggerRef = useRef<HTMLButtonElement | null>(null);
-  const panelRef = useRef<HTMLDivElement | null>(null);
-  const searchRef = useRef<HTMLInputElement | null>(null);
-  const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const wasOpenRef = useRef(false);
   const selectedIndex = useMemo(
     () => options.findIndex((option) => option.value === value),
@@ -79,75 +71,70 @@ export function SelectOnlyDropdown({
     [options],
   );
   const selectedOption = selectedIndex >= 0 ? options[selectedIndex] : undefined;
-  const [isOpen, setIsOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const normalizedQuery = query.trim().toLowerCase();
-  const filteredOptions = useMemo(() => {
-    if (!normalizedQuery) {
-      return options;
-    }
-    return options.filter((option) =>
-      [option.label, option.value, option.description ?? ""]
-        .join(" ")
-        .toLowerCase()
-        .includes(normalizedQuery),
-    );
-  }, [normalizedQuery, options]);
+  const isDisabled = disabled || options.length === 0;
+  const dropdown = useSearchableDropdownCore({
+    id,
+    idSuffix: "select",
+    options,
+    disabled: isDisabled,
+  });
+  const {
+    triggerId,
+    listboxId,
+    searchId,
+    rootRef,
+    triggerRef,
+    panelRef,
+    searchRef,
+    isOpen,
+    query,
+    setQuery,
+    filteredOptions,
+    filteredOptionsKey: filteredOptionSignature,
+    openDropdown: openCoreDropdown,
+    closeDropdown,
+    handleRootBlur,
+  } = dropdown;
   const selectedFilteredIndex = useMemo(
     () => filteredOptions.findIndex((option) => option.value === value),
     [filteredOptions, value],
   );
-  const filteredOptionSignature = useMemo(
-    () => filteredOptions.map((option) => option.value).join("\u0002"),
-    [filteredOptions],
-  );
-  const [activeIndex, setActiveIndex] = useState(
-    selectedIndex >= 0 ? selectedIndex : filteredOptions.length > 0 ? 0 : -1,
-  );
-  const isDisabled = disabled || options.length === 0;
+  const navigation = useDropdownOptionNavigation<HTMLButtonElement>({
+    optionCount: filteredOptions.length,
+    fallbackIndex: selectedFilteredIndex >= 0 ? selectedFilteredIndex : 0,
+    onEscape: () => closeDropdown(true),
+  });
+  const {
+    optionRefs,
+    activeIndex,
+    setActiveIndex,
+    focusOption,
+    focusFirstOption,
+    focusLastOption,
+    moveActiveOption: moveOption,
+    handleOptionKeyDown: handleSharedOptionKeyDown,
+  } = navigation;
   const activeOptionId =
     isOpen && activeIndex >= 0 ? `${listboxId}-option-${activeIndex}` : undefined;
-
-  const focusOption = useCallback((index: number) => {
-    window.requestAnimationFrame(() => {
-      optionRefs.current[index]?.focus();
-    });
-  }, []);
 
   const moveActiveOption = useCallback(
     (direction: 1 | -1) => {
       if (filteredOptions.length === 0) {
         return;
       }
-      setIsOpen(true);
-      setActiveIndex((current) => {
-        const startIndex =
-          current >= 0 ? current : selectedFilteredIndex >= 0 ? selectedFilteredIndex : 0;
-        const nextIndex =
-          (startIndex + direction + filteredOptions.length) % filteredOptions.length;
-        focusOption(nextIndex);
-        return nextIndex;
-      });
+      openCoreDropdown();
+      moveOption(direction);
     },
-    [filteredOptions.length, focusOption, selectedFilteredIndex],
+    [filteredOptions.length, moveOption, openCoreDropdown],
   );
 
   const openDropdown = useCallback(() => {
     if (isDisabled) {
       return;
     }
-    setQuery("");
     setActiveIndex(selectedIndex >= 0 ? selectedIndex : 0);
-    setIsOpen(true);
-  }, [isDisabled, selectedIndex]);
-
-  const closeDropdown = useCallback((restoreFocus = false) => {
-    setIsOpen(false);
-    setQuery("");
-    if (restoreFocus) {
-      triggerRef.current?.focus();
-    }
-  }, []);
+    openCoreDropdown();
+  }, [isDisabled, openCoreDropdown, selectedIndex, setActiveIndex]);
 
   const selectOption = useCallback(
     (option: SelectOnlyDropdownOption) => {
@@ -155,34 +142,18 @@ export function SelectOnlyDropdown({
         return;
       }
       setActiveIndex(options.findIndex((candidate) => candidate.value === option.value));
-      setIsOpen(false);
-      setQuery("");
+      closeDropdown(true);
       if (option.value !== value) {
         onChange(option.value);
       }
-      triggerRef.current?.focus();
     },
-    [onChange, options, value],
+    [closeDropdown, onChange, options, setActiveIndex, value],
   );
 
   useEffect(() => {
-    setIsOpen(false);
-    setQuery("");
+    closeDropdown();
     setActiveIndex(selectedIndex >= 0 ? selectedIndex : options.length > 0 ? 0 : -1);
-  }, [optionSignature, options.length, selectedIndex, value]);
-
-  useEffect(() => {
-    if (isDisabled) {
-      setIsOpen(false);
-    }
-  }, [isDisabled]);
-
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-    searchRef.current?.focus();
-  }, [isOpen]);
+  }, [closeDropdown, optionSignature, options.length, selectedIndex, setActiveIndex, value]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -200,14 +171,13 @@ export function SelectOnlyDropdown({
           ? 0
           : -1,
     );
-  }, [filteredOptionSignature, filteredOptions.length, isOpen, selectedFilteredIndex]);
-
-  usePopupDismissal({
-    open: isOpen,
-    onClose: closeDropdown,
-    triggerRef,
-    panelRef,
-  });
+  }, [
+    filteredOptionSignature,
+    filteredOptions.length,
+    isOpen,
+    selectedFilteredIndex,
+    setActiveIndex,
+  ]);
 
   function handleKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
     if (event.key === "ArrowDown") {
@@ -222,15 +192,12 @@ export function SelectOnlyDropdown({
     }
     if (event.key === "Home" && isOpen && filteredOptions.length > 0) {
       event.preventDefault();
-      setActiveIndex(0);
-      focusOption(0);
+      focusFirstOption();
       return;
     }
     if (event.key === "End" && isOpen && filteredOptions.length > 0) {
       event.preventDefault();
-      const lastIndex = filteredOptions.length - 1;
-      setActiveIndex(lastIndex);
-      focusOption(lastIndex);
+      focusLastOption();
       return;
     }
     if (event.key === "Enter" || event.key === " ") {
@@ -280,15 +247,12 @@ export function SelectOnlyDropdown({
     }
     if (event.key === "Home" && filteredOptions.length > 0) {
       event.preventDefault();
-      setActiveIndex(0);
-      focusOption(0);
+      focusFirstOption();
       return;
     }
     if (event.key === "End" && filteredOptions.length > 0) {
       event.preventDefault();
-      const lastIndex = filteredOptions.length - 1;
-      setActiveIndex(lastIndex);
-      focusOption(lastIndex);
+      focusLastOption();
       return;
     }
     if (event.key === "Enter") {
@@ -304,50 +268,13 @@ export function SelectOnlyDropdown({
     event: KeyboardEvent<HTMLButtonElement>,
     option: SelectOnlyDropdownOption,
   ) {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      closeDropdown(true);
-      return;
-    }
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      moveActiveOption(1);
-      return;
-    }
-    if (event.key === "ArrowUp") {
-      event.preventDefault();
-      moveActiveOption(-1);
-      return;
-    }
-    if (event.key === "Home" && filteredOptions.length > 0) {
-      event.preventDefault();
-      setActiveIndex(0);
-      focusOption(0);
-      return;
-    }
-    if (event.key === "End" && filteredOptions.length > 0) {
-      event.preventDefault();
-      const lastIndex = filteredOptions.length - 1;
-      setActiveIndex(lastIndex);
-      focusOption(lastIndex);
-      return;
-    }
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      selectOption(option);
-    }
+    handleSharedOptionKeyDown(event, () => selectOption(option));
   }
 
   return (
     <div
       ref={rootRef}
-      onBlur={(event) => {
-        const nextTarget = event.relatedTarget as Node | null;
-        if (nextTarget && rootRef.current?.contains(nextTarget)) {
-          return;
-        }
-        closeDropdown();
-      }}
+      onBlur={(event) => handleRootBlur(event.relatedTarget)}
       className={cn("relative min-w-0", isOpen ? "z-30" : "z-20", className)}
     >
       <button
