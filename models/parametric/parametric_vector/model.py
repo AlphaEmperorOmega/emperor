@@ -1,8 +1,9 @@
 from typing import TYPE_CHECKING
 
 import torch
+from emperor.base.config import ConfigBase
 from emperor.base.layer import Layer, LayerConfig, LayerStackConfig
-from emperor.base.utils import ConfigBase, Module
+from emperor.base.module import Module
 from emperor.experiments.classifier import ClassifierExperiment
 from emperor.parametric.core.state import ParametricLayerState
 from torch import Tensor
