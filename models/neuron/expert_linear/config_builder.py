@@ -1,3 +1,5 @@
+# ruff: noqa: E501
+
 from typing import Any
 
 from emperor.base.layer.gate import GateConfig, LayerGateOptions
@@ -11,19 +13,20 @@ from emperor.halting.options import HaltingHiddenStateModeOptions
 from emperor.neuron.core.options import TerminalRangeOptions, TerminalZAxisOffsetOptions
 
 import models.neuron.expert_linear.config as config
-from models.neuron.expert_linear.experiment_config import ExperimentConfig
-from models.neuron._config_builder import NeuronWrapperConfigBuilder
-from models.neuron._builder_options import (
+from models.neuron.expert_linear._hidden.runtime_defaults import runtime_from_flat
+from models.neuron.expert_linear._neuron_config_builder import (
+    NeuronConfigBuilder,
+)
+from models.neuron.expert_linear.runtime_options import (
     ClusterRouteHaltingOptions,
     NeuronClusterCapacityOptions,
     NeuronSubmoduleStackOptions,
     NeuronTerminalOptions,
     NeuronTerminalSamplerOptions,
 )
-from models.neuron.expert_linear._source_expert_linear_adapter import SOURCE_ADAPTER
 
 
-class NeuronExpertLinearConfigBuilder(NeuronWrapperConfigBuilder):
+class NeuronExpertLinearConfigBuilder(NeuronConfigBuilder):
     def __init__(
         self,
         cluster_x_axis_total_neurons: int = config.CLUSTER_X_AXIS_TOTAL_NEURONS,
@@ -150,7 +153,7 @@ class NeuronExpertLinearConfigBuilder(NeuronWrapperConfigBuilder):
         terminal_router_options: NeuronSubmoduleStackOptions | None = None,
         terminal_sampler_options: NeuronTerminalSamplerOptions | None = None,
         cluster_halting_options: ClusterRouteHaltingOptions | None = None,
-        **source_kwargs: Any,
+        **hidden_options: Any,
     ) -> None:
         cluster_capacity_options = (
             cluster_capacity_options
@@ -158,15 +161,9 @@ class NeuronExpertLinearConfigBuilder(NeuronWrapperConfigBuilder):
                 x_axis_total_neurons=cluster_x_axis_total_neurons,
                 y_axis_total_neurons=cluster_y_axis_total_neurons,
                 z_axis_total_neurons=cluster_z_axis_total_neurons,
-                initial_x_axis_total_neurons=(
-                    cluster_initial_x_axis_total_neurons
-                ),
-                initial_y_axis_total_neurons=(
-                    cluster_initial_y_axis_total_neurons
-                ),
-                initial_z_axis_total_neurons=(
-                    cluster_initial_z_axis_total_neurons
-                ),
+                initial_x_axis_total_neurons=(cluster_initial_x_axis_total_neurons),
+                initial_y_axis_total_neurons=(cluster_initial_y_axis_total_neurons),
+                initial_z_axis_total_neurons=(cluster_initial_z_axis_total_neurons),
                 max_steps=cluster_max_steps,
                 growth_threshold=cluster_growth_threshold,
             )
@@ -182,9 +179,7 @@ class NeuronExpertLinearConfigBuilder(NeuronWrapperConfigBuilder):
             or NeuronSubmoduleStackOptions(
                 hidden_dim=cluster_terminal_router_hidden_dim,
                 num_layers=cluster_terminal_router_num_layers,
-                last_layer_bias_option=(
-                    cluster_terminal_router_last_layer_bias_option
-                ),
+                last_layer_bias_option=(cluster_terminal_router_last_layer_bias_option),
                 apply_output_pipeline_flag=(
                     cluster_terminal_router_apply_output_pipeline_flag
                 ),
@@ -221,45 +216,43 @@ class NeuronExpertLinearConfigBuilder(NeuronWrapperConfigBuilder):
                 ),
             )
         )
-        cluster_halting_options = (
-            cluster_halting_options
-            or ClusterRouteHaltingOptions(
-                enabled=cluster_halting_flag,
-                threshold=cluster_halting_threshold,
-                dropout=cluster_halting_dropout,
-                hidden_state_mode=cluster_halting_hidden_state_mode,
-                stack_options=NeuronSubmoduleStackOptions(
-                    hidden_dim=cluster_halting_stack_hidden_dim,
-                    num_layers=cluster_halting_stack_num_layers,
-                    last_layer_bias_option=(
-                        cluster_halting_stack_last_layer_bias_option
-                    ),
-                    apply_output_pipeline_flag=(
-                        cluster_halting_stack_apply_output_pipeline_flag
-                    ),
-                    activation=cluster_halting_stack_activation,
-                    layer_norm_position=cluster_halting_stack_layer_norm_position,
-                    residual_connection_option=(
-                        cluster_halting_stack_residual_connection_option
-                    ),
-                    dropout_probability=cluster_halting_stack_dropout_probability,
-                    bias_flag=cluster_halting_stack_bias_flag,
+        cluster_halting_options = cluster_halting_options or ClusterRouteHaltingOptions(
+            enabled=cluster_halting_flag,
+            threshold=cluster_halting_threshold,
+            dropout=cluster_halting_dropout,
+            hidden_state_mode=cluster_halting_hidden_state_mode,
+            stack_options=NeuronSubmoduleStackOptions(
+                hidden_dim=cluster_halting_stack_hidden_dim,
+                num_layers=cluster_halting_stack_num_layers,
+                last_layer_bias_option=(cluster_halting_stack_last_layer_bias_option),
+                apply_output_pipeline_flag=(
+                    cluster_halting_stack_apply_output_pipeline_flag
                 ),
-                output_dim=cluster_halting_output_dim,
-            )
+                activation=cluster_halting_stack_activation,
+                layer_norm_position=cluster_halting_stack_layer_norm_position,
+                residual_connection_option=(
+                    cluster_halting_stack_residual_connection_option
+                ),
+                dropout_probability=cluster_halting_stack_dropout_probability,
+                bias_flag=cluster_halting_stack_bias_flag,
+            ),
+            output_dim=cluster_halting_output_dim,
         )
+        hidden_flat_options = {
+            "gate_option": gate_option,
+            "gate_activation": gate_activation,
+            "recurrent_gate_option": recurrent_gate_option,
+            "recurrent_gate_activation": recurrent_gate_activation,
+            **hidden_options,
+        }
+        if shared_gate_config is not None:
+            hidden_flat_options["shared_gate_config"] = shared_gate_config
+
         super().__init__(
-            source_adapter=SOURCE_ADAPTER,
+            hidden_runtime=runtime_from_flat(hidden_flat_options, config),
             cluster_capacity_options=cluster_capacity_options,
             terminal_options=terminal_options,
             terminal_router_options=terminal_router_options,
             terminal_sampler_options=terminal_sampler_options,
             cluster_halting_options=cluster_halting_options,
-            source_kwargs=source_kwargs,
-            shared_gate_config=shared_gate_config,
-            gate_option=gate_option,
-            gate_activation=gate_activation,
-            recurrent_gate_option=recurrent_gate_option,
-            recurrent_gate_activation=recurrent_gate_activation,
-            experiment_config_type=ExperimentConfig,
         )
