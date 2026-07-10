@@ -1,26 +1,11 @@
 from models.linears.linear_adaptive import Experiment, ExperimentPreset
-from models.parser import (
-    get_experiment_parser,
-    resolve_dataset_names,
-    resolve_experiment_mode,
-)
+from models.package_cli import run_model_package_cli
+
+EXPERIMENT_MODULE_PATH = "models.linears.linear_adaptive"
 
 if __name__ == "__main__":
-    parser = get_experiment_parser(
-        ExperimentPreset.names(), "models.linears.linear_adaptive"
-    )
-    args = parser.parse_args()
-    mode = resolve_experiment_mode(args, ExperimentPreset)
-    experiment = Experiment(mode.preset, experiment_task=mode.experiment_task)
-    experiment.train_model(
-        search_mode=mode.search_mode,
-        log_folder=args.logdir,
-        search_keys=mode.search_keys,
-        config_overrides=mode.config_overrides,
-        search_overrides=mode.search_overrides,
-        selected_datasets=resolve_dataset_names(
-            experiment.dataset_options, args.datasets
-        ),
-        selected_presets=mode.selected_presets,
-        callbacks=mode.monitor_callbacks,
+    run_model_package_cli(
+        experiment_type=Experiment,
+        preset_type=ExperimentPreset,
+        module_path=EXPERIMENT_MODULE_PATH,
     )
