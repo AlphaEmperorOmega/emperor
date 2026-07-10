@@ -4,6 +4,8 @@ from emperor.base.options import BaseOptions
 class ExperimentTask(BaseOptions):
     IMAGE_CLASSIFICATION = 1
     BERT_PRETRAINING = 2
+    TEXT_TRANSLATION = 3
+    CAUSAL_LANGUAGE_MODELING = 4
 
 
 def experiment_task_name(task: ExperimentTask) -> str:
