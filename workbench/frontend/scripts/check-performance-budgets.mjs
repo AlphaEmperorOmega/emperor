@@ -3,8 +3,8 @@ import { gzipSync } from "node:zlib";
 import { resolve } from "node:path";
 
 const NEXT_DIRECTORY = resolve(".next");
-const FIRST_LOAD_BUDGET_BYTES = 215_000;
-const ROUTE_SPECIFIC_BUDGET_BYTES = 100_000;
+const FIRST_LOAD_BUDGET_BYTES = 210_000;
+const ROUTE_SPECIFIC_BUDGET_BYTES = 98_000;
 
 function readManifest(name) {
   try {
@@ -63,6 +63,10 @@ assert(
 );
 
 const deferredModules = [
+  {
+    label: "Logs workspace state",
+    target: "@/features/workbench/providers/logs-workspace-provider",
+  },
   {
     label: "ECharts scalar charts",
     target: "@/features/workbench/components/logs/log-scalar-chart",
