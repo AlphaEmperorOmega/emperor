@@ -60,6 +60,15 @@ type ClusterCapacity = {
   z: number;
 };
 
+type ParsedTerminalReach = NonNullable<
+  ReturnType<typeof parseTerminalReachDetails>
+>;
+
+type CoordinateNodeCandidate = {
+  node: GraphNode;
+  priority: number;
+};
+
 function clusterDetail(node: GraphNode): Record<string, unknown> | undefined {
   const cluster = node.details.cluster;
   return isRecord(cluster) ? cluster : undefined;
@@ -85,10 +94,6 @@ function optionalAxisCoordinate(
 
 function coordinateKey(coordinate: GraphCoordinate) {
   return coordinate.join(",");
-}
-
-function coordinatesEqual(left: GraphCoordinate, right: GraphCoordinate) {
-  return left.every((value, index) => value === right[index]);
 }
 
 function isInBounds(coordinate: GraphCoordinate, capacity: ClusterCapacity) {
@@ -121,10 +126,6 @@ function uniqueCoordinateMap(coordinates: GraphCoordinate[]) {
     byKey.set(coordinateKey(coordinate), coordinate);
   }
   return byKey;
-}
-
-function graphNodesById(graph: InspectResponse) {
-  return new Map(graph.nodes.map((node) => [node.id, node]));
 }
 
 function descendantNodeIds(graph: InspectResponse, clusterNodeId: string) {
@@ -180,51 +181,75 @@ function nodeMatch(node: GraphNode): Cluster3DNodeMatch {
   };
 }
 
-function resolveCoordinateNode(
-  graph: InspectResponse,
-  descendantIds: Set<string>,
-  coordinate: GraphCoordinate,
-): Cluster3DNodeMatch | null {
-  const descendants = graph.nodes.filter((node) => descendantIds.has(node.id));
-  const reachCandidates = descendants
-    .map((node, index) => ({ node, index, reach: parseTerminalReachDetails(node.details) }))
-    .filter((candidate) =>
-      candidate.reach
-        ? coordinatesEqual(candidate.reach.position, coordinate)
-        : false,
-    )
-    .sort((left, right) => {
-      const priority = terminalReachPriority(right.node) - terminalReachPriority(left.node);
-      return priority || left.index - right.index;
-    });
-  const reachMatch = reachCandidates[0]?.node;
-  if (reachMatch) {
-    return nodeMatch(reachMatch);
-  }
-
-  const suffixCandidates = descendants
-    .map((node, index) => ({ node, index }))
-    .filter(({ node }) =>
-      [node.id, node.path, node.label].some((value) =>
-        textMatchesCoordinateSuffix(value, coordinate),
-      ),
-    )
-    .sort((left, right) => {
-      const priority = terminalReachPriority(right.node) - terminalReachPriority(left.node);
-      return priority || left.index - right.index;
-    });
-  return suffixCandidates[0] ? nodeMatch(suffixCandidates[0].node) : null;
+function shouldReplaceCandidate(
+  current: CoordinateNodeCandidate | undefined,
+  candidate: CoordinateNodeCandidate,
+) {
+  return !current || candidate.priority > current.priority;
 }
 
-function reachFromNode(
-  node: GraphNode | undefined,
+function buildCoordinateNodeIndex(
+  graph: InspectResponse,
+  descendantIds: Set<string>,
+  activeByKey: Map<string, GraphCoordinate>,
+) {
+  const descendants = graph.nodes
+    .filter((node) => descendantIds.has(node.id))
+    .map((node): CoordinateNodeCandidate => ({
+      node,
+      priority: terminalReachPriority(node),
+    }));
+  const exactCandidateByKey = new Map<string, CoordinateNodeCandidate>();
+  const reachByNodeId = new Map<string, ParsedTerminalReach>();
+
+  for (const candidate of descendants) {
+    const reach = parseTerminalReachDetails(candidate.node.details);
+    if (!reach) {
+      continue;
+    }
+    reachByNodeId.set(candidate.node.id, reach);
+    const key = coordinateKey(reach.position);
+    if (
+      activeByKey.has(key) &&
+      shouldReplaceCandidate(exactCandidateByKey.get(key), candidate)
+    ) {
+      exactCandidateByKey.set(key, candidate);
+    }
+  }
+
+  const unmatchedCoordinates = [...activeByKey.entries()].filter(
+    ([key]) => !exactCandidateByKey.has(key),
+  );
+  const suffixCandidateByKey = new Map<string, CoordinateNodeCandidate>();
+  for (const candidate of descendants) {
+    const matchValues = [candidate.node.id, candidate.node.path, candidate.node.label];
+    for (const [key, coordinate] of unmatchedCoordinates) {
+      if (
+        matchValues.some((value) =>
+          textMatchesCoordinateSuffix(value, coordinate),
+        ) &&
+        shouldReplaceCandidate(suffixCandidateByKey.get(key), candidate)
+      ) {
+        suffixCandidateByKey.set(key, candidate);
+      }
+    }
+  }
+
+  const nodeByCoordinateKey = new Map<string, GraphNode>();
+  for (const key of activeByKey.keys()) {
+    const candidate = exactCandidateByKey.get(key) ?? suffixCandidateByKey.get(key);
+    if (candidate) {
+      nodeByCoordinateKey.set(key, candidate.node);
+    }
+  }
+  return { nodeByCoordinateKey, reachByNodeId };
+}
+
+function reachFromDetails(
+  reach: ParsedTerminalReach | undefined,
   activeCoordinateKeys: Set<string>,
   capacity: ClusterCapacity,
 ): Cluster3DReach | null {
-  if (!node) {
-    return null;
-  }
-  const reach = parseTerminalReachDetails(node.details);
   if (!reach || reach.connections.length === 0) {
     return null;
   }
@@ -311,7 +336,11 @@ export function buildCluster3DSceneModel({
   const activeByKey = new Map([...inspectionByKey, ...recentAddedByKey]);
   const activeCoordinateKeys = new Set(activeByKey.keys());
   const descendantIds = descendantNodeIds(graph, clusterNode.id);
-  const nodesById = graphNodesById(graph);
+  const { nodeByCoordinateKey, reachByNodeId } = buildCoordinateNodeIndex(
+    graph,
+    descendantIds,
+    activeByKey,
+  );
 
   const activeCells = [...activeByKey.entries()]
     .map(([key, coordinate]): Cluster3DCell => {
@@ -321,9 +350,14 @@ export function buildCluster3DSceneModel({
         : isInsideInitialArea(coordinate, initial, initialStart)
           ? "initial"
           : "grown";
-      const match = resolveCoordinateNode(graph, descendantIds, coordinate);
-      const reach = match
-        ? reachFromNode(nodesById.get(match.nodeId), activeCoordinateKeys, capacityBounds)
+      const matchedNode = nodeByCoordinateKey.get(key);
+      const match = matchedNode ? nodeMatch(matchedNode) : null;
+      const reach = matchedNode
+        ? reachFromDetails(
+            reachByNodeId.get(matchedNode.id),
+            activeCoordinateKeys,
+            capacityBounds,
+          )
         : null;
 
       return {

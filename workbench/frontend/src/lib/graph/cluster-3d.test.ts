@@ -329,4 +329,45 @@ describe("buildCluster3DSceneModel", () => {
       nodeType: "Neuron",
     });
   });
+
+  it("prefers exact reach metadata over a higher-priority suffix match", () => {
+    const scene = buildCluster3DSceneModel({
+      graph: graph(
+        [
+          node("model.cluster", {
+            typeName: "NeuronCluster",
+            details: {
+              cluster: {
+                capacity: [1, 1, 1],
+                coordinates: [[1, 1, 1]],
+              },
+            },
+          }),
+          node("model.cluster.neuron_1_1_1", {
+            typeName: "Neuron",
+            path: "model.cluster.neuron_1_1_1",
+          }),
+          node("exact-terminal", {
+            typeName: "Terminal",
+            details: {
+              terminalReach: {
+                position: [1, 1, 1],
+                connections: [[1, 1, 1]],
+              },
+            },
+          }),
+        ],
+        [
+          ["model.cluster", "model.cluster.neuron_1_1_1"],
+          ["model.cluster", "exact-terminal"],
+        ],
+      ),
+      selectedNodeId: "model.cluster",
+    });
+
+    expect(scene?.activeCells[0]?.nodeMatch).toMatchObject({
+      nodeId: "exact-terminal",
+      nodeType: "Terminal",
+    });
+  });
 });
