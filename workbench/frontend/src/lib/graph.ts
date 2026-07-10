@@ -48,6 +48,7 @@ export {
   detailText,
   formatCompactCount,
   formatExactCount,
+  formatGraphCoordinate,
   formatModelSize,
   graphNodeHeight,
   nodeDimsText,

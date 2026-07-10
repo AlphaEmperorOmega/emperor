@@ -4,6 +4,7 @@ import {
   deriveTrainingSearchLockSummary,
   effectiveUnlockedTrainingSearch,
   estimatePlannedRuns,
+  formatTrainingSearchList,
   unlockedSearchAxes,
   validateTrainingSearch,
   type TrainingSearchState,
@@ -40,6 +41,13 @@ const axes: SearchAxis[] = [
 ];
 
 describe("training search lock handling", () => {
+  it("formats domain lists with stable conjunction grammar", () => {
+    expect(formatTrainingSearchList([])).toBe("");
+    expect(formatTrainingSearchList(["A"])).toBe("A");
+    expect(formatTrainingSearchList(["A", "B"])).toBe("A and B");
+    expect(formatTrainingSearchList(["A", "B", "C"])).toBe("A, B, and C");
+  });
+
   it("treats all axes as all unlocked axes", () => {
     expect(unlockedSearchAxes(axes).map((axis) => axis.key)).toEqual([
       "hidden_dim",

@@ -22,6 +22,8 @@ import {
   surfacePanelClassName,
 } from "@/components/ui/surface-panel";
 import {
+  configSnapshotOverrideCount,
+  configSnapshotOverrideCountLabel,
   configSnapshotOverrideEntries,
   draftMatchesConfigSnapshot,
   validateConfigSnapshotCandidate,
@@ -33,10 +35,6 @@ import {
 import { type ConfigField } from "@/lib/api";
 import { type OverrideValues } from "@/lib/config";
 import { cn } from "@/lib/utils";
-
-function overrideCountLabel(count: number) {
-  return `${count} override${count === 1 ? "" : "s"}`;
-}
 
 function SnapshotOverrideSummary({ overrides }: { overrides: OverrideValues }) {
   const entries = Object.entries(overrides);
@@ -192,7 +190,7 @@ export function AddConfigSnapshotDialog({
         icon={<SlidersHorizontal className="h-[15px] w-[15px] text-violet" aria-hidden />}
         className="gap-2 p-3"
         title="Changed fields"
-        detail={<Badge>{overrideCountLabel(entries.length)}</Badge>}
+        detail={<Badge>{configSnapshotOverrideCountLabel(entries.length)}</Badge>}
       >
         {entries.length > 0 ? (
           <div className="grid max-h-40 gap-1.5 overflow-y-auto pr-1">
@@ -401,7 +399,7 @@ export function ConfigSnapshotsTray({
                 <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
                   {group.snapshots.map((snapshot) => {
                     const isEditing = editingId === snapshot.id;
-                    const overrideCount = Object.keys(snapshot.overrides).length;
+                    const overrideCount = configSnapshotOverrideCount(snapshot);
                     const isIncluded = selectedTrainingSnapshotIds.includes(
                       snapshot.id,
                     );
@@ -439,7 +437,7 @@ export function ConfigSnapshotsTray({
                                   {snapshot.name}
                                 </span>
                                 <span className="font-mono text-xs text-ink-faint">
-                                  {snapshot.preset} · {overrideCountLabel(overrideCount)}
+                                  {snapshot.preset} · {configSnapshotOverrideCountLabel(overrideCount)}
                                 </span>
                               </div>
                             </div>

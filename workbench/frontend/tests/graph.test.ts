@@ -4,6 +4,7 @@ import {
   detailText,
   formatCompactCount,
   formatExactCount,
+  formatGraphCoordinate,
   formatModelSize,
   nodeDimsText,
   nodeBadges,
@@ -199,6 +200,10 @@ describe("nodeDetailEntries", () => {
 });
 
 describe("parameter count formatting", () => {
+  it("formats exact graph coordinates", () => {
+    expect(formatGraphCoordinate([2, 3, 4])).toBe("(2, 3, 4)");
+  });
+
   it("formats compact and exact parameter counts", () => {
     expect(formatCompactCount(65800)).toBe("65.8K");
     expect(formatCompactCount(1000000)).toBe("1M");

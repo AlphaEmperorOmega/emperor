@@ -27,7 +27,7 @@ import {
   buildCluster3DSceneModel,
   type Cluster3DCell,
   type Cluster3DSceneModel,
-  type GraphCoordinate,
+  formatGraphCoordinate,
 } from "@/lib/graph";
 import { cn } from "@/lib/utils";
 
@@ -78,10 +78,6 @@ class SceneErrorBoundary extends Component<
     }
     return this.props.children;
   }
-}
-
-function coordinateLabel(coordinate: GraphCoordinate) {
-  return `(${coordinate[0]}, ${coordinate[1]}, ${coordinate[2]})`;
 }
 
 function axisValues(count: number) {
@@ -178,7 +174,7 @@ function CellDetail({
     <div className="rounded-[8px] border border-cyan-200/25 bg-cyan-300/[0.06] p-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-mono text-sm font-bold text-ink">
-          {coordinateLabel(selectedCell.coordinate)}
+          {formatGraphCoordinate(selectedCell.coordinate)}
         </span>
         <StatChip tone="soft">{selectedCell.category}</StatChip>
         {selectedCell.isOverlayOnly && <StatChip tone="soft">growth overlay</StatChip>}
@@ -234,7 +230,7 @@ function Fallback2DPanel({
           <button
             key={cell.key}
             type="button"
-            aria-label={`Select coordinate ${coordinateLabel(cell.coordinate)}`}
+            aria-label={`Select coordinate ${formatGraphCoordinate(cell.coordinate)}`}
             onClick={() => onSelectCell(cell)}
             className={cn(
               "rounded-[8px] border p-2 text-left font-mono text-[11px] transition focus:outline-none focus-visible:ring-2 focus-visible:ring-focus",
@@ -243,7 +239,7 @@ function Fallback2DPanel({
                 : "border-line bg-white/[0.035] text-ink-dim hover:border-cyan-200/35 hover:text-ink",
             )}
           >
-            <span className="block font-bold">{coordinateLabel(cell.coordinate)}</span>
+            <span className="block font-bold">{formatGraphCoordinate(cell.coordinate)}</span>
             <span className="mt-1 block text-[10px] uppercase">{cell.category}</span>
           </button>
         ))}
@@ -294,7 +290,7 @@ function CoordinateList({
                 key={cell.key}
                 type="button"
                 aria-pressed={isSelected}
-                aria-label={`Select coordinate ${coordinateLabel(cell.coordinate)} ${cell.category}`}
+                aria-label={`Select coordinate ${formatGraphCoordinate(cell.coordinate)} ${cell.category}`}
                 onClick={() => onSelectCell(cell)}
                 className={cn(
                   "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-[7px] border px-2.5 py-2 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-focus",
@@ -304,7 +300,7 @@ function CoordinateList({
                 )}
               >
                 <span className="font-mono text-[11px] font-bold">
-                  {coordinateLabel(cell.coordinate)}
+                  {formatGraphCoordinate(cell.coordinate)}
                 </span>
                 <span className="rounded-[6px] border border-line-soft px-1.5 py-0.5 text-[10px] uppercase">
                   {cell.category}

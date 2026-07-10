@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   buildConfigSnapshotRunPlan,
+  configSnapshotOverrideCount,
+  configSnapshotOverrideCountLabel,
   configSnapshotOverrideEntries,
   createConfigSnapshot,
   validateConfigSnapshotCandidate,
@@ -202,6 +204,18 @@ function makeSnapshot(overrides: Record<string, string>, name = "snapshot") {
 }
 
 describe("config snapshots", () => {
+  it("counts and labels snapshot overrides", () => {
+    const snapshot = makeSnapshot(
+      { hidden_dim: "128", num_layers: "4" },
+      "counted",
+    );
+
+    expect(configSnapshotOverrideCount(snapshot)).toBe(2);
+    expect(configSnapshotOverrideCountLabel(0)).toBe("0 overrides");
+    expect(configSnapshotOverrideCountLabel(1)).toBe("1 override");
+    expect(configSnapshotOverrideCountLabel(2)).toBe("2 overrides");
+  });
+
   it("rejects default-equivalent snapshots", () => {
     const result = createConfigSnapshot({
       id: "snap-default",

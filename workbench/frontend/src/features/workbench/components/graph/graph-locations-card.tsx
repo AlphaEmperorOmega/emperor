@@ -14,13 +14,10 @@ import {
   type GraphCoordinate,
   buildClusterLocationSummary,
   formatExactCount,
+  formatGraphCoordinate,
 } from "@/lib/graph";
 import { type InspectResponse } from "@/lib/api";
 import { cn } from "@/lib/utils";
-
-function coordinateLabel(coordinate: GraphCoordinate) {
-  return `(${coordinate[0]}, ${coordinate[1]}, ${coordinate[2]})`;
-}
 
 function StatText({ children }: { children: ReactNode }) {
   return <StatChip tone="soft">{children}</StatChip>;
@@ -35,7 +32,7 @@ function CoordinateChip({
   label: string;
   onClick: () => void;
 }) {
-  const text = coordinateLabel(coordinate);
+  const text = formatGraphCoordinate(coordinate);
 
   return (
     <button
@@ -101,7 +98,7 @@ function LocationSummarySection({
             <CoordinateChip
               key={`${coordinate.join(",")}-${index}`}
               coordinate={coordinate}
-              label={`Reveal ${summary.nodePath} coordinate ${coordinateLabel(coordinate)}`}
+              label={`Reveal ${summary.nodePath} coordinate ${formatGraphCoordinate(coordinate)}`}
               onClick={revealNode}
             />
           ))}

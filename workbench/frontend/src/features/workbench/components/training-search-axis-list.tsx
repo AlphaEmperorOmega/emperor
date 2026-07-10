@@ -4,6 +4,7 @@ import { type ConfigValue, type SearchAxis } from "@/lib/api";
 import {
   configValueKey,
   configValueLabel,
+  formatTrainingSearchList,
   type TrainingSearchState,
 } from "@/lib/training-search";
 import { valueIsSelected } from "@/lib/selection";
@@ -13,19 +14,6 @@ import { workbenchStatusCopy } from "@/features/workbench/components/shared/stat
 
 function selectedValueCount(axis: SearchAxis, search: TrainingSearchState) {
   return search.selectedValues[axis.key]?.length ?? 0;
-}
-
-function formatList(values: string[]) {
-  if (values.length === 0) {
-    return "";
-  }
-  if (values.length === 1) {
-    return values[0];
-  }
-  if (values.length === 2) {
-    return `${values[0]} and ${values[1]}`;
-  }
-  return `${values.slice(0, -1).join(", ")}, and ${values.at(-1)}`;
 }
 
 export function TrainingSearchAxisList({
@@ -102,7 +90,7 @@ export function TrainingSearchAxisList({
                     ? `Locked value: ${configValueLabel(axis.lockedValue ?? null)}`
                     : "Preset-owned axis"}
                   {lockedByPresets.length > 0
-                    ? ` by ${formatList(lockedByPresets)}`
+                    ? ` by ${formatTrainingSearchList(lockedByPresets)}`
                     : ""}
                   .
                 </div>

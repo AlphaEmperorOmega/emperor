@@ -48,7 +48,7 @@ function uniqueStrings(values: string[]) {
   return Array.from(new Set(values.filter((value) => value.length > 0)));
 }
 
-function formatList(values: string[]) {
+export function formatTrainingSearchList(values: string[]) {
   if (values.length === 0) {
     return "";
   }
@@ -174,11 +174,11 @@ export function deriveTrainingSearchLockSummary(
   const lockedAxisWord = lockedAxes.length === 1 ? "axis" : "axes";
   const lockedPresetText =
     lockedPresetLabels.length > 0
-      ? ` for ${formatList(lockedPresetLabels)}`
+      ? ` for ${formatTrainingSearchList(lockedPresetLabels)}`
       : "";
   const lockedLabelText =
     lockedAxisLabels.length > 0 && lockedAxisLabels.length <= 3
-      ? `: ${formatList(lockedAxisLabels)}`
+      ? `: ${formatTrainingSearchList(lockedAxisLabels)}`
       : "";
   const lockedAxesMessage =
     lockedAxes.length > 0

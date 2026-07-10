@@ -1,6 +1,7 @@
 import { type GraphNode } from "@/lib/api";
 import { SEMANTIC_LABEL_TYPE_NAMES } from "@/lib/graph/constants";
 import { lastPathSegment } from "@/lib/graph/helpers";
+import { type GraphCoordinate } from "@/lib/graph/types";
 
 const exactCountFormatter = new Intl.NumberFormat("en-US");
 const bytesPerMegabyte = 1024 * 1024;
@@ -34,6 +35,10 @@ export function nodeDetailEntryText(entry: NodeDetailEntry) {
 
 export function formatExactCount(count: number) {
   return exactCountFormatter.format(count);
+}
+
+export function formatGraphCoordinate(coordinate: GraphCoordinate) {
+  return `(${coordinate[0]}, ${coordinate[1]}, ${coordinate[2]})`;
 }
 
 export function formatCompactCount(count: number) {

@@ -22,7 +22,11 @@ import { SurfacePanel } from "@/components/ui/surface-panel";
 import { ViewModeButton } from "@/features/workbench/components/view-mode-button";
 import { workbenchStatusCopy } from "@/features/workbench/components/shared/status-copy";
 import { type Dataset, type MonitorOption } from "@/lib/api";
-import { type ConfigSnapshot } from "@/lib/config-snapshots";
+import {
+  configSnapshotOverrideCount,
+  configSnapshotOverrideCountLabel,
+  type ConfigSnapshot,
+} from "@/lib/config-snapshots";
 
 type SelectOption = {
   value: string;
@@ -36,10 +40,6 @@ const defaultFieldLabelClass =
   "text-xs font-semibold tracking-[0.02em] text-ink-dim";
 const fieldLabelWithIconClass = `${defaultFieldLabelClass} inline-flex items-center gap-1.5`;
 const inlineFieldIconClass = "h-3.5 w-3.5 text-violet";
-
-function overrideCountLabel(count: number) {
-  return `${count} override${count === 1 ? "" : "s"}`;
-}
 
 export function TrainingTargetDatasetPanel({
   modelTypeOptions = [],
@@ -158,11 +158,11 @@ export function TrainingTargetDatasetPanel({
       : undefined,
   }));
   const trainingSnapshotOptions = configSnapshots.map((snapshot) => {
-    const overrideCount = Object.keys(snapshot.overrides).length;
+    const overrideCount = configSnapshotOverrideCount(snapshot);
     return {
       value: snapshot.id,
       label: snapshot.name,
-      description: `${snapshot.preset} · ${overrideCountLabel(overrideCount)}`,
+      description: `${snapshot.preset} · ${configSnapshotOverrideCountLabel(overrideCount)}`,
       meta: <span>{snapshot.preset}</span>,
       actions: disabled
         ? undefined

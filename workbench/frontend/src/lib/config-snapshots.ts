@@ -44,6 +44,16 @@ export type ConfigSnapshotCreateResult =
   | { ok: true; snapshot: ConfigSnapshot }
   | { ok: false; error: string };
 
+export function configSnapshotOverrideCount(
+  snapshot: Pick<ConfigSnapshot, "overrides">,
+) {
+  return Object.keys(snapshot.overrides).length;
+}
+
+export function configSnapshotOverrideCountLabel(count: number) {
+  return `${count} override${count === 1 ? "" : "s"}`;
+}
+
 function displayValueForField(field: ConfigField, value: string) {
   return field.nullable && value === "" ? "None" : value;
 }
