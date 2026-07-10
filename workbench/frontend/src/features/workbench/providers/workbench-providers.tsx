@@ -276,6 +276,7 @@ export type WorkbenchProvidersProps = {
   /** Wired to the logs workspace so a new job's folder appears in its run list. */
   onJobStarted?: (logFolder: string) => void;
   activeWorkspace?: WorkbenchWorkspace;
+  snapshotLibraryEnabled?: boolean;
   children: ReactNode;
 };
 
@@ -286,12 +287,14 @@ export type WorkbenchProvidersProps = {
  */
 export function WorkbenchProviders({
   activeWorkspace,
+  snapshotLibraryEnabled,
   onJobStarted,
   children,
 }: WorkbenchProvidersProps) {
   const { target, graph, history, activeJob, graphMonitor, apiConnection } =
     useWorkbenchState({
       activeWorkspace,
+      snapshotLibraryEnabled,
       onJobStarted,
     });
   const targetSlices = useTargetContextSlices(target);

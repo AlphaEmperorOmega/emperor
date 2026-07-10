@@ -149,19 +149,21 @@ export function PreviewPanel() {
         </div>
       )}
       <div className="relative h-full min-h-0 overflow-hidden">
-        <GraphPreviewPanel
-          graph={graphForDetail}
-          minimapGraph={graph}
-          nodes={nodes}
-          edges={edges}
-          selectedNodeId={selectedNodeId}
-          hasSelectedClusterNode={hasSelectedClusterNode}
-          cluster3dNodeId={cluster3dNodeId}
-          parameterActivityMinimap={parameterActivityMinimap}
-          onSelectNode={onSelectNode}
-          onRevealNode={onRevealNode}
-          onOpenCluster3d={openCluster3d}
-        />
+        {hasPreviewGraph && (
+          <GraphPreviewPanel
+            graph={graphForDetail}
+            minimapGraph={graph}
+            nodes={nodes}
+            edges={edges}
+            selectedNodeId={selectedNodeId}
+            hasSelectedClusterNode={hasSelectedClusterNode}
+            cluster3dNodeId={cluster3dNodeId}
+            parameterActivityMinimap={parameterActivityMinimap}
+            onSelectNode={onSelectNode}
+            onRevealNode={onRevealNode}
+            onOpenCluster3d={openCluster3d}
+          />
+        )}
         {!hasPreviewGraph && !isPreviewBuilding && !isPreviewError && (
           <EmptyState
             title={workbenchStatusCopy.empty.graph}

@@ -2,6 +2,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  deferred,
   installFetchMock,
   inspectResponse,
   locationInspectResponse,
@@ -22,6 +23,21 @@ import {
 
 describe("WorkbenchApp Graph Workspace", () => {
   beforeEach(resetWorkbenchAppTestState);
+
+  it("does not mount the graph canvas before inspected graph data exists", async () => {
+    const pendingInspection = deferred<unknown>();
+    installFetchMock({
+      inspectResponseFactory: () => pendingInspection.promise,
+    });
+    renderWorkbench();
+
+    expect(await screen.findByText("building")).toBeInTheDocument();
+    expect(screen.queryByTestId("flow")).not.toBeInTheDocument();
+
+    pendingInspection.resolve(inspectResponse);
+
+    expect(await screen.findByTestId("flow")).toBeInTheDocument();
+  });
 
   it("renders graph nodes progressively by default", async () => {
     installFetchMock();

@@ -30,6 +30,7 @@ export type WorkbenchStateOptions = {
   /** Notifies the logs workspace when a training job starts writing to a folder. */
   onJobStarted?: (logFolder: string) => void;
   activeWorkspace?: WorkbenchWorkspace;
+  snapshotLibraryEnabled?: boolean;
 };
 
 function targetConfigCascadeRules(
@@ -119,6 +120,7 @@ export function useWorkbenchState(options: WorkbenchStateOptions = {}) {
   const {
     onJobStarted,
     activeWorkspace = "model",
+    snapshotLibraryEnabled = false,
   } = options;
 
   const graphPreview = useGraphPreviewController();
@@ -128,7 +130,11 @@ export function useWorkbenchState(options: WorkbenchStateOptions = {}) {
     [graphPreview, historicalRunSelection],
   );
 
-  const targetConfig = useTargetConfigState(cascadeRules);
+  const targetConfig = useTargetConfigState({
+    ...cascadeRules,
+    activeWorkspace,
+    snapshotLibraryEnabled,
+  });
   const { selectedModel } = targetConfig.selection;
   const { selectedExperimentTask, selectedModelType } = targetConfig.target;
 

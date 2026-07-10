@@ -1,6 +1,7 @@
+import dynamic from "next/dynamic";
 import { Hash } from "lucide-react";
-import { SelectedNodeDetails } from "@/features/workbench/components/graph/selected-node-details";
 import { MetricCard } from "@/features/workbench/components/shared/metric-card";
+import { InlineStatus } from "@/features/workbench/components/shared/inline-status";
 import { SidePanel } from "@/features/workbench/components/shared/side-panel";
 import {
   useActiveTrainingJob,
@@ -8,6 +9,19 @@ import {
   useHistoricalRuns,
 } from "@/features/workbench/providers/workbench-providers";
 import { formatCompactCount, formatExactCount } from "@/lib/graph";
+
+const SelectedNodeDetails = dynamic(
+  () =>
+    import(
+      "@/features/workbench/components/graph/selected-node-details"
+    ).then((module) => module.SelectedNodeDetails),
+  {
+    ssr: false,
+    loading: () => (
+      <InlineStatus className="rounded-[16px]">Loading node details</InlineStatus>
+    ),
+  },
+);
 
 export function NodeDetailsPanel() {
   const {
@@ -43,18 +57,22 @@ export function NodeDetailsPanel() {
         ) : undefined
       }
     >
-      <SelectedNodeDetails
-        node={selectedNode}
-        monitorNode={selectedMonitorNode}
-        comparisonCandidateGroups={selectedMonitorComparisonCandidateGroups}
-        activeTrainingJob={activeTrainingJob}
-        historicalRuns={historicalRuns}
-        historicalExperiment={historicalExperiment}
-        historicalDataset={historicalDataset}
-        historicalPreset={historicalPreset}
-        historicalRunHasMonitorTags={historicalRunHasMonitorTags}
-        historicalRunTagsLoading={historicalRunTagsLoading}
-      />
+      {selectedNode ? (
+        <SelectedNodeDetails
+          node={selectedNode}
+          monitorNode={selectedMonitorNode}
+          comparisonCandidateGroups={selectedMonitorComparisonCandidateGroups}
+          activeTrainingJob={activeTrainingJob}
+          historicalRuns={historicalRuns}
+          historicalExperiment={historicalExperiment}
+          historicalDataset={historicalDataset}
+          historicalPreset={historicalPreset}
+          historicalRunHasMonitorTags={historicalRunHasMonitorTags}
+          historicalRunTagsLoading={historicalRunTagsLoading}
+        />
+      ) : (
+        <InlineStatus className="rounded-[16px]">No node selected</InlineStatus>
+      )}
     </SidePanel>
   );
 }

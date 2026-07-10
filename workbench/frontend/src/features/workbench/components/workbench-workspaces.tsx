@@ -1,8 +1,4 @@
 import dynamic from "next/dynamic";
-import { FullConfigDialog } from "@/features/workbench/components/config/full-config-dialog";
-import { ConnectedTrainingWorkspace } from "@/features/workbench/components/connected-training-panel";
-import { ApiConnectionDialog } from "@/features/workbench/components/screen/api-connection-dialog";
-import { ImportLogsDialog } from "@/features/workbench/components/screen/import-logs-dialog";
 import { NodeDetailsPanel } from "@/features/workbench/components/screen/node-details-panel";
 import { PreviewPanel } from "@/features/workbench/components/screen/preview-panel";
 import { PreviewToolbar } from "@/features/workbench/components/screen/preview-toolbar";
@@ -16,6 +12,50 @@ import {
   type WorkbenchDialogControls,
 } from "@/features/workbench/state/use-workbench-workspace-shell";
 import { type WorkbenchWorkspace } from "@/types/workbench";
+
+function TrainingWorkspaceLoadingFallback() {
+  return (
+    <div
+      className="grid h-full min-h-[560px] place-items-center lg:min-h-0"
+      role="status"
+      aria-label="Loading training workspace"
+    >
+      <span className="text-xs text-ink-faint">Loading training workspace</span>
+    </div>
+  );
+}
+
+const ConnectedTrainingWorkspace = dynamic(
+  () =>
+    import("@/features/workbench/components/connected-training-panel").then(
+      (module) => module.ConnectedTrainingWorkspace,
+    ),
+  {
+    ssr: false,
+    loading: TrainingWorkspaceLoadingFallback,
+  },
+);
+const FullConfigDialog = dynamic(
+  () =>
+    import("@/features/workbench/components/config/full-config-dialog").then(
+      (module) => module.FullConfigDialog,
+    ),
+  { ssr: false },
+);
+const ApiConnectionDialog = dynamic(
+  () =>
+    import(
+      "@/features/workbench/components/screen/api-connection-dialog"
+    ).then((module) => module.ApiConnectionDialog),
+  { ssr: false },
+);
+const ImportLogsDialog = dynamic(
+  () =>
+    import("@/features/workbench/components/screen/import-logs-dialog").then(
+      (module) => module.ImportLogsDialog,
+    ),
+  { ssr: false },
+);
 
 const FeatureListDialog = dynamic(
   () =>

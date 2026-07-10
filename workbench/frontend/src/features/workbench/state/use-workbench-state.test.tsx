@@ -1161,7 +1161,7 @@ describe("useWorkbenchState", () => {
   });
 
   it("settles the auto-selected training preset without an update loop", async () => {
-    const { result } = renderWorkbenchState();
+    const { result } = renderWorkbenchState({ activeWorkspace: "training" });
 
     await waitFor(() => {
       expect(result.current.target.selectedModel).toBe("linear");
@@ -1173,7 +1173,7 @@ describe("useWorkbenchState", () => {
   it("auto-selects the first public model type and calls APIs with split identity", async () => {
     mockPublicModelCatalog();
 
-    const { result } = renderWorkbenchState();
+    const { result } = renderWorkbenchState({ activeWorkspace: "training" });
 
     await waitFor(() => {
       expect(result.current.target.selectedModelType).toBe("linears");

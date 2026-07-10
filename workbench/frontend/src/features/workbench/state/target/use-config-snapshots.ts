@@ -92,10 +92,11 @@ export function useConfigSnapshots(identity: ModelIdentity) {
   };
 }
 
-export function useConfigSnapshotLibrary() {
+export function useConfigSnapshotLibrary({ enabled = true } = {}) {
   const query = useQuery({
     queryKey: workbenchQueryKeys.configSnapshotLibrary(),
-    queryFn: fetchConfigSnapshotLibrary,
+    queryFn: ({ signal }) => fetchConfigSnapshotLibrary({ signal }),
+    enabled,
     retry: false,
   });
 

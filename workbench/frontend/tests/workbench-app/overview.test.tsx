@@ -39,6 +39,42 @@ function deferred<T>() {
 describe("WorkbenchApp Overview", () => {
   beforeEach(resetWorkbenchAppTestState);
 
+  it("keeps preset-mode cold start free of unrelated workspace requests", async () => {
+    const { fetchMock } = installFetchMock();
+    renderWorkbench();
+    const user = userEvent.setup();
+
+    await waitForTargetValue("preset", "baseline");
+    await screen.findByTestId("flow");
+
+    const requestPaths = fetchMock.mock.calls.map(([input]) => {
+      const url = new URL(String(input));
+      return `${url.pathname}${url.search}`;
+    });
+    expect(requestPaths.some((path) => path.startsWith("/logs/runs"))).toBe(false);
+    expect(requestPaths.some((path) => path.includes("/search-space"))).toBe(false);
+    expect(requestPaths).not.toContain("/config-snapshots/library");
+
+    const identicalRequestCounts = new Map<string, number>();
+    for (const path of requestPaths) {
+      identicalRequestCounts.set(path, (identicalRequestCounts.get(path) ?? 0) + 1);
+    }
+    expect(
+      Array.from(identicalRequestCounts.entries()).filter(([, count]) => count > 1),
+    ).toEqual([]);
+    expect(requestPaths.length).toBeLessThanOrEqual(9);
+
+    await user.click(screen.getByRole("button", { name: /open full config/i }));
+    await screen.findByRole("dialog", { name: /full config/i });
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([input]) =>
+          String(input).endsWith("/config-snapshots/library"),
+        ),
+      ).toBe(true);
+    });
+  });
+
   it("renders model and preset selectors from API data", async () => {
     installFetchMock();
     renderWorkbench();

@@ -230,7 +230,7 @@ export function useTargetConfigState({
   const {
     query: configSnapshotLibraryQuery,
     snapshots: configSnapshotLibrary,
-  } = useConfigSnapshotLibrary();
+  } = useConfigSnapshotLibrary({ enabled: snapshotLibraryEnabled });
   const createSnapshotRecord = createSnapshotMutation.mutate;
   const renameSnapshotRecord = renameSnapshotMutation.mutate;
   const updateSnapshotRecord = updateSnapshotMutation.mutate;
@@ -268,6 +268,7 @@ export function useTargetConfigState({
     selectedTrainingModel,
     selectedTrainingPrimaryPreset,
     selectedTrainingPresets,
+    { includeSearchSpace: activeWorkspace === "training" },
   );
   const capabilities = capabilitiesQuery.data ?? LOCAL_DEFAULT_CAPABILITIES;
   const models = modelsQuery.data?.models ?? EMPTY_MODEL_IDS;

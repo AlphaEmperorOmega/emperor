@@ -101,5 +101,3 @@ export function ConnectedTrainingWorkspace({
 
   return <TrainingPanel viewModel={viewModel} />;
 }
-
-export const ConnectedTrainingPanel = ConnectedTrainingWorkspace;

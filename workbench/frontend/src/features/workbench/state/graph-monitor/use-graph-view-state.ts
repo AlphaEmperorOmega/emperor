@@ -15,12 +15,19 @@ import {
   filterGraphByExpansion,
 } from "@/lib/graph";
 
-// The dagre-backed layout is the only first-load dependency on `dagre`. Load it
-// lazily (on mount, in parallel with everything else) so `dagre` stays out of
-// the initial bundle. It resolves long before a model is inspected, so the graph
-// canvas still renders with laid-out nodes; until then the layout is empty.
+// The dagre-backed layout is loaded only after graph data exists. Keeping the
+// promise at module scope deduplicates imports when graph state changes while
+// the layout chunk is in flight.
 type LayoutGraphFn = typeof import("@/lib/graph/layout").layoutGraph;
 const EMPTY_GRAPH_LAYOUT: ReturnType<LayoutGraphFn> = { nodes: [], edges: [] };
+let layoutGraphPromise: Promise<LayoutGraphFn> | null = null;
+
+function loadLayoutGraph() {
+  layoutGraphPromise ??= import("@/lib/graph/layout").then(
+    (module) => module.layoutGraph,
+  );
+  return layoutGraphPromise;
+}
 
 type GraphViewStateOptions = {
   canOpenMonitor?: (node: GraphNode) => boolean;
@@ -250,17 +257,21 @@ export function useGraphViewState(
   );
 
   const [layoutGraph, setLayoutGraph] = useState<LayoutGraphFn | null>(null);
+  const hasGraphToLayout = Boolean(graphForDisplay?.nodes.length);
   useEffect(() => {
+    if (!hasGraphToLayout || layoutGraph) {
+      return;
+    }
     let active = true;
-    void import("@/lib/graph/layout").then((module) => {
+    void loadLayoutGraph().then((loadedLayoutGraph) => {
       if (active) {
-        setLayoutGraph(() => module.layoutGraph);
+        setLayoutGraph(() => loadedLayoutGraph);
       }
     });
     return () => {
       active = false;
     };
-  }, []);
+  }, [hasGraphToLayout, layoutGraph]);
 
   // Structural layout pass: runs the dagre layout. Deliberately excludes
   // selectedNodeId so that selecting a node does NOT trigger a relayout. The

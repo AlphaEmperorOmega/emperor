@@ -10,7 +10,10 @@ export function WorkbenchApp() {
   const workspaceShell = useWorkbenchWorkspaceShell();
 
   return (
-    <WorkbenchProviders activeWorkspace={workspaceShell.screen.activeWorkspace}>
+    <WorkbenchProviders
+      activeWorkspace={workspaceShell.screen.activeWorkspace}
+      snapshotLibraryEnabled={workspaceShell.screen.fullConfigDialog.isOpen}
+    >
       <LogsWorkspaceProvider enabled={workspaceShell.screen.activeWorkspace === "logs"}>
         <WorkbenchScreen shell={workspaceShell.screen} />
       </LogsWorkspaceProvider>

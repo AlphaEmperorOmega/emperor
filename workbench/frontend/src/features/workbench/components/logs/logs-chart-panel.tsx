@@ -7,6 +7,7 @@ import {
   RefreshCw,
   RectangleHorizontal,
 } from "lucide-react";
+import dynamic from "next/dynamic";
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,10 +18,6 @@ import { InlineStatus } from "@/features/workbench/components/shared/inline-stat
 import { SurfacePanel } from "@/features/workbench/components/shared/surface-panel";
 import { LogBestRunPanel } from "@/features/workbench/components/logs/log-best-run-panel";
 import { LogConfusionMatrixHeatmaps } from "@/features/workbench/components/logs/log-confusion-matrix-heatmap";
-import {
-  LazyLogScalarChart,
-  LazyLogTrainValidationScalarChart,
-} from "@/features/workbench/components/logs/log-scalar-chart";
 import { LogTestScoresPanel } from "@/features/workbench/components/logs/log-test-scores-panel";
 import { LogValidationExamplesPanel } from "@/features/workbench/components/logs/log-validation-examples-panel";
 import {
@@ -53,6 +50,21 @@ import {
   type LogValidationExampleImage,
 } from "@/features/workbench/state/logs/log-diagnostics";
 import { cn, errorMessage } from "@/lib/utils";
+
+const LazyLogScalarChart = dynamic(
+  () =>
+    import("@/features/workbench/components/logs/log-scalar-chart").then(
+      (module) => module.LazyLogScalarChart,
+    ),
+  { ssr: false },
+);
+const LazyLogTrainValidationScalarChart = dynamic(
+  () =>
+    import("@/features/workbench/components/logs/log-scalar-chart").then(
+      (module) => module.LazyLogTrainValidationScalarChart,
+    ),
+  { ssr: false },
+);
 
 export type ScalarChartGridMode = "full" | "two" | "three";
 
