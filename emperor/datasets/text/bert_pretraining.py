@@ -1,15 +1,15 @@
 import random
-import torch
-import torch.utils.data
-
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from torch import Tensor
+
+import torch
+import torch.utils.data
 from tokenizers import Tokenizer
 from tokenizers.models import WordPiece
 from tokenizers.normalizers import BertNormalizer
 from tokenizers.pre_tokenizers import BertPreTokenizer
 from tokenizers.trainers import WordPieceTrainer
+from torch import Tensor
 from torchtext.datasets import PennTreebank as PennTreebankDataset
 from torchtext.datasets import WikiText2 as WikiText2Dataset
 
@@ -23,7 +23,6 @@ from emperor.datasets.text.vocabulary import (
     BertSpecialTokenIds,
     get_bert_special_token_ids,
 )
-
 
 BERT_PRETRAINING_TARGET_VOCAB_SIZE = 30522
 
