@@ -1,3 +1,4 @@
+from emperor.base.layer.residual import ResidualConnectionOptions
 from emperor.base.options import BaseOptions, LayerNormPositionOptions
 from emperor.datasets.text.bert_pretraining import PennTreebankBertPretraining
 from emperor.embedding.absolute.core.config import (
@@ -11,14 +12,14 @@ from emperor.experiments.base import (
 )
 
 import models.bert.linear.config as config
-from models.bert._builder_adapter import linear_builder_kwargs_from_flat
+import models.bert.linear.dataset_options as dataset_options
 from models.bert.linear.config_builder import (
     BertLinearConfigBuilder,
 )
 from models.bert.linear.model import Model
+from models.bert.linear.runtime_defaults import runtime_from_flat
 
 
-import models.bert.linear.dataset_options as dataset_options
 class ExperimentPreset(BaseOptions):
     BASELINE = 1
     PRE_NORM = 2
@@ -41,6 +42,13 @@ class ExperimentPreset(BaseOptions):
     RECURRENT_GATING_MEMORY = 19
     RECURRENT_HALTING_MEMORY = 20
     RECURRENT_GATING_HALTING_MEMORY = 21
+    RESIDUAL = 22
+    RESIDUAL_POST_NORM = 23
+    RESIDUAL_GATING = 24
+    RESIDUAL_HALTING = 25
+    RESIDUAL_MEMORY = 26
+    RECURRENT_RESIDUAL = 27
+    RECURRENT_POST_NORM = 28
 
 
 _PRESET_DEFINITIONS = {
@@ -54,15 +62,19 @@ _PRESET_DEFINITIONS = {
         preset_values={
             "layer_norm_position": LayerNormPositionOptions.BEFORE,
         },
-        description="Default config with layer normalization applied before each encoder "
-        "sub-block.",
+        description=(
+            "Default config with layer normalization applied before each encoder "
+            "sub-block."
+        ),
     ),
     ExperimentPreset.POST_NORM: PresetDefinition(
         preset_values={
             "layer_norm_position": LayerNormPositionOptions.AFTER,
         },
-        description="Default config with layer normalization applied after each encoder "
-        "sub-block.",
+        description=(
+            "Default config with layer normalization applied after each encoder "
+            "sub-block."
+        ),
     ),
     ExperimentPreset.SINUSOIDAL: PresetDefinition(
         preset_values={
@@ -102,7 +114,9 @@ _PRESET_DEFINITIONS = {
             "stack_gate_flag": True,
             "stack_halting_flag": True,
         },
-        description="Default config with both encoder-block gating and halting enabled.",
+        description=(
+            "Default config with both encoder-block gating and halting enabled."
+        ),
     ),
     ExperimentPreset.MEMORY: PresetDefinition(
         preset_values={
@@ -115,14 +129,18 @@ _PRESET_DEFINITIONS = {
             "stack_gate_flag": True,
             "memory_flag": True,
         },
-        description="Default config with encoder-block gating and shared memory enabled.",
+        description=(
+            "Default config with encoder-block gating and shared memory enabled."
+        ),
     ),
     ExperimentPreset.HALTING_MEMORY: PresetDefinition(
         preset_values={
             "stack_halting_flag": True,
             "memory_flag": True,
         },
-        description="Default config with encoder-block halting and shared memory enabled.",
+        description=(
+            "Default config with encoder-block halting and shared memory enabled."
+        ),
     ),
     ExperimentPreset.GATING_HALTING_MEMORY: PresetDefinition(
         preset_values={
@@ -130,7 +148,9 @@ _PRESET_DEFINITIONS = {
             "stack_halting_flag": True,
             "memory_flag": True,
         },
-        description="Default config with encoder-block gating, halting, and shared memory.",
+        description=(
+            "Default config with encoder-block gating, halting, and shared memory."
+        ),
     ),
     ExperimentPreset.RECURRENT: PresetDefinition(
         preset_values={
@@ -173,7 +193,9 @@ _PRESET_DEFINITIONS = {
             "recurrent_gate_flag": True,
             "memory_flag": True,
         },
-        description="Default recurrent encoder with step-level gating and shared memory.",
+        description=(
+            "Default recurrent encoder with step-level gating and shared memory."
+        ),
     ),
     ExperimentPreset.RECURRENT_HALTING_MEMORY: PresetDefinition(
         preset_values={
@@ -181,7 +203,9 @@ _PRESET_DEFINITIONS = {
             "recurrent_halting_flag": True,
             "memory_flag": True,
         },
-        description="Default recurrent encoder with recurrent halting and shared memory.",
+        description=(
+            "Default recurrent encoder with recurrent halting and shared memory."
+        ),
     ),
     ExperimentPreset.RECURRENT_GATING_HALTING_MEMORY: PresetDefinition(
         preset_values={
@@ -194,6 +218,63 @@ _PRESET_DEFINITIONS = {
             "Default recurrent encoder with step-level gating, recurrent halting, "
             "and shared memory."
         ),
+    ),
+    ExperimentPreset.RESIDUAL: PresetDefinition(
+        preset_values={
+            "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+        },
+        description="Default config with residual skip connections enabled between "
+        "same-width encoder stack layers.",
+    ),
+    ExperimentPreset.RESIDUAL_POST_NORM: PresetDefinition(
+        preset_values={
+            "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+            "layer_norm_position": LayerNormPositionOptions.AFTER,
+        },
+        description="Default config with residual skip connections and post-layer "
+        "normalization enabled.",
+    ),
+    ExperimentPreset.RESIDUAL_GATING: PresetDefinition(
+        preset_values={
+            "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+            "stack_gate_flag": True,
+        },
+        description=(
+            "Default config with residual skip connections and per-layer gating "
+            "enabled."
+        ),
+    ),
+    ExperimentPreset.RESIDUAL_HALTING: PresetDefinition(
+        preset_values={
+            "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+            "stack_halting_flag": True,
+        },
+        description="Default config with residual skip connections and encoder stack "
+        "halting enabled.",
+    ),
+    ExperimentPreset.RESIDUAL_MEMORY: PresetDefinition(
+        preset_values={
+            "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+            "memory_flag": True,
+        },
+        description="Default config with residual skip connections and shared encoder "
+        "stack memory enabled.",
+    ),
+    ExperimentPreset.RECURRENT_RESIDUAL: PresetDefinition(
+        preset_values={
+            "recurrent_flag": True,
+            "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+        },
+        description="Default recurrent config using a residual encoder stack at each "
+        "recurrent step.",
+    ),
+    ExperimentPreset.RECURRENT_POST_NORM: PresetDefinition(
+        preset_values={
+            "recurrent_flag": True,
+            "layer_norm_position": LayerNormPositionOptions.AFTER,
+        },
+        description="Default recurrent config with post-layer normalization enabled "
+        "inside the reused encoder stack.",
     ),
 }
 
@@ -214,8 +295,7 @@ class ExperimentPresets(BuilderBackedExperimentPresetsBase):
         }
 
     def _preset(self, **kwargs):
-        builder_kwargs = linear_builder_kwargs_from_flat(kwargs, config)
-        return self._builder_type(**builder_kwargs).build()
+        return self._builder_type(runtime=runtime_from_flat(kwargs, config)).build()
 
 
 class Experiment(ExperimentBase):
@@ -230,7 +310,9 @@ class Experiment(ExperimentBase):
         return config.NUM_EPOCHS
 
     def _dataset_options(self) -> list:
-        return dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK]
+        return dataset_options.DATASET_OPTIONS_BY_TASK[
+            dataset_options.DEFAULT_EXPERIMENT_TASK
+        ]
 
     def _model_type(self) -> type:
         return Model
