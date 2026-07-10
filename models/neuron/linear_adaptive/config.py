@@ -1,28 +1,41 @@
+# ruff: noqa: E402, F401, E501
+
 from emperor.base.layer.residual import ResidualConnectionOptions
-from models.trainer_config import *  # noqa: F403
-from emperor.base.options import (
-    ActivationOptions,
-    LastLayerBiasOptions,
-    LayerNormPositionOptions,
-)
-from emperor.halting.options import HaltingHiddenStateModeOptions
-from emperor.base.layer.gate import LayerGateOptions
-from emperor.memory.config import (
-    AttentionDynamicMemoryConfig,  # noqa: F401
-    DynamicMemoryConfig,
-    ElementWiseWeightedDynamicMemoryConfig,  # noqa: F401
-    GatedResidualDynamicMemoryConfig,
-    WeightedDynamicMemoryConfig,  # noqa: F401
-)
-from emperor.memory.options import MemoryPositionOptions
-from emperor.augmentations.adaptive_parameters.options import (
-    DynamicDepthOptions,
-    WeightNormalizationOptions,
-    WeightNormalizationPositionOptions,
-    WeightDecayScheduleOptions,
-    MaskDimensionOptions,
-    BankExpansionFactorOptions,
-)
+
+# Trainer
+TRAINER_ACCELERATOR: str = "auto"
+TRAINER_DEVICES: str | int = "auto"
+TRAINER_GRADIENT_CLIP_VAL: float = 0.0
+TRAINER_GRADIENT_CLIP_ALGORITHM: str = "norm"
+TRAINER_ACCUMULATE_GRAD_BATCHES: int = 1
+TRAINER_PRECISION: str = "32-true"
+TRAINER_DETERMINISTIC: bool = False
+TRAINER_BENCHMARK: bool = True
+TRAINER_MAX_STEPS: int = -1
+TRAINER_MAX_TIME: str | None = None
+TRAINER_VAL_CHECK_INTERVAL: float = 1.0
+TRAINER_LIMIT_TRAIN_BATCHES: float = 1.0
+TRAINER_LIMIT_VAL_BATCHES: float = 1.0
+TRAINER_OVERFIT_BATCHES: int | float = 0.0
+TRAINER_NUM_SANITY_VAL_STEPS: int = 2
+TRAINER_LOG_EVERY_N_STEPS: int = 50
+TRAINER_ENABLE_PROGRESS_BAR: bool = False
+TRAINER_ENABLE_CHECKPOINTING: bool = False
+TRAINER_ENABLE_MODEL_SUMMARY: bool = False
+TRAINER_PROFILER: str | None = None
+MONITOR_LOG_EVERY_N_STEPS: int = 100
+
+# Run
+DATA_NUM_WORKERS: int = 4
+RUN_TEST_AFTER_FIT: bool = True
+
+# Callback
+CALLBACK_EARLY_STOPPING_PATIENCE: int = 0
+CALLBACK_EARLY_STOPPING_METRIC: str = "validation/accuracy"
+CALLBACK_EARLY_STOPPING_MIN_DELTA: float = 0.0
+CALLBACK_EARLY_STOPPING_STRICT: bool = True
+CALLBACK_EARLY_STOPPING_CHECK_FINITE: bool = True
+CALLBACK_CHECKPOINT_FLAG: bool = False
 from emperor.augmentations.adaptive_parameters import (
     AdditiveDynamicBiasConfig,
     AffineTransformDynamicBiasConfig,
@@ -46,9 +59,32 @@ from emperor.augmentations.adaptive_parameters import (
     StandardDynamicDiagonalConfig,
     TanhGatedDynamicBiasConfig,
     TopSliceAxisMaskConfig,
-    WeightInformedScoreAxisMaskConfig,
     WeightedBankDynamicBiasConfig,
+    WeightInformedScoreAxisMaskConfig,
 )
+from emperor.augmentations.adaptive_parameters.options import (
+    BankExpansionFactorOptions,
+    DynamicDepthOptions,
+    MaskDimensionOptions,
+    WeightDecayScheduleOptions,
+    WeightNormalizationOptions,
+    WeightNormalizationPositionOptions,
+)
+from emperor.base.layer.gate import LayerGateOptions
+from emperor.base.options import (
+    ActivationOptions,
+    LastLayerBiasOptions,
+    LayerNormPositionOptions,
+)
+from emperor.halting.options import HaltingHiddenStateModeOptions
+from emperor.memory.config import (
+    AttentionDynamicMemoryConfig,  # noqa: F401
+    DynamicMemoryConfig,
+    ElementWiseWeightedDynamicMemoryConfig,  # noqa: F401
+    GatedResidualDynamicMemoryConfig,
+    WeightedDynamicMemoryConfig,  # noqa: F401
+)
+from emperor.memory.options import MemoryPositionOptions
 
 # Global
 BATCH_SIZE: int = 128
@@ -73,7 +109,7 @@ STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
 STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
     ResidualConnectionOptions.DISABLED
 )
-STACK_DROPOUT_PROBABILITY: float = 0.2
+STACK_DROPOUT_PROBABILITY: float = 0.0
 STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT
 STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = True
 STACK_BIAS_FLAG: bool = True
@@ -107,7 +143,7 @@ ADAPTIVE_GENERATOR_STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
 ADAPTIVE_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
     ResidualConnectionOptions.DISABLED
 )
-ADAPTIVE_GENERATOR_STACK_DROPOUT_PROBABILITY: float = 0.1
+ADAPTIVE_GENERATOR_STACK_DROPOUT_PROBABILITY: float = 0.0
 ADAPTIVE_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = (
     LastLayerBiasOptions.DEFAULT
 )
@@ -379,9 +415,7 @@ OUTPUT_LAYER_WEIGHT_DECAY_WARMUP_BATCHES: int = WEIGHT_DECAY_WARMUP_BATCHES
 OUTPUT_LAYER_WEIGHT_NORMALIZATION_OPTION: WeightNormalizationOptions = (
     WEIGHT_NORMALIZATION_OPTION
 )
-OUTPUT_LAYER_WEIGHT_NORMALIZATION_POSITION_OPTION: (
-    WeightNormalizationPositionOptions
-) = WEIGHT_NORMALIZATION_POSITION_OPTION
+OUTPUT_LAYER_WEIGHT_NORMALIZATION_POSITION_OPTION: WeightNormalizationPositionOptions = WEIGHT_NORMALIZATION_POSITION_OPTION
 OUTPUT_LAYER_WEIGHT_BANK_EXPANSION_FACTOR: BankExpansionFactorOptions = (
     WEIGHT_BANK_EXPANSION_FACTOR
 )
