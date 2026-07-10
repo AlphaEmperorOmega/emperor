@@ -1,7 +1,4 @@
-import {
-  type TrainingRunPlan,
-  type TrainingSearchCreateInput,
-} from "@/lib/api";
+import { type TrainingSearchCreateInput } from "@/lib/api";
 import { type OverrideValues } from "@/lib/config";
 
 type StringList = readonly string[];
@@ -27,7 +24,6 @@ export type TrainingRunPlanQueryKeyInput = {
   logFolder: string;
   monitors: StringList;
   search?: TrainingSearchCreateInput;
-  submittedRunPlan?: TrainingRunPlan;
 };
 
 function normalizedStringSet(values: StringList) {
@@ -73,7 +69,6 @@ function trainingRunPlanInputKey({
   logFolder,
   monitors,
   search,
-  submittedRunPlan,
 }: TrainingRunPlanQueryKeyInput): NormalizedQueryObject {
   return {
     datasets: [...datasets],
@@ -86,7 +81,6 @@ function trainingRunPlanInputKey({
     presets: [...presets],
     experimentTask,
     search: normalizedQueryValue(search ?? null),
-    submittedRunPlan: normalizedQueryValue(submittedRunPlan ?? null),
   };
 }
 

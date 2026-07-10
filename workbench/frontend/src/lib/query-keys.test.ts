@@ -176,7 +176,6 @@ describe("query key factories", () => {
         preset: "baseline",
         presets: ["baseline"],
         search: null,
-        submittedRunPlan: null,
       },
     ]);
   });

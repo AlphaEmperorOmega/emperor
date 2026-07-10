@@ -271,7 +271,6 @@ export function useTrainingJobController({
       logFolder,
       monitors: selectedMonitors,
       search: searchPayload,
-      submittedRunPlan,
     }),
     [
       effectiveOverrides,
@@ -284,7 +283,6 @@ export function useTrainingJobController({
       selectedMonitors,
       selectedPreset,
       selectedTrainingPresets,
-      submittedRunPlan,
     ],
   );
   const runPlanQuery = useQuery({
