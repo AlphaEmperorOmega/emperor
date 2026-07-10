@@ -64,7 +64,9 @@ class Model(ClassifierExperiment):
         X = torch.flatten(X, start_dim=1)
         X = Layer.run_model_returning_hidden(self.input_model, X)
         state = Layer.run_model_returning_state(self.main_model, X)
-        logits = Layer.run_model_returning_hidden(self.output_model, state.hidden)
+        classification_logits = Layer.run_model_returning_hidden(
+            self.output_model, state.hidden
+        )
         if state.loss is not None:
-            return logits, state.loss
-        return logits
+            return classification_logits, state.loss
+        return classification_logits
