@@ -7,7 +7,7 @@ import { StatusPill } from "@/features/workbench/components/status-pill";
 import {
   useGraphView,
   useHistoricalRuns,
-  useTargetConfig,
+  useModelTargetConfig,
 } from "@/features/workbench/providers/workbench-providers";
 import { useParameterActivityMinimapState } from "@/features/workbench/state/graph-monitor/use-parameter-activity-minimap-state";
 import { errorMessage } from "@/lib/utils";
@@ -33,7 +33,7 @@ export function PreviewPanel() {
     selectedModelType,
     selectedTargetMode,
     selectedExperimentRunId,
-  } = useTargetConfig();
+  } = useModelTargetConfig();
   const {
     selectedLogRun,
     selectedLogRunMonitorEligibility,

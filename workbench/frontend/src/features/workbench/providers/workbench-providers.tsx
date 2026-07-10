@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { type ReactNode, useMemo } from "react";
 import {
   useWorkbenchState,
   type ActiveTrainingJobContextValue,
@@ -10,13 +10,26 @@ import {
 } from "@/features/workbench/state/use-workbench-state";
 import { createWorkbenchContext } from "@/features/workbench/providers/create-context";
 import {
+  type ModelTargetContextValue,
+  type TargetCatalogContextValue,
+  type TargetSnapshotsContextValue,
+  type TrainingTargetContextValue,
+  useTargetContextSlices,
+} from "@/features/workbench/providers/target-context-slices";
+import {
   useActiveTrainingJobProgress,
   type ActiveTrainingJobProgress,
 } from "@/features/workbench/state/training/use-training-job-controller";
 import { type WorkbenchWorkspace } from "@/types/workbench";
 
-const [TargetConfigProvider, useTargetConfig] =
-  createWorkbenchContext<TargetConfigContextValue>("TargetConfigContext");
+const [TargetCatalogProvider, useTargetCatalog] =
+  createWorkbenchContext<TargetCatalogContextValue>("TargetCatalogContext");
+const [ModelTargetProvider, useModelTargetConfig] =
+  createWorkbenchContext<ModelTargetContextValue>("ModelTargetContext");
+const [TrainingTargetProvider, useTrainingTargetState] =
+  createWorkbenchContext<TrainingTargetContextValue>("TrainingTargetContext");
+const [TargetSnapshotsProvider, useTargetSnapshots] =
+  createWorkbenchContext<TargetSnapshotsContextValue>("TargetSnapshotsContext");
 const [GraphViewProvider, useGraphView] =
   createWorkbenchContext<GraphViewContextValue>("GraphViewContext");
 const [HistoricalRunsProvider, useHistoricalRuns] =
@@ -33,7 +46,9 @@ const [ApiConnectionProvider, useApiConnection] =
   createWorkbenchContext<ApiConnectionContextValue>("ApiConnectionContext");
 
 export {
-  useTargetConfig,
+  useTargetCatalog,
+  useModelTargetConfig,
+  useTargetSnapshots,
   useGraphView,
   useHistoricalRuns,
   useActiveTrainingJob,
@@ -41,6 +56,30 @@ export {
   useGraphMonitor,
   useApiConnection,
 };
+
+/** Compatibility Interface for the few dialogs that intentionally coordinate
+ * Model, Training, and snapshot state. Hot-path consumers use a focused hook. */
+export function useTargetConfig(): TargetConfigContextValue {
+  const catalog = useTargetCatalog();
+  const model = useModelTargetConfig();
+  const training = useTrainingTargetState();
+  const snapshots = useTargetSnapshots();
+
+  return useMemo(
+    () => ({ ...catalog, ...model, ...training, ...snapshots }),
+    [catalog, model, snapshots, training],
+  ) as TargetConfigContextValue;
+}
+
+export function useTrainingTargetConfig() {
+  const catalog = useTargetCatalog();
+  const training = useTrainingTargetState();
+
+  return useMemo(
+    () => ({ ...catalog, ...training }),
+    [catalog, training],
+  );
+}
 
 function ActiveTrainingJobProgressController({
   children,
@@ -58,15 +97,15 @@ function ActiveTrainingJobProgressController({
 }
 
 export function useTargetHeaderState() {
+  const { apiOnline } = useTargetCatalog();
   const {
     selectedModelType,
     selectedModel,
     selectedPreset,
-    apiOnline,
     overrideCount,
     presetOwnedFieldCount,
     resetOverrides,
-  } = useTargetConfig();
+  } = useModelTargetConfig();
 
   return {
     selectedModelType,
@@ -80,6 +119,15 @@ export function useTargetHeaderState() {
 }
 
 export function useTargetSelectorState() {
+  const { capabilities, models } = useTargetCatalog();
+  const {
+    selectedSnapshotId,
+    selectedConfigSnapshot,
+    selectTargetSnapshot,
+    prepareSelectedSnapshotEdit,
+    preparePresetSnapshotDraft,
+    allConfigSnapshots,
+  } = useTargetSnapshots();
   const {
     selectedModelType,
     selectedModel,
@@ -89,8 +137,6 @@ export function useTargetSelectorState() {
     activateTargetExperimentMode,
     selectedPreset,
     selectedPresetMeta,
-    selectedSnapshotId,
-    selectedConfigSnapshot,
     selectedExperimentRunId,
     selectedExperimentTask,
     experimentTaskOptions,
@@ -98,25 +144,19 @@ export function useTargetSelectorState() {
     activeOverrides,
     effectivePresetOverrides,
     configSections,
-    capabilities,
     selectModelType,
     selectModel,
     selectTargetPreset,
-    selectTargetSnapshot,
     selectExperimentTask,
-    preparePresetSnapshotDraft,
-    prepareSelectedSnapshotEdit,
     toggleDataset,
     selectAllDatasets,
     selectFirstDataset,
-    allConfigSnapshots,
-    models,
     presets,
     datasets,
     targetMonitors,
     targetMonitorsLoading,
     isSchemaReady,
-  } = useTargetConfig();
+  } = useModelTargetConfig();
 
   return {
     selectedModelType,
@@ -158,16 +198,16 @@ export function useTargetSelectorState() {
 }
 
 export function useTargetConfigSummaryState() {
+  const { allConfigSnapshotCount } = useTargetSnapshots();
   const {
     fieldCount,
     overrideCount,
-    allConfigSnapshotCount,
     selectedModel,
     selectedPreset,
     selectedTargetMode,
     isSchemaReady,
     schemaLoading,
-  } = useTargetConfig();
+  } = useModelTargetConfig();
 
   return {
     fieldCount,
@@ -189,7 +229,7 @@ export function useConfigSnapshotLibraryState() {
     isLibraryError,
     libraryError,
     loadConfigSnapshot,
-  } = useTargetConfig();
+  } = useTargetSnapshots();
 
   return {
     snapshots: configSnapshotLibrary,
@@ -202,16 +242,15 @@ export function useConfigSnapshotLibraryState() {
 }
 
 export function useTargetQueryStatusState() {
+  const { isModelsError, modelsError } = useTargetCatalog();
   const {
-    isModelsError,
-    modelsError,
     isPresetsError,
     presetsError,
     isDatasetsError,
     datasetsError,
     isSchemaError,
     schemaError,
-  } = useTargetConfig();
+  } = useModelTargetConfig();
 
   return {
     modelsQuery: {
@@ -255,21 +294,28 @@ export function WorkbenchProviders({
       activeWorkspace,
       onJobStarted,
     });
+  const targetSlices = useTargetContextSlices(target);
   return (
-    <TargetConfigProvider value={target}>
-      <GraphViewProvider value={graph}>
-        <HistoricalRunsProvider value={history}>
-          <ActiveTrainingJobProvider value={activeJob}>
-            <ActiveTrainingJobProgressController>
-              <GraphMonitorProvider value={graphMonitor}>
-                <ApiConnectionProvider value={apiConnection}>
-                  {children}
-                </ApiConnectionProvider>
-              </GraphMonitorProvider>
-            </ActiveTrainingJobProgressController>
-          </ActiveTrainingJobProvider>
-        </HistoricalRunsProvider>
-      </GraphViewProvider>
-    </TargetConfigProvider>
+    <TargetCatalogProvider value={targetSlices.catalog}>
+      <ModelTargetProvider value={targetSlices.model}>
+        <TrainingTargetProvider value={targetSlices.training}>
+          <TargetSnapshotsProvider value={targetSlices.snapshots}>
+            <GraphViewProvider value={graph}>
+              <HistoricalRunsProvider value={history}>
+                <ActiveTrainingJobProvider value={activeJob}>
+                  <ActiveTrainingJobProgressController>
+                    <GraphMonitorProvider value={graphMonitor}>
+                      <ApiConnectionProvider value={apiConnection}>
+                        {children}
+                      </ApiConnectionProvider>
+                    </GraphMonitorProvider>
+                  </ActiveTrainingJobProgressController>
+                </ActiveTrainingJobProvider>
+              </HistoricalRunsProvider>
+            </GraphViewProvider>
+          </TargetSnapshotsProvider>
+        </TrainingTargetProvider>
+      </ModelTargetProvider>
+    </TargetCatalogProvider>
   );
 }

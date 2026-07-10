@@ -2,7 +2,8 @@ import { type ReactNode, useEffect } from "react";
 import { createWorkbenchContext } from "@/features/workbench/providers/create-context";
 import {
   useActiveTrainingJob,
-  useTargetConfig,
+  useModelTargetConfig,
+  useTargetCatalog,
 } from "@/features/workbench/providers/workbench-providers";
 import {
   useLogsWorkspaceState,
@@ -21,14 +22,14 @@ export function LogsWorkspaceProvider({
   enabled: boolean;
   children: ReactNode;
 }) {
+  const { capabilities } = useTargetCatalog();
   const {
     selectedModelType,
     selectedModel,
     selectedPreset,
     selectedPresetMeta,
     selectedDatasets,
-    capabilities,
-  } = useTargetConfig();
+  } = useModelTargetConfig();
   const { activeTrainingJob } = useActiveTrainingJob();
   const state = useLogsWorkspaceState({
     enabled,

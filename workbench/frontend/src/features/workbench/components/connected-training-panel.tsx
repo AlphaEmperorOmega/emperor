@@ -2,7 +2,7 @@ import { TrainingPanel } from "@/features/workbench/components/training-panel";
 import {
   useActiveTrainingJob,
   useActiveTrainingJobProgressState,
-  useTargetConfig,
+  useTrainingTargetConfig,
 } from "@/features/workbench/providers/workbench-providers";
 import {
   useTrainingPanelViewModel,
@@ -16,7 +16,7 @@ export function ConnectedTrainingWorkspace({
 }: {
   onOpenFullConfig: FullConfigDialogControls["open"];
 }) {
-  const target = useTargetConfig();
+  const target = useTrainingTargetConfig();
   const activeJob = useActiveTrainingJob();
   const activeJobProgress = useActiveTrainingJobProgressState();
   const viewModel = useTrainingPanelViewModel({

@@ -38,7 +38,11 @@ vi.mock("@/lib/api", () => mocks);
 
 import { useWorkbenchState } from "@/features/workbench/state/use-workbench-state";
 import { ConnectedTrainingWorkspace } from "@/features/workbench/components/connected-training-panel";
-import { WorkbenchProviders } from "@/features/workbench/providers/workbench-providers";
+import {
+  useModelTargetConfig,
+  useTrainingTargetConfig,
+  WorkbenchProviders,
+} from "@/features/workbench/providers/workbench-providers";
 import { TargetPresetPanel } from "@/features/workbench/components/screen/target-preset-panel";
 import {
   clearPersistedTargetSelection,
@@ -87,7 +91,7 @@ function renderTrainingPanel() {
 
   return render(
     <QueryClientProvider client={client}>
-      <WorkbenchProviders>
+      <WorkbenchProviders activeWorkspace="training">
         <ConnectedTrainingWorkspace onOpenFullConfig={vi.fn()} />
       </WorkbenchProviders>
     </QueryClientProvider>,
@@ -101,7 +105,7 @@ function renderTrainingPanelWithExperiments() {
 
   return render(
     <QueryClientProvider client={client}>
-      <WorkbenchProviders>
+      <WorkbenchProviders activeWorkspace="training">
         <TargetPresetPanel onOpenFullConfig={vi.fn()} />
         <ConnectedTrainingWorkspace onOpenFullConfig={vi.fn()} />
       </WorkbenchProviders>
@@ -901,6 +905,144 @@ describe("useWorkbenchState", () => {
     expect(result.current.activeJob.activeTrainingJob?.step).toBe(20);
     expect(result.current.target).toBe(target);
     expect(result.current.history).toBe(history);
+  });
+
+  it("does not rerender Training consumers for a Model-only override", async () => {
+    let trainingRenderCount = 0;
+
+    function ModelTargetProbe() {
+      const { selectedModel, overrides, updateOverride } =
+        useModelTargetConfig();
+      return (
+        <button
+          type="button"
+          onClick={() => updateOverride("hidden_size", "128")}
+        >
+          {selectedModel}:{overrides.hidden_size ?? "default"}
+        </button>
+      );
+    }
+
+    function TrainingTargetProbe() {
+      const {
+        selectedTrainingModel,
+        selectedTrainingPrimaryPreset,
+        trainingSchemaLoading,
+        trainingSearchAxesLoading,
+      } = useTrainingTargetConfig();
+      trainingRenderCount += 1;
+      return (
+        <output
+          data-testid="training-target-probe"
+          data-ready={
+            !trainingSchemaLoading && !trainingSearchAxesLoading
+              ? "true"
+              : "false"
+          }
+        >
+          {selectedTrainingModel}:{selectedTrainingPrimaryPreset}
+        </output>
+      );
+    }
+
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <WorkbenchProviders activeWorkspace="training">
+          <ModelTargetProbe />
+          <TrainingTargetProbe />
+        </WorkbenchProviders>
+      </QueryClientProvider>,
+    );
+    const user = userEvent.setup();
+
+    await screen.findByRole("button", { name: "linear:default" });
+    await waitFor(() => {
+      expect(screen.getByTestId("training-target-probe")).toHaveTextContent(
+        "linear:baseline",
+      );
+      expect(screen.getByTestId("training-target-probe")).toHaveAttribute(
+        "data-ready",
+        "true",
+      );
+    });
+    const settledTrainingRenderCount = trainingRenderCount;
+
+    await user.click(screen.getByRole("button", { name: "linear:default" }));
+
+    expect(
+      await screen.findByRole("button", { name: "linear:128" }),
+    ).toBeInTheDocument();
+    expect(trainingRenderCount).toBe(settledTrainingRenderCount);
+  });
+
+  it("does not rerender Model consumers for a Training-only override", async () => {
+    let modelRenderCount = 0;
+
+    function ModelTargetProbe() {
+      const { selectedModel, overrides } = useModelTargetConfig();
+      modelRenderCount += 1;
+      return (
+        <output data-testid="model-target-probe">
+          {selectedModel}:{overrides.hidden_size ?? "default"}
+        </output>
+      );
+    }
+
+    function TrainingTargetProbe() {
+      const {
+        selectedTrainingModel,
+        trainingOverrides,
+        updateTrainingOverride,
+        trainingSchemaLoading,
+        trainingSearchAxesLoading,
+      } = useTrainingTargetConfig();
+      return (
+        <button
+          type="button"
+          data-ready={
+            !trainingSchemaLoading && !trainingSearchAxesLoading
+              ? "true"
+              : "false"
+          }
+          onClick={() => updateTrainingOverride("epochs", "12")}
+        >
+          {selectedTrainingModel}:{trainingOverrides.epochs ?? "default"}
+        </button>
+      );
+    }
+
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <WorkbenchProviders activeWorkspace="training">
+          <ModelTargetProbe />
+          <TrainingTargetProbe />
+        </WorkbenchProviders>
+      </QueryClientProvider>,
+    );
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("model-target-probe")).toHaveTextContent(
+        "linear:default",
+      );
+      expect(
+        screen.getByRole("button", { name: "linear:default" }),
+      ).toHaveAttribute("data-ready", "true");
+    });
+    const settledModelRenderCount = modelRenderCount;
+
+    await user.click(screen.getByRole("button", { name: "linear:default" }));
+
+    expect(
+      await screen.findByRole("button", { name: "linear:12" }),
+    ).toBeInTheDocument();
+    expect(modelRenderCount).toBe(settledModelRenderCount);
   });
 
   it("uses enabled local defaults while loading capabilities", () => {

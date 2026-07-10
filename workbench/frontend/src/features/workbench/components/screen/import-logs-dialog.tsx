@@ -16,7 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import { DialogShell } from "@/features/workbench/components/shared/dialog-shell";
-import { useTargetConfig } from "@/features/workbench/providers/workbench-providers";
+import { useTargetCatalog } from "@/features/workbench/providers/workbench-providers";
 import { useLogQueryCache } from "@/features/workbench/state/logs/use-log-query-cache";
 import { importLogArchive, type LogArchiveImportResponse } from "@/lib/api";
 
@@ -72,7 +72,7 @@ function successMessage(result: LogArchiveImportResponse) {
 }
 
 export function ImportLogsDialog({ onClose }: { onClose: () => void }) {
-  const { capabilities } = useTargetConfig();
+  const { capabilities } = useTargetCatalog();
   const logQueryCache = useLogQueryCache();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
