@@ -42,3 +42,16 @@ class LinearValidator(ValidatorBase):
                 f"Input must be a 2D matrix (batch, input_dim), "
                 f"got {X.dim()}D tensor with shape {X.shape}"
             )
+
+    @staticmethod
+    def validate_input_tensor(X: Tensor, input_dim: int) -> None:
+        if X.dim() < 2:
+            raise ValueError(
+                f"Input must have shape (..., input_dim), got {X.dim()}D "
+                f"tensor with shape {X.shape}"
+            )
+        if X.shape[-1] != input_dim:
+            raise ValueError(
+                f"Input final dimension must be {input_dim}, got {X.shape[-1]} "
+                f"for tensor with shape {X.shape}"
+            )
