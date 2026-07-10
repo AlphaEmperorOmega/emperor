@@ -4,17 +4,18 @@ from emperor.base.options import ActivationOptions, LayerNormPositionOptions
 from emperor.config import ModelConfig
 from emperor.linears.core.config import LinearLayerConfig
 from emperor.parametric.core.mixtures.options import ClipParameterOptions
+
 from models.parametric.parametric_vector import config
 from models.parametric.parametric_vector._control_config_factory import (
     build_parametric_stack_config,
 )
-from models.parametric._shared_stack_factory import (
+from models.parametric.parametric_vector.experiment_config import ExperimentConfig
+from models.parametric.parametric_vector.runtime_options import (
     ParametricMixtureOptions,
     ParametricRouterOptions,
     ParametricSamplerOptions,
     ParametricStackOptions,
 )
-from models.parametric.parametric_vector.experiment_config import ExperimentConfig
 
 
 class ParametricVectorConfigBuilder:
@@ -100,9 +101,7 @@ class ParametricVectorConfigBuilder:
         self.output_dim = output_dim
         self.stack_num_layers = stack_options.num_layers
         self.stack_activation = stack_options.activation
-        self.stack_residual_connection_option = (
-            stack_options.residual_connection_option
-        )
+        self.stack_residual_connection_option = stack_options.residual_connection_option
         self.stack_dropout_probability = stack_options.dropout_probability
         self.mixture_options = mixture_options
         self.adaptive_mixture_top_k = mixture_options.top_k
@@ -126,9 +125,7 @@ class ParametricVectorConfigBuilder:
             sampler_options.coefficient_of_variation_loss_weight
         )
         self.sampler_switch_loss_weight = sampler_options.switch_loss_weight
-        self.sampler_zero_centred_loss_weight = (
-            sampler_options.zero_centred_loss_weight
-        )
+        self.sampler_zero_centred_loss_weight = sampler_options.zero_centred_loss_weight
         self.sampler_mutual_information_loss_weight = (
             sampler_options.mutual_information_loss_weight
         )

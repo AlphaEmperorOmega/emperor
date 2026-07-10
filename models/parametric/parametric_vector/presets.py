@@ -7,13 +7,13 @@ from emperor.experiments.base import (
 )
 
 import models.parametric.parametric_vector.config as config
+import models.parametric.parametric_vector.dataset_options as dataset_options
 from models.parametric.parametric_vector.config_builder import (
     ParametricVectorConfigBuilder,
 )
 from models.parametric.parametric_vector.model import Model
 
 
-import models.parametric.parametric_vector.dataset_options as dataset_options
 class ExperimentPreset(BaseOptions):
     PRESET = 1
     CONFIG = 2
@@ -54,7 +54,9 @@ class Experiment(ExperimentBase):
         return config.NUM_EPOCHS
 
     def _dataset_options(self) -> list:
-        return dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK]
+        return dataset_options.DATASET_OPTIONS_BY_TASK[
+            dataset_options.DEFAULT_EXPERIMENT_TASK
+        ]
 
     def _model_type(self) -> type:
         return Model

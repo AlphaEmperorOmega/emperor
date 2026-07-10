@@ -1,20 +1,17 @@
-import os
-import unittest
 import importlib
+import os
 import runpy
 import sys
+import unittest
 from copy import deepcopy
 from unittest.mock import patch
 
 import models.parametric.parametric_vector.dataset_options as dataset_options
 import models.parametric.parametric_vector.search_space as search_space
+
 os.environ.setdefault("MPLCONFIGDIR", "/tmp")
 
 import torch
-
-import models.parametric.parametric_vector.config as config
-
-from emperor.experiments.base import GridSearch, RandomSearch
 from emperor.base.layer import LayerConfig, LayerStackConfig
 from emperor.base.layer.residual import ResidualConnectionOptions
 from emperor.base.options import (
@@ -22,6 +19,7 @@ from emperor.base.options import (
     LastLayerBiasOptions,
     LayerNormPositionOptions,
 )
+from emperor.experiments.base import GridSearch, RandomSearch
 from emperor.linears.core.config import LinearLayerConfig
 from emperor.parametric import (
     AdaptiveRouterOptions,
@@ -30,13 +28,7 @@ from emperor.parametric import (
     ParametricLayerHandlerConfig,
     VectorWeightsMixtureConfig,
 )
-from models.parametric._shared_stack_factory import (
-    ParametricGeneratorStackOptions,
-    ParametricMixtureOptions,
-    ParametricRouterOptions,
-    ParametricSamplerOptions,
-    ParametricStackOptions,
-)
+
 from models.parametric.parametric_vector.config_builder import (
     ParametricVectorConfigBuilder,
 )
@@ -47,11 +39,11 @@ from models.parametric.parametric_vector.presets import (
     ExperimentPreset,
     ExperimentPresets,
 )
-from models.parametric.parametric_matrix.config_builder import (
-    ParametricMatrixConfigBuilder,
-)
-from models.parametric.parametric_generator.config_builder import (
-    ParametricGeneratorConfigBuilder,
+from models.parametric.parametric_vector.runtime_options import (
+    ParametricMixtureOptions,
+    ParametricRouterOptions,
+    ParametricSamplerOptions,
+    ParametricStackOptions,
 )
 from models.training_test_utils import (
     RandomImageClassificationDataModule,
@@ -102,7 +94,12 @@ class TestParametricVectorModel(unittest.TestCase):
         self.assertIsNone(kwargs["search_keys"])
         self.assertEqual(kwargs["config_overrides"], {})
         self.assertEqual(kwargs["search_overrides"], {})
-        self.assertEqual(kwargs["selected_datasets"], dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK])
+        self.assertEqual(
+            kwargs["selected_datasets"],
+            dataset_options.DATASET_OPTIONS_BY_TASK[
+                dataset_options.DEFAULT_EXPERIMENT_TASK
+            ],
+        )
         self.assertIsNone(kwargs["selected_presets"])
 
     def test_modern_preset_contract_is_exposed(self):
@@ -155,7 +152,7 @@ class TestParametricVectorModel(unittest.TestCase):
         self.assertEqual(model.output_model.input_dim, 4)
         self.assertEqual(model.output_model.output_dim, 3)
 
-    def test_option_group_builds_match_flat_kwargs_across_parametric_variants(self):
+    def test_option_group_build_matches_flat_kwargs(self):
         stack_options = ParametricStackOptions(
             hidden_dim=7,
             num_layers=2,
@@ -184,12 +181,6 @@ class TestParametricVectorModel(unittest.TestCase):
         router_options = ParametricRouterOptions(
             activation=stack_options.activation,
         )
-        generator_stack_options = ParametricGeneratorStackOptions(
-            hidden_dim=11,
-            num_layers=3,
-            activation=ActivationOptions.GELU,
-            dropout_probability=0.05,
-        )
         flat_kwargs = {
             "batch_size": 3,
             "learning_rate": 0.02,
@@ -212,9 +203,7 @@ class TestParametricVectorModel(unittest.TestCase):
             ),
             "adaptive_mixture_clip_range": mixture_options.clip_range,
             "sampler_threshold": sampler_options.threshold,
-            "sampler_filter_above_threshold": (
-                sampler_options.filter_above_threshold
-            ),
+            "sampler_filter_above_threshold": (sampler_options.filter_above_threshold),
             "sampler_num_topk_samples": sampler_options.num_topk_samples,
             "sampler_normalize_probabilities_flag": (
                 sampler_options.normalize_probabilities_flag
@@ -241,46 +230,10 @@ class TestParametricVectorModel(unittest.TestCase):
             "sampler_options": sampler_options,
             "router_options": router_options,
         }
-        cases = (
-            (
-                "vector",
-                ParametricVectorConfigBuilder,
-                {},
-                {},
-            ),
-            (
-                "matrix",
-                ParametricMatrixConfigBuilder,
-                {},
-                {},
-            ),
-            (
-                "generator",
-                ParametricGeneratorConfigBuilder,
-                {
-                    "generator_stack_hidden_dim": (
-                        generator_stack_options.hidden_dim
-                    ),
-                    "generator_stack_num_layers": (
-                        generator_stack_options.num_layers
-                    ),
-                    "generator_stack_activation": (
-                        generator_stack_options.activation
-                    ),
-                    "generator_stack_dropout_probability": (
-                        generator_stack_options.dropout_probability
-                    ),
-                },
-                {"generator_stack_options": generator_stack_options},
-            ),
-        )
+        flat_cfg = ParametricVectorConfigBuilder(**flat_kwargs).build()
+        grouped_cfg = ParametricVectorConfigBuilder(**grouped_kwargs).build()
 
-        for variant, builder, extra_flat, extra_grouped in cases:
-            with self.subTest(variant=variant):
-                flat_cfg = builder(**flat_kwargs, **extra_flat).build()
-                grouped_cfg = builder(**grouped_kwargs, **extra_grouped).build()
-
-                self.assertEqual(flat_cfg, grouped_cfg)
+        self.assertEqual(flat_cfg, grouped_cfg)
 
     def test_preset_builds_current_parametric_config(self):
         hidden_dim = 5
@@ -336,48 +289,58 @@ class TestParametricVectorModel(unittest.TestCase):
         with self.assertRaises(ValueError):
             parametric_config.build()
 
-    def test_router_and_sampler_defaults_match_across_parametric_variants(self):
-        builders = {
-            "vector": ParametricVectorConfigBuilder,
-            "matrix": ParametricMatrixConfigBuilder,
-            "generator": ParametricGeneratorConfigBuilder,
-        }
-        summaries = {
-            variant: self._router_sampler_summary(
-                builder(input_dim=8, hidden_dim=9, output_dim=3).build()
-            )
-            for variant, builder in builders.items()
-        }
-        expected_summary = summaries["vector"]
+    def test_router_and_sampler_defaults_match_expected_structure(self):
+        summary = self._router_sampler_summary(
+            ParametricVectorConfigBuilder(
+                input_dim=8,
+                hidden_dim=9,
+                output_dim=3,
+            ).build()
+        )
 
-        for variant, summary in summaries.items():
-            with self.subTest(variant=variant):
-                self.assertEqual(summary, expected_summary)
-                self.assertEqual(summary["router_hidden_dim"], 9)
-                self.assertEqual(summary["router_num_layers"], 1)
-                self.assertEqual(
-                    summary["router_last_layer_bias_option"],
-                    LastLayerBiasOptions.DEFAULT,
-                )
-                self.assertFalse(summary["router_apply_output_pipeline_flag"])
-                self.assertEqual(
-                    summary["router_residual_connection_option"],
-                    ResidualConnectionOptions.DISABLED,
-                )
-                self.assertEqual(
-                    summary["router_layer_norm_position"],
-                    LayerNormPositionOptions.DISABLED,
-                )
-                self.assertEqual(summary["router_dropout_probability"], 0.0)
-                self.assertFalse(summary["router_noisy_topk_flag"])
-                self.assertTrue(summary["router_linear_bias_flag"])
-                self.assertIsNone(summary["sampler_router_config"])
+        self.assertEqual(
+            summary,
+            {
+                "router_input_dim": 9,
+                "router_num_experts": 2,
+                "router_noisy_topk_flag": False,
+                "router_model_input_dim": 9,
+                "router_hidden_dim": 9,
+                "router_model_output_dim": 2,
+                "router_num_layers": 1,
+                "router_last_layer_bias_option": LastLayerBiasOptions.DEFAULT,
+                "router_apply_output_pipeline_flag": False,
+                "router_activation": ActivationOptions.GELU,
+                "router_residual_connection_option": (
+                    ResidualConnectionOptions.DISABLED
+                ),
+                "router_dropout_probability": 0.0,
+                "router_layer_norm_position": LayerNormPositionOptions.DISABLED,
+                "router_linear_input_dim": 9,
+                "router_linear_output_dim": 2,
+                "router_linear_bias_flag": True,
+                "sampler_top_k": 1,
+                "sampler_threshold": 0.0,
+                "sampler_filter_above_threshold": False,
+                "sampler_num_topk_samples": 0,
+                "sampler_normalize_probabilities_flag": False,
+                "sampler_noisy_topk_flag": False,
+                "sampler_num_experts": 2,
+                "sampler_coefficient_of_variation_loss_weight": 0.0,
+                "sampler_switch_loss_weight": 0.0,
+                "sampler_zero_centred_loss_weight": 0.0,
+                "sampler_mutual_information_loss_weight": 0.0,
+                "sampler_router_config": None,
+            },
+        )
 
     def test_forward_one_batch_per_dataset(self):
         batch_size = 2
         presets = ExperimentPresets()
 
-        for dataset in dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK]:
+        for dataset in dataset_options.DATASET_OPTIONS_BY_TASK[
+            dataset_options.DEFAULT_EXPERIMENT_TASK
+        ]:
             with self.subTest(dataset=dataset.__name__):
                 cfg = presets.get_config(ExperimentPreset.PRESET, dataset)[0]
                 model = Model(cfg)
@@ -392,7 +355,9 @@ class TestParametricVectorModel(unittest.TestCase):
 
     def test_all_presets_train_one_epoch(self):
         presets = ExperimentPresets()
-        dataset = dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0]
+        dataset = dataset_options.DATASET_OPTIONS_BY_TASK[
+            dataset_options.DEFAULT_EXPERIMENT_TASK
+        ][0]
 
         for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
@@ -410,7 +375,9 @@ class TestParametricVectorModel(unittest.TestCase):
     def test_config_search_space_builds_configs(self):
         configs = ExperimentPresets().get_config(
             ExperimentPreset.CONFIG,
-            dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
+            dataset_options.DATASET_OPTIONS_BY_TASK[
+                dataset_options.DEFAULT_EXPERIMENT_TASK
+            ][0],
             RandomSearch(num_samples=2),
         )
 
@@ -430,7 +397,9 @@ class TestParametricVectorModel(unittest.TestCase):
     def test_preset_accepts_grid_search_over_unlocked_axis(self):
         configs = ExperimentPresets().get_config(
             ExperimentPreset.PRESET,
-            dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
+            dataset_options.DATASET_OPTIONS_BY_TASK[
+                dataset_options.DEFAULT_EXPERIMENT_TASK
+            ][0],
             GridSearch(),
             search_keys=["learning_rate"],
         )
@@ -444,7 +413,9 @@ class TestParametricVectorModel(unittest.TestCase):
     def test_config_search_applies_parametric_axes(self):
         configs = ExperimentPresets().get_config(
             ExperimentPreset.CONFIG,
-            dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
+            dataset_options.DATASET_OPTIONS_BY_TASK[
+                dataset_options.DEFAULT_EXPERIMENT_TASK
+            ][0],
             GridSearch(),
             search_keys=["adaptive_mixture_num_experts"],
         )
@@ -465,7 +436,9 @@ class TestParametricVectorModel(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             ExperimentPresets().get_config(
                 ExperimentPreset.CONFIG,
-                dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
+                dataset_options.DATASET_OPTIONS_BY_TASK[
+                    dataset_options.DEFAULT_EXPERIMENT_TASK
+                ][0],
                 RandomSearch(num_samples=2),
                 search_keys=["bogus_axis"],
             )
@@ -528,9 +501,7 @@ class TestParametricVectorModel(unittest.TestCase):
             "router_linear_bias_flag": router_linear_config.bias_flag,
             "sampler_top_k": sampler_config.top_k,
             "sampler_threshold": sampler_config.threshold,
-            "sampler_filter_above_threshold": (
-                sampler_config.filter_above_threshold
-            ),
+            "sampler_filter_above_threshold": (sampler_config.filter_above_threshold),
             "sampler_num_topk_samples": sampler_config.num_topk_samples,
             "sampler_normalize_probabilities_flag": (
                 sampler_config.normalize_probabilities_flag
