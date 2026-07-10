@@ -173,7 +173,7 @@ class SinusoidalPositionalEmbedding(AbsolutePositionalEmbeddingBase):
         self, embedding_dim: int, num_embeddings: int
     ) -> Tensor:
         half_dim = embedding_dim // 2
-        frequency_scale = math.log(10000) / (half_dim - 1)
+        frequency_scale = 0.0 if half_dim <= 1 else math.log(10000) / (half_dim - 1)
         frequency_exponents = (
             torch.arange(half_dim, dtype=torch.float) * -frequency_scale
         )
