@@ -251,6 +251,62 @@ class InspectorSchemaTests(unittest.TestCase):
                 for field_key in hidden_fields:
                     self.assertNotIn(field_key, fields)
 
+    def test_adaptive_expert_schemas_remove_attention_mode_switch(self) -> None:
+        for model_name in (
+            "bert/expert_linear_adaptive",
+            "vit/expert_linear_adaptive",
+        ):
+            payload = config_schema(model_name)
+            fields = _fields_by_key(payload)
+
+            with self.subTest(model_name=model_name):
+                self.assertNotIn("expert_attention_flag", fields)
+                self.assertNotIn(
+                    "EXPERT_ATTENTION_FLAG",
+                    {field["configKey"] for field in payload["fields"]},
+                )
+
+    def test_grouped_bert_schemas_hide_builder_internals(self) -> None:
+        common_public_fields = {
+            "input_dim",
+            "output_dim",
+            "batch_size",
+            "learning_rate",
+            "num_epochs",
+            "trainer_accelerator",
+            "trainer_devices",
+            "data_num_workers",
+            "run_test_after_fit",
+        }
+        common_hidden_fields = {
+            "hidden_dim",
+            "token_type_vocab_size",
+            "embedding_layer_norm_flag",
+            "mlm_activation",
+            "nsp_output_dim",
+            "positional_embedding_option",
+            "stack_num_layers",
+            "submodule_stack_hidden_dim",
+            "attn_num_layers",
+            "attn_gate_flag",
+            "ff_num_layers",
+            "ff_gate_flag",
+            "adaptive_generator_stack_hidden_dim",
+            "weight_option",
+        }
+
+        for model_name, additional_public_fields, additional_hidden_fields in (
+            ("bert/linear_adaptive", set(), {"sequence_length"}),
+            ("bert/expert_linear", {"sequence_length"}, set()),
+        ):
+            fields = _fields_by_key(config_schema(model_name))
+
+            with self.subTest(model_name=model_name):
+                for field_key in common_public_fields | additional_public_fields:
+                    self.assertIn(field_key, fields)
+                for field_key in common_hidden_fields | additional_hidden_fields:
+                    self.assertNotIn(field_key, fields)
+
     def test_config_schema_rejects_uppercase_config_import_aliases(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -554,8 +610,6 @@ class InspectorSchemaTests(unittest.TestCase):
 
         for model_name in (
             "bert/linear",
-            "bert/linear_adaptive",
-            "bert/expert_linear",
             "bert/expert_linear_adaptive",
         ):
             fields = _fields_by_key(config_schema(model_name))
@@ -579,6 +633,8 @@ class InspectorSchemaTests(unittest.TestCase):
                 )
 
         for model_name in (
+            "bert/linear_adaptive",
+            "bert/expert_linear",
             "vit/linear",
             "vit/linear_adaptive",
             "vit/expert_linear",
@@ -629,8 +685,6 @@ class InspectorSchemaTests(unittest.TestCase):
 
         for model_name in (
             "bert/linear",
-            "bert/linear_adaptive",
-            "bert/expert_linear",
             "bert/expert_linear_adaptive",
         ):
             fields = _fields_by_key(config_schema(model_name))
@@ -659,6 +713,8 @@ class InspectorSchemaTests(unittest.TestCase):
                 )
 
         for model_name in (
+            "bert/linear_adaptive",
+            "bert/expert_linear",
             "vit/linear",
             "vit/linear_adaptive",
             "vit/expert_linear",
