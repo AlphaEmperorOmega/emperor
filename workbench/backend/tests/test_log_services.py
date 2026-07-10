@@ -66,10 +66,7 @@ class ListingLogRunRepository:
         return [_ResponseItem(run) for run in self._runs]
 
     def list_experiments(self) -> list[_ResponseItem]:
-        return [
-            _ResponseItem(experiment)
-            for experiment in self._experiments
-        ]
+        return [_ResponseItem(experiment) for experiment in self._experiments]
 
 
 class CountingLogRunRepository(ListingLogRunRepository):

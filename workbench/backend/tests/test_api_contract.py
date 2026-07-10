@@ -1822,9 +1822,7 @@ class ApiIntegrationContractTests(unittest.TestCase):
 
         from workbench.backend.api import WorkbenchApiSettings, create_app
 
-        app = create_app(
-            WorkbenchApiSettings(auth_mode="bearer", token="secret-token")
-        )
+        app = create_app(WorkbenchApiSettings(auth_mode="bearer", token="secret-token"))
 
         async def call_api() -> httpx.Response:
             transport = httpx.ASGITransport(app=app)

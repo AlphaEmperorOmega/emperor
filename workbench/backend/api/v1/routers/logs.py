@@ -127,10 +127,7 @@ def _model_query_ids(
 
 
 def _model_filter_ids(request: LogRunDeleteFiltersRequest) -> list[str]:
-    return [
-        require_model_id(model.modelType, model.model)
-        for model in request.models
-    ]
+    return [require_model_id(model.modelType, model.model) for model in request.models]
 
 
 @router.get(
@@ -258,7 +255,7 @@ async def logs_checkpoints(
         checkpoints=[
             LogCheckpointResponse.model_validate(checkpoint)
             for checkpoint in bounded["items"]
-        ]
+        ],
     )
 
 
@@ -346,9 +343,7 @@ async def delete_log_runs(
             active_jobs=active_job_payloads(training_service),
         )
 
-    return LogRunDeleteResponse.model_validate(
-        await run_blocking_io(delete_runs)
-    )
+    return LogRunDeleteResponse.model_validate(await run_blocking_io(delete_runs))
 
 
 @router.post(
@@ -365,10 +360,7 @@ async def logs_tags(
 ) -> LogTagsResponse:
     tags_for_runs = await run_blocking_io(service.tags_for_runs, request.runIds)
     return LogTagsResponse(
-        runs=[
-            LogRunTagsResponse.model_validate(tags)
-            for tags in tags_for_runs
-        ]
+        runs=[LogRunTagsResponse.model_validate(tags) for tags in tags_for_runs]
     )
 
 
@@ -391,8 +383,7 @@ async def logs_scalars(
     )
     return LogScalarsResponse(
         series=[
-            LogScalarSeriesResponse.model_validate(series)
-            for series in scalar_series
+            LogScalarSeriesResponse.model_validate(series) for series in scalar_series
         ]
     )
 
@@ -421,13 +412,9 @@ async def logs_media(
         truncated=media.get("truncated"),
         truncationReason=media.get("truncationReason"),
         images=[
-            LogImageSummaryResponse.model_validate(image)
-            for image in media["images"]
+            LogImageSummaryResponse.model_validate(image) for image in media["images"]
         ],
-        texts=[
-            LogTextSummaryResponse.model_validate(text)
-            for text in media["texts"]
-        ],
+        texts=[LogTextSummaryResponse.model_validate(text) for text in media["texts"]],
     )
 
 
@@ -446,10 +433,7 @@ async def logs_parameter_status(
         request.runIds,
     )
     return LogParameterStatusResponse(
-        runs=[
-            ParameterStatusResponse.model_validate(status)
-            for status in statuses
-        ]
+        runs=[ParameterStatusResponse.model_validate(status) for status in statuses]
     )
 
 

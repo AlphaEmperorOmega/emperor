@@ -91,10 +91,7 @@ def _has_active_job_for_log_folder(
     active_jobs: list[dict[str, Any]],
     log_folder: str,
 ) -> bool:
-    return any(
-        str(job.get("logFolder") or "") == log_folder
-        for job in active_jobs
-    )
+    return any(str(job.get("logFolder") or "") == log_folder for job in active_jobs)
 
 
 def _cached_layer_monitor_data(repository: LogRunRepository, run: Any) -> bool | None:

@@ -178,13 +178,16 @@ class AppFactoryTests(unittest.TestCase):
                 return {"series": []}
 
             transport = httpx.ASGITransport(app=api)
-            async with httpx.AsyncClient(
-                transport=transport,
-                base_url="http://testserver",
-            ) as scalar_client, httpx.AsyncClient(
-                transport=transport,
-                base_url="http://testserver",
-            ) as health_client:
+            async with (
+                httpx.AsyncClient(
+                    transport=transport,
+                    base_url="http://testserver",
+                ) as scalar_client,
+                httpx.AsyncClient(
+                    transport=transport,
+                    base_url="http://testserver",
+                ) as health_client,
+            ):
                 scalar_task = asyncio.create_task(
                     scalar_client.post(
                         "/logs/scalars",
@@ -270,13 +273,16 @@ class AppFactoryTests(unittest.TestCase):
                 )
 
                 transport = httpx.ASGITransport(app=test_app)
-                async with httpx.AsyncClient(
-                    transport=transport,
-                    base_url="http://testserver",
-                ) as delete_client, httpx.AsyncClient(
-                    transport=transport,
-                    base_url="http://testserver",
-                ) as health_client:
+                async with (
+                    httpx.AsyncClient(
+                        transport=transport,
+                        base_url="http://testserver",
+                    ) as delete_client,
+                    httpx.AsyncClient(
+                        transport=transport,
+                        base_url="http://testserver",
+                    ) as health_client,
+                ):
                     started_at = time.perf_counter()
                     delete_task = asyncio.create_task(
                         delete_client.delete("/logs/experiments/slow")
@@ -365,9 +371,7 @@ class AppFactoryTests(unittest.TestCase):
             log_result = await log_task
             return log_result, inspection_result, inspection_elapsed
 
-        log_result, inspection_result, inspection_elapsed = asyncio.run(
-            run_sequence()
-        )
+        log_result, inspection_result, inspection_elapsed = asyncio.run(run_sequence())
 
         self.assertEqual(log_result, "logs")
         self.assertEqual(inspection_result, "inspect")
