@@ -12,14 +12,17 @@ import {
 
 const [LogsWorkspaceProviderBase, useLogsWorkspace] =
   createWorkbenchContext<LogsWorkspaceState>("LogsWorkspaceContext");
+const noStartedExperiments: readonly string[] = [];
 
 export { useLogsWorkspace };
 
 export function LogsWorkspaceProvider({
   enabled,
+  startedExperiments = noStartedExperiments,
   children,
 }: {
   enabled: boolean;
+  startedExperiments?: readonly string[];
   children: ReactNode;
 }) {
   const { capabilities } = useTargetCatalog();
@@ -44,10 +47,13 @@ export function LogsWorkspaceProvider({
   const includeStartedExperiment = state.includeStartedExperiment;
 
   useEffect(() => {
+    for (const experiment of startedExperiments) {
+      includeStartedExperiment(experiment);
+    }
     if (activeTrainingJob?.logFolder) {
       includeStartedExperiment(activeTrainingJob.logFolder);
     }
-  }, [activeTrainingJob?.logFolder, includeStartedExperiment]);
+  }, [activeTrainingJob?.logFolder, includeStartedExperiment, startedExperiments]);
 
   return <LogsWorkspaceProviderBase value={state}>{children}</LogsWorkspaceProviderBase>;
 }

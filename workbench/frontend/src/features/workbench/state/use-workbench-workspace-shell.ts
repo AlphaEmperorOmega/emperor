@@ -29,6 +29,7 @@ export type WorkbenchScreenShell = {
 
 export function useWorkbenchWorkspaceShell() {
   const [activeWorkspace, setActiveWorkspace] = useState<WorkbenchWorkspace>("model");
+  const [logsWorkspaceActivated, setLogsWorkspaceActivated] = useState(false);
   const [isFullConfigOpen, setIsFullConfigOpen] = useState(false);
   const [fullConfigMode, setFullConfigMode] =
     useState<FullConfigDialogMode>("default");
@@ -40,6 +41,9 @@ export function useWorkbenchWorkspaceShell() {
 
   const changeWorkspace = useCallback((workspace: WorkbenchWorkspace) => {
     setActiveWorkspace(workspace);
+    if (workspace === "logs") {
+      setLogsWorkspaceActivated(true);
+    }
     if (workspace !== "model") {
       setIsFullConfigOpen(false);
     }
@@ -91,6 +95,7 @@ export function useWorkbenchWorkspaceShell() {
   };
 
   return {
+    logsWorkspaceActivated,
     screen,
   };
 }
