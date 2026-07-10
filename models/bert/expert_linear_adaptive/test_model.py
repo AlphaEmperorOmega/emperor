@@ -1,20 +1,30 @@
 import importlib
+import inspect
 import unittest
 
 import torch
-
 from emperor.attention.core.variants.mixture_of_attention_heads.config import (
     MixtureOfAttentionHeadsConfig,
 )
+from emperor.attention.core.variants.mixture_of_attention_heads.layer import (
+    MixtureOfAttentionHeads,
+)
+from emperor.attention.core.variants.self_attention.layer import SelfAttention
 from emperor.experts.config import MixtureOfExpertsModelConfig
+from emperor.experts.core.layers import MixtureOfExperts
 from emperor.linears.core.config import AdaptiveLinearLayerConfig
+
+import models.bert.expert_linear_adaptive.config as config
+import models.bert.expert_linear_adaptive.dataset_options as dataset_options
+from models.bert.expert_linear_adaptive.config_builder import (
+    BertExpertLinearAdaptiveConfigBuilder,
+)
 from models.bert.expert_linear_adaptive.model import Model
 from models.bert.expert_linear_adaptive.presets import (
     Experiment,
     ExperimentPreset,
     ExperimentPresets,
 )
-import models.bert.expert_linear_adaptive.config as config
 from models.catalog import catalog_entry
 from models.training_test_utils import (
     RandomBertPretrainingDataModule,
@@ -22,7 +32,6 @@ from models.training_test_utils import (
 )
 
 
-import models.bert.expert_linear_adaptive.dataset_options as dataset_options
 class TestBertExpertLinearAdaptiveModel(unittest.TestCase):
     def test_public_surface_and_catalog_id(self):
         for module_name in (
@@ -43,11 +52,30 @@ class TestBertExpertLinearAdaptiveModel(unittest.TestCase):
         )
         self.assertIsNotNone(catalog_entry("bert/expert_linear_adaptive"))
 
+    def test_attention_mode_switch_is_removed(self):
+        self.assertFalse(hasattr(config, "EXPERT_ATTENTION_FLAG"))
+        self.assertFalse(hasattr(ExperimentPreset, "EXPERT_ATTENTION"))
+        self.assertEqual(
+            [preset.value for preset in ExperimentPreset],
+            list(range(1, 24)),
+        )
+        parameters = inspect.signature(BertExpertLinearAdaptiveConfigBuilder).parameters
+        self.assertNotIn("expert_attention_flag", parameters)
+        self.assertIn("expert_attention_use_kv_expert_models_flag", parameters)
+
+        with self.assertRaises(TypeError):
+            BertExpertLinearAdaptiveConfigBuilder(expert_attention_flag=False)
+        with self.assertRaises(TypeError):
+            self._config(
+                ExperimentPreset.BASELINE,
+                {"expert_attention_flag": False},
+            )
+
     def test_feed_forward_expert_internals_are_adaptive(self):
         cfg = self._config(ExperimentPreset.LOW_RANK_EXPERT_WEIGHT)
-        feed_forward_stack_config = (
-            self._encoder_layer_config(cfg).feed_forward_config.stack_config
-        )
+        feed_forward_stack_config = self._encoder_layer_config(
+            cfg
+        ).feed_forward_config.stack_config
         expert_core_config = (
             feed_forward_stack_config.stack_config.layer_config.layer_model_config
         )
@@ -62,10 +90,13 @@ class TestBertExpertLinearAdaptiveModel(unittest.TestCase):
         )
 
     def test_expert_attention_uses_adaptive_expert_internals(self):
-        cfg = self._config(ExperimentPreset.EXPERT_ATTENTION)
+        cfg = self._config(ExperimentPreset.BASELINE)
         attention_config = self._encoder_layer_config(cfg).attention_config
+        attention_expert_stack_config = (
+            attention_config.experts_config.expert_model_config
+        )
         attention_expert_layer_config = (
-            attention_config.experts_config.expert_model_config.layer_config.layer_model_config
+            attention_expert_stack_config.layer_config.layer_model_config
         )
 
         self.assertIsInstance(attention_config, MixtureOfAttentionHeadsConfig)
@@ -75,20 +106,133 @@ class TestBertExpertLinearAdaptiveModel(unittest.TestCase):
         for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
                 cfg = self._config(preset)
-                mlm_logits, nsp_logits, auxiliary_loss = Model(cfg)(
+                attention_config = self._encoder_layer_config(cfg).attention_config
+                model = Model(cfg)
+                mlm_logits, nsp_logits, auxiliary_loss = model(
                     *self._fake_bert_inputs(cfg)
                 )
+                modules = tuple(model.modules())
 
-                self.assertEqual(mlm_logits.shape, (2, cfg.sequence_length, cfg.output_dim))
+                self.assertIsInstance(
+                    attention_config,
+                    MixtureOfAttentionHeadsConfig,
+                )
+                self.assertTrue(
+                    any(
+                        isinstance(module, MixtureOfAttentionHeads)
+                        for module in modules
+                    )
+                )
+                self.assertFalse(
+                    any(isinstance(module, SelfAttention) for module in modules)
+                )
+                self.assertEqual(
+                    mlm_logits.shape,
+                    (2, cfg.sequence_length, cfg.output_dim),
+                )
                 self.assertEqual(nsp_logits.shape, (2, 2))
                 self.assertEqual(auxiliary_loss.dim(), 0)
                 self.assertTrue(torch.isfinite(auxiliary_loss))
+
+    def test_attention_kv_modes_forward_backward(self):
+        for use_kv_experts in (False, True):
+            with self.subTest(use_kv_experts=use_kv_experts):
+                torch.manual_seed(0)
+                cfg = self._config(
+                    ExperimentPreset.BASELINE,
+                    {"expert_attention_use_kv_expert_models_flag": (use_kv_experts)},
+                )
+                model = Model(cfg)
+                mlm_logits, nsp_logits, auxiliary_loss = model(
+                    *self._fake_bert_inputs(cfg)
+                )
+                attention = next(
+                    module
+                    for module in model.modules()
+                    if isinstance(module, MixtureOfAttentionHeads)
+                )
+
+                self.assertEqual(
+                    attention.cfg.use_kv_expert_models_flag,
+                    use_kv_experts,
+                )
+                self.assertEqual(
+                    mlm_logits.shape,
+                    (2, cfg.sequence_length, cfg.output_dim),
+                )
+                self.assertEqual(nsp_logits.shape, (2, 2))
+                self.assertEqual(auxiliary_loss.dim(), 0)
+                self.assertTrue(torch.isfinite(auxiliary_loss))
+
+                loss = (
+                    mlm_logits.square().mean()
+                    + nsp_logits.square().mean()
+                    + auxiliary_loss
+                )
+                loss.backward()
+                self.assertIsNotNone(model.token_embedding.weight.grad)
+                self.assertGreater(
+                    model.token_embedding.weight.grad.abs().sum().item(),
+                    0.0,
+                )
+
+                projector = attention.projector
+                if use_kv_experts:
+                    for role, expert_model in {
+                        "key": projector.key_model,
+                        "value": projector.value_model,
+                    }.items():
+                        with self.subTest(
+                            use_kv_experts=use_kv_experts,
+                            role=role,
+                        ):
+                            self.assertIsInstance(expert_model, MixtureOfExperts)
+                            self._assert_nonzero_parameter_gradients(
+                                expert_model,
+                                role,
+                            )
+                else:
+                    self._assert_nonzero_parameter_gradients(
+                        projector.key_model,
+                        "regular key projection",
+                    )
+                    self._assert_nonzero_parameter_gradients(
+                        projector.value_model,
+                        "regular value projection",
+                    )
+
+    def test_causal_mask_is_propagated_and_blocks_future_tokens(self):
+        cfg = self._config(ExperimentPreset.CAUSAL)
+        encoder_layer_config = self._encoder_layer_config(cfg)
+
+        self.assertTrue(encoder_layer_config.causal_attention_mask_flag)
+        self.assertTrue(
+            encoder_layer_config.attention_config.causal_attention_mask_flag
+        )
+
+        model = Model(cfg).eval()
+        input_ids, attention_mask, token_type_ids = self._fake_bert_inputs(cfg)
+        changed = input_ids.clone()
+        changed[:, -2] = (changed[:, -2] + 17) % cfg.input_dim
+        with torch.no_grad():
+            original_mlm, original_nsp, _ = model(
+                input_ids,
+                attention_mask,
+                token_type_ids,
+            )
+            changed_mlm, changed_nsp, _ = model(
+                changed,
+                attention_mask,
+                token_type_ids,
+            )
+
+        torch.testing.assert_close(original_mlm[:, 0], changed_mlm[:, 0])
+        torch.testing.assert_close(original_nsp, changed_nsp)
 
     def test_representative_presets_train_one_tiny_epoch(self):
         for preset in (
             ExperimentPreset.BASELINE,
             ExperimentPreset.LOW_RANK_EXPERT_WEIGHT,
-            ExperimentPreset.EXPERT_ATTENTION,
         ):
             with self.subTest(preset=preset.name):
                 cfg = self._config(preset)
@@ -97,11 +241,20 @@ class TestBertExpertLinearAdaptiveModel(unittest.TestCase):
 
                 tiny_cpu_trainer().fit(model, datamodule=datamodule)
 
-    def _config(self, preset: ExperimentPreset):
+    def _config(
+        self,
+        preset: ExperimentPreset,
+        config_overrides: dict | None = None,
+    ):
         return ExperimentPresets().get_config(
             preset,
-            dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
-            config_overrides=self._test_overrides(),
+            dataset_options.DATASET_OPTIONS_BY_TASK[
+                dataset_options.DEFAULT_EXPERIMENT_TASK
+            ][0],
+            config_overrides={
+                **self._test_overrides(),
+                **(config_overrides or {}),
+            },
         )[0]
 
     def _test_overrides(self) -> dict:
@@ -129,6 +282,18 @@ class TestBertExpertLinearAdaptiveModel(unittest.TestCase):
         if hasattr(encoder_config, "block_config"):
             encoder_config = encoder_config.block_config
         return encoder_config.layer_config.layer_model_config
+
+    def _assert_nonzero_parameter_gradients(self, model, role: str) -> None:
+        gradients = [
+            parameter.grad
+            for parameter in model.parameters()
+            if parameter.grad is not None
+        ]
+        self.assertTrue(gradients, f"{role} had no gradients")
+        self.assertTrue(
+            any(gradient.abs().sum().item() > 0.0 for gradient in gradients),
+            f"{role} gradients were all zero",
+        )
 
 
 if __name__ == "__main__":
