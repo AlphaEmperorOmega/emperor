@@ -1,28 +1,39 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 export type CopyStatus = "idle" | "copied" | "failed";
 
-// Copy `text` to the clipboard, exposing a transient status that resets to
-// "idle" whenever `text` changes.
-export function useCopyToClipboard(text: string) {
-  const [status, setStatus] = useState<CopyStatus>("idle");
+type CopyCompletion = {
+  text: string;
+  status: Exclude<CopyStatus, "idle">;
+};
 
-  useEffect(() => {
-    setStatus("idle");
-  }, [text]);
+// Copy `text` to the clipboard, exposing a status only for the current text.
+export function useCopyToClipboard(text: string) {
+  const [completion, setCompletion] = useState<CopyCompletion | null>(null);
+  const currentTextRef = useRef(text);
+  const attemptRef = useRef(0);
+  currentTextRef.current = text;
 
   const copy = useCallback(async () => {
+    const attempt = ++attemptRef.current;
+    const complete = (status: CopyCompletion["status"]) => {
+      if (attempt === attemptRef.current && currentTextRef.current === text) {
+        setCompletion({ text, status });
+      }
+    };
     if (!navigator.clipboard?.writeText) {
-      setStatus("failed");
+      complete("failed");
       return;
     }
     try {
       await navigator.clipboard.writeText(text);
-      setStatus("copied");
+      complete("copied");
     } catch {
-      setStatus("failed");
+      complete("failed");
     }
   }, [text]);
 
+  const status: CopyStatus =
+    completion?.text === text ? completion.status : "idle";
   return { status, copy };
 }
