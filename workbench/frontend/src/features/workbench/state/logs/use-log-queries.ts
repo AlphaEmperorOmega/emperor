@@ -1,5 +1,6 @@
 import {
   keepPreviousData,
+  useInfiniteQuery,
   useQueries,
   useQuery,
   type UseQueryResult,
@@ -60,14 +61,60 @@ export function useLogRunsQuery({
   filters,
   pagination,
   includeAllPages,
+  projection,
   keepPreviousData: shouldKeepPreviousData = true,
 }: QueryOptions & FetchLogRunsInput & { keepPreviousData?: boolean } = {}) {
   return useQuery({
-    queryKey: logQueryKeys.runs({ filters, pagination, includeAllPages }),
+    queryKey: logQueryKeys.runs({
+      filters,
+      pagination,
+      includeAllPages,
+      projection,
+    }),
     queryFn: ({ signal }) =>
-      fetchLogRuns({ filters, pagination, includeAllPages }, { signal }),
+      fetchLogRuns(
+        { filters, pagination, includeAllPages, projection },
+        { signal },
+      ),
     enabled,
     placeholderData: shouldKeepPreviousData ? keepPreviousData : undefined,
+    retry: false,
+    staleTime: LOG_RUNS_STALE_TIME_MS,
+  });
+}
+
+export function useInfiniteLogRunsQuery({
+  enabled = true,
+  filters,
+  pageSize,
+  projection,
+}: QueryOptions &
+  Pick<FetchLogRunsInput, "filters" | "projection"> & {
+    pageSize: number;
+  }) {
+  return useInfiniteQuery({
+    queryKey: logQueryKeys.runs({
+      filters,
+      pagination: { limit: pageSize },
+      projection,
+      mode: "pages",
+    }),
+    queryFn: ({ pageParam, signal }) =>
+      fetchLogRuns(
+        {
+          filters,
+          pagination: { limit: pageSize, offset: pageParam },
+          projection,
+        },
+        { signal },
+      ),
+    enabled,
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) =>
+      lastPage.hasMore
+        ? (lastPage.offset ?? 0) + (lastPage.limit ?? pageSize)
+        : undefined,
+    placeholderData: keepPreviousData,
     retry: false,
     staleTime: LOG_RUNS_STALE_TIME_MS,
   });

@@ -63,6 +63,26 @@ export const logRunSchema = logRunPayloadSchema
   }))
   .pipe(logRunOutputSchema);
 
+const logRunFacetValueSchema = z.object({
+  value: z.string(),
+  count: z.number(),
+});
+const logRunModelFacetSchema = z.object({
+  modelType: z.string(),
+  model: z.string(),
+  count: z.number(),
+});
+const logRunExperimentFacetsSchema = z.object({
+  experiment: z.string(),
+  runCount: z.number(),
+  datasets: z.array(logRunFacetValueSchema),
+  models: z.array(logRunModelFacetSchema),
+  presets: z.array(logRunFacetValueSchema),
+});
+const logRunFacetsSchema = z.object({
+  experiments: z.array(logRunExperimentFacetsSchema),
+});
+
 export const logRunTagsSchema = z.object({
   runId: z.string(),
   hasLayerMonitorData: z.boolean().nullable().optional(),
@@ -119,7 +139,10 @@ const paginationSchema = z.object({
   hasMore: z.boolean().optional(),
 });
 
-const logRunsSchema = paginationSchema.extend({ runs: z.array(logRunSchema) });
+const logRunsSchema = paginationSchema.extend({
+  facets: logRunFacetsSchema.nullable().optional(),
+  runs: z.array(logRunSchema),
+});
 
 const logExperimentsSchema = paginationSchema.extend({
   experiments: z.array(logExperimentSchema),
@@ -166,6 +189,7 @@ export const logRunArtifactsSchema = z.object({
 });
 
 export type LogRun = z.infer<typeof logRunSchema>;
+export type LogRunFacets = z.infer<typeof logRunFacetsSchema>;
 export type LogExperiment = z.infer<typeof logExperimentSchema>;
 export type LogRunTags = z.infer<typeof logRunTagsSchema>;
 export type LogScalarPoint = z.infer<typeof logScalarPointSchema>;
@@ -337,6 +361,7 @@ export type FetchLogRunsInput = {
   filters?: FetchLogRunsFilters;
   pagination?: { limit: number; offset?: number };
   includeAllPages?: boolean;
+  projection?: "full" | "summary";
 };
 
 export async function fetchLogRuns(
@@ -355,8 +380,11 @@ export async function fetchLogRuns(
           preset: filters.preset,
           dataset: filters.dataset,
           hasEventFiles: filters.hasEventFiles,
+          projection: input.projection,
         }
-      : undefined,
+      : input.projection
+        ? { projection: input.projection }
+        : undefined,
     pagination: input.pagination,
     includeAllPages: input.includeAllPages,
     signal: options.signal,

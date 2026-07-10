@@ -174,6 +174,49 @@ describe("logs selection state", () => {
     ]);
   });
 
+  it("uses complete server facets when only the first run page is loaded", () => {
+    const facetOptions = buildCommonRunFacetOptions({
+      runs: [
+        logRun({ id: "a-mnist", experiment: "exp_a", dataset: "Mnist" }),
+      ],
+      selectedExperiments: new Set(["exp_a"]),
+      facets: {
+        experiments: [
+          {
+            experiment: "exp_a",
+            runCount: 105,
+            datasets: [
+              { value: "Mnist", count: 100 },
+              { value: "ZebraSet", count: 5 },
+            ],
+            models: [
+              { modelType: "linears", model: "linear", count: 100 },
+              { modelType: "linears", model: "wide_linear", count: 5 },
+            ],
+            presets: [
+              { value: "AAA_CONTROL", count: 100 },
+              { value: "BASELINE", count: 5 },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(facetOptions.datasets).toEqual([
+      { value: "Mnist", label: "Mnist", count: 100 },
+      { value: "ZebraSet", label: "ZebraSet", count: 5 },
+    ]);
+    expect(facetOptions.models.map(({ value, count }) => ({ value, count })))
+      .toEqual([
+        { value: "linears/linear", count: 100 },
+        { value: "linears/wide_linear", count: 5 },
+      ]);
+    expect(facetOptions.presets).toEqual([
+      { value: "AAA_CONTROL", label: "AAA_CONTROL", count: 100 },
+      { value: "BASELINE", label: "BASELINE", count: 5 },
+    ]);
+  });
+
   it("returns empty lower facets when a selected experiment has no runs", () => {
     const facetOptions = buildCommonRunFacetOptions({
       runs: [logRun({ id: "a-cifar", experiment: "exp_a", dataset: "Cifar10" })],

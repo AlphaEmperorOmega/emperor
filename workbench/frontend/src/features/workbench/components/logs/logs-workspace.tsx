@@ -50,6 +50,11 @@ export function LogsSidebarPanel({ state }: { state: LogsWorkspaceState }) {
       deleteRuns={state.deleteRuns}
       runDeleteError={state.runDeleteError}
       isDeletingRunDelete={state.isDeletingRunDelete}
+      loadedRunCount={state.loadedRunCount}
+      totalRunCount={state.totalRunCount}
+      canLoadMoreRuns={state.canLoadMoreRuns}
+      isLoadingMoreRuns={state.isLoadingMoreRuns}
+      loadMoreRuns={state.loadMoreRuns}
       loadedScalarTagRunCount={state.loadedScalarTagRunCount}
       totalScalarTagRunCount={state.totalScalarTagRunCount}
       canLoadMoreScalarTags={state.canLoadMoreScalarTags}

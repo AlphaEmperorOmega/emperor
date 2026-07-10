@@ -79,6 +79,11 @@ export type LogsSidebarProps = {
   deleteRuns: LogsWorkspaceState["deleteRuns"];
   runDeleteError: LogsWorkspaceState["runDeleteError"];
   isDeletingRunDelete: LogsWorkspaceState["isDeletingRunDelete"];
+  loadedRunCount: LogsWorkspaceState["loadedRunCount"];
+  totalRunCount: LogsWorkspaceState["totalRunCount"];
+  canLoadMoreRuns: LogsWorkspaceState["canLoadMoreRuns"];
+  isLoadingMoreRuns: LogsWorkspaceState["isLoadingMoreRuns"];
+  loadMoreRuns: LogsWorkspaceState["loadMoreRuns"];
   loadedScalarTagRunCount: LogsWorkspaceState["loadedScalarTagRunCount"];
   totalScalarTagRunCount: LogsWorkspaceState["totalScalarTagRunCount"];
   canLoadMoreScalarTags: LogsWorkspaceState["canLoadMoreScalarTags"];
@@ -313,6 +318,11 @@ export function LogsSidebar({
   deleteRuns,
   runDeleteError,
   isDeletingRunDelete,
+  loadedRunCount,
+  totalRunCount,
+  canLoadMoreRuns,
+  isLoadingMoreRuns,
+  loadMoreRuns,
   loadedScalarTagRunCount,
   totalScalarTagRunCount,
   canLoadMoreScalarTags,
@@ -528,6 +538,28 @@ export function LogsSidebar({
             />
           ) : (
             <>
+              {canLoadMoreRuns && (
+                <div className="grid gap-2 rounded-[12px] border border-line-soft bg-white/[0.018] p-3">
+                  <div className="text-xs text-ink-faint">
+                    Loaded {loadedRunCount} of {totalRunCount} matching runs
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="h-8 border border-line bg-white/[0.025] text-xs"
+                    onClick={loadMoreRuns}
+                    disabled={isLoadingMoreRuns}
+                  >
+                    {isLoadingMoreRuns && (
+                      <Loader2
+                        className="mr-2 h-3.5 w-3.5 animate-spin"
+                        aria-hidden
+                      />
+                    )}
+                    Load more runs
+                  </Button>
+                </div>
+              )}
               <LogFilterSection
                 title="Datasets"
                 icon={<Database className="h-4 w-4" aria-hidden />}

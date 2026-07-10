@@ -1102,7 +1102,7 @@ SCHEMA_PARITY_CASES = (
     SchemaParityCase(
         schemas.LogRunsResponse,
         "logRunsSchema",
-        ("total", "limit", "offset", "hasMore", "runs"),
+        ("total", "limit", "offset", "hasMore", "facets", "runs"),
         ("runs",),
     ),
     SchemaParityCase(

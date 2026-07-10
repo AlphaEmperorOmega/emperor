@@ -3000,6 +3000,7 @@ export function installFetchMock(
     presets: string[];
     datasets: string[];
     hasEventFiles: string | null;
+    projection: string | null;
     limit: number;
     offset: number;
   }> = [];
@@ -3632,6 +3633,7 @@ export function installFetchMock(
       const selectedPresets = parsedUrl.searchParams.getAll("preset");
       const selectedDatasets = parsedUrl.searchParams.getAll("dataset");
       const hasEventFiles = parsedUrl.searchParams.get("hasEventFiles");
+      const projection = parsedUrl.searchParams.get("projection");
       const offset = Number(parsedUrl.searchParams.get("offset") ?? 0);
       const limit = Number(
         parsedUrl.searchParams.get("limit") ?? logResponse.runs.length,
@@ -3643,6 +3645,7 @@ export function installFetchMock(
         presets: selectedPresets,
         datasets: selectedDatasets,
         hasEventFiles,
+        projection,
         limit,
         offset,
       });
@@ -3676,9 +3679,52 @@ export function installFetchMock(
         }
         return true;
       });
+      const facetCounts = (values: string[]) =>
+        Array.from(
+          values.reduce((counts, value) => {
+            counts.set(value, (counts.get(value) ?? 0) + 1);
+            return counts;
+          }, new Map<string, number>()),
+          ([value, count]) => ({ value, count }),
+        ).sort((left, right) => left.value.localeCompare(right.value));
+      const facetExperiments = Array.from(
+        filteredRuns.reduce((groups, run) => {
+          const group = groups.get(run.experiment) ?? [];
+          group.push(run);
+          groups.set(run.experiment, group);
+          return groups;
+        }, new Map<string, typeof filteredRuns>()),
+      )
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([experiment, runs]) => ({
+          experiment,
+          runCount: runs.length,
+          datasets: facetCounts(runs.map((run) => run.dataset)),
+          models: Array.from(
+            runs.reduce((counts, run) => {
+              const key = `${run.modelType}\u0000${run.model}`;
+              const current = counts.get(key);
+              counts.set(key, {
+                modelType: run.modelType,
+                model: run.model,
+                count: (current?.count ?? 0) + 1,
+              });
+              return counts;
+            }, new Map<string, { modelType: string; model: string; count: number }>()),
+            ([, value]) => value,
+          ).sort((left, right) =>
+            `${left.modelType}/${left.model}`.localeCompare(
+              `${right.modelType}/${right.model}`,
+            ),
+          ),
+          presets: facetCounts(runs.map((run) => run.preset)),
+        }));
       return jsonResponse({
         ...logResponse,
-        runs: filteredRuns.slice(offset, offset + limit),
+        runs: filteredRuns.slice(offset, offset + limit).map((run) =>
+          projection === "summary" ? { ...run, metrics: {} } : run,
+        ),
+        facets: { experiments: facetExperiments },
         total: filteredRuns.length,
         limit,
         offset,

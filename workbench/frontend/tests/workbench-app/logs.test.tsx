@@ -383,6 +383,7 @@ describe("WorkbenchApp Logs Workspace", () => {
             hasEventFiles: "true",
             limit: 5,
             offset: 0,
+            projection: null,
           },
         ]),
       );
@@ -2789,7 +2790,7 @@ describe("WorkbenchApp Logs Workspace", () => {
     );
   });
 
-  it("shows complete non-scalar log filter options from all custom run pages", async () => {
+  it("shows complete server facets before loading the next custom run page", async () => {
     const runs = Array.from({ length: 105 }, (_, index) => {
       const number = String(index + 1).padStart(3, "0");
       const lateRun = index >= 100;
@@ -2842,17 +2843,15 @@ describe("WorkbenchApp Logs Workspace", () => {
           offset: 0,
         }),
       );
-      expect(logRunRequests).toContainEqual(
-        expect.objectContaining({
-          experiments: ["mega_experiment"],
-          limit: 100,
-          offset: 100,
-        }),
-      );
     });
-    expect(
-      screen.queryByRole("button", { name: /^load more runs$/i }),
-    ).not.toBeInTheDocument();
+    expect(logRunRequests).not.toContainEqual(
+      expect.objectContaining({
+        experiments: ["mega_experiment"],
+        offset: 100,
+      }),
+    );
+    expect(screen.getByRole("button", { name: /^load more runs$/i }))
+      .toBeInTheDocument();
 
     const datasetOptions = await openLogFilter(user, "Datasets");
     expect(within(datasetOptions).getByRole("option", {
@@ -2877,6 +2876,19 @@ describe("WorkbenchApp Logs Workspace", () => {
     expect(within(presetOptions).getByRole("option", {
       name: logOptionName("BASELINE"),
     })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /^load more runs$/i }));
+    await waitFor(() => {
+      expect(logRunRequests).toContainEqual(
+        expect.objectContaining({
+          experiments: ["mega_experiment"],
+          limit: 100,
+          offset: 100,
+        }),
+      );
+    });
+    expect(screen.queryByRole("button", { name: /^load more runs$/i }))
+      .not.toBeInTheDocument();
   });
 
   it("lazy-loads scalar tag discovery without changing non-scalar filters", async () => {
@@ -2898,6 +2910,12 @@ describe("WorkbenchApp Logs Workspace", () => {
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
     await selectAllLogExperiments(user);
 
+    await waitFor(() => {
+      expect(logRunRequests).toContainEqual(
+        expect.objectContaining({ limit: 100, offset: 0 }),
+      );
+    });
+    await user.click(screen.getByRole("button", { name: /^load more runs$/i }));
     await waitFor(() => {
       expect(logRunRequests).toContainEqual(
         expect.objectContaining({ limit: 100, offset: 100 }),

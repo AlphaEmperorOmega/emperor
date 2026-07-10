@@ -45,11 +45,35 @@ class LogRunResponse(ApiResponseModel):
     metrics: JsonObject
 
 
+class LogRunFacetValueResponse(ApiResponseModel):
+    value: str
+    count: int
+
+
+class LogRunModelFacetResponse(ApiResponseModel):
+    modelType: str
+    model: str
+    count: int
+
+
+class LogRunExperimentFacetsResponse(ApiResponseModel):
+    experiment: str
+    runCount: int
+    datasets: list[LogRunFacetValueResponse]
+    models: list[LogRunModelFacetResponse]
+    presets: list[LogRunFacetValueResponse]
+
+
+class LogRunFacetsResponse(ApiResponseModel):
+    experiments: list[LogRunExperimentFacetsResponse]
+
+
 class LogRunsResponse(ApiResponseModel):
     total: int = 0
     limit: int = 0
     offset: int = 0
     hasMore: bool = False
+    facets: LogRunFacetsResponse | None = None
     runs: list[LogRunResponse]
 
 

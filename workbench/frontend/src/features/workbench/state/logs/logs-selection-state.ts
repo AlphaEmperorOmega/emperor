@@ -1,5 +1,15 @@
-import { type LogRun, type LogRunDeleteFilters, type LogRunTags } from "@/lib/api";
-import { modelIdentityFromLegacyId } from "@/lib/selection";
+import {
+  type LogRun,
+  type LogRunDeleteFilters,
+  type LogRunFacets,
+  type LogRunTags,
+} from "@/lib/api";
+import {
+  modelIdentityFromLegacyId,
+  modelIdentityKey,
+  modelNameForId,
+  modelTypeForId,
+} from "@/lib/selection";
 import {
   type ChecklistOption,
   buildCountOptions,
@@ -22,6 +32,7 @@ type CommonRunFacetOptions = {
   models: ChecklistOption[];
   presets: ChecklistOption[];
 };
+type LogRunExperimentFacets = LogRunFacets["experiments"][number];
 
 type ExperimentScalarTagSeedSelection = {
   loadedExperiments: Set<string>;
@@ -179,9 +190,11 @@ function intersectExperimentFacetValues({
 export function buildCommonRunFacetOptions({
   runs,
   selectedExperiments,
+  facets,
 }: {
   runs: LogRun[];
   selectedExperiments: Set<string>;
+  facets?: LogRunFacets | null;
 }): CommonRunFacetOptions {
   if (selectedExperiments.size === 0) {
     return {
@@ -189,6 +202,69 @@ export function buildCommonRunFacetOptions({
       models: [],
       presets: [],
     };
+  }
+
+  const selectedExperimentFacets = facets?.experiments.filter((facet) =>
+    selectedExperiments.has(facet.experiment),
+  );
+  if (
+    selectedExperimentFacets &&
+    selectedExperimentFacets.length === selectedExperiments.size
+  ) {
+    const commonValues = <Value>(
+      valuesForExperiment: (experiment: LogRunExperimentFacets) =>
+        Array<{ value: string; count: number; item: Value }>,
+    ) => {
+      let common: Set<string> | null = null;
+      const counts = new Map<string, { count: number; item: Value }>();
+      for (const experiment of selectedExperimentFacets) {
+        const values = valuesForExperiment(experiment);
+        const experimentValues = new Set(values.map(({ value }) => value));
+        if (common === null) {
+          common = experimentValues;
+        } else {
+          const previousCommon = common as Set<string>;
+          common = new Set<string>(
+            Array.from(previousCommon).filter((value) =>
+              experimentValues.has(value),
+            ),
+          );
+        }
+        for (const { value, count, item } of values) {
+          const current = counts.get(value);
+          counts.set(value, { count: (current?.count ?? 0) + count, item });
+        }
+      }
+      return Array.from(common ?? [])
+        .map((value) => ({ value, ...counts.get(value)! }))
+        .sort((left, right) => left.value.localeCompare(right.value));
+    };
+    const datasets = commonValues((experiment) =>
+      experiment.datasets.map((item) => ({
+        value: item.value,
+        count: item.count,
+        item,
+      })),
+    ).map(({ value, count }) => ({ value, label: value, count }));
+    const presets = commonValues((experiment) =>
+      experiment.presets.map((item) => ({
+        value: item.value,
+        count: item.count,
+        item,
+      })),
+    ).map(({ value, count }) => ({ value, label: value, count }));
+    const models = commonValues((experiment) =>
+      experiment.models.map((item) => ({
+        value: modelIdentityKey(item),
+        count: item.count,
+        item,
+      })),
+    ).map(({ value, count, item }) => ({
+      value,
+      label: `${modelNameForId(item)} · ${modelTypeForId(item)}`,
+      count,
+    }));
+    return { datasets, models, presets };
   }
 
   const selectedExperimentRuns = runs.filter((run) =>

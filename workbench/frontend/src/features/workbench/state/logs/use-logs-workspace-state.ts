@@ -16,6 +16,7 @@ import {
   type LogRunTags,
 } from "@/lib/api";
 import {
+  useInfiniteLogRunsQuery,
   useLogExperimentsQuery,
   useLogTagQueries,
   useLogRunsQuery,
@@ -52,6 +53,7 @@ import {
 
 const TARGET_LOG_RUN_LIMIT = 5;
 const CUSTOM_LOG_RUN_LIMIT = 100;
+const MAX_CUSTOM_LOG_RUN_LIMIT = 2000;
 const SCALAR_TAG_RUN_WINDOW_SIZE = 100;
 const LOG_SELECT_ALL_TAG_LIMIT = 100;
 const DEFAULT_COLLAPSED_METRIC_GROUPS = new Set<LogMetricGroupKey>(["other"]);
@@ -226,15 +228,31 @@ export function useLogsWorkspaceState({
       offset: 0,
     },
   });
-  const customRunsQuery = useLogRunsQuery({
+  const customRunPagesQuery = useInfiniteLogRunsQuery({
     enabled: canQueryRuns && !isTargetScopeMode,
     filters: customRunFilters,
-    pagination: {
+    pageSize: CUSTOM_LOG_RUN_LIMIT,
+  });
+  const customRunsData = useMemo(() => {
+    const pages = customRunPagesQuery.data?.pages;
+    if (!pages?.length) {
+      return undefined;
+    }
+    const firstPage = pages[0];
+    const lastPage = pages[pages.length - 1];
+    return {
+      ...firstPage,
+      runs: pages.flatMap((page) => page.runs),
+      total: firstPage.total,
       limit: CUSTOM_LOG_RUN_LIMIT,
       offset: 0,
-    },
-    includeAllPages: true,
-  });
+      hasMore: Boolean(lastPage.hasMore),
+    };
+  }, [customRunPagesQuery.data?.pages]);
+  const customRunsQuery = {
+    ...customRunPagesQuery,
+    data: customRunsData,
+  };
   const runsQuery = isTargetScopeMode ? targetRunsQuery : customRunsQuery;
   const experimentsQuery = useLogExperimentsQuery({ enabled });
 
@@ -242,6 +260,7 @@ export function useLogsWorkspaceState({
   const runs = useMemo(() => runsData ?? [], [runsData]);
   const experimentsData = experimentsQuery.data?.experiments;
   const experiments = useMemo(() => experimentsData ?? [], [experimentsData]);
+
   const experimentOptions = useMemo(
     () => buildExperimentOptions(experiments),
     [experiments],
@@ -333,8 +352,9 @@ export function useLogsWorkspaceState({
       buildCommonRunFacetOptions({
         runs,
         selectedExperiments: experimentSet,
+        facets: runsQuery.data?.facets,
       }),
-    [experimentSet, runs],
+    [experimentSet, runs, runsQuery.data?.facets],
   );
   const datasetOptions = commonRunFacetOptions.datasets;
   const modelOptions = commonRunFacetOptions.models;
@@ -708,6 +728,25 @@ export function useLogsWorkspaceState({
     },
     runDeleteError: deleteRunsMutation.error,
     isDeletingRunDelete: deleteRunsMutation.isPending,
+    loadedRunCount: runs.length,
+    totalRunCount: runsQuery.data?.total ?? runs.length,
+    canLoadMoreRuns:
+      !isTargetScopeMode &&
+      Boolean(customRunPagesQuery.hasNextPage) &&
+      runs.length < MAX_CUSTOM_LOG_RUN_LIMIT,
+    isLoadingMoreRuns:
+      !isTargetScopeMode && customRunPagesQuery.isFetchingNextPage,
+    loadMoreRuns: () => {
+      if (
+        isTargetScopeMode ||
+        customRunPagesQuery.isFetchingNextPage ||
+        !customRunPagesQuery.hasNextPage ||
+        runs.length >= MAX_CUSTOM_LOG_RUN_LIMIT
+      ) {
+        return;
+      }
+      void customRunPagesQuery.fetchNextPage();
+    },
     loadedScalarTagRunCount: scalarTagRunIds.length,
     totalScalarTagRunCount: visibleRunIds.length,
     canLoadMoreScalarTags: scalarTagRunIds.length < visibleRunIds.length,

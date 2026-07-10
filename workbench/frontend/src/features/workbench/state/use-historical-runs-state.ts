@@ -13,6 +13,8 @@ import {
 } from "@/features/workbench/state/logs/historical-run-selection";
 import { logQueryKeys } from "@/lib/query-keys";
 
+const HISTORICAL_RUN_PAGE_LIMIT = 500;
+
 type HistoricalRunSelectionState = {
   selectedLogRunId: string | null;
   selectedHistoricalExperimentFilter: string;
@@ -30,6 +32,7 @@ type HistoricalRunsStateInput = {
   selectedModelType: string;
   selectedModel: string;
   selectedExperimentTask?: string;
+  runsEnabled?: boolean;
   tagsEnabled?: boolean;
   syncSelectedLogRun: (selectedLogRun: LogRun) => void;
   clearSelectedExperimentRun: () => void;
@@ -171,6 +174,7 @@ export function useHistoricalRunsState({
   selectedModelType,
   selectedModel,
   selectedExperimentTask = "",
+  runsEnabled = true,
   tagsEnabled = true,
   syncSelectedLogRun,
   clearSelectedExperimentRun,
@@ -203,9 +207,10 @@ export function useHistoricalRunsState({
     [selectedModel, selectedModelType],
   );
   const logRunsQuery = useLogRunsQuery({
-    enabled: Boolean(selectedModel && selectedModelType),
+    enabled: runsEnabled && Boolean(selectedModel && selectedModelType),
     filters: logRunFilters,
-    includeAllPages: true,
+    pagination: { limit: HISTORICAL_RUN_PAGE_LIMIT, offset: 0 },
+    projection: "summary",
     keepPreviousData: false,
   });
   const selectedRunCandidateState = useMemo(

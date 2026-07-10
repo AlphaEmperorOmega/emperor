@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query, Request
 
@@ -155,6 +155,7 @@ async def logs_runs(
         bool | None,
         Query(alias="hasEventFiles"),
     ] = None,
+    projection: Annotated[Literal["full", "summary"], Query()] = "full",
 ) -> LogRunsResponse:
     return LogRunsResponse.model_validate(
         await run_blocking_io(
@@ -166,6 +167,7 @@ async def logs_runs(
             preset=preset,
             dataset=dataset,
             has_event_files=has_event_files,
+            projection=projection,
         )
     )
 

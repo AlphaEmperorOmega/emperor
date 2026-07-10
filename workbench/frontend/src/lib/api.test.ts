@@ -2188,6 +2188,50 @@ describe("URL and query construction", () => {
 	    );
   });
 
+  it("fetches lightweight log run pages with server-provided facets", async () => {
+    const fetchMock = stubFetch(
+      fakeResponse({
+        json: () =>
+          Promise.resolve({
+            total: 2,
+            limit: 1,
+            offset: 0,
+            hasMore: true,
+            facets: {
+              experiments: [
+                {
+                  experiment: "exp-a",
+                  runCount: 2,
+                  datasets: [
+                    { value: "Cifar10", count: 1 },
+                    { value: "Mnist", count: 1 },
+                  ],
+                  models: [
+                    { modelType: "linears", model: "linear", count: 2 },
+                  ],
+                  presets: [{ value: "BASELINE", count: 2 }],
+                },
+              ],
+            },
+            runs: [],
+          }),
+      }),
+    );
+
+    const result = await fetchLogRuns({
+      projection: "summary",
+      pagination: { limit: 1, offset: 0 },
+    });
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      `${BASE}/logs/runs?projection=summary&limit=1&offset=0`,
+    );
+    expect(result.facets?.experiments[0].datasets).toEqual([
+      { value: "Cifar10", count: 1 },
+      { value: "Mnist", count: 1 },
+    ]);
+  });
+
   it("fetches log experiments with run counts", async () => {
     const fetchMock = stubFetch(
       fakeResponse({

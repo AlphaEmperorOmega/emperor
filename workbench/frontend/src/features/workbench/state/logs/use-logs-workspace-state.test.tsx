@@ -231,16 +231,45 @@ describe("useLogsWorkspaceState", () => {
       ],
     });
     mocks.fetchLogRuns.mockImplementation(
-      ({ filters }: { filters?: { experiment?: string[] } } = {}) =>
-        Promise.resolve({
-          runs: filters?.experiment
-            ? runs.filter((run) => filters.experiment?.includes(run.experiment))
-            : runs,
-          total: runs.length,
-          limit: 100,
-          offset: 0,
-          hasMore: false,
-        }),
+      ({
+        filters,
+        pagination = { limit: 100, offset: 0 },
+      }: {
+        filters?: { experiment?: string[] };
+        pagination?: { limit: number; offset?: number };
+      } = {}) => {
+        const filteredRuns = filters?.experiment
+          ? runs.filter((run) => filters.experiment?.includes(run.experiment))
+          : runs;
+        const offset = pagination.offset ?? 0;
+        return Promise.resolve({
+          runs: filteredRuns.slice(offset, offset + pagination.limit),
+          total: filteredRuns.length,
+          limit: pagination.limit,
+          offset,
+          hasMore: offset + pagination.limit < filteredRuns.length,
+          facets: {
+            experiments: [
+              {
+                experiment: "large_exp",
+                runCount: 105,
+                datasets: [
+                  { value: "Mnist", count: 100 },
+                  { value: "ZebraSet", count: 5 },
+                ],
+                models: [
+                  { modelType: "linears", model: "linear", count: 100 },
+                  { modelType: "linears", model: "wide_linear", count: 5 },
+                ],
+                presets: [
+                  { value: "AAA_CONTROL", count: 100 },
+                  { value: "BASELINE", count: 5 },
+                ],
+              },
+            ],
+          },
+        });
+      },
     );
     mocks.fetchLogTags.mockImplementation(({ runIds }: { runIds: string[] }) =>
       Promise.resolve({
@@ -276,7 +305,6 @@ describe("useLogsWorkspaceState", () => {
     expect(mocks.fetchLogRuns).toHaveBeenCalledWith(
       expect.objectContaining({
         filters: { experiment: ["large_exp"] },
-        includeAllPages: true,
         pagination: { limit: 100, offset: 0 },
       }),
       expect.any(Object),
@@ -289,8 +317,28 @@ describe("useLogsWorkspaceState", () => {
     });
 
     await waitFor(() => {
+      expect(result.current.visibleRunIds).toHaveLength(100);
+    });
+    expect(result.current.loadedRunCount).toBe(100);
+    expect(result.current.totalRunCount).toBe(105);
+    expect(result.current.canLoadMoreRuns).toBe(true);
+    expect(result.current.canLoadMoreScalarTags).toBe(false);
+
+    act(() => {
+      result.current.loadMoreRuns();
+    });
+
+    await waitFor(() => {
+      expect(mocks.fetchLogRuns).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filters: { experiment: ["large_exp"] },
+          pagination: { limit: 100, offset: 100 },
+        }),
+        expect.any(Object),
+      );
       expect(result.current.visibleRunIds).toHaveLength(105);
     });
+    expect(result.current.canLoadMoreRuns).toBe(false);
     await waitFor(() => {
       expect(mocks.fetchLogTags).toHaveBeenCalledWith(
         { runIds: runs.slice(0, 100).map((run) => run.id) },

@@ -32,6 +32,26 @@ class _ResponseItem:
         return dict(self._payload)
 
 
+class _CountingResponseItem(_ResponseItem):
+    def __init__(self, payload: dict[str, object]) -> None:
+        super().__init__(payload)
+        self.response_count = 0
+
+    def to_response(self) -> dict[str, object]:
+        self.response_count += 1
+        return super().to_response()
+
+
+class _CountingFilterItem(_CountingResponseItem):
+    def __init__(self, payload: dict[str, object]) -> None:
+        super().__init__(payload)
+        self.attribute_counts: dict[str, int] = {}
+
+    def __getattr__(self, name: str) -> object:
+        self.attribute_counts[name] = self.attribute_counts.get(name, 0) + 1
+        return super().__getattr__(name)
+
+
 class ListingLogRunRepository:
     def __init__(
         self,
@@ -50,6 +70,24 @@ class ListingLogRunRepository:
             _ResponseItem(experiment)
             for experiment in self._experiments
         ]
+
+
+class CountingLogRunRepository(ListingLogRunRepository):
+    def __init__(self, runs: list[dict[str, object]]) -> None:
+        super().__init__(runs=runs)
+        self.items = [_CountingResponseItem(run) for run in runs]
+
+    def list_runs(self) -> list[_CountingResponseItem]:
+        return self.items
+
+
+class CountingFilterLogRunRepository(ListingLogRunRepository):
+    def __init__(self, runs: list[dict[str, object]]) -> None:
+        super().__init__(runs=runs)
+        self.items = [_CountingFilterItem(run) for run in runs]
+
+    def list_runs(self) -> list[_CountingFilterItem]:
+        return self.items
 
 
 class RecordingLogRunRepository:
@@ -147,6 +185,74 @@ class LogRunServiceListResponseTests(unittest.TestCase):
 
         self.assertEqual(result["total"], 1)
         self.assertEqual(result["runs"][0]["id"], "run-1")
+
+    def test_list_runs_serializes_only_the_requested_page(self) -> None:
+        repository = CountingLogRunRepository(
+            [_run_payload(f"run-{index}", index) for index in range(500)]
+        )
+        service = LogRunService(repository)  # type: ignore[arg-type]
+
+        result = service.list_runs(limit=5, offset=100)
+
+        self.assertEqual(len(result["runs"]), 5)
+        self.assertEqual(
+            [item.response_count for item in repository.items],
+            [0] * 100 + [1] * 5 + [0] * 395,
+        )
+
+    def test_list_runs_reuses_filtered_facets_across_pages(self) -> None:
+        repository = CountingFilterLogRunRepository(
+            [_run_payload(f"run-{index}", index) for index in range(500)]
+        )
+        service = LogRunService(repository)  # type: ignore[arg-type]
+
+        service.list_runs(limit=100, offset=0, projection="summary")
+        first_page_filter_reads = sum(
+            item.attribute_counts.get("experiment", 0) for item in repository.items
+        )
+        service.list_runs(limit=100, offset=100, projection="summary")
+
+        self.assertGreater(first_page_filter_reads, 0)
+        self.assertEqual(
+            sum(
+                item.attribute_counts.get("experiment", 0) for item in repository.items
+            ),
+            first_page_filter_reads,
+        )
+
+    def test_list_runs_returns_complete_facets_with_a_summary_page(self) -> None:
+        runs = [
+            {
+                **_run_payload("run-1", 0),
+                "experiment": "exp-a",
+                "modelType": "linears",
+                "model": "linear",
+                "dataset": "Mnist",
+                "preset": "BASELINE",
+                "metrics": {"test/accuracy": 0.9},
+            },
+            {
+                **_run_payload("run-2", 1),
+                "experiment": "exp-a",
+                "modelType": "linears",
+                "model": "linear",
+                "dataset": "Cifar10",
+                "preset": "BASELINE",
+                "metrics": {"test/accuracy": 0.8},
+            },
+        ]
+        service = LogRunService(ListingLogRunRepository(runs=runs))  # type: ignore[arg-type]
+
+        result = service.list_runs(limit=1, offset=0, projection="summary")
+        response = LogRunsResponse.model_validate(result)
+
+        self.assertEqual(response.runs[0].metrics, {})
+        self.assertEqual(response.total, 2)
+        self.assertEqual(
+            [facet.value for facet in response.facets.experiments[0].datasets],
+            ["Cifar10", "Mnist"],
+        )
+        self.assertEqual(response.facets.experiments[0].runCount, 2)
 
     def test_list_experiments_returns_response_ready_page(self) -> None:
         repository = ListingLogRunRepository(

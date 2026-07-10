@@ -1113,21 +1113,25 @@ describe("useWorkbenchState", () => {
     const { result } = renderWorkbenchState({ activeWorkspace: "model" });
 
     await waitFor(() => {
+      expect(result.current.target.selectedModel).toBe("linear");
+    });
+    expect(mocks.fetchLogRuns).not.toHaveBeenCalled();
+    expect(mocks.fetchLogTags).not.toHaveBeenCalled();
+
+    act(() => {
+      result.current.target.activateTargetExperimentMode();
+    });
+    await waitFor(() => {
       expect(mocks.fetchLogRuns).toHaveBeenCalledWith(
         expect.objectContaining({
           filters: {
             models: [{ modelType: "linears", model: "linear" }],
           },
-          includeAllPages: true,
+          pagination: { limit: 500, offset: 0 },
+          projection: "summary",
         }),
         expect.any(Object),
       );
-      expect(result.current.target.selectedModel).toBe("linear");
-    });
-    expect(mocks.fetchLogTags).not.toHaveBeenCalled();
-
-    act(() => {
-      result.current.target.activateTargetExperimentMode();
     });
     expect(mocks.fetchLogTags).not.toHaveBeenCalled();
 
