@@ -1,0 +1,650 @@
+import importlib
+import inspect
+import unittest
+from dataclasses import replace
+from pathlib import Path
+
+import torch
+import torch.nn as nn
+from emperor.experiments.language_model import LanguageModelExperiment
+from emperor.linears.core.config import AdaptiveLinearLayerConfig
+from emperor.transformer import TransformerDecoderLayer
+
+import models.gpt.linear_adaptive.config as config
+import models.gpt.linear_adaptive.dataset_options as dataset_options
+import models.gpt.linear_adaptive.runtime_options as runtime_options
+from models.catalog import MODEL_CATALOG, catalog_entry
+from models.gpt.linear_adaptive import (
+    Experiment,
+    ExperimentConfig,
+    ExperimentPreset,
+    ExperimentPresets,
+    GptLinearAdaptiveConfigBuilder,
+    GptLmHeadOptions,
+    Model,
+)
+from models.gpt.linear_adaptive import _config_defaults as config_defaults
+from models.gpt.linear_adaptive._builder_adapter import (
+    linear_adaptive_builder_kwargs_from_flat,
+)
+from models.training_test_utils import (
+    RandomLanguageModelDataModule,
+    tiny_cpu_trainer,
+)
+
+
+class TestGptLinearAdaptiveModel(unittest.TestCase):
+    backend_module_name = "AdaptiveLinearLayer"
+
+    def config(self, **overrides):
+        return GptLinearAdaptiveConfigBuilder(
+            input_dim=16,
+            output_dim=16,
+            sequence_length=6,
+            **overrides,
+        ).build()
+
+    def test_public_imports_and_catalog_identity(self):
+        self.assertTrue(issubclass(Model, LanguageModelExperiment))
+        self.assertIsNotNone(Experiment)
+        self.assertIsNotNone(ExperimentConfig)
+        self.assertIsNotNone(ExperimentPresets)
+        self.assertEqual(
+            MODEL_CATALOG["gpt/linear_adaptive"].module_path,
+            "models.gpt.linear_adaptive",
+        )
+
+    def test_presets_are_contiguous_buildable_and_always_causal(self):
+        presets = ExperimentPresets()
+        self.assertNotIn("CAUSAL", ExperimentPreset.__members__)
+        self.assertEqual(
+            [preset.value for preset in ExperimentPreset],
+            list(range(1, len(ExperimentPreset) + 1)),
+        )
+        for preset in ExperimentPreset:
+            with self.subTest(preset=preset.name):
+                configs = presets.get_config(preset)
+                self.assertTrue(configs)
+                decoder_config = configs[0].experiment_config.decoder_config
+                block_config = getattr(decoder_config, "block_config", decoder_config)
+                layer_config = block_config.layer_config.layer_model_config
+                self.assertTrue(layer_config.causal_attention_mask_flag)
+                self.assertTrue(
+                    layer_config.self_attention_config.causal_attention_mask_flag
+                )
+                self.assertIsNone(layer_config.cross_attention_config)
+
+    def test_forward_shape_tied_head_and_backend_construction(self):
+        model = Model(self.config()).eval()
+        input_ids = torch.tensor([[1, 2, 3, 4], [4, 3, 2, 1]])
+        logits, auxiliary_loss = model(input_ids)
+
+        self.assertEqual(tuple(logits.shape), (2, 4, 16))
+        self.assertEqual(tuple(auxiliary_loss.shape), ())
+        self.assertIs(model.lm_head.weight, model.token_embedding.weight)
+        self.assertIsNone(model.lm_head.bias)
+        self.assertIn(
+            self.backend_module_name,
+            {type(module).__name__ for module in model.modules()},
+        )
+        decoder_layers = [
+            module
+            for module in model.modules()
+            if isinstance(module, TransformerDecoderLayer)
+        ]
+        self.assertTrue(decoder_layers)
+        self.assertTrue(
+            all(layer.cross_attention_model is None for layer in decoder_layers)
+        )
+
+    def test_lm_head_options_allow_untied_biased_projection(self):
+        cfg = self.config(
+            lm_head_options=GptLmHeadOptions(
+                weight_tying_flag=False,
+                bias_flag=True,
+            )
+        )
+        model = Model(cfg)
+        self.assertIsNot(model.lm_head.weight, model.token_embedding.weight)
+        self.assertIsNotNone(model.lm_head.bias)
+
+    def test_tied_head_rejects_unequal_vocabularies(self):
+        with self.assertRaises(ValueError):
+            GptLinearAdaptiveConfigBuilder(
+                input_dim=15,
+                output_dim=16,
+                sequence_length=4,
+            ).build()
+
+    def test_future_tokens_do_not_change_earlier_logits(self):
+        torch.manual_seed(7)
+        model = Model(self.config()).eval()
+        original = torch.tensor([[1, 2, 3, 4, 5]])
+        changed_future = torch.tensor([[1, 2, 3, 9, 10]])
+
+        with torch.no_grad():
+            original_logits, _ = model(original)
+            changed_logits, _ = model(changed_future)
+
+        torch.testing.assert_close(
+            original_logits[:, :3],
+            changed_logits[:, :3],
+            rtol=0.0,
+            atol=0.0,
+        )
+
+    def test_training_loss_has_gradient_flow(self):
+        torch.manual_seed(11)
+        model = Model(self.config())
+        input_ids = torch.tensor([[1, 2, 3], [3, 4, 5]])
+        labels = torch.tensor([[2, 3, 4], [4, 5, 6]])
+        loss = model._model_step((input_ids, labels))
+        loss.backward()
+        gradients = [
+            parameter.grad
+            for parameter in model.parameters()
+            if parameter.requires_grad and parameter.grad is not None
+        ]
+        self.assertTrue(gradients)
+        self.assertTrue(any(torch.any(gradient.abs() > 0) for gradient in gradients))
+
+    def test_generate_is_greedy_deterministic_and_restores_mode(self):
+        torch.manual_seed(13)
+        model = Model(self.config())
+        prompt = torch.tensor([[1, 2, 3]])
+        model.eval()
+        with torch.no_grad():
+            prompt_logits, _ = model(prompt)
+        expected_next = prompt_logits[:, -1].argmax(dim=-1)
+
+        model.train()
+        first = model.generate(prompt, max_new_tokens=1)
+        second = model.generate(prompt, max_new_tokens=1)
+
+        self.assertTrue(model.training)
+        self.assertEqual(tuple(first.shape), (1, 4))
+        torch.testing.assert_close(first[:, :3], prompt)
+        torch.testing.assert_close(first[:, -1], expected_next)
+        torch.testing.assert_close(first, second)
+
+    def test_generate_rejects_invalid_requests(self):
+        model = Model(self.config())
+        invalid_cases = (
+            (torch.tensor([1, 2]), 1, (ValueError, TypeError)),
+            (torch.empty((1, 0), dtype=torch.long), 1, (ValueError,)),
+            (torch.tensor([[1, -1]]), 1, (ValueError,)),
+            (torch.tensor([[1, 16]]), 1, (ValueError,)),
+            (torch.tensor([[1, 2]]), -1, (ValueError,)),
+            (torch.tensor([[1, 2]]), 5, (ValueError,)),
+        )
+        for input_ids, max_new_tokens, errors in invalid_cases:
+            with self.subTest(
+                shape=tuple(input_ids.shape),
+                max_new_tokens=max_new_tokens,
+            ):
+                with self.assertRaises(errors):
+                    model.generate(input_ids, max_new_tokens)
+
+    def test_all_public_modules_import_and_catalog_resolves(self):
+        for module_name in (
+            "models.gpt.linear_adaptive.config",
+            "models.gpt.linear_adaptive.presets",
+            "models.gpt.linear_adaptive.model",
+            "models.gpt.linear_adaptive.config_builder",
+            "models.gpt.linear_adaptive.experiment_config",
+        ):
+            with self.subTest(module_name=module_name):
+                self.assertEqual(
+                    importlib.import_module(module_name).__name__,
+                    module_name,
+                )
+        self.assertEqual(Experiment()._public_model_id(), "gpt/linear_adaptive")
+        self.assertIsNotNone(catalog_entry("gpt/linear_adaptive"))
+
+    def test_package_avoids_bert_and_gpt_sibling_construction_imports(self):
+        package_dir = Path(__file__).resolve().parent
+        blocked = (
+            "models.bert.",
+            "models.gpt.linear.",
+            "models.gpt.expert_linear",
+            "models.linears.linear_adaptive.config",
+        )
+        for path in package_dir.glob("*.py"):
+            if path.name == "test_model.py":
+                continue
+            source = path.read_text(encoding="utf-8")
+            for import_path in blocked:
+                with self.subTest(path=path.name, import_path=import_path):
+                    self.assertNotIn(import_path, source)
+
+    def test_builder_has_explicit_keyword_only_gpt_interface(self):
+        parameters = inspect.signature(
+            GptLinearAdaptiveConfigBuilder.__init__
+        ).parameters
+        self.assertNotIn("runtime", parameters)
+        self.assertFalse(
+            any(
+                parameter.kind is inspect.Parameter.VAR_KEYWORD
+                for parameter in parameters.values()
+            )
+        )
+        for name, parameter in parameters.items():
+            if name != "self":
+                with self.subTest(name=name):
+                    self.assertIs(parameter.kind, inspect.Parameter.KEYWORD_ONLY)
+        for name in (
+            "sequence_length",
+            "embedding_options",
+            "lm_head_options",
+            "decoder_options",
+            "attention_projection_layer_controller_options",
+            "feed_forward_recurrent_controller_options",
+            "attention_hidden_adaptive_weight_options",
+            "feed_forward_hidden_adaptive_mask_options",
+        ):
+            self.assertIn(name, parameters)
+        for removed_name in (
+            "encoder_options",
+            "causal_attention_mask_flag",
+            "token_type_vocab_size",
+            "mlm_head_options",
+            "nsp_head_options",
+        ):
+            self.assertNotIn(removed_name, parameters)
+
+    def test_removed_legacy_runtime_modules_stay_removed(self):
+        package_dir = Path(__file__).resolve().parent
+        removed_modules = (
+            "runtime_defaults",
+            "_adaptive_builder_options",
+            "_builder_options",
+            "_controller_stack",
+            "_linear_builder_options",
+            "_transformer_builder_options",
+        )
+        self.assertFalse(hasattr(runtime_options, "RuntimeOptions"))
+        for module_name in removed_modules:
+            with self.subTest(module_name=module_name):
+                self.assertFalse((package_dir / f"{module_name}.py").exists())
+                with self.assertRaises(ModuleNotFoundError):
+                    importlib.import_module(f"models.gpt.linear_adaptive.{module_name}")
+
+    def test_flat_adapter_matches_explicit_grouped_configuration(self):
+        flat_options = {
+            **self._small_overrides(),
+            "weight_option": config.LowRankDynamicWeightConfig,
+            "stack_gate_flag": True,
+        }
+        decoder_options = replace(
+            config_defaults.gpt_decoder_options(config),
+            hidden_dim=flat_options["hidden_dim"],
+            num_layers=flat_options["stack_num_layers"],
+            dropout_probability=flat_options["stack_dropout_probability"],
+        )
+        attention_options = replace(
+            config_defaults.gpt_attention_options(config),
+            num_heads=flat_options["attn_num_heads"],
+        )
+        recurrent_options = replace(
+            config_defaults.linears_recurrent_controller_options(
+                config,
+                recurrent_prefix="RECURRENT",
+                gate_stack_prefix="RECURRENT_GATE_STACK",
+                halting_stack_prefix="RECURRENT_HALTING_STACK",
+            ),
+            recurrent_max_steps=flat_options["recurrent_max_steps"],
+        )
+        layer_options = replace(
+            config_defaults.linears_layer_controller_options(
+                config,
+                gate_prefix="GATE",
+                gate_stack_prefix="GATE_STACK",
+                halting_prefix="HALTING",
+                halting_stack_prefix="HALTING_STACK",
+            ),
+            stack_gate_flag=True,
+        )
+        weight_options = replace(
+            config_defaults.hidden_adaptive_weight_options(config),
+            option_flag=True,
+            option=config.LowRankDynamicWeightConfig,
+        )
+        adapted = GptLinearAdaptiveConfigBuilder(
+            **linear_adaptive_builder_kwargs_from_flat(flat_options, config)
+        ).build()
+        grouped = GptLinearAdaptiveConfigBuilder(
+            batch_size=flat_options["batch_size"],
+            input_dim=flat_options["input_dim"],
+            output_dim=flat_options["output_dim"],
+            sequence_length=flat_options["sequence_length"],
+            decoder_options=decoder_options,
+            attention_options=attention_options,
+            layer_controller_options=layer_options,
+            recurrent_controller_options=recurrent_options,
+            hidden_adaptive_weight_options=weight_options,
+        ).build()
+        self.assertEqual(adapted, grouped)
+
+    def test_unknown_flat_option_reaches_builder_type_error(self):
+        kwargs = linear_adaptive_builder_kwargs_from_flat(
+            {"unknown_option": 7},
+            config,
+        )
+        self.assertEqual(kwargs["unknown_option"], 7)
+        with self.assertRaisesRegex(TypeError, "unknown_option"):
+            GptLinearAdaptiveConfigBuilder(**kwargs)
+
+    def test_low_rank_preset_adapts_projection_and_feed_forward_layers(self):
+        cfg = self._preset_config(ExperimentPreset.LOW_RANK_WEIGHT)
+        projection = self._projection_layer_config(cfg)
+        feed_forward = self._feed_forward_layer_config(cfg)
+        for role, layer_config in (
+            ("attention", projection),
+            ("feed_forward", feed_forward),
+        ):
+            with self.subTest(role=role):
+                self.assertIsInstance(layer_config, AdaptiveLinearLayerConfig)
+                self.assertIsNotNone(
+                    layer_config.adaptive_augmentation_config.weight_config
+                )
+
+    def test_global_adaptive_weight_reaches_both_decoder_roles(self):
+        cfg = self._preset_config(
+            ExperimentPreset.BASELINE,
+            {
+                "weight_option_flag": True,
+                "weight_option": config.LowRankDynamicWeightConfig,
+            },
+        )
+        self.assertIsNotNone(
+            self._projection_layer_config(
+                cfg
+            ).adaptive_augmentation_config.weight_config
+        )
+        self.assertIsNotNone(
+            self._feed_forward_layer_config(
+                cfg
+            ).adaptive_augmentation_config.weight_config
+        )
+
+    def test_role_specific_adaptive_weight_overrides_are_isolated(self):
+        cases = (
+            ("attention", "attn_weight_option", True, False),
+            ("feed_forward", "ff_weight_option", False, True),
+        )
+        for role, option_name, attention_enabled, ff_enabled in cases:
+            with self.subTest(role=role):
+                cfg = self._preset_config(
+                    ExperimentPreset.BASELINE,
+                    {option_name: config.LowRankDynamicWeightConfig},
+                )
+                projection_weight = self._projection_layer_config(
+                    cfg
+                ).adaptive_augmentation_config.weight_config
+                feed_forward_weight = self._feed_forward_layer_config(
+                    cfg
+                ).adaptive_augmentation_config.weight_config
+                self.assertEqual(projection_weight is not None, attention_enabled)
+                self.assertEqual(feed_forward_weight is not None, ff_enabled)
+
+    def test_role_false_disables_inherited_global_weight(self):
+        cfg = self._preset_config(
+            ExperimentPreset.BASELINE,
+            {
+                "weight_option_flag": True,
+                "weight_option": config.LowRankDynamicWeightConfig,
+                "ff_weight_option_flag": False,
+            },
+        )
+        self.assertIsNotNone(
+            self._projection_layer_config(
+                cfg
+            ).adaptive_augmentation_config.weight_config
+        )
+        self.assertIsNone(
+            self._feed_forward_layer_config(
+                cfg
+            ).adaptive_augmentation_config.weight_config
+        )
+
+    def test_role_generator_stack_dimensions_are_independent(self):
+        cfg = self._preset_config(
+            ExperimentPreset.BASELINE,
+            {
+                "weight_option_flag": True,
+                "weight_option": config.LowRankDynamicWeightConfig,
+                "attn_weight_generator_stack_independent_flag": True,
+                "attn_weight_generator_stack_hidden_dim": 23,
+                "ff_weight_generator_stack_independent_flag": True,
+                "ff_weight_generator_stack_hidden_dim": 37,
+            },
+        )
+        projection_weight = self._projection_layer_config(
+            cfg
+        ).adaptive_augmentation_config.weight_config
+        feed_forward_weight = self._feed_forward_layer_config(
+            cfg
+        ).adaptive_augmentation_config.weight_config
+        self.assertEqual(projection_weight.model_config.hidden_dim, 23)
+        self.assertEqual(feed_forward_weight.model_config.hidden_dim, 37)
+
+    def test_boundaries_remain_plain_and_configurable(self):
+        cfg = self._preset_config(
+            ExperimentPreset.LOW_RANK_WEIGHT,
+            {
+                "embedding_layer_norm_flag": False,
+                "embedding_dropout_probability": 0.25,
+                "lm_head_weight_tying_flag": False,
+                "lm_head_bias_flag": True,
+            },
+        )
+        model = Model(cfg)
+        self.assertIsInstance(model.token_embedding, nn.Embedding)
+        self.assertIsInstance(model.lm_head, nn.Linear)
+        self.assertIsInstance(model.embedding_layer_norm, nn.Identity)
+        self.assertEqual(model.embedding_dropout.p, 0.25)
+        self.assertIsNot(model.lm_head.weight, model.token_embedding.weight)
+        self.assertIsNotNone(model.lm_head.bias)
+
+    def test_stack_controls_preserve_adaptive_backend_layers(self):
+        defaults = self._default_builder_kwargs()
+        cfg = self._preset_config(
+            ExperimentPreset.LOW_RANK_WEIGHT,
+            {
+                "feed_forward_stack_options": replace(
+                    defaults["feed_forward_stack_options"],
+                    hidden_dim=17,
+                ),
+                "feed_forward_layer_controller_options": replace(
+                    defaults["feed_forward_layer_controller_options"],
+                    stack_gate_flag=True,
+                ),
+                "attention_projection_stack_options": replace(
+                    defaults["attention_projection_stack_options"],
+                    hidden_dim=19,
+                ),
+                "attention_projection_layer_controller_options": replace(
+                    defaults["attention_projection_layer_controller_options"],
+                    stack_gate_flag=True,
+                ),
+            },
+        )
+        layer = self._decoder_layer_config(cfg)
+        projection = layer.self_attention_config.projection_model_config
+        feed_forward = layer.feed_forward_config.stack_config
+        self.assertEqual(projection.hidden_dim, 19)
+        self.assertEqual(feed_forward.hidden_dim, 17)
+        self.assertIsNotNone(projection.layer_config.gate_config)
+        self.assertIsNotNone(feed_forward.layer_config.gate_config)
+        self.assertIsInstance(
+            projection.layer_config.layer_model_config,
+            AdaptiveLinearLayerConfig,
+        )
+        self.assertIsInstance(
+            feed_forward.layer_config.layer_model_config,
+            AdaptiveLinearLayerConfig,
+        )
+
+    def test_every_preset_forwards_a_finite_causal_batch(self):
+        for preset in ExperimentPreset:
+            with self.subTest(preset=preset.name):
+                cfg = self._preset_config(preset)
+                logits, auxiliary_loss = Model(cfg)(self._input_ids(cfg))
+                self.assertEqual(
+                    tuple(logits.shape),
+                    (2, cfg.sequence_length, cfg.output_dim),
+                )
+                self.assertEqual(tuple(auxiliary_loss.shape), ())
+                self.assertTrue(torch.isfinite(logits).all())
+                self.assertTrue(torch.isfinite(auxiliary_loss))
+                layer = self._decoder_layer_config(cfg)
+                self.assertTrue(layer.causal_attention_mask_flag)
+                self.assertTrue(layer.self_attention_config.causal_attention_mask_flag)
+                self.assertIsNone(layer.cross_attention_config)
+
+    def test_baseline_forwards_both_language_model_datasets(self):
+        datasets = dataset_options.DATASET_OPTIONS_BY_TASK[
+            dataset_options.DEFAULT_EXPERIMENT_TASK
+        ]
+        for dataset in datasets:
+            with self.subTest(dataset=dataset.__name__):
+                overrides = self._small_overrides()
+                overrides.pop("input_dim")
+                overrides.pop("output_dim")
+                cfg = ExperimentPresets().get_config(
+                    ExperimentPreset.BASELINE,
+                    dataset,
+                    config_overrides=overrides,
+                )[0]
+                logits, auxiliary_loss = Model(cfg)(self._input_ids(cfg))
+                self.assertEqual(logits.shape[-1], dataset.num_classes)
+                self.assertEqual(tuple(auxiliary_loss.shape), ())
+
+    def test_baseline_trains_one_tiny_epoch(self):
+        cfg = self._preset_config(ExperimentPreset.BASELINE)
+        tiny_cpu_trainer().fit(
+            Model(cfg),
+            datamodule=RandomLanguageModelDataModule(
+                cfg,
+                batch_size=2,
+                num_batches=1,
+            ),
+        )
+
+    def test_dimension_and_embedding_dropout_validation_matrix(self):
+        untied = GptLmHeadOptions(weight_tying_flag=False, bias_flag=False)
+        cases = {
+            "input_dim": {"input_dim": 0},
+            "output_dim": {"output_dim": 0, "lm_head_options": untied},
+            "sequence_length": {"sequence_length": 0},
+        }
+        for field, overrides in cases.items():
+            with self.subTest(field=field):
+                with self.assertRaisesRegex(ValueError, field):
+                    GptLinearAdaptiveConfigBuilder(**overrides).build()
+        defaults = config_defaults.gpt_embedding_options(config)
+        for probability in (-0.01, 1.01):
+            with self.subTest(probability=probability):
+                with self.assertRaisesRegex(ValueError, "dropout_probability"):
+                    GptLinearAdaptiveConfigBuilder(
+                        embedding_options=replace(
+                            defaults,
+                            dropout_probability=probability,
+                        )
+                    ).build()
+
+    def _preset_config(
+        self,
+        preset: ExperimentPreset,
+        overrides: dict | None = None,
+    ):
+        return ExperimentPresets().get_config(
+            preset,
+            dataset_options.DATASET_OPTIONS_BY_TASK[
+                dataset_options.DEFAULT_EXPERIMENT_TASK
+            ][0],
+            config_overrides={
+                **self._small_overrides(),
+                **(overrides or {}),
+            },
+        )[0]
+
+    def _small_overrides(self) -> dict:
+        return {
+            "batch_size": 2,
+            "input_dim": 32,
+            "output_dim": 32,
+            "hidden_dim": 16,
+            "sequence_length": 6,
+            "stack_num_layers": 2,
+            "attn_num_heads": 4,
+            "stack_dropout_probability": 0.0,
+            "recurrent_max_steps": 2,
+        }
+
+    def _default_builder_kwargs(self) -> dict:
+        return {
+            "adaptive_generator_stack_options": (
+                config_defaults.adaptive_generator_stack_options(config)
+            ),
+            "feed_forward_stack_options": (
+                config_defaults.linears_submodule_stack_options(
+                    config,
+                    "FF_STACK",
+                    num_layers_key="FF_NUM_LAYERS",
+                    bias_key="FF_BIAS_FLAG",
+                )
+            ),
+            "feed_forward_layer_controller_options": (
+                config_defaults.linears_layer_controller_options(
+                    config,
+                    gate_prefix="FF_GATE",
+                    gate_stack_prefix="FF_GATE_STACK",
+                    halting_prefix="FF_HALTING",
+                    halting_stack_prefix="FF_HALTING_STACK",
+                )
+            ),
+            "attention_projection_stack_options": (
+                config_defaults.linears_submodule_stack_options(
+                    config,
+                    "ATTN_STACK",
+                    num_layers_key="ATTN_NUM_LAYERS",
+                    bias_key="ATTN_BIAS_FLAG",
+                )
+            ),
+            "attention_projection_layer_controller_options": (
+                config_defaults.linears_layer_controller_options(
+                    config,
+                    gate_prefix="ATTN_GATE",
+                    gate_stack_prefix="ATTN_GATE_STACK",
+                    halting_prefix="ATTN_HALTING",
+                    halting_stack_prefix="ATTN_HALTING_STACK",
+                )
+            ),
+        }
+
+    def _input_ids(self, cfg) -> torch.Tensor:
+        return torch.randint(
+            0,
+            cfg.input_dim,
+            (2, cfg.sequence_length),
+        )
+
+    def _decoder_layer_config(self, cfg):
+        decoder = cfg.experiment_config.decoder_config
+        decoder = getattr(decoder, "block_config", decoder)
+        return decoder.layer_config.layer_model_config
+
+    def _projection_layer_config(self, cfg):
+        return self._decoder_layer_config(
+            cfg
+        ).self_attention_config.projection_model_config.layer_config.layer_model_config
+
+    def _feed_forward_layer_config(self, cfg):
+        return self._decoder_layer_config(
+            cfg
+        ).feed_forward_config.stack_config.layer_config.layer_model_config
+
+
+if __name__ == "__main__":
+    unittest.main()
