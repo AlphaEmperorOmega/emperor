@@ -27,7 +27,6 @@ from emperor.halting.options import HaltingHiddenStateModeOptions
 from emperor.memory.config import DynamicMemoryConfig
 from emperor.memory.options import MemoryPositionOptions
 
-
 _PACKAGE = "models.linears.linear_adaptive"
 
 
@@ -273,5 +272,6 @@ class RuntimeOptions:
         _positive("output_dim", self.output_dim)
         if self.gate.enabled and self.gate.shared_config is not None:
             raise ValueError(
-                f"{_PACKAGE}: enabled gate and shared gate config are mutually exclusive"
+                f"{_PACKAGE}: enabled gate and shared gate config are mutually "
+                "exclusive"
             )

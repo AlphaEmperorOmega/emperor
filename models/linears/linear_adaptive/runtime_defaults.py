@@ -137,11 +137,7 @@ def _normalize_overrides(overrides: Mapping[str, object]) -> dict[str, object]:
                 f"accepted keys: {accepted}"
             )
         key = _ALIASES.get(raw_key, raw_key)
-        if (
-            key in normalized
-            and sources[key] != raw_key
-            and normalized[key] != value
-        ):
+        if key in normalized and sources[key] != raw_key and normalized[key] != value:
             raise ValueError(
                 f"{_PACKAGE}: conflicting aliases {sources[key]!r} and "
                 f"{raw_key!r} target {key!r}"
@@ -168,9 +164,7 @@ def _probability(values: Mapping[str, object], *keys: str) -> None:
     for key in keys:
         value = values[key]
         if not 0.0 <= value <= 1.0:  # type: ignore[operator]
-            raise ValueError(
-                f"{_PACKAGE}: runtime key {key!r} must be between 0 and 1"
-            )
+            raise ValueError(f"{_PACKAGE}: runtime key {key!r} must be between 0 and 1")
 
 
 def _validate_values(values: Mapping[str, object]) -> None:
@@ -229,9 +223,7 @@ def _validate_values(values: Mapping[str, object]) -> None:
         "output_layer_bias_decay_rate",
     ):
         if values[key] < 0:  # type: ignore[operator]
-            raise ValueError(
-                f"{_PACKAGE}: runtime key {key!r} must be non-negative"
-            )
+            raise ValueError(f"{_PACKAGE}: runtime key {key!r} must be non-negative")
     for key in (
         "weight_decay_warmup_batches",
         "bias_decay_warmup_batches",
@@ -241,9 +233,7 @@ def _validate_values(values: Mapping[str, object]) -> None:
         "output_layer_bias_decay_warmup_batches",
     ):
         if values[key] < 0:  # type: ignore[operator]
-            raise ValueError(
-                f"{_PACKAGE}: runtime key {key!r} must be non-negative"
-            )
+            raise ValueError(f"{_PACKAGE}: runtime key {key!r} must be non-negative")
     memory_learning_rate = values["memory_test_time_training_learning_rate"]
     if memory_learning_rate is not None and memory_learning_rate <= 0:  # type: ignore[operator]
         raise ValueError(
@@ -339,7 +329,9 @@ def _projection(
         weight_decay_rate=value("weight_decay_rate"),  # type: ignore[arg-type]
         weight_decay_warmup_batches=value("weight_decay_warmup_batches"),  # type: ignore[arg-type]
         weight_normalization_option=value("weight_normalization_option"),  # type: ignore[arg-type]
-        weight_normalization_position_option=value("weight_normalization_position_option"),  # type: ignore[arg-type]
+        weight_normalization_position_option=value(
+            "weight_normalization_position_option"
+        ),  # type: ignore[arg-type]
         weight_bank_expansion_factor=value("weight_bank_expansion_factor"),  # type: ignore[arg-type]
         bias_option=value("bias_option"),  # type: ignore[arg-type]
         bias_decay_schedule=value("bias_decay_schedule"),  # type: ignore[arg-type]
@@ -413,8 +405,12 @@ def _runtime(values: Mapping[str, object]) -> RuntimeOptions:
             enabled=values["memory_flag"],  # type: ignore[arg-type]
             option=values["memory_option"],  # type: ignore[arg-type]
             position=values["memory_position_option"],  # type: ignore[arg-type]
-            test_time_training_learning_rate=values["memory_test_time_training_learning_rate"],  # type: ignore[arg-type]
-            test_time_training_num_inner_steps=values["memory_test_time_training_num_inner_steps"],  # type: ignore[arg-type]
+            test_time_training_learning_rate=values[
+                "memory_test_time_training_learning_rate"
+            ],  # type: ignore[arg-type]
+            test_time_training_num_inner_steps=values[
+                "memory_test_time_training_num_inner_steps"
+            ],  # type: ignore[arg-type]
             stack=memory_stack,
         ),
         recurrence=RecurrenceOptions(
@@ -441,7 +437,9 @@ def _runtime(values: Mapping[str, object]) -> RuntimeOptions:
             option=values["weight_option"],  # type: ignore[arg-type]
             generator_depth=values["generator_depth"],  # type: ignore[arg-type]
             normalization_option=values["weight_normalization_option"],  # type: ignore[arg-type]
-            normalization_position_option=values["weight_normalization_position_option"],  # type: ignore[arg-type]
+            normalization_position_option=values[
+                "weight_normalization_position_option"
+            ],  # type: ignore[arg-type]
             decay_schedule=values["weight_decay_schedule"],  # type: ignore[arg-type]
             decay_rate=values["weight_decay_rate"],  # type: ignore[arg-type]
             decay_warmup_batches=values["weight_decay_warmup_batches"],  # type: ignore[arg-type]

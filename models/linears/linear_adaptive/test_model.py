@@ -279,9 +279,7 @@ class TestModelBehavior(unittest.TestCase):
             dataset_options.DEFAULT_EXPERIMENT_TASK
         ]:
             with self.subTest(dataset=dataset.__name__):
-                model = Model(
-                    presets.get_config(ExperimentPreset.BASELINE, dataset)[0]
-                )
+                model = Model(presets.get_config(ExperimentPreset.BASELINE, dataset)[0])
                 output = model(self._fake_batch(dataset))
                 logits = output[0] if isinstance(output, tuple) else output
                 self.assertEqual(logits.shape, (2, dataset.num_classes))

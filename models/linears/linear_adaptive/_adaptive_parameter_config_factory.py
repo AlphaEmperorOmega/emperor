@@ -115,9 +115,7 @@ class AdaptiveParameterConfigFactory:
                     runtime.weight.normalization_position_option
                 ),
                 bank_expansion_factor=runtime.weight.bank_expansion_factor,
-                model_config=_independent_stack_config(
-                    runtime.weight.generator_stack
-                ),
+                model_config=_independent_stack_config(runtime.weight.generator_stack),
             )
         bias_config = None
         if runtime.bias.enabled:

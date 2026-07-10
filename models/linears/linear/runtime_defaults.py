@@ -27,7 +27,6 @@ from models.linears.linear.runtime_options import (
     RuntimeOptions,
 )
 
-
 _PACKAGE_NAME = "models.linears.linear"
 _ALIASES = {
     "gate_flag": "stack_gate_flag",
@@ -76,14 +75,10 @@ def _flat_defaults() -> dict[str, object]:
         "layer_norm_position": config.STACK_LAYER_NORM_POSITION,
         "stack_num_layers": config.STACK_NUM_LAYERS,
         "stack_activation": config.STACK_ACTIVATION,
-        "stack_residual_connection_option": (
-            config.STACK_RESIDUAL_CONNECTION_OPTION
-        ),
+        "stack_residual_connection_option": (config.STACK_RESIDUAL_CONNECTION_OPTION),
         "stack_dropout_probability": config.STACK_DROPOUT_PROBABILITY,
         "stack_last_layer_bias_option": config.STACK_LAST_LAYER_BIAS_OPTION,
-        "stack_apply_output_pipeline_flag": (
-            config.STACK_APPLY_OUTPUT_PIPELINE_FLAG
-        ),
+        "stack_apply_output_pipeline_flag": (config.STACK_APPLY_OUTPUT_PIPELINE_FLAG),
         "submodule_stack_hidden_dim": config.SUBMODULE_STACK_HIDDEN_DIM,
         "submodule_stack_num_layers": config.SUBMODULE_STACK_NUM_LAYERS,
         "submodule_stack_last_layer_bias_option": (
@@ -188,8 +183,7 @@ def _canonical_flat_values(
 
 def _raise_type_error(key: str, value: object, expected: str) -> None:
     raise TypeError(
-        f"{_PACKAGE_NAME}: {key!r} has type {type(value).__name__}; "
-        f"expected {expected}"
+        f"{_PACKAGE_NAME}: {key!r} has type {type(value).__name__}; expected {expected}"
     )
 
 
@@ -216,9 +210,7 @@ def _optional_int(
     return _int(values, sources, key)
 
 
-def _float(
-    values: Mapping[str, object], sources: Mapping[str, str], key: str
-) -> float:
+def _float(values: Mapping[str, object], sources: Mapping[str, str], key: str) -> float:
     value = values[key]
     if type(value) is not float:
         _raise_type_error(sources[key], value, "float")
@@ -435,9 +427,7 @@ def _memory_implementation(
 ) -> type[DynamicMemoryConfig]:
     value = values["memory_option"]
     if not isinstance(value, type) or not issubclass(value, DynamicMemoryConfig):
-        _raise_type_error(
-            sources["memory_option"], value, "type[DynamicMemoryConfig]"
-        )
+        _raise_type_error(sources["memory_option"], value, "type[DynamicMemoryConfig]")
     return value
 
 
@@ -488,8 +478,7 @@ def runtime_from_flat(
     gate_option = _optional_enum(values, sources, "gate_option", LayerGateOptions)
     if gate_enabled and gate_option is None:
         raise ValueError(
-            f"{_PACKAGE_NAME}: 'gate_option' must be set when "
-            "'stack_gate_flag' is True"
+            f"{_PACKAGE_NAME}: 'gate_option' must be set when 'stack_gate_flag' is True"
         )
     gate = GateOptions(
         enabled=gate_enabled,
@@ -555,18 +544,10 @@ def runtime_from_flat(
             f"{_PACKAGE_NAME}: 'recurrent_gate_option' must be set when "
             "'recurrent_gate_flag' is True"
         )
-    recurrent_halting_threshold = _float(
-        values, sources, "recurrent_halting_threshold"
-    )
-    recurrent_halting_dropout = _float(
-        values, sources, "recurrent_halting_dropout"
-    )
-    _threshold(
-        sources["recurrent_halting_threshold"], recurrent_halting_threshold
-    )
-    _probability(
-        sources["recurrent_halting_dropout"], recurrent_halting_dropout
-    )
+    recurrent_halting_threshold = _float(values, sources, "recurrent_halting_threshold")
+    recurrent_halting_dropout = _float(values, sources, "recurrent_halting_dropout")
+    _threshold(sources["recurrent_halting_threshold"], recurrent_halting_threshold)
+    _probability(sources["recurrent_halting_dropout"], recurrent_halting_dropout)
     recurrence = RecurrenceOptions(
         enabled=_bool(values, sources, "recurrent_flag"),
         max_steps=recurrent_max_steps,

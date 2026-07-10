@@ -8,12 +8,12 @@ from emperor.experiments.base import (
 )
 
 import models.linears.linear.config as config
+import models.linears.linear.dataset_options as dataset_options
 from models.linears.linear.config_builder import LinearConfigBuilder
 from models.linears.linear.model import Model
 from models.linears.linear.runtime_defaults import runtime_from_flat
 
 
-import models.linears.linear.dataset_options as dataset_options
 class ExperimentPreset(BaseOptions):
     BASELINE = 1
     GATING = 2
@@ -245,6 +245,7 @@ class ExperimentPresets(BuilderBackedExperimentPresetsBase):
         runtime = runtime_from_flat(kwargs)
         return self._builder_type(runtime=runtime).build()
 
+
 class Experiment(ExperimentBase):
     def __init__(
         self,
@@ -257,7 +258,9 @@ class Experiment(ExperimentBase):
         return config.NUM_EPOCHS
 
     def _dataset_options(self) -> list:
-        return dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK]
+        return dataset_options.DATASET_OPTIONS_BY_TASK[
+            dataset_options.DEFAULT_EXPERIMENT_TASK
+        ]
 
     def _model_type(self) -> type:
         return Model

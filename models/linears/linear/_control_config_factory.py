@@ -16,7 +16,6 @@ from models.linears.linear.runtime_options import (
     RuntimeOptions,
 )
 
-
 _STICK_BREAKING_GATE_OUTPUT_DIM = 2
 
 
@@ -38,9 +37,7 @@ class ControlConfigFactory:
             input_dim=self.runtime.hidden_dim,
             output_dim=self.runtime.hidden_dim,
             memory_position_option=options.position,
-            test_time_training_learning_rate=(
-                options.test_time_training_learning_rate
-            ),
+            test_time_training_learning_rate=(options.test_time_training_learning_rate),
             test_time_training_num_inner_steps=(
                 options.test_time_training_num_inner_steps
             ),

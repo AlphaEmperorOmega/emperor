@@ -1,4 +1,8 @@
-from emperor.base.layer.config import LayerConfig, LayerStackConfig, RecurrentLayerConfig
+from emperor.base.layer.config import (
+    LayerConfig,
+    LayerStackConfig,
+    RecurrentLayerConfig,
+)
 from emperor.base.layer.gate import GateConfig
 from emperor.base.layer.residual import ResidualConnectionOptions
 from emperor.halting.config import StickBreakingConfig
@@ -53,9 +57,7 @@ class ControlConfigFactory:
             input_dim=self._runtime.hidden_dim,
             output_dim=self._runtime.hidden_dim,
             memory_position_option=options.position,
-            test_time_training_learning_rate=(
-                options.test_time_training_learning_rate
-            ),
+            test_time_training_learning_rate=(options.test_time_training_learning_rate),
             test_time_training_num_inner_steps=(
                 options.test_time_training_num_inner_steps
             ),

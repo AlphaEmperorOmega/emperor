@@ -1,6 +1,11 @@
 from emperor.base.layer.gate import LayerGateOptions
-from emperor.halting.options import HaltingHiddenStateModeOptions
 from emperor.base.layer.residual import ResidualConnectionOptions
+from emperor.base.options import (
+    ActivationOptions,
+    LastLayerBiasOptions,
+    LayerNormPositionOptions,
+)
+from emperor.halting.options import HaltingHiddenStateModeOptions
 from emperor.memory.config import (
     AttentionDynamicMemoryConfig,  # noqa: F401
     DynamicMemoryConfig,
@@ -9,11 +14,6 @@ from emperor.memory.config import (
     WeightedDynamicMemoryConfig,  # noqa: F401
 )
 from emperor.memory.options import MemoryPositionOptions
-from emperor.base.options import (
-    ActivationOptions,
-    LastLayerBiasOptions,
-    LayerNormPositionOptions,
-)
 
 #########################################################################
 # Global

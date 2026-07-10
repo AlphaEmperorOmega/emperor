@@ -266,9 +266,7 @@ class TestLinearRuntimeDefaults(unittest.TestCase):
                 "submodule_stack_hidden_dim": 37,
                 "submodule_stack_num_layers": 4,
                 "submodule_stack_activation": ActivationOptions.MISH,
-                "submodule_stack_layer_norm_position": (
-                    LayerNormPositionOptions.AFTER
-                ),
+                "submodule_stack_layer_norm_position": (LayerNormPositionOptions.AFTER),
                 "submodule_stack_residual_connection_option": (
                     ResidualConnectionOptions.RESIDUAL
                 ),
@@ -483,9 +481,11 @@ class TestLinearConstruction(unittest.TestCase):
                                 "memory_flag": memory_enabled,
                             }
                         )
-                        stack = LinearConfigBuilder(
-                            runtime=runtime
-                        ).build().experiment_config.model_config
+                        stack = (
+                            LinearConfigBuilder(runtime=runtime)
+                            .build()
+                            .experiment_config.model_config
+                        )
                         self.assertEqual(
                             stack.layer_config.gate_config is not None,
                             gate_enabled,
@@ -517,9 +517,7 @@ class TestLinearConstruction(unittest.TestCase):
             }
         )
         stack = (
-            LinearConfigBuilder(runtime=runtime)
-            .build()
-            .experiment_config.model_config
+            LinearConfigBuilder(runtime=runtime).build().experiment_config.model_config
         )
 
         self.assertEqual(stack.layer_config.gate_config.model_config.hidden_dim, 22)
@@ -556,9 +554,11 @@ class TestLinearConstruction(unittest.TestCase):
                 "memory_test_time_training_num_inner_steps": 2,
             }
         )
-        memory = LinearConfigBuilder(
-            runtime=runtime
-        ).build().experiment_config.model_config.shared_memory_config
+        memory = (
+            LinearConfigBuilder(runtime=runtime)
+            .build()
+            .experiment_config.model_config.shared_memory_config
+        )
 
         self.assertIsInstance(memory, WeightedDynamicMemoryConfig)
         self.assertIs(
@@ -584,9 +584,9 @@ class TestLinearConstruction(unittest.TestCase):
                 "memory_flag": True,
             }
         )
-        recurrent = LinearConfigBuilder(
-            runtime=runtime
-        ).build().experiment_config.model_config
+        recurrent = (
+            LinearConfigBuilder(runtime=runtime).build().experiment_config.model_config
+        )
 
         self.assertIsInstance(recurrent, RecurrentLayerConfig)
         self.assertEqual(recurrent.max_steps, 3)
@@ -644,9 +644,7 @@ class TestLinearConstruction(unittest.TestCase):
                 elif isinstance(node, ast.ImportFrom) and node.module:
                     imported_modules.add(node.module)
                 elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    controller_stack_implementations += (
-                        node.name == "_controller_stack"
-                    )
+                    controller_stack_implementations += node.name == "_controller_stack"
 
             self.assertNotIn("models.linears.linear.config", imported_modules)
             self.assertFalse(
@@ -761,9 +759,11 @@ class TestLinearPresetsAndMetadata(unittest.TestCase):
         }
         for preset, (residual, norm) in cases.items():
             with self.subTest(preset=preset.name):
-                layer = ExperimentPresets().get_config(
-                    preset
-                )[0].experiment_config.model_config.layer_config
+                layer = (
+                    ExperimentPresets()
+                    .get_config(preset)[0]
+                    .experiment_config.model_config.layer_config
+                )
                 self.assertIs(layer.residual_connection_option, residual)
                 self.assertIs(layer.layer_norm_position, norm)
 
@@ -782,9 +782,11 @@ class TestLinearPresetsAndMetadata(unittest.TestCase):
         }
         for preset, (gate, halting, memory) in expected.items():
             with self.subTest(preset=preset.name):
-                recurrent = ExperimentPresets().get_config(
-                    preset
-                )[0].experiment_config.model_config
+                recurrent = (
+                    ExperimentPresets()
+                    .get_config(preset)[0]
+                    .experiment_config.model_config
+                )
                 self.assertIsInstance(recurrent, RecurrentLayerConfig)
                 self.assertEqual(recurrent.gate_config is not None, gate)
                 self.assertEqual(recurrent.halting_config is not None, halting)
@@ -909,9 +911,7 @@ class TestLinearPresetsAndMetadata(unittest.TestCase):
             with self.subTest(removed_flag=removed_flag):
                 with contextlib.redirect_stderr(io.StringIO()):
                     with self.assertRaises(SystemExit):
-                        parser.parse_args(
-                            ["--preset", "baseline", removed_flag, "64"]
-                        )
+                        parser.parse_args(["--preset", "baseline", removed_flag, "64"])
 
     def test_module_entrypoint_resolves_without_training(self):
         with (
@@ -1014,8 +1014,7 @@ class TestLinearModelBehavior(unittest.TestCase):
         self.assertTrue(memory_parameters)
         self.assertTrue(
             any(
-                parameter.grad is not None
-                and torch.any(parameter.grad.abs() > 0)
+                parameter.grad is not None and torch.any(parameter.grad.abs() > 0)
                 for parameter in memory_parameters
             )
         )
