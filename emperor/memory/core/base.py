@@ -128,20 +128,26 @@ class DynamicMemoryAbstract(Module):
         memory_model: "Layer | LayerStack",
         decoder: "Layer | LayerStack",
     ) -> Tensor:
-        params = {k: v.clone() for k, v in memory_model.named_parameters()}
+        with torch.inference_mode(False), torch.enable_grad():
+            if logits.is_inference():
+                logits = logits.clone()
+            params = {k: v.clone() for k, v in memory_model.named_parameters()}
 
-        for _ in range(self.test_time_training_num_inner_steps):
+            for _ in range(self.test_time_training_num_inner_steps):
+                memory = self._functional_run_model(memory_model, params, logits)
+                reconstruction = self._run_model(decoder, memory)
+                loss = F.mse_loss(reconstruction, logits.detach())
+                grads = torch.autograd.grad(
+                    loss,
+                    list(params.values()),
+                    create_graph=self.training,
+                )
+                params = {
+                    k: p - self.test_time_training_learning_rate * g
+                    for (k, p), g in zip(params.items(), grads, strict=True)
+                }
+
             memory = self._functional_run_model(memory_model, params, logits)
-            reconstruction = self._run_model(decoder, memory)
-            loss = F.mse_loss(reconstruction, logits.detach())
-            grads = torch.autograd.grad(
-                loss,
-                list(params.values()),
-                create_graph=self.training,
-            )
-            params = {
-                k: p - self.test_time_training_learning_rate * g
-                for (k, p), g in zip(params.items(), grads, strict=True)
-            }
-
-        return self._functional_run_model(memory_model, params, logits)
+            if not self.training:
+                memory = memory.detach()
+            return memory
