@@ -1,9 +1,9 @@
-from emperor.base.layer import LayerStackConfig
+from typing import TYPE_CHECKING
+
+from emperor.base.layer import LayerStackConfig, RecurrentLayerConfig
 from emperor.base.utils import ConfigBase
 from emperor.base.validator import ValidatorBase
 from emperor.experts.config import MixtureOfExpertsModelConfig
-
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.transformer.feed_forward.core.layers import FeedForward
@@ -21,10 +21,11 @@ class FeedForwardValidator(ValidatorBase):
     @staticmethod
     def validate_stack_config_type(stack_config: ConfigBase) -> None:
         if not isinstance(
-            stack_config, (LayerStackConfig, MixtureOfExpertsModelConfig)
+            stack_config,
+            (LayerStackConfig, MixtureOfExpertsModelConfig, RecurrentLayerConfig),
         ):
             raise TypeError(
-                "FeedForward.stack_config must be a LayerStackConfig or a "
-                "MixtureOfExpertsModelConfig, got "
+                "FeedForward.stack_config must be a LayerStackConfig, "
+                "MixtureOfExpertsModelConfig, or RecurrentLayerConfig, got "
                 f"{type(stack_config).__name__}"
             )
