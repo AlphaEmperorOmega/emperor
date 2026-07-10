@@ -216,10 +216,8 @@ class MutualInformationLoss(AuxiliaryLossBase):
 
         p_x = masks / (masks.sum() + 1e-12)
         p_e = (p_x * probabilities).sum(dim=0)
-        # WARNING: Ensure that `skip_mask` does not contain
-        # any zeros exist in `p_e.log()` will produce `-inf`
-        # `H_e` will store `nan` in it's result
-        H_e = (p_e * p_e.log()).sum()
+        positive_p_e = p_e[p_e > 0]
+        H_e = (positive_p_e * positive_p_e.log()).sum()
 
         neg_H_e_given_x = (p_x * probabilities * log_probabilities).sum()
         mi_loss = -(neg_H_e_given_x + H_e)
