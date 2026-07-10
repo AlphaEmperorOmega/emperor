@@ -703,9 +703,8 @@ class ExperimentBase:
         self,
         experiment_task: ExperimentTask | str | None,
     ) -> ExperimentTask | None:
-        try:
-            metadata = self._model_metadata()
-        except Exception:
+        metadata = self._model_metadata()
+        if metadata is None:
             return resolve_experiment_task(experiment_task)
         if experiment_task is None:
             return metadata.default_experiment_task
@@ -715,16 +714,30 @@ class ExperimentBase:
         self,
         experiment_task: ExperimentTask | None,
     ) -> list:
-        try:
-            return self._model_metadata().dataset_options_for_task(experiment_task)
-        except Exception:
+        metadata = self._model_metadata()
+        if metadata is None:
             return self._dataset_options()
+        return metadata.dataset_options_for_task(experiment_task)
 
     def _model_metadata(self):
         from models.model_metadata import load_model_metadata_from_module_path
 
         package = type(self).__module__.rsplit(".", 1)[0]
-        return load_model_metadata_from_module_path(package)
+        try:
+            return load_model_metadata_from_module_path(package)
+        except ModuleNotFoundError as exc:
+            expected_metadata_modules = {
+                f"{package}.config",
+                f"{package}.dataset_options",
+                f"{package}.monitor_options",
+                f"{package}.search_space",
+            }
+            if (
+                public_id_for_module(package) is not None
+                or exc.name not in expected_metadata_modules
+            ):
+                raise
+            return None
 
     def _model_type(self) -> type:
         raise NotImplementedError(
