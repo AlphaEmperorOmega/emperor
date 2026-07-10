@@ -2945,6 +2945,77 @@ describe("POST requests", () => {
     ]);
   });
 
+  it("removes an aborted scalar request from the pending global queue", async () => {
+    const pending: Array<{
+      body: { runIds: string[]; tags: string[] };
+      resolve: (response: Response) => void;
+    }> = [];
+    const scalarFetchMock = vi.fn<FetchFn>((_input, init) => {
+      const response = createDeferred<Response>();
+      pending.push({
+        body: JSON.parse(String((init as RequestInit).body)) as {
+          runIds: string[];
+          tags: string[];
+        },
+        resolve: response.resolve,
+      });
+      return response.promise;
+    });
+    vi.stubGlobal("fetch", scalarFetchMock);
+    const resolveRequest = (index: number) => {
+      pending[index]?.resolve(
+        fakeResponse({ json: () => Promise.resolve({ series: [] }) }),
+      );
+    };
+
+    const firstScalars = fetchLogScalars({
+      runIds: ["run-a"],
+      tags: ["train/loss"],
+    });
+    const controller = new AbortController();
+    const abortedScalars = fetchLogScalars(
+      {
+        runIds: ["run-b"],
+        tags: ["validation/accuracy"],
+      },
+      { signal: controller.signal },
+    );
+    let abortedError: unknown;
+    const abortedResult = abortedScalars.catch((error: unknown) => {
+      abortedError = error;
+    });
+
+    await flushAsyncWork();
+    expect(pending).toHaveLength(1);
+    controller.abort();
+    await flushAsyncWork();
+    const rejectedBeforeFirstSettled =
+      abortedError instanceof DOMException && abortedError.name === "AbortError";
+
+    const thirdScalars = fetchLogScalars({
+      runIds: ["run-c"],
+      tags: ["test/accuracy"],
+    });
+    resolveRequest(0);
+    await flushAsyncWork();
+
+    if (pending[1]?.body.runIds[0] === "run-b") {
+      resolveRequest(1);
+      await flushAsyncWork();
+    }
+    const thirdRequestIndex = pending.findIndex(
+      (request) => request.body.runIds[0] === "run-c",
+    );
+    resolveRequest(thirdRequestIndex);
+    await Promise.all([firstScalars, abortedResult, thirdScalars]);
+
+    expect(rejectedBeforeFirstSettled).toBe(true);
+    expect(pending.map((request) => request.body.runIds[0])).toEqual([
+      "run-a",
+      "run-c",
+    ]);
+  });
+
   it("posts log media requests as JSON", async () => {
     const mediaFetchMock = stubFetch(
       fakeResponse({

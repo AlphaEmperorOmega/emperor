@@ -245,13 +245,47 @@ type FetchPaginatedResult<TPage, TItem> = {
 
 const LOG_SCALAR_GLOBAL_REQUEST_CONCURRENCY = 1;
 let activeLogScalarRequestCount = 0;
-const pendingLogScalarRequests: Array<() => void> = [];
+type PendingLogScalarRequest = {
+  run: () => void;
+  reject: (reason?: unknown) => void;
+  signal?: AbortSignal;
+  handleAbort?: () => void;
+};
+const pendingLogScalarRequests: PendingLogScalarRequest[] = [];
 
-function queueLogScalarRequest<TResponse>(request: () => Promise<TResponse>) {
+function abortedRequestReason(signal: AbortSignal) {
+  return signal.reason ?? new DOMException("The request was aborted.", "AbortError");
+}
+
+function runNextPendingLogScalarRequest() {
+  const next = pendingLogScalarRequests.shift();
+  if (!next) {
+    return;
+  }
+  if (next.handleAbort) {
+    next.signal?.removeEventListener("abort", next.handleAbort);
+  }
+  next.run();
+}
+
+function queueLogScalarRequest<TResponse>(
+  request: () => Promise<TResponse>,
+  signal?: AbortSignal,
+) {
   // TensorBoard scalar reads are disk-heavy; keep one backend scalar request
   // active so large visible chart sets do not pile up blocking work.
   return new Promise<TResponse>((resolve, reject) => {
-    const run = () => {
+    const pendingRequest: PendingLogScalarRequest = {
+      run: () => {},
+      reject,
+      signal,
+    };
+    pendingRequest.run = () => {
+      if (signal?.aborted) {
+        reject(abortedRequestReason(signal));
+        runNextPendingLogScalarRequest();
+        return;
+      }
       activeLogScalarRequestCount += 1;
       Promise.resolve()
         .then(request)
@@ -261,17 +295,33 @@ function queueLogScalarRequest<TResponse>(request: () => Promise<TResponse>) {
             0,
             activeLogScalarRequestCount - 1,
           );
-          const next = pendingLogScalarRequests.shift();
-          next?.();
+          runNextPendingLogScalarRequest();
         });
     };
 
-    if (activeLogScalarRequestCount < LOG_SCALAR_GLOBAL_REQUEST_CONCURRENCY) {
-      run();
+    if (signal?.aborted) {
+      reject(abortedRequestReason(signal));
       return;
     }
 
-    pendingLogScalarRequests.push(run);
+    if (activeLogScalarRequestCount < LOG_SCALAR_GLOBAL_REQUEST_CONCURRENCY) {
+      pendingRequest.run();
+      return;
+    }
+
+    if (signal) {
+      pendingRequest.handleAbort = () => {
+        const pendingIndex = pendingLogScalarRequests.indexOf(pendingRequest);
+        if (pendingIndex < 0) {
+          return;
+        }
+        pendingLogScalarRequests.splice(pendingIndex, 1);
+        signal.removeEventListener("abort", pendingRequest.handleAbort!);
+        reject(abortedRequestReason(signal));
+      };
+      signal.addEventListener("abort", pendingRequest.handleAbort, { once: true });
+    }
+    pendingLogScalarRequests.push(pendingRequest);
   });
 }
 
@@ -474,12 +524,14 @@ export function fetchLogScalars(input: {
   );
 
   if (requests.length <= 1) {
-    return queueLogScalarRequest(() =>
-      requestJson("/logs/scalars", logScalarsSchema, {
-        method: "POST",
-        signal: options.signal,
-        body: JSON.stringify(request),
-      }),
+    return queueLogScalarRequest(
+      () =>
+        requestJson("/logs/scalars", logScalarsSchema, {
+          method: "POST",
+          signal: options.signal,
+          body: JSON.stringify(request),
+        }),
+      options.signal,
     );
   }
 
@@ -487,16 +539,18 @@ export function fetchLogScalars(input: {
     requests,
     LOG_SCALAR_REQUEST_CONCURRENCY,
     ({ runIds, tags }) =>
-      queueLogScalarRequest(() =>
-        requestJson("/logs/scalars", logScalarsSchema, {
-          method: "POST",
-          signal: options.signal,
-          body: JSON.stringify({
-            ...request,
-            runIds,
-            tags,
+      queueLogScalarRequest(
+        () =>
+          requestJson("/logs/scalars", logScalarsSchema, {
+            method: "POST",
+            signal: options.signal,
+            body: JSON.stringify({
+              ...request,
+              runIds,
+              tags,
+            }),
           }),
-        }),
+        options.signal,
       ),
   ).then((pages) => ({
     series: pages.flatMap((page) => page.series),
