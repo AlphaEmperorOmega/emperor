@@ -1240,20 +1240,20 @@ class ExperimentBase:
             merged_top5 = _read_best_results_path(summary_path)
             dataset = result["dataset"]
             runs = list(merged_top5.get(dataset, []))
-            new_acc = result["metrics"].get("validation_accuracy", 0)
-            worst_acc = min(
-                (r["metrics"].get("validation_accuracy", 0) for r in runs),
-                default=-1,
+            new_score = self._result_ranking_score(result)
+            worst_score = min(
+                (self._result_ranking_score(run) for run in runs),
+                default=(float("-inf"), float("-inf")),
             )
 
-            if len(runs) < 5 or new_acc > worst_acc:
+            if len(runs) < 5 or new_score > worst_score:
                 runs.append(result)
                 merged_top5[dataset] = [
                     {**run, "rank": i + 1}
                     for i, run in enumerate(
                         sorted(
                             runs,
-                            key=lambda r: r["metrics"].get("validation_accuracy", 0),
+                            key=self._result_ranking_score,
                             reverse=True,
                         )[:5]
                     )
@@ -1262,6 +1262,34 @@ class ExperimentBase:
 
             top5.clear()
             top5.update(merged_top5)
+
+    def _result_ranking_score(self, result: dict) -> tuple[float, float]:
+        metrics = result.get("metrics", {})
+        if self.experiment_task == ExperimentTask.CAUSAL_LANGUAGE_MODELING:
+            validation_loss = metrics.get("validation/loss")
+            if validation_loss is None:
+                validation_loss = metrics.get("validation_loss")
+            if validation_loss is not None:
+                return (1.0, -float(validation_loss))
+            return (0.0, float("-inf"))
+
+        if self.experiment_task == ExperimentTask.TEXT_TRANSLATION:
+            bleu = metrics.get("validation/bleu")
+            if bleu is None:
+                bleu = metrics.get("validation_bleu")
+            if bleu is not None:
+                return (2.0, float(bleu))
+            validation_loss = metrics.get("validation/loss")
+            if validation_loss is None:
+                validation_loss = metrics.get("validation_loss")
+            if validation_loss is not None:
+                return (1.0, -float(validation_loss))
+            return (0.0, float("-inf"))
+
+        accuracy = metrics.get("validation_accuracy")
+        if accuracy is None:
+            accuracy = metrics.get("validation/accuracy", 0)
+        return (1.0, float(accuracy))
 
     def _best_results_path(self, log_folder: str | None = None) -> Path:
         log_folder = _validate_log_folder(log_folder)
