@@ -355,6 +355,7 @@ class _TorchTextBertPretraining(DataModule):
             special_token_ids=self.special_token_ids,
             vocab_size=self.actual_vocab_size,
             mlm_probability=self.mlm_probability,
+            generator=torch.Generator().manual_seed(self.seed),
         )
 
     def _build_dataset(
@@ -398,6 +399,9 @@ class _TorchTextBertPretraining(DataModule):
             num_workers=self.num_workers,
             drop_last=self.drop_last,
             collate_fn=self.collator,
+            generator=torch.Generator().manual_seed(
+                self.seed if train else self.seed + 1
+            ),
         )
 
     def _text_labels(self, indices) -> list:
