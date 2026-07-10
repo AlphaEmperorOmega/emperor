@@ -8,11 +8,9 @@ from emperor.experiments.base import (
 )
 
 import models.linears.linear.config as config
-from models.linears._builder_adapter import (
-    linear_builder_kwargs_from_flat,
-)
 from models.linears.linear.config_builder import LinearConfigBuilder
 from models.linears.linear.model import Model
+from models.linears.linear.runtime_defaults import runtime_from_flat
 
 
 import models.linears.linear.dataset_options as dataset_options
@@ -244,8 +242,8 @@ class ExperimentPresets(BuilderBackedExperimentPresetsBase):
         )
 
     def _preset(self, **kwargs):
-        builder_kwargs = linear_builder_kwargs_from_flat(kwargs, config)
-        return self._builder_type(**builder_kwargs).build()
+        runtime = runtime_from_flat(kwargs)
+        return self._builder_type(runtime=runtime).build()
 
 class Experiment(ExperimentBase):
     def __init__(
