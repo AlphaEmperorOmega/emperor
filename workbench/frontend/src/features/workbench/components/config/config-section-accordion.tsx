@@ -9,6 +9,7 @@ import {
   type OverrideValues,
   boundaryModelFieldGroups,
   concreteConfigOptionChoice,
+  configKeyToken,
   controlledSectionState,
   displayConfigFieldLabel,
   displayConfigSectionDescription,
@@ -34,6 +35,13 @@ function isEnabledConfigValue(value: string) {
   return ["true", "1", "yes", "on"].includes(value.trim().toLowerCase());
 }
 
+function attentionModeValueLabel(field: ConfigField, value: string) {
+  if (configKeyToken(field.key) !== "expert_attention_flag") {
+    return undefined;
+  }
+  return isEnabledConfigValue(value) ? "MixtureOfAttentionHeads" : "SelfAttention";
+}
+
 function SectionHeaderControl({
   field,
   displayLabel,
@@ -55,6 +63,7 @@ function SectionHeaderControl({
   const isModified = fieldHasOverride(overrides, field.key);
   const isLocked = Boolean(field.locked);
   const isResetDisabled = !isModified || isLocked;
+  const modeLabel = attentionModeValueLabel(field, value);
 
   return (
     <span
@@ -68,6 +77,11 @@ function SectionHeaderControl({
         checked={isEnabled}
         onCheckedChange={(checked) => onChange(field.key, String(checked))}
       />
+      {modeLabel && (
+        <span className="max-w-[13rem] truncate text-xs font-semibold text-ink-dim">
+          {modeLabel}
+        </span>
+      )}
       {isModified && (
         <button
           type="button"
@@ -342,7 +356,10 @@ export function ConfigSectionAccordion({
   const sectionModifiedCount = modifiedCount(fields, overrides);
   const sectionPresetOwnedCount = presetOwnedCount(fields);
   const displayTitle = displayConfigSectionTitle(title);
-  const displayDescription = displayConfigSectionDescription(title);
+  const displayDescription =
+    title === "Attention Mode" && !controlField
+      ? undefined
+      : displayConfigSectionDescription(title);
   const controlFieldId = controlField ? `${id}-control-${controlField.key}` : undefined;
   const controlFieldDisplayLabel = controlField
     ? displayConfigFieldLabel(controlField, title)

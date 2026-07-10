@@ -683,6 +683,26 @@ function expertsMixtureSchemaResponse() {
     fields: [
       ...schemaResponse.fields,
       configFixtureField({
+        key: "expert_attention_flag",
+        configKey: "EXPERT_ATTENTION_FLAG",
+        flag: "--expert-attention-flag",
+        label: "expert attention flag",
+        section: "Mixture Of Experts Model Options",
+        type: "bool",
+        default: true,
+        choices: [true, false],
+      }),
+      configFixtureField({
+        key: "expert_attention_use_kv_expert_models_flag",
+        configKey: "EXPERT_ATTENTION_USE_KV_EXPERT_MODELS_FLAG",
+        flag: "--expert-attention-use-kv-expert-models-flag",
+        label: "expert attention use kv expert models flag",
+        section: "Mixture Of Experts Model Options",
+        type: "bool",
+        default: false,
+        choices: [true, false],
+      }),
+      configFixtureField({
         key: "expert_top_k",
         configKey: "EXPERT_TOP_K",
         flag: "--expert-top-k",
@@ -737,6 +757,16 @@ function expertsMixtureSchemaResponse() {
         choices: [true, false],
       }),
     ],
+  };
+}
+
+function expertsMixtureWithoutAttentionModeFlagSchemaResponse() {
+  const response = expertsMixtureSchemaResponse();
+  return {
+    ...response,
+    fields: response.fields.filter(
+      (field) => field.key !== "expert_attention_flag",
+    ),
   };
 }
 
@@ -2542,6 +2572,75 @@ describe("WorkbenchApp Full Config", () => {
     expect(
       within(fullConfigSectionFor(expertStackAccordion)).queryByRole("switch"),
     ).not.toBeInTheDocument();
+  });
+
+  it("renders expert attention mode as a nested accordion switch", async () => {
+    installFetchMock({ schemaResponse: expertsMixtureSchemaResponse() });
+    renderWorkbench();
+    const user = userEvent.setup();
+
+    const dialog = await openFullConfig(user);
+    const mixtureAccordion = within(dialog).getByRole("button", {
+      name: /mixture of experts model options section, 3 fields, 0 overrides/i,
+    });
+    await user.click(mixtureAccordion);
+
+    const mixtureSection = fullConfigSectionFor(mixtureAccordion);
+    const attentionAccordion = within(mixtureSection).getByRole("button", {
+      name: /attention mode section, 2 fields, 0 overrides/i,
+    });
+    const attentionSection = fullConfigSectionFor(attentionAccordion);
+    const attentionModeSwitch = within(attentionSection).getByRole("switch", {
+      name: /use mixtureofattentionheads/i,
+    });
+
+    expect(attentionAccordion).not.toBeDisabled();
+    expect(attentionSection).toHaveTextContent("MixtureOfAttentionHeads");
+    expect(attentionModeSwitch).toBeChecked();
+    expect(
+      within(directFieldGridFor(attentionAccordion)).getByRole("radiogroup", {
+        name: /expert k\/v projections/i,
+      }),
+    ).toBeInTheDocument();
+
+    await user.click(attentionModeSwitch);
+
+    const disabledAttentionAccordion = within(mixtureSection).getByRole("button", {
+      name: /attention mode section, 2 fields, 1 override/i,
+    });
+    const disabledAttentionSection = fullConfigSectionFor(disabledAttentionAccordion);
+
+    expect(disabledAttentionAccordion).toBeDisabled();
+    expect(disabledAttentionSection).toHaveTextContent("SelfAttention");
+    expect(attentionModeSwitch).not.toBeChecked();
+  });
+
+  it("renders expert K/V projections without a mode switch when the schema omits it", async () => {
+    installFetchMock({
+      schemaResponse: expertsMixtureWithoutAttentionModeFlagSchemaResponse(),
+    });
+    renderWorkbench();
+    const user = userEvent.setup();
+
+    const dialog = await openFullConfig(user);
+    const mixtureAccordion = within(dialog).getByRole("button", {
+      name: /mixture of experts model options section, 3 fields, 0 overrides/i,
+    });
+    await user.click(mixtureAccordion);
+
+    const mixtureSection = fullConfigSectionFor(mixtureAccordion);
+    const attentionAccordion = within(mixtureSection).getByRole("button", {
+      name: /attention mode section, 1 field, 0 overrides/i,
+    });
+    const attentionSection = fullConfigSectionFor(attentionAccordion);
+
+    expect(within(attentionSection).queryByRole("switch")).not.toBeInTheDocument();
+    expect(
+      within(directFieldGridFor(attentionAccordion)).getByRole("radiogroup", {
+        name: /expert k\/v projections/i,
+      }),
+    ).toBeInTheDocument();
+    expect(attentionSection).not.toHaveTextContent(/SelfAttention/i);
   });
 
   it("renders expert controller accordions beside expert stack options", async () => {

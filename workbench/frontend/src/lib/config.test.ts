@@ -6,6 +6,7 @@ import {
   defaultConfigFieldValue,
   deriveNestedConfigSections,
   disabledConfigFieldReasons,
+  displayConfigFieldLabel,
   effectivePresetOverrides,
   filterConfigSectionsForSearch,
   inheritedHiddenModelFieldHint,
@@ -1600,6 +1601,68 @@ describe("config section controls", () => {
     );
     expect(expertStackSection?.children).toBeUndefined();
     expect(disabledConfigFieldReasons(sections, {}).size).toBe(0);
+  });
+
+  it("nests expert attention mode under mixture options and controls dependent fields", () => {
+    const sections: ConfigSection[] = [
+      {
+        title: "Mixture Of Experts Model Options",
+        fields: [
+          field({
+            key: "expert_attention_flag",
+            label: "expert attention flag",
+            type: "bool",
+            default: true,
+            choices: [true, false],
+            section: "Mixture Of Experts Model Options",
+          }),
+          field({
+            key: "expert_attention_use_kv_expert_models_flag",
+            label: "expert attention use kv expert models flag",
+            type: "bool",
+            default: false,
+            choices: [true, false],
+            section: "Mixture Of Experts Model Options",
+          }),
+          field({
+            key: "expert_top_k",
+            type: "int",
+            default: 2,
+            section: "Mixture Of Experts Model Options",
+          }),
+        ],
+      },
+    ];
+
+    const [mixtureSection] = deriveNestedConfigSections(sections);
+    const attentionModeSection = mixtureSection.children?.find(
+      (section) => section.title === "Attention Mode",
+    );
+    const disabledReasons = disabledConfigFieldReasons(sections, {});
+    const disabledReasonsWhenOff = disabledConfigFieldReasons(sections, {
+      expert_attention_flag: "false",
+    });
+
+    expect(mixtureSection.fields.map((item) => item.key)).toEqual([
+      "expert_top_k",
+    ]);
+    expect(attentionModeSection?.controlFieldKey).toBe("expert_attention_flag");
+    expect(attentionModeSection?.fields.map((item) => item.key)).toEqual([
+      "expert_attention_flag",
+      "expert_attention_use_kv_expert_models_flag",
+    ]);
+    expect(
+      disabledReasons.get("expert_attention_use_kv_expert_models_flag"),
+    ).toBeUndefined();
+    expect(
+      disabledReasonsWhenOff.get("expert_attention_use_kv_expert_models_flag"),
+    ).toMatch(/enable expert attention flag/i);
+    expect(
+      displayConfigFieldLabel(attentionModeSection!.fields[0]!, "Attention Mode"),
+    ).toBe("Use MixtureOfAttentionHeads");
+    expect(
+      displayConfigFieldLabel(attentionModeSection!.fields[1]!, "Attention Mode"),
+    ).toBe("Expert K/V projections");
   });
 
   it("nests expert-internal controller sections under mixture options alongside expert stack options", () => {

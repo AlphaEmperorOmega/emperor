@@ -100,6 +100,7 @@ export function normalizeConfigOverrides(
 }
 
 const CONTROLLED_SECTION_FLAG_KEYS_BY_TITLE = new Map([
+  ["Attention Mode", "expert_attention_flag"],
   ["Gate Options", "gate_flag"],
   ["Gate Stack Options", "gate_stack_independent_flag"],
   ["Halting Options", "halting_flag"],
@@ -475,6 +476,24 @@ const LAYER_STACK_SUBMODULE_OPTIONS_SECTION = "Layer Stack Submodule Options";
 const INPUT_BOUNDARY_MODEL_SECTION = "Input Boundary Model Options";
 const OUTPUT_BOUNDARY_MODEL_SECTION = "Output Boundary Model Options";
 const ADAPTIVE_GENERATOR_STACK_SECTION = "Adaptive Generator Stack Options";
+const MIXTURE_OF_EXPERTS_SECTION = "Mixture Of Experts Model Options";
+const ATTENTION_MODE_SECTION = "Attention Mode";
+
+const DISPLAY_SECTION_PATH_OVERRIDES_BY_FIELD_KEY = new Map<string, string[]>([
+  [
+    "expert_attention_flag",
+    [MIXTURE_OF_EXPERTS_SECTION, ATTENTION_MODE_SECTION],
+  ],
+  [
+    "expert_attention_use_kv_expert_models_flag",
+    [MIXTURE_OF_EXPERTS_SECTION, ATTENTION_MODE_SECTION],
+  ],
+]);
+
+const DISPLAY_CONFIG_FIELD_LABELS_BY_KEY = new Map<string, string>([
+  ["expert_attention_flag", "Use MixtureOfAttentionHeads"],
+  ["expert_attention_use_kv_expert_models_flag", "Expert K/V projections"],
+]);
 
 const DISPLAY_CONFIG_SECTIONS = new Map<
   string,
@@ -495,6 +514,14 @@ const DISPLAY_CONFIG_SECTIONS = new Map<
         "Defaults for gate, halting, memory, and recurrent stacks unless overridden.",
     },
   ],
+  [
+    ATTENTION_MODE_SECTION,
+    {
+      title: "Attention Mode",
+      description:
+        "Off uses SelfAttention. On uses MixtureOfAttentionHeads for expert-routed attention projections.",
+    },
+  ],
 ]);
 
 export function displayConfigFieldSection(field: ConfigField) {
@@ -507,6 +534,10 @@ export function displayConfigSectionTitle(title: string) {
 
 export function displayConfigSectionDescription(title: string) {
   return DISPLAY_CONFIG_SECTIONS.get(title)?.description;
+}
+
+function displaySectionPathOverride(field: ConfigField) {
+  return DISPLAY_SECTION_PATH_OVERRIDES_BY_FIELD_KEY.get(configKeyToken(field.key));
 }
 
 function sentenceCaseLabel(label: string) {
@@ -562,6 +593,13 @@ export function displayConfigFieldLabel(
   sectionTitle: string,
   groupTitle?: string,
 ) {
+  const explicitLabel = DISPLAY_CONFIG_FIELD_LABELS_BY_KEY.get(
+    configKeyToken(field.key),
+  );
+  if (explicitLabel) {
+    return explicitLabel;
+  }
+
   const controlFieldKey = CONTROLLED_SECTION_FLAG_KEYS_BY_TITLE.get(sectionTitle);
   if (
     controlFieldKey &&
@@ -646,7 +684,15 @@ export function groupConfigFieldsBySectionPath(fields: ConfigField[]): ConfigSec
   }
 
   for (const rawField of fields) {
-    const field = normalizeConfigFieldForDisplay(rawField);
+    const normalizedField = normalizeConfigFieldForDisplay(rawField);
+    const overriddenSectionPath = displaySectionPathOverride(normalizedField);
+    const field = overriddenSectionPath
+      ? {
+          ...normalizedField,
+          section: overriddenSectionPath[overriddenSectionPath.length - 1]!,
+          sectionPath: overriddenSectionPath,
+        }
+      : normalizedField;
     const sectionPath = normalizedFieldSectionPath(field);
     let node = childFor(roots, sectionPath[0]!);
     for (const sectionTitle of sectionPath.slice(1)) {
