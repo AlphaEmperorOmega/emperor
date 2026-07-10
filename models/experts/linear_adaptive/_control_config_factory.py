@@ -35,13 +35,13 @@ from emperor.sampler.core.config import RouterConfig, SamplerConfig
 from models.experts.linear_adaptive._router_controller_config import (
     RouterControllerModelConfig,
 )
-from models.adaptive_parameter_config_factory import (
+from models.experts.linear_adaptive._adaptive_parameter_config_factory import (
     build_bias_config,
     build_diagonal_config,
     build_mask_config,
     build_weight_config,
 )
-from models.experts._builder_options import (
+from models.experts.linear_adaptive.runtime_options import (
     ExpertsDynamicMemoryOptions,
     ExpertsSubmoduleStackOptions,
     ExpertsLayerControllerOptions,
@@ -51,17 +51,17 @@ from models.experts._builder_options import (
     ExpertsSamplerOptions,
     ExpertsStackOptions,
 )
-from models.experts._controller_stack import (
+from models.experts.linear_adaptive._control_support import (
     build_controller_stack,
+    ExpertsGateConfigFactory,
+    ExpertsHaltingConfigFactory,
+    ExpertsMemoryConfigFactory,
+    ExpertsRecurrentConfigFactory,
 )
-from models.experts._gate_config_factory import ExpertsGateConfigFactory
-from models.experts._halting_config_factory import ExpertsHaltingConfigFactory
-from models.experts._memory_config_factory import ExpertsMemoryConfigFactory
-from models.experts._recurrent_config_factory import ExpertsRecurrentConfigFactory
-from models.linears.linear_adaptive._adaptive_generator_stack_config_factory import (
+from models.experts.linear_adaptive._adaptive_generator_stack_config_factory import (
     AdaptiveGeneratorStackConfigFactory,
 )
-from models.linears.linear_adaptive._builder_options import (
+from models.experts.linear_adaptive.runtime_options import (
     AdaptiveGeneratorStackOptions,
     AdaptiveGeneratorStackSource,
     HiddenAdaptiveBiasOptions,

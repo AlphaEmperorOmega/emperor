@@ -47,9 +47,7 @@ from emperor.experts.core.options import (
 )
 
 import models.experts.linear_adaptive.config as config
-from models.experts._builder_adapter import (
-    linear_adaptive_builder_kwargs_from_flat,
-)
+from models.experts.linear_adaptive.runtime_defaults import runtime_from_flat
 from models.experts.linear_adaptive.config_builder import (
     LinearAdaptiveConfigBuilder,
 )
@@ -905,11 +903,7 @@ class ExperimentPresets(BuilderBackedExperimentPresetsBase):
         )
 
     def _preset(self, **kwargs):
-        builder_kwargs = linear_adaptive_builder_kwargs_from_flat(
-            kwargs,
-            config,
-        )
-        return self._builder_type(**builder_kwargs).build()
+        return self._builder_type(runtime=runtime_from_flat(kwargs, config)).build()
 
 
 class Experiment(ExperimentBase):

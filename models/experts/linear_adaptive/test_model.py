@@ -68,7 +68,7 @@ from emperor.memory.config import (
 from emperor.memory.options import MemoryPositionOptions
 
 import models.experts.linear_adaptive.config as config
-from models.experts._builder_options import (
+from models.experts.linear_adaptive.runtime_options import (
     ExpertsDynamicMemoryOptions,
     ExpertsLayerControllerOptions,
     ExpertsMixtureOptions,
@@ -78,6 +78,7 @@ from models.experts._builder_options import (
     ExpertsStackOptions,
     ExpertsSubmoduleStackOptions,
     ExpertsSubmoduleStackSource,
+    RuntimeOptions,
 )
 from models.experts.linear_adaptive.config_builder import (
     LinearAdaptiveConfigBuilder,
@@ -89,19 +90,15 @@ from models.experts.linear_adaptive._router_controller_config import (
 from models.experts.linear_adaptive.presets import (
     ExperimentPreset,
     ExperimentPresets,
-    _PRESET_DEFINITIONS as EXPERT_ADAPTIVE_PRESET_DEFINITIONS,
 )
-from models.linears.linear_adaptive._builder_options import (
+from models.experts.linear_adaptive.runtime_defaults import runtime_from_flat
+from models.experts.linear_adaptive.runtime_options import (
     AdaptiveGeneratorStackOptions,
     AdaptiveGeneratorStackSource,
     HiddenAdaptiveBiasOptions,
     HiddenAdaptiveDiagonalOptions,
     HiddenAdaptiveMaskOptions,
     HiddenAdaptiveWeightOptions,
-)
-from models.linears.linear_adaptive.presets import (
-    ExperimentPreset as LinearAdaptiveExperimentPreset,
-    _PRESET_DEFINITIONS as LINEAR_ADAPTIVE_PRESET_DEFINITIONS,
 )
 
 
@@ -126,24 +123,10 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
 
                 self.assertEqual(logits.shape, (batch_size, dataset.num_classes))
 
-    def test_expert_adaptive_presets_include_linear_adaptive_family_names(self):
-        self.assertEqual(
-            set(LinearAdaptiveExperimentPreset.names())
-            - set(ExperimentPreset.names()),
-            set(),
-        )
-
-    def test_shared_linear_adaptive_preset_values_match_expert_adaptive(self):
-        for linear_preset in LinearAdaptiveExperimentPreset:
-            with self.subTest(preset=linear_preset.name):
-                expert_preset = ExperimentPreset[linear_preset.name]
-
-                self.assertEqual(
-                    EXPERT_ADAPTIVE_PRESET_DEFINITIONS[expert_preset].preset_values,
-                    LINEAR_ADAPTIVE_PRESET_DEFINITIONS[
-                        linear_preset
-                    ].preset_values,
-                )
+    def test_local_preset_catalog_has_stable_endpoints(self):
+        self.assertEqual(ExperimentPreset.BASELINE.value, 1)
+        self.assertEqual(ExperimentPreset.ADAPTIVE_SHARED_ROUTER.value, 9)
+        self.assertGreaterEqual(len(ExperimentPreset.names()), 60)
 
     def test_baseline_forwards_all_datasets(self):
         batch_size = 2
@@ -699,15 +682,8 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
 
         self.assertEqual(flat_cfg, grouped_cfg)
 
-    def test_removed_router_stack_independent_and_sampler_names_are_rejected(self):
-        parameters = inspect.signature(
-            LinearAdaptiveConfigBuilder.__init__
-        ).parameters
-        new_names = {
-            "router_stack_options",
-            "router_stack_hidden_dim",
-            "router_bias_flag",
-        }
+    def test_runtime_is_primary_and_removed_legacy_names_are_rejected(self):
+        parameters = inspect.signature(LinearAdaptiveConfigBuilder.__init__).parameters
         old_names = {
             "router_stack_independent_flag",
             "sampler_stack_options",
@@ -716,9 +692,11 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
             "sampler_bias_flag",
         }
 
-        for name in new_names:
-            with self.subTest(name=name):
-                self.assertIn(name, parameters)
+        self.assertIn("runtime", parameters)
+        self.assertLessEqual(
+            set(parameters),
+            {"self", "legacy_args", "runtime", "legacy_options"},
+        )
 
         for name in old_names:
             with self.subTest(name=name):
@@ -747,6 +725,31 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
 
                 with self.assertRaises(TypeError):
                     self.experts_preset(**kwargs)
+
+    def test_typed_runtime_builds_the_model_config(self):
+        runtime = runtime_from_flat(
+            {
+                "batch_size": 3,
+                "learning_rate": 0.02,
+                "input_dim": 8,
+                "hidden_dim": 16,
+                "output_dim": 4,
+                "stack_num_layers": 1,
+                "submodule_stack_hidden_dim": 16,
+                "num_experts": 2,
+                "top_k": 1,
+            },
+            config,
+        )
+
+        self.assertIsInstance(runtime, RuntimeOptions)
+        cfg = LinearAdaptiveConfigBuilder(runtime=runtime).build()
+
+        self.assertEqual(cfg.batch_size, 3)
+        self.assertEqual(cfg.learning_rate, 0.02)
+        self.assertEqual(cfg.input_dim, 8)
+        self.assertEqual(cfg.hidden_dim, 16)
+        self.assertEqual(cfg.output_dim, 4)
 
     def test_shared_gate_config_is_stored_on_stack_config(self):
         shared_gate_config = self.shared_gate_config()
