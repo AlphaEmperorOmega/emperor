@@ -1,10 +1,10 @@
-import torch
+from typing import TYPE_CHECKING
 
+import torch
 from torch import Tensor
 from torch.nn import functional as F
-from emperor.base.utils import Module
 
-from typing import TYPE_CHECKING
+from emperor.base.utils import Module
 
 if TYPE_CHECKING:
     from emperor.sampler.core.config import SamplerConfig
@@ -32,13 +32,15 @@ class AuxiliaryLossBase:
     def _is_accumulation_none(self, accumulation: Tensor | None) -> None:
         if accumulation is None:
             raise ValueError(
-                "`self.accumulation` is `None`. Please call `update_accumulation` before validating accumulation."
+                "`self.accumulation` is `None`. Please call "
+                "`update_accumulation` before validating accumulation."
             )
 
     def _is_valid_input(self, input: Tensor | None, obj: object) -> None:
         if input is None:
             raise ValueError(
-                f"A valid input tensor is required when `loss_weight` > 0, for {obj.__class__.__name__} instance."
+                "A valid input tensor is required when `loss_weight` > 0, "
+                f"for {obj.__class__.__name__} instance."
             )
 
     def reset_loss(self) -> None:
@@ -48,12 +50,14 @@ class AuxiliaryLossBase:
 
     def update_loss(self, *args, **kwargs) -> None:
         raise NotImplementedError(
-            "`update_loss` method must be implemented by subclasses of AuxiliaryLossBase"
+            "`update_loss` method must be implemented by subclasses of "
+            "AuxiliaryLossBase"
         )
 
     def _compute_loss(self, *args, **kwargs) -> Tensor:
         raise NotImplementedError(
-            "`_compute_loss` method must be implemented by subclasses of AuxiliaryLossBase"
+            "`_compute_loss` method must be implemented by subclasses of "
+            "AuxiliaryLossBase"
         )
 
 
@@ -202,7 +206,8 @@ class MutualInformationLoss(AuxiliaryLossBase):
     def _is_accumulation_list_empty(self, accumulation: list) -> None:
         if len(accumulation) == 0:
             raise ValueError(
-                "`self.accumulation_list` is `empty`. Please call `update_accumulation` before validating accumulation."
+                "`self.accumulation_list` is `empty`. Please call "
+                "`update_accumulation` before validating accumulation."
             )
 
     def __compute_mutual_information_loss(self):
@@ -231,7 +236,7 @@ class SamplerAuxiliaryLosses(Module):
         super().__init__()
 
         config = getattr(cfg, "sampler_model_config", cfg)
-        self.cfg: "SamplerConfig" = self._override_config(config, overrides)
+        self.cfg: SamplerConfig = self._override_config(config, overrides)
 
         self.num_experts = self.cfg.num_experts
         self.coefficient_of_variation_loss_weight = (
