@@ -3,8 +3,7 @@ from emperor.augmentations.adaptive_parameters import (
 )
 from emperor.base.layer import LayerStackConfig
 from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import LastLayerBiasOptions
-from emperor.base.options import LayerNormPositionOptions
+from emperor.base.options import LastLayerBiasOptions, LayerNormPositionOptions
 from emperor.experts.core.config import MixtureOfExpertsConfig
 from emperor.experts.core.options import (
     DroppedTokenOptions,
@@ -18,15 +17,18 @@ from emperor.parametric import (
     ParametricLayerConfig,
     ParametricLayerHandlerConfig,
 )
-from models.parametric._shared_stack_factory import (
+
+from models.parametric.parametric_generator._stack_config_factory import (
+    build_linear_stack_config,
+    build_router_config,
+    build_sampler_config,
+)
+from models.parametric.parametric_generator.runtime_options import (
     ParametricGeneratorStackOptions,
     ParametricMixtureOptions,
     ParametricRouterOptions,
     ParametricSamplerOptions,
     ParametricStackOptions,
-    build_linear_stack_config,
-    build_router_config,
-    build_sampler_config,
 )
 
 

@@ -1,3 +1,5 @@
+# ruff: noqa: F405
+
 from .config import *  # noqa: F401,F403
 
 SEARCH_SPACE_LEARNING_RATE: list = [1e-4, 1e-3]
