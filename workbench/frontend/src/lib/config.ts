@@ -57,10 +57,6 @@ export function configKeyToken(key: string) {
   return key.trim().replace(/-/g, "_").toLowerCase();
 }
 
-export function canonicalConfigKey(key: string) {
-  return key.trim().replace(/-/g, "_").toUpperCase();
-}
-
 function configFieldMatchesKey(field: ConfigField, key: string) {
   const token = configKeyToken(key);
   return (
@@ -654,14 +650,6 @@ export function configSectionsFields(sections: ConfigSection[]): ConfigField[] {
   return sections.flatMap((section) => configSectionFields(section));
 }
 
-export function configSectionCount(sections: ConfigSection[]): number {
-  return sections.reduce(
-    (count, section) =>
-      count + 1 + configSectionCount(section.children ?? []),
-    0,
-  );
-}
-
 export function groupConfigFieldsBySectionPath(fields: ConfigField[]): ConfigSection[] {
   type DraftSection = {
     title: string;
@@ -717,10 +705,6 @@ export function fieldValue(field: ConfigField, overrides: OverrideValues) {
     ? field.lockedValue
     : (overrideValue(overrides, field.key) ?? field.default);
   return value === null || value === undefined ? "" : String(value);
-}
-
-export function defaultLabel(field: ConfigField) {
-  return field.default === null || field.default === undefined ? "None" : String(field.default);
 }
 
 function normalizePrimitiveConfigValue(value: ConfigValue | string) {
@@ -969,10 +953,6 @@ export function presetOwnedCount(fields: ConfigField[]) {
   return fields.filter((field) => Boolean(field.locked)).length;
 }
 
-export function hasPresetOwnedFields(fields: ConfigField[]) {
-  return presetOwnedCount(fields) > 0;
-}
-
 function isEnabledConfigValue(value: string) {
   return ["true", "1", "yes", "on"].includes(value.trim().toLowerCase());
 }
@@ -996,14 +976,6 @@ export function controlledSectionDisabledReason(
   controlField: ConfigField,
 ) {
   return `Enable ${controlField.label} before editing ${section.title}.`;
-}
-
-export function isControlledSectionEnabled(
-  section: ConfigSection,
-  overrides: OverrideValues,
-) {
-  const controlField = controlledSectionFlagField(section);
-  return controlField ? isEnabledConfigValue(fieldValue(controlField, overrides)) : true;
 }
 
 export function controlledSectionState(

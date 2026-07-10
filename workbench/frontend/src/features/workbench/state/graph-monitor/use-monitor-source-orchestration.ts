@@ -179,7 +179,6 @@ export function useMonitorSourceOrchestration({
   );
   const isParameterStatusLoading =
     isActiveParameterStatusLoading || isHistoricalParameterStatusLoading;
-  const isParameterStatusPartiallyLoading = false;
   const parameterActivityByNodePath = useMemo(
     () =>
       deriveParameterActivityByNodePath({
@@ -269,7 +268,6 @@ export function useMonitorSourceOrchestration({
     canOpenGraphNodeMonitor,
     parameterActivityByNodePath,
     isParameterStatusLoading,
-    isParameterStatusPartiallyLoading,
     isParameterStatusPathMismatch,
     deriveSelectedMonitorSourceState,
   };

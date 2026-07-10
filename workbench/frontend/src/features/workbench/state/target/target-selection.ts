@@ -4,7 +4,6 @@ import {
   groupConfigFieldsBySectionPath,
   presetOwnedCount,
   type ConfigSection,
-  type OverrideValues,
 } from "@/lib/config";
 import {
   groupConfigSnapshotsByPreset,
@@ -22,7 +21,6 @@ export type TargetSelectionInput = {
   selectedModel: string;
   selectedPreset: string;
   selectedTrainingPresets: string[];
-  overrides: OverrideValues;
 };
 
 export type TargetSelectionState = {
@@ -35,7 +33,6 @@ export type TargetSelectionState = {
   modelConfigSnapshotGroups: ConfigSnapshotGroup[];
   visibleConfigSnapshots: ConfigSnapshot[];
   configSnapshotGroups: ConfigSnapshotGroup[];
-  overrideCount: number;
   presetOwnedFieldCount: number;
   fieldCount: number;
 };
@@ -86,7 +83,6 @@ export function deriveTargetSelectionState(
     modelConfigSnapshotGroups,
     visibleConfigSnapshots,
     configSnapshotGroups,
-    overrideCount: Object.keys(input.overrides).length,
     presetOwnedFieldCount,
     fieldCount,
   };

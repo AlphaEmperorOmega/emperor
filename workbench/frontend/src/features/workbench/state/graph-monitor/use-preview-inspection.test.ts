@@ -324,7 +324,6 @@ describe("usePreviewInspectionState", () => {
 
     expect(result.current.graph).toBeUndefined();
     expect(result.current.previewRequest).toBeNull();
-    expect(result.current.previewRequestKey).toBeNull();
 
     await act(async () => {
       pending.resolve(graphA);

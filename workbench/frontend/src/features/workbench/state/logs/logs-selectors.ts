@@ -5,15 +5,12 @@ import {
   modelIdentityKey,
   modelNameForId,
   modelTypeForId,
-  toggleSetValue as toggleSelectionSetValue,
   uniqueValidValues,
 } from "@/lib/selection";
 import {
   isConfusionMatrixHeatmapTag,
   isConfusionMatrixScalarTag,
 } from "@/features/workbench/state/logs/log-diagnostics";
-
-export { formatNumber };
 
 export const COMMON_SCALAR_TAGS = [
   "train/loss",
@@ -293,34 +290,6 @@ export function metricGroupForTag(tag: string): LogMetricGroupKey {
   return "other";
 }
 
-export function groupRenderableLogMetrics({
-  selectedTagList,
-  seriesByTag,
-}: {
-  selectedTagList: string[];
-  seriesByTag: Map<string, LogScalarSeries[]>;
-}): LogMetricsByGroup {
-  const groups: LogMetricsByGroup = {
-    train: [],
-    validation: [],
-    test: [],
-    other: [],
-  };
-
-  for (const tag of selectedTagList) {
-    if (isConfusionMatrixScalarTag(tag)) {
-      continue;
-    }
-    const series = seriesByTag.get(tag) ?? [];
-    if (series.length === 0) {
-      continue;
-    }
-    groups[metricGroupForTag(tag)].push({ tag, series });
-  }
-
-  return groups;
-}
-
 export function groupLogMetricTags(tags: string[]): LogMetricTagsByGroup {
   const groups: LogMetricTagsByGroup = {
     train: [],
@@ -339,15 +308,6 @@ export function groupLogMetricTags(tags: string[]): LogMetricTagsByGroup {
 
 export function groupLogPlotSelectorTags(tags: string[]): LogMetricTagsByGroup {
   return groupLogMetricTags(tags.filter((tag) => isLogPlotSelectorScalarTag(tag)));
-}
-
-export function toggleSetValue(
-  setValues: Dispatch<SetStateAction<Set<string> | null>>,
-  value: string,
-) {
-  setValues((previous) => {
-    return toggleSelectionSetValue(previous ?? new Set<string>(), value);
-  });
 }
 
 export function setAllValues(

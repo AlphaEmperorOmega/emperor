@@ -8,7 +8,6 @@ import {
   normalizePrimarySelection,
   normalizeSelection,
   selectionValuesEqual,
-  toggleSetValue,
   uniqueValidValues,
   valueIsSelected,
 } from "@/lib/selection";
@@ -168,26 +167,6 @@ describe("selectionValuesEqual", () => {
     expect(selectionValuesEqual(["a", "b"], ["a", "b"])).toBe(true);
     expect(selectionValuesEqual(["a", "b"], ["b", "a"])).toBe(false);
     expect(selectionValuesEqual(["a"], ["a", "b"])).toBe(false);
-  });
-});
-
-describe("toggleSetValue", () => {
-  it("adds a missing value without mutating the original set", () => {
-    const original = new Set(["a"]);
-
-    const next = toggleSetValue(original, "b");
-
-    expect(next).toEqual(new Set(["a", "b"]));
-    expect(original).toEqual(new Set(["a"]));
-  });
-
-  it("removes an existing value without mutating the original set", () => {
-    const original = new Set(["a", "b"]);
-
-    const next = toggleSetValue(original, "a");
-
-    expect(next).toEqual(new Set(["b"]));
-    expect(original).toEqual(new Set(["a", "b"]));
   });
 });
 

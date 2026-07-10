@@ -16,7 +16,6 @@ import {
 export type DatasetSelectionInput = {
   logRuns?: LogRun[];
   modelRunTags?: LogRunTags[];
-  includeRunsWithoutMonitorTags?: boolean;
   selectedModelType?: string;
   selectedModel: string;
   selectedExperimentTask?: string;

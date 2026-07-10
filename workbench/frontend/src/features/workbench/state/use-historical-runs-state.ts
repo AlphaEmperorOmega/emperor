@@ -218,7 +218,6 @@ export function useHistoricalRunsState({
       deriveDatasetSelectionState({
         logRuns: logRunsQuery.data?.runs,
         modelRunTags: undefined,
-        includeRunsWithoutMonitorTags: !tagsEnabled,
         selectedModelType,
         selectedModel,
         selectedExperimentTask,
@@ -236,7 +235,6 @@ export function useHistoricalRunsState({
       selectedLogRunId,
       selectedModel,
       selectedModelType,
-      tagsEnabled,
     ],
   );
   const selectedHistoricalRunIdsForTags = useMemo(
@@ -268,7 +266,6 @@ export function useHistoricalRunsState({
       deriveDatasetSelectionState({
         logRuns: logRunsQuery.data?.runs,
         modelRunTags: selectedRunTags,
-        includeRunsWithoutMonitorTags: !tagsEnabled,
         selectedModelType,
         selectedModel,
         selectedExperimentTask,
@@ -287,7 +284,6 @@ export function useHistoricalRunsState({
       selectedLogRunId,
       selectedModel,
       selectedModelType,
-      tagsEnabled,
     ],
   );
   const {

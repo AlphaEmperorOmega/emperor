@@ -49,7 +49,6 @@ export type MonitorSourceInput = {
 export type MonitorSourceState = {
   monitorTargetResolver: MonitorTargetResolver;
   linearMonitorTargetResolver: LinearMonitorTargetResolver;
-  activeJobHasMonitorSource: boolean;
   selectedMonitorNode: GraphNode | undefined;
   selectedMonitorComparisonCandidateGroups: LinearMonitorComparisonCandidateGroups;
   selectedLogRunHasMonitorTags: boolean;
@@ -91,11 +90,6 @@ export function deriveMonitorSource(input: MonitorSourceInput): MonitorSourceSta
   const graphMonitorTarget = monitorTargetResolver(input.graphMonitorNode);
   const selectedMonitorName = selectedMonitorTarget?.monitorName;
   const graphMonitorName = graphMonitorTarget?.monitorName;
-  const activeSelectedTrainingJob =
-    selectedMonitorName &&
-    activeTrainingJob?.monitors.includes(selectedMonitorName)
-      ? activeTrainingJob
-      : undefined;
   const activeGraphTrainingJob =
     graphMonitorName && activeTrainingJob?.monitors.includes(graphMonitorName)
       ? activeTrainingJob
@@ -103,9 +97,6 @@ export function deriveMonitorSource(input: MonitorSourceInput): MonitorSourceSta
   const activeLinearTrainingJob = activeTrainingJob?.monitors.includes("linear")
     ? input.activeTrainingJob
     : undefined;
-  const activeJobHasMonitorSource = Boolean(
-    activeSelectedTrainingJob ?? activeLinearTrainingJob,
-  );
   const selectedMonitorNode = selectedMonitorTarget?.node;
   const selectedMonitorComparisonCandidateGroups =
     buildMonitorComparisonCandidateGroups(
@@ -142,7 +133,6 @@ export function deriveMonitorSource(input: MonitorSourceInput): MonitorSourceSta
   return {
     monitorTargetResolver,
     linearMonitorTargetResolver,
-    activeJobHasMonitorSource,
     selectedMonitorNode,
     selectedMonitorComparisonCandidateGroups,
     selectedLogRunHasMonitorTags,

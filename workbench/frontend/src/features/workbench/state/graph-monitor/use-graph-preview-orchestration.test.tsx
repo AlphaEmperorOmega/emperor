@@ -56,7 +56,6 @@ function controller(
   return {
     graph: undefined,
     previewRequest: null,
-    previewRequestKey: null,
     clearPreview: vi.fn(),
     requestPreview: vi.fn(),
     previewInspection: {

@@ -338,8 +338,6 @@ export function logRunHasLayerMonitorData(
   return tagsIncludeParameterMonitorData(tags);
 }
 
-export const logRunHasParameterMonitorData = logRunHasLayerMonitorData;
-
 /**
  * The set of experiments that contain at least one run with per-layer monitor
  * data. Returns an empty set when `tagsByRun` has not loaded yet so callers can

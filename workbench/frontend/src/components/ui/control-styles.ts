@@ -29,12 +29,6 @@ export const fieldControlClassName = [
   "disabled:cursor-not-allowed disabled:opacity-60",
 ].join(" ");
 
-export const selectControlClassName = [
-  "h-10 w-full min-w-0 rounded-control border border-line bg-control-chrome px-3",
-  "font-sans text-[13.5px] font-semibold text-ink transition hover:border-line-hover",
-  fieldControlFocusClassName,
-].join(" ");
-
 export const selectTriggerClassName = [
   "grid h-10 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2",
   "rounded-control border border-line bg-control-chrome px-3 text-left font-sans",

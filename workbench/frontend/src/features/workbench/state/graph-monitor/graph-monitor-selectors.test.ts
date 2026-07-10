@@ -543,7 +543,6 @@ describe("workbench state selectors", () => {
     const state = deriveDatasetSelectionState({
       logRuns: [run({ id: "layer-run", experiment: "exp_a", dataset: "Mnist" })],
       modelRunTags: undefined,
-      includeRunsWithoutMonitorTags: true,
       selectedModel: "linear",
       selectedHistoricalExperimentFilter: "exp_a",
       selectedHistoricalDatasetFilter: "Mnist",
@@ -615,7 +614,6 @@ describe("workbench state selectors", () => {
       filteredHistoricalRunIds: ["new-mnist"],
     });
 
-    expect(state.activeJobHasMonitorSource).toBe(false);
     expect(state.selectedMonitorNode?.id).toBe("linear-0");
     expect(state.selectedLogRunHasMonitorTags).toBe(true);
     expect(state.selectedMonitorComparisonCandidateGroups["same-stack"]).toEqual([
@@ -701,7 +699,6 @@ describe("workbench state selectors", () => {
     });
 
     expect(state.selectedMonitorNode).toBe(attention);
-    expect(state.activeJobHasMonitorSource).toBe(true);
     expect(state.graphMonitorSource).toEqual({
       kind: "active-job",
       job: activeJob,

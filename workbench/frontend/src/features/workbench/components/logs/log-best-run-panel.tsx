@@ -18,11 +18,8 @@ import {
   type LogMetricDirection,
   type LogMetricPointPolicy,
 } from "@/features/workbench/state/logs/logs-chart-view-model";
-import {
-  formatNumber,
-  formatRunLabel,
-} from "@/features/workbench/state/logs/logs-selectors";
-import { formatRunTimestamp } from "@/lib/format";
+import { formatRunLabel } from "@/features/workbench/state/logs/logs-selectors";
+import { formatNumber, formatRunTimestamp } from "@/lib/format";
 import { errorMessage } from "@/lib/utils";
 
 function countLabel(count: number, noun: string) {

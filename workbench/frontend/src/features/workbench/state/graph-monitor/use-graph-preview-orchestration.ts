@@ -95,7 +95,6 @@ export function useGraphPreviewController() {
   const {
     graph,
     previewRequest,
-    previewRequestKey,
     clearPreview,
     requestPreview,
     previewInspection,
@@ -118,7 +117,6 @@ export function useGraphPreviewController() {
     () => ({
       graph,
       previewRequest,
-      previewRequestKey,
       clearPreview,
       requestPreview,
       previewInspection,
@@ -132,7 +130,6 @@ export function useGraphPreviewController() {
       graph,
       previewInspection,
       previewRequest,
-      previewRequestKey,
       requestPreview,
       resetGraphExpansion,
       resetGraphSelectionAndExpansion,
@@ -202,7 +199,6 @@ export function useGraphPreviewOrchestration({
     canOpenGraphNodeMonitor,
     parameterActivityByNodePath,
     isParameterStatusLoading,
-    isParameterStatusPartiallyLoading,
     isParameterStatusPathMismatch,
     deriveSelectedMonitorSourceState,
   } = monitorSource;
@@ -264,7 +260,6 @@ export function useGraphPreviewOrchestration({
       selectedMonitorNode,
       selectedMonitorComparisonCandidateGroups,
       isParameterStatusLoading,
-      isParameterStatusPartiallyLoading,
       isParameterStatusPathMismatch,
       collapseGraphNodes: graphState.collapseGraphNodes,
       revealGraphNode: graphState.revealGraphNode,
@@ -290,7 +285,6 @@ export function useGraphPreviewOrchestration({
       graphState.setGraphScope,
       graphState.setSelectedNodeId,
       isParameterStatusLoading,
-      isParameterStatusPartiallyLoading,
       isParameterStatusPathMismatch,
       previewInspection,
       selectedMonitorComparisonCandidateGroups,

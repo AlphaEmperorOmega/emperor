@@ -8,7 +8,6 @@ import { EdgeCard } from "@/components/ui/edge-card";
 import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
 import { SegmentedControl } from "@/components/ui/segmented-control";
-import { Select } from "@/components/ui/select";
 import { StatusDot } from "@/components/ui/status-dot";
 import { SurfacePanel } from "@/components/ui/surface-panel";
 import { Switch } from "@/components/ui/switch";
@@ -178,22 +177,6 @@ describe("Input", () => {
     render(<Input placeholder="search" defaultValue="x" />);
     const input = screen.getByPlaceholderText("search");
     expect(input).toHaveValue("x");
-  });
-});
-
-describe("Select", () => {
-  it("renders a combobox with its options and fires onChange", () => {
-    const onChange = vi.fn();
-    render(
-      <Select value="a" onChange={onChange}>
-        <option value="a">A</option>
-        <option value="b">B</option>
-      </Select>,
-    );
-    const select = screen.getByRole("combobox");
-    expect(select).toHaveValue("a");
-    fireEvent.change(select, { target: { value: "b" } });
-    expect(onChange).toHaveBeenCalled();
   });
 });
 

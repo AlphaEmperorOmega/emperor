@@ -85,7 +85,6 @@ export function usePreviewInspectionState() {
   const [graph, setGraph] = useState<InspectResponse | undefined>();
   const [previewRequest, setPreviewRequest] =
     useState<PreviewInspectionRequest | null>(null);
-  const [previewRequestKey, setPreviewRequestKey] = useState<string | null>(null);
   const [isBuilding, setIsBuilding] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const requestIdRef = useRef(0);
@@ -98,7 +97,6 @@ export function usePreviewInspectionState() {
     });
     setGraph(undefined);
     setPreviewRequest(null);
-    setPreviewRequestKey(null);
     inFlightRequestKeyRef.current = null;
     setIsBuilding(false);
     setError(null);
@@ -115,7 +113,6 @@ export function usePreviewInspectionState() {
       inFlightRequestKeyRef.current = requestKey;
       const queryKey = workbenchQueryKeys.previewInspection(requestKey);
       setPreviewRequest(request);
-      setPreviewRequestKey(requestKey);
       setGraph(undefined);
       setIsBuilding(true);
       setError(null);
@@ -173,7 +170,6 @@ export function usePreviewInspectionState() {
   return {
     graph,
     previewRequest,
-    previewRequestKey,
     clearPreview,
     requestPreview,
     previewInspection,

@@ -8,7 +8,7 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { formatNumber } from "@/features/workbench/state/logs/logs-selectors";
+import { formatNumber } from "@/lib/format";
 import { type ConfusionMatrixHeatmap } from "@/features/workbench/state/logs/log-diagnostics";
 import { cn } from "@/lib/utils";
 

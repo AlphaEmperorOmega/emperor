@@ -39,11 +39,13 @@ import {
 } from "@/features/workbench/state/logs/logs-selectors";
 import {
   type LogBestRunViewModel,
+  type LogsChartEmptyState,
   type LogMetricChartLayoutGroupKey,
   type LogMetricGroupScalarQueryStates,
   type LogScalarTagQueryState,
   type LogMetricGroupScalarQueryState,
   type LogTrainValidationComparisonMetric,
+  type ScalarChartGridMode,
 } from "@/features/workbench/state/logs/logs-chart-view-model";
 import {
   type ConfusionMatrixHeatmap,
@@ -65,8 +67,6 @@ const LazyLogTrainValidationScalarChart = dynamic(
     ),
   { ssr: false },
 );
-
-export type ScalarChartGridMode = "full" | "two" | "three";
 
 const SCALAR_CHART_GRID_CLASSES: Record<ScalarChartGridMode, string> = {
   full: "grid gap-4",
@@ -131,12 +131,6 @@ type LogsChartSectionRenderItem =
 const LOG_METRIC_GROUP_BY_KEY = Object.fromEntries(
   LOG_METRIC_GROUPS.map((group) => [group.key, group]),
 ) as Record<LogMetricGroupKey, LogsChartMetricGroup>;
-
-export type LogsChartEmptyState = {
-  title: string;
-  detail: string;
-  busy?: boolean;
-};
 
 function metricCountLabel(count: number) {
   return `${count} ${count === 1 ? "metric" : "metrics"}`;

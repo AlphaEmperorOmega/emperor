@@ -17,10 +17,8 @@ import {
   type ScalarXMode,
   type ScalarYScale,
 } from "@/lib/echarts/scalar-options";
-import {
-  formatNumber,
-  formatRunLabel,
-} from "@/features/workbench/state/logs/logs-selectors";
+import { formatRunLabel } from "@/features/workbench/state/logs/logs-selectors";
+import { formatNumber } from "@/lib/format";
 import { cn, errorMessage } from "@/lib/utils";
 
 type LogScalarChartProps = {

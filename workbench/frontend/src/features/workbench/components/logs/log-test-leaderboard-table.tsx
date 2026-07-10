@@ -5,10 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SurfacePanel } from "@/components/ui/surface-panel";
 import { type LogRun, type LogScalarSeries } from "@/lib/api";
-import {
-  formatNumber,
-  formatRunLabel,
-} from "@/features/workbench/state/logs/logs-selectors";
+import { formatRunLabel } from "@/features/workbench/state/logs/logs-selectors";
+import { formatNumber } from "@/lib/format";
 import {
   buildLogMetricRankingRows,
   inferLogMetricDirection,

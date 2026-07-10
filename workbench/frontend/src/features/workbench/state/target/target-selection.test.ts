@@ -84,7 +84,6 @@ describe("target selection", () => {
       selectedModel: "linear",
       selectedPreset: "fast",
       selectedTrainingPresets: ["fast", "baseline"],
-      overrides: { hidden_dim: "128", dropout: "0.1" },
     });
 
     expect(state.datasetNames).toEqual(["Mnist", "Cifar10"]);
@@ -100,7 +99,6 @@ describe("target selection", () => {
       "layer_norm",
       "dropout",
     ]);
-    expect(state.overrideCount).toBe(2);
     expect(state.presetOwnedFieldCount).toBe(1);
     expect(state.fieldCount).toBe(3);
     expect(state.modelConfigSnapshots.map((item) => item.id)).toEqual([
@@ -158,7 +156,6 @@ describe("target selection", () => {
       selectedModel: "linear",
       selectedPreset: "baseline",
       selectedTrainingPresets: [],
-      overrides: {},
     });
 
     expect(state.configSections.map((section) => section.title)).toEqual([
@@ -215,7 +212,6 @@ describe("target selection", () => {
       selectedModel: "linear",
       selectedPreset: "baseline",
       selectedTrainingPresets: [],
-      overrides: {},
     });
 
     expect(state.configSections).toHaveLength(1);

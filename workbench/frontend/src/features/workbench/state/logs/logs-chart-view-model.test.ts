@@ -17,7 +17,6 @@ import {
   buildTrainValidationScalarPairs,
   defaultTrainValidationScalarPairSuffixes,
   isDefaultScalarTag,
-  groupRenderableLogMetrics,
   groupLogPlotSelectorTags,
   isLogPlotSelectorScalarTag,
 } from "@/features/workbench/state/logs/logs-selectors";
@@ -130,26 +129,6 @@ describe("logs chart view model", () => {
     expect(seriesByTag.get("test/accuracy")?.map((series) => series.runId)).toEqual([
       "run-1",
     ]);
-  });
-
-  it("filters renderable metrics to selected tags with series", () => {
-    const seriesByTag = groupLogScalarSeriesByTag([
-      scalarSeries({ runId: "run-1", tag: "train/loss" }),
-      scalarSeries({ runId: "run-1", tag: "validation/accuracy" }),
-      scalarSeries({ runId: "run-1", tag: "test/accuracy" }),
-    ]);
-
-    const groups = groupRenderableLogMetrics({
-      selectedTagList: ["validation/accuracy", "missing/tag", "test/accuracy"],
-      seriesByTag,
-    });
-
-    expect(groups.train).toEqual([]);
-    expect(groups.validation.map((metric) => metric.tag)).toEqual([
-      "validation/accuracy",
-    ]);
-    expect(groups.test.map((metric) => metric.tag)).toEqual(["test/accuracy"]);
-    expect(groups.other).toEqual([]);
   });
 
   it("groups selected log metrics even before scalar series load", () => {
@@ -445,7 +424,7 @@ describe("logs chart view model", () => {
     ).toBeNull();
   });
 
-  it("routes confusion-matrix rates to heatmaps and hides raw cells from scalar groups", () => {
+  it("builds heatmaps from confusion-matrix rates", () => {
     const confusionRateTag =
       "validation/confusion_matrix/true_class_0/predicted_class_1/rate";
     const confusionCountTag =
@@ -463,12 +442,6 @@ describe("logs chart view model", () => {
         points: [{ step: 2, wallTime: 200, value: 5 }],
       }),
     ]);
-    const selectedTagList = ["train/loss", confusionRateTag, confusionCountTag];
-
-    const groups = groupRenderableLogMetrics({
-      selectedTagList,
-      seriesByTag,
-    });
     const heatmaps = buildConfusionMatrixHeatmaps({
       matrixTagList: [confusionRateTag],
       seriesByTag,
@@ -476,8 +449,6 @@ describe("logs chart view model", () => {
       runOrder: ["run-1"],
     });
 
-    expect(groups.train.map((metric) => metric.tag)).toEqual(["train/loss"]);
-    expect(groups.validation).toEqual([]);
     expect(heatmaps).toHaveLength(1);
     expect(heatmaps[0]).toMatchObject({
       split: "validation",
