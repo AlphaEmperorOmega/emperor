@@ -1,16 +1,17 @@
-from emperor.base.validator import ValidatorBase
-
 from typing import TYPE_CHECKING
+
+from emperor.base.validator import ValidatorBase
 
 if TYPE_CHECKING:
     from torch import Tensor
+
     from emperor.transformer.core.layers import (
-        TransformerEncoderLayer,
         TransformerDecoderLayer,
+        TransformerEncoderLayer,
     )
     from emperor.transformer.core.stack import (
-        TransformerEncoderStack,
         TransformerDecoderStack,
+        TransformerEncoderStack,
     )
     from emperor.transformer.model import Transformer
 
@@ -46,10 +47,7 @@ class TransformerValidator(ValidatorBase):
         if encoder_stack_config is not None or decoder_stack_config is None:
             return
         layer_config = decoder_stack_config.layer_config
-        if (
-            layer_config is not None
-            and layer_config.cross_attention_config is not None
-        ):
+        if layer_config is not None and layer_config.cross_attention_config is not None:
             raise ValueError(
                 "A decoder-only Transformer (no encoder_stack_config) must "
                 "configure the decoder layer with cross_attention_config=None; "
