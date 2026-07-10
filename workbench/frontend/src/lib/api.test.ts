@@ -3386,10 +3386,16 @@ describe("POST requests", () => {
     };
     const jobFetchMock = stubFetch(fakeResponse({ json: () => Promise.resolve(job) }));
 
-    await fetchTrainingJob("job/a?b");
+    const jobRequestController = new AbortController();
+    await fetchTrainingJob("job/a?b", {
+      signal: jobRequestController.signal,
+    });
 
     expect(jobFetchMock.mock.calls[0][0]).toBe(
       `${BASE}/training/jobs/job%2Fa%3Fb`,
+    );
+    expect((jobFetchMock.mock.calls[0][1] as RequestInit).signal).toBe(
+      jobRequestController.signal,
     );
 
     const eventsFetchMock = stubFetch(
@@ -3651,12 +3657,16 @@ describe("fetchTrainingRunPlan", () => {
       logFolder: "test_model",
     };
 
-    const result = await fetchTrainingRunPlan(input);
+    const controller = new AbortController();
+    const result = await fetchTrainingRunPlan(input, {
+      signal: controller.signal,
+    });
 
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe(`${BASE}/training/run-plan`);
     expect((init as RequestInit).method).toBe("POST");
     expect((init as RequestInit).body).toBe(JSON.stringify(input));
+    expect((init as RequestInit).signal).toBe(controller.signal);
     expect(result.summary.remainingEpochs).toBe(30);
   });
 });

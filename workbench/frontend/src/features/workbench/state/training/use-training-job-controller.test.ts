@@ -134,6 +134,38 @@ describe("resolveTrainingLogRefresh", () => {
 });
 
 describe("useActiveTrainingJobProgress", () => {
+  it("passes React Query cancellation to an obsolete job poll", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    });
+    const onJobChange = vi.fn();
+    mocks.fetchTrainingJob.mockReturnValue(
+      new Promise<TrainingJob>(() => undefined),
+    );
+
+    const rendered = renderHook(
+      ({ activeJobId }: { activeJobId: string }) =>
+        useActiveTrainingJobProgress({ activeJobId, onJobChange }),
+      {
+        initialProps: { activeJobId: "job-1" },
+        wrapper: queryClientWrapper(queryClient),
+      },
+    );
+
+    await waitFor(() => {
+      expect(mocks.fetchTrainingJob.mock.calls[0]?.[1]?.signal).toBeDefined();
+    });
+    const firstSignal = mocks.fetchTrainingJob.mock.calls[0][1].signal;
+
+    rendered.rerender({ activeJobId: "job-2" });
+
+    await waitFor(() => {
+      expect(mocks.fetchTrainingJob).toHaveBeenCalledTimes(2);
+    });
+    expect(firstSignal.aborted).toBe(true);
+    rendered.unmount();
+  });
+
   it("keeps terminal log refresh alive without the training panel UI mounted", async () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false, gcTime: 0 } },

@@ -94,7 +94,8 @@ export function useActiveTrainingJobProgress({
   );
   const jobQuery = useQuery({
     queryKey: trainingQueryKeys.job(activeJobId),
-    queryFn: () => fetchTrainingJob(activeJobId ?? ""),
+    queryFn: ({ signal }) =>
+      fetchTrainingJob(activeJobId ?? "", { signal }),
     enabled: activeJobId !== null,
     refetchInterval: (query) => {
       const status = (query.state.data as TrainingJob | undefined)?.status;
@@ -288,11 +289,11 @@ export function useTrainingJobController({
   );
   const runPlanQuery = useQuery({
     queryKey: trainingQueryKeys.runPlan(planNonce, planInputKey),
-    queryFn: () => {
+    queryFn: ({ signal }) => {
       if (!planRequest) {
         throw new Error("Training run plan request is not ready.");
       }
-      return fetchTrainingRunPlan(planRequest);
+      return fetchTrainingRunPlan(planRequest, { signal });
     },
     enabled: planRequest !== null,
     staleTime: Number.POSITIVE_INFINITY,

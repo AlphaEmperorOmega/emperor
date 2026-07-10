@@ -10,6 +10,10 @@ import {
   type JsonObject,
 } from "@/lib/api/schemas";
 
+type ApiRequestOptions = {
+  signal?: AbortSignal;
+};
+
 export const trainingRunChangeSchema = z.object({
   key: z.string(),
   label: z.string(),
@@ -432,15 +436,26 @@ export function createTrainingJob(input: TrainingJobCreateInput) {
   });
 }
 
-export function fetchTrainingRunPlan(input: TrainingRunPlanCreateInput) {
+export function fetchTrainingRunPlan(
+  input: TrainingRunPlanCreateInput,
+  { signal }: ApiRequestOptions = {},
+) {
   return requestJson("/training/run-plan", trainingRunPlanSchema, {
     method: "POST",
     body: JSON.stringify(input),
+    signal,
   });
 }
 
-export function fetchTrainingJob(id: string) {
-  return requestJson(`/training/jobs/${encodeURIComponent(id)}`, trainingJobSchema);
+export function fetchTrainingJob(
+  id: string,
+  { signal }: ApiRequestOptions = {},
+) {
+  return requestJson(
+    `/training/jobs/${encodeURIComponent(id)}`,
+    trainingJobSchema,
+    { signal },
+  );
 }
 
 export function fetchTrainingJobEvents(
