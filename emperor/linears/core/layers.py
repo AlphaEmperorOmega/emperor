@@ -1,13 +1,13 @@
+from typing import TYPE_CHECKING
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
 from torch import Tensor
 from torch.nn import Parameter
+
 from emperor.base.utils import Module
 from emperor.linears.core._validator import LinearValidator
-
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.linears.core.config import AdaptiveLinearLayerConfig, LinearLayerConfig
@@ -20,7 +20,7 @@ class LinearAbstract(Module):
         overrides: "LinearLayerConfig | None" = None,
     ):
         super().__init__()
-        self.cfg: "LinearLayerConfig" = self._override_config(cfg, overrides)
+        self.cfg: LinearLayerConfig = self._override_config(cfg, overrides)
         self.input_dim: int = self.cfg.input_dim
         self.output_dim: int = self.cfg.output_dim
         self.bias_flag: bool = self.cfg.bias_flag

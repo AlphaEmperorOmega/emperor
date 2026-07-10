@@ -1,8 +1,8 @@
+from typing import TYPE_CHECKING
+
 from torch import Tensor
 
 from emperor.base.validator import ValidatorBase
-
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.linears.core.layers import LinearAbstract
