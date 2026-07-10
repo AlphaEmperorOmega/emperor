@@ -1111,8 +1111,7 @@ export function useTargetConfigState({
         (selectedExperimentTarget?.experimentTask ?? null) === runExperimentTask &&
         selectedSnapshotId === "" &&
         catalogPresetSynced &&
-        catalogDatasetSynced &&
-        overridesAlreadyEmpty;
+        catalogDatasetSynced;
       if (alreadySynced) {
         return;
       }

@@ -2906,6 +2906,7 @@ describe("useWorkbenchState", () => {
       });
     });
     await waitFor(() => {
+      expect(result.current.target.overrides).toEqual({ hidden_size: "128" });
       expect(mocks.inspectModel).toHaveBeenCalledWith(
         expect.objectContaining({
           logRunId: "run-final",
