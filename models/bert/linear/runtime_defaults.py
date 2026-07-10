@@ -8,7 +8,6 @@ import models.bert.linear.config as config
 from models.bert.linear._builder_adapter import linear_builder_kwargs_from_flat
 from models.bert.linear.runtime_options import RuntimeOptions
 
-
 _RUNTIME_FIELDS = {field.name for field in fields(RuntimeOptions)}
 
 

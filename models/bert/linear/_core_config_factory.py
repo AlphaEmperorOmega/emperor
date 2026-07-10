@@ -18,24 +18,20 @@ from emperor.transformer.core.config import (
 from emperor.transformer.feed_forward import FeedForwardConfig
 
 import models.bert.linear.config as config
-from models.bert.linear._linear_layer_config_factory import LinearLayerConfigFactory
-from models.bert.linear.runtime_options import (
-    DynamicMemoryOptions,
-    LayerControllerOptions,
-    MainLayerStackOptions,
-    RecurrentControllerOptions,
-)
-from models.bert.linear.runtime_options import (
-    SubmoduleStackOptions,
-    SubmoduleStackSource,
-)
 from models.bert.linear._encoder_control_config_factory import (
     GateConfigFactory,
     HaltingConfigFactory,
     MemoryConfigFactory,
     RecurrentConfigFactory,
 )
+from models.bert.linear._linear_layer_config_factory import LinearLayerConfigFactory
 from models.bert.linear.runtime_options import (
+    DynamicMemoryOptions,
+    LayerControllerOptions,
+    MainLayerStackOptions,
+    RecurrentControllerOptions,
+    SubmoduleStackOptions,
+    SubmoduleStackSource,
     TransformerAttentionOptions,
     TransformerEncoderOptions,
     TransformerFeedForwardOptions,

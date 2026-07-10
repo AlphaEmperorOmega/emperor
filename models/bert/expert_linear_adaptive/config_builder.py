@@ -5,14 +5,19 @@ from emperor.attention.core.variants.mixture_of_attention_heads.config import (
 from emperor.experts.config import MixtureOfExpertsModelConfig
 
 import models.bert.expert_linear_adaptive.config as config
-from models.bert.expert_linear_adaptive.runtime_defaults import (
-    expert_linear_adaptive_builder_kwargs_from_flat,
-)
 from models.bert.expert_linear_adaptive._base_config_builder import (
     BertBackendConfigBuilder,
 )
+from models.bert.expert_linear_adaptive._expert_control_config_factory import (
+    ControlConfigDependencies,
+    ControlConfigFactory,
+)
 from models.bert.expert_linear_adaptive.experiment_config import ExperimentConfig
+from models.bert.expert_linear_adaptive.runtime_defaults import (
+    expert_linear_adaptive_builder_kwargs_from_flat,
+)
 from models.bert.expert_linear_adaptive.runtime_options import (
+    AdaptiveGeneratorStackOptions,
     ExpertsDynamicMemoryOptions,
     ExpertsLayerControllerOptions,
     ExpertsMixtureOptions,
@@ -21,19 +26,10 @@ from models.bert.expert_linear_adaptive.runtime_options import (
     ExpertsSamplerOptions,
     ExpertsStackOptions,
     ExpertsSubmoduleStackOptions,
-)
-from models.bert.expert_linear_adaptive._expert_control_config_factory import (
-    ControlConfigDependencies,
-    ControlConfigFactory,
-)
-from models.bert.expert_linear_adaptive.runtime_options import (
-    AdaptiveGeneratorStackOptions,
     HiddenAdaptiveBiasOptions,
     HiddenAdaptiveDiagonalOptions,
     HiddenAdaptiveMaskOptions,
     HiddenAdaptiveWeightOptions,
-)
-from models.bert.expert_linear_adaptive.runtime_options import (
     TransformerAttentionOptions,
     TransformerEncoderOptions,
     TransformerFeedForwardOptions,

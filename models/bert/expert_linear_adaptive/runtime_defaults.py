@@ -1,7 +1,9 @@
 from __future__ import annotations
-from dataclasses import fields, is_dataclass, replace
+
+from dataclasses import replace
 from types import ModuleType
 from typing import TYPE_CHECKING, Any
+
 from models.bert.expert_linear_adaptive._linear_adapter_support import (
     _adaptive_generator_stack_options_from_kwargs,
     _hidden_adaptive_bias_options_from_kwargs,

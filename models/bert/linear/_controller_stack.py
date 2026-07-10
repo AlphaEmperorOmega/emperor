@@ -1,8 +1,8 @@
 """Compatibility imports for the public Runtime Options Interface."""
 
 from models.bert.linear.runtime_options import (
-    SubmoduleStackSource,
     SubmoduleStackOptions,
+    SubmoduleStackSource,
     resolve_controller_stack_options,
 )
 

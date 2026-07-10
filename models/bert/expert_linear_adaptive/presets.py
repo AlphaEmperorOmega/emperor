@@ -12,13 +12,13 @@ from emperor.experiments.base import (
 
 import models.bert.expert_linear_adaptive.config as config
 import models.bert.expert_linear_adaptive.dataset_options as dataset_options
-from models.bert.expert_linear_adaptive.runtime_defaults import (
-    expert_linear_adaptive_builder_kwargs_from_flat,
-)
 from models.bert.expert_linear_adaptive.config_builder import (
     BertExpertLinearAdaptiveConfigBuilder,
 )
 from models.bert.expert_linear_adaptive.model import Model
+from models.bert.expert_linear_adaptive.runtime_defaults import (
+    expert_linear_adaptive_builder_kwargs_from_flat,
+)
 
 
 class ExperimentPreset(BaseOptions):
@@ -235,6 +235,7 @@ _PRESET_DEFINITIONS[ExperimentPreset.LOW_RANK_EXPERT_WEIGHT] = PresetDefinition(
     description="Default config with adaptive low-rank dynamic weights inside expert "
     "feed-forward internals.",
 )
+
 
 class ExperimentPresets(BuilderBackedExperimentPresetsBase):
     def __init__(self) -> None:

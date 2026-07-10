@@ -8,18 +8,12 @@ from models.bert.linear.runtime_options import (
     BertEmbeddingOptions,
     BertMlmHeadOptions,
     BertNspHeadOptions,
-)
-from models.bert.linear.runtime_options import (
-    SubmoduleStackOptions,
-    SubmoduleStackSource,
-)
-from models.bert.linear.runtime_options import (
     DynamicMemoryOptions,
     LayerControllerOptions,
     MainLayerStackOptions,
     RecurrentControllerOptions,
-)
-from models.bert.linear.runtime_options import (
+    SubmoduleStackOptions,
+    SubmoduleStackSource,
     TransformerAttentionOptions,
     TransformerEncoderOptions,
     TransformerFeedForwardOptions,

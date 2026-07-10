@@ -31,7 +31,6 @@ from emperor.augmentations.adaptive_parameters.options import (
 )
 from emperor.base.layer.config import LayerStackConfig
 
-
 _WEIGHT_OPTION_FIELDS: dict[type[DynamicWeightConfig], tuple[str, ...]] = {
     SingleModelDynamicWeightConfig: (
         "normalization_option",
@@ -114,9 +113,7 @@ def build_bias_config(
     optional_kwargs = {
         "bank_expansion_factor": bank_expansion_factor,
     }
-    kwargs.update(
-        _selected_kwargs(_BIAS_OPTION_FIELDS, bias_option, optional_kwargs)
-    )
+    kwargs.update(_selected_kwargs(_BIAS_OPTION_FIELDS, bias_option, optional_kwargs))
     return bias_option(**kwargs)
 
 

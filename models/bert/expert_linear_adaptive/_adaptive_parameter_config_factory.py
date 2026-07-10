@@ -4,7 +4,9 @@ from emperor.augmentations.adaptive_parameters.core.bias import (
     DynamicBiasConfig,
     WeightedBankDynamicBiasConfig,
 )
-from emperor.augmentations.adaptive_parameters.core.diagonal import DynamicDiagonalConfig
+from emperor.augmentations.adaptive_parameters.core.diagonal import (
+    DynamicDiagonalConfig,
+)
 from emperor.augmentations.adaptive_parameters.core.mask import (
     AxisMaskConfig,
     DiagonalAxisMaskConfig,
@@ -113,7 +115,9 @@ def build_diagonal_config(
     *,
     model_config: LayerStackConfig | None = None,
 ) -> DynamicDiagonalConfig | None:
-    return None if diagonal_option is None else diagonal_option(model_config=model_config)
+    return (
+        None if diagonal_option is None else diagonal_option(model_config=model_config)
+    )
 
 
 def build_mask_config(

@@ -32,11 +32,6 @@ import models.bert.linear.config as config
 import models.bert.linear.dataset_options as dataset_options
 import models.bert.linear.search_space as search_space
 from models.bert.linear._builder_adapter import linear_builder_kwargs_from_flat
-from models.bert.linear.runtime_options import (
-    BertEmbeddingOptions,
-    BertMlmHeadOptions,
-    BertNspHeadOptions,
-)
 from models.bert.linear.config_builder import (
     BertLinearConfigBuilder,
 )
@@ -47,18 +42,21 @@ from models.bert.linear.presets import (
     ExperimentPresets,
 )
 from models.bert.linear.runtime_defaults import runtime_from_flat
-from models.bert.linear.runtime_options import RuntimeOptions
+from models.bert.linear.runtime_options import (
+    BertEmbeddingOptions,
+    BertMlmHeadOptions,
+    BertNspHeadOptions,
+    RuntimeOptions,
+    TransformerAttentionOptions,
+    TransformerEncoderOptions,
+    TransformerFeedForwardOptions,
+    TransformerPositionalEmbeddingOptions,
+)
 from models.config_overrides import iter_supported_config_keys, print_config_options
 from models.parser import get_experiment_parser, resolve_experiment_mode
 from models.training_test_utils import (
     RandomBertPretrainingDataModule,
     tiny_cpu_trainer,
-)
-from models.bert.linear.runtime_options import (
-    TransformerAttentionOptions,
-    TransformerEncoderOptions,
-    TransformerFeedForwardOptions,
-    TransformerPositionalEmbeddingOptions,
 )
 
 

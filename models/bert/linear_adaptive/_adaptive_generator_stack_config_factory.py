@@ -1,5 +1,6 @@
 from emperor.base.layer.config import LayerConfig, LayerStackConfig
 from emperor.linears.core.config import LinearLayerConfig
+
 from models.bert.linear_adaptive.runtime_options import (
     AdaptiveGeneratorStackOptions,
     AdaptiveGeneratorStackSource,

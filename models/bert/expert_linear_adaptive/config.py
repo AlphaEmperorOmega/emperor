@@ -32,11 +32,6 @@ from emperor.augmentations.adaptive_parameters.options import (
     WeightNormalizationOptions,
     WeightNormalizationPositionOptions,
 )
-from emperor.experts.core.options import (
-    DroppedTokenOptions,
-    ExpertWeightingPositionOptions,
-    RoutingInitializationMode,
-)
 from emperor.base.layer.gate import LayerGateOptions
 from emperor.base.layer.residual import ResidualConnectionOptions
 from emperor.base.options import (
@@ -48,6 +43,11 @@ from emperor.datasets.text.bert_pretraining import BERT_PRETRAINING_TARGET_VOCAB
 from emperor.embedding.absolute.core.config import (
     AbsolutePositionalEmbeddingConfig,
     TextLearnedPositionalEmbeddingConfig,
+)
+from emperor.experts.core.options import (
+    DroppedTokenOptions,
+    ExpertWeightingPositionOptions,
+    RoutingInitializationMode,
 )
 from emperor.halting.options import HaltingHiddenStateModeOptions
 from emperor.memory.config import (
@@ -965,7 +965,6 @@ MASK_GENERATOR_STACK_DROPOUT_PROBABILITY: float | None = None
 MASK_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions | None = None
 MASK_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool | None = None
 MASK_GENERATOR_STACK_BIAS_FLAG: bool | None = None
-
 
 
 #########################################################################

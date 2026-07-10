@@ -1,18 +1,18 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
+
+from emperor.base.layer.gate import GateConfig, LayerGateOptions
 from emperor.base.layer.residual import ResidualConnectionOptions
 from emperor.base.options import (
     ActivationOptions,
     LastLayerBiasOptions,
     LayerNormPositionOptions,
 )
-from emperor.base.options import ActivationOptions
-from emperor.base.layer.gate import GateConfig, LayerGateOptions
+from emperor.embedding.absolute.core.config import AbsolutePositionalEmbeddingConfig
 from emperor.halting.options import HaltingHiddenStateModeOptions
 from emperor.memory.config import DynamicMemoryConfig
 from emperor.memory.options import MemoryPositionOptions
-from emperor.base.options import ActivationOptions, LayerNormPositionOptions
-from emperor.embedding.absolute.core.config import AbsolutePositionalEmbeddingConfig
 
 
 @dataclass(frozen=True)

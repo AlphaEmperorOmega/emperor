@@ -74,8 +74,7 @@ class Model(BertPretrainingExperiment):
     ) -> ExperimentConfig:
         if not isinstance(config.experiment_config, ExperimentConfig):
             raise TypeError(
-                "config.experiment_config must be a BERT Linear "
-                "ExperimentConfig."
+                "config.experiment_config must be a BERT Linear ExperimentConfig."
             )
         return config.experiment_config
 
@@ -117,9 +116,7 @@ class Model(BertPretrainingExperiment):
         return nn.LayerNorm(self.cfg.hidden_dim)
 
     def __build_embedding_dropout(self) -> nn.Dropout:
-        return nn.Dropout(
-            self.boundary_config.embedding_options.dropout_probability
-        )
+        return nn.Dropout(self.boundary_config.embedding_options.dropout_probability)
 
     def __build_encoder_model(self) -> nn.Module:
         return self.experiment_config.encoder_config.build()
@@ -145,9 +142,7 @@ class Model(BertPretrainingExperiment):
         return nn.LayerNorm(self.cfg.hidden_dim)
 
     def __build_mlm_decoder(self) -> nn.Linear:
-        return nn.Linear(
-            self.cfg.hidden_dim, self.cfg.output_dim, bias=False
-        )
+        return nn.Linear(self.cfg.hidden_dim, self.cfg.output_dim, bias=False)
 
     def __tie_mlm_decoder_weights(self) -> None:
         if not self.boundary_config.mlm_head_options.decoder_weight_tying_flag:

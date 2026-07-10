@@ -15,7 +15,6 @@ from emperor.augmentations.adaptive_parameters.core.mask import (
 from emperor.augmentations.adaptive_parameters.core.weight import (
     DynamicWeightConfig,
 )
-from emperor.base.options import ActivationOptions, LayerNormPositionOptions
 from emperor.base.layer.config import (
     LayerConfig,
     LayerStackConfig,
@@ -23,6 +22,7 @@ from emperor.base.layer.config import (
 )
 from emperor.base.layer.gate import GateConfig
 from emperor.base.layer.residual import ResidualConnectionOptions
+from emperor.base.options import ActivationOptions, LayerNormPositionOptions
 from emperor.experts.config import MixtureOfExpertsModelConfig
 from emperor.experts.core.config import (
     MixtureOfExpertsConfig,
@@ -32,8 +32,8 @@ from emperor.halting.config import StickBreakingConfig
 from emperor.linears.core.config import AdaptiveLinearLayerConfig, LinearLayerConfig
 from emperor.sampler.core.config import RouterConfig, SamplerConfig
 
-from models.bert.expert_linear_adaptive._router_controller_config import (
-    RouterControllerModelConfig,
+from models.bert.expert_linear_adaptive._adaptive_generator_stack_config_factory import (
+    AdaptiveGeneratorStackConfigFactory,
 )
 from models.bert.expert_linear_adaptive._adaptive_parameter_config_factory import (
     build_bias_config,
@@ -41,29 +41,27 @@ from models.bert.expert_linear_adaptive._adaptive_parameter_config_factory impor
     build_mask_config,
     build_weight_config,
 )
+from models.bert.expert_linear_adaptive._control_support import (
+    ExpertsGateConfigFactory,
+    ExpertsHaltingConfigFactory,
+    ExpertsMemoryConfigFactory,
+    ExpertsRecurrentConfigFactory,
+    build_controller_stack,
+)
+from models.bert.expert_linear_adaptive._router_controller_config import (
+    RouterControllerModelConfig,
+)
 from models.bert.expert_linear_adaptive.runtime_options import (
+    AdaptiveGeneratorStackOptions,
+    AdaptiveGeneratorStackSource,
     ExpertsDynamicMemoryOptions,
-    ExpertsSubmoduleStackOptions,
     ExpertsLayerControllerOptions,
     ExpertsMixtureOptions,
     ExpertsRecurrentControllerOptions,
     ExpertsRouterOptions,
     ExpertsSamplerOptions,
     ExpertsStackOptions,
-)
-from models.bert.expert_linear_adaptive._control_support import (
-    build_controller_stack,
-    ExpertsGateConfigFactory,
-    ExpertsHaltingConfigFactory,
-    ExpertsMemoryConfigFactory,
-    ExpertsRecurrentConfigFactory,
-)
-from models.bert.expert_linear_adaptive._adaptive_generator_stack_config_factory import (
-    AdaptiveGeneratorStackConfigFactory,
-)
-from models.bert.expert_linear_adaptive.runtime_options import (
-    AdaptiveGeneratorStackOptions,
-    AdaptiveGeneratorStackSource,
+    ExpertsSubmoduleStackOptions,
     HiddenAdaptiveBiasOptions,
     HiddenAdaptiveDiagonalOptions,
     HiddenAdaptiveMaskOptions,

@@ -24,8 +24,14 @@ from emperor.transformer.feed_forward import FeedForwardConfig
 
 from models.bert.expert_linear_adaptive._control_support import (
     ExpertsGateConfigFactory as BertGateConfigFactory,
+)
+from models.bert.expert_linear_adaptive._control_support import (
     ExpertsHaltingConfigFactory as BertHaltingConfigFactory,
+)
+from models.bert.expert_linear_adaptive._control_support import (
     ExpertsMemoryConfigFactory as BertMemoryConfigFactory,
+)
+from models.bert.expert_linear_adaptive._control_support import (
     ExpertsRecurrentConfigFactory as BertRecurrentConfigFactory,
 )
 from models.bert.expert_linear_adaptive.runtime_options import (
@@ -34,8 +40,6 @@ from models.bert.expert_linear_adaptive.runtime_options import (
     ExpertsRecurrentControllerOptions,
     ExpertsStackOptions,
     ExpertsSubmoduleStackOptions,
-)
-from models.bert.expert_linear_adaptive.runtime_options import (
     TransformerAttentionOptions,
     TransformerEncoderOptions,
     TransformerFeedForwardOptions,
@@ -108,9 +112,7 @@ class BertBackendConfigBuilder:
         self.attn_num_heads = attention_options.num_heads
         self.attn_num_layers = attention_options.num_layers
         self.attn_bias_flag = attention_options.bias_flag
-        self.attn_add_key_value_bias_flag = (
-            attention_options.add_key_value_bias_flag
-        )
+        self.attn_add_key_value_bias_flag = attention_options.add_key_value_bias_flag
         self.attention_projection_stack_options = attention_projection_stack_options
         self.attention_projection_layer_controller_options = (
             attention_projection_layer_controller_options
@@ -128,9 +130,7 @@ class BertBackendConfigBuilder:
         self.feed_forward_layer_controller_options = (
             feed_forward_layer_controller_options
         )
-        self.feed_forward_dynamic_memory_options = (
-            feed_forward_dynamic_memory_options
-        )
+        self.feed_forward_dynamic_memory_options = feed_forward_dynamic_memory_options
         self.feed_forward_recurrent_controller_options = (
             feed_forward_recurrent_controller_options
         )
@@ -362,12 +362,8 @@ class BertBackendConfigBuilder:
             target_stack.layer_config.halting_config = (
                 halting_factory.build_halting_config()
             )
-        if (
-            self.feed_forward_layer_controller_options is not None
-            and (
-                self.feed_forward_layer_controller_options.shared_gate_config
-                is not None
-            )
+        if self.feed_forward_layer_controller_options is not None and (
+            self.feed_forward_layer_controller_options.shared_gate_config is not None
         ):
             target_stack.shared_gate_config = (
                 self.feed_forward_layer_controller_options.shared_gate_config
@@ -417,9 +413,7 @@ class BertBackendConfigBuilder:
         layer_model_config = self._build_linear_layer_config(bias_flag=bias_flag)
         layer_config = LayerConfig(
             activation=(
-                self.encoder_options.activation
-                if activation is None
-                else activation
+                self.encoder_options.activation if activation is None else activation
             ),
             layer_norm_position=layer_norm_position,
             residual_connection_option=residual_connection_option,
@@ -554,9 +548,7 @@ class BertBackendConfigBuilder:
         attention_stack_options = self._effective_attention_projection_stack_options()
         return BertMemoryConfigFactory(
             stack_options=attention_stack_options,
-            dynamic_memory_options=(
-                self.attention_projection_dynamic_memory_options
-            ),
+            dynamic_memory_options=(self.attention_projection_dynamic_memory_options),
             submodule_stack_options=attention_stack_options,
         )
 

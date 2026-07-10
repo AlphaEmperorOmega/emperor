@@ -1,10 +1,5 @@
 from typing import TYPE_CHECKING, Any
 
-from models.bert.linear.runtime_defaults import (
-    DEFAULT_RUNTIME,
-    runtime_with_builder_options,
-)
-from models.bert.linear.runtime_options import RuntimeOptions
 from models.bert.linear._boundary_config_factory import (
     BoundaryConfigDependencies,
     BoundaryConfigFactory,
@@ -22,6 +17,11 @@ from models.bert.linear._positional_embedding_config_factory import (
     PositionalEmbeddingConfigFactory,
 )
 from models.bert.linear.experiment_config import ExperimentConfig
+from models.bert.linear.runtime_defaults import (
+    DEFAULT_RUNTIME,
+    runtime_with_builder_options,
+)
+from models.bert.linear.runtime_options import RuntimeOptions
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig

@@ -69,9 +69,7 @@ class Model(BertPretrainingExperiment):
         return nn.LayerNorm(self.cfg.hidden_dim)
 
     def __build_embedding_dropout(self) -> nn.Dropout:
-        return nn.Dropout(
-            self.experiment_config.embedding_dropout_probability
-        )
+        return nn.Dropout(self.experiment_config.embedding_dropout_probability)
 
     def __build_encoder_model(self) -> nn.Module:
         return self.experiment_config.encoder_config.build()
@@ -89,9 +87,7 @@ class Model(BertPretrainingExperiment):
         return nn.LayerNorm(self.cfg.hidden_dim)
 
     def __build_mlm_decoder(self) -> nn.Linear:
-        return nn.Linear(
-            self.cfg.hidden_dim, self.cfg.output_dim, bias=False
-        )
+        return nn.Linear(self.cfg.hidden_dim, self.cfg.output_dim, bias=False)
 
     def __tie_mlm_decoder_weights(self) -> None:
         self.mlm_decoder.weight = self.token_embedding.weight

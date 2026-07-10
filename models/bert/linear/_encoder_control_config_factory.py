@@ -1,25 +1,25 @@
-from emperor.base.layer.config import LayerConfig, LayerStackConfig
-from emperor.base.layer.gate import GateConfig
-from emperor.linears.core.config import LinearLayerConfig
-from models.bert.linear.runtime_options import (
-    LayerControllerOptions,
-    RecurrentControllerOptions,
+from dataclasses import replace
+
+from emperor.base.layer.config import (
+    LayerConfig,
+    LayerStackConfig,
+    RecurrentLayerConfig,
 )
+from emperor.base.layer.gate import GateConfig
+from emperor.base.layer.residual import ResidualConnectionOptions
+from emperor.base.options import LastLayerBiasOptions
+from emperor.halting.config import StickBreakingConfig
+from emperor.linears.core.config import LinearLayerConfig
+from emperor.memory.config import DynamicMemoryConfig
+
 from models.bert.linear.runtime_options import (
+    DynamicMemoryOptions,
+    LayerControllerOptions,
+    MainLayerStackOptions,
+    RecurrentControllerOptions,
     SubmoduleStackOptions,
     resolve_controller_stack_options,
 )
-from dataclasses import replace
-from emperor.base.options import LastLayerBiasOptions
-from emperor.halting.config import StickBreakingConfig
-from emperor.memory.config import DynamicMemoryConfig
-from models.bert.linear.runtime_options import (
-    DynamicMemoryOptions,
-    MainLayerStackOptions,
-)
-from emperor.base.layer.config import LayerStackConfig, RecurrentLayerConfig
-from emperor.base.layer.residual import ResidualConnectionOptions
-from models.bert.linear.runtime_options import RecurrentControllerOptions
 
 
 class GateConfigFactory:

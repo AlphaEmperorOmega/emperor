@@ -3,7 +3,9 @@
 from dataclasses import dataclass
 
 from emperor.augmentations.adaptive_parameters.core.bias import DynamicBiasConfig
-from emperor.augmentations.adaptive_parameters.core.diagonal import DynamicDiagonalConfig
+from emperor.augmentations.adaptive_parameters.core.diagonal import (
+    DynamicDiagonalConfig,
+)
 from emperor.augmentations.adaptive_parameters.core.mask import AxisMaskConfig
 from emperor.augmentations.adaptive_parameters.core.weight import DynamicWeightConfig
 from emperor.augmentations.adaptive_parameters.options import (
@@ -21,6 +23,7 @@ from emperor.base.options import (
     LastLayerBiasOptions,
     LayerNormPositionOptions,
 )
+from emperor.embedding.absolute.core.config import AbsolutePositionalEmbeddingConfig
 from emperor.experts.core.options import (
     DroppedTokenOptions,
     ExpertWeightingPositionOptions,
@@ -29,7 +32,6 @@ from emperor.experts.core.options import (
 from emperor.halting.options import HaltingHiddenStateModeOptions
 from emperor.memory.config import DynamicMemoryConfig
 from emperor.memory.options import MemoryPositionOptions
-from emperor.embedding.absolute.core.config import AbsolutePositionalEmbeddingConfig
 
 
 @dataclass(frozen=True, slots=True)

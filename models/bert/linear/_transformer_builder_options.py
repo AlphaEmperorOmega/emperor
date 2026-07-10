@@ -1,12 +1,12 @@
 """Compatibility imports for the public Runtime Options Interface."""
 
 from models.bert.linear.runtime_options import (
-    TransformerEncoderOptions,
-    TransformerPositionalEmbeddingOptions,
     TransformerAttentionOptions,
+    TransformerEncoderOptions,
     TransformerFeedForwardOptions,
-    VitPatchOptions,
+    TransformerPositionalEmbeddingOptions,
     VitOutputOptions,
+    VitPatchOptions,
 )
 
 LEGACY_RUNTIME_OPTIONS_MODULE = True
