@@ -1,17 +1,27 @@
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
 from emperor.base.layer import LayerConfig
 from emperor.base.layer.residual import ResidualConnectionOptions
 from emperor.base.utils import ConfigBase, optional_field
 
-from typing import TYPE_CHECKING
-
 if TYPE_CHECKING:
-    from emperor.base.options import LayerNormPositionOptions
-    from emperor.attention.core.variants.self_attention.config import SelfAttentionConfig
     from emperor.attention.core.variants.independent_attention.config import (
         IndependentAttentionConfig,
     )
+    from emperor.attention.core.variants.mixture_of_attention_heads.config import (
+        MixtureOfAttentionHeadsConfig,
+    )
+    from emperor.attention.core.variants.self_attention.config import (
+        SelfAttentionConfig,
+    )
+    from emperor.base.options import LayerNormPositionOptions
     from emperor.transformer.feed_forward.core.config import FeedForwardConfig
+
+    DecoderSelfAttentionConfig = SelfAttentionConfig | MixtureOfAttentionHeadsConfig
+    DecoderCrossAttentionConfig = (
+        IndependentAttentionConfig | MixtureOfAttentionHeadsConfig
+    )
 
 
 @dataclass
@@ -31,8 +41,8 @@ class TransformerEncoderLayerConfig(ConfigBase):
     causal_attention_mask_flag: bool | None = optional_field(
         "Force a causal attention mask in the stack-level mask generation."
     )
-    attention_config: "SelfAttentionConfig | None" = optional_field(
-        "Self-attention configuration for the encoder sub-block."
+    attention_config: "SelfAttentionConfig | MixtureOfAttentionHeadsConfig | None" = (
+        optional_field("Supported attention configuration for the encoder sub-block.")
     )
     feed_forward_config: "FeedForwardConfig | None" = optional_field(
         "Feed-forward configuration for the encoder sub-block."
@@ -53,6 +63,14 @@ class TransformerEncoderBlockLayerConfig(LayerConfig):
 
 
 @dataclass
+class TransformerDecoderBlockLayerConfig(LayerConfig):
+    def _registry_owner(self) -> type:
+        from emperor.transformer.core.layers import TransformerDecoderBlockLayer
+
+        return TransformerDecoderBlockLayer
+
+
+@dataclass
 class TransformerDecoderLayerConfig(ConfigBase):
     embedding_dim: int | None = optional_field(
         "Token embedding dimension shared by attention and feed-forward."
@@ -69,10 +87,10 @@ class TransformerDecoderLayerConfig(ConfigBase):
     causal_attention_mask_flag: bool | None = optional_field(
         "Force a causal attention mask in the stack-level mask generation."
     )
-    self_attention_config: "SelfAttentionConfig | None" = optional_field(
+    self_attention_config: "DecoderSelfAttentionConfig | None" = optional_field(
         "Self-attention configuration for the decoder sub-block."
     )
-    cross_attention_config: "IndependentAttentionConfig | None" = optional_field(
+    cross_attention_config: "DecoderCrossAttentionConfig | None" = optional_field(
         "Cross-attention configuration querying encoder outputs."
     )
     feed_forward_config: "FeedForwardConfig | None" = optional_field(
@@ -87,9 +105,7 @@ class TransformerDecoderLayerConfig(ConfigBase):
 
 @dataclass
 class TransformerEncoderStackConfig(ConfigBase):
-    num_layers: int | None = optional_field(
-        "Number of encoder layers in the stack."
-    )
+    num_layers: int | None = optional_field("Number of encoder layers in the stack.")
     embedding_dim: int | None = optional_field(
         "Token embedding dimension. Drives final layer-norm sizing."
     )
@@ -114,9 +130,7 @@ class TransformerEncoderStackConfig(ConfigBase):
 
 @dataclass
 class TransformerDecoderStackConfig(ConfigBase):
-    num_layers: int | None = optional_field(
-        "Number of decoder layers in the stack."
-    )
+    num_layers: int | None = optional_field("Number of decoder layers in the stack.")
     embedding_dim: int | None = optional_field(
         "Token embedding dimension. Drives final layer-norm sizing."
     )

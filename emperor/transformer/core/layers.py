@@ -1,22 +1,38 @@
-import torch
-import torch.nn as nn
-
-from torch import Tensor
-from emperor.base.utils import Module
-from emperor.base.layer import Layer
-from emperor.attention.core.state import AttentionLayerState
-from emperor.base.options import LayerNormPositionOptions
-from emperor.base.layer.residual import ResidualConnection, ResidualConnectionOptions
-from emperor.transformer.core._validator import TransformerValidator
-
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+import torch
+import torch.nn as nn
+from torch import Tensor
+
+from emperor.attention.core.state import AttentionLayerState
+from emperor.base.layer import Layer, LayerState
+from emperor.base.layer.residual import ResidualConnection, ResidualConnectionOptions
+from emperor.base.options import LayerNormPositionOptions
+from emperor.base.utils import Module
+from emperor.transformer.core._validator import TransformerValidator
+
 if TYPE_CHECKING:
-    from emperor.base.layer.state import LayerState
+    from emperor.halting.core.base import HaltingStateBase
     from emperor.transformer.core.config import (
-        TransformerEncoderLayerConfig,
         TransformerDecoderLayerConfig,
+        TransformerEncoderLayerConfig,
     )
+
+
+@dataclass
+class TransformerDecoderLayerState(LayerState):
+    """Context preserved while decoder blocks pass through Emperor controllers."""
+
+    hidden: Tensor
+    loss: Tensor | None = None
+    halting_state: "HaltingStateBase | None" = None
+    target_key_padding_mask: Tensor | None = None
+    target_attention_mask: Tensor | None = None
+    encoder_output: Tensor | None = None
+    encoder_padding_mask: Tensor | None = None
+    cross_attention_mask: Tensor | None = None
+    controller_state: object | None = None
 
 
 class TransformerEncoderLayer(Module):
@@ -105,9 +121,7 @@ class TransformerEncoderLayer(Module):
         source_key_padding_mask: Tensor | None,
         attention_mask: Tensor | None,
     ) -> tuple[Tensor, Tensor]:
-        normed_input = self.__apply_pre_norm(
-            residual, self.self_attention_layer_norm
-        )
+        normed_input = self.__apply_pre_norm(residual, self.self_attention_layer_norm)
         attention_output, _attention_weights, auxiliary_loss = (
             self.self_attention_model(
                 q=normed_input,
@@ -211,6 +225,28 @@ class TransformerEncoderBlockLayer(Layer):
         return output
 
 
+class TransformerDecoderBlockLayer(Layer):
+    def _handle_model_processing(
+        self,
+        main_model_input: Tensor,
+        state: "LayerState",
+    ) -> Tensor:
+        if not isinstance(state, TransformerDecoderLayerState):
+            raise TypeError(
+                "TransformerDecoderBlockLayer requires a TransformerDecoderLayerState."
+            )
+        output, loss = self.model(
+            main_model_input,
+            encoder_output=state.encoder_output,
+            key_padding_mask=state.target_key_padding_mask,
+            encoder_padding_mask=state.encoder_padding_mask,
+            attention_mask=state.target_attention_mask,
+            encoder_attention_mask=state.cross_attention_mask,
+        )
+        state.loss = loss if state.loss is None else state.loss + loss
+        return output
+
+
 class TransformerDecoderLayer(Module):
     def __init__(
         self,
@@ -309,9 +345,7 @@ class TransformerDecoderLayer(Module):
         target_key_padding_mask: Tensor | None,
         attention_mask: Tensor | None,
     ) -> tuple[Tensor, Tensor]:
-        normed_input = self.__apply_pre_norm(
-            residual, self.self_attention_layer_norm
-        )
+        normed_input = self.__apply_pre_norm(residual, self.self_attention_layer_norm)
         attention_output, _attention_weights, auxiliary_loss = (
             self.self_attention_model(
                 q=normed_input,
@@ -343,9 +377,7 @@ class TransformerDecoderLayer(Module):
         encoder_padding_mask: Tensor | None,
         encoder_attention_mask: Tensor | None,
     ) -> tuple[Tensor, Tensor]:
-        normed_input = self.__apply_pre_norm(
-            residual, self.cross_attention_layer_norm
-        )
+        normed_input = self.__apply_pre_norm(residual, self.cross_attention_layer_norm)
         attention_output, _attention_weights, auxiliary_loss = (
             self.cross_attention_model(
                 q=normed_input,
