@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type ConfigSnapshotRecord,
-  type Dataset,
   type DatasetGroup,
   type LogRun,
   type ModelIdentity,
@@ -16,7 +15,6 @@ import {
   lockedOverrideKeys,
   normalizeAdaptiveOptionOverrides,
   normalizeConfigOverrides,
-  overrideDigest,
   overrideValue,
   type ActiveOverrideScope,
   type OverrideValues,
@@ -63,25 +61,28 @@ import {
 import {
   deriveTargetSelectionState,
 } from "@/features/workbench/state/target/target-selection";
+import {
+  datasetsForExperimentTask,
+  experimentTaskOptions,
+  normalizeExperimentTask,
+} from "@/features/workbench/state/target/target-dataset-catalog";
+import {
+  previewTargetKey,
+  resolvePreviewTarget,
+  type HistoricalExperimentTarget,
+  type TargetMode,
+} from "@/features/workbench/state/target/target-preview";
+import { type WorkbenchWorkspace } from "@/types/workbench";
 
 const EMPTY_MODEL_IDS: ModelIdentity[] = [];
 const EMPTY_PRESETS: Preset[] = [];
-const EMPTY_DATASETS: Dataset[] = [];
 const EMPTY_DATASET_GROUPS: DatasetGroup[] = [];
 const EMPTY_MONITORS: MonitorOption[] = [];
 const EMPTY_SEARCH_AXES: SearchAxis[] = [];
 
-type TargetMode = "preset" | "snapshot" | "experiment";
-
-type HistoricalExperimentTarget = {
-  runId: string;
-  experiment: string;
-  preset: string;
-  dataset: string;
-  experimentTask?: string | null;
-};
-
 type TargetConfigStateOptions = {
+  activeWorkspace?: WorkbenchWorkspace;
+  snapshotLibraryEnabled?: boolean;
   requestPreview: (request: PreviewInspectionRequest) => void;
   clearPreview: () => void;
   resetGraphSelectionAndExpansion: () => void;
@@ -113,38 +114,6 @@ function withoutOverride(overrides: OverrideValues, key: string): OverrideValues
   );
 }
 
-function experimentTaskOptions(groups: DatasetGroup[]) {
-  return groups.map((group) => ({
-    value: group.experimentTask,
-    label: group.label || group.experimentTask,
-  }));
-}
-
-function normalizeExperimentTask(
-  current: string,
-  defaultExperimentTask: string,
-  groups: DatasetGroup[],
-) {
-  const taskNames = groups.map((group) => group.experimentTask);
-  if (current && taskNames.includes(current)) {
-    return current;
-  }
-  if (defaultExperimentTask && taskNames.includes(defaultExperimentTask)) {
-    return defaultExperimentTask;
-  }
-  return taskNames[0] ?? "";
-}
-
-function datasetsForExperimentTask(
-  groups: DatasetGroup[],
-  experimentTask: string,
-) {
-  return (
-    groups.find((group) => group.experimentTask === experimentTask)?.datasets ??
-    EMPTY_DATASETS
-  );
-}
-
 function createSnapshotId() {
   return globalThis.crypto?.randomUUID?.() ?? `snapshot-${Date.now()}`;
 }
@@ -157,72 +126,9 @@ type PresetSnapshotDraftOptions = {
   includeTrainingPreset?: boolean;
 };
 
-function previewTargetKey({
-  modelType,
-  model,
-  preset,
-  experimentTask,
-  dataset,
-  mode,
-  target,
-  overrides,
-}: {
-  modelType: string;
-  model: string;
-  preset: string;
-  experimentTask?: string | null;
-  dataset: string;
-  mode: TargetMode;
-  target: string;
-  overrides: OverrideValues;
-}) {
-  return `${modelType}\u0000${model}\u0000${preset}\u0000${experimentTask ?? ""}\u0000${dataset}\u0000${mode}\u0000${target}\u0000${overrideDigest(overrides)}`;
-}
-
-function resolvePreviewTarget({
-  selectedTargetMode,
-  selectedSnapshotId,
-  selectedExperimentTarget,
-  selectedPreset,
-  selectedExperimentTask,
-  selectedDatasets,
-}: {
-  selectedTargetMode: TargetMode;
-  selectedSnapshotId: string;
-  selectedExperimentTarget: HistoricalExperimentTarget | null;
-  selectedPreset: string;
-  selectedExperimentTask: string;
-  selectedDatasets: string[];
-}) {
-  const catalogDataset = selectedDatasets[0] ?? "";
-  if (selectedTargetMode === "snapshot" && selectedSnapshotId) {
-    return {
-      targetMode: "snapshot" as const,
-      targetId: selectedSnapshotId,
-      preset: selectedPreset,
-      experimentTask: selectedExperimentTask,
-      dataset: catalogDataset,
-    };
-  }
-  if (selectedTargetMode === "experiment") {
-    return {
-      targetMode: "experiment" as const,
-      targetId: selectedExperimentTarget?.runId ?? "",
-      preset: selectedExperimentTarget?.preset ?? selectedPreset,
-      experimentTask: selectedExperimentTarget?.experimentTask ?? "",
-      dataset: selectedExperimentTarget?.dataset ?? catalogDataset,
-    };
-  }
-  return {
-    targetMode: "preset" as const,
-    targetId: selectedPreset,
-    preset: selectedPreset,
-    experimentTask: selectedExperimentTask,
-    dataset: catalogDataset,
-  };
-}
-
 export function useTargetConfigState({
+  activeWorkspace = "model",
+  snapshotLibraryEnabled = false,
   requestPreview,
   clearPreview,
   resetGraphSelectionAndExpansion,
