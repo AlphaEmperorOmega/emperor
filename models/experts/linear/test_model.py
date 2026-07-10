@@ -30,6 +30,11 @@ from emperor.memory.config import (
 from emperor.memory.options import MemoryPositionOptions
 
 import models.experts.linear.config as config
+import models.experts.linear.dataset_options as dataset_options
+from models.experts.linear.config_builder import LinearConfigBuilder
+from models.experts.linear.model import Model
+from models.experts.linear.presets import ExperimentPreset, ExperimentPresets
+from models.experts.linear.runtime_defaults import runtime_from_flat
 from models.experts.linear.runtime_options import (
     ExpertsDynamicMemoryOptions,
     ExpertsLayerControllerOptions,
@@ -42,17 +47,12 @@ from models.experts.linear.runtime_options import (
     ExpertsSubmoduleStackSource,
     RuntimeOptions,
 )
-from models.experts.linear.config_builder import LinearConfigBuilder
-from models.experts.linear.model import Model
-from models.experts.linear.presets import ExperimentPreset, ExperimentPresets
-from models.experts.linear.runtime_defaults import runtime_from_flat
 from models.training_test_utils import (
     RandomImageClassificationDataModule,
     tiny_cpu_trainer,
 )
 
 
-import models.experts.linear.dataset_options as dataset_options
 class TestLinearModel(unittest.TestCase):
     def experts_preset(self, **kwargs):
         return ExperimentPresets()._preset(**kwargs)
@@ -60,7 +60,9 @@ class TestLinearModel(unittest.TestCase):
     def test_all_presets_forward_one_mnist_batch(self):
         batch_size = 4
         presets = ExperimentPresets()
-        dataset = dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0]
+        dataset = dataset_options.DATASET_OPTIONS_BY_TASK[
+            dataset_options.DEFAULT_EXPERIMENT_TASK
+        ][0]
 
         for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
@@ -77,7 +79,9 @@ class TestLinearModel(unittest.TestCase):
         batch_size = 4
         presets = ExperimentPresets()
 
-        for dataset in dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK]:
+        for dataset in dataset_options.DATASET_OPTIONS_BY_TASK[
+            dataset_options.DEFAULT_EXPERIMENT_TASK
+        ]:
             with self.subTest(dataset=dataset.__name__):
                 cfg = presets.get_config(ExperimentPreset.BASELINE, dataset)[0]
                 model = Model(cfg)
@@ -90,7 +94,9 @@ class TestLinearModel(unittest.TestCase):
 
     def test_all_presets_train_one_epoch(self):
         presets = ExperimentPresets()
-        dataset = dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0]
+        dataset = dataset_options.DATASET_OPTIONS_BY_TASK[
+            dataset_options.DEFAULT_EXPERIMENT_TASK
+        ][0]
 
         for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
@@ -203,7 +209,9 @@ class TestLinearModel(unittest.TestCase):
     def test_preset_accepts_search_flags(self):
         configs = ExperimentPresets().get_config(
             ExperimentPreset.BASELINE,
-            dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
+            dataset_options.DATASET_OPTIONS_BY_TASK[
+                dataset_options.DEFAULT_EXPERIMENT_TASK
+            ][0],
             RandomSearch(num_samples=2),
         )
 
@@ -690,17 +698,19 @@ class TestLinearModel(unittest.TestCase):
             {"memory_flag": True},
             {"top_k": 1},
             {"router_stack_independent_flag": True},
-            {"sampler_stack_options": ExpertsSubmoduleStackOptions(
-                hidden_dim=8,
-                num_layers=1,
-                last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-                apply_output_pipeline_flag=False,
-                activation=ActivationOptions.RELU,
-                layer_norm_position=LayerNormPositionOptions.DISABLED,
-                residual_connection_option=ResidualConnectionOptions.DISABLED,
-                dropout_probability=0.0,
-                bias_flag=True,
-            )},
+            {
+                "sampler_stack_options": ExpertsSubmoduleStackOptions(
+                    hidden_dim=8,
+                    num_layers=1,
+                    last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
+                    apply_output_pipeline_flag=False,
+                    activation=ActivationOptions.RELU,
+                    layer_norm_position=LayerNormPositionOptions.DISABLED,
+                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    dropout_probability=0.0,
+                    bias_flag=True,
+                )
+            },
             {"shared_gate_config": self.shared_gate_config()},
         ):
             with self.subTest(kwargs=kwargs):
@@ -1500,7 +1510,9 @@ class TestLinearModel(unittest.TestCase):
 
     def test_auxiliary_loss_presets_return_finite_loss(self):
         batch_size = 4
-        dataset = dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0]
+        dataset = dataset_options.DATASET_OPTIONS_BY_TASK[
+            dataset_options.DEFAULT_EXPERIMENT_TASK
+        ][0]
         presets = ExperimentPresets()
 
         for preset in (

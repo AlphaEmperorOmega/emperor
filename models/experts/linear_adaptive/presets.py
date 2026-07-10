@@ -47,14 +47,14 @@ from emperor.experts.core.options import (
 )
 
 import models.experts.linear_adaptive.config as config
-from models.experts.linear_adaptive.runtime_defaults import runtime_from_flat
+import models.experts.linear_adaptive.dataset_options as dataset_options
 from models.experts.linear_adaptive.config_builder import (
     LinearAdaptiveConfigBuilder,
 )
 from models.experts.linear_adaptive.model import Model
+from models.experts.linear_adaptive.runtime_defaults import runtime_from_flat
 
 
-import models.experts.linear_adaptive.dataset_options as dataset_options
 class ExperimentPreset(BaseOptions):
     BASELINE = 1
     GATING = 2
@@ -918,7 +918,9 @@ class Experiment(ExperimentBase):
         return config.NUM_EPOCHS
 
     def _dataset_options(self) -> list:
-        return dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK]
+        return dataset_options.DATASET_OPTIONS_BY_TASK[
+            dataset_options.DEFAULT_EXPERIMENT_TASK
+        ]
 
     def _model_type(self) -> type:
         return Model

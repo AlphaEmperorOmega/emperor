@@ -1,19 +1,19 @@
 from typing import TYPE_CHECKING, Any
 
+from models.experts.linear._hidden_model_config_factory import (
+    HiddenModelConfigDependencies,
+    HiddenModelConfigFactory,
+)
+from models.experts.linear._projection_config_factory import (
+    ProjectionConfigDependencies,
+    ProjectionConfigFactory,
+)
+from models.experts.linear.experiment_config import ExperimentConfig
 from models.experts.linear.runtime_defaults import (
     DEFAULT_RUNTIME,
     runtime_from_legacy_options,
 )
 from models.experts.linear.runtime_options import RuntimeOptions
-from models.experts.linear._projection_config_factory import (
-    ProjectionConfigDependencies,
-    ProjectionConfigFactory,
-)
-from models.experts.linear._hidden_model_config_factory import (
-    HiddenModelConfigDependencies,
-    HiddenModelConfigFactory,
-)
-from models.experts.linear.experiment_config import ExperimentConfig
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig

@@ -1,32 +1,3 @@
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import (
-    ActivationOptions,
-    LastLayerBiasOptions,
-    LayerNormPositionOptions,
-)
-from emperor.halting.options import HaltingHiddenStateModeOptions
-from emperor.experts.core.options import (
-    DroppedTokenOptions,
-    ExpertWeightingPositionOptions,
-    RoutingInitializationMode,
-)
-from emperor.base.layer.gate import LayerGateOptions
-from emperor.memory.config import (
-    AttentionDynamicMemoryConfig,  # noqa: F401
-    DynamicMemoryConfig,
-    ElementWiseWeightedDynamicMemoryConfig,  # noqa: F401
-    GatedResidualDynamicMemoryConfig,
-    WeightedDynamicMemoryConfig,  # noqa: F401
-)
-from emperor.memory.options import MemoryPositionOptions
-from emperor.augmentations.adaptive_parameters.options import (
-    BankExpansionFactorOptions,
-    DynamicDepthOptions,
-    MaskDimensionOptions,
-    WeightDecayScheduleOptions,
-    WeightNormalizationOptions,
-    WeightNormalizationPositionOptions,
-)
 from emperor.augmentations.adaptive_parameters import (
     AdditiveDynamicBiasConfig,
     AffineTransformDynamicBiasConfig,
@@ -50,9 +21,38 @@ from emperor.augmentations.adaptive_parameters import (
     StandardDynamicDiagonalConfig,
     TanhGatedDynamicBiasConfig,
     TopSliceAxisMaskConfig,
-    WeightInformedScoreAxisMaskConfig,
     WeightedBankDynamicBiasConfig,
+    WeightInformedScoreAxisMaskConfig,
 )
+from emperor.augmentations.adaptive_parameters.options import (
+    BankExpansionFactorOptions,
+    DynamicDepthOptions,
+    MaskDimensionOptions,
+    WeightDecayScheduleOptions,
+    WeightNormalizationOptions,
+    WeightNormalizationPositionOptions,
+)
+from emperor.base.layer.gate import LayerGateOptions
+from emperor.base.layer.residual import ResidualConnectionOptions
+from emperor.base.options import (
+    ActivationOptions,
+    LastLayerBiasOptions,
+    LayerNormPositionOptions,
+)
+from emperor.experts.core.options import (
+    DroppedTokenOptions,
+    ExpertWeightingPositionOptions,
+    RoutingInitializationMode,
+)
+from emperor.halting.options import HaltingHiddenStateModeOptions
+from emperor.memory.config import (
+    AttentionDynamicMemoryConfig,  # noqa: F401
+    DynamicMemoryConfig,
+    ElementWiseWeightedDynamicMemoryConfig,  # noqa: F401
+    GatedResidualDynamicMemoryConfig,
+    WeightedDynamicMemoryConfig,  # noqa: F401
+)
+from emperor.memory.options import MemoryPositionOptions
 
 # Package-local trainer defaults. Model packages intentionally do not import the
 # repository-level trainer configuration so they remain independently loadable.
@@ -748,9 +748,7 @@ OUTPUT_LAYER_WEIGHT_DECAY_WARMUP_BATCHES: int = WEIGHT_DECAY_WARMUP_BATCHES
 OUTPUT_LAYER_WEIGHT_NORMALIZATION_OPTION: WeightNormalizationOptions = (
     WEIGHT_NORMALIZATION_OPTION
 )
-OUTPUT_LAYER_WEIGHT_NORMALIZATION_POSITION_OPTION: (
-    WeightNormalizationPositionOptions
-) = WEIGHT_NORMALIZATION_POSITION_OPTION
+OUTPUT_LAYER_WEIGHT_NORMALIZATION_POSITION_OPTION: WeightNormalizationPositionOptions = WEIGHT_NORMALIZATION_POSITION_OPTION  # noqa: E501
 OUTPUT_LAYER_WEIGHT_BANK_EXPANSION_FACTOR: BankExpansionFactorOptions = (
     WEIGHT_BANK_EXPANSION_FACTOR
 )

@@ -1,25 +1,6 @@
 from dataclasses import replace
+from typing import TYPE_CHECKING
 
-from emperor.base.layer.residual import ResidualConnectionOptions
-import models.experts.linear_adaptive.config as config
-
-from emperor.base.options import (
-    ActivationOptions,
-    LastLayerBiasOptions,
-    LayerNormPositionOptions,
-)
-from emperor.base.layer.config import (
-    LayerConfig,
-)
-from emperor.base.layer.gate import GateConfig, LayerGateOptions
-from emperor.experts.core.options import (
-    DroppedTokenOptions,
-    ExpertWeightingPositionOptions,
-    RoutingInitializationMode,
-)
-from emperor.halting.options import HaltingHiddenStateModeOptions
-from emperor.memory.config import DynamicMemoryConfig
-from emperor.memory.options import MemoryPositionOptions
 from emperor.augmentations.adaptive_parameters.core.bias import (
     DynamicBiasConfig,
 )
@@ -40,39 +21,52 @@ from emperor.augmentations.adaptive_parameters.options import (
     WeightNormalizationOptions,
     WeightNormalizationPositionOptions,
 )
+from emperor.base.layer.gate import GateConfig, LayerGateOptions
+from emperor.base.layer.residual import ResidualConnectionOptions
+from emperor.base.options import (
+    ActivationOptions,
+    LastLayerBiasOptions,
+    LayerNormPositionOptions,
+)
+from emperor.experts.core.options import (
+    DroppedTokenOptions,
+    ExpertWeightingPositionOptions,
+    RoutingInitializationMode,
+)
+from emperor.halting.options import HaltingHiddenStateModeOptions
+from emperor.memory.config import DynamicMemoryConfig
+from emperor.memory.options import MemoryPositionOptions
+
+import models.experts.linear_adaptive.config as config
+from models.experts.linear_adaptive._control_config_factory import (
+    ControlConfigDependencies,
+    ControlConfigFactory,
+)
+from models.experts.linear_adaptive._projection_config_factory import (
+    AdaptiveBoundaryModelOptions,
+    BoundaryModelConfigDependencies,
+    BoundaryModelConfigFactory,
+)
+from models.experts.linear_adaptive.experiment_config import ExperimentConfig
 from models.experts.linear_adaptive.runtime_options import (
+    AdaptiveGeneratorStackOptions,
+    AdaptiveGeneratorStackSource,
     ExpertsDynamicMemoryOptions,
-    ExpertsSubmoduleStackOptions,
-    ExpertsSubmoduleStackSource,
     ExpertsLayerControllerOptions,
     ExpertsMixtureOptions,
     ExpertsRecurrentControllerOptions,
     ExpertsRouterOptions,
     ExpertsSamplerOptions,
     ExpertsStackOptions,
-    resolve_experts_controller_stack_options,
-    resolve_experts_submodule_stack_options,
-)
-from models.experts.linear_adaptive._control_config_factory import (
-    ControlConfigDependencies,
-    ControlConfigFactory,
-)
-from models.experts.linear_adaptive.experiment_config import ExperimentConfig
-from models.experts.linear_adaptive._projection_config_factory import (
-    AdaptiveBoundaryModelOptions,
-    BoundaryModelConfigDependencies,
-    BoundaryModelConfigFactory,
-)
-from models.experts.linear_adaptive.runtime_options import (
-    AdaptiveGeneratorStackOptions,
-    AdaptiveGeneratorStackSource,
+    ExpertsSubmoduleStackOptions,
+    ExpertsSubmoduleStackSource,
     HiddenAdaptiveBiasOptions,
     HiddenAdaptiveDiagonalOptions,
     HiddenAdaptiveMaskOptions,
     HiddenAdaptiveWeightOptions,
+    resolve_experts_controller_stack_options,
+    resolve_experts_submodule_stack_options,
 )
-
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig

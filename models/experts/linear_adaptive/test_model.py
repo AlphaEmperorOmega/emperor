@@ -68,7 +68,22 @@ from emperor.memory.config import (
 from emperor.memory.options import MemoryPositionOptions
 
 import models.experts.linear_adaptive.config as config
+import models.experts.linear_adaptive.dataset_options as dataset_options
+from models.experts.linear_adaptive._router_controller_config import (
+    RouterControllerModelConfig,
+)
+from models.experts.linear_adaptive.config_builder import (
+    LinearAdaptiveConfigBuilder,
+)
+from models.experts.linear_adaptive.model import Model
+from models.experts.linear_adaptive.presets import (
+    ExperimentPreset,
+    ExperimentPresets,
+)
+from models.experts.linear_adaptive.runtime_defaults import runtime_from_flat
 from models.experts.linear_adaptive.runtime_options import (
+    AdaptiveGeneratorStackOptions,
+    AdaptiveGeneratorStackSource,
     ExpertsDynamicMemoryOptions,
     ExpertsLayerControllerOptions,
     ExpertsMixtureOptions,
@@ -78,31 +93,14 @@ from models.experts.linear_adaptive.runtime_options import (
     ExpertsStackOptions,
     ExpertsSubmoduleStackOptions,
     ExpertsSubmoduleStackSource,
-    RuntimeOptions,
-)
-from models.experts.linear_adaptive.config_builder import (
-    LinearAdaptiveConfigBuilder,
-)
-from models.experts.linear_adaptive.model import Model
-from models.experts.linear_adaptive._router_controller_config import (
-    RouterControllerModelConfig,
-)
-from models.experts.linear_adaptive.presets import (
-    ExperimentPreset,
-    ExperimentPresets,
-)
-from models.experts.linear_adaptive.runtime_defaults import runtime_from_flat
-from models.experts.linear_adaptive.runtime_options import (
-    AdaptiveGeneratorStackOptions,
-    AdaptiveGeneratorStackSource,
     HiddenAdaptiveBiasOptions,
     HiddenAdaptiveDiagonalOptions,
     HiddenAdaptiveMaskOptions,
     HiddenAdaptiveWeightOptions,
+    RuntimeOptions,
 )
 
 
-import models.experts.linear_adaptive.dataset_options as dataset_options
 class TestLinearAdaptiveExpertModel(unittest.TestCase):
     def experts_preset(self, **kwargs):
         return ExperimentPresets()._preset(**kwargs)
@@ -110,7 +108,9 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
     def test_all_presets_forward_one_mnist_batch(self):
         batch_size = 2
         presets = ExperimentPresets()
-        dataset = dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0]
+        dataset = dataset_options.DATASET_OPTIONS_BY_TASK[
+            dataset_options.DEFAULT_EXPERIMENT_TASK
+        ][0]
 
         for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
@@ -132,7 +132,9 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
         batch_size = 2
         presets = ExperimentPresets()
 
-        for dataset in dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK]:
+        for dataset in dataset_options.DATASET_OPTIONS_BY_TASK[
+            dataset_options.DEFAULT_EXPERIMENT_TASK
+        ]:
             with self.subTest(dataset=dataset.__name__):
                 cfg = presets.get_config(ExperimentPreset.BASELINE, dataset)[0]
                 model = Model(cfg)
@@ -145,7 +147,9 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
 
     def test_auxiliary_loss_preset_returns_finite_loss(self):
         batch_size = 2
-        dataset = dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0]
+        dataset = dataset_options.DATASET_OPTIONS_BY_TASK[
+            dataset_options.DEFAULT_EXPERIMENT_TASK
+        ][0]
         cfg = ExperimentPresets().get_config(
             ExperimentPreset.ADAPTIVE_TOP1_SWITCH,
             dataset,
@@ -241,7 +245,9 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
     def test_preset_accepts_search_flags(self):
         configs = ExperimentPresets().get_config(
             ExperimentPreset.BASELINE,
-            dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0],
+            dataset_options.DATASET_OPTIONS_BY_TASK[
+                dataset_options.DEFAULT_EXPERIMENT_TASK
+            ][0],
             RandomSearch(num_samples=2),
         )
 
@@ -704,17 +710,19 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
 
         for kwargs in (
             {"router_stack_independent_flag": True},
-            {"sampler_stack_options": ExpertsSubmoduleStackOptions(
-                hidden_dim=8,
-                num_layers=1,
-                last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-                apply_output_pipeline_flag=False,
-                activation=ActivationOptions.RELU,
-                layer_norm_position=LayerNormPositionOptions.DISABLED,
-                residual_connection_option=ResidualConnectionOptions.DISABLED,
-                dropout_probability=0.0,
-                bias_flag=True,
-            )},
+            {
+                "sampler_stack_options": ExpertsSubmoduleStackOptions(
+                    hidden_dim=8,
+                    num_layers=1,
+                    last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
+                    apply_output_pipeline_flag=False,
+                    activation=ActivationOptions.RELU,
+                    layer_norm_position=LayerNormPositionOptions.DISABLED,
+                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    dropout_probability=0.0,
+                    bias_flag=True,
+                )
+            },
             {"sampler_stack_independent_flag": True},
             {"sampler_stack_hidden_dim": 13},
             {"sampler_bias_flag": False},
@@ -816,7 +824,9 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
             submodule_stack_apply_output_pipeline_flag=True,
             submodule_stack_bias_flag=False,
         )
-        router_stack = cfg.experiment_config.model_config.sampler_config.router_config.model_config
+        router_stack = (
+            cfg.experiment_config.model_config.sampler_config.router_config.model_config
+        )
 
         self.assertEqual(router_stack.hidden_dim, config.ROUTER_STACK_HIDDEN_DIM)
         self.assertEqual(router_stack.num_layers, config.ROUTER_STACK_NUM_LAYERS)
@@ -860,7 +870,9 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
             router_stack_apply_output_pipeline_flag=True,
             router_bias_flag=False,
         )
-        router_stack = cfg.experiment_config.model_config.sampler_config.router_config.model_config
+        router_stack = (
+            cfg.experiment_config.model_config.sampler_config.router_config.model_config
+        )
 
         self.assertEqual(router_stack.hidden_dim, 88)
         self.assertEqual(
@@ -1036,12 +1048,25 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
             router_recurrent_flag=True,
         )
         model = Model(cfg)
-        X = self._fake_batch(dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0], batch_size=2)
+        X = self._fake_batch(
+            dataset_options.DATASET_OPTIONS_BY_TASK[
+                dataset_options.DEFAULT_EXPERIMENT_TASK
+            ][0],
+            batch_size=2,
+        )
 
         output = model(X)
         logits = output[0] if isinstance(output, tuple) else output
 
-        self.assertEqual(logits.shape, (2, dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK][0].num_classes))
+        self.assertEqual(
+            logits.shape,
+            (
+                2,
+                dataset_options.DATASET_OPTIONS_BY_TASK[
+                    dataset_options.DEFAULT_EXPERIMENT_TASK
+                ][0].num_classes,
+            ),
+        )
 
     def test_disabled_memory_is_absent_from_stack_and_layer_configs(self):
         cfg = LinearAdaptiveConfigBuilder().build()
@@ -1875,7 +1900,9 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
                 if case.get("halting"):
                     self.assertIsNotNone(layer_cfg.halting_config)
                 if case.get("memory"):
-                    self.assertIsNotNone(moe_model_cfg.stack_config.shared_memory_config)
+                    self.assertIsNotNone(
+                        moe_model_cfg.stack_config.shared_memory_config
+                    )
                 if "layer_norm" in case:
                     self.assertEqual(layer_cfg.layer_norm_position, case["layer_norm"])
 

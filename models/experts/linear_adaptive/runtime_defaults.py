@@ -1,7 +1,6 @@
 """Runtime Default translation for the standalone adaptive-experts package."""
 
-from types import MappingProxyType
-from types import ModuleType
+from types import MappingProxyType, ModuleType
 from typing import Any, Final
 
 import models.experts.linear_adaptive.config as config

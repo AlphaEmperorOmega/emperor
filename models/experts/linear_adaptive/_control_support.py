@@ -3,7 +3,11 @@
 from dataclasses import replace
 from typing import Any
 
-from emperor.base.layer.config import LayerConfig, LayerStackConfig, RecurrentLayerConfig
+from emperor.base.layer.config import (
+    LayerConfig,
+    LayerStackConfig,
+    RecurrentLayerConfig,
+)
 from emperor.base.layer.gate import GateConfig
 from emperor.base.layer.residual import ResidualConnectionOptions
 from emperor.base.options import LastLayerBiasOptions

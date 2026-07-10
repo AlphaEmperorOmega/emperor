@@ -5,6 +5,7 @@ from emperor.base.layer.layer import Layer
 from emperor.base.utils import ConfigBase, Module
 from emperor.experiments.classifier import ClassifierExperiment
 from torch import Tensor
+
 from models.experts.linear.experiment_config import ExperimentConfig
 
 if TYPE_CHECKING:

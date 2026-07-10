@@ -1,7 +1,8 @@
 """Package-local hidden mixture, routing, and control construction."""
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Any
+
 from emperor.base.layer.config import (
     LayerConfig,
     LayerStackConfig,
@@ -11,27 +12,19 @@ from emperor.base.layer.gate import GateConfig
 from emperor.base.layer.residual import ResidualConnectionOptions
 from emperor.base.options import LastLayerBiasOptions
 from emperor.base.utils import ConfigBase
-from emperor.halting.config import StickBreakingConfig
-from emperor.linears.core.config import LinearLayerConfig
-from emperor.memory.config import DynamicMemoryConfig
-from models.experts.linear.runtime_options import (
-    ExpertsAdaptiveGeneratorStackOptions,
-    ExpertsDynamicMemoryOptions,
-    ExpertsLayerControllerOptions,
-    ExpertsRecurrentControllerOptions,
-    ExpertsStackOptions,
-    ExpertsSubmoduleStackOptions,
-    resolve_experts_controller_stack_options,
-)
-from dataclasses import dataclass
 from emperor.experts.config import MixtureOfExpertsModelConfig
 from emperor.experts.core.config import (
     MixtureOfExpertsConfig,
     MixtureOfExpertsLayerConfig,
 )
+from emperor.halting.config import StickBreakingConfig
+from emperor.linears.core.config import LinearLayerConfig
+from emperor.memory.config import DynamicMemoryConfig
 from emperor.sampler.core.config import RouterConfig, SamplerConfig
+
 import models.experts.linear.config as config
 from models.experts.linear.runtime_options import (
+    ExpertsAdaptiveGeneratorStackOptions,
     ExpertsDynamicMemoryOptions,
     ExpertsLayerControllerOptions,
     ExpertsMixtureOptions,
@@ -41,6 +34,7 @@ from models.experts.linear.runtime_options import (
     ExpertsStackOptions,
     ExpertsSubmoduleStackOptions,
     ExpertsSubmoduleStackSource,
+    resolve_experts_controller_stack_options,
     resolve_experts_submodule_stack_options,
 )
 
