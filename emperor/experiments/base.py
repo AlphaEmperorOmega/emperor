@@ -886,6 +886,19 @@ class ExperimentBase:
         if seed is not None and hasattr(dataset, "seed"):
             dataset.seed = int(seed)
 
+    def _dataset_constructor_kwargs(self, training_run: _TrainingRun) -> dict:
+        """Return package-specific keyword arguments for a data module."""
+
+        kwargs = {"batch_size": training_run.config.batch_size}
+        if training_run.experiment_task == ExperimentTask.CAUSAL_LANGUAGE_MODELING:
+            kwargs["sequence_length"] = training_run.config.sequence_length
+        return kwargs
+
+    def _build_dataset(self, training_run: _TrainingRun):
+        return training_run.dataset_type(
+            **self._dataset_constructor_kwargs(training_run)
+        )
+
     def _trainer_args(self, config, config_overrides: dict) -> dict:
         trainer_args = {}
         for key, value in vars(config).items():
@@ -1056,7 +1069,7 @@ class ExperimentBase:
         runtime_config = self._load_runtime_config(training_run.config_overrides)
         if runtime_config["seed"] is not None:
             seed_everything(int(runtime_config["seed"]), workers=True)
-        dataset = training_run.dataset_type(batch_size=training_run.config.batch_size)
+        dataset = self._build_dataset(training_run)
         self._configure_dataset(dataset, runtime_config)
         model = self.model_type(training_run.config)
         logger = TensorBoardLogger(
