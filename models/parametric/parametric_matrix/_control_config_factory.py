@@ -2,8 +2,7 @@ from emperor.augmentations.adaptive_parameters import (
     AdaptiveParameterAugmentationConfig,
 )
 from emperor.base.layer import LayerStackConfig
-from emperor.base.options import LastLayerBiasOptions
-from emperor.base.options import LayerNormPositionOptions
+from emperor.base.options import LastLayerBiasOptions, LayerNormPositionOptions
 from emperor.parametric import (
     AdaptiveRouterOptions,
     MatrixBiasMixtureConfig,
@@ -11,13 +10,16 @@ from emperor.parametric import (
     ParametricLayerConfig,
     ParametricLayerHandlerConfig,
 )
-from models.parametric._shared_stack_factory import (
+
+from models.parametric.parametric_matrix._stack_config_factory import (
+    build_router_config,
+    build_sampler_config,
+)
+from models.parametric.parametric_matrix.runtime_options import (
     ParametricMixtureOptions,
     ParametricRouterOptions,
     ParametricSamplerOptions,
     ParametricStackOptions,
-    build_router_config,
-    build_sampler_config,
 )
 
 

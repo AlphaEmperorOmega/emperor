@@ -1,13 +1,13 @@
 from typing import TYPE_CHECKING
 
 import torch
+from emperor.base.config import ConfigBase
 from emperor.base.layer import Layer, LayerConfig, LayerStackConfig
-from emperor.base.utils import Module
+from emperor.base.module import Module
 from emperor.experiments.classifier import ClassifierExperiment
 from emperor.parametric.core.state import ParametricLayerState
 from torch import Tensor
 
-from models.classifier_pipeline import build_from_experiment_config
 from models.parametric.parametric_matrix.experiment_config import ExperimentConfig
 
 if TYPE_CHECKING:
@@ -30,30 +30,43 @@ class Model(ClassifierExperiment):
         self.model_config: LayerStackConfig = self.experiment_config.model_config
         self.output_config: LayerConfig = self.experiment_config.output_model_config
 
-        self.input_model = self._build_input_model()
-        self.model = self._build_model()
-        self.output_model = self._build_output_model()
+        self.input_model = self.__build_input_model()
+        self.model = self.__build_model()
+        self.output_model = self.__build_output_model()
 
-    def _build_input_model(self) -> Layer:
-        return build_from_experiment_config(
+    def __build_input_model(self) -> Layer:
+        return self.__build_from_experiment_config(
             self.input_config,
             input_dim=self.cfg.input_dim,
             output_dim=self.cfg.hidden_dim,
         )
 
-    def _build_model(self) -> Module:
-        return build_from_experiment_config(
+    def __build_model(self) -> Module:
+        return self.__build_from_experiment_config(
             self.model_config,
             input_dim=self.cfg.hidden_dim,
             output_dim=self.cfg.hidden_dim,
         )
 
-    def _build_output_model(self) -> Layer:
-        return build_from_experiment_config(
+    def __build_output_model(self) -> Layer:
+        return self.__build_from_experiment_config(
             self.output_config,
             input_dim=self.cfg.hidden_dim,
             output_dim=self.cfg.output_dim,
         )
+
+    def __build_from_experiment_config(
+        self,
+        model_config: ConfigBase,
+        *,
+        input_dim: int,
+        output_dim: int,
+    ) -> Module:
+        dimension_overrides = type(model_config)(
+            input_dim=input_dim,
+            output_dim=output_dim,
+        )
+        return model_config.build(overrides=dimension_overrides)
 
     def forward(
         self,
