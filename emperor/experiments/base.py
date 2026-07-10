@@ -14,7 +14,7 @@ from datetime import datetime
 from enum import Enum
 from pathlib import Path
 
-from lightning import Trainer
+from lightning import Trainer, seed_everything
 from lightning.pytorch.callbacks import Callback, EarlyStopping, ModelCheckpoint
 from lightning.pytorch.loggers import TensorBoardLogger
 from models.catalog import model_identity_payload_from_id, public_id_for_module
@@ -873,13 +873,18 @@ class ExperimentBase:
         return {
             "data_num_workers": runtime_value("DATA_NUM_WORKERS", None),
             "run_test_after_fit": runtime_value("RUN_TEST_AFTER_FIT", True),
+            "seed": runtime_value("SEED", None),
         }
 
     def _configure_dataset(self, dataset, runtime_config: dict) -> None:
         data_num_workers = runtime_config.get("data_num_workers")
         if data_num_workers is None or not hasattr(dataset, "num_workers"):
-            return
-        dataset.num_workers = int(data_num_workers)
+            pass
+        else:
+            dataset.num_workers = int(data_num_workers)
+        seed = runtime_config.get("seed")
+        if seed is not None and hasattr(dataset, "seed"):
+            dataset.seed = int(seed)
 
     def _trainer_args(self, config, config_overrides: dict) -> dict:
         trainer_args = {}
@@ -1049,6 +1054,8 @@ class ExperimentBase:
     ) -> None:
         trainer_config = self._load_trainer_config(training_run.config_overrides)
         runtime_config = self._load_runtime_config(training_run.config_overrides)
+        if runtime_config["seed"] is not None:
+            seed_everything(int(runtime_config["seed"]), workers=True)
         dataset = training_run.dataset_type(batch_size=training_run.config.batch_size)
         self._configure_dataset(dataset, runtime_config)
         model = self.model_type(training_run.config)
