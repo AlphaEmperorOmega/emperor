@@ -1,3 +1,5 @@
+"""Package-local input and output projection construction."""
+
 from dataclasses import dataclass
 
 from emperor.base.layer.config import LayerConfig
@@ -6,28 +8,20 @@ from emperor.base.options import ActivationOptions, LayerNormPositionOptions
 from emperor.linears.core.config import LinearLayerConfig
 
 import models.experts.linear.config as config
-from models.experts._builder_options import ExpertsStackOptions
+from models.experts.linear.runtime_options import ExpertsStackOptions
 
 
-@dataclass(frozen=True)
-class BoundaryConfigDependencies:
+@dataclass(frozen=True, slots=True)
+class ProjectionConfigDependencies:
     hidden_dim: int
     stack_options: ExpertsStackOptions | None
 
 
-class BoundaryConfigFactory:
-    def __init__(self, dependencies: BoundaryConfigDependencies) -> None:
+class ProjectionConfigFactory:
+    def __init__(self, dependencies: ProjectionConfigDependencies) -> None:
         self.hidden_dim = dependencies.hidden_dim
-        self.stack_options = self.__default_stack_options(dependencies.stack_options)
-
-    def __default_stack_options(
-        self,
-        stack_options: ExpertsStackOptions | None,
-    ) -> ExpertsStackOptions:
-        if stack_options is not None:
-            return stack_options
-        return ExpertsStackOptions(
-            hidden_dim=self.hidden_dim,
+        self.stack_options = dependencies.stack_options or ExpertsStackOptions(
+            hidden_dim=dependencies.hidden_dim,
             bias_flag=config.STACK_BIAS_FLAG,
             layer_norm_position=config.STACK_LAYER_NORM_POSITION,
             num_layers=config.STACK_NUM_LAYERS,
@@ -47,9 +41,7 @@ class BoundaryConfigFactory:
             gate_config=None,
             halting_config=None,
             memory_config=None,
-            layer_model_config=LinearLayerConfig(
-                bias_flag=self.stack_options.bias_flag,
-            ),
+            layer_model_config=LinearLayerConfig(bias_flag=True),
         )
 
     def build_output_model_config(self) -> LayerConfig:
@@ -61,7 +53,5 @@ class BoundaryConfigFactory:
             gate_config=None,
             halting_config=None,
             memory_config=None,
-            layer_model_config=LinearLayerConfig(
-                bias_flag=self.stack_options.bias_flag,
-            ),
+            layer_model_config=LinearLayerConfig(bias_flag=True),
         )

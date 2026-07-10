@@ -13,9 +13,7 @@ from emperor.experts.core.options import (
 )
 
 import models.experts.linear.config as config
-from models.experts._builder_adapter import (
-    linear_builder_kwargs_from_flat,
-)
+from models.experts.linear.runtime_defaults import runtime_from_flat
 from models.experts.linear.config_builder import LinearConfigBuilder
 from models.experts.linear.model import Model
 
@@ -338,8 +336,7 @@ class ExperimentPresets(BuilderBackedExperimentPresetsBase):
         )
 
     def _preset(self, **kwargs):
-        builder_kwargs = linear_builder_kwargs_from_flat(kwargs, config)
-        return self._builder_type(**builder_kwargs).build()
+        return self._builder_type(runtime=runtime_from_flat(kwargs, config)).build()
 
 class Experiment(ExperimentBase):
     def __init__(

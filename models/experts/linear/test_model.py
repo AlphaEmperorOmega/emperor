@@ -30,7 +30,7 @@ from emperor.memory.config import (
 from emperor.memory.options import MemoryPositionOptions
 
 import models.experts.linear.config as config
-from models.experts._builder_options import (
+from models.experts.linear.runtime_options import (
     ExpertsDynamicMemoryOptions,
     ExpertsLayerControllerOptions,
     ExpertsMixtureOptions,
@@ -40,11 +40,12 @@ from models.experts._builder_options import (
     ExpertsStackOptions,
     ExpertsSubmoduleStackOptions,
     ExpertsSubmoduleStackSource,
+    RuntimeOptions,
 )
 from models.experts.linear.config_builder import LinearConfigBuilder
 from models.experts.linear.model import Model
 from models.experts.linear.presets import ExperimentPreset, ExperimentPresets
-from models.linears.linear.presets import ExperimentPreset as LinearExperimentPreset
+from models.experts.linear.runtime_defaults import runtime_from_flat
 from models.training_test_utils import (
     RandomImageClassificationDataModule,
     tiny_cpu_trainer,
@@ -99,11 +100,10 @@ class TestLinearModel(unittest.TestCase):
 
                 tiny_cpu_trainer().fit(model, datamodule=datamodule)
 
-    def test_expert_presets_include_linear_family_names(self):
-        self.assertEqual(
-            set(LinearExperimentPreset.names()) - set(ExperimentPreset.names()),
-            set(),
-        )
+    def test_local_preset_catalog_has_stable_endpoints(self):
+        self.assertEqual(ExperimentPreset.BASELINE.value, 1)
+        self.assertEqual(ExperimentPreset.RECURRENT_POST_NORM.value, 32)
+        self.assertEqual(len(ExperimentPreset.names()), 32)
 
     def _fake_batch(self, dataset: type, batch_size: int) -> torch.Tensor:
         return torch.randn(
@@ -168,7 +168,7 @@ class TestLinearModel(unittest.TestCase):
                     boundary_cfg.layer_model_config,
                     LinearLayerConfig,
                 )
-                self.assertFalse(boundary_cfg.layer_model_config.bias_flag)
+                self.assertTrue(boundary_cfg.layer_model_config.bias_flag)
 
     def shared_gate_config(self, dim: int = 16) -> GateConfig:
         return GateConfig(
@@ -662,20 +662,8 @@ class TestLinearModel(unittest.TestCase):
         self.assertIs(stack_cfg.shared_gate_config, shared_gate_config)
         self.assertIsNone(stack_cfg.layer_config.gate_config)
 
-    def test_flat_builder_kwargs_are_rejected(self):
+    def test_runtime_is_primary_and_flat_builder_kwargs_are_rejected(self):
         parameters = inspect.signature(LinearConfigBuilder.__init__).parameters
-        grouped_names = {
-            "stack_options",
-            "submodule_stack_options",
-            "mixture_options",
-            "expert_stack_options",
-            "sampler_options",
-            "router_options",
-            "router_stack_options",
-            "layer_controller_options",
-            "dynamic_memory_options",
-            "recurrent_controller_options",
-        }
         flat_names = {
             "memory_flag",
             "top_k",
@@ -688,9 +676,11 @@ class TestLinearModel(unittest.TestCase):
             "shared_gate_config",
         }
 
-        for name in grouped_names:
-            with self.subTest(name=name):
-                self.assertIn(name, parameters)
+        self.assertIn("runtime", parameters)
+        self.assertLessEqual(
+            set(parameters),
+            {"self", "legacy_args", "runtime", "legacy_options"},
+        )
 
         for name in flat_names:
             with self.subTest(name=name):
@@ -726,6 +716,31 @@ class TestLinearModel(unittest.TestCase):
             with self.subTest(kwargs=kwargs):
                 with self.assertRaises(TypeError):
                     self.experts_preset(**kwargs)
+
+    def test_typed_runtime_builds_the_model_config(self):
+        runtime = runtime_from_flat(
+            {
+                "batch_size": 3,
+                "learning_rate": 0.02,
+                "input_dim": 8,
+                "hidden_dim": 16,
+                "output_dim": 4,
+                "stack_num_layers": 1,
+                "submodule_stack_hidden_dim": 16,
+                "num_experts": 2,
+                "top_k": 1,
+            },
+            config,
+        )
+
+        self.assertIsInstance(runtime, RuntimeOptions)
+        cfg = LinearConfigBuilder(runtime=runtime).build()
+
+        self.assertEqual(cfg.batch_size, 3)
+        self.assertEqual(cfg.learning_rate, 0.02)
+        self.assertEqual(cfg.input_dim, 8)
+        self.assertEqual(cfg.hidden_dim, 16)
+        self.assertEqual(cfg.output_dim, 4)
 
     def test_controller_stack_overrides_use_canonical_names(self):
         cfg = self.experts_preset(
