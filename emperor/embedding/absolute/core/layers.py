@@ -1,15 +1,14 @@
 import math
+from typing import TYPE_CHECKING, Any
+
 import torch
 import torch.nn as nn
-
 from torch import Tensor
-from typing import Any
+
 from emperor.base.utils import Module
 from emperor.embedding.absolute.core._validator import (
     AbsolutePositionalEmbeddingValidator,
 )
-
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.embedding.absolute.core.config import (
@@ -28,7 +27,7 @@ class AbsolutePositionalEmbeddingBase(Module):
         super().__init__()
         config = getattr(cfg, "absolute_positional_embedding_config", cfg)
         config = getattr(config, "positional_embedding_config", config)
-        self.cfg: "AbsolutePositionalEmbeddingConfig" = self._override_config(
+        self.cfg: AbsolutePositionalEmbeddingConfig = self._override_config(
             config, overrides
         )
         AbsolutePositionalEmbeddingValidator.validate_config(self.cfg)
@@ -41,11 +40,15 @@ class AbsolutePositionalEmbeddingBase(Module):
 
     def _make_positions(self, input_tokens: Tensor) -> Tensor:
         if self.padding_idx is None:
-            return torch.arange(
-                input_tokens.size(1),
-                device=input_tokens.device,
-                dtype=torch.long,
-            ).unsqueeze(0).expand_as(input_tokens)
+            return (
+                torch.arange(
+                    input_tokens.size(1),
+                    device=input_tokens.device,
+                    dtype=torch.long,
+                )
+                .unsqueeze(0)
+                .expand_as(input_tokens)
+            )
         non_padding_mask = input_tokens.ne(self.padding_idx).int()
         cumulative_positions = torch.cumsum(non_padding_mask, dim=1).type_as(
             non_padding_mask
@@ -134,9 +137,7 @@ class ImageLearnedPositionalEmbedding(LearnedPositionalEmbedding):
         return self.num_embeddings + 1
 
     def forward(self, patch_embeddings: Tensor) -> Tensor:
-        AbsolutePositionalEmbeddingValidator.validate_patch_embeddings(
-            patch_embeddings
-        )
+        AbsolutePositionalEmbeddingValidator.validate_patch_embeddings(patch_embeddings)
         return self.embedding_model.weight + patch_embeddings
 
 
@@ -252,7 +253,5 @@ class ImageSinusoidalPositionalEmbedding(SinusoidalPositionalEmbedding):
         self.class_token_flag: bool = self.cfg.class_token_flag
 
     def forward(self, patch_embeddings: Tensor) -> Tensor:
-        AbsolutePositionalEmbeddingValidator.validate_patch_embeddings(
-            patch_embeddings
-        )
+        AbsolutePositionalEmbeddingValidator.validate_patch_embeddings(patch_embeddings)
         return patch_embeddings + self.weights
