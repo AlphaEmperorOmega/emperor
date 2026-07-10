@@ -13,6 +13,7 @@ const radioNavigationKeys = new Set([
   "End",
   "Home",
 ]);
+const tabNavigationKeys = new Set(["ArrowLeft", "ArrowRight", "End", "Home"]);
 
 export function SegmentedControl({
   className,
@@ -22,17 +23,19 @@ export function SegmentedControl({
 }: SegmentedControlProps) {
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     onKeyDown?.(event);
+    const navigationKeys =
+      variant === "radiogroup" ? radioNavigationKeys : tabNavigationKeys;
     if (
       event.defaultPrevented ||
-      variant !== "radiogroup" ||
-      !radioNavigationKeys.has(event.key)
+      !navigationKeys.has(event.key)
     ) {
       return;
     }
 
+    const optionRole = variant === "radiogroup" ? "radio" : "tab";
     const options = Array.from(
       event.currentTarget.querySelectorAll<HTMLButtonElement>(
-        'button[role="radio"]',
+        `button[role="${optionRole}"]`,
       ),
     ).filter((option) => !option.disabled);
     if (options.length === 0) {

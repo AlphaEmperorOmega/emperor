@@ -30,7 +30,7 @@ export function ViewModeButton({
       aria-controls={isTab ? controls : undefined}
       disabled={disabled}
       onClick={onClick}
-      tabIndex={isTab ? undefined : active ? 0 : -1}
+      tabIndex={active ? 0 : -1}
       className={cn(
         "inline-flex h-[30px] items-center gap-2 rounded-control-sm px-3.5 text-[12.5px] font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-focus",
         active

@@ -1,4 +1,4 @@
-import { createRef } from "react";
+import { createRef, useState } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +13,7 @@ import { StatusDot } from "@/components/ui/status-dot";
 import { SurfacePanel } from "@/components/ui/surface-panel";
 import { Switch } from "@/components/ui/switch";
 import { MetricCard } from "@/features/workbench/components/shared/metric-card";
+import { ViewModeButton } from "@/features/workbench/components/view-mode-button";
 
 // Render + role/behaviour smoke tests for the shared primitives, pinning the
 // current public contract before they are reused more widely in Phase 1.
@@ -252,6 +253,59 @@ describe("SegmentedControl", () => {
       name: "Training config selector",
     });
     expect(tablist).toContainElement(screen.getByRole("tab", { name: "Presets" }));
+  });
+
+  it("uses roving focus and activates enabled tabs with keyboard navigation", () => {
+    function TablistFixture() {
+      const [activeTab, setActiveTab] = useState<"presets" | "snapshots">(
+        "presets",
+      );
+      return (
+        <SegmentedControl aria-label="Training config selector" variant="tablist">
+          <ViewModeButton
+            variant="tab"
+            active={activeTab === "presets"}
+            onClick={() => setActiveTab("presets")}
+          >
+            Presets
+          </ViewModeButton>
+          <ViewModeButton variant="tab" active={false} disabled onClick={() => {}}>
+            Disabled
+          </ViewModeButton>
+          <ViewModeButton
+            variant="tab"
+            active={activeTab === "snapshots"}
+            onClick={() => setActiveTab("snapshots")}
+          >
+            Snapshots
+          </ViewModeButton>
+        </SegmentedControl>
+      );
+    }
+
+    render(<TablistFixture />);
+    const presets = screen.getByRole("tab", { name: "Presets" });
+    const disabled = screen.getByRole("tab", { name: "Disabled" });
+    const snapshots = screen.getByRole("tab", { name: "Snapshots" });
+
+    expect(presets).toHaveAttribute("tabindex", "0");
+    expect(disabled).toHaveAttribute("tabindex", "-1");
+    expect(snapshots).toHaveAttribute("tabindex", "-1");
+
+    presets.focus();
+    fireEvent.keyDown(presets, { key: "ArrowRight" });
+    expect(snapshots).toHaveFocus();
+    expect(snapshots).toHaveAttribute("aria-selected", "true");
+    expect(snapshots).toHaveAttribute("tabindex", "0");
+
+    fireEvent.keyDown(snapshots, { key: "ArrowRight" });
+    expect(presets).toHaveFocus();
+    fireEvent.keyDown(presets, { key: "End" });
+    expect(snapshots).toHaveFocus();
+    fireEvent.keyDown(snapshots, { key: "Home" });
+    expect(presets).toHaveFocus();
+    fireEvent.keyDown(presets, { key: "ArrowLeft" });
+    expect(snapshots).toHaveFocus();
   });
 });
 
