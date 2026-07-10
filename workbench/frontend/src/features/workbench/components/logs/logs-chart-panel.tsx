@@ -15,7 +15,7 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 import { ErrorPanel } from "@/features/workbench/components/error-panel";
 import { ViewModeButton } from "@/features/workbench/components/view-mode-button";
 import { InlineStatus } from "@/features/workbench/components/shared/inline-status";
-import { SurfacePanel } from "@/features/workbench/components/shared/surface-panel";
+import { SurfacePanel } from "@/components/ui/surface-panel";
 import { LogBestRunPanel } from "@/features/workbench/components/logs/log-best-run-panel";
 import { LogConfusionMatrixHeatmaps } from "@/features/workbench/components/logs/log-confusion-matrix-heatmap";
 import { LogTestScoresPanel } from "@/features/workbench/components/logs/log-test-scores-panel";
