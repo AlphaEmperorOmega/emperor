@@ -1,5 +1,5 @@
 import { type GraphNode, type InspectResponse } from "@/lib/api";
-import { buildClusterDiagrams } from "@/lib/graph/cluster-diagrams";
+import { buildClusterDiagramMetadata } from "@/lib/graph/cluster-diagrams";
 import {
   buildTerminalReachGrid,
   parseTerminalReachDetails,
@@ -8,11 +8,50 @@ import {
   graphCoordinates,
   isRecord,
 } from "@/lib/graph/helpers";
-import { type GraphLocationSummary } from "@/lib/graph/types";
+import {
+  type ClusterLocationSummary,
+  type GraphLocationSummary,
+} from "@/lib/graph/types";
 
 function clusterDetail(node: GraphNode): Record<string, unknown> | undefined {
   const cluster = node.details.cluster;
   return isRecord(cluster) ? cluster : undefined;
+}
+
+function clusterLocationSummary(
+  node: GraphNode,
+): ClusterLocationSummary | undefined {
+  if (node.typeName !== "NeuronCluster") {
+    return undefined;
+  }
+  const cluster = clusterDetail(node);
+  const metadata = buildClusterDiagramMetadata(node);
+  const coordinates = cluster ? graphCoordinates(cluster.coordinates) : [];
+  if (!metadata || coordinates.length === 0) {
+    return undefined;
+  }
+  return {
+    kind: "cluster",
+    nodeId: node.id,
+    nodePath: node.path,
+    nodeLabel: node.label,
+    nodeType: node.typeName,
+    coordinates,
+    instantiated: metadata.instantiated,
+    capacityTotal: metadata.capacityTotal,
+    hasOverflow:
+      metadata.hasColumnOverflow ||
+      metadata.hasRowOverflow ||
+      metadata.hasPlaneOverflow,
+  };
+}
+
+export function buildClusterLocationSummary(
+  graph: InspectResponse | undefined,
+  nodeId: string,
+) {
+  const node = graph?.nodes.find((candidate) => candidate.id === nodeId);
+  return node ? clusterLocationSummary(node) : undefined;
 }
 
 export function buildGraphLocationSummaries(
@@ -22,31 +61,12 @@ export function buildGraphLocationSummaries(
     return [];
   }
 
-  const clusterDiagramsById = buildClusterDiagrams(graph);
   const summaries: GraphLocationSummary[] = [];
 
   for (const node of graph.nodes) {
-    if (node.typeName === "NeuronCluster") {
-      const cluster = clusterDetail(node);
-      const diagram = clusterDiagramsById.get(node.id);
-      const coordinates = cluster ? graphCoordinates(cluster.coordinates) : [];
-
-      if (diagram && coordinates.length > 0) {
-        summaries.push({
-          kind: "cluster",
-          nodeId: node.id,
-          nodePath: node.path,
-          nodeLabel: node.label,
-          nodeType: node.typeName,
-          coordinates,
-          instantiated: diagram.instantiated,
-          capacityTotal: diagram.capacityTotal,
-          hasOverflow:
-            diagram.hasColumnOverflow ||
-            diagram.hasRowOverflow ||
-            diagram.hasPlaneOverflow,
-        });
-      }
+    const clusterSummary = clusterLocationSummary(node);
+    if (clusterSummary) {
+      summaries.push(clusterSummary);
     }
 
     const reach = parseTerminalReachDetails(node.details);

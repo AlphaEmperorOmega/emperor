@@ -25,7 +25,10 @@ import { buildExpertDiagrams } from "@/lib/graph/expert-diagrams";
 import { buildStackDiagrams } from "@/lib/graph/stack-diagrams";
 import { buildClusterDiagrams } from "@/lib/graph/cluster-diagrams";
 import { buildTerminalReachGrid } from "@/lib/graph/terminal-reach";
-import { buildGraphLocationSummaries } from "@/lib/graph/locations";
+import {
+  buildClusterLocationSummary,
+  buildGraphLocationSummaries,
+} from "@/lib/graph/locations";
 import { filterGraphByDetail, filterGraphByExpansion } from "@/lib/graph/filtering";
 import { layoutGraph } from "@/lib/graph/layout";
 import {
@@ -2092,6 +2095,35 @@ describe("buildTerminalReachGrid", () => {
 });
 
 describe("buildGraphLocationSummaries", () => {
+  it("builds only the requested cluster summary", () => {
+    const unrelated = node("unrelated", {
+      typeName: "NeuronCluster",
+      details: {},
+    });
+    Object.defineProperty(unrelated.details, "cluster", {
+      get: () => {
+        throw new Error("Unselected cluster detail was read.");
+      },
+    });
+    const selected = node("selected", {
+      typeName: "NeuronCluster",
+      details: {
+        cluster: {
+          capacity: [4, 3, 2],
+          coordinates: [[1, 1, 1]],
+        },
+      },
+    });
+
+    expect(buildClusterLocationSummary(graph([unrelated, selected], []), "selected"))
+      .toMatchObject({
+        kind: "cluster",
+        nodeId: "selected",
+        instantiated: 1,
+        capacityTotal: 24,
+      });
+  });
+
   it("returns neuron cluster coordinates with instantiated and capacity counts", () => {
     const g = graph(
       [

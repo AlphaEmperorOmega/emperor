@@ -86,7 +86,10 @@ export {
   buildTerminalReachGrid,
   parseTerminalReachDetails,
 } from "@/lib/graph/terminal-reach";
-export { buildGraphLocationSummaries } from "@/lib/graph/locations";
+export {
+  buildClusterLocationSummary,
+  buildGraphLocationSummaries,
+} from "@/lib/graph/locations";
 export { buildCluster3DSceneModel } from "@/lib/graph/cluster-3d";
 // `layoutGraph` is intentionally NOT re-exported here: it pulls in `dagre`, and
 // re-exporting it keeps `dagre` in the first-load bundle even when unused.

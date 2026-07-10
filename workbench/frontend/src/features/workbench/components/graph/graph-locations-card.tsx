@@ -12,7 +12,7 @@ import { StatChip } from "@/features/workbench/components/shared/stat-chip";
 import {
   type ClusterLocationSummary,
   type GraphCoordinate,
-  buildGraphLocationSummaries,
+  buildClusterLocationSummary,
   formatExactCount,
 } from "@/lib/graph";
 import { type InspectResponse } from "@/lib/api";
@@ -198,13 +198,7 @@ export function GraphLocationsCard({
       return null;
     }
 
-    return (
-      buildGraphLocationSummaries(graph).find(
-        (locationSummary): locationSummary is ClusterLocationSummary =>
-          locationSummary.kind === "cluster" &&
-          locationSummary.nodeId === selectedNodeId,
-      ) ?? null
-    );
+    return buildClusterLocationSummary(graph, selectedNodeId) ?? null;
   }, [graph, selectedNodeId]);
 
   if (!summary) {

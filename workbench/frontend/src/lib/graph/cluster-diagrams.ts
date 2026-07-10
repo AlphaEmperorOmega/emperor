@@ -15,6 +15,10 @@ type ClusterCapacity = {
   planes: number;
 };
 
+type ClusterDiagramMetadata = Omit<ClusterDiagram, "planes"> & {
+  planeCount: number;
+};
+
 function clusterDetail(node: GraphNode): Record<string, unknown> | undefined {
   const cluster = node.details.cluster;
   return isRecord(cluster) ? cluster : undefined;
@@ -185,15 +189,39 @@ function clusterReachByPosition(
   return reachByPosition;
 }
 
+function clusterDiagramMetadataFromDetail(
+  cluster: Record<string, unknown>,
+  filled = coordinateKeySet(cluster.coordinates),
+): ClusterDiagramMetadata {
+  const capacity = clusterCapacity(cluster);
+  return {
+    columns: capacity.columns,
+    rows: capacity.rows,
+    planeCount: capacity.planes,
+    instantiated:
+      typeof cluster.instantiated === "number" ? cluster.instantiated : filled.size,
+    capacityTotal: capacity.columns * capacity.rows * capacity.planes,
+    maxSteps: typeof cluster.maxSteps === "number" ? cluster.maxSteps : null,
+    growthThreshold:
+      typeof cluster.growthThreshold === "number" ? cluster.growthThreshold : null,
+    hasColumnOverflow: false,
+    hasRowOverflow: false,
+    hasPlaneOverflow: false,
+  };
+}
+
+export function buildClusterDiagramMetadata(node: GraphNode) {
+  const cluster = clusterDetail(node);
+  return cluster ? clusterDiagramMetadataFromDetail(cluster) : undefined;
+}
+
 function clusterDiagramFromDetail(
   cluster: Record<string, unknown>,
   reachByPosition: Map<string, ClusterDiagramReach>,
 ): ClusterDiagram {
-  const capacity = clusterCapacity(cluster);
-  const columns = capacity.columns;
-  const rows = capacity.rows;
-  const planeCount = capacity.planes;
   const filled = coordinateKeySet(cluster.coordinates);
+  const metadata = clusterDiagramMetadataFromDetail(cluster, filled);
+  const { columns, rows, planeCount, ...diagramMetadata } = metadata;
 
   const planes: ClusterDiagramPlane[] = [];
   for (let z = 1; z <= planeCount; z += 1) {
@@ -217,21 +245,11 @@ function clusterDiagramFromDetail(
     planes.push({ z, cells });
   }
 
-  const instantiated =
-    typeof cluster.instantiated === "number" ? cluster.instantiated : filled.size;
-
   return {
     columns,
     rows,
     planes,
-    instantiated,
-    capacityTotal: capacity.columns * capacity.rows * capacity.planes,
-    maxSteps: typeof cluster.maxSteps === "number" ? cluster.maxSteps : null,
-    growthThreshold:
-      typeof cluster.growthThreshold === "number" ? cluster.growthThreshold : null,
-    hasColumnOverflow: false,
-    hasRowOverflow: false,
-    hasPlaneOverflow: false,
+    ...diagramMetadata,
   };
 }
 
