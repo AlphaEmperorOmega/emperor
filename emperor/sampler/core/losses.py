@@ -153,10 +153,9 @@ class ZeroCentredLoss(AuxiliaryLossBase):
         self._accumulate("count_accumulation", count)
 
     def __compute_squared_log_sum_exp(self, logits: Tensor) -> Tensor:
-        squared_log_sum_exp = torch.exp(logits).sum(dim=-1)
-        squared_log_sum_exp = torch.log(squared_log_sum_exp) ** 2
-        squared_log_sum_exp = torch.sum(squared_log_sum_exp)
-        return squared_log_sum_exp
+        if logits.dtype in (torch.float16, torch.bfloat16):
+            logits = logits.float()
+        return torch.logsumexp(logits, dim=-1).square().sum()
 
     def _compute_loss(self) -> Tensor:
         self._is_accumulation_none(self.squared_log_sum_exp_accumulation)
