@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { TrainingFooterRunSummary } from "@/features/workbench/components/training/training-footer-run-summary";
+import * as trainingRunDisplay from "@/features/workbench/components/training/training-run-display";
 import { type TrainingJob, type TrainingRun, type TrainingRunPlan } from "@/lib/api";
 
 function run(overrides: Partial<TrainingRun> = {}): TrainingRun {
@@ -131,6 +132,19 @@ function expectStatusPill(label: string, value: string) {
 }
 
 describe("TrainingFooterRunSummary", () => {
+  it("selects the display run once per render", () => {
+    const selectSpy = vi.spyOn(
+      trainingRunDisplay,
+      "selectTrainingRunForDisplay",
+    );
+    const runPlan = plan([run({ index: 1 }), run({ index: 2 })]);
+
+    render(<TrainingFooterRunSummary plan={runPlan} />);
+
+    expect(selectSpy).toHaveBeenCalledTimes(1);
+    selectSpy.mockRestore();
+  });
+
   it("renders no-plan, loading, and plan-error states", () => {
     const { rerender } = render(<TrainingFooterRunSummary />);
 

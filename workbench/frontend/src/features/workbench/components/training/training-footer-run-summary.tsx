@@ -33,8 +33,11 @@ function summaryLabel({
   isLoading,
   job,
   plan,
+  run,
 }: Required<Pick<TrainingRunSummaryBadgeProps, "isLoading" | "error">> &
-  Pick<TrainingRunSummaryBadgeProps, "job" | "plan">) {
+  Pick<TrainingRunSummaryBadgeProps, "job" | "plan"> & {
+    run: TrainingRun | undefined;
+  }) {
   if (isLoading) {
     return "Training run summary: planning training runs";
   }
@@ -45,7 +48,6 @@ function summaryLabel({
     return "Training run summary: no run plan";
   }
 
-  const run = selectTrainingRunForDisplay({ plan, job });
   const runText = run
     ? `${trainingRunDisplayLabel(run, job)} #${run.index} ${run.currentEpoch} / ${
         run.totalEpochs || "-"
@@ -63,7 +65,7 @@ export function TrainingRunSummaryBadge({
   plan,
 }: TrainingRunSummaryBadgeProps) {
   const run = selectTrainingRunForDisplay({ plan, job });
-  const ariaLabel = summaryLabel({ error, isLoading, job, plan });
+  const ariaLabel = summaryLabel({ error, isLoading, job, plan, run });
 
   return (
     <div
