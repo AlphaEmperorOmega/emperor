@@ -1,5 +1,8 @@
-from emperor.base.options import BaseOptions
+from emperor.base.options import BaseOptions, LayerNormPositionOptions
 from emperor.datasets.text.bert_pretraining import PennTreebankBertPretraining
+from emperor.embedding.absolute.core.config import (
+    TextSinusoidalPositionalEmbeddingConfig,
+)
 from emperor.experiments.base import (
     BuilderBackedExperimentPresetsBase,
     ExperimentBase,
@@ -8,19 +11,14 @@ from emperor.experiments.base import (
 )
 
 import models.bert.expert_linear.config as config
-import models.experts.linear.config as expert_defaults
-from models.bert._builder_adapter import linear_builder_kwargs_from_flat
-from models.bert.linear.presets import (
-    _PRESET_DEFINITIONS as _LINEAR_PRESET_DEFINITIONS,
+import models.bert.expert_linear.dataset_options as dataset_options
+from models.bert.expert_linear._builder_adapter import (
+    expert_linear_builder_kwargs_from_flat,
 )
 from models.bert.expert_linear.config_builder import BertExpertLinearConfigBuilder
 from models.bert.expert_linear.model import Model
-from models.experts._builder_adapter import (
-    linear_builder_kwargs_from_flat as expert_builder_kwargs_from_flat,
-)
 
 
-import models.bert.expert_linear.dataset_options as dataset_options
 class ExperimentPreset(BaseOptions):
     BASELINE = 1
     PRE_NORM = 2
@@ -44,20 +42,178 @@ class ExperimentPreset(BaseOptions):
     RECURRENT_HALTING_MEMORY = 20
     RECURRENT_GATING_HALTING_MEMORY = 21
     TOP1_SWITCH_AUX = 22
-    EXPERT_ATTENTION = 23
 
 
 _PRESET_DEFINITIONS = {
-    preset: PresetDefinition(
-        preset_values=dict(definition.preset_values),
-        description=definition.description.replace("linear", "expert linear"),
-    )
-    for preset, definition in zip(
-        ExperimentPreset,
-        _LINEAR_PRESET_DEFINITIONS.values(),
-        strict=False,
-    )
+    ExperimentPreset.BASELINE: PresetDefinition(
+        preset_values={},
+        description="Default config: a BERT-style pretraining encoder with expert "
+        "attention and feed-forward sub-stacks, learned positional "
+        "embeddings, and bidirectional attention.",
+    ),
+    ExperimentPreset.PRE_NORM: PresetDefinition(
+        preset_values={
+            "layer_norm_position": LayerNormPositionOptions.BEFORE,
+        },
+        description=(
+            "Default config with layer normalization applied before each encoder "
+            "sub-block."
+        ),
+    ),
+    ExperimentPreset.POST_NORM: PresetDefinition(
+        preset_values={
+            "layer_norm_position": LayerNormPositionOptions.AFTER,
+        },
+        description=(
+            "Default config with layer normalization applied after each encoder "
+            "sub-block."
+        ),
+    ),
+    ExperimentPreset.SINUSOIDAL: PresetDefinition(
+        preset_values={
+            "positional_embedding_option": TextSinusoidalPositionalEmbeddingConfig,
+        },
+        description="Default config with fixed sinusoidal positional embeddings.",
+    ),
+    ExperimentPreset.CAUSAL: PresetDefinition(
+        preset_values={
+            "causal_attention_mask_flag": True,
+        },
+        description="Default config with causal attention masking enabled for "
+        "autoregressive modeling.",
+    ),
+    ExperimentPreset.ATTENTION_BIAS: PresetDefinition(
+        preset_values={
+            "attn_bias_flag": True,
+            "attn_add_key_value_bias_flag": True,
+        },
+        description="Default config with attention projection bias and key/value bias "
+        "enabled.",
+    ),
+    ExperimentPreset.GATING: PresetDefinition(
+        preset_values={
+            "stack_gate_flag": True,
+        },
+        description="Default config with per-encoder-block gating enabled.",
+    ),
+    ExperimentPreset.HALTING: PresetDefinition(
+        preset_values={
+            "stack_halting_flag": True,
+        },
+        description="Default config with encoder-block stack halting enabled.",
+    ),
+    ExperimentPreset.GATING_HALTING: PresetDefinition(
+        preset_values={
+            "stack_gate_flag": True,
+            "stack_halting_flag": True,
+        },
+        description=(
+            "Default config with both encoder-block gating and halting enabled."
+        ),
+    ),
+    ExperimentPreset.MEMORY: PresetDefinition(
+        preset_values={
+            "memory_flag": True,
+        },
+        description="Default config with shared encoder-stack memory enabled.",
+    ),
+    ExperimentPreset.GATING_MEMORY: PresetDefinition(
+        preset_values={
+            "stack_gate_flag": True,
+            "memory_flag": True,
+        },
+        description=(
+            "Default config with encoder-block gating and shared memory enabled."
+        ),
+    ),
+    ExperimentPreset.HALTING_MEMORY: PresetDefinition(
+        preset_values={
+            "stack_halting_flag": True,
+            "memory_flag": True,
+        },
+        description=(
+            "Default config with encoder-block halting and shared memory enabled."
+        ),
+    ),
+    ExperimentPreset.GATING_HALTING_MEMORY: PresetDefinition(
+        preset_values={
+            "stack_gate_flag": True,
+            "stack_halting_flag": True,
+            "memory_flag": True,
+        },
+        description=(
+            "Default config with encoder-block gating, halting, and shared memory."
+        ),
+    ),
+    ExperimentPreset.RECURRENT: PresetDefinition(
+        preset_values={
+            "recurrent_flag": True,
+        },
+        description="Default encoder stack wrapped in fixed-step recurrence.",
+    ),
+    ExperimentPreset.RECURRENT_GATING: PresetDefinition(
+        preset_values={
+            "recurrent_flag": True,
+            "recurrent_gate_flag": True,
+        },
+        description="Default recurrent encoder with step-level gating enabled.",
+    ),
+    ExperimentPreset.RECURRENT_HALTING: PresetDefinition(
+        preset_values={
+            "recurrent_flag": True,
+            "recurrent_halting_flag": True,
+        },
+        description="Default recurrent encoder with recurrent halting enabled.",
+    ),
+    ExperimentPreset.RECURRENT_MEMORY: PresetDefinition(
+        preset_values={
+            "recurrent_flag": True,
+            "memory_flag": True,
+        },
+        description="Default recurrent encoder whose reused stack has shared memory.",
+    ),
+    ExperimentPreset.RECURRENT_GATING_HALTING: PresetDefinition(
+        preset_values={
+            "recurrent_flag": True,
+            "recurrent_gate_flag": True,
+            "recurrent_halting_flag": True,
+        },
+        description="Default recurrent encoder with step-level gating and halting.",
+    ),
+    ExperimentPreset.RECURRENT_GATING_MEMORY: PresetDefinition(
+        preset_values={
+            "recurrent_flag": True,
+            "recurrent_gate_flag": True,
+            "memory_flag": True,
+        },
+        description=(
+            "Default recurrent encoder with step-level gating and shared memory."
+        ),
+    ),
+    ExperimentPreset.RECURRENT_HALTING_MEMORY: PresetDefinition(
+        preset_values={
+            "recurrent_flag": True,
+            "recurrent_halting_flag": True,
+            "memory_flag": True,
+        },
+        description=(
+            "Default recurrent encoder with recurrent halting and shared memory."
+        ),
+    ),
+    ExperimentPreset.RECURRENT_GATING_HALTING_MEMORY: PresetDefinition(
+        preset_values={
+            "recurrent_flag": True,
+            "recurrent_gate_flag": True,
+            "recurrent_halting_flag": True,
+            "memory_flag": True,
+        },
+        description=(
+            "Default recurrent encoder with step-level gating, recurrent halting, "
+            "and shared memory."
+        ),
+    ),
 }
+
 _PRESET_DEFINITIONS[ExperimentPreset.TOP1_SWITCH_AUX] = PresetDefinition(
     preset_values={
         "top_k": 1,
@@ -66,29 +222,6 @@ _PRESET_DEFINITIONS[ExperimentPreset.TOP1_SWITCH_AUX] = PresetDefinition(
     },
     description="Default config with top-1 expert routing and switch auxiliary loss.",
 )
-_PRESET_DEFINITIONS[ExperimentPreset.EXPERT_ATTENTION] = PresetDefinition(
-    preset_values={
-        "expert_attention_flag": True,
-    },
-    description="Default config with expert-backed attention projections enabled.",
-)
-
-_BUILDER_KEYS = {
-    "batch_size",
-    "learning_rate",
-    "input_dim",
-    "output_dim",
-    "sequence_length",
-    "embedding_dropout_probability",
-    "encoder_options",
-    "positional_embedding_options",
-    "attention_options",
-    "feed_forward_options",
-    "submodule_stack_options",
-    "layer_controller_options",
-    "dynamic_memory_options",
-    "recurrent_controller_options",
-}
 
 
 class ExperimentPresets(BuilderBackedExperimentPresetsBase):
@@ -107,28 +240,7 @@ class ExperimentPresets(BuilderBackedExperimentPresetsBase):
         }
 
     def _preset(self, **kwargs):
-        builder_kwargs = linear_builder_kwargs_from_flat(kwargs, config)
-        builder_kwargs = {
-            key: value for key, value in builder_kwargs.items() if key in _BUILDER_KEYS
-        }
-        expert_kwargs = expert_builder_kwargs_from_flat(kwargs, expert_defaults)
-        for key in (
-            "mixture_options",
-            "expert_stack_options",
-            "sampler_options",
-            "router_options",
-            "router_stack_options",
-            "expert_layer_controller_options",
-            "expert_dynamic_memory_options",
-            "expert_recurrent_controller_options",
-        ):
-            builder_kwargs[key] = expert_kwargs[key]
-        if "expert_attention_flag" in kwargs:
-            builder_kwargs["expert_attention_flag"] = kwargs["expert_attention_flag"]
-        if "expert_attention_use_kv_expert_models_flag" in kwargs:
-            builder_kwargs["expert_attention_use_kv_expert_models_flag"] = kwargs[
-                "expert_attention_use_kv_expert_models_flag"
-            ]
+        builder_kwargs = expert_linear_builder_kwargs_from_flat(kwargs, config)
         return self._builder_type(**builder_kwargs).build()
 
 
@@ -144,7 +256,9 @@ class Experiment(ExperimentBase):
         return config.NUM_EPOCHS
 
     def _dataset_options(self) -> list:
-        return dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK]
+        return dataset_options.DATASET_OPTIONS_BY_TASK[
+            dataset_options.DEFAULT_EXPERIMENT_TASK
+        ]
 
     def _model_type(self) -> type:
         return Model

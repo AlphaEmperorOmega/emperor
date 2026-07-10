@@ -1,34 +1,92 @@
-import torch
-from emperor.attention.core.variants.mixture_of_attention_heads.config import (
-    MixtureOfAttentionHeadsConfig,
-)
-from emperor.experts.config import MixtureOfExpertsModelConfig
+from typing import TYPE_CHECKING
 
 import models.bert.expert_linear.config as config
-import models.experts.linear.config as expert_defaults
-from models.bert.linear.config_builder import BertLinearConfigBuilder
+from models.bert.expert_linear._boundary_config_factory import (
+    BoundaryConfigDependencies,
+    BoundaryConfigFactory,
+)
+from models.bert.expert_linear._core_config_factory import (
+    CoreConfigDependencies,
+    CoreConfigFactory,
+)
+from models.bert.expert_linear._expert_config_factory import (
+    ExpertConfigDependencies,
+    ExpertConfigFactory,
+)
+from models.bert.expert_linear._linear_layer_config_factory import (
+    LinearLayerConfigDependencies,
+    LinearLayerConfigFactory,
+)
+from models.bert.expert_linear._positional_embedding_config_factory import (
+    PositionalEmbeddingConfigDependencies,
+    PositionalEmbeddingConfigFactory,
+)
 from models.bert.expert_linear.experiment_config import ExperimentConfig
-from models.experts._builder_adapter import linear_builder_kwargs_from_flat
-from models.experts._builder_options import (
+from models.bert.expert_linear.runtime_options import (
+    BertEmbeddingOptions,
+    BertMlmHeadOptions,
+    BertNspHeadOptions,
+    DynamicMemoryOptions,
     ExpertsDynamicMemoryOptions,
     ExpertsLayerControllerOptions,
     ExpertsMixtureOptions,
     ExpertsRecurrentControllerOptions,
     ExpertsRouterOptions,
     ExpertsSamplerOptions,
-    ExpertsStackOptions,
     ExpertsSubmoduleStackOptions,
-)
-from models.experts.linear._control_config_factory import (
-    ControlConfigDependencies,
-    ControlConfigFactory,
+    LayerControllerOptions,
+    MainLayerStackOptions,
+    RecurrentControllerOptions,
+    SubmoduleStackOptions,
+    TransformerAttentionOptions,
+    TransformerEncoderOptions,
+    TransformerFeedForwardOptions,
+    TransformerPositionalEmbeddingOptions,
 )
 
+if TYPE_CHECKING:
+    from emperor.config import ModelConfig
 
-class BertExpertLinearConfigBuilder(BertLinearConfigBuilder):
+
+class BertExpertLinearConfigBuilder:
     def __init__(
         self,
-        *args,
+        *,
+        batch_size: int = config.BATCH_SIZE,
+        learning_rate: float = config.LEARNING_RATE,
+        input_dim: int = config.INPUT_DIM,
+        output_dim: int = config.OUTPUT_DIM,
+        sequence_length: int = config.SEQUENCE_LENGTH,
+        embedding_options: BertEmbeddingOptions | None = None,
+        encoder_options: TransformerEncoderOptions | None = None,
+        positional_embedding_options: (
+            TransformerPositionalEmbeddingOptions | None
+        ) = None,
+        attention_options: TransformerAttentionOptions | None = None,
+        feed_forward_options: TransformerFeedForwardOptions | None = None,
+        mlm_head_options: BertMlmHeadOptions | None = None,
+        nsp_head_options: BertNspHeadOptions | None = None,
+        attention_projection_stack_options: SubmoduleStackOptions | None = None,
+        attention_projection_layer_controller_options: (
+            LayerControllerOptions | None
+        ) = None,
+        attention_projection_dynamic_memory_options: (
+            DynamicMemoryOptions | None
+        ) = None,
+        attention_projection_recurrent_controller_options: (
+            RecurrentControllerOptions | None
+        ) = None,
+        feed_forward_stack_options: SubmoduleStackOptions | None = None,
+        feed_forward_layer_controller_options: LayerControllerOptions | None = None,
+        feed_forward_dynamic_memory_options: DynamicMemoryOptions | None = None,
+        feed_forward_recurrent_controller_options: (
+            RecurrentControllerOptions | None
+        ) = None,
+        stack_options: MainLayerStackOptions | None = None,
+        submodule_stack_options: SubmoduleStackOptions | None = None,
+        layer_controller_options: LayerControllerOptions | None = None,
+        dynamic_memory_options: DynamicMemoryOptions | None = None,
+        recurrent_controller_options: RecurrentControllerOptions | None = None,
         mixture_options: ExpertsMixtureOptions | None = None,
         expert_stack_options: ExpertsSubmoduleStackOptions | None = None,
         sampler_options: ExpertsSamplerOptions | None = None,
@@ -39,113 +97,166 @@ class BertExpertLinearConfigBuilder(BertLinearConfigBuilder):
         expert_recurrent_controller_options: (
             ExpertsRecurrentControllerOptions | None
         ) = None,
-        expert_attention_flag: bool = config.EXPERT_ATTENTION_FLAG,
         expert_attention_use_kv_expert_models_flag: bool = (
             config.EXPERT_ATTENTION_USE_KV_EXPERT_MODELS_FLAG
         ),
-        **kwargs,
     ) -> None:
-        expert_defaults_kwargs = linear_builder_kwargs_from_flat({}, expert_defaults)
-        self.mixture_options = (
-            mixture_options or expert_defaults_kwargs["mixture_options"]
+        self.batch_size = batch_size
+        self.learning_rate = learning_rate
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+        self.sequence_length = sequence_length
+        self.embedding_options = embedding_options
+        self.encoder_options = encoder_options
+        self.hidden_dim = self.__linear_layer_config_factory().hidden_dim
+        self.positional_embedding_options = positional_embedding_options
+        self.attention_options = attention_options
+        self.feed_forward_options = feed_forward_options
+        self.mlm_head_options = mlm_head_options
+        self.nsp_head_options = nsp_head_options
+        self.attention_projection_stack_options = attention_projection_stack_options
+        self.attention_projection_layer_controller_options = (
+            attention_projection_layer_controller_options
         )
-        self.expert_stack_options = (
-            expert_stack_options or expert_defaults_kwargs["expert_stack_options"]
+        self.attention_projection_dynamic_memory_options = (
+            attention_projection_dynamic_memory_options
         )
-        self.sampler_options = (
-            sampler_options or expert_defaults_kwargs["sampler_options"]
+        self.attention_projection_recurrent_controller_options = (
+            attention_projection_recurrent_controller_options
         )
-        self.router_options = (
-            router_options or expert_defaults_kwargs["router_options"]
+        self.feed_forward_stack_options = feed_forward_stack_options
+        self.feed_forward_layer_controller_options = (
+            feed_forward_layer_controller_options
         )
-        self.router_stack_options = (
-            router_stack_options or expert_defaults_kwargs["router_stack_options"]
+        self.feed_forward_dynamic_memory_options = feed_forward_dynamic_memory_options
+        self.feed_forward_recurrent_controller_options = (
+            feed_forward_recurrent_controller_options
         )
-        self.expert_layer_controller_options = (
-            expert_layer_controller_options
-            or expert_defaults_kwargs["expert_layer_controller_options"]
-        )
-        self.expert_dynamic_memory_options = (
-            expert_dynamic_memory_options
-            or expert_defaults_kwargs["expert_dynamic_memory_options"]
-        )
-        self.expert_recurrent_controller_options = (
-            expert_recurrent_controller_options
-            or expert_defaults_kwargs["expert_recurrent_controller_options"]
-        )
-        self.expert_attention_flag = expert_attention_flag
+        self.encoder_stack_options = stack_options
+        self.encoder_submodule_stack_options = submodule_stack_options
+        self.encoder_layer_controller_options = layer_controller_options
+        self.encoder_dynamic_memory_options = dynamic_memory_options
+        self.encoder_recurrent_controller_options = recurrent_controller_options
+        self.mixture_options = mixture_options
+        self.expert_stack_options = expert_stack_options
+        self.sampler_options = sampler_options
+        self.router_options = router_options
+        self.router_stack_options = router_stack_options
+        self.expert_layer_controller_options = expert_layer_controller_options
+        self.expert_dynamic_memory_options = expert_dynamic_memory_options
+        self.expert_recurrent_controller_options = expert_recurrent_controller_options
         self.expert_attention_use_kv_expert_models_flag = (
             expert_attention_use_kv_expert_models_flag
         )
-        super().__init__(*args, **kwargs)
-        self.experiment_config_type = ExperimentConfig
 
-    def _build_feed_forward_stack_config(self) -> MixtureOfExpertsModelConfig:
-        return self._build_expert_model_config()
+    def build(self) -> "ModelConfig":
+        from emperor.config import ModelConfig
 
-    def _build_attention_config(self):
-        if not self.expert_attention_flag:
-            return super()._build_attention_config()
-        encoder_options = self.encoder_options
-        attention_options = self.attention_options
-        return MixtureOfAttentionHeadsConfig(
+        return ModelConfig(
+            learning_rate=self.learning_rate,
             batch_size=self.batch_size,
-            num_heads=attention_options.num_heads,
-            embedding_dim=self.hidden_dim,
-            query_key_projection_dim=self.hidden_dim,
-            value_projection_dim=self.hidden_dim,
-            target_sequence_length=self.sequence_length,
-            source_sequence_length=self.sequence_length,
-            target_dtype=torch.float32,
-            dropout_probability=encoder_options.dropout_probability,
-            zero_attention_flag=False,
-            causal_attention_mask_flag=encoder_options.causal_attention_mask_flag,
-            add_key_value_bias_flag=attention_options.add_key_value_bias_flag,
-            average_attention_weights_flag=False,
-            return_attention_weights_flag=False,
-            projection_model_config=self._build_attention_projection_stack_config(),
-            experts_config=self._build_attention_experts_config(),
-            use_kv_expert_models_flag=self.expert_attention_use_kv_expert_models_flag,
-        )
-
-    def _build_attention_experts_config(self):
-        model_config = self._build_expert_model_config()
-        return model_config.stack_config.layer_config.layer_model_config
-
-    def _build_expert_model_config(self) -> MixtureOfExpertsModelConfig:
-        stack_options = ExpertsStackOptions(
+            input_dim=self.input_dim,
             hidden_dim=self.hidden_dim,
-            bias_flag=self.feed_forward_options.bias_flag,
-            layer_norm_position=self.encoder_options.layer_norm_position,
-            num_layers=self.feed_forward_options.num_layers,
-            activation=self.encoder_options.activation,
-            residual_connection_option=config.ResidualConnectionOptions.DISABLED,
-            dropout_probability=self.encoder_options.dropout_probability,
-            last_layer_bias_option=config.LastLayerBiasOptions.DEFAULT,
-            apply_output_pipeline_flag=True,
+            output_dim=self.output_dim,
+            sequence_length=self.sequence_length,
+            experiment_config=ExperimentConfig(
+                positional_embedding_config=self.__positional_embedding_config(),
+                boundary_config=self.__boundary_config(),
+                encoder_config=self.__encoder_config(),
+            ),
         )
-        factory = ControlConfigFactory(
-            ControlConfigDependencies(
-                stack_options=stack_options,
-                submodule_stack_options=None,
+
+    def __positional_embedding_config(self):
+        factory = PositionalEmbeddingConfigFactory(
+            PositionalEmbeddingConfigDependencies(
+                hidden_dim=self.hidden_dim,
+                sequence_length=self.sequence_length,
+                positional_embedding_options=self.positional_embedding_options,
+            )
+        )
+        return factory.build_positional_embedding_config()
+
+    def __boundary_config(self):
+        factory = BoundaryConfigFactory(
+            BoundaryConfigDependencies(
+                input_dim=self.input_dim,
+                hidden_dim=self.hidden_dim,
+                output_dim=self.output_dim,
+                sequence_length=self.sequence_length,
+                embedding_options=self.embedding_options,
+                mlm_head_options=self.mlm_head_options,
+                nsp_head_options=self.nsp_head_options,
+            )
+        )
+        return factory.build_boundary_config()
+
+    def __encoder_config(self):
+        return CoreConfigFactory(
+            self.__core_config_dependencies()
+        ).build_encoder_config()
+
+    def __core_config_dependencies(self) -> CoreConfigDependencies:
+        return CoreConfigDependencies(
+            batch_size=self.batch_size,
+            sequence_length=self.sequence_length,
+            encoder_options=self.encoder_options,
+            attention_options=self.attention_options,
+            feed_forward_options=self.feed_forward_options,
+            attention_projection_stack_options=(
+                self.attention_projection_stack_options
+            ),
+            attention_projection_layer_controller_options=(
+                self.attention_projection_layer_controller_options
+            ),
+            attention_projection_dynamic_memory_options=(
+                self.attention_projection_dynamic_memory_options
+            ),
+            attention_projection_recurrent_controller_options=(
+                self.attention_projection_recurrent_controller_options
+            ),
+            feed_forward_stack_options=self.feed_forward_stack_options,
+            feed_forward_layer_controller_options=(
+                self.feed_forward_layer_controller_options
+            ),
+            feed_forward_dynamic_memory_options=(
+                self.feed_forward_dynamic_memory_options
+            ),
+            feed_forward_recurrent_controller_options=(
+                self.feed_forward_recurrent_controller_options
+            ),
+            stack_options=self.encoder_stack_options,
+            submodule_stack_options=self.encoder_submodule_stack_options,
+            layer_controller_options=self.encoder_layer_controller_options,
+            dynamic_memory_options=self.encoder_dynamic_memory_options,
+            recurrent_controller_options=self.encoder_recurrent_controller_options,
+            linear_layer_config_factory=self.__linear_layer_config_factory(),
+            expert_config_factory=self.__expert_config_factory(),
+        )
+
+    def __linear_layer_config_factory(self) -> LinearLayerConfigFactory:
+        return LinearLayerConfigFactory(
+            LinearLayerConfigDependencies(encoder_options=self.encoder_options)
+        )
+
+    def __expert_config_factory(self) -> ExpertConfigFactory:
+        return ExpertConfigFactory(
+            ExpertConfigDependencies(
+                hidden_dim=self.hidden_dim,
+                encoder_options=self.encoder_options,
+                attention_options=self.attention_options,
+                feed_forward_options=self.feed_forward_options,
                 mixture_options=self.mixture_options,
                 expert_stack_options=self.expert_stack_options,
                 sampler_options=self.sampler_options,
                 router_options=self.router_options,
                 router_stack_options=self.router_stack_options,
-                layer_controller_options=None,
-                dynamic_memory_options=None,
-                recurrent_controller_options=None,
-                expert_layer_controller_options=self.expert_layer_controller_options,
+                expert_layer_controller_options=(self.expert_layer_controller_options),
                 expert_dynamic_memory_options=self.expert_dynamic_memory_options,
                 expert_recurrent_controller_options=(
                     self.expert_recurrent_controller_options
                 ),
-                hidden_dim=self.hidden_dim,
-                output_dim=self.hidden_dim,
+                expert_attention_use_kv_expert_models_flag=(
+                    self.expert_attention_use_kv_expert_models_flag
+                ),
             )
         )
-        model_config = factory.build()
-        if isinstance(model_config, MixtureOfExpertsModelConfig):
-            return model_config
-        return model_config.block_config
