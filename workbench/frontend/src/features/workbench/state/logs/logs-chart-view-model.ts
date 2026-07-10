@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  DEFAULT_LOG_SCALAR_MAX_POINTS,
-  LOG_SCALAR_SAMPLING,
   type LogCheckpoint,
   type LogRun,
   type LogScalarSeries,
@@ -12,7 +10,6 @@ import {
   useLogMediaQuery,
   useLogScalarQueries,
   useLogScalarsQuery,
-  type LogScalarQueryInput,
 } from "@/features/workbench/state/logs/use-log-queries";
 import { logQueryKeys } from "@/lib/query-keys";
 import { type LogsWorkspaceState } from "@/features/workbench/state/logs/use-logs-workspace-state";
@@ -44,6 +41,10 @@ import {
   type LogMetricDirection,
   type LogMetricPointPolicy,
 } from "@/features/workbench/state/logs/log-metric-ranking";
+import {
+  buildLogScalarChunkQueryInputs,
+  buildLogScalarQueryInput,
+} from "@/features/workbench/state/logs/logs-scalar-query-plan";
 
 export type LogsChartEmptyState = {
   title: string;
@@ -95,30 +96,6 @@ export type LogBestRunViewModel = {
   onDirectionChange: (direction: LogMetricDirection) => void;
   onPointPolicyChange: (policy: LogMetricPointPolicy) => void;
 };
-
-export function buildLogScalarQueryInput({
-  enabled,
-  group,
-  selectedTagList,
-  visibleRunIds,
-}: {
-  enabled: boolean;
-  group?: string;
-  selectedTagList: string[];
-  visibleRunIds: string[];
-}): LogScalarQueryInput {
-  return {
-    runIds: visibleRunIds,
-    tags: selectedTagList,
-    enabled: enabled && visibleRunIds.length > 0 && selectedTagList.length > 0,
-    group,
-    queryKey: logQueryKeys.scalarsForRunsAndTags(visibleRunIds, selectedTagList, {
-      group,
-      maxPoints: DEFAULT_LOG_SCALAR_MAX_POINTS,
-      sampling: LOG_SCALAR_SAMPLING,
-    }),
-  };
-}
 
 export type LogMetricGroupScalarQuerySnapshot =
   LogMetricGroupScalarQueryState & {
@@ -203,9 +180,6 @@ const DEFAULT_LOG_METRIC_GRID_MODES: Record<
   validation: "full",
   other: "full",
 };
-export const LOG_SCALAR_TAG_CHUNK_SIZE = 6;
-export const LOG_SCALAR_RUN_CHUNK_SIZE = 2;
-
 export function defaultLogBestRunMetricTag(tagOptions: ChecklistOption[]) {
   const availableTags = new Set(tagOptions.map((option) => option.value));
   return (
@@ -213,32 +187,6 @@ export function defaultLogBestRunMetricTag(tagOptions: ChecklistOption[]) {
     tagOptions[0]?.value ??
     null
   );
-}
-
-export function chunkScalarTagsForQueries(
-  tags: string[],
-  chunkSize = LOG_SCALAR_TAG_CHUNK_SIZE,
-) {
-  const size = Math.max(1, Math.floor(chunkSize));
-  const uniqueTags = Array.from(new Set(tags));
-  const chunks: string[][] = [];
-  for (let index = 0; index < uniqueTags.length; index += size) {
-    chunks.push(uniqueTags.slice(index, index + size));
-  }
-  return chunks;
-}
-
-export function chunkScalarRunIdsForQueries(
-  runIds: string[],
-  chunkSize = LOG_SCALAR_RUN_CHUNK_SIZE,
-) {
-  const size = Math.max(1, Math.floor(chunkSize));
-  const uniqueRunIds = Array.from(new Set(runIds));
-  const chunks: string[][] = [];
-  for (let index = 0; index < uniqueRunIds.length; index += size) {
-    chunks.push(uniqueRunIds.slice(index, index + size));
-  }
-  return chunks;
 }
 
 export function groupSelectedLogMetrics({
@@ -263,36 +211,6 @@ export function groupSelectedLogMetrics({
   }
 
   return groups;
-}
-
-export function buildLogScalarChunkQueryInputs({
-  enabled,
-  group,
-  requestedTags,
-  selectedTagList,
-  visibleRunIds,
-}: {
-  enabled: boolean;
-  group: string;
-  requestedTags: Set<string>;
-  selectedTagList: string[];
-  visibleRunIds: string[];
-}) {
-  const requestedSelectedTags = selectedTagList.filter((tag) =>
-    requestedTags.has(tag),
-  );
-  const tagChunks = chunkScalarTagsForQueries(requestedSelectedTags);
-  const runChunks = chunkScalarRunIdsForQueries(visibleRunIds);
-  return runChunks.flatMap((runIds) =>
-    tagChunks.map((tags) =>
-      buildLogScalarQueryInput({
-        enabled,
-        group,
-        selectedTagList: tags,
-        visibleRunIds: runIds,
-      }),
-    ),
-  );
 }
 
 export function deriveLogsChartEmptyState({

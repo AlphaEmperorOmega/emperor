@@ -2721,21 +2721,22 @@ describe("POST requests", () => {
       { signal: controller.signal },
     );
 
-    for (let index = 0; index < 47; index += 1) {
+    for (let index = 0; index < 10; index += 1) {
       await flushAsyncWork();
       expect(pending).toHaveLength(index + 1);
       resolveRequest(index);
     }
     await scalarsPromise;
 
-    expect(scalarFetchMock).toHaveBeenCalledTimes(47);
+    expect(scalarFetchMock).toHaveBeenCalledTimes(10);
     expect(maxActive).toBe(1);
-    expect(pending.map((request) => request.body.runIds.length)).toEqual(
-      Array.from({ length: 47 }, () => 2),
-    );
+    expect(pending.map((request) => request.body.runIds.length)).toEqual([
+      ...Array.from({ length: 9 }, () => 10),
+      4,
+    ]);
     for (const request of pending) {
       expect(request.signal).toBe(controller.signal);
-      expect(request.body.runIds.length).toBeLessThanOrEqual(2);
+      expect(request.body.runIds.length).toBeLessThanOrEqual(10);
       expect(request.body.tags).toEqual(["validation/accuracy"]);
     }
   });
@@ -2795,7 +2796,7 @@ describe("POST requests", () => {
     }
     await scalarsPromise;
 
-    expect(scalarFetchMock).toHaveBeenCalledTimes(141);
+    expect(scalarFetchMock).toHaveBeenCalledTimes(30);
     expect(maxActive).toBe(1);
     expect(
       pending.map((request) => [
@@ -2803,15 +2804,15 @@ describe("POST requests", () => {
         request.body.tags.length,
       ]),
     ).toEqual(
-      Array.from({ length: 47 }, () =>
+      Array.from({ length: 10 }, (_, runChunkIndex) =>
         [50, 50, 46].map((tagCount) => [
-          2,
+          runChunkIndex === 9 ? 4 : 10,
           tagCount,
         ]),
       ).flat(),
     );
     for (const request of pending) {
-      expect(request.body.runIds.length).toBeLessThanOrEqual(2);
+      expect(request.body.runIds.length).toBeLessThanOrEqual(10);
       expect(request.body.tags.length).toBeLessThanOrEqual(50);
     }
   });
@@ -2849,7 +2850,7 @@ describe("POST requests", () => {
 
     const scalars = await fetchLogScalars({ runIds, tags });
 
-    expect(scalarFetchMock).toHaveBeenCalledTimes(52);
+    expect(scalarFetchMock).toHaveBeenCalledTimes(12);
     expect(
       scalars.series.map((series) => ({
         runId: series.runId,
@@ -2857,9 +2858,9 @@ describe("POST requests", () => {
         value: series.points[0].value,
       })),
     ).toEqual(
-      Array.from({ length: 26 }, (_, runChunkIndex) => {
-        const runId = `run-${runChunkIndex * 2}`;
-        const runCount = runChunkIndex === 25 ? 1 : 2;
+      Array.from({ length: 6 }, (_, runChunkIndex) => {
+        const runId = `run-${runChunkIndex * 10}`;
+        const runCount = runChunkIndex === 5 ? 1 : 10;
         return [
           { runId, tag: "validation/tag-0", value: runCount + 0.5 },
           { runId, tag: "validation/tag-50", value: runCount + 0.01 },

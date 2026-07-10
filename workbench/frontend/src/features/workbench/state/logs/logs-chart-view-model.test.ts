@@ -1,15 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
   bestRunMetricGroupForActiveScalarQuery,
-  buildLogScalarChunkQueryInputs,
-  buildLogScalarQueryInput,
-  chunkScalarTagsForQueries,
   defaultLogBestRunMetricTag,
   deriveLogMetricGroupScalarQueryStates,
   deriveLogsChartEmptyState,
   groupLogScalarSeriesByTag,
   groupSelectedLogMetrics,
 } from "@/features/workbench/state/logs/logs-chart-view-model";
+import {
+  buildLogScalarChunkQueryInputs,
+  buildLogScalarQueryInput,
+  chunkScalarTagsForQueries,
+} from "@/features/workbench/state/logs/logs-scalar-query-plan";
 import {
   buildLogScalarTagOptions,
   buildTrainValidationScalarPairs,
@@ -236,13 +238,29 @@ describe("logs chart view model", () => {
         tags: input.tags,
       })),
     ).toEqual(
-      Array.from({ length: 12 }, (_, runChunkIndex) =>
+      Array.from({ length: 3 }, (_, runChunkIndex) =>
         [selectedTags.slice(0, 6), selectedTags.slice(6)].map((tags) => ({
-          runIds: runIds.slice(runChunkIndex * 2, (runChunkIndex + 1) * 2),
+          runIds: runIds.slice(runChunkIndex * 10, (runChunkIndex + 1) * 10),
           tags,
         })),
       ).flat(),
     );
+  });
+
+  it("keeps the 100-run six-tag scalar fan-out within ten requests", () => {
+    const runIds = Array.from({ length: 100 }, (_, index) => `run-${index}`);
+    const tags = Array.from({ length: 6 }, (_, index) => `train/metric-${index}`);
+
+    const inputs = buildLogScalarChunkQueryInputs({
+      enabled: true,
+      group: "train",
+      requestedTags: new Set(tags),
+      selectedTagList: tags,
+      visibleRunIds: runIds,
+    });
+
+    expect(inputs.length).toBeLessThanOrEqual(10);
+    expect(inputs.every((input) => input.runIds.length <= 10)).toBe(true);
   });
 
   it("defaults to the core epoch scalar tags without diagnostic metrics", () => {

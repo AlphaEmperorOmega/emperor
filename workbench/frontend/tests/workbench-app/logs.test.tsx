@@ -2719,12 +2719,12 @@ describe("WorkbenchApp Logs Workspace", () => {
           request.tags.length === 1 && request.tags[0] === "custom/tag-42",
       );
       expect(
-        selectedTagRequests.slice(-Math.ceil(expectedRunIds.length / 2)),
+        selectedTagRequests.slice(-Math.ceil(expectedRunIds.length / 10)),
       ).toEqual(
         Array.from(
-          { length: Math.ceil(expectedRunIds.length / 2) },
+          { length: Math.ceil(expectedRunIds.length / 10) },
           (_, index) => ({
-            runIds: expectedRunIds.slice(index * 2, (index + 1) * 2),
+            runIds: expectedRunIds.slice(index * 10, (index + 1) * 10),
             tags: ["custom/tag-42"],
             maxPoints: 500,
             sampling: "tail",
