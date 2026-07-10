@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from torch import Tensor
 
 from emperor.base.layer import Layer, LayerStack, LayerStackConfig
-from emperor.base.options import LastLayerBiasOptions
+from emperor.halting.core._validator import StickBreakingValidator
 from emperor.halting.core.base import HaltingBase, HaltingStateBase
 from emperor.halting.options import HaltingHiddenStateModeOptions
 
@@ -69,28 +69,35 @@ class SoftHalting(HaltingBase[SoftHaltingState]):
         super().__init__()
         config = getattr(cfg, "halting_config", cfg)
         self.cfg: HaltingConfig = self._override_config(config, overrides)
-        self.main_cfg = self._resolve_main_config(self.cfg, cfg)
+        StickBreakingValidator.validate(self.cfg)
 
         self.input_dim: int = self.cfg.input_dim
         self.threshold: float = self.cfg.threshold
         self.hidden_state_mode: HaltingHiddenStateModeOptions = (
             self.cfg.hidden_state_mode
         )
+        self.halting_gate_config: LayerStackConfig = self.cfg.halting_gate_config
 
         self._gate: Layer | LayerStack = self.__build_gate()
         self.__init_gate_weights()
 
     def __build_gate(self) -> "Layer | LayerStack":
-        from emperor.linears.core.stack import LinearLayerStack
-
-        overrides = LayerStackConfig(
+        overrides = type(self.halting_gate_config)(
             input_dim=self.input_dim,
             output_dim=2,
-            last_layer_bias_option=LastLayerBiasOptions.DISABLED,
         )
-        return LinearLayerStack(self.main_cfg, overrides).build_model()
+        return self.halting_gate_config.build(overrides=overrides)
 
     def __init_gate_weights(self) -> None:
+        output_layer = (
+            self._gate[-1] if isinstance(self._gate, LayerStack) else self._gate
+        )
+        output_model = getattr(output_layer, "model", output_layer)
+        weight_params = getattr(output_model, "weight_params", None)
+        if isinstance(weight_params, nn.Parameter):
+            nn.init.zeros_(weight_params)
+            return
+
         last_linear = None
         for m in self._gate.modules():
             if isinstance(m, nn.Linear):
@@ -99,7 +106,10 @@ class SoftHalting(HaltingBase[SoftHaltingState]):
             nn.init.zeros_(last_linear.weight)
 
     def __compute_gate_logits(self, model_hidden_state: Tensor) -> Tensor:
-        logits = self._gate(model_hidden_state)
+        original_shape = model_hidden_state.shape
+        flat = model_hidden_state.view(-1, original_shape[-1])
+        logits = Layer.run_model_returning_hidden(self._gate, flat)
+        logits = logits.view(*original_shape[:-1], 2)
         return F.log_softmax(logits, dim=-1)
 
     def __compute_step_halting_probability(
