@@ -107,6 +107,41 @@ def header_values(value: str) -> set[str]:
 
 
 class AppFactoryTests(unittest.TestCase):
+    def test_large_json_responses_are_compressed_without_compressing_small_ones(
+        self,
+    ) -> None:
+        from workbench.backend.api import WorkbenchApiSettings
+        from workbench.backend.middleware import configure_middleware
+
+        async def call_api() -> tuple[httpx.Response, httpx.Response]:
+            api = FastAPI()
+            configure_middleware(api, WorkbenchApiSettings())
+
+            @api.get("/small")
+            async def small() -> dict[str, str]:
+                return {"data": "small"}
+
+            @api.get("/large")
+            async def large() -> dict[str, str]:
+                return {"data": "scalar-data-" * 20_000}
+
+            transport = httpx.ASGITransport(app=api)
+            async with httpx.AsyncClient(
+                transport=transport,
+                base_url="http://testserver",
+                headers={"accept-encoding": "gzip"},
+            ) as client:
+                return await client.get("/small"), await client.get("/large")
+
+        small_response, large_response = asyncio.run(call_api())
+
+        self.assertNotIn("content-encoding", small_response.headers)
+        self.assertEqual(large_response.headers["content-encoding"], "gzip")
+        self.assertLess(
+            int(large_response.headers["content-length"]),
+            len(large_response.content),
+        )
+
     def test_blocking_route_handlers_are_async_boundary_handlers(self) -> None:
         from workbench.backend.api import create_app
 
