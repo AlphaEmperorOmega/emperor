@@ -38,7 +38,7 @@ const STATIC_METADATA_STALE_TIME_MS = 5 * 60_000;
 export function useCapabilitiesQuery() {
   return useQuery({
     queryKey: workbenchQueryKeys.capabilities(),
-    queryFn: fetchCapabilities,
+    queryFn: ({ signal }) => fetchCapabilities({ signal }),
     retry: false,
     initialData: LOCAL_DEFAULT_CAPABILITIES,
   });
@@ -66,7 +66,7 @@ export function useWorkbenchQueries(
         : [];
   const healthQuery = useQuery({
     queryKey: workbenchQueryKeys.health(),
-    queryFn: fetchHealth,
+    queryFn: ({ signal }) => fetchHealth({ signal }),
     retry: false,
     refetchInterval: 10000,
   });
@@ -74,14 +74,14 @@ export function useWorkbenchQueries(
 
   const modelsQuery = useQuery({
     queryKey: workbenchQueryKeys.models(),
-    queryFn: fetchModels,
+    queryFn: ({ signal }) => fetchModels({ signal }),
     retry: false,
     staleTime: STATIC_METADATA_STALE_TIME_MS,
   });
 
   const presetsQuery = useQuery({
     queryKey: workbenchQueryKeys.presets(selectedModelType, selectedModel),
-    queryFn: () => fetchPresets(selectedIdentity),
+    queryFn: ({ signal }) => fetchPresets(selectedIdentity, { signal }),
     enabled: hasSelectedModel,
     retry: false,
     staleTime: STATIC_METADATA_STALE_TIME_MS,
@@ -89,7 +89,7 @@ export function useWorkbenchQueries(
 
   const datasetsQuery = useQuery({
     queryKey: workbenchQueryKeys.datasets(selectedModelType, selectedModel),
-    queryFn: () => fetchDatasets(selectedIdentity),
+    queryFn: ({ signal }) => fetchDatasets(selectedIdentity, { signal }),
     enabled: hasSelectedModel,
     retry: false,
     staleTime: STATIC_METADATA_STALE_TIME_MS,
@@ -97,7 +97,7 @@ export function useWorkbenchQueries(
 
   const monitorsQuery = useQuery({
     queryKey: workbenchQueryKeys.monitors(selectedModelType, selectedModel),
-    queryFn: () => fetchMonitors(selectedIdentity),
+    queryFn: ({ signal }) => fetchMonitors(selectedIdentity, { signal }),
     enabled: hasSelectedModel,
     retry: false,
     staleTime: STATIC_METADATA_STALE_TIME_MS,
@@ -109,7 +109,8 @@ export function useWorkbenchQueries(
       selectedModel,
       selectedPreset,
     ),
-    queryFn: () => fetchConfigSchema(selectedIdentity, selectedPreset),
+    queryFn: ({ signal }) =>
+      fetchConfigSchema(selectedIdentity, selectedPreset, { signal }),
     enabled: hasSelectedModel && selectedPreset.length > 0,
     retry: false,
     staleTime: STATIC_METADATA_STALE_TIME_MS,
@@ -122,11 +123,12 @@ export function useWorkbenchQueries(
       selectedPreset,
       searchSpacePresets,
     ),
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       fetchSearchSpace(
         selectedIdentity,
         selectedPreset,
         searchSpacePresets,
+        { signal },
       ),
     enabled: includeSearchSpace && hasSelectedModel && selectedPreset.length > 0,
     retry: false,

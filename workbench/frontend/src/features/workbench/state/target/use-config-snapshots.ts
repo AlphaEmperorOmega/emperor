@@ -14,6 +14,7 @@ import {
 import { workbenchQueryKeys } from "@/lib/query-keys";
 
 const EMPTY_CONFIG_SNAPSHOTS: ConfigSnapshotRecord[] = [];
+const CONFIG_SNAPSHOTS_STALE_TIME_MS = 5 * 60_000;
 
 /**
  * Server-backed config snapshot library for a model. The backend is the single
@@ -27,9 +28,10 @@ export function useConfigSnapshots(identity: ModelIdentity) {
 
   const query = useQuery({
     queryKey: workbenchQueryKeys.configSnapshots(identity.modelType, identity.model),
-    queryFn: () => fetchConfigSnapshots(identity),
+    queryFn: ({ signal }) => fetchConfigSnapshots(identity, { signal }),
     enabled,
     retry: false,
+    staleTime: CONFIG_SNAPSHOTS_STALE_TIME_MS,
   });
 
   function invalidateModel(snapshot: ModelIdentity) {

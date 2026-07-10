@@ -108,31 +108,49 @@ export type ConfigField = Omit<
 export type SearchAxis = z.infer<typeof searchAxisSchema>;
 export type SearchSpace = z.infer<typeof searchSpaceSchema>;
 
+type ApiRequestOptions = {
+  signal?: AbortSignal;
+};
+
 function modelPath({ modelType, model }: ModelIdentity) {
   return `${encodeURIComponent(modelType)}/${encodeURIComponent(model)}`;
 }
 
-export function fetchModels() {
-  return requestJson("/models", modelsSchema);
+export function fetchModels(options: ApiRequestOptions = {}) {
+  return requestJson("/models", modelsSchema, options);
 }
 
-export function fetchPresets(identity: ModelIdentity) {
-  return requestJson(`/models/${modelPath(identity)}/presets`, presetsSchema);
+export function fetchPresets(
+  identity: ModelIdentity,
+  options: ApiRequestOptions = {},
+) {
+  return requestJson(`/models/${modelPath(identity)}/presets`, presetsSchema, options);
 }
 
-export function fetchDatasets(identity: ModelIdentity) {
-  return requestJson(`/models/${modelPath(identity)}/datasets`, datasetsSchema);
+export function fetchDatasets(
+  identity: ModelIdentity,
+  options: ApiRequestOptions = {},
+) {
+  return requestJson(`/models/${modelPath(identity)}/datasets`, datasetsSchema, options);
 }
 
-export function fetchMonitors(identity: ModelIdentity) {
-  return requestJson(`/models/${modelPath(identity)}/monitors`, monitorsSchema);
+export function fetchMonitors(
+  identity: ModelIdentity,
+  options: ApiRequestOptions = {},
+) {
+  return requestJson(`/models/${modelPath(identity)}/monitors`, monitorsSchema, options);
 }
 
-export function fetchConfigSchema(identity: ModelIdentity, preset?: string) {
+export function fetchConfigSchema(
+  identity: ModelIdentity,
+  preset?: string,
+  options: ApiRequestOptions = {},
+) {
   const query = preset ? `?preset=${encodeURIComponent(preset)}` : "";
   return requestJson(
     `/models/${modelPath(identity)}/config-schema${query}`,
     configSchema,
+    options,
   );
 }
 
@@ -140,6 +158,7 @@ export function fetchSearchSpace(
   identity: ModelIdentity,
   preset?: string,
   presets?: readonly string[],
+  options: ApiRequestOptions = {},
 ) {
   const params = new URLSearchParams();
   if (preset) {
@@ -155,5 +174,6 @@ export function fetchSearchSpace(
   return requestJson(
     `/models/${modelPath(identity)}/search-space${query}`,
     searchSpaceSchema,
+    options,
   );
 }

@@ -1181,24 +1181,26 @@ describe("useWorkbenchState", () => {
       expect(mocks.fetchConfigSchema).toHaveBeenCalledWith(
         { modelType: "linears", model: "linear" },
         "baseline",
+        expect.objectContaining({ signal: expect.anything() }),
       );
     });
-    expect(mocks.fetchPresets).toHaveBeenCalledWith({
-      modelType: "linears",
-      model: "linear",
-    });
-    expect(mocks.fetchDatasets).toHaveBeenCalledWith({
-      modelType: "linears",
-      model: "linear",
-    });
-    expect(mocks.fetchMonitors).toHaveBeenCalledWith({
-      modelType: "linears",
-      model: "linear",
-    });
+    expect(mocks.fetchPresets).toHaveBeenCalledWith(
+      { modelType: "linears", model: "linear" },
+      expect.objectContaining({ signal: expect.anything() }),
+    );
+    expect(mocks.fetchDatasets).toHaveBeenCalledWith(
+      { modelType: "linears", model: "linear" },
+      expect.objectContaining({ signal: expect.anything() }),
+    );
+    expect(mocks.fetchMonitors).toHaveBeenCalledWith(
+      { modelType: "linears", model: "linear" },
+      expect.objectContaining({ signal: expect.anything() }),
+    );
     expect(mocks.fetchSearchSpace).toHaveBeenCalledWith(
       { modelType: "linears", model: "linear" },
       "baseline",
       ["baseline"],
+      expect.objectContaining({ signal: expect.anything() }),
     );
     expect(mocks.inspectModel.mock.calls.map(([request]) => request))
       .toContainEqual({
@@ -1209,6 +1211,50 @@ describe("useWorkbenchState", () => {
         dataset: "Mnist",
         overrides: {},
       });
+  });
+
+  it("aborts obsolete model metadata when the selected model changes", async () => {
+    mockPublicModelCatalog();
+    const signals = new Map<string, AbortSignal | undefined>();
+    mocks.fetchPresets.mockImplementation(
+      (
+        identity: ModelIdentity,
+        options: { signal?: AbortSignal } = {},
+      ) =>
+        new Promise((resolve, reject) => {
+          const key = modelIdentityKey(identity);
+          signals.set(key, options.signal);
+          options.signal?.addEventListener(
+            "abort",
+            () => reject(new DOMException("Aborted", "AbortError")),
+            { once: true },
+          );
+          if (key === "experts/linear") {
+            resolve({
+              ...identity,
+              presets: [
+                {
+                  name: "expert-baseline",
+                  label: "Expert baseline",
+                  description: "",
+                },
+              ],
+            });
+          }
+        }),
+    );
+    const { result } = renderWorkbenchState({ activeWorkspace: "model" });
+
+    await waitFor(() => expect(signals.has("linears/linear")).toBe(true));
+
+    act(() => result.current.target.selectModelType("experts"));
+
+    await waitFor(() => {
+      expect(signals.get("linears/linear")?.aborted).toBe(true);
+      expect(signals.has("experts/linear")).toBe(true);
+      expect(result.current.target.selectedModelType).toBe("experts");
+    });
+    expect(result.current.target.isPresetsError).toBe(false);
   });
 
   it("selects the first model in a new type through the model reset cascade", async () => {
@@ -1238,18 +1284,18 @@ describe("useWorkbenchState", () => {
       expect(result.current.target.selectedDatasets).toEqual(["ExpertToy"]);
       expect(result.current.target.overrides).toEqual({});
     });
-    expect(mocks.fetchPresets).toHaveBeenCalledWith({
-      modelType: "experts",
-      model: "linear",
-    });
-    expect(mocks.fetchDatasets).toHaveBeenCalledWith({
-      modelType: "experts",
-      model: "linear",
-    });
-    expect(mocks.fetchMonitors).toHaveBeenCalledWith({
-      modelType: "experts",
-      model: "linear",
-    });
+    expect(mocks.fetchPresets).toHaveBeenCalledWith(
+      { modelType: "experts", model: "linear" },
+      expect.objectContaining({ signal: expect.anything() }),
+    );
+    expect(mocks.fetchDatasets).toHaveBeenCalledWith(
+      { modelType: "experts", model: "linear" },
+      expect.objectContaining({ signal: expect.anything() }),
+    );
+    expect(mocks.fetchMonitors).toHaveBeenCalledWith(
+      { modelType: "experts", model: "linear" },
+      expect.objectContaining({ signal: expect.anything() }),
+    );
     expect(mocks.inspectModel.mock.calls.map(([request]) => request))
       .toContainEqual({
         modelType: "experts",
@@ -2247,14 +2293,17 @@ describe("useWorkbenchState", () => {
         "test-layer",
       );
     });
-    expect(mocks.inspectModel).toHaveBeenCalledWith({
-      modelType: "linears",
-      model: "linear",
-      preset: "KAGGLE_LINEAR",
-      dataset: "KaggleDigits",
-      overrides: {},
-      logRunId: "kaggle-linear-run",
-    });
+    expect(mocks.inspectModel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        modelType: "linears",
+        model: "linear",
+        preset: "KAGGLE_LINEAR",
+        dataset: "KaggleDigits",
+        overrides: {},
+        logRunId: "kaggle-linear-run",
+      }),
+      expect.objectContaining({ signal: expect.anything() }),
+    );
     expect(mocks.fetchLogParameterStatus).not.toHaveBeenCalled();
     expect(mocks.fetchLogParameterStatus).not.toHaveBeenCalledWith(
       { runIds: ["kaggle-linear-run"] },
@@ -2345,14 +2394,17 @@ describe("useWorkbenchState", () => {
         "slow-layer",
       );
     });
-    expect(mocks.inspectModel).toHaveBeenCalledWith({
-      modelType: "linears",
-      model: "linear",
-      preset: "baseline",
-      dataset: "Mnist",
-      overrides: {},
-      logRunId: "slow-tags-run",
-    });
+    expect(mocks.inspectModel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        modelType: "linears",
+        model: "linear",
+        preset: "baseline",
+        dataset: "Mnist",
+        overrides: {},
+        logRunId: "slow-tags-run",
+      }),
+      expect.objectContaining({ signal: expect.anything() }),
+    );
     expect(mocks.fetchLogParameterStatus).not.toHaveBeenCalled();
 
     act(() => {
@@ -2398,14 +2450,17 @@ describe("useWorkbenchState", () => {
       expect(result.current.target.selectedDatasets).toEqual(["FashionMnist"]);
     });
     await waitFor(() => {
-      expect(mocks.inspectModel).toHaveBeenCalledWith({
-        modelType: "linears",
-        model: "linear",
-        preset: "Fast",
-        dataset: "FashionMnist",
-        overrides: {},
-        logRunId: "linear-history",
-      });
+      expect(mocks.inspectModel).toHaveBeenCalledWith(
+        expect.objectContaining({
+          modelType: "linears",
+          model: "linear",
+          preset: "Fast",
+          dataset: "FashionMnist",
+          overrides: {},
+          logRunId: "linear-history",
+        }),
+        expect.objectContaining({ signal: expect.anything() }),
+      );
     });
 
     mocks.inspectModel.mockClear();
@@ -2475,14 +2530,17 @@ describe("useWorkbenchState", () => {
       expect(result.current.target.selectedDatasets).toEqual(["FashionMnist"]);
     });
     await waitFor(() => {
-      expect(mocks.inspectModel).toHaveBeenCalledWith({
-        modelType: "linears",
-        model: "linear",
-        preset: "Fast",
-        dataset: "FashionMnist",
-        overrides: {},
-        logRunId: "linear-history",
-      });
+      expect(mocks.inspectModel).toHaveBeenCalledWith(
+        expect.objectContaining({
+          modelType: "linears",
+          model: "linear",
+          preset: "Fast",
+          dataset: "FashionMnist",
+          overrides: {},
+          logRunId: "linear-history",
+        }),
+        expect.objectContaining({ signal: expect.anything() }),
+      );
     });
 
     mocks.inspectModel.mockClear();
@@ -2785,17 +2843,29 @@ describe("useWorkbenchState", () => {
       },
     );
     mocks.inspectModel.mockImplementation(
-      (request: {
-        modelType: string;
-        model: string;
-        preset: string;
-        logRunId?: string;
-      }) => {
+      (
+        request: {
+          modelType: string;
+          model: string;
+          preset: string;
+          logRunId?: string;
+        },
+        options: { signal?: AbortSignal } = {},
+      ) => {
+        const abortable = (response: Promise<InspectResponse>) =>
+          new Promise<InspectResponse>((resolve, reject) => {
+            response.then(resolve, reject);
+            options.signal?.addEventListener(
+              "abort",
+              () => reject(new DOMException("Aborted", "AbortError")),
+              { once: true },
+            );
+          });
         if (request.logRunId === "run-old") {
-          return oldInspect.promise;
+          return abortable(oldInspect.promise);
         }
         if (request.logRunId === "run-final") {
-          return finalInspect.promise;
+          return abortable(finalInspect.promise);
         }
         return Promise.resolve(experimentMonitorGraph(request, "initial"));
       },
@@ -2815,6 +2885,7 @@ describe("useWorkbenchState", () => {
       expect(result.current.target.selectedExperimentRunId).toBe("run-old");
       expect(mocks.inspectModel).toHaveBeenCalledWith(
         expect.objectContaining({ logRunId: "run-old" }),
+        expect.objectContaining({ signal: expect.anything() }),
       );
     });
 
@@ -2825,6 +2896,7 @@ describe("useWorkbenchState", () => {
       expect(result.current.target.selectedExperimentRunId).toBe("run-final");
       expect(mocks.inspectModel).toHaveBeenCalledWith(
         expect.objectContaining({ logRunId: "run-final" }),
+        expect.objectContaining({ signal: expect.anything() }),
       );
     });
 
@@ -2839,6 +2911,7 @@ describe("useWorkbenchState", () => {
           logRunId: "run-final",
           overrides: { hidden_size: "128" },
         }),
+        expect.objectContaining({ signal: expect.anything() }),
       );
     });
 

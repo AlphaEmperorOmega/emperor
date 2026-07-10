@@ -60,8 +60,9 @@ export function inspectModel(input: {
   experimentTask?: string;
   dataset?: string;
   logRunId?: string;
-}) {
+}, options: { signal?: AbortSignal } = {}) {
   return requestJson("/inspect", inspectResponseSchema, {
+    ...options,
     method: "POST",
     body: JSON.stringify(input),
   });

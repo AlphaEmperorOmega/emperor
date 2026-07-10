@@ -112,19 +112,28 @@ describe("useWorkbenchQueries enabled gating", () => {
     renderQueries("linear", "");
 
     await waitFor(() =>
-      expect(mocks.fetchPresets).toHaveBeenCalledWith({
+      expect(mocks.fetchPresets).toHaveBeenCalledWith(
+        {
+          modelType: "linears",
+          model: "linear",
+        },
+        { signal: expect.any(AbortSignal) },
+      ),
+    );
+    expect(mocks.fetchDatasets).toHaveBeenCalledWith(
+      {
         modelType: "linears",
         model: "linear",
-      }),
+      },
+      { signal: expect.any(AbortSignal) },
     );
-    expect(mocks.fetchDatasets).toHaveBeenCalledWith({
-      modelType: "linears",
-      model: "linear",
-    });
-    expect(mocks.fetchMonitors).toHaveBeenCalledWith({
-      modelType: "linears",
-      model: "linear",
-    });
+    expect(mocks.fetchMonitors).toHaveBeenCalledWith(
+      {
+        modelType: "linears",
+        model: "linear",
+      },
+      { signal: expect.any(AbortSignal) },
+    );
     expect(mocks.fetchConfigSchema).not.toHaveBeenCalled();
     expect(mocks.fetchSearchSpace).not.toHaveBeenCalled();
   });
@@ -136,12 +145,14 @@ describe("useWorkbenchQueries enabled gating", () => {
       expect(mocks.fetchConfigSchema).toHaveBeenCalledWith(
         { modelType: "linears", model: "linear" },
         "base",
+        { signal: expect.any(AbortSignal) },
       ),
     );
     expect(mocks.fetchSearchSpace).toHaveBeenCalledWith(
       { modelType: "linears", model: "linear" },
       "base",
       ["base", "post-norm"],
+      { signal: expect.any(AbortSignal) },
     );
   });
 
@@ -152,6 +163,7 @@ describe("useWorkbenchQueries enabled gating", () => {
       expect(mocks.fetchConfigSchema).toHaveBeenCalledWith(
         { modelType: "linears", model: "linear" },
         "base",
+        { signal: expect.any(AbortSignal) },
       ),
     );
     expect(mocks.fetchSearchSpace).not.toHaveBeenCalled();
@@ -165,6 +177,7 @@ describe("useWorkbenchQueries enabled gating", () => {
         { modelType: "linears", model: "linear" },
         "base",
         ["base"],
+        { signal: expect.any(AbortSignal) },
       ),
     );
   });

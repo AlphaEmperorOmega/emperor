@@ -39,7 +39,14 @@ export type ConfigSnapshotUpdateInput = {
   overrides?: Record<string, string>;
 };
 
-export function fetchConfigSnapshots(identity: ModelIdentity) {
+type ApiRequestOptions = {
+  signal?: AbortSignal;
+};
+
+export function fetchConfigSnapshots(
+  identity: ModelIdentity,
+  options: ApiRequestOptions = {},
+) {
   const params = new URLSearchParams({
     modelType: identity.modelType,
     model: identity.model,
@@ -47,11 +54,16 @@ export function fetchConfigSnapshots(identity: ModelIdentity) {
   return requestJson(
     `/config-snapshots?${params.toString()}`,
     configSnapshotsSchema,
+    options,
   );
 }
 
-export function fetchConfigSnapshotLibrary() {
-  return requestJson("/config-snapshots/library", configSnapshotLibrarySchema);
+export function fetchConfigSnapshotLibrary(options: ApiRequestOptions = {}) {
+  return requestJson(
+    "/config-snapshots/library",
+    configSnapshotLibrarySchema,
+    options,
+  );
 }
 
 export function createConfigSnapshot(input: ConfigSnapshotCreateInput) {

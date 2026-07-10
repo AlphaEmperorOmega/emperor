@@ -25,10 +25,14 @@ const capabilitiesSchema = z.object({
 
 export type Capabilities = z.infer<typeof capabilitiesSchema>;
 
-export function fetchHealth() {
-  return requestJson("/health", healthSchema);
+type ApiRequestOptions = {
+  signal?: AbortSignal;
+};
+
+export function fetchHealth(options: ApiRequestOptions = {}) {
+  return requestJson("/health", healthSchema, options);
 }
 
-export function fetchCapabilities() {
-  return requestJson("/capabilities", capabilitiesSchema);
+export function fetchCapabilities(options: ApiRequestOptions = {}) {
+  return requestJson("/capabilities", capabilitiesSchema, options);
 }

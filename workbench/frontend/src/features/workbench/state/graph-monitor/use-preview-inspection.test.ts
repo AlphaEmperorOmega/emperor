@@ -107,7 +107,9 @@ describe("usePreviewInspectionState", () => {
 
     const { result } = renderPreview();
     act(() => result.current.requestPreview(request("A")));
+    await waitFor(() => expect(inspectModelMock).toHaveBeenCalledTimes(1));
     act(() => result.current.requestPreview(request("B")));
+    await waitFor(() => expect(inspectModelMock).toHaveBeenCalledTimes(2));
 
     // Newer request resolves first.
     await act(async () => {
@@ -204,6 +206,7 @@ describe("usePreviewInspectionState", () => {
 
     const { result } = renderPreview();
     act(() => result.current.requestPreview(request("A")));
+    await waitFor(() => expect(inspectModelMock).toHaveBeenCalledTimes(1));
     act(() => result.current.requestPreview(request("A")));
 
     expect(inspectModelMock).toHaveBeenCalledTimes(1);
@@ -288,13 +291,16 @@ describe("usePreviewInspectionState", () => {
     );
 
     await waitFor(() => expect(result.current.graph?.model).toBe("A"));
-    expect(inspectModelMock).toHaveBeenCalledWith({
-      modelType: "linears",
-      model: "A",
-      preset: "p",
-      overrides: {},
-      logRunId: "run-1",
-    });
+    expect(inspectModelMock).toHaveBeenCalledWith(
+      {
+        modelType: "linears",
+        model: "A",
+        preset: "p",
+        overrides: {},
+        logRunId: "run-1",
+      },
+      { signal: expect.any(AbortSignal) },
+    );
   });
 
   it("clears preview state and ignores in-flight responses", async () => {
