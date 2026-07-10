@@ -1,4 +1,7 @@
-from emperor.base.options import BaseOptions
+from emperor.base.options import BaseOptions, LayerNormPositionOptions
+from emperor.embedding.absolute.core.config import (
+    ImageSinusoidalPositionalEmbeddingConfig,
+)
 from emperor.experiments.base import (
     BuilderBackedExperimentPresetsBase,
     ExperimentBase,
@@ -6,33 +9,28 @@ from emperor.experiments.base import (
     PresetDefinition,
 )
 
-import models.experts.linear_adaptive.config as adaptive_expert_defaults
 import models.vit.expert_linear_adaptive.config as config
-from models.experts._builder_adapter import (
-    linear_adaptive_builder_kwargs_from_flat as expert_adaptive_kwargs_from_flat,
-)
-from models.vit._builder_adapter import linear_builder_kwargs_from_flat
-from models.vit.expert_linear.presets import (
-    _PRESET_DEFINITIONS as _EXPERT_PRESET_DEFINITIONS,
+import models.vit.expert_linear_adaptive.dataset_options as dataset_options
+from models.vit.expert_linear_adaptive._builder_adapter import (
+    expert_linear_adaptive_builder_kwargs_from_flat,
 )
 from models.vit.expert_linear_adaptive.config_builder import (
     VitExpertLinearAdaptiveConfigBuilder,
 )
 from models.vit.expert_linear_adaptive.model import Model
 
-import models.vit.expert_linear_adaptive.dataset_options as dataset_options
-_BUILDER_KEYS = {
-    "batch_size",
-    "learning_rate",
-    "input_dim",
-    "output_dim",
-    "patch_options",
-    "encoder_options",
-    "positional_embedding_options",
-    "attention_options",
-    "feed_forward_options",
-    "output_options",
-}
+
+def default_patch_size_for_dataset(dataset: type) -> int:
+    image_height = dataset.default_height
+    if (
+        image_height >= config.IMAGE_HEIGHT
+        and image_height % config.IMAGE_PATCH_SIZE == 0
+    ):
+        return config.IMAGE_PATCH_SIZE
+    for patch_size in (4, 2, 1):
+        if image_height % patch_size == 0:
+            return patch_size
+    return 1
 
 
 class ExperimentPreset(BaseOptions):
@@ -41,23 +39,54 @@ class ExperimentPreset(BaseOptions):
     SINUSOIDAL = 3
     ATTENTION_BIAS = 4
     TOP1_SWITCH_AUX = 5
-    EXPERT_ATTENTION = 6
-    LOW_RANK_EXPERT_WEIGHT = 7
+    LOW_RANK_EXPERT_WEIGHT = 6
 
 
 _PRESET_DEFINITIONS = {
-    preset: PresetDefinition(
-        preset_values=dict(definition.preset_values),
-        description=definition.description.replace(
-            "expert linear",
-            "adaptive expert linear",
+    ExperimentPreset.BASELINE: PresetDefinition(
+        preset_values={},
+        description=(
+            "Default config: a Vision Transformer classifier with adaptive expert "
+            "linear patch embeddings, a trainable class token, learned image "
+            "positions, an adaptive Mixture of Attention Heads, and a pre-norm "
+            "bidirectional encoder."
         ),
-    )
-    for preset, definition in zip(
-        ExperimentPreset,
-        _EXPERT_PRESET_DEFINITIONS.values(),
-        strict=False,
-    )
+    ),
+    ExperimentPreset.POST_NORM: PresetDefinition(
+        preset_values={
+            "layer_norm_position": LayerNormPositionOptions.AFTER,
+        },
+        description=(
+            "Default config with layer normalization after each encoder sub-block."
+        ),
+    ),
+    ExperimentPreset.SINUSOIDAL: PresetDefinition(
+        preset_values={
+            "positional_embedding_option": ImageSinusoidalPositionalEmbeddingConfig,
+        },
+        description=(
+            "Default config with fixed sinusoidal image positional embeddings."
+        ),
+    ),
+    ExperimentPreset.ATTENTION_BIAS: PresetDefinition(
+        preset_values={
+            "attn_bias_flag": True,
+            "attn_add_key_value_bias_flag": True,
+        },
+        description=(
+            "Default config with attention projection bias and key/value bias enabled."
+        ),
+    ),
+    ExperimentPreset.TOP1_SWITCH_AUX: PresetDefinition(
+        preset_values={
+            "top_k": 1,
+            "sampler_normalize_probabilities_flag": False,
+            "sampler_switch_loss_weight": 0.1,
+        },
+        description=(
+            "Default config with top-1 expert routing and switch auxiliary loss."
+        ),
+    ),
 }
 _PRESET_DEFINITIONS[ExperimentPreset.LOW_RANK_EXPERT_WEIGHT] = PresetDefinition(
     preset_values={
@@ -80,53 +109,17 @@ class ExperimentPresets(BuilderBackedExperimentPresetsBase):
     def _dataset_config(self, dataset: type) -> dict:
         return {
             **super()._dataset_config(dataset),
+            "image_patch_size": default_patch_size_for_dataset(dataset),
             "input_channels": dataset.num_channels,
             "image_height": dataset.default_height,
             "output_dim": dataset.num_classes,
         }
 
     def _preset(self, **kwargs):
-        builder_kwargs = linear_builder_kwargs_from_flat(kwargs, config)
-        builder_kwargs = {
-            key: value for key, value in builder_kwargs.items() if key in _BUILDER_KEYS
-        }
-        expert_kwargs = expert_adaptive_kwargs_from_flat(
+        builder_kwargs = expert_linear_adaptive_builder_kwargs_from_flat(
             kwargs,
-            adaptive_expert_defaults,
+            config,
         )
-        for key in (
-            "mixture_options",
-            "expert_stack_options",
-            "sampler_options",
-            "router_options",
-            "router_stack_options",
-            "expert_layer_controller_options",
-            "expert_dynamic_memory_options",
-            "expert_recurrent_controller_options",
-            "submodule_stack_options",
-            "layer_controller_options",
-            "dynamic_memory_options",
-            "recurrent_controller_options",
-            "adaptive_generator_stack_options",
-            "hidden_adaptive_weight_options",
-            "hidden_adaptive_bias_options",
-            "hidden_adaptive_diagonal_options",
-            "hidden_adaptive_mask_options",
-            "router_layer_controller_options",
-            "router_dynamic_memory_options",
-            "router_recurrent_controller_options",
-            "router_adaptive_weight_options",
-            "router_adaptive_bias_options",
-            "router_adaptive_diagonal_options",
-            "router_adaptive_mask_options",
-        ):
-            builder_kwargs[key] = expert_kwargs[key]
-        if "expert_attention_flag" in kwargs:
-            builder_kwargs["expert_attention_flag"] = kwargs["expert_attention_flag"]
-        if "expert_attention_use_kv_expert_models_flag" in kwargs:
-            builder_kwargs["expert_attention_use_kv_expert_models_flag"] = kwargs[
-                "expert_attention_use_kv_expert_models_flag"
-            ]
         return self._builder_type(**builder_kwargs).build()
 
 
@@ -142,7 +135,9 @@ class Experiment(ExperimentBase):
         return config.NUM_EPOCHS
 
     def _dataset_options(self) -> list:
-        return dataset_options.DATASET_OPTIONS_BY_TASK[dataset_options.DEFAULT_EXPERIMENT_TASK]
+        return dataset_options.DATASET_OPTIONS_BY_TASK[
+            dataset_options.DEFAULT_EXPERIMENT_TASK
+        ]
 
     def _model_type(self) -> type:
         return Model
