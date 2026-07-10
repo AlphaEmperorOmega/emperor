@@ -1,4 +1,40 @@
-from models.trainer_config import *  # noqa: F403
+# Shared training defaults are deliberately copied into each Model Package.  They
+# are runtime identity, not a construction dependency shared across packages.
+# Trainer
+TRAINER_ACCELERATOR: str = "auto"
+TRAINER_DEVICES: str | int = "auto"
+TRAINER_GRADIENT_CLIP_VAL: float = 0.0
+TRAINER_GRADIENT_CLIP_ALGORITHM: str = "norm"
+TRAINER_ACCUMULATE_GRAD_BATCHES: int = 1
+TRAINER_PRECISION: str = "32-true"
+TRAINER_DETERMINISTIC: bool = False
+TRAINER_BENCHMARK: bool = True
+TRAINER_MAX_STEPS: int = -1
+TRAINER_MAX_TIME: str | None = None
+TRAINER_VAL_CHECK_INTERVAL: float = 1.0
+TRAINER_LIMIT_TRAIN_BATCHES: float = 1.0
+TRAINER_LIMIT_VAL_BATCHES: float = 1.0
+TRAINER_OVERFIT_BATCHES: int | float = 0.0
+TRAINER_NUM_SANITY_VAL_STEPS: int = 2
+TRAINER_LOG_EVERY_N_STEPS: int = 50
+TRAINER_ENABLE_PROGRESS_BAR: bool = False
+TRAINER_ENABLE_CHECKPOINTING: bool = False
+TRAINER_ENABLE_MODEL_SUMMARY: bool = False
+TRAINER_PROFILER: str | None = None
+
+MONITOR_LOG_EVERY_N_STEPS: int = 100
+
+# Run
+DATA_NUM_WORKERS: int = 4
+RUN_TEST_AFTER_FIT: bool = True
+
+# Callback
+CALLBACK_EARLY_STOPPING_PATIENCE: int = 0
+CALLBACK_EARLY_STOPPING_METRIC: str = "validation/accuracy"
+CALLBACK_EARLY_STOPPING_MIN_DELTA: float = 0.0
+CALLBACK_EARLY_STOPPING_STRICT: bool = True
+CALLBACK_EARLY_STOPPING_CHECK_FINITE: bool = True
+CALLBACK_CHECKPOINT_FLAG: bool = False
 from emperor.augmentations.adaptive_parameters import (
     AdditiveDynamicBiasConfig,  # noqa: F401
     AffineTransformDynamicBiasConfig,  # noqa: F401
