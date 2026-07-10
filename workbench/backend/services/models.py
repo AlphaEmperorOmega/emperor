@@ -21,7 +21,7 @@ class ModelCatalogService:
 
         return list_model_presets(require_model_id(model_type, model))
 
-    def list_datasets(self, model_type: str, model: str) -> list[dict[str, Any]]:
+    def list_datasets(self, model_type: str, model: str) -> dict[str, Any]:
         from workbench.backend.inspector.discovery import list_model_datasets
 
         return list_model_datasets(require_model_id(model_type, model))

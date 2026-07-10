@@ -169,7 +169,13 @@ class InspectorDiscoveryTests(unittest.TestCase):
             list_model_presets(removed_flat_name)
 
     def test_dataset_discovery_for_linear(self) -> None:
-        datasets = list_model_datasets("linears/linear")
+        payload = list_model_datasets("linears/linear")
+        self.assertEqual(payload["defaultExperimentTask"], "image-classification")
+        self.assertEqual(len(payload["datasetGroups"]), 1)
+
+        group = payload["datasetGroups"][0]
+        self.assertEqual(group["experimentTask"], "image-classification")
+        datasets = group["datasets"]
         dataset_by_name = {dataset["name"]: dataset for dataset in datasets}
 
         self.assertIn("Mnist", dataset_by_name)

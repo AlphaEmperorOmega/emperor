@@ -18,8 +18,9 @@ class ConfigSnapshotServiceAdaptiveValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(
             InspectorError,
             re.escape(
-                "Invalid config snapshot overrides: weight_option must be set "
-                "when weight_option_flag is True."
+                "Invalid config snapshot overrides: models.linears.linear_adaptive: "
+                "runtime key 'weight_option' must be set when "
+                "'weight_option_flag' is True"
             ),
         ):
             self.service.create_snapshot(
@@ -40,8 +41,9 @@ class ConfigSnapshotServiceAdaptiveValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(
             InspectorError,
             re.escape(
-                "Invalid config snapshot overrides: weight_option must be set "
-                "when weight_option_flag is True."
+                "Invalid config snapshot overrides: models.linears.linear_adaptive: "
+                "runtime key 'weight_option' must be set when "
+                "'weight_option_flag' is True"
             ),
         ):
             self.service.update_snapshot(

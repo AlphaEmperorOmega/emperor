@@ -1779,7 +1779,10 @@ class InspectorGraphTests(unittest.TestCase):
 
         for node in (expert_model, expert_stack_model):
             with self.subTest(node=node["id"]):
-                self.assertEqual(node["details"]["topK"], 2)
+                self.assertEqual(
+                    node["details"]["topK"],
+                    experts_linear_config.EXPERT_TOP_K,
+                )
                 self.assertEqual(
                     node["details"]["numExperts"],
                     experts_linear_config.EXPERT_NUM_EXPERTS,

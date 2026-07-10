@@ -571,7 +571,16 @@ def config_schema(model_name: str, preset_name: str | None = None) -> dict[str, 
     locks = preset_locks(model_name, preset_name)
     annotations = getattr(parts.config_module, "__annotations__", {})
     metadata = _source_metadata(parts.config_module)
-    supported_keys = iter_supported_config_keys(parts.config_module)
+    schema_skip_keys = {
+        key
+        for key in getattr(parts.config_module, "CONFIG_SCHEMA_SKIP_KEYS", ())
+        if isinstance(key, str)
+    }
+    supported_keys = [
+        key
+        for key in iter_supported_config_keys(parts.config_module)
+        if key not in schema_skip_keys
+    ]
     missing_metadata_keys = [key for key in supported_keys if key not in metadata]
     if missing_metadata_keys:
         raise InspectorError(

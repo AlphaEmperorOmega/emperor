@@ -6,11 +6,17 @@ from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
+from models.catalog import MODEL_CATALOG
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 CORE_PACKAGE_DIRS = ("emperor", "models")
 CORE_PACKAGE_ROOTS = frozenset(CORE_PACKAGE_DIRS)
 WORKBENCH_BACKEND_DIR = REPO_ROOT / "workbench" / "backend"
 MODELS_DIR = REPO_ROOT / "models"
+CATALOG_PACKAGE_ROOTS = tuple(
+    (REPO_ROOT.joinpath(*entry.module_path.split(".")), entry.module_path)
+    for entry in MODEL_CATALOG.values()
+)
 
 
 @dataclass(frozen=True)
@@ -68,6 +74,9 @@ def _absolute_imports_under(roots: Iterable[Path]) -> Iterator[AbsoluteImport]:
 
 
 def _models_package_for_path(path: Path) -> str:
+    for package_root, module_path in CATALOG_PACKAGE_ROOTS:
+        if path.is_relative_to(package_root):
+            return module_path
     relative_path = path.relative_to(REPO_ROOT).with_suffix("")
     return ".".join(relative_path.parts[:-1])
 
@@ -122,8 +131,6 @@ class DependencyDirectionTests(unittest.TestCase):
     def test_model_packages_do_not_import_other_model_configs(self) -> None:
         violations = []
         for source_import in _config_imports_under([MODELS_DIR]):
-            if source_import.imported_config_module == "models.trainer_config":
-                continue
             current_package = _models_package_for_path(source_import.path)
             allowed_config_module = f"{current_package}.config"
             if source_import.imported_config_module != allowed_config_module:
