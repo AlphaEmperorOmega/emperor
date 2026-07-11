@@ -1,7 +1,7 @@
 import torch.nn as nn
 
 from torch import Tensor
-from emperor.base.utils import Module
+from emperor.base.module import Module
 from emperor.convs.core._validator import Conv2dLayerValidator
 from emperor.convs.core.config import Conv2dLayerConfig
 
