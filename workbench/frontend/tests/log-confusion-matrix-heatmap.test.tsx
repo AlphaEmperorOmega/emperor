@@ -1,4 +1,5 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LogConfusionMatrixHeatmaps } from "@/features/workbench/components/logs/log-confusion-matrix-heatmap";
 import { type ConfusionMatrixHeatmap } from "@/features/workbench/state/logs/log-diagnostics";
@@ -60,23 +61,62 @@ describe("LogConfusionMatrixHeatmaps", () => {
       <LogConfusionMatrixHeatmaps heatmaps={[largeHeatmap()]} />,
     );
 
-    expect(
-      screen.getByRole("img", {
-        name: /validation confusion matrix for run-a · MNIST · baseline, 20 classes/i,
-      }),
-    ).toBeInstanceOf(HTMLCanvasElement);
+    expect(container.querySelector("canvas")).toHaveAttribute("aria-hidden", "true");
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
     expect(container.querySelectorAll("canvas")).toHaveLength(1);
     expect(container.querySelectorAll('[role="grid"]')).toHaveLength(0);
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: /view validation confusion matrix for run-a · MNIST · baseline, 20 classes data/i,
+      }),
+    ).toHaveAttribute("aria-expanded", "false");
     expect(container.querySelectorAll("[title]")).toHaveLength(0);
-    expect(container.querySelectorAll("*").length).toBeLessThan(20);
+    expect(container.querySelectorAll("*").length).toBeLessThan(25);
+  });
+
+  it("exposes every class-pair value through a keyboard-operated table", async () => {
+    const user = userEvent.setup();
+    const { container } = render(
+      <LogConfusionMatrixHeatmaps heatmaps={[heatmap()]} />,
+    );
+
+    expect(container.querySelector("canvas")).toHaveAttribute("aria-hidden", "true");
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+
+    const disclosure = screen.getByRole("button", {
+      name: /view validation confusion matrix for run-a · MNIST · baseline, 2 classes data/i,
+    });
+    expect(disclosure).toHaveAttribute("aria-expanded", "false");
+
+    disclosure.focus();
+    await user.keyboard("{Enter}");
+
+    expect(disclosure).toHaveAttribute("aria-expanded", "true");
+    const table = screen.getByRole("table", {
+      name: /validation confusion matrix for run-a · MNIST · baseline, 2 classes/i,
+    });
+    expect(within(table).getAllByRole("columnheader")).toHaveLength(3);
+    expect(within(table).getAllByRole("rowheader")).toHaveLength(2);
+    expect(within(table).getAllByRole("cell").map((cell) => cell.textContent)).toEqual([
+      "0.8",
+      "0.2",
+      "0.25",
+      "0.75",
+    ]);
   });
 
   it("shows the true class, predicted class, and value for the hovered cell", async () => {
-    render(<LogConfusionMatrixHeatmaps heatmaps={[heatmap()]} />);
+    const { container } = render(
+      <LogConfusionMatrixHeatmaps heatmaps={[heatmap()]} />,
+    );
 
-    const canvas = screen.getByRole("img", {
-      name: /validation confusion matrix for run-a/i,
-    });
+    const canvas = container.querySelector("canvas");
+    expect(canvas).toBeInstanceOf(HTMLCanvasElement);
+    if (!(canvas instanceof HTMLCanvasElement)) {
+      throw new Error("Expected confusion matrix canvas");
+    }
     vi.spyOn(canvas, "getBoundingClientRect").mockReturnValue(rect(98, 98));
 
     fireEvent(
@@ -88,12 +128,13 @@ describe("LogConfusionMatrixHeatmaps", () => {
       }),
     );
 
-    const tooltip = await screen.findByRole("tooltip");
+    const tooltip = await screen.findByText("true 1, predicted 0, 0.25");
     expect(tooltip).toHaveTextContent("true 1, predicted 0, 0.25");
+    expect(tooltip).toHaveAttribute("aria-hidden", "true");
 
     fireEvent.pointerLeave(canvas);
     await waitFor(() => {
-      expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+      expect(screen.queryByText("true 1, predicted 0, 0.25")).not.toBeInTheDocument();
     });
   });
 
@@ -131,11 +172,9 @@ describe("LogConfusionMatrixHeatmaps", () => {
       );
     });
 
-    expect(
-      await screen.findByRole("img", {
-        name: /validation confusion matrix for run-a/i,
-      }),
-    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(container.querySelector("canvas")).toHaveAttribute("aria-hidden", "true");
+    });
     expect(disconnect).toHaveBeenCalled();
   });
 });

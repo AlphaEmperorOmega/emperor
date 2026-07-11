@@ -244,6 +244,72 @@ function cancelScheduledAnimationFrame(handle: number) {
   window.clearTimeout(handle);
 }
 
+function ConfusionMatrixDataTable({
+  ariaLabel,
+  id,
+  renderData,
+}: {
+  ariaLabel: string;
+  id: string;
+  renderData: MatrixRenderData;
+}) {
+  return (
+    <div id={id} className="grid gap-2 overflow-x-auto">
+      <div className="text-xs text-ink-dim">
+        Rows are true classes; columns are predicted classes.
+      </div>
+      <table className="min-w-max border-collapse font-mono text-xs text-ink-dim">
+        <caption className="sr-only">{ariaLabel}</caption>
+        <thead>
+          <tr>
+            <th
+              scope="col"
+              className="border border-line bg-white/[0.035] px-2 py-1.5 text-left font-semibold text-ink"
+            >
+              True / predicted
+            </th>
+            {renderData.classes.map((predictedClass) => (
+              <th
+                key={predictedClass}
+                scope="col"
+                aria-label={`Predicted class ${predictedClass}`}
+                className="border border-line bg-white/[0.035] px-2 py-1.5 text-center font-semibold text-ink"
+              >
+                {predictedClass}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {renderData.classes.map((trueClass) => (
+            <tr key={trueClass}>
+              <th
+                scope="row"
+                aria-label={`True class ${trueClass}`}
+                className="border border-line bg-white/[0.025] px-2 py-1.5 text-left font-semibold text-ink"
+              >
+                {trueClass}
+              </th>
+              {renderData.classes.map((predictedClass) => (
+                <td
+                  key={predictedClass}
+                  className="border border-line px-2 py-1.5 text-right tabular-nums"
+                >
+                  {formatNumber(
+                    renderData.values[
+                      matrixIndex(trueClass, predictedClass, renderData.classCount)
+                    ] ?? 0,
+                  )}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 const LogConfusionMatrixCard = memo(function LogConfusionMatrixCard({
   heatmap,
 }: {
@@ -253,10 +319,11 @@ const LogConfusionMatrixCard = memo(function LogConfusionMatrixCard({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const pointerRef = useRef<{ clientX: number; clientY: number } | null>(null);
   const animationFrameRef = useRef<number | null>(null);
-  const tooltipId = useId();
+  const matrixDataId = useId();
   const canObserveVisibility = typeof IntersectionObserver !== "undefined";
   const [hasEnteredView, setHasEnteredView] = useState(!canObserveVisibility);
   const [hoveredCell, setHoveredCell] = useState<HoveredCell | null>(null);
+  const [isDataTableOpen, setIsDataTableOpen] = useState(false);
   const renderData = useMemo(() => buildMatrixRenderData(heatmap), [heatmap]);
   const ariaLabel = `${heatmap.split} confusion matrix for ${heatmap.runLabel}, ${renderData.classCount} classes`;
 
@@ -364,9 +431,7 @@ const LogConfusionMatrixCard = memo(function LogConfusionMatrixCard({
         {hasEnteredView ? (
           <canvas
             ref={canvasRef}
-            role="img"
-            aria-label={ariaLabel}
-            aria-describedby={hoveredCell ? tooltipId : undefined}
+            aria-hidden="true"
             className="block max-w-none rounded-[4px]"
             style={{
               height: renderData.dimensions.height,
@@ -388,8 +453,7 @@ const LogConfusionMatrixCard = memo(function LogConfusionMatrixCard({
       </div>
       {hoveredCell && (
         <div
-          id={tooltipId}
-          role="tooltip"
+          aria-hidden="true"
           className="pointer-events-none fixed z-50 rounded-[8px] border border-line bg-panel/95 px-2 py-1 font-mono text-[11px] leading-5 text-ink shadow-panel"
           style={{
             left: hoveredCell.clientX + 12,
@@ -399,6 +463,23 @@ const LogConfusionMatrixCard = memo(function LogConfusionMatrixCard({
           true {hoveredCell.trueClass}, predicted {hoveredCell.predictedClass},{" "}
           {formatNumber(hoveredCell.value)}
         </div>
+      )}
+      <button
+        type="button"
+        aria-expanded={isDataTableOpen}
+        aria-controls={matrixDataId}
+        aria-label={`${isDataTableOpen ? "Hide" : "View"} ${ariaLabel} data`}
+        onClick={() => setIsDataTableOpen((current) => !current)}
+        className="justify-self-start rounded-control-sm border border-line bg-white/[0.025] px-2.5 py-1.5 text-xs font-semibold text-ink-dim transition hover:border-violet/35 hover:bg-violet/10 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+      >
+        {isDataTableOpen ? "Hide matrix data" : "View matrix data"}
+      </button>
+      {isDataTableOpen && (
+        <ConfusionMatrixDataTable
+          id={matrixDataId}
+          ariaLabel={ariaLabel}
+          renderData={renderData}
+        />
       )}
     </div>
   );
