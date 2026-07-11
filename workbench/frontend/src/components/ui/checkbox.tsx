@@ -27,12 +27,13 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
         type="checkbox"
         checked={checked}
         onChange={() => onCheckedChange(!checked)}
-        className="sr-only"
+        className="peer sr-only"
         {...props}
       />
       <span
         className={cn(
           checkboxIndicatorClassName,
+          "peer-focus-visible:border-violet/70 peer-focus-visible:ring-2 peer-focus-visible:ring-focus",
           checked
             ? checkboxCheckedClassName
             : checkboxUncheckedClassName,

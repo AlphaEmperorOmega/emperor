@@ -1,5 +1,6 @@
 import { createRef, useState } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -208,6 +209,31 @@ describe("Checkbox", () => {
       <Checkbox checked onCheckedChange={() => {}} aria-label="on" />,
     );
     expect(screen.getByRole("checkbox", { name: "on" })).toBeChecked();
+  });
+
+  it("keeps the native checkbox keyboard-focusable behind its visible indicator", async () => {
+    const user = userEvent.setup();
+    const onCheckedChange = vi.fn();
+    render(
+      <Checkbox
+        checked={false}
+        onCheckedChange={onCheckedChange}
+        aria-label="focus target"
+      />,
+    );
+    const checkbox = screen.getByRole("checkbox", { name: "focus target" });
+    const indicator = checkbox.nextElementSibling;
+
+    expect(checkbox).toHaveClass("peer", "sr-only");
+    await user.tab();
+    expect(checkbox).toHaveFocus();
+    await user.keyboard(" ");
+    expect(onCheckedChange).toHaveBeenCalledWith(true);
+    expect(indicator).toHaveClass(
+      "peer-focus-visible:ring-2",
+      "peer-focus-visible:ring-focus",
+    );
+    expect(indicator).not.toHaveClass("peer-focus:ring-2");
   });
 });
 
