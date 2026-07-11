@@ -16,7 +16,7 @@ const config: Config = {
         "card-b": "#0e0e18",
         ink: "#ecebf5",
         "ink-dim": "#9c9cb6",
-        "ink-faint": "#62627c",
+        "ink-faint": "#80809b",
         violet: "#a78bfa",
         "violet-deep": "#8b5cf6",
         blue: "#6ea8ff",
