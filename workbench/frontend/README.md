@@ -65,6 +65,10 @@ Open `http://localhost:9000` unless you selected a different port.
 - `npm run typecheck`: generate Next.js route/app types, then run TypeScript
   without emitting files.
 - `npm run test`: run the Vitest unit and component test suite.
+- `npm run test:contract:e2e`: start two temporary bearer-protected backend
+  processes and run the live typed-client contract.
+- `npm run performance:browser`: run the production-build browser and
+  long-session performance harness.
 
 `npm run typecheck` writes generated Next.js types under `.next/types`. Run it
 sequentially with `npm run build`; running both against the same `.next`
@@ -79,9 +83,69 @@ Unit and component tests live under `tests/` and alongside source files with
 npm run test
 ```
 
-There is no end-to-end test runner configured in this package today. Add the
-runner, scripts, and docs in the same change if browser-level coverage is
-introduced later.
+The live backend/frontend contract uses the repository Python environment when
+`torchenv/bin/python` exists, or `WORKBENCH_E2E_PYTHON`/`python` otherwise. It
+requires the Workbench backend dependencies, permission to bind temporary
+loopback ports, and permission to create temporary directories. Run it from
+this package with:
+
+```bash
+npm run test:contract:e2e
+```
+
+The runner starts two bearer-protected backend apps with isolated temporary
+logs, snapshots, and fake Training Job state. It covers capability loading,
+authentication, protected mutations, API-origin switching, normalized errors,
+and logout without starting a real training process, then removes its temporary
+state.
+
+After a successful production build, the browser performance harness can be run
+with:
+
+```bash
+npm run performance:browser
+```
+
+It starts temporary loopback services and headless Chromium; it does not use the
+configured user logs or snapshots.
+
+## Connection and Browser Session
+
+The Workbench Connection module owns the active API base URL, hosted-origin
+policy, bearer session, capability and authentication status, request identity,
+and protected-state invalidation. Rendering consumes derived states and complete
+actions; it does not read browser storage, coordinate query keys, or interpret
+the Model Package catalog as authentication state.
+
+API base URLs must be absolute `http://` or `https://` URLs without user
+information, a query string, or a fragment. A successful runtime change is
+normalized and stored in local storage. Invalid or disallowed stored values are
+removed and fall back to the configured default with an actionable status. If
+local storage is unavailable or does not retain a write/removal, the requested
+change fails atomically and the previous connection and caches remain active.
+
+Bearer tokens are stored only in browser session storage and attached at request
+time. They never enter public connection state, query keys, persistent query
+data, snapshots, or normalized error text. One session token is shared across
+the origins explicitly permitted by the hosted allowlist; changing the API base
+URL does not erase it. If session storage cannot retain or remove a token,
+sign-in, replacement, or logout fails without publishing a partial identity.
+
+`/health` and `/capabilities` are public connection checks. When bearer auth is
+enabled, `GET /models` verifies the credential for the current connection
+revision. All other protected reads, polling, pagination, previews, uploads, and
+mutations remain inactive until that probe succeeds; when backend authentication
+is disabled they become active after capabilities resolve. Rejected credentials
+remain replaceable or removable from **API Connection**.
+
+Base-URL changes cancel current requests, advance the private request revision,
+clear all query and mutation data, invoke each domain module's semantic reset,
+then re-check capabilities and authentication. A complete Inspection target is
+retained and rebuilt against the new backend only after its metadata is ready.
+Token replacement and logout use the same ordering for protected state while
+retaining public health/capability data. Late responses cannot repopulate the
+new identity even when a transport ignores `AbortSignal`; active imports are
+also aborted and their late completion is ignored.
 
 ## Deployment
 
