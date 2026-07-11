@@ -16,6 +16,7 @@
     "performance:logs": "vite-node --config vitest.config.ts scripts/benchmark-log-scalar-plan.ts",
     "start": "next start -p ${PORT:-9000}",
     "lint": "eslint . --max-warnings 0",
+    "test:contract:e2e": "WORKBENCH_RUN_CONTRACT_E2E=1 VITE_CJS_IGNORE_WARNING=true vitest run tests/backend-frontend-contract.e2e.test.tsx",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "VITE_CJS_IGNORE_WARNING=true vitest run"
   },
