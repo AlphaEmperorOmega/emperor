@@ -9,6 +9,7 @@
     "dev": "next dev -p ${PORT:-9000}",
     "build": "next build",
     "performance:budget": "node scripts/check-performance-budgets.mjs",
+    "performance:browser": "node scripts/benchmark-browser-long-session.mjs",
     "performance:cluster3d": "vite-node --config vitest.config.ts scripts/benchmark-cluster-3d.ts",
     "performance:history": "vite-node --config vitest.config.ts scripts/benchmark-historical-grouping.ts",
     "performance:locations": "vite-node --config vitest.config.ts scripts/benchmark-graph-locations.ts",
