@@ -2,7 +2,7 @@ import torch
 
 from torch import Tensor
 from emperor.base.layer import Layer, LayerStack, LayerStackConfig
-from emperor.base.utils import Module
+from emperor.base.module import Module
 from emperor.augmentations.adaptive_parameters.core._validator import AxisMaskValidator
 from emperor.augmentations.adaptive_parameters.core.mask.config import AxisMaskConfig
 from emperor.augmentations.adaptive_parameters.options import MaskDimensionOptions

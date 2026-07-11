@@ -1,7 +1,8 @@
 from copy import deepcopy
 from torch import Tensor
 from collections.abc import Callable
-from emperor.base.utils import ConfigBase, Module
+from emperor.base.config import ConfigBase
+from emperor.base.module import Module
 from emperor.augmentations.adaptive_parameters.core._validator import (
     AdaptiveParameterAugmentationValidator,
 )

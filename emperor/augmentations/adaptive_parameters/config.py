@@ -3,7 +3,7 @@ from emperor.augmentations.adaptive_parameters.core.diagonal.config import (
     DynamicDiagonalConfig,
 )
 from emperor.base.layer.config import LayerStackConfig
-from emperor.base.utils import ConfigBase, optional_field
+from emperor.base.config import ConfigBase, optional_field
 from emperor.augmentations.adaptive_parameters.core.bias.config import (
     DynamicBiasConfig,
 )

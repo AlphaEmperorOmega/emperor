@@ -2,7 +2,7 @@ import torch
 
 from torch import Tensor
 from copy import deepcopy
-from emperor.base.utils import Module
+from emperor.base.module import Module
 from emperor.base.layer.layer import Layer
 from dataclasses import dataclass, fields, field
 from emperor.linears.core.config import LinearLayerConfig

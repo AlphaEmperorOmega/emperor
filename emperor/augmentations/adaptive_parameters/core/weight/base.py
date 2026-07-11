@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from torch import Tensor
-from emperor.base.utils import Module
+from emperor.base.module import Module
 from emperor.augmentations.adaptive_parameters.options import (
     WeightDecayScheduleOptions,
     WeightNormalizationOptions,
