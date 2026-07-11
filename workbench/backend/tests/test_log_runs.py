@@ -2,34 +2,87 @@ from __future__ import annotations
 
 import asyncio
 import json
+import shutil
 import tempfile
 import unittest
+from dataclasses import dataclass
 from pathlib import Path
 from unittest.mock import patch
 
-from models.catalog import model_identity_payload_from_id
+from emperor.model_packages import model_identity_payload_from_id
 
 from workbench.backend.inspector.errors import InspectorError
-from workbench.backend.log_runs import (
+from workbench.backend.log_experiments import (
     LOG_EXPERIMENT_NAME_RE,
+    LogExperimentMutationCoordinator,
+    is_valid_log_experiment_name,
+    validate_log_experiment_name,
+)
+from workbench.backend.run_history import RunHistoryService
+from workbench.backend.run_history.deletion import LogRunDeletionExecutor
+from workbench.backend.run_history.query import LogRunQueryService
+from workbench.backend.run_history.records import (
     LOG_RESPONSE_ITEM_LIMIT,
     ActiveLogRunDeleteBlocker,
     LogRunDeleteCandidate,
     LogRunDeleteFilters,
     LogRunDeletePlan,
     LogRunDeleteResult,
-    LogRunIndex,
-    LogRunQueryService,
-    LogRunScanner,
-    is_valid_log_experiment_name,
-    validate_log_experiment_name,
 )
+from workbench.backend.run_history.scanner import LogRunScanner
 from workbench.backend.tests.helpers import (
     FakeRunner,
+    TrainingJobRuntimeHarness,
+    create_app_with_training_runtime,
     delete_filters_for_runs,
     write_tensorboard_run,
 )
-from workbench.backend.training_jobs import TrainingJobManager
+
+
+@dataclass(frozen=True, slots=True)
+class _ActiveWriter:
+    id: str
+    status: str
+    log_folder: str
+
+
+def _run_history(
+    logs_root: Path,
+    *,
+    active_writers: list[_ActiveWriter] | None = None,
+) -> RunHistoryService:
+    writers = active_writers or []
+    return RunHistoryService(
+        logs_root=logs_root,
+        mutation_coordinator=LogExperimentMutationCoordinator(),
+        active_log_writers=lambda: list(writers),
+    )
+
+
+def _delete_plan(
+    service: RunHistoryService,
+    filters: LogRunDeleteFilters,
+) -> dict[str, object]:
+    return service.create_delete_plan(
+        experiments=filters.experiments,
+        datasets=filters.datasets,
+        models=filters.models,
+        presets=filters.presets,
+        run_ids=filters.runIds,
+    )
+
+
+def _delete_runs(
+    service: RunHistoryService,
+    filters: LogRunDeleteFilters,
+) -> dict[str, object]:
+    return service.delete_runs(
+        experiments=filters.experiments,
+        datasets=filters.datasets,
+        models=filters.models,
+        presets=filters.presets,
+        run_ids=filters.runIds,
+    )
 
 
 class FakeScalarEvent:
@@ -246,7 +299,7 @@ class LogRunDeleteResponseTests(unittest.TestCase):
         self.assertIn("capped", payload["truncationReason"])
 
 
-class LogRunIndexAndApiTests(unittest.TestCase):
+class RunHistoryAndApiTests(unittest.TestCase):
     @staticmethod
     def _delete_candidate(
         relative_path: str,
@@ -269,7 +322,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
             relativePath=relative_path,
         )
 
-    def test_log_run_index_parses_supported_log_shapes(self) -> None:
+    def test_run_history_parses_supported_log_shapes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             logs_root = Path(tmp) / "logs"
             default_run = write_tensorboard_run(
@@ -360,7 +413,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
             escaped_run = escaped_run_parent / "version_99"
             escaped_run.symlink_to(outside_run, target_is_directory=True)
 
-            runs = LogRunIndex(logs_root=logs_root).list_runs()
+            runs = LogRunScanner(logs_root=logs_root).list_runs()
 
         by_path = {run.relativePath: run for run in runs}
         default_summary = by_path[default_run.relative_to(logs_root).as_posix()]
@@ -464,7 +517,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
         self.assertEqual([run.id for run in first], [run.id for run in third])
         self.assertEqual(parse.call_count, 2)
 
-    def test_log_run_index_reads_checkpoints_and_artifacts(self) -> None:
+    def test_run_history_reads_checkpoints_and_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             logs_root = Path(tmp) / "logs"
             run_dir = write_tensorboard_run(
@@ -521,8 +574,9 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            index = LogRunIndex(logs_root=logs_root)
-            runs_by_path = {run.relativePath: run for run in index.list_runs()}
+            scanner = LogRunScanner(logs_root=logs_root)
+            query = LogRunQueryService(scanner=scanner)
+            runs_by_path = {run.relativePath: run for run in scanner.list_runs()}
             run = runs_by_path[
                 "linear/BASELINE/Mnist/aaa_20260601_010203/version_0"
             ]
@@ -530,13 +584,13 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                 "linear/BASELINE/Mnist/malformed_20260601_050607/version_0"
             ]
 
-            checkpoints = index.checkpoints_for_runs([run.id])
-            artifacts = index.artifacts_for_run(run.id)
-            malformed_artifacts = index.artifacts_for_run(malformed.id)
+            checkpoints = query.checkpoints_for_runs([run.id])
+            artifacts = query.artifacts_for_run(run.id)
+            malformed_artifacts = query.artifacts_for_run(malformed.id)
             with self.assertRaises(InspectorError):
-                index.checkpoints_for_runs(["not-a-run"])
+                query.checkpoints_for_runs(["not-a-run"])
             with self.assertRaises(InspectorError):
-                index.artifacts_for_run("not-a-run")
+                query.artifacts_for_run("not-a-run")
 
         self.assertEqual(
             [
@@ -590,7 +644,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
         self.assertEqual(malformed_artifacts["params"], {})
         self.assertEqual(malformed_artifacts["metrics"], {})
 
-    def test_log_run_index_caps_artifact_metadata_rows(self) -> None:
+    def test_run_history_caps_artifact_metadata_rows(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             logs_root = Path(tmp)
             run_dir = write_tensorboard_run(
@@ -605,9 +659,10 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                     encoding="utf-8",
                 )
 
-            index = LogRunIndex(logs_root=logs_root)
-            run = index.list_runs()[0]
-            payload = index.artifacts_for_run(run.id)
+            scanner = LogRunScanner(logs_root=logs_root)
+            query = LogRunQueryService(scanner=scanner)
+            run = scanner.list_runs()[0]
+            payload = query.artifacts_for_run(run.id)
 
         returned_count = len(payload["artifacts"]) + len(payload["checkpoints"])
         self.assertEqual(returned_count, LOG_RESPONSE_ITEM_LIMIT)
@@ -616,7 +671,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
         self.assertTrue(payload["truncated"])
         self.assertIn("capped", payload["truncationReason"])
 
-    def test_log_run_index_deletes_experiment_tree(self) -> None:
+    def test_run_history_deletes_experiment_tree(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             logs_root = root / "logs"
@@ -657,16 +712,20 @@ class LogRunIndexAndApiTests(unittest.TestCase):
             outside_target.write_text("outside", encoding="utf-8")
             logs_root.joinpath("test_model", "outside-link").symlink_to(outside_target)
 
-            index = LogRunIndex(logs_root=logs_root)
-            run_ids_by_path = {run.relativePath: run.id for run in index.list_runs()}
-            result = index.delete_experiment("test_model")
-            remaining_paths = {run.relativePath for run in index.list_runs()}
+            scanner = LogRunScanner(logs_root=logs_root)
+            run_ids_by_path = {run.relativePath: run.id for run in scanner.list_runs()}
+            service = _run_history(logs_root)
+            result = service.delete_experiment("test_model")
+            remaining_paths = {
+                run.relativePath
+                for run in LogRunScanner(logs_root=logs_root).list_runs()
+            }
 
-            self.assertEqual(result.experiment, "test_model")
-            self.assertEqual(result.deletedRunCount, 2)
-            self.assertEqual(result.deletedRelativePath, "test_model")
+            self.assertEqual(result["experiment"], "test_model")
+            self.assertEqual(result["deletedRunCount"], 2)
+            self.assertEqual(result["deletedRelativePath"], "test_model")
             self.assertEqual(
-                set(result.deletedRunIds),
+                set(result["deletedRunIds"]),
                 {
                     run_ids_by_path[deleted_run.relative_to(logs_root).as_posix()],
                     run_ids_by_path[
@@ -682,7 +741,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                 {remaining_run.relative_to(logs_root).as_posix()},
             )
 
-    def test_log_run_index_refuses_symlink_experiment_delete_and_preserves_target(
+    def test_run_history_refuses_symlink_experiment_delete_and_preserves_target(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -700,13 +759,13 @@ class LogRunIndexAndApiTests(unittest.TestCase):
             )
 
             with self.assertRaisesRegex(InspectorError, "symlink"):
-                LogRunIndex(logs_root=logs_root).delete_experiment("linked")
+                _run_history(logs_root).delete_experiment("linked")
 
             self.assertTrue(symlink_experiment.is_symlink())
             self.assertTrue(outside_experiment.exists())
             self.assertEqual(outside_marker.read_text(encoding="utf-8"), "outside")
 
-    def test_log_run_index_filtered_delete_candidate_safety_matrix(self) -> None:
+    def test_run_history_filtered_delete_candidate_safety_matrix(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             logs_root = root / "logs"
@@ -750,12 +809,13 @@ class LogRunIndexAndApiTests(unittest.TestCase):
             escaped_version.mkdir(parents=True)
             escaped_marker = escaped_version / "keep.txt"
             escaped_marker.write_text("escaped", encoding="utf-8")
-            index = LogRunIndex(logs_root=logs_root)
-            filters = delete_filters_for_runs(index.list_runs())
-            result = index.delete_runs(filters, active_jobs=[])
+            scanner = LogRunScanner(logs_root=logs_root)
+            executor = LogRunDeletionExecutor(scanner=scanner)
+            filters = delete_filters_for_runs(scanner.list_runs())
+            result = _delete_runs(_run_history(logs_root), filters)
 
             self.assertEqual(
-                result.deletedRelativePaths,
+                result["deletedRelativePaths"],
                 ["test_model/linear/BASELINE/Mnist/aaa_20260601_010203/version_0"],
             )
             self.assertFalse(run_dir.exists())
@@ -784,9 +844,10 @@ class LogRunIndexAndApiTests(unittest.TestCase):
             for label, relative_path, error_pattern, preserved_paths in cases:
                 with self.subTest(label=label):
                     with self.assertRaisesRegex(InspectorError, error_pattern):
-                        index._validated_delete_candidate_path(
-                            self._delete_candidate(relative_path),
-                            index._resolved_root(),
+                        executor.delete_runs(
+                            LogRunDeletePlan(
+                                candidates=[self._delete_candidate(relative_path)]
+                            )
                         )
                     for preserved_path in preserved_paths:
                         self.assertTrue(preserved_path.exists())
@@ -795,7 +856,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
             self.assertEqual(escaped_marker.read_text(encoding="utf-8"), "escaped")
             self.assertEqual(non_version_marker.read_text(encoding="utf-8"), "keep")
 
-    def test_log_run_index_deletes_filtered_version_dirs_and_prunes_empty_parents(
+    def test_run_history_deletes_filtered_version_dirs_and_prunes_empty_parents(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -845,23 +906,26 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                 ],
             )
 
-            index = LogRunIndex(logs_root=logs_root)
-            runs = index.list_runs()
+            service = _run_history(logs_root)
+            runs = LogRunScanner(logs_root=logs_root).list_runs()
             filters = delete_filters_for_runs(
                 runs,
                 experiments=["test_model"],
                 datasets=["Mnist"],
                 presets=["BASELINE"],
             )
-            plan = index.create_delete_plan(filters, active_jobs=[])
-            result = index.delete_runs(filters, active_jobs=[])
-            remaining_paths = {run.relativePath for run in index.list_runs()}
+            plan = _delete_plan(service, filters)
+            result = _delete_runs(service, filters)
+            remaining_paths = {
+                run.relativePath
+                for run in LogRunScanner(logs_root=logs_root).list_runs()
+            }
 
-            self.assertTrue(plan.canDelete)
-            self.assertEqual(plan.to_response()["candidateCount"], 1)
-            self.assertEqual(len(result.deletedRunIds), 1)
+            self.assertTrue(plan["canDelete"])
+            self.assertEqual(plan["candidateCount"], 1)
+            self.assertEqual(len(result["deletedRunIds"]), 1)
             self.assertEqual(
-                result.deletedRelativePaths,
+                result["deletedRelativePaths"],
                 [mnist_run.relative_to(logs_root).as_posix()],
             )
             self.assertFalse(mnist_run.exists())
@@ -879,12 +943,12 @@ class LogRunIndexAndApiTests(unittest.TestCase):
             )
 
             second_filters = delete_filters_for_runs(
-                index.list_runs(),
+                LogRunScanner(logs_root=logs_root).list_runs(),
                 experiments=["test_model"],
                 datasets=["Cifar10"],
                 presets=["BASELINE"],
             )
-            index.delete_runs(second_filters, active_jobs=[])
+            _delete_runs(service, second_filters)
             self.assertFalse(cifar_run.exists())
             self.assertFalse(
                 logs_root.joinpath(
@@ -896,7 +960,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
             )
             self.assertTrue(logs_root.joinpath("test_model").exists())
 
-    def test_log_run_index_deletes_exact_run_id_filter_only(self) -> None:
+    def test_run_history_deletes_exact_run_id_filter_only(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             logs_root = Path(tmp) / "logs"
             first_run = write_tensorboard_run(
@@ -922,19 +986,116 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                 ],
             )
 
-            index = LogRunIndex(logs_root=logs_root)
-            runs = index.list_runs()
+            runs = LogRunScanner(logs_root=logs_root).list_runs()
             first_run_id = next(
                 run.id
                 for run in runs
                 if run.relativePath == first_run.relative_to(logs_root).as_posix()
             )
             filters = delete_filters_for_runs(runs, run_ids=[first_run_id])
-            result = index.delete_runs(filters, active_jobs=[])
+            result = _delete_runs(_run_history(logs_root), filters)
 
-            self.assertEqual(result.deletedRunIds, [first_run_id])
+            self.assertEqual(result["deletedRunIds"], [first_run_id])
             self.assertFalse(first_run.exists())
             self.assertTrue(second_run.exists())
+
+    def test_run_history_deletes_runs_across_multiple_experiments(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = Path(tmp) / "logs"
+            run_dirs = [
+                write_tensorboard_run(
+                    logs_root,
+                    [
+                        experiment,
+                        "linear",
+                        "BASELINE",
+                        "Mnist",
+                        f"run_20260711_0{index}0101",
+                        "version_0",
+                    ],
+                )
+                for index, experiment in enumerate(("exp_a", "exp_b"), start=1)
+            ]
+            runs = LogRunScanner(logs_root=logs_root).list_runs()
+            filters = delete_filters_for_runs(runs)
+
+            result = _delete_runs(_run_history(logs_root), filters)
+
+            self.assertEqual(result["deletedRunCount"], 2)
+            self.assertEqual(set(result["deletedRunIds"]), {run.id for run in runs})
+            self.assertTrue(all(not run_dir.exists() for run_dir in run_dirs))
+
+    def test_delete_recomputes_stale_preview_without_a_plan_token(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = Path(tmp) / "logs"
+            relative_parts = [
+                "test_model",
+                "linear",
+                "BASELINE",
+                "Mnist",
+                "run_20260711_080910",
+                "version_0",
+            ]
+            write_tensorboard_run(logs_root, relative_parts)
+            service = _run_history(logs_root)
+            run = LogRunScanner(logs_root=logs_root).list_runs()[0]
+            filters = delete_filters_for_runs([run])
+            preview = _delete_plan(service, filters)
+            self.assertEqual(preview["candidateCount"], 1)
+
+            service.delete_experiment("test_model")
+            with self.assertRaisesRegex(InspectorError, "No log runs match"):
+                _delete_runs(service, filters)
+
+            recreated = write_tensorboard_run(logs_root, relative_parts)
+            recreated_preview = _delete_plan(service, filters)
+            self.assertEqual(recreated_preview["candidateCount"], 1)
+            result = _delete_runs(service, filters)
+            self.assertEqual(result["deletedRunIds"], [run.id])
+            self.assertFalse(recreated.exists())
+
+    def test_partial_filtered_delete_failure_invalidates_public_listing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = Path(tmp) / "logs"
+            for name in (
+                "first_20260711_010101",
+                "second_20260711_020202",
+            ):
+                write_tensorboard_run(
+                    logs_root,
+                    [
+                        "test_model",
+                        "linear",
+                        "BASELINE",
+                        "Mnist",
+                        name,
+                        "version_0",
+                    ],
+                )
+            service = _run_history(logs_root)
+            runs = LogRunScanner(logs_root=logs_root).list_runs()
+            filters = delete_filters_for_runs(runs)
+            self.assertEqual(service.list_runs(limit=10, offset=0)["total"], 2)
+            original_rmtree = shutil.rmtree
+            delete_count = 0
+
+            def fail_second_delete(path: Path):
+                nonlocal delete_count
+                delete_count += 1
+                if delete_count == 2:
+                    raise OSError("forced second Run delete failure")
+                return original_rmtree(path)
+
+            with (
+                patch(
+                    "workbench.backend.run_history.deletion.shutil.rmtree",
+                    side_effect=fail_second_delete,
+                ),
+                self.assertRaises(OSError),
+            ):
+                _delete_runs(service, filters)
+
+            self.assertEqual(service.list_runs(limit=10, offset=0)["total"], 1)
 
     def test_log_run_delete_partial_filters_match_nothing_and_preserve_runs(
         self,
@@ -952,8 +1113,8 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                     "version_0",
                 ],
             )
-            index = LogRunIndex(logs_root=logs_root)
-            run = index.list_runs()[0]
+            service = _run_history(logs_root)
+            run = LogRunScanner(logs_root=logs_root).list_runs()[0]
             full_filter_fields = {
                 "experiments": [run.experiment],
                 "datasets": [run.dataset],
@@ -983,12 +1144,12 @@ class LogRunIndexAndApiTests(unittest.TestCase):
             for label, fields in cases:
                 with self.subTest(label=label):
                     filters = LogRunDeleteFilters(**fields)
-                    plan = index.create_delete_plan(filters, active_jobs=[])
+                    plan = _delete_plan(service, filters)
 
-                    self.assertFalse(plan.canDelete)
-                    self.assertEqual(plan.candidates, [])
+                    self.assertFalse(plan["canDelete"])
+                    self.assertEqual(plan["candidates"], [])
                     with self.assertRaisesRegex(InspectorError, "No log runs match"):
-                        index.delete_runs(filters, active_jobs=[])
+                        _delete_runs(service, filters)
                     self.assertTrue(run_dir.exists())
 
     def test_log_run_delete_empty_filters_match_nothing(self) -> None:
@@ -1006,22 +1167,22 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                 ],
             )
 
-            index = LogRunIndex(logs_root=logs_root)
+            service = _run_history(logs_root)
             filters = LogRunDeleteFilters(
                 experiments=["test_model"],
                 datasets=[],
                 models=["linears/linear"],
                 presets=["BASELINE"],
-                runIds=[index.list_runs()[0].id],
+                runIds=[LogRunScanner(logs_root=logs_root).list_runs()[0].id],
             )
-            plan = index.create_delete_plan(filters, active_jobs=[])
+            plan = _delete_plan(service, filters)
 
-            self.assertFalse(plan.canDelete)
-            self.assertEqual(plan.candidates, [])
+            self.assertFalse(plan["canDelete"])
+            self.assertEqual(plan["candidates"], [])
             with self.assertRaisesRegex(InspectorError, "No log runs match"):
-                index.delete_runs(filters, active_jobs=[])
+                _delete_runs(service, filters)
 
-    def test_log_run_index_prunes_only_empty_parents_under_logs_root(self) -> None:
+    def test_run_history_prunes_only_empty_parents_under_logs_root(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             logs_root = root / "logs"
@@ -1045,19 +1206,11 @@ class LogRunIndexAndApiTests(unittest.TestCase):
             sibling_dir.mkdir(parents=True)
             sibling_marker = sibling_dir / "keep.txt"
             sibling_marker.write_text("keep", encoding="utf-8")
-            outside_parent = root / "outside_parent"
-            outside_child = outside_parent / "empty_child"
-            outside_child.mkdir(parents=True)
-            index = LogRunIndex(logs_root=logs_root)
+            scanner = LogRunScanner(logs_root=logs_root)
 
-            index.delete_runs(
-                delete_filters_for_runs(index.list_runs()),
-                active_jobs=[],
-            )
-            index._prune_empty_run_parents(
-                start=outside_child,
-                experiment_dir=outside_parent,
-                root=index._resolved_root(),
+            _delete_runs(
+                _run_history(logs_root),
+                delete_filters_for_runs(scanner.list_runs()),
             )
 
             self.assertFalse(run_dir.exists())
@@ -1073,9 +1226,8 @@ class LogRunIndexAndApiTests(unittest.TestCase):
             self.assertTrue(logs_root.exists())
             self.assertTrue(sibling_dir.exists())
             self.assertEqual(sibling_marker.read_text(encoding="utf-8"), "keep")
-            self.assertTrue(outside_child.exists())
 
-    def test_log_run_index_active_job_blocks_filtered_destructive_delete(
+    def test_run_history_active_job_blocks_filtered_destructive_delete(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1091,29 +1243,36 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                     "version_0",
                 ],
             )
-            index = LogRunIndex(logs_root=logs_root)
-            filters = delete_filters_for_runs(index.list_runs())
-            active_jobs = [
-                {
-                    "id": "job-1",
-                    "logFolder": "test_model",
-                    "status": "running",
-                }
-            ]
+            filters = delete_filters_for_runs(
+                LogRunScanner(logs_root=logs_root).list_runs()
+            )
+            service = _run_history(
+                logs_root,
+                active_writers=[
+                    _ActiveWriter(
+                        id="job-1",
+                        log_folder="test_model",
+                        status="running",
+                    )
+                ],
+            )
 
-            plan = index.create_delete_plan(filters, active_jobs=active_jobs)
+            plan = _delete_plan(service, filters)
 
-            self.assertFalse(plan.canDelete)
-            self.assertEqual(len(plan.blockedByActiveJobs), 1)
-            self.assertEqual(plan.blockedByActiveJobs[0].logFolder, "test_model")
+            self.assertFalse(plan["canDelete"])
+            self.assertEqual(len(plan["blockedByActiveJobs"]), 1)
+            self.assertEqual(
+                plan["blockedByActiveJobs"][0]["logFolder"],
+                "test_model",
+            )
             with self.assertRaisesRegex(
                 InspectorError,
                 "training job is still writing",
             ):
-                index.delete_runs(filters, active_jobs=active_jobs)
+                _delete_runs(service, filters)
             self.assertTrue(run_dir.exists())
 
-    def test_log_run_index_lists_safe_top_level_experiments(self) -> None:
+    def test_run_history_lists_safe_top_level_experiments(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             logs_root = root / "logs"
@@ -1151,7 +1310,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                 ],
             )
 
-            experiments = LogRunIndex(logs_root=logs_root).list_experiments()
+            experiments = LogRunScanner(logs_root=logs_root).list_experiments()
 
         self.assertEqual(
             [experiment.experiment for experiment in experiments],
@@ -1162,7 +1321,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
         self.assertEqual(by_name["test_model"].runCount, 1)
         self.assertEqual(by_name["test_model"].relativePath, "test_model")
 
-    def test_log_run_index_rejects_invalid_delete_experiments(self) -> None:
+    def test_run_history_rejects_invalid_delete_experiments(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             logs_root = root / "logs"
@@ -1180,7 +1339,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                 target_is_directory=True,
             )
 
-            index = LogRunIndex(logs_root=logs_root)
+            service = _run_history(logs_root)
             for experiment in (
                 "",
                 "../outside",
@@ -1191,10 +1350,10 @@ class LogRunIndexAndApiTests(unittest.TestCase):
             ):
                 with self.subTest(experiment=experiment):
                     with self.assertRaises(InspectorError):
-                        index.delete_experiment(experiment)
+                        service.delete_experiment(experiment)
 
             with self.assertRaisesRegex(InspectorError, "symlink"):
-                index.delete_experiment("linked")
+                service.delete_experiment("linked")
 
             self.assertTrue(logs_root.joinpath("linear").exists())
             self.assertTrue(outside_experiment.exists())
@@ -1243,6 +1402,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                 async with httpx.AsyncClient(
                     transport=transport,
                     base_url="http://testserver",
+                    headers={"X-Workbench-Mutation": "true"},
                 ) as client:
                     before_response = await client.get("/logs/runs")
                     delete_response = await client.delete(
@@ -1290,6 +1450,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                 async with httpx.AsyncClient(
                     transport=transport,
                     base_url="http://testserver",
+                    headers={"X-Workbench-Mutation": "true"},
                 ) as client:
                     return await client.delete("/logs/experiments/new_empty")
 
@@ -1310,7 +1471,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
     def test_log_api_blocks_experiment_delete_with_matching_active_job(self) -> None:
         import httpx
 
-        from workbench.backend.api import WorkbenchApiSettings, create_app
+        from workbench.backend.api import WorkbenchApiSettings
 
         cases = (
             (
@@ -1366,7 +1527,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                             "version_0",
                         ],
                     )
-                    manager = TrainingJobManager(
+                    manager = TrainingJobRuntimeHarness(
                         root=Path(tmp) / "jobs",
                         logs_root=logs_root,
                         runner=FakeRunner(),
@@ -1382,25 +1543,30 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                     job_id = str(job["id"])
                     if job_status == "cancelled":
                         manager.cancel_job(job_id)
+                    elif job_status == "completed":
+                        manager.runner.process.exit_code = 0
+                    elif job_status == "failed":
+                        manager.runner.process.exit_code = 1
                     elif job_status != "running":
                         manager.jobs[job_id].status = job_status
 
                     async def call_api(
                         logs_root: Path = logs_root,
-                        manager: TrainingJobManager = manager,
+                        manager: TrainingJobRuntimeHarness = manager,
                     ) -> httpx.Response:
                         transport = httpx.ASGITransport(
-                            app=create_app(
+                            app=create_app_with_training_runtime(
                                 WorkbenchApiSettings(
                                     logs_root=str(logs_root),
                                     allow_unsafe_local_mutations=True,
                                 ),
-                                training_manager=manager,
+                                manager,
                             )
                         )
                         async with httpx.AsyncClient(
                             transport=transport,
                             base_url="http://testserver",
+                            headers={"X-Workbench-Mutation": "true"},
                         ) as client:
                             return await client.delete("/logs/experiments/test_model")
 
@@ -1439,7 +1605,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
 
                     self.assertEqual(
                         manager.jobs[job_id].status,
-                        job_status,
+                        "running" if job_status == "queued" else job_status,
                     )
 
     def test_log_api_restart_behavior_fresh_manager_preserves_active_delete_blocker(
@@ -1447,7 +1613,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
     ) -> None:
         import httpx
 
-        from workbench.backend.api import WorkbenchApiSettings, create_app
+        from workbench.backend.api import WorkbenchApiSettings
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1463,7 +1629,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                     "version_0",
                 ],
             )
-            original_manager = TrainingJobManager(
+            original_manager = TrainingJobRuntimeHarness(
                 root=root / "jobs",
                 logs_root=logs_root,
                 runner=FakeRunner(),
@@ -1488,7 +1654,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                 ],
             )
 
-            fresh_manager = TrainingJobManager(
+            fresh_manager = TrainingJobRuntimeHarness(
                 root=root / "jobs",
                 logs_root=logs_root,
                 runner=FakeRunner(),
@@ -1506,17 +1672,18 @@ class LogRunIndexAndApiTests(unittest.TestCase):
 
             async def call_api() -> httpx.Response:
                 transport = httpx.ASGITransport(
-                    app=create_app(
+                    app=create_app_with_training_runtime(
                         WorkbenchApiSettings(
                             logs_root=str(logs_root),
                             allow_unsafe_local_mutations=True,
                         ),
-                        training_manager=fresh_manager,
+                        fresh_manager,
                     )
                 )
                 async with httpx.AsyncClient(
                     transport=transport,
                     base_url="http://testserver",
+                    headers={"X-Workbench-Mutation": "true"},
                 ) as client:
                     return await client.delete("/logs/experiments/test_model")
 
@@ -1545,7 +1712,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
     ) -> None:
         import httpx
 
-        from workbench.backend.api import WorkbenchApiSettings, create_app
+        from workbench.backend.api import WorkbenchApiSettings
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1561,7 +1728,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                     "version_0",
                 ],
             )
-            original_manager = TrainingJobManager(
+            original_manager = TrainingJobRuntimeHarness(
                 root=root / "jobs",
                 logs_root=logs_root,
                 runner=FakeRunner(),
@@ -1585,12 +1752,12 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                     }
                 ],
             )
-            fresh_manager = TrainingJobManager(
+            fresh_manager = TrainingJobRuntimeHarness(
                 root=root / "jobs",
                 logs_root=logs_root,
                 runner=FakeRunner(),
             )
-            run = LogRunIndex(logs_root=logs_root).list_runs()[0]
+            run = LogRunScanner(logs_root=logs_root).list_runs()[0]
             filters = {
                 "experiments": [run.experiment],
                 "datasets": [run.dataset],
@@ -1601,17 +1768,18 @@ class LogRunIndexAndApiTests(unittest.TestCase):
 
             async def create_plan() -> httpx.Response:
                 transport = httpx.ASGITransport(
-                    app=create_app(
+                    app=create_app_with_training_runtime(
                         WorkbenchApiSettings(
                             logs_root=str(logs_root),
                             allow_unsafe_local_mutations=True,
                         ),
-                        training_manager=fresh_manager,
+                        fresh_manager,
                     )
                 )
                 async with httpx.AsyncClient(
                     transport=transport,
                     base_url="http://testserver",
+                    headers={"X-Workbench-Mutation": "true"},
                 ) as client:
                     return await client.post(
                         "/logs/runs/delete-plan",
@@ -1636,17 +1804,18 @@ class LogRunIndexAndApiTests(unittest.TestCase):
 
             async def delete_runs() -> httpx.Response:
                 transport = httpx.ASGITransport(
-                    app=create_app(
+                    app=create_app_with_training_runtime(
                         WorkbenchApiSettings(
                             logs_root=str(logs_root),
                             allow_unsafe_local_mutations=True,
                         ),
-                        training_manager=fresh_manager,
+                        fresh_manager,
                     )
                 )
                 async with httpx.AsyncClient(
                     transport=transport,
                     base_url="http://testserver",
+                    headers={"X-Workbench-Mutation": "true"},
                 ) as client:
                     return await client.post(
                         "/logs/runs/delete",
@@ -1667,7 +1836,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
     ) -> None:
         import httpx
 
-        from workbench.backend.api import WorkbenchApiSettings, create_app
+        from workbench.backend.api import WorkbenchApiSettings
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1683,7 +1852,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                     "version_0",
                 ],
             )
-            original_manager = TrainingJobManager(
+            original_manager = TrainingJobRuntimeHarness(
                 root=root / "jobs",
                 logs_root=logs_root,
                 runner=FakeRunner(),
@@ -1707,7 +1876,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                     }
                 ],
             )
-            fresh_manager = TrainingJobManager(
+            fresh_manager = TrainingJobRuntimeHarness(
                 root=root / "jobs",
                 logs_root=logs_root,
                 runner=FakeRunner(),
@@ -1715,17 +1884,18 @@ class LogRunIndexAndApiTests(unittest.TestCase):
 
             async def call_api() -> httpx.Response:
                 transport = httpx.ASGITransport(
-                    app=create_app(
+                    app=create_app_with_training_runtime(
                         WorkbenchApiSettings(
                             logs_root=str(logs_root),
                             allow_unsafe_local_mutations=True,
                         ),
-                        training_manager=fresh_manager,
+                        fresh_manager,
                     )
                 )
                 async with httpx.AsyncClient(
                     transport=transport,
                     base_url="http://testserver",
+                    headers={"X-Workbench-Mutation": "true"},
                 ) as client:
                     return await client.delete("/logs/experiments/test_model")
 
@@ -1744,7 +1914,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
     ) -> None:
         import httpx
 
-        from workbench.backend.api import WorkbenchApiSettings, create_app
+        from workbench.backend.api import WorkbenchApiSettings
 
         with tempfile.TemporaryDirectory() as tmp:
             logs_root = Path(tmp) / "logs"
@@ -1759,7 +1929,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                     "version_0",
                 ],
             )
-            manager = TrainingJobManager(
+            manager = TrainingJobRuntimeHarness(
                 root=Path(tmp) / "jobs",
                 logs_root=logs_root,
                 runner=FakeRunner(),
@@ -1775,17 +1945,18 @@ class LogRunIndexAndApiTests(unittest.TestCase):
 
             async def call_api() -> tuple[httpx.Response, httpx.Response]:
                 transport = httpx.ASGITransport(
-                    app=create_app(
+                    app=create_app_with_training_runtime(
                         WorkbenchApiSettings(
                             logs_root=str(logs_root),
                             allow_unsafe_local_mutations=True,
                         ),
-                        training_manager=manager,
+                        manager,
                     )
                 )
                 async with httpx.AsyncClient(
                     transport=transport,
                     base_url="http://testserver",
+                    headers={"X-Workbench-Mutation": "true"},
                 ) as client:
                     runs_response = await client.get("/logs/runs")
                     run = runs_response.json()["runs"][0]
@@ -1857,6 +2028,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                 async with httpx.AsyncClient(
                     transport=transport,
                     base_url="http://testserver",
+                    headers={"X-Workbench-Mutation": "true"},
                 ) as client:
                     return await client.get("/logs/experiments")
 
@@ -1906,6 +2078,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                 async with httpx.AsyncClient(
                     transport=transport,
                     base_url="http://testserver",
+                    headers={"X-Workbench-Mutation": "true"},
                 ) as client:
                     runs_response = await client.get(
                         "/logs/runs",
@@ -2013,6 +2186,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                 async with httpx.AsyncClient(
                     transport=transport,
                     base_url="http://testserver",
+                    headers={"X-Workbench-Mutation": "true"},
                 ) as client:
                     runs_response = await client.get("/logs/runs")
                     run_id = next(
@@ -2102,7 +2276,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
         self.assertEqual(raw_path_response.status_code, 400)
         self.assertIn("Unknown log run id", raw_path_response.json()["detail"])
 
-    def test_log_run_index_reads_tensorboard_media_summaries(self) -> None:
+    def test_run_history_reads_tensorboard_media_summaries(self) -> None:
         import torch
         from torch.utils.tensorboard import SummaryWriter
 
@@ -2130,10 +2304,11 @@ class LogRunIndexAndApiTests(unittest.TestCase):
             writer.flush()
             writer.close()
 
-            index = LogRunIndex(logs_root=logs_root)
-            run = index.list_runs()[0]
-            tags = index.tags_for_runs([run.id])[0]
-            media = index.media_for_runs(
+            scanner = LogRunScanner(logs_root=logs_root)
+            query = LogRunQueryService(scanner=scanner)
+            run = scanner.list_runs()[0]
+            tags = query.tags_for_runs([run.id])[0]
+            media = query.media_for_runs(
                 run_ids=[run.id],
                 image_tags=["validation/examples/predictions"],
                 text_tags=["validation/examples/predictions/text_summary"],
@@ -2166,8 +2341,10 @@ class LogRunIndexAndApiTests(unittest.TestCase):
             late_writer.flush()
             late_writer.close()
 
-            index = LogRunIndex(logs_root=Path(tmp))
-            summary = index.query_service.read_text_summary(
+            query = LogRunQueryService(
+                scanner=LogRunScanner(logs_root=Path(tmp))
+            )
+            summary = query.read_text_summary(
                 run_dir,
                 "validation/examples/predictions/text_summary",
             )
@@ -2197,7 +2374,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                 return FakeTensorBoardAccumulator()
 
             with patch(
-                "workbench.backend.log_run_query.load_event_accumulator",
+                "workbench.backend.run_history.query.load_event_accumulator",
                 load_accumulator,
             ):
                 first_tags = service.read_tags(run_dir)
@@ -2245,7 +2422,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
             )
 
             with patch(
-                "workbench.backend.log_run_query.load_event_accumulator",
+                "workbench.backend.run_history.query.load_event_accumulator",
                 return_value=MultiTagAccumulator(),
             ) as load:
                 loss = service.read_scalar_series_batch(
@@ -2277,7 +2454,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
             )
 
             with patch(
-                "workbench.backend.log_run_query.load_event_accumulator"
+                "workbench.backend.run_history.query.load_event_accumulator"
             ) as load:
                 tags = service.read_tags(run_dir)
 
@@ -2330,7 +2507,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                 return FakeTensorBoardAccumulator()
 
             with patch(
-                "workbench.backend.log_run_query.load_event_accumulator",
+                "workbench.backend.run_history.query.load_event_accumulator",
                 load_accumulator,
             ):
                 payloads = service.tags_for_runs(
@@ -2386,7 +2563,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
             )
 
             with patch(
-                "workbench.backend.log_run_query.load_event_accumulator",
+                "workbench.backend.run_history.query.load_event_accumulator",
                 return_value=FakeTensorBoardAccumulator(),
             ) as load:
                 first_payloads = service.tags_for_runs(
@@ -2430,7 +2607,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
             )
 
             with patch(
-                "workbench.backend.log_run_query.load_event_accumulator",
+                "workbench.backend.run_history.query.load_event_accumulator",
                 return_value=FakeTensorBoardAccumulator(),
             ) as load:
                 service.tags_for_runs([run_ids["first_20260601_010203"]])
@@ -2504,6 +2681,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                 async with httpx.AsyncClient(
                     transport=transport,
                     base_url="http://testserver",
+                    headers={"X-Workbench-Mutation": "true"},
                 ) as client:
                     scoped_response = await client.get(
                         "/logs/runs",
@@ -2581,9 +2759,10 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                 async with httpx.AsyncClient(
                     transport=transport,
                     base_url="http://testserver",
+                    headers={"X-Workbench-Mutation": "true"},
                 ) as client:
                     with patch(
-                        "workbench.backend.log_run_query.load_event_accumulator"
+                        "workbench.backend.run_history.query.load_event_accumulator"
                     ) as load:
                         before_response = await client.get("/logs/runs")
                         load.assert_not_called()
@@ -2657,6 +2836,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                 async with httpx.AsyncClient(
                     transport=transport,
                     base_url="http://testserver",
+                    headers={"X-Workbench-Mutation": "true"},
                 ) as client:
                     runs_response = await client.get("/logs/runs")
                     run_id = runs_response.json()["runs"][0]["id"]

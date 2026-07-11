@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import importlib
 import os
+import sys
 import unittest
-from pathlib import Path
 from unittest.mock import patch
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
@@ -191,47 +191,54 @@ class InspectorCompatibilityImportTests(unittest.TestCase):
 
 
 class ExtensionPointImportTests(unittest.TestCase):
-    def test_no_auth_and_no_database_extension_points_are_importable(self) -> None:
-        module_names = (
-            "workbench.backend.core.security",
-            "workbench.backend.db.session",
-        )
+    def test_security_module_remains_importable(self) -> None:
+        module_name = "workbench.backend.core.security"
 
-        for module_name in module_names:
-            with self.subTest(module=module_name):
-                module = importlib.import_module(module_name)
+        module = importlib.import_module(module_name)
 
-                self.assertEqual(module.__name__, module_name)
+        self.assertEqual(module.__name__, module_name)
 
-    def test_database_session_extension_point_remains_noop(self) -> None:
-        session = importlib.import_module("workbench.backend.db.session")
-        public_names = [name for name in vars(session) if not name.startswith("_")]
-        forbidden_database_names = {
-            "Session",
-            "SessionLocal",
-            "engine",
-            "get_db",
-            "get_session",
-            "sessionmaker",
-        }
-        forbidden_database_imports = (
-            "asyncpg",
-            "databases",
-            "psycopg",
-            "psycopg2",
-            "sqlalchemy",
-            "sqlmodel",
-        )
-        session_source = Path(str(session.__file__)).read_text(encoding="utf-8")
-
-        self.assertEqual(public_names, [])
-        self.assertTrue(forbidden_database_names.isdisjoint(vars(session)))
-        for import_name in forbidden_database_imports:
-            with self.subTest(import_name=import_name):
-                self.assertNotIn(import_name, session_source)
+    def test_empty_database_extension_point_is_absent(self) -> None:
+        with self.assertRaises(ModuleNotFoundError):
+            importlib.import_module("workbench.backend.db.session")
 
 
 class CliCompatibilityImportTests(unittest.TestCase):
+    def test_cli_maps_broken_package_parser_imports_to_clean_error(self) -> None:
+        from emperor.model_packages import ModelPackage
+
+        from workbench.backend.inspector.errors import InspectorError
+
+        cli = importlib.import_module("workbench.backend.cli")
+        package = ModelPackage(
+            "broken",
+            "missing",
+            "models.__inspection_missing__",
+        )
+
+        with (
+            patch.object(
+                sys,
+                "argv",
+                [
+                    "cli",
+                    "--model-type",
+                    "broken",
+                    "--model",
+                    "missing",
+                    "--preset",
+                    "baseline",
+                ],
+            ),
+            patch.object(cli, "model_id_from_parts", return_value="broken/missing"),
+            patch.object(cli, "model_package", return_value=package),
+            self.assertRaisesRegex(
+                InspectorError,
+                "Failed to import model package 'broken/missing'",
+            ),
+        ):
+            cli._parse_args()
+
     def test_cli_module_exposes_callable_main(self) -> None:
         cli = importlib.import_module("workbench.backend.cli")
 

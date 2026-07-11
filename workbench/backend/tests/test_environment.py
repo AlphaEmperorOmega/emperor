@@ -113,7 +113,12 @@ class EnvScriptTests(unittest.TestCase):
             venv_bin = project_path / "torchenv" / "bin"
             marker_path = project_path / "torchenv" / ".emperor-pyproject.cksum"
             calls_path = project_path / "python-calls.log"
+            constraints_path = (
+                project_path / "constraints" / "python-3.13-linux-x86_64.txt"
+            )
             venv_bin.mkdir(parents=True)
+            constraints_path.parent.mkdir(parents=True)
+            constraints_path.write_text("pip==26.1.2\n", encoding="utf-8")
             (project_path / "pyproject.toml").write_text(
                 '[project]\nname = "fake-emperor"\n',
                 encoding="utf-8",
@@ -134,12 +139,14 @@ class EnvScriptTests(unittest.TestCase):
                 PROJECT_ROOT={shlex.quote(str(project_path))}
                 VENV_PATH={shlex.quote(str(project_path / "torchenv"))}
                 WORKBENCH_DEPENDENCY_MARKER={shlex.quote(str(marker_path))}
+                PYTHON_CONSTRAINTS={shlex.quote(str(constraints_path))}
 
                 pyproject_dependency_signature > "$WORKBENCH_DEPENDENCY_MARKER"
                 ensure_project_dependencies
-                printf 'stale\\n' > "$WORKBENCH_DEPENDENCY_MARKER"
+                printf '# changed\\n' >> "$PYTHON_CONSTRAINTS"
                 ensure_project_dependencies
-                test "$(cat "$WORKBENCH_DEPENDENCY_MARKER")" != "stale"
+                test "$(cat "$WORKBENCH_DEPENDENCY_MARKER")" = \
+                  "$(pyproject_dependency_signature)"
                 """
             )
 
@@ -166,8 +173,10 @@ class EnvScriptTests(unittest.TestCase):
         self.assertEqual(
             pip_calls,
             [
-                "-m pip install --upgrade pip",
-                "-m pip install -e .[dev]",
+                "-m pip install --upgrade pip==26.1.2",
+                "-m pip install --constraint "
+                f"{constraints_path} --build-constraint {constraints_path} "
+                "-e .[dev]",
             ],
         )
 

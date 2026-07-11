@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from workbench.backend.runtime.job_status import (
+from workbench.backend.training_jobs.status import (
     ACTIVE_JOB_STATUSES,
     LIVE_PROCESS_JOB_STATUSES,
     TERMINAL_JOB_STATUSES,

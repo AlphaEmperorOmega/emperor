@@ -7,13 +7,14 @@ from typing import Any
 from unittest.mock import patch
 
 from workbench.backend.inspector.errors import InspectorError
-from workbench.backend.log_runs import (
+from workbench.backend.run_history.deletion import LogRunDeletionExecutor
+from workbench.backend.run_history.query import LogRunQueryService
+from workbench.backend.run_history.records import (
     LogRun,
     LogRunDeleteCandidate,
-    LogRunDeletionExecutor,
-    LogRunQueryService,
-    LogRunScanner,
+    LogRunDeletePlan,
 )
+from workbench.backend.run_history.scanner import LogRunScanner
 
 
 def _log_run(
@@ -193,7 +194,7 @@ class LogRunQueryServiceTests(unittest.TestCase):
                 return BatchAccumulator()
 
             with patch(
-                "workbench.backend.log_run_query.load_event_accumulator",
+                "workbench.backend.run_history.query.load_event_accumulator",
                 load_accumulator,
             ):
                 service.read_tags(run_dir)
@@ -355,15 +356,6 @@ class LogRunDeletionExecutorTests(unittest.TestCase):
             symlink_run.symlink_to(outside_run, target_is_directory=True)
             scanner = LogRunScanner(logs_root=logs_root)
             executor = LogRunDeletionExecutor(scanner=scanner)
-            resolved_root = scanner.resolved_root()
-
-            self.assertEqual(
-                executor.validated_delete_candidate_path(
-                    _delete_candidate(valid_run.relative_to(logs_root).as_posix()),
-                    resolved_root,
-                ),
-                valid_run,
-            )
 
             cases = (
                 (
@@ -386,14 +378,27 @@ class LogRunDeletionExecutorTests(unittest.TestCase):
             for label, relative_path, error_pattern in cases:
                 with self.subTest(label=label):
                     with self.assertRaisesRegex(InspectorError, error_pattern):
-                        executor.validated_delete_candidate_path(
-                            _delete_candidate(relative_path),
-                            resolved_root,
+                        executor.delete_runs(
+                            LogRunDeletePlan(
+                                candidates=[_delete_candidate(relative_path)]
+                            )
                         )
             self.assertTrue(valid_run.exists())
             self.assertTrue(invalid_run.exists())
             self.assertTrue(outside_run.exists())
             self.assertTrue(symlink_run.is_symlink())
+
+            result = executor.delete_runs(
+                LogRunDeletePlan(
+                    candidates=[
+                        _delete_candidate(
+                            valid_run.relative_to(logs_root).as_posix()
+                        )
+                    ]
+                )
+            )
+            self.assertEqual(result.deletedRunIds, ["run-1"])
+            self.assertFalse(valid_run.exists())
 
 
 if __name__ == "__main__":

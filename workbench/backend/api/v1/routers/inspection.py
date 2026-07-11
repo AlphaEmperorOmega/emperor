@@ -6,6 +6,10 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
+from workbench.backend.api.mutation_policy import (
+    HttpOperationPolicy,
+    declare_http_operation,
+)
 from workbench.backend.blocking import named_blocking_work_limiter, run_blocking_io
 from workbench.backend.core.security import require_bearer_auth
 from workbench.backend.dependencies import get_inspection_service
@@ -30,6 +34,7 @@ router = APIRouter(
     summary="Inspect a model preset",
     response_description="Serialized model graph for the requested model preset.",
 )
+@declare_http_operation(HttpOperationPolicy.READ_ONLY)
 async def inspect(
     request: InspectRequest,
     service: Annotated[InspectionService, Depends(get_inspection_service)],

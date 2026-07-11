@@ -83,21 +83,25 @@ async def run_blocking_io(
     *args: Any,
     timeout_seconds: float = DEFAULT_BLOCKING_WORK_TIMEOUT_SECONDS,
     limiter: asyncio.Semaphore | None = None,
+    limiter_already_acquired: bool = False,
     **kwargs: Any,
 ) -> ResultT:
     """Run blocking work without tying up the event loop."""
 
+    if limiter_already_acquired and limiter is None:
+        raise ValueError("An acquired blocking-work limiter must be provided")
     loop = asyncio.get_running_loop()
     deadline = loop.time() + timeout_seconds
     call = partial(callable_object, *args, **kwargs)
     work_limiter = limiter if limiter is not None else _default_blocking_work_limiter()
-    acquired = False
+    acquired = limiter_already_acquired
     executor: ThreadPoolExecutor | None = None
     future: Future[ResultT] | None = None
     release_when_done = False
     try:
-        await asyncio.wait_for(work_limiter.acquire(), timeout_seconds)
-        acquired = True
+        if not acquired:
+            await asyncio.wait_for(work_limiter.acquire(), timeout_seconds)
+            acquired = True
         executor = ThreadPoolExecutor(
             max_workers=1,
             thread_name_prefix="workbench-blocking",

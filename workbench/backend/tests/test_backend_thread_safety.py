@@ -5,20 +5,23 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from workbench.backend.job_store import (
-    FileSystemTrainingJobStore,
-    InMemoryTrainingJobStore,
-    TrainingJobRecord,
-)
-from workbench.backend.log_runs import LogRunQueryService, LogRunScanner
-from workbench.backend.monitor_data import (
+from workbench.backend.run_history.query import LogRunQueryService
+from workbench.backend.run_history.scanner import LogRunScanner
+from workbench.backend.tensorboard.readers import (
     TensorBoardMonitorReader,
     TensorBoardParameterStatusReader,
 )
-from workbench.backend.training_jobs import TrainingJobManager
-from workbench.backend.training_progress_store import (
+from workbench.backend.tests.helpers import (
+    TrainingJobRuntimeHarness,
+)
+from workbench.backend.training_jobs.progress import (
     TrainingProgressSnapshot,
     TrainingProgressStore,
+)
+from workbench.backend.training_jobs.store import (
+    FileSystemTrainingJobStore,
+    InMemoryTrainingJobStore,
+    TrainingJobRecord,
 )
 
 
@@ -85,7 +88,7 @@ class BackendThreadSafetyTests(unittest.TestCase):
             self.assertEqual(len(store.list()), 64)
 
     def test_training_live_projection_cache_handles_concurrent_reads(self) -> None:
-        manager = TrainingJobManager(job_store=InMemoryTrainingJobStore())
+        manager = TrainingJobRuntimeHarness(job_store=InMemoryTrainingJobStore())
         job = training_job_record("job-1", Path("/tmp/jobs"))
         events = [
             {
@@ -158,72 +161,44 @@ class BackendThreadSafetyTests(unittest.TestCase):
             self.assertEqual(counts, [20] * 80)
 
     def test_log_query_and_monitor_caches_handle_concurrent_clears(self) -> None:
-        query_service = LogRunQueryService(scanner=LogRunScanner())
-        monitor_reader = TensorBoardMonitorReader()
-        parameter_reader = TensorBoardParameterStatusReader()
-        root = Path("/tmp/logs/run-1")
-        tags_key = (root.as_posix(), ())
-        scalar_key = (root.as_posix(), (), "train/loss", 500, "tail")
-        monitor_key = (root.as_posix(), (), "job-1", "main", "mnist")
-        parameter_key = (root.as_posix(), (), "job-1", "baseline", "mnist")
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "run-1"
+            root.mkdir()
+            (root / "events.out.tfevents.invalid").write_bytes(b"invalid")
+            query_service = LogRunQueryService(scanner=LogRunScanner())
+            monitor_reader = TensorBoardMonitorReader()
+            parameter_reader = TensorBoardParameterStatusReader()
 
-        def mutate(index: int) -> None:
-            query_service._cache_set(
-                query_service._tags_cache,
-                tags_key,
-                {
-                    "scalars": ["train/loss"],
-                    "histograms": [],
-                    "images": [],
-                    "texts": [],
-                },
-            )
-            query_service._cache_set(
-                query_service._scalar_cache,
-                scalar_key,
-                {
-                    "points": [{"step": index, "wallTime": 0.0, "value": 1.0}],
-                    "sourcePointCount": 1,
-                    "truncated": False,
-                },
-            )
-            monitor_reader._cache_set(
-                monitor_key,
-                {
-                    "jobId": "job-1",
-                    "nodePath": "main",
-                    "dataset": "mnist",
-                    "logDir": root.as_posix(),
-                    "scalarSeries": [],
-                    "histograms": [],
-                    "images": [],
-                },
-            )
-            parameter_reader._cache_set(
-                parameter_key,
-                {
-                    "sourceId": "job-1",
-                    "preset": "baseline",
-                    "dataset": "mnist",
-                    "logDir": root.as_posix(),
-                    "nodes": [],
-                },
-            )
-            if index % 2 == 0:
-                query_service.clear_run_caches([root])
-                monitor_reader.clear_roots({root.as_posix()})
-                parameter_reader.clear_roots({root.as_posix()})
-            else:
-                query_service.clear_cache()
-                monitor_reader.clear_cache()
-                parameter_reader.clear_cache()
+            def read_or_clear(index: int) -> None:
+                if index % 2 == 0:
+                    query_service.read_tags(root)
+                    monitor_reader.read(
+                        job_id="job-1",
+                        node_path="main",
+                        dataset="mnist",
+                        log_dir=root.as_posix(),
+                    )
+                    parameter_reader.read(
+                        source_id="job-1",
+                        preset="baseline",
+                        dataset="mnist",
+                        log_dir=root.as_posix(),
+                    )
+                elif index % 4 == 1:
+                    query_service.clear_run_caches([root])
+                    monitor_reader.clear_roots({root.as_posix()})
+                    parameter_reader.clear_roots({root.as_posix()})
+                else:
+                    query_service.clear_cache()
+                    monitor_reader.clear_cache()
+                    parameter_reader.clear_cache()
 
-        with ThreadPoolExecutor(max_workers=8) as executor:
-            list(executor.map(mutate, range(80)))
+            with ThreadPoolExecutor(max_workers=8) as executor:
+                list(executor.map(read_or_clear, range(80)))
 
-        query_service.clear_cache()
-        monitor_reader.clear_cache()
-        parameter_reader.clear_cache()
+            query_service.clear_cache()
+            monitor_reader.clear_cache()
+            parameter_reader.clear_cache()
 
 
 if __name__ == "__main__":

@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from workbench.backend.job_store import (
+from workbench.backend.training_jobs.store import (
     FileSystemTrainingJobStore,
     InMemoryTrainingJobStore,
     TrainingJobRecord,
@@ -56,6 +56,93 @@ class InMemoryTrainingJobStoreTests(unittest.TestCase):
 
 
 class FileSystemTrainingJobStoreTests(unittest.TestCase):
+    def test_metadata_codec_preserves_exact_persisted_key_set(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            record = make_record("job-1")
+            record.root = root / record.id
+            record.experiment_task = "classification"
+            record.cancellation_mode = "strict-cgroup"
+            record.worker_pid = 4321
+            record.process_group_id = 4321
+            record.cgroup_path = "/sys/fs/cgroup/jobs/job-job-1"
+
+            FileSystemTrainingJobStore(root).save(record)
+            payload = json.loads(
+                (record.root / "metadata.json").read_text(encoding="utf-8")
+            )
+
+        self.assertEqual(
+            set(payload),
+            {
+                "id",
+                "modelType",
+                "model",
+                "preset",
+                "presets",
+                "experiment_task",
+                "datasets",
+                "overrides",
+                "search",
+                "planned_run_count",
+                "run_plan",
+                "monitors",
+                "log_folder",
+                "command",
+                "root",
+                "payload_path",
+                "progress_path",
+                "log_path",
+                "created_at",
+                "updated_at",
+                "status",
+                "pid",
+                "cancellation_mode",
+                "worker_pid",
+                "process_group_id",
+                "cgroup_path",
+                "exit_code",
+            },
+        )
+        self.assertEqual(payload["experiment_task"], "classification")
+        self.assertEqual(payload["cancellation_mode"], "strict-cgroup")
+        self.assertEqual(payload["worker_pid"], 4321)
+        self.assertEqual(payload["process_group_id"], 4321)
+        self.assertEqual(
+            payload["cgroup_path"],
+            "/sys/fs/cgroup/jobs/job-job-1",
+        )
+
+    def test_metadata_codec_reads_legacy_task_and_containment_defaults(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            record = make_record("job-1")
+            record.root = root / record.id
+            record.experiment_task = "classification"
+            store = FileSystemTrainingJobStore(root)
+            store.save(record)
+            metadata_path = record.root / "metadata.json"
+            payload = json.loads(metadata_path.read_text(encoding="utf-8"))
+            payload["experimentTask"] = payload.pop("experiment_task")
+            for key in (
+                "cancellation_mode",
+                "worker_pid",
+                "process_group_id",
+                "cgroup_path",
+            ):
+                payload.pop(key)
+            metadata_path.write_text(json.dumps(payload), encoding="utf-8")
+
+            recovered = FileSystemTrainingJobStore(root).get(record.id)
+
+        self.assertIsNotNone(recovered)
+        assert recovered is not None
+        self.assertEqual(recovered.experiment_task, "classification")
+        self.assertEqual(recovered.cancellation_mode, "process-group")
+        self.assertEqual(recovered.worker_pid, record.pid)
+        self.assertIsNone(recovered.process_group_id)
+        self.assertIsNone(recovered.cgroup_path)
+
     def test_save_get_and_list_records_across_store_instances(self) -> None:
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -199,6 +286,148 @@ class FileSystemTrainingJobStoreTests(unittest.TestCase):
 
             self.assertEqual(store.list(), [])
             self.assertIsNone(store.get("../outside"))
+
+    def test_list_and_get_reject_outside_root_job_directory_symlink(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            jobs_root = root / "jobs"
+            jobs_root.mkdir()
+            outside_store = FileSystemTrainingJobStore(root / "outside")
+            outside_record = make_record("job-1")
+            outside_record.root = outside_store.root / outside_record.id
+            outside_store.save(outside_record)
+            (jobs_root / "job-1").symlink_to(
+                outside_record.root,
+                target_is_directory=True,
+            )
+
+            store = FileSystemTrainingJobStore(jobs_root)
+
+            self.assertEqual(store.list(), [])
+            self.assertIsNone(store.get("job-1"))
+
+    def test_cached_record_is_evicted_after_job_directory_becomes_symlink(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            jobs_root = root / "jobs"
+            outside_root = root / "outside" / "job-1"
+            record = make_record("job-1")
+            record.root = jobs_root / record.id
+            store = FileSystemTrainingJobStore(jobs_root)
+            store.save(record)
+            self.assertIs(store.get(record.id), record)
+
+            outside_root.parent.mkdir()
+            record.root.rename(outside_root)
+            record.root.symlink_to(outside_root, target_is_directory=True)
+
+            self.assertEqual(store.list(), [])
+            self.assertIsNone(store.get(record.id))
+
+            record.root.unlink()
+            outside_root.rename(record.root)
+            recovered = store.get(record.id)
+
+        self.assertIsNotNone(recovered)
+        self.assertIsNot(recovered, record)
+
+    def test_list_and_get_reject_metadata_symlink(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            jobs_root = root / "jobs"
+            job_root = jobs_root / "job-1"
+            job_root.mkdir(parents=True)
+            outside_store = FileSystemTrainingJobStore(root / "outside")
+            outside_record = make_record("job-1")
+            outside_record.root = outside_store.root / outside_record.id
+            outside_store.save(outside_record)
+            (job_root / "metadata.json").symlink_to(
+                outside_record.root / "metadata.json"
+            )
+
+            store = FileSystemTrainingJobStore(jobs_root)
+
+            self.assertEqual(store.list(), [])
+            self.assertIsNone(store.get("job-1"))
+
+    def test_cached_record_is_evicted_after_metadata_becomes_symlink(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            jobs_root = root / "jobs"
+            outside_metadata = root / "outside" / "metadata.json"
+            record = make_record("job-1")
+            record.root = jobs_root / record.id
+            store = FileSystemTrainingJobStore(jobs_root)
+            store.save(record)
+            self.assertIs(store.get(record.id), record)
+
+            outside_metadata.parent.mkdir()
+            metadata_path = record.root / "metadata.json"
+            metadata_path.rename(outside_metadata)
+            metadata_path.symlink_to(outside_metadata)
+
+            self.assertIsNone(store.get(record.id))
+            self.assertEqual(store.list(), [])
+
+            metadata_path.unlink()
+            outside_metadata.rename(metadata_path)
+            recovered = store.get(record.id)
+
+        self.assertIsNotNone(recovered)
+        self.assertIsNot(recovered, record)
+
+    def test_list_does_not_cache_directory_and_payload_id_mismatch(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            jobs_root = root / "jobs"
+            source_store = FileSystemTrainingJobStore(root / "source")
+            source_record = make_record("job-b")
+            source_record.root = source_store.root / source_record.id
+            source_store.save(source_record)
+            mismatched_root = jobs_root / "job-a"
+            mismatched_root.mkdir(parents=True)
+            (mismatched_root / "metadata.json").write_text(
+                (source_record.root / "metadata.json").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+
+            store = FileSystemTrainingJobStore(jobs_root)
+
+            self.assertEqual(store.list(), [])
+            self.assertIsNone(store.get("job-a"))
+            self.assertIsNone(store.get("job-b"))
+
+    def test_recovered_metadata_rebases_legacy_root_to_canonical_job_directory(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            store = FileSystemTrainingJobStore(root)
+            record = make_record("job-1")
+            record.root = root / record.id
+            store.save(record)
+            metadata_path = record.root / "metadata.json"
+            payload = json.loads(metadata_path.read_text(encoding="utf-8"))
+            payload["root"] = "/legacy/training/jobs/job-1"
+            metadata_path.write_text(json.dumps(payload), encoding="utf-8")
+
+            recovered = FileSystemTrainingJobStore(root).get(record.id)
+
+        self.assertIsNotNone(recovered)
+        assert recovered is not None
+        self.assertEqual(recovered.root, root / record.id)
+
+    def test_save_rejects_record_root_that_does_not_match_job_id(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            record = make_record("job-1")
+            record.root = root / "different-job"
+            store = FileSystemTrainingJobStore(root)
+
+            with self.assertRaises(ValueError):
+                store.save(record)
 
     def test_save_rejects_unsafe_job_id(self) -> None:
         with TemporaryDirectory() as tmp:

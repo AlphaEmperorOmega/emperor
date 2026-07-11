@@ -14,6 +14,10 @@ from workbench.backend.dependencies import get_workbench_settings
 UNAUTHORIZED_DETAIL = "Missing or invalid bearer credentials"
 WWW_AUTHENTICATE_HEADER = "Bearer"
 LOCAL_MUTATION_DISABLED_DETAIL = "Local mutation endpoints are disabled"
+MUTATION_HEADER_NAME = "X-Workbench-Mutation"
+MUTATION_HEADER_VALUE = "true"
+MUTATION_PROOF_REQUIRED_DETAIL = "Mutation request proof is missing or invalid"
+UNTRUSTED_MUTATION_ORIGIN_DETAIL = "Mutation request origin is not trusted"
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -45,32 +49,12 @@ async def require_bearer_auth(
         )
 
 
-def require_local_mutations_allowed(settings: WorkbenchApiSettings) -> None:
-    """Fail closed for endpoints that mutate local files or processes."""
-
-    if settings.allow_unsafe_local_mutations:
-        return
-    raise HTTPException(
-        status_code=403,
-        detail=LOCAL_MUTATION_DISABLED_DETAIL,
-    )
-
-
-def require_log_imports_allowed(settings: WorkbenchApiSettings) -> None:
-    """Fail closed for log archive imports when uploads are not enabled."""
-
-    if settings.log_imports_enabled:
-        return
-    raise HTTPException(
-        status_code=403,
-        detail=LOCAL_MUTATION_DISABLED_DETAIL,
-    )
-
-
 __all__ = [
+    "MUTATION_HEADER_NAME",
+    "MUTATION_HEADER_VALUE",
+    "MUTATION_PROOF_REQUIRED_DETAIL",
+    "UNTRUSTED_MUTATION_ORIGIN_DETAIL",
     "WWW_AUTHENTICATE_HEADER",
     "bearer_scheme",
-    "require_log_imports_allowed",
-    "require_local_mutations_allowed",
     "require_bearer_auth",
 ]

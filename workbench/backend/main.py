@@ -6,6 +6,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 
+from workbench.backend.api.mutation_policy import build_http_operation_catalog
 from workbench.backend.api.v1.router import (
     PUBLIC_API_PREFIX,
 )
@@ -20,50 +21,55 @@ from workbench.backend.core.config import (
 from workbench.backend.core.errors import ApiError
 from workbench.backend.dependencies import WorkbenchServices
 from workbench.backend.exceptions import api_error_handler
-from workbench.backend.log_runs import LogRunIndex
+from workbench.backend.log_experiments import (
+    LogExperimentMutationCoordinator,
+)
 from workbench.backend.middleware import configure_middleware
-from workbench.backend.repositories.config_snapshots import ConfigSnapshotRepository
-from workbench.backend.repositories.log_runs import LogRunRepository
-from workbench.backend.repositories.training_jobs import TrainingJobRepository
+from workbench.backend.run_history import RunHistoryService
 from workbench.backend.services.config_snapshots import ConfigSnapshotService
 from workbench.backend.services.inspection import InspectionService
-from workbench.backend.services.logs import LogRunService
-from workbench.backend.services.models import ModelCatalogService
-from workbench.backend.services.training import TrainingJobService
-from workbench.backend.training_jobs import TrainingJobManager
+from workbench.backend.training_jobs import TrainingJobService
+from workbench.backend.training_jobs.plans import TrainingRunPlanService
 
 __all__ = ["WorkbenchApiSettings", "create_app", "app"]
 
 
 def create_app(
     settings: WorkbenchApiSettings | None = None,
-    training_manager: TrainingJobManager | None = None,
 ) -> FastAPI:
     api_settings = settings or get_workbench_api_settings()
-    jobs = training_manager or TrainingJobManager(
+    log_experiment_mutations = LogExperimentMutationCoordinator()
+    training_jobs = TrainingJobService(
         logs_root=api_settings.logs_root,
         cancellation_mode=api_settings.training_cancellation_mode,
+        mutation_coordinator=log_experiment_mutations,
     )
-    log_runs = LogRunIndex(logs_root=api_settings.logs_root)
-    log_run_repository = LogRunRepository(log_runs)
+    run_history = RunHistoryService(
+        logs_root=api_settings.logs_root,
+        mutation_coordinator=log_experiment_mutations,
+        active_log_writers=lambda: training_jobs.active_jobs(),
+    )
     snapshot_store = FileSystemConfigSnapshotStore(Path(api_settings.snapshots_root))
 
     api = FastAPI(title="Emperor Model Workbench API", version="1.0.0")
-    configure_middleware(api, api_settings)
     api.add_exception_handler(ApiError, api_error_handler)
 
     api.state.workbench_services = WorkbenchServices(
         settings=api_settings,
-        model_catalog=ModelCatalogService(),
-        config_snapshots=ConfigSnapshotService(
-            ConfigSnapshotRepository(snapshot_store)
-        ),
-        inspection=InspectionService(log_run_repository),
-        log_runs=LogRunService(log_run_repository),
-        training_jobs=TrainingJobService(TrainingJobRepository(jobs)),
+        config_snapshots=ConfigSnapshotService(snapshot_store),
+        inspection=InspectionService(run_history),
+        run_history=run_history,
+        training_jobs=training_jobs,
+        training_run_plans=TrainingRunPlanService(),
+        log_experiment_mutations=log_experiment_mutations,
     )
 
     api.include_router(api_v1_router, prefix=PUBLIC_API_PREFIX)
+    operation_catalog = build_http_operation_catalog(
+        api.routes,
+        declared_routes=api_v1_router.routes,
+    )
+    configure_middleware(api, api_settings, operation_catalog)
     return api
 
 

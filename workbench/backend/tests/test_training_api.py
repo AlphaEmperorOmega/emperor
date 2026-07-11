@@ -11,7 +11,7 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 from fastapi.routing import APIRoute
 from pydantic import ValidationError
 
-from workbench.backend.api import WorkbenchApiSettings, create_app
+from workbench.backend.api import WorkbenchApiSettings
 from workbench.backend.schemas import (
     MonitorDataResponse,
     ParameterStatusResponse,
@@ -22,8 +22,12 @@ from workbench.backend.schemas import (
     TrainingRunPlanCreateRequest,
     TrainingRunPlanResponse,
 )
-from workbench.backend.tests.helpers import FakeProcess, FakeRunner
-from workbench.backend.training_jobs import TrainingJobManager
+from workbench.backend.tests.helpers import (
+    FakeProcess,
+    FakeRunner,
+    TrainingJobRuntimeHarness,
+    create_app_with_training_runtime,
+)
 
 EXPECTED_TRAINING_JOB_RESPONSE_FIELDS = (
     "id",
@@ -104,17 +108,17 @@ class TrainingApiLifecycleTests(unittest.TestCase):
         process: FakeProcess | None = None,
     ):
         logs_root = root / "logs"
-        manager = TrainingJobManager(
+        manager = TrainingJobRuntimeHarness(
             root=root / "jobs",
             logs_root=logs_root,
             runner=FakeRunner(process),
         )
-        app = create_app(
+        app = create_app_with_training_runtime(
             WorkbenchApiSettings(
                 logs_root=str(logs_root),
                 allow_unsafe_local_mutations=True,
             ),
-            training_manager=manager,
+            manager,
         )
         return app, manager
 
@@ -312,6 +316,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                 async with httpx.AsyncClient(
                     transport=transport,
                     base_url="http://testserver",
+                    headers={"X-Workbench-Mutation": "true"},
                 ) as client:
                     return await client.post(
                         "/training/run-plan",
@@ -341,6 +346,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                 async with httpx.AsyncClient(
                     transport=transport,
                     base_url="http://testserver",
+                    headers={"X-Workbench-Mutation": "true"},
                 ) as client:
                     accepted = await client.post(
                         "/training/run-plan",
@@ -393,6 +399,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                 async with httpx.AsyncClient(
                     transport=transport,
                     base_url="http://testserver",
+                    headers={"X-Workbench-Mutation": "true"},
                 ) as client:
                     return await client.post(
                         "/training/run-plan",
@@ -427,6 +434,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                 async with httpx.AsyncClient(
                     transport=transport,
                     base_url="http://testserver",
+                    headers={"X-Workbench-Mutation": "true"},
                 ) as client:
                     return await client.post(
                         "/training/run-plan",
@@ -462,6 +470,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                 async with httpx.AsyncClient(
                     transport=transport,
                     base_url="http://testserver",
+                    headers={"X-Workbench-Mutation": "true"},
                 ) as client:
                     return await client.post(
                         "/training/run-plan",
@@ -513,6 +522,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                 async with httpx.AsyncClient(
                     transport=transport,
                     base_url="http://testserver",
+                    headers={"X-Workbench-Mutation": "true"},
                 ) as client:
                     return await client.post(
                         "/training/run-plan",
@@ -549,6 +559,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                 async with httpx.AsyncClient(
                     transport=transport,
                     base_url="http://testserver",
+                    headers={"X-Workbench-Mutation": "true"},
                 ) as client:
                     return await client.post(
                         "/training/run-plan",
@@ -603,6 +614,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                 async with httpx.AsyncClient(
                     transport=transport,
                     base_url="http://testserver",
+                    headers={"X-Workbench-Mutation": "true"},
                 ) as client:
                     return await client.post(
                         "/training/run-plan",
@@ -804,6 +816,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                 async with httpx.AsyncClient(
                     transport=transport,
                     base_url="http://testserver",
+                    headers={"X-Workbench-Mutation": "true"},
                 ) as client:
                     run_plan_response = await client.post(
                         "/training/run-plan",
@@ -873,6 +886,57 @@ class TrainingApiLifecycleTests(unittest.TestCase):
         for internal_key in ("command", "root", "process"):
             self.assertNotIn(internal_key, create_payload)
 
+    def test_training_job_rejects_duplicate_submitted_run_ids(self) -> None:
+        import httpx
+
+        with tempfile.TemporaryDirectory() as tmp:
+            app, manager = self._create_test_app(Path(tmp))
+
+            async def call_api() -> httpx.Response:
+                transport = httpx.ASGITransport(app=app)
+                async with httpx.AsyncClient(
+                    transport=transport,
+                    base_url="http://testserver",
+                    headers={"X-Workbench-Mutation": "true"},
+                ) as client:
+                    run_plan_response = await client.post(
+                        "/training/run-plan",
+                        json={
+                            "modelType": "linears",
+                            "model": "linear",
+                            "preset": "baseline",
+                            "datasets": ["Mnist"],
+                            "overrides": {},
+                            "logFolder": "duplicate_ids",
+                        },
+                    )
+                    run_plan = run_plan_response.json()
+                    duplicate = dict(run_plan["runs"][0])
+                    duplicate["index"] = 2
+                    run_plan["runs"].append(duplicate)
+                    return await client.post(
+                        "/training/jobs",
+                        json={
+                            "modelType": "linears",
+                            "model": "linear",
+                            "preset": "baseline",
+                            "datasets": ["Mnist"],
+                            "overrides": {},
+                            "logFolder": "duplicate_ids",
+                            "monitors": [],
+                            "runPlan": run_plan,
+                        },
+                    )
+
+            response = asyncio.run(call_api())
+
+        self.assertEqual(response.status_code, 400, response.text)
+        self.assertEqual(
+            response.json(),
+            {"detail": "Run plan contains duplicate run id 'run-0001'."},
+        )
+        self.assertEqual(manager.runner.commands, [])
+
     def test_training_job_events_endpoint_paginates_progress_history(self) -> None:
         import httpx
 
@@ -884,6 +948,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                 async with httpx.AsyncClient(
                     transport=transport,
                     base_url="http://testserver",
+                    headers={"X-Workbench-Mutation": "true"},
                 ) as client:
                     create_response = await client.post(
                         "/training/jobs",
@@ -921,6 +986,10 @@ class TrainingApiLifecycleTests(unittest.TestCase):
         self.assertEqual(create_response.status_code, 200, create_response.text)
         self.assertEqual(events_response.status_code, 200, events_response.text)
         payload = events_response.json()
+        self.assertEqual(
+            set(payload),
+            {"jobId", "offset", "limit", "totalCount", "nextOffset", "events"},
+        )
         self.assertEqual(payload["offset"], 2)
         self.assertEqual(payload["limit"], 3)
         self.assertEqual(payload["totalCount"], 6)
@@ -938,6 +1007,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                 async with httpx.AsyncClient(
                     transport=transport,
                     base_url="http://testserver",
+                    headers={"X-Workbench-Mutation": "true"},
                 ) as client:
                     return await client.post(
                         "/training/run-plan",
@@ -973,6 +1043,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                 async with httpx.AsyncClient(
                     transport=transport,
                     base_url="http://testserver",
+                    headers={"X-Workbench-Mutation": "true"},
                 ) as client:
                     return await client.post(
                         "/training/jobs",
@@ -1011,6 +1082,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                 async with httpx.AsyncClient(
                     transport=transport,
                     base_url="http://testserver",
+                    headers={"X-Workbench-Mutation": "true"},
                 ) as client:
                     create_response = await client.post(
                         "/training/jobs",
@@ -1063,6 +1135,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                 async with httpx.AsyncClient(
                     transport=transport,
                     base_url="http://testserver",
+                    headers={"X-Workbench-Mutation": "true"},
                 ) as client:
                     get_response = await client.get("/training/jobs/missing")
                     cancel_response = await client.post(

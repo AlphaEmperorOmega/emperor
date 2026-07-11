@@ -6,14 +6,25 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 
+from workbench.backend.api.mutation_policy import (
+    HttpOperationPolicy,
+    declare_http_operation,
+)
+from workbench.backend.api.v1.training_commands import (
+    create_run_plan_command,
+    create_training_job_command,
+)
+from workbench.backend.api.v1.training_mapping import (
+    training_events_page_to_payload,
+    training_job_to_payload,
+    training_run_plan_to_payload,
+)
 from workbench.backend.blocking import run_blocking_io
 from workbench.backend.core.config import WorkbenchApiSettings
-from workbench.backend.core.security import (
-    require_bearer_auth,
-    require_local_mutations_allowed,
-)
+from workbench.backend.core.security import require_bearer_auth
 from workbench.backend.dependencies import (
     get_training_job_service,
+    get_training_run_plan_service,
     get_workbench_settings,
 )
 from workbench.backend.schemas import (
@@ -25,11 +36,8 @@ from workbench.backend.schemas import (
     TrainingRunPlanCreateRequest,
     TrainingRunPlanResponse,
 )
-from workbench.backend.services.training import TrainingJobService
-from workbench.backend.training_request_commands import (
-    create_run_plan_command,
-    create_training_job_command,
-)
+from workbench.backend.training_jobs import TrainingJobService
+from workbench.backend.training_jobs.plans import TrainingRunPlanService
 
 router = APIRouter(
     prefix="/training",
@@ -44,19 +52,19 @@ router = APIRouter(
     summary="Create a training job",
     response_description="Created training job state.",
 )
+@declare_http_operation(HttpOperationPolicy.LOCAL_MUTATION)
 async def create_training_job(
     request: TrainingJobCreateRequest,
     service: Annotated[TrainingJobService, Depends(get_training_job_service)],
     settings: Annotated[WorkbenchApiSettings, Depends(get_workbench_settings)],
 ) -> TrainingJobResponse:
-    require_local_mutations_allowed(settings)
     return TrainingJobResponse.model_validate(
-        (
+        training_job_to_payload(
             await run_blocking_io(
                 service.create_job,
                 create_training_job_command(request),
             )
-        ).to_api_payload()
+        )
     )
 
 
@@ -66,17 +74,21 @@ async def create_training_job(
     summary="Create a training run plan",
     response_description="Materialized training runs for the current request.",
 )
+@declare_http_operation(HttpOperationPolicy.READ_ONLY)
 async def create_training_run_plan(
     request: TrainingRunPlanCreateRequest,
-    service: Annotated[TrainingJobService, Depends(get_training_job_service)],
+    service: Annotated[
+        TrainingRunPlanService,
+        Depends(get_training_run_plan_service),
+    ],
 ) -> TrainingRunPlanResponse:
     return TrainingRunPlanResponse.model_validate(
-        (
+        training_run_plan_to_payload(
             await run_blocking_io(
                 service.create_run_plan,
                 create_run_plan_command(request),
             )
-        ).to_api_payload()
+        )
     )
 
 
@@ -91,7 +103,7 @@ async def training_job(
     service: Annotated[TrainingJobService, Depends(get_training_job_service)],
 ) -> TrainingJobResponse:
     return TrainingJobResponse.model_validate(
-        (await run_blocking_io(service.get_job, job_id)).to_api_payload()
+        training_job_to_payload(await run_blocking_io(service.get_job, job_id))
     )
 
 
@@ -108,11 +120,13 @@ async def training_job_events(
     limit: Annotated[int, Query(ge=1, le=5000)] = 500,
 ) -> TrainingProgressEventsResponse:
     return TrainingProgressEventsResponse.model_validate(
-        await run_blocking_io(
-            service.get_job_events,
-            job_id,
-            offset=offset,
-            limit=limit,
+        training_events_page_to_payload(
+            await run_blocking_io(
+                service.get_job_events,
+                job_id,
+                offset=offset,
+                limit=limit,
+            )
         )
     )
 
@@ -169,12 +183,14 @@ async def training_job_monitor_parameter_status(
     summary="Cancel a training job",
     response_description="Cancelled training job state.",
 )
+@declare_http_operation(HttpOperationPolicy.LOCAL_MUTATION)
 async def cancel_training_job(
     job_id: str,
     service: Annotated[TrainingJobService, Depends(get_training_job_service)],
     settings: Annotated[WorkbenchApiSettings, Depends(get_workbench_settings)],
 ) -> TrainingJobResponse:
-    require_local_mutations_allowed(settings)
     return TrainingJobResponse.model_validate(
-        (await run_blocking_io(service.cancel_job, job_id)).to_api_payload()
+        training_job_to_payload(
+            await run_blocking_io(service.cancel_job, job_id)
+        )
     )

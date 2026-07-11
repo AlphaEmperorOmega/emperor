@@ -10,7 +10,10 @@ from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from workbench.backend.core.limits import (
+    DEFAULT_LOG_ARCHIVE_UPLOAD_CONCURRENCY,
     DEFAULT_MAX_LOG_ARCHIVE_EXTRACTED_SIZE,
+    DEFAULT_MAX_LOG_ARCHIVE_MEMBER_COUNT,
+    DEFAULT_MAX_LOG_ARCHIVE_PATH_BYTES,
     DEFAULT_MAX_LOG_ARCHIVE_UPLOAD_SIZE,
 )
 
@@ -41,6 +44,18 @@ class WorkbenchApiSettings(BaseSettings):
     allow_log_imports: bool | None = None
     max_upload_size: int | None = Field(default=None, ge=1)
     max_log_archive_extracted_size: int | None = Field(default=None, ge=1)
+    max_log_archive_member_count: int = Field(
+        default=DEFAULT_MAX_LOG_ARCHIVE_MEMBER_COUNT,
+        ge=1,
+    )
+    max_log_archive_path_bytes: int = Field(
+        default=DEFAULT_MAX_LOG_ARCHIVE_PATH_BYTES,
+        ge=1,
+    )
+    log_archive_upload_concurrency: int = Field(
+        default=DEFAULT_LOG_ARCHIVE_UPLOAD_CONCURRENCY,
+        ge=1,
+    )
     training_cancellation_mode: Literal["strict-cgroup", "process-group"] = (
         "strict-cgroup"
     )
@@ -60,32 +75,19 @@ class WorkbenchApiSettings(BaseSettings):
 
     @property
     def log_imports_enabled(self) -> bool:
-        if self.allow_log_imports is not None:
-            return self.allow_log_imports
-        return self.allow_unsafe_local_mutations or self.auth_mode == "none"
+        return self.allow_log_imports is True
 
     @property
-    def effective_max_upload_size(self) -> int | None:
+    def effective_max_upload_size(self) -> int:
         if self.max_upload_size is not None:
             return self.max_upload_size
-        if self._uses_trusted_local_import_defaults():
-            return None
         return DEFAULT_MAX_LOG_ARCHIVE_UPLOAD_SIZE
 
     @property
-    def effective_max_log_archive_extracted_size(self) -> int | None:
+    def effective_max_log_archive_extracted_size(self) -> int:
         if self.max_log_archive_extracted_size is not None:
             return self.max_log_archive_extracted_size
-        if self._uses_trusted_local_import_defaults():
-            return None
         return DEFAULT_MAX_LOG_ARCHIVE_EXTRACTED_SIZE
-
-    def _uses_trusted_local_import_defaults(self) -> bool:
-        return (
-            self.auth_mode == "none"
-            and self.allow_log_imports is None
-            and not self.allow_unsafe_local_mutations
-        )
 
 
 @lru_cache(maxsize=1)

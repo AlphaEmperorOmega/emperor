@@ -9,8 +9,6 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from types import SimpleNamespace
-from unittest.mock import patch
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
@@ -18,11 +16,13 @@ import models.linears.linear.config as linear_config
 from emperor.base.layer.gate import LayerGateOptions
 from emperor.base.options import ActivationOptions
 from emperor.memory.config import WeightedDynamicMemoryConfig
+from emperor.model_packages.configuration_metadata import (
+    configuration_field_metadata,
+)
 from models.catalog import discover_model_ids
 from models.config_overrides import parse_config_value
 
 from workbench.backend.inspector.schema import config_schema, search_space_schema
-from workbench.backend.inspector.errors import InspectorError
 
 
 def _fields_by_key(payload: dict) -> dict[str, dict]:
@@ -34,6 +34,46 @@ def _axes_by_key(payload: dict) -> dict[str, dict]:
 
 
 class InspectorSchemaTests(unittest.TestCase):
+    def test_gpt_schemas_remove_pretraining_and_causal_switch_fields(self) -> None:
+        blocked = {
+            "causal_attention_mask_flag",
+            "token_type_vocab_size",
+            "mlm_activation",
+            "mlm_decoder_bias_flag",
+            "nsp_output_dim",
+        }
+        for model_name in (
+            "gpt/linear",
+            "gpt/linear_adaptive",
+            "gpt/expert_linear",
+            "gpt/expert_linear_adaptive",
+        ):
+            with self.subTest(model_name=model_name):
+                fields = _fields_by_key(config_schema(model_name))
+                self.assertFalse(blocked & set(fields))
+                self.assertFalse(any("causal" in key for key in fields))
+                self.assertIn("sequence_length", fields)
+                self.assertTrue(fields["lm_head_weight_tying_flag"]["default"])
+                self.assertFalse(fields["lm_head_bias_flag"]["default"])
+                self.assertIn("embedding_layer_norm_flag", fields)
+                self.assertIn("embedding_dropout_probability", fields)
+
+    def test_gpt_search_axes_match_corresponding_bert_backends(self) -> None:
+        for backend in (
+            "linear",
+            "linear_adaptive",
+            "expert_linear",
+            "expert_linear_adaptive",
+        ):
+            with self.subTest(backend=backend):
+                gpt_axes = _axes_by_key(
+                    search_space_schema(f"gpt/{backend}", "baseline")
+                )
+                bert_axes = _axes_by_key(
+                    search_space_schema(f"bert/{backend}", "baseline")
+                )
+                self.assertEqual(set(gpt_axes), set(bert_axes))
+
     def test_config_schema_emits_uppercase_public_keys(self) -> None:
         fields = config_schema("linears/linear")["fields"]
 
@@ -109,22 +149,17 @@ class InspectorSchemaTests(unittest.TestCase):
             try:
                 importlib.invalidate_caches()
                 config_module = importlib.import_module(model_module_name)
-                parts = SimpleNamespace(config_module=config_module)
-                with patch(
-                    "workbench.backend.inspector.schema.load_model_parts",
-                    return_value=parts,
-                ):
-                    fields = _fields_by_key(config_schema("test/model"))
+                metadata = configuration_field_metadata(config_module)
             finally:
                 sys.path.remove(temp_dir)
                 sys.modules.pop(model_module_name, None)
                 sys.modules.pop(shared_module_name, None)
 
-        self.assertEqual(fields["trainer_accelerator"]["section"], "Trainer")
-        self.assertEqual(fields["trainer_max_steps"]["section"], "Trainer")
-        self.assertEqual(fields["trainer_precision"]["section"], "Trainer")
-        self.assertEqual(fields["callback_checkpoint_flag"]["section"], "Callback")
-        self.assertEqual(fields["hidden_dim"]["section"], "Model")
+        self.assertEqual(metadata["TRAINER_ACCELERATOR"]["section"], "Trainer")
+        self.assertEqual(metadata["TRAINER_MAX_STEPS"]["section"], "Trainer")
+        self.assertEqual(metadata["TRAINER_PRECISION"]["section"], "Trainer")
+        self.assertEqual(metadata["CALLBACK_CHECKPOINT_FLAG"]["section"], "Callback")
+        self.assertEqual(metadata["HIDDEN_DIM"]["section"], "Model")
 
     def test_config_schema_uses_markdown_heading_section_paths(self) -> None:
         fields = _fields_by_key(config_schema("linears/linear"))
@@ -329,13 +364,8 @@ class InspectorSchemaTests(unittest.TestCase):
             try:
                 importlib.invalidate_caches()
                 config_module = importlib.import_module(model_module_name)
-                parts = SimpleNamespace(config_module=config_module)
-                with patch(
-                    "workbench.backend.inspector.schema.load_model_parts",
-                    return_value=parts,
-                ):
-                    with self.assertRaisesRegex(InspectorError, "cannot use `as`"):
-                        config_schema("test/model")
+                with self.assertRaisesRegex(ValueError, "cannot use `as`"):
+                    configuration_field_metadata(config_module)
             finally:
                 sys.path.remove(temp_dir)
                 sys.modules.pop(model_module_name, None)
@@ -607,6 +637,10 @@ class InspectorSchemaTests(unittest.TestCase):
         for model_name in (
             "bert/linear",
             "bert/expert_linear_adaptive",
+            "transformer/linear",
+            "transformer/linear_adaptive",
+            "transformer/expert_linear",
+            "transformer/expert_linear_adaptive",
         ):
             fields = _fields_by_key(config_schema(model_name))
 
@@ -676,6 +710,10 @@ class InspectorSchemaTests(unittest.TestCase):
         for model_name in (
             "bert/linear",
             "bert/expert_linear_adaptive",
+            "transformer/linear",
+            "transformer/linear_adaptive",
+            "transformer/expert_linear",
+            "transformer/expert_linear_adaptive",
         ):
             fields = _fields_by_key(config_schema(model_name))
 
@@ -713,6 +751,53 @@ class InspectorSchemaTests(unittest.TestCase):
             with self.subTest(model_name=model_name):
                 for field_key in expected_sections:
                     self.assertNotIn(field_key, fields)
+
+    def test_transformer_schemas_and_search_axes_cover_translation_backends(
+        self,
+    ) -> None:
+        for backend in (
+            "linear",
+            "linear_adaptive",
+            "expert_linear",
+            "expert_linear_adaptive",
+        ):
+            model_name = f"transformer/{backend}"
+            with self.subTest(model_name=model_name):
+                fields = _fields_by_key(config_schema(model_name))
+                self.assertTrue(
+                    {
+                        "vocab_size",
+                        "model_dim",
+                        "source_sequence_length",
+                        "target_sequence_length",
+                        "encoder_num_layers",
+                        "decoder_num_layers",
+                    }.issubset(fields)
+                )
+                axes = _axes_by_key(search_space_schema(model_name, "baseline"))
+                self.assertTrue(
+                    {
+                        "learning_rate",
+                        "model_dim",
+                        "encoder_num_layers",
+                        "decoder_num_layers",
+                        "attn_num_heads",
+                        "ff_stack_hidden_dim",
+                    }.issubset(axes)
+                )
+                if "expert" in backend:
+                    self.assertTrue(
+                        {"expert_num_experts", "expert_top_k"}.issubset(axes)
+                    )
+                if "adaptive" in backend:
+                    self.assertTrue(
+                        {
+                            "weight_option",
+                            "bias_option",
+                            "diagonal_option",
+                            "row_mask_option",
+                        }.issubset(axes)
+                    )
 
     def test_linear_schemas_do_not_expose_halting_output_dims(self) -> None:
         removed_field_keys = {

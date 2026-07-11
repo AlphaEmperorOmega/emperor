@@ -2,7 +2,8 @@
 
 A config snapshot captures a named set of config overrides for a given
 ``model + preset`` so it can be reused and trained later. The Workbench backend has
-no database, so persistence mirrors :mod:`workbench.backend.job_store`: records are
+no database, so persistence mirrors :mod:`workbench.backend.training_jobs.store`:
+records are
 serialized to JSON on disk, one file per snapshot under
 ``<root>/<model>/<id>.json``.
 """

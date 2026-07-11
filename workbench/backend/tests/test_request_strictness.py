@@ -11,7 +11,10 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 import httpx
 
 from workbench.backend.api import WorkbenchApiSettings, create_app
-from workbench.backend.training_jobs import TrainingJobManager
+from workbench.backend.tests.helpers import (
+    TrainingJobRuntimeHarness,
+    create_app_with_training_runtime,
+)
 
 
 class FakeProcess:
@@ -122,14 +125,14 @@ class RequestStrictnessTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             logs_root = Path(tmp) / "logs"
-            manager = TrainingJobManager(
+            manager = TrainingJobRuntimeHarness(
                 root=Path(tmp) / "jobs",
                 logs_root=logs_root,
                 runner=FakeRunner(),
             )
-            test_app = create_app(
+            test_app = create_app_with_training_runtime(
                 WorkbenchApiSettings(logs_root=str(logs_root)),
-                training_manager=manager,
+                manager,
             )
 
             for path, payload in REQUEST_BODY_ENDPOINT_CASES:
@@ -156,6 +159,7 @@ class RequestStrictnessTests(unittest.TestCase):
                 async with httpx.AsyncClient(
                     transport=transport,
                     base_url="http://testserver",
+                    headers={"X-Workbench-Mutation": "true"},
                 ) as client:
                     run_ids = [f"run-{index}" for index in range(51)]
                     parameter_status_response = await client.post(
@@ -190,6 +194,7 @@ class RequestStrictnessTests(unittest.TestCase):
         async with httpx.AsyncClient(
             transport=transport,
             base_url="http://testserver",
+            headers={"X-Workbench-Mutation": "true"},
         ) as client:
             return await client.post(
                 path,

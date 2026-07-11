@@ -8,21 +8,25 @@ from typing import Annotated, cast
 from fastapi import Depends, Request
 
 from workbench.backend.core.config import WorkbenchApiSettings
+from workbench.backend.log_experiments import (
+    LogExperimentMutationCoordinator,
+)
+from workbench.backend.run_history import RunHistoryService
 from workbench.backend.services.config_snapshots import ConfigSnapshotService
 from workbench.backend.services.inspection import InspectionService
-from workbench.backend.services.logs import LogRunService
-from workbench.backend.services.models import ModelCatalogService
-from workbench.backend.services.training import TrainingJobService
+from workbench.backend.training_jobs import TrainingJobService
+from workbench.backend.training_jobs.plans import TrainingRunPlanService
 
 
 @dataclass(frozen=True, slots=True)
 class WorkbenchServices:
     settings: WorkbenchApiSettings
-    model_catalog: ModelCatalogService
     config_snapshots: ConfigSnapshotService
     inspection: InspectionService
-    log_runs: LogRunService
+    run_history: RunHistoryService
     training_jobs: TrainingJobService
+    training_run_plans: TrainingRunPlanService
+    log_experiment_mutations: LogExperimentMutationCoordinator
 
 
 async def get_workbench_services(request: Request) -> WorkbenchServices:
@@ -33,12 +37,6 @@ async def get_workbench_settings(
     services: Annotated[WorkbenchServices, Depends(get_workbench_services)],
 ) -> WorkbenchApiSettings:
     return services.settings
-
-
-async def get_model_catalog_service(
-    services: Annotated[WorkbenchServices, Depends(get_workbench_services)],
-) -> ModelCatalogService:
-    return services.model_catalog
 
 
 async def get_config_snapshot_service(
@@ -53,10 +51,10 @@ async def get_inspection_service(
     return services.inspection
 
 
-async def get_log_run_service(
+async def get_run_history_service(
     services: Annotated[WorkbenchServices, Depends(get_workbench_services)],
-) -> LogRunService:
-    return services.log_runs
+) -> RunHistoryService:
+    return services.run_history
 
 
 async def get_training_job_service(
@@ -65,13 +63,19 @@ async def get_training_job_service(
     return services.training_jobs
 
 
+async def get_training_run_plan_service(
+    services: Annotated[WorkbenchServices, Depends(get_workbench_services)],
+) -> TrainingRunPlanService:
+    return services.training_run_plans
+
+
 __all__ = [
     "WorkbenchServices",
     "get_config_snapshot_service",
     "get_inspection_service",
-    "get_log_run_service",
-    "get_model_catalog_service",
+    "get_run_history_service",
     "get_training_job_service",
+    "get_training_run_plan_service",
     "get_workbench_services",
     "get_workbench_settings",
 ]

@@ -14,13 +14,16 @@ from tensorboard.backend.event_processing import event_accumulator
 from torch.utils.tensorboard import SummaryWriter
 
 from workbench.backend.inspector.errors import InspectorError
-from workbench.backend.log_runs import LogRunIndex
-from workbench.backend.monitor_data import (
+from workbench.backend.run_history.scanner import LogRunScanner
+from workbench.backend.tensorboard.readers import (
     TensorBoardMonitorReader,
     TensorBoardParameterStatusReader,
 )
-from workbench.backend.tests.helpers import FakeRunner
-from workbench.backend.training_jobs import TrainingJobManager
+from workbench.backend.tests.helpers import (
+    FakeRunner,
+    TrainingJobRuntimeHarness,
+    create_app_with_training_runtime,
+)
 
 
 class TagsFailureAccumulator:
@@ -111,9 +114,12 @@ class TensorBoardMonitorReaderFailureTests(unittest.TestCase):
     ) -> dict:
         run_dirs = [log_dir / f"run-{index}" for index, _ in enumerate(accumulators)]
         with (
-            patch("workbench.backend.monitor_data.event_dirs", return_value=run_dirs),
             patch(
-                "workbench.backend.monitor_data.load_event_accumulator",
+                "workbench.backend.tensorboard.readers.event_dirs",
+                return_value=run_dirs,
+            ),
+            patch(
+                "workbench.backend.tensorboard.readers.load_event_accumulator",
                 side_effect=accumulators,
             ),
         ):
@@ -174,7 +180,9 @@ class TensorBoardMonitorReaderFailureTests(unittest.TestCase):
             event_file.write_text("large-event-payload", encoding="utf-8")
             reader = TensorBoardMonitorReader(max_event_bytes=4)
 
-            with patch("workbench.backend.monitor_data.load_event_accumulator") as load:
+            with patch(
+                "workbench.backend.tensorboard.readers.load_event_accumulator"
+            ) as load:
                 data = reader.read(
                     job_id="job-1",
                     node_path="main_model.0.model",
@@ -250,11 +258,11 @@ class TensorBoardMonitorReaderFailureTests(unittest.TestCase):
 
             with (
                 patch(
-                    "workbench.backend.monitor_data.event_dirs",
+                    "workbench.backend.tensorboard.readers.event_dirs",
                     return_value=[log_dir],
                 ),
                 patch(
-                    "workbench.backend.monitor_data.load_event_accumulator",
+                    "workbench.backend.tensorboard.readers.load_event_accumulator",
                     return_value=NoMatchingMonitorAccumulator(),
                 ) as load,
             ):
@@ -443,7 +451,9 @@ class TensorBoardParameterStatusReaderTests(unittest.TestCase):
             event_file.write_text("large-event-payload", encoding="utf-8")
             reader = TensorBoardParameterStatusReader(max_event_bytes=4)
 
-            with patch("workbench.backend.monitor_data.load_event_accumulator") as load:
+            with patch(
+                "workbench.backend.tensorboard.readers.load_event_accumulator"
+            ) as load:
                 data = reader.read(
                     source_id="job-1",
                     preset=None,
@@ -480,11 +490,11 @@ class TensorBoardParameterStatusReaderTests(unittest.TestCase):
 
             with (
                 patch(
-                    "workbench.backend.monitor_data.event_dirs",
+                    "workbench.backend.tensorboard.readers.event_dirs",
                     return_value=[log_dir],
                 ),
                 patch(
-                    "workbench.backend.monitor_data.load_event_accumulator",
+                    "workbench.backend.tensorboard.readers.load_event_accumulator",
                     return_value=ParameterStatusAccumulator(),
                 ) as load,
             ):
@@ -526,11 +536,11 @@ class TensorBoardParameterStatusReaderTests(unittest.TestCase):
 
             with (
                 patch(
-                    "workbench.backend.monitor_data.event_dirs",
+                    "workbench.backend.tensorboard.readers.event_dirs",
                     return_value=[log_dir],
                 ),
                 patch(
-                    "workbench.backend.monitor_data.load_event_accumulator",
+                    "workbench.backend.tensorboard.readers.load_event_accumulator",
                     return_value=ParameterStatusAccumulator(),
                 ) as load,
             ):
@@ -555,11 +565,11 @@ class TensorBoardParameterStatusReaderTests(unittest.TestCase):
 
             with (
                 patch(
-                    "workbench.backend.monitor_data.event_dirs",
+                    "workbench.backend.tensorboard.readers.event_dirs",
                     return_value=[log_dir],
                 ),
                 patch(
-                    "workbench.backend.monitor_data.load_event_accumulator",
+                    "workbench.backend.tensorboard.readers.load_event_accumulator",
                     return_value=LargeParameterStatusAccumulator(),
                 ),
             ):
@@ -591,7 +601,7 @@ class HistoricalMonitorDataFailureTests(unittest.TestCase):
         )
         run_dir.mkdir(parents=True)
         (run_dir / "events.out.tfevents.test").write_text("broken", encoding="utf-8")
-        run = LogRunIndex(logs_root=logs_root).list_runs()[0]
+        run = LogRunScanner(logs_root=logs_root).list_runs()[0]
         return run.id, run_dir
 
     def test_broken_historical_tags_return_empty_monitor_response_shape(self) -> None:
@@ -617,7 +627,7 @@ class HistoricalMonitorDataFailureTests(unittest.TestCase):
             run_id, run_dir = self.write_historical_run(logs_root)
 
             with patch(
-                "workbench.backend.monitor_data.load_event_accumulator",
+                "workbench.backend.tensorboard.readers.load_event_accumulator",
                 return_value=TagsFailureAccumulator(),
             ):
                 response = asyncio.run(call_api(logs_root, run_id))
@@ -667,7 +677,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            manager = TrainingJobManager(
+            manager = TrainingJobRuntimeHarness(
                 root=Path(tmp) / "jobs",
                 logs_root=Path(tmp) / "logs",
                 runner=FakeRunner(),
@@ -707,7 +717,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
 
     def test_training_job_monitor_data_rejects_unknown_dataset(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            manager = TrainingJobManager(
+            manager = TrainingJobRuntimeHarness(
                 root=Path(tmp) / "jobs",
                 logs_root=Path(tmp) / "logs",
                 runner=FakeRunner(),
@@ -735,7 +745,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
 
     def test_training_job_monitor_data_rejects_unknown_preset(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            manager = TrainingJobManager(
+            manager = TrainingJobRuntimeHarness(
                 root=Path(tmp) / "jobs",
                 logs_root=Path(tmp) / "logs",
                 runner=FakeRunner(),
@@ -767,7 +777,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            manager = TrainingJobManager(
+            manager = TrainingJobRuntimeHarness(
                 root=Path(tmp) / "jobs",
                 logs_root=Path(tmp) / "logs",
                 runner=FakeRunner(),
@@ -817,19 +827,22 @@ class TrainingMonitorDataTests(unittest.TestCase):
             preset="gating",
         )
 
-    def test_training_job_monitor_data_trusts_existing_log_dir_outside_logs_root(
+    def test_training_job_monitor_data_rejects_log_dirs_outside_job_experiment(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            outside_log_dir = Path(tmp) / "outside-run"
-            writer = SummaryWriter(log_dir=str(outside_log_dir))
-            writer.add_scalar("main_model.0.model/output/mean", 0.42, 7)
-            writer.flush()
-            writer.close()
-
-            manager = TrainingJobManager(
-                root=Path(tmp) / "jobs",
-                logs_root=Path(tmp) / "logs",
+            root = Path(tmp)
+            logs_root = root / "logs"
+            outside_log_dir = root / "outside-run"
+            other_experiment = logs_root / "other_model" / "run"
+            symlink_escape = logs_root / "test_model" / "linked"
+            outside_log_dir.mkdir()
+            other_experiment.mkdir(parents=True)
+            symlink_escape.parent.mkdir(parents=True)
+            symlink_escape.symlink_to(outside_log_dir, target_is_directory=True)
+            manager = TrainingJobRuntimeHarness(
+                root=root / "jobs",
+                logs_root=logs_root,
                 runner=FakeRunner(),
             )
             payload = manager.create_job(
@@ -841,37 +854,39 @@ class TrainingMonitorDataTests(unittest.TestCase):
                 monitors=["linear"],
             )
             job = manager.jobs[payload["id"]]
-            manager._write_event(
-                job,
-                {
-                    "type": "dataset_started",
-                    "status": "running",
-                    "preset": "baseline",
-                    "dataset": "Mnist",
-                    "logDir": str(outside_log_dir),
-                },
-            )
+            for untrusted_log_dir in (
+                outside_log_dir,
+                other_experiment,
+                logs_root / "test_model" / ".." / "other_model" / "run",
+                symlink_escape,
+            ):
+                with self.subTest(log_dir=untrusted_log_dir):
+                    manager._write_event(
+                        job,
+                        {
+                            "type": "dataset_started",
+                            "status": "running",
+                            "preset": "baseline",
+                            "dataset": "Mnist",
+                            "logDir": str(untrusted_log_dir),
+                        },
+                    )
 
-            data = manager.get_monitor_data(
-                payload["id"],
-                node_path="main_model.0.model",
-                dataset="Mnist",
-                preset="baseline",
-            )
-
-        self.assertEqual(data["logDir"], str(outside_log_dir))
-        self.assertEqual(data["preset"], "baseline")
-        self.assertEqual(data["dataset"], "Mnist")
-        self.assertEqual(
-            data["scalarSeries"][0]["tag"], "main_model.0.model/output/mean"
-        )
-        self.assertEqual(data["scalarSeries"][0]["points"][0]["step"], 7)
-        self.assertAlmostEqual(data["scalarSeries"][0]["points"][0]["value"], 0.42)
+                    with self.assertRaisesRegex(
+                        InspectorError,
+                        "outside this Training Job's Log Experiment",
+                    ):
+                        manager.get_monitor_data(
+                            payload["id"],
+                            node_path="main_model.0.model",
+                            dataset="Mnist",
+                            preset="baseline",
+                        )
 
     def test_training_job_monitor_data_filters_tensorboard_tags(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "jobs"
-            log_dir = Path(tmp) / "logs" / "run"
+            log_dir = Path(tmp) / "logs" / "test_model" / "run"
             writer = SummaryWriter(log_dir=str(log_dir))
             writer.add_scalar("main_model.0.model/output/mean", 0.12, 100)
             writer.add_scalar("main_model.1.model/output/mean", 0.99, 100)
@@ -889,7 +904,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
             writer.flush()
             writer.close()
 
-            manager = TrainingJobManager(
+            manager = TrainingJobRuntimeHarness(
                 root=root,
                 logs_root=Path(tmp) / "logs",
                 runner=FakeRunner(),
@@ -944,8 +959,8 @@ class TrainingMonitorDataTests(unittest.TestCase):
     def test_training_job_monitor_data_filters_by_preset_and_dataset(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "jobs"
-            baseline_dir = Path(tmp) / "logs" / "baseline"
-            gating_dir = Path(tmp) / "logs" / "gating"
+            baseline_dir = Path(tmp) / "logs" / "test_model" / "baseline"
+            gating_dir = Path(tmp) / "logs" / "test_model" / "gating"
             baseline_writer = SummaryWriter(log_dir=str(baseline_dir))
             baseline_writer.add_scalar("main_model.0.model/output/mean", 0.12, 100)
             baseline_writer.flush()
@@ -955,7 +970,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
             gating_writer.flush()
             gating_writer.close()
 
-            manager = TrainingJobManager(
+            manager = TrainingJobRuntimeHarness(
                 root=root,
                 logs_root=Path(tmp) / "logs",
                 runner=FakeRunner(),
@@ -1007,7 +1022,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
     ) -> None:
         import httpx
 
-        from workbench.backend.api import WorkbenchApiSettings, create_app
+        from workbench.backend.api import WorkbenchApiSettings
 
         async def call_api(app, job_id: str) -> httpx.Response:
             transport = httpx.ASGITransport(app=app)
@@ -1023,8 +1038,8 @@ class TrainingMonitorDataTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "jobs"
             logs_root = Path(tmp) / "logs"
-            baseline_dir = logs_root / "baseline"
-            gating_dir = logs_root / "gating"
+            baseline_dir = logs_root / "test_model" / "baseline"
+            gating_dir = logs_root / "test_model" / "gating"
 
             baseline_writer = SummaryWriter(log_dir=str(baseline_dir))
             baseline_writer.add_scalar(
@@ -1043,7 +1058,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
             gating_writer.flush()
             gating_writer.close()
 
-            manager = TrainingJobManager(
+            manager = TrainingJobRuntimeHarness(
                 root=root,
                 logs_root=logs_root,
                 runner=FakeRunner(),
@@ -1078,9 +1093,9 @@ class TrainingMonitorDataTests(unittest.TestCase):
                     "logDir": str(gating_dir),
                 },
             )
-            app = create_app(
+            app = create_app_with_training_runtime(
                 WorkbenchApiSettings(logs_root=str(logs_root)),
-                training_manager=manager,
+                manager,
             )
 
             response = asyncio.run(call_api(app, payload["id"]))
@@ -1093,6 +1108,46 @@ class TrainingMonitorDataTests(unittest.TestCase):
         self.assertEqual(data["logDir"], str(gating_dir))
         self.assertEqual(data["nodes"][0]["weights"]["status"], "updated")
         self.assertEqual(data["nodes"][0]["weights"]["lastStep"], 20)
+
+    def test_training_job_parameter_status_rejects_untrusted_event_log_dir(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manager = TrainingJobRuntimeHarness(
+                root=root / "jobs",
+                logs_root=root / "logs",
+                runner=FakeRunner(),
+            )
+            payload = manager.create_job(
+                model="linears/linear",
+                preset="baseline",
+                datasets=["Mnist"],
+                overrides={},
+                log_folder="test_model",
+                monitors=["linear"],
+            )
+            job = manager.jobs[payload["id"]]
+            manager._write_event(
+                job,
+                {
+                    "type": "dataset_started",
+                    "status": "running",
+                    "preset": "baseline",
+                    "dataset": "Mnist",
+                    "logDir": str(root / "outside-run"),
+                },
+            )
+
+            with self.assertRaisesRegex(
+                InspectorError,
+                "outside this Training Job's Log Experiment",
+            ):
+                manager.get_parameter_status(
+                    payload["id"],
+                    dataset="Mnist",
+                    preset="baseline",
+                )
 
     def test_log_run_monitor_data_filters_tensorboard_tags(self) -> None:
         import httpx
@@ -1126,7 +1181,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
             writer.flush()
             writer.close()
 
-            run_id = LogRunIndex(logs_root=logs_root).list_runs()[0].id
+            run_id = LogRunScanner(logs_root=logs_root).list_runs()[0].id
 
             async def call_api() -> tuple[
                 httpx.Response, httpx.Response, httpx.Response
@@ -1231,7 +1286,8 @@ class TrainingMonitorDataTests(unittest.TestCase):
             second_writer.close()
 
             runs_by_preset = {
-                run.preset: run for run in LogRunIndex(logs_root=logs_root).list_runs()
+                run.preset: run
+                for run in LogRunScanner(logs_root=logs_root).list_runs()
             }
             run_ids = [
                 runs_by_preset["baseline"].id,

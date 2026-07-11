@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Any
 
 from fastapi import APIRouter, Depends
 
 from workbench.backend.blocking import run_blocking_io
 from workbench.backend.core.security import require_bearer_auth
-from workbench.backend.dependencies import get_model_catalog_service
 from workbench.backend.schemas import (
     ConfigSchemaResponse,
     DatasetsResponse,
@@ -17,7 +16,6 @@ from workbench.backend.schemas import (
     PresetsResponse,
     SearchSpaceResponse,
 )
-from workbench.backend.services.models import ModelCatalogService
 
 router = APIRouter(
     prefix="/models",
@@ -26,16 +24,84 @@ router = APIRouter(
 )
 
 
+def _list_models() -> list[dict[str, str]]:
+    from emperor.model_packages import discover_model_packages
+
+    return [package.identity.to_payload() for package in discover_model_packages()]
+
+
+def _list_presets(model_type: str, model: str) -> list[dict[str, Any]]:
+    from workbench.backend.inspection_errors import call_model_package
+    from workbench.backend.inspection_serialization import model_presets_payload
+    from workbench.backend.model_identity import require_model_package
+
+    package = require_model_package(model_type, model)
+    return call_model_package(package, model_presets_payload, package)
+
+
+def _list_datasets(model_type: str, model: str) -> dict[str, Any]:
+    from workbench.backend.inspection_errors import call_model_package
+    from workbench.backend.inspection_serialization import model_datasets_payload
+    from workbench.backend.model_identity import require_model_package
+
+    package = require_model_package(model_type, model)
+    return call_model_package(package, model_datasets_payload, package)
+
+
+def _list_monitors(model_type: str, model: str) -> list[dict[str, Any]]:
+    from workbench.backend.inspection_errors import call_model_package
+    from workbench.backend.inspection_serialization import model_monitors_payload
+    from workbench.backend.model_identity import require_model_package
+
+    package = require_model_package(model_type, model)
+    return call_model_package(package, model_monitors_payload, package)
+
+
+def _config_schema(
+    model_type: str,
+    model: str,
+    preset: str | None,
+) -> dict[str, Any]:
+    from emperor.inspection import configuration_schema
+
+    from workbench.backend.inspection_errors import call_inspection
+    from workbench.backend.inspection_serialization import (
+        configuration_schema_payload,
+    )
+    from workbench.backend.model_identity import require_model_package
+
+    package = require_model_package(model_type, model)
+    return configuration_schema_payload(
+        call_inspection(configuration_schema, package, preset)
+    )
+
+
+def _search_space(
+    model_type: str,
+    model: str,
+    preset: str | None,
+    presets: list[str] | None,
+) -> dict[str, Any]:
+    from emperor.inspection import search_space_schema
+
+    from workbench.backend.inspection_errors import call_inspection
+    from workbench.backend.inspection_serialization import search_space_payload
+    from workbench.backend.model_identity import require_model_package
+
+    package = require_model_package(model_type, model)
+    return search_space_payload(
+        call_inspection(search_space_schema, package, preset, presets)
+    )
+
+
 @router.get(
     "",
     response_model=ModelsResponse,
     summary="List models",
     response_description="Available model package names.",
 )
-async def models(
-    service: Annotated[ModelCatalogService, Depends(get_model_catalog_service)],
-) -> ModelsResponse:
-    return ModelsResponse(models=await run_blocking_io(service.list_models))
+async def models() -> ModelsResponse:
+    return ModelsResponse(models=await run_blocking_io(_list_models))
 
 
 @router.get(
@@ -47,12 +113,11 @@ async def models(
 async def presets(
     modelType: str,
     model: str,
-    service: Annotated[ModelCatalogService, Depends(get_model_catalog_service)],
 ) -> PresetsResponse:
     return PresetsResponse(
         modelType=modelType,
         model=model,
-        presets=await run_blocking_io(service.list_presets, modelType, model),
+        presets=await run_blocking_io(_list_presets, modelType, model),
     )
 
 
@@ -65,9 +130,12 @@ async def presets(
 async def datasets(
     modelType: str,
     model: str,
-    service: Annotated[ModelCatalogService, Depends(get_model_catalog_service)],
 ) -> DatasetsResponse:
-    dataset_payload = await run_blocking_io(service.list_datasets, modelType, model)
+    dataset_payload = await run_blocking_io(
+        _list_datasets,
+        modelType,
+        model,
+    )
     return DatasetsResponse(
         modelType=modelType,
         model=model,
@@ -84,12 +152,15 @@ async def datasets(
 async def monitors(
     modelType: str,
     model: str,
-    service: Annotated[ModelCatalogService, Depends(get_model_catalog_service)],
 ) -> MonitorsResponse:
     return MonitorsResponse(
         modelType=modelType,
         model=model,
-        monitors=await run_blocking_io(service.list_monitors, modelType, model),
+        monitors=await run_blocking_io(
+            _list_monitors,
+            modelType,
+            model,
+        ),
     )
 
 
@@ -102,11 +173,15 @@ async def monitors(
 async def schema(
     modelType: str,
     model: str,
-    service: Annotated[ModelCatalogService, Depends(get_model_catalog_service)],
     preset: str | None = None,
 ) -> ConfigSchemaResponse:
     return ConfigSchemaResponse.model_validate(
-        await run_blocking_io(service.config_schema, modelType, model, preset)
+        await run_blocking_io(
+            _config_schema,
+            modelType,
+            model,
+            preset,
+        )
     )
 
 
@@ -119,7 +194,6 @@ async def schema(
 async def search_space(
     modelType: str,
     model: str,
-    service: Annotated[ModelCatalogService, Depends(get_model_catalog_service)],
     preset: str | None = None,
     presets: str | None = None,
 ) -> SearchSpaceResponse:
@@ -130,7 +204,7 @@ async def search_space(
     )
     return SearchSpaceResponse.model_validate(
         await run_blocking_io(
-            service.search_space_schema,
+            _search_space,
             modelType,
             model,
             preset,

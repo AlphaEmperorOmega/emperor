@@ -30,8 +30,12 @@ EXPECTED_ROOT_ROUTE_PAIRS = {
 }
 
 CORS_PREFLIGHT_METHODS = ("GET", "POST", "PATCH", "DELETE")
-CORS_PREFLIGHT_REQUEST_HEADERS = "authorization,content-type"
-CORS_PREFLIGHT_ALLOWED_HEADERS = {"authorization", "content-type"}
+CORS_PREFLIGHT_REQUEST_HEADERS = "authorization,content-type,x-workbench-mutation"
+CORS_PREFLIGHT_ALLOWED_HEADERS = {
+    "authorization",
+    "content-type",
+    "x-workbench-mutation",
+}
 
 # Routes that do blocking CPU or file work stay async at the API boundary.
 # Relying on FastAPI sync-route dispatch deadlocks under ASGITransport in this
@@ -111,11 +115,18 @@ class AppFactoryTests(unittest.TestCase):
         self,
     ) -> None:
         from workbench.backend.api import WorkbenchApiSettings
+        from workbench.backend.api.mutation_policy import (
+            build_http_operation_catalog,
+        )
         from workbench.backend.middleware import configure_middleware
 
         async def call_api() -> tuple[httpx.Response, httpx.Response]:
             api = FastAPI()
-            configure_middleware(api, WorkbenchApiSettings())
+            configure_middleware(
+                api,
+                WorkbenchApiSettings(),
+                build_http_operation_catalog(api.routes),
+            )
 
             @api.get("/small")
             async def small() -> dict[str, str]:
@@ -226,18 +237,14 @@ class AppFactoryTests(unittest.TestCase):
     def test_health_responds_while_log_delete_is_blocked(self) -> None:
         from workbench.backend.api import WorkbenchApiSettings, create_app
         from workbench.backend.dependencies import (
-            get_log_run_service,
-            get_training_job_service,
+            get_run_history_service,
         )
 
-        class FakeLogRunService:
+        class FakeRunHistoryService:
             def delete_experiment(
                 self,
                 experiment: str,
-                *,
-                active_jobs: list[dict[str, str]],
             ) -> dict[str, object]:
-                del active_jobs
                 time.sleep(0.2)
                 return {
                     "experiment": experiment,
@@ -245,10 +252,6 @@ class AppFactoryTests(unittest.TestCase):
                     "deletedRunCount": 0,
                     "deletedRelativePath": experiment,
                 }
-
-        class FakeTrainingJobService:
-            def active_jobs(self) -> list[object]:
-                return []
 
         async def call_api() -> tuple[httpx.Response, httpx.Response, float]:
             with tempfile.TemporaryDirectory() as tmp:
@@ -259,17 +262,11 @@ class AppFactoryTests(unittest.TestCase):
                     )
                 )
 
-                async def override_log_run_service() -> FakeLogRunService:
-                    return FakeLogRunService()
+                async def override_run_history_service() -> FakeRunHistoryService:
+                    return FakeRunHistoryService()
 
-                async def override_training_job_service() -> FakeTrainingJobService:
-                    return FakeTrainingJobService()
-
-                test_app.dependency_overrides[get_log_run_service] = (
-                    override_log_run_service
-                )
-                test_app.dependency_overrides[get_training_job_service] = (
-                    override_training_job_service
+                test_app.dependency_overrides[get_run_history_service] = (
+                    override_run_history_service
                 )
 
                 transport = httpx.ASGITransport(app=test_app)
@@ -285,7 +282,10 @@ class AppFactoryTests(unittest.TestCase):
                 ):
                     started_at = time.perf_counter()
                     delete_task = asyncio.create_task(
-                        delete_client.delete("/logs/experiments/slow")
+                        delete_client.delete(
+                            "/logs/experiments/slow",
+                            headers={"X-Workbench-Mutation": "true"},
+                        )
                     )
                     await asyncio.sleep(0.02)
                     health_response = await asyncio.wait_for(

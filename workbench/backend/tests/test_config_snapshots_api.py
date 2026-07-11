@@ -93,6 +93,7 @@ class ConfigSnapshotApiTests(unittest.TestCase):
             async with httpx.AsyncClient(
                 transport=transport,
                 base_url="http://testserver",
+                headers={"X-Workbench-Mutation": "true"},
             ) as client:
                 return await client.request(method, path, **kwargs)
 

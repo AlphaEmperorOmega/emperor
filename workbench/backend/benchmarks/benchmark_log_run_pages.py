@@ -6,8 +6,12 @@ import json
 from statistics import median
 from time import perf_counter
 from typing import Any
+from unittest.mock import patch
 
-from workbench.backend.services.logs import LogRunService
+from workbench.backend.log_experiments import (
+    LogExperimentMutationCoordinator,
+)
+from workbench.backend.run_history import RunHistoryService
 
 PAGE_SIZE = 100
 SAMPLE_COUNT = 7
@@ -61,18 +65,12 @@ class SyntheticRun:
         }
 
 
-class SyntheticRepository:
-    def __init__(self, runs: list[SyntheticRun]) -> None:
-        self.runs = runs
-
-    def list_runs(self) -> list[SyntheticRun]:
-        return list(self.runs)
-
-    def cached_layer_monitor_data_for_run(
-        self,
-        _run: SyntheticRun,
-    ) -> None:
-        return None
+def _service() -> RunHistoryService:
+    return RunHistoryService(
+        logs_root="logs",
+        mutation_coordinator=LogExperimentMutationCoordinator(),
+        active_log_writers=lambda: (),
+    )
 
 
 def baseline_full_response(runs: list[SyntheticRun]) -> dict[str, Any]:
@@ -100,17 +98,18 @@ def measure(run_count: int, *, current_all_pages: bool) -> dict[str, float]:
         runs = [SyntheticRun(index) for index in range(run_count)]
         started_at = perf_counter()
         if current_all_pages:
-            service = LogRunService(SyntheticRepository(runs))  # type: ignore[arg-type]
-            responses = []
-            for offset in range(0, run_count, PAGE_SIZE):
-                responses.append(
-                    service.list_runs(
-                        limit=PAGE_SIZE,
-                        offset=offset,
-                        experiment=["benchmark"],
-                        projection="summary",
+            service = _service()
+            with patch.object(service._scanner, "list_runs", return_value=runs):
+                responses = []
+                for offset in range(0, run_count, PAGE_SIZE):
+                    responses.append(
+                        service.list_runs(
+                            limit=PAGE_SIZE,
+                            offset=offset,
+                            experiment=["benchmark"],
+                            projection="summary",
+                        )
                     )
-                )
         else:
             responses = [baseline_full_response(runs)]
         encoded = [
@@ -137,14 +136,15 @@ def measure_current_first_page(run_count: int) -> dict[str, float]:
     filter_reads_per_sample: list[int] = []
     for _sample in range(SAMPLE_COUNT):
         runs = [SyntheticRun(index) for index in range(run_count)]
-        service = LogRunService(SyntheticRepository(runs))  # type: ignore[arg-type]
+        service = _service()
         started_at = perf_counter()
-        response = service.list_runs(
-            limit=PAGE_SIZE,
-            offset=0,
-            experiment=["benchmark"],
-            projection="summary",
-        )
+        with patch.object(service._scanner, "list_runs", return_value=runs):
+            response = service.list_runs(
+                limit=PAGE_SIZE,
+                offset=0,
+                experiment=["benchmark"],
+                projection="summary",
+            )
         encoded = json.dumps(response, separators=(",", ":")).encode()
         durations.append((perf_counter() - started_at) * 1_000)
         bytes_per_sample.append(len(encoded))

@@ -9,16 +9,31 @@ from pathlib import Path
 from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 
+from workbench.backend.api.mutation_policy import (
+    HttpOperationPolicy,
+    build_http_operation_catalog,
+    enforce_operation_policy,
+)
 from workbench.backend.core.security import (
     LOCAL_MUTATION_DISABLED_DETAIL,
+    MUTATION_HEADER_NAME,
+    MUTATION_HEADER_VALUE,
+    MUTATION_PROOF_REQUIRED_DETAIL,
+    UNTRUSTED_MUTATION_ORIGIN_DETAIL,
     require_bearer_auth,
-    require_local_mutations_allowed,
 )
 from workbench.backend.settings import WorkbenchApiSettings
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
 ROUTE_AUTH_TOKEN = "server-secret"
+
+
+def concrete_route_path(route) -> str:
+    path = route.path_format
+    for parameter_name in route.param_convertors:
+        path = path.replace(f"{{{parameter_name}}}", "security-test")
+    return path
 
 PROTECTED_ROUTE_CASES = (
     ("models", "GET", "/models", None),
@@ -111,16 +126,20 @@ class SecurityDependencyTests(unittest.TestCase):
 
         asyncio.run(require_bearer_auth(settings, bearer_credentials("server-secret")))
 
-    def test_local_mutation_guard_rejects_default_settings(self) -> None:
+    def test_local_mutation_policy_rejects_default_settings(self) -> None:
         with self.assertRaises(HTTPException) as raised:
-            require_local_mutations_allowed(WorkbenchApiSettings())
+            enforce_operation_policy(
+                HttpOperationPolicy.LOCAL_MUTATION,
+                WorkbenchApiSettings(),
+            )
 
         self.assertEqual(raised.exception.status_code, 403)
         self.assertEqual(raised.exception.detail, LOCAL_MUTATION_DISABLED_DETAIL)
 
-    def test_local_mutation_guard_accepts_explicit_opt_in(self) -> None:
-        require_local_mutations_allowed(
-            WorkbenchApiSettings(allow_unsafe_local_mutations=True)
+    def test_local_mutation_policy_accepts_explicit_opt_in(self) -> None:
+        enforce_operation_policy(
+            HttpOperationPolicy.LOCAL_MUTATION,
+            WorkbenchApiSettings(allow_unsafe_local_mutations=True),
         )
 
 
@@ -133,19 +152,20 @@ class RouteAuthIntegrationTests(unittest.TestCase):
         *,
         payload: dict[str, object] | None = None,
         authorization: str | None = None,
+        headers: dict[str, str] | None = None,
     ):
         import httpx
 
-        headers = {}
+        request_headers = dict(headers or {})
         if authorization is not None:
-            headers["Authorization"] = authorization
+            request_headers["Authorization"] = authorization
 
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
             transport=transport,
             base_url="http://testserver",
         ) as client:
-            kwargs = {"headers": headers}
+            kwargs = {"headers": request_headers}
             if payload is not None:
                 kwargs["json"] = payload
             return await client.request(method, path, **kwargs)
@@ -161,18 +181,18 @@ class RouteAuthIntegrationTests(unittest.TestCase):
         from workbench.backend.api import create_app
         from workbench.backend.dependencies import (
             get_inspection_service,
-            get_log_run_service,
-            get_model_catalog_service,
+            get_run_history_service,
             get_training_job_service,
+            get_training_run_plan_service,
         )
-        from workbench.backend.training_contracts import (
+        from workbench.backend.training_jobs.contracts import (
             TrainingJobView,
             TrainingRunPlanView,
         )
-
-        class FakeModelCatalogService:
-            def list_models(self) -> list[dict[str, str]]:
-                return [{"modelType": "linears", "model": "linear"}]
+        from workbench.backend.training_jobs.serialization import (
+            training_run_plan_from_payload,
+            training_search_to_payload,
+        )
 
         class FakeInspectionService:
             def inspect(
@@ -210,47 +230,42 @@ class RouteAuthIntegrationTests(unittest.TestCase):
 
         class FakeTrainingJobService:
             def create_job(self, command) -> TrainingJobView:
-                return TrainingJobView.from_payload(
-                    {
-                        "id": "job-1",
-                        "status": "running",
-                        "modelType": "linears",
-                        "model": "linear",
-                        "preset": command.preset,
-                        "presets": command.presets or [command.preset],
-                        "datasets": command.datasets,
-                        "overrides": command.overrides,
-                        "search": (
-                            command.search.to_api_payload()
-                            if command.search is not None
-                            else None
-                        ),
-                        "plannedRunCount": 0,
-                        "runPlan": (
-                            command.run_plan.to_api_payload()
-                            if command.run_plan is not None
-                            else None
-                        ),
-                        "monitors": command.monitors,
-                        "logFolder": command.log_folder,
-                        "createdAt": "2026-06-06T00:00:00Z",
-                        "updatedAt": "2026-06-06T00:00:00Z",
-                        "exitCode": None,
-                        "pid": 123,
-                        "currentPreset": None,
-                        "currentDataset": None,
-                        "epoch": None,
-                        "step": None,
-                        "metrics": {},
-                        "logDir": None,
-                        "events": [],
-                        "logTail": [],
-                        "resultLinks": [],
-                    }
+                return TrainingJobView(
+                    id="job-1",
+                    status="running",
+                    model="linears/linear",
+                    preset=command.preset,
+                    presets=command.presets or [command.preset],
+                    experiment_task=command.experiment_task or "",
+                    datasets=command.datasets,
+                    overrides=command.overrides,
+                    search=command.search,
+                    planned_run_count=0,
+                    run_plan=command.run_plan,
+                    monitors=command.monitors,
+                    log_folder=command.log_folder,
+                    created_at="2026-06-06T00:00:00Z",
+                    updated_at="2026-06-06T00:00:00Z",
+                    exit_code=None,
+                    pid=123,
+                    cancellation_mode="process-group",
+                    current_preset=None,
+                    current_dataset=None,
+                    epoch=None,
+                    step=None,
+                    metrics={},
+                    log_dir=None,
+                    events=[],
+                    event_count=0,
+                    event_counts={},
+                    events_truncated=False,
+                    cluster_growth=[],
+                    log_tail=[],
+                    result_links=[],
                 )
 
             def create_run_plan(self, command) -> TrainingRunPlanView:
-                return TrainingRunPlanView.from_payload(
+                return training_run_plan_from_payload(
                     {
                         "modelType": "linears",
                         "model": "linear",
@@ -259,7 +274,7 @@ class RouteAuthIntegrationTests(unittest.TestCase):
                         "datasets": command.datasets,
                         "overrides": command.overrides,
                         "search": (
-                            command.search.to_api_payload()
+                            training_search_to_payload(command.search)
                             if command.search is not None
                             else None
                         ),
@@ -289,7 +304,7 @@ class RouteAuthIntegrationTests(unittest.TestCase):
                     }
                 )
 
-        class FakeLogRunService:
+        class FakeRunHistoryService:
             def list_runs(
                 self,
                 *,
@@ -322,13 +337,9 @@ class RouteAuthIntegrationTests(unittest.TestCase):
                 ),
             )
         )
-        model_catalog_service = FakeModelCatalogService()
         inspection_service = FakeInspectionService()
         training_job_service = FakeTrainingJobService()
-        log_run_service = FakeLogRunService()
-
-        async def override_model_catalog_service() -> FakeModelCatalogService:
-            return model_catalog_service
+        run_history_service = FakeRunHistoryService()
 
         async def override_inspection_service() -> FakeInspectionService:
             return inspection_service
@@ -336,17 +347,20 @@ class RouteAuthIntegrationTests(unittest.TestCase):
         async def override_training_job_service() -> FakeTrainingJobService:
             return training_job_service
 
-        async def override_log_run_service() -> FakeLogRunService:
-            return log_run_service
+        async def override_training_run_plan_service() -> FakeTrainingJobService:
+            return training_job_service
 
-        app.dependency_overrides[get_model_catalog_service] = (
-            override_model_catalog_service
-        )
+        async def override_run_history_service() -> FakeRunHistoryService:
+            return run_history_service
+
         app.dependency_overrides[get_inspection_service] = override_inspection_service
         app.dependency_overrides[get_training_job_service] = (
             override_training_job_service
         )
-        app.dependency_overrides[get_log_run_service] = override_log_run_service
+        app.dependency_overrides[get_training_run_plan_service] = (
+            override_training_run_plan_service
+        )
+        app.dependency_overrides[get_run_history_service] = override_run_history_service
         return app
 
     def route_runs_on_event_loop(self, app, method: str, path: str) -> bool:
@@ -479,7 +493,13 @@ class RouteAuthIntegrationTests(unittest.TestCase):
                     if not self.route_runs_on_event_loop(app, method, path):
                         continue
                     response = asyncio.run(
-                        self.request(app, method, path, payload=payload)
+                        self.request(
+                            app,
+                            method,
+                            path,
+                            payload=payload,
+                            headers={MUTATION_HEADER_NAME: MUTATION_HEADER_VALUE},
+                        )
                     )
 
                     self.assertEqual(response.status_code, 200, response.text)
@@ -511,6 +531,7 @@ class RouteAuthIntegrationTests(unittest.TestCase):
                         "search": None,
                         "runPlan": None,
                     },
+                    headers={MUTATION_HEADER_NAME: MUTATION_HEADER_VALUE},
                 )
             )
 
@@ -528,13 +549,84 @@ class RouteAuthIntegrationTests(unittest.TestCase):
                 allow_log_imports=False,
             )
 
-            response = asyncio.run(self.request(app, "POST", "/logs/import"))
+            response = asyncio.run(
+                self.request(
+                    app,
+                    "POST",
+                    "/logs/import",
+                    headers={MUTATION_HEADER_NAME: MUTATION_HEADER_VALUE},
+                )
+            )
 
         self.assertEqual(response.status_code, 403, response.text)
         self.assertEqual(
             response.json(),
             {"detail": LOCAL_MUTATION_DISABLED_DETAIL},
         )
+
+    def test_untrusted_origin_is_rejected_on_every_mutation_route(self) -> None:
+        from workbench.backend.api.v1.router import router as api_v1_router
+
+        with tempfile.TemporaryDirectory() as tmp:
+            app = self.create_test_app(
+                Path(tmp),
+                auth_mode="none",
+                allow_unsafe_local_mutations=True,
+                allow_log_imports=True,
+            )
+            catalog = build_http_operation_catalog(
+                app.routes,
+                declared_routes=api_v1_router.routes,
+            )
+
+            for operation in catalog.mutations:
+                path = concrete_route_path(operation.route)
+                with self.subTest(method=operation.method, path=path):
+                    response = asyncio.run(
+                        self.request(
+                            app,
+                            operation.method,
+                            path,
+                            headers={
+                                "Origin": "https://evil.example",
+                                "Sec-Fetch-Site": "cross-site",
+                            },
+                        )
+                    )
+
+                    self.assertEqual(response.status_code, 403, response.text)
+                    self.assertEqual(
+                        response.json(),
+                        {"detail": UNTRUSTED_MUTATION_ORIGIN_DETAIL},
+                    )
+
+    def test_every_unauthenticated_mutation_requires_proof(self) -> None:
+        from workbench.backend.api.v1.router import router as api_v1_router
+
+        with tempfile.TemporaryDirectory() as tmp:
+            app = self.create_test_app(
+                Path(tmp),
+                auth_mode="none",
+                allow_unsafe_local_mutations=True,
+                allow_log_imports=True,
+            )
+            catalog = build_http_operation_catalog(
+                app.routes,
+                declared_routes=api_v1_router.routes,
+            )
+
+            for operation in catalog.mutations:
+                path = concrete_route_path(operation.route)
+                with self.subTest(method=operation.method, path=path):
+                    response = asyncio.run(
+                        self.request(app, operation.method, path)
+                    )
+
+                    self.assertEqual(response.status_code, 403, response.text)
+                    self.assertEqual(
+                        response.json(),
+                        {"detail": MUTATION_PROOF_REQUIRED_DETAIL},
+                    )
 
 
 if __name__ == "__main__":

@@ -34,20 +34,39 @@ from emperor.base.options import (
     LayerNormPositionOptions,
 )
 from emperor.linears.core.config import AdaptiveLinearLayerConfig, LinearLayerConfig
+from emperor.model_packages import model_package
 from torch import nn
 
 from workbench.backend.inspector.checkpoint_shapes import (
     MAX_CHECKPOINT_GRAPH_SHAPE_BYTES,
+    CheckpointGraphShapes,
     checkpoint_graph_shapes_from_state_dict,
 )
 from workbench.backend.inspector.discovery import discover_models, list_model_presets
 from workbench.backend.inspector.errors import InspectorError
 from workbench.backend.inspector.graph import serialize_graph
-from workbench.backend.inspector.service import build_config, inspect_model
-from workbench.backend.log_runs import LogRunIndex
-from workbench.backend.repositories.log_runs import LogRunRepository
-from workbench.backend.services.inspection import InspectionService
+from workbench.backend.inspector.service import inspect_model
+from workbench.backend.log_experiments import (
+    LogExperimentMutationCoordinator,
+)
+from workbench.backend.run_history import RunHistoryService
+from workbench.backend.services.inspection import (
+    InspectionService,
+    _checkpoint_overrides,
+)
 from workbench.backend.tests.helpers import write_tensorboard_run
+
+
+def _run_history(logs_root: Path) -> RunHistoryService:
+    return RunHistoryService(
+        logs_root=logs_root,
+        mutation_coordinator=LogExperimentMutationCoordinator(),
+        active_log_writers=lambda: (),
+    )
+
+
+def _first_run_id(run_history: RunHistoryService) -> str:
+    return str(run_history.list_runs(limit=1, offset=0)["runs"][0]["id"])
 
 GraphNodePayload: TypeAlias = dict[str, Any]
 GraphEdgePayload: TypeAlias = dict[str, str]
@@ -128,6 +147,37 @@ def nodes_by_id(nodes: list[GraphNodePayload]) -> dict[str, GraphNodePayload]:
 
 
 class InspectorGraphTests(unittest.TestCase):
+    def test_historical_checkpoint_invalid_preset_maps_to_workbench_error(
+        self,
+    ) -> None:
+        package = model_package("linears/linear")
+        assert package is not None
+
+        for checkpoint_overrides in (
+            {"hidden_dim": 64},
+            {"adaptive_generator_stack_num_layers": 2},
+        ):
+            with self.subTest(overrides=checkpoint_overrides):
+                shapes = CheckpointGraphShapes(
+                    config_overrides=checkpoint_overrides,
+                    parameter_shapes={},
+                    coverage_counts={},
+                    tensor_count=0,
+                )
+                with self.assertRaisesRegex(
+                    InspectorError,
+                    "Unknown preset 'missing'",
+                ) as raised:
+                    _checkpoint_overrides(
+                        model_id="linears/linear",
+                        preset="missing",
+                        package=package,
+                        checkpoint_shapes=shapes,
+                        saved_run_overrides={},
+                        request_overrides={},
+                    )
+                self.assertEqual(raised.exception.status_code, 400)
+
     def test_graph_serializer_preserves_depth_first_named_child_order(self) -> None:
         nodes, edges = serialize_graph(TinyGraphFixture())
         expected_edges: list[GraphEdgePayload] = [
@@ -360,8 +410,12 @@ class InspectorGraphTests(unittest.TestCase):
     def test_inspect_linear_baseline_model_size_matches_registered_parameters(
         self,
     ) -> None:
-        parts, _option, cfg = build_config("linears/linear", "baseline")
-        model = parts.model_type(cfg)
+        package = model_package("linears/linear")
+        assert package is not None
+        preset = package.resolve_preset("baseline")
+        dataset = package.resolve_dataset(None)
+        cfg = package.build_configurations(preset, dataset)[0]
+        model = package.build_model(cfg)
         result = inspect_model("linears/linear", "baseline")
         node_by_id = nodes_by_id(result["nodes"])
         expected_count = sum(parameter.numel() for parameter in model.parameters())
@@ -404,10 +458,9 @@ class InspectorGraphTests(unittest.TestCase):
                 json.dumps({"params": {"hidden_dim": 12}}),
                 encoding="utf-8",
             )
-            run = LogRunIndex(logs_root=logs_root).list_runs()[0]
-            service = InspectionService(
-                LogRunRepository(LogRunIndex(logs_root=logs_root))
-            )
+            run_history = _run_history(logs_root)
+            run_id = _first_run_id(run_history)
+            service = InspectionService(run_history)
 
             default_result = service.inspect(
                 model_type="linears",
@@ -422,7 +475,7 @@ class InspectorGraphTests(unittest.TestCase):
                 preset="baseline",
                 dataset="Mnist",
                 overrides={},
-                log_run_id=run.id,
+                log_run_id=run_id,
             )
             expected_result = inspect_model(
                 "linears/linear",
@@ -497,10 +550,9 @@ class InspectorGraphTests(unittest.TestCase):
                 },
                 run_dir / "checkpoints" / "epoch=2-step=300.ckpt",
             )
-            run = LogRunIndex(logs_root=logs_root).list_runs()[0]
-            service = InspectionService(
-                LogRunRepository(LogRunIndex(logs_root=logs_root))
-            )
+            run_history = _run_history(logs_root)
+            run_id = _first_run_id(run_history)
+            service = InspectionService(run_history)
 
             preset_result = service.inspect(
                 model_type="linears",
@@ -515,7 +567,7 @@ class InspectorGraphTests(unittest.TestCase):
                 preset="baseline",
                 dataset="Mnist",
                 overrides={},
-                log_run_id=run.id,
+                log_run_id=run_id,
             )
             checkpoint_result = inspect_model(
                 "linears/linear",
@@ -958,10 +1010,9 @@ class InspectorGraphTests(unittest.TestCase):
                 {"state_dict": state_dict},
                 run_dir / "checkpoints" / "epoch=0-step=1.ckpt",
             )
-            run = LogRunIndex(logs_root=logs_root).list_runs()[0]
-            service = InspectionService(
-                LogRunRepository(LogRunIndex(logs_root=logs_root))
-            )
+            run_history = _run_history(logs_root)
+            run_id = _first_run_id(run_history)
+            service = InspectionService(run_history)
 
             result = service.inspect(
                 model_type="linears",
@@ -969,7 +1020,7 @@ class InspectorGraphTests(unittest.TestCase):
                 preset="baseline",
                 dataset="Mnist",
                 overrides={},
-                log_run_id=run.id,
+                log_run_id=run_id,
             )
 
         node_by_id = nodes_by_id(result["nodes"])
@@ -1021,10 +1072,9 @@ class InspectorGraphTests(unittest.TestCase):
                 },
                 run_dir / "checkpoints" / "epoch=0-step=1.ckpt",
             )
-            run = LogRunIndex(logs_root=logs_root).list_runs()[0]
-            service = InspectionService(
-                LogRunRepository(LogRunIndex(logs_root=logs_root))
-            )
+            run_history = _run_history(logs_root)
+            run_id = _first_run_id(run_history)
+            service = InspectionService(run_history)
 
             result = service.inspect(
                 model_type="linears",
@@ -1032,7 +1082,7 @@ class InspectorGraphTests(unittest.TestCase):
                 preset="baseline",
                 dataset="Mnist",
                 overrides={"hidden_dim": 32, "stack_num_layers": 1},
-                log_run_id=run.id,
+                log_run_id=run_id,
             )
 
         node_by_id = nodes_by_id(result["nodes"])
@@ -1088,10 +1138,9 @@ class InspectorGraphTests(unittest.TestCase):
                 {"state_dict": state_dict},
                 run_dir / "checkpoints" / "epoch=0-step=1.ckpt",
             )
-            run = LogRunIndex(logs_root=logs_root).list_runs()[0]
-            service = InspectionService(
-                LogRunRepository(LogRunIndex(logs_root=logs_root))
-            )
+            run_history = _run_history(logs_root)
+            run_id = _first_run_id(run_history)
+            service = InspectionService(run_history)
 
             result = service.inspect(
                 model_type="linears",
@@ -1099,7 +1148,7 @@ class InspectorGraphTests(unittest.TestCase):
                 preset="gating",
                 dataset="Mnist",
                 overrides={},
-                log_run_id=run.id,
+                log_run_id=run_id,
             )
 
         node_by_id = nodes_by_id(result["nodes"])
@@ -1143,10 +1192,9 @@ class InspectorGraphTests(unittest.TestCase):
                 {"state_dict": state_dict},
                 run_dir / "checkpoints" / "epoch=0-step=1.ckpt",
             )
-            run = LogRunIndex(logs_root=logs_root).list_runs()[0]
-            service = InspectionService(
-                LogRunRepository(LogRunIndex(logs_root=logs_root))
-            )
+            run_history = _run_history(logs_root)
+            run_id = _first_run_id(run_history)
+            service = InspectionService(run_history)
 
             result = service.inspect(
                 model_type="linears",
@@ -1154,7 +1202,7 @@ class InspectorGraphTests(unittest.TestCase):
                 preset="gating",
                 dataset="Mnist",
                 overrides={},
-                log_run_id=run.id,
+                log_run_id=run_id,
             )
 
         root = nodes_by_id(result["nodes"])["__root__"]
@@ -1195,10 +1243,9 @@ class InspectorGraphTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            run = LogRunIndex(logs_root=logs_root).list_runs()[0]
-            service = InspectionService(
-                LogRunRepository(LogRunIndex(logs_root=logs_root))
-            )
+            run_history = _run_history(logs_root)
+            run_id = _first_run_id(run_history)
+            service = InspectionService(run_history)
 
             historical_result = service.inspect(
                 model_type="linears",
@@ -1206,7 +1253,7 @@ class InspectorGraphTests(unittest.TestCase):
                 preset="baseline",
                 dataset="Cifar10",
                 overrides={},
-                log_run_id=run.id,
+                log_run_id=run_id,
             )
             expected_result = inspect_model(
                 "linears/linear",
@@ -1253,10 +1300,9 @@ class InspectorGraphTests(unittest.TestCase):
             )
             checkpoint_path = run_dir / "checkpoints" / "epoch=0-step=1.ckpt"
             os.truncate(checkpoint_path, MAX_CHECKPOINT_GRAPH_SHAPE_BYTES + 1)
-            run = LogRunIndex(logs_root=logs_root).list_runs()[0]
-            service = InspectionService(
-                LogRunRepository(LogRunIndex(logs_root=logs_root))
-            )
+            run_history = _run_history(logs_root)
+            run_id = _first_run_id(run_history)
+            service = InspectionService(run_history)
 
             with mock.patch(
                 "workbench.backend.inspector.checkpoint_shapes.torch.load",
@@ -1268,7 +1314,7 @@ class InspectorGraphTests(unittest.TestCase):
                     preset="baseline",
                     dataset="Cifar10",
                     overrides={},
-                    log_run_id=run.id,
+                    log_run_id=run_id,
                 )
             expected_result = inspect_model(
                 "linears/linear",
@@ -1316,10 +1362,9 @@ class InspectorGraphTests(unittest.TestCase):
                     "version_0",
                 ],
             )
-            run = LogRunIndex(logs_root=logs_root).list_runs()[0]
-            service = InspectionService(
-                LogRunRepository(LogRunIndex(logs_root=logs_root))
-            )
+            run_history = _run_history(logs_root)
+            run_id = _first_run_id(run_history)
+            service = InspectionService(run_history)
 
             with self.assertRaises(InspectorError) as raised:
                 service.inspect(
@@ -1328,7 +1373,7 @@ class InspectorGraphTests(unittest.TestCase):
                     preset="baseline",
                     dataset="Mnist",
                     overrides={"gather_frequency_flag": False},
-                    log_run_id=run.id,
+                    log_run_id=run_id,
                 )
 
         self.assertIn(
@@ -1351,10 +1396,9 @@ class InspectorGraphTests(unittest.TestCase):
                     "version_0",
                 ],
             )
-            run = LogRunIndex(logs_root=logs_root).list_runs()[0]
-            service = InspectionService(
-                LogRunRepository(LogRunIndex(logs_root=logs_root))
-            )
+            run_history = _run_history(logs_root)
+            run_id = _first_run_id(run_history)
+            service = InspectionService(run_history)
 
             with self.assertRaises(InspectorError) as raised:
                 service.inspect(
@@ -1363,7 +1407,7 @@ class InspectorGraphTests(unittest.TestCase):
                     preset="baseline",
                     dataset="Cifar10",
                     overrides={},
-                    log_run_id=run.id,
+                    log_run_id=run_id,
                 )
 
         self.assertIn("belongs to dataset 'Mnist'", raised.exception.detail)
@@ -1380,6 +1424,110 @@ class InspectorGraphTests(unittest.TestCase):
                 overrides={},
             ),
             inspect_model("linears/linear", "baseline", {}, dataset="Mnist"),
+        )
+
+    def test_historical_inspection_freezes_saved_checkpoint_request_precedence(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = Path(tmp) / "logs"
+            run_dir = write_tensorboard_run(
+                logs_root,
+                [
+                    "exp_linear",
+                    "linears",
+                    "linear",
+                    "BASELINE",
+                    "Mnist",
+                    "run_20260601_010203",
+                    "version_0",
+                ],
+            )
+            (run_dir / "result.json").write_text(
+                json.dumps({"params": {"hidden_dim": 12, "stack_num_layers": 4}}),
+                encoding="utf-8",
+            )
+            torch.save(
+                {
+                    "state_dict": checkpoint_state_dict(
+                        input_dim=784,
+                        hidden_dim=32,
+                        output_dim=10,
+                        layer_count=2,
+                    )
+                },
+                run_dir / "checkpoints" / "epoch=2-step=300.ckpt",
+            )
+            run_history = _run_history(logs_root)
+            run_id = _first_run_id(run_history)
+            result = InspectionService(run_history).inspect(
+                model_type="linears",
+                model="linear",
+                preset="baseline",
+                dataset="Mnist",
+                overrides={"hidden_dim": 48},
+                log_run_id=run_id,
+            )
+            expected = inspect_model(
+                "linears/linear",
+                "baseline",
+                {"hidden_dim": 48, "stack_num_layers": 2},
+                dataset="Mnist",
+            )
+
+        node_by_id = nodes_by_id(result["nodes"])
+        self.assertEqual(result["parameterCount"], expected["parameterCount"])
+        self.assertEqual(node_by_id["input_model"]["details"]["dims"], "784 -> 48")
+        self.assertEqual(node_by_id["main_model"]["details"]["numLayers"], 2)
+        self.assertEqual(
+            node_by_id["input_model.model"]["details"]["weightShape"],
+            "784 x 32",
+        )
+
+    def test_historical_inspection_ignores_a_malformed_checkpoint(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = Path(tmp) / "logs"
+            run_dir = write_tensorboard_run(
+                logs_root,
+                [
+                    "exp_linear",
+                    "linears",
+                    "linear",
+                    "BASELINE",
+                    "Mnist",
+                    "run_20260601_010203",
+                    "version_0",
+                ],
+            )
+            (run_dir / "result.json").write_text(
+                json.dumps({"params": {"hidden_dim": 12}}),
+                encoding="utf-8",
+            )
+            (run_dir / "checkpoints" / "epoch=0-step=1.ckpt").write_bytes(
+                b"not a checkpoint"
+            )
+            run_history = _run_history(logs_root)
+            run_id = _first_run_id(run_history)
+            result = InspectionService(run_history).inspect(
+                model_type="linears",
+                model="linear",
+                preset="baseline",
+                dataset="Mnist",
+                overrides={},
+                log_run_id=run_id,
+            )
+
+        expected = inspect_model(
+            "linears/linear",
+            "baseline",
+            {"hidden_dim": 12},
+            dataset="Mnist",
+        )
+        self.assertEqual(result["parameterCount"], expected["parameterCount"])
+        node_by_id = nodes_by_id(result["nodes"])
+        self.assertEqual(node_by_id["input_model"]["details"]["dims"], "784 -> 12")
+        self.assertTrue(
+            all("checkpoint" not in node["details"] for node in result["nodes"])
         )
 
     def test_graph_serializer_reports_direct_weight_and_bias_shapes(self) -> None:

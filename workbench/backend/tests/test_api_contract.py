@@ -1779,7 +1779,9 @@ class ApiIntegrationContractTests(unittest.TestCase):
 
         from workbench.backend.api import app
         from workbench.backend.core.config import get_workbench_api_settings
-        from workbench.backend.training_cgroups import requested_cancellation_capability
+        from workbench.backend.training_jobs.cgroups import (
+            requested_cancellation_capability,
+        )
 
         async def call_api() -> httpx.Response:
             transport = httpx.ASGITransport(app=app)
@@ -1806,7 +1808,7 @@ class ApiIntegrationContractTests(unittest.TestCase):
                 "historicalLogsEnabled": True,
                 "liveMonitorDataEnabled": True,
                 "historicalMonitorDataEnabled": True,
-                "uploadsEnabled": True,
+                "uploadsEnabled": False,
                 "maxUploadSize": (
                     get_workbench_api_settings().effective_max_upload_size
                 ),
@@ -1892,7 +1894,7 @@ class ApiIntegrationContractTests(unittest.TestCase):
         self.assertTrue(response.json()["trainingEnabled"])
         self.assertTrue(response.json()["logDeletionEnabled"])
         self.assertTrue(response.json()["configSnapshotsEnabled"])
-        self.assertTrue(response.json()["uploadsEnabled"])
+        self.assertFalse(response.json()["uploadsEnabled"])
 
     def test_model_dataset_endpoint_exposes_path_free_dataset_metadata(self) -> None:
         import httpx
@@ -2058,18 +2060,24 @@ class ApiIntegrationContractTests(unittest.TestCase):
         import httpx
 
         from workbench.backend.api import create_app
-        from workbench.backend.dependencies import get_model_catalog_service
+        from workbench.backend.dependencies import get_run_history_service
 
-        class FakeModelCatalogService:
-            def list_models(self) -> list[dict[str, str]]:
-                return [{"modelType": "override", "model": "model"}]
+        class FakeRunHistoryService:
+            def list_runs(self, **kwargs: object) -> dict[str, object]:
+                return {
+                    "total": 0,
+                    "limit": kwargs["limit"],
+                    "offset": kwargs["offset"],
+                    "hasMore": False,
+                    "runs": [],
+                }
 
-        async def override_model_catalog_service() -> FakeModelCatalogService:
-            return FakeModelCatalogService()
+        async def override_run_history_service() -> FakeRunHistoryService:
+            return FakeRunHistoryService()
 
         test_app = create_app()
-        test_app.dependency_overrides[get_model_catalog_service] = (
-            override_model_catalog_service
+        test_app.dependency_overrides[get_run_history_service] = (
+            override_run_history_service
         )
 
         async def call_api() -> httpx.Response:
@@ -2078,14 +2086,21 @@ class ApiIntegrationContractTests(unittest.TestCase):
                 transport=transport,
                 base_url="http://testserver",
             ) as client:
-                return await client.get("/models")
+                return await client.get("/logs/runs")
 
         response = asyncio.run(call_api())
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             response.json(),
-            {"models": [{"modelType": "override", "model": "model"}]},
+            {
+                "total": 0,
+                "limit": 500,
+                "offset": 0,
+                "hasMore": False,
+                "facets": None,
+                "runs": [],
+            },
         )
 
     def test_api_inspector_errors_use_shared_handler(self) -> None:
@@ -2104,6 +2119,48 @@ class ApiIntegrationContractTests(unittest.TestCase):
         response = asyncio.run(call_api())
         self.assertEqual(response.status_code, 400)
         self.assertIn("Unknown model", response.json()["detail"])
+
+    def test_broken_model_package_routes_use_stable_http_errors(self) -> None:
+        from unittest.mock import patch
+
+        import httpx
+        from emperor.model_packages import ModelPackage
+        from emperor.model_packages.catalog import MODEL_CATALOG
+
+        from workbench.backend.api import app
+
+        async def call_api(path: str) -> httpx.Response:
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(
+                transport=transport,
+                base_url="http://testserver",
+            ) as client:
+                return await client.get(path)
+
+        package = ModelPackage(
+            "broken",
+            "missing",
+            "models.__inspection_missing__",
+        )
+        paths = (
+            "/models/broken/missing/presets",
+            "/models/broken/missing/datasets",
+            "/models/broken/missing/monitors",
+            "/models/broken/missing/config-schema",
+            "/models/broken/missing/search-space",
+        )
+        with patch.dict(
+            MODEL_CATALOG,
+            {"broken/missing": package},
+        ):
+            for path in paths:
+                with self.subTest(path=path):
+                    response = asyncio.run(call_api(path))
+                    self.assertEqual(response.status_code, 400, response.text)
+                    self.assertIn(
+                        "Failed to import model package 'broken/missing'",
+                        response.json()["detail"],
+                    )
 
 
 if __name__ == "__main__":

@@ -1,342 +1,240 @@
 from __future__ import annotations
 
-import os
+import tempfile
 import unittest
-
-os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
+from dataclasses import dataclass
+from pathlib import Path
+from unittest.mock import patch
 
 from workbench.backend.inspector.errors import InspectorError
+from workbench.backend.log_experiments import (
+    LogExperimentMutationCoordinator,
+)
+from workbench.backend.run_history import RunHistoryService
+from workbench.backend.run_history.records import LogRun
 from workbench.backend.schemas import LogExperimentsResponse, LogRunsResponse
-from workbench.backend.services.logs import LogRunService
+from workbench.backend.tests.helpers import write_tensorboard_run
 
 
-class _DeleteResult:
-    def __init__(self, payload: dict[str, object]) -> None:
-        self._payload = payload
-
-    def to_response(self) -> dict[str, object]:
-        return dict(self._payload)
-
-
-class _ResponseItem:
-    def __init__(self, payload: dict[str, object]) -> None:
-        self._payload = payload
-
-    def __getattr__(self, name: str) -> object:
-        try:
-            return self._payload[name]
-        except KeyError:
-            raise AttributeError(name) from None
-
-    def to_response(self) -> dict[str, object]:
-        return dict(self._payload)
+@dataclass(frozen=True, slots=True)
+class _ActiveWriter:
+    id: str
+    status: str
+    log_folder: str
 
 
-class _CountingResponseItem(_ResponseItem):
-    def __init__(self, payload: dict[str, object]) -> None:
-        super().__init__(payload)
-        self.response_count = 0
-
-    def to_response(self) -> dict[str, object]:
-        self.response_count += 1
-        return super().to_response()
-
-
-class _CountingFilterItem(_CountingResponseItem):
-    def __init__(self, payload: dict[str, object]) -> None:
-        super().__init__(payload)
-        self.attribute_counts: dict[str, int] = {}
-
-    def __getattr__(self, name: str) -> object:
-        self.attribute_counts[name] = self.attribute_counts.get(name, 0) + 1
-        return super().__getattr__(name)
+def _service(
+    logs_root: Path,
+    *,
+    writers: list[_ActiveWriter] | None = None,
+) -> RunHistoryService:
+    active_writers = writers or []
+    return RunHistoryService(
+        logs_root=logs_root,
+        mutation_coordinator=LogExperimentMutationCoordinator(),
+        active_log_writers=lambda: list(active_writers),
+    )
 
 
-class ListingLogRunRepository:
-    def __init__(
-        self,
-        *,
-        runs: list[dict[str, object]] | None = None,
-        experiments: list[dict[str, object]] | None = None,
-    ) -> None:
-        self._runs = runs or []
-        self._experiments = experiments or []
-
-    def list_runs(self) -> list[_ResponseItem]:
-        return [_ResponseItem(run) for run in self._runs]
-
-    def list_experiments(self) -> list[_ResponseItem]:
-        return [_ResponseItem(experiment) for experiment in self._experiments]
-
-
-class CountingLogRunRepository(ListingLogRunRepository):
-    def __init__(self, runs: list[dict[str, object]]) -> None:
-        super().__init__(runs=runs)
-        self.items = [_CountingResponseItem(run) for run in runs]
-
-    def list_runs(self) -> list[_CountingResponseItem]:
-        return self.items
+def _write_run(
+    logs_root: Path,
+    *,
+    experiment: str,
+    dataset: str,
+    preset: str,
+    run_name: str,
+    with_events: bool = True,
+) -> Path:
+    parts = [
+        experiment,
+        "linear",
+        preset,
+        dataset,
+        run_name,
+        "version_0",
+    ]
+    if with_events:
+        return write_tensorboard_run(logs_root, parts)
+    run_dir = logs_root.joinpath(*parts)
+    run_dir.mkdir(parents=True)
+    return run_dir
 
 
-class CountingFilterLogRunRepository(ListingLogRunRepository):
-    def __init__(self, runs: list[dict[str, object]]) -> None:
-        super().__init__(runs=runs)
-        self.items = [_CountingFilterItem(run) for run in runs]
+class RunHistoryServiceListResponseTests(unittest.TestCase):
+    def test_list_runs_filters_before_paginating_and_preserves_response(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = Path(tmp) / "logs"
+            _write_run(
+                logs_root,
+                experiment="exp_a",
+                dataset="Mnist",
+                preset="BASELINE",
+                run_name="first_20260711_010101",
+            )
+            _write_run(
+                logs_root,
+                experiment="exp_a",
+                dataset="Cifar10",
+                preset="BASELINE",
+                run_name="second_20260711_020202",
+            )
+            _write_run(
+                logs_root,
+                experiment="exp_b",
+                dataset="Mnist",
+                preset="GATING",
+                run_name="third_20260711_030303",
+                with_events=False,
+            )
+            result = _service(logs_root).list_runs(
+                limit=1,
+                offset=0,
+                model=["linear"],
+                preset=["BASELINE"],
+                dataset=["Mnist"],
+                has_event_files=True,
+            )
 
-    def list_runs(self) -> list[_CountingFilterItem]:
-        return self.items
-
-
-class RecordingLogRunRepository:
-    def __init__(self, delete_payload: dict[str, object] | None = None) -> None:
-        self.calls: list[tuple[str, tuple[object, ...], dict[str, object]]] = []
-        self.delete_payload = delete_payload or {
-            "experiment": "test_model",
-            "deletedRunIds": ["run-1"],
-            "deletedRunCount": 1,
-            "deletedRelativePath": "test_model",
-        }
-
-    def delete_experiment(self, experiment: str) -> _DeleteResult:
-        self.calls.append(("delete_experiment", (experiment,), {}))
-        return _DeleteResult(self.delete_payload)
-
-
-def _run_payload(run_id: str, index: int) -> dict[str, object]:
-    return {
-        "id": run_id,
-        "group": None,
-        "experiment": "exp",
-        "modelType": "models",
-        "model": "model",
-        "preset": "preset",
-        "dataset": "dataset",
-        "runName": f"run-{index}",
-        "timestamp": None,
-        "version": f"version_{index}",
-        "relativePath": f"exp/version_{index}",
-        "hasResult": False,
-        "eventFileCount": 0,
-        "checkpointCount": 0,
-        "hasHparams": False,
-        "metrics": {},
-    }
-
-
-class LogRunServiceListResponseTests(unittest.TestCase):
-    def test_list_runs_returns_response_ready_page(self) -> None:
-        repository = ListingLogRunRepository(
-            runs=[
-                _run_payload("run-1", 0),
-                _run_payload("run-2", 1),
-                _run_payload("run-3", 2),
-            ],
-        )
-        service = LogRunService(repository)  # type: ignore[arg-type]
-
-        result = service.list_runs(limit=1, offset=1)
         response = LogRunsResponse.model_validate(result)
-
-        self.assertEqual(result["total"], 3)
-        self.assertEqual(result["limit"], 1)
-        self.assertEqual(result["offset"], 1)
-        self.assertTrue(result["hasMore"])
-        self.assertEqual([run.id for run in response.runs], ["run-2"])
-
-    def test_list_runs_filters_before_paginating(self) -> None:
-        first = {
-            **_run_payload("run-1", 0),
-            "modelType": "linears",
-            "model": "linear",
-            "preset": "BASELINE",
-            "dataset": "Mnist",
-            "eventFileCount": 1,
-        }
-        second = {
-            **_run_payload("run-2", 1),
-            "modelType": "linears",
-            "model": "linear",
-            "preset": "BASELINE",
-            "dataset": "Cifar10",
-            "eventFileCount": 1,
-        }
-        third = {
-            **_run_payload("run-3", 2),
-            "modelType": "linears",
-            "model": "linear",
-            "preset": "GATING",
-            "dataset": "Mnist",
-            "eventFileCount": 0,
-        }
-        repository = ListingLogRunRepository(runs=[first, second, third])
-        service = LogRunService(repository)  # type: ignore[arg-type]
-
-        result = service.list_runs(
-            limit=5,
-            offset=0,
-            model=["linear"],
-            preset=["BASELINE"],
-            dataset=["Mnist"],
-            has_event_files=True,
-        )
-
         self.assertEqual(result["total"], 1)
-        self.assertEqual(result["runs"][0]["id"], "run-1")
+        self.assertEqual(result["limit"], 1)
+        self.assertEqual(result["offset"], 0)
+        self.assertFalse(result["hasMore"])
+        self.assertEqual(response.runs[0].dataset, "Mnist")
 
-    def test_list_runs_serializes_only_the_requested_page(self) -> None:
-        repository = CountingLogRunRepository(
-            [_run_payload(f"run-{index}", index) for index in range(500)]
-        )
-        service = LogRunService(repository)  # type: ignore[arg-type]
+    def test_summary_page_keeps_complete_facets_and_omits_expensive_fields(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = Path(tmp) / "logs"
+            for dataset, timestamp in (
+                ("Mnist", "010101"),
+                ("Cifar10", "020202"),
+            ):
+                _write_run(
+                    logs_root,
+                    experiment="exp_a",
+                    dataset=dataset,
+                    preset="BASELINE",
+                    run_name=f"run_20260711_{timestamp}",
+                )
+            result = _service(logs_root).list_runs(
+                limit=1,
+                offset=0,
+                projection="summary",
+            )
 
-        result = service.list_runs(limit=5, offset=100)
-
-        self.assertEqual(len(result["runs"]), 5)
-        self.assertEqual(
-            [item.response_count for item in repository.items],
-            [0] * 100 + [1] * 5 + [0] * 395,
-        )
-
-    def test_list_runs_reuses_filtered_facets_across_pages(self) -> None:
-        repository = CountingFilterLogRunRepository(
-            [_run_payload(f"run-{index}", index) for index in range(500)]
-        )
-        service = LogRunService(repository)  # type: ignore[arg-type]
-
-        service.list_runs(limit=100, offset=0, projection="summary")
-        first_page_filter_reads = sum(
-            item.attribute_counts.get("experiment", 0) for item in repository.items
-        )
-        service.list_runs(limit=100, offset=100, projection="summary")
-
-        self.assertGreater(first_page_filter_reads, 0)
-        self.assertEqual(
-            sum(
-                item.attribute_counts.get("experiment", 0) for item in repository.items
-            ),
-            first_page_filter_reads,
-        )
-
-    def test_list_runs_returns_complete_facets_with_a_summary_page(self) -> None:
-        runs = [
-            {
-                **_run_payload("run-1", 0),
-                "experiment": "exp-a",
-                "modelType": "linears",
-                "model": "linear",
-                "dataset": "Mnist",
-                "preset": "BASELINE",
-                "metrics": {"test/accuracy": 0.9},
-            },
-            {
-                **_run_payload("run-2", 1),
-                "experiment": "exp-a",
-                "modelType": "linears",
-                "model": "linear",
-                "dataset": "Cifar10",
-                "preset": "BASELINE",
-                "metrics": {"test/accuracy": 0.8},
-            },
-        ]
-        service = LogRunService(ListingLogRunRepository(runs=runs))  # type: ignore[arg-type]
-
-        result = service.list_runs(limit=1, offset=0, projection="summary")
         response = LogRunsResponse.model_validate(result)
-
         self.assertEqual(response.runs[0].metrics, {})
+        self.assertIsNone(response.runs[0].hasLayerMonitorData)
         self.assertEqual(response.total, 2)
         self.assertEqual(
             [facet.value for facet in response.facets.experiments[0].datasets],
             ["Cifar10", "Mnist"],
         )
-        self.assertEqual(response.facets.experiments[0].runCount, 2)
+
+    def test_list_runs_serializes_only_requested_page(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = Path(tmp) / "logs"
+            for index in range(5):
+                _write_run(
+                    logs_root,
+                    experiment="exp_a",
+                    dataset="Mnist",
+                    preset="BASELINE",
+                    run_name=f"run_20260711_0{index}0101",
+                )
+            service = _service(logs_root)
+            serialized: list[str] = []
+            original_to_response = LogRun.to_response
+
+            def recording_to_response(run: LogRun):
+                serialized.append(run.id)
+                return original_to_response(run)
+
+            with patch.object(LogRun, "to_response", recording_to_response):
+                result = service.list_runs(limit=2, offset=1)
+
+        self.assertEqual(len(result["runs"]), 2)
+        self.assertEqual(len(serialized), 2)
 
     def test_list_experiments_returns_response_ready_page(self) -> None:
-        repository = ListingLogRunRepository(
-            experiments=[
-                {
-                    "experiment": "exp-a",
-                    "runCount": 2,
-                    "relativePath": "exp-a",
-                },
-                {
-                    "experiment": "exp-b",
-                    "runCount": 1,
-                    "relativePath": "exp-b",
-                },
-            ],
-        )
-        service = LogRunService(repository)  # type: ignore[arg-type]
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = Path(tmp) / "logs"
+            _write_run(
+                logs_root,
+                experiment="exp_a",
+                dataset="Mnist",
+                preset="BASELINE",
+                run_name="first_20260711_010101",
+            )
+            _write_run(
+                logs_root,
+                experiment="exp_b",
+                dataset="Mnist",
+                preset="BASELINE",
+                run_name="second_20260711_020202",
+            )
+            result = _service(logs_root).list_experiments(limit=1, offset=0)
 
-        result = service.list_experiments(limit=1, offset=0)
         response = LogExperimentsResponse.model_validate(result)
-
         self.assertEqual(result["total"], 2)
-        self.assertEqual(result["limit"], 1)
-        self.assertEqual(result["offset"], 0)
         self.assertTrue(result["hasMore"])
         self.assertEqual(
             [experiment.experiment for experiment in response.experiments],
-            ["exp-a"],
+            ["exp_a"],
         )
 
 
-class LogRunServiceDeleteExperimentTests(unittest.TestCase):
-    def test_delete_experiment_blocks_matching_active_job(self) -> None:
-        repository = RecordingLogRunRepository()
-        service = LogRunService(repository)  # type: ignore[arg-type]
-
-        with self.assertRaisesRegex(
-            InspectorError,
-            "A training job is still writing to this log folder.",
-        ):
-            service.delete_experiment(
-                "test_model",
-                active_jobs=[
-                    {
-                        "id": "job-1",
-                        "logFolder": "test_model",
-                        "status": "running",
-                    }
-                ],
+class RunHistoryServiceDeleteExperimentTests(unittest.TestCase):
+    def test_delete_experiment_blocks_matching_active_writer(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = Path(tmp) / "logs"
+            experiment = logs_root / "test_model"
+            experiment.mkdir(parents=True)
+            service = _service(
+                logs_root,
+                writers=[_ActiveWriter("job-1", "Running", "test_model")],
             )
 
-        self.assertEqual(repository.calls, [])
+            with self.assertRaisesRegex(
+                InspectorError,
+                "A training job is still writing to this log folder",
+            ):
+                service.delete_experiment("test_model")
 
-    def test_delete_experiment_delegates_for_non_matching_active_jobs(self) -> None:
-        repository = RecordingLogRunRepository()
-        service = LogRunService(repository)  # type: ignore[arg-type]
+            self.assertTrue(experiment.is_dir())
 
-        result = service.delete_experiment(
-            "test_model",
-            active_jobs=[
-                {
-                    "id": "job-1",
-                    "logFolder": "other_model",
-                    "status": "running",
-                }
-            ],
-        )
+    def test_delete_experiment_ignores_nonmatching_writer(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = Path(tmp) / "logs"
+            experiment = logs_root / "test_model"
+            experiment.mkdir(parents=True)
+            service = _service(
+                logs_root,
+                writers=[_ActiveWriter("job-1", "Running", "other_model")],
+            )
 
-        self.assertEqual(
-            repository.calls,
-            [("delete_experiment", ("test_model",), {})],
-        )
-        self.assertEqual(result["experiment"], "test_model")
+            result = service.delete_experiment("test_model")
 
-    def test_delete_experiment_success_response_payload_is_unchanged(self) -> None:
-        expected = {
-            "experiment": "new_empty",
-            "deletedRunIds": [],
-            "deletedRunCount": 0,
-            "deletedRelativePath": "new_empty",
-        }
-        repository = RecordingLogRunRepository(delete_payload=expected)
-        service = LogRunService(repository)  # type: ignore[arg-type]
+            self.assertEqual(result["experiment"], "test_model")
+            self.assertFalse(experiment.exists())
+
+    def test_empty_experiment_delete_payload_is_stable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = Path(tmp) / "logs"
+            (logs_root / "new_empty").mkdir(parents=True)
+
+            result = _service(logs_root).delete_experiment("new_empty")
 
         self.assertEqual(
-            service.delete_experiment("new_empty", active_jobs=[]),
-            expected,
+            result,
+            {
+                "experiment": "new_empty",
+                "deletedRunIds": [],
+                "deletedRunCount": 0,
+                "deletedRelativePath": "new_empty",
+            },
         )
 
 

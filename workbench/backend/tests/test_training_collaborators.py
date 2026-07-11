@@ -9,12 +9,20 @@ from pathlib import Path
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
-import workbench.backend.training_job_projector as training_job_projector
-from workbench.backend.job_store import TrainingJobRecord
-from workbench.backend.training_job_projector import TrainingJobProjector
-from workbench.backend.training_monitor_locator import TrainingMonitorLocator
-from workbench.backend.training_progress_store import TrainingProgressStore
-from workbench.backend.training_worker_launcher import TrainingWorkerLauncher
+import workbench.backend.training_jobs.snapshot as training_job_projector
+from workbench.backend.api.v1.training_mapping import training_job_to_payload
+from workbench.backend.training_jobs.launcher import (
+    TRAINING_LOGS_ROOT_ENV,
+    TrainingWorkerLauncher,
+)
+from workbench.backend.training_jobs.monitoring import TrainingMonitorLocator
+from workbench.backend.training_jobs.progress import (
+    TrainingProgressSnapshot,
+    TrainingProgressStore,
+)
+from workbench.backend.training_jobs.projection import TrainingLiveProjectionCache
+from workbench.backend.training_jobs.snapshot import TrainingJobProjector
+from workbench.backend.training_jobs.store import TrainingJobRecord
 
 
 class FakeProcess:
@@ -112,7 +120,7 @@ class TrainingProgressStoreTests(unittest.TestCase):
             job.progress_path.write_text("bad json\n\n", encoding="utf-8")
 
             store.append_event(job, {"type": "dataset_started"})
-            events = store.read_events(job)
+            events = store.read_snapshot(job).events
 
         self.assertEqual(len(events), 1)
         self.assertEqual(events[0]["jobId"], "job-1")
@@ -145,9 +153,11 @@ class TrainingWorkerLauncherTests(unittest.TestCase):
             root = Path(tmp)
             runner = RecordingRunner()
             launcher = TrainingWorkerLauncher(cwd=root, runner=runner)
+            relative_logs_root = Path("relative-worker-logs")
             launch = launcher.launch(
                 job_root=root / "job-1",
                 payload={"id": "job-1"},
+                logs_root=relative_logs_root,
             )
 
             payload_path = root / "job-1" / "payload.json"
@@ -169,6 +179,10 @@ class TrainingWorkerLauncherTests(unittest.TestCase):
             )
             self.assertIs(launch.process, runner.process)
             self.assertEqual(runner.calls[0]["log_path"], log_path)
+            self.assertEqual(
+                runner.calls[0]["env"][TRAINING_LOGS_ROOT_ENV],
+                str(relative_logs_root.resolve()),
+            )
 
 
 class TrainingMonitorLocatorTests(unittest.TestCase):
@@ -224,10 +238,21 @@ class TrainingJobProjectorTests(unittest.TestCase):
                 }
             ]
 
-            payload = TrainingJobProjector().project(
+            projection = TrainingLiveProjectionCache().project(
                 job,
-                events=events,
+                TrainingProgressSnapshot(
+                    events=events,
+                    new_events=events,
+                    total_count=len(events),
+                    reset=True,
+                ),
                 summarize=lambda runs: {"totalRuns": len(runs)},
+            )
+            payload = training_job_to_payload(
+                TrainingJobProjector().project_snapshot(
+                    job,
+                    projection,
+                )
             )
 
         self.assertEqual(payload["id"], "job-1")

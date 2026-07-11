@@ -15,7 +15,10 @@ from workbench.backend.core.config import (
     get_workbench_api_settings,
 )
 from workbench.backend.core.limits import (
+    DEFAULT_LOG_ARCHIVE_UPLOAD_CONCURRENCY,
     DEFAULT_MAX_LOG_ARCHIVE_EXTRACTED_SIZE,
+    DEFAULT_MAX_LOG_ARCHIVE_MEMBER_COUNT,
+    DEFAULT_MAX_LOG_ARCHIVE_PATH_BYTES,
     DEFAULT_MAX_LOG_ARCHIVE_UPLOAD_SIZE,
 )
 
@@ -28,6 +31,9 @@ SETTINGS_ENV_NAMES = (
     "WORKBENCH_API_ALLOW_LOG_IMPORTS",
     "WORKBENCH_API_MAX_UPLOAD_SIZE",
     "WORKBENCH_API_MAX_LOG_ARCHIVE_EXTRACTED_SIZE",
+    "WORKBENCH_API_MAX_LOG_ARCHIVE_MEMBER_COUNT",
+    "WORKBENCH_API_MAX_LOG_ARCHIVE_PATH_BYTES",
+    "WORKBENCH_API_LOG_ARCHIVE_UPLOAD_CONCURRENCY",
 )
 
 
@@ -58,18 +64,38 @@ class WorkbenchApiSettingsTests(unittest.TestCase):
             get_workbench_api_settings,
         )
 
-    def test_defaults_keep_local_development_unauthenticated(self) -> None:
+    def test_defaults_keep_local_development_unauthenticated_and_read_only(
+        self,
+    ) -> None:
         with isolated_settings_env():
             settings = WorkbenchApiSettings()
 
         self.assertEqual(settings.auth_mode, "none")
         self.assertIsNone(settings.token)
         self.assertIs(settings.allow_unsafe_local_mutations, False)
-        self.assertIs(settings.log_imports_enabled, True)
+        self.assertIs(settings.log_imports_enabled, False)
         self.assertIsNone(settings.max_upload_size)
         self.assertIsNone(settings.max_log_archive_extracted_size)
-        self.assertIsNone(settings.effective_max_upload_size)
-        self.assertIsNone(settings.effective_max_log_archive_extracted_size)
+        self.assertEqual(
+            settings.effective_max_upload_size,
+            DEFAULT_MAX_LOG_ARCHIVE_UPLOAD_SIZE,
+        )
+        self.assertEqual(
+            settings.effective_max_log_archive_extracted_size,
+            DEFAULT_MAX_LOG_ARCHIVE_EXTRACTED_SIZE,
+        )
+        self.assertEqual(
+            settings.max_log_archive_member_count,
+            DEFAULT_MAX_LOG_ARCHIVE_MEMBER_COUNT,
+        )
+        self.assertEqual(
+            settings.max_log_archive_path_bytes,
+            DEFAULT_MAX_LOG_ARCHIVE_PATH_BYTES,
+        )
+        self.assertEqual(
+            settings.log_archive_upload_concurrency,
+            DEFAULT_LOG_ARCHIVE_UPLOAD_CONCURRENCY,
+        )
 
     def test_bearer_mode_defaults_disable_log_imports(self) -> None:
         settings = WorkbenchApiSettings(auth_mode="bearer", token="secret-token")
@@ -95,14 +121,20 @@ class WorkbenchApiSettingsTests(unittest.TestCase):
                     DEFAULT_MAX_LOG_ARCHIVE_EXTRACTED_SIZE,
                 )
 
-    def test_code_can_explicitly_disable_log_import_size_limits(self) -> None:
+    def test_none_cannot_disable_log_import_size_limits(self) -> None:
         settings = WorkbenchApiSettings(
             max_upload_size=None,
             max_log_archive_extracted_size=None,
         )
 
-        self.assertIsNone(settings.effective_max_upload_size)
-        self.assertIsNone(settings.effective_max_log_archive_extracted_size)
+        self.assertEqual(
+            settings.effective_max_upload_size,
+            DEFAULT_MAX_LOG_ARCHIVE_UPLOAD_SIZE,
+        )
+        self.assertEqual(
+            settings.effective_max_log_archive_extracted_size,
+            DEFAULT_MAX_LOG_ARCHIVE_EXTRACTED_SIZE,
+        )
 
     def test_defaults_keep_local_development_cors_origins(self) -> None:
         with isolated_settings_env():
@@ -154,7 +186,7 @@ class WorkbenchApiSettingsTests(unittest.TestCase):
             settings = WorkbenchApiSettings()
 
         self.assertIs(settings.allow_unsafe_local_mutations, True)
-        self.assertIs(settings.log_imports_enabled, True)
+        self.assertIs(settings.log_imports_enabled, False)
 
     def test_env_parses_log_import_override(self) -> None:
         with isolated_settings_env(WORKBENCH_API_ALLOW_LOG_IMPORTS="false"):
@@ -173,6 +205,9 @@ class WorkbenchApiSettingsTests(unittest.TestCase):
         with isolated_settings_env(
             WORKBENCH_API_MAX_UPLOAD_SIZE="1024",
             WORKBENCH_API_MAX_LOG_ARCHIVE_EXTRACTED_SIZE="2048",
+            WORKBENCH_API_MAX_LOG_ARCHIVE_MEMBER_COUNT="100",
+            WORKBENCH_API_MAX_LOG_ARCHIVE_PATH_BYTES="4096",
+            WORKBENCH_API_LOG_ARCHIVE_UPLOAD_CONCURRENCY="2",
         ):
             settings = WorkbenchApiSettings()
 
@@ -180,6 +215,9 @@ class WorkbenchApiSettingsTests(unittest.TestCase):
         self.assertEqual(settings.max_log_archive_extracted_size, 2048)
         self.assertEqual(settings.effective_max_upload_size, 1024)
         self.assertEqual(settings.effective_max_log_archive_extracted_size, 2048)
+        self.assertEqual(settings.max_log_archive_member_count, 100)
+        self.assertEqual(settings.max_log_archive_path_bytes, 4096)
+        self.assertEqual(settings.log_archive_upload_concurrency, 2)
 
     def test_env_parses_cors_origins_json_array(self) -> None:
         origins = [

@@ -1,9 +1,0 @@
-"""Training request limits that protect local process and memory resources."""
-
-from __future__ import annotations
-
-MAX_TRAINING_DATASETS = 50
-MAX_TRAINING_MONITORS = 100
-MAX_TRAINING_PLANNED_RUNS = 2000
-MAX_TRAINING_SEARCH_AXES = 16
-MAX_TRAINING_SEARCH_AXIS_VALUES = 50

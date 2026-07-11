@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 try:
-    from workbench.backend import tensorboard_reader
+    import workbench.backend.tensorboard.events as tensorboard_reader
 except ModuleNotFoundError as exc:
     if exc.name != "tensorboard":
         raise
@@ -101,7 +101,7 @@ class TensorBoardReaderTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             run_dir = Path(tmp)
             with patch(
-                "workbench.backend.tensorboard_reader.event_accumulator.EventAccumulator",
+                "workbench.backend.tensorboard.events.event_accumulator.EventAccumulator",
                 ReloadingAccumulator,
             ):
                 loaded = tensorboard_reader.load_event_accumulator(run_dir)
@@ -128,7 +128,7 @@ class TensorBoardReaderTests(unittest.TestCase):
 
         custom_guidance = {1: 2}
         with patch(
-            "workbench.backend.tensorboard_reader.event_accumulator.EventAccumulator",
+            "workbench.backend.tensorboard.events.event_accumulator.EventAccumulator",
             ReloadingAccumulator,
         ):
             tensorboard_reader.load_event_accumulator(
@@ -155,7 +155,7 @@ class TensorBoardReaderTests(unittest.TestCase):
                 raise RuntimeError("reload failed")
 
         with patch(
-            "workbench.backend.tensorboard_reader.event_accumulator.EventAccumulator",
+            "workbench.backend.tensorboard.events.event_accumulator.EventAccumulator",
             FailingAccumulator,
         ):
             self.assertIsNone(
@@ -163,7 +163,7 @@ class TensorBoardReaderTests(unittest.TestCase):
             )
 
         with patch(
-            "workbench.backend.tensorboard_reader.event_accumulator.EventAccumulator",
+            "workbench.backend.tensorboard.events.event_accumulator.EventAccumulator",
             ReloadFailingAccumulator,
         ):
             self.assertIsNone(

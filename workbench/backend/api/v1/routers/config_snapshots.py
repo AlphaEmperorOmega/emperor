@@ -6,12 +6,13 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 
+from workbench.backend.api.mutation_policy import (
+    HttpOperationPolicy,
+    declare_http_operation,
+)
 from workbench.backend.blocking import run_blocking_io
 from workbench.backend.core.config import WorkbenchApiSettings
-from workbench.backend.core.security import (
-    require_bearer_auth,
-    require_local_mutations_allowed,
-)
+from workbench.backend.core.security import require_bearer_auth
 from workbench.backend.dependencies import (
     get_config_snapshot_service,
     get_workbench_settings,
@@ -74,12 +75,12 @@ async def list_config_snapshot_library(
     summary="Create a config snapshot",
     response_description="The created config snapshot.",
 )
+@declare_http_operation(HttpOperationPolicy.LOCAL_MUTATION)
 async def create_config_snapshot(
     request: ConfigSnapshotCreateRequest,
     service: Annotated[ConfigSnapshotService, Depends(get_config_snapshot_service)],
     settings: Annotated[WorkbenchApiSettings, Depends(get_workbench_settings)],
 ) -> ConfigSnapshotResponse:
-    require_local_mutations_allowed(settings)
     model_id = require_model_id(request.modelType, request.model)
     return ConfigSnapshotResponse.model_validate(
         await run_blocking_io(
@@ -98,13 +99,13 @@ async def create_config_snapshot(
     summary="Update a config snapshot",
     response_description="The updated config snapshot.",
 )
+@declare_http_operation(HttpOperationPolicy.LOCAL_MUTATION)
 async def update_config_snapshot(
     snapshot_id: str,
     request: ConfigSnapshotUpdateRequest,
     service: Annotated[ConfigSnapshotService, Depends(get_config_snapshot_service)],
     settings: Annotated[WorkbenchApiSettings, Depends(get_workbench_settings)],
 ) -> ConfigSnapshotResponse:
-    require_local_mutations_allowed(settings)
     return ConfigSnapshotResponse.model_validate(
         await run_blocking_io(
             service.update_snapshot,
@@ -121,12 +122,12 @@ async def update_config_snapshot(
     summary="Delete a config snapshot",
     response_description="Remaining config snapshots for the model.",
 )
+@declare_http_operation(HttpOperationPolicy.LOCAL_MUTATION)
 async def delete_config_snapshot(
     snapshot_id: str,
     service: Annotated[ConfigSnapshotService, Depends(get_config_snapshot_service)],
     settings: Annotated[WorkbenchApiSettings, Depends(get_workbench_settings)],
 ) -> ConfigSnapshotsResponse:
-    require_local_mutations_allowed(settings)
     return ConfigSnapshotsResponse.model_validate(
         await run_blocking_io(service.delete_snapshot, snapshot_id)
     )

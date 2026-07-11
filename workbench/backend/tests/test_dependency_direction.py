@@ -12,6 +12,55 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 CORE_PACKAGE_DIRS = ("emperor", "models")
 CORE_PACKAGE_ROOTS = frozenset(CORE_PACKAGE_DIRS)
 WORKBENCH_BACKEND_DIR = REPO_ROOT / "workbench" / "backend"
+WORKBENCH_TESTS_DIR = WORKBENCH_BACKEND_DIR / "tests"
+REMOVED_SHALLOW_INSPECTION_PATHS = (
+    WORKBENCH_BACKEND_DIR / "services" / "models.py",
+    WORKBENCH_BACKEND_DIR / "inspector" / "config_classes.py",
+    WORKBENCH_BACKEND_DIR / "inspector" / "field_descriptions.py",
+    WORKBENCH_BACKEND_DIR / "inspector" / "overrides.py",
+    WORKBENCH_BACKEND_DIR / "inspector" / "values.py",
+)
+REMOVED_RUN_IMPLEMENTATION_PATHS = (
+    REPO_ROOT / "emperor" / "experiments" / "progress.py",
+    WORKBENCH_BACKEND_DIR / "inspector" / "search.py",
+    WORKBENCH_BACKEND_DIR / "training_events.py",
+)
+REMOVED_TRAINING_JOB_IMPLEMENTATION_PATHS = (
+    WORKBENCH_BACKEND_DIR / "job_store.py",
+    WORKBENCH_BACKEND_DIR / "runtime" / "__init__.py",
+    WORKBENCH_BACKEND_DIR / "runtime" / "job_status.py",
+    WORKBENCH_BACKEND_DIR / "services" / "training.py",
+    WORKBENCH_BACKEND_DIR / "training_cgroups.py",
+    WORKBENCH_BACKEND_DIR / "training_contracts.py",
+    WORKBENCH_BACKEND_DIR / "training_job_lifecycle.py",
+    WORKBENCH_BACKEND_DIR / "training_job_projector.py",
+    WORKBENCH_BACKEND_DIR / "training_jobs.py",
+    WORKBENCH_BACKEND_DIR / "training_limits.py",
+    WORKBENCH_BACKEND_DIR / "training_live_projection.py",
+    WORKBENCH_BACKEND_DIR / "training_monitor_locator.py",
+    WORKBENCH_BACKEND_DIR / "training_progress_store.py",
+    WORKBENCH_BACKEND_DIR / "training_request_commands.py",
+    WORKBENCH_BACKEND_DIR / "training_run_plans.py",
+    WORKBENCH_BACKEND_DIR / "training_run_progress.py",
+    WORKBENCH_BACKEND_DIR / "training_worker_launcher.py",
+)
+REMOVED_RUN_HISTORY_IMPLEMENTATION_PATHS = (
+    WORKBENCH_BACKEND_DIR / "log_experiment_mutations.py",
+    WORKBENCH_BACKEND_DIR / "log_run_artifacts.py",
+    WORKBENCH_BACKEND_DIR / "log_run_deletion.py",
+    WORKBENCH_BACKEND_DIR / "log_run_models.py",
+    WORKBENCH_BACKEND_DIR / "log_run_names.py",
+    WORKBENCH_BACKEND_DIR / "log_run_query.py",
+    WORKBENCH_BACKEND_DIR / "log_run_scanner.py",
+    WORKBENCH_BACKEND_DIR / "log_runs.py",
+    WORKBENCH_BACKEND_DIR / "monitor_data.py",
+    WORKBENCH_BACKEND_DIR / "tensorboard_reader.py",
+    WORKBENCH_BACKEND_DIR / "services" / "log_import.py",
+    WORKBENCH_BACKEND_DIR / "services" / "logs.py",
+)
+RUN_HISTORY_DIR = WORKBENCH_BACKEND_DIR / "run_history"
+SHARED_TENSORBOARD_DIR = WORKBENCH_BACKEND_DIR / "tensorboard"
+EMPEROR_DIR = REPO_ROOT / "emperor"
 MODELS_DIR = REPO_ROOT / "models"
 CATALOG_PACKAGE_ROOTS = tuple(
     (REPO_ROOT.joinpath(*entry.module_path.split(".")), entry.module_path)
@@ -109,6 +158,83 @@ def _config_imports_under(roots: Iterable[Path]) -> Iterator[ConfigImport]:
 
 
 class DependencyDirectionTests(unittest.TestCase):
+    def test_shallow_inspection_implementations_remain_removed(self) -> None:
+        remaining = [
+            str(path.relative_to(REPO_ROOT))
+            for path in REMOVED_SHALLOW_INSPECTION_PATHS
+            if path.exists()
+        ]
+
+        self.assertEqual([], remaining)
+
+    def test_obsolete_run_implementations_remain_removed(self) -> None:
+        remaining = [
+            str(path.relative_to(REPO_ROOT))
+            for path in REMOVED_RUN_IMPLEMENTATION_PATHS
+            if path.exists()
+        ]
+
+        self.assertEqual([], remaining)
+
+    def test_obsolete_training_job_implementations_remain_removed(self) -> None:
+        remaining = [
+            str(path.relative_to(REPO_ROOT))
+            for path in REMOVED_TRAINING_JOB_IMPLEMENTATION_PATHS
+            if path.exists()
+        ]
+
+        self.assertEqual([], remaining)
+
+    def test_obsolete_run_history_implementations_remain_removed(self) -> None:
+        remaining = [
+            str(path.relative_to(REPO_ROOT))
+            for path in REMOVED_RUN_HISTORY_IMPLEMENTATION_PATHS
+            if path.exists()
+        ]
+
+        self.assertEqual([], remaining)
+
+    def test_run_history_does_not_import_http_or_training_implementations(
+        self,
+    ) -> None:
+        forbidden_prefixes = (
+            "workbench.backend.api",
+            "workbench.backend.training_jobs",
+        )
+        violations = [
+            source_import.format_for_failure()
+            for source_import in _absolute_imports_under([RUN_HISTORY_DIR])
+            if source_import.module.startswith(forbidden_prefixes)
+        ]
+
+        self.assertEqual([], violations)
+
+    def test_shared_tensorboard_does_not_import_capability_implementations(
+        self,
+    ) -> None:
+        forbidden_prefixes = (
+            "workbench.backend.run_history",
+            "workbench.backend.training_jobs",
+        )
+        violations = [
+            source_import.format_for_failure()
+            for source_import in _absolute_imports_under([SHARED_TENSORBOARD_DIR])
+            if source_import.module.startswith(forbidden_prefixes)
+        ]
+
+        self.assertEqual([], violations)
+
+    def test_emperor_does_not_import_model_packages_by_legacy_namespace(
+        self,
+    ) -> None:
+        violations = [
+            source_import.format_for_failure()
+            for source_import in _absolute_imports_under([EMPEROR_DIR])
+            if source_import.root == "models"
+        ]
+
+        self.assertEqual([], violations)
+
     def test_core_packages_do_not_import_workbench(self) -> None:
         core_roots = [REPO_ROOT / package_dir for package_dir in CORE_PACKAGE_DIRS]
         violations = [
@@ -127,6 +253,24 @@ class DependencyDirectionTests(unittest.TestCase):
         }
 
         self.assertEqual(CORE_PACKAGE_ROOTS, imported_core_roots)
+
+    def test_workbench_imports_only_allowlisted_public_emperor_interfaces(
+        self,
+    ) -> None:
+        allowed = {
+            "emperor.inspection",
+            "emperor.model_packages",
+            "emperor.runs",
+        }
+        violations = [
+            source_import.format_for_failure()
+            for source_import in _absolute_imports_under([WORKBENCH_BACKEND_DIR])
+            if not source_import.path.is_relative_to(WORKBENCH_TESTS_DIR)
+            and source_import.root == "emperor"
+            and source_import.module not in allowed
+        ]
+
+        self.assertEqual([], violations)
 
     def test_model_packages_do_not_import_other_model_configs(self) -> None:
         violations = []

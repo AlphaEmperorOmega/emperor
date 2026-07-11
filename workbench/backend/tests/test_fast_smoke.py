@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import importlib
+import os
+import subprocess
 import sys
 import unittest
 
 FAST_SMOKE_MODULES = (
     "workbench.backend.storage.local_files",
-    "workbench.backend.runtime.job_status",
+    "workbench.backend.training_jobs.status",
     "workbench.backend.config_snapshots",
-    "workbench.backend.job_store",
+    "workbench.backend.training_jobs.store",
     "workbench.backend.tests.test_dependency_direction",
     "workbench.backend.tests.test_local_files",
     "workbench.backend.tests.test_job_status",
@@ -43,6 +45,67 @@ class FastSmokeSuiteTests(unittest.TestCase):
             sorted(imported_roots & HEAVY_RUNTIME_MODULE_ROOTS),
             [],
         )
+
+    def test_inspection_facade_import_is_lazy(self) -> None:
+        script = """
+import sys
+import emperor.inspection
+from emperor.model_packages import discover_model_packages
+
+loaded = [
+    package.module_path
+    for package in discover_model_packages()
+    if any(
+        name == package.module_path or name.startswith(package.module_path + '.')
+        for name in sys.modules
+    )
+]
+if loaded:
+    raise SystemExit(f'Inspection facade loaded Model Packages: {loaded}')
+if 'torch' in sys.modules:
+    raise SystemExit('Inspection facade imported Torch')
+"""
+        completed = subprocess.run(
+            [sys.executable, "-c", script],
+            cwd=".",
+            env={**os.environ, "MPLCONFIGDIR": "/tmp/matplotlib"},
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+    def test_lightweight_app_startup_does_not_load_a_model_package(self) -> None:
+        script = """
+import sys
+from workbench.backend.main import create_app
+from emperor.model_packages import discover_model_packages
+
+create_app()
+loaded = [
+    package.module_path
+    for package in discover_model_packages()
+    if any(
+        name == package.module_path or name.startswith(package.module_path + '.')
+        for name in sys.modules
+    )
+]
+if loaded:
+    raise SystemExit(f'Workbench startup loaded Model Packages: {loaded}')
+if 'torch' in sys.modules:
+    raise SystemExit('Workbench startup imported Torch')
+"""
+        completed = subprocess.run(
+            [sys.executable, "-c", script],
+            cwd=".",
+            env={**os.environ, "MPLCONFIGDIR": "/tmp/matplotlib"},
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
 
 
 if __name__ == "__main__":

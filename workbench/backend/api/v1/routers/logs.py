@@ -2,25 +2,35 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Literal
+import asyncio
+import tempfile
+from typing import Annotated, BinaryIO, Literal
 
 from fastapi import APIRouter, Depends, Query, Request
 
-from workbench.backend.blocking import run_blocking_io
+from workbench.backend.api.mutation_policy import (
+    HttpOperationPolicy,
+    declare_http_operation,
+)
+from workbench.backend.api.v1.log_archive_upload import (
+    parse_multipart_log_archive_upload,
+)
+from workbench.backend.blocking import (
+    BLOCKING_WORK_TIMEOUT_MESSAGE,
+    DEFAULT_BLOCKING_WORK_TIMEOUT_SECONDS,
+    named_blocking_work_limiter,
+    run_blocking_io,
+)
 from workbench.backend.core.config import WorkbenchApiSettings
 from workbench.backend.core.errors import ApiError
-from workbench.backend.core.security import (
-    require_bearer_auth,
-    require_local_mutations_allowed,
-    require_log_imports_allowed,
-)
+from workbench.backend.core.security import require_bearer_auth
 from workbench.backend.dependencies import (
-    get_log_run_service,
-    get_training_job_service,
+    get_run_history_service,
     get_workbench_settings,
 )
 from workbench.backend.inspector.errors import InspectorError
 from workbench.backend.model_identity import require_model_id
+from workbench.backend.run_history import RunHistoryService
 from workbench.backend.schemas import (
     LogArchiveImportResponse,
     LogCheckpointResponse,
@@ -49,11 +59,6 @@ from workbench.backend.schemas import (
     MonitorDataResponse,
     ParameterStatusResponse,
 )
-from workbench.backend.services.log_import import (
-    parse_multipart_log_archive_upload,
-)
-from workbench.backend.services.logs import LogRunService
-from workbench.backend.services.training import TrainingJobService
 
 router = APIRouter(
     prefix="/logs",
@@ -61,11 +66,13 @@ router = APIRouter(
     dependencies=[Depends(require_bearer_auth)],
 )
 # Read endpoints are async at the API boundary so ASGI clients do not rely on
-# FastAPI sync-route dispatch. Delete endpoints share mutable TrainingJobManager
-# state with the training routes.
+# FastAPI sync-route dispatch. Mutations coordinate Log Experiment ownership in
+# the app-scoped capability layer.
 DEFAULT_LOG_PAGE_LIMIT = 500
 MAX_LOG_PAGE_LIMIT = 2000
 LOG_METADATA_RESPONSE_LIMIT = 500
+LOG_ARCHIVE_UPLOAD_MEMORY_SPOOL_SIZE = 1024 * 1024
+LOG_ARCHIVE_UPLOAD_LIMITER_NAME = "log-archive-upload"
 
 
 def _upload_too_large_error(limit: int) -> ApiError:
@@ -79,15 +86,23 @@ async def _read_upload_body_with_limit(
     request: Request,
     *,
     max_upload_size: int | None,
-) -> bytes:
-    chunks: list[bytes] = []
+) -> BinaryIO:
+    body = tempfile.SpooledTemporaryFile(
+        max_size=LOG_ARCHIVE_UPLOAD_MEMORY_SPOOL_SIZE,
+        mode="w+b",
+    )
     total_size = 0
-    async for chunk in request.stream():
-        total_size += len(chunk)
-        if max_upload_size is not None and total_size > max_upload_size:
-            raise _upload_too_large_error(max_upload_size)
-        chunks.append(chunk)
-    return b"".join(chunks)
+    try:
+        async for chunk in request.stream():
+            total_size += len(chunk)
+            if max_upload_size is not None and total_size > max_upload_size:
+                raise _upload_too_large_error(max_upload_size)
+            body.write(chunk)
+        body.seek(0)
+        return body
+    except BaseException:
+        body.close()
+        raise
 
 
 def _bounded_metadata_response(items: list[object], *, label: str) -> dict[str, object]:
@@ -104,10 +119,6 @@ def _bounded_metadata_response(items: list[object], *, label: str) -> dict[str, 
         ),
         "items": returned,
     }
-
-
-def active_job_payloads(service: TrainingJobService) -> list[dict[str, str]]:
-    return [job.to_api_payload() for job in service.active_jobs()]
 
 
 def _model_query_ids(
@@ -137,7 +148,7 @@ def _model_filter_ids(request: LogRunDeleteFiltersRequest) -> list[str]:
     response_description="Historical TensorBoard runs indexed from the logs root.",
 )
 async def logs_runs(
-    service: Annotated[LogRunService, Depends(get_log_run_service)],
+    service: Annotated[RunHistoryService, Depends(get_run_history_service)],
     limit: Annotated[
         int,
         Query(ge=1, le=MAX_LOG_PAGE_LIMIT),
@@ -176,7 +187,7 @@ async def logs_runs(
     response_description="Log experiment folders indexed from the logs root.",
 )
 async def logs_experiments(
-    service: Annotated[LogRunService, Depends(get_log_run_service)],
+    service: Annotated[RunHistoryService, Depends(get_run_history_service)],
     limit: int = Query(DEFAULT_LOG_PAGE_LIMIT, ge=1, le=MAX_LOG_PAGE_LIMIT),
     offset: int = Query(0, ge=0),
 ) -> LogExperimentsResponse:
@@ -191,14 +202,18 @@ async def logs_experiments(
     summary="Import log archive",
     response_description="Extracted log archive import summary.",
 )
+@declare_http_operation(HttpOperationPolicy.LOG_IMPORT)
 async def import_log_archive(
     request: Request,
-    service: Annotated[LogRunService, Depends(get_log_run_service)],
+    service: Annotated[RunHistoryService, Depends(get_run_history_service)],
     settings: Annotated[WorkbenchApiSettings, Depends(get_workbench_settings)],
 ) -> LogArchiveImportResponse:
-    require_log_imports_allowed(settings)
     max_upload_size = settings.effective_max_upload_size
     max_extracted_size = settings.effective_max_log_archive_extracted_size
+    max_member_count = settings.max_log_archive_member_count
+    max_path_bytes = settings.max_log_archive_path_bytes
+    upload_concurrency = settings.log_archive_upload_concurrency
+    content_type = request.headers.get("content-type", "")
 
     content_length = request.headers.get("content-length")
     if content_length is not None:
@@ -209,26 +224,56 @@ async def import_log_archive(
         if max_upload_size is not None and upload_size > max_upload_size:
             raise _upload_too_large_error(max_upload_size)
 
-    upload = parse_multipart_log_archive_upload(
-        content_type=request.headers.get("content-type", ""),
-        body=await _read_upload_body_with_limit(
+    upload_limiter = named_blocking_work_limiter(
+        f"{LOG_ARCHIVE_UPLOAD_LIMITER_NAME}:{upload_concurrency}",
+        upload_concurrency,
+    )
+    try:
+        await asyncio.wait_for(
+            upload_limiter.acquire(),
+            DEFAULT_BLOCKING_WORK_TIMEOUT_SECONDS,
+        )
+    except TimeoutError as exc:
+        raise ApiError(
+            BLOCKING_WORK_TIMEOUT_MESSAGE,
+            status_code=503,
+        ) from exc
+
+    limiter_handed_to_worker = False
+    try:
+        body = await _read_upload_body_with_limit(
             request,
             max_upload_size=max_upload_size,
-        ),
-        max_upload_size=max_upload_size,
-    )
-
-    def extract_archive() -> dict[str, object]:
-        return service.import_archive(
-            archive=upload.content,
-            filename=upload.filename,
-            max_upload_size=max_upload_size,
-            max_extracted_size=max_extracted_size,
         )
 
-    return LogArchiveImportResponse.model_validate(
-        await run_blocking_io(extract_archive)
-    )
+        def parse_and_extract_archive() -> dict[str, object]:
+            try:
+                upload = parse_multipart_log_archive_upload(
+                    content_type=content_type,
+                    body=body,
+                    max_upload_size=max_upload_size,
+                )
+                return service.import_archive(
+                    archive=upload.content,
+                    filename=upload.filename,
+                    max_upload_size=max_upload_size,
+                    max_extracted_size=max_extracted_size,
+                    max_member_count=max_member_count,
+                    max_path_bytes=max_path_bytes,
+                )
+            finally:
+                body.close()
+
+        limiter_handed_to_worker = True
+        result = await run_blocking_io(
+            parse_and_extract_archive,
+            limiter=upload_limiter,
+            limiter_already_acquired=True,
+        )
+        return LogArchiveImportResponse.model_validate(result)
+    finally:
+        if not limiter_handed_to_worker:
+            upload_limiter.release()
 
 
 @router.post(
@@ -237,9 +282,10 @@ async def import_log_archive(
     summary="Read log-run checkpoints",
     response_description="Checkpoint file metadata for requested historical runs.",
 )
+@declare_http_operation(HttpOperationPolicy.READ_ONLY)
 async def logs_checkpoints(
     request: LogCheckpointsRequest,
-    service: Annotated[LogRunService, Depends(get_log_run_service)],
+    service: Annotated[RunHistoryService, Depends(get_run_history_service)],
 ) -> LogCheckpointsResponse:
     checkpoints = await run_blocking_io(service.checkpoints_for_runs, request.runIds)
     bounded = _bounded_metadata_response(checkpoints, label="checkpoint metadata")
@@ -265,22 +311,14 @@ async def logs_checkpoints(
     summary="Delete a log experiment",
     response_description="Deleted experiment metadata and removed run ids.",
 )
+@declare_http_operation(HttpOperationPolicy.LOCAL_MUTATION)
 async def delete_log_experiment(
     experiment: str,
-    service: Annotated[LogRunService, Depends(get_log_run_service)],
-    training_service: Annotated[
-        TrainingJobService,
-        Depends(get_training_job_service),
-    ],
+    service: Annotated[RunHistoryService, Depends(get_run_history_service)],
     settings: Annotated[WorkbenchApiSettings, Depends(get_workbench_settings)],
 ) -> LogExperimentDeleteResponse:
-    require_local_mutations_allowed(settings)
-
     def delete_experiment() -> dict[str, object]:
-        return service.delete_experiment(
-            experiment,
-            active_jobs=active_job_payloads(training_service),
-        )
+        return service.delete_experiment(experiment)
 
     return LogExperimentDeleteResponse.model_validate(
         await run_blocking_io(delete_experiment)
@@ -293,13 +331,10 @@ async def delete_log_experiment(
     summary="Plan filtered log-run deletion",
     response_description="Matched run folders and active training-job blockers.",
 )
+@declare_http_operation(HttpOperationPolicy.READ_ONLY)
 async def log_run_delete_plan(
     request: LogRunDeleteFiltersRequest,
-    service: Annotated[LogRunService, Depends(get_log_run_service)],
-    training_service: Annotated[
-        TrainingJobService,
-        Depends(get_training_job_service),
-    ],
+    service: Annotated[RunHistoryService, Depends(get_run_history_service)],
 ) -> LogRunDeletePlanResponse:
     def create_delete_plan() -> dict[str, object]:
         return service.create_delete_plan(
@@ -308,7 +343,6 @@ async def log_run_delete_plan(
             models=_model_filter_ids(request),
             presets=request.presets,
             run_ids=request.runIds,
-            active_jobs=active_job_payloads(training_service),
         )
 
     return LogRunDeletePlanResponse.model_validate(
@@ -322,17 +356,12 @@ async def log_run_delete_plan(
     summary="Delete filtered log runs",
     response_description="Deleted run metadata for matched version folders.",
 )
+@declare_http_operation(HttpOperationPolicy.LOCAL_MUTATION)
 async def delete_log_runs(
     request: LogRunDeleteFiltersRequest,
-    service: Annotated[LogRunService, Depends(get_log_run_service)],
-    training_service: Annotated[
-        TrainingJobService,
-        Depends(get_training_job_service),
-    ],
+    service: Annotated[RunHistoryService, Depends(get_run_history_service)],
     settings: Annotated[WorkbenchApiSettings, Depends(get_workbench_settings)],
 ) -> LogRunDeleteResponse:
-    require_local_mutations_allowed(settings)
-
     def delete_runs() -> dict[str, object]:
         return service.delete_runs(
             experiments=request.experiments,
@@ -340,7 +369,6 @@ async def delete_log_runs(
             models=_model_filter_ids(request),
             presets=request.presets,
             run_ids=request.runIds,
-            active_jobs=active_job_payloads(training_service),
         )
 
     return LogRunDeleteResponse.model_validate(await run_blocking_io(delete_runs))
@@ -354,9 +382,10 @@ async def delete_log_runs(
         "Scalar, histogram, image, and text tags for requested runs."
     ),
 )
+@declare_http_operation(HttpOperationPolicy.READ_ONLY)
 async def logs_tags(
     request: LogTagsRequest,
-    service: Annotated[LogRunService, Depends(get_log_run_service)],
+    service: Annotated[RunHistoryService, Depends(get_run_history_service)],
 ) -> LogTagsResponse:
     tags_for_runs = await run_blocking_io(service.tags_for_runs, request.runIds)
     return LogTagsResponse(
@@ -370,9 +399,10 @@ async def logs_tags(
     summary="Read log-run scalar series",
     response_description="Requested scalar series from historical TensorBoard runs.",
 )
+@declare_http_operation(HttpOperationPolicy.READ_ONLY)
 async def logs_scalars(
     request: LogScalarsRequest,
-    service: Annotated[LogRunService, Depends(get_log_run_service)],
+    service: Annotated[RunHistoryService, Depends(get_run_history_service)],
 ) -> LogScalarsResponse:
     scalar_series = await run_blocking_io(
         service.scalars_for_runs,
@@ -394,9 +424,10 @@ async def logs_scalars(
     summary="Read log-run media summaries",
     response_description="Requested TensorBoard image and text summaries.",
 )
+@declare_http_operation(HttpOperationPolicy.READ_ONLY)
 async def logs_media(
     request: LogMediaRequest,
-    service: Annotated[LogRunService, Depends(get_log_run_service)],
+    service: Annotated[RunHistoryService, Depends(get_run_history_service)],
 ) -> LogMediaResponse:
     media = await run_blocking_io(
         service.media_for_runs,
@@ -424,9 +455,10 @@ async def logs_media(
     summary="Read log-run parameter status",
     response_description="Weight and bias update status for requested historical runs.",
 )
+@declare_http_operation(HttpOperationPolicy.READ_ONLY)
 async def logs_parameter_status(
     request: LogParameterStatusRequest,
-    service: Annotated[LogRunService, Depends(get_log_run_service)],
+    service: Annotated[RunHistoryService, Depends(get_run_history_service)],
 ) -> LogParameterStatusResponse:
     statuses = await run_blocking_io(
         service.parameter_status_for_runs,
@@ -445,7 +477,7 @@ async def logs_parameter_status(
 )
 async def log_run_artifacts(
     run_id: str,
-    service: Annotated[LogRunService, Depends(get_log_run_service)],
+    service: Annotated[RunHistoryService, Depends(get_run_history_service)],
 ) -> LogRunArtifactsResponse:
     payload = await run_blocking_io(service.artifacts_for_run, run_id)
     return LogRunArtifactsResponse(
@@ -475,7 +507,7 @@ async def log_run_artifacts(
 )
 async def log_run_monitor_data(
     run_id: str,
-    service: Annotated[LogRunService, Depends(get_log_run_service)],
+    service: Annotated[RunHistoryService, Depends(get_run_history_service)],
     node_path: str = Query(..., alias="nodePath"),
 ) -> MonitorDataResponse:
     return MonitorDataResponse.model_validate(

@@ -8,24 +8,29 @@ import sys
 import tempfile
 import time
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Lock
+from unittest.mock import patch
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
-import workbench.backend.training_jobs as training_jobs
 from workbench.backend.inspector.errors import InspectorError
-from workbench.backend.job_store import InMemoryTrainingJobStore
 from workbench.backend.tests.helpers import (
     FakeProcess,
     FakeRunner,
+    TrainingJobRuntimeHarness,
+    create_app_with_training_runtime,
     create_progress_test_job,
 )
-from workbench.backend.training_cgroups import (
+from workbench.backend.training_jobs.cgroups import (
     CgroupV2Manager,
     StrictCancellationUnavailable,
 )
-from workbench.backend.training_jobs import TrainingJobManager
-from workbench.backend.training_worker_launcher import TrainingWorkerLauncher
+from workbench.backend.training_jobs.launcher import TrainingWorkerLauncher
+from workbench.backend.training_jobs.progress import TrainingProgressStore
+from workbench.backend.training_jobs.projection import TrainingLiveProjectionCache
+from workbench.backend.training_jobs.store import InMemoryTrainingJobStore
 
 
 class FailingTrainingJobStore(InMemoryTrainingJobStore):
@@ -67,9 +72,11 @@ class FakeCgroup:
 class FakeCgroupManager:
     def __init__(self, cgroup: FakeCgroup | None = None) -> None:
         self.cgroup = cgroup or FakeCgroup()
+        self.requested_job_ids: list[str] = []
 
-    def from_existing(self, cgroup_path: str | None):
-        return self.cgroup if cgroup_path else None
+    def from_job_id(self, job_id: str):
+        self.requested_job_ids.append(job_id)
+        return self.cgroup
 
 
 class TrainingJobTests(unittest.TestCase):
@@ -139,7 +146,7 @@ class TrainingJobTests(unittest.TestCase):
                 for index, dataset in enumerate(datasets, start=1)
             ]
         }
-        manager = TrainingJobManager(
+        manager = TrainingJobRuntimeHarness(
             root=root / "jobs",
             logs_root=root / "logs",
             runner=FakeRunner(process),
@@ -162,7 +169,7 @@ class TrainingJobTests(unittest.TestCase):
         log_folder: str = "restart_limitation",
     ):
         process = process or FakeProcess()
-        manager = TrainingJobManager(
+        manager = TrainingJobRuntimeHarness(
             root=root / "jobs",
             logs_root=root / "logs",
             runner=FakeRunner(process),
@@ -180,11 +187,11 @@ class TrainingJobTests(unittest.TestCase):
     def test_training_api_response_does_not_expose_manager_internals(self) -> None:
         import httpx
 
-        from workbench.backend.api import WorkbenchApiSettings, create_app
+        from workbench.backend.api import WorkbenchApiSettings
 
         with tempfile.TemporaryDirectory() as tmp:
             logs_root = Path(tmp) / "logs"
-            manager = TrainingJobManager(
+            manager = TrainingJobRuntimeHarness(
                 root=Path(tmp) / "jobs",
                 logs_root=logs_root,
                 runner=FakeRunner(),
@@ -192,17 +199,18 @@ class TrainingJobTests(unittest.TestCase):
 
             async def call_api() -> httpx.Response:
                 transport = httpx.ASGITransport(
-                    app=create_app(
+                    app=create_app_with_training_runtime(
                         WorkbenchApiSettings(
                             logs_root=str(logs_root),
                             allow_unsafe_local_mutations=True,
                         ),
-                        training_manager=manager,
+                        manager,
                     )
                 )
                 async with httpx.AsyncClient(
                     transport=transport,
                     base_url="http://testserver",
+                    headers={"X-Workbench-Mutation": "true"},
                 ) as client:
                     return await client.post(
                         "/training/jobs",
@@ -233,7 +241,7 @@ class TrainingJobTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             process = FakeProcess()
-            manager = TrainingJobManager(
+            manager = TrainingJobRuntimeHarness(
                 root=root / "jobs",
                 logs_root=root / "logs",
                 runner=FakeRunner(process),
@@ -254,11 +262,132 @@ class TrainingJobTests(unittest.TestCase):
         self.assertFalse(process.killed)
         self.assertEqual(manager._processes, {})
 
+    def test_create_job_payload_write_failure_has_no_runtime_ownership(
+        self,
+    ) -> None:
+        class CountingCgroupManager:
+            def __init__(self) -> None:
+                self.create_count = 0
+
+            def create_job_cgroup(self, job_id: str):
+                self.create_count += 1
+                return FakeCgroup()
+
+            def from_job_id(self, job_id: str):
+                return None
+
+        class FailingPayloadLauncher(TrainingWorkerLauncher):
+            def write_payload(
+                self,
+                job_root: Path,
+                payload: dict,
+            ) -> Path:
+                raise OSError("payload write failed")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runner = FakeRunner()
+            cgroups = CountingCgroupManager()
+            manager = TrainingJobRuntimeHarness(
+                root=root / "jobs",
+                logs_root=root / "logs",
+                worker_launcher=FailingPayloadLauncher(
+                    cwd=Path.cwd(),
+                    runner=runner,
+                    cancellation_mode="strict-cgroup",
+                    cgroup_manager=cgroups,
+                ),
+            )
+
+            with self.assertRaisesRegex(OSError, "payload write failed"):
+                manager.create_job(
+                    model="linears/linear",
+                    preset="baseline",
+                    datasets=["Mnist"],
+                    overrides={},
+                    log_folder="payload_write_failure",
+                    monitors=[],
+                )
+
+            self.assertEqual(runner.commands, [])
+            self.assertEqual(cgroups.create_count, 0)
+            self.assertEqual(manager.jobs, {})
+            self.assertEqual(manager._processes, {})
+            self.assertEqual(list((root / "jobs").glob("*/payload.json")), [])
+            self.assertEqual(list((root / "jobs").glob("*/metadata.json")), [])
+
+    def test_create_job_runner_start_failure_cleans_precreated_cgroup(
+        self,
+    ) -> None:
+        class EmptyCountingCgroup(FakeCgroup):
+            def __init__(self) -> None:
+                super().__init__()
+                self.processes = False
+                self.cleanup_count = 0
+
+            def cleanup_empty(self) -> None:
+                self.cleanup_count += 1
+                super().cleanup_empty()
+
+        class CountingCgroupManager:
+            def __init__(self, cgroup: EmptyCountingCgroup) -> None:
+                self.cgroup = cgroup
+                self.create_count = 0
+
+            def create_job_cgroup(self, job_id: str):
+                self.create_count += 1
+                return self.cgroup
+
+            def from_job_id(self, job_id: str):
+                return None
+
+        class FailingRunner:
+            def __init__(self) -> None:
+                self.start_count = 0
+
+            def start(self, command, *, cwd, env, log_path):
+                self.start_count += 1
+                raise RuntimeError("runner start failed")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runner = FailingRunner()
+            cgroup = EmptyCountingCgroup()
+            cgroups = CountingCgroupManager(cgroup)
+            manager = TrainingJobRuntimeHarness(
+                root=root / "jobs",
+                logs_root=root / "logs",
+                worker_launcher=TrainingWorkerLauncher(
+                    cwd=Path.cwd(),
+                    runner=runner,
+                    cancellation_mode="strict-cgroup",
+                    cgroup_manager=cgroups,
+                ),
+            )
+
+            with self.assertRaisesRegex(RuntimeError, "runner start failed"):
+                manager.create_job(
+                    model="linears/linear",
+                    preset="baseline",
+                    datasets=["Mnist"],
+                    overrides={},
+                    log_folder="runner_start_failure",
+                    monitors=[],
+                )
+
+            self.assertEqual(runner.start_count, 1)
+            self.assertEqual(cgroups.create_count, 1)
+            self.assertEqual(cgroup.cleanup_count, 1)
+            self.assertTrue(cgroup.cleaned)
+            self.assertEqual(manager.jobs, {})
+            self.assertEqual(manager._processes, {})
+            self.assertEqual(list((root / "jobs").glob("*/metadata.json")), [])
+
     def test_cancel_job_reaps_process_after_terminate(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             process = FakeProcess()
-            manager = TrainingJobManager(
+            manager = TrainingJobRuntimeHarness(
                 root=root / "jobs",
                 logs_root=root / "logs",
                 runner=FakeRunner(process),
@@ -282,7 +411,7 @@ class TrainingJobTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             process = FakeProcess(ignores_terminate=True)
-            manager = TrainingJobManager(
+            manager = TrainingJobRuntimeHarness(
                 root=root / "jobs",
                 logs_root=root / "logs",
                 runner=FakeRunner(process),
@@ -302,11 +431,221 @@ class TrainingJobTests(unittest.TestCase):
         self.assertTrue(process.killed)
         self.assertEqual(cancelled["exitCode"], -9)
 
+    def test_cancel_job_preserves_completed_and_failed_terminal_states(self) -> None:
+        for exit_code, expected_status in ((0, "completed"), (2, "failed")):
+            with self.subTest(expected_status=expected_status):
+                with tempfile.TemporaryDirectory() as tmp:
+                    root = Path(tmp)
+                    process = FakeProcess(exit_code=exit_code)
+                    manager = TrainingJobRuntimeHarness(
+                        root=root / "jobs",
+                        logs_root=root / "logs",
+                        runner=FakeRunner(process),
+                    )
+                    created = manager.create_job(
+                        model="linears/linear",
+                        preset="baseline",
+                        datasets=["Mnist"],
+                        overrides={},
+                        log_folder=f"preserve_{expected_status}",
+                        monitors=[],
+                    )
+                    job_id = str(created["id"])
+
+                    first = manager.cancel_job(job_id)
+                    second = manager.cancel_job(job_id)
+
+                    self.assertEqual(first["status"], expected_status)
+                    self.assertEqual(second["status"], expected_status)
+                    self.assertEqual(first["exitCode"], exit_code)
+                    self.assertEqual(second["exitCode"], exit_code)
+                    self.assertFalse(process.terminated)
+                    self.assertEqual(first["eventCounts"].get("cancelled", 0), 0)
+                    self.assertEqual(second["eventCounts"].get("cancelled", 0), 0)
+                    self.assertNotIn(job_id, manager._processes)
+
+    def test_repeated_active_cancellation_emits_once_and_evicts_terminal_state(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            process = FakeProcess()
+            manager = TrainingJobRuntimeHarness(
+                root=root / "jobs",
+                logs_root=root / "logs",
+                runner=FakeRunner(process),
+            )
+            created = manager.create_job(
+                model="linears/linear",
+                preset="baseline",
+                datasets=["Mnist"],
+                overrides={},
+                log_folder="idempotent_cancel",
+                monitors=[],
+            )
+            job_id = str(created["id"])
+            job = manager.jobs[job_id]
+
+            first = manager.cancel_job(job_id)
+            second = manager.cancel_job(job_id)
+
+            self.assertEqual(first["status"], "cancelled")
+            self.assertEqual(second["status"], "cancelled")
+            self.assertEqual(first["eventCounts"]["cancelled"], 1)
+            self.assertEqual(second["eventCounts"]["cancelled"], 1)
+            self.assertNotIn(job_id, manager._processes)
+            self.assertNotIn(job.progress_path, manager.progress_store._cache)
+            self.assertNotIn(job_id, manager._live_projection_cache._cache)
+
+    def test_observed_process_completion_evicts_handle_and_projection_caches(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            process = FakeProcess()
+            manager = TrainingJobRuntimeHarness(
+                root=root / "jobs",
+                logs_root=root / "logs",
+                runner=FakeRunner(process),
+            )
+            created = manager.create_job(
+                model="linears/linear",
+                preset="baseline",
+                datasets=["Mnist"],
+                overrides={},
+                log_folder="terminal_cache_eviction",
+                monitors=[],
+            )
+            job_id = str(created["id"])
+            job = manager.jobs[job_id]
+            self.assertIn(job_id, manager._processes)
+            self.assertIn(job.progress_path, manager.progress_store._cache)
+            self.assertIn(job_id, manager._live_projection_cache._cache)
+
+            process.exit_code = 0
+            completed = manager.get_job(job_id)
+
+            self.assertEqual(completed["status"], "completed")
+            self.assertNotIn(job_id, manager._processes)
+            self.assertNotIn(job.progress_path, manager.progress_store._cache)
+            self.assertNotIn(job_id, manager._live_projection_cache._cache)
+
+    def test_concurrent_terminal_release_evicts_each_cache_exactly_once(self) -> None:
+        class CountingProgressStore(TrainingProgressStore):
+            def __init__(self) -> None:
+                super().__init__()
+                self.evict_count = 0
+                self.count_lock = Lock()
+
+            def evict(self, job) -> None:
+                with self.count_lock:
+                    self.evict_count += 1
+                super().evict(job)
+
+        class CountingProjectionCache(TrainingLiveProjectionCache):
+            def __init__(self) -> None:
+                super().__init__()
+                self.evict_count = 0
+                self.count_lock = Lock()
+
+            def evict(self, job_id: str) -> None:
+                with self.count_lock:
+                    self.evict_count += 1
+                super().evict(job_id)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            process = FakeProcess()
+            progress_store = CountingProgressStore()
+            manager = TrainingJobRuntimeHarness(
+                root=root / "jobs",
+                logs_root=root / "logs",
+                runner=FakeRunner(process),
+            )
+            manager.progress_store = progress_store
+            projection_cache = CountingProjectionCache()
+            manager._live_projection_cache = projection_cache
+            created = manager.create_job(
+                model="linears/linear",
+                preset="baseline",
+                datasets=["Mnist"],
+                overrides={},
+                log_folder="concurrent_release",
+                monitors=[],
+            )
+            job = manager.jobs[str(created["id"])]
+            process.exit_code = 0
+            job.status = "completed"
+            job.exit_code = 0
+            manager.job_store.save(job)
+
+            with ThreadPoolExecutor(max_workers=16) as pool:
+                list(
+                    pool.map(
+                        lambda _: manager._release_terminal_resources(job),
+                        range(32),
+                    )
+                )
+
+        self.assertEqual(progress_store.evict_count, 1)
+        self.assertEqual(projection_cache.evict_count, 1)
+
+    def test_concurrent_get_active_and_cancel_share_one_lifecycle_transition(
+        self,
+    ) -> None:
+        class CountingProcess(FakeProcess):
+            def __init__(self) -> None:
+                super().__init__()
+                self.terminate_count = 0
+                self.count_lock = Lock()
+
+            def terminate(self) -> None:
+                with self.count_lock:
+                    self.terminate_count += 1
+                super().terminate()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            process = CountingProcess()
+            manager = TrainingJobRuntimeHarness(
+                root=root / "jobs",
+                logs_root=root / "logs",
+                runner=FakeRunner(process),
+            )
+            created = manager.create_job(
+                model="linears/linear",
+                preset="baseline",
+                datasets=["Mnist"],
+                overrides={},
+                log_folder="concurrent_lifecycle",
+                monitors=[],
+            )
+            job_id = str(created["id"])
+
+            def operate(index: int):
+                operation = index % 3
+                if operation == 0:
+                    return manager.get_job(job_id)
+                if operation == 1:
+                    return manager.active_jobs()
+                return manager.cancel_job(job_id)
+
+            with ThreadPoolExecutor(max_workers=16) as pool:
+                futures = [pool.submit(operate, index) for index in range(96)]
+                results = [future.result(timeout=10) for future in futures]
+
+            final = manager.get_job(job_id)
+
+        self.assertEqual(len(results), 96)
+        self.assertEqual(final["status"], "cancelled")
+        self.assertEqual(final["eventCounts"]["cancelled"], 1)
+        self.assertEqual(process.terminate_count, 1)
+
     def test_cancel_job_failure_keeps_job_running(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             process = FakeProcess(ignores_terminate=True, ignores_kill=True)
-            manager = TrainingJobManager(
+            manager = TrainingJobRuntimeHarness(
                 root=root / "jobs",
                 logs_root=root / "logs",
                 runner=FakeRunner(process),
@@ -345,7 +684,7 @@ class TrainingJobTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            manager = TrainingJobManager(
+            manager = TrainingJobRuntimeHarness(
                 root=root / "jobs",
                 logs_root=root / "logs",
                 worker_launcher=TrainingWorkerLauncher(
@@ -373,7 +712,7 @@ class TrainingJobTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             process = FakeProcess(exit_code=None)
-            manager = TrainingJobManager(
+            manager = TrainingJobRuntimeHarness(
                 root=root / "jobs",
                 logs_root=root / "logs",
                 runner=FakeRunner(process),
@@ -397,7 +736,7 @@ class TrainingJobTests(unittest.TestCase):
     def test_restart_can_cancel_persisted_strict_cgroup_job(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            manager = TrainingJobManager(
+            manager = TrainingJobRuntimeHarness(
                 root=root / "jobs",
                 logs_root=root / "logs",
                 runner=FakeRunner(),
@@ -414,23 +753,104 @@ class TrainingJobTests(unittest.TestCase):
             job.cancellation_mode = "strict-cgroup"
             job.worker_pid = job.pid
             job.process_group_id = job.pid
-            job.cgroup_path = FakeCgroup.cgroup_path
+            job.cgroup_path = "/forged/victim/cgroup"
             manager.job_store.save(job)
 
             cgroup = FakeCgroup(ignores_terminate=True)
-            restarted = TrainingJobManager(
+            cgroup_manager = FakeCgroupManager(cgroup)
+            restarted = TrainingJobRuntimeHarness(
+                root=root / "jobs",
+                logs_root=root / "logs",
+                runner=FakeRunner(),
+                cgroup_manager=cgroup_manager,
+            )
+
+            with patch(
+                "workbench.backend.training_jobs.launcher.os.killpg"
+            ) as kill_process_group:
+                cancelled = restarted.cancel_job(str(payload["id"]))
+
+        self.assertEqual(cancelled["status"], "cancelled")
+        kill_process_group.assert_not_called()
+        self.assertTrue(cgroup_manager.requested_job_ids)
+        self.assertEqual(
+            set(cgroup_manager.requested_job_ids),
+            {str(payload["id"])},
+        )
+        self.assertTrue(cgroup.terminated)
+        self.assertTrue(cgroup.killed)
+        self.assertTrue(cgroup.cleaned)
+
+    def test_restarted_strict_cgroup_empty_without_terminal_event_stays_unknown(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            original, created, _ = self._create_restart_limitation_job(
+                root,
+                log_folder="restart_strict_unknown",
+            )
+            job_id = str(created["id"])
+            job = original.jobs[job_id]
+            job.cancellation_mode = "strict-cgroup"
+            job.cgroup_path = "/persisted/path/is/not/authority"
+            original.job_store.save(job)
+            cgroup = FakeCgroup()
+            restarted = TrainingJobRuntimeHarness(
                 root=root / "jobs",
                 logs_root=root / "logs",
                 runner=FakeRunner(),
                 cgroup_manager=FakeCgroupManager(cgroup),
             )
 
-            cancelled = restarted.cancel_job(str(payload["id"]))
+            observed_live = restarted.get_job(job_id)
+            cgroup.processes = False
+            observed_empty = restarted.get_job(job_id)
+            active = restarted.active_jobs()
 
-        self.assertEqual(cancelled["status"], "cancelled")
-        self.assertTrue(cgroup.terminated)
-        self.assertTrue(cgroup.killed)
-        self.assertTrue(cgroup.cleaned)
+        self.assertEqual(observed_live["status"], "running")
+        self.assertEqual(observed_empty["status"], "unknown")
+        self.assertIsNone(observed_empty["exitCode"])
+        self.assertEqual(
+            active,
+            [
+                {
+                    "id": job_id,
+                    "status": "unknown",
+                    "logFolder": "restart_strict_unknown",
+                }
+            ],
+        )
+
+    def test_restarted_empty_strict_cgroup_uses_terminal_event_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            original, created, _ = self._create_restart_limitation_job(
+                root,
+                log_folder="restart_strict_terminal",
+            )
+            job_id = str(created["id"])
+            job = original.jobs[job_id]
+            job.cancellation_mode = "strict-cgroup"
+            job.cgroup_path = "/persisted/path/is/not/authority"
+            original._write_event(
+                job,
+                {"type": "completed", "status": "completed"},
+            )
+            original.job_store.save(job)
+            cgroup = FakeCgroup()
+            cgroup.processes = False
+            restarted = TrainingJobRuntimeHarness(
+                root=root / "jobs",
+                logs_root=root / "logs",
+                runner=FakeRunner(),
+                cgroup_manager=FakeCgroupManager(cgroup),
+            )
+
+            recovered = restarted.get_job(job_id)
+
+        self.assertEqual(recovered["status"], "completed")
+        self.assertEqual(recovered["exitCode"], 0)
 
     @unittest.skipIf(os.name != "posix", "process-group cancellation is POSIX-only")
     def test_cancel_job_terminates_real_worker_child_processes(self) -> None:
@@ -463,12 +883,10 @@ Path(sys.argv[1]).write_text(str(child.pid), encoding="utf-8")
                 return [sys.executable, "-c", parent_script, str(child_pid_path)]
 
         child_pid: int | None = None
-        original_grace_seconds = training_jobs.CANCEL_REAP_GRACE_SECONDS
-        training_jobs.CANCEL_REAP_GRACE_SECONDS = 0.2
         with tempfile.TemporaryDirectory() as tmp:
             try:
                 root = Path(tmp)
-                manager = TrainingJobManager(
+                manager = TrainingJobRuntimeHarness(
                     root=root / "jobs",
                     logs_root=root / "logs",
                     worker_launcher=ChildSpawningLauncher(
@@ -476,6 +894,7 @@ Path(sys.argv[1]).write_text(str(child.pid), encoding="utf-8")
                         cancellation_mode="process-group",
                     ),
                 )
+                manager._cancel_reap_grace_seconds = 0.2
                 payload = manager.create_job(
                     model="linears/linear",
                     preset="baseline",
@@ -502,7 +921,6 @@ Path(sys.argv[1]).write_text(str(child.pid), encoding="utf-8")
                     f"child process {child_pid} survived cancellation",
                 )
             finally:
-                training_jobs.CANCEL_REAP_GRACE_SECONDS = original_grace_seconds
                 if child_pid is not None:
                     self._kill_leftover_process(child_pid)
 
@@ -542,12 +960,10 @@ while True:
                 return [sys.executable, "-c", parent_script, str(child_pid_path)]
 
         child_pid: int | None = None
-        original_grace_seconds = training_jobs.CANCEL_REAP_GRACE_SECONDS
-        training_jobs.CANCEL_REAP_GRACE_SECONDS = 0.2
         with tempfile.TemporaryDirectory() as tmp:
             try:
                 root = Path(tmp)
-                manager = TrainingJobManager(
+                manager = TrainingJobRuntimeHarness(
                     root=root / "jobs",
                     logs_root=root / "logs",
                     worker_launcher=EscapedChildLauncher(
@@ -555,6 +971,7 @@ while True:
                         cancellation_mode="strict-cgroup",
                     ),
                 )
+                manager._cancel_reap_grace_seconds = 0.2
                 payload = manager.create_job(
                     model="linears/linear",
                     preset="baseline",
@@ -576,39 +993,42 @@ while True:
                     f"escaped child process {child_pid} survived cancellation",
                 )
             finally:
-                training_jobs.CANCEL_REAP_GRACE_SECONDS = original_grace_seconds
                 if child_pid is not None:
                     self._kill_leftover_process(child_pid)
 
     def test_training_api_cancel_job_terminates_process(self) -> None:
         import httpx
 
-        from workbench.backend.api import WorkbenchApiSettings, create_app
+        from workbench.backend.api import WorkbenchApiSettings
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             logs_root = root / "logs"
             process = FakeProcess()
-            manager = TrainingJobManager(
+            manager = TrainingJobRuntimeHarness(
                 root=root / "jobs",
                 logs_root=logs_root,
                 runner=FakeRunner(process),
             )
-            test_app = create_app(
+            test_app = create_app_with_training_runtime(
                 WorkbenchApiSettings(
                     logs_root=str(logs_root),
                     allow_unsafe_local_mutations=True,
                 ),
-                training_manager=manager,
+                manager,
             )
 
             async def call_api() -> tuple[
-                httpx.Response, httpx.Response, httpx.Response
+                httpx.Response,
+                httpx.Response,
+                httpx.Response,
+                httpx.Response,
             ]:
                 transport = httpx.ASGITransport(app=test_app)
                 async with httpx.AsyncClient(
                     transport=transport,
                     base_url="http://testserver",
+                    headers={"X-Workbench-Mutation": "true"},
                 ) as client:
                     create_response = await client.post(
                         "/training/jobs",
@@ -626,12 +1046,25 @@ while True:
                     cancel_response = await client.post(
                         f"/training/jobs/{job_id}/cancel"
                     )
+                    repeated_cancel_response = await client.post(
+                        f"/training/jobs/{job_id}/cancel"
+                    )
                     unknown_response = await client.post(
                         "/training/jobs/missing/cancel"
                     )
-                    return create_response, cancel_response, unknown_response
+                    return (
+                        create_response,
+                        cancel_response,
+                        repeated_cancel_response,
+                        unknown_response,
+                    )
 
-            create_response, cancel_response, unknown_response = asyncio.run(call_api())
+            (
+                create_response,
+                cancel_response,
+                repeated_cancel_response,
+                unknown_response,
+            ) = asyncio.run(call_api())
 
         self.assertEqual(create_response.status_code, 200, create_response.text)
         job_id = create_response.json()["id"]
@@ -643,6 +1076,12 @@ while True:
         self.assertEqual(payload["events"][-1]["type"], "cancelled")
         self.assertEqual(payload["events"][-1]["status"], "cancelled")
         self.assertEqual(payload["events"][-1]["jobId"], job_id)
+        self.assertEqual(payload["eventCounts"]["cancelled"], 1)
+        self.assertEqual(repeated_cancel_response.status_code, 200)
+        self.assertEqual(
+            repeated_cancel_response.json()["eventCounts"]["cancelled"],
+            1,
+        )
         self.assertEqual(
             [run["status"] for run in payload["runPlan"]["runs"]],
             ["Skipped"],
@@ -662,24 +1101,24 @@ while True:
     def test_training_api_created_job_uses_safe_worker_command_paths(self) -> None:
         import httpx
 
-        from workbench.backend.api import WorkbenchApiSettings, create_app
+        from workbench.backend.api import WorkbenchApiSettings
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             jobs_root = root / "jobs"
             logs_root = root / "logs"
             runner = FakeRunner()
-            manager = TrainingJobManager(
+            manager = TrainingJobRuntimeHarness(
                 root=jobs_root,
                 logs_root=logs_root,
                 runner=runner,
             )
-            test_app = create_app(
+            test_app = create_app_with_training_runtime(
                 WorkbenchApiSettings(
                     logs_root=str(logs_root),
                     allow_unsafe_local_mutations=True,
                 ),
-                training_manager=manager,
+                manager,
             )
 
             async def call_api() -> httpx.Response:
@@ -687,6 +1126,7 @@ while True:
                 async with httpx.AsyncClient(
                     transport=transport,
                     base_url="http://testserver",
+                    headers={"X-Workbench-Mutation": "true"},
                 ) as client:
                     return await client.post(
                         "/training/jobs",
@@ -743,7 +1183,7 @@ while True:
         with tempfile.TemporaryDirectory() as tmp:
             runner = FakeRunner()
             logs_root = Path(tmp) / "logs"
-            manager = TrainingJobManager(
+            manager = TrainingJobRuntimeHarness(
                 root=Path(tmp), logs_root=logs_root, runner=runner
             )
 
@@ -768,6 +1208,56 @@ while True:
             self.assertEqual(worker_payload["preset"], "baseline")
             self.assertEqual(worker_payload["presets"], ["baseline"])
             self.assertEqual(worker_payload["logFolder"], "test_model")
+            self.assertEqual(
+                set(worker_payload),
+                {
+                    "id",
+                    "modelType",
+                    "model",
+                    "preset",
+                    "presets",
+                    "experimentTask",
+                    "datasets",
+                    "overrides",
+                    "search",
+                    "plannedRunCount",
+                    "runPlan",
+                    "monitors",
+                    "logFolder",
+                },
+            )
+            self.assertEqual(
+                set(worker_payload["runPlan"]),
+                {
+                    "modelType",
+                    "model",
+                    "preset",
+                    "presets",
+                    "experimentTask",
+                    "datasets",
+                    "overrides",
+                    "search",
+                    "logFolder",
+                    "isRandomSearch",
+                    "runs",
+                    "summary",
+                },
+            )
+            self.assertEqual(worker_payload["runPlan"], payload["runPlan"])
+            for key in (
+                "preset",
+                "presets",
+                "experimentTask",
+                "datasets",
+                "overrides",
+                "search",
+                "logFolder",
+            ):
+                with self.subTest(worker_plan_envelope=key):
+                    self.assertEqual(
+                        worker_payload[key],
+                        worker_payload["runPlan"][key],
+                    )
             self.assertEqual(payload["pid"], 1234)
             self.assertTrue((logs_root / "test_model").is_dir())
             self.assertTrue(runner.commands)
@@ -778,7 +1268,7 @@ while True:
             root = Path(tmp)
             process = FakeProcess()
             store = InMemoryTrainingJobStore()
-            manager = TrainingJobManager(
+            manager = TrainingJobRuntimeHarness(
                 root=root / "jobs",
                 logs_root=root / "logs",
                 runner=FakeRunner(process),
@@ -815,7 +1305,7 @@ while True:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             process = FakeProcess()
-            manager = TrainingJobManager(
+            manager = TrainingJobRuntimeHarness(
                 root=root / "jobs",
                 logs_root=root / "logs",
                 runner=FakeRunner(process),
@@ -854,7 +1344,7 @@ while True:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             process = FakeProcess()
-            manager = TrainingJobManager(
+            manager = TrainingJobRuntimeHarness(
                 root=root / "jobs",
                 logs_root=root / "logs",
                 runner=FakeRunner(process),
@@ -1166,7 +1656,7 @@ while True:
                 target_is_directory=True,
             )
             runner = FakeRunner()
-            manager = TrainingJobManager(
+            manager = TrainingJobRuntimeHarness(
                 root=root / "jobs",
                 logs_root=logs_root,
                 runner=runner,
@@ -1191,7 +1681,7 @@ while True:
         self.assertEqual(manager.jobs, {})
 
     def test_training_job_get_unknown_id_raises_inspector_error(self) -> None:
-        manager = TrainingJobManager(runner=FakeRunner())
+        manager = TrainingJobRuntimeHarness(runner=FakeRunner())
 
         with self.assertRaises(InspectorError) as context:
             manager.get_job("missing")
@@ -1208,7 +1698,7 @@ while True:
             job_root = root / "jobs" / job_id
             self.assertTrue(job_root.joinpath("payload.json").is_file())
             self.assertTrue(job_root.joinpath("progress.jsonl").is_file())
-            fresh_manager = TrainingJobManager(
+            fresh_manager = TrainingJobRuntimeHarness(
                 root=root / "jobs",
                 logs_root=root / "logs",
                 runner=FakeRunner(),
@@ -1238,7 +1728,7 @@ while True:
                 log_folder="restart_cancel_limitation",
             )
             job_id = str(created_payload["id"])
-            fresh_manager = TrainingJobManager(
+            fresh_manager = TrainingJobRuntimeHarness(
                 root=root / "jobs",
                 logs_root=root / "logs",
                 runner=FakeRunner(),
@@ -1277,7 +1767,7 @@ while True:
             )
             self.assertTrue((root / "jobs" / job_id / "payload.json").is_file())
             self.assertTrue((root / "jobs" / job_id / "progress.jsonl").is_file())
-            fresh_manager = TrainingJobManager(
+            fresh_manager = TrainingJobRuntimeHarness(
                 root=root / "jobs",
                 logs_root=root / "logs",
                 runner=FakeRunner(),
@@ -1337,8 +1827,9 @@ while True:
             job_root = root / "jobs" / job_id
             self.assertTrue(job_root.joinpath("payload.json").is_file())
             self.assertTrue(job_root.joinpath("progress.jsonl").is_file())
+            original_payload = original_manager.get_job(job_id)
 
-            fresh_manager = TrainingJobManager(
+            fresh_manager = TrainingJobRuntimeHarness(
                 root=root / "jobs",
                 logs_root=root / "logs",
                 runner=FakeRunner(),
@@ -1365,6 +1856,24 @@ while True:
         self.assertEqual(payload["logDir"], log_dir)
         self.assertEqual(payload["runPlan"]["runs"][0]["status"], "Running")
         self.assertEqual(payload["runPlan"]["summary"]["runningRuns"], 1)
+        for key in (
+            "runPlan",
+            "currentPreset",
+            "currentDataset",
+            "epoch",
+            "step",
+            "metrics",
+            "logDir",
+            "events",
+            "eventCount",
+            "eventCounts",
+            "eventsTruncated",
+            "clusterGrowth",
+            "logTail",
+            "resultLinks",
+        ):
+            with self.subTest(projection_field=key):
+                self.assertEqual(payload[key], original_payload[key])
 
     def test_restart_fresh_manager_uses_completed_progress_event(
         self,
@@ -1403,20 +1912,19 @@ while True:
                 },
             )
 
-            fresh_manager = TrainingJobManager(
+            fresh_manager = TrainingJobRuntimeHarness(
                 root=root / "jobs",
                 logs_root=root / "logs",
                 runner=FakeRunner(),
             )
             payload = fresh_manager.get_job(job_id)
-
-        self.assertEqual(payload["status"], "completed")
-        self.assertEqual(payload["exitCode"], 0)
-        self.assertEqual(payload["eventCounts"]["completed"], 1)
-        self.assertEqual(payload["runPlan"]["summary"]["completedRuns"], 1)
-        self.assertEqual(fresh_manager.active_jobs(), [])
-        self.assertEqual(fresh_manager.jobs[job_id].status, "completed")
-        self.assertEqual(fresh_manager.jobs[job_id].exit_code, 0)
+            self.assertEqual(payload["status"], "completed")
+            self.assertEqual(payload["exitCode"], 0)
+            self.assertEqual(payload["eventCounts"]["completed"], 1)
+            self.assertEqual(payload["runPlan"]["summary"]["completedRuns"], 1)
+            self.assertEqual(fresh_manager.active_jobs(), [])
+            self.assertEqual(fresh_manager.jobs[job_id].status, "completed")
+            self.assertEqual(fresh_manager.jobs[job_id].exit_code, 0)
 
     def test_restart_fresh_manager_lists_unknown_disk_job_as_active(
         self,
@@ -1439,7 +1947,7 @@ while True:
                 ],
             )
 
-            fresh_manager = TrainingJobManager(
+            fresh_manager = TrainingJobRuntimeHarness(
                 root=root / "jobs",
                 logs_root=root / "logs",
                 runner=FakeRunner(),
@@ -1468,7 +1976,7 @@ while True:
                 log_folder="restart_read_only_behavior",
             )
             job_id = str(created_payload["id"])
-            fresh_manager = TrainingJobManager(
+            fresh_manager = TrainingJobRuntimeHarness(
                 root=root / "jobs",
                 logs_root=root / "logs",
                 runner=FakeRunner(),
@@ -1490,11 +1998,11 @@ while True:
     ) -> None:
         import httpx
 
-        from workbench.backend.api import WorkbenchApiSettings, create_app
+        from workbench.backend.api import WorkbenchApiSettings
 
         with tempfile.TemporaryDirectory() as tmp:
             logs_root = Path(tmp) / "logs"
-            manager = TrainingJobManager(
+            manager = TrainingJobRuntimeHarness(
                 root=Path(tmp) / "jobs",
                 logs_root=logs_root,
                 runner=FakeRunner(),
@@ -1507,17 +2015,18 @@ while True:
 
             async def call_api() -> tuple[httpx.Response, httpx.Response]:
                 transport = httpx.ASGITransport(
-                    app=create_app(
+                    app=create_app_with_training_runtime(
                         WorkbenchApiSettings(
                             logs_root=str(logs_root),
                             allow_unsafe_local_mutations=True,
                         ),
-                        training_manager=manager,
+                        manager,
                     )
                 )
                 async with httpx.AsyncClient(
                     transport=transport,
                     base_url="http://testserver",
+                    headers={"X-Workbench-Mutation": "true"},
                 ) as client:
                     get_response = await client.get("/training/jobs/missing")
                     cancel_response = await client.post("/training/jobs/missing/cancel")
@@ -1544,11 +2053,11 @@ while True:
     def test_training_api_get_unknown_job_returns_http_400(self) -> None:
         import httpx
 
-        from workbench.backend.api import WorkbenchApiSettings, create_app
+        from workbench.backend.api import WorkbenchApiSettings
 
         with tempfile.TemporaryDirectory() as tmp:
             logs_root = Path(tmp) / "logs"
-            manager = TrainingJobManager(
+            manager = TrainingJobRuntimeHarness(
                 root=Path(tmp) / "jobs",
                 logs_root=logs_root,
                 runner=FakeRunner(),
@@ -1556,17 +2065,18 @@ while True:
 
             async def call_api() -> httpx.Response:
                 transport = httpx.ASGITransport(
-                    app=create_app(
+                    app=create_app_with_training_runtime(
                         WorkbenchApiSettings(
                             logs_root=str(logs_root),
                             allow_unsafe_local_mutations=True,
                         ),
-                        training_manager=manager,
+                        manager,
                     )
                 )
                 async with httpx.AsyncClient(
                     transport=transport,
                     base_url="http://testserver",
+                    headers={"X-Workbench-Mutation": "true"},
                 ) as client:
                     return await client.get("/training/jobs/missing")
 
@@ -1581,7 +2091,7 @@ while True:
     def test_training_job_manager_active_jobs_excludes_terminal_statuses(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            running_manager = TrainingJobManager(
+            running_manager = TrainingJobRuntimeHarness(
                 root=root / "running",
                 logs_root=root / "logs-running",
                 runner=FakeRunner(FakeProcess()),
@@ -1605,7 +2115,7 @@ while True:
                 ],
             )
 
-            completed_manager = TrainingJobManager(
+            completed_manager = TrainingJobRuntimeHarness(
                 root=root / "completed",
                 logs_root=root / "logs-completed",
                 runner=FakeRunner(FakeProcess(exit_code=0)),
@@ -1620,7 +2130,7 @@ while True:
             )
             self.assertEqual(completed_manager.active_jobs(), [])
 
-            failed_manager = TrainingJobManager(
+            failed_manager = TrainingJobRuntimeHarness(
                 root=root / "failed",
                 logs_root=root / "logs-failed",
                 runner=FakeRunner(FakeProcess(exit_code=1)),
@@ -1635,7 +2145,7 @@ while True:
             )
             self.assertEqual(failed_manager.active_jobs(), [])
 
-            cancelled_manager = TrainingJobManager(
+            cancelled_manager = TrainingJobRuntimeHarness(
                 root=root / "cancelled",
                 logs_root=root / "logs-cancelled",
                 runner=FakeRunner(FakeProcess()),
@@ -1655,7 +2165,7 @@ while True:
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            manager = TrainingJobManager(
+            manager = TrainingJobRuntimeHarness(
                 root=Path(tmp) / "jobs",
                 logs_root=Path(tmp) / "logs",
                 runner=FakeRunner(),
@@ -1678,7 +2188,7 @@ while True:
         self.assertEqual(worker_payload["presets"], ["baseline", "gating"])
 
     def test_training_job_rejects_unknown_selected_preset(self) -> None:
-        manager = TrainingJobManager(runner=FakeRunner())
+        manager = TrainingJobRuntimeHarness(runner=FakeRunner())
 
         with self.assertRaises(InspectorError):
             manager.create_job(
@@ -1696,7 +2206,7 @@ while True:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             runner = FakeRunner()
-            manager = TrainingJobManager(
+            manager = TrainingJobRuntimeHarness(
                 root=root / "jobs",
                 logs_root=root / "logs",
                 runner=runner,
@@ -1726,7 +2236,7 @@ while True:
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            manager = TrainingJobManager(
+            manager = TrainingJobRuntimeHarness(
                 root=Path(tmp) / "jobs",
                 logs_root=Path(tmp) / "logs",
                 runner=FakeRunner(),
@@ -2167,7 +2677,7 @@ while True:
         )
 
     def test_training_job_rejects_invalid_search_requests(self) -> None:
-        manager = TrainingJobManager(runner=FakeRunner())
+        manager = TrainingJobRuntimeHarness(runner=FakeRunner())
 
         invalid_searches = [
             {"mode": "grid", "values": {"missing_axis": [1]}},
@@ -2194,7 +2704,7 @@ while True:
                     )
 
     def test_training_job_rejects_locked_search_axis(self) -> None:
-        manager = TrainingJobManager(runner=FakeRunner())
+        manager = TrainingJobRuntimeHarness(runner=FakeRunner())
 
         with self.assertRaises(InspectorError) as context:
             manager.create_job(
@@ -2213,7 +2723,7 @@ while True:
         self.assertIn("locked", str(context.exception))
 
     def test_training_job_rejects_invalid_log_folders(self) -> None:
-        manager = TrainingJobManager(runner=FakeRunner())
+        manager = TrainingJobRuntimeHarness(runner=FakeRunner())
 
         for log_folder in (
             "",
@@ -2236,7 +2746,7 @@ while True:
                     )
 
     def test_training_job_rejects_unknown_monitor(self) -> None:
-        manager = TrainingJobManager(runner=FakeRunner())
+        manager = TrainingJobRuntimeHarness(runner=FakeRunner())
 
         with self.assertRaises(InspectorError):
             manager.create_job(
@@ -2249,7 +2759,7 @@ while True:
             )
 
     def test_training_job_rejects_locked_overrides(self) -> None:
-        manager = TrainingJobManager(runner=FakeRunner())
+        manager = TrainingJobRuntimeHarness(runner=FakeRunner())
 
         with self.assertRaises(InspectorError):
             manager.create_job(

@@ -11,10 +11,18 @@ import models.neuron.linear.config as neuron_config
 import models.vit.linear.config as vit_config
 from emperor.base.layer.gate import LayerGateOptions
 from emperor.base.options import LayerNormPositionOptions
+from emperor.inspection import InspectionError as SemanticInspectionError
+from emperor.inspection import parse_overrides
+from emperor.model_packages import model_package_for_module
 
 from workbench.backend.inspector.errors import InspectorError
-from workbench.backend.inspector.overrides import parse_override_mapping
 from workbench.backend.inspector.service import inspect_model
+
+
+def parse_override_mapping(config_module, overrides):
+    package = model_package_for_module(config_module.__name__)
+    assert package is not None
+    return dict(parse_overrides(package, overrides).values)
 
 
 class InspectorServiceTests(unittest.TestCase):
@@ -196,7 +204,10 @@ class InspectorServiceTests(unittest.TestCase):
             "gate_bias_flag",
         ):
             with self.subTest(override_key=override_key):
-                with self.assertRaisesRegex(InspectorError, "Unknown override"):
+                with self.assertRaisesRegex(
+                    SemanticInspectionError,
+                    "Unknown override",
+                ):
                     parse_override_mapping(
                         linears_linear_config,
                         {override_key: "32"},
@@ -212,7 +223,10 @@ class InspectorServiceTests(unittest.TestCase):
             "halting_bias_flag",
         ):
             with self.subTest(override_key=override_key):
-                with self.assertRaisesRegex(InspectorError, "Unknown override"):
+                with self.assertRaisesRegex(
+                    SemanticInspectionError,
+                    "Unknown override",
+                ):
                     parse_override_mapping(
                         expert_linear_config,
                         {override_key: "32"},
@@ -227,7 +241,7 @@ class InspectorServiceTests(unittest.TestCase):
         self.assertIsNone(parsed["positional_embedding_padding_idx"])
 
     def test_empty_string_override_still_rejects_non_nullable_fields(self) -> None:
-        with self.assertRaises(InspectorError):
+        with self.assertRaises(SemanticInspectionError):
             parse_override_mapping(vit_config, {"hidden_dim": ""})
 
     def test_legacy_residual_flag_override_maps_to_connection_option(self) -> None:

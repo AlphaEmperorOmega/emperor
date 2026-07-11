@@ -16,25 +16,38 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from models.catalog import model_identity_payload_from_id
-from models.config_overrides import normalize_key
+from emperor.inspection import (
+    InspectionError,
+    InspectionRequest,
+    configuration_schema,
+    validate_configuration,
+)
+from emperor.model_packages import (
+    model_identity_payload_from_id,
+    model_package,
+    normalize_key,
+)
 
-from workbench.backend.config_snapshots import ConfigSnapshotRecord
+from workbench.backend.config_snapshots import ConfigSnapshotRecord, ConfigSnapshotStore
+from workbench.backend.inspection_errors import call_inspection
+from workbench.backend.inspection_serialization import configuration_schema_payload
 from workbench.backend.inspector.errors import InspectorError
-from workbench.backend.repositories.config_snapshots import ConfigSnapshotRepository
 
 IDENTITY_SEPARATOR = "\x00"
 
 
 def config_schema(model: str, preset: str | None = None) -> dict[str, Any]:
-    from workbench.backend.inspector.schema import config_schema as load_config_schema
-
-    return load_config_schema(model, preset)
+    package = model_package(model)
+    if package is None:
+        raise InspectorError(f"Unknown model: {model}")
+    return configuration_schema_payload(
+        call_inspection(configuration_schema, package, preset)
+    )
 
 
 class ConfigSnapshotService:
-    def __init__(self, repository: ConfigSnapshotRepository) -> None:
-        self._repository = repository
+    def __init__(self, store: ConfigSnapshotStore) -> None:
+        self._store = store
 
     def list_snapshots(self, model: str) -> list[dict[str, Any]]:
         return [
@@ -130,13 +143,13 @@ class ConfigSnapshotService:
 
     def _list_snapshot_records(self, model: str) -> list[ConfigSnapshotRecord]:
         try:
-            return self._repository.list_snapshots(model)
+            return self._store.list(model)
         except ValueError as exc:
             raise InspectorError("Invalid config snapshot storage path.") from exc
 
     def _list_all_snapshot_records(self) -> list[ConfigSnapshotRecord]:
         try:
-            return self._repository.list_all_snapshots()
+            return self._store.list_all()
         except ValueError as exc:
             raise InspectorError("Invalid config snapshot storage path.") from exc
 
@@ -145,19 +158,19 @@ class ConfigSnapshotService:
         snapshot_id: str,
     ) -> ConfigSnapshotRecord | None:
         try:
-            return self._repository.get_snapshot(snapshot_id)
+            return self._store.get(snapshot_id)
         except ValueError as exc:
             raise InspectorError("Invalid config snapshot storage path.") from exc
 
     def _save_snapshot_record(self, snapshot: ConfigSnapshotRecord) -> None:
         try:
-            self._repository.save_snapshot(snapshot)
+            self._store.save(snapshot)
         except ValueError as exc:
             raise InspectorError("Invalid config snapshot storage path.") from exc
 
     def _delete_snapshot_record(self, snapshot_id: str) -> bool:
         try:
-            return self._repository.delete_snapshot(snapshot_id)
+            return self._store.delete(snapshot_id)
         except ValueError as exc:
             raise InspectorError("Invalid config snapshot storage path.") from exc
 
@@ -222,16 +235,16 @@ def _validate_snapshot_config(
     preset: str,
     entries: list[dict[str, str]],
 ) -> None:
-    from workbench.backend.inspector.discovery import load_model_parts
-    from workbench.backend.inspector.overrides import parse_override_mapping
-    from workbench.backend.inspector.service import build_config
-
     overrides = {entry["key"]: entry["value"] for entry in entries}
+    package = model_package(model)
+    if package is None:
+        raise InspectorError(f"Unknown model: {model}")
     try:
-        parts = load_model_parts(model)
-        parsed_overrides = parse_override_mapping(parts.config_module, overrides)
-        build_config(model, preset, config_overrides=parsed_overrides)
-    except InspectorError as exc:
+        validate_configuration(
+            package,
+            InspectionRequest(preset=preset, overrides=overrides),
+        )
+    except InspectionError as exc:
         raise InspectorError(
             f"Invalid config snapshot overrides: {_snapshot_config_error_detail(exc)}"
         ) from exc
@@ -240,7 +253,7 @@ def _validate_snapshot_config(
         raise InspectorError(f"Invalid config snapshot overrides: {detail}") from exc
 
 
-def _snapshot_config_error_detail(exc: InspectorError) -> str:
+def _snapshot_config_error_detail(exc: Exception) -> str:
     message = str(exc)
     cause = exc.__cause__
     if (

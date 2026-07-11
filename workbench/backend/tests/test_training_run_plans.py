@@ -7,28 +7,92 @@ import tempfile
 import unittest
 from collections import Counter
 from pathlib import Path
+from types import SimpleNamespace
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
-from emperor.base.options import ActivationOptions
+from emperor.experiments.base import GridSearch
+from emperor.model_packages import model_package
+from emperor.runs import RunRequest, plan_runs
+from models.package_cli import _search_spec
 
 from workbench.backend.inspector.errors import InspectorError
-from workbench.backend.inspector.search import (
-    ParsedTrainingSearch,
-    parse_training_search,
+from workbench.backend.tests.helpers import (
+    FakeRunner,
+    TrainingJobRuntimeHarness,
 )
-from workbench.backend.tests.helpers import FakeRunner
-from workbench.backend.training_jobs import TrainingJobManager
-from workbench.backend.training_limits import MAX_TRAINING_PLANNED_RUNS
-from workbench.backend.training_run_plans import TrainingRunPlanBuilder
+from workbench.backend.training_jobs.limits import MAX_TRAINING_PLANNED_RUNS
+from workbench.backend.training_jobs.plans import TrainingRunPlanBuilder
 
 
 class TrainingRunPlanTests(unittest.TestCase):
+    def test_cli_and_workbench_materialize_equivalent_grid_plan(self) -> None:
+        package = model_package("linears/linear")
+        if package is None:
+            self.fail("Expected the linears/linear Model Package.")
+        cli_search = _search_spec(
+            SimpleNamespace(
+                search_mode=GridSearch(),
+                search_keys=["hidden_dim", "stack_activation"],
+                search_overrides={
+                    "hidden_dim": [64, 128],
+                    "stack_activation": ["RELU", "GELU"],
+                },
+            )
+        )
+        cli_plan = plan_runs(
+            package,
+            RunRequest(
+                presets=("baseline", "gating"),
+                datasets=("Mnist", "Cifar10"),
+                overrides={"stack_num_layers": "4"},
+                search=cli_search,
+            ),
+        )
+        workbench_plan = TrainingJobRuntimeHarness(runner=FakeRunner()).create_run_plan(
+            model="linears/linear",
+            preset="baseline",
+            presets=["baseline", "gating"],
+            datasets=["Mnist", "Cifar10"],
+            overrides={"stack_num_layers": "4"},
+            search={
+                "mode": "grid",
+                "values": {
+                    "hidden_dim": [64, 128],
+                    "stack_activation": ["RELU", "GELU"],
+                },
+            },
+            log_folder="",
+        )
+
+        self.assertEqual(workbench_plan["presets"], list(cli_plan.presets))
+        self.assertEqual(
+            workbench_plan["experimentTask"],
+            cli_plan.experiment_task,
+        )
+        self.assertEqual(workbench_plan["datasets"], list(cli_plan.datasets))
+        self.assertEqual(workbench_plan["overrides"], dict(cli_plan.overrides))
+        self.assertEqual(
+            [
+                (
+                    row["id"],
+                    row["preset"],
+                    row["dataset"],
+                    row["overrides"],
+                )
+                for row in workbench_plan["runs"]
+            ],
+            [
+                (run.id, run.preset, run.dataset, dict(run.overrides))
+                for run in cli_plan.runs
+            ],
+        )
+
     def test_training_job_accepts_grid_search_and_strips_conflicting_override(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            manager = TrainingJobManager(
+            manager = TrainingJobRuntimeHarness(
                 root=Path(tmp) / "jobs",
                 logs_root=Path(tmp) / "logs",
                 runner=FakeRunner(),
@@ -56,11 +120,13 @@ class TrainingRunPlanTests(unittest.TestCase):
         self.assertEqual(worker_payload["overrides"], {"STACK_NUM_LAYERS": 4})
         self.assertEqual(worker_payload["search"], payload["search"])
 
-    def test_parse_training_search_serializes_values_payload(self) -> None:
-        parsed = parse_training_search(
-            "linears/linear_adaptive",
-            "baseline",
-            {
+    def test_workbench_adapter_serializes_search_payload(self) -> None:
+        plan = TrainingJobRuntimeHarness(runner=FakeRunner()).create_run_plan(
+            model="linears/linear_adaptive",
+            preset="baseline",
+            datasets=["Mnist"],
+            overrides={},
+            search={
                 "mode": "grid",
                 "values": {
                     "hidden_dim": [64],
@@ -68,20 +134,11 @@ class TrainingRunPlanTests(unittest.TestCase):
                     "adaptive_generator_stack_num_layers": [1, 2],
                 },
             },
-            dataset_count=1,
+            log_folder="",
         )
 
-        self.assertIsNotNone(parsed)
         self.assertEqual(
-            parsed.values,
-            {
-                "HIDDEN_DIM": [64],
-                "STACK_ACTIVATION": ["RELU"],
-                "ADAPTIVE_GENERATOR_STACK_NUM_LAYERS": [1, 2],
-            },
-        )
-        self.assertEqual(
-            parsed.to_payload(),
+            plan["search"],
             {
                 "mode": "grid",
                 "values": {
@@ -91,18 +148,9 @@ class TrainingRunPlanTests(unittest.TestCase):
                 },
             },
         )
-        self.assertEqual(parsed.search_overrides["hidden_dim"], [64])
-        self.assertIs(
-            parsed.search_overrides["stack_activation"][0],
-            ActivationOptions.RELU,
-        )
-        self.assertEqual(
-            parsed.search_overrides["adaptive_generator_stack_num_layers"],
-            [1, 2],
-        )
 
     def test_training_run_plan_materializes_grid_rows_and_commands(self) -> None:
-        manager = TrainingJobManager(runner=FakeRunner())
+        manager = TrainingJobRuntimeHarness(runner=FakeRunner())
 
         plan = manager.create_run_plan(
             model="linears/linear",
@@ -135,7 +183,7 @@ class TrainingRunPlanTests(unittest.TestCase):
         self.assertNotIn("--logdir", plan["runs"][0]["command"])
 
     def test_training_run_plan_commands_include_selected_monitors(self) -> None:
-        manager = TrainingJobManager(runner=FakeRunner())
+        manager = TrainingJobRuntimeHarness(runner=FakeRunner())
 
         plan = manager.create_run_plan(
             model="linears/linear",
@@ -155,7 +203,7 @@ class TrainingRunPlanTests(unittest.TestCase):
         )
 
     def test_training_run_plan_rejects_path_like_dataset_input(self) -> None:
-        manager = TrainingJobManager(runner=FakeRunner())
+        manager = TrainingJobRuntimeHarness(runner=FakeRunner())
 
         with self.assertRaises(InspectorError) as context:
             manager.create_run_plan(
@@ -171,10 +219,35 @@ class TrainingRunPlanTests(unittest.TestCase):
         self.assertIn("filesystem path", message)
         self.assertIn("server-known dataset name", message)
 
+    def test_workbench_strictly_rejects_equal_locked_values(self) -> None:
+        manager = TrainingJobRuntimeHarness(runner=FakeRunner())
+        with self.assertRaisesRegex(InspectorError, "locked fields"):
+            manager.create_run_plan(
+                model="linears/linear",
+                preset="gating",
+                presets=["gating"],
+                datasets=["Mnist"],
+                overrides={"stack_gate_flag": "true"},
+                log_folder="",
+            )
+        with self.assertRaisesRegex(InspectorError, "locked by preset"):
+            manager.create_run_plan(
+                model="linears/linear",
+                preset="post-norm",
+                presets=["post-norm"],
+                datasets=["Mnist"],
+                overrides={},
+                search={
+                    "mode": "grid",
+                    "values": {"stack_layer_norm_position": ["AFTER"]},
+                },
+                log_folder="",
+            )
+
     def test_training_run_plan_grid_search_characterizes_order_and_payload(
         self,
     ) -> None:
-        manager = TrainingJobManager(runner=FakeRunner())
+        manager = TrainingJobRuntimeHarness(runner=FakeRunner())
 
         plan = manager.create_run_plan(
             model="linears/linear",
@@ -332,7 +405,7 @@ class TrainingRunPlanTests(unittest.TestCase):
     def test_training_run_plan_serializes_search_values_in_rows_and_commands(
         self,
     ) -> None:
-        manager = TrainingJobManager(runner=FakeRunner())
+        manager = TrainingJobRuntimeHarness(runner=FakeRunner())
 
         plan = manager.create_run_plan(
             model="linears/linear_adaptive",
@@ -401,7 +474,7 @@ class TrainingRunPlanTests(unittest.TestCase):
 
     def test_training_job_accepts_random_search_sample_count(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            manager = TrainingJobManager(
+            manager = TrainingJobRuntimeHarness(
                 root=Path(tmp) / "jobs",
                 logs_root=Path(tmp) / "logs",
                 runner=FakeRunner(),
@@ -428,7 +501,7 @@ class TrainingRunPlanTests(unittest.TestCase):
         self.assertEqual(payload["plannedRunCount"], 6)
 
     def test_training_run_plan_materializes_random_search_before_start(self) -> None:
-        manager = TrainingJobManager(runner=FakeRunner())
+        manager = TrainingJobRuntimeHarness(runner=FakeRunner())
 
         plan = manager.create_run_plan(
             model="linears/linear",
@@ -459,50 +532,17 @@ class TrainingRunPlanTests(unittest.TestCase):
             all("--logdir random_search" in run["command"] for run in plan["runs"])
         )
 
-    def test_training_run_plan_random_search_handles_huge_product(self) -> None:
-        axis_values = {
-            f"synthetic_axis_{index}": list(range(50)) for index in range(16)
-        }
-        parsed_search = ParsedTrainingSearch(
-            mode="random",
-            values=axis_values,
-            search_overrides={
-                f"synthetic_param_{index}": values
-                for index, values in enumerate(axis_values.values())
-            },
-            axis_keys=set(axis_values),
-            model_params={
-                f"synthetic_param_{index}" for index in range(len(axis_values))
-            },
-            combination_count=50**16,
-            planned_run_count=3,
-            random_samples=3,
-        )
-        builder = TrainingRunPlanBuilder(random_source=random.Random(17))
-
-        combinations = builder._search_combinations(
-            model="linears/linear",
-            preset="baseline",
-            parsed_search=parsed_search,
-        )
-
-        self.assertEqual(len(combinations), 3)
-        for changes, overrides in combinations:
-            with self.subTest(overrides=overrides):
-                self.assertEqual(len(changes), 16)
-                self.assertEqual(len(overrides), 16)
-
     def test_training_job_random_search_uses_seeded_materialized_run_plan(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            manager = TrainingJobManager(
+            manager = TrainingJobRuntimeHarness(
                 root=Path(tmp) / "jobs",
                 logs_root=Path(tmp) / "logs",
                 runner=FakeRunner(),
-                run_plan_builder=TrainingRunPlanBuilder(
-                    random_source=random.Random(13)
-                ),
+            )
+            manager.run_plan_builder = TrainingRunPlanBuilder(
+                random_source=random.Random(13)
             )
 
             payload = manager.create_job(
@@ -640,7 +680,7 @@ class TrainingRunPlanTests(unittest.TestCase):
 
     def test_training_job_accepts_mixed_submitted_run_plan(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            manager = TrainingJobManager(
+            manager = TrainingJobRuntimeHarness(
                 root=Path(tmp) / "jobs",
                 logs_root=Path(tmp) / "logs",
                 runner=FakeRunner(),
@@ -750,7 +790,7 @@ class TrainingRunPlanTests(unittest.TestCase):
         ]
 
         with tempfile.TemporaryDirectory() as tmp:
-            manager = TrainingJobManager(
+            manager = TrainingJobRuntimeHarness(
                 root=Path(tmp) / "jobs",
                 logs_root=Path(tmp) / "logs",
                 runner=FakeRunner(),
@@ -810,7 +850,7 @@ class TrainingRunPlanTests(unittest.TestCase):
 
     def test_training_job_rejects_locked_submitted_run_plan_override(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            manager = TrainingJobManager(
+            manager = TrainingJobRuntimeHarness(
                 root=Path(tmp) / "jobs",
                 logs_root=Path(tmp) / "logs",
                 runner=FakeRunner(),

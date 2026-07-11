@@ -12,7 +12,7 @@ from workbench.backend.schemas._base import (
     ConfigValue,
     JsonObject,
 )
-from workbench.backend.training_limits import (
+from workbench.backend.training_jobs.limits import (
     MAX_TRAINING_DATASETS,
     MAX_TRAINING_MONITORS,
     MAX_TRAINING_PLANNED_RUNS,
