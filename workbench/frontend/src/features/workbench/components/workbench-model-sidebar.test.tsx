@@ -4,11 +4,19 @@ import { fetchModels } from "@/lib/api";
 import { WorkbenchModelSidebar } from "@/features/workbench/components/workbench-model-sidebar";
 
 const mocks = vi.hoisted(() => ({
-  useTargetQueryStatusState: vi.fn(),
+  useModelPackageCatalog: vi.fn(),
+  useModelPackageInspection: vi.fn(),
 }));
 
 vi.mock("@/features/workbench/providers/workbench-providers", () => ({
-  useTargetQueryStatusState: mocks.useTargetQueryStatusState,
+  useModelPackageCatalog: mocks.useModelPackageCatalog,
+  useModelPackageInspection: mocks.useModelPackageInspection,
+}));
+
+vi.mock("@/features/workbench/providers/workbench-connection-provider", () => ({
+  useWorkbenchConnection: () => ({
+    authentication: { state: "rejected" },
+  }),
 }));
 
 vi.mock("@/features/workbench/components/screen/target-preset-panel", () => ({
@@ -68,11 +76,15 @@ function queryState(error?: unknown) {
 }
 
 function renderSidebarWithModelError(error: unknown) {
-  mocks.useTargetQueryStatusState.mockReturnValue({
-    modelsQuery: queryState(error),
-    presetsQuery: queryState(),
-    datasetsQuery: queryState(),
-    schemaQuery: queryState(),
+  mocks.useModelPackageCatalog.mockReturnValue({
+    modelPackages: queryState(error),
+  });
+  mocks.useModelPackageInspection.mockReturnValue({
+    status: {
+      presets: queryState(),
+      datasets: queryState(),
+      schema: queryState(),
+    },
   });
 
   render(<WorkbenchModelSidebar onOpenFullConfig={vi.fn()} />);
@@ -84,7 +96,7 @@ afterEach(() => {
 });
 
 describe("WorkbenchModelSidebar", () => {
-  it("surfaces unauthorized model-list failures as authentication required", async () => {
+  it("surfaces rejected connection state without leaking the raw model error", async () => {
     const error = await createUnauthorizedModelsError();
 
     renderSidebarWithModelError(error);
@@ -93,8 +105,9 @@ describe("WorkbenchModelSidebar", () => {
     expect(screen.queryByText("Backend unavailable")).not.toBeInTheDocument();
     expect(
       screen.getByText(
-        "GET /models from http://127.0.0.1:9999 failed with 401: Missing or invalid bearer credentials",
+        "The session bearer token was rejected. Replace it or log out from API Connection.",
       ),
     ).toBeInTheDocument();
+    expect(screen.queryByText(/GET \/models.*401/i)).not.toBeInTheDocument();
   });
 });

@@ -30,6 +30,7 @@ export function TargetSelectorSection({
   selectedModel,
   selectedTargetMode,
   selectedPreset,
+  presetControlValue,
   selectedSnapshotId,
   selectedSnapshotName,
   selectedHistoricalExperimentFilter,
@@ -75,6 +76,7 @@ export function TargetSelectorSection({
   selectedModel: string;
   selectedTargetMode: TargetMode;
   selectedPreset: string;
+  presetControlValue: string;
   selectedSnapshotId: string;
   selectedSnapshotName: string;
   selectedHistoricalExperimentFilter: string;
@@ -241,7 +243,7 @@ export function TargetSelectorSection({
             <SelectOnlyDropdown
               id={presetSelectId}
               label="preset"
-              value={selectedPreset}
+              value={presetControlValue}
               options={presetOptions}
               onChange={onSelectPreset}
               placeholder="Select preset"

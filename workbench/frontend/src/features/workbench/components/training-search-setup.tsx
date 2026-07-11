@@ -1,4 +1,4 @@
-import { type Dispatch, type SetStateAction, useMemo } from "react";
+import { useMemo } from "react";
 import { Grid2X2, Search, Shuffle, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -36,7 +36,7 @@ type TrainingSearchSetupProps = {
   isLoading?: boolean;
   searchLockSummary?: TrainingSearchLockSummary;
   disabledReason?: string;
-  onChange: Dispatch<SetStateAction<TrainingSearchState>>;
+  onChange: (search: TrainingSearchState) => void;
 };
 
 function updateSelectedValues(
@@ -91,72 +91,70 @@ export function TrainingSearchSetup({
     if (isDisabled) {
       return;
     }
-    onChange((current) => {
-      if (mode === "off") {
-        return DEFAULT_TRAINING_SEARCH_STATE;
-      }
-      return {
-        mode,
-        selectedValues: current.mode === "off" ? {} : current.selectedValues,
-        randomSamples:
-          current.randomSamples > 0
-            ? current.randomSamples
-            : DEFAULT_RANDOM_SEARCH_SAMPLES,
-      };
-    });
+    onChange(
+      mode === "off"
+        ? DEFAULT_TRAINING_SEARCH_STATE
+        : {
+            mode,
+            selectedValues:
+              search.mode === "off" ? {} : search.selectedValues,
+            randomSamples:
+              search.randomSamples > 0
+                ? search.randomSamples
+                : DEFAULT_RANDOM_SEARCH_SAMPLES,
+          },
+    );
   }
 
   function toggleAxis(axis: SearchAxis) {
     if (isDisabled || axis.locked) {
       return;
     }
-    onChange((current) => {
-      const isSelected = (current.selectedValues[axis.key]?.length ?? 0) > 0;
-      return updateSelectedValues(current, axis.key, isSelected ? [] : axis.values);
-    });
+    const isSelected = (search.selectedValues[axis.key]?.length ?? 0) > 0;
+    onChange(
+      updateSelectedValues(search, axis.key, isSelected ? [] : axis.values),
+    );
   }
 
   function toggleValue(axis: SearchAxis, value: ConfigValue) {
     if (isDisabled || axis.locked) {
       return;
     }
-    onChange((current) => {
-      const values = current.selectedValues[axis.key] ?? [];
-      const selected = valueIsSelected(values, value);
-      const nextValues = selected
-        ? values.filter((candidate) => !configValueEquals(candidate, value))
-        : [...values, value];
-      return updateSelectedValues(current, axis.key, nextValues);
-    });
+    const values = search.selectedValues[axis.key] ?? [];
+    const selected = valueIsSelected(values, value);
+    const nextValues = selected
+      ? values.filter((candidate) => !configValueEquals(candidate, value))
+      : [...values, value];
+    onChange(updateSelectedValues(search, axis.key, nextValues));
   }
 
   function selectAllAxes() {
     if (isDisabled) {
       return;
     }
-    onChange((current) => ({
-      ...current,
+    onChange({
+      ...search,
       selectedValues: Object.fromEntries(
         unlockedAxes.map((axis) => [axis.key, axis.values]),
       ),
-    }));
+    });
   }
 
   function clearAxes() {
     if (isDisabled) {
       return;
     }
-    onChange((current) => ({ ...current, selectedValues: {} }));
+    onChange({ ...search, selectedValues: {} });
   }
 
   function updateRandomSamples(value: string) {
     if (isDisabled) {
       return;
     }
-    onChange((current) => ({
-      ...current,
+    onChange({
+      ...search,
       randomSamples: value === "" ? 0 : Number(value),
-    }));
+    });
   }
 
   return (

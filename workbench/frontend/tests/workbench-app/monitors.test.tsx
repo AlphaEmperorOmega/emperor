@@ -882,7 +882,7 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows pending and loading parameter activity while switching experiments", async () => {
+  it("shows pending browser selection and loading activity while switching runs", async () => {
     const fixture = buildHistoricalMonitorFixture(2);
     const statusB = deferred<{
       runs: Array<{
@@ -1015,13 +1015,13 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
 
     await selectExperiment(/^monitor_exp_b/);
 
-    expect(await screen.findByText("pending")).toBeInTheDocument();
     expect(
       screen.queryByLabelText("Weights parameter activity: updated"),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByLabelText("Bias parameter activity: unchanged"),
     ).not.toBeInTheDocument();
+    expect(await screen.findByText("pending")).toBeInTheDocument();
 
     await selectDatasetAndPreset();
 

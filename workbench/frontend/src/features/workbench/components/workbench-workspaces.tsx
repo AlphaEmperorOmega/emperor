@@ -25,10 +25,10 @@ function TrainingWorkspaceLoadingFallback() {
   );
 }
 
-const ConnectedTrainingWorkspace = dynamic(
+const TrainingPanel = dynamic(
   () =>
-    import("@/features/workbench/components/connected-training-panel").then(
-      (module) => module.ConnectedTrainingWorkspace,
+    import("@/features/workbench/components/training-panel").then(
+      (module) => module.TrainingPanel,
     ),
   {
     ssr: false,
@@ -129,10 +129,8 @@ export function WorkbenchWorkspaceSidebar({
 
 export function WorkbenchWorkspaceMain({
   activeWorkspace,
-  onOpenFullConfig,
 }: {
   activeWorkspace: WorkbenchWorkspace;
-  onOpenFullConfig: FullConfigDialogControls["open"];
 }) {
   if (activeWorkspace === "model") {
     return (
@@ -159,7 +157,7 @@ export function WorkbenchWorkspaceMain({
   if (activeWorkspace === "training") {
     return (
       <div className="grid h-full min-h-[560px] min-w-0 grid-rows-[minmax(0,1fr)] overflow-hidden lg:col-span-3 lg:min-h-0">
-        <ConnectedTrainingWorkspace onOpenFullConfig={onOpenFullConfig} />
+        <TrainingPanel />
       </div>
     );
   }

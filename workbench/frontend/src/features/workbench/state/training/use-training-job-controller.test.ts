@@ -21,13 +21,14 @@ vi.mock("@/lib/api", async () => {
   };
 });
 
+import { useActiveTrainingJobProgress } from "@/features/workbench/state/training/use-training-job-controller";
 import {
-  resolveTrainingLogRefresh,
-  useActiveTrainingJobProgress,
-} from "@/features/workbench/state/training/use-training-job-controller";
-import {
+  LOG_ARTIFACTS_QUERY_KEY,
+  LOG_CHECKPOINTS_QUERY_KEY,
   LOG_EXPERIMENTS_QUERY_KEY,
+  LOG_MEDIA_QUERY_KEY,
   LOG_RUNS_QUERY_KEY,
+  LOG_SCALARS_QUERY_KEY,
   LOG_TAGS_QUERY_KEY,
   trainingQueryKeys,
 } from "@/lib/query-keys";
@@ -78,62 +79,31 @@ beforeEach(() => {
   mocks.fetchTrainingJob.mockReset();
 });
 
-describe("resolveTrainingLogRefresh", () => {
-  it("refreshes lists only when a running job first exposes a log directory", () => {
-    const emptySnapshot = resolveTrainingLogRefresh(
-      {
-        jobId: null,
-        logDir: null,
-        terminalStatus: null,
-      },
-      undefined,
-    ).snapshot;
-    const firstRunningPoll = resolveTrainingLogRefresh(
-      emptySnapshot,
-      trainingJob({ logDir: "logs/runs" }),
-    );
-    const repeatedRunningPoll = resolveTrainingLogRefresh(
-      firstRunningPoll.snapshot,
-      trainingJob({ logDir: "logs/runs", step: 12 }),
-    );
-
-    expect(firstRunningPoll.action).toBe("lists");
-    expect(repeatedRunningPoll.action).toBe("none");
-  });
-
-  it("does one details refresh when the job reaches a terminal status", () => {
-    const firstRunningPoll = resolveTrainingLogRefresh(
-      {
-        jobId: null,
-        logDir: null,
-        terminalStatus: null,
-      },
-      trainingJob({ logDir: "logs/runs" }),
-    );
-    const terminalPoll = resolveTrainingLogRefresh(
-      firstRunningPoll.snapshot,
-      trainingJob({
-        status: "completed",
-        exitCode: 0,
-        logDir: "logs/runs",
-      }),
-    );
-    const repeatedTerminalPoll = resolveTrainingLogRefresh(
-      terminalPoll.snapshot,
-      trainingJob({
-        status: "completed",
-        exitCode: 0,
-        logDir: "logs/runs",
-        updatedAt: "2026-06-01T00:00:01Z",
-      }),
-    );
-
-    expect(terminalPoll.action).toBe("details");
-    expect(repeatedTerminalPoll.action).toBe("none");
-  });
-});
-
 describe("useActiveTrainingJobProgress", () => {
+  it("does not poll an active job until protected access is enabled", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    });
+    const onJobChange = vi.fn();
+    mocks.fetchTrainingJob.mockResolvedValue(trainingJob({}));
+    const rendered = renderHook(
+      ({ enabled }) =>
+        useActiveTrainingJobProgress({
+          activeJobId: "job-1",
+          onJobChange,
+          enabled,
+        }),
+      {
+        initialProps: { enabled: false },
+        wrapper: queryClientWrapper(queryClient),
+      },
+    );
+
+    expect(mocks.fetchTrainingJob).not.toHaveBeenCalled();
+    rendered.rerender({ enabled: true });
+    await waitFor(() => expect(mocks.fetchTrainingJob).toHaveBeenCalledTimes(1));
+  });
+
   it("passes React Query cancellation to an obsolete job poll", async () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false, gcTime: 0 } },
@@ -164,6 +134,64 @@ describe("useActiveTrainingJobProgress", () => {
     });
     expect(firstSignal.aborted).toBe(true);
     rendered.unmount();
+  });
+
+  it("refreshes log lists once when a running job first exposes a log directory", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    });
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    const onJobChange = vi.fn();
+    mocks.fetchTrainingJob.mockResolvedValue(trainingJob({ logDir: null }));
+
+    renderHook(
+      () =>
+        useActiveTrainingJobProgress({
+          activeJobId: "job-1",
+          onJobChange,
+        }),
+      { wrapper: queryClientWrapper(queryClient) },
+    );
+
+    await waitFor(() => {
+      expect(onJobChange).toHaveBeenCalledWith(
+        expect.objectContaining({ logDir: null }),
+      );
+    });
+    invalidateSpy.mockClear();
+    onJobChange.mockClear();
+
+    act(() => {
+      queryClient.setQueryData(
+        trainingQueryKeys.job("job-1"),
+        trainingJob({ logDir: "logs/runs" }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(invalidateSpy).toHaveBeenCalledWith({
+        queryKey: LOG_EXPERIMENTS_QUERY_KEY,
+      });
+      expect(invalidateSpy).toHaveBeenCalledWith({
+        queryKey: LOG_RUNS_QUERY_KEY,
+      });
+    });
+    invalidateSpy.mockClear();
+    onJobChange.mockClear();
+
+    act(() => {
+      queryClient.setQueryData(
+        trainingQueryKeys.job("job-1"),
+        trainingJob({ logDir: "logs/runs", step: 12 }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(onJobChange).toHaveBeenCalledWith(
+        expect.objectContaining({ logDir: "logs/runs", step: 12 }),
+      );
+    });
+    expect(invalidateSpy).not.toHaveBeenCalled();
   });
 
   it("keeps terminal log refresh alive without the training panel UI mounted", async () => {
@@ -219,6 +247,44 @@ describe("useActiveTrainingJobProgress", () => {
       expect(removeSpy).toHaveBeenCalledWith({
         queryKey: LOG_TAGS_QUERY_KEY,
       });
+      expect(removeSpy).toHaveBeenCalledWith({
+        queryKey: LOG_CHECKPOINTS_QUERY_KEY,
+      });
+      expect(removeSpy).toHaveBeenCalledWith({
+        queryKey: LOG_ARTIFACTS_QUERY_KEY,
+      });
+      expect(removeSpy).toHaveBeenCalledWith({
+        queryKey: LOG_MEDIA_QUERY_KEY,
+      });
+      expect(removeSpy).toHaveBeenCalledWith({
+        queryKey: LOG_SCALARS_QUERY_KEY,
+      });
     });
+    invalidateSpy.mockClear();
+    removeSpy.mockClear();
+    onJobChange.mockClear();
+
+    act(() => {
+      queryClient.setQueryData(
+        trainingQueryKeys.job("job-1"),
+        trainingJob({
+          status: "completed",
+          exitCode: 0,
+          logDir: "logs/runs",
+          updatedAt: "2026-06-01T00:00:01Z",
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(onJobChange).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: "completed",
+          updatedAt: "2026-06-01T00:00:01Z",
+        }),
+      );
+    });
+    expect(invalidateSpy).not.toHaveBeenCalled();
+    expect(removeSpy).not.toHaveBeenCalled();
   });
 });

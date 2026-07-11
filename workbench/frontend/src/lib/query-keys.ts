@@ -1,5 +1,4 @@
-import { type TrainingSearchCreateInput } from "@/lib/api";
-import { type OverrideValues } from "@/lib/config";
+import { type TrainingRunPlanCreateInput } from "@/lib/api";
 
 type StringList = readonly string[];
 type NormalizedQueryObject = {
@@ -13,18 +12,7 @@ type NormalizedQueryValue =
   | readonly NormalizedQueryValue[]
   | NormalizedQueryObject;
 
-export type TrainingRunPlanQueryKeyInput = {
-  modelType: string;
-  model: string;
-  preset: string;
-  presets: StringList;
-  experimentTask?: string;
-  datasets: StringList;
-  overrides: OverrideValues;
-  logFolder: string;
-  monitors: StringList;
-  search?: TrainingSearchCreateInput;
-};
+export type TrainingRunPlanQueryKeyInput = TrainingRunPlanCreateInput;
 
 function normalizedStringSet(values: StringList) {
   return Array.from(new Set(values)).sort();
@@ -62,12 +50,12 @@ function trainingRunPlanInputKey({
   model,
   modelType,
   preset,
-  presets,
+  presets = [],
   experimentTask = "",
   datasets,
   overrides,
-  logFolder,
-  monitors,
+  logFolder = "",
+  monitors = [],
   search,
 }: TrainingRunPlanQueryKeyInput): NormalizedQueryObject {
   return {

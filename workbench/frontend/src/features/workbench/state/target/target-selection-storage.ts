@@ -9,7 +9,6 @@ export type PersistedTargetSelection = {
 };
 
 const TARGET_SELECTION_STORAGE_KEY = "emperor.workbench.targetSelection.v1";
-let fallbackTargetSelectionValue: string | null = null;
 
 function getLocalStorage() {
   if (typeof window === "undefined") {
@@ -73,21 +72,18 @@ function parseTargetSelection(value: string | null): PersistedTargetSelection | 
 export function readPersistedTargetSelection() {
   const storage = getLocalStorage();
   try {
-    const storedValue = storage?.getItem?.(TARGET_SELECTION_STORAGE_KEY);
-    if (storedValue) {
-      return parseTargetSelection(storedValue);
-    }
+    return parseTargetSelection(
+      storage?.getItem?.(TARGET_SELECTION_STORAGE_KEY) ?? null,
+    );
   } catch {
-    // Fall through to the in-memory fallback below.
+    return null;
   }
-  return parseTargetSelection(fallbackTargetSelectionValue);
 }
 
 export function writePersistedTargetSelection(
   selection: PersistedTargetSelection,
 ) {
   const value = JSON.stringify(selection);
-  fallbackTargetSelectionValue = value;
   const storage = getLocalStorage();
   if (!storage?.setItem) {
     return;
@@ -96,15 +92,5 @@ export function writePersistedTargetSelection(
     storage.setItem(TARGET_SELECTION_STORAGE_KEY, value);
   } catch {
     // Persistence is best-effort; storage failures should not break the workbench.
-  }
-}
-
-export function clearPersistedTargetSelection() {
-  fallbackTargetSelectionValue = null;
-  const storage = getLocalStorage();
-  try {
-    storage?.removeItem?.(TARGET_SELECTION_STORAGE_KEY);
-  } catch {
-    // Clearing is best-effort for the same reason writes are.
   }
 }

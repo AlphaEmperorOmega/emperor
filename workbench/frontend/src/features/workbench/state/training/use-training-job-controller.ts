@@ -8,6 +8,7 @@ import {
   type TrainingJob,
   type TrainingJobCreateInput,
   type TrainingRunPlan,
+  type TrainingRunPlanCreateInput,
   type TrainingSearchCreateInput,
 } from "@/lib/api";
 import { type OverrideValues } from "@/lib/config";
@@ -18,13 +19,8 @@ import {
 import { useLogQueryCache } from "@/features/workbench/state/logs/use-log-query-cache";
 import {
   trainingQueryKeys,
-  type TrainingRunPlanQueryKeyInput,
 } from "@/lib/query-keys";
 import { errorMessage } from "@/lib/utils";
-import {
-  buildTrainingJobRequest,
-  buildTrainingRunPlanRequest,
-} from "@/features/workbench/state/training/training-request";
 
 const terminalStatuses = new Set(["completed", "failed", "cancelled"]);
 
@@ -40,13 +36,87 @@ type TrainingMutationError =
   | { action: "create"; message: string }
   | { action: "cancel"; jobId: string; message: string };
 
+type PendingTrainingRequest = {
+  request: TrainingJobCreateInput;
+  revision: string;
+};
+
+type TrainingDraftRequestInput = {
+  canPlan: boolean;
+  selectedModelType: string;
+  selectedModel: string;
+  selectedPreset: string;
+  selectedTrainingPresets: string[];
+  selectedExperimentTask?: string;
+  selectedDatasets: string[];
+  effectiveOverrides: OverrideValues;
+  logFolder: string;
+  selectedMonitors: string[];
+  searchPayload?: TrainingSearchCreateInput;
+};
+
+function buildTrainingDraftRequest({
+  canPlan,
+  selectedModelType,
+  selectedModel,
+  selectedPreset,
+  selectedTrainingPresets,
+  selectedExperimentTask = "",
+  selectedDatasets,
+  effectiveOverrides,
+  logFolder,
+  selectedMonitors,
+  searchPayload,
+}: TrainingDraftRequestInput): TrainingRunPlanCreateInput | null {
+  if (!canPlan) {
+    return null;
+  }
+  return {
+    modelType: selectedModelType,
+    model: selectedModel,
+    preset: selectedPreset,
+    presets: selectedTrainingPresets,
+    ...(selectedExperimentTask ? { experimentTask: selectedExperimentTask } : {}),
+    datasets: selectedDatasets,
+    overrides: effectiveOverrides,
+    logFolder,
+    monitors: selectedMonitors,
+    ...(searchPayload ? { search: searchPayload } : {}),
+  };
+}
+
+function buildTrainingJobRequest({
+  draftRequest,
+  runPlan,
+}: {
+  draftRequest: TrainingRunPlanCreateInput | null;
+  runPlan?: TrainingRunPlan;
+}): TrainingJobCreateInput | null {
+  if (!draftRequest || !runPlan) {
+    return null;
+  }
+  const presets = runPlan.presets.length > 0
+    ? runPlan.presets
+    : draftRequest.presets;
+  const experimentTask = runPlan.experimentTask || draftRequest.experimentTask;
+  return {
+    ...draftRequest,
+    preset: runPlan.preset || draftRequest.preset,
+    presets,
+    ...(experimentTask ? { experimentTask } : {}),
+    logFolder: draftRequest.logFolder ?? "",
+    monitors: draftRequest.monitors ?? [],
+    runPlan,
+  };
+}
+
 const emptyLogRefreshSnapshot: TrainingLogRefreshSnapshot = {
   jobId: null,
   logDir: null,
   terminalStatus: null,
 };
 
-export function resolveTrainingLogRefresh(
+function resolveTrainingLogRefresh(
   previous: TrainingLogRefreshSnapshot,
   job: TrainingJob | undefined,
 ): {
@@ -82,11 +152,13 @@ export function resolveTrainingLogRefresh(
 type UseActiveTrainingJobProgressInput = {
   activeJobId: string | null;
   onJobChange: (job: TrainingJob | undefined) => void;
+  enabled?: boolean;
 };
 
 export function useActiveTrainingJobProgress({
   activeJobId,
   onJobChange,
+  enabled = true,
 }: UseActiveTrainingJobProgressInput) {
   const { invalidateLogLists, refreshAfterMutation } = useLogQueryCache();
   const logRefreshSnapshotRef = useRef<TrainingLogRefreshSnapshot>(
@@ -96,7 +168,7 @@ export function useActiveTrainingJobProgress({
     queryKey: trainingQueryKeys.job(activeJobId),
     queryFn: ({ signal }) =>
       fetchTrainingJob(activeJobId ?? "", { signal }),
-    enabled: activeJobId !== null,
+    enabled: enabled && activeJobId !== null,
     refetchInterval: (query) => {
       const status = (query.state.data as TrainingJob | undefined)?.status;
       return status && terminalStatuses.has(status) ? false : 1000;
@@ -126,10 +198,9 @@ export function useActiveTrainingJobProgress({
 
   return useMemo(
     () => ({
-      isPolling: jobQuery.isFetching,
       progressError: jobQuery.isError ? errorMessage(jobQuery.error) : "",
     }),
-    [jobQuery.error, jobQuery.isError, jobQuery.isFetching],
+    [jobQuery.error, jobQuery.isError],
   );
 }
 
@@ -151,13 +222,13 @@ type UseTrainingJobControllerInput = {
   searchPayload?: TrainingSearchCreateInput;
   submittedRunPlan?: TrainingRunPlan;
   canPlan: boolean;
+  protectedReadsEnabled?: boolean;
   hasValidLogFolder: boolean;
   plannedRunCount: number;
   activeTrainingJob: TrainingJob | undefined;
   progressError: string;
   onActiveJobIdChange: (jobId: string | null) => void;
   onJobChange: (job: TrainingJob | undefined) => void;
-  onJobStarted: () => void;
 };
 
 export function useTrainingJobController({
@@ -174,35 +245,42 @@ export function useTrainingJobController({
   searchPayload,
   submittedRunPlan,
   canPlan,
+  protectedReadsEnabled = true,
   hasValidLogFolder,
   plannedRunCount,
   activeTrainingJob,
   progressError,
   onActiveJobIdChange,
   onJobChange,
-  onJobStarted,
 }: UseTrainingJobControllerInput) {
   const [planNonce, setPlanNonce] = useState(0);
   const [pendingTrainingRequest, setPendingTrainingRequest] =
-    useState<TrainingJobCreateInput | null>(null);
+    useState<PendingTrainingRequest | null>(null);
   const [mutationError, setMutationError] =
     useState<TrainingMutationError | null>(null);
+  const mutationGenerationRef = useRef(0);
   const queryClient = useQueryClient();
   const { refreshAfterMutation } = useLogQueryCache();
   const createMutation = useMutation({
     mutationFn: createTrainingJob,
     onMutate: () => {
       setMutationError(null);
+      return { generation: mutationGenerationRef.current };
     },
-    onSuccess: (job) => {
+    onSuccess: (job, _request, context) => {
+      if (context.generation !== mutationGenerationRef.current) {
+        return;
+      }
       queryClient.setQueryData(trainingQueryKeys.job(job.id), job);
       setMutationError(null);
       onActiveJobIdChange(job.id);
       onJobChange(job);
-      onJobStarted();
       void refreshAfterMutation();
     },
-    onError: (error) => {
+    onError: (error, _request, context) => {
+      if (context?.generation !== mutationGenerationRef.current) {
+        return;
+      }
       setMutationError({ action: "create", message: errorMessage(error) });
     },
   });
@@ -210,15 +288,30 @@ export function useTrainingJobController({
     mutationFn: cancelTrainingJob,
     onMutate: () => {
       setMutationError(null);
+      return { generation: mutationGenerationRef.current };
     },
-    onSuccess: (job) => {
-      queryClient.setQueryData(trainingQueryKeys.job(job.id), job);
+    onSuccess: async (job, _jobId, context) => {
+      if (context.generation !== mutationGenerationRef.current) {
+        return;
+      }
+      const jobQueryKey = trainingQueryKeys.job(job.id);
+      await queryClient.cancelQueries({
+        queryKey: jobQueryKey,
+        exact: true,
+      });
+      if (context.generation !== mutationGenerationRef.current) {
+        return;
+      }
+      queryClient.setQueryData(jobQueryKey, job);
       setMutationError(null);
       onActiveJobIdChange(job.id);
       onJobChange(job);
       void refreshAfterMutation();
     },
-    onError: (error, jobId) => {
+    onError: (error, jobId, context) => {
+      if (context?.generation !== mutationGenerationRef.current) {
+        return;
+      }
       setMutationError({
         action: "cancel",
         jobId,
@@ -228,9 +321,9 @@ export function useTrainingJobController({
   });
   const job = activeTrainingJob ?? createMutation.data ?? cancelMutation.data;
 
-  const planRequest = useMemo(
+  const draftRequest = useMemo(
     () =>
-      buildTrainingRunPlanRequest({
+      buildTrainingDraftRequest({
         canPlan,
         selectedModelType,
         selectedModel,
@@ -242,7 +335,6 @@ export function useTrainingJobController({
         logFolder,
         selectedMonitors,
         searchPayload,
-        submittedRunPlan,
       }),
     [
       canPlan,
@@ -256,44 +348,42 @@ export function useTrainingJobController({
       selectedMonitors,
       selectedPreset,
       selectedTrainingPresets,
+    ],
+  );
+  const planRequest = submittedRunPlan ? null : draftRequest;
+  const runPlanQueryKey = useMemo(
+    () =>
+      planRequest
+        ? trainingQueryKeys.runPlan(planNonce, planRequest)
+        : (["training-run-plan", planNonce, null] as const),
+    [planNonce, planRequest],
+  );
+  const planRevision = useMemo(
+    () =>
+      JSON.stringify({
+        runPlanQueryKey,
+        submittedRunPlan: submittedRunPlan ?? null,
+        canPlan,
+        hasValidLogFolder,
+      }),
+    [
+      canPlan,
+      hasValidLogFolder,
+      runPlanQueryKey,
       submittedRunPlan,
     ],
   );
-  const planInputKey = useMemo<TrainingRunPlanQueryKeyInput>(
-    () => ({
-      modelType: selectedModelType,
-      model: selectedModel,
-      preset: selectedPreset,
-      presets: selectedTrainingPresets,
-      experimentTask: selectedExperimentTask,
-      datasets: selectedDatasets,
-      overrides: effectiveOverrides,
-      logFolder,
-      monitors: selectedMonitors,
-      search: searchPayload,
-    }),
-    [
-      effectiveOverrides,
-      logFolder,
-      searchPayload,
-      selectedExperimentTask,
-      selectedDatasets,
-      selectedModelType,
-      selectedModel,
-      selectedMonitors,
-      selectedPreset,
-      selectedTrainingPresets,
-    ],
-  );
+  const currentPlanRevisionRef = useRef(planRevision);
+  currentPlanRevisionRef.current = planRevision;
   const runPlanQuery = useQuery({
-    queryKey: trainingQueryKeys.runPlan(planNonce, planInputKey),
+    queryKey: runPlanQueryKey,
     queryFn: ({ signal }) => {
       if (!planRequest) {
         throw new Error("Training run plan request is not ready.");
       }
       return fetchTrainingRunPlan(planRequest, { signal });
     },
-    enabled: planRequest !== null,
+    enabled: protectedReadsEnabled && planRequest !== null,
     staleTime: Number.POSITIVE_INFINITY,
     refetchOnWindowFocus: false,
     retry: false,
@@ -304,7 +394,6 @@ export function useTrainingJobController({
   const jobRunPlan = job?.runPlan ?? undefined;
   const progressRunPlan = jobRunPlan ?? draftRunPlan;
   const draftRunPlanSummary = draftRunPlan?.summary;
-  const progressRunPlanSummary = progressRunPlan?.summary;
   const isPlanning =
     canPlan &&
     !submittedRunPlan &&
@@ -318,6 +407,7 @@ export function useTrainingJobController({
   const hasPendingMutation = createMutation.isPending || cancelMutation.isPending;
   const canStart = Boolean(
     canPlan &&
+      protectedReadsEnabled &&
       hasValidLogFolder &&
       draftRunPlan &&
       !isPlanning &&
@@ -325,16 +415,26 @@ export function useTrainingJobController({
       !isRunning &&
       !hasPendingMutation,
   );
+  const canStartRef = useRef(canStart);
+  canStartRef.current = canStart;
   const displayedRunCount = draftRunPlanSummary?.totalRuns ?? plannedRunCount;
   const requiresLargeGridConfirmation =
     trainingSearch.mode === "grid" &&
     displayedRunCount > LARGE_GRID_RUN_THRESHOLD;
   const canResampleRunPlan = Boolean(
-    trainingSearch.mode === "random" &&
+    protectedReadsEnabled &&
+      trainingSearch.mode === "random" &&
       !submittedRunPlan &&
       !isRunning &&
       !jobRunPlan &&
       draftRunPlan,
+  );
+  const canRetryRunPlan = Boolean(
+    protectedReadsEnabled &&
+      planRequest &&
+      !submittedRunPlan &&
+      runPlanQuery.isError &&
+      !runPlanQuery.isFetching,
   );
   const mutationErrorMessage =
     mutationError?.action === "create"
@@ -344,19 +444,18 @@ export function useTrainingJobController({
         : "";
   const trainingError = mutationErrorMessage || progressError;
 
+  useEffect(() => {
+    setPendingTrainingRequest((pending) =>
+      pending && pending.revision === planRevision && canStart
+        ? pending
+        : null,
+    );
+  }, [canStart, planRevision]);
+
   function trainingRequest(): TrainingJobCreateInput | null {
     return buildTrainingJobRequest({
-      selectedModelType,
-      selectedModel,
-      selectedPreset,
-      selectedTrainingPresets,
-      selectedExperimentTask,
-      selectedDatasets,
-      effectiveOverrides,
-      logFolder,
+      draftRequest,
       runPlan: draftRunPlan,
-      searchPayload,
-      selectedMonitors,
     });
   }
 
@@ -374,17 +473,24 @@ export function useTrainingJobController({
       return;
     }
     if (requiresLargeGridConfirmation) {
-      setPendingTrainingRequest(request);
+      setPendingTrainingRequest({ request, revision: planRevision });
       return;
     }
     submitTrainingRequest(request);
   }
 
   function confirmLargeGridSearch() {
-    if (pendingTrainingRequest && canStart) {
-      submitTrainingRequest(pendingTrainingRequest);
+    if (
+      !pendingTrainingRequest ||
+      pendingTrainingRequest.revision !== currentPlanRevisionRef.current ||
+      !canStartRef.current
+    ) {
       setPendingTrainingRequest(null);
+      return;
     }
+    const { request } = pendingTrainingRequest;
+    setPendingTrainingRequest(null);
+    submitTrainingRequest(request);
   }
 
   function cancelLargeGridSearch() {
@@ -392,7 +498,7 @@ export function useTrainingJobController({
   }
 
   function cancelTraining() {
-    if (job?.id && !cancelMutation.isPending) {
+    if (protectedReadsEnabled && job?.id && !cancelMutation.isPending) {
       cancelMutation.mutate(job.id);
     }
   }
@@ -410,17 +516,33 @@ export function useTrainingJobController({
   }
 
   function resampleRunPlan() {
+    if (!canResampleRunPlan || runPlanQuery.isFetching) {
+      return;
+    }
+    setPendingTrainingRequest(null);
     setPlanNonce((current) => current + 1);
+  }
+
+  function retryRunPlan() {
+    if (!protectedReadsEnabled || !canRetryRunPlan) {
+      return;
+    }
+    void runPlanQuery.refetch();
+  }
+
+  function clearForConnectionChange() {
+    mutationGenerationRef.current += 1;
+    setPlanNonce(0);
+    setPendingTrainingRequest(null);
+    setMutationError(null);
+    createMutation.reset();
+    cancelMutation.reset();
   }
 
   return {
     job,
-    draftRunPlan,
     progressRunPlan,
-    progressRunPlanSummary,
     displayedRunCount,
-    isPlanning,
-    planError,
     isProgressPlanning,
     progressPlanError,
     isRunning,
@@ -429,17 +551,22 @@ export function useTrainingJobController({
     ),
     canStart,
     canResampleRunPlan,
+    canRetryRunPlan,
     isResampling: runPlanQuery.isFetching,
     isStarting: createMutation.isPending,
     isCancelling: cancelMutation.isPending,
     trainingError,
     requiresLargeGridConfirmation,
-    showLargeGridConfirmation: pendingTrainingRequest !== null,
+    showLargeGridConfirmation: Boolean(
+      pendingTrainingRequest?.revision === planRevision && canStart,
+    ),
     startTraining,
     confirmLargeGridSearch,
     cancelLargeGridSearch,
     cancelTraining,
     resetTraining,
     resampleRunPlan,
+    retryRunPlan,
+    clearForConnectionChange,
   };
 }

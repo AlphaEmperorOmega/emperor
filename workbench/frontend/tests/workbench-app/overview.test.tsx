@@ -23,10 +23,7 @@ import {
 import {
   readPersistedTargetSelection,
 } from "@/features/workbench/state/target/target-selection-storage";
-import {
-  setWorkbenchApiBaseUrl,
-  WORKBENCH_API_BASE_URL_STORAGE_KEY,
-} from "@/lib/api";
+import { WORKBENCH_API_BASE_URL_STORAGE_KEY } from "@/lib/api/_connection-runtime";
 
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -39,7 +36,7 @@ function deferred<T>() {
 describe("WorkbenchApp Overview", () => {
   beforeEach(resetWorkbenchAppTestState);
 
-  it("keeps preset-mode cold start free of unrelated workspace requests", async () => {
+  it("keeps Model and Full Config free of unrelated workspace requests", async () => {
     const { fetchMock } = installFetchMock();
     renderWorkbench();
     const user = userEvent.setup();
@@ -66,13 +63,11 @@ describe("WorkbenchApp Overview", () => {
 
     await user.click(screen.getByRole("button", { name: /open full config/i }));
     await screen.findByRole("dialog", { name: /full config/i });
-    await waitFor(() => {
-      expect(
-        fetchMock.mock.calls.some(([input]) =>
-          String(input).endsWith("/config-snapshots/library"),
-        ),
-      ).toBe(true);
-    });
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).endsWith("/config-snapshots/library"),
+      ),
+    ).toBe(false);
   });
 
   it("renders model and preset selectors from API data", async () => {
@@ -221,7 +216,7 @@ describe("WorkbenchApp Overview", () => {
     expect(within(dialog).getByLabelText("API base URL")).toHaveValue(apiBaseUrl);
     expect(dialog).toHaveTextContent(/backend deployment/i);
     expect(dialog).toHaveTextContent(/browser frontend code cannot add/i);
-    expect(within(dialog).getByText(/bearer auth/i)).toBeInTheDocument();
+    expect(dialog).toHaveTextContent(/bearer auth/i);
     expect(dialog).toHaveTextContent(/unsafe local mutation/i);
     expect(dialog).toHaveTextContent(/training, log deletion, and config snapshots/i);
 
@@ -238,6 +233,194 @@ describe("WorkbenchApp Overview", () => {
 
     expect(writeText).toHaveBeenNthCalledWith(1, corsEnvValue);
     expect(writeText).toHaveBeenNthCalledWith(2, frontendEnvValue);
+  });
+
+  it("retries a transient capability failure from API Connection", async () => {
+    const user = userEvent.setup();
+    const { fetchMock } = installFetchMock();
+    const defaultFetch = fetchMock.getMockImplementation();
+    let capabilityRequestCount = 0;
+    fetchMock.mockImplementation((input, init) => {
+      if (String(input).endsWith("/capabilities")) {
+        capabilityRequestCount += 1;
+        if (capabilityRequestCount === 1) {
+          return jsonResponse({ detail: "temporarily unavailable" }, 503);
+        }
+      }
+      if (!defaultFetch) {
+        throw new Error("Expected default fetch mock implementation");
+      }
+      return defaultFetch(input, init);
+    });
+    renderWorkbench();
+
+    await user.click(screen.getByRole("button", { name: /api connection settings/i }));
+    const dialog = await screen.findByRole("dialog", { name: /api connection/i });
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+      /capabilities could not be read/i,
+    );
+
+    await user.click(within(dialog).getByRole("button", { name: /try again/i }));
+
+    await waitFor(() => {
+      expect(capabilityRequestCount).toBe(2);
+      expect(dialog).toHaveTextContent(
+        /does not require bearer authentication/i,
+      );
+    });
+  });
+
+  it("completes hosted bearer login, protected access, replacement, and logout", async () => {
+    const user = userEvent.setup();
+    let acceptedToken = "first-hosted-token";
+    const { fetchMock, logImportRequests } = installFetchMock({
+      capabilitiesResponse: {
+        ...capabilitiesResponse,
+        authMode: "bearer",
+        uploadsEnabled: true,
+      },
+      logImportResponse: {
+        extractedFileCount: 1,
+        skippedFileCount: 0,
+        destinationRoot: "/workspace/logs",
+      },
+    });
+    const defaultFetch = fetchMock.getMockImplementation();
+    if (!defaultFetch) {
+      throw new Error("Expected the Workbench fetch mock implementation");
+    }
+    fetchMock.mockImplementation((input, init) => {
+      const url = String(input);
+      if (url.endsWith("/health") || url.endsWith("/capabilities")) {
+        return defaultFetch(input, init);
+      }
+      const authorization = new Headers(init?.headers).get("Authorization");
+      if (authorization !== `Bearer ${acceptedToken}`) {
+        return jsonResponse(
+          { detail: "Missing or invalid bearer credentials" },
+          401,
+        );
+      }
+      return defaultFetch(input, init);
+    });
+    renderWorkbench();
+
+    expect(await screen.findByText("Authentication required")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /import logs/i }));
+    const blockedImportDialog = await screen.findByRole("dialog", {
+      name: /import logs/i,
+    });
+    expect(
+      within(blockedImportDialog).getByLabelText(/log archive zip file/i),
+    ).toBeDisabled();
+    expect(
+      within(blockedImportDialog).getByRole("button", { name: /^import logs$/i }),
+    ).toBeDisabled();
+    await user.click(
+      within(blockedImportDialog).getByRole("button", {
+        name: /close import logs/i,
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: /api connection settings/i }));
+    let dialog = await screen.findByRole("dialog", { name: /api connection/i });
+    let tokenInput = within(dialog).getByLabelText("Session bearer token");
+
+    expect(within(dialog).getByRole("alert")).toHaveTextContent(
+      /enter the bearer token/i,
+    );
+    await user.type(tokenInput, "wrong-token");
+    await user.click(within(dialog).getByRole("button", { name: /sign in/i }));
+
+    await waitFor(() => {
+      expect(within(dialog).getByRole("alert")).toHaveTextContent(
+        /token was rejected/i,
+      );
+    });
+
+    await user.type(tokenInput, acceptedToken);
+    await user.click(
+      within(dialog).getByRole("button", { name: /replace token/i }),
+    );
+
+    await waitFor(() => {
+      expect(
+        within(dialog).getByText(/authenticated for this browser session/i),
+      ).toBeInTheDocument();
+    });
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        const url = String(input);
+        return (
+          url.endsWith("/models") &&
+          new Headers(init?.headers).get("Authorization") ===
+            "Bearer first-hosted-token"
+        );
+      }),
+    ).toBe(true);
+
+    await user.click(
+      within(dialog).getByRole("button", {
+        name: /close api connection settings/i,
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: /import logs/i }));
+    const importDialog = await screen.findByRole("dialog", { name: /import logs/i });
+    const fileInput = within(importDialog).getByLabelText(/log archive zip file/i);
+    await waitFor(() => expect(fileInput).toBeEnabled());
+    await user.upload(
+      fileInput,
+      new File(["zip"], "protected.zip", { type: "application/zip" }),
+    );
+    await user.click(
+      within(importDialog).getByRole("button", { name: /^import logs$/i }),
+    );
+
+    await waitFor(() => expect(logImportRequests).toHaveLength(1));
+    expect(
+      new Headers(logImportRequests[0]?.headers).get("Authorization"),
+    ).toBe("Bearer first-hosted-token");
+    await user.click(
+      within(importDialog).getByRole("button", { name: /close import logs/i }),
+    );
+
+    acceptedToken = "second-hosted-token";
+    await user.click(screen.getByRole("button", { name: /api connection settings/i }));
+    dialog = await screen.findByRole("dialog", { name: /api connection/i });
+    tokenInput = within(dialog).getByLabelText("Session bearer token");
+    const requestCountBeforeReplacement = fetchMock.mock.calls.length;
+    await user.type(tokenInput, acceptedToken);
+    await user.click(
+      within(dialog).getByRole("button", { name: /replace token/i }),
+    );
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls
+          .slice(requestCountBeforeReplacement)
+          .some(([input, init]) => {
+            const url = String(input);
+            return (
+              url.endsWith("/models") &&
+              new Headers(init?.headers).get("Authorization") ===
+                "Bearer second-hosted-token"
+            );
+          }),
+      ).toBe(true);
+    });
+
+    const requestCountBeforeLogout = fetchMock.mock.calls.length;
+    await user.click(within(dialog).getByRole("button", { name: /log out/i }));
+
+    await waitFor(() => {
+      expect(within(dialog).getByRole("alert")).toHaveTextContent(
+        /enter the bearer token/i,
+      );
+    });
+    expect(
+      fetchMock.mock.calls
+        .slice(requestCountBeforeLogout)
+        .some(([input]) => String(input).endsWith("/models")),
+    ).toBe(false);
   });
 
   it("renders flat header action buttons in order in the top nav", async () => {
@@ -378,7 +561,10 @@ describe("WorkbenchApp Overview", () => {
 
   it("imports a selected zip through the configured API base URL", async () => {
     const user = userEvent.setup();
-    setWorkbenchApiBaseUrl("https://api.example.test/workbench");
+    window.localStorage.setItem(
+      WORKBENCH_API_BASE_URL_STORAGE_KEY,
+      "https://api.example.test/workbench",
+    );
     const { fetchMock, logImportRequests } = installFetchMock({
       capabilitiesResponse: {
         ...capabilitiesResponse,
@@ -520,7 +706,29 @@ describe("WorkbenchApp Overview", () => {
   it("uses and resets a runtime API URL from the existing connection dialog", async () => {
     const user = userEvent.setup();
     const { fetchMock } = installFetchMock();
+    const defaultFetch = fetchMock.getMockImplementation();
+    const nextCapabilities = deferred<Response>();
+    fetchMock.mockImplementation((input, init) => {
+      if (
+        String(input) ===
+        "https://api.example.test/workbench/capabilities"
+      ) {
+        return nextCapabilities.promise;
+      }
+      if (!defaultFetch) {
+        throw new Error("Expected default fetch mock implementation");
+      }
+      return defaultFetch(input, init);
+    });
     renderWorkbench();
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(
+          ([url]) => String(url) === "http://127.0.0.1:9999/inspect",
+        ),
+      ).toBe(true);
+    });
 
     await user.click(screen.getByRole("button", { name: /api connection settings/i }));
 
@@ -550,6 +758,22 @@ describe("WorkbenchApp Overview", () => {
           ([url]) => String(url) === "https://api.example.test/workbench/health",
         ),
       ).toBe(true);
+      expect(
+        fetchMock.mock.calls.some(
+          ([url]) =>
+            String(url) ===
+            "https://api.example.test/workbench/capabilities",
+        ),
+      ).toBe(true);
+    });
+    expect(
+      fetchMock.mock.calls.some(
+        ([url]) => String(url) === "https://api.example.test/workbench/inspect",
+      ),
+    ).toBe(false);
+
+    nextCapabilities.resolve(jsonResponse(capabilitiesResponse));
+    await waitFor(() => {
       expect(
         fetchMock.mock.calls.some(
           ([url]) => String(url) === "https://api.example.test/workbench/inspect",
@@ -600,8 +824,31 @@ describe("WorkbenchApp Overview", () => {
     await user.click(within(dialog).getByRole("button", { name: /^use$/i }));
 
     expect(within(dialog).getByRole("alert")).toHaveTextContent(
-      /without a query string or fragment/i,
+      /without credentials, query, or fragment/i,
     );
+    expect(window.localStorage.getItem(WORKBENCH_API_BASE_URL_STORAGE_KEY)).toBeNull();
+    expect(fetchMock.mock.calls).toHaveLength(requestCount);
+  });
+
+  it("restores the authoritative API URL after same-identity Use and Reset", async () => {
+    const user = userEvent.setup();
+    const { fetchMock } = installFetchMock();
+    renderWorkbench();
+
+    await user.click(screen.getByRole("button", { name: /api connection settings/i }));
+    const dialog = await screen.findByRole("dialog", { name: /api connection/i });
+    const input = within(dialog).getByLabelText("API base URL");
+    const requestCount = fetchMock.mock.calls.length;
+
+    await user.clear(input);
+    await user.type(input, " http://127.0.0.1:9999/// ");
+    await user.click(within(dialog).getByRole("button", { name: /^use$/i }));
+    expect(input).toHaveValue("http://127.0.0.1:9999");
+
+    await user.clear(input);
+    await user.type(input, "https://unapplied.example.test");
+    await user.click(within(dialog).getByRole("button", { name: /^reset$/i }));
+    expect(input).toHaveValue("http://127.0.0.1:9999");
     expect(window.localStorage.getItem(WORKBENCH_API_BASE_URL_STORAGE_KEY)).toBeNull();
     expect(fetchMock.mock.calls).toHaveLength(requestCount);
   });
@@ -838,7 +1085,7 @@ describe("WorkbenchApp Overview", () => {
     const snapshotControl = await screen.findByRole("combobox", {
       name: /^snapshot$/i,
     });
-    expect(snapshotControl).toHaveTextContent("Wide snapshot");
+    expect(snapshotControl).toHaveTextContent("Select snapshot");
 
     await user.click(snapshotControl);
     const snapshotOptions = await screen.findByRole("listbox", {
@@ -973,12 +1220,13 @@ describe("WorkbenchApp Overview", () => {
       expect(screen.getByRole("radio", { name: "Snapshots" })).toBeEnabled(),
     );
     await user.click(screen.getByRole("radio", { name: "Snapshots" }));
-    expect(await screen.findByRole("combobox", { name: /^snapshot$/i }))
+    await selectTargetOption(user, "snapshot", "Bert snapshot");
+    expect(screen.getByRole("combobox", { name: /^snapshot$/i }))
       .toHaveTextContent("Bert snapshot");
-	    await waitFor(() => {
-	      expect(readPersistedTargetSelection()).toMatchObject({
-	        selectedModelType: "bert",
-	        selectedModel: "linear",
+    await waitFor(() => {
+      expect(readPersistedTargetSelection()).toMatchObject({
+        selectedModelType: "bert",
+        selectedModel: "linear",
         selectedPreset: "bert-baseline",
         selectedTargetMode: "snapshot",
         selectedSnapshotId: "bert-wide",
@@ -991,8 +1239,10 @@ describe("WorkbenchApp Overview", () => {
 
     expect(await waitForTargetValue("model", "linear"))
       .toHaveTextContent("linear");
-    expect(screen.getByRole("radio", { name: "Snapshots" }))
-      .toHaveAttribute("aria-checked", "true");
+    await waitFor(() =>
+      expect(screen.getByRole("radio", { name: "Snapshots" }))
+        .toHaveAttribute("aria-checked", "true"),
+    );
     expect(await screen.findByRole("combobox", { name: /^snapshot$/i }))
       .toHaveTextContent("Bert snapshot");
     await waitFor(() => {
@@ -1007,7 +1257,7 @@ describe("WorkbenchApp Overview", () => {
     });
   });
 
-  it("switches from a snapshot target back to Presets with empty overrides", async () => {
+  it("browses Presets without replacing a snapshot until a preset is selected", async () => {
     const { inspectBodies } = installFetchMock({
       configSnapshotsResponse: {
         modelType: "linears",
@@ -1031,6 +1281,7 @@ describe("WorkbenchApp Overview", () => {
 
     await waitForTargetValue("preset", "baseline");
     await user.click(screen.getByRole("radio", { name: "Snapshots" }));
+    await selectTargetOption(user, "snapshot", "Wide snapshot");
     await waitFor(() => {
       expect(inspectBodies.at(-1)).toEqual({
         modelType: "linears",
@@ -1042,8 +1293,15 @@ describe("WorkbenchApp Overview", () => {
       });
     });
 
+    const snapshotRequestCount = inspectBodies.length;
     await user.click(screen.getByRole("radio", { name: "Presets" }));
+    expect(inspectBodies).toHaveLength(snapshotRequestCount);
+    expect(screen.getByRole("combobox", { name: /^preset$/i }))
+      .toHaveTextContent("Select preset");
+    expect(screen.queryByRole("combobox", { name: /^snapshot$/i }))
+      .not.toBeInTheDocument();
 
+    await selectTargetOption(user, "preset", "baseline");
     await waitFor(() => {
       expect(inspectBodies.at(-1)).toEqual({
         modelType: "linears",
@@ -1054,10 +1312,6 @@ describe("WorkbenchApp Overview", () => {
         overrides: {},
       });
     });
-    expect(screen.getByRole("combobox", { name: /^preset$/i }))
-      .toHaveTextContent("baseline");
-    expect(screen.queryByRole("combobox", { name: /^snapshot$/i }))
-      .not.toBeInTheDocument();
   });
 
   it("refreshes snapshot options when the selected model changes", async () => {
@@ -1104,7 +1358,7 @@ describe("WorkbenchApp Overview", () => {
     const snapshotControl = await screen.findByRole("combobox", {
       name: /^snapshot$/i,
     });
-    expect(snapshotControl).toHaveTextContent("Bert snapshot");
+    expect(snapshotControl).toHaveTextContent("Select snapshot");
 
     await user.click(snapshotControl);
     const snapshotOptions = await screen.findByRole("listbox", {
@@ -1134,7 +1388,7 @@ describe("WorkbenchApp Overview", () => {
     const trigger = screen.getByRole("button", {
       name: /training command for preset/i,
     });
-    expect(trigger).toBeEnabled();
+    await waitFor(() => expect(trigger).toBeEnabled());
 
     await user.click(trigger);
 
@@ -1235,7 +1489,8 @@ describe("WorkbenchApp Overview", () => {
 
     await waitForTargetValue("preset", "baseline");
     await user.click(screen.getByRole("radio", { name: "Snapshots" }));
-    expect(await screen.findByRole("combobox", { name: /^snapshot$/i }))
+    await selectTargetOption(user, "snapshot", "Wide snapshot");
+    expect(screen.getByRole("combobox", { name: /^snapshot$/i }))
       .toHaveTextContent("Wide snapshot");
 
     const trigger = screen.getByRole("button", {

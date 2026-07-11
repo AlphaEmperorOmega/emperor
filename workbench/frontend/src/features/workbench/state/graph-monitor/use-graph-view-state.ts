@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type GraphNode, type InspectResponse } from "@/lib/api";
 import {
   type GraphDetailMode,
@@ -35,6 +35,10 @@ type GraphViewStateOptions = {
   resolveMonitorTarget?: (node: GraphNode) => GraphNode | undefined;
   resolveParameterActivityTarget?: (node: GraphNode) => GraphNode | undefined;
   parameterActivityByNodePath?: Map<string, GraphParameterActivity>;
+  inspectionTransition?: {
+    revision: number;
+    cause: "target-changed" | "inspection-refreshed";
+  };
 };
 
 export function useGraphViewState(
@@ -47,6 +51,7 @@ export function useGraphViewState(
     resolveMonitorTarget,
     resolveParameterActivityTarget,
     parameterActivityByNodePath,
+    inspectionTransition,
   } = options;
   const [graphDetailMode, setGraphDetailMode] = useState<GraphDetailMode>("basic");
   const [graphScope, setGraphScope] = useState<GraphScope>("opened");
@@ -390,6 +395,17 @@ export function useGraphViewState(
     setCluster3dNodeId(null);
     resetGraphExpansion();
   }, [resetGraphExpansion]);
+  const appliedInspectionTransitionRevisionRef = useRef(
+    inspectionTransition?.revision ?? 0,
+  );
+  useEffect(() => {
+    const revision = inspectionTransition?.revision ?? 0;
+    if (revision === appliedInspectionTransitionRevisionRef.current) {
+      return;
+    }
+    appliedInspectionTransitionRevisionRef.current = revision;
+    resetGraphSelectionAndExpansion();
+  }, [inspectionTransition, resetGraphSelectionAndExpansion]);
 
   return {
     graphDetailMode,
@@ -409,7 +425,6 @@ export function useGraphViewState(
     revealGraphNode,
     revealGraphNodeInFull,
     collapseGraphNodes,
-    resetGraphExpansion,
-    resetGraphSelectionAndExpansion,
+    clearForConnectionChange: resetGraphSelectionAndExpansion,
   };
 }

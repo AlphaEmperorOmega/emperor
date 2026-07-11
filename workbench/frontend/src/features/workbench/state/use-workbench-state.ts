@@ -1,50 +1,37 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import {
-  useGraphPreviewController,
   useGraphPreviewOrchestration,
 } from "@/features/workbench/state/graph-monitor/use-graph-preview-orchestration";
 import {
-  useTargetConfigState,
-} from "@/features/workbench/state/target/use-target-config-state";
+  useModelPackageInspectionState,
+} from "@/features/workbench/state/target/use-model-package-inspection-state";
 import {
   useHistoricalRunsState,
   useHistoricalRunSelectionState,
 } from "@/features/workbench/state/use-historical-runs-state";
-import {
-  useActiveTrainingJobState,
-} from "@/features/workbench/state/training/use-active-training-job-state";
-import {
-  useWorkbenchApiConnectionSwitch,
-} from "@/features/workbench/state/use-workbench-api-connection";
+import { type TrainingJob } from "@/lib/api";
 import { type WorkbenchWorkspace } from "@/types/workbench";
 
-type GraphPreviewControllerState = ReturnType<typeof useGraphPreviewController>;
-type TargetConfigState = ReturnType<typeof useTargetConfigState>;
+type ModelPackageInspectionState = ReturnType<
+  typeof useModelPackageInspectionState
+>;
 type HistoricalRunSelectionState = ReturnType<
   typeof useHistoricalRunSelectionState
 >;
 type HistoricalRunsState = ReturnType<typeof useHistoricalRunsState>;
-type ActiveTrainingJobState = ReturnType<typeof useActiveTrainingJobState>;
-
 export type WorkbenchStateOptions = {
-  /** Notifies the logs workspace when a training job starts writing to a folder. */
-  onJobStarted?: (logFolder: string) => void;
   activeWorkspace?: WorkbenchWorkspace;
-  snapshotLibraryEnabled?: boolean;
+  activeTrainingJob?: TrainingJob;
+  protectedReadsEnabled?: boolean;
 };
 
-function targetConfigCascadeRules(
-  graphPreview: GraphPreviewControllerState,
+function modelPackageInspectionCascadeRules(
   historicalRunSelection: HistoricalRunSelectionState,
-): Parameters<typeof useTargetConfigState>[0] {
+): Parameters<typeof useModelPackageInspectionState>[0] {
   const clearHistoricalSelection =
     historicalRunSelection.clearHistoricalSelectionForTarget;
 
   return {
-    requestPreview: graphPreview.requestPreview,
-    clearPreview: graphPreview.clearPreview,
-    resetGraphSelectionAndExpansion: graphPreview.resetGraphSelectionAndExpansion,
-    resetGraphExpansion: graphPreview.resetGraphExpansion,
     onModelSelected: clearHistoricalSelection,
     onTargetPresetSelected: clearHistoricalSelection,
     onTargetSnapshotSelected: clearHistoricalSelection,
@@ -52,50 +39,23 @@ function targetConfigCascadeRules(
 }
 
 function graphPreviewCompositionInput({
-  graphPreview,
-  targetConfig,
+  inspectionState,
   historicalRuns,
-  activeTrainingJobState,
+  activeTrainingJob,
+  protectedReadsEnabled,
 }: {
-  graphPreview: GraphPreviewControllerState;
-  targetConfig: TargetConfigState;
+  inspectionState: ModelPackageInspectionState;
   historicalRuns: HistoricalRunsState;
-  activeTrainingJobState: ActiveTrainingJobState;
+  activeTrainingJob: TrainingJob | undefined;
+  protectedReadsEnabled: boolean;
 }): Parameters<typeof useGraphPreviewOrchestration>[0] {
-  const { selectedModel, selectedPreset, selectedDatasets } = targetConfig.selection;
-  const {
-    selectedModelType,
-    selectedTargetMode,
-    selectedSnapshotId,
-    selectedExperimentRunId,
-    selectedExperimentPreset,
-    selectedExperimentDataset,
-  } = targetConfig.target;
+  const target = inspectionState.contexts.model.target;
   const historicalGraphPreview = historicalRuns.graphPreview;
-  const targetMode =
-    selectedTargetMode === "snapshot" && selectedSnapshotId
-      ? "snapshot"
-      : selectedTargetMode === "experiment"
-        ? "experiment"
-        : "preset";
-  const targetId =
-    targetMode === "snapshot"
-      ? selectedSnapshotId
-      : targetMode === "experiment"
-        ? selectedExperimentRunId
-        : selectedPreset;
-  const targetPreset =
-    targetMode === "experiment" && selectedExperimentPreset
-      ? selectedExperimentPreset
-      : selectedPreset;
-  const targetDatasets =
-    targetMode === "experiment" && selectedExperimentDataset
-      ? [selectedExperimentDataset]
-      : selectedDatasets;
 
   return {
-    controller: graphPreview,
-    activeTrainingJob: activeTrainingJobState.activeTrainingJob,
+    inspection: inspectionState.inspection,
+    activeTrainingJob,
+    protectedReadsEnabled,
     historicalMonitorRuns: historicalGraphPreview.historicalMonitorRuns,
     selectedHistoricalExperiment:
       historicalGraphPreview.selectedHistoricalExperiment,
@@ -103,12 +63,8 @@ function graphPreviewCompositionInput({
     selectedHistoricalPreset: historicalGraphPreview.selectedHistoricalRunPreset,
     logRunTags: historicalGraphPreview.logRunTags,
     filteredHistoricalRunIds: historicalGraphPreview.filteredHistoricalRunIds,
-    targetModelType: selectedModelType,
-    targetModel: selectedModel,
-    targetPreset,
-    targetDatasets,
-    targetMode,
-    targetId,
+    targetPreset: target.preset,
+    targetDatasets: target.datasets,
   };
 }
 
@@ -118,55 +74,71 @@ function graphPreviewCompositionInput({
  */
 export function useWorkbenchState(options: WorkbenchStateOptions = {}) {
   const {
-    onJobStarted,
     activeWorkspace = "model",
-    snapshotLibraryEnabled = false,
+    activeTrainingJob,
+    protectedReadsEnabled = true,
   } = options;
 
-  const graphPreview = useGraphPreviewController();
   const historicalRunSelection = useHistoricalRunSelectionState();
   const cascadeRules = useMemo(
-    () => targetConfigCascadeRules(graphPreview, historicalRunSelection),
-    [graphPreview, historicalRunSelection],
+    () => modelPackageInspectionCascadeRules(historicalRunSelection),
+    [historicalRunSelection],
   );
 
-  const targetConfig = useTargetConfigState({
+  const inspectionState = useModelPackageInspectionState({
     ...cascadeRules,
-    activeWorkspace,
-    snapshotLibraryEnabled,
+    protectedReadsEnabled,
   });
-  const { selectedModel } = targetConfig.selection;
-  const { selectedExperimentTask, selectedModelType } = targetConfig.target;
+  const modelPackageInspection = inspectionState.contexts.model;
+  const { browser, target } = modelPackageInspection;
+  const selectedModel = browser.selectedModel;
+  const selectedModelType = browser.selectedModelType;
+  const selectedExperimentTask = browser.selectedExperimentTask;
+  const selectedTargetBrowserMode = browser.mode;
 
-  const activeTrainingJobState = useActiveTrainingJobState({ onJobStarted });
   const historicalTagsEnabled =
-    targetConfig.target.selectedTargetMode === "experiment" ||
+    selectedTargetBrowserMode === "experiment" ||
+    target.kind === "historical-run" ||
     historicalRunSelection.selectedLogRunId !== null;
   const historicalRunsEnabled =
     activeWorkspace === "logs" ||
-    targetConfig.target.selectedTargetMode === "experiment";
+    selectedTargetBrowserMode === "experiment" ||
+    target.kind === "historical-run";
   const historicalRuns = useHistoricalRunsState({
     selectedModelType,
     selectedModel,
     selectedExperimentTask,
-    runsEnabled: historicalRunsEnabled,
-    tagsEnabled: historicalTagsEnabled,
-    syncSelectedLogRun: targetConfig.syncSelectedLogRun,
-    clearSelectedExperimentRun: targetConfig.clearSelectedExperimentRun,
+    runsEnabled: protectedReadsEnabled && historicalRunsEnabled,
+    tagsEnabled: protectedReadsEnabled && historicalTagsEnabled,
+    syncSelectedLogRun: inspectionState.selectHistoricalRunTarget,
     selection: historicalRunSelection,
   });
-  const apiConnection = useWorkbenchApiConnectionSwitch(graphPreview);
   const graphPreviewInput = useMemo(
     () =>
       graphPreviewCompositionInput({
-        graphPreview,
-        targetConfig,
+        inspectionState,
         historicalRuns,
-        activeTrainingJobState,
+        activeTrainingJob,
+        protectedReadsEnabled,
       }),
-    [activeTrainingJobState, graphPreview, historicalRuns, targetConfig],
+    [
+      activeTrainingJob,
+      historicalRuns,
+      inspectionState,
+      protectedReadsEnabled,
+    ],
   );
   const graphPreviewState = useGraphPreviewOrchestration(graphPreviewInput);
+  const clearGraphForConnectionChange = graphPreviewState.clearForConnectionChange;
+  const clearForConnectionChange = useCallback(() => {
+    historicalRunSelection.clearHistoricalSelectionForTarget();
+    clearGraphForConnectionChange();
+    inspectionState.inspection.clearForConnectionChange();
+  }, [
+    clearGraphForConnectionChange,
+    historicalRunSelection,
+    inspectionState.inspection,
+  ]);
 
   const history = useMemo(
     () => ({
@@ -179,33 +151,27 @@ export function useWorkbenchState(options: WorkbenchStateOptions = {}) {
       historicalRuns.history,
     ],
   );
-  const activeJob = activeTrainingJobState;
   const graphMonitor = graphPreviewState.graphMonitor;
 
   return useMemo(
     () => ({
-      target: targetConfig.target,
+      targetContexts: inspectionState.contexts,
       graph: graphPreviewState.graph,
       history,
-      activeJob,
       graphMonitor,
-      apiConnection,
+      clearForConnectionChange,
     }),
     [
-      activeJob,
-      apiConnection,
+      clearForConnectionChange,
       graphMonitor,
       graphPreviewState.graph,
       history,
-      targetConfig.target,
+      inspectionState.contexts,
     ],
   );
 }
 
 export type WorkbenchState = ReturnType<typeof useWorkbenchState>;
-export type TargetConfigContextValue = WorkbenchState["target"];
 export type GraphViewContextValue = WorkbenchState["graph"];
 export type HistoricalRunsContextValue = WorkbenchState["history"];
-export type ActiveTrainingJobContextValue = WorkbenchState["activeJob"];
 export type GraphMonitorContextValue = WorkbenchState["graphMonitor"];
-export type ApiConnectionContextValue = WorkbenchState["apiConnection"];

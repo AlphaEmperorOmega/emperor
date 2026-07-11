@@ -25,7 +25,6 @@ type HistoricalRunSelectionState = {
   setSelectedHistoricalPreset: (preset: string) => void;
   setSelectedLogRunId: Dispatch<SetStateAction<string | null>>;
   clearHistoricalSelectionForTarget: () => void;
-  selectLogRun: (runId: string) => void;
 };
 
 type HistoricalRunsStateInput = {
@@ -35,12 +34,10 @@ type HistoricalRunsStateInput = {
   runsEnabled?: boolean;
   tagsEnabled?: boolean;
   syncSelectedLogRun: (selectedLogRun: LogRun) => void;
-  clearSelectedExperimentRun: () => void;
   selection: HistoricalRunSelectionState;
 };
 
 type HistoricalRunsProviderSlice = {
-  visibleHistoricalRuns: LogRun[];
   historicalMonitorRuns: LogRun[];
   historicalExperimentOptions: ReturnType<
     typeof deriveDatasetSelectionState
@@ -62,10 +59,7 @@ type HistoricalRunsProviderSlice = {
   selectedHistoricalRunPreset: string;
   selectedLogRunId: string | null;
   selectedLogRun?: LogRun;
-  selectLogRun: (runId: string) => void;
   logRunTagsLoading: boolean;
-  experimentsLoading: boolean;
-  experimentsError: Error | null;
   selectedLogRunMonitorEligibility:
     ReturnType<typeof deriveDatasetSelectionState>["selectedLogRunMonitorEligibility"];
 };
@@ -139,10 +133,6 @@ export function useHistoricalRunSelectionState(): HistoricalRunSelectionState {
     [selectedHistoricalPreset],
   );
 
-  const selectLogRun = useCallback((runId: string) => {
-    setSelectedLogRunId((current) => (current === runId ? current : runId));
-  }, []);
-
   return useMemo(
     () => ({
       selectedLogRunId,
@@ -154,11 +144,9 @@ export function useHistoricalRunSelectionState(): HistoricalRunSelectionState {
       setSelectedHistoricalPreset: setSelectedHistoricalPresetFilter,
       setSelectedLogRunId,
       clearHistoricalSelectionForTarget,
-      selectLogRun,
     }),
     [
       clearHistoricalSelectionForTarget,
-      selectLogRun,
       selectedHistoricalDatasetFilter,
       selectedHistoricalExperimentFilter,
       selectedHistoricalPreset,
@@ -177,7 +165,6 @@ export function useHistoricalRunsState({
   runsEnabled = true,
   tagsEnabled = true,
   syncSelectedLogRun,
-  clearSelectedExperimentRun,
   selection,
 }: HistoricalRunsStateInput): HistoricalRunsState {
   const {
@@ -189,7 +176,6 @@ export function useHistoricalRunsState({
     selectedHistoricalPreset,
     setSelectedHistoricalPreset,
     setSelectedLogRunId,
-    selectLogRun,
   } = selection;
 
   const logRunFilters = useMemo(
@@ -404,12 +390,6 @@ export function useHistoricalRunsState({
   ]);
 
   useEffect(() => {
-    if (selectedLogRunId === null) {
-      clearSelectedExperimentRun();
-    }
-  }, [clearSelectedExperimentRun, selectedLogRunId]);
-
-  useEffect(() => {
     if (!selectedModel || !selectedLogRun) {
       return;
     }
@@ -418,7 +398,6 @@ export function useHistoricalRunsState({
 
   const history = useMemo(
     () => ({
-      visibleHistoricalRuns,
       historicalMonitorRuns,
       historicalExperimentOptions,
       historicalDatasetOptions,
@@ -434,10 +413,7 @@ export function useHistoricalRunsState({
       selectedHistoricalRunPreset,
       selectedLogRunId,
       selectedLogRun,
-      selectLogRun,
       logRunTagsLoading: logRunTagsQuery.isLoading,
-      experimentsLoading: logRunsQuery.isLoading,
-      experimentsError: logRunsQuery.error,
       selectedLogRunMonitorEligibility,
     }),
     [
@@ -446,9 +422,6 @@ export function useHistoricalRunsState({
       historicalExperimentOptions,
       historicalPresetOptions,
       logRunTagsQuery.isLoading,
-      logRunsQuery.error,
-      logRunsQuery.isLoading,
-      selectLogRun,
       selectedHistoricalDatasetFilter,
       selectedHistoricalDataset,
       selectedHistoricalExperimentFilter,
@@ -461,7 +434,6 @@ export function useHistoricalRunsState({
       setSelectedHistoricalDatasetFilter,
       setSelectedHistoricalExperimentFilter,
       setSelectedHistoricalPreset,
-      visibleHistoricalRuns,
     ],
   );
   const graphPreview = useMemo(

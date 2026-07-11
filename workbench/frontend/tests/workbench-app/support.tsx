@@ -3,10 +3,8 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, vi } from "vitest";
 import { WorkbenchApp } from "@/features/workbench/components/workbench-app";
-import {
-  clearPersistedTargetSelection,
-} from "@/features/workbench/state/target/target-selection-storage";
-import { resetWorkbenchApiBaseUrl, type Capabilities } from "@/lib/api";
+import { type Capabilities } from "@/lib/api";
+import { loadWorkbenchConnectionRuntime } from "@/lib/api/_connection-runtime";
 import type { GraphParameterActivity } from "@/lib/graph";
 export { IMPLEMENTED_FEATURES } from "@/lib/feature-catalog";
 
@@ -2910,7 +2908,10 @@ export function installFetchMock(
       Partial<Omit<MockLogRunArtifacts, "runId">>
     >;
     deleteLogExperimentError?: string;
+    deleteLogRunPlanError?: string;
+    deleteLogRunPlanErrorFactory?: (requestIndex: number) => string | undefined;
     deleteLogRunsError?: string;
+    deleteLogRunsErrorFactory?: (requestIndex: number) => string | undefined;
     deleteLogRunsBlockers?: Array<{ id: string; logFolder: string; status: string }>;
     logImportError?: string;
     logImportResponse?: {
@@ -2943,6 +2944,11 @@ export function installFetchMock(
       context: { runIds: string[] },
     ) => unknown | Promise<unknown>;
     trainingJobStatus?: MockTrainingJobStatus;
+    trainingRunPlanResponseFactory?: (
+      request: MockTrainingPlanRequest,
+      requestIndex: number,
+      defaultPlan: ReturnType<typeof mockTrainingRunPlan>,
+    ) => unknown | Promise<unknown>;
     trainingJobResponseFactory?: (
       requestIndex: number,
     ) => unknown | Promise<unknown>;
@@ -2965,6 +2971,7 @@ export function installFetchMock(
 ) {
   const inspectBodies: unknown[] = [];
   const trainingBodies: unknown[] = [];
+  let trainingRunPlanRequestCount = 0;
   let trainingJobPollRequestCount = 0;
   const logScalarRequests: Array<{
     runIds: string[];
@@ -3422,7 +3429,17 @@ export function installFetchMock(
     }
     if (url.endsWith("/training/run-plan")) {
       const request = JSON.parse(String(init?.body)) as MockTrainingPlanRequest;
-      return jsonResponse(mockTrainingRunPlan(request));
+      const defaultPlan = mockTrainingRunPlan(request);
+      const requestIndex = trainingRunPlanRequestCount;
+      trainingRunPlanRequestCount += 1;
+      const responseBody = options.trainingRunPlanResponseFactory
+        ? options.trainingRunPlanResponseFactory(
+            request,
+            requestIndex,
+            defaultPlan,
+          )
+        : defaultPlan;
+      return Promise.resolve(responseBody).then((body) => jsonResponse(body));
     }
     if (url.endsWith("/inspect")) {
       const inspectRequest = JSON.parse(String(init?.body)) as {
@@ -3562,8 +3579,15 @@ export function installFetchMock(
 	        models: MockModelIdentity[];
 	        presets: string[];
 	        runIds: string[];
-	      };
+      };
       deleteRunPlanRequests.push(body);
+      const planError =
+        options.deleteLogRunPlanErrorFactory?.(
+          deleteRunPlanRequests.length - 1,
+        ) ?? options.deleteLogRunPlanError;
+      if (planError) {
+        return jsonResponse({ detail: planError }, 400);
+      }
       return jsonResponse(deletePlanPayload(body));
     }
     if (url.endsWith("/logs/runs/delete")) {
@@ -3573,10 +3597,13 @@ export function installFetchMock(
 	        models: MockModelIdentity[];
 	        presets: string[];
 	        runIds: string[];
-	      };
+      };
       deleteRunRequests.push(body);
-      if (options.deleteLogRunsError) {
-        return jsonResponse({ detail: options.deleteLogRunsError }, 400);
+      const deleteError =
+        options.deleteLogRunsErrorFactory?.(deleteRunRequests.length - 1) ??
+        options.deleteLogRunsError;
+      if (deleteError) {
+        return jsonResponse({ detail: deleteError }, 400);
       }
       const plan = deletePlanPayload(body);
       if (!plan.canDelete) {
@@ -3908,11 +3935,12 @@ export function renderWorkbench() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   });
-  return render(
+  const rendered = render(
     <QueryClientProvider client={queryClient}>
       <WorkbenchApp />
     </QueryClientProvider>,
   );
+  return { ...rendered, queryClient };
 }
 
 export async function waitForOpenFullConfigButton(
@@ -3936,6 +3964,7 @@ type TargetDropdownLabel =
   | "model type"
   | "model"
   | "preset"
+  | "snapshot"
   | "experiment"
   | "dataset";
 
@@ -4398,10 +4427,10 @@ export let scrollIntoViewMock: ReturnType<typeof vi.fn>;
 
 export function resetWorkbenchAppTestState() {
   vi.restoreAllMocks();
-  resetWorkbenchApiBaseUrl();
-  clearPersistedTargetSelection();
   try {
     window.localStorage?.clear?.();
+    window.sessionStorage?.clear?.();
+    loadWorkbenchConnectionRuntime();
   } catch {
     // Storage cleanup is best-effort in test environments.
   }

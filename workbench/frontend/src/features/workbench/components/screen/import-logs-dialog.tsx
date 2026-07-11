@@ -1,6 +1,7 @@
 import {
   type ChangeEvent,
   type FormEvent,
+  useCallback,
   useMemo,
   useRef,
   useState,
@@ -16,7 +17,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import { DialogShell } from "@/features/workbench/components/shared/dialog-shell";
-import { useTargetCatalog } from "@/features/workbench/providers/workbench-providers";
+import {
+  useRegisterWorkbenchConnectionReset,
+  useWorkbenchCapabilities,
+  isWorkbenchProtectedAccessReady,
+  useWorkbenchConnection,
+} from "@/features/workbench/providers/workbench-connection-provider";
 import { useLogQueryCache } from "@/features/workbench/state/logs/use-log-query-cache";
 import { importLogArchive, type LogArchiveImportResponse } from "@/lib/api";
 
@@ -37,7 +43,7 @@ function formatFileSize(size: number) {
 
 const logImportsDisabledMessage = "Log imports are disabled by this backend.";
 const logImportsDisabledHint =
-  "For local project uploads, use the local backend defaults or set WORKBENCH_API_ALLOW_LOG_IMPORTS=true before starting the backend.";
+  "Log imports require explicit backend opt-in. Set WORKBENCH_API_ALLOW_LOG_IMPORTS=true before starting the backend.";
 
 function messageFromImportError(error: unknown) {
   if (!(error instanceof Error)) {
@@ -72,14 +78,32 @@ function successMessage(result: LogArchiveImportResponse) {
 }
 
 export function ImportLogsDialog({ onClose }: { onClose: () => void }) {
-  const { capabilities } = useTargetCatalog();
+  const { capabilities } = useWorkbenchCapabilities();
+  const workbenchConnection = useWorkbenchConnection();
   const logQueryCache = useLogQueryCache();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<LogArchiveImportResponse | null>(null);
-  const uploadsEnabled = capabilities.uploadsEnabled;
+  const operationGenerationRef = useRef(0);
+  const uploadControllerRef = useRef<AbortController | null>(null);
+  const clearForConnectionChange = useCallback(() => {
+    operationGenerationRef.current += 1;
+    uploadControllerRef.current?.abort();
+    uploadControllerRef.current = null;
+    setSelectedFile(null);
+    setIsImporting(false);
+    setError(null);
+    setResult(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }, []);
+  useRegisterWorkbenchConnectionReset(clearForConnectionChange);
+  const uploadsEnabled =
+    capabilities.uploadsEnabled &&
+    isWorkbenchProtectedAccessReady(workbenchConnection);
   const maxUploadSize = capabilities.maxUploadSize;
 
   const selectedFileTooLarge = useMemo(
@@ -139,8 +163,16 @@ export function ImportLogsDialog({ onClose }: { onClose: () => void }) {
     setIsImporting(true);
     setError(null);
     setResult(null);
+    const operationGeneration = operationGenerationRef.current;
+    const uploadController = new AbortController();
+    uploadControllerRef.current = uploadController;
     try {
-      const importResult = await importLogArchive(selectedFile);
+      const importResult = await importLogArchive(selectedFile, {
+        signal: uploadController.signal,
+      });
+      if (operationGenerationRef.current !== operationGeneration) {
+        return;
+      }
       setResult(importResult);
       setSelectedFile(null);
       if (fileInputRef.current) {
@@ -148,9 +180,14 @@ export function ImportLogsDialog({ onClose }: { onClose: () => void }) {
       }
       void logQueryCache.refreshAfterMutation();
     } catch (caughtError) {
-      setError(messageFromImportError(caughtError));
+      if (operationGenerationRef.current === operationGeneration) {
+        setError(messageFromImportError(caughtError));
+      }
     } finally {
-      setIsImporting(false);
+      if (operationGenerationRef.current === operationGeneration) {
+        uploadControllerRef.current = null;
+        setIsImporting(false);
+      }
     }
   };
 

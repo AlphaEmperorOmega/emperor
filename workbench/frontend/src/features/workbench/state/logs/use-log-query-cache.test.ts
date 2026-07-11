@@ -11,7 +11,7 @@ import {
   LOG_RUNS_QUERY_KEY,
   LOG_SCALARS_QUERY_KEY,
   LOG_TAGS_QUERY_KEY,
-} from "@/features/workbench/state/logs/use-log-queries";
+} from "@/lib/query-keys";
 
 function renderLogQueryCache() {
   const client = new QueryClient({
@@ -84,21 +84,44 @@ describe("useLogQueryCache", () => {
     expect(removeSpy).not.toHaveBeenCalled();
   });
 
-  it("removes only affected scalar-family caches when a run id is supplied", () => {
+  it("marks every Logs query family stale through one semantic refresh", async () => {
+    const { invalidateSpy, removeSpy, result } = renderLogQueryCache();
+
+    await act(async () => {
+      await result.current.refreshLogs();
+    });
+
+    expect(invalidateSpy.mock.calls.map(([filters]) => filters)).toEqual([
+      { queryKey: LOG_EXPERIMENTS_QUERY_KEY },
+      { queryKey: LOG_RUNS_QUERY_KEY },
+      { queryKey: LOG_TAGS_QUERY_KEY },
+      { queryKey: LOG_SCALARS_QUERY_KEY },
+      { queryKey: LOG_MEDIA_QUERY_KEY },
+      { queryKey: LOG_CHECKPOINTS_QUERY_KEY },
+      { queryKey: LOG_ARTIFACTS_QUERY_KEY },
+    ]);
+    expect(removeSpy).not.toHaveBeenCalled();
+  });
+
+  it("removes only affected caches for a mutation run-id set", async () => {
     const { client, removeSpy, result } = renderLogQueryCache();
     client.setQueryData([...LOG_SCALARS_QUERY_KEY, ["run-1"], ["loss"]], "loss");
     client.setQueryData([...LOG_SCALARS_QUERY_KEY, ["run-2"], ["accuracy"]], "accuracy");
-    client.setQueryData([...LOG_TAGS_QUERY_KEY, ["run-1"]], "tags");
+    client.setQueryData([...LOG_SCALARS_QUERY_KEY, ["run-3"], ["loss"]], "kept");
+    client.setQueryData([...LOG_TAGS_QUERY_KEY, ["run-3"]], "tags");
 
-    act(() => {
-      result.current.removeRunScalars("run-1");
+    await act(async () => {
+      await result.current.refreshAfterMutation({ runIds: ["run-1", "run-2"] });
     });
 
-    expect(removeSpy).toHaveBeenCalledTimes(1);
+    expect(removeSpy).toHaveBeenCalledTimes(5);
     expect(client.getQueryData([...LOG_SCALARS_QUERY_KEY, ["run-1"], ["loss"]])).toBeUndefined();
     expect(
       client.getQueryData([...LOG_SCALARS_QUERY_KEY, ["run-2"], ["accuracy"]]),
-    ).toBe("accuracy");
-    expect(client.getQueryData([...LOG_TAGS_QUERY_KEY, ["run-1"]])).toBe("tags");
+    ).toBeUndefined();
+    expect(client.getQueryData([...LOG_SCALARS_QUERY_KEY, ["run-3"], ["loss"]])).toBe(
+      "kept",
+    );
+    expect(client.getQueryData([...LOG_TAGS_QUERY_KEY, ["run-3"]])).toBe("tags");
   });
 });

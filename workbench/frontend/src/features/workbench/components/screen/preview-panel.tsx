@@ -7,8 +7,10 @@ import { StatusPill } from "@/features/workbench/components/status-pill";
 import {
   useGraphView,
   useHistoricalRuns,
-  useModelTargetConfig,
+  useModelPackageInspection,
+  useWorkbenchConnection,
 } from "@/features/workbench/providers/workbench-providers";
+import { isWorkbenchProtectedAccessReady } from "@/features/workbench/providers/workbench-connection-provider";
 import { useParameterActivityMinimapState } from "@/features/workbench/state/graph-monitor/use-parameter-activity-minimap-state";
 import { errorMessage } from "@/lib/utils";
 
@@ -29,12 +31,15 @@ function isNeuronModelType(modelType: string) {
 }
 
 export function PreviewPanel() {
+  const workbenchConnection = useWorkbenchConnection();
+  const { target, browser } = useModelPackageInspection();
+  const selectedModelType = target.modelPackage.modelType;
+  const selectedTargetMode =
+    target.kind === "historical-run" ? "experiment" : target.kind;
+  const selectedExperimentRunId =
+    target.kind === "historical-run" ? target.run.runId : "";
   const {
-    selectedModelType,
-    selectedTargetMode,
-    selectedExperimentRunId,
-  } = useModelTargetConfig();
-  const {
+    selectedLogRunId,
     selectedLogRun,
     selectedLogRunMonitorEligibility,
   } = useHistoricalRuns();
@@ -64,8 +69,8 @@ export function PreviewPanel() {
     ? graph?.nodes.find((node) => node.typeName === "NeuronCluster")?.id ?? null
     : null;
   const hasPreviewGraph = Boolean(graph);
-  const isExperimentTargetPending =
-    selectedTargetMode === "experiment" && !selectedExperimentRunId;
+  const isHistoricalRunSelectionPending =
+    browser.mode === "experiment" && !selectedLogRunId;
   const isMonitorEligibilityChecking =
     selectedTargetMode === "experiment" &&
     Boolean(selectedExperimentRunId) &&
@@ -81,6 +86,7 @@ export function PreviewPanel() {
     selectedExperimentRunId,
     selectedLogRun,
     selectedLogRunMonitorEligibility,
+    protectedReadsEnabled: isWorkbenchProtectedAccessReady(workbenchConnection),
   });
 
   return (
@@ -91,7 +97,7 @@ export function PreviewPanel() {
         </div>
       )}
       {(isPreviewBuilding ||
-        isExperimentTargetPending ||
+        isHistoricalRunSelectionPending ||
         isMonitorEligibilityChecking ||
         isMonitorIneligible ||
         showActivityLoading ||
@@ -105,7 +111,7 @@ export function PreviewPanel() {
               tone="warn"
             />
           )}
-          {isExperimentTargetPending && (
+          {isHistoricalRunSelectionPending && (
             <StatusPill
               icon={<Clock3 className="h-4 w-4" />}
               label="experiment"

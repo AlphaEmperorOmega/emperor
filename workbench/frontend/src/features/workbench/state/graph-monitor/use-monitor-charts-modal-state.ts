@@ -16,12 +16,14 @@ type UseMonitorChartsModalStateInput = {
   node: GraphNode;
   source: MonitorChartsSource;
   comparisonCandidateGroups: LinearMonitorComparisonCandidateGroups;
+  protectedReadsEnabled?: boolean;
 };
 
 export function useMonitorChartsModalState({
   node,
   source,
   comparisonCandidateGroups,
+  protectedReadsEnabled = true,
 }: UseMonitorChartsModalStateInput) {
   const activeJob = source.kind === "active-job" ? source.job : undefined;
   const historicalRun = source.kind === "historical-run" ? source.run : undefined;
@@ -73,6 +75,7 @@ export function useMonitorChartsModalState({
     dataset,
     preset,
     comparisonNodePath: comparisonNode?.path,
+    enabled: protectedReadsEnabled,
   });
 
   useEffect(() => {

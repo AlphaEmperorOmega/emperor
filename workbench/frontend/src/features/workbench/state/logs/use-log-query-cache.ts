@@ -71,6 +71,22 @@ export function useLogQueryCache() {
     [queryClient],
   );
 
+  const refreshLogs = useCallback(
+    () =>
+      Promise.all(
+        [
+          LOG_EXPERIMENTS_QUERY_KEY,
+          LOG_RUNS_QUERY_KEY,
+          LOG_TAGS_QUERY_KEY,
+          LOG_SCALARS_QUERY_KEY,
+          LOG_MEDIA_QUERY_KEY,
+          LOG_CHECKPOINTS_QUERY_KEY,
+          LOG_ARTIFACTS_QUERY_KEY,
+        ].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
+      ).then(() => undefined),
+    [queryClient],
+  );
+
   const invalidateRunDetails = useCallback(
     (runIds?: RunIdInput) => {
       queryClient.removeQueries(
@@ -112,8 +128,7 @@ export function useLogQueryCache() {
 
   return {
     invalidateLogLists,
-    invalidateRunDetails,
-    removeRunScalars,
+    refreshLogs,
     refreshAfterMutation,
   };
 }

@@ -1,46 +1,39 @@
+import { useCallback, useMemo, useRef } from "react";
 import {
-  useCallback,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-} from "react";
-import {
+  type InspectResponse,
   type LogRun,
   type LogRunTags,
   type TrainingJob,
 } from "@/lib/api";
 import { useGraphViewState } from "@/features/workbench/state/graph-monitor/use-graph-view-state";
 import {
-  presetIdentityMatches,
-  usePreviewInspectionState,
-} from "@/features/workbench/state/graph-monitor/use-preview-inspection";
-import {
   useMonitorSourceOrchestration,
 } from "@/features/workbench/state/graph-monitor/use-monitor-source-orchestration";
 import { type ActiveMonitorJob } from "@/types/monitor";
 
-type GraphResetHandlers = {
-  resetGraphSelectionAndExpansion: () => void;
-  resetGraphExpansion: () => void;
-};
-
-type GraphPreviewController = ReturnType<typeof useGraphPreviewController>;
-
 type GraphPreviewOrchestrationInput = {
-  controller: GraphPreviewController;
+  inspection: {
+    graph: InspectResponse | undefined;
+    status: {
+      isBuilding: boolean;
+      isError: boolean;
+      error: Error | null;
+    };
+    transition: {
+      revision: number;
+      cause: "target-changed" | "inspection-refreshed";
+    };
+  };
   activeTrainingJob: TrainingJob | undefined;
+  protectedReadsEnabled?: boolean;
   historicalMonitorRuns: LogRun[];
   selectedHistoricalExperiment: string;
   selectedHistoricalDataset: string;
   selectedHistoricalPreset: string;
   logRunTags?: LogRunTags[];
   filteredHistoricalRunIds: string[];
-  targetModelType: string;
-  targetModel: string;
   targetPreset: string;
   targetDatasets: string[];
-  targetMode: "preset" | "snapshot" | "experiment";
-  targetId: string;
 };
 
 type StableActiveMonitorJobRef = {
@@ -91,96 +84,26 @@ function useStableActiveMonitorJob(job: TrainingJob | undefined) {
   return stableJobRef.current.job;
 }
 
-export function useGraphPreviewController() {
-  const {
-    graph,
-    previewRequest,
-    clearPreview,
-    requestPreview,
-    previewInspection,
-  } = usePreviewInspectionState();
-  const graphResetHandlersRef = useRef<GraphResetHandlers>({
-    resetGraphSelectionAndExpansion: () => {},
-    resetGraphExpansion: () => {},
-  });
-  const resetGraphSelectionAndExpansion = useCallback(() => {
-    graphResetHandlersRef.current.resetGraphSelectionAndExpansion();
-  }, []);
-  const resetGraphExpansion = useCallback(() => {
-    graphResetHandlersRef.current.resetGraphExpansion();
-  }, []);
-  const bindGraphResetHandlers = useCallback((handlers: GraphResetHandlers) => {
-    graphResetHandlersRef.current = handlers;
-  }, []);
-
-  return useMemo(
-    () => ({
-      graph,
-      previewRequest,
-      clearPreview,
-      requestPreview,
-      previewInspection,
-      resetGraphSelectionAndExpansion,
-      resetGraphExpansion,
-      bindGraphResetHandlers,
-    }),
-    [
-      bindGraphResetHandlers,
-      clearPreview,
-      graph,
-      previewInspection,
-      previewRequest,
-      requestPreview,
-      resetGraphExpansion,
-      resetGraphSelectionAndExpansion,
-    ],
-  );
-}
-
 export function useGraphPreviewOrchestration({
-  controller,
+  inspection,
   activeTrainingJob,
+  protectedReadsEnabled = true,
   historicalMonitorRuns,
   selectedHistoricalExperiment,
   selectedHistoricalDataset,
   selectedHistoricalPreset,
   logRunTags,
   filteredHistoricalRunIds,
-  targetModelType,
-  targetModel,
   targetPreset,
   targetDatasets,
-  targetMode,
-  targetId,
 }: GraphPreviewOrchestrationInput) {
-  const {
-    graph,
-    previewInspection,
-    previewRequest,
-    bindGraphResetHandlers,
-  } = controller;
-  const targetDataset = targetDatasets[0] ?? "";
-  const previewRequestMatchesTarget =
-    !previewRequest ||
-    (previewRequest.modelType === targetModelType &&
-      previewRequest.model === targetModel &&
-      presetIdentityMatches(previewRequest.preset, targetPreset) &&
-      (previewRequest.dataset ?? "") === targetDataset &&
-      (previewRequest.targetMode ?? "preset") === targetMode &&
-      (previewRequest.targetId ?? previewRequest.preset) === targetId &&
-      (targetMode !== "experiment" || previewRequest.logRunId === targetId));
-  const targetGraph =
-    graph &&
-    graph.modelType === targetModelType &&
-    graph.model === targetModel &&
-    presetIdentityMatches(graph.preset, targetPreset) &&
-    previewRequestMatchesTarget
-      ? graph
-      : undefined;
+  const { graph, status: previewInspection, transition } = inspection;
+  const targetGraph = graph;
   const activeMonitorJob = useStableActiveMonitorJob(activeTrainingJob);
   const monitorSource = useMonitorSourceOrchestration({
     graph: targetGraph,
     activeTrainingJob: activeMonitorJob,
+    protectedReadsEnabled,
     historicalMonitorRuns,
     selectedHistoricalExperiment,
     selectedHistoricalDataset,
@@ -208,26 +131,13 @@ export function useGraphPreviewOrchestration({
     resolveMonitorTarget: resolveMonitorTargetNode,
     resolveParameterActivityTarget: resolveParameterActivityTargetNode,
     parameterActivityByNodePath,
+    inspectionTransition: transition,
   });
-  const {
-    resetGraphExpansion,
-    resetGraphSelectionAndExpansion,
-  } = graphState;
-  useLayoutEffect(() => {
-    bindGraphResetHandlers({
-      resetGraphSelectionAndExpansion: () => {
-        resetGraphSelectionAndExpansion();
-      },
-      resetGraphExpansion: () => {
-        resetGraphExpansion();
-      },
-    });
-  }, [
-    bindGraphResetHandlers,
-    resetGraphExpansion,
-    resetGraphSelectionAndExpansion,
-  ]);
-
+  const clearGraphViewForConnectionChange = graphState.clearForConnectionChange;
+  const clearForConnectionChange = useCallback(() => {
+    clearGraphViewForConnectionChange();
+    closeGraphNodeMonitor();
+  }, [clearGraphViewForConnectionChange, closeGraphNodeMonitor]);
   const monitorSourceState = useMemo(
     () => deriveSelectedMonitorSourceState(graphState.selectedNode),
     [deriveSelectedMonitorSourceState, graphState.selectedNode],
@@ -301,7 +211,6 @@ export function useGraphPreviewOrchestration({
   const graphMonitorSlice = useMemo(
     () => ({
       graphMonitorNode,
-      openGraphNodeMonitor,
       closeGraphNodeMonitor,
       graphMonitorSource,
       graphMonitorComparisonCandidateGroups,
@@ -311,7 +220,6 @@ export function useGraphPreviewOrchestration({
       graphMonitorComparisonCandidateGroups,
       graphMonitorNode,
       graphMonitorSource,
-      openGraphNodeMonitor,
     ],
   );
 
@@ -320,7 +228,8 @@ export function useGraphPreviewOrchestration({
       graph: graphSlice,
       history: historySlice,
       graphMonitor: graphMonitorSlice,
+      clearForConnectionChange,
     }),
-    [graphMonitorSlice, graphSlice, historySlice],
+    [clearForConnectionChange, graphMonitorSlice, graphSlice, historySlice],
   );
 }

@@ -14,9 +14,10 @@ import { StatusDot } from "@/components/ui/status-dot";
 import { StatusPill } from "@/features/workbench/components/status-pill";
 import { WorkbenchWorkspaceNav } from "@/features/workbench/components/workbench-workspace-nav";
 import {
-  useActiveTrainingJob,
-  useTargetHeaderState,
+  useModelPackageInspection,
 } from "@/features/workbench/providers/workbench-providers";
+import { useWorkbenchConnection } from "@/features/workbench/providers/workbench-connection-provider";
+import { useActiveTrainingJob } from "@/features/workbench/providers/training-provider";
 import { cn } from "@/lib/utils";
 import { type WorkbenchWorkspace } from "@/types/workbench";
 
@@ -54,13 +55,13 @@ export function AppHeader({
   onOpenApiConnection: () => void;
   onOpenImportLogs: () => void;
 }) {
-  const {
-    selectedModel,
-    apiOnline,
-    overrideCount,
-    presetOwnedFieldCount,
-    resetOverrides: onResetOverrides,
-  } = useTargetHeaderState();
+  const { connection } = useWorkbenchConnection();
+  const { browser, runtimeDefaults, actions } = useModelPackageInspection();
+  const selectedModel = browser.selectedModel;
+  const apiOnline = connection.isOnline;
+  const overrideCount = runtimeDefaults.overrideCount;
+  const presetOwnedFieldCount = runtimeDefaults.presetOwnedFieldCount;
+  const onResetOverrides = actions.resetRuntimeDefaults;
   const { activeTrainingJob } = useActiveTrainingJob();
   const trainingStatus = activeTrainingJob
     ? {

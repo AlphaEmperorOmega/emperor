@@ -20,9 +20,9 @@ import { DialogShell } from "@/features/workbench/components/shared/dialog-shell
 import { SectionHeading } from "@/components/ui/section-heading";
 import { StatChip } from "@/features/workbench/components/shared/stat-chip";
 import {
-  useActiveTrainingJob,
   useGraphView,
 } from "@/features/workbench/providers/workbench-providers";
+import { useActiveTrainingJob } from "@/features/workbench/providers/training-provider";
 import {
   buildCluster3DSceneModel,
   type Cluster3DCell,

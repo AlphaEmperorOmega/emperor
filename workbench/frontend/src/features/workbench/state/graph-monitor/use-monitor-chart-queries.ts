@@ -96,6 +96,7 @@ type UseMonitorChartQueriesInput = {
   dataset: string;
   preset: string;
   comparisonNodePath?: string;
+  enabled?: boolean;
 };
 
 export function useMonitorChartQueries({
@@ -104,6 +105,7 @@ export function useMonitorChartQueries({
   dataset,
   preset,
   comparisonNodePath,
+  enabled = true,
 }: UseMonitorChartQueriesInput) {
   const activeJob = source.kind === "active-job" ? source.job : undefined;
   const historicalRun = source.kind === "historical-run" ? source.run : undefined;
@@ -129,7 +131,7 @@ export function useMonitorChartQueries({
   const monitorCount = activeJob?.monitors.length;
   const isComparing = Boolean(comparisonNodePath);
   const historicalRunGroupEnabled = Boolean(
-    historicalRunGroup && historicalRuns.length > 0,
+    enabled && historicalRunGroup && historicalRuns.length > 0,
   );
   const historicalComparisonEnabled =
     historicalRunGroupEnabled && Boolean(comparisonNodePath);
@@ -189,9 +191,11 @@ export function useMonitorChartQueries({
         { signal },
       );
     },
-    enabled: activeJob
-      ? activeJob.monitors.length > 0
-      : !historicalRunGroup && Boolean(historicalRun),
+    enabled:
+      enabled &&
+      (activeJob
+        ? activeJob.monitors.length > 0
+        : !historicalRunGroup && Boolean(historicalRun)),
     retry: false,
     refetchInterval: isRunning ? 1500 : false,
   });
@@ -263,6 +267,7 @@ export function useMonitorChartQueries({
       );
     },
     enabled:
+      enabled &&
       Boolean(comparisonNodePath) &&
       (activeJob
         ? activeJob.monitors.length > 0
@@ -437,6 +442,9 @@ export function useMonitorChartQueries({
   ]);
 
   const refetch = () => {
+    if (!enabled) {
+      return;
+    }
     if (historicalRunGroup) {
       setHistoricalEnabledCount(
         Math.min(historicalRuns.length, HISTORICAL_MONITOR_REQUEST_CONCURRENCY),

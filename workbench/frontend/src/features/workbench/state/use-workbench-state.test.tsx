@@ -1,4 +1,11 @@
-import { createElement, type ReactNode } from "react";
+import {
+  createElement,
+  Profiler,
+  type ReactNode,
+  useCallback,
+  useMemo,
+  useState,
+} from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, renderHook, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -23,10 +30,10 @@ const mocks = vi.hoisted(() => ({
   fetchLogExperiments: vi.fn(),
   fetchLogTags: vi.fn(),
   inspectModel: vi.fn(),
-  getWorkbenchApiBaseUrl: vi.fn(),
-  normalizeWorkbenchApiBaseUrl: vi.fn(),
-  setWorkbenchApiBaseUrl: vi.fn(),
-  resetWorkbenchApiBaseUrl: vi.fn(),
+  isUnauthorizedApiError: vi.fn(
+    (error: unknown) =>
+      typeof error === "object" && error !== null && "status" in error && error.status === 401,
+  ),
   fetchTrainingRunPlan: vi.fn(),
   createTrainingJob: vi.fn(),
   fetchTrainingJob: vi.fn(),
@@ -37,16 +44,25 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/api", () => mocks);
 
 import { useWorkbenchState } from "@/features/workbench/state/use-workbench-state";
-import { ConnectedTrainingWorkspace } from "@/features/workbench/components/connected-training-panel";
+import { TrainingPanel } from "@/features/workbench/components/training-panel";
 import {
-  useModelTargetConfig,
-  useTrainingTargetConfig,
+  useModelPackageInspection,
+  useConfigSnapshotRecords,
+  useModelPackageCatalog,
   WorkbenchProviders,
 } from "@/features/workbench/providers/workbench-providers";
-import { TargetPresetPanel } from "@/features/workbench/components/screen/target-preset-panel";
 import {
-  clearPersistedTargetSelection,
-} from "@/features/workbench/state/target/target-selection-storage";
+  WorkbenchConnectionProvider,
+  useRegisterWorkbenchConnectionReset,
+  useWorkbenchCapabilities,
+  useWorkbenchConnection,
+} from "@/features/workbench/providers/workbench-connection-provider";
+import {
+  useTrainingConfiguration,
+  useTrainingWorkspace,
+} from "@/features/workbench/providers/training-provider";
+import { TargetPresetPanel } from "@/features/workbench/components/screen/target-preset-panel";
+import { readPersistedTargetSelection } from "@/features/workbench/state/target/target-selection-storage";
 import {
   type GraphNode,
   type InspectResponse,
@@ -56,7 +72,33 @@ import {
   type TrainingJob,
 } from "@/lib/api";
 
-const DEFAULT_WORKBENCH_API_BASE_URL = "http://127.0.0.1:9999";
+function TrainingWorkspaceReadyProbe({ testId }: { testId: string }) {
+  const { searchLoading } = useTrainingWorkspace().draft;
+  return (
+    <output data-testid={testId}>
+      {searchLoading ? "loading" : "ready"}
+    </output>
+  );
+}
+
+function useTestActiveTrainingJobState() {
+  const [activeTrainingJob, setActiveTrainingJob] = useState<TrainingJob>();
+  const onJobChange = useCallback((job: TrainingJob | undefined) => {
+    setActiveTrainingJob(job);
+  }, []);
+  const clearActiveTrainingJob = useCallback(() => {
+    setActiveTrainingJob(undefined);
+  }, []);
+
+  return useMemo(
+    () => ({
+      activeTrainingJob,
+      onJobChange,
+      clearActiveTrainingJob,
+    }),
+    [activeTrainingJob, clearActiveTrainingJob, onJobChange],
+  );
+}
 
 function renderWorkbenchState(options: Parameters<typeof useWorkbenchState>[0] = {}) {
   const client = new QueryClient({
@@ -64,9 +106,23 @@ function renderWorkbenchState(options: Parameters<typeof useWorkbenchState>[0] =
   });
   const workbenchOptions = { activeWorkspace: "logs" as const, ...options };
 
-  return renderHook(() => useWorkbenchState(workbenchOptions), {
+  return renderHook(() => {
+    const activeJob = useTestActiveTrainingJobState();
+    const workbench = useWorkbenchState({
+      ...workbenchOptions,
+      activeTrainingJob: activeJob.activeTrainingJob,
+    });
+    useRegisterWorkbenchConnectionReset(workbench.clearForConnectionChange);
+    const connection = useWorkbenchConnection();
+    const capabilityProjection = useWorkbenchCapabilities();
+    return { ...workbench, activeJob, connection, capabilityProjection };
+  }, {
     wrapper: ({ children }: { children: ReactNode }) =>
-      createElement(QueryClientProvider, { client }, children),
+      createElement(
+        QueryClientProvider,
+        { client },
+        createElement(WorkbenchConnectionProvider, null, children),
+      ),
   });
 }
 
@@ -91,8 +147,11 @@ function renderTrainingPanel() {
 
   return render(
     <QueryClientProvider client={client}>
-      <WorkbenchProviders activeWorkspace="training">
-        <ConnectedTrainingWorkspace onOpenFullConfig={vi.fn()} />
+      <WorkbenchProviders
+        activeWorkspace="training"
+        onOpenFullConfig={vi.fn()}
+      >
+        <TrainingPanel />
       </WorkbenchProviders>
     </QueryClientProvider>,
   );
@@ -105,9 +164,12 @@ function renderTrainingPanelWithExperiments() {
 
   return render(
     <QueryClientProvider client={client}>
-      <WorkbenchProviders activeWorkspace="training">
+      <WorkbenchProviders
+        activeWorkspace="training"
+        onOpenFullConfig={vi.fn()}
+      >
         <TargetPresetPanel onOpenFullConfig={vi.fn()} />
-        <ConnectedTrainingWorkspace onOpenFullConfig={vi.fn()} />
+        <TrainingPanel />
       </WorkbenchProviders>
     </QueryClientProvider>,
   );
@@ -135,6 +197,7 @@ function logRun(overrides: Partial<LogRun> & Pick<LogRun, "id">): LogRun {
     model: overrides.model ?? "linear",
     preset: overrides.preset ?? "Fast",
     dataset: overrides.dataset ?? "FashionMnist",
+    experimentTask: overrides.experimentTask,
     runName: overrides.runName ?? `${overrides.id}_20260601_010203`,
     timestamp: overrides.timestamp ?? "2026-06-01 01:02:03",
     version: overrides.version ?? "version_0",
@@ -148,6 +211,47 @@ function logRun(overrides: Partial<LogRun> & Pick<LogRun, "id">): LogRun {
     hasLayerMonitorData: overrides.hasLayerMonitorData,
     metrics: overrides.metrics ?? {},
   };
+}
+
+async function selectHistoricalRunThroughCascade(
+  result: ReturnType<typeof renderWorkbenchState>["result"],
+  run: Pick<LogRun, "id" | "experiment" | "dataset" | "preset">,
+) {
+  await waitFor(() => {
+    expect(
+      result.current.history.historicalExperimentOptions.some(
+        (option) => option.value === run.experiment,
+      ),
+    ).toBe(true);
+  });
+  act(() => {
+    result.current.history.setSelectedHistoricalExperimentFilter(
+      run.experiment,
+    );
+  });
+  await waitFor(() => {
+    expect(
+      result.current.history.historicalDatasetOptions.some(
+        (option) => option.value === run.dataset,
+      ),
+    ).toBe(true);
+  });
+  act(() => {
+    result.current.history.setSelectedHistoricalDatasetFilter(run.dataset);
+  });
+  await waitFor(() => {
+    expect(
+      result.current.history.historicalPresetOptions.some(
+        (option) => option.value === run.preset,
+      ),
+    ).toBe(true);
+  });
+  act(() => {
+    result.current.history.setSelectedHistoricalPreset(run.preset);
+  });
+  await waitFor(() => {
+    expect(result.current.history.selectedLogRunId).toBe(run.id);
+  });
 }
 
 function historicalOption(
@@ -595,39 +699,8 @@ function mockPublicModelCatalog() {
 }
 
 beforeEach(() => {
-  let workbenchApiBaseUrl = DEFAULT_WORKBENCH_API_BASE_URL;
-  mocks.normalizeWorkbenchApiBaseUrl.mockReset().mockImplementation((url: string) => {
-    const trimmedUrl = url.trim();
-    if (!trimmedUrl) {
-      return null;
-    }
-    try {
-      const parsedUrl = new URL(trimmedUrl);
-      if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
-        return null;
-      }
-      if (parsedUrl.search || parsedUrl.hash) {
-        return null;
-      }
-    } catch {
-      return null;
-    }
-    return trimmedUrl.replace(/\/+$/, "");
-  });
-  mocks.getWorkbenchApiBaseUrl.mockReset().mockImplementation(() => workbenchApiBaseUrl);
-  mocks.setWorkbenchApiBaseUrl.mockReset().mockImplementation((url: string) => {
-    const normalizedUrl = mocks.normalizeWorkbenchApiBaseUrl(url);
-    if (!normalizedUrl) {
-      throw new Error("Invalid API base URL");
-    }
-    workbenchApiBaseUrl = normalizedUrl;
-    return workbenchApiBaseUrl;
-  });
-  mocks.resetWorkbenchApiBaseUrl.mockReset().mockImplementation(() => {
-    workbenchApiBaseUrl = DEFAULT_WORKBENCH_API_BASE_URL;
-    return workbenchApiBaseUrl;
-  });
-  clearPersistedTargetSelection();
+  window.localStorage.clear();
+  window.sessionStorage.clear();
   mocks.fetchHealth.mockReset().mockResolvedValue({ status: "ok" });
   mocks.fetchCapabilities.mockReset().mockResolvedValue({
     authMode: "none",
@@ -868,79 +941,66 @@ beforeEach(() => {
 });
 
 describe("useWorkbenchState", () => {
-  it("keeps target and history context identities stable on unrelated rerenders", async () => {
+  it("keeps the target context identity stable on unrelated rerenders", async () => {
     const { result, rerender } = renderWorkbenchState();
 
     await waitFor(() => {
-      expect(result.current.target.selectedModel).toBe("linear");
-      expect(result.current.target.selectedPreset).toBe("baseline");
-      expect(result.current.target.selectedTrainingDatasets).toEqual(["Mnist"]);
-      expect(result.current.target.trainingSearchAxesLoading).toBe(false);
-      expect(result.current.history.experimentsLoading).toBe(false);
+      expect(result.current.targetContexts.model.browser.selectedModel).toBe("linear");
+      expect(result.current.targetContexts.model.browser.selectedPreset).toBe("baseline");
     });
-    const target = result.current.target;
-    const history = result.current.history;
+    const target = result.current.targetContexts.model;
 
     rerender();
 
-    expect(result.current.target).toBe(target);
-    expect(result.current.history).toBe(history);
+    expect(result.current.targetContexts.model).toBe(target);
   });
 
-  it("keeps target and history context identities stable when only the active job changes", async () => {
+  it("keeps the target context identity stable when only the active job changes", async () => {
     const { result } = renderWorkbenchState();
 
     await waitFor(() => {
-      expect(result.current.target.selectedModel).toBe("linear");
-      expect(result.current.target.selectedPreset).toBe("baseline");
-      expect(result.current.history.experimentsLoading).toBe(false);
+      expect(result.current.targetContexts.model.browser.selectedModel).toBe("linear");
+      expect(result.current.targetContexts.model.browser.selectedPreset).toBe("baseline");
     });
-    const target = result.current.target;
-    const history = result.current.history;
+    const target = result.current.targetContexts.model;
 
     act(() => {
       result.current.activeJob.onJobChange(trainingJob({ step: 20 }));
     });
 
     expect(result.current.activeJob.activeTrainingJob?.step).toBe(20);
-    expect(result.current.target).toBe(target);
-    expect(result.current.history).toBe(history);
+    expect(result.current.targetContexts.model).toBe(target);
   });
 
   it("does not rerender Training consumers for a Model-only override", async () => {
     let trainingRenderCount = 0;
 
     function ModelTargetProbe() {
-      const { selectedModel, overrides, updateOverride } =
-        useModelTargetConfig();
+      const { browser, runtimeDefaults, actions } = useModelPackageInspection();
       return (
         <button
           type="button"
-          onClick={() => updateOverride("hidden_size", "128")}
+          onClick={() => actions.editRuntimeDefault("hidden_size", "128")}
         >
-          {selectedModel}:{overrides.hidden_size ?? "default"}
+          {browser.selectedModel}:
+          {runtimeDefaults.active.hidden_size ?? "default"}
         </button>
       );
     }
 
     function TrainingTargetProbe() {
       const {
-        selectedTrainingModel,
-        selectedTrainingPrimaryPreset,
-        trainingSchemaLoading,
-        trainingSearchAxesLoading,
-      } = useTrainingTargetConfig();
+        selectedModel,
+        selectedPrimaryPreset,
+        schemaLoading,
+      } = useTrainingConfiguration();
       trainingRenderCount += 1;
       return (
         <output
           data-testid="training-target-probe"
-          data-ready={
-            !trainingSchemaLoading && !trainingSearchAxesLoading
-              ? "true"
-              : "false"
-          }
+          data-ready={!schemaLoading ? "true" : "false"}
         >
-          {selectedTrainingModel}:{selectedTrainingPrimaryPreset}
+          {selectedModel}:{selectedPrimaryPreset}
         </output>
       );
     }
@@ -953,6 +1013,7 @@ describe("useWorkbenchState", () => {
         <WorkbenchProviders activeWorkspace="training">
           <ModelTargetProbe />
           <TrainingTargetProbe />
+          <TrainingWorkspaceReadyProbe testId="training-workspace-ready" />
         </WorkbenchProviders>
       </QueryClientProvider>,
     );
@@ -966,6 +1027,9 @@ describe("useWorkbenchState", () => {
       expect(screen.getByTestId("training-target-probe")).toHaveAttribute(
         "data-ready",
         "true",
+      );
+      expect(screen.getByTestId("training-workspace-ready")).toHaveTextContent(
+        "ready",
       );
     });
     const settledTrainingRenderCount = trainingRenderCount;
@@ -982,34 +1046,30 @@ describe("useWorkbenchState", () => {
     let modelRenderCount = 0;
 
     function ModelTargetProbe() {
-      const { selectedModel, overrides } = useModelTargetConfig();
+      const { browser, runtimeDefaults } = useModelPackageInspection();
       modelRenderCount += 1;
       return (
         <output data-testid="model-target-probe">
-          {selectedModel}:{overrides.hidden_size ?? "default"}
+          {browser.selectedModel}:
+          {runtimeDefaults.active.hidden_size ?? "default"}
         </output>
       );
     }
 
     function TrainingTargetProbe() {
       const {
-        selectedTrainingModel,
-        trainingOverrides,
-        updateTrainingOverride,
-        trainingSchemaLoading,
-        trainingSearchAxesLoading,
-      } = useTrainingTargetConfig();
+        selectedModel,
+        bulkOverrides,
+        updateOverride,
+        schemaLoading,
+      } = useTrainingConfiguration();
       return (
         <button
           type="button"
-          data-ready={
-            !trainingSchemaLoading && !trainingSearchAxesLoading
-              ? "true"
-              : "false"
-          }
-          onClick={() => updateTrainingOverride("epochs", "12")}
+          data-ready={!schemaLoading ? "true" : "false"}
+          onClick={() => updateOverride("epochs", "12")}
         >
-          {selectedTrainingModel}:{trainingOverrides.epochs ?? "default"}
+          {selectedModel}:{bulkOverrides.epochs ?? "default"}
         </button>
       );
     }
@@ -1022,6 +1082,7 @@ describe("useWorkbenchState", () => {
         <WorkbenchProviders activeWorkspace="training">
           <ModelTargetProbe />
           <TrainingTargetProbe />
+          <TrainingWorkspaceReadyProbe testId="training-workspace-ready" />
         </WorkbenchProviders>
       </QueryClientProvider>,
     );
@@ -1034,6 +1095,9 @@ describe("useWorkbenchState", () => {
       expect(
         screen.getByRole("button", { name: "linear:default" }),
       ).toHaveAttribute("data-ready", "true");
+      expect(screen.getByTestId("training-workspace-ready")).toHaveTextContent(
+        "ready",
+      );
     });
     const settledModelRenderCount = modelRenderCount;
 
@@ -1045,12 +1109,153 @@ describe("useWorkbenchState", () => {
     expect(modelRenderCount).toBe(settledModelRenderCount);
   });
 
+  it("exposes three focused target contexts with bounded top-level interfaces", () => {
+    function ContextOwnershipProbe() {
+      const catalog = useModelPackageCatalog();
+      const model = useModelPackageInspection();
+      const snapshots = useConfigSnapshotRecords();
+      return (
+        <output
+          data-testid="target-context-ownership"
+          data-catalog={JSON.stringify(Object.keys(catalog).sort())}
+          data-model={JSON.stringify(Object.keys(model).sort())}
+          data-snapshots={JSON.stringify(Object.keys(snapshots).sort())}
+        />
+      );
+    }
+
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <WorkbenchProviders>
+          <ContextOwnershipProbe />
+        </WorkbenchProviders>
+      </QueryClientProvider>,
+    );
+
+    const probe = screen.getByTestId("target-context-ownership");
+    const keys = (name: string) =>
+      JSON.parse(probe.getAttribute(`data-${name}`) ?? "[]") as string[];
+    expect(keys("catalog")).toEqual([
+      "modelPackages",
+    ]);
+    expect(keys("model")).toEqual([
+      "actions",
+      "browser",
+      "options",
+      "runtimeDefaults",
+      "status",
+      "target",
+    ]);
+    expect(keys("snapshots")).toEqual(["actions", "records"]);
+  });
+
+  it("profiles a Model-only override without committing unrelated target consumers", async () => {
+    let profilerCommitCount = 0;
+    const renders = { catalog: 0, model: 0, training: 0, snapshots: 0 };
+
+    function CatalogProbe() {
+      const { connection } = useWorkbenchConnection();
+      renders.catalog += 1;
+      return <output>{String(connection.isOnline)}</output>;
+    }
+
+    function ModelProbe() {
+      const { browser, runtimeDefaults, actions } = useModelPackageInspection();
+      renders.model += 1;
+      return (
+        <button
+          type="button"
+          onClick={() => actions.editRuntimeDefault("hidden_size", "128")}
+        >
+          {browser.selectedModel}:
+          {runtimeDefaults.active.hidden_size ?? "default"}
+        </button>
+      );
+    }
+
+    function TrainingProbe() {
+      const {
+        selectedModel,
+        schemaLoading,
+      } = useTrainingConfiguration();
+      renders.training += 1;
+      return (
+        <output
+          data-testid="profile-training"
+          data-ready={!schemaLoading ? "true" : "false"}
+        >
+          {selectedModel}
+        </output>
+      );
+    }
+
+    function SnapshotsProbe() {
+      const { records } = useConfigSnapshotRecords();
+      renders.snapshots += 1;
+      return <output>{records.allCount}</output>;
+    }
+
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <WorkbenchProviders activeWorkspace="training">
+          <TrainingWorkspaceReadyProbe testId="profile-workspace-ready" />
+          <Profiler
+            id="target-contexts"
+            onRender={() => {
+              profilerCommitCount += 1;
+            }}
+          >
+            <CatalogProbe />
+            <ModelProbe />
+            <TrainingProbe />
+            <SnapshotsProbe />
+          </Profiler>
+        </WorkbenchProviders>
+      </QueryClientProvider>,
+    );
+    const user = userEvent.setup();
+
+    await screen.findByRole("button", { name: "linear:default" });
+    await waitFor(() => {
+      expect(screen.getByText("true", { selector: "output" })).toBeInTheDocument();
+      expect(screen.getByTestId("profile-training")).toHaveTextContent("linear");
+      expect(screen.getByTestId("profile-training")).toHaveAttribute(
+        "data-ready",
+        "true",
+      );
+      expect(screen.getByTestId("profile-workspace-ready")).toHaveTextContent(
+        "ready",
+      );
+    });
+    const settledProfilerCommitCount = profilerCommitCount;
+    const settledRenders = { ...renders };
+
+    await user.click(screen.getByRole("button", { name: "linear:default" }));
+    expect(
+      await screen.findByRole("button", { name: "linear:128" }),
+    ).toBeInTheDocument();
+
+    expect({
+      catalog: renders.catalog - settledRenders.catalog,
+      model: renders.model - settledRenders.model,
+      training: renders.training - settledRenders.training,
+      snapshots: renders.snapshots - settledRenders.snapshots,
+    }).toEqual({ catalog: 0, model: 1, training: 0, snapshots: 0 });
+    expect(profilerCommitCount - settledProfilerCommitCount).toBeLessThanOrEqual(3);
+  });
+
   it("uses enabled local defaults while loading capabilities", () => {
     mocks.fetchCapabilities.mockRejectedValueOnce(new Error("capabilities unavailable"));
 
     const { result } = renderWorkbenchState();
 
-    expect(result.current.target.capabilities).toMatchObject({
+    expect(result.current.capabilityProjection.capabilities).toMatchObject({
       trainingEnabled: true,
       logDeletionEnabled: true,
       uploadsEnabled: true,
@@ -1076,10 +1281,13 @@ describe("useWorkbenchState", () => {
     const { result } = renderWorkbenchState();
 
     await waitFor(() => {
-      expect(result.current.target.capabilities).toMatchObject({
-        authMode: "bearer",
+      expect(result.current.capabilityProjection.capabilities).toMatchObject({
         trainingEnabled: false,
         logDeletionEnabled: false,
+      });
+      expect(result.current.connection.authentication).toMatchObject({
+        mode: "bearer",
+        state: "unauthenticated",
       });
     });
   });
@@ -1113,13 +1321,13 @@ describe("useWorkbenchState", () => {
     const { result } = renderWorkbenchState({ activeWorkspace: "model" });
 
     await waitFor(() => {
-      expect(result.current.target.selectedModel).toBe("linear");
+      expect(result.current.targetContexts.model.browser.selectedModel).toBe("linear");
     });
     expect(mocks.fetchLogRuns).not.toHaveBeenCalled();
     expect(mocks.fetchLogTags).not.toHaveBeenCalled();
 
     act(() => {
-      result.current.target.activateTargetExperimentMode();
+      result.current.targetContexts.model.actions.browseHistoricalRuns();
     });
     await waitFor(() => {
       expect(mocks.fetchLogRuns).toHaveBeenCalledWith(
@@ -1160,26 +1368,18 @@ describe("useWorkbenchState", () => {
     );
   });
 
-  it("settles the auto-selected training preset without an update loop", async () => {
-    const { result } = renderWorkbenchState({ activeWorkspace: "training" });
-
-    await waitFor(() => {
-      expect(result.current.target.selectedModel).toBe("linear");
-      expect(result.current.target.selectedPreset).toBe("baseline");
-      expect(result.current.target.selectedTrainingPresets).toEqual(["baseline"]);
-    });
-  });
-
   it("auto-selects the first public model type and calls APIs with split identity", async () => {
     mockPublicModelCatalog();
 
     const { result } = renderWorkbenchState({ activeWorkspace: "training" });
 
     await waitFor(() => {
-      expect(result.current.target.selectedModelType).toBe("linears");
-      expect(result.current.target.selectedModel).toBe("linear");
-      expect(result.current.target.selectedPreset).toBe("baseline");
-      expect(result.current.target.selectedDatasets).toEqual(["Mnist"]);
+      expect(result.current.targetContexts.model.browser).toMatchObject({
+        selectedModelType: "linears",
+        selectedModel: "linear",
+        selectedPreset: "baseline",
+        selectedDatasets: ["Mnist"],
+      });
     });
     await waitFor(() => {
       expect(mocks.fetchConfigSchema).toHaveBeenCalledWith(
@@ -1198,12 +1398,6 @@ describe("useWorkbenchState", () => {
     );
     expect(mocks.fetchMonitors).toHaveBeenCalledWith(
       { modelType: "linears", model: "linear" },
-      expect.objectContaining({ signal: expect.anything() }),
-    );
-    expect(mocks.fetchSearchSpace).toHaveBeenCalledWith(
-      { modelType: "linears", model: "linear" },
-      "baseline",
-      ["baseline"],
       expect.objectContaining({ signal: expect.anything() }),
     );
     expect(mocks.inspectModel.mock.calls.map(([request]) => request))
@@ -1251,14 +1445,14 @@ describe("useWorkbenchState", () => {
 
     await waitFor(() => expect(signals.has("linears/linear")).toBe(true));
 
-    act(() => result.current.target.selectModelType("experts"));
+    act(() => result.current.targetContexts.model.actions.selectModelType("experts"));
 
     await waitFor(() => {
       expect(signals.get("linears/linear")?.aborted).toBe(true);
       expect(signals.has("experts/linear")).toBe(true);
-      expect(result.current.target.selectedModelType).toBe("experts");
+      expect(result.current.targetContexts.model.browser.selectedModelType).toBe("experts");
     });
-    expect(result.current.target.isPresetsError).toBe(false);
+    expect(result.current.targetContexts.model.status.presets.isError).toBe(false);
   });
 
   it("selects the first model in a new type through the model reset cascade", async () => {
@@ -1266,27 +1460,38 @@ describe("useWorkbenchState", () => {
     const { result } = renderWorkbenchState();
 
     await waitFor(() => {
-      expect(result.current.target.selectedModel).toBe("linear");
+      expect(result.current.targetContexts.model.browser.selectedModel).toBe("linear");
     });
 
     act(() => {
-      result.current.target.updateOverride("hidden_size", "128");
+      result.current.targetContexts.model.actions.editRuntimeDefault("hidden_size", "128");
     });
 
     await waitFor(() => {
-      expect(result.current.target.overrides).toEqual({ hidden_size: "128" });
+      expect(result.current.targetContexts.model.runtimeDefaults.active).toEqual({
+        hidden_size: "128",
+      });
     });
 
     act(() => {
-      result.current.target.selectModelType("experts");
+      result.current.targetContexts.model.actions.selectModelType("experts");
     });
 
     await waitFor(() => {
-      expect(result.current.target.selectedModelType).toBe("experts");
-      expect(result.current.target.selectedModel).toBe("linear");
-      expect(result.current.target.selectedPreset).toBe("expert-baseline");
-      expect(result.current.target.selectedDatasets).toEqual(["ExpertToy"]);
-      expect(result.current.target.overrides).toEqual({});
+      expect(result.current.targetContexts.model.browser).toMatchObject({
+        selectedModelType: "experts",
+        selectedModel: "linear",
+        selectedPreset: "expert-baseline",
+        selectedDatasets: ["ExpertToy"],
+      });
+      expect(result.current.targetContexts.model.runtimeDefaults.active).toEqual({});
+    });
+    expect(readPersistedTargetSelection()).toEqual({
+      selectedModelType: "experts",
+      selectedModel: "linear",
+      selectedPreset: "expert-baseline",
+      selectedTargetMode: "preset",
+      selectedSnapshotId: "",
     });
     expect(mocks.fetchPresets).toHaveBeenCalledWith(
       { modelType: "experts", model: "linear" },
@@ -1324,7 +1529,7 @@ describe("useWorkbenchState", () => {
     const { result } = renderWorkbenchState();
 
     await waitFor(() => {
-      expect(result.current.target.selectedModel).toBe("linear");
+      expect(result.current.targetContexts.model.browser.selectedModel).toBe("linear");
       expect(result.current.graph.graph).toMatchObject({
         modelType: "linears",
         model: "linear",
@@ -1332,11 +1537,11 @@ describe("useWorkbenchState", () => {
     });
 
     act(() => {
-      result.current.target.selectModelType("experts");
+      result.current.targetContexts.model.actions.selectModelType("experts");
     });
 
     await waitFor(() => {
-      expect(result.current.target.selectedModel).toBe("linear");
+      expect(result.current.targetContexts.model.browser.selectedModel).toBe("linear");
       expect(result.current.graph.graph).toMatchObject({
         modelType: "experts",
         model: "linear",
@@ -1346,13 +1551,13 @@ describe("useWorkbenchState", () => {
       .toEqual(expect.arrayContaining(["MixtureOfExperts"]));
 
     act(() => {
-      result.current.target.selectModel("linear", "linears");
+      result.current.targetContexts.model.actions.selectModelPackage("linear", "linears");
     });
 
     expect(result.current.graph.graph).toBeUndefined();
 
     await waitFor(() => {
-      expect(result.current.target.selectedModel).toBe("linear");
+      expect(result.current.targetContexts.model.browser.selectedModel).toBe("linear");
       expect(result.current.graph.graph).toMatchObject({
         modelType: "linears",
         model: "linear",
@@ -1393,8 +1598,10 @@ describe("useWorkbenchState", () => {
 
     await waitFor(() => expect(previewResponses).toHaveLength(1));
 
-    act(() => {
-      result.current.apiConnection.setApiBaseUrl("https://api-alt.example.test");
+    await act(async () => {
+      await result.current.connection.actions.useApiBaseUrl(
+        "https://api-alt.example.test",
+      );
     });
 
     expect(result.current.graph.graph).toBeUndefined();
@@ -1425,11 +1632,35 @@ describe("useWorkbenchState", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.apiConnection.apiBaseUrl).toBe(
+      expect(result.current.connection.connection.apiBaseUrl).toBe(
         "https://api-alt.example.test",
       );
       expect(result.current.graph.graph?.nodes[0]?.label).toBe("new backend");
     });
+  });
+
+  it("switches API base URLs without inventing a preview when no target exists", async () => {
+    mocks.fetchModels.mockReset().mockResolvedValue({ models: [] });
+    mocks.inspectModel.mockClear();
+    const { result } = renderWorkbenchState({ activeWorkspace: "model" });
+
+    await waitFor(() => {
+      expect(result.current.connection.authentication.state).toBe("disabled");
+    });
+    await act(async () => {
+      await result.current.connection.actions.useApiBaseUrl(
+        "https://empty-backend.example.test",
+      );
+    });
+
+    await waitFor(() => {
+      expect(result.current.connection.connection.apiBaseUrl).toBe(
+        "https://empty-backend.example.test",
+      );
+    });
+    expect(result.current.targetContexts.model.browser.selectedModel).toBe("");
+    expect(result.current.graph.graph).toBeUndefined();
+    expect(mocks.inspectModel).not.toHaveBeenCalled();
   });
 
   it("clears historical run selection when switching model type", async () => {
@@ -1447,34 +1678,144 @@ describe("useWorkbenchState", () => {
     });
     const { result } = renderWorkbenchState();
 
-    await waitFor(() => {
-      expect(result.current.history.visibleHistoricalRuns.map((run) => run.id))
-        .toEqual(["linears-history"]);
-    });
-
-    act(() => {
-      result.current.history.selectLogRun("linears-history");
-    });
+    await selectHistoricalRunThroughCascade(
+      result,
+      logRun({ id: "linears-history" }),
+    );
 
     await waitFor(() => {
       expect(result.current.history.selectedLogRunId).toBe("linears-history");
-      expect(result.current.target.selectedTargetMode).toBe("experiment");
-      expect(result.current.target.selectedExperimentRunId).toBe("linears-history");
-      expect(result.current.target.selectedPreset).toBe("fast");
+      expect(result.current.targetContexts.model.target).toMatchObject({
+        kind: "historical-run",
+        run: { runId: "linears-history" },
+      });
+      expect(result.current.targetContexts.model.browser.selectedPreset).toBe("fast");
     });
 
     act(() => {
-      result.current.target.selectModelType("experts");
+      result.current.targetContexts.model.actions.selectModelType("experts");
     });
 
     await waitFor(() => {
-      expect(result.current.target.selectedModel).toBe("linear");
+      expect(result.current.targetContexts.model.browser.selectedModel).toBe("linear");
       expect(result.current.history.selectedLogRunId).toBeNull();
       expect(result.current.history.selectedHistoricalExperimentFilter).toBe("");
       expect(result.current.history.selectedHistoricalDatasetFilter).toBe("");
       expect(result.current.history.selectedHistoricalPreset).toBe("");
-      expect(result.current.target.selectedTargetMode).toBe("preset");
-      expect(result.current.target.selectedExperimentRunId).toBe("");
+      expect(result.current.targetContexts.model.target.kind).toBe("preset");
+    });
+  });
+
+  it("clears historical browser selection while preserving the complete target on connection change", async () => {
+    mockPublicModelCatalog();
+    mocks.fetchLogRuns.mockResolvedValueOnce({
+      runs: [
+        logRun({
+          id: "connection-history",
+          modelType: "linears",
+          model: "linear",
+          preset: "Fast",
+          dataset: "FashionMnist",
+        }),
+      ],
+    });
+    const { result } = renderWorkbenchState();
+    await selectHistoricalRunThroughCascade(
+      result,
+      logRun({ id: "connection-history" }),
+    );
+    await waitFor(() => {
+      expect(result.current.history.selectedLogRunId).toBe("connection-history");
+    });
+
+    await act(async () => {
+      await result.current.connection.actions.useApiBaseUrl(
+        "https://history-reset.example.test",
+      );
+    });
+
+    await waitFor(() => {
+      expect(result.current.history.selectedLogRunId).toBeNull();
+      expect(result.current.history.selectedHistoricalExperimentFilter).toBe("");
+      expect(result.current.history.selectedHistoricalDatasetFilter).toBe("");
+      expect(result.current.history.selectedHistoricalPreset).toBe("");
+      expect(result.current.targetContexts.model.target).toMatchObject({
+        kind: "historical-run",
+        run: { runId: "connection-history" },
+      });
+    });
+  });
+
+  it("keeps the complete historical Inspection when an Experiment Task hides its Run", async () => {
+    mocks.fetchDatasets.mockResolvedValueOnce({
+      modelType: "linears",
+      model: "linear",
+      defaultExperimentTask: "image-classification",
+      datasetGroups: [
+        {
+          experimentTask: "image-classification",
+          label: "Image Classification",
+          datasets: [
+            { name: "Mnist", label: "MNIST", inputDim: 784, outputDim: 10 },
+          ],
+        },
+        {
+          experimentTask: "fashion-classification",
+          label: "Fashion Classification",
+          datasets: [
+            {
+              name: "FashionMnist",
+              label: "Fashion MNIST",
+              inputDim: 784,
+              outputDim: 10,
+            },
+          ],
+        },
+      ],
+    });
+    mocks.fetchLogRuns.mockResolvedValueOnce({
+      runs: [
+        logRun({
+          id: "image-run",
+          experimentTask: "image-classification",
+          dataset: "Mnist",
+        }),
+      ],
+    });
+    const { result } = renderWorkbenchState();
+
+    await selectHistoricalRunThroughCascade(
+      result,
+      logRun({
+        id: "image-run",
+        experimentTask: "image-classification",
+        dataset: "Mnist",
+      }),
+    );
+    await waitFor(() => {
+      expect(result.current.targetContexts.model.target).toMatchObject({
+        kind: "historical-run",
+        run: { runId: "image-run" },
+      });
+      expect(result.current.history.selectedLogRunId).toBe("image-run");
+    });
+
+    act(() => {
+      result.current.targetContexts.model.actions.selectExperimentTask(
+        "fashion-classification",
+      );
+    });
+
+    await waitFor(() => {
+      expect(result.current.history.selectedLogRunId).toBeNull();
+    });
+    expect(result.current.targetContexts.model.browser).toMatchObject({
+      selectedExperimentTask: "fashion-classification",
+      selectedDatasets: ["FashionMnist"],
+    });
+    expect(result.current.targetContexts.model.target).toMatchObject({
+      kind: "historical-run",
+      run: { runId: "image-run", experimentTask: "image-classification" },
     });
   });
 
@@ -1482,22 +1823,23 @@ describe("useWorkbenchState", () => {
     const { result } = renderWorkbenchState();
 
     await waitFor(() => {
-      expect(result.current.target.selectedModel).toBe("linear");
-      expect(result.current.target.selectedPreset).toBe("baseline");
-      expect(result.current.target.selectedDatasets).toEqual(["Mnist"]);
+      expect(result.current.targetContexts.model.browser).toMatchObject({
+        selectedModel: "linear",
+        selectedPreset: "baseline",
+        selectedDatasets: ["Mnist"],
+      });
     });
 
     act(() => {
-      result.current.target.selectModel("linear", "bert");
+      result.current.targetContexts.model.actions.selectModelPackage("linear", "bert");
     });
 
     await waitFor(() => {
-      expect(result.current.target.selectedModel).toBe("linear");
-      expect(result.current.target.selectedPreset).toBe("bert-baseline");
-      expect(result.current.target.selectedDatasets).toEqual(["ToyText"]);
-      expect(result.current.target.selectedTrainingModel).toBe("linear");
-      expect(result.current.target.selectedTrainingPresets).toEqual(["baseline"]);
-      expect(result.current.target.selectedTrainingDatasets).toEqual(["Mnist"]);
+      expect(result.current.targetContexts.model.browser).toMatchObject({
+        selectedModel: "linear",
+        selectedPreset: "bert-baseline",
+        selectedDatasets: ["ToyText"],
+      });
     });
     expect(mocks.inspectModel.mock.calls.map(([request]) => request)).toContainEqual({
       modelType: "bert",
@@ -1529,11 +1871,11 @@ describe("useWorkbenchState", () => {
     });
 
     act(() => {
-      result.current.target.selectModel("linear", "bert");
+      result.current.targetContexts.model.actions.selectModelPackage("linear", "bert");
     });
 
     await waitFor(() => {
-      expect(result.current.target.selectedModel).toBe("linear");
+      expect(result.current.targetContexts.model.browser.selectedModel).toBe("linear");
       expect(result.current.graph.selectedNodeId).toBeNull();
       expect(result.current.graph.expandedGraphNodeIds.size).toBe(0);
     });
@@ -1566,40 +1908,49 @@ describe("useWorkbenchState", () => {
     const { result } = renderWorkbenchState();
 
     await waitFor(() => {
-      expect(result.current.target.selectedModel).toBe("linear");
-      expect(result.current.target.selectedPreset).toBe("bert-baseline");
-      expect(result.current.target.selectedDatasets).toEqual(["ToyText"]);
+      expect(result.current.targetContexts.model.browser).toMatchObject({
+        selectedModel: "linear",
+        selectedPreset: "bert-baseline",
+        selectedDatasets: ["ToyText"],
+      });
     });
 
     act(() => {
-      result.current.target.selectModel("linear", "linears");
+      result.current.targetContexts.model.actions.selectModelPackage("linear", "linears");
     });
 
-    // The run becomes visible but nothing is auto-selected.
+    // The run becomes available but nothing is auto-selected.
     await waitFor(() => {
-      expect(result.current.target.selectedModel).toBe("linear");
-      expect(
-        result.current.history.visibleHistoricalRuns.map((run) => run.id),
-      ).toEqual(["linear-history"]);
+      expect(result.current.targetContexts.model.browser.selectedModel).toBe("linear");
+      expect(result.current.history.historicalExperimentOptions).toEqual([
+        historicalOption("exp_linear", 1, "checking"),
+      ]);
     });
     expect(result.current.history.selectedLogRunId).toBeNull();
 
     mocks.inspectModel.mockClear();
-    act(() => {
-      result.current.history.selectLogRun("linear-history");
-    });
+    await selectHistoricalRunThroughCascade(
+      result,
+      logRun({ id: "linear-history" }),
+    );
 
     await waitFor(() => {
       expect(result.current.history.selectedLogRunId).toBe("linear-history");
-      expect(result.current.target.selectedTargetMode).toBe("experiment");
-      expect(result.current.target.selectedExperimentRunId).toBe("linear-history");
-      expect(result.current.target.selectedExperimentPreset).toBe("Fast");
-      expect(result.current.target.selectedExperimentDataset).toBe("FashionMnist");
-      expect(result.current.target.selectedPreset).toBe("fast");
-      expect(result.current.target.selectedDatasets).toEqual(["FashionMnist"]);
-      expect(result.current.target.selectedTrainingPresets).toEqual(["bert-baseline"]);
-      expect(result.current.target.selectedTrainingDatasets).toEqual(["ToyText"]);
-      expect(result.current.target.overrides).toEqual({});
+      expect(result.current.targetContexts.model.target).toMatchObject({
+        kind: "historical-run",
+        preset: "Fast",
+        datasets: ["FashionMnist"],
+        run: {
+          runId: "linear-history",
+          preset: "Fast",
+          dataset: "FashionMnist",
+        },
+      });
+      expect(result.current.targetContexts.model.browser).toMatchObject({
+        selectedPreset: "fast",
+        selectedDatasets: ["FashionMnist"],
+      });
+      expect(result.current.targetContexts.model.runtimeDefaults.active).toEqual({});
     });
 
     const finalHistoricalRequests = mocks.inspectModel.mock.calls.filter(
@@ -1613,11 +1964,12 @@ describe("useWorkbenchState", () => {
     expect(finalHistoricalRequests).toHaveLength(1);
 
     const requestCount = mocks.inspectModel.mock.calls.length;
-    act(() => {
-      result.current.history.selectLogRun("linear-history");
-    });
+    await selectHistoricalRunThroughCascade(
+      result,
+      logRun({ id: "linear-history" }),
+    );
     expect(result.current.history.selectedLogRunId).toBe("linear-history");
-    expect(result.current.target.selectedTargetMode).toBe("experiment");
+    expect(result.current.targetContexts.model.target.kind).toBe("historical-run");
     expect(mocks.inspectModel.mock.calls.length).toBe(requestCount);
   });
 
@@ -1686,13 +2038,6 @@ describe("useWorkbenchState", () => {
     const { result } = renderWorkbenchState();
 
     await waitFor(() => {
-      expect(result.current.history.visibleHistoricalRuns.map((run) => run.id))
-        .toEqual([
-          "fashion-history",
-          "baseline-new",
-          "fast-history",
-          "baseline-old",
-        ]);
       expect(result.current.history.historicalExperimentOptions).toEqual([
         historicalOption("exp_linear", 4, "checking"),
       ]);
@@ -1703,13 +2048,6 @@ describe("useWorkbenchState", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.history.visibleHistoricalRuns.map((run) => run.id))
-        .toEqual([
-          "fashion-history",
-          "baseline-new",
-          "fast-history",
-          "baseline-old",
-        ]);
       expect(result.current.history.selectedHistoricalDatasetFilter).toBe("");
       expect(result.current.history.selectedHistoricalPreset).toBe("");
       expect(result.current.history.selectedLogRunId).toBeNull();
@@ -1724,8 +2062,6 @@ describe("useWorkbenchState", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.history.visibleHistoricalRuns.map((run) => run.id))
-        .toEqual(["baseline-new", "fast-history", "baseline-old"]);
       expect(result.current.history.selectedHistoricalPreset).toBe("");
       expect(result.current.history.selectedLogRunId).toBeNull();
       expect(result.current.history.historicalPresetOptions).toEqual([
@@ -1743,11 +2079,14 @@ describe("useWorkbenchState", () => {
 
     await waitFor(() => {
       expect(result.current.history.selectedLogRunId).toBe("baseline-new");
-      expect(result.current.target.selectedTargetMode).toBe("experiment");
-      expect(result.current.target.selectedExperimentRunId).toBe("baseline-new");
-      expect(result.current.target.selectedPreset).toBe("baseline");
-      expect(result.current.target.selectedTrainingPresets).toEqual(["baseline"]);
-      expect(result.current.target.selectedDatasets).toEqual(["Mnist"]);
+      expect(result.current.targetContexts.model.target).toMatchObject({
+        kind: "historical-run",
+        run: { runId: "baseline-new" },
+      });
+      expect(result.current.targetContexts.model.browser).toMatchObject({
+        selectedPreset: "baseline",
+        selectedDatasets: ["Mnist"],
+      });
       expect(result.current.history.historicalMonitorRuns.map((run) => run.id))
         .toEqual(["baseline-new", "baseline-old"]);
     });
@@ -1791,8 +2130,6 @@ describe("useWorkbenchState", () => {
         },
       });
     });
-    expect(result.current.history.visibleHistoricalRuns.map((run) => run.id))
-      .toEqual(["baseline-new", "baseline-old"]);
     expect(mocks.inspectModel.mock.calls.map(([request]) => request))
       .toContainEqual({
         modelType: "linears",
@@ -1812,9 +2149,13 @@ describe("useWorkbenchState", () => {
     await waitFor(() => {
       expect(result.current.history.selectedHistoricalPreset).toBe("");
       expect(result.current.history.selectedLogRunId).toBeNull();
-      expect(result.current.target.selectedExperimentRunId).toBe("");
-      expect(result.current.history.visibleHistoricalRuns.map((run) => run.id))
-        .toEqual(["fashion-history"]);
+      expect(result.current.targetContexts.model.target).toMatchObject({
+        kind: "historical-run",
+        run: { runId: "baseline-new" },
+      });
+      expect(result.current.history.historicalPresetOptions).toEqual([
+        historicalOption("fast", 1, "checking"),
+      ]);
     });
     expect(result.current.history.historicalMonitorRuns).toEqual([]);
     expect(mocks.fetchLogParameterStatus).not.toHaveBeenCalled();
@@ -1825,8 +2166,11 @@ describe("useWorkbenchState", () => {
 
     await waitFor(() => {
       expect(result.current.history.selectedLogRunId).toBe("fashion-history");
-      expect(result.current.target.selectedExperimentRunId).toBe("fashion-history");
-      expect(result.current.target.selectedDatasets).toEqual(["FashionMnist"]);
+      expect(result.current.targetContexts.model.target).toMatchObject({
+        kind: "historical-run",
+        datasets: ["FashionMnist"],
+        run: { runId: "fashion-history" },
+      });
       expect(result.current.history.historicalMonitorRuns.map((run) => run.id))
         .toEqual(["fashion-history"]);
       expect(mocks.fetchLogTags).toHaveBeenCalledWith({
@@ -1933,9 +2277,11 @@ describe("useWorkbenchState", () => {
 
     await waitFor(() => {
       expect(result.current.history.selectedLogRunId).toBe("fast-run");
-      expect(result.current.target.selectedTargetMode).toBe("experiment");
-      expect(result.current.target.selectedExperimentRunId).toBe("fast-run");
-      expect(result.current.target.selectedPreset).toBe("fast");
+      expect(result.current.targetContexts.model.target).toMatchObject({
+        kind: "historical-run",
+        run: { runId: "fast-run" },
+      });
+      expect(result.current.targetContexts.model.browser.selectedPreset).toBe("fast");
       expect(result.current.history.historicalMonitorRuns.map((run) => run.id))
         .toEqual(["fast-run"]);
     });
@@ -2049,14 +2395,16 @@ describe("useWorkbenchState", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.target.selectedTargetMode).toBe("experiment");
-      expect(result.current.target.selectedExperimentRunId).toBe("");
+      expect(result.current.targetContexts.model.target).toMatchObject({
+        kind: "historical-run",
+        run: { runId: "run-a" },
+      });
       expect(result.current.history.historicalDatasetOptions).toEqual([
         historicalOption("Mnist", 1, "checking"),
       ]);
     });
     expect(mocks.inspectModel).not.toHaveBeenCalled();
-    expect(result.current.graph.graph).toBeUndefined();
+    expect(result.current.graph.graph).toBeDefined();
 
     act(() => {
       result.current.history.setSelectedHistoricalDatasetFilter("Mnist");
@@ -2071,8 +2419,10 @@ describe("useWorkbenchState", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.target.selectedTargetMode).toBe("experiment");
-      expect(result.current.target.selectedExperimentRunId).toBe("run-b");
+      expect(result.current.targetContexts.model.target).toMatchObject({
+        kind: "historical-run",
+        run: { runId: "run-b" },
+      });
       expect(result.current.graph.nodes.map((node) => node.id)).toContain(
         "b-layer",
       );
@@ -2189,11 +2539,11 @@ describe("useWorkbenchState", () => {
     const { result } = renderWorkbenchState();
 
     await waitFor(() => {
-      expect(result.current.target.selectedModel).toBe("linear");
+      expect(result.current.targetContexts.model.browser.selectedModel).toBe("linear");
     });
 
     act(() => {
-      result.current.target.activateTargetExperimentMode();
+      result.current.targetContexts.model.actions.browseHistoricalRuns();
     });
 
     await waitFor(() => {
@@ -2224,7 +2574,10 @@ describe("useWorkbenchState", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.target.selectedExperimentRunId).toBe("test-linear-run");
+      expect(result.current.targetContexts.model.target).toMatchObject({
+        kind: "historical-run",
+        run: { runId: "test-linear-run" },
+      });
       expect(result.current.graph.nodes.map((node) => node.id)).toContain(
         "test-layer",
       );
@@ -2254,16 +2607,16 @@ describe("useWorkbenchState", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.target.selectedTargetMode).toBe("experiment");
-      expect(result.current.target.selectedExperimentRunId).toBe("");
+      expect(result.current.targetContexts.model.target).toMatchObject({
+        kind: "historical-run",
+        run: { runId: "test-linear-run" },
+      });
       expect(result.current.history.selectedHistoricalExperimentFilter).toBe(
         "kaggle_linear_all",
       );
       expect(result.current.history.historicalDatasetOptions).toEqual([
         historicalOption("KaggleDigits", 1, "checking"),
       ]);
-      expect(result.current.history.visibleHistoricalRuns.map((run) => run.id))
-        .toEqual(["kaggle-linear-run"]);
     });
     expect(mocks.fetchLogParameterStatus).not.toHaveBeenCalled();
     expect(mocks.fetchLogParameterStatus).not.toHaveBeenCalledWith(
@@ -2286,9 +2639,10 @@ describe("useWorkbenchState", () => {
 
     await waitFor(() => {
       expect(result.current.history.selectedLogRunId).toBe("kaggle-linear-run");
-      expect(result.current.target.selectedExperimentRunId).toBe(
-        "kaggle-linear-run",
-      );
+      expect(result.current.targetContexts.model.target).toMatchObject({
+        kind: "historical-run",
+        run: { runId: "kaggle-linear-run" },
+      });
       expect(result.current.history.selectedLogRunMonitorEligibility).toBe(
         "ineligible",
       );
@@ -2355,7 +2709,7 @@ describe("useWorkbenchState", () => {
     expect(mocks.fetchLogTags).not.toHaveBeenCalled();
 
     act(() => {
-      result.current.target.activateTargetExperimentMode();
+      result.current.targetContexts.model.actions.browseHistoricalRuns();
     });
     expect(mocks.fetchLogTags).not.toHaveBeenCalled();
     act(() => {
@@ -2389,7 +2743,10 @@ describe("useWorkbenchState", () => {
 
     await waitFor(() => {
       expect(result.current.history.selectedLogRunId).toBe("slow-tags-run");
-      expect(result.current.target.selectedExperimentRunId).toBe("slow-tags-run");
+      expect(result.current.targetContexts.model.target).toMatchObject({
+        kind: "historical-run",
+        run: { runId: "slow-tags-run" },
+      });
       expect(result.current.history.selectedLogRunMonitorEligibility).toBe(
         "checking",
       );
@@ -2439,19 +2796,17 @@ describe("useWorkbenchState", () => {
     });
     const { result } = renderWorkbenchState();
 
+    await selectHistoricalRunThroughCascade(
+      result,
+      logRun({ id: "linear-history" }),
+    );
     await waitFor(() => {
-      expect(result.current.history.visibleHistoricalRuns.map((run) => run.id))
-        .toEqual(["linear-history"]);
-    });
-
-    act(() => {
-      result.current.history.selectLogRun("linear-history");
-    });
-    await waitFor(() => {
-      expect(result.current.target.selectedTargetMode).toBe("experiment");
+      expect(result.current.targetContexts.model.target.kind).toBe("historical-run");
       expect(result.current.history.selectedLogRunId).toBe("linear-history");
-      expect(result.current.target.selectedExperimentDataset).toBe("FashionMnist");
-      expect(result.current.target.selectedDatasets).toEqual(["FashionMnist"]);
+      expect(result.current.targetContexts.model.target.datasets).toEqual(["FashionMnist"]);
+      expect(result.current.targetContexts.model.browser.selectedDatasets).toEqual([
+        "FashionMnist",
+      ]);
     });
     await waitFor(() => {
       expect(mocks.inspectModel).toHaveBeenCalledWith(
@@ -2469,15 +2824,14 @@ describe("useWorkbenchState", () => {
 
     mocks.inspectModel.mockClear();
     act(() => {
-      result.current.target.selectTargetPreset("baseline");
+      result.current.targetContexts.model.actions.selectPresetTarget("baseline");
     });
 
     await waitFor(() => {
-      expect(result.current.target.selectedTargetMode).toBe("preset");
-      expect(result.current.target.selectedExperimentRunId).toBe("");
+      expect(result.current.targetContexts.model.target.kind).toBe("preset");
       expect(result.current.history.selectedLogRunId).toBeNull();
-      expect(result.current.target.selectedSnapshotId).toBe("");
-      expect(result.current.target.overrides).toEqual({});
+      expect(result.current.targetContexts.model.browser.selectedSnapshotId).toBe("");
+      expect(result.current.targetContexts.model.runtimeDefaults.active).toEqual({});
     });
     expect(mocks.inspectModel.mock.calls.at(-1)?.[0]).toEqual({
       modelType: "linears",
@@ -2519,19 +2873,20 @@ describe("useWorkbenchState", () => {
     const { result } = renderWorkbenchState();
 
     await waitFor(() => {
-      expect(result.current.target.allConfigSnapshotCount).toBe(1);
-      expect(result.current.history.visibleHistoricalRuns.map((run) => run.id))
-        .toEqual(["linear-history"]);
+      expect(result.current.targetContexts.snapshots.records.allCount).toBe(1);
     });
 
-    act(() => {
-      result.current.history.selectLogRun("linear-history");
-    });
+    await selectHistoricalRunThroughCascade(
+      result,
+      logRun({ id: "linear-history" }),
+    );
     await waitFor(() => {
-      expect(result.current.target.selectedTargetMode).toBe("experiment");
+      expect(result.current.targetContexts.model.target.kind).toBe("historical-run");
       expect(result.current.history.selectedLogRunId).toBe("linear-history");
-      expect(result.current.target.selectedExperimentDataset).toBe("FashionMnist");
-      expect(result.current.target.selectedDatasets).toEqual(["FashionMnist"]);
+      expect(result.current.targetContexts.model.target.datasets).toEqual(["FashionMnist"]);
+      expect(result.current.targetContexts.model.browser.selectedDatasets).toEqual([
+        "FashionMnist",
+      ]);
     });
     await waitFor(() => {
       expect(mocks.inspectModel).toHaveBeenCalledWith(
@@ -2549,15 +2904,20 @@ describe("useWorkbenchState", () => {
 
     mocks.inspectModel.mockClear();
     act(() => {
-      expect(result.current.target.selectTargetSnapshot("snapshot-wide")).toBe(true);
+      expect(
+        result.current.targetContexts.model.actions.selectSnapshotTarget("snapshot-wide"),
+      ).toBe(true);
     });
 
     await waitFor(() => {
-      expect(result.current.target.selectedTargetMode).toBe("snapshot");
-      expect(result.current.target.selectedSnapshotId).toBe("snapshot-wide");
-      expect(result.current.target.selectedExperimentRunId).toBe("");
+      expect(result.current.targetContexts.model.target.kind).toBe("snapshot");
+      expect(result.current.targetContexts.model.browser.selectedSnapshotId).toBe(
+        "snapshot-wide",
+      );
       expect(result.current.history.selectedLogRunId).toBeNull();
-      expect(result.current.target.overrides).toEqual({ hidden_size: "256" });
+      expect(result.current.targetContexts.model.runtimeDefaults.active).toEqual({
+        hidden_size: "256",
+      });
     });
     expect(mocks.inspectModel.mock.calls.at(-1)?.[0]).toEqual({
       modelType: "linears",
@@ -2569,89 +2929,13 @@ describe("useWorkbenchState", () => {
     });
   });
 
-  it("updates the selected config snapshot without detaching snapshot mode", async () => {
-    mocks.fetchConfigSnapshots.mockResolvedValue({
-      modelType: "linears",
-      model: "linear",
-      snapshots: [
-        {
-          id: "snapshot-wide",
-          modelType: "linears",
-          model: "linear",
-          preset: "baseline",
-          name: "Wide",
-          overrides: { hidden_size: "256" },
-          createdAt: "2026-06-01T00:00:00.000Z",
-          updatedAt: "2026-06-01T00:00:00.000Z",
-        },
-      ],
-    });
-    mocks.fetchConfigSchema.mockResolvedValue({
-      modelType: "linears",
-      model: "linear",
-      fields: [
-        {
-          key: "hidden_size",
-          configKey: "HIDDEN_SIZE",
-          flag: "--hidden-size",
-          label: "Hidden size",
-          section: "Model",
-          sectionPath: ["Model"],
-          type: "int",
-          default: 64,
-          nullable: false,
-          choices: [],
-        },
-      ],
-    });
-    const { result } = renderWorkbenchState();
-
-    await waitFor(() => {
-      expect(result.current.target.allConfigSnapshotCount).toBe(1);
-    });
-
-    act(() => {
-      expect(result.current.target.selectTargetSnapshot("snapshot-wide")).toBe(true);
-    });
-
-    await waitFor(() => {
-      expect(result.current.target.selectedTargetMode).toBe("snapshot");
-      expect(result.current.target.selectedSnapshotId).toBe("snapshot-wide");
-      expect(result.current.target.selectedConfigSnapshot?.name).toBe("Wide");
-    });
-
-    act(() => {
-      result.current.target.updateSnapshotEditorDraftOverride("hidden_size", "512");
-    });
-
-    expect(result.current.target.selectedTargetMode).toBe("snapshot");
-    expect(result.current.target.selectedSnapshotId).toBe("snapshot-wide");
-    expect(result.current.target.overrides).toEqual({ hidden_size: "512" });
-
-    act(() => {
-      const resultValue =
-        result.current.target.updateSelectedConfigSnapshot("Wide edited");
-      expect(resultValue.ok).toBe(true);
-    });
-
-    await waitFor(() => {
-      expect(mocks.updateConfigSnapshot).toHaveBeenCalledWith("snapshot-wide", {
-        name: "Wide edited",
-        overrides: { hidden_size: "512" },
-      });
-    });
-    expect(mocks.createConfigSnapshot).not.toHaveBeenCalled();
-    expect(result.current.target.selectedTargetMode).toBe("snapshot");
-    expect(result.current.target.selectedSnapshotId).toBe("snapshot-wide");
-  });
-
   it("requests parameter status for the active linear training job", async () => {
     mocks.inspectModel.mockResolvedValue(monitorGraph());
     const { result } = renderWorkbenchState();
 
     await waitFor(() => {
-      expect(result.current.target.selectedModel).toBe("linear");
-      expect(result.current.target.selectedPreset).toBe("baseline");
+      expect(result.current.targetContexts.model.browser.selectedModel).toBe("linear");
+      expect(result.current.targetContexts.model.browser.selectedPreset).toBe("baseline");
     });
 
     act(() => {
@@ -2677,17 +2961,22 @@ describe("useWorkbenchState", () => {
         "linear-0",
       );
     });
-    const linearNode = result.current.graph.graph?.nodes.find(
-      (node) => node.id === "linear-0",
-    );
-    expect(linearNode).toBeDefined();
     const job = trainingJob();
-
     act(() => {
       result.current.activeJob.onJobChange(job);
     });
+    act(() => result.current.graph.revealGraphNode("linear-0"));
+    const linearNode = await waitFor(() => {
+      const node = result.current.graph.nodes.find(
+        (candidate) => candidate.id === "linear-0",
+      );
+      expect(node).toBeDefined();
+      expect(node?.data.onOpenMonitor).toBeTypeOf("function");
+      return node;
+    });
+    expect(linearNode).toBeDefined();
     act(() => {
-      result.current.graphMonitor.openGraphNodeMonitor(linearNode as GraphNode);
+      linearNode?.data.onOpenMonitor?.();
     });
 
     await waitFor(() => {
@@ -2696,6 +2985,17 @@ describe("useWorkbenchState", () => {
         kind: "active-job",
         job: activeMonitorJob(job),
       });
+    });
+
+    await act(async () => {
+      await result.current.connection.actions.useApiBaseUrl(
+        "https://monitor-reset.example.test",
+      );
+    });
+    await waitFor(() => {
+      expect(result.current.graphMonitor.graphMonitorNode).toBeUndefined();
+      expect(result.current.graph.selectedNodeId).toBeNull();
+      expect(result.current.graph.expandedGraphNodeIds.size).toBe(0);
     });
   });
 
@@ -2708,18 +3008,23 @@ describe("useWorkbenchState", () => {
         "linear-0",
       );
     });
-    const linearNode = result.current.graph.graph?.nodes.find(
-      (node) => node.id === "linear-0",
-    );
-    expect(linearNode).toBeDefined();
-
     act(() => {
       result.current.activeJob.onJobChange(
         trainingJob({ epoch: 1, step: 10, metrics: { loss: 1 } }),
       );
     });
+    act(() => result.current.graph.revealGraphNode("linear-0"));
+    const linearNode = await waitFor(() => {
+      const node = result.current.graph.nodes.find(
+        (candidate) => candidate.id === "linear-0",
+      );
+      expect(node).toBeDefined();
+      expect(node?.data.onOpenMonitor).toBeTypeOf("function");
+      return node;
+    });
+    expect(linearNode).toBeDefined();
     act(() => {
-      result.current.graphMonitor.openGraphNodeMonitor(linearNode as GraphNode);
+      linearNode?.data.onOpenMonitor?.();
     });
 
     await waitFor(() => {
@@ -2770,14 +3075,10 @@ describe("useWorkbenchState", () => {
     });
     const { result } = renderWorkbenchState();
 
-    await waitFor(() => {
-      expect(result.current.history.visibleHistoricalRuns.map((run) => run.id))
-        .toEqual(["run-new", "run-fast", "run-old"]);
-    });
-
-    act(() => {
-      result.current.history.selectLogRun("run-new");
-    });
+    await selectHistoricalRunThroughCascade(
+      result,
+      logRun({ id: "run-new", preset: "baseline", dataset: "Mnist" }),
+    );
 
     await waitFor(() => {
       expect(result.current.history.historicalMonitorRuns.map((run) => run.id))
@@ -2877,45 +3178,42 @@ describe("useWorkbenchState", () => {
 
     const { result } = renderWorkbenchState();
 
+    await selectHistoricalRunThroughCascade(
+      result,
+      logRun({
+        id: "run-old",
+        experiment: "exp_old",
+        preset: "baseline",
+        dataset: "Mnist",
+      }),
+    );
     await waitFor(() => {
-      expect(result.current.history.visibleHistoricalRuns.map((run) => run.id))
-        .toEqual(["run-final", "run-old"]);
-    });
-
-    act(() => {
-      result.current.history.selectLogRun("run-old");
-    });
-    await waitFor(() => {
-      expect(result.current.target.selectedExperimentRunId).toBe("run-old");
+      expect(result.current.targetContexts.model.target).toMatchObject({
+        kind: "historical-run",
+        run: { runId: "run-old" },
+      });
       expect(mocks.inspectModel).toHaveBeenCalledWith(
         expect.objectContaining({ logRunId: "run-old" }),
         expect.objectContaining({ signal: expect.anything() }),
       );
     });
 
-    act(() => {
-      result.current.history.selectLogRun("run-final");
-    });
+    await selectHistoricalRunThroughCascade(
+      result,
+      logRun({
+        id: "run-final",
+        experiment: "exp_final",
+        preset: "baseline",
+        dataset: "Mnist",
+      }),
+    );
     await waitFor(() => {
-      expect(result.current.target.selectedExperimentRunId).toBe("run-final");
+      expect(result.current.targetContexts.model.target).toMatchObject({
+        kind: "historical-run",
+        run: { runId: "run-final" },
+      });
       expect(mocks.inspectModel).toHaveBeenCalledWith(
         expect.objectContaining({ logRunId: "run-final" }),
-        expect.objectContaining({ signal: expect.anything() }),
-      );
-    });
-
-    act(() => {
-      result.current.target.updateOverride("hidden_size", "128", {
-        preserveTargetSelection: true,
-      });
-    });
-    await waitFor(() => {
-      expect(result.current.target.overrides).toEqual({ hidden_size: "128" });
-      expect(mocks.inspectModel).toHaveBeenCalledWith(
-        expect.objectContaining({
-          logRunId: "run-final",
-          overrides: { hidden_size: "128" },
-        }),
         expect.objectContaining({ signal: expect.anything() }),
       );
     });
@@ -3157,8 +3455,13 @@ describe("useWorkbenchState", () => {
     await waitFor(() => expect(snapshotsButton).toBeEnabled());
     await user.click(snapshotsButton);
 
-    expect(await screen.findByRole("combobox", { name: /^snapshot$/i }))
-      .toHaveTextContent("Wide");
+    const snapshotSelect = await screen.findByRole("combobox", {
+      name: /^snapshot$/i,
+    });
+    expect(snapshotSelect).toHaveTextContent("Select snapshot");
+    await user.click(snapshotSelect);
+    await user.click(await screen.findByRole("option", { name: "Wide" }));
+    expect(snapshotSelect).toHaveTextContent("Wide");
     expect(screen.queryByRole("button", { name: "Create Snapshot" }))
       .not.toBeInTheDocument();
 

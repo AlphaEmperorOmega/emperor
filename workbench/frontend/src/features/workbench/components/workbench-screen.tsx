@@ -30,7 +30,6 @@ export function WorkbenchScreen({
       />
       <WorkbenchWorkspaceMain
         activeWorkspace={activeWorkspace}
-        onOpenFullConfig={fullConfigDialog.open}
       />
     </>
   );

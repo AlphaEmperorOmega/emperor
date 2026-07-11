@@ -28,30 +28,25 @@ import {
 import { TrainingRunSummaryBadge } from "@/features/workbench/components/training/training-footer-run-summary";
 import { TrainingLogTailCard } from "@/features/workbench/components/training/training-log-tail-card";
 import { TrainingRunPlanCard } from "@/features/workbench/components/training/training-run-plan-card";
-import {
-  type TrainingPanelViewModel,
-} from "@/features/workbench/state/training/use-training-panel-view-model";
-
-type TrainingPanelProps = {
-  viewModel: TrainingPanelViewModel;
-};
+import { useTrainingWorkspace } from "@/features/workbench/providers/training-provider";
 
 const trainingIconClass = "h-[15px] w-[15px] text-violet";
 
-export function TrainingPanel({ viewModel }: TrainingPanelProps) {
-  const { input, logFolder, options, request, status, training } = viewModel;
+export function TrainingPanel() {
+  const { draft, plan, job: activeJob, dialogs, actions } =
+    useTrainingWorkspace();
   const {
     datasetOptions,
     experimentTaskOptions,
     selectedModelType,
     selectedModel,
-    selectedPreset,
-    selectedTrainingPresets,
+    selectedPrimaryPreset: selectedPreset,
+    selectedPresets: selectedTrainingPresets,
     selectedExperimentTask,
-    selectedTrainingSnapshotIds,
+    selectedSnapshotIds: selectedTrainingSnapshotIds,
     selectedDatasets,
-    overrides,
-    allConfigSnapshots,
+    bulkOverrides: overrides,
+    configSnapshots: allConfigSnapshots,
     monitorOptions,
     snapshotOverrideWarning,
     selectedMonitors,
@@ -60,32 +55,83 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
     searchLoading,
     trainingEnabled,
     canOpenFullConfig,
-    onOpenFullConfig,
-    onSelectModelType,
-    onSelectModel,
-    onSelectPreset,
-    onSetTrainingPresets,
-    onSetTrainingSnapshotSelection,
-    onToggleTrainingPreset,
-    onMakeTrainingPresetPrimary,
-    onSelectAllTrainingPresets,
-    onSelectPrimaryTrainingPreset,
-    onSelectExperimentTask,
-    onSetDatasets,
-    onToggleDataset,
-    onSelectAllDatasets,
-    onSelectFirstDataset,
-    onSetMonitors,
-    onSelectAllMonitors,
-    onClearMonitors,
-    onRemoveConfigSnapshot,
-    onExcludeConfigSnapshot,
-    onExcludeDraftTrainingPreset,
-    onCreatePresetSnapshot,
-    onEditConfigSnapshot,
-    onDuplicateConfigSnapshot,
-    onTrainingSearchChange,
-  } = input;
+    activeConfigSnapshotCount,
+    selectedPresetCount: selectedTrainingPresetCount,
+    modelTypeOptions,
+    modelOptions,
+    presetOptions,
+  } = draft;
+  const {
+    display: progressRunPlan,
+    displayedRunCount,
+    isPlanning: isProgressPlanning,
+    error: progressPlanError,
+    canStart,
+    canResample: canResampleRunPlan,
+    canRetry: canRetryRunPlan,
+    isResampling,
+    datasetCountLabel,
+    presetCountLabel,
+    search: {
+      effective: effectiveTrainingSearch,
+      conflictKeys: searchConflictKeys,
+      validation: trainingSearchValidation,
+      lockSummary: searchLockSummary,
+      modeLabel: searchModeLabel,
+      activeAxisCount: activeSearchAxisCount,
+    },
+  } = plan;
+  const {
+    value: job,
+    status: jobStatus,
+    isRunning,
+    canReset: canResetTraining,
+    isStarting,
+    isCancelling,
+    error: trainingError,
+    clusterGrowth,
+  } = activeJob;
+  const {
+    isOpen: showLargeGridConfirmation,
+    isRequired: requiresLargeGridConfirmation,
+  } = dialogs.largeGridConfirmation;
+  const {
+    openFullConfig: onOpenFullConfig,
+    selectModelType: onSelectModelType,
+    selectModel: onSelectModel,
+    selectPrimaryPreset: onSelectPreset,
+    selectPresets: onSetTrainingPresets,
+    selectSnapshots: onSetTrainingSnapshotSelection,
+    togglePreset: onToggleTrainingPreset,
+    excludePreset: onExcludeDraftTrainingPreset,
+    makePresetPrimary: onMakeTrainingPresetPrimary,
+    selectAllPresets: onSelectAllTrainingPresets,
+    selectOnlyPrimaryPreset: onSelectPrimaryTrainingPreset,
+    selectExperimentTask: onSelectExperimentTask,
+    selectDatasets: onSetDatasets,
+    toggleDataset: onToggleDataset,
+    selectAllDatasets: onSelectAllDatasets,
+    selectFirstDataset: onSelectFirstDataset,
+    selectMonitors: onSetMonitors,
+    selectAllMonitors: onSelectAllMonitors,
+    clearMonitors: onClearMonitors,
+    removeSnapshot: onRemoveConfigSnapshot,
+    excludeSnapshot: onExcludeConfigSnapshot,
+    createPresetSnapshot: onCreatePresetSnapshot,
+    editConfigSnapshot: onEditConfigSnapshot,
+    duplicateConfigSnapshot: onDuplicateConfigSnapshot,
+    updateSearch: onTrainingSearchChange,
+    selectLogFolderMode,
+    selectExistingLogFolder: setSelectedExistingLogFolder,
+    nameNewLogFolder: setNewLogFolder,
+    startJob: startTraining,
+    confirmLargeGridSearch,
+    cancelLargeGridSearch,
+    cancelJob: cancelTraining,
+    resetJob: resetTraining,
+    resamplePlan: resampleRunPlan,
+    retryPlan: retryRunPlan,
+  } = actions;
   const {
     existingHelp,
     existingValue: selectedExistingLogFolder,
@@ -95,50 +141,7 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
     newValid: newLogFolderValid,
     newValue: newLogFolder,
     options: logFolderOptions,
-    setExistingValue: setSelectedExistingLogFolder,
-    setNewValue: setNewLogFolder,
-  } = logFolder;
-  const { modelTypeOptions, modelOptions, presetOptions } = options;
-  const {
-    activeConfigSnapshotCount,
-    activeSearchAxisCount,
-    canRequestTraining,
-    effectiveTrainingSearch,
-    searchConflictKeys,
-    searchLockSummary,
-    searchModeLabel,
-    selectedTrainingPresetCount,
-    trainingSearchValidation,
-  } = request;
-  const {
-    job,
-    progressRunPlan,
-    displayedRunCount,
-    isProgressPlanning,
-    progressPlanError,
-    isRunning,
-    canResetTraining,
-    canStart,
-    canResampleRunPlan,
-    isResampling,
-    isStarting,
-    isCancelling,
-    trainingError,
-    requiresLargeGridConfirmation,
-    showLargeGridConfirmation,
-    startTraining,
-    confirmLargeGridSearch,
-    cancelLargeGridSearch,
-    cancelTraining,
-    resetTraining,
-    resampleRunPlan,
-  } = training;
-  const {
-    clusterGrowth,
-    datasetCountLabel,
-    jobStatus,
-    presetCountLabel,
-  } = status;
+  } = draft.logFolder;
   const planChangingControlsDisabled = isRunning;
   const setupLockMessage = planChangingControlsDisabled
     ? "Training setup is locked while the active job is running or queued."
@@ -147,17 +150,17 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
   const logFolderModeControl = (
     <SegmentedControl aria-label="Log folder mode">
       <ViewModeButton
-        active={logFolder.mode === "existing"}
+        active={logFolderMode === "existing"}
         disabled={planChangingControlsDisabled}
-        onClick={() => logFolder.setMode("existing")}
+        onClick={() => selectLogFolderMode("existing")}
       >
         <FolderOpen className="h-3.5 w-3.5" aria-hidden />
         Existing folder
       </ViewModeButton>
       <ViewModeButton
-        active={logFolder.mode === "new"}
+        active={logFolderMode === "new"}
         disabled={planChangingControlsDisabled}
-        onClick={() => logFolder.setMode("new")}
+        onClick={() => selectLogFolderMode("new")}
       >
         <FolderPlus className="h-3.5 w-3.5" aria-hidden />
         New folder
@@ -382,6 +385,16 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
                     className="min-w-0"
                   />
                   <TrainingAllCommandsButton plan={progressRunPlan} />
+                  {canRetryRunPlan && (
+                    <Button
+                      variant="secondary"
+                      onClick={retryRunPlan}
+                      className="h-10 px-3 text-[13px]"
+                    >
+                      <RefreshCw className="h-4 w-4" aria-hidden />
+                      Retry Plan
+                    </Button>
+                  )}
                   <Button
                     variant="secondary"
                     onClick={onOpenFullConfig}
@@ -421,7 +434,7 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
                   <Button
                     variant="primary"
                     onClick={startTraining}
-                    disabled={!canRequestTraining || !canStart}
+                    disabled={!trainingEnabled || !canStart}
                     className="h-10 px-[22px] text-sm"
                   >
                     {isStarting ? (

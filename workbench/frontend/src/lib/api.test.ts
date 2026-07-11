@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 import {
   cancelTrainingJob,
   createConfigSnapshot,
@@ -32,7 +33,6 @@ import {
   fetchTrainingJob,
   fetchTrainingJobEvents,
   fetchTrainingRunPlan,
-  getWorkbenchApiBaseUrl,
   importLogArchive,
   inspectModel,
   isUnauthorizedApiError,
@@ -41,19 +41,35 @@ import {
   logImageSummarySchema,
   logArchiveImportSchema,
   monitorDataSchema,
-  normalizeWorkbenchApiBaseUrl,
   renameConfigSnapshot,
-  resetWorkbenchApiBaseUrl,
-  setWorkbenchApiBaseUrl,
   trainingJobSchema,
   trainingJobEventsSchema,
   trainingProgressEventSchema,
   trainingRunPlanSchema,
   updateConfigSnapshot,
-  WORKBENCH_API_BASE_URL_STORAGE_KEY,
 } from "@/lib/api";
 import { mapWithConcurrency } from "@/lib/api/concurrency";
-import { setSessionAuthToken } from "@/lib/auth-token";
+import {
+  requestJson,
+  WORKBENCH_MUTATION_HEADER_NAME,
+} from "@/lib/api/client";
+import {
+  loadWorkbenchConnectionRuntime,
+  normalizeWorkbenchApiBaseUrl,
+  observeWorkbenchAuthMode,
+  validateWorkbenchApiBaseUrl,
+  WORKBENCH_API_BASE_URL,
+  WORKBENCH_API_BASE_URL_STORAGE_KEY,
+} from "@/lib/api/_connection-runtime";
+import {
+  beginWorkbenchConnectionTransition,
+  commitWorkbenchApiBaseUrl,
+  commitWorkbenchAuthToken,
+  finishWorkbenchConnectionTransition,
+  persistDefaultWorkbenchApiBaseUrl,
+  persistWorkbenchApiBaseUrl,
+  persistWorkbenchAuthToken,
+} from "@/lib/api/_connection-runtime-actions";
 
 // Characterization tests: assert the CURRENT behavior of the API client
 // (URL/verb/body construction and requestJson error handling) so later
@@ -61,6 +77,47 @@ import { setSessionAuthToken } from "@/lib/auth-token";
 
 const BASE = "http://127.0.0.1:9999";
 const linearIdentity = { modelType: "linears", model: "linear" } as const;
+
+function getWorkbenchApiBaseUrl() {
+  return loadWorkbenchConnectionRuntime().apiBaseUrl;
+}
+
+function setWorkbenchApiBaseUrl(url: string) {
+  const validation = validateWorkbenchApiBaseUrl(url);
+  if (!validation.ok) {
+    throw new Error(validation.message);
+  }
+  const persisted = persistWorkbenchApiBaseUrl(validation.value);
+  if (!persisted.ok) {
+    throw new Error(persisted.message);
+  }
+  beginWorkbenchConnectionTransition();
+  commitWorkbenchApiBaseUrl(validation.value);
+  finishWorkbenchConnectionTransition();
+  return validation.value;
+}
+
+function resetWorkbenchApiBaseUrl() {
+  const persisted = persistDefaultWorkbenchApiBaseUrl();
+  if (!persisted.ok) {
+    throw new Error(persisted.message);
+  }
+  beginWorkbenchConnectionTransition();
+  commitWorkbenchApiBaseUrl(WORKBENCH_API_BASE_URL);
+  finishWorkbenchConnectionTransition();
+  return WORKBENCH_API_BASE_URL;
+}
+
+function setSessionAuthToken(token: string) {
+  const persisted = persistWorkbenchAuthToken(token);
+  if (!persisted.ok) {
+    throw new Error(persisted.message);
+  }
+  beginWorkbenchConnectionTransition();
+  commitWorkbenchAuthToken(token);
+  finishWorkbenchConnectionTransition();
+  observeWorkbenchAuthMode("none");
+}
 
 const capabilitiesResponse = {
   authMode: "none",
@@ -116,6 +173,11 @@ async function flushAsyncWork() {
     await Promise.resolve();
   }
 }
+
+beforeEach(() => {
+  loadWorkbenchConnectionRuntime();
+  observeWorkbenchAuthMode("none");
+});
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -1248,6 +1310,7 @@ describe("requestJson success", () => {
     const headers = new Headers((init as RequestInit).headers);
     expect(headers.get("content-type")).toBe("application/json");
     expect(headers.has("Authorization")).toBe(false);
+    expect(headers.has("X-Workbench-Mutation")).toBe(false);
   });
 
   it("attaches no authorization header when no session token is stored", async () => {
@@ -1260,6 +1323,35 @@ describe("requestJson success", () => {
     const headers = new Headers((fetchMock.mock.calls[0][1] as RequestInit).headers);
     expect(headers.get("content-type")).toBe("application/json");
     expect(headers.has("Authorization")).toBe(false);
+  });
+
+  it("attaches mutation proof to unsafe methods only and removes caller spoofing from safe methods", async () => {
+    const fetchMock = stubFetch(
+      fakeResponse({ json: () => Promise.resolve({ status: "ok" }) }),
+    );
+    const schema = z.object({ status: z.string() });
+
+    for (const method of ["GET", "HEAD", "OPTIONS", "POST", "PUT", "PATCH", "DELETE"]) {
+      await requestJson("/method-matrix", schema, {
+        method,
+        headers: { [WORKBENCH_MUTATION_HEADER_NAME]: "caller-value" },
+      });
+    }
+
+    expect(
+      fetchMock.mock.calls.map(([, init]) => ({
+        method: init?.method,
+        mutation: new Headers(init?.headers).get(WORKBENCH_MUTATION_HEADER_NAME),
+      })),
+    ).toEqual([
+      { method: "GET", mutation: null },
+      { method: "HEAD", mutation: null },
+      { method: "OPTIONS", mutation: null },
+      { method: "POST", mutation: "true" },
+      { method: "PUT", mutation: "true" },
+      { method: "PATCH", mutation: "true" },
+      { method: "DELETE", mutation: "true" },
+    ]);
   });
 
   it("attaches a bearer authorization header when a session token is stored", async () => {
@@ -1334,7 +1426,7 @@ describe("requestJson success", () => {
     expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/health`);
   });
 
-  it("prefers a runtime API URL switch when storage persistence throws", async () => {
+  it("keeps the current API URL when switch persistence throws", async () => {
     const fetchMock = stubFetch(
       fakeResponse({ json: () => Promise.resolve({ status: "ok" }) }),
     );
@@ -1346,12 +1438,15 @@ describe("requestJson success", () => {
       throw new Error("storage locked");
     });
 
-    setWorkbenchApiBaseUrl("https://runtime-api.example.test");
+    expect(getWorkbenchApiBaseUrl()).toBe("https://stored-api.example.test");
+    expect(() =>
+      setWorkbenchApiBaseUrl("https://runtime-api.example.test"),
+    ).toThrow(/could not persist/i);
 
-    expect(getWorkbenchApiBaseUrl()).toBe("https://runtime-api.example.test");
+    expect(getWorkbenchApiBaseUrl()).toBe("https://stored-api.example.test");
     await fetchHealth();
     expect(fetchMock.mock.calls[0][0]).toBe(
-      "https://runtime-api.example.test/health",
+      "https://stored-api.example.test/health",
     );
   });
 
@@ -1383,14 +1478,19 @@ describe("requestJson success", () => {
     });
 
     try {
-      resetWorkbenchApiBaseUrl();
+      expect(getWorkbenchApiBaseUrl()).toBe(
+        "https://stored-api.example.test",
+      );
+      expect(() => resetWorkbenchApiBaseUrl()).toThrow(/could not clear/i);
 
       expect(window.localStorage.getItem(WORKBENCH_API_BASE_URL_STORAGE_KEY)).toBe(
         "https://stored-api.example.test",
       );
-      expect(getWorkbenchApiBaseUrl()).toBe(BASE);
+      expect(getWorkbenchApiBaseUrl()).toBe("https://stored-api.example.test");
       await fetchHealth();
-      expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/health`);
+      expect(fetchMock.mock.calls[0][0]).toBe(
+        "https://stored-api.example.test/health",
+      );
     } finally {
       if (originalStorage) {
         Object.defineProperty(window, "localStorage", originalStorage);
@@ -1404,7 +1504,7 @@ describe("requestJson success", () => {
     expect(normalizeWorkbenchApiBaseUrl("https://api.example.test/workbench#status"))
       .toBeNull();
     expect(() => setWorkbenchApiBaseUrl("https://api.example.test?debug=true"))
-      .toThrow(/without a query string or fragment/i);
+      .toThrow(/without credentials, query, or fragment/i);
   });
 
   it("preserves POST request init fields when attaching the bearer token", async () => {
@@ -1439,6 +1539,7 @@ describe("requestJson success", () => {
     expect(request.method).toBe("POST");
     expect(request.body).toBe(JSON.stringify(input));
     expect(headers.get("Authorization")).toBe("Bearer hosted-secret");
+    expect(headers.get("X-Workbench-Mutation")).toBe("true");
   });
 });
 
@@ -1464,6 +1565,7 @@ describe("requestMultipartJson success", () => {
     expect(request.method).toBe("POST");
     expect(request.body).toBeInstanceOf(FormData);
     expect(headers.get("Authorization")).toBe("Bearer hosted-secret");
+    expect(headers.get("X-Workbench-Mutation")).toBe("true");
     expect(headers.has("content-type")).toBe(false);
     const archive = (request.body as FormData).get("archive");
     expect(archive).toBeInstanceOf(File);
@@ -1472,6 +1574,103 @@ describe("requestMultipartJson success", () => {
 });
 
 describe("requestJson error handling", () => {
+  it("redacts a session token rejected during header construction", async () => {
+    const token = "invalid-header-token\r\ncredential";
+    setSessionAuthToken(token);
+    const fetchMock = stubFetch(
+      fakeResponse({ json: () => Promise.resolve({ ok: true }) }),
+    );
+
+    const error = await requestJson(
+      "/redaction",
+      z.object({ ok: z.boolean() }),
+    ).catch((caught: unknown) => caught);
+
+    expect(String(error)).not.toContain(token);
+    expect(error).toEqual(
+      expect.objectContaining({ message: expect.not.stringContaining(token) }),
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("redacts the active bearer token from every normalized request error", async () => {
+    const token = "redaction-sentinel-token";
+    setSessionAuthToken(token);
+    const assertRedacted = (error: unknown) => {
+      expect(JSON.stringify(error)).not.toContain(token);
+      expect(String(error)).not.toContain(token);
+      expect(error).toEqual(expect.objectContaining({ message: expect.not.stringContaining(token) }));
+      if (typeof error === "object" && error !== null && "detail" in error) {
+        expect(String(error.detail)).not.toContain(token);
+      }
+    };
+
+    const httpFetch = stubFetch(
+      fakeResponse({
+        ok: false,
+        status: 400,
+        statusText: "Bad Request",
+        json: () => Promise.resolve({ detail: `Bearer ${token} was rejected` }),
+      }),
+    );
+    const httpError = await requestJson("/redaction", z.object({ ok: z.boolean() }))
+      .catch((error: unknown) => error);
+    assertRedacted(httpError);
+    httpFetch.mockRestore();
+
+    stubFetch(
+      fakeResponse({ json: () => Promise.resolve(`payload-${token}`) }),
+    );
+    const schema = z.string().refine(() => false, {
+      message: `invalid secret ${token}`,
+    });
+    const schemaError = await requestJson("/redaction", schema).catch(
+      (error: unknown) => error,
+    );
+    assertRedacted(schemaError);
+    vi.unstubAllGlobals();
+
+    stubFetch(
+      fakeResponse({
+        json: () => Promise.reject(new Error(`malformed body echoed ${token}`)),
+      }),
+    );
+    const bodyParseError = await requestJson(
+      "/redaction",
+      z.object({ ok: z.boolean() }),
+    ).catch((error: unknown) => error);
+    assertRedacted(bodyParseError);
+    vi.unstubAllGlobals();
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<FetchFn>(() => Promise.reject(new Error(`network echoed ${token}`))),
+    );
+    const fetchError = await requestJson("/redaction", z.object({ ok: z.boolean() }))
+      .catch((error: unknown) => error);
+    assertRedacted(fetchError);
+  });
+
+  it("quarantines an error body that resolves after the connection changes", async () => {
+    const errorBody = createDeferred<{ detail: string }>();
+    stubFetch(
+      fakeResponse({
+        ok: false,
+        status: 401,
+        statusText: "Unauthorized",
+        json: () => errorBody.promise,
+      }),
+    );
+    const request = requestJson("/slow-error", z.object({ ok: z.boolean() }));
+    await Promise.resolve();
+
+    setWorkbenchApiBaseUrl("https://changed-during-error.example.test");
+    errorBody.resolve({ detail: "obsolete unauthorized" });
+
+    await expect(request).rejects.toMatchObject({
+      name: "WorkbenchConnectionChangedError",
+    });
+  });
   it("classifies 401 responses as unauthorized while preserving request context", async () => {
     stubFetch(
       fakeResponse({

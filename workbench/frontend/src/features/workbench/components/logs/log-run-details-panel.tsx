@@ -6,11 +6,9 @@ import { MetricCard } from "@/features/workbench/components/shared/metric-card";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { SidePanel } from "@/features/workbench/components/shared/side-panel";
 import { SurfacePanel } from "@/components/ui/surface-panel";
-import { useLogsWorkspace } from "@/features/workbench/providers/logs-workspace-provider";
-import { useLogRunArtifactsQuery } from "@/features/workbench/state/logs/use-log-queries";
+import { useLogRunDetail } from "@/features/workbench/providers/logs-workspace-provider";
 import { formatMetricValue } from "@/features/workbench/state/logs/logs-selectors";
-import { type LogsWorkspaceState } from "@/features/workbench/state/logs/use-logs-workspace-state";
-import { type LogRunArtifacts } from "@/lib/api";
+import { type LogRun, type LogRunArtifacts } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const metadataCardClassName = "w-full min-w-0";
@@ -116,7 +114,7 @@ export function LogRunDetailsPanel({
   artifactsLoading = false,
   artifactsError = null,
 }: {
-  selectedRun: LogsWorkspaceState["selectedRun"];
+  selectedRun: LogRun | undefined;
   artifacts?: LogRunArtifacts;
   artifactsLoading?: boolean;
   artifactsError?: unknown;
@@ -348,17 +346,13 @@ export function LogRunDetailsPanel({
 }
 
 export function ConnectedLogRunDetailsPanel() {
-  const state = useLogsWorkspace();
-  const artifactsQuery = useLogRunArtifactsQuery({
-    runId: state.selectedRun?.id,
-    enabled: state.enabled,
-  });
+  const detail = useLogRunDetail();
   return (
     <LogRunDetailsPanel
-      selectedRun={state.selectedRun}
-      artifacts={artifactsQuery.data}
-      artifactsLoading={artifactsQuery.isLoading}
-      artifactsError={artifactsQuery.error}
+      selectedRun={detail.run}
+      artifacts={detail.artifacts}
+      artifactsLoading={detail.status.isLoading}
+      artifactsError={detail.status.error}
     />
   );
 }

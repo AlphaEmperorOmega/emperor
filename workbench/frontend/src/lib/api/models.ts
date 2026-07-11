@@ -117,7 +117,9 @@ function modelPath({ modelType, model }: ModelIdentity) {
 }
 
 export function fetchModels(options: ApiRequestOptions = {}) {
-  return requestJson("/models", modelsSchema, options);
+  return requestJson("/models", modelsSchema, options, {
+    authenticationProbe: true,
+  });
 }
 
 export function fetchPresets(

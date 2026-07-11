@@ -1,25 +1,26 @@
 import { createElement, type ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderHook, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { act, renderHook, waitFor } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
 import {
-  useGraphPreviewController,
   useGraphPreviewOrchestration,
 } from "@/features/workbench/state/graph-monitor/use-graph-preview-orchestration";
 import { type InspectResponse } from "@/lib/api";
 
-type GraphPreviewControllerState = ReturnType<typeof useGraphPreviewController>;
+type Input = Parameters<typeof useGraphPreviewOrchestration>[0];
 
-function renderOrchestration(
-  input: Parameters<typeof useGraphPreviewOrchestration>[0],
-) {
+function renderOrchestration(input: Input) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  return renderHook(() => useGraphPreviewOrchestration(input), {
-    wrapper: ({ children }: { children: ReactNode }) =>
-      createElement(QueryClientProvider, { client }, children),
-  });
+  return renderHook(
+    ({ value }: { value: Input }) => useGraphPreviewOrchestration(value),
+    {
+      initialProps: { value: input },
+      wrapper: ({ children }: { children: ReactNode }) =>
+        createElement(QueryClientProvider, { client }, children),
+    },
+  );
 }
 
 function graph(
@@ -45,28 +46,45 @@ function graph(
         details: {},
         config: null,
       },
+      {
+        id: "__child__",
+        label: "Child",
+        typeName: "Layer",
+        path: "model.child",
+        graphRole: "architecture",
+        parameterCount: 0,
+        parameterSizeBytes: 0,
+        details: {},
+        config: null,
+      },
+      {
+        id: "__leaf__",
+        label: "Leaf",
+        typeName: "Layer",
+        path: "model.child.leaf",
+        graphRole: "architecture",
+        parameterCount: 0,
+        parameterSizeBytes: 0,
+        details: {},
+        config: null,
+      },
     ],
-    edges: [],
+    edges: [
+      { id: "root-child", source: "__root__", target: "__child__" },
+      { id: "child-leaf", source: "__child__", target: "__leaf__" },
+    ],
   };
 }
 
-function controller(
-  overrides: Partial<GraphPreviewControllerState>,
-): GraphPreviewControllerState {
+function inspection(
+  response: InspectResponse | undefined,
+  revision = 0,
+  cause: "target-changed" | "inspection-refreshed" = "target-changed",
+): Input["inspection"] {
   return {
-    graph: undefined,
-    previewRequest: null,
-    clearPreview: vi.fn(),
-    requestPreview: vi.fn(),
-    previewInspection: {
-      isBuilding: false,
-      isError: false,
-      error: null,
-    },
-    resetGraphSelectionAndExpansion: vi.fn(),
-    resetGraphExpansion: vi.fn(),
-    bindGraphResetHandlers: vi.fn(),
-    ...overrides,
+    graph: response,
+    status: { isBuilding: false, isError: false, error: null },
+    transition: { revision, cause },
   };
 }
 
@@ -78,119 +96,88 @@ const baseInput = {
   selectedHistoricalPreset: "",
   logRunTags: [],
   filteredHistoricalRunIds: [],
-  targetModelType: "neuron",
-  targetModel: "linear",
   targetPreset: "baseline",
   targetDatasets: ["Mnist"],
-  targetMode: "preset" as const,
-  targetId: "baseline",
 };
 
 describe("useGraphPreviewOrchestration", () => {
-  it("does not expose a graph whose identity no longer matches the target", () => {
-    const { result } = renderOrchestration({
-      ...baseInput,
-      controller: controller({
-        graph: graph("linear", "baseline", "experts"),
-      }),
-    });
+  it.each(["target-changed", "inspection-refreshed"] as const)(
+    "applies each %s Inspection transition once without handler binding",
+    async (cause) => {
+      const matchingGraph = graph("linear");
+      const initialInput: Input = {
+        ...baseInput,
+        inspection: inspection(matchingGraph),
+      };
+      const { result, rerender } = renderOrchestration(initialInput);
 
-    expect(result.current.graph.graph).toBeUndefined();
+      await waitFor(() => expect(result.current.graph.nodes).not.toEqual([]));
+      act(() => result.current.graph.revealGraphNode("__leaf__"));
+      expect(result.current.graph.selectedNodeId).toBe("__leaf__");
+      expect(result.current.graph.expandedGraphNodeIds.size).toBeGreaterThan(0);
+
+      rerender({
+        value: {
+          ...initialInput,
+          inspection: inspection(matchingGraph, 1, cause),
+        },
+      });
+      await waitFor(() => {
+        expect(result.current.graph.selectedNodeId).toBeNull();
+        expect(result.current.graph.expandedGraphNodeIds.size).toBe(0);
+      });
+
+      act(() => result.current.graph.revealGraphNode("__leaf__"));
+      rerender({
+        value: {
+          ...initialInput,
+          inspection: inspection(matchingGraph, 1, cause),
+        },
+      });
+      expect(result.current.graph.selectedNodeId).toBe("__leaf__");
+      expect(result.current.graph.expandedGraphNodeIds.size).toBeGreaterThan(0);
+    },
+  );
+
+  it("initializes from an advanced transition revision before graph arrival", async () => {
+    const matchingGraph = graph("linear");
+    const initialInput: Input = {
+      ...baseInput,
+      inspection: inspection(undefined, 7),
+    };
+    const { result, rerender } = renderOrchestration(initialInput);
+
     expect(result.current.graph.nodes).toEqual([]);
+    rerender({
+      value: {
+        ...initialInput,
+        inspection: inspection(matchingGraph, 7),
+      },
+    });
+    await waitFor(() => expect(result.current.graph.nodes).not.toEqual([]));
+    act(() => result.current.graph.revealGraphNode("__leaf__"));
+    expect(result.current.graph.selectedNodeId).toBe("__leaf__");
+
+    rerender({
+      value: {
+        ...initialInput,
+        inspection: inspection(matchingGraph, 8),
+      },
+    });
+    await waitFor(() => {
+      expect(result.current.graph.selectedNodeId).toBeNull();
+      expect(result.current.graph.expandedGraphNodeIds.size).toBe(0);
+    });
   });
 
-  it("exposes the graph when its identity matches the target", async () => {
+  it("renders the graph supplied by the Inspection projection", async () => {
     const matchingGraph = graph("linear");
     const { result } = renderOrchestration({
       ...baseInput,
-      controller: controller({
-        graph: matchingGraph,
-        previewRequest: {
-          modelType: "neuron",
-          model: "linear",
-          preset: "baseline",
-          dataset: "Mnist",
-          overrides: {},
-          targetMode: "preset",
-          targetId: "baseline",
-        },
-      }),
-    });
-
-    expect(result.current.graph.graph).toBe(matchingGraph);
-    // Layout loads asynchronously (dagre is lazily imported); wait for nodes.
-    await waitFor(() => expect(result.current.graph.nodes).not.toEqual([]));
-  });
-
-  it("exposes an experiment graph when the backend returns a canonical preset name", async () => {
-    const matchingGraph = graph("linear", "baseline", "linears");
-    const { result } = renderOrchestration({
-      ...baseInput,
-      targetModelType: "linears",
-      targetModel: "linear",
-      targetPreset: "BASELINE",
-      targetMode: "experiment",
-      targetId: "run-1",
-      controller: controller({
-        graph: matchingGraph,
-        previewRequest: {
-          modelType: "linears",
-          model: "linear",
-          preset: "BASELINE",
-          dataset: "Mnist",
-          overrides: {},
-          targetMode: "experiment",
-          targetId: "run-1",
-          logRunId: "run-1",
-        },
-      }),
+      inspection: inspection(matchingGraph),
     });
 
     expect(result.current.graph.graph).toBe(matchingGraph);
     await waitFor(() => expect(result.current.graph.nodes).not.toEqual([]));
-  });
-
-  it("does not expose a graph when the preview request belongs to another dataset", () => {
-    const { result } = renderOrchestration({
-      ...baseInput,
-      controller: controller({
-        graph: graph("linear"),
-        previewRequest: {
-          modelType: "neuron",
-          model: "linear",
-          preset: "baseline",
-          dataset: "Cifar10",
-          overrides: {},
-          targetMode: "preset",
-          targetId: "baseline",
-        },
-      }),
-    });
-
-    expect(result.current.graph.graph).toBeUndefined();
-    expect(result.current.graph.nodes).toEqual([]);
-  });
-
-  it("does not expose a graph when the preview request belongs to another experiment target", () => {
-    const { result } = renderOrchestration({
-      ...baseInput,
-      targetMode: "experiment",
-      targetId: "run-new",
-      controller: controller({
-        graph: graph("linear"),
-        previewRequest: {
-          modelType: "neuron",
-          model: "linear",
-          preset: "baseline",
-          dataset: "Mnist",
-          overrides: {},
-          targetMode: "experiment",
-          targetId: "run-old",
-        },
-      }),
-    });
-
-    expect(result.current.graph.graph).toBeUndefined();
-    expect(result.current.graph.nodes).toEqual([]);
   });
 });

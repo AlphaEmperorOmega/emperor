@@ -48,6 +48,10 @@ import {
   emptyMonitorComparisonCandidateGroups,
   useMonitorChartsModalState,
 } from "@/features/workbench/state/graph-monitor/use-monitor-charts-modal-state";
+import {
+  isWorkbenchProtectedAccessReady,
+  useWorkbenchConnection,
+} from "@/features/workbench/providers/workbench-connection-provider";
 import { LabeledField } from "@/features/workbench/components/shared/labeled-field";
 import { cn } from "@/lib/utils";
 
@@ -712,10 +716,12 @@ export function MonitorChartsModal({
   comparisonCandidateGroups = emptyMonitorComparisonCandidateGroups,
   onClose,
 }: MonitorChartsModalProps) {
+  const workbenchConnection = useWorkbenchConnection();
   const modalState = useMonitorChartsModalState({
     node,
     source,
     comparisonCandidateGroups,
+    protectedReadsEnabled: isWorkbenchProtectedAccessReady(workbenchConnection),
   });
   const {
     activeJob,

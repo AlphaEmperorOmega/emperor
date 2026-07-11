@@ -4,10 +4,10 @@ import { MetricCard } from "@/features/workbench/components/shared/metric-card";
 import { InlineStatus } from "@/features/workbench/components/shared/inline-status";
 import { SidePanel } from "@/features/workbench/components/shared/side-panel";
 import {
-  useActiveTrainingJob,
   useGraphView,
   useHistoricalRuns,
 } from "@/features/workbench/providers/workbench-providers";
+import { useActiveTrainingJob } from "@/features/workbench/providers/training-provider";
 import { formatCompactCount, formatExactCount } from "@/lib/graph";
 
 const SelectedNodeDetails = dynamic(

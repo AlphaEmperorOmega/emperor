@@ -38,6 +38,7 @@ type ParameterActivityMinimapStateInput = {
   selectedExperimentRunId: string;
   selectedLogRun?: LogRun;
   selectedLogRunMonitorEligibility?: MonitorEligibility;
+  protectedReadsEnabled?: boolean;
 };
 
 export function useParameterActivityMinimapState({
@@ -46,6 +47,7 @@ export function useParameterActivityMinimapState({
   selectedExperimentRunId,
   selectedLogRun,
   selectedLogRunMonitorEligibility,
+  protectedReadsEnabled = true,
 }: ParameterActivityMinimapStateInput): ParameterActivityMinimapState {
   const shouldRenderButton = Boolean(
     selectedTargetMode === "experiment" && selectedExperimentRunId && graph,
@@ -75,11 +77,12 @@ export function useParameterActivityMinimapState({
         { runIds: [selectedExperimentRunId] },
         { signal },
       ),
-    enabled: statusQueryEnabled,
+    enabled: protectedReadsEnabled && statusQueryEnabled,
     retry: false,
   });
   const isStatusLoading = Boolean(
-    statusQueryEnabled &&
+    protectedReadsEnabled &&
+      statusQueryEnabled &&
       !statusQuery.data &&
       (statusQuery.isFetching || statusQuery.isLoading),
   );

@@ -5,7 +5,8 @@ import { InlineStatus } from "@/features/workbench/components/shared/inline-stat
 import { SectionHeading } from "@/components/ui/section-heading";
 import { workbenchStatusCopy } from "@/features/workbench/components/shared/status-copy";
 import {
-  useTargetConfigSummaryState,
+  useConfigSnapshotRecords,
+  useModelPackageInspection,
 } from "@/features/workbench/providers/workbench-providers";
 
 export function ConfigSummaryPanel({
@@ -13,14 +14,17 @@ export function ConfigSummaryPanel({
 }: {
   onOpenFullConfig: () => void;
 }) {
-  const {
-    fieldCount,
-    overrideCount,
-    configSnapshotCount,
-    canOpenFullConfig,
-    showFullConfigButton,
-    isSchemaLoading,
-  } = useTargetConfigSummaryState();
+  const { records } = useConfigSnapshotRecords();
+  const { target, browser, runtimeDefaults, status } =
+    useModelPackageInspection();
+  const fieldCount = runtimeDefaults.fieldCount;
+  const overrideCount = runtimeDefaults.overrideCount;
+  const configSnapshotCount = records.allCount;
+  const canOpenFullConfig = Boolean(
+    browser.selectedModel && browser.selectedPreset && status.schema.isReady,
+  );
+  const showFullConfigButton = target.kind !== "historical-run";
+  const isSchemaLoading = status.schema.isLoading;
   return (
     <section className="grid gap-3">
       <div className="flex items-center justify-between gap-3">

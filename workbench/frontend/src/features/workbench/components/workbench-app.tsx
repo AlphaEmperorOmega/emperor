@@ -40,6 +40,9 @@ export function WorkbenchApp() {
       current.includes(logFolder) ? current : [...current, logFolder],
     );
   }, []);
+  const clearStartedLogFoldersForConnectionChange = useCallback(() => {
+    setStartedLogFolders([]);
+  }, []);
   const workspaceBoundary = workspaceShell.logsWorkspaceActivated
     ? (content: ReactNode) => (
         <DeferredLogsWorkspaceProvider
@@ -54,8 +57,9 @@ export function WorkbenchApp() {
   return (
     <WorkbenchProviders
       activeWorkspace={workspaceShell.screen.activeWorkspace}
-      snapshotLibraryEnabled={workspaceShell.screen.fullConfigDialog.isOpen}
       onJobStarted={rememberStartedLogFolder}
+      onOpenFullConfig={workspaceShell.screen.fullConfigDialog.open}
+      clearShellForConnectionChange={clearStartedLogFoldersForConnectionChange}
     >
       <WorkbenchScreen
         shell={workspaceShell.screen}

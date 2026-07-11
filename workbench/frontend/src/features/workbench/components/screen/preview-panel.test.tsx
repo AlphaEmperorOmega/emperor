@@ -15,12 +15,22 @@ vi.mock("next/dynamic", () => ({
 }));
 
 vi.mock("@/features/workbench/providers/workbench-providers", () => ({
-  useModelTargetConfig: () => ({
-    selectedModelType: "linears",
-    selectedTargetMode: "preset",
-    selectedExperimentRunId: null,
+  useWorkbenchConnection: () => ({
+    connection: { isChanging: false },
+    authentication: { state: "disabled" },
+  }),
+  useModelPackageInspection: () => ({
+    browser: { mode: "preset" },
+    target: {
+      kind: "preset",
+      modelPackage: { modelType: "linears", model: "linear" },
+      preset: "baseline",
+      experimentTask: "image-classification",
+      datasets: ["Mnist"],
+    },
   }),
   useHistoricalRuns: () => ({
+    selectedLogRunId: null,
     selectedLogRun: undefined,
     selectedLogRunMonitorEligibility: "unknown",
   }),

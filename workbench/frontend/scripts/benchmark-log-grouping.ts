@@ -1,5 +1,5 @@
 import { performance } from "node:perf_hooks";
-import { groupLogScalarSeriesByTag } from "@/features/workbench/state/logs/logs-chart-view-model";
+import { groupLogScalarSeriesByTag } from "@/features/workbench/state/logs/_logs-chart-state";
 import { type LogScalarSeries } from "@/lib/api";
 
 const ENTRY_COUNT = 2_000;

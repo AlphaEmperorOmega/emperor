@@ -2,14 +2,20 @@ import { ErrorPanel } from "@/features/workbench/components/error-panel";
 import { ConfigSummaryPanel } from "@/features/workbench/components/config/config-summary-panel";
 import { TargetPresetPanel } from "@/features/workbench/components/screen/target-preset-panel";
 import {
-  useTargetQueryStatusState,
+  useModelPackageCatalog,
+  useModelPackageInspection,
 } from "@/features/workbench/providers/workbench-providers";
+import { useWorkbenchConnection } from "@/features/workbench/providers/workbench-connection-provider";
 import { type FullConfigDialogControls } from "@/features/workbench/state/use-workbench-workspace-shell";
-import { isUnauthorizedApiError } from "@/lib/api";
 import { errorMessage } from "@/lib/utils";
 
-function errorPanelTitle(defaultTitle: string, error: unknown) {
-  return isUnauthorizedApiError(error) ? "Authentication required" : defaultTitle;
+function errorPanelTitle(
+  defaultTitle: string,
+  authenticationState: ReturnType<typeof useWorkbenchConnection>["authentication"]["state"],
+) {
+  return authenticationState === "rejected"
+    ? "Authentication required"
+    : defaultTitle;
 }
 
 export function WorkbenchModelSidebar({
@@ -17,14 +23,32 @@ export function WorkbenchModelSidebar({
 }: {
   onOpenFullConfig: FullConfigDialogControls["open"];
 }) {
-  const { modelsQuery, presetsQuery, datasetsQuery, schemaQuery } =
-    useTargetQueryStatusState();
+  const { modelPackages } = useModelPackageCatalog();
+  const { authentication } = useWorkbenchConnection();
+  const { status } = useModelPackageInspection();
+  const modelsQuery = modelPackages;
+  const presetsQuery = status.presets;
+  const datasetsQuery = status.datasets;
+  const schemaQuery = status.schema;
+  const authenticationRequired =
+    authentication.state === "unauthenticated" ||
+    authentication.state === "rejected";
 
   return (
     <>
-      {modelsQuery.isError && (
+      {authenticationRequired && (
         <ErrorPanel
-          title={errorPanelTitle("Backend unavailable", modelsQuery.error)}
+          title="Authentication required"
+          message={
+            authentication.state === "rejected"
+              ? "The session bearer token was rejected. Replace it or log out from API Connection."
+              : "Enter the bearer token supplied by the API operator in API Connection."
+          }
+        />
+      )}
+      {modelsQuery.isError && !authenticationRequired && (
+        <ErrorPanel
+          title={errorPanelTitle("Backend unavailable", authentication.state)}
           message={errorMessage(modelsQuery.error)}
         />
       )}
@@ -34,19 +58,19 @@ export function WorkbenchModelSidebar({
 
       {presetsQuery.isError && (
         <ErrorPanel
-          title={errorPanelTitle("Model import failed", presetsQuery.error)}
+          title={errorPanelTitle("Model import failed", authentication.state)}
           message={errorMessage(presetsQuery.error)}
         />
       )}
       {datasetsQuery.isError && (
         <ErrorPanel
-          title={errorPanelTitle("Dataset discovery failed", datasetsQuery.error)}
+          title={errorPanelTitle("Dataset discovery failed", authentication.state)}
           message={errorMessage(datasetsQuery.error)}
         />
       )}
       {schemaQuery.isError && (
         <ErrorPanel
-          title={errorPanelTitle("Config schema failed", schemaQuery.error)}
+          title={errorPanelTitle("Config schema failed", authentication.state)}
           message={errorMessage(schemaQuery.error)}
         />
       )}

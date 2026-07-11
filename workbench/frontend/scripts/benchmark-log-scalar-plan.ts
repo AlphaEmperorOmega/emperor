@@ -6,7 +6,7 @@ import {
   buildLogScalarChunkQueryInputs,
   chunkScalarRunIdsForQueries,
   chunkScalarTagsForQueries,
-} from "@/features/workbench/state/logs/logs-scalar-query-plan";
+} from "@/features/workbench/state/logs/_logs-scalar-query-plan";
 
 const SYNTHETIC_POINTS_PER_SERIES = 20;
 const SAMPLE_COUNT = 3;

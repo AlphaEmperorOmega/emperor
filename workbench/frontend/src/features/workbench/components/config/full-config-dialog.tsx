@@ -36,7 +36,13 @@ import {
 } from "@/features/workbench/components/shared/status-copy";
 import { useConfigDialogSections } from "@/features/workbench/components/config/use-config-dialog-sections";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
-import { useTargetConfig } from "@/features/workbench/providers/workbench-providers";
+import {
+  useConfigSnapshotEditor,
+  useModelPackageInspection,
+  useConfigSnapshotRecords,
+} from "@/features/workbench/providers/workbench-providers";
+import { useWorkbenchCapabilities } from "@/features/workbench/providers/workbench-connection-provider";
+import { useTrainingConfiguration } from "@/features/workbench/providers/training-provider";
 import {
   type FullConfigDialogMode,
   type FullConfigDialogScope,
@@ -52,63 +58,87 @@ export function FullConfigDialog({
   scope?: FullConfigDialogScope;
   onClose: () => void;
 }) {
-  const {
-    selectedModelType,
-    selectedModel,
-    selectedPreset,
-    configSections,
-    fieldCount: modelFieldCount,
-    overrides: modelOverrides,
-    snapshotEditorDraft,
-    inactiveLockedOverrideCount,
-    snapshotOverrideWarning,
-    selectedConfigSnapshot,
-    selectedTrainingModelType,
-    selectedTrainingModel,
-    selectedTrainingPrimaryPreset,
-    selectedTrainingSnapshotIds,
-    trainingConfigSections,
-    trainingFieldCount,
-    trainingOverrides,
-    trainingInactiveLockedOverrideCount,
-    selectedDatasets,
-    selectedMonitors,
-    allConfigSnapshots,
-    allConfigSnapshotGroups,
-    allConfigSnapshotCount,
-    capabilities,
-    schemaLoading,
-    addConfigSnapshot,
-    removeConfigSnapshot,
-    renameConfigSnapshot,
-    updateSelectedConfigSnapshot,
-    loadConfigSnapshot,
-    toggleConfigSnapshotRunSelection,
-    updateOverride,
-    clearOverride,
-    updateTrainingOverride,
-    clearTrainingOverride,
-    updateSnapshotEditorDraftOverride,
-    clearSnapshotEditorDraftOverride,
-    resetSnapshotEditorDraft,
-    resetOverrides,
-    resetTrainingOverrides,
-    updatePreview: onUpdatePreview,
-    trainingSchemaLoading,
-  } = useTargetConfig();
+  const { capabilities } = useWorkbenchCapabilities();
+  const modelPackageInspection = useModelPackageInspection();
+  const { browser, options, runtimeDefaults, status, actions } =
+    modelPackageInspection;
+  const selectedModelType = browser.selectedModelType;
+  const selectedModel = browser.selectedModel;
+  const selectedPreset = browser.selectedPreset;
+  const configSections = options.configSections;
+  const modelFieldCount = runtimeDefaults.fieldCount;
+  const modelOverrides = runtimeDefaults.active;
+  const inactiveLockedOverrideCount = runtimeDefaults.inactiveLockedCount;
+  const selectedDatasets = browser.selectedDatasets;
+  const updateOverride = actions.editRuntimeDefault;
+  const clearOverride = actions.clearRuntimeDefault;
+  const resetOverrides = actions.resetRuntimeDefaults;
+  const onUpdatePreview = actions.refreshInspection;
+  const schemaLoading = status.schema.isLoading;
+  const snapshotLibrary = useConfigSnapshotRecords();
+  const allConfigSnapshots = snapshotLibrary.records.all;
+  const allConfigSnapshotGroups = snapshotLibrary.records.allGroups;
+  const removeConfigSnapshot = snapshotLibrary.actions.remove;
+  const renameConfigSnapshot = snapshotLibrary.actions.rename;
+  const loadConfigSnapshot = snapshotLibrary.actions.selectTarget;
+  const snapshotEditor = useConfigSnapshotEditor();
+  const editorSession = snapshotEditor.session;
+  const selectedConfigSnapshot = editorSession.selectedSnapshot;
+  const training = useTrainingConfiguration();
+  const selectedTrainingModelType = training.selectedModelType;
+  const selectedTrainingModel = training.selectedModel;
+  const selectedTrainingPrimaryPreset = training.selectedPrimaryPreset;
+  const selectedTrainingSnapshotIds = training.selectedSnapshotIds;
+  const trainingConfigSections = training.configSections;
+  const trainingFieldCount = training.fieldCount;
+  const trainingOverrides = training.bulkOverrides;
+  const trainingInactiveLockedOverrideCount =
+    training.inactiveLockedOverrideCount;
+  const selectedMonitors = training.selectedMonitors;
+  const updateTrainingOverride = training.updateOverride;
+  const clearTrainingOverride = training.clearOverride;
+  const resetTrainingOverrides = training.resetOverrides;
+  const trainingSchemaLoading = training.schemaLoading;
+  const snapshotOverrideWarning = "";
+  const toggleConfigSnapshotRunSelection = useCallback(
+    (snapshotId: string) => {
+      if (training.selectedSnapshotIds.includes(snapshotId)) {
+        training.excludeSnapshot(snapshotId);
+        return;
+      }
+      training.includeSnapshot(snapshotId);
+    },
+    [training],
+  );
   const isSnapshotDraftMode = mode === "snapshotDraft";
   const isSnapshotEditMode = mode === "snapshotEdit";
   const isSnapshotSaveMode = isSnapshotDraftMode || isSnapshotEditMode;
   const isTrainingScope = scope === "training" && !isSnapshotSaveMode;
-  const modelType = isTrainingScope
-    ? selectedTrainingModelType
-    : selectedModelType;
-  const model = isTrainingScope ? selectedTrainingModel : selectedModel;
-  const preset = isTrainingScope
-    ? selectedTrainingPrimaryPreset
-    : selectedPreset;
-  const sections = isTrainingScope ? trainingConfigSections : configSections;
-  const fieldCount = isTrainingScope ? trainingFieldCount : modelFieldCount;
+  const modelType = isSnapshotSaveMode
+    ? editorSession.modelType
+    : isTrainingScope
+      ? selectedTrainingModelType
+      : selectedModelType;
+  const model = isSnapshotSaveMode
+    ? editorSession.model
+    : isTrainingScope
+      ? selectedTrainingModel
+      : selectedModel;
+  const preset = isSnapshotSaveMode
+    ? editorSession.preset
+    : isTrainingScope
+      ? selectedTrainingPrimaryPreset
+      : selectedPreset;
+  const sections = isSnapshotSaveMode
+    ? editorSession.configSections
+    : isTrainingScope
+      ? trainingConfigSections
+      : configSections;
+  const fieldCount = isSnapshotSaveMode
+    ? editorSession.fieldCount
+    : isTrainingScope
+      ? trainingFieldCount
+      : modelFieldCount;
   const overrides = isTrainingScope ? trainingOverrides : modelOverrides;
   const lockedOverrideCount = isTrainingScope
     ? trainingInactiveLockedOverrideCount
@@ -118,8 +148,19 @@ export function FullConfigDialog({
     : isSnapshotEditMode
       ? "Snapshot edit"
       : "";
-  const isLoading = isTrainingScope ? trainingSchemaLoading : schemaLoading;
-  const dialogOverrides = isSnapshotSaveMode ? snapshotEditorDraft : overrides;
+  const isLoading = isSnapshotSaveMode
+    ? editorSession.status.isLoading
+    : isTrainingScope
+      ? trainingSchemaLoading
+      : schemaLoading;
+  const dialogOverrides = isSnapshotSaveMode ? editorSession.draft : overrides;
+  const displayedSnapshots = isSnapshotSaveMode
+    ? editorSession.records
+    : allConfigSnapshots;
+  const displayedSnapshotGroups = isSnapshotSaveMode
+    ? editorSession.recordGroups
+    : allConfigSnapshotGroups;
+  const displayedSnapshotCount = displayedSnapshots.length;
   const dialogOverrideCount = Object.keys(dialogOverrides).length;
   const canUpdate = Boolean(model && preset && selectedDatasets.length > 0);
   const [isTrainingCommandOpen, setIsTrainingCommandOpen] = useState(false);
@@ -276,7 +317,7 @@ export function FullConfigDialog({
       const field = configFieldsByKey.get(key);
       if (field && isDefaultConfigFieldValue(field, value)) {
         if (isSnapshotSaveMode) {
-          clearSnapshotEditorDraftOverride(key);
+          snapshotEditor.actions.clearOverride(key);
           return;
         }
         if (isTrainingScope) {
@@ -287,7 +328,7 @@ export function FullConfigDialog({
         return;
       }
       if (isSnapshotSaveMode) {
-        updateSnapshotEditorDraftOverride(key, value);
+        snapshotEditor.actions.updateOverride(key, value);
         return;
       }
       if (isTrainingScope) {
@@ -298,20 +339,19 @@ export function FullConfigDialog({
     },
     [
       clearOverride,
-      clearSnapshotEditorDraftOverride,
       clearTrainingOverride,
       configFieldsByKey,
       isSnapshotSaveMode,
       isTrainingScope,
       updateOverride,
-      updateSnapshotEditorDraftOverride,
       updateTrainingOverride,
+      snapshotEditor.actions,
     ],
   );
   const handleFieldReset = useCallback(
     (key: string) => {
       if (isSnapshotSaveMode) {
-        clearSnapshotEditorDraftOverride(key);
+        snapshotEditor.actions.clearOverride(key);
         return;
       }
       if (isTrainingScope) {
@@ -322,15 +362,15 @@ export function FullConfigDialog({
     },
     [
       clearOverride,
-      clearSnapshotEditorDraftOverride,
       clearTrainingOverride,
       isSnapshotSaveMode,
       isTrainingScope,
+      snapshotEditor.actions,
     ],
   );
   const handleResetOverrides = useCallback(() => {
     if (isSnapshotSaveMode) {
-      resetSnapshotEditorDraft();
+      snapshotEditor.actions.reset();
       return;
     }
     if (isTrainingScope) {
@@ -342,9 +382,15 @@ export function FullConfigDialog({
     isSnapshotSaveMode,
     isTrainingScope,
     resetOverrides,
-    resetSnapshotEditorDraft,
     resetTrainingOverrides,
+    snapshotEditor.actions,
   ]);
+  const closeFullConfig = useCallback(() => {
+    if (isSnapshotSaveMode) {
+      snapshotEditor.actions.close();
+    }
+    onClose();
+  }, [isSnapshotSaveMode, onClose, snapshotEditor.actions]);
 
   function handleSearchQueryChange(query: string) {
     setSearchQuery(query);
@@ -369,7 +415,7 @@ export function FullConfigDialog({
       size="fullscreen"
       panelVariant="surface"
       titleId="full-config-title"
-      onClose={onClose}
+      onClose={closeFullConfig}
       panelClassName="full-config-dialog-shell"
       header={
         <header className="full-config-dialog-chrome full-config-dialog-header sticky top-0 z-10 border-b border-line-soft px-4 py-3 backdrop-blur sm:px-5">
@@ -412,14 +458,14 @@ export function FullConfigDialog({
               {presetOwnedFieldCount > 0 && (
                 <Badge variant="preset">{presetOwnedFieldCount} preset</Badge>
               )}
-              {!isTrainingScope && allConfigSnapshotCount > 0 && (
+              {!isTrainingScope && displayedSnapshotCount > 0 && (
                 <Badge variant="success">
-                  {allConfigSnapshotCount} snapshots
+                  {displayedSnapshotCount} snapshots
                 </Badge>
               )}
               <IconButton
                 label="Close full config"
-                onClick={onClose}
+                onClick={closeFullConfig}
                 variant="edge"
                 className="border-line-soft bg-white/[0.025] shadow-[inset_0_1px_0_rgba(255,255,255,0.035)] hover:border-line hover:bg-white/[0.055]"
                 icon={<X className="h-4 w-4" aria-hidden />}
@@ -460,7 +506,7 @@ export function FullConfigDialog({
             )}
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <Button variant="ghost" onClick={onClose}>
+            <Button variant="ghost" onClick={closeFullConfig}>
               Close
             </Button>
             {!isTrainingScope && (
@@ -473,7 +519,7 @@ export function FullConfigDialog({
               </Button>
             )}
             {isTrainingScope ? (
-              <Button variant="primary" onClick={onClose}>
+              <Button variant="primary" onClick={closeFullConfig}>
                 Done
               </Button>
             ) : isSnapshotSaveMode ? (
@@ -518,7 +564,7 @@ export function FullConfigDialog({
               preset={preset}
               fields={configFields}
               overrides={dialogOverrides}
-              snapshots={allConfigSnapshots}
+              snapshots={displayedSnapshots}
               title={
                 isSnapshotEditMode
                   ? "Save Snapshot Changes"
@@ -539,11 +585,7 @@ export function FullConfigDialog({
               excludeSnapshotId={
                 isSnapshotEditMode ? selectedConfigSnapshot?.id : undefined
               }
-              onAdd={
-                isSnapshotEditMode
-                  ? (name) => updateSelectedConfigSnapshot(name, dialogOverrides)
-                  : (name) => addConfigSnapshot(name, dialogOverrides)
-              }
+              onAdd={(name) => snapshotEditor.actions.save(name)}
               onClose={() => setIsAddSnapshotOpen(false)}
             />
           )}
@@ -568,17 +610,29 @@ export function FullConfigDialog({
                 </InlineStatus>
               </div>
             )}
-            {!isTrainingScope && allConfigSnapshotGroups.length > 0 && (
+            {!isTrainingScope && displayedSnapshotGroups.length > 0 && (
               <div className="lg:col-span-2">
                 <ConfigSnapshotsTray
-                  groups={allConfigSnapshotGroups}
+                  groups={displayedSnapshotGroups}
                   selectedPreset={preset}
                   selectedTrainingSnapshotIds={selectedTrainingSnapshotIds}
                   overrides={dialogOverrides}
                   canManage={capabilities.configSnapshotsEnabled}
-                  onLoad={loadConfigSnapshot}
-                  onRename={renameConfigSnapshot}
-                  onRemove={removeConfigSnapshot}
+                  onLoad={
+                    isSnapshotSaveMode
+                      ? snapshotEditor.actions.load
+                      : loadConfigSnapshot
+                  }
+                  onRename={
+                    isSnapshotSaveMode
+                      ? snapshotEditor.actions.rename
+                      : renameConfigSnapshot
+                  }
+                  onRemove={
+                    isSnapshotSaveMode
+                      ? snapshotEditor.actions.remove
+                      : removeConfigSnapshot
+                  }
                   onToggleSelection={toggleConfigSnapshotRunSelection}
                 />
               </div>

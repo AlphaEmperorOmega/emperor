@@ -24,6 +24,7 @@ const PARAMETER_STATUS_STALE_TIME_MS = 5 * 60_000;
 export type MonitorSourceOrchestrationInput = {
   graph?: InspectResponse;
   activeTrainingJob: ActiveMonitorJob | undefined;
+  protectedReadsEnabled?: boolean;
   historicalMonitorRuns: LogRun[];
   selectedHistoricalExperiment: string;
   selectedHistoricalDataset: string;
@@ -37,6 +38,7 @@ export type MonitorSourceOrchestrationInput = {
 export function useMonitorSourceOrchestration({
   graph,
   activeTrainingJob,
+  protectedReadsEnabled = true,
   historicalMonitorRuns,
   selectedHistoricalExperiment,
   selectedHistoricalDataset,
@@ -129,7 +131,7 @@ export function useMonitorSourceOrchestration({
         { signal },
       );
     },
-    enabled: activeParameterStatusEnabled,
+    enabled: protectedReadsEnabled && activeParameterStatusEnabled,
     retry: false,
     staleTime: PARAMETER_STATUS_STALE_TIME_MS,
     refetchInterval:
@@ -147,7 +149,7 @@ export function useMonitorSourceOrchestration({
         { runIds: parameterStatusHistoricalRunIds },
         { signal },
       ),
-    enabled: historicalParameterStatusEnabled,
+    enabled: protectedReadsEnabled && historicalParameterStatusEnabled,
     retry: false,
     staleTime: PARAMETER_STATUS_STALE_TIME_MS,
   });

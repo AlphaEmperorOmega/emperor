@@ -1,16 +1,5 @@
 export {
-  getWorkbenchApiAllowedOrigins,
-  getWorkbenchApiBaseUrl,
   isUnauthorizedApiError,
-  isWorkbenchApiBaseUrlAllowed,
-  normalizeWorkbenchApiBaseUrl,
-  requestMultipartJson,
-  resetWorkbenchApiBaseUrl,
-  setWorkbenchApiBaseUrl,
-  WORKBENCH_API_ALLOWED_ORIGINS_ENV_NAME,
-  WORKBENCH_API_BASE_URL,
-  WORKBENCH_API_BASE_URL_STORAGE_KEY,
-  WORKBENCH_API_URL_ENV_NAME,
 } from "@/lib/api/client";
 export type { UnauthorizedApiError } from "@/lib/api/client";
 export * from "@/lib/api/config-snapshots";

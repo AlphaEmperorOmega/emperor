@@ -16,7 +16,9 @@ describe("modelTypeForId", () => {
   it("uses the first public ID path segment as the model type", () => {
     expect(modelTypeForId("linears/linear")).toBe("linears");
     expect(modelTypeForId("bert/linear")).toBe("bert");
+    expect(modelTypeForId("gpt/linear")).toBe("gpt");
     expect(modelTypeForId("vit/linear")).toBe("vit");
+    expect(modelTypeForId("transformer/linear")).toBe("transformer");
   });
 
   it("falls back to a shared legacy type for flat or malformed IDs", () => {
@@ -47,12 +49,14 @@ describe("modelTypeOptions", () => {
         "experts/linear",
         "bert/linear",
         "vit/linear",
+        "transformer/linear",
       ]),
     ).toEqual([
       { value: "linears", label: "Linears" },
       { value: "experts", label: "Experts" },
       { value: "bert", label: "Bert" },
       { value: "vit", label: "Vit" },
+      { value: "transformer", label: "Transformer" },
     ]);
   });
 });
@@ -71,6 +75,10 @@ describe("modelsForType", () => {
       "vit/linear_adaptive",
       "vit/expert_linear",
       "vit/expert_linear_adaptive",
+      "transformer/linear",
+      "transformer/linear_adaptive",
+      "transformer/expert_linear",
+      "transformer/expert_linear_adaptive",
     ];
 
     expect(
@@ -89,6 +97,13 @@ describe("modelsForType", () => {
       "vit/linear_adaptive",
       "vit/expert_linear",
       "vit/expert_linear_adaptive",
+    ]);
+
+    expect(modelsForType(catalog, "transformer")).toEqual([
+      "transformer/linear",
+      "transformer/linear_adaptive",
+      "transformer/expert_linear",
+      "transformer/expert_linear_adaptive",
     ]);
   });
 

@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input";
 import { ErrorPanel } from "@/features/workbench/components/error-panel";
 import { DialogShell } from "@/features/workbench/components/shared/dialog-shell";
 import {
-  type LogRunDeleteFilters,
   type LogRunDeletePlan,
   type ModelIdentity,
 } from "@/lib/api";
@@ -20,7 +19,6 @@ export type SubsetDeleteTarget = {
   kind: SubsetDeleteKind;
   value: string;
   experiment: string;
-  filters: LogRunDeleteFilters;
   key: string;
 };
 
@@ -167,6 +165,7 @@ export function DeleteSubsetRunsDialog({
   isPlanning,
   isDeleting,
   onClose,
+  onRetry,
   onConfirm,
 }: {
   target: SubsetDeleteTarget;
@@ -175,6 +174,7 @@ export function DeleteSubsetRunsDialog({
   isPlanning: boolean;
   isDeleting: boolean;
   onClose: () => void;
+  onRetry: () => Promise<void>;
   onConfirm: () => Promise<void>;
 }) {
   const targetLabel = "Preset";
@@ -335,6 +335,11 @@ export function DeleteSubsetRunsDialog({
           <Button variant="ghost" onClick={onClose} disabled={isDeleting}>
             Cancel
           </Button>
+          {Boolean(error) && !plan && !isPlanning && (
+            <Button variant="secondary" onClick={onRetry} disabled={isDeleting}>
+              Retry Plan
+            </Button>
+          )}
           <Button variant="danger" onClick={onConfirm} disabled={!canDelete}>
             {isDeleting && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
             {title}

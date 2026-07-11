@@ -1,236 +1,12 @@
 import { z } from "zod";
+import {
+  assertWorkbenchConnectionRequestCurrent,
+  captureWorkbenchConnectionRequest,
+  confirmWorkbenchAuthentication,
+} from "@/lib/api/_connection-runtime";
 
-import { getSessionAuthToken } from "@/lib/auth-token";
-
-export const WORKBENCH_API_URL_ENV_NAME = "NEXT_PUBLIC_WORKBENCH_API_URL";
-export const WORKBENCH_API_ALLOWED_ORIGINS_ENV_NAME =
-  "NEXT_PUBLIC_WORKBENCH_API_ALLOWED_ORIGINS";
-export const DEFAULT_WORKBENCH_API_BASE_URL = "http://127.0.0.1:9999";
-export const WORKBENCH_API_BASE_URL_STORAGE_KEY = "emperor.workbench.apiBaseUrl";
-let runtimeWorkbenchApiBaseUrlOverride: string | null | undefined;
-
-export function normalizeWorkbenchApiBaseUrl(url: string) {
-  const trimmedUrl = url.trim();
-  if (!trimmedUrl) {
-    return null;
-  }
-  try {
-    const parsedUrl = new URL(trimmedUrl);
-    if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
-      return null;
-    }
-    if (parsedUrl.search || parsedUrl.hash) {
-      return null;
-    }
-  } catch {
-    return null;
-  }
-  return trimmedUrl.replace(/\/+$/, "");
-}
-
-function defaultWorkbenchApiBaseUrl() {
-  return (
-    normalizeWorkbenchApiBaseUrl(process.env.NEXT_PUBLIC_WORKBENCH_API_URL ?? "") ??
-    DEFAULT_WORKBENCH_API_BASE_URL
-  );
-}
-
-export const WORKBENCH_API_BASE_URL = defaultWorkbenchApiBaseUrl();
-
-type WorkbenchApiOriginLock = {
-  locked: boolean;
-  allowedOrigins: Set<string>;
-};
-
-function originFromWorkbenchApiBaseUrl(url: string) {
-  const normalizedUrl = normalizeWorkbenchApiBaseUrl(url);
-  if (!normalizedUrl) {
-    return null;
-  }
-  return new URL(normalizedUrl).origin;
-}
-
-function parseAllowedOriginValues(rawValue: string) {
-  const trimmedValue = rawValue.trim();
-  if (!trimmedValue) {
-    return [];
-  }
-  if (trimmedValue.startsWith("[")) {
-    try {
-      const parsed = JSON.parse(trimmedValue);
-      if (Array.isArray(parsed)) {
-        return parsed.map(String);
-      }
-    } catch {
-      return [];
-    }
-  }
-  return trimmedValue.split(",");
-}
-
-function parseWorkbenchApiAllowedOrigins(rawValue: string) {
-  const origins = parseAllowedOriginValues(rawValue)
-    .map((value) => originFromWorkbenchApiBaseUrl(value))
-    .filter((origin): origin is string => Boolean(origin));
-  return Array.from(new Set(origins));
-}
-
-function isLocalWorkbenchApiOrigin(origin: string) {
-  try {
-    const hostname = new URL(origin).hostname;
-    return (
-      hostname === "localhost" ||
-      hostname === "127.0.0.1" ||
-      hostname === "0.0.0.0" ||
-      hostname === "::1" ||
-      hostname === "[::1]"
-    );
-  } catch {
-    return false;
-  }
-}
-
-function createWorkbenchApiOriginLock(): WorkbenchApiOriginLock {
-  const explicitAllowedOrigins =
-    process.env.NEXT_PUBLIC_WORKBENCH_API_ALLOWED_ORIGINS ?? "";
-  if (explicitAllowedOrigins.trim()) {
-    return {
-      locked: true,
-      allowedOrigins: new Set(
-        parseWorkbenchApiAllowedOrigins(explicitAllowedOrigins),
-      ),
-    };
-  }
-
-  const configuredOrigin = originFromWorkbenchApiBaseUrl(WORKBENCH_API_BASE_URL);
-  if (configuredOrigin && !isLocalWorkbenchApiOrigin(configuredOrigin)) {
-    return {
-      locked: true,
-      allowedOrigins: new Set([configuredOrigin]),
-    };
-  }
-  return { locked: false, allowedOrigins: new Set() };
-}
-
-const workbenchApiOriginLock = createWorkbenchApiOriginLock();
-
-export function getWorkbenchApiAllowedOrigins() {
-  return Array.from(workbenchApiOriginLock.allowedOrigins);
-}
-
-export function isWorkbenchApiBaseUrlAllowed(url: string) {
-  if (!workbenchApiOriginLock.locked) {
-    return true;
-  }
-  const origin = originFromWorkbenchApiBaseUrl(url);
-  return origin !== null && workbenchApiOriginLock.allowedOrigins.has(origin);
-}
-
-function assertWorkbenchApiBaseUrlAllowed(url: string) {
-  if (isWorkbenchApiBaseUrlAllowed(url)) {
-    return;
-  }
-  const origin = originFromWorkbenchApiBaseUrl(url) ?? url;
-  const allowedOrigins = getWorkbenchApiAllowedOrigins();
-  const allowedText =
-    allowedOrigins.length > 0 ? allowedOrigins.join(", ") : "no allowed origins";
-  throw new Error(
-    `Workbench API base URL origin ${origin} is not allowed by this hosted build. ` +
-      `Set ${WORKBENCH_API_ALLOWED_ORIGINS_ENV_NAME} to the allowed API origins ` +
-      `or rebuild with ${WORKBENCH_API_URL_ENV_NAME} set to the intended API. ` +
-      `Allowed origins: ${allowedText}.`,
-  );
-}
-
-function getLocalStorage() {
-  if (typeof window === "undefined") {
-    return null;
-  }
-  try {
-    const storage = window.localStorage;
-    return typeof storage?.getItem === "function" ? storage : null;
-  } catch {
-    return null;
-  }
-}
-
-function readStoredWorkbenchApiBaseUrl() {
-  const storage = getLocalStorage();
-  try {
-    const storedUrl = storage?.getItem(WORKBENCH_API_BASE_URL_STORAGE_KEY);
-    if (!storedUrl) {
-      return null;
-    }
-    const normalizedUrl = normalizeWorkbenchApiBaseUrl(storedUrl);
-    if (!normalizedUrl) {
-      try {
-        storage?.removeItem?.(WORKBENCH_API_BASE_URL_STORAGE_KEY);
-      } catch {
-        // Invalid persisted values should not break API setup.
-      }
-      return null;
-    }
-    if (!isWorkbenchApiBaseUrlAllowed(normalizedUrl)) {
-      try {
-        storage?.removeItem?.(WORKBENCH_API_BASE_URL_STORAGE_KEY);
-      } catch {
-        // Clearing disallowed persisted values is best-effort.
-      }
-      return null;
-    }
-    if (storedUrl !== normalizedUrl) {
-      try {
-        storage?.setItem?.(WORKBENCH_API_BASE_URL_STORAGE_KEY, normalizedUrl);
-      } catch {
-        // Normalization persistence is best-effort.
-      }
-    }
-    return normalizedUrl;
-  } catch {
-    return null;
-  }
-}
-
-export function getWorkbenchApiBaseUrl() {
-  if (runtimeWorkbenchApiBaseUrlOverride !== undefined) {
-    return runtimeWorkbenchApiBaseUrlOverride ?? WORKBENCH_API_BASE_URL;
-  }
-  return (
-    readStoredWorkbenchApiBaseUrl() ??
-    WORKBENCH_API_BASE_URL
-  );
-}
-
-export function setWorkbenchApiBaseUrl(url: string) {
-  const normalizedUrl = normalizeWorkbenchApiBaseUrl(url);
-  if (!normalizedUrl) {
-    throw new Error(
-      "Workbench API base URL must be an absolute http:// or https:// URL without a query string or fragment.",
-    );
-  }
-  assertWorkbenchApiBaseUrlAllowed(normalizedUrl);
-  runtimeWorkbenchApiBaseUrlOverride = normalizedUrl;
-  const storage = getLocalStorage();
-  try {
-    storage?.setItem?.(WORKBENCH_API_BASE_URL_STORAGE_KEY, normalizedUrl);
-  } catch {
-    // Runtime switching should continue even if persistence is unavailable.
-  }
-  return normalizedUrl;
-}
-
-export function resetWorkbenchApiBaseUrl() {
-  const storage = getLocalStorage();
-  let clearedStoredUrl = !storage;
-  try {
-    storage?.removeItem?.(WORKBENCH_API_BASE_URL_STORAGE_KEY);
-    clearedStoredUrl = true;
-  } catch {
-    // Clearing persistence is best-effort for locked-down browser contexts.
-  }
-  runtimeWorkbenchApiBaseUrlOverride = clearedStoredUrl ? undefined : null;
-  return WORKBENCH_API_BASE_URL;
-}
+export const WORKBENCH_MUTATION_HEADER_NAME = "X-Workbench-Mutation";
+export const WORKBENCH_MUTATION_HEADER_VALUE = "true";
 
 const errorBodySchema = z.object({ detail: z.unknown() }).partial();
 
@@ -240,6 +16,7 @@ type ApiErrorInit = {
   path: string;
   detail: string;
   baseUrl: string;
+  authToken: string | null;
 };
 
 export type UnauthorizedApiError = Error & {
@@ -255,8 +32,8 @@ class ApiError extends Error {
   readonly path: string;
   readonly detail: string;
 
-  constructor({ status, method, path, detail, baseUrl }: ApiErrorInit) {
-    const messageDetail = detail || "Request failed";
+  constructor({ status, method, path, detail, baseUrl, authToken }: ApiErrorInit) {
+    const messageDetail = redactBearerToken(detail || "Request failed", authToken);
     super(
       `${method} ${path} from ${baseUrl} failed with ${status}: ${messageDetail}`,
     );
@@ -305,6 +82,8 @@ function detailText(detail: unknown) {
 }
 
 function requestHeaders(
+  method: string,
+  authToken: string | null,
   initHeaders?: HeadersInit,
   contentType: string | null = "application/json",
 ) {
@@ -316,11 +95,41 @@ function requestHeaders(
       headers.set(key, value);
     });
   }
-  const token = getSessionAuthToken();
-  if (token) {
-    headers.set("Authorization", `Bearer ${token}`);
+  headers.delete("authorization");
+  if (authToken) {
+    headers.set("Authorization", `Bearer ${authToken}`);
+  }
+  if (["GET", "HEAD", "OPTIONS"].includes(method)) {
+    headers.delete(WORKBENCH_MUTATION_HEADER_NAME);
+  } else {
+    headers.set(WORKBENCH_MUTATION_HEADER_NAME, WORKBENCH_MUTATION_HEADER_VALUE);
   }
   return headers;
+}
+
+function redactBearerToken(value: string, authToken: string | null) {
+  if (!authToken) {
+    return value;
+  }
+  return value.split(authToken).join("[REDACTED]");
+}
+
+function redactedError(error: unknown, authToken: string | null) {
+  const safeError = new Error(
+    redactBearerToken(
+      error instanceof Error ? error.message : String(error),
+      authToken,
+    ),
+  );
+  safeError.name = error instanceof Error ? error.name : "Error";
+  return safeError;
+}
+
+function throwIfAborted(signal?: AbortSignal | null) {
+  if (!signal?.aborted) {
+    return;
+  }
+  throw new DOMException("The operation was aborted.", "AbortError");
 }
 
 async function parseJsonResponse<TSchema extends z.ZodTypeAny>(
@@ -330,39 +139,65 @@ async function parseJsonResponse<TSchema extends z.ZodTypeAny>(
     apiBaseUrl,
     response,
     schema,
+    requestRevision,
+    authToken,
   }: {
     path: string;
     method: string;
     apiBaseUrl: string;
     response: Response;
     schema: TSchema;
+    requestRevision: number;
+    authToken: string | null;
   },
 ): Promise<z.output<TSchema>> {
+  assertWorkbenchConnectionRequestCurrent(requestRevision);
   if (!response.ok) {
     let detail = response.statusText;
     try {
-      const payload = errorBodySchema.safeParse(await response.json());
+      const errorBody = await response.json();
+      const payload = errorBodySchema.safeParse(errorBody);
       if (payload.success && payload.data.detail) {
         detail = detailText(payload.data.detail);
       }
     } catch {
       // Response was not JSON; keep status text.
     }
+    assertWorkbenchConnectionRequestCurrent(requestRevision);
     throw new ApiError({
       status: response.status,
       method,
       path,
       detail,
       baseUrl: apiBaseUrl,
+      authToken,
     });
   }
-  const payload = await response.json();
-  const parsed = schema.safeParse(payload);
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch (error) {
+    assertWorkbenchConnectionRequestCurrent(requestRevision);
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw error;
+    }
+    throw redactedError(error, authToken);
+  }
+  assertWorkbenchConnectionRequestCurrent(requestRevision);
+  let parsed: z.SafeParseReturnType<unknown, z.output<TSchema>>;
+  try {
+    parsed = schema.safeParse(payload);
+  } catch (error) {
+    throw redactedError(error, authToken);
+  }
   if (!parsed.success) {
     throw new Error(
-      `Invalid API response for ${method} ${path} from ${apiBaseUrl}: ${formatZodIssues(
-        parsed.error.issues,
-      )}`,
+      redactBearerToken(
+        `Invalid API response for ${method} ${path} from ${apiBaseUrl}: ${formatZodIssues(
+          parsed.error.issues,
+        )}`,
+        authToken,
+      ),
     );
   }
   return parsed.data;
@@ -372,16 +207,50 @@ export async function requestJson<TSchema extends z.ZodTypeAny>(
   path: string,
   schema: TSchema,
   init?: RequestInit,
+  policy: { authenticationProbe?: boolean } = {},
 ): Promise<z.output<TSchema>> {
+  throwIfAborted(init?.signal);
   const method = requestMethod(init);
-  const apiBaseUrl = getWorkbenchApiBaseUrl();
-  assertWorkbenchApiBaseUrlAllowed(apiBaseUrl);
-  const request = {
-    ...init,
-    headers: requestHeaders(init?.headers),
-  };
-  const response = await fetch(`${apiBaseUrl}${path}`, request);
-  return parseJsonResponse({ path, method, apiBaseUrl, response, schema });
+  const connection = captureWorkbenchConnectionRequest(
+    path,
+    policy.authenticationProbe,
+  );
+  const apiBaseUrl = connection.apiBaseUrl;
+  let request: RequestInit;
+  try {
+    request = {
+      ...init,
+      headers: requestHeaders(method, connection.authToken, init?.headers),
+    };
+  } catch (error) {
+    throw redactedError(error, connection.authToken);
+  }
+  let response: Response;
+  try {
+    response = await fetch(`${apiBaseUrl}${path}`, request);
+  } catch (error) {
+    assertWorkbenchConnectionRequestCurrent(connection.revision);
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw error;
+    }
+    throw redactedError(error, connection.authToken);
+  }
+  const parsed = await parseJsonResponse({
+    path,
+    method,
+    apiBaseUrl,
+    response,
+    schema,
+    requestRevision: connection.revision,
+    authToken: connection.authToken,
+  });
+  if (policy.authenticationProbe) {
+    confirmWorkbenchAuthentication(
+      connection.revision,
+      connection.authenticationProbeGeneration,
+    );
+  }
+  return parsed;
 }
 
 export async function requestMultipartJson<TSchema extends z.ZodTypeAny>(
@@ -390,15 +259,38 @@ export async function requestMultipartJson<TSchema extends z.ZodTypeAny>(
   formData: FormData,
   init?: Omit<RequestInit, "body">,
 ): Promise<z.output<TSchema>> {
+  throwIfAborted(init?.signal);
   const method = requestMethod({ method: init?.method ?? "POST" });
-  const apiBaseUrl = getWorkbenchApiBaseUrl();
-  assertWorkbenchApiBaseUrlAllowed(apiBaseUrl);
-  const request = {
-    ...init,
+  const connection = captureWorkbenchConnectionRequest(path);
+  const apiBaseUrl = connection.apiBaseUrl;
+  let request: RequestInit;
+  try {
+    request = {
+      ...init,
+      method,
+      body: formData,
+      headers: requestHeaders(method, connection.authToken, init?.headers, null),
+    };
+  } catch (error) {
+    throw redactedError(error, connection.authToken);
+  }
+  let response: Response;
+  try {
+    response = await fetch(`${apiBaseUrl}${path}`, request);
+  } catch (error) {
+    assertWorkbenchConnectionRequestCurrent(connection.revision);
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw error;
+    }
+    throw redactedError(error, connection.authToken);
+  }
+  return parseJsonResponse({
+    path,
     method,
-    body: formData,
-    headers: requestHeaders(init?.headers, null),
-  };
-  const response = await fetch(`${apiBaseUrl}${path}`, request);
-  return parseJsonResponse({ path, method, apiBaseUrl, response, schema });
+    apiBaseUrl,
+    response,
+    schema,
+    requestRevision: connection.revision,
+    authToken: connection.authToken,
+  });
 }

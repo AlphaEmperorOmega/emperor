@@ -12,10 +12,16 @@ import { useEffect, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LogsWorkspaceProvider } from "@/features/workbench/providers/logs-workspace-provider";
 import {
-  useActiveTrainingJob,
-  useTargetConfig,
+  useModelPackageInspection,
   WorkbenchProviders,
 } from "@/features/workbench/providers/workbench-providers";
+import { useWorkbenchConnection } from "@/features/workbench/providers/workbench-connection-provider";
+import {
+  useActiveTrainingJob,
+  useTrainingConfiguration,
+  useTrainingWorkspace,
+} from "@/features/workbench/providers/training-provider";
+import { trainingQueryKeys } from "@/lib/query-keys";
 import {
   WorkbenchWorkspaceMain,
   WorkbenchWorkspaceOverlays,
@@ -200,13 +206,15 @@ function renderWorkspaceOverlayHarness({
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <WorkbenchProviders activeWorkspace={activeWorkspace}>
+      <WorkbenchProviders
+        activeWorkspace={activeWorkspace}
+        onOpenFullConfig={fullConfigDialog.open}
+      >
         <LogsWorkspaceProvider enabled={activeWorkspace === "logs"}>
           {children}
           {activeWorkspace === "training" && (
             <WorkbenchWorkspaceMain
               activeWorkspace={activeWorkspace}
-              onOpenFullConfig={fullConfigDialog.open}
             />
           )}
           <WorkbenchWorkspaceOverlays
@@ -222,38 +230,118 @@ function renderWorkspaceOverlayHarness({
   );
 }
 
-function SeedActiveJob({ jobId }: { jobId: string }) {
-  const { setActiveJobId } = useActiveTrainingJob();
+type TrainingInterfaceSnapshot = {
+  workspace: ReturnType<typeof useTrainingWorkspace>;
+  configuration: ReturnType<typeof useTrainingConfiguration>;
+  modelTarget: ReturnType<typeof useModelPackageInspection>;
+  activeJob: ReturnType<typeof useActiveTrainingJob>;
+  connection: ReturnType<typeof useWorkbenchConnection>;
+};
+
+function TrainingInterfaceProbe({
+  onChange,
+}: {
+  onChange: (snapshot: TrainingInterfaceSnapshot) => void;
+}) {
+  const workspace = useTrainingWorkspace();
+  const configuration = useTrainingConfiguration();
+  const modelTarget = useModelPackageInspection();
+  const activeJob = useActiveTrainingJob();
+  const connection = useWorkbenchConnection();
 
   useEffect(() => {
-    setActiveJobId(jobId);
-  }, [jobId, setActiveJobId]);
+    onChange({
+      activeJob,
+      connection,
+      configuration,
+      workspace,
+      modelTarget,
+    });
+  }, [
+    activeJob,
+    connection,
+    configuration,
+    modelTarget,
+    onChange,
+    workspace,
+  ]);
 
   return null;
 }
 
+function renderTrainingInterfaceHarness({
+  activeWorkspace = "training",
+  onChange,
+}: {
+  activeWorkspace?: WorkbenchWorkspace;
+  onChange: (snapshot: TrainingInterfaceSnapshot) => void;
+}) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  });
+  const renderTree = (workspace: WorkbenchWorkspace) => (
+    <QueryClientProvider client={queryClient}>
+      <WorkbenchProviders activeWorkspace={workspace}>
+        <TrainingInterfaceProbe onChange={onChange} />
+      </WorkbenchProviders>
+    </QueryClientProvider>
+  );
+  const rendered = render(renderTree(activeWorkspace));
+
+  return {
+    ...rendered,
+    rerenderWorkspace(workspace: WorkbenchWorkspace) {
+      rendered.rerender(renderTree(workspace));
+    },
+  };
+}
+
 function TargetTrainingInputsReady({ onReady }: { onReady: () => void }) {
-  const target = useTargetConfig();
+  const training = useTrainingWorkspace();
+  const draft = training.draft;
 
   useEffect(() => {
     if (
-      target.selectedModel &&
-      target.selectedPreset &&
-      target.datasets.length > 0 &&
-      target.isSchemaReady &&
-      !target.monitorsLoading &&
-      !target.searchAxesLoading
+      draft.selectedModel &&
+      draft.selectedPrimaryPreset &&
+      draft.datasetOptions.length > 0 &&
+      draft.canOpenFullConfig &&
+      !draft.monitorsLoading &&
+      !draft.searchLoading
     ) {
       onReady();
     }
   }, [
+    draft.canOpenFullConfig,
+    draft.datasetOptions.length,
+    draft.monitorsLoading,
+    draft.searchLoading,
+    draft.selectedModel,
+    draft.selectedPrimaryPreset,
     onReady,
-    target.datasets.length,
-    target.isSchemaReady,
-    target.monitorsLoading,
-    target.searchAxesLoading,
-    target.selectedModel,
-    target.selectedPreset,
+  ]);
+
+  return null;
+}
+
+function ModelInputsReady({ onReady }: { onReady: () => void }) {
+  const model = useModelPackageInspection();
+
+  useEffect(() => {
+    if (
+      model.browser.selectedModel &&
+      model.browser.selectedPreset &&
+      model.target.datasets.length > 0 &&
+      model.status.schema.isReady
+    ) {
+      onReady();
+    }
+  }, [
+    model.browser.selectedModel,
+    model.browser.selectedPreset,
+    model.target.datasets.length,
+    model.status.schema.isReady,
+    onReady,
   ]);
 
   return null;
@@ -336,7 +424,7 @@ describe("WorkbenchApp Training And Preview", () => {
 
     const modelRender = renderWorkspaceOverlayHarness({
       activeWorkspace: "model",
-      children: <TargetTrainingInputsReady onReady={modelReady} />,
+      children: <ModelInputsReady onReady={modelReady} />,
     });
     await waitForTargetTrainingInputs(modelReady);
     expect(trainingRunPlanCalls(fetchMock)).toHaveLength(0);
@@ -358,7 +446,7 @@ describe("WorkbenchApp Training And Preview", () => {
     const logsReady = vi.fn();
     const logsRender = renderWorkspaceOverlayHarness({
       activeWorkspace: "logs",
-      children: <TargetTrainingInputsReady onReady={logsReady} />,
+      children: <ModelInputsReady onReady={logsReady} />,
     });
     await waitForTargetTrainingInputs(logsReady);
     expect(modelCatalogCalls(fetchMock).length).toBeGreaterThan(0);
@@ -367,17 +455,652 @@ describe("WorkbenchApp Training And Preview", () => {
     logsRender.unmount();
   });
 
-  it("keeps active job polling mounted while the Training workspace is hidden", async () => {
-    const { fetchMock } = installFetchMock();
-
-    renderWorkspaceOverlayHarness({
-      activeWorkspace: "logs",
-      children: <SeedActiveJob jobId="job-1" />,
+  it("submits the current backend Run plan through the Training Interface", async () => {
+    const { trainingBodies } = installFetchMock({
+      trainingRunPlanResponseFactory: (_request, _requestIndex, defaultPlan) => ({
+        ...defaultPlan,
+        runs: defaultPlan.runs.map((run, index) =>
+          index === 0
+            ? {
+                ...run,
+                id: "server-sentinel-run",
+                command: "server-sentinel-command --authoritative",
+              }
+            : run,
+        ),
+      }),
+    });
+    let current: TrainingInterfaceSnapshot | undefined;
+    renderTrainingInterfaceHarness({
+      onChange: (snapshot) => {
+        current = snapshot;
+      },
     });
 
     await waitFor(() => {
-      expect(trainingJobPollCalls(fetchMock)).toHaveLength(1);
+      expect(current?.workspace.plan.display?.runs[0]).toMatchObject({
+        id: "server-sentinel-run",
+        command: "server-sentinel-command --authoritative",
+      });
     });
+    act(() => {
+      current?.workspace.actions.selectLogFolderMode("new");
+      current?.workspace.actions.nameNewLogFolder("interface_tracer");
+    });
+    await waitFor(() => {
+      expect(current?.workspace.plan.canStart).toBe(true);
+    });
+
+    act(() => {
+      current?.workspace.actions.startJob();
+    });
+
+    await waitFor(() => {
+      expect(trainingBodies).toHaveLength(1);
+    });
+    expect(trainingBodies[0]).toHaveProperty(
+      "runPlan.runs.0.id",
+      "server-sentinel-run",
+    );
+    expect(trainingBodies[0]).toHaveProperty(
+      "runPlan.runs.0.command",
+      "server-sentinel-command --authoritative",
+    );
+  });
+
+  it("exposes only the five-part Training workspace Interface and focused projections", async () => {
+    installFetchMock();
+    let current: TrainingInterfaceSnapshot | undefined;
+    renderTrainingInterfaceHarness({
+      onChange: (snapshot) => {
+        current = snapshot;
+      },
+    });
+
+    await waitFor(() => {
+      expect(current?.workspace.plan.display).toBeDefined();
+    });
+    expect(Object.keys(current?.workspace ?? {}).sort()).toEqual([
+      "actions",
+      "dialogs",
+      "draft",
+      "job",
+      "plan",
+    ]);
+    expect(current?.workspace).not.toHaveProperty("input");
+    expect(current?.workspace).not.toHaveProperty("training");
+    expect(current?.workspace.draft).not.toHaveProperty(
+      "clearForConnectionChange",
+    );
+    expect(current?.workspace.actions).not.toHaveProperty("setSearch");
+    expect(current?.configuration).not.toHaveProperty(
+      "clearForConnectionChange",
+    );
+    expect(current?.configuration).not.toHaveProperty("selectModelType");
+    expect(current?.configuration).not.toHaveProperty("updateSearch");
+    expect(Object.keys(current?.activeJob ?? {}).sort()).toEqual([
+      "activeTrainingJob",
+    ]);
+  });
+
+  it("retries a failed backend Run plan through a semantic Training action", async () => {
+    let shouldFail = true;
+    const { fetchMock } = installFetchMock({
+      trainingRunPlanResponseFactory: (_request, _requestIndex, defaultPlan) =>
+        shouldFail
+          ? Promise.reject(new Error("run plan unavailable"))
+          : defaultPlan,
+    });
+    renderWorkbench();
+    const user = userEvent.setup();
+    await expandedTrainingDetails(user);
+
+    const retryButton = await screen.findByRole("button", {
+      name: /retry plan/i,
+    });
+    expect(screen.getAllByText("run plan unavailable").length).toBeGreaterThan(0);
+    const failedRequestCount = trainingRunPlanCalls(fetchMock).length;
+
+    shouldFail = false;
+    await user.click(retryButton);
+
+    await findTrainingRunSummary(
+      /0\s*\/\s*1 runs;\s*0\s*\/\s*30 epochs/i,
+    );
+    expect(trainingRunPlanCalls(fetchMock).length).toBeGreaterThan(
+      failedRequestCount,
+    );
+    expect(
+      screen.queryByRole("button", { name: /retry plan/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps an obsolete Run plan response from replacing the current draft plan", async () => {
+    const obsoletePlan = deferred<unknown>();
+    let obsoleteResponse: unknown;
+    const { fetchMock } = installFetchMock({
+      trainingRunPlanResponseFactory: (request, _requestIndex, defaultPlan) => {
+        if (request.logFolder === "obsolete_plan") {
+          obsoleteResponse = defaultPlan;
+          return obsoletePlan.promise;
+        }
+        if (request.logFolder === "current_plan") {
+          return {
+            ...defaultPlan,
+            runs: defaultPlan.runs.map((run, index) =>
+              index === 0
+                ? { ...run, command: "current-plan --authoritative" }
+                : run,
+            ),
+          };
+        }
+        return defaultPlan;
+      },
+    });
+    let current: TrainingInterfaceSnapshot | undefined;
+    renderTrainingInterfaceHarness({
+      onChange: (snapshot) => {
+        current = snapshot;
+      },
+    });
+
+    await waitFor(() => {
+      expect(current?.workspace.plan.display).toBeDefined();
+    });
+    act(() => {
+      current?.workspace.actions.selectLogFolderMode("new");
+      current?.workspace.actions.nameNewLogFolder("obsolete_plan");
+    });
+    await waitFor(() => {
+      expect(
+        trainingRunPlanRequestBodies(fetchMock).some(
+          (request) => request.logFolder === "obsolete_plan",
+        ),
+      ).toBe(true);
+    });
+    const obsoleteCall = trainingRunPlanCalls(fetchMock).find(([, init]) =>
+      String((init as RequestInit | undefined)?.body).includes(
+        '"logFolder":"obsolete_plan"',
+      ),
+    );
+
+    act(() => {
+      current?.workspace.actions.nameNewLogFolder("current_plan");
+    });
+    await waitFor(() => {
+      expect(current?.workspace.plan.display).toMatchObject({
+        logFolder: "current_plan",
+      });
+      expect(
+        current?.workspace.plan.display?.runs[0]?.command,
+      ).toBe("current-plan --authoritative");
+    });
+    expect(
+      (obsoleteCall?.[1] as RequestInit | undefined)?.signal?.aborted,
+    ).toBe(true);
+
+    await act(async () => {
+      obsoletePlan.resolve(obsoleteResponse);
+      await obsoletePlan.promise;
+    });
+
+    expect(current?.workspace.plan.display).toMatchObject({
+      logFolder: "current_plan",
+    });
+    expect(current?.workspace.plan.display?.runs[0]?.command).toBe(
+      "current-plan --authoritative",
+    );
+  });
+
+  it("resampling replaces only the draft Run plan and submits the replacement", async () => {
+    let randomPlanResponseCount = 0;
+    const { trainingBodies } = installFetchMock({
+      trainingRunPlanResponseFactory: (request, _requestIndex, defaultPlan) => {
+        if (request.search?.mode !== "random") {
+          return defaultPlan;
+        }
+        randomPlanResponseCount += 1;
+        return {
+          ...defaultPlan,
+          runs: defaultPlan.runs.map((run, index) =>
+            index === 0
+              ? {
+                  ...run,
+                  command: `random-plan-${randomPlanResponseCount} --authoritative`,
+                }
+              : run,
+          ),
+        };
+      },
+    });
+    let current: TrainingInterfaceSnapshot | undefined;
+    renderTrainingInterfaceHarness({
+      onChange: (snapshot) => {
+        current = snapshot;
+      },
+    });
+
+    await waitFor(() => {
+      expect(current?.workspace.draft.searchLoading).toBe(false);
+      expect(current?.workspace.plan.display).toBeDefined();
+    });
+    act(() => {
+      current?.workspace.actions.updateSearch({
+        mode: "random",
+        selectedValues: { hidden_dim: [64, 128] },
+        randomSamples: 2,
+      });
+      current?.workspace.actions.selectLogFolderMode("new");
+      current?.workspace.actions.nameNewLogFolder("resampled_plan");
+    });
+    await waitFor(() => {
+      expect(current?.workspace.plan.canResample).toBe(true);
+      expect(
+        current?.workspace.plan.display?.runs[0]?.command,
+      ).toMatch(/^random-plan-\d+ --authoritative$/);
+    });
+    const originalCommand =
+      current?.workspace.plan.display?.runs[0]?.command;
+
+    act(() => {
+      current?.workspace.actions.resamplePlan();
+    });
+    await waitFor(() => {
+      expect(
+        current?.workspace.plan.display?.runs[0]?.command,
+      ).toMatch(/^random-plan-\d+ --authoritative$/);
+      expect(
+        current?.workspace.plan.display?.runs[0]?.command,
+      ).not.toBe(originalCommand);
+      expect(current?.workspace.plan.canStart).toBe(true);
+    });
+    const replacementCommand =
+      current?.workspace.plan.display?.runs[0]?.command;
+
+    act(() => {
+      current?.workspace.actions.startJob();
+    });
+    await waitFor(() => {
+      expect(trainingBodies).toHaveLength(1);
+    });
+    expect(trainingBodies[0]).toHaveProperty(
+      "runPlan.runs.0.command",
+      replacementCommand,
+    );
+  });
+
+  it("rejects a large-grid confirmation retained from an obsolete draft revision", async () => {
+    const largeSearchSpace = {
+      ...searchSpaceResponse,
+      axes: [
+        {
+          ...searchSpaceResponse.axes[0],
+          values: Array.from({ length: 11 }, (_, index) => index + 1),
+        },
+        {
+          ...searchSpaceResponse.axes[1],
+          values: Array.from({ length: 10 }, (_, index) => index + 1),
+        },
+      ],
+    };
+    const { trainingBodies } = installFetchMock({
+      searchSpaceResponse: largeSearchSpace,
+    });
+    let current: TrainingInterfaceSnapshot | undefined;
+    renderTrainingInterfaceHarness({
+      onChange: (snapshot) => {
+        current = snapshot;
+      },
+    });
+
+    await waitFor(() => {
+      expect(current?.workspace.draft.searchLoading).toBe(false);
+      expect(current?.workspace.plan.display).toBeDefined();
+    });
+    act(() => {
+      current?.workspace.actions.updateSearch({
+        mode: "grid",
+        selectedValues: {
+          hidden_dim: largeSearchSpace.axes[0].values,
+          stack_num_layers: largeSearchSpace.axes[1].values,
+        },
+        randomSamples: 10,
+      });
+      current?.workspace.actions.selectLogFolderMode("new");
+      current?.workspace.actions.nameNewLogFolder("large_grid_revision_one");
+    });
+    await waitFor(() => {
+      expect(current?.workspace.plan.displayedRunCount).toBe(110);
+      expect(current?.workspace.plan.canStart).toBe(true);
+    });
+    act(() => {
+      current?.workspace.actions.startJob();
+    });
+    await waitFor(() => {
+      expect(current?.workspace.dialogs.largeGridConfirmation.isOpen).toBe(true);
+    });
+    const obsoleteConfirm =
+      current?.workspace.actions.confirmLargeGridSearch;
+
+    act(() => {
+      current?.workspace.actions.nameNewLogFolder("large_grid_revision_two");
+    });
+    await waitFor(() => {
+      expect(current?.workspace.dialogs.largeGridConfirmation.isOpen).toBe(false);
+      expect(current?.workspace.plan.display?.logFolder).toBe(
+        "large_grid_revision_two",
+      );
+    });
+
+    act(() => {
+      obsoleteConfirm?.();
+    });
+    expect(trainingBodies).toHaveLength(0);
+  });
+
+  it("keeps a failed create out of active Job state and permits a fresh create", async () => {
+    let shouldFail = true;
+    const { trainingBodies } = installFetchMock({
+      createTrainingJobResponseFactory: (request) =>
+        shouldFail
+          ? Promise.reject(new Error("training create unavailable"))
+          : mockTrainingJobPayload(
+              request as Parameters<typeof mockTrainingJobPayload>[0],
+              { status: "running" },
+            ),
+    });
+    let current: TrainingInterfaceSnapshot | undefined;
+    renderTrainingInterfaceHarness({
+      onChange: (snapshot) => {
+        current = snapshot;
+      },
+    });
+
+    await waitFor(() => {
+      expect(current?.workspace.plan.display).toBeDefined();
+    });
+    act(() => {
+      current?.workspace.actions.selectLogFolderMode("new");
+      current?.workspace.actions.nameNewLogFolder("create_retry");
+    });
+    await waitFor(() => {
+      expect(current?.workspace.plan.canStart).toBe(true);
+    });
+    act(() => {
+      current?.workspace.actions.startJob();
+    });
+    await waitFor(() => {
+      expect(current?.workspace.job.error).toBe(
+        "training create unavailable",
+      );
+    });
+    expect(current?.workspace.job.value).toBeUndefined();
+
+    shouldFail = false;
+    act(() => {
+      current?.workspace.actions.startJob();
+    });
+    await waitFor(() => {
+      expect(trainingBodies).toHaveLength(2);
+      expect(current?.workspace.job.value).toMatchObject({
+        id: "job-1",
+        logFolder: "create_retry",
+      });
+      expect(current?.workspace.job.error).toBe("");
+    });
+  });
+
+  it("does not rewrite an established Training draft after a Model workspace change", async () => {
+    installFetchMock();
+    let current: TrainingInterfaceSnapshot | undefined;
+    renderTrainingInterfaceHarness({
+      onChange: (snapshot) => {
+        current = snapshot;
+      },
+    });
+
+    await waitFor(() => {
+      expect(current?.workspace.draft.selectedModelType).toBe("linears");
+      expect(current?.workspace.draft.selectedModel).toBe("linear");
+      expect(current?.workspace.draft.selectedPrimaryPreset).toBe("baseline");
+    });
+    act(() => {
+      current?.modelTarget.actions.selectModelType("bert");
+    });
+
+    await waitFor(() => {
+      expect(current?.modelTarget.browser.selectedModelType).toBe("bert");
+    });
+    expect(current?.workspace.draft).toMatchObject({
+      selectedModelType: "linears",
+      selectedModel: "linear",
+      selectedPrimaryPreset: "baseline",
+    });
+  });
+
+  it("seeds the Training draft from the current Model target on first open", async () => {
+    installFetchMock();
+    let current: TrainingInterfaceSnapshot | undefined;
+    const rendered = renderTrainingInterfaceHarness({
+      activeWorkspace: "model",
+      onChange: (snapshot) => {
+        current = snapshot;
+      },
+    });
+
+    await waitFor(() => {
+      expect(current?.modelTarget.browser.selectedModelType).toBe("linears");
+      expect(current?.workspace.draft.selectedModel).toBe("");
+    });
+    act(() => {
+      current?.modelTarget.actions.selectModelType("bert");
+    });
+    await waitFor(() => {
+      expect(current?.modelTarget.browser.selectedModelType).toBe("bert");
+      expect(current?.modelTarget.browser.selectedPreset).toBe("bert-baseline");
+    });
+
+    rendered.rerenderWorkspace("training");
+
+    await waitFor(() => {
+      expect(current?.workspace.draft).toMatchObject({
+        selectedModelType: "bert",
+        selectedModel: "linear",
+        selectedPrimaryPreset: "bert-baseline",
+        selectedDatasets: ["ToyText"],
+      });
+    });
+  });
+
+  it("retains an active Training Job across draft and workspace changes", async () => {
+    installFetchMock({ trainingJobStatus: "running" });
+    let current: TrainingInterfaceSnapshot | undefined;
+    const rendered = renderTrainingInterfaceHarness({
+      onChange: (snapshot) => {
+        current = snapshot;
+      },
+    });
+
+    await waitFor(() => {
+      expect(current?.workspace.plan.display).toBeDefined();
+    });
+    act(() => {
+      current?.workspace.actions.selectLogFolderMode("new");
+      current?.workspace.actions.nameNewLogFolder("retained_job");
+    });
+    await waitFor(() => {
+      expect(current?.workspace.plan.canStart).toBe(true);
+    });
+    act(() => {
+      current?.workspace.actions.startJob();
+    });
+    await waitFor(() => {
+      expect(current?.workspace.job.value?.id).toBe("job-1");
+    });
+
+    act(() => {
+      current?.workspace.actions.selectModelType("experts");
+    });
+    await waitFor(() => {
+      expect(current?.workspace.draft.selectedModelType).toBe("experts");
+    });
+    expect(current?.workspace.job.value?.id).toBe("job-1");
+
+    rendered.rerenderWorkspace("model");
+
+    await waitFor(() => {
+      expect(current?.workspace.job.value?.id).toBe("job-1");
+    });
+    expect(current?.workspace.draft.selectedModelType).toBe("experts");
+  });
+
+  it("clears Training internals through the connection composition command", async () => {
+    installFetchMock({ trainingJobStatus: "running" });
+    let current: TrainingInterfaceSnapshot | undefined;
+    renderTrainingInterfaceHarness({
+      onChange: (snapshot) => {
+        current = snapshot;
+      },
+    });
+
+    await waitFor(() => {
+      expect(current?.workspace.plan.display).toBeDefined();
+    });
+    act(() => {
+      current?.workspace.actions.updateSearch({
+        mode: "random",
+        selectedValues: { hidden_dim: [64, 128] },
+        randomSamples: 2,
+      });
+      current?.workspace.actions.selectLogFolderMode("new");
+      current?.workspace.actions.nameNewLogFolder("connection_owned_clear");
+    });
+    await waitFor(() => {
+      expect(current?.workspace.plan.canStart).toBe(true);
+    });
+    act(() => {
+      current?.workspace.actions.startJob();
+    });
+    await waitFor(() => {
+      expect(current?.activeJob.activeTrainingJob?.status).toBe("running");
+      expect(current?.workspace.plan.search.effective.mode).toBe(
+        "random",
+      );
+    });
+
+    await act(async () => {
+      await current?.connection.actions.useApiBaseUrl(
+        "https://alternate-workbench.example.test",
+      );
+    });
+
+    await waitFor(() => {
+      expect(current?.activeJob.activeTrainingJob).toBeUndefined();
+      expect(current?.activeJob).not.toHaveProperty("setActiveJobId");
+      expect(current?.activeJob).not.toHaveProperty("onJobChange");
+      expect(current?.workspace.job.value).toBeUndefined();
+      expect(current?.workspace.draft.logFolder).toMatchObject({
+        mode: "existing",
+        existingValue: "",
+        newValue: "",
+      });
+      expect(current?.workspace.plan.search.effective.mode).toBe(
+        "off",
+      );
+    });
+  });
+
+  it("ignores a create response that completes after a connection change", async () => {
+    const pendingCreate = deferred<unknown>();
+    let createRequest: Parameters<typeof mockTrainingJobPayload>[0] | undefined;
+    const { trainingBodies } = installFetchMock({
+      createTrainingJobResponseFactory: (request) => {
+        createRequest = request as Parameters<typeof mockTrainingJobPayload>[0];
+        return pendingCreate.promise;
+      },
+    });
+    let current: TrainingInterfaceSnapshot | undefined;
+    renderTrainingInterfaceHarness({
+      onChange: (snapshot) => {
+        current = snapshot;
+      },
+    });
+
+    await waitFor(() => {
+      expect(current?.workspace.plan.display).toBeDefined();
+    });
+    act(() => {
+      current?.workspace.actions.selectLogFolderMode("new");
+      current?.workspace.actions.nameNewLogFolder("obsolete_create");
+    });
+    await waitFor(() => {
+      expect(current?.workspace.plan.canStart).toBe(true);
+    });
+    act(() => {
+      current?.workspace.actions.startJob();
+    });
+    await waitFor(() => {
+      expect(trainingBodies).toHaveLength(1);
+      expect(current?.workspace.job.isStarting).toBe(true);
+    });
+
+    await act(async () => {
+      await current?.connection.actions.useApiBaseUrl(
+        "https://new-connection.example.test",
+      );
+    });
+    await act(async () => {
+      pendingCreate.resolve(
+        mockTrainingJobPayload(createRequest ?? {}, { status: "running" }),
+      );
+      await pendingCreate.promise;
+    });
+
+    await waitFor(() => {
+      expect(current?.activeJob.activeTrainingJob).toBeUndefined();
+      expect(current?.workspace.job.value).toBeUndefined();
+      expect(current?.workspace.job.isStarting).toBe(false);
+    });
+  });
+
+  it("keeps active job polling mounted while the Training workspace is hidden", async () => {
+    const { fetchMock } = installFetchMock({ trainingJobStatus: "running" });
+    let current: TrainingInterfaceSnapshot | undefined;
+    const rendered = renderTrainingInterfaceHarness({
+      onChange: (snapshot) => {
+        current = snapshot;
+      },
+    });
+
+    await waitFor(() => {
+      expect(current?.workspace.plan.display).toBeDefined();
+    });
+    act(() => {
+      current?.workspace.actions.selectLogFolderMode("new");
+      current?.workspace.actions.nameNewLogFolder("hidden_polling");
+    });
+    await waitFor(() => {
+      expect(current?.workspace.plan.canStart).toBe(true);
+    });
+    act(() => {
+      current?.workspace.actions.startJob();
+    });
+    await waitFor(() => {
+      expect(current?.workspace.job.value?.status).toBe("running");
+      expect(trainingJobPollCalls(fetchMock).length).toBeGreaterThan(0);
+    });
+    const visiblePollCount = trainingJobPollCalls(fetchMock).length;
+
+    rendered.rerenderWorkspace("logs");
+
+    await waitFor(
+      () => {
+        expect(trainingJobPollCalls(fetchMock).length).toBeGreaterThan(
+          visiblePollCount,
+        );
+      },
+      { timeout: 2500 },
+    );
     expect(screen.queryByRole("button", { name: /start training/i }))
       .not.toBeInTheDocument();
   });
@@ -390,11 +1113,14 @@ describe("WorkbenchApp Training And Preview", () => {
     });
     renderWorkspaceOverlayHarness({
       activeWorkspace: "training",
-      children: <SeedActiveJob jobId="job-1" />,
     });
     const user = userEvent.setup();
 
-    const details = await expandedTrainingDetails(user);
+    const details = await screen.findByRole("region", {
+      name: "Training workspace",
+    });
+    await selectNewTrainingLogFolder(user, "cancel_failure");
+    await user.click(screen.getByRole("button", { name: /start training/i }));
     const runList = trainingRunList(details);
     const cancelButton = await within(runList).findByRole("button", {
       name: /^cancel$/i,
@@ -428,10 +1154,12 @@ describe("WorkbenchApp Training And Preview", () => {
     });
     renderWorkspaceOverlayHarness({
       activeWorkspace: "training",
-      children: <SeedActiveJob jobId="job-1" />,
     });
     const user = userEvent.setup();
 
+    await screen.findByRole("region", { name: "Training workspace" });
+    await selectNewTrainingLogFolder(user, "cancel_header_failure");
+    await user.click(screen.getByRole("button", { name: /start training/i }));
     await user.click(await screen.findByRole("button", { name: /^cancel$/i }));
 
     await waitFor(() => {
@@ -449,9 +1177,17 @@ describe("WorkbenchApp Training And Preview", () => {
   it("does not let stale running polls overwrite a cancelled mutation", async () => {
     const stalePoll = deferred<unknown>();
     const { fetchMock } = installFetchMock({
-      trainingJobResponseFactory: () => stalePoll.promise,
+      trainingJobResponseFactory: (requestIndex) =>
+        requestIndex === 0
+          ? stalePoll.promise
+          : mockTrainingJobPayload(
+              { logFolder: "stale_cancel_poll", datasets: ["Mnist"] },
+              { status: "cancelled" },
+            ),
     });
-    renderWorkbench();
+    const { queryClient } = renderWorkbench();
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    const removeSpy = vi.spyOn(queryClient, "removeQueries");
     const user = userEvent.setup();
 
     await expandedTrainingDetailsReady(user);
@@ -465,6 +1201,29 @@ describe("WorkbenchApp Training And Preview", () => {
     await waitFor(() => {
       expect(screen.getAllByText("cancelled").length).toBeGreaterThan(0);
     });
+    await waitFor(() => {
+      expect(
+        queryClient.getQueryData(trainingQueryKeys.job("job-1")),
+      ).toMatchObject({ status: "cancelled" });
+      expect(invalidateSpy).toHaveBeenCalled();
+      expect(removeSpy).toHaveBeenCalled();
+    });
+    invalidateSpy.mockClear();
+    removeSpy.mockClear();
+    const observedStatuses: string[] = [];
+    const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
+      if (
+        event.query.queryKey[0] === "training-job" &&
+        event.query.queryKey[1] === "job-1"
+      ) {
+        const status = (
+          event.query.state.data as { status?: string } | undefined
+        )?.status;
+        if (status) {
+          observedStatuses.push(status);
+        }
+      }
+    });
     stalePoll.resolve(
       mockTrainingJobPayload(
         { logFolder: "stale_cancel_poll", datasets: ["Mnist"] },
@@ -472,9 +1231,21 @@ describe("WorkbenchApp Training And Preview", () => {
       ),
     );
 
-    await waitFor(() => {
-      expect(screen.getAllByText("cancelled").length).toBeGreaterThan(0);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
     });
+    expect(observedStatuses).not.toContain("running");
+    expect(
+      queryClient.getQueryData(trainingQueryKeys.job("job-1")),
+    ).toMatchObject({ status: "cancelled" });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1100));
+    });
+    unsubscribe();
+
+    expect(trainingJobPollCalls(fetchMock)).toHaveLength(1);
+    expect(invalidateSpy).not.toHaveBeenCalled();
+    expect(removeSpy).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: /^cancel$/i }))
       .not.toBeInTheDocument();
   });
@@ -1733,8 +2504,8 @@ describe("WorkbenchApp Training And Preview", () => {
     expect(control).not.toHaveTextContent("Wide snapshot");
   });
 
-  it("deselects a preset run from the Training run list and syncs setup variants", async () => {
-    installFetchMock({
+  it("submits a Config Snapshot-only plan after removing every base preset", async () => {
+    const { trainingBodies } = installFetchMock({
       schemaResponse: {
         ...schemaResponse,
         fields: [
@@ -1783,6 +2554,7 @@ describe("WorkbenchApp Training And Preview", () => {
       "Config snapshots",
       /wide snapshot/i,
     );
+    await selectNewTrainingLogFolder(user, "snapshot_only");
     await findTrainingRunSummary(
       /0\s*\/\s*2 runs;\s*0\s*\/\s*35 epochs/i,
     );
@@ -1813,6 +2585,27 @@ describe("WorkbenchApp Training And Preview", () => {
         name: /^presets\s+0\s*\/\s*2 selected$/i,
       }),
     ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /start training/i }));
+
+    await waitFor(() => {
+      expect(trainingBodies).toHaveLength(1);
+    });
+    expect(trainingBodies[0]).toMatchObject({
+      logFolder: "snapshot_only",
+      presets: ["baseline"],
+      runPlan: {
+        presets: ["baseline"],
+        runs: [
+          expect.objectContaining({
+            snapshotId: "snap-wide",
+            snapshotName: "Wide snapshot",
+            preset: "baseline",
+          }),
+        ],
+      },
+    });
+    expect(trainingBodies[0]).not.toHaveProperty("search");
   });
 
   it("deselects a snapshot run across datasets and syncs setup variants", async () => {
@@ -2795,6 +3588,89 @@ describe("WorkbenchApp Training And Preview", () => {
       .toBe(false);
   });
 
+  it("prunes datasets when the Training Experiment Task changes", async () => {
+    const { fetchMock, trainingBodies } = installFetchMock({
+      datasetsResponse: {
+        modelType: "linears",
+        model: "linear",
+        defaultExperimentTask: "image-classification",
+        datasetGroups: [
+          {
+            experimentTask: "image-classification",
+            label: "Image Classification",
+            datasets: [
+              { name: "Mnist", label: "Mnist", inputDim: 784, outputDim: 10 },
+              {
+                name: "Cifar10",
+                label: "Cifar 10",
+                inputDim: 3072,
+                outputDim: 10,
+              },
+            ],
+          },
+          {
+            experimentTask: "tabular-classification",
+            label: "Tabular Classification",
+            datasets: [
+              { name: "Iris", label: "Iris", inputDim: 4, outputDim: 3 },
+            ],
+          },
+        ],
+      },
+    });
+    renderWorkbench();
+    const user = userEvent.setup();
+
+    const details = await expandedTrainingDetailsReady(user);
+    await setTrainingMultiSelectOption(
+      user,
+      details,
+      "Training datasets",
+      /Cifar 10/i,
+    );
+    expect(
+      within(details).getByRole("combobox", {
+        name: /^training datasets\s+2\s*\/\s*2 selected$/i,
+      }),
+    ).toBeInTheDocument();
+
+    const experimentTask = within(details).getByRole("combobox", {
+      name: /^experiment task$/i,
+    });
+    await user.click(experimentTask);
+    await user.click(
+      within(
+        await within(details).findByRole("listbox", {
+          name: /^experiment task options$/i,
+        }),
+      ).getByRole("option", { name: /Tabular Classification/i }),
+    );
+
+    await waitFor(() => {
+      expect(experimentTask).toHaveTextContent("Tabular Classification");
+      expect(
+        within(details).getByRole("combobox", {
+          name: /^training datasets\s+1\s*\/\s*1 selected$/i,
+        }),
+      ).toHaveTextContent("Iris");
+      const requests = trainingRunPlanRequestBodies(fetchMock);
+      expect(requests[requests.length - 1]).toMatchObject({
+        experimentTask: "tabular-classification",
+        datasets: ["Iris"],
+      });
+    });
+
+    await selectNewTrainingLogFolder(user, "task_pruning");
+    await user.click(screen.getByRole("button", { name: /start training/i }));
+
+    await waitFor(() => {
+      expect(trainingBodies[0]).toMatchObject({
+        experimentTask: "tabular-classification",
+        datasets: ["Iris"],
+      });
+    });
+  });
+
   it("keeps Start Training disabled when the selected model has no datasets", async () => {
     const { trainingBodies } = installFetchMock({
       datasetsResponse: {
@@ -2859,6 +3735,47 @@ describe("WorkbenchApp Training And Preview", () => {
         name: /^fresh_run\b/i,
       }),
     ).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("does not replay a started folder after the Workbench connection changes", async () => {
+    const { trainingBodies } = installFetchMock();
+    renderWorkbench();
+    const user = userEvent.setup();
+
+    await selectNewTrainingLogFolder(user, "old_connection_run");
+    await user.click(screen.getByRole("button", { name: /start training/i }));
+    await waitFor(() => {
+      expect(trainingBodies[0]).toMatchObject({
+        logFolder: "old_connection_run",
+      });
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: /api connection settings/i }),
+    );
+    const connectionDialog = await screen.findByRole("dialog", {
+      name: /api connection/i,
+    });
+    const apiUrlInput = within(connectionDialog).getByLabelText("API base URL");
+    await user.clear(apiUrlInput);
+    await user.type(apiUrlInput, "https://replacement.example.test");
+    await user.click(within(connectionDialog).getByRole("button", { name: /^use$/i }));
+    await user.click(
+      within(connectionDialog).getByRole("button", {
+        name: /close api connection settings/i,
+      }),
+    );
+
+    await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+    await user.click(await screen.findByRole("combobox", { name: /^experiments\b/i }));
+    const experimentsList = await screen.findByRole("listbox", {
+      name: "Experiments options",
+    });
+    expect(
+      within(experimentsList).getByRole("option", {
+        name: /^old_connection_run\b/i,
+      }),
+    ).toHaveAttribute("aria-selected", "false");
   });
 
   it("Full config Update Preview sends a new inspect request for the same selection", async () => {

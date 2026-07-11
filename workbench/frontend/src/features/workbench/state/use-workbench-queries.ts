@@ -1,31 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import {
-  type Capabilities,
-  fetchCapabilities,
   fetchConfigSchema,
   fetchDatasets,
-  fetchHealth,
   fetchMonitors,
   fetchModels,
   fetchPresets,
   fetchSearchSpace,
 } from "@/lib/api";
 import { workbenchQueryKeys } from "@/lib/query-keys";
-
-export const LOCAL_DEFAULT_CAPABILITIES: Capabilities = {
-  authMode: "none",
-  trainingEnabled: true,
-  trainingCancellationCapability: "unsupported",
-  logDeletionEnabled: true,
-  configSnapshotsEnabled: true,
-  historicalLogsEnabled: true,
-  liveMonitorDataEnabled: true,
-  historicalMonitorDataEnabled: true,
-  uploadsEnabled: true,
-  maxUploadSize: null,
-  dataSourcesEnabled: false,
-  dataSources: [],
-};
 
 // Model registry, presets, datasets, monitors, config schema, and search space
 // describe the backend's on-disk model definitions. They only change when
@@ -35,12 +17,32 @@ export const LOCAL_DEFAULT_CAPABILITIES: Capabilities = {
 // this window.
 const STATIC_METADATA_STALE_TIME_MS = 5 * 60_000;
 
-export function useCapabilitiesQuery() {
+export function useConfigSchemaQuery(
+  selectedModelType: string,
+  selectedModel: string,
+  selectedPreset: string,
+  options: { enabled?: boolean } = {},
+) {
+  const { enabled = true } = options;
+  const selectedIdentity = {
+    modelType: selectedModelType,
+    model: selectedModel,
+  };
   return useQuery({
-    queryKey: workbenchQueryKeys.capabilities(),
-    queryFn: ({ signal }) => fetchCapabilities({ signal }),
+    queryKey: workbenchQueryKeys.configSchema(
+      selectedModelType,
+      selectedModel,
+      selectedPreset,
+    ),
+    queryFn: ({ signal }) =>
+      fetchConfigSchema(selectedIdentity, selectedPreset, { signal }),
+    enabled:
+      enabled &&
+      selectedModelType.length > 0 &&
+      selectedModel.length > 0 &&
+      selectedPreset.length > 0,
     retry: false,
-    initialData: LOCAL_DEFAULT_CAPABILITIES,
+    staleTime: STATIC_METADATA_STALE_TIME_MS,
   });
 }
 
@@ -49,9 +51,15 @@ export function useWorkbenchQueries(
   selectedModel: string,
   selectedPreset: string,
   selectedTrainingPresets: readonly string[] = [],
-  options: { includeSearchSpace?: boolean } = {},
+  options: {
+    includeSearchSpace?: boolean;
+    protectedReadsEnabled?: boolean;
+  } = {},
 ) {
-  const { includeSearchSpace = true } = options;
+  const {
+    includeSearchSpace = true,
+    protectedReadsEnabled = true,
+  } = options;
   const selectedIdentity = {
     modelType: selectedModelType,
     model: selectedModel,
@@ -64,17 +72,10 @@ export function useWorkbenchQueries(
       : selectedPreset
         ? [selectedPreset]
         : [];
-  const healthQuery = useQuery({
-    queryKey: workbenchQueryKeys.health(),
-    queryFn: ({ signal }) => fetchHealth({ signal }),
-    retry: false,
-    refetchInterval: 10000,
-  });
-  const capabilitiesQuery = useCapabilitiesQuery();
-
   const modelsQuery = useQuery({
     queryKey: workbenchQueryKeys.models(),
     queryFn: ({ signal }) => fetchModels({ signal }),
+    enabled: protectedReadsEnabled,
     retry: false,
     staleTime: STATIC_METADATA_STALE_TIME_MS,
   });
@@ -82,7 +83,7 @@ export function useWorkbenchQueries(
   const presetsQuery = useQuery({
     queryKey: workbenchQueryKeys.presets(selectedModelType, selectedModel),
     queryFn: ({ signal }) => fetchPresets(selectedIdentity, { signal }),
-    enabled: hasSelectedModel,
+    enabled: protectedReadsEnabled && hasSelectedModel,
     retry: false,
     staleTime: STATIC_METADATA_STALE_TIME_MS,
   });
@@ -90,7 +91,7 @@ export function useWorkbenchQueries(
   const datasetsQuery = useQuery({
     queryKey: workbenchQueryKeys.datasets(selectedModelType, selectedModel),
     queryFn: ({ signal }) => fetchDatasets(selectedIdentity, { signal }),
-    enabled: hasSelectedModel,
+    enabled: protectedReadsEnabled && hasSelectedModel,
     retry: false,
     staleTime: STATIC_METADATA_STALE_TIME_MS,
   });
@@ -98,23 +99,17 @@ export function useWorkbenchQueries(
   const monitorsQuery = useQuery({
     queryKey: workbenchQueryKeys.monitors(selectedModelType, selectedModel),
     queryFn: ({ signal }) => fetchMonitors(selectedIdentity, { signal }),
-    enabled: hasSelectedModel,
+    enabled: protectedReadsEnabled && hasSelectedModel,
     retry: false,
     staleTime: STATIC_METADATA_STALE_TIME_MS,
   });
 
-  const schemaQuery = useQuery({
-    queryKey: workbenchQueryKeys.configSchema(
-      selectedModelType,
-      selectedModel,
-      selectedPreset,
-    ),
-    queryFn: ({ signal }) =>
-      fetchConfigSchema(selectedIdentity, selectedPreset, { signal }),
-    enabled: hasSelectedModel && selectedPreset.length > 0,
-    retry: false,
-    staleTime: STATIC_METADATA_STALE_TIME_MS,
-  });
+  const schemaQuery = useConfigSchemaQuery(
+    selectedModelType,
+    selectedModel,
+    selectedPreset,
+    { enabled: protectedReadsEnabled },
+  );
 
   const searchSpaceQuery = useQuery({
     queryKey: workbenchQueryKeys.searchSpace(
@@ -130,14 +125,16 @@ export function useWorkbenchQueries(
         searchSpacePresets,
         { signal },
       ),
-    enabled: includeSearchSpace && hasSelectedModel && selectedPreset.length > 0,
+    enabled:
+      protectedReadsEnabled &&
+      includeSearchSpace &&
+      hasSelectedModel &&
+      selectedPreset.length > 0,
     retry: false,
     staleTime: STATIC_METADATA_STALE_TIME_MS,
   });
 
   return {
-    healthQuery,
-    capabilitiesQuery,
     modelsQuery,
     presetsQuery,
     datasetsQuery,

@@ -12,7 +12,11 @@ type BackendContactException = {
 const BACKEND_CONTACT_EXCEPTIONS: BackendContactException[] = [
   {
     relativePath: "src/lib/api/client.ts",
-    reason: "Shared API client owns fetch, base URL, auth headers, and response validation.",
+    reason: "Shared API client owns fetch, request headers, connection-race quarantine, and response validation.",
+  },
+  {
+    relativePath: "src/lib/api/_connection-runtime.ts",
+    reason: "Private Workbench connection runtime owns base URL, origin policy, browser session storage, and request identity.",
   },
   {
     relativePath: "src/lib/api/health.ts",

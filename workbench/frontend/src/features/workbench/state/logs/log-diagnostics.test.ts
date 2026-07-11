@@ -9,7 +9,7 @@ import {
   pairValidationExampleMedia,
   selectValidationExampleMediaTags,
 } from "@/features/workbench/state/logs/log-diagnostics";
-import { groupLogScalarSeriesByTag } from "@/features/workbench/state/logs/logs-chart-view-model";
+import { groupLogScalarSeriesByTag } from "@/features/workbench/state/logs/_logs-chart-state";
 import {
   type LogImageSummary,
   type LogRun,

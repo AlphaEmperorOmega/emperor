@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useMemo } from "react";
 import {
   Cpu,
   Database,
@@ -17,7 +17,6 @@ import {
   DeleteExperimentDialog,
   DeleteSubsetRunsDialog,
   type SubsetDeleteKind,
-  type SubsetDeleteTarget,
 } from "@/features/workbench/components/logs/delete-dialogs";
 import { InlineStatus } from "@/features/workbench/components/shared/inline-status";
 import { SectionHeading } from "@/components/ui/section-heading";
@@ -27,131 +26,17 @@ import {
   type MultiSelectDropdownOption,
   type MultiSelectDropdownOptionAction,
 } from "@/features/workbench/components/screen/multi-select-dropdown";
-import { type LogsWorkspaceState } from "@/features/workbench/state/logs/use-logs-workspace-state";
-import { type LogRun, type ModelIdentity } from "@/lib/api";
 import {
-  type ChecklistOption,
-  selectedOptionsSet,
-} from "@/features/workbench/state/logs/logs-selectors";
+  type LogsBrowser,
+  type LogsDeletion,
+} from "@/features/workbench/providers/logs-workspace-provider";
+import { type ChecklistOption } from "@/features/workbench/state/logs/logs-selectors";
 import { cn, errorMessage } from "@/lib/utils";
 
 export type LogsSidebarProps = {
-  runs: LogRun[];
-  runsQuery: LogsWorkspaceState["runsQuery"];
-  experimentsQuery: LogsWorkspaceState["experimentsQuery"];
-  tagsQuery: LogsWorkspaceState["tagsQuery"];
-  logDeletionEnabled: boolean;
-  experimentOptions: ChecklistOption[];
-  datasetOptions: ChecklistOption[];
-  modelOptions: ChecklistOption[];
-  presetOptions: ChecklistOption[];
-  tagOptions: ChecklistOption[];
-  selectedExperiments: Set<string>;
-  selectedDatasets: Set<string>;
-  selectedModels: Set<string>;
-  selectedPresets: Set<string>;
-  selectedTags: Set<string>;
-  toggleExperiment: LogsWorkspaceState["toggleExperiment"];
-  toggleDataset: LogsWorkspaceState["toggleDataset"];
-  toggleModel: LogsWorkspaceState["toggleModel"];
-  togglePreset: LogsWorkspaceState["togglePreset"];
-  toggleTag: LogsWorkspaceState["toggleTag"];
-  selectAllExperiments: LogsWorkspaceState["selectAllExperiments"];
-  selectNoExperiments: LogsWorkspaceState["selectNoExperiments"];
-  selectAllDatasets: LogsWorkspaceState["selectAllDatasets"];
-  selectNoDatasets: LogsWorkspaceState["selectNoDatasets"];
-  selectAllModels: LogsWorkspaceState["selectAllModels"];
-  selectNoModels: LogsWorkspaceState["selectNoModels"];
-  selectAllPresets: LogsWorkspaceState["selectAllPresets"];
-  selectNoPresets: LogsWorkspaceState["selectNoPresets"];
-  selectAllTags: LogsWorkspaceState["selectAllTags"];
-  selectNoTags: LogsWorkspaceState["selectNoTags"];
-  refreshLogLists: LogsWorkspaceState["refreshLogLists"];
-  resetDeleteExperiment: LogsWorkspaceState["resetDeleteExperiment"];
-  deleteExperiment: LogsWorkspaceState["deleteExperiment"];
-  deleteExperimentError: LogsWorkspaceState["deleteExperimentError"];
-  isDeletingExperiment: LogsWorkspaceState["isDeletingExperiment"];
-  resetRunDelete: LogsWorkspaceState["resetRunDelete"];
-  createRunDeletePlan: LogsWorkspaceState["createRunDeletePlan"];
-  runDeletePlan: LogsWorkspaceState["runDeletePlan"];
-  runDeletePlanError: LogsWorkspaceState["runDeletePlanError"];
-  isPlanningRunDelete: LogsWorkspaceState["isPlanningRunDelete"];
-  deleteRuns: LogsWorkspaceState["deleteRuns"];
-  runDeleteError: LogsWorkspaceState["runDeleteError"];
-  isDeletingRunDelete: LogsWorkspaceState["isDeletingRunDelete"];
-  loadedRunCount: LogsWorkspaceState["loadedRunCount"];
-  totalRunCount: LogsWorkspaceState["totalRunCount"];
-  canLoadMoreRuns: LogsWorkspaceState["canLoadMoreRuns"];
-  isLoadingMoreRuns: LogsWorkspaceState["isLoadingMoreRuns"];
-  loadMoreRuns: LogsWorkspaceState["loadMoreRuns"];
-  loadedScalarTagRunCount: LogsWorkspaceState["loadedScalarTagRunCount"];
-  totalScalarTagRunCount: LogsWorkspaceState["totalScalarTagRunCount"];
-  canLoadMoreScalarTags: LogsWorkspaceState["canLoadMoreScalarTags"];
-  isLoadingMoreScalarTags: LogsWorkspaceState["isLoadingMoreScalarTags"];
-  loadMoreScalarTags: LogsWorkspaceState["loadMoreScalarTags"];
+  browser: LogsBrowser;
+  deletion: LogsDeletion;
 };
-
-function uniqueSorted(values: string[]) {
-  return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b));
-}
-
-function uniqueModelIdentities(runs: LogRun[]): ModelIdentity[] {
-  const models = new Map<string, ModelIdentity>();
-  for (const run of runs) {
-    const key = `${run.modelType}/${run.model}`;
-    if (!models.has(key)) {
-      models.set(key, { modelType: run.modelType, model: run.model });
-    }
-  }
-  return Array.from(models.values()).sort((left, right) =>
-    `${left.modelType}/${left.model}`.localeCompare(`${right.modelType}/${right.model}`),
-  );
-}
-
-function buildSubsetDeleteTarget({
-  kind,
-  value,
-  experiment,
-  runs,
-}: {
-  kind: SubsetDeleteKind;
-  value: string;
-  experiment: string;
-  runs: LogRun[];
-}): SubsetDeleteTarget | null {
-  const targetRuns = runs.filter((run) => {
-    if (run.experiment !== experiment) {
-      return false;
-    }
-    return run.preset === value;
-  });
-
-  if (targetRuns.length === 0) {
-    return null;
-  }
-
-  const filters = {
-    experiments: uniqueSorted(targetRuns.map((run) => run.experiment)),
-    datasets: uniqueSorted(targetRuns.map((run) => run.dataset)),
-    models: uniqueModelIdentities(targetRuns),
-    presets: uniqueSorted(targetRuns.map((run) => run.preset)),
-    runIds: uniqueSorted(targetRuns.map((run) => run.id)),
-  };
-
-  return {
-    kind,
-    value,
-    experiment,
-    filters,
-    key: JSON.stringify({ kind, value, experiment, filters }),
-  };
-}
-
-function selectedValuesForOptions(selected: Set<string>, options: ChecklistOption[]) {
-  return options
-    .filter((option) => selected.has(option.value))
-    .map((option) => option.value);
-}
 
 function runCountLabel(count: number) {
   return `${count} ${count === 1 ? "run" : "runs"}`;
@@ -161,7 +46,7 @@ function LogFilterSection({
   title,
   icon,
   options,
-  selected,
+  selectedValues,
   onToggle,
   onAll,
   onNone,
@@ -173,7 +58,7 @@ function LogFilterSection({
   title: string;
   icon: ReactNode;
   options: ChecklistOption[];
-  selected: Set<string>;
+  selectedValues: string[];
   onToggle: (value: string) => void;
   onAll: () => void;
   onNone: () => void;
@@ -184,10 +69,7 @@ function LogFilterSection({
   divided?: boolean;
   optionCountDisplay?: "visible" | "hover";
 }) {
-  const selectedValues = useMemo(
-    () => selectedValuesForOptions(selected, options),
-    [options, selected],
-  );
+  const selected = useMemo(() => new Set(selectedValues), [selectedValues]);
   const dropdownOptions = useMemo<MultiSelectDropdownOption[]>(
     () =>
       options.map((option) => ({
@@ -274,156 +156,52 @@ function SidebarStatus({
   );
 }
 
-export function LogsSidebar({
-  runs,
-  runsQuery,
-  experimentsQuery,
-  tagsQuery,
-  logDeletionEnabled,
-  experimentOptions,
-  datasetOptions,
-  modelOptions,
-  presetOptions,
-  tagOptions,
-  selectedExperiments,
-  selectedDatasets,
-  selectedModels,
-  selectedPresets,
-  selectedTags,
-  toggleExperiment,
-  toggleDataset,
-  toggleModel,
-  togglePreset,
-  toggleTag,
-  selectAllExperiments,
-  selectNoExperiments,
-  selectAllDatasets,
-  selectNoDatasets,
-  selectAllModels,
-  selectNoModels,
-  selectAllPresets,
-  selectNoPresets,
-  selectAllTags,
-  selectNoTags,
-  refreshLogLists,
-  resetDeleteExperiment,
-  deleteExperiment,
-  deleteExperimentError,
-  isDeletingExperiment,
-  resetRunDelete,
-  createRunDeletePlan,
-  runDeletePlan,
-  runDeletePlanError,
-  isPlanningRunDelete,
-  deleteRuns,
-  runDeleteError,
-  isDeletingRunDelete,
-  loadedRunCount,
-  totalRunCount,
-  canLoadMoreRuns,
-  isLoadingMoreRuns,
-  loadMoreRuns,
-  loadedScalarTagRunCount,
-  totalScalarTagRunCount,
-  canLoadMoreScalarTags,
-  isLoadingMoreScalarTags,
-  loadMoreScalarTags,
-}: LogsSidebarProps) {
-  const [deleteOption, setDeleteOption] = useState<ChecklistOption | null>(null);
-  const [subsetDeleteTarget, setSubsetDeleteTarget] =
-    useState<SubsetDeleteTarget | null>(null);
-  const isScanning = runsQuery.isLoading || experimentsQuery.isLoading;
-  const isRefreshing = runsQuery.isFetching || experimentsQuery.isFetching;
-  const selectedExperimentOptions = useMemo(
-    () => selectedOptionsSet(selectedExperiments, experimentOptions),
-    [experimentOptions, selectedExperiments],
-  );
-  const singleSelectedExperiment =
-    selectedExperimentOptions.size === 1
-      ? Array.from(selectedExperimentOptions)[0]
-      : null;
+export function LogsSidebar({ browser, deletion }: LogsSidebarProps) {
+  const { actions, filters, pagination, results, scope, status } = browser;
+  const experimentOptions = filters.experiments.options;
+  const datasetOptions = filters.datasets.options;
+  const modelOptions = filters.models.options;
+  const presetOptions = filters.presets.options;
+  const tagOptions = filters.tags.options;
+  const selectedExperimentValues = filters.experiments.selectedValues;
+  const {
+    enabled: logDeletionEnabled,
+    presetTargetExperiment,
+    operation: deleteOperation,
+    actions: deleteActions,
+  } = deletion;
+  const toggleExperiment = (value: string) =>
+    actions.toggleFilter("experiments", value);
+  const toggleDataset = (value: string) => actions.toggleFilter("datasets", value);
+  const toggleModel = (value: string) => actions.toggleFilter("models", value);
+  const togglePreset = (value: string) => actions.toggleFilter("presets", value);
+  const toggleTag = (value: string) => actions.toggleFilter("tags", value);
+  const selectAllExperiments = () => actions.selectAll("experiments");
+  const selectNoExperiments = () => actions.selectNone("experiments");
+  const selectAllDatasets = () => actions.selectAll("datasets");
+  const selectNoDatasets = () => actions.selectNone("datasets");
+  const selectAllModels = () => actions.selectAll("models");
+  const selectNoModels = () => actions.selectNone("models");
+  const selectAllPresets = () => actions.selectAll("presets");
+  const selectNoPresets = () => actions.selectNone("presets");
+  const selectAllTags = () => actions.selectAll("tags");
+  const selectNoTags = () => actions.selectNone("tags");
+  const isScanning = status.isScanning;
+  const isRefreshing = status.isRefreshing;
 
-  useEffect(() => {
-    if (!subsetDeleteTarget || singleSelectedExperiment === subsetDeleteTarget.experiment) {
-      return;
-    }
-    resetRunDelete();
-    setSubsetDeleteTarget(null);
-  }, [resetRunDelete, singleSelectedExperiment, subsetDeleteTarget]);
-
-  useEffect(() => {
-    if (logDeletionEnabled || (!deleteOption && !subsetDeleteTarget)) {
-      return;
-    }
-    resetDeleteExperiment();
-    resetRunDelete();
-    setDeleteOption(null);
-    setSubsetDeleteTarget(null);
-  }, [
-    deleteOption,
-    logDeletionEnabled,
-    resetDeleteExperiment,
-    resetRunDelete,
-    subsetDeleteTarget,
-  ]);
-
-  function openDeleteDialog(option: ChecklistOption) {
-    if (!logDeletionEnabled) {
-      return;
-    }
-    resetDeleteExperiment();
-    setDeleteOption(option);
-  }
-
-  function openSubsetDeleteDialog(kind: SubsetDeleteKind, option: ChecklistOption) {
-    if (!logDeletionEnabled || !singleSelectedExperiment) {
-      return;
-    }
-    const target = buildSubsetDeleteTarget({
-      kind,
-      value: option.value,
-      experiment: singleSelectedExperiment,
-      runs,
-    });
-    if (!target) {
-      return;
-    }
-    resetRunDelete();
-    setSubsetDeleteTarget(target);
-    void createRunDeletePlan(target.filters);
-  }
-
-  function closeSubsetDeleteDialog() {
-    resetRunDelete();
-    setSubsetDeleteTarget(null);
-  }
-
-  function closeDeleteDialog() {
-    resetDeleteExperiment();
-    setDeleteOption(null);
-  }
-
-  async function confirmDeleteExperiment() {
-    if (!logDeletionEnabled || !deleteOption) {
-      return;
-    }
+  async function confirmDeletion() {
     try {
-      await deleteExperiment(deleteOption.value);
-      setDeleteOption(null);
+      await deleteActions.confirm();
     } catch {
-      // The mutation error is shown in the dialog.
+      // The lifecycle publishes the failure to the active dialog.
     }
   }
 
-  async function confirmDeleteSubsetRuns() {
-    if (!logDeletionEnabled || !subsetDeleteTarget) {
-      return;
-    }
+  async function retrySubsetPlan() {
     try {
-      await deleteRuns(subsetDeleteTarget.filters);
-      setSubsetDeleteTarget(null);
+      await deleteActions.retryPlan();
     } catch {
-      // The mutation error is shown in the dialog.
+      // The lifecycle publishes the planning failure to the active dialog.
     }
   }
 
@@ -431,21 +209,21 @@ export function LogsSidebar({
     kind: SubsetDeleteKind,
     option: ChecklistOption,
   ): MultiSelectDropdownOptionAction[] | undefined {
-    if (!logDeletionEnabled || !singleSelectedExperiment) {
+    if (!logDeletionEnabled || !presetTargetExperiment) {
       return undefined;
     }
-    const label = `Delete ${kind} ${option.label} from experiment ${singleSelectedExperiment}`;
+    const label = `Delete ${kind} ${option.label} from experiment ${presetTargetExperiment}`;
     return [
       {
         label,
         tooltip: label,
         icon: <Trash2 className="h-4 w-4" aria-hidden />,
-        onAction: () => openSubsetDeleteDialog(kind, option),
+        onAction: () => deleteActions.openPreset(option),
       },
     ];
   }
 
-  const presetDeleteActions = singleSelectedExperiment && logDeletionEnabled
+  const presetDeleteActions = presetTargetExperiment && logDeletionEnabled
     ? function renderPresetDeleteAction(option: ChecklistOption) {
         return subsetDeleteActions("preset", option);
       }
@@ -465,7 +243,7 @@ export function LogsSidebar({
             variant="ghost"
             className="rounded-[10px] active:translate-y-px"
             onClick={() => {
-              void refreshLogLists();
+              void actions.refresh();
             }}
             disabled={isRefreshing}
             icon={
@@ -478,13 +256,13 @@ export function LogsSidebar({
         </div>
       </section>
 
-      {runsQuery.isError && (
-        <ErrorPanel title="Log scan failed" message={errorMessage(runsQuery.error)} />
+      {Boolean(status.runsError) && (
+        <ErrorPanel title="Log scan failed" message={errorMessage(status.runsError)} />
       )}
-      {experimentsQuery.isError && (
+      {Boolean(status.experimentsError) && (
         <ErrorPanel
           title="Experiment scan failed"
-          message={errorMessage(experimentsQuery.error)}
+          message={errorMessage(status.experimentsError)}
         />
       )}
       {!logDeletionEnabled && (
@@ -499,7 +277,7 @@ export function LogsSidebar({
           detail="Reading historical version folders from logs/."
           busy
         />
-      ) : experimentOptions.length === 0 ? (
+      ) : !results.hasExperiments ? (
         <SidebarStatus
           title="No log runs"
           detail="No version_* folders were found under logs/."
@@ -510,10 +288,37 @@ export function LogsSidebar({
             title="Experiments"
             icon={<FolderTree className="h-4 w-4" aria-hidden />}
             options={experimentOptions}
-            selected={selectedExperimentOptions}
+            selectedValues={selectedExperimentValues}
             onToggle={toggleExperiment}
             onAll={selectAllExperiments}
             onNone={selectNoExperiments}
+            beforeDropdown={
+              <div
+                className="grid grid-cols-2 gap-2 rounded-[12px] border border-line-soft bg-white/[0.018] p-2"
+                role="group"
+                aria-label="Log scope"
+              >
+                <Button
+                  type="button"
+                  variant={scope.mode === "target" ? "secondary" : "ghost"}
+                  className="h-8 text-xs"
+                  aria-pressed={scope.mode === "target"}
+                  onClick={scope.useCurrentTarget}
+                  disabled={!scope.canUseCurrentTarget}
+                >
+                  Current Target
+                </Button>
+                <Button
+                  type="button"
+                  variant={scope.allRunsSelected ? "secondary" : "ghost"}
+                  className="h-8 text-xs"
+                  aria-pressed={scope.allRunsSelected}
+                  onClick={scope.showAllRuns}
+                >
+                  All Runs
+                </Button>
+              </div>
+            }
             optionCountDisplay="hover"
             optionActions={
               logDeletionEnabled
@@ -524,33 +329,33 @@ export function LogsSidebar({
                         label,
                         tooltip: label,
                         icon: <Trash2 className="h-4 w-4" aria-hidden />,
-                        onAction: () => openDeleteDialog(option),
+                        onAction: () => deleteActions.openExperiment(option),
                       },
                     ];
                   }
                 : undefined
             }
           />
-          {runs.length === 0 ? (
+          {!results.hasRuns ? (
             <SidebarStatus
               title="No runs yet"
               detail="Experiment folders without version_* runs stay selectable."
             />
           ) : (
             <>
-              {canLoadMoreRuns && (
+              {pagination.runs.canLoadMore && (
                 <div className="grid gap-2 rounded-[12px] border border-line-soft bg-white/[0.018] p-3">
                   <div className="text-xs text-ink-faint">
-                    Loaded {loadedRunCount} of {totalRunCount} matching runs
+                    Loaded {pagination.runs.loaded} of {pagination.runs.total} matching runs
                   </div>
                   <Button
                     type="button"
                     variant="ghost"
                     className="h-8 border border-line bg-white/[0.025] text-xs"
-                    onClick={loadMoreRuns}
-                    disabled={isLoadingMoreRuns}
+                    onClick={actions.loadMoreRuns}
+                    disabled={pagination.runs.isLoadingMore}
                   >
-                    {isLoadingMoreRuns && (
+                    {pagination.runs.isLoadingMore && (
                       <Loader2
                         className="mr-2 h-3.5 w-3.5 animate-spin"
                         aria-hidden
@@ -564,7 +369,7 @@ export function LogsSidebar({
                 title="Datasets"
                 icon={<Database className="h-4 w-4" aria-hidden />}
                 options={datasetOptions}
-                selected={selectedOptionsSet(selectedDatasets, datasetOptions)}
+                selectedValues={filters.datasets.selectedValues}
                 onToggle={toggleDataset}
                 onAll={selectAllDatasets}
                 onNone={selectNoDatasets}
@@ -574,7 +379,7 @@ export function LogsSidebar({
                 title="Models"
                 icon={<Cpu className="h-4 w-4" aria-hidden />}
                 options={modelOptions}
-                selected={selectedOptionsSet(selectedModels, modelOptions)}
+                selectedValues={filters.models.selectedValues}
                 onToggle={toggleModel}
                 onAll={selectAllModels}
                 onNone={selectNoModels}
@@ -584,39 +389,39 @@ export function LogsSidebar({
                 title="Presets"
                 icon={<Layers className="h-4 w-4" aria-hidden />}
                 options={presetOptions}
-                selected={selectedOptionsSet(selectedPresets, presetOptions)}
+                selectedValues={filters.presets.selectedValues}
                 onToggle={togglePreset}
                 onAll={selectAllPresets}
                 onNone={selectNoPresets}
                 optionActions={presetDeleteActions}
                 divided
               />
-              {tagsQuery.isError && (
-                <ErrorPanel title="Tag read failed" message={errorMessage(tagsQuery.error)} />
+              {status.tagsError && (
+                <ErrorPanel title="Tag read failed" message={errorMessage(status.tagsError)} />
               )}
               <LogFilterSection
                 title="Scalar Tags"
                 icon={<Tag className="h-4 w-4" aria-hidden />}
                 options={tagOptions}
-                selected={selectedOptionsSet(selectedTags, tagOptions)}
+                selectedValues={filters.tags.selectedValues}
                 onToggle={toggleTag}
                 onAll={selectAllTags}
                 onNone={selectNoTags}
                 beforeDropdown={
-                  canLoadMoreScalarTags ? (
+                  pagination.scalarTags.canLoadMore ? (
                     <div className="grid gap-2 rounded-[12px] border border-line-soft bg-white/[0.018] p-3">
                       <div className="text-xs text-ink-faint">
-                        Scalar tags scanned for {loadedScalarTagRunCount} of{" "}
-                        {totalScalarTagRunCount} visible runs
+                        Scalar tags scanned for {pagination.scalarTags.loadedRuns} of{" "}
+                        {pagination.scalarTags.totalRuns} visible runs
                       </div>
                       <Button
                         type="button"
                         variant="ghost"
                         className="h-8 border border-line bg-white/[0.025] text-xs"
-                        onClick={loadMoreScalarTags}
-                        disabled={isLoadingMoreScalarTags}
+                        onClick={actions.loadMoreScalarTags}
+                        disabled={pagination.scalarTags.isLoadingMore}
                       >
-                        {isLoadingMoreScalarTags && (
+                        {pagination.scalarTags.isLoadingMore && (
                           <Loader2
                             className="mr-2 h-3.5 w-3.5 animate-spin"
                             aria-hidden
@@ -634,25 +439,26 @@ export function LogsSidebar({
         </>
       )}
 
-      {deleteOption && (
+      {deleteOperation?.kind === "experiment" && (
         <DeleteExperimentDialog
-          option={deleteOption}
-          error={deleteExperimentError}
-          isDeleting={isDeletingExperiment}
-          onClose={closeDeleteDialog}
-          onConfirm={confirmDeleteExperiment}
+          option={deleteOperation.option}
+          error={deleteOperation.error}
+          isDeleting={deleteOperation.phase === "mutating"}
+          onClose={deleteActions.cancel}
+          onConfirm={confirmDeletion}
         />
       )}
-      {subsetDeleteTarget && (
+      {deleteOperation?.kind === "preset" && (
         <DeleteSubsetRunsDialog
-          key={subsetDeleteTarget.key}
-          target={subsetDeleteTarget}
-          plan={runDeletePlan}
-          error={runDeletePlanError ?? runDeleteError}
-          isPlanning={isPlanningRunDelete}
-          isDeleting={isDeletingRunDelete}
-          onClose={closeSubsetDeleteDialog}
-          onConfirm={confirmDeleteSubsetRuns}
+          key={deleteOperation.target.key}
+          target={deleteOperation.target}
+          plan={deleteOperation.plan}
+          error={deleteOperation.error}
+          isPlanning={deleteOperation.phase === "planning"}
+          isDeleting={deleteOperation.phase === "mutating"}
+          onClose={deleteActions.cancel}
+          onRetry={retrySubsetPlan}
+          onConfirm={confirmDeletion}
         />
       )}
     </div>

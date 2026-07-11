@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { workbenchStatusCopy } from "@/features/workbench/components/shared/status-copy";
 import { useLogExperimentsQuery } from "@/features/workbench/state/logs/use-log-queries";
 import { type LogExperiment } from "@/lib/api";
@@ -20,7 +20,7 @@ type TrainingLogFolderViewInput = {
   isLoading: boolean;
 };
 
-export function buildTrainingLogFolderView({
+function buildTrainingLogFolderView({
   mode,
   existingValue,
   newValue,
@@ -39,7 +39,6 @@ export function buildTrainingLogFolderView({
         : "Use letters and numbers separated by single underscores.";
   const value = mode === "existing" ? existingValue : newValue;
   const isValid = mode === "existing" ? existingValid : newValid;
-  const label = isValid ? `logs/${value}` : "Choose log folder";
   const existingHelp = isLoading
     ? workbenchStatusCopy.loading.logFolders
     : options.length === 0
@@ -49,7 +48,6 @@ export function buildTrainingLogFolderView({
   return {
     value,
     isValid,
-    label,
     existingHelp,
     newValid,
     newError,
@@ -77,6 +75,11 @@ export function useTrainingLogFolderState({
       }),
     [existingValue, logExperimentsQuery.isLoading, mode, newValue, options],
   );
+  const clearForConnectionChange = useCallback(() => {
+    setMode("existing");
+    setExistingValue("");
+    setNewValue("");
+  }, []);
 
   return {
     mode,
@@ -92,6 +95,6 @@ export function useTrainingLogFolderState({
     newError: view.newError,
     value: view.value,
     isValid: view.isValid,
-    label: view.label,
+    clearForConnectionChange,
   };
 }

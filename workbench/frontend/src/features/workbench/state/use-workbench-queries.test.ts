@@ -24,7 +24,10 @@ function renderQueries(
   model: string,
   preset: string,
   trainingPresets: string[] = [],
-  options: { includeSearchSpace?: boolean } = {},
+  options: {
+    includeSearchSpace?: boolean;
+    protectedReadsEnabled?: boolean;
+  } = {},
 ) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -95,12 +98,23 @@ beforeEach(() => {
 });
 
 describe("useWorkbenchQueries enabled gating", () => {
-  it("fires only root queries when no model is selected", async () => {
+  it("fires only the protected Model Package root query when no model is selected", async () => {
     renderQueries("", "");
 
     await waitFor(() => expect(mocks.fetchModels).toHaveBeenCalled());
-    expect(mocks.fetchHealth).toHaveBeenCalled();
-    expect(mocks.fetchCapabilities).toHaveBeenCalled();
+    expect(mocks.fetchHealth).not.toHaveBeenCalled();
+    expect(mocks.fetchCapabilities).not.toHaveBeenCalled();
+    expect(mocks.fetchPresets).not.toHaveBeenCalled();
+    expect(mocks.fetchDatasets).not.toHaveBeenCalled();
+    expect(mocks.fetchMonitors).not.toHaveBeenCalled();
+    expect(mocks.fetchConfigSchema).not.toHaveBeenCalled();
+    expect(mocks.fetchSearchSpace).not.toHaveBeenCalled();
+  });
+
+  it("does not start protected metadata while the connection denies reads", () => {
+    renderQueries("linear", "base", [], { protectedReadsEnabled: false });
+
+    expect(mocks.fetchModels).not.toHaveBeenCalled();
     expect(mocks.fetchPresets).not.toHaveBeenCalled();
     expect(mocks.fetchDatasets).not.toHaveBeenCalled();
     expect(mocks.fetchMonitors).not.toHaveBeenCalled();

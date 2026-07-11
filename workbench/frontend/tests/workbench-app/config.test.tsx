@@ -1117,7 +1117,7 @@ describe("WorkbenchApp Full Config", () => {
     expect(screen.queryByLabelText(/hidden dim/i)).not.toBeInTheDocument();
   });
 
-  it("hides the open full config action while selecting experiment targets", async () => {
+  it("keeps Full Config while browsing Runs and hides it for a selected historical target", async () => {
     installFetchMock();
     renderWorkbench();
     const user = userEvent.setup();
@@ -1131,6 +1131,14 @@ describe("WorkbenchApp Full Config", () => {
     await waitFor(() => {
       expect(screen.getByRole("radio", { name: /^experiments$/i }))
         .toHaveAttribute("aria-checked", "true");
+      expect(screen.getByRole("button", { name: /open full config/i }))
+        .toBeInTheDocument();
+    });
+
+    await selectTargetOption(user, "experiment", "test_model");
+    await selectTargetOption(user, "dataset", "Mnist");
+    await selectTargetOption(user, "preset", "BASELINE");
+    await waitFor(() => {
       expect(screen.queryByRole("button", { name: /open full config/i }))
         .not.toBeInTheDocument();
     });
@@ -1160,8 +1168,7 @@ describe("WorkbenchApp Full Config", () => {
     });
     renderWorkbench();
 
-    await waitForTargetValue("preset", "baseline");
-    expect(screen.getByRole("button", { name: /open full config/i })).toBeEnabled();
+    await waitForOpenFullConfigButton();
     expect(screen.queryByRole("heading", { name: "Snapshots" }))
       .not.toBeInTheDocument();
     expect(screen.queryByText("Bert tuned")).not.toBeInTheDocument();
@@ -1215,7 +1222,8 @@ describe("WorkbenchApp Full Config", () => {
     });
     await waitFor(() => expect(snapshotsButton).toBeEnabled());
     await user.click(snapshotsButton);
-    expect(await screen.findByRole("combobox", { name: /^snapshot$/i }))
+    await selectTargetOption(user, "snapshot", "Wide");
+    expect(screen.getByRole("combobox", { name: /^snapshot$/i }))
       .toHaveTextContent("Wide");
 
     await user.click(screen.getByRole("button", { name: "Duplicate" }));
@@ -1279,6 +1287,7 @@ describe("WorkbenchApp Full Config", () => {
     });
     await waitFor(() => expect(snapshotsButton).toBeEnabled());
     await user.click(snapshotsButton);
+    await selectTargetOption(user, "snapshot", "Wide");
     await user.click(await screen.findByRole("button", { name: "Edit" }));
 
     const dialog = await screen.findByRole("dialog", {

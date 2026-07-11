@@ -2,7 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { LogBestRunPanel } from "@/features/workbench/components/logs/log-best-run-panel";
-import { type LogBestRunViewModel } from "@/features/workbench/state/logs/logs-chart-view-model";
+import { type LogBestRunViewModel } from "@/features/workbench/providers/logs-workspace-provider";
 import {
   type LogMetricDatasetRankingRow,
   type LogMetricRankingRow,

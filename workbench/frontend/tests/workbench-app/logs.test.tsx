@@ -339,8 +339,8 @@ describe("WorkbenchApp Logs Workspace", () => {
     expect(logScalarRequests).toHaveLength(0);
   });
 
-  it("omits log scope controls from the Experiments filter", async () => {
-    installFetchMock();
+  it("moves explicitly between the current target and all-runs scope", async () => {
+    const { logRunRequests } = installFetchMock();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -348,15 +348,53 @@ describe("WorkbenchApp Logs Workspace", () => {
     await screen.findByRole("combobox", { name: /^Experiments\b/i });
 
     const experimentSection = logFilterSection("Experiments");
-    expect(within(experimentSection).queryByRole("button", {
+    const currentTarget = within(experimentSection).getByRole("button", {
       name: /current target/i,
-    })).not.toBeInTheDocument();
-    expect(within(experimentSection).queryByRole("button", {
+    });
+    const allRuns = within(experimentSection).getByRole("button", {
       name: /all runs/i,
-    })).not.toBeInTheDocument();
-    expect(within(experimentSection).getByRole("button", { name: /^all$/i }))
+    });
+    expect(currentTarget).toHaveAttribute("aria-pressed", "true");
+    expect(allRuns).toHaveAttribute("aria-pressed", "false");
+
+    await user.click(allRuns);
+
+    await waitFor(() => {
+      expect(logRunRequests).toContainEqual(
+        expect.objectContaining({
+          experiments: ["test_model", "test_model_2"],
+          limit: 100,
+          offset: 0,
+        }),
+      );
+      const updatedSection = logFilterSection("Experiments");
+      expect(
+        within(updatedSection).getByRole("button", { name: /current target/i }),
+      ).toHaveAttribute("aria-pressed", "false");
+      expect(
+        within(updatedSection).getByRole("button", { name: /all runs/i }),
+      ).toHaveAttribute("aria-pressed", "true");
+    });
+
+    await user.click(
+      within(logFilterSection("Experiments")).getByRole("button", {
+        name: /current target/i,
+      }),
+    );
+
+    await waitFor(() => {
+      const updatedSection = logFilterSection("Experiments");
+      expect(
+        within(updatedSection).getByRole("button", { name: /current target/i }),
+      ).toHaveAttribute("aria-pressed", "true");
+      expect(
+        within(updatedSection).getByRole("button", { name: /all runs/i }),
+      ).toHaveAttribute("aria-pressed", "false");
+    });
+    const finalExperimentSection = logFilterSection("Experiments");
+    expect(within(finalExperimentSection).getByRole("button", { name: /^all$/i }))
       .toBeInTheDocument();
-    expect(within(experimentSection).getByRole("button", { name: /^none$/i }))
+    expect(within(finalExperimentSection).getByRole("button", { name: /^none$/i }))
       .toBeInTheDocument();
     expect(screen.queryByText(/^Runs$/)).not.toBeInTheDocument();
     expect(screen.queryByText(/^Tags$/)).not.toBeInTheDocument();
@@ -388,10 +426,10 @@ describe("WorkbenchApp Logs Workspace", () => {
         ]),
       );
     });
-    expect(screen.queryByRole("button", { name: /current target/i }))
-      .not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /all runs/i }))
-      .not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /current target/i }))
+      .toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /all runs/i }))
+      .toHaveAttribute("aria-pressed", "false");
     await expectLogFilterSelection(user, "Experiments", "test_model", false);
     await selectLogExperiments(user, ["test_model"]);
     expect(await screen.findByRole("img", { name: /validation\/accuracy_epoch scalar chart/i }))
@@ -1118,14 +1156,14 @@ describe("WorkbenchApp Logs Workspace", () => {
         sampling: "tail",
       });
     });
-    await waitFor(() => {
-      expect(
-        screen.getByText("Loading validation/accuracy_epoch scalar points"),
-      ).toBeInTheDocument();
+    const retainedChart = screen.getByRole("img", {
+      name: /validation\/accuracy_epoch scalar chart/i,
     });
+    const retainedChartSection = retainedChart.closest("section");
+    expect(retainedChartSection).toBeInstanceOf(HTMLElement);
     expect(
-      screen.queryByRole("img", { name: /validation\/accuracy_epoch scalar chart/i }),
-    ).not.toBeInTheDocument();
+      within(retainedChartSection as HTMLElement).getByText(/1 line/i),
+    ).toBeInTheDocument();
 
     expandedScalarResponse.resolve({
       series: [
@@ -1277,11 +1315,19 @@ describe("WorkbenchApp Logs Workspace", () => {
       maxPoints: 500,
       sampling: "tail",
     });
-    expect(
-      await screen.findByRole("img", {
-        name: /validation confusion matrix for aaa_20260601_010203/i,
-      }),
-    ).toBeInTheDocument();
+    const matrixDataToggle = await screen.findByRole("button", {
+      name: /view validation confusion matrix for aaa_20260601_010203.*2 classes data/i,
+    });
+    expect(matrixDataToggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+
+    await user.click(matrixDataToggle);
+
+    const matrixTable = await screen.findByRole("table", {
+      name: /validation confusion matrix for aaa_20260601_010203.*2 classes/i,
+    });
+    expect(within(matrixTable).getAllByRole("cell").map((cell) => cell.textContent))
+      .toEqual(["0.8", "0.2", "0.1", "0.9"]);
     expect(
       await screen.findByRole("button", { name: /^Confusion Matrix\s+1 matrix$/i }),
     ).toHaveAttribute("aria-expanded", "true");
@@ -1538,6 +1584,75 @@ describe("WorkbenchApp Logs Workspace", () => {
     expect(screen.queryByText("Loading Train scalar points")).not.toBeInTheDocument();
   });
 
+  it("keeps successful scalar chunks visible when a sibling chunk fails", async () => {
+    const baseFixture = buildLargeLogFixture(11);
+    const runs = baseFixture.logRunsResponse.runs.map((run) => ({
+      ...run,
+      group: "partial_scalar",
+      experiment: "partial_scalar",
+      dataset: "Mnist",
+      modelType: "linears",
+      model: "linear",
+      preset: "BASELINE",
+      relativePath: `partial_scalar/linear/BASELINE/Mnist/${run.runName}/version_0`,
+    }));
+    const failedRunId = runs.at(-1)?.id;
+    const { logScalarRequests } = installFetchMock({
+      logRunsResponse: { runs },
+      logExperimentsResponse: {
+        experiments: [
+          {
+            experiment: "partial_scalar",
+            runCount: runs.length,
+            relativePath: "partial_scalar",
+          },
+        ],
+      },
+      logTagsByRun: Object.fromEntries(
+        runs.map((run) => [run.id, scalarTagsWithEpochDefaults()]),
+      ),
+      logScalarSeries: runs.flatMap((run, index) =>
+        epochScalarSeriesForRun(run.id, index),
+      ),
+      logScalarResponseFactory: (body) => {
+        if (
+          failedRunId &&
+          body.runIds.includes(failedRunId) &&
+          body.tags.includes("train/accuracy_epoch")
+        ) {
+          return Promise.reject(new Error("scalar chunk unavailable"));
+        }
+        return undefined;
+      },
+    });
+    renderWorkbench();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+    await selectLogExperiments(user, ["partial_scalar"]);
+
+    await waitFor(() => {
+      expect(
+        logScalarRequests.filter((request) =>
+          request.tags.includes("train/accuracy_epoch"),
+        ),
+      ).toHaveLength(2);
+    });
+    expect(await screen.findByText(/scalar read failed/i))
+      .toBeInTheDocument();
+
+    const chart = await screen.findByRole("img", {
+      name: /train\/accuracy_epoch scalar chart/i,
+    });
+    const chartSection = chart.closest("section");
+    expect(chartSection).toBeInstanceOf(HTMLElement);
+    await waitFor(() => {
+      expect(within(chartSection as HTMLElement).getByText(/10 lines/i))
+        .toBeInTheDocument();
+    });
+    expect(screen.getByText(/scalar chunk unavailable/i)).toBeInTheDocument();
+  });
+
   it("keeps existing charts visible while a later log tag chunk loads", async () => {
     const extraRuns = buildLargeLogFixture(55).logRunsResponse.runs.map(
       (run, index) => ({
@@ -1609,6 +1724,16 @@ describe("WorkbenchApp Logs Workspace", () => {
     await selectLogExperiments(user, ["test_model"]);
     expect(await screen.findByText("Historical Scalars")).toBeInTheDocument();
     expect(await screen.findByText("Run Details")).toBeInTheDocument();
+    const loadedChart = await screen.findByRole("img", {
+      name: /validation\/accuracy_epoch scalar chart/i,
+    });
+    const loadedChartSection = loadedChart.closest("section");
+    expect(loadedChartSection).toBeInstanceOf(HTMLElement);
+    await waitFor(() => {
+      expect(
+        within(loadedChartSection as HTMLElement).getByText(/1 line/i),
+      ).toBeInTheDocument();
+    });
 
     await selectAllLogExperiments(user);
 
@@ -1618,6 +1743,11 @@ describe("WorkbenchApp Logs Workspace", () => {
       ).toBe(true);
     });
     expect(screen.getByText("Historical Scalars")).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", {
+        name: /validation\/accuracy_epoch scalar chart/i,
+      }),
+    ).toBeInTheDocument();
     expect(screen.getByText("Refreshing TensorBoard tags")).toBeInTheDocument();
     expect(screen.queryByText("Reading TensorBoard tags")).not.toBeInTheDocument();
 
@@ -2536,7 +2666,6 @@ describe("WorkbenchApp Logs Workspace", () => {
       installFetchMock({
         capabilitiesResponse: {
           ...capabilitiesResponse,
-          authMode: "bearer",
           logDeletionEnabled: false,
         },
       });
@@ -2605,6 +2734,100 @@ describe("WorkbenchApp Logs Workspace", () => {
       },
     ]);
     expect(deleteRunRequests).toEqual(deleteRunPlanRequests);
+  });
+
+  it("cancels a planned preset deletion without issuing a mutation", async () => {
+    const { deleteRunPlanRequests, deleteRunRequests } = installFetchMock(
+      buildSubsetDeleteFixture(),
+    );
+    renderWorkbench();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+    await clickLogOption(user, "Experiments", "test_model");
+    await openLogFilter(user, "Presets");
+    await user.click(
+      await screen.findByRole("button", {
+        name: /^delete preset BASELINE from experiment test_model$/i,
+      }),
+    );
+
+    const dialog = await screen.findByRole("dialog", { name: /^delete preset$/i });
+    expect(await within(dialog).findByText(/2 matched runs/i)).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: /^cancel$/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: /^delete preset$/i }))
+        .not.toBeInTheDocument();
+    });
+    expect(deleteRunPlanRequests).toHaveLength(1);
+    expect(deleteRunRequests).toHaveLength(0);
+  });
+
+  it("retries preset deletion planning after a scoped plan failure", async () => {
+    const { deleteRunPlanRequests, deleteRunRequests } = installFetchMock({
+      ...buildSubsetDeleteFixture(),
+      deleteLogRunPlanErrorFactory: (requestIndex) =>
+        requestIndex === 0 ? "delete plan unavailable" : undefined,
+    });
+    renderWorkbench();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+    await clickLogOption(user, "Experiments", "test_model");
+    await openLogFilter(user, "Presets");
+    await user.click(
+      await screen.findByRole("button", {
+        name: /^delete preset BASELINE from experiment test_model$/i,
+      }),
+    );
+
+    const dialog = await screen.findByRole("dialog", { name: /^delete preset$/i });
+    expect(await within(dialog).findByText(/delete plan unavailable/i))
+      .toBeInTheDocument();
+    await user.click(
+      within(dialog).getByRole("button", { name: /^retry plan$/i }),
+    );
+
+    expect(await within(dialog).findByText(/2 matched runs/i)).toBeInTheDocument();
+    expect(deleteRunPlanRequests).toHaveLength(2);
+    expect(deleteRunRequests).toHaveLength(0);
+  });
+
+  it("retains a preset plan while a failed mutation is retried", async () => {
+    const { deleteRunRequests } = installFetchMock({
+      ...buildSubsetDeleteFixture(),
+      deleteLogRunsErrorFactory: (requestIndex) =>
+        requestIndex === 0 ? "delete mutation unavailable" : undefined,
+    });
+    renderWorkbench();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+    await clickLogOption(user, "Experiments", "test_model");
+    await openLogFilter(user, "Presets");
+    await user.click(
+      await screen.findByRole("button", {
+        name: /^delete preset BASELINE from experiment test_model$/i,
+      }),
+    );
+
+    const dialog = await screen.findByRole("dialog", { name: /^delete preset$/i });
+    expect(await within(dialog).findByText(/2 matched runs/i)).toBeInTheDocument();
+    const deleteButton = within(dialog).getByRole("button", {
+      name: /^delete preset$/i,
+    });
+    await user.click(deleteButton);
+    expect(await within(dialog).findByText(/delete mutation unavailable/i))
+      .toBeInTheDocument();
+
+    await user.click(deleteButton);
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: /^delete preset$/i }))
+        .not.toBeInTheDocument();
+    });
+    expect(deleteRunRequests).toHaveLength(2);
   });
 
   it("blocks preset row deletion when an active training job uses an affected folder", async () => {

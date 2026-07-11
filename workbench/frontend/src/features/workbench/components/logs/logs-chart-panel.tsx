@@ -25,32 +25,16 @@ import {
   type MultiSelectDropdownOption,
 } from "@/features/workbench/components/screen/multi-select-dropdown";
 import {
-  type LogCheckpoint,
-  type LogRun,
-  type LogTextSummary,
-} from "@/lib/api";
-import { type ScalarXMode, type ScalarYScale } from "@/lib/echarts/scalar-options";
-import {
   LOG_METRIC_GROUPS,
-  type LogMetricsByGroup,
-  type LogMetricTagsByGroup,
   type LogMetricGroupKey,
   type TrainValidationScalarPair,
 } from "@/features/workbench/state/logs/logs-selectors";
 import {
-  type LogBestRunViewModel,
+  type LogsCharts,
   type LogsChartEmptyState,
   type LogMetricChartLayoutGroupKey,
-  type LogMetricGroupScalarQueryStates,
-  type LogScalarTagQueryState,
-  type LogMetricGroupScalarQueryState,
-  type LogTrainValidationComparisonMetric,
   type ScalarChartGridMode,
-} from "@/features/workbench/state/logs/logs-chart-view-model";
-import {
-  type ConfusionMatrixHeatmap,
-  type LogValidationExampleImage,
-} from "@/features/workbench/state/logs/log-diagnostics";
+} from "@/features/workbench/providers/logs-workspace-provider";
 import { cn, errorMessage } from "@/lib/utils";
 
 const LazyLogScalarChart = dynamic(
@@ -390,129 +374,74 @@ function ChartEmptyState({ title, detail, busy }: LogsChartEmptyState) {
   );
 }
 
-export function LogsChartPanel({
-  metricsByGroup,
-  availableMetricTagsByGroup,
-  selectedTagsByGroup,
-  onMetricGroupTagSelectionChange,
-  trainValidationPairs,
-  trainValidationComparisonMetrics,
-  selectedTrainValidationPairSuffixes,
-  trainValidationPairQueryStates,
-  trainValidationComparisonQueryState,
-  isTrainValidationComparisonCollapsed,
-  onToggleTrainValidationComparison,
-  trainValidationComparisonGridMode,
-  onTrainValidationComparisonGridModeChange,
-  onTrainValidationPairSelectionChange,
-  onTrainValidationComparisonChartVisible,
-  confusionHeatmaps,
-  runsById,
-  checkpointsByRunId,
-  mediaImages,
-  mediaTexts,
-  hasValidationExampleMedia,
-  isValidationExampleMediaLoading,
-  isValidationExamplesCollapsed,
-  onToggleValidationExamples,
-  onValidationExamplesVisible,
-  runOrder,
-  visibleRunCount,
-  selectedTagCount,
-  scalarQueryStates,
-  scalarTagQueryStates,
-  onScalarChartVisible,
-  hasConfusionMatrixTags,
-  isConfusionMatrixCollapsed,
-  isConfusionMatrixLoaded,
-  isConfusionMatrixLoading,
-  isConfusionMatrixError,
-  confusionMatrixError,
-  onToggleConfusionMatrix,
-  isTagRefreshLoading,
-  collapsedMetricGroups,
-  onToggleMetricGroup,
-  accordionGridMode,
-  onAccordionGridModeChange,
-  metricGridModes,
-  onMetricGridModeChange,
-  smoothing,
-  onSmoothingChange,
-  xMode,
-  onXModeChange,
-  yScale,
-  onYScaleChange,
-  isFetching,
-  isRefreshDisabled,
-  onRefresh,
-  emptyState,
-  bestRun,
-  onSelectRun,
-}: {
-  metricsByGroup: LogMetricsByGroup;
-  availableMetricTagsByGroup: LogMetricTagsByGroup;
-  selectedTagsByGroup: LogMetricTagsByGroup;
-  onMetricGroupTagSelectionChange: (
-    group: LogMetricGroupKey,
-    selectedValues: string[],
-  ) => void;
-  trainValidationPairs: TrainValidationScalarPair[];
-  trainValidationComparisonMetrics: LogTrainValidationComparisonMetric[];
-  selectedTrainValidationPairSuffixes: string[];
-  trainValidationPairQueryStates: Map<string, LogScalarTagQueryState>;
-  trainValidationComparisonQueryState: LogMetricGroupScalarQueryState;
-  isTrainValidationComparisonCollapsed: boolean;
-  onToggleTrainValidationComparison: () => void;
-  trainValidationComparisonGridMode: ScalarChartGridMode;
-  onTrainValidationComparisonGridModeChange: (mode: ScalarChartGridMode) => void;
-  onTrainValidationPairSelectionChange: (suffixes: string[]) => void;
-  onTrainValidationComparisonChartVisible: (suffix: string) => void;
-  confusionHeatmaps: ConfusionMatrixHeatmap[];
-  runsById: Map<string, LogRun>;
-  checkpointsByRunId: Map<string, LogCheckpoint[]>;
-  mediaImages: LogValidationExampleImage[];
-  mediaTexts: LogTextSummary[];
-  hasValidationExampleMedia: boolean;
-  isValidationExampleMediaLoading: boolean;
-  isValidationExamplesCollapsed: boolean;
-  onToggleValidationExamples: () => void;
-  onValidationExamplesVisible: () => void;
-  runOrder: string[];
-  visibleRunCount: number;
-  selectedTagCount: number;
-  scalarQueryStates: LogMetricGroupScalarQueryStates;
-  scalarTagQueryStates: Map<string, LogScalarTagQueryState>;
-  onScalarChartVisible: (tag: string) => void;
-  hasConfusionMatrixTags: boolean;
-  isConfusionMatrixCollapsed: boolean;
-  isConfusionMatrixLoaded: boolean;
-  isConfusionMatrixLoading: boolean;
-  isConfusionMatrixError: boolean;
-  confusionMatrixError: unknown;
-  onToggleConfusionMatrix: () => void;
-  isTagRefreshLoading: boolean;
-  collapsedMetricGroups: Set<LogMetricGroupKey>;
-  onToggleMetricGroup: (group: LogMetricGroupKey) => void;
-  accordionGridMode: ScalarChartGridMode;
-  onAccordionGridModeChange: (mode: ScalarChartGridMode) => void;
-  metricGridModes: Record<LogMetricChartLayoutGroupKey, ScalarChartGridMode>;
-  onMetricGridModeChange: (
-    group: LogMetricChartLayoutGroupKey,
-    mode: ScalarChartGridMode,
-  ) => void;
-  smoothing: number;
-  onSmoothingChange: (weight: number) => void;
-  xMode: ScalarXMode;
-  onXModeChange: (mode: ScalarXMode) => void;
-  yScale: ScalarYScale;
-  onYScaleChange: (scale: ScalarYScale) => void;
-  isFetching: boolean;
-  isRefreshDisabled: boolean;
-  onRefresh: () => void;
-  emptyState: LogsChartEmptyState | null;
-  bestRun: LogBestRunViewModel;
-  onSelectRun: (runId: string) => void;
-}) {
+export function LogsChartPanel({ charts }: { charts: LogsCharts }) {
+  const {
+    metricsByGroup,
+    availableMetricTagsByGroup,
+    trainValidationPairs,
+    trainValidationComparisonMetrics,
+    selectedTrainValidationPairSuffixes,
+    confusionHeatmaps,
+    runsById,
+    checkpointsByRunId,
+    mediaImages,
+    mediaTexts,
+    runOrder,
+    visibleRunCount,
+    selectedTagCount,
+    selectedTagsByGroup,
+    hasValidationExampleMedia,
+    bestRun,
+  } = charts.content;
+  const {
+    isTrainValidationComparisonCollapsed,
+    trainValidationComparisonGridMode,
+    isConfusionMatrixCollapsed,
+    collapsedMetricGroups,
+    accordionGridMode,
+    metricGridModes,
+    smoothing,
+    xMode,
+    yScale,
+    isValidationExamplesCollapsed,
+  } = charts.settings;
+  const {
+    trainValidationPairQueryStates,
+    trainValidationComparisonQueryState,
+    scalarQueryStates,
+    scalarTagQueryStates,
+    hasConfusionMatrixTags,
+    isConfusionMatrixLoaded,
+    isConfusionMatrixLoading,
+    isConfusionMatrixError,
+    confusionMatrixError,
+    isTagRefreshLoading,
+    isFetching,
+    isRefreshDisabled,
+    emptyState,
+    isValidationExampleMediaLoading,
+    validationExampleMediaError,
+    checkpointError,
+  } = charts.status;
+  const {
+    onMetricGroupTagSelectionChange,
+    onToggleTrainValidationComparison,
+    onTrainValidationComparisonGridModeChange,
+    onTrainValidationPairSelectionChange,
+    onTrainValidationComparisonChartVisible,
+    onScalarChartVisible,
+    onToggleConfusionMatrix,
+    onToggleMetricGroup,
+    onAccordionGridModeChange,
+    onMetricGridModeChange,
+    onSmoothingChange,
+    onXModeChange,
+    onYScaleChange,
+    onRefresh,
+    onToggleValidationExamples,
+    onValidationExamplesVisible,
+    onSelectRun,
+  } = charts.actions;
   const [highlightedRunsByGroup, setHighlightedRunsByGroup] = useState<
     Record<LogMetricChartLayoutGroupKey, string | null>
   >(() => ({ ...EMPTY_HIGHLIGHTED_RUNS_BY_GROUP }));
@@ -871,7 +800,13 @@ export function LogsChartPanel({
             onToggle={onToggleValidationExamples}
           />
           {!isValidationExamplesCollapsed && (
-            <div id="logs-validation-examples">
+            <div id="logs-validation-examples" className="grid gap-3">
+              {validationExampleMediaError && (
+                <ErrorPanel
+                  title="Validation example read failed"
+                  message={errorMessage(validationExampleMediaError)}
+                />
+              )}
               <LogValidationExamplesPanel
                 images={mediaImages}
                 texts={mediaTexts}
@@ -1018,6 +953,12 @@ export function LogsChartPanel({
                 <InlineStatus busy compact role="status">
                   Refreshing TensorBoard tags
                 </InlineStatus>
+              )}
+              {checkpointError && (
+                <ErrorPanel
+                  title="Checkpoint metadata read failed"
+                  message={errorMessage(checkpointError)}
+                />
               )}
               <div className={ACCORDION_SECTION_GRID_CLASSES[accordionGridMode]}>
                 {orderedLogChartSections.map(renderLogChartSection)}

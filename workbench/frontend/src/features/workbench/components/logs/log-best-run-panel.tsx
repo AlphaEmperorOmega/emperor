@@ -12,12 +12,12 @@ import {
 import { InlineStatus } from "@/features/workbench/components/shared/inline-status";
 import { SurfacePanel } from "@/components/ui/surface-panel";
 import { ViewModeButton } from "@/features/workbench/components/view-mode-button";
+import { type LogBestRunViewModel } from "@/features/workbench/providers/logs-workspace-provider";
 import {
-  type LogBestRunViewModel,
   type LogMetricDatasetRankingRow,
   type LogMetricDirection,
   type LogMetricPointPolicy,
-} from "@/features/workbench/state/logs/logs-chart-view-model";
+} from "@/features/workbench/state/logs/log-metric-ranking";
 import { formatRunLabel } from "@/features/workbench/state/logs/logs-selectors";
 import { formatNumber, formatRunTimestamp } from "@/lib/format";
 import { errorMessage } from "@/lib/utils";

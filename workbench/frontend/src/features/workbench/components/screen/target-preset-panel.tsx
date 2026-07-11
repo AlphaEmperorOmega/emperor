@@ -4,9 +4,13 @@ import { Button } from "@/components/ui/button";
 import { TrainingCommandDialog } from "@/features/workbench/components/config/training-command-dialog";
 import { TargetSelectorSection } from "@/features/workbench/components/screen/target-selector-section";
 import {
+  useConfigSnapshotRecords,
+  useConfigSnapshotEditor,
   useHistoricalRuns,
-  useTargetSelectorState,
+  useModelPackageCatalog,
+  useModelPackageInspection,
 } from "@/features/workbench/providers/workbench-providers";
+import { useWorkbenchCapabilities } from "@/features/workbench/providers/workbench-connection-provider";
 import { type FullConfigDialogControls } from "@/features/workbench/state/use-workbench-workspace-shell";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import {
@@ -27,37 +31,39 @@ export function TargetPresetPanel({
 }: {
   onOpenFullConfig: FullConfigDialogControls["open"];
 }) {
-  const {
-    selectedModelType,
-    selectedModel,
-    selectedTargetMode,
-    activateTargetPresetMode,
-    activateTargetSnapshotMode,
-    activateTargetExperimentMode,
-    selectedPreset,
-    selectedSnapshotId,
-    selectedConfigSnapshot,
-    selectedExperimentTask,
-    experimentTaskOptions,
-    configSnapshotsEnabled,
-    isSchemaReady,
-    selectedDatasets,
-    activeOverrides,
-    effectivePresetOverrides,
-    configSections,
-    targetMonitors,
-    targetMonitorsLoading,
-    selectModelType: onSelectModelType,
-    selectModel: onSelectModel,
-    selectPreset: onSelectPreset,
-    selectSnapshot: onSelectSnapshot,
-    selectExperimentTask: onSelectExperimentTask,
-    preparePresetSnapshotDraft,
-    prepareSelectedSnapshotEdit,
-    models,
-    presets,
-    snapshots,
-  } = useTargetSelectorState();
+  const { modelPackages } = useModelPackageCatalog();
+  const { capabilities } = useWorkbenchCapabilities();
+  const snapshotRecords = useConfigSnapshotRecords();
+  const { target, browser, options, runtimeDefaults, status, actions } =
+    useModelPackageInspection();
+  const selectedModelType = browser.selectedModelType;
+  const selectedModel = browser.selectedModel;
+  const selectedTargetMode = browser.mode;
+  const activateTargetPresetMode = actions.showPresetTarget;
+  const activateTargetSnapshotMode = actions.showSnapshotTarget;
+  const activateTargetExperimentMode = actions.browseHistoricalRuns;
+  const selectedPreset = browser.selectedPreset;
+  const selectedSnapshotId = browser.selectedSnapshotId;
+  const selectedConfigSnapshot =
+    target.kind === "snapshot" ? target.snapshot : undefined;
+  const selectedExperimentTask = browser.selectedExperimentTask;
+  const experimentTaskOptions = options.experimentTasks;
+  const configSnapshotsEnabled = capabilities.configSnapshotsEnabled;
+  const isSchemaReady = status.schema.isReady;
+  const selectedDatasets = browser.selectedDatasets;
+  const activeOverrides = runtimeDefaults.active;
+  const effectivePresetOverrides = runtimeDefaults.effectivePreset;
+  const configSections = options.configSections;
+  const targetMonitors = options.monitorMetadata;
+  const targetMonitorsLoading = status.monitors.isLoading;
+  const onSelectModelType = actions.selectModelType;
+  const onSelectModel = actions.selectModelPackage;
+  const onSelectPreset = actions.selectPresetTarget;
+  const onSelectSnapshot = actions.selectSnapshotTarget;
+  const onSelectExperimentTask = actions.selectExperimentTask;
+  const models = modelPackages.records;
+  const presets = options.presets;
+  const snapshots = snapshotRecords.records.all;
   const {
     historicalExperimentOptions,
     historicalDatasetOptions,
@@ -69,6 +75,7 @@ export function TargetPresetPanel({
     selectedHistoricalPreset,
     setSelectedHistoricalPreset,
   } = useHistoricalRuns();
+  const snapshotEditor = useConfigSnapshotEditor();
   const [trainingCommandMode, setTrainingCommandMode] =
     useState<TrainingCommandMode | null>(null);
   const [includeAllMonitors, setIncludeAllMonitors] = useState(false);
@@ -87,6 +94,8 @@ export function TargetPresetPanel({
     value: preset.name,
     label: preset.name,
   }));
+  const presetControlValue =
+    target.kind === "preset" ? selectedPreset : "";
   const snapshotOptions = snapshots.map((snapshot) => ({
     value: snapshot.id,
     label: snapshot.name,
@@ -177,19 +186,31 @@ export function TargetPresetPanel({
   }
 
   const createPresetSnapshot = () => {
-    if (preparePresetSnapshotDraft(selectedPreset)) {
+    if (
+      snapshotEditor.actions.beginDraft({
+        modelType: selectedModelType,
+        model: selectedModel,
+        preset: selectedPreset,
+      })
+    ) {
       onOpenFullConfig("snapshotDraft");
     }
   };
 
   const editSelectedSnapshot = () => {
-    if (selectedSnapshotId && prepareSelectedSnapshotEdit(selectedSnapshotId)) {
+    if (
+      selectedConfigSnapshot &&
+      snapshotEditor.actions.beginEdit(selectedConfigSnapshot)
+    ) {
       onOpenFullConfig("snapshotEdit");
     }
   };
 
   const duplicateSelectedSnapshot = () => {
-    if (selectedSnapshotId && onSelectSnapshot(selectedSnapshotId)) {
+    if (
+      selectedConfigSnapshot &&
+      snapshotEditor.actions.beginDuplicate(selectedConfigSnapshot)
+    ) {
       onOpenFullConfig("snapshotDraft");
     }
   };
@@ -201,6 +222,7 @@ export function TargetPresetPanel({
         selectedModel={selectedModel}
         selectedTargetMode={selectedTargetMode}
         selectedPreset={selectedPreset}
+        presetControlValue={presetControlValue}
         selectedSnapshotId={selectedSnapshotId}
         selectedSnapshotName={selectedSnapshotName}
         selectedHistoricalExperimentFilter={selectedHistoricalExperimentFilter}
