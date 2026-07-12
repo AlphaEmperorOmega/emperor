@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
-from emperor.base.utils import Module
+from emperor.base.module import Module
 from emperor.embedding.absolute.core._validator import (
     AbsolutePositionalEmbeddingValidator,
 )
