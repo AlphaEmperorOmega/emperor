@@ -402,7 +402,9 @@ export function workbenchTailwindColor(token: WorkbenchVisualTokenName) {
   const cssName = kebabCase(token);
   return ({ opacityValue }: { opacityValue?: string }) =>
     `rgb(var(--color-${cssName}-rgb) / ${
-      opacityValue ?? `var(--color-${cssName}-alpha)`
+      opacityValue === undefined
+        ? `var(--color-${cssName}-alpha)`
+        : `calc(var(--color-${cssName}-alpha) * ${opacityValue})`
     })`;
 }
 

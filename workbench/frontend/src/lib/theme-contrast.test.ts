@@ -1,5 +1,8 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import postcss from "postcss";
+import tailwindcss from "tailwindcss";
+import { type Config } from "tailwindcss";
 import { describe, expect, it } from "vitest";
 import tailwindConfig, {
   workbenchCssVariables,
@@ -230,9 +233,41 @@ describe("Workbench design-system adapters", () => {
         `rgb(var(--color-${cssName}-rgb) / var(--color-${cssName}-alpha))`,
       );
       expect(adapter({ opacityValue: "0.37" })).toBe(
-        `rgb(var(--color-${cssName}-rgb) / 0.37)`,
+        `rgb(var(--color-${cssName}-rgb) / calc(var(--color-${cssName}-alpha) * 0.37))`,
       );
     }
+  });
+
+  it("multiplies explicit Tailwind opacity by a semantic color's intrinsic alpha", () => {
+    const adapter = themeColors["accent-soft"];
+    expect(workbenchVisualTokens.accentSoft).toBe("rgba(169,154,255,0.12)");
+    expect(adapter({ opacityValue: "0.5" })).toBe(
+      "rgb(var(--color-accent-soft-rgb) / calc(var(--color-accent-soft-alpha) * 0.5))",
+    );
+    expect(
+      Number(workbenchCssVariables["--color-accent-soft-alpha"]) * 0.5,
+    ).toBeCloseTo(0.06);
+  });
+
+  it("generates utilities that preserve intrinsic alpha composition", async () => {
+    const result = await postcss([
+      tailwindcss({
+        ...tailwindConfig,
+        content: [
+          {
+            raw: '<div class="bg-accent-soft/50 border-accent-line/[0.25]"></div>',
+            extension: "html",
+          },
+        ],
+      } as Config),
+    ]).process("@tailwind utilities;", { from: undefined });
+
+    expect(result.css).toContain(
+      "background-color: rgb(var(--color-accent-soft-rgb) / calc(var(--color-accent-soft-alpha) * var(--opacity-disabled)))",
+    );
+    expect(result.css).toContain(
+      "border-color: rgb(var(--color-accent-line-rgb) / calc(var(--color-accent-line-alpha) * 0.25))",
+    );
   });
 
   it("maps spacing, controls, radii, typography, and elevation to variables", () => {
