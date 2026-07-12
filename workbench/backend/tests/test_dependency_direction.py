@@ -16,14 +16,13 @@ WORKBENCH_TESTS_DIR = WORKBENCH_BACKEND_DIR / "tests"
 WORKBENCH_TEST_HELPERS = WORKBENCH_TESTS_DIR / "helpers.py"
 TRAINING_JOB_SERVICE_TEST = WORKBENCH_TESTS_DIR / "test_training_job_service.py"
 WORKBENCH_INSPECTION_ADAPTER = WORKBENCH_BACKEND_DIR / "inspection_adapter.py"
-WORKBENCH_HISTORICAL_INSPECTION = (
-    WORKBENCH_BACKEND_DIR / "historical_inspection.py"
-)
-WORKBENCH_INSPECTION_SERVICE = (
-    WORKBENCH_BACKEND_DIR / "services" / "inspection.py"
-)
+WORKBENCH_HISTORICAL_INSPECTION = WORKBENCH_BACKEND_DIR / "historical_inspection.py"
+WORKBENCH_INSPECTION_SERVICE = WORKBENCH_BACKEND_DIR / "services" / "inspection.py"
 WORKBENCH_RUN_PLAN_ADAPTER = (
     WORKBENCH_BACKEND_DIR / "training_jobs" / "run_plan_adapter.py"
+)
+WORKBENCH_TRAINING_JOB_CONTRACTS = (
+    WORKBENCH_BACKEND_DIR / "training_jobs" / "contracts.py"
 )
 RUN_PLAN_ADAPTATION_IMPORTS = frozenset(
     {
@@ -38,8 +37,15 @@ RUN_PLAN_ADAPTATION_IMPORTS = frozenset(
 )
 WORKBENCH_INSPECTION_IMPLEMENTATION_MODULES = frozenset(
     {
-        "workbench.backend.inspection_errors",
         "workbench.backend.inspection_serialization",
+    }
+)
+WORKBENCH_INSPECTION_ADAPTER_PATHS = frozenset(
+    {
+        WORKBENCH_INSPECTION_ADAPTER,
+        WORKBENCH_HISTORICAL_INSPECTION,
+        WORKBENCH_INSPECTION_SERVICE,
+        WORKBENCH_BACKEND_DIR / "api" / "v1" / "routers" / "inspection.py",
     }
 )
 LEGACY_WORKBENCH_MODELS_IMPORTS = frozenset(
@@ -324,7 +330,7 @@ class DependencyDirectionTests(unittest.TestCase):
             source_import.format_for_failure()
             for source_import in _absolute_imports_under([WORKBENCH_BACKEND_DIR])
             if not source_import.path.is_relative_to(WORKBENCH_TESTS_DIR)
-            and source_import.path != WORKBENCH_INSPECTION_ADAPTER
+            and source_import.path not in WORKBENCH_INSPECTION_ADAPTER_PATHS
             and source_import.module in WORKBENCH_INSPECTION_IMPLEMENTATION_MODULES
         ]
 
@@ -332,9 +338,7 @@ class DependencyDirectionTests(unittest.TestCase):
 
     def test_historical_inspection_policy_has_one_deep_interface(self) -> None:
         service_source = WORKBENCH_INSPECTION_SERVICE.read_text(encoding="utf-8")
-        historical_source = WORKBENCH_HISTORICAL_INSPECTION.read_text(
-            encoding="utf-8"
-        )
+        historical_source = WORKBENCH_HISTORICAL_INSPECTION.read_text(encoding="utf-8")
         graph_test_source = (WORKBENCH_TESTS_DIR / "test_inspector_graph.py").read_text(
             encoding="utf-8"
         )
@@ -348,6 +352,31 @@ class DependencyDirectionTests(unittest.TestCase):
             MODEL_CATALOG["linears/linear"].checkpoint_metadata_module,
             "models.linears.linear.checkpoint_metadata",
         )
+
+    def test_domain_implementations_do_not_import_http_error_types(self) -> None:
+        implementation_roots = [
+            WORKBENCH_BACKEND_DIR / "training_jobs",
+            WORKBENCH_BACKEND_DIR / "run_history",
+            WORKBENCH_BACKEND_DIR / "log_experiments",
+            WORKBENCH_BACKEND_DIR / "config_snapshots.py",
+            WORKBENCH_BACKEND_DIR / "historical_inspection.py",
+            WORKBENCH_BACKEND_DIR / "inspection_adapter.py",
+            WORKBENCH_BACKEND_DIR / "inspection_errors.py",
+            WORKBENCH_BACKEND_DIR / "inspection_worker.py",
+            WORKBENCH_BACKEND_DIR / "model_identity.py",
+            WORKBENCH_BACKEND_DIR / "services" / "inspection.py",
+        ]
+        forbidden_modules = {
+            "workbench.backend.core.errors",
+            "workbench.backend.inspector.errors",
+        }
+        violations = [
+            source_import.format_for_failure()
+            for source_import in _absolute_imports_under(implementation_roots)
+            if source_import.module in forbidden_modules
+        ]
+
+        self.assertEqual([], violations)
 
     def test_workbench_run_plan_adaptation_has_one_implementation(self) -> None:
         violations: list[str] = []
@@ -372,6 +401,25 @@ class DependencyDirectionTests(unittest.TestCase):
                     violations.append(
                         f"{relative_path}:{node.lineno}: {', '.join(duplicated)}"
                     )
+
+        self.assertEqual([], violations)
+
+    def test_training_job_contracts_do_not_import_implementation_modules(self) -> None:
+        violations = [
+            source_import.format_for_failure()
+            for source_import in _absolute_imports(WORKBENCH_TRAINING_JOB_CONTRACTS)
+            if source_import.module.startswith("workbench.backend.training_jobs.")
+        ]
+
+        self.assertEqual([], violations)
+
+    def test_production_uses_one_config_snapshot_interface(self) -> None:
+        violations = [
+            source_import.format_for_failure()
+            for source_import in _absolute_imports_under([WORKBENCH_BACKEND_DIR])
+            if not source_import.path.is_relative_to(WORKBENCH_TESTS_DIR)
+            and source_import.module == "workbench.backend.services.config_snapshots"
+        ]
 
         self.assertEqual([], violations)
 

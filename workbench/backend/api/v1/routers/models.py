@@ -58,9 +58,7 @@ def _config_schema(
     return WorkbenchInspectionAdapter.select_parts(
         model_type,
         model,
-    ).configuration_payload(
-        preset
-    )
+    ).configuration_payload(preset)
 
 
 def _search_space(

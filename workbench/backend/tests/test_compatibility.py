@@ -41,15 +41,15 @@ EXPECTED_SCHEMA_EXPORTS = [
     "InspectRequest",
     "InspectResponse",
     "TrainingJobCreateRequest",
+    "ConfigSnapshotRevisionResponse",
+    "TrainingJobReconcileRequest",
     "TrainingRunPlanCreateRequest",
     "TrainingSearchResponse",
     "TrainingSearchRequest",
     "TrainingRunChangeResponse",
-    "SubmittedTrainingRunChangeRequest",
     "TrainingRunResponse",
     "SubmittedTrainingRunRequest",
     "TrainingRunPlanSummaryResponse",
-    "SubmittedTrainingRunPlanSummaryRequest",
     "TrainingRunPlanResponse",
     "SubmittedTrainingRunPlanRequest",
     "TrainingResultLinkResponse",
@@ -87,6 +87,7 @@ EXPECTED_SCHEMA_EXPORTS = [
     "LogImageSummaryResponse",
     "LogTextSummaryResponse",
     "LogMediaResponse",
+    "LogPresetDeleteRequest",
     "LogRunDeleteFiltersRequest",
     "LogRunModelFilterRequest",
     "LogRunDeleteCandidateResponse",
@@ -129,31 +130,19 @@ class ApiCompatibilityImportTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertIs(getattr(settings, name), getattr(config, name))
 
-    def test_legacy_route_shims_reexport_canonical_routers(self) -> None:
-        route_modules = {
-            "config_snapshots": "config_snapshots",
-            "inspect": "inspection",
-            "logs": "logs",
-            "models": "models",
-            "training": "training",
-        }
-
-        for legacy_name, canonical_name in route_modules.items():
-            with self.subTest(route=legacy_name):
-                legacy = importlib.import_module(
-                    f"workbench.backend.routes.{legacy_name}"
-                )
-                canonical = importlib.import_module(
-                    f"workbench.backend.api.v1.routers.{canonical_name}"
-                )
-
-                self.assertEqual(legacy.COMPATIBILITY_STATUS, "deprecated")
-                self.assertEqual(
-                    legacy.REPLACEMENT_IMPORT,
-                    f"workbench.backend.api.v1.routers.{canonical_name}",
-                )
-                self.assertTrue(legacy.REMOVAL_CONDITION)
-                self.assertIs(legacy.router, canonical.router)
+    def test_removed_legacy_route_and_empty_model_packages_stay_absent(self) -> None:
+        for module_name in (
+            "workbench.backend.routes.config_snapshots",
+            "workbench.backend.routes.inspect",
+            "workbench.backend.routes.logs",
+            "workbench.backend.routes.models",
+            "workbench.backend.routes.training",
+            "workbench.backend.models",
+        ):
+            with self.subTest(module=module_name), self.assertRaises(
+                ModuleNotFoundError
+            ):
+                importlib.import_module(module_name)
 
 
 class SchemaCompatibilityImportTests(unittest.TestCase):
@@ -207,7 +196,7 @@ class CliCompatibilityImportTests(unittest.TestCase):
     def test_cli_maps_broken_package_parser_imports_to_clean_error(self) -> None:
         from emperor.model_packages import ModelPackage
 
-        from workbench.backend.inspector.errors import InspectorError
+        from workbench.backend.inspection_errors import InspectionFailure
 
         cli = importlib.import_module("workbench.backend.cli")
         package = ModelPackage(
@@ -237,7 +226,7 @@ class CliCompatibilityImportTests(unittest.TestCase):
                 return_value=cli.WorkbenchInspectionAdapter.from_package(package),
             ),
             self.assertRaisesRegex(
-                InspectorError,
+                InspectionFailure,
                 "Failed to import model package 'broken/missing'",
             ),
         ):

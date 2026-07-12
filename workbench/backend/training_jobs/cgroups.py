@@ -21,10 +21,31 @@ TrainingCancellationMode = Literal["strict-cgroup", "process-group"]
 
 CGROUP_V2_MOUNT = Path("/sys/fs/cgroup")
 CGROUP_NAMESPACE = "emperor-workbench-training"
+DEFAULT_TRAINING_MEMORY_LIMIT_BYTES = 16 * 1024**3
+DEFAULT_TRAINING_CPU_LIMIT = 8
+DEFAULT_TRAINING_PROCESS_LIMIT = 512
 
 
 class StrictCancellationUnavailable(RuntimeError):
     """Raised when strict cgroup containment cannot be created."""
+
+
+@dataclass(frozen=True, slots=True)
+class TrainingResourceLimits:
+    """Per-worker cgroup limits owned by the Training Job capability."""
+
+    memory_bytes: int = DEFAULT_TRAINING_MEMORY_LIMIT_BYTES
+    cpu_count: int = DEFAULT_TRAINING_CPU_LIMIT
+    process_count: int = DEFAULT_TRAINING_PROCESS_LIMIT
+
+    def __post_init__(self) -> None:
+        for field_name, value in (
+            ("memory_bytes", self.memory_bytes),
+            ("cpu_count", self.cpu_count),
+            ("process_count", self.process_count),
+        ):
+            if value < 1:
+                raise ValueError(f"{field_name} must be positive")
 
 
 def _is_linux() -> bool:
@@ -144,16 +165,16 @@ class CgroupV2Manager:
         *,
         base_path: Path | None = None,
         namespace: str = CGROUP_NAMESPACE,
+        resource_limits: TrainingResourceLimits | None = None,
     ) -> None:
         self._base_path = base_path
         self.namespace = require_safe_name(namespace, "cgroup namespace")
+        self.resource_limits = resource_limits or TrainingResourceLimits()
 
     @property
     def base_path(self) -> Path:
         if self._base_path is None:
-            self._base_path = (
-                current_cgroup_path() if _is_linux() else CGROUP_V2_MOUNT
-            )
+            self._base_path = current_cgroup_path() if _is_linux() else CGROUP_V2_MOUNT
         return self._base_path
 
     def is_available(self) -> bool:
@@ -202,12 +223,27 @@ class CgroupV2Manager:
         try:
             namespace_path.mkdir(exist_ok=True)
             job_path.mkdir(exist_ok=False)
+            self._write_resource_limits(job_path)
         except OSError as exc:
+            try:
+                job_path.rmdir()
+            except OSError:
+                pass
             raise StrictCancellationUnavailable(
-                "Strict training cancellation could not create a per-job "
-                f"cgroup under {self.base_path}: {exc}"
+                "Strict Training Job containment could not create and limit a "
+                f"per-job cgroup under {self.base_path}: {exc}"
             ) from exc
         return CgroupV2Job(job_path)
+
+    def _write_resource_limits(self, job_path: Path) -> None:
+        period_us = 100_000
+        settings = {
+            "memory.max": str(self.resource_limits.memory_bytes),
+            "cpu.max": f"{self.resource_limits.cpu_count * period_us} {period_us}",
+            "pids.max": str(self.resource_limits.process_count),
+        }
+        for filename, value in settings.items():
+            (job_path / filename).write_text(value, encoding="ascii")
 
     def from_job_id(self, job_id: str) -> CgroupV2Job | None:
         """Recover only the canonical cgroup owned by this manager and job."""
@@ -237,7 +273,11 @@ class CgroupV2Manager:
 __all__ = [
     "CgroupV2Job",
     "CgroupV2Manager",
+    "DEFAULT_TRAINING_CPU_LIMIT",
+    "DEFAULT_TRAINING_MEMORY_LIMIT_BYTES",
+    "DEFAULT_TRAINING_PROCESS_LIMIT",
     "StrictCancellationUnavailable",
     "TrainingCancellationCapability",
     "TrainingCancellationMode",
+    "TrainingResourceLimits",
 ]

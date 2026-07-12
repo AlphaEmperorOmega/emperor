@@ -6,7 +6,6 @@ import unittest
 from dataclasses import dataclass
 from pathlib import Path
 
-from workbench.backend.inspector.errors import InspectorError
 from workbench.backend.log_experiments import (
     LogExperimentMutationCoordinator,
 )
@@ -14,6 +13,7 @@ from workbench.backend.run_history import (
     HistoricalInspectionSource,
     RunHistoryService,
 )
+from workbench.backend.run_history.errors import RunHistoryFailure
 from workbench.backend.tests.helpers import write_tensorboard_run
 
 
@@ -109,7 +109,7 @@ class RunHistoryServiceContractTests(unittest.TestCase):
             )
 
             with self.assertRaisesRegex(
-                InspectorError,
+                RunHistoryFailure,
                 "A training job is still writing to this log folder",
             ):
                 service.delete_experiment("test_model")

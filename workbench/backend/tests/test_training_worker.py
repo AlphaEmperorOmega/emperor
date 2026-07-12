@@ -230,8 +230,7 @@ class TrainingWorkerPlanAcceptanceTests(unittest.TestCase):
         package = training_worker.load_model_parts("linears/linear")
         payload = copy.deepcopy(worker_payload())
         payload["runPlan"]["runs"] = [
-            copy.deepcopy(payload["runPlan"]["runs"][0])
-            for _index in range(2001)
+            copy.deepcopy(payload["runPlan"]["runs"][0]) for _index in range(2001)
         ]
         with (
             patch.object(run_plan_adapter, "SubmittedRun") as submitted_run,

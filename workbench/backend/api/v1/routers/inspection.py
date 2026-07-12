@@ -13,6 +13,7 @@ from workbench.backend.api.mutation_policy import (
 from workbench.backend.blocking import named_blocking_work_limiter, run_blocking_io
 from workbench.backend.core.security import require_bearer_auth
 from workbench.backend.dependencies import get_inspection_service
+from workbench.backend.inspection_serialization import inspection_result_payload
 from workbench.backend.schemas import (
     InspectRequest,
     InspectResponse,
@@ -39,19 +40,18 @@ async def inspect(
     request: InspectRequest,
     service: Annotated[InspectionService, Depends(get_inspection_service)],
 ) -> InspectResponse:
-    return InspectResponse.model_validate(
-        await run_blocking_io(
-            service.inspect,
-            model_type=request.modelType,
-            model=request.model,
-            preset=request.preset,
-            overrides=request.overrides,
-            experiment_task=request.experimentTask,
-            dataset=request.dataset,
-            log_run_id=request.logRunId,
-            limiter=named_blocking_work_limiter(
-                INSPECTION_BLOCKING_WORK_LIMITER_NAME,
-                INSPECTION_BLOCKING_WORK_CONCURRENCY,
-            ),
-        )
+    result = await run_blocking_io(
+        service.inspect,
+        model_type=request.modelType,
+        model=request.model,
+        preset=request.preset,
+        overrides=request.overrides,
+        experiment_task=request.experimentTask,
+        dataset=request.dataset,
+        log_run_id=request.logRunId,
+        limiter=named_blocking_work_limiter(
+            INSPECTION_BLOCKING_WORK_LIMITER_NAME,
+            INSPECTION_BLOCKING_WORK_CONCURRENCY,
+        ),
     )
+    return InspectResponse.model_validate(inspection_result_payload(result))

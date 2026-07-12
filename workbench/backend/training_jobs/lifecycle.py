@@ -40,6 +40,8 @@ def terminal_exit_code(
     event: dict[str, Any],
     current_exit_code: int | None,
 ) -> int | None:
+    if event.get("type") == "operator_reconciled_failed":
+        return None
     explicit_exit_code = event.get("exitCode")
     if isinstance(explicit_exit_code, int):
         return explicit_exit_code

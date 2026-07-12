@@ -8,7 +8,12 @@ from typing import ParamSpec, TypeVar
 from emperor.inspection import InspectionError
 from emperor.model_packages import ModelPackage
 
-from workbench.backend.inspector.errors import InspectorError
+from workbench.backend.failures import DomainFailure
+
+
+class InspectionFailure(DomainFailure):
+    """An Inspection request cannot be completed."""
+
 
 P = ParamSpec("P")
 T = TypeVar("T")
@@ -18,7 +23,7 @@ def call_inspection(call: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> 
     try:
         return call(*args, **kwargs)
     except InspectionError as exc:
-        raise InspectorError(str(exc)) from exc
+        raise InspectionFailure(str(exc)) from exc
 
 
 def call_model_package(
@@ -32,13 +37,13 @@ def call_model_package(
     try:
         return call(*args, **kwargs)
     except InspectionError as exc:
-        raise InspectorError(str(exc)) from exc
+        raise InspectionFailure(str(exc)) from exc
     except ValueError as exc:
-        raise InspectorError(str(exc)) from exc
+        raise InspectionFailure(str(exc)) from exc
     except Exception as exc:
-        raise InspectorError(
+        raise InspectionFailure(
             f"Failed to import model package '{package.catalog_key}': {exc}"
         ) from exc
 
 
-__all__ = ["call_inspection", "call_model_package"]
+__all__ = ["InspectionFailure", "call_inspection", "call_model_package"]

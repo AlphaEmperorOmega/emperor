@@ -27,10 +27,7 @@ from workbench.backend.training_jobs.run_plan_adapter import (
 
 
 def _semantic_rows(plan) -> list[tuple[str, str, str, dict]]:
-    return [
-        (run.id, run.preset, run.dataset, dict(run.overrides))
-        for run in plan.runs
-    ]
+    return [(run.id, run.preset, run.dataset, dict(run.overrides)) for run in plan.runs]
 
 
 class RunsCliEquivalenceTests(unittest.TestCase):

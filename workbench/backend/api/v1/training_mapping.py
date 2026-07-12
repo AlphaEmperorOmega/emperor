@@ -56,6 +56,7 @@ def training_job_to_payload(job: TrainingJobView) -> dict[str, Any]:
         "eventsTruncated": job.events_truncated,
         "clusterGrowth": job.cluster_growth,
         "logTail": job.log_tail,
+        "logTailTruncated": job.log_tail_truncated,
         "resultLinks": [_result_link_to_payload(link) for link in job.result_links],
     }
 

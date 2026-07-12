@@ -13,17 +13,19 @@ from typing import Any, Literal
 
 from emperor.model_packages import MODEL_CATALOG, model_id_from_payload
 
-from workbench.backend.inspector.errors import InspectorError
+from workbench.backend.catalogs import PersistentJsonCatalog
 from workbench.backend.log_experiments import is_valid_log_experiment_name
 from workbench.backend.run_history.artifacts import (
     RunArtifactObservation,
     observe_run_artifacts,
 )
+from workbench.backend.run_history.errors import RunHistoryFailure
 from workbench.backend.run_history.paths import resolved_under_root
 from workbench.backend.run_history.records import LogExperiment, LogRun
 
 RUN_TIMESTAMP_RE = re.compile(r"(?P<timestamp>\d{8}_\d{6})$")
 LogRunCatalogFingerprint = tuple[tuple[Any, ...], ...]
+LogRunCatalogGeneration = tuple[tuple[str, int, int, int], ...]
 RunResultProjection = Literal["full", "summary", "none"]
 
 
@@ -66,11 +68,23 @@ class LogRunScanner:
         *,
         logs_root: Path | str = "logs",
         cache_ttl_seconds: float = 30.0,
+        state_root: Path | None = None,
     ) -> None:
         self.logs_root = Path(logs_root)
         self.cache_ttl_seconds = max(0.0, float(cache_ttl_seconds))
+        self._persistent_catalog = (
+            PersistentJsonCatalog(
+                state_root=state_root,
+                name="run-history",
+                authority_root=self.logs_root,
+            )
+            if state_root is not None
+            else None
+        )
+        self._persistent_generation = 0
         self._runs_cache: list[LogRun] | None = None
         self._runs_cache_fingerprint: LogRunCatalogFingerprint | None = None
+        self._runs_cache_catalog_generation: LogRunCatalogGeneration | None = None
         self._artifact_observations: dict[str, RunArtifactObservation] = {}
         self._runs_cache_deadline = 0.0
         self._cache_generation = 0
@@ -82,11 +96,17 @@ class LogRunScanner:
         result_projection: RunResultProjection = "full",
     ) -> list[LogRun]:
         now = time.monotonic()
+        root = self.resolved_root()
+        catalog_generation = self._catalog_generation(root)
         cached_runs: list[LogRun] | None = None
         cached_observations: dict[str, RunArtifactObservation] = {}
         with self._cache_lock:
             generation = self._cache_generation
-            if self._runs_cache is not None and now < self._runs_cache_deadline:
+            if (
+                self._runs_cache is not None
+                and now < self._runs_cache_deadline
+                and self._runs_cache_catalog_generation == catalog_generation
+            ):
                 cached_runs = list(self._runs_cache)
                 cached_observations = dict(self._artifact_observations)
         if cached_runs is not None:
@@ -96,14 +116,33 @@ class LogRunScanner:
                 result_projection=result_projection,
             )
 
-        root = self.resolved_root()
+        if self._runs_cache is None:
+            persisted = self._load_persistent_catalog(root)
+            if persisted is not None:
+                persisted_runs, persisted_generation = persisted
+                with self._cache_lock:
+                    if generation == self._cache_generation:
+                        self._runs_cache = persisted_runs
+                        self._runs_cache_fingerprint = None
+                        self._runs_cache_catalog_generation = catalog_generation
+                        self._artifact_observations = {}
+                        self._runs_cache_deadline = now + self.cache_ttl_seconds
+                        self._persistent_generation = persisted_generation
+                return self._project_runs(
+                    persisted_runs,
+                    {},
+                    result_projection=result_projection,
+                )
+
         if not root.exists():
             with self._cache_lock:
                 if generation == self._cache_generation:
                     self._runs_cache = []
                     self._runs_cache_fingerprint = ()
+                    self._runs_cache_catalog_generation = catalog_generation
                     self._artifact_observations = {}
                     self._runs_cache_deadline = now + self.cache_ttl_seconds
+                    self._publish_persistent_catalog([], generation=1)
             return []
 
         observations, fingerprint = self._version_dirs_and_fingerprint(root)
@@ -114,6 +153,7 @@ class LogRunScanner:
                 and self._runs_cache_fingerprint == fingerprint
             ):
                 self._runs_cache_deadline = now + self.cache_ttl_seconds
+                self._runs_cache_catalog_generation = catalog_generation
                 cached_runs = list(self._runs_cache)
                 cached_observations = dict(self._artifact_observations)
         if cached_runs is not None:
@@ -125,8 +165,7 @@ class LogRunScanner:
 
         runs: list[LogRun] = []
         observations_by_path = {
-            observation.run_dir.as_posix(): observation
-            for observation in observations
+            observation.run_dir.as_posix(): observation for observation in observations
         }
         for observation in observations:
             run = self.parse_run(
@@ -154,8 +193,18 @@ class LogRunScanner:
             if generation == self._cache_generation:
                 self._runs_cache = list(sorted_runs)
                 self._runs_cache_fingerprint = fingerprint
+                self._runs_cache_catalog_generation = catalog_generation
                 self._artifact_observations = observations_by_path
                 self._runs_cache_deadline = now + self.cache_ttl_seconds
+                self._persistent_generation += 1
+                persistent_generation = self._persistent_generation
+            else:
+                persistent_generation = None
+        if persistent_generation is not None:
+            self._publish_persistent_catalog(
+                sorted_runs,
+                generation=persistent_generation,
+            )
         return self._project_runs(
             sorted_runs,
             observations_by_path,
@@ -174,7 +223,8 @@ class LogRunScanner:
         return [
             self._project_run(
                 run,
-                observations[run.path.as_posix()],
+                observations.get(run.path.as_posix())
+                or self.artifact_observation(run),
                 result_projection=result_projection,
             )
             for run in runs
@@ -192,9 +242,7 @@ class LogRunScanner:
         return replace(
             run,
             experimentTask=artifacts.experiment_task(),
-            metrics=(
-                artifacts.metrics() if result_projection == "full" else {}
-            ),
+            metrics=(artifacts.metrics() if result_projection == "full" else {}),
         )
 
     def clear_cache(self) -> None:
@@ -202,8 +250,165 @@ class LogRunScanner:
             self._cache_generation += 1
             self._runs_cache = None
             self._runs_cache_fingerprint = None
+            self._runs_cache_catalog_generation = None
             self._artifact_observations = {}
             self._runs_cache_deadline = 0.0
+        if self._persistent_catalog is not None:
+            self._persistent_catalog.invalidate()
+
+    def reconcile_catalog(self) -> None:
+        """Force one bounded reconciliation before an authoritative mutation."""
+
+        with self._cache_lock:
+            self._runs_cache_deadline = 0.0
+            self._runs_cache_catalog_generation = None
+        self.list_runs(result_projection="none")
+
+    def invalidate_experiment(self, experiment: str) -> list[Path]:
+        """Invalidate cached catalog state scoped by one Log Experiment."""
+
+        with self._cache_lock:
+            affected_paths = [
+                run.path
+                for run in (self._runs_cache or [])
+                if run.experiment == experiment
+            ]
+            affected_keys = {path.as_posix() for path in affected_paths}
+            for key in affected_keys:
+                self._artifact_observations.pop(key, None)
+            self._cache_generation += 1
+            self._runs_cache = None
+            self._runs_cache_fingerprint = None
+            self._runs_cache_catalog_generation = None
+            self._runs_cache_deadline = 0.0
+        if self._persistent_catalog is not None:
+            self._persistent_catalog.invalidate()
+        return affected_paths
+
+    def _catalog_generation(self, root: Path) -> LogRunCatalogGeneration:
+        if not root.exists():
+            return ()
+        generation: list[tuple[str, int, int, int]] = []
+        try:
+            candidates = (root, *sorted(root.iterdir(), key=lambda path: path.name))
+        except OSError:
+            candidates = (root,)
+        for version_dir in candidates:
+            try:
+                stat = version_dir.stat()
+                relative = (
+                    "."
+                    if version_dir == root
+                    else version_dir.relative_to(root).as_posix()
+                )
+            except (OSError, ValueError):
+                continue
+            if version_dir.is_dir():
+                generation.append(
+                    (
+                        relative,
+                        int(stat.st_dev),
+                        int(stat.st_ino),
+                        int(stat.st_mtime_ns),
+                    )
+                )
+        return tuple(sorted(generation))
+
+    def _load_persistent_catalog(
+        self,
+        root: Path,
+    ) -> tuple[list[LogRun], int] | None:
+        catalog = self._persistent_catalog
+        if catalog is None:
+            return None
+        payload = catalog.load(kind="run-history")
+        if payload is None:
+            return None
+        entries = payload.get("entries")
+        if not isinstance(entries, list):
+            return None
+        runs: list[LogRun] = []
+        for entry in entries:
+            if not isinstance(entry, dict):
+                return None
+            run = self._run_from_catalog_entry(root, entry)
+            if run is None:
+                return None
+            runs.append(run)
+        generation = payload["generation"]
+        assert isinstance(generation, int)
+        return runs, generation
+
+    def _publish_persistent_catalog(
+        self,
+        runs: list[LogRun],
+        *,
+        generation: int,
+    ) -> None:
+        catalog = self._persistent_catalog
+        if catalog is None:
+            return
+        catalog.publish(
+            kind="run-history",
+            generation=generation,
+            entries=[self._run_catalog_entry(run) for run in runs],
+        )
+
+    @staticmethod
+    def _run_catalog_entry(run: LogRun) -> dict[str, Any]:
+        return {
+            "id": run.id,
+            "group": run.group,
+            "experiment": run.experiment,
+            "model": run.model,
+            "preset": run.preset,
+            "dataset": run.dataset,
+            "runName": run.runName,
+            "timestamp": run.timestamp,
+            "version": run.version,
+            "relativePath": run.relativePath,
+            "hasResult": run.hasResult,
+            "eventFileCount": run.eventFileCount,
+            "checkpointCount": run.checkpointCount,
+            "hasHparams": run.hasHparams,
+        }
+
+    def _run_from_catalog_entry(
+        self,
+        root: Path,
+        entry: dict[str, Any],
+    ) -> LogRun | None:
+        try:
+            relative_path = str(entry["relativePath"])
+            candidate = root / relative_path
+            resolved = self.resolve_under_root(candidate, root)
+            if resolved is None or not resolved.is_dir():
+                return None
+            group = entry.get("group")
+            timestamp = entry.get("timestamp")
+            if group is not None and not isinstance(group, str):
+                return None
+            if timestamp is not None and not isinstance(timestamp, str):
+                return None
+            return LogRun(
+                id=str(entry["id"]),
+                group=group,
+                experiment=str(entry["experiment"]),
+                model=str(entry["model"]),
+                preset=str(entry["preset"]),
+                dataset=str(entry["dataset"]),
+                runName=str(entry["runName"]),
+                timestamp=timestamp,
+                version=str(entry["version"]),
+                relativePath=relative_path,
+                hasResult=bool(entry["hasResult"]),
+                eventFileCount=int(entry["eventFileCount"]),
+                checkpointCount=int(entry["checkpointCount"]),
+                hasHparams=bool(entry["hasHparams"]),
+                path=resolved,
+            )
+        except (KeyError, TypeError, ValueError):
+            return None
 
     def _version_dirs_and_fingerprint(
         self,
@@ -239,8 +444,7 @@ class LogRunScanner:
             return []
 
         run_counts = Counter(
-            run.experiment
-            for run in self.list_runs(result_projection="none")
+            run.experiment for run in self.list_runs(result_projection="none")
         )
         experiments: list[LogExperiment] = []
         for child in sorted(root.iterdir(), key=lambda path: path.name):
@@ -352,16 +556,15 @@ class LogRunScanner:
     def resolve_runs(self, run_ids: list[str]) -> list[LogRun]:
         if not run_ids:
             return []
-        runs_by_id = {
-            run.id: run
-            for run in self.list_runs(result_projection="none")
-        }
+        runs_by_id = {run.id: run for run in self.list_runs(result_projection="none")}
         unknown = [run_id for run_id in run_ids if run_id not in runs_by_id]
         if unknown:
-            raise InspectorError(f"Unknown log run id: {unknown[0]}")
+            raise RunHistoryFailure(f"Unknown log run id: {unknown[0]}")
         return [runs_by_id[run_id] for run_id in dict.fromkeys(run_ids)]
+
 
 __all__ = [
     "LogRunCatalogFingerprint",
+    "LogRunCatalogGeneration",
     "LogRunScanner",
 ]

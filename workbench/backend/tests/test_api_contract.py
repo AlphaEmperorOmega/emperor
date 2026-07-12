@@ -53,10 +53,13 @@ EXPECTED_BUSINESS_ROUTES = [
     (("POST",), "/logs/parameter-status"),
     (("POST",), "/logs/runs/delete"),
     (("POST",), "/logs/runs/delete-plan"),
+    (("POST",), "/logs/runs/preset-delete"),
+    (("POST",), "/logs/runs/preset-delete-plan"),
     (("POST",), "/logs/scalars"),
     (("POST",), "/logs/tags"),
     (("POST",), "/training/jobs"),
     (("POST",), "/training/jobs/{job_id}/cancel"),
+    (("POST",), "/training/jobs/{job_id}/reconcile"),
     (("POST",), "/training/run-plan"),
 ]
 
@@ -238,6 +241,18 @@ ENDPOINT_SCHEMA_MAPPINGS: dict[RouteKey, EndpointSchemaMapping] = {
         frontend_api_function="fetchLogParameterStatus",
         frontend_response_schema="logParameterStatusSchema",
     ),
+    (("POST",), "/logs/runs/preset-delete"): EndpointSchemaMapping(
+        backend_body_request_schemas=(schemas.LogPresetDeleteRequest,),
+        backend_response_schema=schemas.LogRunDeleteResponse,
+        frontend_api_function="deleteLogPreset",
+        frontend_response_schema="logRunDeleteSchema",
+    ),
+    (("POST",), "/logs/runs/preset-delete-plan"): EndpointSchemaMapping(
+        backend_body_request_schemas=(schemas.LogPresetDeleteRequest,),
+        backend_response_schema=schemas.LogRunDeletePlanResponse,
+        frontend_api_function="createLogPresetDeletePlan",
+        frontend_response_schema="logRunDeletePlanSchema",
+    ),
     (("POST",), "/logs/scalars"): EndpointSchemaMapping(
         backend_body_request_schemas=(schemas.LogScalarsRequest,),
         backend_response_schema=schemas.LogScalarsResponse,
@@ -260,6 +275,12 @@ ENDPOINT_SCHEMA_MAPPINGS: dict[RouteKey, EndpointSchemaMapping] = {
         backend_body_request_schemas=(),
         backend_response_schema=schemas.TrainingJobResponse,
         frontend_api_function="cancelTrainingJob",
+        frontend_response_schema="trainingJobSchema",
+    ),
+    (("POST",), "/training/jobs/{job_id}/reconcile"): EndpointSchemaMapping(
+        backend_body_request_schemas=(schemas.TrainingJobReconcileRequest,),
+        backend_response_schema=schemas.TrainingJobResponse,
+        frontend_api_function="reconcileTrainingJob",
         frontend_response_schema="trainingJobSchema",
     ),
     (("POST",), "/training/run-plan"): EndpointSchemaMapping(
@@ -294,8 +315,10 @@ CAPABILITIES_FIELDS = (
     "historicalMonitorDataEnabled",
     "uploadsEnabled",
     "maxUploadSize",
-    "dataSourcesEnabled",
-    "dataSources",
+    "maxActiveTrainingJobs",
+    "trainingJobMemoryLimitBytes",
+    "trainingJobCpuLimit",
+    "trainingJobProcessLimit",
 )
 CAPABILITIES_REQUIRED_FIELDS = (
     "authMode",
@@ -311,10 +334,18 @@ CAPABILITIES_FRONTEND_DEFAULT_FIELDS = {
     ),
     "uploadsEnabled": "capabilitiesSchema defaults upload support off when omitted.",
     "maxUploadSize": "capabilitiesSchema defaults upload size to null when omitted.",
-    "dataSourcesEnabled": (
-        "capabilitiesSchema defaults data-source support off when omitted."
+    "maxActiveTrainingJobs": (
+        "capabilitiesSchema defaults the active Training Job limit for older APIs."
     ),
-    "dataSources": "capabilitiesSchema defaults data-source placeholders to [].",
+    "trainingJobMemoryLimitBytes": (
+        "capabilitiesSchema defaults the Training Job memory limit for older APIs."
+    ),
+    "trainingJobCpuLimit": (
+        "capabilitiesSchema defaults the Training Job CPU limit for older APIs."
+    ),
+    "trainingJobProcessLimit": (
+        "capabilitiesSchema defaults the Training Job process limit for older APIs."
+    ),
     "trainingCancellationCapability": (
         "capabilitiesSchema defaults strict cancellation support to unsupported "
         "when omitted."
@@ -333,6 +364,7 @@ CONFIG_FIELD_FIELDS = (
     "default",
     "nullable",
     "choices",
+    "maximum",
     "locked",
     "lockedValue",
     "lockedReason",
@@ -467,7 +499,9 @@ TRAINING_RUN_PLAN_FIELDS = (
     "isRandomSearch",
     "runs",
     "summary",
+    "snapshotRevisions",
 )
+TRAINING_RUN_PLAN_REQUIRED_FIELDS = TRAINING_RUN_PLAN_FIELDS[:-1]
 TRAINING_JOB_FIELDS = (
     "id",
     "status",
@@ -500,6 +534,7 @@ TRAINING_JOB_FIELDS = (
     "eventsTruncated",
     "clusterGrowth",
     "logTail",
+    "logTailTruncated",
     "resultLinks",
 )
 TRAINING_JOB_REQUIRED_FIELDS = (
@@ -892,6 +927,8 @@ SCHEMA_PARITY_CASES = (
             "monitors",
             "search",
             "runPlan",
+            "snapshotIds",
+            "snapshotRevisions",
         ),
         (
             "modelType",
@@ -902,6 +939,12 @@ SCHEMA_PARITY_CASES = (
             "logFolder",
             "monitors",
         ),
+    ),
+    SchemaParityCase(
+        schemas.TrainingJobReconcileRequest,
+        "TrainingJobReconcileInput",
+        ("action", "reason"),
+        ("action", "reason"),
     ),
     SchemaParityCase(
         schemas.TrainingRunPlanCreateRequest,
@@ -917,6 +960,7 @@ SCHEMA_PARITY_CASES = (
             "logFolder",
             "monitors",
             "search",
+            "snapshotIds",
         ),
         ("modelType", "model", "preset", "datasets", "overrides"),
     ),
@@ -957,15 +1001,21 @@ SCHEMA_PARITY_CASES = (
         TRAINING_RUN_PLAN_SUMMARY_FIELDS,
     ),
     SchemaParityCase(
+        schemas.ConfigSnapshotRevisionResponse,
+        "configSnapshotRevisionSchema",
+        ("id", "semanticRevision"),
+        ("id", "semanticRevision"),
+    ),
+    SchemaParityCase(
         schemas.TrainingRunPlanResponse,
         "trainingRunPlanSchema",
         TRAINING_RUN_PLAN_FIELDS,
-        TRAINING_RUN_PLAN_FIELDS,
+        TRAINING_RUN_PLAN_REQUIRED_FIELDS,
     ),
     SchemaParityCase(
         schemas.SubmittedTrainingRunPlanRequest,
         "TrainingRunPlanSubmitInput",
-        ("runs",),
+        ("runs", "snapshotRevisions"),
         ("runs",),
     ),
     SchemaParityCase(
@@ -1158,6 +1208,12 @@ SCHEMA_PARITY_CASES = (
         "LogRunDeleteFilters",
         LOG_DELETE_FILTER_FIELDS,
         LOG_DELETE_FILTER_FIELDS,
+    ),
+    SchemaParityCase(
+        schemas.LogPresetDeleteRequest,
+        "LogPresetDeleteTarget",
+        ("experiment", "preset"),
+        ("experiment", "preset"),
     ),
     SchemaParityCase(
         schemas.LogRunDeleteCandidateResponse,
@@ -1389,6 +1445,7 @@ HIGH_RISK_SCHEMA_PARITY_GROUPS = {
         schemas.TrainingRunResponse,
         schemas.SubmittedTrainingRunRequest,
         schemas.TrainingRunPlanSummaryResponse,
+        schemas.ConfigSnapshotRevisionResponse,
         schemas.TrainingRunPlanResponse,
         schemas.SubmittedTrainingRunPlanRequest,
         schemas.TrainingResultLinkResponse,
@@ -1420,6 +1477,7 @@ HIGH_RISK_SCHEMA_PARITY_GROUPS = {
         schemas.LogExperimentsResponse,
         schemas.LogExperimentDeleteResponse,
         schemas.LogArchiveImportResponse,
+        schemas.LogPresetDeleteRequest,
         schemas.LogRunDeleteFiltersRequest,
         schemas.LogRunDeleteCandidateResponse,
         schemas.LogRunDeleteAffectedValuesResponse,
@@ -1743,7 +1801,7 @@ class ApiSchemaContractTests(unittest.TestCase):
                             backend_schema.model_fields[field_name].is_required()
                         )
 
-    def test_capabilities_schema_defaults_data_source_and_upload_placeholders(
+    def test_capabilities_schema_defaults_additive_fields(
         self,
     ) -> None:
         capabilities = schemas.CapabilitiesResponse(
@@ -1755,8 +1813,6 @@ class ApiSchemaContractTests(unittest.TestCase):
         self.assertEqual(capabilities.trainingCancellationCapability, "unsupported")
         self.assertEqual(capabilities.uploadsEnabled, False)
         self.assertIsNone(capabilities.maxUploadSize)
-        self.assertEqual(capabilities.dataSourcesEnabled, False)
-        self.assertEqual(capabilities.dataSources, [])
 
 
 class ApiIntegrationContractTests(unittest.TestCase):
@@ -1770,7 +1826,7 @@ class ApiIntegrationContractTests(unittest.TestCase):
             transport = httpx.ASGITransport(app=app)
             async with httpx.AsyncClient(
                 transport=transport,
-                base_url="http://testserver",
+                base_url="http://localhost",
             ) as client:
                 return await client.get("/capabilities")
 
@@ -1784,8 +1840,7 @@ class ApiIntegrationContractTests(unittest.TestCase):
                 "authMode": "none",
                 "trainingEnabled": False,
                 "trainingCancellationCapability": (
-                    app.state.workbench_services.training_jobs
-                    .cancellation_capability()
+                    app.state.workbench_services.training_jobs.cancellation_capability()
                 ),
                 "logDeletionEnabled": False,
                 "configSnapshotsEnabled": False,
@@ -1796,8 +1851,18 @@ class ApiIntegrationContractTests(unittest.TestCase):
                 "maxUploadSize": (
                     get_workbench_api_settings().effective_max_upload_size
                 ),
-                "dataSourcesEnabled": False,
-                "dataSources": [],
+                "maxActiveTrainingJobs": (
+                    get_workbench_api_settings().max_active_training_jobs
+                ),
+                "trainingJobMemoryLimitBytes": (
+                    get_workbench_api_settings().training_job_memory_limit_bytes
+                ),
+                "trainingJobCpuLimit": (
+                    get_workbench_api_settings().training_job_cpu_limit
+                ),
+                "trainingJobProcessLimit": (
+                    get_workbench_api_settings().training_job_process_limit
+                ),
             },
         )
 
@@ -1819,7 +1884,7 @@ class ApiIntegrationContractTests(unittest.TestCase):
             transport = httpx.ASGITransport(app=test_app)
             async with httpx.AsyncClient(
                 transport=transport,
-                base_url="http://testserver",
+                base_url="http://localhost",
             ) as client:
                 return await client.get("/capabilities")
 
@@ -1849,6 +1914,7 @@ class ApiIntegrationContractTests(unittest.TestCase):
         from workbench.backend.training_jobs.cgroups import (
             CgroupV2Manager,
             StrictCancellationUnavailable,
+            TrainingResourceLimits,
         )
 
         with patch.object(
@@ -1866,7 +1932,7 @@ class ApiIntegrationContractTests(unittest.TestCase):
                 transport = httpx.ASGITransport(app=test_app)
                 async with httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
+                    base_url="http://localhost",
                 ) as client:
                     return await client.get("/capabilities")
 
@@ -1877,7 +1943,9 @@ class ApiIntegrationContractTests(unittest.TestCase):
             response.json()["trainingCancellationCapability"],
             "unsupported",
         )
-        construct_cgroups.assert_called_once_with()
+        construct_cgroups.assert_called_once_with(
+            resource_limits=TrainingResourceLimits()
+        )
 
     def test_capabilities_endpoint_keeps_hosted_uploads_disabled_by_default(
         self,
@@ -1892,7 +1960,7 @@ class ApiIntegrationContractTests(unittest.TestCase):
             transport = httpx.ASGITransport(app=app)
             async with httpx.AsyncClient(
                 transport=transport,
-                base_url="http://testserver",
+                base_url="http://localhost",
             ) as client:
                 return await client.get("/capabilities")
 
@@ -1922,7 +1990,7 @@ class ApiIntegrationContractTests(unittest.TestCase):
             transport = httpx.ASGITransport(app=app)
             async with httpx.AsyncClient(
                 transport=transport,
-                base_url="http://testserver",
+                base_url="http://localhost",
             ) as client:
                 return await client.get("/capabilities")
 
@@ -1946,7 +2014,7 @@ class ApiIntegrationContractTests(unittest.TestCase):
             transport = httpx.ASGITransport(app=app)
             async with httpx.AsyncClient(
                 transport=transport,
-                base_url="http://testserver",
+                base_url="http://localhost",
             ) as client:
                 return await client.get("/capabilities")
 
@@ -1967,7 +2035,7 @@ class ApiIntegrationContractTests(unittest.TestCase):
             transport = httpx.ASGITransport(app=app)
             async with httpx.AsyncClient(
                 transport=transport,
-                base_url="http://testserver",
+                base_url="http://localhost",
             ) as client:
                 return await client.get("/models/linears/linear/datasets")
 
@@ -2022,7 +2090,7 @@ class ApiIntegrationContractTests(unittest.TestCase):
             transport = httpx.ASGITransport(app=app)
             async with httpx.AsyncClient(
                 transport=transport,
-                base_url="http://testserver",
+                base_url="http://localhost",
             ) as client:
                 health = await client.get("/health")
                 monitors = await client.get("/models/linears/linear/monitors")
@@ -2066,10 +2134,11 @@ class ApiIntegrationContractTests(unittest.TestCase):
 
     def test_inspect_rejects_path_like_dataset_input(self) -> None:
         from workbench.backend.api.v1.routers.inspection import inspect
-        from workbench.backend.inspector.errors import InspectorError
+        from workbench.backend.failures import FailureKind
+        from workbench.backend.inspection_errors import InspectionFailure
         from workbench.backend.services.inspection import InspectionService
 
-        with self.assertRaises(InspectorError) as raised:
+        with self.assertRaises(InspectionFailure) as raised:
             asyncio.run(
                 inspect(
                     schemas.InspectRequest(
@@ -2083,7 +2152,7 @@ class ApiIntegrationContractTests(unittest.TestCase):
                 ),
             )
 
-        self.assertEqual(raised.exception.status_code, 400)
+        self.assertEqual(raised.exception.kind, FailureKind.INVALID)
         self.assertIn("./Mnist", raised.exception.detail)
         self.assertIn("filesystem path", raised.exception.detail)
         self.assertIn("server-known dataset name", raised.exception.detail)
@@ -2097,7 +2166,7 @@ class ApiIntegrationContractTests(unittest.TestCase):
             transport = httpx.ASGITransport(app=app)
             async with httpx.AsyncClient(
                 transport=transport,
-                base_url="http://testserver",
+                base_url="http://localhost",
             ) as client:
                 return await client.post(
                     "/logs/scalars",
@@ -2146,7 +2215,7 @@ class ApiIntegrationContractTests(unittest.TestCase):
             transport = httpx.ASGITransport(app=test_app)
             async with httpx.AsyncClient(
                 transport=transport,
-                base_url="http://testserver",
+                base_url="http://localhost",
             ) as client:
                 return await client.get("/logs/runs")
 
@@ -2174,7 +2243,7 @@ class ApiIntegrationContractTests(unittest.TestCase):
             transport = httpx.ASGITransport(app=app)
             async with httpx.AsyncClient(
                 transport=transport,
-                base_url="http://testserver",
+                base_url="http://localhost",
             ) as client:
                 return await client.get("/models/unknown/model/presets")
 
@@ -2195,7 +2264,7 @@ class ApiIntegrationContractTests(unittest.TestCase):
             transport = httpx.ASGITransport(app=app)
             async with httpx.AsyncClient(
                 transport=transport,
-                base_url="http://testserver",
+                base_url="http://localhost",
             ) as client:
                 return await client.get(path)
 

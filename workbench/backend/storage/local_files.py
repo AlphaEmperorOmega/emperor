@@ -12,6 +12,8 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from emperor.runs import require_finite_json
+
 
 def resolve_root(root: Path) -> Path:
     """Return an absolute, resolved storage root."""
@@ -89,6 +91,7 @@ def read_json_object(path: Path) -> dict[str, Any] | None:
 def write_json_atomic(path: Path, payload: Mapping[str, Any]) -> None:
     """Write a JSON object to ``path`` using a same-directory replace."""
 
+    require_finite_json(payload)
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     temporary_path: Path | None = None

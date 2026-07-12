@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from emperor.model_packages import model_id_from_parts
 
-from workbench.backend.inspector.errors import InspectorError
+from workbench.backend.inspection_errors import InspectionFailure
 
 
 def require_model_id(model_type: str, model: str) -> str:
@@ -12,7 +12,7 @@ def require_model_id(model_type: str, model: str) -> str:
 
     model_id = model_id_from_parts(model_type, model)
     if model_id is None:
-        raise InspectorError(
+        raise InspectionFailure(
             f"Unknown model: --model-type {model_type} --model {model}"
         )
     return model_id

@@ -27,10 +27,12 @@ from workbench.backend.dependencies import (
     get_training_run_plan_service,
     get_workbench_settings,
 )
+from workbench.backend.mutation_execution import run_mutation_io
 from workbench.backend.schemas import (
     MonitorDataResponse,
     ParameterStatusResponse,
     TrainingJobCreateRequest,
+    TrainingJobReconcileRequest,
     TrainingJobResponse,
     TrainingProgressEventsResponse,
     TrainingRunPlanCreateRequest,
@@ -62,7 +64,7 @@ async def create_training_job(
 ) -> TrainingJobResponse:
     return TrainingJobResponse.model_validate(
         training_job_to_payload(
-            await run_blocking_io(
+            await run_mutation_io(
                 service.create_job,
                 create_training_job_command(request),
             )
@@ -192,7 +194,30 @@ async def cancel_training_job(
     settings: Annotated[WorkbenchApiSettings, Depends(get_workbench_settings)],
 ) -> TrainingJobResponse:
     return TrainingJobResponse.model_validate(
+        training_job_to_payload(await run_mutation_io(service.cancel_job, job_id))
+    )
+
+
+@router.post(
+    "/jobs/{job_id}/reconcile",
+    response_model=TrainingJobResponse,
+    summary="Reconcile an unknown training job",
+    response_description="Operator-reconciled training job state.",
+)
+@declare_http_operation(HttpOperationPolicy.LOCAL_MUTATION)
+async def reconcile_training_job(
+    job_id: str,
+    request: TrainingJobReconcileRequest,
+    service: Annotated[TrainingJobService, Depends(get_training_job_service)],
+    settings: Annotated[WorkbenchApiSettings, Depends(get_workbench_settings)],
+) -> TrainingJobResponse:
+    return TrainingJobResponse.model_validate(
         training_job_to_payload(
-            await run_blocking_io(service.cancel_job, job_id)
+            await run_mutation_io(
+                service.reconcile_job,
+                job_id,
+                action=request.action,
+                reason=request.reason,
+            )
         )
     )

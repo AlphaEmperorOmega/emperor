@@ -5,15 +5,17 @@ import json
 import shutil
 import tempfile
 import unittest
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from unittest.mock import patch
 
 from emperor.model_packages import model_identity_payload_from_id
 
-from workbench.backend.inspector.errors import InspectorError
+from workbench.backend.failures import FailureKind
 from workbench.backend.log_experiments import (
     LOG_EXPERIMENT_NAME_RE,
+    LogExperimentFailure,
     LogExperimentMutationCoordinator,
     is_valid_log_experiment_name,
     validate_log_experiment_name,
@@ -25,6 +27,7 @@ from workbench.backend.run_history.artifacts import (
     observe_run_artifacts,
 )
 from workbench.backend.run_history.deletion import LogRunDeletionExecutor
+from workbench.backend.run_history.errors import RunHistoryFailure
 from workbench.backend.run_history.query import LogRunQueryService
 from workbench.backend.run_history.records import (
     LOG_RESPONSE_ITEM_LIMIT,
@@ -181,7 +184,7 @@ class LogExperimentNameTests(unittest.TestCase):
             "abcé",
         ):
             with self.subTest(name=name):
-                with self.assertRaises(InspectorError):
+                with self.assertRaises(LogExperimentFailure):
                     validate_log_experiment_name(name)
 
 
@@ -327,6 +330,30 @@ class RunHistoryAndApiTests(unittest.TestCase):
             version=Path(relative_path).name,
             relativePath=relative_path,
         )
+
+    def test_catalog_generation_exposes_external_run_before_cache_ttl(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = Path(tmp) / "logs"
+            service = _run_history(logs_root)
+            self.assertEqual(service.list_runs(limit=10, offset=0)["total"], 0)
+
+            write_tensorboard_run(
+                logs_root,
+                [
+                    "experiment",
+                    "linears",
+                    "linear",
+                    "BASELINE",
+                    "Mnist",
+                    "completed_20260601_010203",
+                    "version_0",
+                ],
+            )
+
+            refreshed = service.list_runs(limit=10, offset=0)
+
+        self.assertEqual(refreshed["total"], 1)
+        self.assertEqual(refreshed["runs"][0]["experiment"], "experiment")
 
     def test_run_history_parses_supported_log_shapes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -567,17 +594,20 @@ class RunHistoryAndApiTests(unittest.TestCase):
             )
             service = _run_history(logs_root)
 
-            with patch.object(
-                run_artifacts,
-                "_read_result_payload",
-                wraps=run_artifacts._read_result_payload,
-            ) as read_result, patch.object(
-                run_artifacts.RunArtifactObservation,
-                "metrics",
-                side_effect=AssertionError(
-                    "summary projection must not materialize metrics"
-                ),
-            ) as project_metrics:
+            with (
+                patch.object(
+                    run_artifacts,
+                    "_read_result_payload",
+                    wraps=run_artifacts._read_result_payload,
+                ) as read_result,
+                patch.object(
+                    run_artifacts.RunArtifactObservation,
+                    "metrics",
+                    side_effect=AssertionError(
+                        "summary projection must not materialize metrics"
+                    ),
+                ) as project_metrics,
+            ):
                 payload = service.list_runs(
                     limit=10,
                     offset=0,
@@ -621,6 +651,61 @@ class RunHistoryAndApiTests(unittest.TestCase):
         self.assertEqual(metrics, {"accuracy": 0.9})
         self.assertEqual(params, {"batch_size": 8})
         read_result.assert_called_once()
+
+    def test_run_artifacts_cannot_resolve_into_a_sibling_run(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "logs"
+            first_run = root / "experiment" / "first"
+            second_run = root / "experiment" / "second"
+            first_run.mkdir(parents=True)
+            second_run.mkdir(parents=True)
+            second_run.joinpath("result.json").write_text(
+                json.dumps({"metrics": {"secret": 1.0}}),
+                encoding="utf-8",
+            )
+            second_run.joinpath("secret.ckpt").write_bytes(b"secret")
+            first_run.joinpath("result.json").symlink_to(second_run / "result.json")
+            first_run.joinpath("stolen.ckpt").symlink_to(second_run / "secret.ckpt")
+
+            observation = observe_run_artifacts(first_run, root)
+
+        self.assertEqual(observation.metrics(), {})
+        self.assertIsNone(observation.result)
+        self.assertEqual(observation.checkpoints, ())
+
+    def test_run_artifact_in_run_symlink_is_allowed_but_replacement_fails_closed(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "logs"
+            run_dir = root / "experiment" / "run"
+            run_dir.mkdir(parents=True)
+            target = run_dir / "contained-result.json"
+            target.write_text(
+                json.dumps({"metrics": {"accuracy": 0.9}}),
+                encoding="utf-8",
+            )
+            result = run_dir / "result.json"
+            result.symlink_to(target)
+
+            allowed = observe_run_artifacts(run_dir, root)
+            self.assertEqual(allowed.metrics(), {"accuracy": 0.9})
+
+            result.unlink()
+            result.write_text(
+                json.dumps({"metrics": {"beforeSwap": 1.0}}),
+                encoding="utf-8",
+            )
+            replaced = observe_run_artifacts(run_dir, root)
+            outside = Path(tmp) / "outside-result.json"
+            outside.write_text(
+                json.dumps({"metrics": {"secret": 1.0}}),
+                encoding="utf-8",
+            )
+            result.unlink()
+            result.symlink_to(outside)
+
+            self.assertEqual(replaced.metrics(), {})
 
     def test_run_artifact_observation_enforces_file_depth_and_byte_budgets(
         self,
@@ -673,10 +758,63 @@ class RunHistoryAndApiTests(unittest.TestCase):
         )
         self.assertTrue(
             any(
-                "recursion cap" in reason
-                for reason in depth_limited.truncation_reasons
+                "recursion cap" in reason for reason in depth_limited.truncation_reasons
             )
         )
+
+    def test_incomplete_event_observation_refuses_tensorboard_loading(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "logs"
+            run_dir = root / "experiment" / "run"
+            run_dir.mkdir(parents=True)
+            run_dir.joinpath("events.out.tfevents.safe").write_bytes(b"safe")
+            omitted = run_dir / "z-omitted"
+            omitted.mkdir()
+            omitted.joinpath("events.out.tfevents.hidden").write_bytes(b"hidden")
+
+            observation = observe_run_artifacts(
+                run_dir,
+                root,
+                budgets=RunArtifactBudgets(
+                    max_files=1,
+                    max_depth=16,
+                    max_metadata_file_bytes=1024,
+                ),
+            )
+            with patch.object(
+                tensorboard_events,
+                "load_event_accumulator",
+                return_value=FakeTensorBoardAccumulator(),
+            ) as load:
+                accumulator = observation.event_files.load_accumulator(run_dir)
+
+        self.assertTrue(observation.truncated)
+        self.assertFalse(observation.event_files.complete)
+        self.assertIsNone(accumulator)
+        load.assert_not_called()
+
+    def test_event_file_replacement_after_observation_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "logs"
+            run_dir = root / "experiment" / "run"
+            run_dir.mkdir(parents=True)
+            event_path = run_dir / "events.out.tfevents.safe"
+            event_path.write_bytes(b"safe")
+            observation = observe_run_artifacts(run_dir, root)
+            outside = Path(tmp) / "events.out.tfevents.outside"
+            outside.write_bytes(b"secret")
+            event_path.unlink()
+            event_path.symlink_to(outside)
+
+            with patch.object(
+                tensorboard_events,
+                "load_event_accumulator",
+                return_value=FakeTensorBoardAccumulator(),
+            ) as load:
+                accumulator = observation.event_files.load_accumulator(run_dir)
+
+        self.assertIsNone(accumulator)
+        load.assert_not_called()
 
     def test_run_artifact_observation_composes_shared_event_index(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -697,6 +835,7 @@ class RunHistoryAndApiTests(unittest.TestCase):
         observe_events.assert_called_once_with(
             run_dir,
             candidates=(event_file,),
+            complete=True,
         )
         self.assertEqual(observation.event_files.files, (event_file,))
         self.assertEqual(
@@ -797,9 +936,7 @@ class RunHistoryAndApiTests(unittest.TestCase):
             scanner = LogRunScanner(logs_root=logs_root)
             query = LogRunQueryService(scanner=scanner)
             runs_by_path = {run.relativePath: run for run in scanner.list_runs()}
-            run = runs_by_path[
-                "linear/BASELINE/Mnist/aaa_20260601_010203/version_0"
-            ]
+            run = runs_by_path["linear/BASELINE/Mnist/aaa_20260601_010203/version_0"]
             malformed = runs_by_path[
                 "linear/BASELINE/Mnist/malformed_20260601_050607/version_0"
             ]
@@ -807,9 +944,9 @@ class RunHistoryAndApiTests(unittest.TestCase):
             checkpoints = query.checkpoints_for_runs([run.id])
             artifacts = query.artifacts_for_run(run.id)
             malformed_artifacts = query.artifacts_for_run(malformed.id)
-            with self.assertRaises(InspectorError):
+            with self.assertRaises(RunHistoryFailure):
                 query.checkpoints_for_runs(["not-a-run"])
-            with self.assertRaises(InspectorError):
+            with self.assertRaises(RunHistoryFailure):
                 query.artifacts_for_run("not-a-run")
 
         self.assertEqual(
@@ -978,7 +1115,7 @@ class RunHistoryAndApiTests(unittest.TestCase):
                 target_is_directory=True,
             )
 
-            with self.assertRaisesRegex(InspectorError, "symlink"):
+            with self.assertRaisesRegex(RunHistoryFailure, "symlink"):
                 _run_history(logs_root).delete_experiment("linked")
 
             self.assertTrue(symlink_experiment.is_symlink())
@@ -1063,7 +1200,10 @@ class RunHistoryAndApiTests(unittest.TestCase):
 
             for label, relative_path, error_pattern, preserved_paths in cases:
                 with self.subTest(label=label):
-                    with self.assertRaisesRegex(InspectorError, error_pattern):
+                    with self.assertRaisesRegex(
+                        RunHistoryFailure,
+                        error_pattern,
+                    ):
                         executor.delete_runs(
                             LogRunDeletePlan(
                                 candidates=[self._delete_candidate(relative_path)]
@@ -1219,6 +1359,150 @@ class RunHistoryAndApiTests(unittest.TestCase):
             self.assertFalse(first_run.exists())
             self.assertTrue(second_run.exists())
 
+    def test_preset_delete_is_backend_authoritative_beyond_filter_limits(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = Path(tmp) / "logs"
+            for index in range(55):
+                write_tensorboard_run(
+                    logs_root,
+                    [
+                        "test_model",
+                        "linear",
+                        "BASELINE",
+                        "Mnist",
+                        f"run_{index:03d}_20260711_010101",
+                        "version_0",
+                    ],
+                    checkpoint=False,
+                )
+            write_tensorboard_run(
+                logs_root,
+                [
+                    "test_model",
+                    "linear",
+                    "GATING",
+                    "Mnist",
+                    "keep_20260711_020202",
+                    "version_0",
+                ],
+                checkpoint=False,
+            )
+            service = _run_history(logs_root)
+
+            preview = service.create_preset_delete_plan(
+                experiment="test_model",
+                preset="BASELINE",
+            )
+            result = service.delete_preset(
+                experiment="test_model",
+                preset="BASELINE",
+            )
+
+            self.assertEqual(preview["candidateCount"], 55)
+            self.assertEqual(result["deletedRunCount"], 55)
+            remaining = service.list_runs(limit=100, offset=0)["runs"]
+            self.assertEqual([run["preset"] for run in remaining], ["GATING"])
+
+    def test_preset_delete_recomputes_stale_preview_and_blocks_active_writer(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = Path(tmp) / "logs"
+            base_parts = [
+                "test_model",
+                "linear",
+                "BASELINE",
+                "Mnist",
+            ]
+            write_tensorboard_run(
+                logs_root,
+                [*base_parts, "first_20260711_010101", "version_0"],
+            )
+            service = _run_history(logs_root)
+            self.assertEqual(
+                service.create_preset_delete_plan(
+                    experiment="test_model",
+                    preset="BASELINE",
+                )["candidateCount"],
+                1,
+            )
+            write_tensorboard_run(
+                logs_root,
+                [*base_parts, "second_20260711_020202", "version_0"],
+            )
+            self.assertEqual(
+                service.delete_preset(
+                    experiment="test_model",
+                    preset="BASELINE",
+                )["deletedRunCount"],
+                2,
+            )
+
+            write_tensorboard_run(
+                logs_root,
+                [*base_parts, "third_20260711_030303", "version_0"],
+            )
+            blocked = _run_history(
+                logs_root,
+                active_writers=[
+                    _ActiveWriter(
+                        id="job-1",
+                        status="running",
+                        log_folder="test_model",
+                    )
+                ],
+            )
+            blocked_plan = blocked.create_preset_delete_plan(
+                experiment="test_model",
+                preset="BASELINE",
+            )
+            self.assertFalse(blocked_plan["canDelete"])
+            self.assertEqual(blocked_plan["blockedByActiveJobs"][0]["id"], "job-1")
+            with self.assertRaisesRegex(RunHistoryFailure, "still writing"):
+                blocked.delete_preset(
+                    experiment="test_model",
+                    preset="BASELINE",
+                )
+
+    def test_log_run_listing_filters_facets_by_experiment_task(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = Path(tmp) / "logs"
+            for task, experiment in (
+                ("image-classification", "image_exp"),
+                ("language-modeling", "language_exp"),
+            ):
+                run_dir = write_tensorboard_run(
+                    logs_root,
+                    [
+                        experiment,
+                        "linears",
+                        "linear",
+                        "BASELINE",
+                        "Mnist",
+                        f"run_20260711_01010{len(experiment)}",
+                        "version_0",
+                    ],
+                )
+                (run_dir / "result.json").write_text(
+                    json.dumps({"experimentTask": task, "metrics": {}}),
+                    encoding="utf-8",
+                )
+
+            payload = _run_history(logs_root).list_runs(
+                limit=10,
+                offset=0,
+                model=["linears/linear"],
+                experiment_task="image-classification",
+                projection="summary",
+            )
+
+            self.assertEqual(payload["total"], 1)
+            self.assertEqual(payload["runs"][0]["experiment"], "image_exp")
+            self.assertEqual(
+                [facet["experiment"] for facet in payload["facets"]["experiments"]],
+                ["image_exp"],
+            )
+
     def test_run_history_deletes_runs_across_multiple_experiments(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             logs_root = Path(tmp) / "logs"
@@ -1264,7 +1548,10 @@ class RunHistoryAndApiTests(unittest.TestCase):
             self.assertEqual(preview["candidateCount"], 1)
 
             service.delete_experiment("test_model")
-            with self.assertRaisesRegex(InspectorError, "No log runs match"):
+            with self.assertRaisesRegex(
+                RunHistoryFailure,
+                "No log runs match",
+            ):
                 _delete_runs(service, filters)
 
             recreated = write_tensorboard_run(logs_root, relative_parts)
@@ -1368,7 +1655,10 @@ class RunHistoryAndApiTests(unittest.TestCase):
 
                     self.assertFalse(plan["canDelete"])
                     self.assertEqual(plan["candidates"], [])
-                    with self.assertRaisesRegex(InspectorError, "No log runs match"):
+                    with self.assertRaisesRegex(
+                        RunHistoryFailure,
+                        "No log runs match",
+                    ):
                         _delete_runs(service, filters)
                     self.assertTrue(run_dir.exists())
 
@@ -1399,7 +1689,10 @@ class RunHistoryAndApiTests(unittest.TestCase):
 
             self.assertFalse(plan["canDelete"])
             self.assertEqual(plan["candidates"], [])
-            with self.assertRaisesRegex(InspectorError, "No log runs match"):
+            with self.assertRaisesRegex(
+                RunHistoryFailure,
+                "No log runs match",
+            ):
                 _delete_runs(service, filters)
 
     def test_run_history_prunes_only_empty_parents_under_logs_root(self) -> None:
@@ -1486,7 +1779,7 @@ class RunHistoryAndApiTests(unittest.TestCase):
                 "test_model",
             )
             with self.assertRaisesRegex(
-                InspectorError,
+                RunHistoryFailure,
                 "training job is still writing",
             ):
                 _delete_runs(service, filters)
@@ -1569,10 +1862,10 @@ class RunHistoryAndApiTests(unittest.TestCase):
                 "missing",
             ):
                 with self.subTest(experiment=experiment):
-                    with self.assertRaises(InspectorError):
+                    with self.assertRaises(RunHistoryFailure):
                         service.delete_experiment(experiment)
 
-            with self.assertRaisesRegex(InspectorError, "symlink"):
+            with self.assertRaisesRegex(RunHistoryFailure, "symlink"):
                 service.delete_experiment("linked")
 
             self.assertTrue(logs_root.joinpath("linear").exists())
@@ -1621,8 +1914,11 @@ class RunHistoryAndApiTests(unittest.TestCase):
                 )
                 async with httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
-                    headers={"X-Workbench-Mutation": "true"},
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
                 ) as client:
                     before_response = await client.get("/logs/runs")
                     delete_response = await client.delete(
@@ -1669,8 +1965,11 @@ class RunHistoryAndApiTests(unittest.TestCase):
                 )
                 async with httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
-                    headers={"X-Workbench-Mutation": "true"},
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
                 ) as client:
                     return await client.delete("/logs/experiments/new_empty")
 
@@ -1785,8 +2084,11 @@ class RunHistoryAndApiTests(unittest.TestCase):
                         )
                         async with httpx.AsyncClient(
                             transport=transport,
-                            base_url="http://testserver",
-                            headers={"X-Workbench-Mutation": "true"},
+                            base_url="http://localhost",
+                            headers={
+                                "X-Workbench-Mutation": "true",
+                                "Idempotency-Key": uuid.uuid4().hex,
+                            },
                         ) as client:
                             return await client.delete("/logs/experiments/test_model")
 
@@ -1902,8 +2204,11 @@ class RunHistoryAndApiTests(unittest.TestCase):
                 )
                 async with httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
-                    headers={"X-Workbench-Mutation": "true"},
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
                 ) as client:
                     return await client.delete("/logs/experiments/test_model")
 
@@ -1998,8 +2303,11 @@ class RunHistoryAndApiTests(unittest.TestCase):
                 )
                 async with httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
-                    headers={"X-Workbench-Mutation": "true"},
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
                 ) as client:
                     return await client.post(
                         "/logs/runs/delete-plan",
@@ -2034,8 +2342,11 @@ class RunHistoryAndApiTests(unittest.TestCase):
                 )
                 async with httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
-                    headers={"X-Workbench-Mutation": "true"},
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
                 ) as client:
                     return await client.post(
                         "/logs/runs/delete",
@@ -2114,8 +2425,11 @@ class RunHistoryAndApiTests(unittest.TestCase):
                 )
                 async with httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
-                    headers={"X-Workbench-Mutation": "true"},
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
                 ) as client:
                     return await client.delete("/logs/experiments/test_model")
 
@@ -2175,8 +2489,11 @@ class RunHistoryAndApiTests(unittest.TestCase):
                 )
                 async with httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
-                    headers={"X-Workbench-Mutation": "true"},
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
                 ) as client:
                     runs_response = await client.get("/logs/runs")
                     run = runs_response.json()["runs"][0]
@@ -2247,8 +2564,11 @@ class RunHistoryAndApiTests(unittest.TestCase):
                 )
                 async with httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
-                    headers={"X-Workbench-Mutation": "true"},
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
                 ) as client:
                     return await client.get("/logs/experiments")
 
@@ -2297,8 +2617,11 @@ class RunHistoryAndApiTests(unittest.TestCase):
                 )
                 async with httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
-                    headers={"X-Workbench-Mutation": "true"},
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
                 ) as client:
                     runs_response = await client.get(
                         "/logs/runs",
@@ -2405,8 +2728,11 @@ class RunHistoryAndApiTests(unittest.TestCase):
                 )
                 async with httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
-                    headers={"X-Workbench-Mutation": "true"},
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
                 ) as client:
                     runs_response = await client.get("/logs/runs")
                     run_id = next(
@@ -2561,9 +2887,7 @@ class RunHistoryAndApiTests(unittest.TestCase):
             late_writer.flush()
             late_writer.close()
 
-            query = LogRunQueryService(
-                scanner=LogRunScanner(logs_root=Path(tmp))
-            )
+            query = LogRunQueryService(scanner=LogRunScanner(logs_root=Path(tmp)))
             summary = query.read_text_summary(
                 run_dir,
                 "validation/examples/predictions/text_summary",
@@ -2572,6 +2896,34 @@ class RunHistoryAndApiTests(unittest.TestCase):
         self.assertIsNotNone(summary)
         self.assertEqual(summary["step"], 2)
         self.assertEqual(summary["text"], "late")
+
+    def test_log_run_query_service_streams_exact_bounded_scalar_tails(self) -> None:
+        from torch.utils.tensorboard import SummaryWriter
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for point_count in (501, 1_000, 2_000):
+                with self.subTest(point_count=point_count):
+                    run_dir = root / f"run-{point_count}"
+                    writer = SummaryWriter(log_dir=str(run_dir))
+                    for step in range(point_count):
+                        writer.add_scalar("train/loss", float(step), step)
+                    writer.close()
+                    query = LogRunQueryService(scanner=LogRunScanner(logs_root=root))
+
+                    series = query.read_scalar_series(
+                        run_dir,
+                        "train/loss",
+                        max_points=500,
+                    )
+
+                    self.assertEqual(series["sourcePointCount"], point_count)
+                    self.assertTrue(series["truncated"])
+                    self.assertEqual(len(series["points"]), 500)
+                    self.assertEqual(
+                        [point["step"] for point in series["points"]],
+                        list(range(point_count - 500, point_count)),
+                    )
 
     def test_log_run_query_service_caches_tags_and_scalar_tails_until_event_changes(
         self,
@@ -2593,9 +2945,27 @@ class RunHistoryAndApiTests(unittest.TestCase):
                 load_calls.append(event_dir)
                 return FakeTensorBoardAccumulator()
 
-            with patch(
-                "workbench.backend.tensorboard.events.load_event_accumulator",
-                load_accumulator,
+            scalar_tail = {
+                "train/loss": {
+                    "points": [
+                        {"step": 2, "wallTime": 2.0, "value": 0.25},
+                        {"step": 3, "wallTime": 3.0, "value": 0.125},
+                    ],
+                    "sourcePointCount": 3,
+                    "truncated": True,
+                }
+            }
+
+            with (
+                patch(
+                    "workbench.backend.tensorboard.events.load_event_accumulator",
+                    load_accumulator,
+                ),
+                patch.object(
+                    tensorboard_events,
+                    "exact_scalar_tails",
+                    return_value=scalar_tail,
+                ) as stream_tails,
             ):
                 first_tags = service.read_tags(run_dir)
                 second_tags = service.read_tags(run_dir)
@@ -2621,15 +2991,12 @@ class RunHistoryAndApiTests(unittest.TestCase):
             [point["step"] for point in first_scalars["points"]],
             [2, 3],
         )
-        self.assertEqual(len(load_calls), 3)
+        self.assertEqual(len(load_calls), 2)
+        stream_tails.assert_called_once()
 
-    def test_log_run_query_service_reuses_scalar_accumulator_across_tag_batches(
+    def test_log_run_query_service_streams_each_scalar_tag_batch_once(
         self,
     ) -> None:
-        class MultiTagAccumulator:
-            def Scalars(self, tag: str) -> list[FakeScalarEvent]:
-                return [FakeScalarEvent(step=1, value=0.5 if tag == "loss" else 0.8)]
-
         with tempfile.TemporaryDirectory() as tmp:
             run_dir = Path(tmp) / "run"
             run_dir.mkdir()
@@ -2641,24 +3008,34 @@ class RunHistoryAndApiTests(unittest.TestCase):
                 scanner=LogRunScanner(logs_root=Path(tmp)),
             )
 
-            with patch(
-                "workbench.backend.tensorboard.events.load_event_accumulator",
-                return_value=MultiTagAccumulator(),
-            ) as load:
-                loss = service.read_scalar_series_batch(
+            streamed = {
+                tag: {
+                    "points": [
+                        {
+                            "step": 1,
+                            "wallTime": 1.0,
+                            "value": 0.5 if tag == "loss" else 0.8,
+                        }
+                    ],
+                    "sourcePointCount": 1,
+                    "truncated": False,
+                }
+                for tag in ("loss", "accuracy")
+            }
+            with patch.object(
+                tensorboard_events,
+                "exact_scalar_tails",
+                return_value=streamed,
+            ) as stream_tails:
+                result = service.read_scalar_series_batch(
                     run_dir,
-                    ["loss"],
-                    max_points=2,
-                )
-                accuracy = service.read_scalar_series_batch(
-                    run_dir,
-                    ["accuracy"],
+                    ["loss", "accuracy"],
                     max_points=2,
                 )
 
-        self.assertEqual(load.call_count, 1)
-        self.assertEqual(loss["loss"]["points"][0]["value"], 0.5)
-        self.assertEqual(accuracy["accuracy"]["points"][0]["value"], 0.8)
+        stream_tails.assert_called_once()
+        self.assertEqual(result["loss"]["points"][0]["value"], 0.5)
+        self.assertEqual(result["accuracy"]["points"][0]["value"], 0.8)
 
     def test_log_run_query_service_skips_tag_scan_for_oversized_event_files(
         self,
@@ -2690,7 +3067,7 @@ class RunHistoryAndApiTests(unittest.TestCase):
         self.assertIn("event files skipped", tags["truncationReason"])
         load.assert_not_called()
 
-    def test_log_run_query_service_skips_uncached_tags_past_batch_budget(
+    def test_log_run_query_service_rejects_uncached_tags_past_batch_budget(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -2730,29 +3107,18 @@ class RunHistoryAndApiTests(unittest.TestCase):
                 "workbench.backend.tensorboard.events.load_event_accumulator",
                 load_accumulator,
             ):
-                payloads = service.tags_for_runs(
-                    [
-                        run_ids["first_20260601_010203"],
-                        run_ids["second_20260601_020304"],
-                        run_ids["third_20260601_030405"],
-                    ]
-                )
+                with self.assertRaises(RunHistoryFailure) as raised:
+                    service.tags_for_runs(
+                        [
+                            run_ids["first_20260601_010203"],
+                            run_ids["second_20260601_020304"],
+                            run_ids["third_20260601_030405"],
+                        ]
+                    )
 
         self.assertEqual(len(loaded_event_dirs), 2)
-        self.assertEqual(payloads[0]["scalarTags"], ["train/loss"])
-        self.assertEqual(payloads[1]["scalarTags"], ["train/loss"])
-        skipped = payloads[2]
-        self.assertEqual(skipped["scalarTags"], [])
-        self.assertEqual(skipped["histogramTags"], [])
-        self.assertEqual(skipped["imageTags"], [])
-        self.assertEqual(skipped["textTags"], [])
-        self.assertFalse(skipped["hasLayerMonitorData"])
-        self.assertEqual(skipped["eventBytes"], 4)
-        self.assertEqual(skipped["skippedEventFiles"], 1)
-        self.assertEqual(skipped["sourceItemCount"], 1)
-        self.assertEqual(skipped["returnedItemCount"], 0)
-        self.assertTrue(skipped["truncated"])
-        self.assertIn("batch tag-read cap", skipped["truncationReason"])
+        self.assertEqual(raised.exception.kind, FailureKind.TOO_LARGE)
+        self.assertIn("8 byte read budget", raised.exception.detail)
 
     def test_log_run_query_service_does_not_cache_batch_budget_skips(
         self,
@@ -2786,20 +3152,19 @@ class RunHistoryAndApiTests(unittest.TestCase):
                 "workbench.backend.tensorboard.events.load_event_accumulator",
                 return_value=FakeTensorBoardAccumulator(),
             ) as load:
-                first_payloads = service.tags_for_runs(
-                    [
-                        run_ids["first_20260601_010203"],
-                        run_ids["second_20260601_020304"],
-                        run_ids["third_20260601_030405"],
-                    ]
-                )
+                with self.assertRaises(RunHistoryFailure):
+                    service.tags_for_runs(
+                        [
+                            run_ids["first_20260601_010203"],
+                            run_ids["second_20260601_020304"],
+                            run_ids["third_20260601_030405"],
+                        ]
+                    )
                 second_payloads = service.tags_for_runs(
                     [run_ids["third_20260601_030405"]]
                 )
 
         self.assertEqual(load.call_count, 3)
-        self.assertTrue(first_payloads[2]["truncated"])
-        self.assertEqual(first_payloads[2]["scalarTags"], [])
         self.assertFalse(second_payloads[0]["truncated"])
         self.assertEqual(second_payloads[0]["scalarTags"], ["train/loss"])
 
@@ -2900,8 +3265,11 @@ class RunHistoryAndApiTests(unittest.TestCase):
                 )
                 async with httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
-                    headers={"X-Workbench-Mutation": "true"},
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
                 ) as client:
                     scoped_response = await client.get(
                         "/logs/runs",
@@ -2937,6 +3305,39 @@ class RunHistoryAndApiTests(unittest.TestCase):
         no_event_payload = no_event_response.json()
         self.assertEqual(no_event_payload["total"], 1)
         self.assertEqual(no_event_payload["runs"][0]["eventFileCount"], 0)
+
+    def test_qualified_model_filter_does_not_match_a_shared_leaf_name(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = Path(tmp) / "logs"
+            for model_type in ("linears", "experts"):
+                write_tensorboard_run(
+                    logs_root,
+                    [
+                        "experiment",
+                        model_type,
+                        "linear",
+                        "BASELINE",
+                        "Mnist",
+                        f"{model_type}_20260601_010203",
+                        "version_0",
+                    ],
+                )
+            service = _run_history(logs_root)
+
+            qualified = service.list_runs(
+                limit=10,
+                offset=0,
+                model=["linears/linear"],
+            )
+            legacy = service.list_runs(
+                limit=10,
+                offset=0,
+                model=["linear"],
+            )
+
+        self.assertEqual(qualified["total"], 1)
+        self.assertEqual(qualified["runs"][0]["modelType"], "linears")
+        self.assertEqual(legacy["total"], 2)
 
     def test_log_api_reports_layer_monitor_eligibility_from_tag_cache(
         self,
@@ -2978,8 +3379,11 @@ class RunHistoryAndApiTests(unittest.TestCase):
                 )
                 async with httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
-                    headers={"X-Workbench-Mutation": "true"},
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
                 ) as client:
                     with patch(
                         "workbench.backend.tensorboard.events.load_event_accumulator"
@@ -3008,33 +3412,21 @@ class RunHistoryAndApiTests(unittest.TestCase):
         self.assertEqual(tags_response.status_code, 200)
         self.assertEqual(after_response.status_code, 200)
 
-        before_by_name = {
-            run["runName"]: run for run in before_response.json()["runs"]
-        }
+        before_by_name = {run["runName"]: run for run in before_response.json()["runs"]}
         self.assertIsNone(
             before_by_name["layer_20260601_010203"]["hasLayerMonitorData"]
         )
-        self.assertIsNone(
-            before_by_name["perf_20260601_020304"]["hasLayerMonitorData"]
-        )
+        self.assertIsNone(before_by_name["perf_20260601_020304"]["hasLayerMonitorData"])
 
-        tags_by_run_id = {
-            run["runId"]: run for run in tags_response.json()["runs"]
-        }
+        tags_by_run_id = {run["runId"]: run for run in tags_response.json()["runs"]}
         layer_run_id = before_by_name["layer_20260601_010203"]["id"]
         perf_run_id = before_by_name["perf_20260601_020304"]["id"]
         self.assertTrue(tags_by_run_id[layer_run_id]["hasLayerMonitorData"])
         self.assertFalse(tags_by_run_id[perf_run_id]["hasLayerMonitorData"])
 
-        after_by_name = {
-            run["runName"]: run for run in after_response.json()["runs"]
-        }
-        self.assertTrue(
-            after_by_name["layer_20260601_010203"]["hasLayerMonitorData"]
-        )
-        self.assertFalse(
-            after_by_name["perf_20260601_020304"]["hasLayerMonitorData"]
-        )
+        after_by_name = {run["runName"]: run for run in after_response.json()["runs"]}
+        self.assertTrue(after_by_name["layer_20260601_010203"]["hasLayerMonitorData"])
+        self.assertFalse(after_by_name["perf_20260601_020304"]["hasLayerMonitorData"])
 
     def test_log_api_scalar_request_limits_and_metadata(self) -> None:
         import httpx
@@ -3055,8 +3447,11 @@ class RunHistoryAndApiTests(unittest.TestCase):
                 )
                 async with httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
-                    headers={"X-Workbench-Mutation": "true"},
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
                 ) as client:
                     runs_response = await client.get("/logs/runs")
                     run_id = runs_response.json()["runs"][0]["id"]

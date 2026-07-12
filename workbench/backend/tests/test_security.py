@@ -4,6 +4,7 @@ import asyncio
 import os
 import tempfile
 import unittest
+import uuid
 from pathlib import Path
 
 from fastapi import HTTPException
@@ -34,6 +35,7 @@ def concrete_route_path(route) -> str:
     for parameter_name in route.param_convertors:
         path = path.replace(f"{{{parameter_name}}}", "security-test")
     return path
+
 
 PROTECTED_ROUTE_CASES = (
     ("models", "GET", "/models", None),
@@ -144,6 +146,57 @@ class SecurityDependencyTests(unittest.TestCase):
 
 
 class RouteAuthIntegrationTests(unittest.TestCase):
+    def test_matching_origin_cannot_bypass_unconfigured_host_rejection(self) -> None:
+        from workbench.backend.api import create_app
+
+        async def call_api():
+            import httpx
+
+            app = create_app(WorkbenchApiSettings(allow_unsafe_local_mutations=True))
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(
+                transport=transport,
+                base_url="https://hosted.example",
+            ) as client:
+                return await client.post(
+                    "/config-snapshots",
+                    headers={
+                        "Origin": "https://hosted.example",
+                        MUTATION_HEADER_NAME: MUTATION_HEADER_VALUE,
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
+                    json={
+                        "modelType": "linears",
+                        "model": "linear",
+                        "preset": "baseline",
+                        "name": "must-not-dispatch",
+                        "overrides": {},
+                    },
+                )
+
+        response = asyncio.run(call_api())
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.text, "Invalid host header")
+
+    def test_explicitly_configured_host_can_reach_routes(self) -> None:
+        from workbench.backend.api import create_app
+
+        async def call_api():
+            import httpx
+
+            app = create_app(WorkbenchApiSettings(trusted_hosts=["testserver"]))
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(
+                transport=transport,
+                base_url="http://testserver",
+            ) as client:
+                return await client.get("/health")
+
+        response = asyncio.run(call_api())
+
+        self.assertEqual(response.status_code, 200)
+
     async def request(
         self,
         app,
@@ -159,11 +212,13 @@ class RouteAuthIntegrationTests(unittest.TestCase):
         request_headers = dict(headers or {})
         if authorization is not None:
             request_headers["Authorization"] = authorization
+        if method.upper() not in {"GET", "HEAD", "OPTIONS"}:
+            request_headers.setdefault("Idempotency-Key", uuid.uuid4().hex)
 
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
             transport=transport,
-            base_url="http://testserver",
+            base_url="http://localhost",
         ) as client:
             kwargs = {"headers": request_headers}
             if payload is not None:
@@ -178,6 +233,9 @@ class RouteAuthIntegrationTests(unittest.TestCase):
         allow_unsafe_local_mutations: bool = True,
         allow_log_imports: bool | None = None,
     ):
+        from emperor.inspection import GraphNode, InspectionResult
+        from emperor.model_packages import ModelIdentity
+
         from workbench.backend.api import create_app
         from workbench.backend.dependencies import (
             get_inspection_service,
@@ -205,28 +263,27 @@ class RouteAuthIntegrationTests(unittest.TestCase):
                 dataset: str | None,
                 experiment_task: str | None = None,
                 log_run_id: str | None,
-            ) -> dict[str, object]:
-                return {
-                    "modelType": model_type,
-                    "model": model,
-                    "preset": preset,
-                    "parameterCount": 0,
-                    "parameterSizeBytes": 0,
-                    "nodes": [
-                        {
-                            "id": "root",
-                            "label": "Root",
-                            "typeName": "FakeModel",
-                            "path": "root",
-                            "graphRole": "architecture",
-                            "parameterCount": 0,
-                            "parameterSizeBytes": 0,
-                            "details": {},
-                            "config": None,
-                        }
-                    ],
-                    "edges": [],
-                }
+            ) -> InspectionResult:
+                return InspectionResult(
+                    identity=ModelIdentity(model_type=model_type, model=model),
+                    preset=preset,
+                    parameter_count=0,
+                    parameter_size_bytes=0,
+                    nodes=(
+                        GraphNode(
+                            id="root",
+                            type_name="FakeModel",
+                            description=None,
+                            path="root",
+                            graph_role="architecture",
+                            parameter_count=0,
+                            parameter_size_bytes=0,
+                            details={},
+                            configuration=None,
+                        ),
+                    ),
+                    edges=(),
+                )
 
         class FakeTrainingJobService:
             def cancellation_capability(self) -> str:
@@ -501,7 +558,10 @@ class RouteAuthIntegrationTests(unittest.TestCase):
                             method,
                             path,
                             payload=payload,
-                            headers={MUTATION_HEADER_NAME: MUTATION_HEADER_VALUE},
+                            headers={
+                                MUTATION_HEADER_NAME: MUTATION_HEADER_VALUE,
+                                "Idempotency-Key": uuid.uuid4().hex,
+                            },
                         )
                     )
 
@@ -534,7 +594,10 @@ class RouteAuthIntegrationTests(unittest.TestCase):
                         "search": None,
                         "runPlan": None,
                     },
-                    headers={MUTATION_HEADER_NAME: MUTATION_HEADER_VALUE},
+                    headers={
+                        MUTATION_HEADER_NAME: MUTATION_HEADER_VALUE,
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
                 )
             )
 
@@ -557,7 +620,10 @@ class RouteAuthIntegrationTests(unittest.TestCase):
                     app,
                     "POST",
                     "/logs/import",
-                    headers={MUTATION_HEADER_NAME: MUTATION_HEADER_VALUE},
+                    headers={
+                        MUTATION_HEADER_NAME: MUTATION_HEADER_VALUE,
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
                 )
             )
 
@@ -621,9 +687,7 @@ class RouteAuthIntegrationTests(unittest.TestCase):
             for operation in catalog.mutations:
                 path = concrete_route_path(operation.route)
                 with self.subTest(method=operation.method, path=path):
-                    response = asyncio.run(
-                        self.request(app, operation.method, path)
-                    )
+                    response = asyncio.run(self.request(app, operation.method, path))
 
                     self.assertEqual(response.status_code, 403, response.text)
                     self.assertEqual(

@@ -8,6 +8,7 @@ import sys
 import tempfile
 import time
 import unittest
+import uuid
 from pathlib import Path
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
@@ -94,7 +95,7 @@ async def cors_preflight(
     transport = httpx.ASGITransport(app=api)
     async with httpx.AsyncClient(
         transport=transport,
-        base_url="http://testserver",
+        base_url="http://localhost",
     ) as client:
         return await client.options(
             "/health",
@@ -139,7 +140,7 @@ class AppFactoryTests(unittest.TestCase):
             transport = httpx.ASGITransport(app=api)
             async with httpx.AsyncClient(
                 transport=transport,
-                base_url="http://testserver",
+                base_url="http://localhost",
                 headers={"accept-encoding": "gzip"},
             ) as client:
                 return await client.get("/small"), await client.get("/large")
@@ -192,11 +193,11 @@ class AppFactoryTests(unittest.TestCase):
             async with (
                 httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
+                    base_url="http://localhost",
                 ) as scalar_client,
                 httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
+                    base_url="http://localhost",
                 ) as health_client,
             ):
                 scalar_task = asyncio.create_task(
@@ -273,18 +274,21 @@ class AppFactoryTests(unittest.TestCase):
                 async with (
                     httpx.AsyncClient(
                         transport=transport,
-                        base_url="http://testserver",
+                        base_url="http://localhost",
                     ) as delete_client,
                     httpx.AsyncClient(
                         transport=transport,
-                        base_url="http://testserver",
+                        base_url="http://localhost",
                     ) as health_client,
                 ):
                     started_at = time.perf_counter()
                     delete_task = asyncio.create_task(
                         delete_client.delete(
                             "/logs/experiments/slow",
-                            headers={"X-Workbench-Mutation": "true"},
+                            headers={
+                                "X-Workbench-Mutation": "true",
+                                "Idempotency-Key": uuid.uuid4().hex,
+                            },
                         )
                     )
                     await asyncio.sleep(0.02)
@@ -516,7 +520,7 @@ class AppFactoryTests(unittest.TestCase):
                 transport = httpx.ASGITransport(app=test_app)
                 async with httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
+                    base_url="http://localhost",
                 ) as client:
                     return await client.get("/raises-inspector-error")
 

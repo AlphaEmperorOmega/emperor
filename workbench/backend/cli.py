@@ -20,8 +20,8 @@ from models.parser import (
     resolve_experiment_mode,
 )
 
+from workbench.backend.failures import DomainFailure
 from workbench.backend.inspection_adapter import WorkbenchInspectionAdapter
-from workbench.backend.inspector.errors import InspectorError
 
 
 def _parser_metadata(package) -> tuple[list[str], str]:
@@ -209,5 +209,5 @@ def main() -> None:
 if __name__ == "__main__":
     try:
         main()
-    except (InspectionError, InspectorError) as exc:
+    except (InspectionError, DomainFailure) as exc:
         raise SystemExit(str(exc)) from exc

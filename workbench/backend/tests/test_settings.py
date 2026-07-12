@@ -10,6 +10,7 @@ from pydantic import ValidationError
 
 from workbench.backend.core.config import (
     DEFAULT_SNAPSHOTS_ROOT,
+    DEFAULT_TRUSTED_HOSTS,
     LOCAL_FRONTEND_ORIGINS,
     WorkbenchApiSettings,
     get_workbench_api_settings,
@@ -26,6 +27,7 @@ SETTINGS_ENV_NAMES = (
     "WORKBENCH_API_AUTH_MODE",
     "WORKBENCH_API_TOKEN",
     "WORKBENCH_API_CORS_ORIGINS",
+    "WORKBENCH_API_TRUSTED_HOSTS",
     "WORKBENCH_API_SNAPSHOTS_ROOT",
     "WORKBENCH_API_ALLOW_UNSAFE_LOCAL_MUTATIONS",
     "WORKBENCH_API_ALLOW_LOG_IMPORTS",
@@ -54,6 +56,21 @@ def isolated_settings_env(**values: str) -> Iterator[None]:
 
 
 class WorkbenchApiSettingsTests(unittest.TestCase):
+    def test_defaults_allow_only_local_api_hosts(self) -> None:
+        with isolated_settings_env():
+            settings = WorkbenchApiSettings()
+
+        self.assertEqual(settings.trusted_hosts, DEFAULT_TRUSTED_HOSTS)
+        self.assertNotIn("testserver", settings.trusted_hosts)
+
+    def test_env_parses_trusted_hosts_json_array(self) -> None:
+        with isolated_settings_env(
+            WORKBENCH_API_TRUSTED_HOSTS='["api.example.com","testserver"]',
+        ):
+            settings = WorkbenchApiSettings()
+
+        self.assertEqual(settings.trusted_hosts, ["api.example.com", "testserver"])
+
     def test_legacy_settings_module_reexports_canonical_settings(self) -> None:
         from workbench.backend import settings as legacy_settings
 

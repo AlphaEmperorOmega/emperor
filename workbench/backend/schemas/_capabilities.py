@@ -9,10 +9,6 @@ from pydantic import Field
 from workbench.backend.schemas._base import ApiResponseModel
 
 
-class DataSourceCapabilityPlaceholder(ApiResponseModel):
-    """Reserved shape for future server-owned data source descriptors."""
-
-
 class CapabilitiesResponse(ApiResponseModel):
     authMode: Literal["none", "bearer"]
     trainingEnabled: bool
@@ -28,5 +24,7 @@ class CapabilitiesResponse(ApiResponseModel):
     historicalMonitorDataEnabled: bool = True
     uploadsEnabled: bool = False
     maxUploadSize: int | None = Field(default=None, ge=0)
-    dataSourcesEnabled: bool = False
-    dataSources: list[DataSourceCapabilityPlaceholder] = Field(default_factory=list)
+    maxActiveTrainingJobs: int = Field(default=2, ge=1)
+    trainingJobMemoryLimitBytes: int = Field(default=16 * 1024**3, ge=1)
+    trainingJobCpuLimit: int = Field(default=8, ge=1)
+    trainingJobProcessLimit: int = Field(default=512, ge=1)

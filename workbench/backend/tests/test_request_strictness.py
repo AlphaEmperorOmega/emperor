@@ -4,6 +4,7 @@ import asyncio
 import os
 import tempfile
 import unittest
+import uuid
 from pathlib import Path
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
@@ -131,7 +132,10 @@ class RequestStrictnessTests(unittest.TestCase):
                 runner=FakeRunner(),
             )
             test_app = create_app_with_training_service(
-                WorkbenchApiSettings(logs_root=str(logs_root)),
+                WorkbenchApiSettings(
+                    logs_root=str(logs_root),
+                    allow_unsafe_local_mutations=True,
+                ),
                 manager,
             )
 
@@ -152,14 +156,22 @@ class RequestStrictnessTests(unittest.TestCase):
     def test_log_fanout_request_limits_reject_overlarge_lists(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             logs_root = Path(tmp) / "logs"
-            test_app = create_app(WorkbenchApiSettings(logs_root=str(logs_root)))
+            test_app = create_app(
+                WorkbenchApiSettings(
+                    logs_root=str(logs_root),
+                    allow_unsafe_local_mutations=True,
+                )
+            )
 
             async def call_api() -> tuple[httpx.Response, httpx.Response]:
                 transport = httpx.ASGITransport(app=test_app)
                 async with httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
-                    headers={"X-Workbench-Mutation": "true"},
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
                 ) as client:
                     run_ids = [f"run-{index}" for index in range(51)]
                     parameter_status_response = await client.post(
@@ -193,8 +205,11 @@ class RequestStrictnessTests(unittest.TestCase):
         transport = httpx.ASGITransport(app=test_app)
         async with httpx.AsyncClient(
             transport=transport,
-            base_url="http://testserver",
-            headers={"X-Workbench-Mutation": "true"},
+            base_url="http://localhost",
+            headers={
+                "X-Workbench-Mutation": "true",
+                "Idempotency-Key": uuid.uuid4().hex,
+            },
         ) as client:
             return await client.post(
                 path,

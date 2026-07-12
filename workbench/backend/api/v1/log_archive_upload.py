@@ -93,11 +93,7 @@ def _multipart_boundary(content_type: str) -> bytes:
         encoded = boundary.encode("ascii")
     except UnicodeEncodeError:
         raise ApiError("Invalid multipart form data boundary.") from None
-    if (
-        len(encoded) > MULTIPART_BOUNDARY_LIMIT
-        or b"\r" in encoded
-        or b"\n" in encoded
-    ):
+    if len(encoded) > MULTIPART_BOUNDARY_LIMIT or b"\r" in encoded or b"\n" in encoded:
         raise ApiError("Invalid multipart form data boundary.")
     return encoded
 

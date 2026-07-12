@@ -13,6 +13,7 @@ from workbench.backend.training_jobs.progress import (
     TRAINING_PROGRESS_CACHE_JOB_LIMIT,
     TrainingProgressCursor,
     TrainingProgressSnapshot,
+    TrainingProgressStore,
 )
 from workbench.backend.training_jobs.run_plan_adapter import (
     apply_training_run_progress_event,
@@ -118,8 +119,7 @@ class _TrainingEventReducer:
             event_counts=dict(self.event_counts),
             events_truncated=self.event_count > len(self.events_tail),
             cluster_growth=[
-                entry.to_payload()
-                for entry in self.cluster_growth.values()
+                entry.to_payload() for entry in self.cluster_growth.values()
             ],
         )
 
@@ -242,6 +242,14 @@ class TrainingLiveProjectionCache:
         with self._lock:
             reducer = self._cache.get(job.id)
             if (
+                reducer is not None
+                and reducer.cursor == snapshot.cursor
+                and reducer.event_count == snapshot.total_count
+                and not snapshot.new_events
+            ):
+                self._cache.move_to_end(job.id)
+                return reducer.snapshot(job_status=job.status)
+            if (
                 reducer is None
                 or snapshot.reset
                 or snapshot.total_count < reducer.event_count
@@ -271,6 +279,43 @@ class TrainingLiveProjectionCache:
                 job_status=job.status,
             )
 
+    def consume_progress(
+        self,
+        job: TrainingJobRecord,
+        progress_store: TrainingProgressStore,
+    ) -> TrainingProgressSnapshot:
+        """Stream the unread JSONL range straight into this job's reducer."""
+
+        with self._lock:
+            reducer = self._cache.get(job.id)
+
+            def reset_reducer() -> None:
+                nonlocal reducer
+                reducer = _TrainingEventReducer.from_job(job)
+                self._cache[job.id] = reducer
+
+            def apply_event(event: dict[str, Any]) -> None:
+                nonlocal reducer
+                if reducer is None:
+                    reset_reducer()
+                assert reducer is not None
+                reducer.apply(event)
+
+            snapshot = progress_store.stream_snapshot(
+                job,
+                cursor=reducer.cursor if reducer is not None else None,
+                on_reset=reset_reducer,
+                on_event=apply_event,
+            )
+            if reducer is None:
+                reset_reducer()
+            assert reducer is not None
+            reducer.cursor = snapshot.cursor
+            self._cache.move_to_end(job.id)
+            while len(self._cache) > self._max_cached_jobs:
+                self._cache.popitem(last=False)
+            return snapshot
+
     def replay(
         self,
         job: TrainingJobRecord,
@@ -279,9 +324,7 @@ class TrainingLiveProjectionCache:
         """Project a released terminal job without retaining cache state."""
         reducer = _TrainingEventReducer.from_job(job)
         for event in (
-            snapshot.new_events
-            if snapshot.cursor is not None
-            else snapshot.events
+            snapshot.new_events if snapshot.cursor is not None else snapshot.events
         ):
             reducer.apply(event)
         reducer.cursor = snapshot.cursor

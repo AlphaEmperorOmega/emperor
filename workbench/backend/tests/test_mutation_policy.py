@@ -4,6 +4,7 @@ import asyncio
 import json
 import tempfile
 import unittest
+import uuid
 from pathlib import Path
 
 import httpx
@@ -69,7 +70,7 @@ class HttpMutationPolicyTests(unittest.TestCase):
             transport = httpx.ASGITransport(app=app)
             async with httpx.AsyncClient(
                 transport=transport,
-                base_url="http://testserver",
+                base_url="http://localhost",
             ) as client:
                 return await client.post(
                     "/workbench/config-snapshots",
@@ -141,11 +142,14 @@ class HttpMutationPolicyTests(unittest.TestCase):
             transport = httpx.ASGITransport(app=app)
             async with httpx.AsyncClient(
                 transport=transport,
-                base_url="http://testserver",
+                base_url="http://localhost",
             ) as client:
                 return await client.post(
                     "/operation",
-                    headers={MUTATION_HEADER_NAME: MUTATION_HEADER_VALUE},
+                    headers={
+                        MUTATION_HEADER_NAME: MUTATION_HEADER_VALUE,
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
                 )
 
         response = asyncio.run(request())
@@ -306,7 +310,7 @@ class HttpMutationPolicyTests(unittest.TestCase):
             transport = httpx.ASGITransport(app=app)
             async with httpx.AsyncClient(
                 transport=transport,
-                base_url="http://testserver",
+                base_url="http://localhost",
             ) as client:
                 return await client.post(
                     "/query",
@@ -366,7 +370,7 @@ class HttpMutationPolicyTests(unittest.TestCase):
             transport = httpx.ASGITransport(app=app)
             async with httpx.AsyncClient(
                 transport=transport,
-                base_url="http://testserver",
+                base_url="http://localhost",
             ) as client:
                 response = await client.get("/capabilities")
                 self.assertEqual(response.status_code, 200, response.text)
@@ -421,15 +425,13 @@ class HttpMutationPolicyTests(unittest.TestCase):
         from workbench.backend.api import WorkbenchApiSettings, create_app
         from workbench.backend.core.security import MUTATION_PROOF_REQUIRED_DETAIL
 
-        app = create_app(
-            WorkbenchApiSettings(allow_unsafe_local_mutations=True)
-        )
+        app = create_app(WorkbenchApiSettings(allow_unsafe_local_mutations=True))
 
         async def request() -> httpx.Response:
             transport = httpx.ASGITransport(app=app)
             async with httpx.AsyncClient(
                 transport=transport,
-                base_url="http://testserver",
+                base_url="http://localhost",
             ) as client:
                 return await client.delete("/config-snapshots/%73napshot")
 
@@ -447,15 +449,13 @@ class HttpMutationPolicyTests(unittest.TestCase):
         from workbench.backend.api import WorkbenchApiSettings, create_app
         from workbench.backend.core.security import MUTATION_PROOF_REQUIRED_DETAIL
 
-        app = create_app(
-            WorkbenchApiSettings(allow_unsafe_local_mutations=True)
-        )
+        app = create_app(WorkbenchApiSettings(allow_unsafe_local_mutations=True))
 
         async def request() -> tuple[httpx.Response, httpx.Response]:
             transport = httpx.ASGITransport(app=app)
             async with httpx.AsyncClient(
                 transport=transport,
-                base_url="http://testserver",
+                base_url="http://localhost",
                 follow_redirects=False,
             ) as client:
                 redirected = await client.post(
@@ -483,22 +483,22 @@ class HttpMutationPolicyTests(unittest.TestCase):
             {"detail": MUTATION_PROOF_REQUIRED_DETAIL},
         )
 
-    def test_json_validation_precedes_operational_policy_rejection(self) -> None:
+    def test_operational_policy_rejection_precedes_request_body_consumption(
+        self,
+    ) -> None:
         from workbench.backend.api import WorkbenchApiSettings, create_app
         from workbench.backend.core.security import (
             MUTATION_HEADER_NAME,
             MUTATION_HEADER_VALUE,
         )
 
-        app = create_app(
-            WorkbenchApiSettings(allow_unsafe_local_mutations=False)
-        )
+        app = create_app(WorkbenchApiSettings(allow_unsafe_local_mutations=False))
 
         async def request() -> httpx.Response:
             transport = httpx.ASGITransport(app=app)
             async with httpx.AsyncClient(
                 transport=transport,
-                base_url="http://testserver",
+                base_url="http://localhost",
             ) as client:
                 return await client.post(
                     "/config-snapshots",
@@ -506,13 +506,17 @@ class HttpMutationPolicyTests(unittest.TestCase):
                     headers={
                         "content-type": "application/json",
                         MUTATION_HEADER_NAME: MUTATION_HEADER_VALUE,
+                        "Idempotency-Key": uuid.uuid4().hex,
                     },
                 )
 
         response = asyncio.run(request())
 
-        self.assertEqual(response.status_code, 422, response.text)
-        self.assertEqual(response.json()["detail"][0]["type"], "json_invalid")
+        self.assertEqual(response.status_code, 403, response.text)
+        self.assertEqual(
+            response.json(),
+            {"detail": "Local mutation endpoints are disabled"},
+        )
 
     def test_middleware_respects_first_matching_operation_order(self) -> None:
         from workbench.backend.api.mutation_policy import (
@@ -551,7 +555,7 @@ class HttpMutationPolicyTests(unittest.TestCase):
             transport = httpx.ASGITransport(app=app)
             async with httpx.AsyncClient(
                 transport=transport,
-                base_url="http://testserver",
+                base_url="http://localhost",
             ) as client:
                 return await client.post("/items/special")
 
@@ -625,7 +629,7 @@ class HttpMutationPolicyTests(unittest.TestCase):
             transport = httpx.ASGITransport(app=app)
             async with httpx.AsyncClient(
                 transport=transport,
-                base_url="http://testserver",
+                base_url="http://localhost",
             ) as client:
                 return await client.post("/items/special")
 

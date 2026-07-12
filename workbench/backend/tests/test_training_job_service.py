@@ -5,7 +5,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from workbench.backend.inspector.errors import InspectorError
 from workbench.backend.log_experiments import LogExperimentMutationCoordinator
 from workbench.backend.tests.helpers import FakeProcess, FakeRunner
 from workbench.backend.training_jobs.contracts import (
@@ -13,6 +12,7 @@ from workbench.backend.training_jobs.contracts import (
     CreateTrainingJobCommand,
     TrainingJobView,
 )
+from workbench.backend.training_jobs.errors import TrainingJobFailure
 from workbench.backend.training_jobs.service import TrainingJobService
 
 
@@ -79,7 +79,10 @@ class TrainingJobServiceWorkflowTests(unittest.TestCase):
             restarted = _service(root)
             recovered = restarted.get_job(created.id)
             active = restarted.active_jobs()
-            with self.assertRaisesRegex(InspectorError, "live process handle"):
+            with self.assertRaisesRegex(
+                TrainingJobFailure,
+                "live process handle",
+            ):
                 restarted.cancel_job(created.id)
 
         self.assertIsInstance(recovered, TrainingJobView)

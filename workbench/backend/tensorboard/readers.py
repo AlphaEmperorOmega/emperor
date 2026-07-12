@@ -110,16 +110,22 @@ def skipped_event_metadata(
 
 
 class _TensorBoardPayloadCache:
-    def __init__(self) -> None:
-        self._cache = TensorBoardEventCache(
-            {"payload": MONITOR_EVENT_CACHE_MAX_ENTRIES}
+    def __init__(
+        self,
+        *,
+        event_cache: TensorBoardEventCache | None = None,
+        cache_name: str = "payload",
+    ) -> None:
+        self._cache = event_cache or TensorBoardEventCache(
+            {cache_name: MONITOR_EVENT_CACHE_MAX_ENTRIES}
         )
+        self._cache_name = cache_name
 
     def token(self) -> int:
         return self._cache.token()
 
     def get(self, key: tuple[Any, ...]) -> dict[str, Any] | None:
-        cached = self._cache.get("payload", key)
+        cached = self._cache.get(self._cache_name, key)
         return copy.deepcopy(cached) if cached is not None else None
 
     def publish(
@@ -130,7 +136,7 @@ class _TensorBoardPayloadCache:
         generation: int,
     ) -> None:
         self._cache.publish(
-            "payload",
+            self._cache_name,
             key,
             copy.deepcopy(value),
             generation=generation,
@@ -150,11 +156,16 @@ class TensorBoardMonitorReader:
         scalar_point_limit: int = DEFAULT_SCALAR_POINT_LIMIT,
         bucket_limit: int = DEFAULT_BUCKET_LIMIT,
         max_event_bytes: int = DEFAULT_MONITOR_EVENT_READ_MAX_BYTES,
+        event_cache: TensorBoardEventCache | None = None,
+        cache_name: str = "monitor_payload",
     ) -> None:
         self.scalar_point_limit = scalar_point_limit
         self.bucket_limit = bucket_limit
         self.max_event_bytes = max(0, int(max_event_bytes))
-        self._payload_cache = _TensorBoardPayloadCache()
+        self._payload_cache = _TensorBoardPayloadCache(
+            event_cache=event_cache,
+            cache_name=cache_name,
+        )
 
     def clear_roots(self, roots: set[str]) -> None:
         self._payload_cache.clear_roots(roots)
@@ -356,6 +367,8 @@ class TensorBoardParameterStatusReader:
         *,
         scalar_point_limit: int = DEFAULT_PARAMETER_STATUS_SCALAR_POINT_LIMIT,
         max_event_bytes: int = DEFAULT_MONITOR_EVENT_READ_MAX_BYTES,
+        event_cache: TensorBoardEventCache | None = None,
+        cache_name: str = "parameter_status_payload",
     ) -> None:
         self.scalar_point_limit = max(1, int(scalar_point_limit))
         self.max_event_bytes = max(0, int(max_event_bytes))
@@ -363,7 +376,10 @@ class TensorBoardParameterStatusReader:
             **DEFAULT_TENSORBOARD_SIZE_GUIDANCE,
             event_accumulator.SCALARS: self.scalar_point_limit,
         }
-        self._payload_cache = _TensorBoardPayloadCache()
+        self._payload_cache = _TensorBoardPayloadCache(
+            event_cache=event_cache,
+            cache_name=cache_name,
+        )
 
     def clear_roots(self, roots: set[str]) -> None:
         self._payload_cache.clear_roots(roots)
@@ -542,11 +558,7 @@ class TensorBoardParameterStatusReader:
             None,
         )
         two_sample_metric = next(
-            (
-                metric
-                for metric in delta_metrics
-                if len(points_by_metric[metric]) >= 2
-            ),
+            (metric for metric in delta_metrics if len(points_by_metric[metric]) >= 2),
             None,
         )
         metric = evidence_metric or two_sample_metric or delta_metrics[0]

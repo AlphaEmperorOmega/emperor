@@ -74,6 +74,7 @@ class ConfigFieldResponse(ApiResponseModel):
     default: ConfigValue
     nullable: bool
     choices: list[ConfigValue]
+    maximum: int | float | None = None
     locked: bool = False
     lockedValue: ConfigValue = None
     lockedReason: str = ""

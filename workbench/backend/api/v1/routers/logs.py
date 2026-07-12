@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from typing import Annotated, BinaryIO, Literal
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -28,9 +29,10 @@ from workbench.backend.dependencies import (
     get_run_history_service,
     get_workbench_settings,
 )
-from workbench.backend.inspector.errors import InspectorError
 from workbench.backend.model_identity import require_model_id
+from workbench.backend.mutation_execution import run_mutation_io
 from workbench.backend.run_history import RunHistoryService
+from workbench.backend.run_history.errors import RunHistoryFailure
 from workbench.backend.schemas import (
     LogArchiveImportResponse,
     LogCheckpointResponse,
@@ -43,6 +45,7 @@ from workbench.backend.schemas import (
     LogMediaResponse,
     LogParameterStatusRequest,
     LogParameterStatusResponse,
+    LogPresetDeleteRequest,
     LogRunArtifactResponse,
     LogRunArtifactsResponse,
     LogRunDeleteFiltersRequest,
@@ -92,17 +95,30 @@ async def _read_upload_body_with_limit(
         mode="w+b",
     )
     total_size = 0
+    executor = ThreadPoolExecutor(
+        max_workers=1,
+        thread_name_prefix="workbench-upload-spool",
+    )
+
+    async def run_file_call(callable_object, *args):
+        future = executor.submit(callable_object, *args)
+        while not future.done():
+            await asyncio.sleep(0)
+        return future.result()
+
     try:
         async for chunk in request.stream():
             total_size += len(chunk)
             if max_upload_size is not None and total_size > max_upload_size:
                 raise _upload_too_large_error(max_upload_size)
-            body.write(chunk)
-        body.seek(0)
+            await run_file_call(body.write, chunk)
+        await run_file_call(body.seek, 0)
         return body
     except BaseException:
-        body.close()
+        await run_file_call(body.close)
         raise
+    finally:
+        executor.shutdown(wait=True, cancel_futures=False)
 
 
 def _bounded_metadata_response(items: list[object], *, label: str) -> dict[str, object]:
@@ -128,9 +144,9 @@ def _model_query_ids(
     if not model_types:
         return models
     if not models:
-        raise InspectorError("Log model filters require modelType and model.")
+        raise RunHistoryFailure("Log model filters require modelType and model.")
     if len(model_types) != len(models):
-        raise InspectorError("Log modelType and model filters must be paired.")
+        raise RunHistoryFailure("Log modelType and model filters must be paired.")
     return [
         require_model_id(model_type, model)
         for model_type, model in zip(model_types, models, strict=True)
@@ -159,6 +175,7 @@ async def logs_runs(
     model: Annotated[list[str] | None, Query()] = None,
     preset: Annotated[list[str] | None, Query()] = None,
     dataset: Annotated[list[str] | None, Query()] = None,
+    experimentTask: Annotated[str | None, Query()] = None,
     has_event_files: Annotated[
         bool | None,
         Query(alias="hasEventFiles"),
@@ -174,6 +191,7 @@ async def logs_runs(
             model=_model_query_ids(modelType, model),
             preset=preset,
             dataset=dataset,
+            experiment_task=experimentTask,
             has_event_files=has_event_files,
             projection=projection,
         )
@@ -265,7 +283,7 @@ async def import_log_archive(
                 body.close()
 
         limiter_handed_to_worker = True
-        result = await run_blocking_io(
+        result = await run_mutation_io(
             parse_and_extract_archive,
             limiter=upload_limiter,
             limiter_already_acquired=True,
@@ -321,7 +339,7 @@ async def delete_log_experiment(
         return service.delete_experiment(experiment)
 
     return LogExperimentDeleteResponse.model_validate(
-        await run_blocking_io(delete_experiment)
+        await run_mutation_io(delete_experiment)
     )
 
 
@@ -371,7 +389,50 @@ async def delete_log_runs(
             run_ids=request.runIds,
         )
 
-    return LogRunDeleteResponse.model_validate(await run_blocking_io(delete_runs))
+    return LogRunDeleteResponse.model_validate(await run_mutation_io(delete_runs))
+
+
+@router.post(
+    "/runs/preset-delete-plan",
+    response_model=LogRunDeletePlanResponse,
+    summary="Plan preset log-run deletion",
+    response_description="Every run matching one experiment and preset.",
+)
+@declare_http_operation(HttpOperationPolicy.READ_ONLY)
+async def log_preset_delete_plan(
+    request: LogPresetDeleteRequest,
+    service: Annotated[RunHistoryService, Depends(get_run_history_service)],
+) -> LogRunDeletePlanResponse:
+    def create_delete_plan() -> dict[str, object]:
+        return service.create_preset_delete_plan(
+            experiment=request.experiment,
+            preset=request.preset,
+        )
+
+    return LogRunDeletePlanResponse.model_validate(
+        await run_blocking_io(create_delete_plan)
+    )
+
+
+@router.post(
+    "/runs/preset-delete",
+    response_model=LogRunDeleteResponse,
+    summary="Delete preset log runs",
+    response_description="Deleted metadata for every matching run.",
+)
+@declare_http_operation(HttpOperationPolicy.LOCAL_MUTATION)
+async def delete_log_preset(
+    request: LogPresetDeleteRequest,
+    service: Annotated[RunHistoryService, Depends(get_run_history_service)],
+    settings: Annotated[WorkbenchApiSettings, Depends(get_workbench_settings)],
+) -> LogRunDeleteResponse:
+    def delete_preset() -> dict[str, object]:
+        return service.delete_preset(
+            experiment=request.experiment,
+            preset=request.preset,
+        )
+
+    return LogRunDeleteResponse.model_validate(await run_mutation_io(delete_preset))
 
 
 @router.post(

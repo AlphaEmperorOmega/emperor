@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import os
+from collections import deque
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +21,14 @@ from workbench.backend.training_jobs.run_plan_adapter import (
 from workbench.backend.training_jobs.store import TrainingJobRecord
 
 TRAINING_JOB_LOG_TAIL_CHUNK_BYTES = 8192
+TRAINING_JOB_LOG_TAIL_LINE_LIMIT = 80
+TRAINING_JOB_LOG_TAIL_MAX_BYTES = 256 * 1024
+
+
+@dataclass(frozen=True, slots=True)
+class TrainingLogTail:
+    lines: tuple[str, ...]
+    truncated: bool
 
 
 class TrainingJobProjector:
@@ -32,6 +43,7 @@ class TrainingJobProjector:
         latest_event = projection.latest_event
         metrics_event = projection.metrics_event
         latest_preset = self._monitor_locator.event_preset_name(latest_event)
+        log_tail = self.log_tail_snapshot(job)
         return TrainingJobView(
             id=job.id,
             status=job.status,
@@ -62,7 +74,7 @@ class TrainingJobProjector:
             event_counts=dict(projection.event_counts),
             events_truncated=projection.events_truncated,
             cluster_growth=list(projection.cluster_growth),
-            log_tail=self.log_tail(job),
+            log_tail=list(log_tail.lines),
             result_links=[
                 TrainingResultLinkView(
                     preset=self._monitor_locator.event_preset_name(event),
@@ -71,6 +83,7 @@ class TrainingJobProjector:
                 )
                 for event in projection.result_events
             ],
+            log_tail_truncated=log_tail.truncated,
         )
 
     def log_tail(
@@ -78,30 +91,80 @@ class TrainingJobProjector:
         job: TrainingJobRecord,
         line_count: int = 80,
     ) -> list[str]:
+        return list(self.log_tail_snapshot(job, line_count=line_count).lines)
+
+    def log_tail_snapshot(
+        self,
+        job: TrainingJobRecord,
+        *,
+        line_count: int = TRAINING_JOB_LOG_TAIL_LINE_LIMIT,
+        max_bytes: int = TRAINING_JOB_LOG_TAIL_MAX_BYTES,
+    ) -> TrainingLogTail:
         if not job.log_path.exists():
-            return []
-        return _tail_lines(job.log_path, line_count)
+            return TrainingLogTail((), False)
+        return _tail_lines(job.log_path, line_count, max_bytes)
 
 
-def _tail_lines(path: Path, line_count: int) -> list[str]:
-    if line_count <= 0:
-        return []
+def _utf8_suffix(value: str, max_bytes: int) -> str:
+    encoded = value.encode("utf-8")
+    if len(encoded) <= max_bytes:
+        return value
+    suffix = encoded[-max_bytes:]
+    while suffix and suffix[0] & 0xC0 == 0x80:
+        suffix = suffix[1:]
+    return suffix.decode("utf-8")
 
-    chunks: list[bytes] = []
-    newline_count = 0
+
+def _bounded_decoded_lines(
+    lines: list[str],
+    max_bytes: int,
+) -> tuple[tuple[str, ...], bool]:
+    retained: deque[str] = deque()
+    remaining = max_bytes
+    truncated = False
+    for line in reversed(lines):
+        separator_bytes = 1 if retained else 0
+        if separator_bytes > remaining:
+            truncated = True
+            break
+        line_budget = remaining - separator_bytes
+        encoded_size = len(line.encode("utf-8"))
+        if encoded_size <= line_budget:
+            retained.appendleft(line)
+            remaining -= separator_bytes + encoded_size
+            continue
+        if line_budget > 0:
+            retained.appendleft(_utf8_suffix(line, line_budget))
+        truncated = True
+        break
+    return tuple(retained), truncated
+
+
+def _tail_lines(
+    path: Path,
+    line_count: int,
+    max_bytes: int,
+) -> TrainingLogTail:
+    if line_count <= 0 or max_bytes <= 0:
+        return TrainingLogTail((), path.stat().st_size > 0)
+
     with path.open("rb") as handle:
-        handle.seek(0, 2)
-        position = handle.tell()
-        while position > 0 and newline_count <= line_count:
-            read_size = min(TRAINING_JOB_LOG_TAIL_CHUNK_BYTES, position)
-            position -= read_size
-            handle.seek(position)
-            chunk = handle.read(read_size)
-            chunks.append(chunk)
-            newline_count += chunk.count(b"\n")
+        size = int(os.fstat(handle.fileno()).st_size)
+        read_size = min(size, max_bytes + 4)
+        position = size - read_size
+        handle.seek(position)
+        data = handle.read(read_size)
 
-    data = b"".join(reversed(chunks))
-    return data.decode("utf-8", errors="replace").splitlines()[-line_count:]
+    decoded_lines = data.decode("utf-8", errors="replace").splitlines()
+    selected_lines = decoded_lines[-line_count:]
+    bounded_lines, byte_truncated = _bounded_decoded_lines(
+        selected_lines,
+        max_bytes,
+    )
+    return TrainingLogTail(
+        bounded_lines,
+        position > 0 or len(decoded_lines) > line_count or byte_truncated,
+    )
 
 
 def _optional_int(value: Any) -> int | None:
@@ -112,4 +175,9 @@ def _optional_str(value: Any) -> str | None:
     return str(value) if value is not None else None
 
 
-__all__ = ["TrainingJobProjector"]
+__all__ = [
+    "TRAINING_JOB_LOG_TAIL_LINE_LIMIT",
+    "TRAINING_JOB_LOG_TAIL_MAX_BYTES",
+    "TrainingJobProjector",
+    "TrainingLogTail",
+]

@@ -23,6 +23,7 @@ from workbench.backend.run_history import RunHistoryService
 from workbench.backend.run_history.records import LogRunDeleteFilters
 from workbench.backend.services.inspection import InspectionService
 from workbench.backend.training_jobs.contracts import (
+    ConfigSnapshotRevision,
     CreateTrainingJobCommand,
     TrainingSearch,
 )
@@ -70,6 +71,7 @@ class TrainingJobServiceHarness:
             log_folder=kwargs.get("log_folder", ""),
             monitors=kwargs.get("monitors"),
             search=kwargs.get("search"),
+            snapshot_ids=list(kwargs.get("snapshot_ids") or []),
         )
 
     def create_job_payload(self, **kwargs: Any) -> dict[str, Any]:
@@ -92,6 +94,14 @@ class TrainingJobServiceHarness:
                     monitors=list(kwargs.get("monitors") or []),
                     search=search,
                     run_plan=run_plan,
+                    snapshot_ids=list(kwargs.get("snapshot_ids") or []),
+                    snapshot_revisions=tuple(
+                        ConfigSnapshotRevision(
+                            id=str(revision["id"]),
+                            semantic_revision=str(revision["semanticRevision"]),
+                        )
+                        for revision in kwargs.get("snapshot_revisions") or []
+                    ),
                 )
             )
         )
@@ -102,10 +112,24 @@ class TrainingJobServiceHarness:
     def cancel_job_payload(self, job_id: str) -> dict[str, Any]:
         return training_job_to_payload(self.service.cancel_job(job_id))
 
+    def reconcile_job_payload(
+        self,
+        job_id: str,
+        *,
+        action: str,
+        reason: str,
+    ) -> dict[str, Any]:
+        return training_job_to_payload(
+            self.service.reconcile_job(
+                job_id,
+                action=action,
+                reason=reason,
+            )
+        )
+
     def active_job_payloads(self) -> list[dict[str, Any]]:
         return [
-            active_training_job_to_payload(job)
-            for job in self.service.active_jobs()
+            active_training_job_to_payload(job) for job in self.service.active_jobs()
         ]
 
     def get_job_events_payload(
@@ -150,6 +174,7 @@ class TrainingJobServiceHarness:
             dataset=dataset,
             preset=preset,
         )
+
 
 def attach_training_service(app, harness: TrainingJobServiceHarness):
     """Install a service-backed test runtime behind the app capability."""

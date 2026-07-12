@@ -254,8 +254,7 @@ class RunHistorySecurityAndFreshnessTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             logs_root = Path(tmp) / "logs"
             relative_run = Path(
-                "cache_exp/linear/BASELINE/Mnist/"
-                "run_20260711_060708/version_0"
+                "cache_exp/linear/BASELINE/Mnist/run_20260711_060708/version_0"
             )
             run_dir = logs_root / relative_run
             run_dir.mkdir(parents=True)
@@ -284,6 +283,18 @@ class RunHistorySecurityAndFreshnessTests(unittest.TestCase):
                     fingerprint=fixed_fingerprint,
                 )
 
+            def stream_version(_index, tags, **_kwargs: Any):
+                version = (run_dir / event_name).read_text(encoding="utf-8")
+                value = 0.0 if version == "old" else 2.0
+                return {
+                    tag: {
+                        "points": [{"step": 1, "wallTime": 1.0, "value": value}],
+                        "sourcePointCount": 1,
+                        "truncated": False,
+                    }
+                    for tag in tags
+                }
+
             with (
                 patch.object(
                     tensorboard_events,
@@ -294,6 +305,11 @@ class RunHistorySecurityAndFreshnessTests(unittest.TestCase):
                     tensorboard_events,
                     "load_event_accumulator",
                     load_version,
+                ),
+                patch.object(
+                    tensorboard_events,
+                    "exact_scalar_tails",
+                    side_effect=stream_version,
                 ),
             ):
                 before_tags = service.tags_for_runs([run_id])[0]

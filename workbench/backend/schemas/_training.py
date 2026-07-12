@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Literal, TypeAlias
+from typing import Annotated, Literal, Self, TypeAlias
 
-from pydantic import ConfigDict, Field
+from pydantic import ConfigDict, Field, model_validator
 
 from workbench.backend.schemas._base import (
     ApiResponseModel,
+    BoundedIdentifier,
     ConfigOverrides,
     ConfigValue,
     JsonObject,
@@ -17,46 +18,99 @@ from workbench.backend.training_jobs.limits import (
     MAX_TRAINING_MONITORS,
     MAX_TRAINING_PLANNED_RUNS,
     MAX_TRAINING_SEARCH_AXES,
+    MAX_TRAINING_SEARCH_AXIS_VALUES,
 )
+
+TrainingSearchValues = Annotated[
+    list[ConfigValue],
+    Field(max_length=MAX_TRAINING_SEARCH_AXIS_VALUES),
+]
+
+
+class ConfigSnapshotRevisionResponse(ApiResponseModel):
+    id: str
+    semanticRevision: str = Field(min_length=64, max_length=64)
 
 
 class TrainingJobCreateRequest(ApiResponseModel):
-    modelType: str
-    model: str
-    preset: str
-    presets: list[str] | None = None
-    experimentTask: str | None = None
-    datasets: list[str] = Field(
+    modelType: BoundedIdentifier
+    model: BoundedIdentifier
+    preset: BoundedIdentifier
+    presets: list[BoundedIdentifier] | None = Field(
+        default=None,
+        max_length=MAX_TRAINING_PLANNED_RUNS,
+    )
+    experimentTask: BoundedIdentifier | None = None
+    datasets: list[BoundedIdentifier] = Field(
         default_factory=list,
         max_length=MAX_TRAINING_DATASETS,
     )
     overrides: ConfigOverrides = Field(default_factory=dict)
-    logFolder: str
-    monitors: list[str] = Field(
+    logFolder: BoundedIdentifier
+    monitors: list[BoundedIdentifier] = Field(
         default_factory=list,
         max_length=MAX_TRAINING_MONITORS,
     )
     search: TrainingSearchRequest | None = None
     runPlan: SubmittedTrainingRunPlanRequest | None = None
+    snapshotIds: list[BoundedIdentifier] = Field(
+        default_factory=list,
+        max_length=MAX_TRAINING_PLANNED_RUNS,
+    )
+    snapshotRevisions: list[ConfigSnapshotRevisionResponse] = Field(
+        default_factory=list,
+        max_length=MAX_TRAINING_PLANNED_RUNS,
+    )
+
+    @model_validator(mode="after")
+    def require_revision_only_snapshot_submission(self) -> Self:
+        if self.snapshotIds and self.runPlan is not None:
+            raise ValueError(
+                "Snapshot Training Jobs accept snapshotIds and "
+                "snapshotRevisions, not a submitted runPlan."
+            )
+        revision_ids = [revision.id for revision in self.snapshotRevisions]
+        if len(revision_ids) != len(set(revision_ids)):
+            raise ValueError("snapshotRevisions must contain unique ids.")
+        if self.snapshotIds and set(revision_ids) != set(self.snapshotIds):
+            raise ValueError(
+                "Snapshot Training Jobs require backend-issued revisions for "
+                "every snapshotId."
+            )
+        if self.snapshotRevisions and not self.snapshotIds:
+            raise ValueError("snapshotRevisions require snapshotIds.")
+        return self
+
+
+class TrainingJobReconcileRequest(ApiResponseModel):
+    action: Literal["mark-failed"]
+    reason: str = Field(min_length=1, max_length=500)
 
 
 class TrainingRunPlanCreateRequest(ApiResponseModel):
-    modelType: str
-    model: str
-    preset: str
-    presets: list[str] | None = None
-    experimentTask: str | None = None
-    datasets: list[str] = Field(
+    modelType: BoundedIdentifier
+    model: BoundedIdentifier
+    preset: BoundedIdentifier
+    presets: list[BoundedIdentifier] | None = Field(
+        default=None,
+        max_length=MAX_TRAINING_PLANNED_RUNS,
+    )
+    experimentTask: BoundedIdentifier | None = None
+    datasets: list[BoundedIdentifier] = Field(
         default_factory=list,
         max_length=MAX_TRAINING_DATASETS,
     )
     overrides: ConfigOverrides = Field(default_factory=dict)
-    logFolder: str = ""
-    monitors: list[str] = Field(
+    logFolder: BoundedIdentifier = ""
+    monitors: list[BoundedIdentifier] = Field(
         default_factory=list,
         max_length=MAX_TRAINING_MONITORS,
     )
     search: TrainingSearchRequest | None = None
+    snapshotIds: list[BoundedIdentifier] = Field(
+        default_factory=list,
+        max_length=MAX_TRAINING_PLANNED_RUNS,
+    )
 
 
 class TrainingSearchResponse(ApiResponseModel):
@@ -67,7 +121,7 @@ class TrainingSearchResponse(ApiResponseModel):
 
 class TrainingSearchRequest(ApiResponseModel):
     mode: Literal["grid", "random"]
-    values: dict[str, list[ConfigValue]] = Field(max_length=MAX_TRAINING_SEARCH_AXES)
+    values: dict[str, TrainingSearchValues] = Field(max_length=MAX_TRAINING_SEARCH_AXES)
     randomSamples: int | None = Field(
         default=None,
         ge=1,
@@ -76,15 +130,6 @@ class TrainingSearchRequest(ApiResponseModel):
 
 
 class TrainingRunChangeResponse(ApiResponseModel):
-    key: str
-    label: str
-    value: ConfigValue
-    source: Literal["override", "search"]
-
-
-class SubmittedTrainingRunChangeRequest(ApiResponseModel):
-    """Legacy standalone shape; submitted Run rows no longer consume it."""
-
     key: str
     label: str
     value: ConfigValue
@@ -119,30 +164,15 @@ class TrainingRunResponse(ApiResponseModel):
 
 
 class SubmittedTrainingRunRequest(ApiResponseModel):
-    id: str
-    preset: str
-    snapshotId: str | None = None
-    snapshotName: str | None = None
-    dataset: str
+    id: BoundedIdentifier
+    preset: BoundedIdentifier
+    snapshotId: BoundedIdentifier | None = None
+    snapshotName: BoundedIdentifier | None = None
+    dataset: BoundedIdentifier
     overrides: ConfigOverrides = Field(default_factory=dict)
 
 
 class TrainingRunPlanSummaryResponse(ApiResponseModel):
-    totalRuns: int = 0
-    completedRuns: int = 0
-    runningRuns: int = 0
-    pendingRuns: int = 0
-    failedRuns: int = 0
-    cancelledRuns: int = 0
-    skippedRuns: int = 0
-    totalEpochs: int = 0
-    completedEpochs: int = 0
-    remainingEpochs: int = 0
-
-
-class SubmittedTrainingRunPlanSummaryRequest(ApiResponseModel):
-    """Legacy standalone shape; submitted Run Plans no longer consume it."""
-
     totalRuns: int = 0
     completedRuns: int = 0
     runningRuns: int = 0
@@ -168,10 +198,17 @@ class TrainingRunPlanResponse(ApiResponseModel):
     isRandomSearch: bool = False
     runs: list[TrainingRunResponse] = Field(default_factory=list)
     summary: TrainingRunPlanSummaryResponse
+    snapshotRevisions: list[ConfigSnapshotRevisionResponse] = Field(
+        default_factory=list
+    )
 
 
 class SubmittedTrainingRunPlanRequest(ApiResponseModel):
     runs: list[SubmittedTrainingRunRequest] = Field(
+        default_factory=list,
+        max_length=MAX_TRAINING_PLANNED_RUNS,
+    )
+    snapshotRevisions: list[ConfigSnapshotRevisionResponse] = Field(
         default_factory=list,
         max_length=MAX_TRAINING_PLANNED_RUNS,
     )
@@ -368,6 +405,7 @@ class TrainingJobResponse(ApiResponseModel):
     eventsTruncated: bool = False
     clusterGrowth: list[TrainingClusterGrowthResponse] = Field(default_factory=list)
     logTail: list[str]
+    logTailTruncated: bool = False
     resultLinks: list[TrainingResultLinkResponse]
 
 

@@ -52,4 +52,8 @@ async def capabilities(
         configSnapshotsEnabled=local_mutations_enabled,
         uploadsEnabled=log_imports_enabled,
         maxUploadSize=settings.effective_max_upload_size,
+        maxActiveTrainingJobs=settings.max_active_training_jobs,
+        trainingJobMemoryLimitBytes=settings.training_job_memory_limit_bytes,
+        trainingJobCpuLimit=settings.training_job_cpu_limit,
+        trainingJobProcessLimit=settings.training_job_process_limit,
     )

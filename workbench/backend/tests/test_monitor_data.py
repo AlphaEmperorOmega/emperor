@@ -13,7 +13,6 @@ import torch
 from tensorboard.backend.event_processing import event_accumulator
 from torch.utils.tensorboard import SummaryWriter
 
-from workbench.backend.inspector.errors import InspectorError
 from workbench.backend.run_history.scanner import LogRunScanner
 from workbench.backend.tensorboard.readers import (
     TensorBoardMonitorReader,
@@ -24,6 +23,7 @@ from workbench.backend.tests.helpers import (
     TrainingJobServiceHarness,
     create_app_with_training_service,
 )
+from workbench.backend.training_jobs.errors import TrainingJobFailure
 
 
 class TagsFailureAccumulator:
@@ -588,7 +588,7 @@ class HistoricalMonitorDataFailureTests(unittest.TestCase):
             )
             async with httpx.AsyncClient(
                 transport=transport,
-                base_url="http://testserver",
+                base_url="http://localhost",
             ) as client:
                 return await client.get(
                     f"/logs/runs/{run_id}/monitor-data",
@@ -704,7 +704,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
                 monitors=["linear"],
             )
 
-            with self.assertRaises(InspectorError) as caught:
+            with self.assertRaises(TrainingJobFailure) as caught:
                 manager.get_monitor_data(
                     payload["id"],
                     node_path="main_model.0.model",
@@ -733,7 +733,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
                 monitors=["linear"],
             )
 
-            with self.assertRaises(InspectorError) as caught:
+            with self.assertRaises(TrainingJobFailure) as caught:
                 manager.get_monitor_data(
                     payload["id"],
                     node_path="main_model.0.model",
@@ -846,7 +846,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
                     )
 
                     with self.assertRaisesRegex(
-                        InspectorError,
+                        TrainingJobFailure,
                         "outside this Training Job's Log Experiment",
                     ):
                         manager.get_monitor_data(
@@ -1001,7 +1001,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
             transport = httpx.ASGITransport(app=app)
             async with httpx.AsyncClient(
                 transport=transport,
-                base_url="http://testserver",
+                base_url="http://localhost",
             ) as client:
                 return await client.get(
                     f"/training/jobs/{job_id}/monitor-parameter-status",
@@ -1113,7 +1113,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
             )
 
             with self.assertRaisesRegex(
-                InspectorError,
+                TrainingJobFailure,
                 "outside this Training Job's Log Experiment",
             ):
                 manager.get_parameter_status(
@@ -1164,7 +1164,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
                 )
                 async with httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
+                    base_url="http://localhost",
                 ) as client:
                     data_response = await client.get(
                         f"/logs/runs/{run_id}/monitor-data",
@@ -1273,7 +1273,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
                 )
                 async with httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
+                    base_url="http://localhost",
                 ) as client:
                     status_response = await client.post(
                         "/logs/parameter-status",

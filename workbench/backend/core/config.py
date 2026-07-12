@@ -28,16 +28,23 @@ LOCAL_FRONTEND_ORIGINS = [
     "http://127.0.0.1:3000",
     "http://0.0.0.0:3000",
 ]
+DEFAULT_TRUSTED_HOSTS = ["localhost", "127.0.0.1", "[::1]", "0.0.0.0"]
 
 DEFAULT_SNAPSHOTS_ROOT = str(Path(__file__).resolve().parents[2] / "snapshots")
+DEFAULT_STATE_ROOT = str(Path(__file__).resolve().parents[2] / ".runtime" / "state")
 
 
 class WorkbenchApiSettings(BaseSettings):
     cors_origins: list[str] = Field(
         default_factory=lambda: LOCAL_FRONTEND_ORIGINS.copy()
     )
+    trusted_hosts: list[str] = Field(
+        default_factory=lambda: DEFAULT_TRUSTED_HOSTS.copy(),
+        min_length=1,
+    )
     logs_root: str = "logs"
     snapshots_root: str = DEFAULT_SNAPSHOTS_ROOT
+    state_root: str = DEFAULT_STATE_ROOT
     auth_mode: Literal["none", "bearer"] = "none"
     token: str | None = Field(default=None, repr=False)
     allow_unsafe_local_mutations: bool = False
@@ -59,6 +66,17 @@ class WorkbenchApiSettings(BaseSettings):
     training_cancellation_mode: Literal["strict-cgroup", "process-group"] = (
         "strict-cgroup"
     )
+    inspection_memory_limit_bytes: int = Field(default=4 * 1024**3, ge=1)
+    inspection_cpu_limit: int = Field(default=4, ge=1)
+    inspection_timeout_seconds: float = Field(default=60.0, gt=0)
+    max_json_body_bytes: int = Field(default=1024**2, ge=1)
+    tensorboard_request_work_bytes: int = Field(default=64 * 1024**2, ge=1)
+    tensorboard_cache_bytes: int = Field(default=128 * 1024**2, ge=1)
+    max_progress_record_bytes: int = Field(default=1024**2, ge=1)
+    max_active_training_jobs: int = Field(default=2, ge=1)
+    training_job_memory_limit_bytes: int = Field(default=16 * 1024**3, ge=1)
+    training_job_cpu_limit: int = Field(default=8, ge=1)
+    training_job_process_limit: int = Field(default=512, ge=1)
 
     model_config = SettingsConfigDict(env_prefix="WORKBENCH_API_")
 
@@ -96,6 +114,8 @@ def get_workbench_api_settings() -> WorkbenchApiSettings:
 
 
 __all__ = [
+    "DEFAULT_STATE_ROOT",
+    "DEFAULT_TRUSTED_HOSTS",
     "LOCAL_FRONTEND_ORIGINS",
     "WorkbenchApiSettings",
     "get_workbench_api_settings",

@@ -4,18 +4,20 @@ import re
 import tempfile
 import unittest
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import FrozenInstanceError
 from pathlib import Path
 from threading import Barrier
 from typing import Any
 from unittest.mock import patch
 
 from workbench.backend.config_snapshots import (
+    ConfigSnapshotFailure,
+    ConfigSnapshotRecord,
+    ConfigSnapshotService,
     ConfigSnapshotStore,
     FileSystemConfigSnapshotStore,
     InMemoryConfigSnapshotStore,
 )
-from workbench.backend.inspector.errors import InspectorError
-from workbench.backend.services.config_snapshots import ConfigSnapshotService
 
 
 class _SynchronizedListStore:
@@ -42,7 +44,7 @@ class _SynchronizedListStore:
 def _capture_mutation(mutation):  # type: ignore[no-untyped-def]
     try:
         return mutation()
-    except InspectorError as exc:
+    except ConfigSnapshotFailure as exc:
         return exc
 
 
@@ -51,9 +53,27 @@ class ConfigSnapshotServiceAdaptiveValidationTests(unittest.TestCase):
         self.store = InMemoryConfigSnapshotStore()
         self.service = ConfigSnapshotService(self.store)
 
+    def test_public_interface_returns_frozen_semantic_records(self) -> None:
+        snapshot = self.service.create_snapshot(
+            model="linears/linear",
+            preset="baseline",
+            name="semantic record",
+            overrides={"HIDDEN_DIM": "128"},
+        )
+
+        self.assertIsInstance(snapshot, ConfigSnapshotRecord)
+        self.assertEqual(
+            self.service.list_snapshots("linears/linear"),
+            (snapshot,),
+        )
+        with self.assertRaises(FrozenInstanceError):
+            snapshot.name = "changed"  # type: ignore[misc]
+        with self.assertRaises(TypeError):
+            snapshot.overrides["HIDDEN_DIM"] = "64"  # type: ignore[index]
+
     def test_create_rejects_adaptive_flag_without_matching_option(self) -> None:
         with self.assertRaisesRegex(
-            InspectorError,
+            ConfigSnapshotFailure,
             re.escape(
                 "Invalid config snapshot overrides: models.linears.linear_adaptive: "
                 "runtime key 'weight_option' must be set when "
@@ -76,7 +96,7 @@ class ConfigSnapshotServiceAdaptiveValidationTests(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(
-            InspectorError,
+            ConfigSnapshotFailure,
             re.escape(
                 "Invalid config snapshot overrides: models.linears.linear_adaptive: "
                 "runtime key 'weight_option' must be set when "
@@ -84,11 +104,11 @@ class ConfigSnapshotServiceAdaptiveValidationTests(unittest.TestCase):
             ),
         ):
             self.service.update_snapshot(
-                snapshot["id"],
+                snapshot.id,
                 overrides={"WEIGHT_OPTION_FLAG": "true"},
             )
 
-        stored = self.store.get(snapshot["id"])
+        stored = self.store.get(snapshot.id)
         self.assertIsNotNone(stored)
         assert stored is not None
         self.assertEqual(stored.overrides, {"HIDDEN_DIM": "384"})
@@ -105,7 +125,7 @@ class ConfigSnapshotServiceAdaptiveValidationTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            snapshot["overrides"],
+            dict(snapshot.overrides),
             {
                 "WEIGHT_OPTION_FLAG": "true",
                 "WEIGHT_OPTION": "SingleModelDynamicWeightConfig",
@@ -127,7 +147,7 @@ class ConfigSnapshotServiceAdaptiveValidationTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            snapshot["overrides"],
+            dict(snapshot.overrides),
             {
                 "HIDDEN_DIM": "128",
                 "STACK_DROPOUT_PROBABILITY": "0.25",
@@ -136,19 +156,22 @@ class ConfigSnapshotServiceAdaptiveValidationTests(unittest.TestCase):
         )
 
         updated = self.service.update_snapshot(
-            snapshot["id"],
+            snapshot.id,
             overrides={
                 "hidden_dim": "64.0",
                 "memory_stack_hidden_dim": "48",
             },
         )
         self.assertEqual(
-            updated["overrides"],
+            dict(updated.overrides),
             {"HIDDEN_DIM": "64", "MEMORY_STACK_HIDDEN_DIM": "48"},
         )
 
     def test_real_schema_rejects_preset_locked_create_without_persisting(self) -> None:
-        with self.assertRaisesRegex(InspectorError, "preset-locked fields"):
+        with self.assertRaisesRegex(
+            ConfigSnapshotFailure,
+            "preset-locked fields",
+        ):
             self.service.create_snapshot(
                 model="linears/linear",
                 preset="gating",
@@ -160,7 +183,7 @@ class ConfigSnapshotServiceAdaptiveValidationTests(unittest.TestCase):
 
     def test_failed_real_construction_does_not_persist_create(self) -> None:
         with self.assertRaisesRegex(
-            InspectorError,
+            ConfigSnapshotFailure,
             "runtime key 'weight_option' must be set",
         ):
             self.service.create_snapshot(
@@ -185,11 +208,11 @@ class ConfigSnapshotServiceAdaptiveValidationTests(unittest.TestCase):
                 overrides={"learning_rate": "0.01"},
             )
             updated = self.service.update_snapshot(
-                snapshot["id"],
+                snapshot.id,
                 overrides={"learning_rate": "0.02"},
             )
 
-        self.assertEqual(updated["overrides"], {"LEARNING_RATE": "0.02"})
+        self.assertEqual(dict(updated.overrides), {"LEARNING_RATE": "0.02"})
 
 
 class ConfigSnapshotServiceAtomicMutationTests(unittest.TestCase):
@@ -214,14 +237,17 @@ class ConfigSnapshotServiceAtomicMutationTests(unittest.TestCase):
                         overrides={"learning_rate": "0.01"},
                     )
 
-                    with self.assertRaisesRegex(InspectorError, "non-default"):
+                    with self.assertRaisesRegex(
+                        ConfigSnapshotFailure,
+                        "non-default",
+                    ):
                         service.update_snapshot(
-                            snapshot["id"],
+                            snapshot.id,
                             name="must not leak",
                             overrides={"learning_rate": "0.001"},
                         )
 
-                    stored = store.get(snapshot["id"])
+                    stored = store.get(snapshot.id)
                     self.assertIsNotNone(stored)
                     assert stored is not None
                     self.assertEqual(stored.name, "original")
@@ -272,12 +298,15 @@ class ConfigSnapshotServiceAtomicMutationTests(unittest.TestCase):
                             outcomes = list(executor.map(create, candidates))
 
                         self.assertEqual(
-                            sum(isinstance(outcome, dict) for outcome in outcomes),
+                            sum(
+                                isinstance(outcome, ConfigSnapshotRecord)
+                                for outcome in outcomes
+                            ),
                             1,
                         )
                         self.assertEqual(
                             sum(
-                                isinstance(outcome, InspectorError)
+                                isinstance(outcome, ConfigSnapshotFailure)
                                 for outcome in outcomes
                             ),
                             1,
@@ -316,17 +345,18 @@ class ConfigSnapshotServiceAtomicMutationTests(unittest.TestCase):
                         )
 
                     with ThreadPoolExecutor(max_workers=2) as executor:
-                        outcomes = list(
-                            executor.map(update, (first["id"], second["id"]))
-                        )
+                        outcomes = list(executor.map(update, (first.id, second.id)))
 
                     self.assertEqual(
-                        sum(isinstance(outcome, dict) for outcome in outcomes),
+                        sum(
+                            isinstance(outcome, ConfigSnapshotRecord)
+                            for outcome in outcomes
+                        ),
                         1,
                     )
                     self.assertEqual(
                         sum(
-                            isinstance(outcome, InspectorError)
+                            isinstance(outcome, ConfigSnapshotFailure)
                             for outcome in outcomes
                         ),
                         1,

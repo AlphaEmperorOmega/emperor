@@ -8,7 +8,8 @@ from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 
-from workbench.backend.core.errors import ApiError
+from workbench.backend.failures import FailureKind
+from workbench.backend.log_experiments.errors import LogExperimentFailure
 
 DEFAULT_LOG_EXPERIMENT_MUTATION_TIMEOUT_SECONDS = 30.0
 LOG_EXPERIMENT_MUTATION_TIMEOUT_MESSAGE = (
@@ -48,9 +49,9 @@ class LogExperimentMutationCoordinator:
             for entry in entries:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0 or not entry.lock.acquire(timeout=remaining):
-                    raise ApiError(
+                    raise LogExperimentFailure(
                         LOG_EXPERIMENT_MUTATION_TIMEOUT_MESSAGE,
-                        status_code=503,
+                        kind=FailureKind.UNAVAILABLE,
                     )
                 acquired.append(entry)
             yield

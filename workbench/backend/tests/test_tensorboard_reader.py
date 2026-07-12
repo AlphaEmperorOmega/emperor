@@ -69,7 +69,14 @@ class TensorBoardReaderTests(unittest.TestCase):
                 )
 
         self.assertEqual(observe.call_count, 1)
-        load.assert_called_once_with(root)
+        load.assert_called_once()
+        args, kwargs = load.call_args
+        self.assertEqual(args, (root,))
+        self.assertEqual(
+            kwargs["event_files"],
+            (root / "events.out.tfevents.test",),
+        )
+        self.assertEqual(kwargs["trusted_root"], root)
 
     def test_parameter_read_reuses_one_shared_event_file_observation(self) -> None:
         from workbench.backend.tensorboard.readers import (
@@ -101,7 +108,15 @@ class TensorBoardReaderTests(unittest.TestCase):
                 )
 
         self.assertEqual(observe.call_count, 1)
-        load.assert_called_once_with(root, size_guidance=reader._size_guidance)
+        load.assert_called_once()
+        args, kwargs = load.call_args
+        self.assertEqual(args, (root,))
+        self.assertEqual(kwargs["size_guidance"], reader._size_guidance)
+        self.assertEqual(
+            kwargs["event_files"],
+            (root / "events.out.tfevents.test",),
+        )
+        self.assertEqual(kwargs["trusted_root"], root)
 
     def test_tag_read_reuses_one_shared_event_file_observation(self) -> None:
         from workbench.backend.run_history.query import LogRunQueryService
@@ -127,10 +142,18 @@ class TensorBoardReaderTests(unittest.TestCase):
                 query.read_tags(root)
 
         self.assertEqual(observe.call_count, 1)
-        load.assert_called_once_with(
-            root,
-            size_guidance=tensorboard_reader.TENSORBOARD_TAG_SIZE_GUIDANCE,
+        load.assert_called_once()
+        args, kwargs = load.call_args
+        self.assertEqual(args, (root,))
+        self.assertEqual(
+            kwargs["size_guidance"],
+            tensorboard_reader.TENSORBOARD_TAG_SIZE_GUIDANCE,
         )
+        self.assertEqual(
+            kwargs["event_files"],
+            (root / "events.out.tfevents.test",),
+        )
+        self.assertEqual(kwargs["trusted_root"], root)
 
     def test_finite_float_coerces_values_and_replaces_non_finite_values(self) -> None:
         assert tensorboard_reader is not None
@@ -257,6 +280,33 @@ class TensorBoardReaderTests(unittest.TestCase):
 
         self.assertIsNone(cache.get("payload", first))
         self.assertEqual(cache.get("payload", third), 3)
+
+    def test_event_cache_evicts_by_aggregate_bytes(self) -> None:
+        assert tensorboard_reader is not None
+        cache = tensorboard_reader.TensorBoardEventCache(
+            {"payload": 10},
+            max_bytes=300,
+        )
+        generation = cache.token()
+        first = ("/runs/first", (), "value")
+        second = ("/runs/second", (), "value")
+
+        cache.publish(
+            "payload",
+            first,
+            {"blob": "a" * 180},
+            generation=generation,
+        )
+        cache.publish(
+            "payload",
+            second,
+            {"blob": "b" * 180},
+            generation=generation,
+        )
+
+        self.assertIsNone(cache.get("payload", first))
+        self.assertIsNotNone(cache.get("payload", second))
+        self.assertLessEqual(cache.current_weight_bytes, 300)
 
     def test_load_event_accumulator_reloads_and_returns_accumulator(self) -> None:
         assert tensorboard_reader is not None

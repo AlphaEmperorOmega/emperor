@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import unittest
 
 from pydantic import TypeAdapter, ValidationError
@@ -31,11 +32,16 @@ class JsonApiSchemaTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             TypeAdapter(JsonObject).validate_python({"bad": object()})
 
+    def test_json_value_rejects_non_finite_numbers_at_any_depth(self) -> None:
+        for value in (math.nan, math.inf, -math.inf):
+            with self.subTest(value=value), self.assertRaises(ValidationError):
+                TypeAdapter(JsonObject).validate_python(
+                    {"metrics": {"nested": [0.5, value]}}
+                )
+
     def test_opaque_api_json_fields_reject_non_json_values(self) -> None:
         with self.assertRaises(ValidationError):
-            GraphConfigFieldResponse.model_validate(
-                {"key": "bad", "value": object()}
-            )
+            GraphConfigFieldResponse.model_validate({"key": "bad", "value": object()})
         with self.assertRaises(ValidationError):
             GraphNodeResponse.model_validate(
                 {

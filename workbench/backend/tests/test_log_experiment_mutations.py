@@ -6,6 +6,7 @@ import shutil
 import tempfile
 import threading
 import unittest
+import uuid
 import zipfile
 from pathlib import Path
 from unittest.mock import patch
@@ -13,8 +14,9 @@ from unittest.mock import patch
 import httpx
 
 from workbench.backend.api import WorkbenchApiSettings
-from workbench.backend.core.errors import ApiError
+from workbench.backend.failures import FailureKind
 from workbench.backend.log_experiments import (
+    LogExperimentFailure,
     LogExperimentMutationCoordinator,
 )
 from workbench.backend.run_history import service as run_history_service_module
@@ -118,8 +120,11 @@ class LogExperimentMutationApiTests(unittest.TestCase):
                 transport = httpx.ASGITransport(app=app)
                 async with httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
-                    headers={"X-Workbench-Mutation": "true"},
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
                 ) as client:
                     delete_task = asyncio.create_task(
                         client.delete("/logs/experiments/shared_experiment")
@@ -178,8 +183,11 @@ class LogExperimentMutationApiTests(unittest.TestCase):
                 transport = httpx.ASGITransport(app=app)
                 async with httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
-                    headers={"X-Workbench-Mutation": "true"},
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
                 ) as client:
                     start_task = asyncio.create_task(
                         client.post(
@@ -234,8 +242,11 @@ class LogExperimentMutationApiTests(unittest.TestCase):
                 transport = httpx.ASGITransport(app=app)
                 async with httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
-                    headers={"X-Workbench-Mutation": "true"},
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
                 ) as client:
                     start_task = asyncio.create_task(
                         client.post("/training/jobs", json=self._training_request())
@@ -285,8 +296,11 @@ class LogExperimentMutationApiTests(unittest.TestCase):
                 transport = httpx.ASGITransport(app=app)
                 async with httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
-                    headers={"X-Workbench-Mutation": "true"},
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
                 ) as client:
                     delete_task = asyncio.create_task(
                         client.post("/logs/runs/delete", json=delete_request)
@@ -322,9 +336,7 @@ class LogExperimentMutationApiTests(unittest.TestCase):
             original_import_archive = run_history_service_module.import_log_archive
             import_entered = threading.Event()
             release_import = threading.Event()
-            archive = _zip_bytes(
-                {"shared_experiment/imported/result.json": "imported"}
-            )
+            archive = _zip_bytes({"shared_experiment/imported/result.json": "imported"})
 
             def paused_import_archive(**kwargs):
                 import_entered.set()
@@ -336,15 +348,16 @@ class LogExperimentMutationApiTests(unittest.TestCase):
                 transport = httpx.ASGITransport(app=app)
                 async with httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
-                    headers={"X-Workbench-Mutation": "true"},
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
                 ) as client:
                     import_task = asyncio.create_task(
                         client.post(
                             "/logs/import",
-                            files={
-                                "archive": ("logs.zip", archive, "application/zip")
-                            },
+                            files={"archive": ("logs.zip", archive, "application/zip")},
                         )
                     )
                     await _wait_for_thread_event(import_entered, "log import")
@@ -386,9 +399,7 @@ class LogExperimentMutationApiTests(unittest.TestCase):
             original_create_job = manager.runtime.create_job_from_command
             start_entered = threading.Event()
             release_start = threading.Event()
-            archive = _zip_bytes(
-                {"shared_experiment/imported/result.json": "imported"}
-            )
+            archive = _zip_bytes({"shared_experiment/imported/result.json": "imported"})
 
             def paused_create_job(command):
                 start_entered.set()
@@ -400,8 +411,11 @@ class LogExperimentMutationApiTests(unittest.TestCase):
                 transport = httpx.ASGITransport(app=app)
                 async with httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
-                    headers={"X-Workbench-Mutation": "true"},
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
                 ) as client:
                     start_task = asyncio.create_task(
                         client.post(
@@ -413,9 +427,7 @@ class LogExperimentMutationApiTests(unittest.TestCase):
                     import_task = asyncio.create_task(
                         client.post(
                             "/logs/import",
-                            files={
-                                "archive": ("logs.zip", archive, "application/zip")
-                            },
+                            files={"archive": ("logs.zip", archive, "application/zip")},
                         )
                     )
                     await asyncio.sleep(0.1)
@@ -455,22 +467,24 @@ class LogExperimentMutationApiTests(unittest.TestCase):
             original_rmtree = shutil.rmtree
             delete_entered = threading.Event()
             release_delete = threading.Event()
-            archive = _zip_bytes(
-                {"shared_experiment/imported/result.json": "imported"}
-            )
+            archive = _zip_bytes({"shared_experiment/imported/result.json": "imported"})
 
-            def paused_delete_experiment(path: Path):
-                delete_entered.set()
-                if not release_delete.wait(timeout=5):
-                    raise AssertionError("Timed out waiting to release log delete")
-                return original_rmtree(path)
+            def paused_delete_experiment(path: Path, *args, **kwargs):
+                if Path(path) == logs_root / "shared_experiment":
+                    delete_entered.set()
+                    if not release_delete.wait(timeout=5):
+                        raise AssertionError("Timed out waiting to release log delete")
+                return original_rmtree(path, *args, **kwargs)
 
             async def race_requests():
                 transport = httpx.ASGITransport(app=app)
                 async with httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
-                    headers={"X-Workbench-Mutation": "true"},
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
                 ) as client:
                     delete_task = asyncio.create_task(
                         client.delete("/logs/experiments/shared_experiment")
@@ -479,9 +493,7 @@ class LogExperimentMutationApiTests(unittest.TestCase):
                     import_task = asyncio.create_task(
                         client.post(
                             "/logs/import",
-                            files={
-                                "archive": ("logs.zip", archive, "application/zip")
-                            },
+                            files={"archive": ("logs.zip", archive, "application/zip")},
                         )
                     )
                     await asyncio.sleep(0.1)
@@ -515,9 +527,7 @@ class LogExperimentMutationApiTests(unittest.TestCase):
             original_import_archive = run_history_service_module.import_log_archive
             import_entered = threading.Event()
             release_import = threading.Event()
-            archive = _zip_bytes(
-                {"shared_experiment/imported/result.json": "imported"}
-            )
+            archive = _zip_bytes({"shared_experiment/imported/result.json": "imported"})
 
             def paused_import_archive(**kwargs):
                 import_entered.set()
@@ -529,15 +539,16 @@ class LogExperimentMutationApiTests(unittest.TestCase):
                 transport = httpx.ASGITransport(app=app)
                 async with httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
-                    headers={"X-Workbench-Mutation": "true"},
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
                 ) as client:
                     import_task = asyncio.create_task(
                         client.post(
                             "/logs/import",
-                            files={
-                                "archive": ("logs.zip", archive, "application/zip")
-                            },
+                            files={"archive": ("logs.zip", archive, "application/zip")},
                         )
                     )
                     await _wait_for_thread_event(import_entered, "log import")
@@ -639,9 +650,7 @@ class LogExperimentMutationCoordinatorTests(unittest.TestCase):
     def test_timeout_releases_partial_scope_and_later_callers_can_continue(
         self,
     ) -> None:
-        coordinator = LogExperimentMutationCoordinator(
-            acquire_timeout_seconds=0.05
-        )
+        coordinator = LogExperimentMutationCoordinator(acquire_timeout_seconds=0.05)
         held = threading.Event()
         release = threading.Event()
 
@@ -654,10 +663,10 @@ class LogExperimentMutationCoordinatorTests(unittest.TestCase):
         holder.start()
         self.assertTrue(held.wait(timeout=5))
         try:
-            with self.assertRaises(ApiError) as context:
+            with self.assertRaises(LogExperimentFailure) as context:
                 with coordinator.coordinate(["first", "second"]):
                     pass
-            self.assertEqual(context.exception.status_code, 503)
+            self.assertEqual(context.exception.kind, FailureKind.UNAVAILABLE)
             with coordinator.coordinate(["first"]):
                 pass
         finally:

@@ -20,25 +20,86 @@ from workbench.backend.training_jobs.cgroups import (
     StrictCancellationUnavailable,
     TrainingCancellationCapability,
     TrainingCancellationMode,
+    TrainingResourceLimits,
 )
 
 TRAINING_LOGS_ROOT_ENV = "WORKBENCH_TRAINING_LOGS_ROOT"
+PRIVATE_DIRECTORY_MODE = 0o700
+PRIVATE_FILE_MODE = 0o600
+
+_WORKER_ENVIRONMENT_NAMES = frozenset(
+    {
+        "HOME",
+        "LANG",
+        "LD_LIBRARY_PATH",
+        "MPLCONFIGDIR",
+        "PATH",
+        "PYTHONHOME",
+        "PYTHONPATH",
+        "PYTHONUNBUFFERED",
+        "TMPDIR",
+        "VIRTUAL_ENV",
+    }
+)
+_WORKER_ENVIRONMENT_PREFIXES = (
+    "CUDA_",
+    "KMP_",
+    "LC_",
+    "MKL_",
+    "NVIDIA_",
+    "OMP_",
+    "TORCH_",
+)
+
+
+def ensure_private_directory(path: Path) -> Path:
+    """Create or tighten one private directory without accepting symlinks."""
+
+    candidate = Path(path)
+    if candidate.is_symlink():
+        raise ValueError(f"Private directory must not be a symlink: {candidate}")
+    candidate.mkdir(parents=True, exist_ok=True, mode=PRIVATE_DIRECTORY_MODE)
+    if candidate.is_symlink() or not candidate.is_dir():
+        raise ValueError(f"Private directory is not canonical: {candidate}")
+    candidate.chmod(PRIVATE_DIRECTORY_MODE)
+    return candidate
+
+
+def _open_private_binary(path: Path, flags: int):
+    no_follow = getattr(os, "O_NOFOLLOW", 0)
+    close_on_exec = getattr(os, "O_CLOEXEC", 0)
+    descriptor = os.open(
+        path,
+        flags | no_follow | close_on_exec,
+        PRIVATE_FILE_MODE,
+    )
+    try:
+        os.fchmod(descriptor, PRIVATE_FILE_MODE)
+        return os.fdopen(descriptor, "ab" if flags & os.O_APPEND else "wb")
+    except Exception:
+        os.close(descriptor)
+        raise
+
+
+def ensure_private_file(path: Path) -> Path:
+    """Create or tighten a regular private file without following symlinks."""
+
+    ensure_private_directory(path.parent)
+    with _open_private_binary(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND):
+        pass
+    return path
 
 
 class ProcessHandle(Protocol):
     pid: int
 
-    def poll(self) -> int | None:
-        ...
+    def poll(self) -> int | None: ...
 
-    def terminate(self) -> None:
-        ...
+    def terminate(self) -> None: ...
 
-    def wait(self, timeout: float | None = None) -> int:
-        ...
+    def wait(self, timeout: float | None = None) -> int: ...
 
-    def kill(self) -> None:
-        ...
+    def kill(self) -> None: ...
 
 
 class ProcessRunner(Protocol):
@@ -49,8 +110,7 @@ class ProcessRunner(Protocol):
         cwd: Path,
         env: dict[str, str],
         log_path: Path,
-    ) -> ProcessHandle:
-        ...
+    ) -> ProcessHandle: ...
 
 
 class TrainingCancellationAdapter:
@@ -61,9 +121,11 @@ class TrainingCancellationAdapter:
         *,
         mode: TrainingCancellationMode,
         cgroup_manager: CgroupV2Manager | None = None,
+        resource_limits: TrainingResourceLimits | None = None,
     ) -> None:
         self.mode = mode
         self._cgroup_manager = cgroup_manager
+        self._resource_limits = resource_limits or TrainingResourceLimits()
         self._manager_lock = Lock()
 
     def capability(self) -> TrainingCancellationCapability:
@@ -77,9 +139,7 @@ class TrainingCancellationAdapter:
 
     def create_job_cgroup(self, job_id: str) -> CgroupV2Job:
         if self.mode != "strict-cgroup":
-            raise RuntimeError(
-                "Per-job cgroups are only valid in strict-cgroup mode."
-            )
+            raise RuntimeError("Per-job cgroups are only valid in strict-cgroup mode.")
         return self._manager().create_job_cgroup(job_id)
 
     def recover_job_cgroup(
@@ -102,7 +162,7 @@ class TrainingCancellationAdapter:
         with self._manager_lock:
             manager = self._cgroup_manager
             if manager is None:
-                manager = CgroupV2Manager()
+                manager = CgroupV2Manager(resource_limits=self._resource_limits)
                 self._cgroup_manager = manager
         return manager
 
@@ -272,8 +332,11 @@ class SubprocessRunner:
         env: dict[str, str],
         log_path: Path,
     ) -> ProcessHandle:
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        with log_path.open("ab") as log_file:
+        ensure_private_directory(log_path.parent)
+        with _open_private_binary(
+            log_path,
+            os.O_WRONLY | os.O_CREAT | os.O_APPEND,
+        ) as log_file:
             process = subprocess.Popen(
                 command,
                 cwd=cwd,
@@ -303,17 +366,18 @@ class TrainingWorkerLauncher:
         runner: ProcessRunner | None = None,
         cancellation_mode: TrainingCancellationMode | None = None,
         cgroup_manager: CgroupV2Manager | None = None,
+        resource_limits: TrainingResourceLimits | None = None,
         cgroup_join_timeout: float = 2.0,
     ) -> None:
         self.cwd = cwd
         self.runner = runner or SubprocessRunner()
-        selected_mode: TrainingCancellationMode = (
-            cancellation_mode
-            or ("process-group" if runner is not None else "strict-cgroup")
+        selected_mode: TrainingCancellationMode = cancellation_mode or (
+            "process-group" if runner is not None else "strict-cgroup"
         )
         self.cancellation = TrainingCancellationAdapter(
             mode=selected_mode,
             cgroup_manager=cgroup_manager,
+            resource_limits=resource_limits,
         )
         self.cgroup_join_timeout = cgroup_join_timeout
 
@@ -342,8 +406,10 @@ class TrainingWorkerLauncher:
         payload: dict[str, Any],
         logs_root: Path | str = "logs",
     ) -> TrainingWorkerLaunch:
+        ensure_private_directory(job_root)
         payload_path = self.write_payload(job_root, payload)
-        progress_path = job_root / "progress.jsonl"
+        progress_path = ensure_private_file(job_root / "progress.jsonl")
+        log_path = ensure_private_file(job_root / "training.log")
         command = self.build_command(payload_path, progress_path)
         cgroup: CgroupV2Job | None = None
         ready_path: Path | None = None
@@ -363,7 +429,7 @@ class TrainingWorkerLauncher:
                 launched_command,
                 cwd=self.cwd,
                 env=worker_env,
-                log_path=job_root / "training.log",
+                log_path=log_path,
             )
         except Exception:
             if cgroup is not None:
@@ -393,8 +459,13 @@ class TrainingWorkerLauncher:
 
     def write_payload(self, job_root: Path, payload: dict[str, Any]) -> Path:
         payload_path = job_root / "payload.json"
-        payload_path.parent.mkdir(parents=True, exist_ok=True)
-        payload_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        ensure_private_directory(payload_path.parent)
+        encoded = json.dumps(payload, indent=2).encode("utf-8")
+        with _open_private_binary(
+            payload_path,
+            os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
+        ) as payload_file:
+            payload_file.write(encoded)
         return payload_path
 
     def build_command(
@@ -413,10 +484,14 @@ class TrainingWorkerLauncher:
         ]
 
     def worker_env(self) -> dict[str, str]:
-        return {
-            **os.environ,
-            "MPLCONFIGDIR": os.environ.get("MPLCONFIGDIR", "/tmp/matplotlib"),
+        environment = {
+            name: value
+            for name, value in os.environ.items()
+            if name in _WORKER_ENVIRONMENT_NAMES
+            or name.startswith(_WORKER_ENVIRONMENT_PREFIXES)
         }
+        environment.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
+        return environment
 
     def _wrap_strict_cgroup_command(
         self,
@@ -479,4 +554,6 @@ __all__ = [
     "TrainingProcessContainment",
     "TrainingWorkerLaunch",
     "TrainingWorkerLauncher",
+    "ensure_private_directory",
+    "ensure_private_file",
 ]

@@ -6,7 +6,11 @@ from typing import Literal
 
 from pydantic import Field
 
-from workbench.backend.schemas._base import ApiResponseModel, JsonObject
+from workbench.backend.schemas._base import (
+    ApiResponseModel,
+    BoundedIdentifier,
+    JsonObject,
+)
 from workbench.backend.schemas._limits import (
     DEFAULT_LOG_SCALAR_MAX_POINTS,
     MAX_LOG_DELETE_FILTER_VALUES,
@@ -78,7 +82,7 @@ class LogRunsResponse(ApiResponseModel):
 
 
 class LogCheckpointsRequest(ApiResponseModel):
-    runIds: list[str] = Field(
+    runIds: list[BoundedIdentifier] = Field(
         default_factory=list,
         max_length=MAX_LOG_REQUEST_RUN_IDS,
     )
@@ -152,16 +156,16 @@ class LogArchiveImportResponse(ApiResponseModel):
 
 
 class LogRunModelFilterRequest(ApiResponseModel):
-    modelType: str
-    model: str
+    modelType: BoundedIdentifier
+    model: BoundedIdentifier
 
 
 class LogRunDeleteFiltersRequest(ApiResponseModel):
-    experiments: list[str] = Field(
+    experiments: list[BoundedIdentifier] = Field(
         default_factory=list,
         max_length=MAX_LOG_DELETE_FILTER_VALUES,
     )
-    datasets: list[str] = Field(
+    datasets: list[BoundedIdentifier] = Field(
         default_factory=list,
         max_length=MAX_LOG_DELETE_FILTER_VALUES,
     )
@@ -169,14 +173,19 @@ class LogRunDeleteFiltersRequest(ApiResponseModel):
         default_factory=list,
         max_length=MAX_LOG_DELETE_FILTER_VALUES,
     )
-    presets: list[str] = Field(
+    presets: list[BoundedIdentifier] = Field(
         default_factory=list,
         max_length=MAX_LOG_DELETE_FILTER_VALUES,
     )
-    runIds: list[str] = Field(
+    runIds: list[BoundedIdentifier] = Field(
         default_factory=list,
         max_length=MAX_LOG_DELETE_FILTER_VALUES,
     )
+
+
+class LogPresetDeleteRequest(ApiResponseModel):
+    experiment: BoundedIdentifier = Field(min_length=1)
+    preset: BoundedIdentifier = Field(min_length=1)
 
 
 class LogRunDeleteCandidateResponse(ApiResponseModel):
@@ -233,7 +242,7 @@ class LogRunDeleteResponse(LogRunDeletePlanResponse):
 
 
 class LogTagsRequest(ApiResponseModel):
-    runIds: list[str] = Field(
+    runIds: list[BoundedIdentifier] = Field(
         default_factory=list,
         max_length=MAX_LOG_REQUEST_RUN_IDS,
     )
@@ -259,11 +268,14 @@ class LogTagsResponse(ApiResponseModel):
 
 
 class LogScalarsRequest(ApiResponseModel):
-    runIds: list[str] = Field(
+    runIds: list[BoundedIdentifier] = Field(
         default_factory=list,
         max_length=MAX_LOG_REQUEST_RUN_IDS,
     )
-    tags: list[str] = Field(default_factory=list, max_length=MAX_LOG_SCALAR_TAGS)
+    tags: list[BoundedIdentifier] = Field(
+        default_factory=list,
+        max_length=MAX_LOG_SCALAR_TAGS,
+    )
     maxPoints: int = Field(
         default=DEFAULT_LOG_SCALAR_MAX_POINTS,
         ge=1,
@@ -285,12 +297,18 @@ class LogScalarsResponse(ApiResponseModel):
 
 
 class LogMediaRequest(ApiResponseModel):
-    runIds: list[str] = Field(
+    runIds: list[BoundedIdentifier] = Field(
         default_factory=list,
         max_length=MAX_LOG_REQUEST_RUN_IDS,
     )
-    imageTags: list[str] = Field(default_factory=list, max_length=MAX_LOG_MEDIA_TAGS)
-    textTags: list[str] = Field(default_factory=list, max_length=MAX_LOG_MEDIA_TAGS)
+    imageTags: list[BoundedIdentifier] = Field(
+        default_factory=list,
+        max_length=MAX_LOG_MEDIA_TAGS,
+    )
+    textTags: list[BoundedIdentifier] = Field(
+        default_factory=list,
+        max_length=MAX_LOG_MEDIA_TAGS,
+    )
 
 
 class LogImageSummaryResponse(ApiResponseModel):

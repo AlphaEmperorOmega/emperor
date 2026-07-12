@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import logging
 import os
 import re
 from dataclasses import dataclass
@@ -13,12 +14,19 @@ from pathlib import Path
 from threading import RLock
 from typing import Any
 
-from workbench.backend.run_history.paths import resolved_under_root
+from emperor.runs import NonFiniteJsonValue, replace_non_finite_json
+
+from workbench.backend.run_history.checkpoint_ranking import (
+    parse_checkpoint_epoch,
+    parse_checkpoint_step,
+)
+from workbench.backend.run_history.paths import (
+    read_regular_file_beneath,
+    resolved_under_root,
+)
 from workbench.backend.tensorboard import events as tensorboard_events
 from workbench.backend.tensorboard.events import EventFileIndex
 
-CHECKPOINT_EPOCH_RE = re.compile(r"(?:^|[-_])epoch=(?P<value>\d+)(?:[-_]|$)")
-CHECKPOINT_STEP_RE = re.compile(r"(?:^|[-_])step=(?P<value>\d+)(?:[-_]|$)")
 HPARAM_INT_RE = re.compile(r"^[+-]?\d+$")
 HPARAM_FLOAT_RE = re.compile(
     r"^[+-]?(?:(?:\d+\.\d*)|(?:\.\d+)|(?:\d+))(?:[eE][+-]?\d+)$"
@@ -27,6 +35,7 @@ HPARAM_FLOAT_RE = re.compile(
 DEFAULT_RUN_ARTIFACT_MAX_FILES = 10_000
 DEFAULT_RUN_ARTIFACT_MAX_DEPTH = 16
 DEFAULT_RUN_METADATA_FILE_MAX_BYTES = 4 * 1024 * 1024
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,9 +50,7 @@ class RunArtifactBudgets:
         if self.max_depth < 0:
             raise ValueError("Run Artifact max_depth cannot be negative.")
         if self.max_metadata_file_bytes < 1:
-            raise ValueError(
-                "Run Artifact max_metadata_file_bytes must be positive."
-            )
+            raise ValueError("Run Artifact max_metadata_file_bytes must be positive.")
 
 
 DEFAULT_RUN_ARTIFACT_BUDGETS = RunArtifactBudgets()
@@ -130,6 +137,8 @@ class RunArtifactObservation:
                     _read_hparams_flat(
                         self.hparams.path,
                         max_bytes=self.budgets.max_metadata_file_bytes,
+                        run_root=self.run_dir,
+                        anchor_root=self.root,
                     )
                     if self.hparams is not None
                     else {}
@@ -144,6 +153,9 @@ class RunArtifactObservation:
                     _read_result_payload(
                         self.result.path,
                         max_bytes=self.budgets.max_metadata_file_bytes,
+                        run_label=self.run_dir.relative_to(self.root).as_posix(),
+                        run_root=self.run_dir,
+                        anchor_root=self.root,
                     )
                     if self.result is not None
                     else {}
@@ -156,13 +168,22 @@ class RunArtifactObservation:
         return copy.deepcopy(value) if isinstance(value, dict) else {}
 
 
-def _read_bounded_text(path: Path, *, max_bytes: int) -> str | None:
-    try:
-        with path.open("rb") as source:
-            raw = source.read(max_bytes + 1)
-    except OSError:
-        return None
-    if len(raw) > max_bytes:
+def _read_bounded_text(
+    path: Path,
+    *,
+    max_bytes: int,
+    run_root: Path | None = None,
+    anchor_root: Path | None = None,
+) -> str | None:
+    boundary = run_root or path.parent
+    anchor = anchor_root or boundary
+    raw = read_regular_file_beneath(
+        path,
+        boundary=boundary,
+        anchor=anchor,
+        max_bytes=max_bytes,
+    )
+    if raw is None:
         return None
     try:
         return raw.decode("utf-8")
@@ -174,13 +195,37 @@ def _read_result_payload(
     result_path: Path,
     *,
     max_bytes: int = DEFAULT_RUN_METADATA_FILE_MAX_BYTES,
+    run_label: str | None = None,
+    run_root: Path | None = None,
+    anchor_root: Path | None = None,
 ) -> dict[str, Any]:
     try:
-        text = _read_bounded_text(result_path, max_bytes=max_bytes)
+        text = _read_bounded_text(
+            result_path,
+            max_bytes=max_bytes,
+            run_root=run_root,
+            anchor_root=anchor_root,
+        )
         payload = json.loads(text) if text is not None else None
     except Exception:
         return {}
-    return payload if isinstance(payload, dict) else {}
+    if not isinstance(payload, dict):
+        return {}
+
+    def diagnose(invalid: NonFiniteJsonValue) -> None:
+        LOGGER.warning(
+            "Run Artifact contains a non-finite JSON number: %s",
+            json.dumps(
+                {
+                    "code": "non_finite_run_artifact_value",
+                    "run": run_label or result_path.parent.as_posix(),
+                    "fieldPath": invalid.path,
+                },
+                sort_keys=True,
+            ),
+        )
+
+    return replace_non_finite_json(payload, on_replace=diagnose)
 
 
 def _parse_hparam_value(raw_value: str) -> bool | int | float | str | None:
@@ -196,11 +241,7 @@ def _parse_hparam_value(raw_value: str) -> bool | int | float | str | None:
         return True
     if normalized == "false":
         return False
-    if (
-        len(value) >= 2
-        and value[0] == value[-1]
-        and value[0] in {"'", '"'}
-    ):
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
         return value[1:-1]
     if HPARAM_INT_RE.fullmatch(value):
         try:
@@ -219,8 +260,15 @@ def _read_hparams_flat(
     hparams_path: Path,
     *,
     max_bytes: int = DEFAULT_RUN_METADATA_FILE_MAX_BYTES,
+    run_root: Path | None = None,
+    anchor_root: Path | None = None,
 ) -> dict[str, Any]:
-    text = _read_bounded_text(hparams_path, max_bytes=max_bytes)
+    text = _read_bounded_text(
+        hparams_path,
+        max_bytes=max_bytes,
+        run_root=run_root,
+        anchor_root=anchor_root,
+    )
     if text is None:
         return {}
     lines = text.splitlines()
@@ -255,8 +303,9 @@ def _observed_artifact(
     path: Path,
     *,
     root: Path,
+    run_root: Path,
 ) -> ObservedRunArtifact | None:
-    resolved = resolved_under_root(path, root)
+    resolved = resolved_under_root(path, run_root)
     if resolved is None or not resolved.is_file():
         return None
     try:
@@ -345,7 +394,11 @@ def observe_run_artifacts(
                 continue
             if not is_file and not is_symlink:
                 continue
-            artifact = _observed_artifact(candidate, root=resolved_root)
+            artifact = _observed_artifact(
+                candidate,
+                root=resolved_root,
+                run_root=resolved_run,
+            )
             if artifact is None:
                 continue
             try:
@@ -354,10 +407,7 @@ def observe_run_artifacts(
                 continue
             if len(run_relative.parts) == 1 and candidate.name == "result.json":
                 result = artifact
-            elif (
-                len(run_relative.parts) == 1
-                and candidate.name == "hparams.yaml"
-            ):
+            elif len(run_relative.parts) == 1 and candidate.name == "hparams.yaml":
                 hparams = artifact
             elif candidate.suffix == ".ckpt":
                 checkpoints.append(artifact)
@@ -376,6 +426,7 @@ def observe_run_artifacts(
     event_files = tensorboard_events.event_file_index(
         resolved_run,
         candidates=tuple(event_candidates),
+        complete=not truncation_reasons,
     )
     event_artifacts = tuple(
         ObservedRunArtifact(
@@ -400,10 +451,7 @@ def observe_run_artifacts(
         for artifact in event_artifacts
     )
     for label, artifact in (("result.json", result), ("hparams.yaml", hparams)):
-        if (
-            artifact is not None
-            and artifact.size > budgets.max_metadata_file_bytes
-        ):
+        if artifact is not None and artifact.size > budgets.max_metadata_file_bytes:
             truncation_reasons.append(
                 f"{label} exceeds the Run metadata byte cap: "
                 f"{artifact.size} > {budgets.max_metadata_file_bytes}."
@@ -430,22 +478,12 @@ def _file_id(run_id: str, relative_path: str) -> str:
     return hashlib.sha256(f"{run_id}:{relative_path}".encode()).hexdigest()[:16]
 
 
-def _parse_checkpoint_field(pattern: re.Pattern[str], filename: str) -> int | None:
-    match = pattern.search(filename)
-    if not match:
-        return None
-    try:
-        return int(match.group("value"))
-    except ValueError:
-        return None
-
-
 def _parse_checkpoint_epoch(filename: str) -> int | None:
-    return _parse_checkpoint_field(CHECKPOINT_EPOCH_RE, Path(filename).stem)
+    return parse_checkpoint_epoch(filename)
 
 
 def _parse_checkpoint_step(filename: str) -> int | None:
-    return _parse_checkpoint_field(CHECKPOINT_STEP_RE, Path(filename).stem)
+    return parse_checkpoint_step(filename)
 
 
 __all__ = [

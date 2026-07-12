@@ -8,6 +8,7 @@ from workbench.backend.schemas import (
     TrainingRunPlanCreateRequest,
 )
 from workbench.backend.training_jobs.contracts import (
+    ConfigSnapshotRevision,
     CreateTrainingJobCommand,
     CreateTrainingRunPlanCommand,
     TrainingSearch,
@@ -39,6 +40,7 @@ def create_run_plan_command(
         log_folder=request.logFolder,
         monitors=request.monitors,
         search=_search_from_request(request),
+        snapshot_ids=request.snapshotIds,
     )
 
 
@@ -55,9 +57,7 @@ def create_training_job_command(
         preset=request.preset,
         presets=request.presets,
         experiment_task=(
-            request.experimentTask
-            if request.experimentTask is not None
-            else None
+            request.experimentTask if request.experimentTask is not None else None
         ),
         datasets=request.datasets,
         overrides=request.overrides,
@@ -65,6 +65,14 @@ def create_training_job_command(
         monitors=request.monitors,
         search=_search_from_request(request),
         run_plan=run_plan,
+        snapshot_ids=request.snapshotIds,
+        snapshot_revisions=tuple(
+            ConfigSnapshotRevision(
+                id=revision.id,
+                semantic_revision=revision.semanticRevision,
+            )
+            for revision in request.snapshotRevisions
+        ),
     )
 
 

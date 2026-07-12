@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
-from emperor.inspection import InspectionRequest
+from emperor.inspection import InspectionRequest, InspectionResult
 from emperor.model_packages import ModelPackage
 
 from workbench.backend.api.v1.routers.models import (
@@ -16,12 +16,12 @@ from workbench.backend.api.v1.routers.models import (
     _search_space as http_search_space,
 )
 from workbench.backend.inspection_adapter import WorkbenchInspectionAdapter
+from workbench.backend.inspection_errors import InspectionFailure
 from workbench.backend.inspection_serialization import (
     configuration_schema_payload,
     inspection_result_payload,
     search_space_payload,
 )
-from workbench.backend.inspector.errors import InspectorError
 from workbench.backend.inspector.schema import (
     config_schema as legacy_config_schema,
 )
@@ -33,6 +33,17 @@ from workbench.backend.services.inspection import InspectionService
 
 
 class InspectionAdapterEquivalenceTests(unittest.TestCase):
+    def test_inspection_service_returns_transport_neutral_result(self) -> None:
+        result = InspectionService().inspect(
+            model_type="linears",
+            model="linear",
+            preset="baseline",
+            overrides={},
+            dataset="Mnist",
+        )
+
+        self.assertIsInstance(result, InspectionResult)
+
     def test_broken_package_failures_map_to_stable_workbench_errors(self) -> None:
         package = ModelPackage(
             "broken",
@@ -50,9 +61,8 @@ class InspectionAdapterEquivalenceTests(unittest.TestCase):
         )
         for call in calls:
             with self.subTest(call=call):
-                with self.assertRaises(InspectorError) as raised:
+                with self.assertRaises(InspectionFailure) as raised:
                     call()
-                self.assertEqual(raised.exception.status_code, 400)
                 self.assertIn(
                     "Failed to import model package 'broken/missing'",
                     raised.exception.detail,
@@ -154,15 +164,21 @@ class InspectionAdapterEquivalenceTests(unittest.TestCase):
         self,
     ) -> None:
         graph_calls: list[str] = []
+        semantic_graph_calls: list[str] = []
         configuration_calls: list[str] = []
         search_calls: list[str] = []
         original_graph = WorkbenchInspectionAdapter.inspect_payload
+        original_semantic_graph = WorkbenchInspectionAdapter.inspect
         original_configuration = WorkbenchInspectionAdapter.configuration_payload
         original_search = WorkbenchInspectionAdapter.search_space_payload
 
         def inspect_payload(adapter, request):  # type: ignore[no-untyped-def]
             graph_calls.append(adapter.package.catalog_key)
             return original_graph(adapter, request)
+
+        def inspect(adapter, request):  # type: ignore[no-untyped-def]
+            semantic_graph_calls.append(adapter.package.catalog_key)
+            return original_semantic_graph(adapter, request)
 
         def configuration_payload(  # type: ignore[no-untyped-def]
             adapter,
@@ -180,6 +196,11 @@ class InspectionAdapterEquivalenceTests(unittest.TestCase):
                 WorkbenchInspectionAdapter,
                 "inspect_payload",
                 inspect_payload,
+            ),
+            patch.object(
+                WorkbenchInspectionAdapter,
+                "inspect",
+                inspect,
             ),
             patch.object(
                 WorkbenchInspectionAdapter,
@@ -209,7 +230,11 @@ class InspectionAdapterEquivalenceTests(unittest.TestCase):
             http_config_schema("linears", "linear", "baseline")
             http_search_space("linears", "linear", "baseline", None)
 
-        self.assertEqual(graph_calls, ["linears/linear", "linears/linear"])
+        self.assertEqual(graph_calls, ["linears/linear"])
+        self.assertEqual(
+            semantic_graph_calls,
+            ["linears/linear", "linears/linear"],
+        )
         self.assertEqual(
             configuration_calls,
             ["linears/linear", "linears/linear"],

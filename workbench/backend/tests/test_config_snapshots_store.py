@@ -183,7 +183,7 @@ class InMemoryConfigSnapshotStoreTests(unittest.TestCase):
                 model="m2",
                 preset="z",
                 created_at="2026-01-02",
-            )
+            ),
         )
         create_record(
             store,
@@ -192,7 +192,7 @@ class InMemoryConfigSnapshotStoreTests(unittest.TestCase):
                 model="m1",
                 preset="z",
                 created_at="2026-01-02",
-            )
+            ),
         )
         create_record(
             store,
@@ -201,7 +201,7 @@ class InMemoryConfigSnapshotStoreTests(unittest.TestCase):
                 model="m1",
                 preset="a",
                 created_at="2026-01-03",
-            )
+            ),
         )
 
         self.assertEqual([s.id for s in store.list_all()], ["c", "a", "b"])
@@ -213,7 +213,7 @@ class FileSystemConfigSnapshotStoreTests(unittest.TestCase):
             first = FileSystemConfigSnapshotStore(Path(tmp))
             create_record(
                 first,
-                make_record(snapshot_id="a", model="m1", overrides={"lr": "0.02"})
+                make_record(snapshot_id="a", model="m1", overrides={"lr": "0.02"}),
             )
 
             second = FileSystemConfigSnapshotStore(Path(tmp))
@@ -266,7 +266,7 @@ class FileSystemConfigSnapshotStoreTests(unittest.TestCase):
                     model="linears/linear_adaptive",
                     preset="wide",
                     created_at="2026-01-02",
-                )
+                ),
             )
             create_record(
                 store,
@@ -275,7 +275,7 @@ class FileSystemConfigSnapshotStoreTests(unittest.TestCase):
                     model="linears/linear",
                     preset="fast",
                     created_at="2026-01-03",
-                )
+                ),
             )
             create_record(
                 store,
@@ -284,7 +284,7 @@ class FileSystemConfigSnapshotStoreTests(unittest.TestCase):
                     model="linears/linear",
                     preset="baseline",
                     created_at="2026-01-04",
-                )
+                ),
             )
 
             self.assertEqual(

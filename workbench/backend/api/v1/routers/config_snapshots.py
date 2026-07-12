@@ -10,7 +10,14 @@ from workbench.backend.api.mutation_policy import (
     HttpOperationPolicy,
     declare_http_operation,
 )
+from workbench.backend.api.v1.config_snapshot_mapping import (
+    config_snapshot_deletion_to_payload,
+    config_snapshot_library_to_payload,
+    config_snapshot_to_payload,
+    config_snapshots_to_payload,
+)
 from workbench.backend.blocking import run_blocking_io
+from workbench.backend.config_snapshots import ConfigSnapshotService
 from workbench.backend.core.config import WorkbenchApiSettings
 from workbench.backend.core.security import require_bearer_auth
 from workbench.backend.dependencies import (
@@ -18,6 +25,7 @@ from workbench.backend.dependencies import (
     get_workbench_settings,
 )
 from workbench.backend.model_identity import require_model_id
+from workbench.backend.mutation_execution import run_mutation_io
 from workbench.backend.schemas import (
     ConfigSnapshotCreateRequest,
     ConfigSnapshotLibraryResponse,
@@ -25,7 +33,6 @@ from workbench.backend.schemas import (
     ConfigSnapshotsResponse,
     ConfigSnapshotUpdateRequest,
 )
-from workbench.backend.services.config_snapshots import ConfigSnapshotService
 
 router = APIRouter(
     prefix="/config-snapshots",
@@ -46,12 +53,9 @@ async def list_config_snapshots(
     model: str = Query(...),
 ) -> ConfigSnapshotsResponse:
     model_id = require_model_id(modelType, model)
+    snapshots = await run_blocking_io(service.list_snapshots, model_id)
     return ConfigSnapshotsResponse.model_validate(
-        {
-            "modelType": modelType,
-            "model": model,
-            "snapshots": await run_blocking_io(service.list_snapshots, model_id),
-        }
+        config_snapshots_to_payload(service, model_id, snapshots)
     )
 
 
@@ -64,8 +68,9 @@ async def list_config_snapshots(
 async def list_config_snapshot_library(
     service: Annotated[ConfigSnapshotService, Depends(get_config_snapshot_service)],
 ) -> ConfigSnapshotLibraryResponse:
+    snapshots = await run_blocking_io(service.list_all_snapshots)
     return ConfigSnapshotLibraryResponse.model_validate(
-        {"snapshots": await run_blocking_io(service.list_all_snapshots)}
+        config_snapshot_library_to_payload(service, snapshots)
     )
 
 
@@ -82,14 +87,15 @@ async def create_config_snapshot(
     settings: Annotated[WorkbenchApiSettings, Depends(get_workbench_settings)],
 ) -> ConfigSnapshotResponse:
     model_id = require_model_id(request.modelType, request.model)
+    snapshot = await run_mutation_io(
+        service.create_snapshot,
+        model=model_id,
+        preset=request.preset,
+        name=request.name,
+        overrides=request.overrides,
+    )
     return ConfigSnapshotResponse.model_validate(
-        await run_blocking_io(
-            service.create_snapshot,
-            model=model_id,
-            preset=request.preset,
-            name=request.name,
-            overrides=request.overrides,
-        )
+        config_snapshot_to_payload(service, snapshot)
     )
 
 
@@ -106,13 +112,14 @@ async def update_config_snapshot(
     service: Annotated[ConfigSnapshotService, Depends(get_config_snapshot_service)],
     settings: Annotated[WorkbenchApiSettings, Depends(get_workbench_settings)],
 ) -> ConfigSnapshotResponse:
+    snapshot = await run_mutation_io(
+        service.update_snapshot,
+        snapshot_id,
+        name=request.name,
+        overrides=request.overrides,
+    )
     return ConfigSnapshotResponse.model_validate(
-        await run_blocking_io(
-            service.update_snapshot,
-            snapshot_id,
-            name=request.name,
-            overrides=request.overrides,
-        )
+        config_snapshot_to_payload(service, snapshot)
     )
 
 
@@ -128,6 +135,7 @@ async def delete_config_snapshot(
     service: Annotated[ConfigSnapshotService, Depends(get_config_snapshot_service)],
     settings: Annotated[WorkbenchApiSettings, Depends(get_workbench_settings)],
 ) -> ConfigSnapshotsResponse:
+    deletion = await run_mutation_io(service.delete_snapshot, snapshot_id)
     return ConfigSnapshotsResponse.model_validate(
-        await run_blocking_io(service.delete_snapshot, snapshot_id)
+        config_snapshot_deletion_to_payload(service, deletion)
     )

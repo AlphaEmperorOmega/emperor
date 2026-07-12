@@ -17,7 +17,12 @@ from emperor.model_packages import model_package
 from emperor.runs import RunRequest, plan_runs
 from models.package_cli import _search_spec
 
-from workbench.backend.inspector.errors import InspectorError
+from workbench.backend.config_snapshots import (
+    ConfigSnapshotRecord,
+    ConfigSnapshotService,
+    InMemoryConfigSnapshotStore,
+)
+from workbench.backend.failures import FailureKind
 from workbench.backend.tests.helpers import (
     FakeRunner,
     TrainingJobServiceHarness,
@@ -26,6 +31,7 @@ from workbench.backend.training_jobs.contracts import (
     CreateTrainingJobCommand,
     CreateTrainingRunPlanCommand,
 )
+from workbench.backend.training_jobs.errors import TrainingJobFailure
 from workbench.backend.training_jobs.limits import MAX_TRAINING_PLANNED_RUNS
 from workbench.backend.training_jobs.run_plan_adapter import (
     WorkbenchRunPlanAdapter,
@@ -87,6 +93,173 @@ class TrainingRunPlanTests(unittest.TestCase):
         self.assertEqual(semantic_plan.runs[0].id, preview.runs[0].id)
         self.assertEqual(materialized.document["runs"][0]["totalEpochs"], 7)
         self.assertEqual(materialized.document["summary"]["totalEpochs"], 7)
+
+    def test_snapshot_plan_is_backend_authoritative_and_revision_checked(self) -> None:
+        snapshots = ConfigSnapshotService(InMemoryConfigSnapshotStore())
+        snapshot = snapshots.create_snapshot(
+            model="linears/linear",
+            preset="baseline",
+            name="wide model",
+            overrides={"HIDDEN_DIM": "128", "NUM_EPOCHS": "7"},
+        )
+        adapter = WorkbenchRunPlanAdapter(config_snapshots=snapshots)
+        preview_command = CreateTrainingRunPlanCommand(
+            model="linears/linear",
+            preset="baseline",
+            presets=[],
+            datasets=["Mnist"],
+            overrides={"STACK_BIAS_FLAG": "false"},
+            log_folder="snapshot_authority",
+            snapshot_ids=[snapshot.id],
+        )
+
+        preview = adapter.create_run_plan(preview_command)
+        payload = training_run_plan_to_payload(preview)
+
+        self.assertEqual(len(payload["runs"]), 1)
+        self.assertEqual(payload["runs"][0]["snapshotId"], snapshot.id)
+        self.assertEqual(payload["runs"][0]["snapshotName"], "wide model")
+        self.assertEqual(
+            payload["runs"][0]["overrides"],
+            {
+                "HIDDEN_DIM": 128,
+                "NUM_EPOCHS": 7,
+                "STACK_BIAS_FLAG": False,
+            },
+        )
+        self.assertEqual(payload["runs"][0]["totalEpochs"], 7)
+        self.assertEqual(
+            payload["snapshotRevisions"][0]["id"],
+            snapshot.id,
+        )
+        revision = payload["snapshotRevisions"][0]["semanticRevision"]
+        self.assertRegex(revision, r"^[0-9a-f]{64}$")
+
+        snapshots.rename_snapshot(snapshot.id, "renamed model")
+        materialized = adapter.materialize_training_job(
+            CreateTrainingJobCommand(
+                model=preview_command.model,
+                preset=preview_command.preset,
+                presets=preview_command.presets,
+                datasets=preview_command.datasets,
+                overrides=preview_command.overrides,
+                log_folder=preview_command.log_folder,
+                snapshot_ids=preview_command.snapshot_ids,
+                snapshot_revisions=preview.snapshot_revisions,
+            ),
+            validated_log_folder="snapshot_authority",
+        )
+        self.assertEqual(
+            materialized.document["runs"][0]["snapshotName"],
+            "renamed model",
+        )
+        self.assertEqual(
+            materialized.document["snapshotRevisions"],
+            payload["snapshotRevisions"],
+        )
+
+        snapshots.update_snapshot(
+            snapshot.id,
+            overrides={"HIDDEN_DIM": "64", "NUM_EPOCHS": "7"},
+        )
+        with self.assertRaises(TrainingJobFailure) as stale:
+            adapter.materialize_training_job(
+                CreateTrainingJobCommand(
+                    model=preview_command.model,
+                    preset=preview_command.preset,
+                    presets=preview_command.presets,
+                    datasets=preview_command.datasets,
+                    overrides=preview_command.overrides,
+                    log_folder=preview_command.log_folder,
+                    snapshot_ids=preview_command.snapshot_ids,
+                    snapshot_revisions=preview.snapshot_revisions,
+                ),
+                validated_log_folder="snapshot_authority",
+            )
+
+        self.assertEqual(stale.exception.kind, FailureKind.CONFLICT)
+
+        snapshots.delete_snapshot(snapshot.id)
+        with self.assertRaises(TrainingJobFailure) as deleted:
+            adapter.materialize_training_job(
+                CreateTrainingJobCommand(
+                    model=preview_command.model,
+                    preset=preview_command.preset,
+                    presets=preview_command.presets,
+                    datasets=preview_command.datasets,
+                    overrides=preview_command.overrides,
+                    log_folder=preview_command.log_folder,
+                    snapshot_ids=preview_command.snapshot_ids,
+                    snapshot_revisions=preview.snapshot_revisions,
+                ),
+                validated_log_folder="snapshot_authority",
+            )
+
+        self.assertEqual(deleted.exception.kind, FailureKind.CONFLICT)
+
+    def test_snapshot_plan_rejects_missing_and_foreign_snapshot_ids(self) -> None:
+        store = InMemoryConfigSnapshotStore()
+        store.create(
+            ConfigSnapshotRecord(
+                id="foreign",
+                model="experts/linear",
+                preset="baseline",
+                name="foreign",
+                overrides={"HIDDEN_DIM": "128"},
+            )
+        )
+        adapter = WorkbenchRunPlanAdapter(config_snapshots=ConfigSnapshotService(store))
+
+        for snapshot_id, detail in (
+            ("missing", "no longer exists"),
+            ("foreign", "belongs to Model Package"),
+        ):
+            with self.subTest(snapshot_id=snapshot_id):
+                with self.assertRaisesRegex(TrainingJobFailure, detail):
+                    adapter.create_run_plan(
+                        CreateTrainingRunPlanCommand(
+                            model="linears/linear",
+                            preset="baseline",
+                            presets=[],
+                            datasets=["Mnist"],
+                            overrides={},
+                            log_folder="snapshot_validation",
+                            snapshot_ids=[snapshot_id],
+                        )
+                    )
+
+    def test_snapshot_provenance_without_backend_revision_is_rejected(self) -> None:
+        adapter = WorkbenchRunPlanAdapter()
+        command = CreateTrainingJobCommand(
+            model="linears/linear",
+            preset="baseline",
+            presets=["baseline"],
+            datasets=["Mnist"],
+            overrides={},
+            log_folder="invented_snapshot",
+            run_plan=submitted_run_plan_from_payload(
+                {
+                    "runs": [
+                        {
+                            "id": "invented-row",
+                            "preset": "baseline",
+                            "dataset": "Mnist",
+                            "overrides": {},
+                            "snapshotId": "invented",
+                            "snapshotName": "invented",
+                        }
+                    ]
+                }
+            ),
+        )
+
+        with self.assertRaises(TrainingJobFailure) as invented:
+            adapter.materialize_training_job(
+                command,
+                validated_log_folder="invented_snapshot",
+            )
+
+        self.assertEqual(invented.exception.kind, FailureKind.CONFLICT)
 
     def test_planning_does_not_depend_on_http_schema_serialization(self) -> None:
         with patch(
@@ -287,7 +460,7 @@ class TrainingRunPlanTests(unittest.TestCase):
     def test_training_run_plan_rejects_path_like_dataset_input(self) -> None:
         manager = TrainingJobServiceHarness(runner=FakeRunner())
 
-        with self.assertRaises(InspectorError) as context:
+        with self.assertRaises(TrainingJobFailure) as context:
             manager.create_run_plan(
                 model="linears/linear",
                 preset="baseline",
@@ -303,7 +476,7 @@ class TrainingRunPlanTests(unittest.TestCase):
 
     def test_workbench_strictly_rejects_equal_locked_values(self) -> None:
         manager = TrainingJobServiceHarness(runner=FakeRunner())
-        with self.assertRaisesRegex(InspectorError, "locked fields"):
+        with self.assertRaisesRegex(TrainingJobFailure, "locked fields"):
             manager.create_run_plan(
                 model="linears/linear",
                 preset="gating",
@@ -312,7 +485,7 @@ class TrainingRunPlanTests(unittest.TestCase):
                 overrides={"stack_gate_flag": "true"},
                 log_folder="",
             )
-        with self.assertRaisesRegex(InspectorError, "locked by preset"):
+        with self.assertRaisesRegex(TrainingJobFailure, "locked by preset"):
             manager.create_run_plan(
                 model="linears/linear",
                 preset="post-norm",
@@ -790,9 +963,7 @@ class TrainingRunPlanTests(unittest.TestCase):
                 {
                     "id": "frontend-row-a",
                     "index": 42,
-                    "snapshotId": "snapshot-2",
-                    "snapshotName": "gating hidden",
-                    "command": "stale --logdir draft_plan snapshot-2 gating hidden",
+                    "command": "stale --logdir draft_plan gating",
                 }
             )
 
@@ -822,11 +993,11 @@ class TrainingRunPlanTests(unittest.TestCase):
         )
         self.assertEqual(
             [run["snapshotId"] for run in normalized_plan["runs"]],
-            [None, "snapshot-2"],
+            [None, None],
         )
         self.assertEqual(
             [run["snapshotName"] for run in normalized_plan["runs"]],
-            [None, "gating hidden"],
+            [None, None],
         )
         self.assertEqual(
             [run["command"] for run in normalized_plan["runs"]],
@@ -979,7 +1150,7 @@ class TrainingRunPlanTests(unittest.TestCase):
                     )
                     mutate(plan)
 
-                    with self.assertRaises(InspectorError) as context:
+                    with self.assertRaises(TrainingJobFailure) as context:
                         manager.create_job_payload(
                             model="linears/linear",
                             preset="baseline",
@@ -1011,7 +1182,7 @@ class TrainingRunPlanTests(unittest.TestCase):
             for index in range(MAX_TRAINING_PLANNED_RUNS + 1)
         ]
 
-        with self.assertRaises(InspectorError) as context:
+        with self.assertRaises(TrainingJobFailure) as context:
             builder.from_submitted(
                 model="linears/linear",
                 selected=selected,
@@ -1038,7 +1209,7 @@ class TrainingRunPlanTests(unittest.TestCase):
             )
             plan["runs"][0]["overrides"]["gate_flag"] = "false"
 
-            with self.assertRaises(InspectorError) as context:
+            with self.assertRaises(TrainingJobFailure) as context:
                 manager.create_job_payload(
                     model="linears/linear",
                     preset="gating",

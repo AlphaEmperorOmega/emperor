@@ -8,6 +8,7 @@ from pydantic import Field
 
 from workbench.backend.schemas._base import (
     ApiResponseModel,
+    BoundedIdentifier,
     ConfigOverrides,
     JsonObject,
     JsonValue,
@@ -45,13 +46,13 @@ class GraphEdgeResponse(ApiResponseModel):
 
 
 class InspectRequest(ApiResponseModel):
-    modelType: str
-    model: str
-    preset: str
+    modelType: BoundedIdentifier
+    model: BoundedIdentifier
+    preset: BoundedIdentifier
     overrides: ConfigOverrides = Field(default_factory=dict)
-    experimentTask: str | None = None
-    dataset: str | None = None
-    logRunId: str | None = None
+    experimentTask: BoundedIdentifier | None = None
+    dataset: BoundedIdentifier | None = None
+    logRunId: BoundedIdentifier | None = None
 
 
 class InspectResponse(ApiResponseModel):

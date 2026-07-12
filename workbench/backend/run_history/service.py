@@ -15,7 +15,6 @@ from workbench.backend.core.limits import (
     DEFAULT_MAX_LOG_ARCHIVE_MEMBER_COUNT,
     DEFAULT_MAX_LOG_ARCHIVE_PATH_BYTES,
 )
-from workbench.backend.inspector.errors import InspectorError
 from workbench.backend.log_experiments import (
     LogExperimentMutationCoordinator,
 )
@@ -32,9 +31,15 @@ from workbench.backend.run_history.deletion import (
     LogRunDeletionExecutor,
     LogRunDeletionPlanner,
 )
-from workbench.backend.run_history.query import LogRunQueryService
+from workbench.backend.run_history.errors import RunHistoryFailure
+from workbench.backend.run_history.query import (
+    LOG_EVENT_CACHE_MAX_ENTRIES,
+    LOG_SCALAR_ACCUMULATOR_CACHE_MAX_ENTRIES,
+    LogRunQueryService,
+)
 from workbench.backend.run_history.records import LogRun, LogRunDeleteFilters
 from workbench.backend.run_history.scanner import LogRunScanner
+from workbench.backend.tensorboard.events import TensorBoardEventCache
 from workbench.backend.tensorboard.readers import (
     DEFAULT_SCALAR_POINT_LIMIT,
     TensorBoardMonitorReader,
@@ -50,6 +55,7 @@ RunListingCacheKey = tuple[
     tuple[str, ...],
     tuple[str, ...],
     tuple[str, ...],
+    str | None,
     bool | None,
 ]
 CachedRunListing = tuple[list[LogRun], dict[str, Any]]
@@ -95,7 +101,9 @@ def _matches_model_filter(run_model: str, selected_models: set[str]) -> bool:
     if not selected_models or run_model in selected_models:
         return True
     run_model_leaf = run_model.rsplit("/", 1)[-1]
-    return any(model.rsplit("/", 1)[-1] == run_model_leaf for model in selected_models)
+    return any(
+        "/" not in model and model == run_model_leaf for model in selected_models
+    )
 
 
 def _delete_filters_from_fields(
@@ -163,21 +171,46 @@ class RunHistoryService:
         logs_root: Path | str,
         mutation_coordinator: LogExperimentMutationCoordinator,
         active_log_writers: ActiveLogWriterSource,
+        state_root: Path | None = None,
         scalar_point_limit: int = DEFAULT_SCALAR_POINT_LIMIT,
+        tensorboard_request_work_bytes: int = 64 * 1024 * 1024,
+        tensorboard_cache_bytes: int = 128 * 1024 * 1024,
     ) -> None:
         self._logs_root = Path(logs_root)
         self._mutation_coordinator = mutation_coordinator
         self._active_log_writers = active_log_writers
-        self._scanner = LogRunScanner(logs_root=self._logs_root)
+        self._scanner = LogRunScanner(
+            logs_root=self._logs_root,
+            state_root=state_root,
+        )
+        event_cache = TensorBoardEventCache(
+            {
+                "tags": LOG_EVENT_CACHE_MAX_ENTRIES,
+                "scalars": LOG_EVENT_CACHE_MAX_ENTRIES,
+                "scalar_accumulators": LOG_SCALAR_ACCUMULATOR_CACHE_MAX_ENTRIES,
+                "monitor_payload": LOG_EVENT_CACHE_MAX_ENTRIES,
+                "parameter_status_payload": LOG_EVENT_CACHE_MAX_ENTRIES,
+            },
+            max_bytes=tensorboard_cache_bytes,
+        )
         monitor_reader = TensorBoardMonitorReader(
             scalar_point_limit=scalar_point_limit,
+            max_event_bytes=tensorboard_request_work_bytes,
+            event_cache=event_cache,
         )
-        parameter_status_reader = TensorBoardParameterStatusReader()
+        parameter_status_reader = TensorBoardParameterStatusReader(
+            max_event_bytes=tensorboard_request_work_bytes,
+            event_cache=event_cache,
+        )
         self._query = LogRunQueryService(
             scanner=self._scanner,
             scalar_point_limit=scalar_point_limit,
             monitor_reader=monitor_reader,
             parameter_status_reader=parameter_status_reader,
+            event_cache=event_cache,
+            max_request_event_bytes=tensorboard_request_work_bytes,
+            max_tag_event_bytes=tensorboard_request_work_bytes,
+            max_tag_batch_event_bytes=tensorboard_request_work_bytes,
         )
         self._deletion_planner = LogRunDeletionPlanner(scanner=self._scanner)
         self._deletion_executor = LogRunDeletionExecutor(scanner=self._scanner)
@@ -202,6 +235,13 @@ class RunHistoryService:
         self._query.clear_run_caches(run_paths)
         self._clear_run_listing_cache()
 
+    def invalidate_experiment(self, experiment: str) -> None:
+        """Inward seam for a terminal Training Job's Log Experiment."""
+
+        run_paths = self._scanner.invalidate_experiment(experiment)
+        self._query.clear_run_caches(run_paths)
+        self._clear_run_listing_cache()
+
     def _filtered_run_listing(
         self,
         *,
@@ -209,6 +249,7 @@ class RunHistoryService:
         model_set: set[str],
         preset_set: set[str],
         dataset_set: set[str],
+        experiment_task: str | None,
         has_event_files: bool | None,
     ) -> tuple[list[LogRun], dict[str, Any]]:
         with self._run_listing_lock:
@@ -220,6 +261,7 @@ class RunHistoryService:
             tuple(sorted(model_set)),
             tuple(sorted(preset_set)),
             tuple(sorted(dataset_set)),
+            experiment_task,
             has_event_files,
         )
         with self._run_listing_lock:
@@ -243,6 +285,10 @@ class RunHistoryService:
                 continue
             if dataset_set and run.dataset not in dataset_set:
                 continue
+            if experiment_task is not None:
+                projected = self._scanner.project_run(run, include_metrics=False)
+                if projected.experimentTask != experiment_task:
+                    continue
             if (
                 has_event_files is not None
                 and (run.eventFileCount > 0) != has_event_files
@@ -271,6 +317,7 @@ class RunHistoryService:
         model: list[str] | None = None,
         preset: list[str] | None = None,
         dataset: list[str] | None = None,
+        experiment_task: str | None = None,
         has_event_files: bool | None = None,
         projection: Literal["full", "summary"] = "full",
     ) -> dict[str, Any]:
@@ -279,6 +326,7 @@ class RunHistoryService:
             model_set=_selected_values(model),
             preset_set=_selected_values(preset),
             dataset_set=_selected_values(dataset),
+            experiment_task=experiment_task,
             has_event_files=has_event_files,
         )
         runs = []
@@ -307,8 +355,7 @@ class RunHistoryService:
 
     def list_experiments(self, *, limit: int, offset: int) -> dict[str, Any]:
         experiments = [
-            experiment.to_response()
-            for experiment in self._scanner.list_experiments()
+            experiment.to_response() for experiment in self._scanner.list_experiments()
         ]
         return _paginated_response(
             experiments,
@@ -319,11 +366,11 @@ class RunHistoryService:
 
     def delete_experiment(self, experiment: str) -> dict[str, Any]:
         with self._mutation_coordinator.coordinate([experiment]):
+            self._scanner.reconcile_catalog()
             if any(
-                writer.log_folder == experiment
-                for writer in self._active_log_writers()
+                writer.log_folder == experiment for writer in self._active_log_writers()
             ):
-                raise InspectorError(ACTIVE_LOG_EXPERIMENT_DELETE_MESSAGE)
+                raise RunHistoryFailure(ACTIVE_LOG_EXPERIMENT_DELETE_MESSAGE)
             try:
                 return self._deletion_executor.delete_experiment(
                     experiment
@@ -340,6 +387,7 @@ class RunHistoryService:
         presets: list[str],
         run_ids: list[str],
     ) -> dict[str, Any]:
+        self._scanner.reconcile_catalog()
         filters = _delete_filters_from_fields(
             experiments=experiments,
             datasets=datasets,
@@ -369,8 +417,42 @@ class RunHistoryService:
             run_ids=run_ids,
         )
         with self._mutation_coordinator.coordinate(experiments):
+            self._scanner.reconcile_catalog()
             plan = self._deletion_planner.create_delete_plan(
                 filters,
+                active_writers=self._active_log_writers(),
+            )
+            affected_run_paths = [candidate.path for candidate in plan.candidates]
+            try:
+                return self._deletion_executor.delete_runs(plan).to_response()
+            finally:
+                self._invalidate_runs(affected_run_paths)
+
+    def create_preset_delete_plan(
+        self,
+        *,
+        experiment: str,
+        preset: str,
+    ) -> dict[str, Any]:
+        with self._mutation_coordinator.coordinate([experiment]):
+            self._scanner.reconcile_catalog()
+            return self._deletion_planner.create_preset_delete_plan(
+                experiment=experiment,
+                preset=preset,
+                active_writers=self._active_log_writers(),
+            ).to_response()
+
+    def delete_preset(
+        self,
+        *,
+        experiment: str,
+        preset: str,
+    ) -> dict[str, Any]:
+        with self._mutation_coordinator.coordinate([experiment]):
+            self._scanner.reconcile_catalog()
+            plan = self._deletion_planner.create_preset_delete_plan(
+                experiment=experiment,
+                preset=preset,
                 active_writers=self._active_log_writers(),
             )
             affected_run_paths = [candidate.path for candidate in plan.candidates]
@@ -402,7 +484,7 @@ class RunHistoryService:
                 writer.log_folder for writer in self._active_log_writers()
             }
             if active_experiments.intersection(experiments):
-                raise InspectorError(ACTIVE_LOG_EXPERIMENT_DELETE_MESSAGE)
+                raise RunHistoryFailure(ACTIVE_LOG_EXPERIMENT_DELETE_MESSAGE)
             try:
                 return import_log_archive(
                     archive=archive,
@@ -465,11 +547,16 @@ class RunHistoryService:
             self._query.saved_params_for_run(run)
         )
         root = self._scanner.resolved_root()
+        try:
+            run_root = run.path.resolve(strict=True)
+            run_root.relative_to(root)
+        except (OSError, ValueError):
+            run_root = run.path
         checkpoint_candidates: list[HistoricalCheckpointCandidate] = []
         for candidate in self._query.checkpoint_paths_for_resolved_run(run):
             try:
                 resolved = candidate.resolve(strict=True)
-                resolved.relative_to(root)
+                resolved.relative_to(run_root)
                 stat = resolved.stat()
             except (OSError, ValueError):
                 continue

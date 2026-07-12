@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from workbench.backend.config_snapshots import ConfigSnapshotService
 from workbench.backend.log_experiments import (
     LogExperimentMutationCoordinator,
 )
@@ -12,6 +14,7 @@ from workbench.backend.training_jobs.cgroups import (
     CgroupV2Manager,
     TrainingCancellationCapability,
     TrainingCancellationMode,
+    TrainingResourceLimits,
 )
 from workbench.backend.training_jobs.contracts import (
     ActiveTrainingJob,
@@ -42,6 +45,13 @@ class TrainingJobService:
         worker_launcher: TrainingWorkerLauncher | None = None,
         cancellation_mode: TrainingCancellationMode | None = None,
         cgroup_manager: CgroupV2Manager | None = None,
+        terminal_log_experiment_invalidator: Callable[[str], None] | None = None,
+        config_snapshots: ConfigSnapshotService | None = None,
+        max_progress_record_bytes: int = 1024 * 1024,
+        tensorboard_request_work_bytes: int = 64 * 1024 * 1024,
+        tensorboard_cache_bytes: int = 128 * 1024 * 1024,
+        max_active_training_jobs: int = 2,
+        training_resource_limits: TrainingResourceLimits | None = None,
     ) -> None:
         self._runtime = _TrainingJobRuntime(
             root=root,
@@ -52,6 +62,13 @@ class TrainingJobService:
             worker_launcher=worker_launcher,
             cancellation_mode=cancellation_mode,
             cgroup_manager=cgroup_manager,
+            terminal_log_experiment_invalidator=(terminal_log_experiment_invalidator),
+            config_snapshots=config_snapshots,
+            max_progress_record_bytes=max_progress_record_bytes,
+            tensorboard_request_work_bytes=tensorboard_request_work_bytes,
+            tensorboard_cache_bytes=tensorboard_cache_bytes,
+            max_active_training_jobs=max_active_training_jobs,
+            training_resource_limits=training_resource_limits,
         )
         self._mutation_coordinator = mutation_coordinator
 
@@ -119,6 +136,19 @@ class TrainingJobService:
 
     def cancel_job(self, job_id: str) -> TrainingJobView:
         return self._runtime.cancel_job_view(job_id)
+
+    def reconcile_job(
+        self,
+        job_id: str,
+        *,
+        action: str,
+        reason: str,
+    ) -> TrainingJobView:
+        return self._runtime.reconcile_unknown_job_view(
+            job_id,
+            action=action,
+            reason=reason,
+        )
 
     def cancellation_capability(self) -> TrainingCancellationCapability:
         return self._runtime.cancellation_capability()

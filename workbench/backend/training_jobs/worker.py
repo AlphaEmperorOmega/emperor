@@ -67,9 +67,7 @@ def main() -> None:
     )
     raw_plan = payload.get("runPlan")
     experiment_task = (
-        raw_plan.get("experimentTask")
-        if isinstance(raw_plan, Mapping)
-        else None
+        raw_plan.get("experimentTask") if isinstance(raw_plan, Mapping) else None
     )
     try:
         datasets, monitors = worker_payload_names(payload)
@@ -99,8 +97,7 @@ def main() -> None:
 
         if not isinstance(raw_plan, Mapping):
             raise ValueError(
-                "Training payload does not include a non-empty materialized "
-                "run plan."
+                "Training payload does not include a non-empty materialized run plan."
             )
         package = load_model_parts(model_id)
         plan = accept_worker_run_plan(package, payload)

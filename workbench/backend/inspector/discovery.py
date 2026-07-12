@@ -16,7 +16,7 @@ from emperor.model_packages import (
 )
 
 from workbench.backend.inspection_adapter import WorkbenchInspectionAdapter
-from workbench.backend.inspector.errors import InspectorError
+from workbench.backend.inspection_errors import InspectionFailure
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
@@ -70,7 +70,7 @@ def discover_models() -> list[str]:
 
 def load_model_parts(model_name: str) -> ModelParts:
     if not is_safe_model_id(model_name):
-        raise InspectorError(f"Invalid model name: {model_name!r}")
+        raise InspectionFailure(f"Invalid model name: {model_name!r}")
     adapter = WorkbenchInspectionAdapter.select(model_name)
     parts = adapter.call_package(
         _legacy_model_parts,
@@ -78,7 +78,7 @@ def load_model_parts(model_name: str) -> ModelParts:
         adapter.package,
     )
     if not parts.dataset_options_by_task:
-        raise InspectorError(
+        raise InspectionFailure(
             f"Model package '{model_name}' does not define DATASET_OPTIONS_BY_TASK."
         )
     return parts

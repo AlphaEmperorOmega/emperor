@@ -82,7 +82,7 @@ class EnvScriptTests(unittest.TestCase):
             script_path.write_text(
                 ENV_SCRIPT.read_text(encoding="utf-8").replace(
                     '\nif [ "$WORKBENCH_ACTION" = "stop" ]; then',
-                    f"\n{injection}\nif [ \"$WORKBENCH_ACTION\" = \"stop\" ]; then",
+                    f'\n{injection}\nif [ "$WORKBENCH_ACTION" = "stop" ]; then',
                     1,
                 ),
                 encoding="utf-8",
@@ -311,7 +311,7 @@ class EnvScriptTests(unittest.TestCase):
             python_path.write_text(
                 "#!/usr/bin/env bash\n"
                 "{\n"
-                "  for arg in \"$@\"; do printf '%s\\n' \"$arg\"; done\n"
+                '  for arg in "$@"; do printf \'%s\\n\' "$arg"; done\n'
                 f"}} > {shlex.quote(str(args_path))}\n"
                 "exit 0\n",
                 encoding="utf-8",
@@ -380,7 +380,7 @@ class EnvScriptTests(unittest.TestCase):
             python_path.write_text(
                 "#!/usr/bin/env bash\n"
                 "{\n"
-                "  for arg in \"$@\"; do printf '%s\\n' \"$arg\"; done\n"
+                '  for arg in "$@"; do printf \'%s\\n\' "$arg"; done\n'
                 f"}} > {shlex.quote(str(args_path))}\n"
                 "exit 0\n",
                 encoding="utf-8",
@@ -452,7 +452,7 @@ class EnvScriptTests(unittest.TestCase):
             python_path.write_text(
                 "#!/usr/bin/env bash\n"
                 "{\n"
-                "  for arg in \"$@\"; do printf '%s\\n' \"$arg\"; done\n"
+                '  for arg in "$@"; do printf \'%s\\n\' "$arg"; done\n'
                 f"}} > {shlex.quote(str(args_path))}\n"
                 "exit 0\n",
                 encoding="utf-8",
@@ -492,9 +492,7 @@ class EnvScriptTests(unittest.TestCase):
             args = args_path.read_text(encoding="utf-8").splitlines()
 
         reload_dirs = [
-            args[index + 1]
-            for index, arg in enumerate(args)
-            if arg == "--reload-dir"
+            args[index + 1] for index, arg in enumerate(args) if arg == "--reload-dir"
         ]
         self.assertIn("--reload", args)
         self.assertEqual(

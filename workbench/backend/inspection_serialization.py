@@ -29,8 +29,7 @@ def _camel_case(key: str) -> str:
 def _workbench_value(value: Any) -> Any:
     if isinstance(value, Mapping):
         return {
-            _camel_case(str(key)): _workbench_value(item)
-            for key, item in value.items()
+            _camel_case(str(key)): _workbench_value(item) for key, item in value.items()
         }
     if isinstance(value, tuple):
         return [_workbench_value(item) for item in value]
@@ -112,6 +111,7 @@ def configuration_schema_payload(schema: ConfigurationSchema) -> dict[str, Any]:
                 "default": field.default,
                 "nullable": field.nullable,
                 "choices": list(field.choices),
+                "maximum": field.maximum,
                 "locked": field.locked,
                 "lockedValue": field.locked_value,
                 "lockedReason": field.locked_reason,
@@ -168,9 +168,7 @@ def _dataset_payload(dataset: type) -> dict[str, Any]:
 
 def model_datasets_payload(package: ModelPackage) -> dict[str, Any]:
     return {
-        "defaultExperimentTask": package.task_name(
-            package.default_experiment_task
-        ),
+        "defaultExperimentTask": package.task_name(package.default_experiment_task),
         "datasetGroups": [
             {
                 "experimentTask": package.task_name(task),

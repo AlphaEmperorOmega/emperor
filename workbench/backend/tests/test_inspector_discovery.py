@@ -5,13 +5,13 @@ import unittest
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
+from workbench.backend.inspection_errors import InspectionFailure
 from workbench.backend.inspector.discovery import (
     discover_models,
     list_model_datasets,
     list_model_monitors,
     list_model_presets,
 )
-from workbench.backend.inspector.errors import InspectorError
 from workbench.backend.inspector.service import inspect_model
 
 
@@ -58,15 +58,15 @@ class InspectorDiscoveryTests(unittest.TestCase):
         self.assertIn("recurrent-gating-halting", preset_names)
 
     def test_flat_model_ids_are_rejected(self) -> None:
-        with self.assertRaisesRegex(InspectorError, "Invalid model name"):
+        with self.assertRaisesRegex(InspectionFailure, "Invalid model name"):
             list_model_presets("linear")
 
     def test_removed_neuron_model_ids_are_rejected(self) -> None:
         removed_flat_name = "neuron" + "_linear"
-        with self.assertRaisesRegex(InspectorError, "Unknown model"):
+        with self.assertRaisesRegex(InspectionFailure, "Unknown model"):
             list_model_presets(f"neuron/{removed_flat_name}")
 
-        with self.assertRaisesRegex(InspectorError, "Invalid model name"):
+        with self.assertRaisesRegex(InspectionFailure, "Invalid model name"):
             list_model_presets(removed_flat_name)
 
     def test_dataset_discovery_for_linear(self) -> None:

@@ -2,18 +2,27 @@
 
 from __future__ import annotations
 
+import logging
+import os
 import subprocess
 import uuid
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from threading import RLock
+from threading import Lock, RLock
 from typing import Any
 
 from emperor.model_packages import model_identity_payload_from_id
 
-from workbench.backend.inspector.errors import InspectorError
-from workbench.backend.log_experiments import validate_log_experiment_name
+from workbench.backend.config_snapshots import ConfigSnapshotService
+from workbench.backend.failures import FailureKind
+from workbench.backend.log_experiments import (
+    LogExperimentFailure,
+    validate_log_experiment_name,
+)
 from workbench.backend.model_identity import normalize_preset_token
+from workbench.backend.mutation_context import deterministic_mutation_resource_id
+from workbench.backend.tensorboard.events import TensorBoardEventCache
 from workbench.backend.tensorboard.readers import (
     TensorBoardMonitorReader,
     TensorBoardParameterStatusReader,
@@ -23,6 +32,7 @@ from workbench.backend.training_jobs.cgroups import (
     StrictCancellationUnavailable,
     TrainingCancellationCapability,
     TrainingCancellationMode,
+    TrainingResourceLimits,
 )
 from workbench.backend.training_jobs.contracts import (
     ActiveTrainingJob,
@@ -30,12 +40,14 @@ from workbench.backend.training_jobs.contracts import (
     TrainingJobView,
     TrainingProgressEventsPage,
 )
+from workbench.backend.training_jobs.errors import TrainingJobFailure
 from workbench.backend.training_jobs.launcher import (
     PersistedCgroupProcessHandle,
     ProcessHandle,
     ProcessRunner,
     TrainingProcessContainment,
     TrainingWorkerLauncher,
+    ensure_private_directory,
 )
 from workbench.backend.training_jobs.lifecycle import (
     terminal_exit_code,
@@ -69,6 +81,7 @@ from workbench.backend.training_jobs.store import (
 # Grace period for a cancelled worker to exit after SIGTERM (and again after
 # the SIGKILL escalation) before cancellation is reported as failed.
 CANCEL_REAP_GRACE_SECONDS = 5.0
+LOGGER = logging.getLogger(__name__)
 
 
 def _now() -> str:
@@ -87,13 +100,21 @@ class _TrainingJobRuntime:
         worker_launcher: TrainingWorkerLauncher | None = None,
         cancellation_mode: TrainingCancellationMode | None = None,
         cgroup_manager: CgroupV2Manager | None = None,
+        terminal_log_experiment_invalidator: Callable[[str], None] | None = None,
+        config_snapshots: ConfigSnapshotService | None = None,
+        max_progress_record_bytes: int = 1024 * 1024,
+        tensorboard_request_work_bytes: int = 64 * 1024 * 1024,
+        tensorboard_cache_bytes: int = 128 * 1024 * 1024,
+        max_active_training_jobs: int = 2,
+        training_resource_limits: TrainingResourceLimits | None = None,
     ) -> None:
-        self.root = root or Path("/tmp/emperor-workbench-training")
+        self.root = ensure_private_directory(
+            root or Path("/tmp/emperor-workbench-training")
+        ).resolve()
         self.cwd = cwd or Path.cwd()
         self.logs_root = Path(logs_root).resolve()
         if worker_launcher is not None and any(
-            value is not None
-            for value in (runner, cancellation_mode, cgroup_manager)
+            value is not None for value in (runner, cancellation_mode, cgroup_manager)
         ):
             raise ValueError(
                 "worker_launcher cannot be combined with runner, "
@@ -107,18 +128,44 @@ class _TrainingJobRuntime:
                 runner=runner,
                 cancellation_mode=cancellation_mode,
                 cgroup_manager=cgroup_manager,
+                resource_limits=training_resource_limits,
             )
-        self.monitor_reader = TensorBoardMonitorReader()
-        self.parameter_status_reader = TensorBoardParameterStatusReader()
-        self.run_plan_adapter = WorkbenchRunPlanAdapter()
+        tensorboard_cache = TensorBoardEventCache(
+            {
+                "training_monitor_payload": 128,
+                "training_parameter_status_payload": 128,
+            },
+            max_bytes=tensorboard_cache_bytes,
+        )
+        self.monitor_reader = TensorBoardMonitorReader(
+            max_event_bytes=tensorboard_request_work_bytes,
+            event_cache=tensorboard_cache,
+            cache_name="training_monitor_payload",
+        )
+        self.parameter_status_reader = TensorBoardParameterStatusReader(
+            max_event_bytes=tensorboard_request_work_bytes,
+            event_cache=tensorboard_cache,
+            cache_name="training_parameter_status_payload",
+        )
+        self.run_plan_adapter = WorkbenchRunPlanAdapter(
+            config_snapshots=config_snapshots
+        )
         self.job_store = job_store or FileSystemTrainingJobStore(self.root)
-        self.progress_store = TrainingProgressStore()
+        self.progress_store = TrainingProgressStore(
+            max_record_bytes=max_progress_record_bytes
+        )
         self.monitor_locator = TrainingMonitorLocator()
         self.job_projector = TrainingJobProjector()
         self._state_lock = RLock()
+        self._launch_admission_lock = Lock()
+        self._max_active_training_jobs = max(1, int(max_active_training_jobs))
         self._cancel_reap_grace_seconds = CANCEL_REAP_GRACE_SECONDS
         self._processes: dict[str, ProcessHandle] = {}
         self._released_job_ids: set[str] = set()
+        self._terminal_invalidated_job_ids: set[str] = set()
+        self._terminal_log_experiment_invalidator = (
+            terminal_log_experiment_invalidator or (lambda _experiment: None)
+        )
         self._live_projection_cache = TrainingLiveProjectionCache()
 
     def cancellation_capability(self) -> TrainingCancellationCapability:
@@ -128,13 +175,29 @@ class _TrainingJobRuntime:
         self,
         command: CreateTrainingJobCommand,
     ) -> TrainingJobView:
-        return self._create_job_view(command)
+        with self._launch_admission_lock:
+            return self._create_job_view(command)
 
     def _create_job_view(
         self,
         command: CreateTrainingJobCommand,
     ) -> TrainingJobView:
-        validated_log_folder = validate_log_experiment_name(command.log_folder)
+        job_id = deterministic_mutation_resource_id("training-job") or uuid.uuid4().hex
+        if self.job_store.get(job_id) is not None:
+            return self.get_job_view(job_id)
+        active_count = len(self.active_job_views())
+        if active_count >= self._max_active_training_jobs:
+            raise TrainingJobFailure(
+                "Training Job admission is unavailable while "
+                f"{self._max_active_training_jobs} active Training Jobs are "
+                "already running.",
+                kind=FailureKind.UNAVAILABLE,
+            )
+
+        try:
+            validated_log_folder = validate_log_experiment_name(command.log_folder)
+        except LogExperimentFailure as exc:
+            raise TrainingJobFailure(exc.detail) from exc
         materialized = self.run_plan_adapter.materialize_training_job(
             command,
             validated_log_folder=validated_log_folder,
@@ -145,7 +208,6 @@ class _TrainingJobRuntime:
 
         self._ensure_job_log_folder(validated_log_folder)
 
-        job_id = uuid.uuid4().hex
         job_root = self._create_job_root(job_id)
         payload = self._build_worker_payload(
             job_id=job_id,
@@ -160,7 +222,7 @@ class _TrainingJobRuntime:
                 logs_root=self.logs_root,
             )
         except StrictCancellationUnavailable as exc:
-            raise InspectorError(str(exc)) from exc
+            raise TrainingJobFailure(str(exc)) from exc
         try:
             job = self._register_job(
                 job_id=job_id,
@@ -199,15 +261,14 @@ class _TrainingJobRuntime:
         # Validate the top-level folder immediately before the worker starts.
         log_folder_path = self.logs_root / validated_log_folder
         if log_folder_path.is_symlink():
-            raise InspectorError(
+            raise TrainingJobFailure(
                 f"Refusing to write symlink log experiment: {validated_log_folder}"
             )
         log_folder_path.mkdir(parents=True, exist_ok=True)
 
     def _create_job_root(self, job_id: str) -> Path:
         job_root = self.root / job_id
-        job_root.mkdir(parents=True, exist_ok=True)
-        return job_root
+        return ensure_private_directory(job_root)
 
     def _build_worker_payload(
         self,
@@ -272,6 +333,7 @@ class _TrainingJobRuntime:
         return payload
 
     def cancel_job_view(self, job_id: str) -> TrainingJobView:
+        terminal_transition: tuple[TrainingJobRecord, str] | None = None
         with self._state_lock:
             job = self._get_job_record(job_id)
             snapshot = self._progress_updates(job)
@@ -279,9 +341,10 @@ class _TrainingJobRuntime:
             if is_terminal_job_status(job.status):
                 payload = self._snapshot(job, snapshot=snapshot)
             else:
+                previous_status = job.status
                 process = self._process_for_job(job)
                 if process is None and is_active_job_status(job.status):
-                    raise InspectorError(
+                    raise TrainingJobFailure(
                         f"Training job '{job_id}' has no live process handle."
                     )
                 reaped_exit_code: int | None = None
@@ -300,15 +363,70 @@ class _TrainingJobRuntime:
                     job.exit_code = reaped_exit_code
                 job.updated_at = _now()
                 self.job_store.save(job)
-                if terminal_status_from_event(
-                    snapshot.latest_terminal_event or {}
-                ) != "cancelled":
+                if (
+                    terminal_status_from_event(snapshot.latest_terminal_event or {})
+                    != "cancelled"
+                ):
                     self._write_event(
                         job,
                         {"type": "cancelled", "status": "cancelled"},
                     )
                 snapshot = self._progress_updates(job)
                 payload = self._snapshot(job, snapshot=snapshot)
+                terminal_transition = (job, previous_status)
+        if terminal_transition is not None:
+            self._notify_terminal_transition(*terminal_transition)
+        self._release_terminal_resources(job)
+        return payload
+
+    def reconcile_unknown_job_view(
+        self,
+        job_id: str,
+        *,
+        action: str,
+        reason: str,
+    ) -> TrainingJobView:
+        normalized_reason = reason.strip()
+        if action != "mark-failed":
+            raise TrainingJobFailure("Unknown Training Job reconciliation action.")
+        if not normalized_reason or len(normalized_reason) > 500:
+            raise TrainingJobFailure(
+                "Training Job reconciliation reason must contain 1 to 500 characters."
+            )
+
+        with self._state_lock:
+            job = self._get_job_record(job_id)
+            snapshot = self._progress_summary(job)
+            self._refresh(job, snapshot=snapshot)
+            if job.status != "unknown":
+                raise TrainingJobFailure(
+                    f"Training job '{job_id}' is '{job.status}', not unknown.",
+                    kind=FailureKind.CONFLICT,
+                )
+            if self._has_live_reconciliation_evidence(job):
+                raise TrainingJobFailure(
+                    f"Training job '{job_id}' still has live process evidence.",
+                    kind=FailureKind.CONFLICT,
+                )
+            previous_status = job.status
+            self._write_event(
+                job,
+                {
+                    "type": "operator_reconciled_failed",
+                    "status": "failed",
+                    "action": action,
+                    "reason": normalized_reason,
+                    "exitCode": None,
+                },
+            )
+            job.status = "failed"
+            job.exit_code = None
+            job.updated_at = _now()
+            self.job_store.save(job)
+            snapshot = self._progress_updates(job)
+            payload = self._snapshot(job, snapshot=snapshot)
+
+        self._notify_terminal_transition(job, previous_status)
         self._release_terminal_resources(job)
         return payload
 
@@ -352,9 +470,7 @@ class _TrainingJobRuntime:
             offset=safe_offset,
             limit=safe_limit,
             total_count=page.total_count,
-            next_offset=(
-                next_offset if next_offset < page.total_count else None
-            ),
+            next_offset=(next_offset if next_offset < page.total_count else None),
             events=page.events,
         )
         self._release_terminal_resources(job)
@@ -370,11 +486,11 @@ class _TrainingJobRuntime:
     ) -> dict[str, Any]:
         job = self._get_job_record(job_id)
         if dataset is not None and dataset not in job.datasets:
-            raise InspectorError(
+            raise TrainingJobFailure(
                 f"Unknown dataset '{dataset}' for training job '{job_id}'."
             )
         if preset is not None and not self.monitor_locator.preset_in_job(job, preset):
-            raise InspectorError(
+            raise TrainingJobFailure(
                 f"Unknown preset '{preset}' for training job '{job_id}'."
             )
         snapshot = self._progress_summary(job)
@@ -407,11 +523,11 @@ class _TrainingJobRuntime:
     ) -> dict[str, Any]:
         job = self._get_job_record(job_id)
         if dataset is not None and dataset not in job.datasets:
-            raise InspectorError(
+            raise TrainingJobFailure(
                 f"Unknown dataset '{dataset}' for training job '{job_id}'."
             )
         if preset is not None and not self.monitor_locator.preset_in_job(job, preset):
-            raise InspectorError(
+            raise TrainingJobFailure(
                 f"Unknown preset '{preset}' for training job '{job_id}'."
             )
         snapshot = self._progress_summary(job)
@@ -469,9 +585,9 @@ class _TrainingJobRuntime:
                 except ValueError:
                     continue
                 return str(resolved_candidate), event_log_dir
-        except (InspectorError, OSError, ValueError):
+        except (TrainingJobFailure, OSError, ValueError):
             pass
-        raise InspectorError(
+        raise TrainingJobFailure(
             "Training monitor log directory is outside this Training Job's "
             "Log Experiment."
         )
@@ -479,7 +595,7 @@ class _TrainingJobRuntime:
     def _get_job_record(self, job_id: str) -> TrainingJobRecord:
         job = self.job_store.get(job_id)
         if job is None:
-            raise InspectorError(f"Unknown training job '{job_id}'.")
+            raise TrainingJobFailure(f"Unknown training job '{job_id}'.")
         return job
 
     def _terminate_and_reap_process(
@@ -498,7 +614,7 @@ class _TrainingJobRuntime:
         try:
             return process.wait(timeout=self._cancel_reap_grace_seconds)
         except subprocess.TimeoutExpired as exc:
-            raise InspectorError(
+            raise TrainingJobFailure(
                 f"Training job '{job_id}' process survived terminate and kill."
             ) from exc
 
@@ -549,6 +665,41 @@ class _TrainingJobRuntime:
         )
         return bool(cgroup and cgroup.has_processes())
 
+    @staticmethod
+    def _process_identity_is_live(pid: int | None, *, group: bool = False) -> bool:
+        if pid is None or pid <= 0:
+            return False
+        try:
+            if group:
+                os.killpg(pid, 0)
+            else:
+                os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+        except OSError:
+            return False
+        return True
+
+    def _has_live_reconciliation_evidence(self, job: TrainingJobRecord) -> bool:
+        process = self._process_for_job(job)
+        if process is not None:
+            try:
+                if process.poll() is None:
+                    return True
+            except Exception:
+                return True
+        if self._job_has_live_containment(job):
+            return True
+        return any(
+            (
+                self._process_identity_is_live(job.pid),
+                self._process_identity_is_live(job.worker_pid),
+                self._process_identity_is_live(job.process_group_id, group=True),
+            )
+        )
+
     def _release_terminal_resources(self, job: TrainingJobRecord) -> None:
         if not is_terminal_job_status(job.status):
             return
@@ -575,12 +726,34 @@ class _TrainingJobRuntime:
                 self._processes.pop(job.id, None)
             self._released_job_ids.add(job.id)
 
+    def _notify_terminal_transition(
+        self,
+        job: TrainingJobRecord,
+        previous_status: str,
+    ) -> None:
+        if is_terminal_job_status(previous_status) or not is_terminal_job_status(
+            job.status
+        ):
+            return
+        with self._state_lock:
+            if job.id in self._terminal_invalidated_job_ids:
+                return
+            self._terminal_invalidated_job_ids.add(job.id)
+        try:
+            self._terminal_log_experiment_invalidator(job.log_folder)
+        except Exception:
+            LOGGER.exception(
+                "Training Job terminal invalidation failed",
+                extra={"job_id": job.id, "log_experiment": job.log_folder},
+            )
+
     def _refresh(
         self,
         job: TrainingJobRecord,
         *,
         snapshot: TrainingProgressSnapshot | None = None,
     ) -> None:
+        transitioned_from: str | None = None
         with self._state_lock:
             original_state = (job.status, job.exit_code, job.updated_at)
             process = self._process_for_job(job)
@@ -630,15 +803,23 @@ class _TrainingJobRuntime:
                 job.updated_at = _now()
             if original_state != (job.status, job.exit_code, job.updated_at):
                 self.job_store.save(job)
+                if not is_terminal_job_status(
+                    original_state[0]
+                ) and is_terminal_job_status(job.status):
+                    transitioned_from = original_state[0]
+        if transitioned_from is not None:
+            self._notify_terminal_transition(job, transitioned_from)
 
     def _progress_updates(
         self,
         job: TrainingJobRecord,
     ) -> TrainingProgressSnapshot:
-        # Lock order: Training Job state, then the private progress-store lock.
+        # Lock order: Training Job state, projection cache, progress store.
         with self._state_lock:
-            cursor = self._live_projection_cache.cursor(job.id)
-            return self.progress_store.read_snapshot(job, cursor=cursor)
+            return self._live_projection_cache.consume_progress(
+                job,
+                self.progress_store,
+            )
 
     def _progress_summary(
         self,

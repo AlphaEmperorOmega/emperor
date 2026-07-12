@@ -117,9 +117,7 @@ class FrozenCheckpointCandidate(Protocol):
     modified_at_ns: int
 
 
-CheckpointConfigInterpreter = Callable[
-    [Mapping[str, TensorShape]], Mapping[str, Any]
-]
+CheckpointConfigInterpreter = Callable[[Mapping[str, TensorShape]], Mapping[str, Any]]
 
 
 def load_checkpoint_graph_shapes(
@@ -188,10 +186,9 @@ def load_checkpoint_graph_shapes(
             except OSError:
                 fallback_reasons.append("checkpointUnavailable")
                 continue
-            if (
-                int(loaded_stat.st_size) != checkpoint_size
-                or int(loaded_stat.st_mtime_ns) != int(stat.st_mtime_ns)
-            ):
+            if int(loaded_stat.st_size) != checkpoint_size or int(
+                loaded_stat.st_mtime_ns
+            ) != int(stat.st_mtime_ns):
                 fallback_reasons.append("checkpointChanged")
                 continue
 
@@ -281,12 +278,8 @@ def _config_overrides(
     diagnostics: list[str],
 ) -> dict[str, Any]:
     overrides: dict[str, Any] = {}
-    input_weight = _matrix_shape(
-        tensor_shapes.get("input_model.model.weight_params")
-    )
-    output_weight = _matrix_shape(
-        tensor_shapes.get("output_model.model.weight_params")
-    )
+    input_weight = _matrix_shape(tensor_shapes.get("input_model.model.weight_params"))
+    output_weight = _matrix_shape(tensor_shapes.get("output_model.model.weight_params"))
     direct_layer_shapes = _stack_weight_shapes(tensor_shapes, _DIRECT_STACK_WEIGHT_RE)
     recurrent_layer_shapes = _stack_weight_shapes(
         tensor_shapes,
@@ -671,9 +664,7 @@ def _router_output_expert_count(
 
     candidates: list[int] = []
     for layer_shapes in shapes_by_outer_and_layer.values():
-        contiguous_layers = _contiguous_indices(
-            {index: () for index in layer_shapes}
-        )
+        contiguous_layers = _contiguous_indices({index: () for index in layer_shapes})
         if contiguous_layers is None:
             diagnostics.append("router_stack_num_layers:nonContiguous")
             return None

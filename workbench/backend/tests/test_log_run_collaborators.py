@@ -7,8 +7,8 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
-from workbench.backend.inspector.errors import InspectorError
 from workbench.backend.run_history.deletion import LogRunDeletionExecutor
+from workbench.backend.run_history.errors import RunHistoryFailure
 from workbench.backend.run_history.query import LogRunQueryService
 from workbench.backend.run_history.records import (
     LogRun,
@@ -75,7 +75,7 @@ class StaticLogRunScanner:
         self.requested_run_ids.append(run_ids)
         unknown = [run_id for run_id in run_ids if run_id not in self.runs_by_id]
         if unknown:
-            raise InspectorError(f"Unknown log run id: {unknown[0]}")
+            raise RunHistoryFailure(f"Unknown log run id: {unknown[0]}")
         return [self.runs_by_id[run_id] for run_id in dict.fromkeys(run_ids)]
 
     def artifact_observation(self, run: LogRun) -> _StaticArtifactObservation:
@@ -209,15 +209,43 @@ class LogRunQueryServiceTests(unittest.TestCase):
             load_calls: list[Path] = []
 
             def load_accumulator(
-                event_dir: Path,
+                _event_dir: Path,
                 **_kwargs: Any,
             ) -> BatchAccumulator:
-                load_calls.append(event_dir)
                 return BatchAccumulator()
 
-            with patch(
-                "workbench.backend.tensorboard.events.load_event_accumulator",
-                load_accumulator,
+            def exact_scalar_tails(
+                event_files,  # type: ignore[no-untyped-def]
+                tags: list[str],
+                **_kwargs: Any,
+            ) -> dict[str, dict[str, Any]]:
+                load_calls.append(event_files.root)
+                accumulator = BatchAccumulator()
+                return {
+                    tag: {
+                        "points": [
+                            {
+                                "step": event.step,
+                                "wallTime": event.wall_time,
+                                "value": event.value,
+                            }
+                            for event in accumulator.Scalars(tag)
+                        ],
+                        "sourcePointCount": 1,
+                        "truncated": False,
+                    }
+                    for tag in tags
+                }
+
+            with (
+                patch(
+                    "workbench.backend.tensorboard.events.load_event_accumulator",
+                    load_accumulator,
+                ),
+                patch(
+                    "workbench.backend.tensorboard.events.exact_scalar_tails",
+                    exact_scalar_tails,
+                ),
             ):
                 service.read_tags(run_dir)
                 load_calls.clear()
@@ -399,7 +427,10 @@ class LogRunDeletionExecutorTests(unittest.TestCase):
             )
             for label, relative_path, error_pattern in cases:
                 with self.subTest(label=label):
-                    with self.assertRaisesRegex(InspectorError, error_pattern):
+                    with self.assertRaisesRegex(
+                        RunHistoryFailure,
+                        error_pattern,
+                    ):
                         executor.delete_runs(
                             LogRunDeletePlan(
                                 candidates=[_delete_candidate(relative_path)]
@@ -413,9 +444,7 @@ class LogRunDeletionExecutorTests(unittest.TestCase):
             result = executor.delete_runs(
                 LogRunDeletePlan(
                     candidates=[
-                        _delete_candidate(
-                            valid_run.relative_to(logs_root).as_posix()
-                        )
+                        _delete_candidate(valid_run.relative_to(logs_root).as_posix())
                     ]
                 )
             )

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import tempfile
 import unittest
+import uuid
 from pathlib import Path
 from typing import Any
 from unittest import mock
@@ -74,11 +75,11 @@ def split_test_model(model: str) -> tuple[str, str]:
 
 
 @mock.patch(
-    "workbench.backend.services.config_snapshots._validate_snapshot_config",
+    "workbench.backend.config_snapshots._validate_snapshot_config",
     fake_validate_snapshot_config,
 )
 @mock.patch(
-    "workbench.backend.services.config_snapshots.config_schema",
+    "workbench.backend.config_snapshots.config_snapshot_schema",
     fake_config_schema,
 )
 class ConfigSnapshotApiTests(unittest.TestCase):
@@ -101,8 +102,11 @@ class ConfigSnapshotApiTests(unittest.TestCase):
             transport = httpx.ASGITransport(app=self.app)
             async with httpx.AsyncClient(
                 transport=transport,
-                base_url="http://testserver",
-                headers={"X-Workbench-Mutation": "true"},
+                base_url="http://localhost",
+                headers={
+                    "X-Workbench-Mutation": "true",
+                    "Idempotency-Key": uuid.uuid4().hex,
+                },
             ) as client:
                 return await client.request(method, path, **kwargs)
 
@@ -255,7 +259,7 @@ class ConfigSnapshotApiTests(unittest.TestCase):
     def test_update_snapshot_changes_name_and_overrides_in_place(self) -> None:
         snapshot = self._create(learning_rate="0.01").json()
         with mock.patch(
-            "workbench.backend.services.config_snapshots._now",
+            "workbench.backend.config_snapshots._now",
             return_value="2026-06-02T00:00:00+00:00",
         ):
             updated = self._request(

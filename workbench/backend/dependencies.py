@@ -7,12 +7,12 @@ from typing import Annotated, cast
 
 from fastapi import Depends, Request
 
+from workbench.backend.config_snapshots import ConfigSnapshotService
 from workbench.backend.core.config import WorkbenchApiSettings
 from workbench.backend.log_experiments import (
     LogExperimentMutationCoordinator,
 )
 from workbench.backend.run_history import RunHistoryService
-from workbench.backend.services.config_snapshots import ConfigSnapshotService
 from workbench.backend.services.inspection import InspectionService
 from workbench.backend.training_jobs import TrainingJobService
 from workbench.backend.training_jobs.run_plan_adapter import (

@@ -20,8 +20,12 @@ from workbench.backend.storage.local_files import (
     resolve_under_root,
     write_json_atomic,
 )
+from workbench.backend.training_jobs.contracts import TrainingRunPlanDocument
+from workbench.backend.training_jobs.launcher import (
+    PRIVATE_FILE_MODE,
+    ensure_private_directory,
+)
 from workbench.backend.training_jobs.run_plan_adapter import (
-    TrainingRunPlanDocument,
     decode_persisted_run_plan,
     encode_persisted_run_plan,
 )
@@ -100,7 +104,7 @@ class InMemoryTrainingJobStore:
 
 class FileSystemTrainingJobStore:
     def __init__(self, root: Path) -> None:
-        self.root = resolve_root(Path(root))
+        self.root = resolve_root(ensure_private_directory(Path(root)))
         self._jobs: dict[str, TrainingJobRecord] = {}
         self._lock = RLock()
 
@@ -114,6 +118,7 @@ class FileSystemTrainingJobStore:
                 safe_job_id=safe_job_id,
             )
             write_json_atomic(metadata_path, _record_to_metadata(job))
+            metadata_path.chmod(PRIVATE_FILE_MODE)
             self._jobs[job.id] = job
 
     def get(self, job_id: str) -> TrainingJobRecord | None:

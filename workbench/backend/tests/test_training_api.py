@@ -4,6 +4,7 @@ import asyncio
 import os
 import tempfile
 import unittest
+import uuid
 from pathlib import Path
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
@@ -17,6 +18,7 @@ from workbench.backend.schemas import (
     ParameterStatusResponse,
     SubmittedTrainingRunPlanRequest,
     TrainingJobCreateRequest,
+    TrainingJobReconcileRequest,
     TrainingJobResponse,
     TrainingProgressEventsResponse,
     TrainingRunPlanCreateRequest,
@@ -28,6 +30,7 @@ from workbench.backend.tests.helpers import (
     TrainingJobServiceHarness,
     create_app_with_training_service,
 )
+from workbench.backend.training_jobs.limits import MAX_TRAINING_PLANNED_RUNS
 from workbench.backend.training_jobs.run_plan_adapter import (
     submitted_run_plan_from_payload,
     submitted_run_plan_to_payload,
@@ -65,6 +68,7 @@ EXPECTED_TRAINING_JOB_RESPONSE_FIELDS = (
     "eventsTruncated",
     "clusterGrowth",
     "logTail",
+    "logTailTruncated",
     "resultLinks",
 )
 
@@ -81,6 +85,7 @@ EXPECTED_TRAINING_RUN_PLAN_RESPONSE_FIELDS = (
     "isRandomSearch",
     "runs",
     "summary",
+    "snapshotRevisions",
 )
 
 EXPECTED_TRAINING_RUN_RESPONSE_FIELDS = (
@@ -120,6 +125,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
         app = create_app_with_training_service(
             WorkbenchApiSettings(
                 logs_root=str(logs_root),
+                snapshots_root=str(root / "snapshots"),
                 allow_unsafe_local_mutations=True,
             ),
             manager,
@@ -164,6 +170,10 @@ class TrainingApiLifecycleTests(unittest.TestCase):
             (("POST",), "/training/jobs/{job_id}/cancel"): (
                 TrainingJobResponse,
                 (),
+            ),
+            (("POST",), "/training/jobs/{job_id}/reconcile"): (
+                TrainingJobResponse,
+                (TrainingJobReconcileRequest,),
             ),
         }
 
@@ -255,6 +265,61 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                 }
             )
 
+    def test_run_plan_resolves_snapshot_ids_and_returns_semantic_revisions(
+        self,
+    ) -> None:
+        import httpx
+
+        with tempfile.TemporaryDirectory() as tmp:
+            app, _manager = self._create_test_app(Path(tmp))
+
+            async def call_api() -> tuple[httpx.Response, httpx.Response]:
+                transport = httpx.ASGITransport(app=app)
+                async with httpx.AsyncClient(
+                    transport=transport,
+                    base_url="http://localhost",
+                    headers={"X-Workbench-Mutation": "true"},
+                ) as client:
+                    snapshot = await client.post(
+                        "/config-snapshots",
+                        headers={"Idempotency-Key": uuid.uuid4().hex},
+                        json={
+                            "modelType": "linears",
+                            "model": "linear",
+                            "preset": "baseline",
+                            "name": "wide",
+                            "overrides": {
+                                "HIDDEN_DIM": "128",
+                                "NUM_EPOCHS": "7",
+                            },
+                        },
+                    )
+                    plan = await client.post(
+                        "/training/run-plan",
+                        json={
+                            "modelType": "linears",
+                            "model": "linear",
+                            "preset": "baseline",
+                            "presets": [],
+                            "datasets": ["Mnist"],
+                            "overrides": {},
+                            "logFolder": "snapshot_api",
+                            "snapshotIds": [snapshot.json().get("id")],
+                        },
+                    )
+                    return snapshot, plan
+
+            snapshot, plan = asyncio.run(call_api())
+
+        self.assertEqual(snapshot.status_code, 200, snapshot.text)
+        self.assertEqual(plan.status_code, 200, plan.text)
+        payload = plan.json()
+        self.assertEqual(len(payload["runs"]), 1)
+        self.assertEqual(payload["runs"][0]["snapshotId"], snapshot.json()["id"])
+        self.assertEqual(payload["runs"][0]["snapshotName"], "wide")
+        self.assertEqual(payload["runs"][0]["totalEpochs"], 7)
+        self.assertEqual(payload["snapshotRevisions"][0]["id"], snapshot.json()["id"])
+
     def test_submitted_run_plan_rejects_response_only_projection_fields(self) -> None:
         row = {
             "id": "run-1",
@@ -278,8 +343,8 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                         response_only_payload
                     )
 
-    def test_training_request_schemas_do_not_cap_preset_selection_count(self) -> None:
-        presets = [f"preset-{index}" for index in range(2501)]
+    def test_training_request_schemas_cap_preset_selection_count(self) -> None:
+        presets = [f"preset-{index}" for index in range(MAX_TRAINING_PLANNED_RUNS + 1)]
         create_payload = {
             "modelType": "linears",
             "model": "linear",
@@ -289,13 +354,10 @@ class TrainingApiLifecycleTests(unittest.TestCase):
             "overrides": {},
             "logFolder": "api_schema",
         }
-        job_request = TrainingJobCreateRequest.model_validate(
-            {**create_payload, "monitors": []}
-        )
-        run_plan_request = TrainingRunPlanCreateRequest.model_validate(create_payload)
-
-        self.assertEqual(job_request.presets, presets)
-        self.assertEqual(run_plan_request.presets, presets)
+        with self.assertRaises(ValidationError):
+            TrainingJobCreateRequest.model_validate({**create_payload, "monitors": []})
+        with self.assertRaises(ValidationError):
+            TrainingRunPlanCreateRequest.model_validate(create_payload)
 
     def test_training_run_plan_rejects_nested_override_object_at_api_boundary(
         self,
@@ -309,8 +371,11 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                 transport = httpx.ASGITransport(app=app)
                 async with httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
-                    headers={"X-Workbench-Mutation": "true"},
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
                 ) as client:
                     return await client.post(
                         "/training/run-plan",
@@ -339,8 +404,11 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                 transport = httpx.ASGITransport(app=app)
                 async with httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
-                    headers={"X-Workbench-Mutation": "true"},
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
                 ) as client:
                     accepted = await client.post(
                         "/training/run-plan",
@@ -392,8 +460,11 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                 transport = httpx.ASGITransport(app=app)
                 async with httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
-                    headers={"X-Workbench-Mutation": "true"},
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
                 ) as client:
                     return await client.post(
                         "/training/run-plan",
@@ -427,8 +498,11 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                 transport = httpx.ASGITransport(app=app)
                 async with httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
-                    headers={"X-Workbench-Mutation": "true"},
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
                 ) as client:
                     return await client.post(
                         "/training/run-plan",
@@ -441,17 +515,15 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                             "logFolder": "search_limit",
                             "search": {
                                 "mode": "grid",
-                                "values": {
-                                    "hidden_dim": [128 for _ in range(51)]
-                                },
+                                "values": {"hidden_dim": [128 for _ in range(51)]},
                             },
                         },
                     )
 
             response = asyncio.run(call_api())
 
-        self.assertEqual(response.status_code, 400)
-        self.assertIn("accepts at most 50", response.text)
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("at most 50 items", response.text)
 
     def test_training_run_plan_rejects_overlarge_grid_plan(self) -> None:
         import httpx
@@ -463,8 +535,11 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                 transport = httpx.ASGITransport(app=app)
                 async with httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
-                    headers={"X-Workbench-Mutation": "true"},
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
                 ) as client:
                     return await client.post(
                         "/training/run-plan",
@@ -515,8 +590,11 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                 transport = httpx.ASGITransport(app=app)
                 async with httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
-                    headers={"X-Workbench-Mutation": "true"},
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
                 ) as client:
                     return await client.post(
                         "/training/run-plan",
@@ -552,8 +630,11 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                 transport = httpx.ASGITransport(app=app)
                 async with httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
-                    headers={"X-Workbench-Mutation": "true"},
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
                 ) as client:
                     return await client.post(
                         "/training/run-plan",
@@ -607,8 +688,11 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                 transport = httpx.ASGITransport(app=app)
                 async with httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
-                    headers={"X-Workbench-Mutation": "true"},
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
                 ) as client:
                     return await client.post(
                         "/training/run-plan",
@@ -809,8 +893,11 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                 transport = httpx.ASGITransport(app=app)
                 async with httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
-                    headers={"X-Workbench-Mutation": "true"},
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
                 ) as client:
                     run_plan_response = await client.post(
                         "/training/run-plan",
@@ -894,8 +981,11 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                 transport = httpx.ASGITransport(app=app)
                 async with httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
-                    headers={"X-Workbench-Mutation": "true"},
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
                 ) as client:
                     run_plan_response = await client.post(
                         "/training/run-plan",
@@ -948,8 +1038,11 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                 transport = httpx.ASGITransport(app=app)
                 async with httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
-                    headers={"X-Workbench-Mutation": "true"},
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
                 ) as client:
                     create_response = await client.post(
                         "/training/jobs",
@@ -1007,8 +1100,11 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                 transport = httpx.ASGITransport(app=app)
                 async with httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
-                    headers={"X-Workbench-Mutation": "true"},
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
                 ) as client:
                     return await client.post(
                         "/training/run-plan",
@@ -1043,8 +1139,11 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                 transport = httpx.ASGITransport(app=app)
                 async with httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
-                    headers={"X-Workbench-Mutation": "true"},
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
                 ) as client:
                     return await client.post(
                         "/training/jobs",
@@ -1063,7 +1162,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
 
             self.assertEqual(manager.jobs, {})
             self.assertEqual(manager.active_job_payloads(), [])
-            self.assertFalse((root / "jobs").exists())
+            self.assertEqual(list((root / "jobs").iterdir()), [])
             self.assertFalse((root / "logs" / "path_like_dataset").exists())
 
         self.assertEqual(response.status_code, 400)
@@ -1082,8 +1181,11 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                 transport = httpx.ASGITransport(app=app)
                 async with httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
-                    headers={"X-Workbench-Mutation": "true"},
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
                 ) as client:
                     create_response = await client.post(
                         "/training/jobs",
@@ -1135,13 +1237,14 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                 transport = httpx.ASGITransport(app=app)
                 async with httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
-                    headers={"X-Workbench-Mutation": "true"},
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
                 ) as client:
                     get_response = await client.get("/training/jobs/missing")
-                    cancel_response = await client.post(
-                        "/training/jobs/missing/cancel"
-                    )
+                    cancel_response = await client.post("/training/jobs/missing/cancel")
                     prefixed_response = await client.get("/v1/training/jobs/missing")
                     return get_response, cancel_response, prefixed_response
 
@@ -1155,6 +1258,75 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                     {"detail": "Unknown training job 'missing'."},
                 )
         self.assertEqual(prefixed_response.status_code, 404)
+
+    def test_reconcile_unknown_job_is_bearer_protected_and_audited(self) -> None:
+        import httpx
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            logs_root = root / "logs"
+            manager = TrainingJobServiceHarness(
+                root=root / "jobs",
+                logs_root=logs_root,
+                runner=FakeRunner(FakeProcess()),
+            )
+            created = manager.create_job_payload(
+                model="linears/linear",
+                preset="baseline",
+                datasets=["Mnist"],
+                overrides={},
+                log_folder="reconcile_api",
+                monitors=[],
+            )
+            job_id = str(created["id"])
+            job = manager.jobs[job_id]
+            manager.runtime._processes.pop(job_id)
+            job.status = "unknown"
+            job.pid = 2_000_000_000
+            job.worker_pid = 2_000_000_000
+            manager.runtime.job_store.save(job)
+            app = create_app_with_training_service(
+                WorkbenchApiSettings(
+                    logs_root=str(logs_root),
+                    allow_unsafe_local_mutations=True,
+                    auth_mode="bearer",
+                    token="operator-token",
+                ),
+                manager,
+            )
+
+            async def call_api() -> tuple[httpx.Response, httpx.Response]:
+                transport = httpx.ASGITransport(app=app)
+                headers = {
+                    "X-Workbench-Mutation": "true",
+                    "Idempotency-Key": uuid.uuid4().hex,
+                }
+                async with httpx.AsyncClient(
+                    transport=transport,
+                    base_url="http://localhost",
+                    headers=headers,
+                ) as client:
+                    missing_auth = await client.post(
+                        f"/training/jobs/{job_id}/reconcile",
+                        json={"action": "mark-failed", "reason": "worker absent"},
+                    )
+                    accepted = await client.post(
+                        f"/training/jobs/{job_id}/reconcile",
+                        headers={"Authorization": "Bearer operator-token"},
+                        json={"action": "mark-failed", "reason": "worker absent"},
+                    )
+                    return missing_auth, accepted
+
+            missing_auth, accepted = asyncio.run(call_api())
+
+        self.assertEqual(missing_auth.status_code, 401)
+        self.assertEqual(accepted.status_code, 200, accepted.text)
+        self.assertEqual(accepted.json()["status"], "failed")
+        self.assertIsNone(accepted.json()["exitCode"])
+        self.assertEqual(
+            accepted.json()["events"][-1]["type"],
+            "operator_reconciled_failed",
+        )
 
 
 if __name__ == "__main__":

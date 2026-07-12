@@ -8,7 +8,9 @@ from typing import Any
 from emperor.inspection import InspectionRequest, ParsedOverrides
 
 from workbench.backend.inspection_adapter import WorkbenchInspectionAdapter
+from workbench.backend.inspection_errors import InspectionFailure
 from workbench.backend.inspector.discovery import load_model_parts
+from workbench.backend.inspector.errors import InspectorError
 
 
 def inspect_model(
@@ -20,21 +22,24 @@ def inspect_model(
     *,
     parsed_overrides: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    adapter = WorkbenchInspectionAdapter.from_package(
-        load_model_parts(model_name).package
-    )
-    return adapter.inspect_payload(
-        InspectionRequest(
-            preset=preset_name,
-            overrides=(
-                ParsedOverrides(parsed_overrides)
-                if parsed_overrides is not None
-                else (overrides or {})
+    try:
+        adapter = WorkbenchInspectionAdapter.from_package(
+            load_model_parts(model_name).package
+        )
+        return adapter.inspect_payload(
+            InspectionRequest(
+                preset=preset_name,
+                overrides=(
+                    ParsedOverrides(parsed_overrides)
+                    if parsed_overrides is not None
+                    else (overrides or {})
+                ),
+                dataset=dataset,
+                experiment_task=experiment_task,
             ),
-            dataset=dataset,
-            experiment_task=experiment_task,
-        ),
-    )
+        )
+    except InspectionFailure as exc:
+        raise InspectorError(exc.detail) from exc
 
 
 __all__ = ["inspect_model"]

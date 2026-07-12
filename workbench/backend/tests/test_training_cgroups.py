@@ -9,6 +9,7 @@ from workbench.backend.api import WorkbenchApiSettings, create_app
 from workbench.backend.training_jobs.cgroups import (
     CgroupV2Manager,
     StrictCancellationUnavailable,
+    TrainingResourceLimits,
 )
 from workbench.backend.training_jobs.launcher import TrainingWorkerLauncher
 
@@ -28,8 +29,7 @@ class TrainingCancellationCapabilityTests(unittest.TestCase):
                 )
             )
             capability = (
-                app.state.workbench_services.training_jobs
-                .cancellation_capability()
+                app.state.workbench_services.training_jobs.cancellation_capability()
             )
 
         construct_cgroups.assert_not_called()
@@ -51,11 +51,12 @@ class TrainingCancellationCapabilityTests(unittest.TestCase):
 
             construct_cgroups.assert_not_called()
             capability = (
-                app.state.workbench_services.training_jobs
-                .cancellation_capability()
+                app.state.workbench_services.training_jobs.cancellation_capability()
             )
 
-        construct_cgroups.assert_called_once_with()
+        construct_cgroups.assert_called_once_with(
+            resource_limits=TrainingResourceLimits()
+        )
         self.assertEqual(capability, "unsupported")
 
     def test_process_group_capability_is_total_on_non_posix_hosts(self) -> None:

@@ -86,9 +86,7 @@ class HttpOperationCatalog(Sequence[HttpOperation]):
 
         method = scope.get("method", "").upper()
         match_scope = (
-            scope
-            if scope.get("method") == method
-            else {**scope, "method": method}
+            scope if scope.get("method") == method else {**scope, "method": method}
         )
         for operation in self.operations:
             if operation.method != method:
@@ -107,9 +105,7 @@ def declare_http_operation(
     def decorator(
         endpoint: Callable[P, Awaitable[R]],
     ) -> Callable[P, Awaitable[R]]:
-        declarations = tuple(
-            getattr(endpoint, _POLICY_DECLARATIONS_ATTRIBUTE, ())
-        )
+        declarations = tuple(getattr(endpoint, _POLICY_DECLARATIONS_ATTRIBUTE, ()))
         endpoint_signature = signature(endpoint, eval_str=True)
 
         @wraps(endpoint)
@@ -168,9 +164,7 @@ def enforce_operation_policy(
 def _non_safe_methods(route: APIRoute) -> tuple[str, ...]:
     return tuple(
         sorted(
-            method
-            for method in route.methods or ()
-            if method not in _SAFE_HTTP_METHODS
+            method for method in route.methods or () if method not in _SAFE_HTTP_METHODS
         )
     )
 
@@ -268,9 +262,7 @@ def build_http_operation_catalog(
                     f"{method} {route.path} is registered more than once."
                 )
             seen_operation_keys.add(operation_key)
-            operations.append(
-                HttpOperation(method=method, route=route, policy=policy)
-            )
+            operations.append(HttpOperation(method=method, route=route, policy=policy))
     return HttpOperationCatalog(tuple(operations))
 
 

@@ -7,6 +7,7 @@ import tempfile
 import threading
 import time
 import unittest
+import uuid
 import warnings
 import zipfile
 from pathlib import Path
@@ -16,7 +17,6 @@ import httpx
 
 from workbench.backend.api import WorkbenchApiSettings, create_app
 from workbench.backend.api.v1.routers import logs as logs_router
-from workbench.backend.core.errors import ApiError
 from workbench.backend.core.security import (
     LOCAL_MUTATION_DISABLED_DETAIL,
     MUTATION_PROOF_REQUIRED_DETAIL,
@@ -25,6 +25,8 @@ from workbench.backend.log_experiments import (
     LogExperimentMutationCoordinator,
 )
 from workbench.backend.run_history import RunHistoryService
+from workbench.backend.run_history import archive as log_archive
+from workbench.backend.run_history.errors import RunHistoryFailure
 
 MUTATION_HEADER_NAME = "X-Workbench-Mutation"
 MUTATION_HEADER_VALUE = "true"
@@ -97,12 +99,15 @@ async def post_archive(
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(
         transport=transport,
-        base_url="http://testserver",
+        base_url="http://localhost",
     ) as client:
         return await client.post(
             "/logs/import",
             headers=(
-                {MUTATION_HEADER_NAME: MUTATION_HEADER_VALUE}
+                {
+                    MUTATION_HEADER_NAME: MUTATION_HEADER_VALUE,
+                    "Idempotency-Key": uuid.uuid4().hex,
+                }
                 if headers is None
                 else headers
             ),
@@ -132,7 +137,7 @@ async def post_multipart_body(
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(
         transport=transport,
-        base_url="http://testserver",
+        base_url="http://localhost",
     ) as client:
         return await client.post(
             "/logs/import",
@@ -140,6 +145,7 @@ async def post_multipart_body(
             headers={
                 "content-type": content_type,
                 MUTATION_HEADER_NAME: MUTATION_HEADER_VALUE,
+                "Idempotency-Key": uuid.uuid4().hex,
             },
         )
 
@@ -172,7 +178,7 @@ async def post_streaming_multipart_body(
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(
         transport=transport,
-        base_url="http://testserver",
+        base_url="http://localhost",
     ) as client:
         response = await client.post(
             "/logs/import",
@@ -181,6 +187,7 @@ async def post_streaming_multipart_body(
                 {
                     "content-type": content_type,
                     MUTATION_HEADER_NAME: MUTATION_HEADER_VALUE,
+                    "Idempotency-Key": uuid.uuid4().hex,
                 }
                 if headers is None
                 else {"content-type": content_type, **headers}
@@ -190,6 +197,88 @@ async def post_streaming_multipart_body(
 
 
 class LogArchiveImportApiTests(unittest.TestCase):
+    def test_archive_members_are_decompressed_once_into_private_staging(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = Path(tmp) / "logs"
+            archive = io.BytesIO(
+                zip_bytes(
+                    {
+                        "experiment/one.json": "one",
+                        "experiment/two.json": "two",
+                    }
+                )
+            )
+            service = RunHistoryService(
+                logs_root=logs_root,
+                mutation_coordinator=LogExperimentMutationCoordinator(),
+                active_log_writers=lambda: (),
+            )
+            original_open = zipfile.ZipFile.open
+            opened: list[str] = []
+
+            def tracked_open(zip_file, member, *args, **kwargs):
+                name = (
+                    member.filename
+                    if isinstance(member, zipfile.ZipInfo)
+                    else member
+                )
+                opened.append(str(name))
+                return original_open(zip_file, member, *args, **kwargs)
+
+            with patch.object(zipfile.ZipFile, "open", tracked_open):
+                service.import_archive(
+                    archive=archive,
+                    filename="logs.zip",
+                    max_upload_size=None,
+                    max_extracted_size=None,
+                )
+
+            self.assertEqual(
+                opened,
+                ["experiment/one.json", "experiment/two.json"],
+            )
+
+    def test_destination_ancestor_swap_after_staging_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            logs_root = root / "logs"
+            outside = root / "outside"
+            outside.mkdir()
+            archive = io.BytesIO(
+                zip_bytes({"experiment/nested/result.json": "secret"})
+            )
+            service = RunHistoryService(
+                logs_root=logs_root,
+                mutation_coordinator=LogExperimentMutationCoordinator(),
+                active_log_writers=lambda: (),
+            )
+            original_extract = log_archive._extract_archive_to_stage
+
+            def extract_then_swap(*args, **kwargs):
+                result = original_extract(*args, **kwargs)
+                (logs_root / "experiment").symlink_to(
+                    outside,
+                    target_is_directory=True,
+                )
+                return result
+
+            with (
+                patch.object(
+                    log_archive,
+                    "_extract_archive_to_stage",
+                    extract_then_swap,
+                ),
+                self.assertRaises(RunHistoryFailure),
+            ):
+                service.import_archive(
+                    archive=archive,
+                    filename="logs.zip",
+                    max_upload_size=None,
+                    max_extracted_size=None,
+                )
+
+            self.assertFalse((outside / "nested" / "result.json").exists())
+
     def test_default_settings_disable_log_imports(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             logs_root = Path(tmp) / "logs"
@@ -213,7 +302,10 @@ class LogArchiveImportApiTests(unittest.TestCase):
             ("absent-origin-without-proof", {}, 403),
             (
                 "absent-origin-with-proof",
-                {MUTATION_HEADER_NAME: MUTATION_HEADER_VALUE},
+                {
+                    MUTATION_HEADER_NAME: MUTATION_HEADER_VALUE,
+                    "Idempotency-Key": uuid.uuid4().hex,
+                },
                 200,
             ),
             (
@@ -221,6 +313,7 @@ class LogArchiveImportApiTests(unittest.TestCase):
                 {
                     "Origin": TRUSTED_FRONTEND_ORIGIN,
                     MUTATION_HEADER_NAME: MUTATION_HEADER_VALUE,
+                    "Idempotency-Key": uuid.uuid4().hex,
                 },
                 200,
             ),
@@ -230,6 +323,7 @@ class LogArchiveImportApiTests(unittest.TestCase):
                 {
                     "Origin": UNTRUSTED_FRONTEND_ORIGIN,
                     MUTATION_HEADER_NAME: MUTATION_HEADER_VALUE,
+                    "Idempotency-Key": uuid.uuid4().hex,
                 },
                 403,
             ),
@@ -239,6 +333,7 @@ class LogArchiveImportApiTests(unittest.TestCase):
                     "Origin": TRUSTED_FRONTEND_ORIGIN,
                     "Sec-Fetch-Site": "cross-site",
                     MUTATION_HEADER_NAME: MUTATION_HEADER_VALUE,
+                    "Idempotency-Key": uuid.uuid4().hex,
                 },
                 200,
             ),
@@ -247,15 +342,17 @@ class LogArchiveImportApiTests(unittest.TestCase):
                 {
                     "Sec-Fetch-Site": "cross-site",
                     MUTATION_HEADER_NAME: MUTATION_HEADER_VALUE,
+                    "Idempotency-Key": uuid.uuid4().hex,
                 },
                 403,
             ),
             (
                 "same-origin-fetch-with-proof",
                 {
-                    "Origin": "http://testserver",
+                    "Origin": "http://localhost",
                     "Sec-Fetch-Site": "same-origin",
                     MUTATION_HEADER_NAME: MUTATION_HEADER_VALUE,
+                    "Idempotency-Key": uuid.uuid4().hex,
                 },
                 200,
             ),
@@ -265,6 +362,7 @@ class LogArchiveImportApiTests(unittest.TestCase):
                     "Origin": TRUSTED_FRONTEND_ORIGIN,
                     "Sec-Fetch-Site": "same-site",
                     MUTATION_HEADER_NAME: MUTATION_HEADER_VALUE,
+                    "Idempotency-Key": uuid.uuid4().hex,
                 },
                 200,
             ),
@@ -349,7 +447,10 @@ class LogArchiveImportApiTests(unittest.TestCase):
                     chunks=[b"disabled", b" import", b" body"],
                     content_type="multipart/form-data; boundary=probe",
                     max_upload_size=1024,
-                    headers={MUTATION_HEADER_NAME: MUTATION_HEADER_VALUE},
+                    headers={
+                        MUTATION_HEADER_NAME: MUTATION_HEADER_VALUE,
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
                     allow_log_imports=False,
                 )
             )
@@ -372,9 +473,7 @@ class LogArchiveImportApiTests(unittest.TestCase):
                 }
             )
 
-            response = asyncio.run(
-                post_archive(logs_root=logs_root, archive=archive)
-            )
+            response = asyncio.run(post_archive(logs_root=logs_root, archive=archive))
 
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json()["extractedFileCount"], 2)
@@ -407,15 +506,12 @@ class LogArchiveImportApiTests(unittest.TestCase):
                 ]
             )
 
-            response = asyncio.run(
-                post_archive(logs_root=logs_root, archive=archive)
-            )
+            response = asyncio.run(post_archive(logs_root=logs_root, archive=archive))
 
             self.assertEqual(response.status_code, 200)
             self.assertTrue(
                 (
-                    logs_root
-                    / "linear_adaptive_long_test/version_0/result.json"
+                    logs_root / "linear_adaptive_long_test/version_0/result.json"
                 ).is_file()
             )
             self.assertFalse((logs_root / "logs").exists())
@@ -432,9 +528,7 @@ class LogArchiveImportApiTests(unittest.TestCase):
                 }
             )
 
-            response = asyncio.run(
-                post_archive(logs_root=logs_root, archive=archive)
-            )
+            response = asyncio.run(post_archive(logs_root=logs_root, archive=archive))
 
             self.assertEqual(response.status_code, 200)
             self.assertTrue((logs_root / "linear/version_0/result.json").is_file())
@@ -451,9 +545,7 @@ class LogArchiveImportApiTests(unittest.TestCase):
                 }
             )
 
-            response = asyncio.run(
-                post_archive(logs_root=logs_root, archive=archive)
-            )
+            response = asyncio.run(post_archive(logs_root=logs_root, archive=archive))
 
             self.assertEqual(response.status_code, 200)
             self.assertTrue((logs_root / "logs/version_0/result.json").is_file())
@@ -472,9 +564,7 @@ class LogArchiveImportApiTests(unittest.TestCase):
                 }
             )
 
-            response = asyncio.run(
-                post_archive(logs_root=logs_root, archive=archive)
-            )
+            response = asyncio.run(post_archive(logs_root=logs_root, archive=archive))
 
             self.assertEqual(response.status_code, 400)
             self.assertIn("traversal", response.json()["detail"])
@@ -492,9 +582,7 @@ class LogArchiveImportApiTests(unittest.TestCase):
                 }
             )
 
-            response = asyncio.run(
-                post_archive(logs_root=logs_root, archive=archive)
-            )
+            response = asyncio.run(post_archive(logs_root=logs_root, archive=archive))
 
             self.assertEqual(response.status_code, 400)
             self.assertIn("absolute", response.json()["detail"])
@@ -513,9 +601,7 @@ class LogArchiveImportApiTests(unittest.TestCase):
                 }
             )
 
-            response = asyncio.run(
-                post_archive(logs_root=logs_root, archive=archive)
-            )
+            response = asyncio.run(post_archive(logs_root=logs_root, archive=archive))
 
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json()["extractedFileCount"], 2)
@@ -539,9 +625,7 @@ class LogArchiveImportApiTests(unittest.TestCase):
                 }
             )
 
-            response = asyncio.run(
-                post_archive(logs_root=logs_root, archive=archive)
-            )
+            response = asyncio.run(post_archive(logs_root=logs_root, archive=archive))
 
             self.assertEqual(response.status_code, 400)
             self.assertIn("symlink destination", response.json()["detail"])
@@ -556,9 +640,7 @@ class LogArchiveImportApiTests(unittest.TestCase):
             logs_root = Path(tmp) / "logs"
             archive = zip_bytes({"my_experiment/version_0/empty.txt": ""})
 
-            response = asyncio.run(
-                post_archive(logs_root=logs_root, archive=archive)
-            )
+            response = asyncio.run(post_archive(logs_root=logs_root, archive=archive))
 
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json()["extractedFileCount"], 1)
@@ -629,9 +711,7 @@ class LogArchiveImportApiTests(unittest.TestCase):
             archive = zip_bytes({"my_experiment/file.txt": "x" * 256})
             self.assertGreater(len(archive), 64)
 
-            response = asyncio.run(
-                post_archive(logs_root=logs_root, archive=archive)
-            )
+            response = asyncio.run(post_archive(logs_root=logs_root, archive=archive))
 
             self.assertEqual(response.status_code, 200, response.text)
             self.assertTrue((logs_root / "my_experiment/file.txt").is_file())
@@ -748,9 +828,7 @@ class LogArchiveImportApiTests(unittest.TestCase):
                     archive=zip_with_info(
                         [
                             (
-                                zipfile.ZipInfo(
-                                    "my_experiment/version_0/result.json"
-                                ),
+                                zipfile.ZipInfo("my_experiment/version_0/result.json"),
                                 "{}",
                             ),
                             (symlink_info, "target"),
@@ -775,9 +853,7 @@ class LogArchiveImportApiTests(unittest.TestCase):
                     archive=zip_with_info(
                         [
                             (
-                                zipfile.ZipInfo(
-                                    "my_experiment/version_0/result.json"
-                                ),
+                                zipfile.ZipInfo("my_experiment/version_0/result.json"),
                                 "{}",
                             ),
                             (fifo_info, "special"),
@@ -879,9 +955,7 @@ class LogArchiveImportApiTests(unittest.TestCase):
     def test_boundary_like_archive_bytes_do_not_truncate_multipart_part(self) -> None:
         boundary = b"workbench-boundary"
         archived_content = b"before\r\n--workbench-boundaryXafter"
-        archive = zip_bytes(
-            {"my_experiment/version_0/payload.bin": archived_content}
-        )
+        archive = zip_bytes({"my_experiment/version_0/payload.bin": archived_content})
         body = (
             b"--"
             + boundary
@@ -899,9 +973,7 @@ class LogArchiveImportApiTests(unittest.TestCase):
                 post_multipart_body(
                     logs_root=logs_root,
                     body=body,
-                    content_type=(
-                        "multipart/form-data; boundary=workbench-boundary"
-                    ),
+                    content_type=("multipart/form-data; boundary=workbench-boundary"),
                 )
             )
 
@@ -930,9 +1002,7 @@ class LogArchiveImportApiTests(unittest.TestCase):
 
         def slow_parser(**kwargs):
             nonlocal observed_body_is_seekable
-            observed_body_is_seekable = callable(
-                getattr(kwargs["body"], "seek", None)
-            )
+            observed_body_is_seekable = callable(getattr(kwargs["body"], "seek", None))
             time.sleep(0.2)
             return original_parser(**kwargs)
 
@@ -950,18 +1020,21 @@ class LogArchiveImportApiTests(unittest.TestCase):
                 async with (
                     httpx.AsyncClient(
                         transport=transport,
-                        base_url="http://testserver",
+                        base_url="http://localhost",
                     ) as upload_client,
                     httpx.AsyncClient(
                         transport=transport,
-                        base_url="http://testserver",
+                        base_url="http://localhost",
                     ) as health_client,
                 ):
                     started = time.perf_counter()
                     upload_task = asyncio.create_task(
                         upload_client.post(
                             "/logs/import",
-                            headers={MUTATION_HEADER_NAME: MUTATION_HEADER_VALUE},
+                            headers={
+                                MUTATION_HEADER_NAME: MUTATION_HEADER_VALUE,
+                                "Idempotency-Key": uuid.uuid4().hex,
+                            },
                             files={
                                 "archive": (
                                     "logs.zip",
@@ -1025,14 +1098,15 @@ class LogArchiveImportApiTests(unittest.TestCase):
                 transport = httpx.ASGITransport(app=app)
                 async with httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
+                    base_url="http://localhost",
                 ) as client:
                     return await asyncio.gather(
                         *(
                             client.post(
                                 "/logs/import",
                                 headers={
-                                    MUTATION_HEADER_NAME: MUTATION_HEADER_VALUE
+                                    MUTATION_HEADER_NAME: MUTATION_HEADER_VALUE,
+                                    "Idempotency-Key": uuid.uuid4().hex,
                                 },
                                 files={
                                     "archive": (
@@ -1105,7 +1179,7 @@ class LogArchiveImportApiTests(unittest.TestCase):
                 transport = httpx.ASGITransport(app=app)
                 async with httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
+                    base_url="http://localhost",
                 ) as client:
                     first_task = asyncio.create_task(
                         client.post(
@@ -1116,6 +1190,7 @@ class LogArchiveImportApiTests(unittest.TestCase):
                                     "multipart/form-data; boundary=first-boundary"
                                 ),
                                 MUTATION_HEADER_NAME: MUTATION_HEADER_VALUE,
+                                "Idempotency-Key": uuid.uuid4().hex,
                             },
                         )
                     )
@@ -1129,6 +1204,7 @@ class LogArchiveImportApiTests(unittest.TestCase):
                                     "multipart/form-data; boundary=second-boundary"
                                 ),
                                 MUTATION_HEADER_NAME: MUTATION_HEADER_VALUE,
+                                "Idempotency-Key": uuid.uuid4().hex,
                             },
                         )
                     )
@@ -1179,12 +1255,15 @@ class LogArchiveImportApiTests(unittest.TestCase):
                 transport = httpx.ASGITransport(app=app)
                 async with httpx.AsyncClient(
                     transport=transport,
-                    base_url="http://testserver",
+                    base_url="http://localhost",
                 ) as client:
                     before = await client.get("/logs/runs")
                     imported = await client.post(
                         "/logs/import",
-                        headers={MUTATION_HEADER_NAME: MUTATION_HEADER_VALUE},
+                        headers={
+                            MUTATION_HEADER_NAME: MUTATION_HEADER_VALUE,
+                            "Idempotency-Key": uuid.uuid4().hex,
+                        },
                         files={"archive": ("logs.zip", archive, "application/zip")},
                     )
                     after = await client.get("/logs/runs")
@@ -1205,8 +1284,7 @@ class LogArchiveImportApiTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             logs_root = Path(tmp) / "logs"
             relative_run = Path(
-                "partial_exp/linear/BASELINE/Mnist/"
-                "run_20260711_040506/version_0"
+                "partial_exp/linear/BASELINE/Mnist/run_20260711_040506/version_0"
             )
             run_dir = logs_root / relative_run
             run_dir.mkdir(parents=True)
@@ -1229,23 +1307,31 @@ class LogArchiveImportApiTests(unittest.TestCase):
                 zip_bytes(
                     {
                         f"{relative_run.as_posix()}/result.json": (
-                            '{"metrics":{"score":2},'
-                            '"params":{"batch_size":8}}'
+                            '{"metrics":{"score":2},"params":{"batch_size":8}}'
                         ),
                         f"{relative_run.as_posix()}/second.json": "second",
                     }
                 )
             )
-            original_replace = Path.replace
+            original_rename = log_archive._descriptor_rename
 
-            def fail_second_replace(path: Path, target: Path):
-                if Path(target).name == "second.json":
+            def fail_second_rename(
+                filename: str,
+                *,
+                source_parent: int,
+                target_parent: int,
+            ):
+                if filename == "second.json":
                     raise OSError("forced second-entry write failure")
-                return original_replace(path, target)
+                return original_rename(
+                    filename,
+                    source_parent=source_parent,
+                    target_parent=target_parent,
+                )
 
             with (
-                patch.object(Path, "replace", fail_second_replace),
-                self.assertRaises(ApiError),
+                patch.object(log_archive, "_descriptor_rename", fail_second_rename),
+                self.assertRaises(RunHistoryFailure),
             ):
                 service.import_archive(
                     archive=archive,
@@ -1271,13 +1357,11 @@ class LogArchiveImportApiTests(unittest.TestCase):
                 mutation_coordinator=LogExperimentMutationCoordinator(),
                 active_log_writers=lambda: (),
             )
-            archive = io.BytesIO(
-                zip_bytes({"new_exp/nested/result.json": "{}"})
-            )
+            archive = io.BytesIO(zip_bytes({"new_exp/nested/result.json": "{}"}))
 
             with patch.object(
-                Path,
-                "replace",
+                log_archive,
+                "_descriptor_rename",
                 side_effect=FileExistsError("forced replacement race"),
             ):
                 result = service.import_archive(

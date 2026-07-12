@@ -6,9 +6,9 @@ import shutil
 from collections.abc import Iterable
 from pathlib import Path
 
-from workbench.backend.inspector.errors import InspectorError
 from workbench.backend.log_experiments import is_valid_log_experiment_name
 from workbench.backend.run_history.contracts import ActiveLogWriter
+from workbench.backend.run_history.errors import RunHistoryFailure
 from workbench.backend.run_history.paths import resolved_under_root
 from workbench.backend.run_history.records import (
     ActiveLogRunDeleteBlocker,
@@ -28,21 +28,21 @@ def _is_log_path_under_root(path: Path, root: Path) -> bool:
 
 def _validate_log_experiment_delete_name(experiment: str) -> None:
     if not experiment:
-        raise InspectorError("Log experiment name is required")
+        raise RunHistoryFailure("Log experiment name is required")
     if "/" in experiment or "\\" in experiment or experiment in {".", ".."}:
-        raise InspectorError(f"Invalid log experiment name: {experiment}")
+        raise RunHistoryFailure(f"Invalid log experiment name: {experiment}")
     if not is_valid_log_experiment_name(experiment):
-        raise InspectorError(f"Invalid log experiment name: {experiment}")
+        raise RunHistoryFailure(f"Invalid log experiment name: {experiment}")
 
 
 def _validated_log_experiment_delete_path(root: Path, experiment: str) -> Path:
     target = root / experiment
     if target.is_symlink():
-        raise InspectorError(
+        raise RunHistoryFailure(
             f"Refusing to delete symlink log experiment: {experiment}"
         )
     if not _is_log_path_under_root(target, root):
-        raise InspectorError(f"Invalid log experiment path: {experiment}") from None
+        raise RunHistoryFailure(f"Invalid log experiment path: {experiment}") from None
     return target
 
 
@@ -52,21 +52,19 @@ def _validated_log_run_delete_candidate_path(
 ) -> Path:
     target = root / candidate.relativePath
     if target.is_symlink():
-        raise InspectorError(
+        raise RunHistoryFailure(
             f"Refusing to delete symlink log run: {candidate.relativePath}"
         )
     if not target.name.startswith("version_"):
-        raise InspectorError(
+        raise RunHistoryFailure(
             f"Refusing to delete non-version log folder: {candidate.relativePath}"
         )
     if not _is_log_path_under_root(target, root):
-        raise InspectorError(
+        raise RunHistoryFailure(
             f"Invalid log run path: {candidate.relativePath}"
         ) from None
     if not target.is_dir():
-        raise InspectorError(
-            f"Log run is not a directory: {candidate.relativePath}"
-        )
+        raise RunHistoryFailure(f"Log run is not a directory: {candidate.relativePath}")
     return target
 
 
@@ -100,8 +98,7 @@ class LogRunDeletionPlanner:
         active_writers: Iterable[ActiveLogWriter],
     ) -> LogRunDeletePlan:
         candidates = [
-            LogRunDeleteCandidate.from_run(run)
-            for run in self.filtered_runs(filters)
+            LogRunDeleteCandidate.from_run(run) for run in self.filtered_runs(filters)
         ]
         candidate_experiments = {candidate.experiment for candidate in candidates}
         blockers = [
@@ -112,6 +109,32 @@ class LogRunDeletionPlanner:
             )
             for writer in active_writers
             if writer.log_folder in candidate_experiments
+        ]
+        return LogRunDeletePlan(candidates=candidates, blockedByActiveJobs=blockers)
+
+    def create_preset_delete_plan(
+        self,
+        *,
+        experiment: str,
+        preset: str,
+        active_writers: Iterable[ActiveLogWriter],
+    ) -> LogRunDeletePlan:
+        _validate_log_experiment_delete_name(experiment)
+        if not preset:
+            raise RunHistoryFailure("Log preset name is required")
+        candidates = [
+            LogRunDeleteCandidate.from_run(run)
+            for run in self.scanner.list_runs(result_projection="none")
+            if run.experiment == experiment and run.preset == preset
+        ]
+        blockers = [
+            ActiveLogRunDeleteBlocker(
+                id=writer.id,
+                logFolder=writer.log_folder,
+                status=writer.status,
+            )
+            for writer in active_writers
+            if candidates and writer.log_folder == experiment
         ]
         return LogRunDeletePlan(candidates=candidates, blockedByActiveJobs=blockers)
 
@@ -161,8 +184,8 @@ class LogRunDeletionExecutor:
 
         if not target.is_dir():
             if not runs:
-                raise InspectorError(f"Unknown log experiment: {experiment}")
-            raise InspectorError(f"Log experiment is not a directory: {experiment}")
+                raise RunHistoryFailure(f"Unknown log experiment: {experiment}")
+            raise RunHistoryFailure(f"Log experiment is not a directory: {experiment}")
 
         deleted_run_ids = [run.id for run in runs]
         shutil.rmtree(target)
@@ -178,9 +201,9 @@ class LogRunDeletionExecutor:
         plan: LogRunDeletePlan,
     ) -> LogRunDeleteResult:
         if not plan.candidates:
-            raise InspectorError("No log runs match the selected filters.")
+            raise RunHistoryFailure("No log runs match the selected filters.")
         if plan.blockedByActiveJobs:
-            raise InspectorError(
+            raise RunHistoryFailure(
                 "A training job is still writing to this log folder."
             )
 

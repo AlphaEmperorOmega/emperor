@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from pydantic import Field
 
-from workbench.backend.schemas._base import ApiResponseModel
+from workbench.backend.schemas._base import (
+    ApiResponseModel,
+    BoundedConfigString,
+    BoundedIdentifier,
+    ConfigKey,
+)
 
 
 class ConfigSnapshotResponse(ApiResponseModel):
@@ -29,17 +34,23 @@ class ConfigSnapshotLibraryResponse(ApiResponseModel):
 
 
 class ConfigSnapshotCreateRequest(ApiResponseModel):
-    modelType: str
-    model: str
-    preset: str
-    name: str = ""
-    overrides: dict[str, str] = Field(default_factory=dict)
+    modelType: BoundedIdentifier
+    model: BoundedIdentifier
+    preset: BoundedIdentifier
+    name: BoundedIdentifier = ""
+    overrides: dict[ConfigKey, BoundedConfigString] = Field(
+        default_factory=dict,
+        max_length=512,
+    )
 
 
 class ConfigSnapshotRenameRequest(ApiResponseModel):
-    name: str
+    name: BoundedIdentifier
 
 
 class ConfigSnapshotUpdateRequest(ApiResponseModel):
-    name: str | None = None
-    overrides: dict[str, str] | None = None
+    name: BoundedIdentifier | None = None
+    overrides: dict[ConfigKey, BoundedConfigString] | None = Field(
+        default=None,
+        max_length=512,
+    )

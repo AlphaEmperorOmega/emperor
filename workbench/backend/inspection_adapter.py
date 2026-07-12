@@ -19,8 +19,11 @@ from emperor.model_packages import (
     model_package,
 )
 
-from workbench.backend.inspection_errors import call_inspection, call_model_package
-from workbench.backend.inspector.errors import InspectorError
+from workbench.backend.inspection_errors import (
+    InspectionFailure,
+    call_inspection,
+    call_model_package,
+)
 
 if TYPE_CHECKING:
     from emperor.inspection import (
@@ -46,7 +49,7 @@ class WorkbenchInspectionAdapter:
     def select(cls, model_id: str) -> WorkbenchInspectionAdapter:
         package = model_package(model_id)
         if package is None:
-            raise InspectorError(f"Unknown model: {model_id}")
+            raise InspectionFailure(f"Unknown model: {model_id}")
         return cls(package)
 
     @classmethod
@@ -57,7 +60,7 @@ class WorkbenchInspectionAdapter:
     ) -> WorkbenchInspectionAdapter:
         model_id = model_id_from_parts(model_type, model)
         if model_id is None:
-            raise InspectorError(
+            raise InspectionFailure(
                 f"Unknown model: --model-type {model_type} --model {model}"
             )
         return cls.select(model_id)
@@ -68,10 +71,7 @@ class WorkbenchInspectionAdapter:
 
     @staticmethod
     def catalog_payload() -> list[dict[str, str]]:
-        return [
-            package.identity.to_payload()
-            for package in discover_model_packages()
-        ]
+        return [package.identity.to_payload() for package in discover_model_packages()]
 
     def call_package(
         self,

@@ -11,10 +11,7 @@ from workbench.backend.training_jobs.store import TrainingJobRecord
 class TrainingMonitorLocator:
     def preset_in_job(self, job: TrainingJobRecord, preset: str) -> bool:
         normalized = normalize_preset_token(preset)
-        return normalized in {
-            normalize_preset_token(item)
-            for item in job.presets
-        }
+        return normalized in {normalize_preset_token(item) for item in job.presets}
 
     def log_dir_for_monitor_data(
         self,

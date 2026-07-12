@@ -5,8 +5,8 @@ from __future__ import annotations
 import copy
 import random
 from collections.abc import Mapping
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Literal, cast
+from dataclasses import dataclass
+from typing import Any, Literal, cast
 
 from emperor.inspection import (
     ConfigurationField,
@@ -38,10 +38,31 @@ from emperor.runs import (
     plan_runs,
 )
 
+from workbench.backend.config_snapshots import (
+    ConfigSnapshotRecord,
+    ConfigSnapshotService,
+)
+from workbench.backend.failures import FailureKind
 from workbench.backend.inspection_adapter import WorkbenchInspectionAdapter
-from workbench.backend.inspector.errors import InspectorError
+from workbench.backend.inspection_errors import InspectionFailure
 from workbench.backend.log_experiments import is_valid_log_experiment_name
 from workbench.backend.model_identity import normalize_preset_token
+from workbench.backend.training_jobs.contracts import (
+    ConfigSnapshotRevision,
+    CreateTrainingJobCommand,
+    CreateTrainingRunPlanCommand,
+    SubmittedTrainingRun,
+    SubmittedTrainingRunPlan,
+    TrainingRunChangeSource,
+    TrainingRunChangeView,
+    TrainingRunPlanDocument,
+    TrainingRunPlanSummaryView,
+    TrainingRunPlanView,
+    TrainingRunStatus,
+    TrainingRunView,
+    TrainingSearch,
+)
+from workbench.backend.training_jobs.errors import TrainingJobFailure
 from workbench.backend.training_jobs.limits import (
     MAX_TRAINING_DATASETS,
     MAX_TRAINING_MONITORS,
@@ -49,112 +70,6 @@ from workbench.backend.training_jobs.limits import (
     MAX_TRAINING_SEARCH_AXES,
     MAX_TRAINING_SEARCH_AXIS_VALUES,
 )
-
-if TYPE_CHECKING:
-    from workbench.backend.training_jobs.contracts import (
-        CreateTrainingJobCommand,
-        CreateTrainingRunPlanCommand,
-    )
-
-ConfigValue = bool | int | float | str | None
-TrainingRunStatus = Literal[
-    "Pending",
-    "Running",
-    "Completed",
-    "Failed",
-    "Cancelled",
-    "Skipped",
-]
-TrainingRunChangeSource = Literal["override", "search"]
-
-
-@dataclass(frozen=True, slots=True)
-class TrainingSearch:
-    mode: Literal["grid", "random"]
-    values: dict[str, list[ConfigValue]] = field(default_factory=dict)
-    random_samples: int | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class TrainingRunChangeView:
-    key: str
-    label: str
-    value: ConfigValue
-    source: TrainingRunChangeSource
-
-
-@dataclass(frozen=True, slots=True)
-class TrainingRunView:
-    id: str
-    index: int
-    status: TrainingRunStatus
-    preset: str
-    dataset: str
-    experiment_task: str
-    changes: list[TrainingRunChangeView]
-    overrides: dict[str, Any]
-    command: str
-    total_epochs: int
-    snapshot_id: str | None = None
-    snapshot_name: str | None = None
-    snapshot_id_present: bool = False
-    snapshot_name_present: bool = False
-    current_epoch: int = 0
-    metrics: dict[str, Any] = field(default_factory=dict)
-    log_dir: str | None = None
-    error: str | None = None
-    error_traceback: str | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class TrainingRunPlanSummaryView:
-    total_runs: int = 0
-    completed_runs: int = 0
-    running_runs: int = 0
-    pending_runs: int = 0
-    failed_runs: int = 0
-    cancelled_runs: int = 0
-    skipped_runs: int = 0
-    total_epochs: int = 0
-    completed_epochs: int = 0
-    remaining_epochs: int = 0
-
-
-@dataclass(frozen=True, slots=True)
-class TrainingRunPlanView:
-    model: str
-    preset: str
-    presets: list[str]
-    experiment_task: str
-    datasets: list[str]
-    overrides: dict[str, Any]
-    search: TrainingSearch | None
-    log_folder: str
-    is_random_search: bool
-    runs: list[TrainingRunView]
-    summary: TrainingRunPlanSummaryView
-
-
-@dataclass(frozen=True, slots=True)
-class SubmittedTrainingRun:
-    """Authoritative row choices accepted from an untrusted caller."""
-
-    id: str
-    preset: str
-    dataset: str
-    overrides: dict[str, Any] = field(default_factory=dict)
-    snapshot_id: str | None = None
-    snapshot_name: str | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class SubmittedTrainingRunPlan:
-    """Minimal submitted Run Plan; all presentation state is derived."""
-
-    runs: list[SubmittedTrainingRun] = field(default_factory=list)
-
-
-TrainingRunPlanDocument = dict[str, Any]
 
 
 def decode_persisted_run_plan(payload: object) -> TrainingRunPlanDocument:
@@ -164,9 +79,7 @@ def decode_persisted_run_plan(payload: object) -> TrainingRunPlanDocument:
         raise ValueError("Persisted Run Plan must be an object.")
     rows = payload.get("runs")
     summary = payload.get("summary")
-    if not isinstance(rows, list) or any(
-        not isinstance(row, Mapping) for row in rows
-    ):
+    if not isinstance(rows, list) or any(not isinstance(row, Mapping) for row in rows):
         raise ValueError("Persisted Run Plan rows must be a list of objects.")
     if not isinstance(summary, Mapping):
         raise ValueError("Persisted Run Plan summary must be an object.")
@@ -275,9 +188,7 @@ def training_run_from_payload(payload: Mapping[str, Any]) -> TrainingRunView:
         metrics=dict(payload.get("metrics") or {}),
         log_dir=str(log_dir) if log_dir is not None else None,
         error=str(error) if error is not None else None,
-        error_traceback=(
-            str(error_traceback) if error_traceback is not None else None
-        ),
+        error_traceback=(str(error_traceback) if error_traceback is not None else None),
     )
 
 
@@ -289,9 +200,7 @@ def training_run_to_payload(run: TrainingRunView) -> dict[str, Any]:
         "preset": run.preset,
         "dataset": run.dataset,
         "experimentTask": run.experiment_task,
-        "changes": [
-            training_run_change_to_payload(change) for change in run.changes
-        ],
+        "changes": [training_run_change_to_payload(change) for change in run.changes],
         "overrides": run.overrides,
         "command": run.command,
         "totalEpochs": run.total_epochs,
@@ -341,6 +250,51 @@ def training_summary_to_payload(summary: TrainingRunPlanSummaryView) -> dict[str
     }
 
 
+def _snapshot_revisions_from_payload(
+    payload: object,
+) -> tuple[ConfigSnapshotRevision, ...]:
+    if payload is None:
+        return ()
+    if not isinstance(payload, list):
+        raise ValueError("Snapshot revisions must be a list.")
+    revisions: list[ConfigSnapshotRevision] = []
+    seen: set[str] = set()
+    for raw_revision in payload:
+        if not isinstance(raw_revision, Mapping):
+            raise ValueError("Snapshot revisions must contain objects.")
+        snapshot_id = raw_revision.get("id")
+        semantic_revision = raw_revision.get("semanticRevision")
+        if not isinstance(snapshot_id, str) or not snapshot_id:
+            raise ValueError("Snapshot revision id must be non-empty.")
+        if (
+            not isinstance(semantic_revision, str)
+            or len(semantic_revision) != 64
+            or any(
+                character not in "0123456789abcdef" for character in semantic_revision
+            )
+        ):
+            raise ValueError(f"Snapshot '{snapshot_id}' semantic revision is invalid.")
+        if snapshot_id in seen:
+            raise ValueError(f"Duplicate snapshot revision '{snapshot_id}'.")
+        seen.add(snapshot_id)
+        revisions.append(
+            ConfigSnapshotRevision(
+                id=snapshot_id,
+                semantic_revision=semantic_revision,
+            )
+        )
+    return tuple(revisions)
+
+
+def _snapshot_revisions_to_payload(
+    revisions: tuple[ConfigSnapshotRevision, ...],
+) -> list[dict[str, str]]:
+    return [
+        {"id": revision.id, "semanticRevision": revision.semantic_revision}
+        for revision in revisions
+    ]
+
+
 def training_run_plan_from_payload(payload: Mapping[str, Any]) -> TrainingRunPlanView:
     return TrainingRunPlanView(
         model=_payload_model_id(payload),
@@ -361,6 +315,9 @@ def training_run_plan_from_payload(payload: Mapping[str, Any]) -> TrainingRunPla
         summary=training_summary_from_payload(
             cast(Mapping[str, Any] | None, payload.get("summary"))
         ),
+        snapshot_revisions=_snapshot_revisions_from_payload(
+            payload.get("snapshotRevisions")
+        ),
     )
 
 
@@ -377,6 +334,7 @@ def training_run_plan_to_payload(plan: TrainingRunPlanView) -> dict[str, Any]:
         "isRandomSearch": plan.is_random_search,
         "runs": [training_run_to_payload(run) for run in plan.runs],
         "summary": training_summary_to_payload(plan.summary),
+        "snapshotRevisions": _snapshot_revisions_to_payload(plan.snapshot_revisions),
     }
 
 
@@ -402,7 +360,10 @@ def submitted_run_plan_from_payload(
                 ),
             )
             for row in _mapping_items(payload.get("runs"))
-        ]
+        ],
+        snapshot_revisions=_snapshot_revisions_from_payload(
+            payload.get("snapshotRevisions")
+        ),
     )
 
 
@@ -420,7 +381,8 @@ def submitted_run_plan_to_payload(
                 "overrides": run.overrides,
             }
             for run in plan.runs
-        ]
+        ],
+        "snapshotRevisions": _snapshot_revisions_to_payload(plan.snapshot_revisions),
     }
 
 
@@ -440,9 +402,7 @@ def _bounded_worker_names(
         requirement = "a non-empty list" if required else "a list"
         raise ValueError(f"Training worker payload {field} must be {requirement}.")
     if len(raw_names) > limit:
-        raise ValueError(
-            f"Training worker payload accepts at most {limit} {field}."
-        )
+        raise ValueError(f"Training worker payload accepts at most {limit} {field}.")
     if any(not isinstance(name, str) or not name.strip() for name in raw_names):
         raise ValueError(
             f"Training worker payload {field} must contain non-empty strings."
@@ -487,8 +447,7 @@ def _worker_search_spec(raw_search: object) -> SearchSpec | None:
         raise ValueError("Training search requires at least one selected axis.")
     if len(raw_values) > MAX_TRAINING_SEARCH_AXES:
         raise ValueError(
-            f"Training search accepts at most {MAX_TRAINING_SEARCH_AXES} "
-            "selected axes."
+            f"Training search accepts at most {MAX_TRAINING_SEARCH_AXES} selected axes."
         )
     mode = raw_search.get("mode")
     random_samples = raw_search.get("randomSamples")
@@ -535,9 +494,7 @@ def _worker_run_request(run_plan: Mapping[str, Any]) -> RunRequest:
     return RunRequest(
         presets=tuple(str(preset) for preset in raw_presets if preset is not None),
         datasets=tuple(str(dataset) for dataset in raw_datasets),
-        experiment_task=(
-            str(experiment_task) if experiment_task is not None else None
-        ),
+        experiment_task=(str(experiment_task) if experiment_task is not None else None),
         overrides=dict(raw_overrides),
         search=_worker_search_spec(run_plan.get("search")),
     )
@@ -627,8 +584,7 @@ def _validate_worker_plan_envelope(
     if not isinstance(run_plan["presets"], list) or not run_plan["presets"]:
         raise ValueError("Run plan presets must be a non-empty list.")
     if not all(
-        isinstance(preset, str) and preset.strip()
-        for preset in run_plan["presets"]
+        isinstance(preset, str) and preset.strip() for preset in run_plan["presets"]
     ):
         raise ValueError("Run plan presets must contain non-empty strings.")
     if run_plan["preset"] != run_plan["presets"][0]:
@@ -643,15 +599,12 @@ def _validate_worker_plan_envelope(
     if not isinstance(run_plan["datasets"], list) or not run_plan["datasets"]:
         raise ValueError("Run plan datasets must be a non-empty list.")
     if not all(
-        isinstance(dataset, str) and dataset.strip()
-        for dataset in run_plan["datasets"]
+        isinstance(dataset, str) and dataset.strip() for dataset in run_plan["datasets"]
     ):
         raise ValueError("Run plan datasets must contain non-empty strings.")
     if not isinstance(run_plan["overrides"], Mapping):
         raise ValueError("Run plan overrides must be an object.")
-    if run_plan["search"] is not None and not isinstance(
-        run_plan["search"], Mapping
-    ):
+    if run_plan["search"] is not None and not isinstance(run_plan["search"], Mapping):
         raise ValueError("Run plan search must be an object or null.")
     if not isinstance(run_plan["logFolder"], str):
         raise ValueError("Run plan log folder must be a string.")
@@ -675,13 +628,24 @@ def _validate_worker_authoritative_metadata(
     envelope_overrides = dict(run_plan["overrides"])
     raw_search = run_plan["search"]
     search_values = (
-        dict(raw_search.get("values") or {})
-        if isinstance(raw_search, Mapping)
-        else {}
+        dict(raw_search.get("values") or {}) if isinstance(raw_search, Mapping) else {}
     )
     expected_random = bool(
         isinstance(raw_search, Mapping) and raw_search.get("mode") == "random"
     )
+    snapshot_revisions = _snapshot_revisions_from_payload(
+        run_plan.get("snapshotRevisions")
+    )
+    revision_ids = {revision.id for revision in snapshot_revisions}
+    row_snapshot_ids = {
+        str(row.get("snapshotId"))
+        for row in rows
+        if isinstance(row, Mapping) and row.get("snapshotId") is not None
+    }
+    if row_snapshot_ids != revision_ids:
+        raise ValueError(
+            "Run plan Snapshot rows do not match its semantic revision set."
+        )
     if run_plan.get("isRandomSearch") is not expected_random:
         raise ValueError(
             "Run plan random-search marker does not match its Search Metadata."
@@ -691,19 +655,14 @@ def _validate_worker_authoritative_metadata(
         if not isinstance(row, Mapping):
             continue
         if row.get("preset") not in presets:
-            raise ValueError(
-                f"Run plan presets do not contain row {index} preset."
-            )
+            raise ValueError(f"Run plan presets do not contain row {index} preset.")
         if row.get("dataset") not in datasets:
-            raise ValueError(
-                f"Run plan datasets do not contain row {index} dataset."
-            )
+            raise ValueError(f"Run plan datasets do not contain row {index} dataset.")
         row_overrides = row.get("overrides")
         if not isinstance(row_overrides, Mapping):
             continue
         normalized_row_overrides = {
-            normalize_key(str(key)): value
-            for key, value in row_overrides.items()
+            normalize_key(str(key)): value for key, value in row_overrides.items()
         }
         for key, value in envelope_overrides.items():
             if normalized_row_overrides.get(normalize_key(str(key))) != value:
@@ -755,11 +714,7 @@ def summarize_training_runs(runs: list[dict[str, Any]]) -> dict[str, int]:
 
 
 def run_lookup_by_id(runs: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    return {
-        str(run.get("id")): run
-        for run in runs
-        if run.get("id") is not None
-    }
+    return {str(run.get("id")): run for run in runs if run.get("id") is not None}
 
 
 def apply_training_run_progress_event(
@@ -903,7 +858,10 @@ def _progress_event_epoch(event: dict[str, Any], total_epochs: int) -> int:
 
 
 def _require_package(model: str) -> ModelPackage:
-    return WorkbenchInspectionAdapter.select(model).package
+    try:
+        return WorkbenchInspectionAdapter.select(model).package
+    except InspectionFailure as exc:
+        raise TrainingJobFailure(exc.detail) from exc
 
 
 def _parse_workbench_search_value(
@@ -925,7 +883,7 @@ def _parse_workbench_search_value(
                 raise ValueError(abstract_error)
         return serialize_config_value(parsed_value)
     except Exception as exc:
-        raise InspectorError(
+        raise TrainingJobFailure(
             f"Invalid search value for axis '{axis.key}': {raw_value!r}. {exc}"
         ) from exc
 
@@ -952,28 +910,30 @@ def _adapt_workbench_search(
         return None, set()
     mode = search.get("mode")
     if mode not in {"grid", "random"}:
-        raise InspectorError("Training search mode must be 'grid' or 'random'.")
+        raise TrainingJobFailure("Training search mode must be 'grid' or 'random'.")
     values_payload = search.get("values")
     if not isinstance(values_payload, dict) or not values_payload:
-        raise InspectorError("Training search requires at least one selected axis.")
+        raise TrainingJobFailure("Training search requires at least one selected axis.")
     if len(values_payload) > MAX_TRAINING_SEARCH_AXES:
-        raise InspectorError(
-            f"Training search accepts at most {MAX_TRAINING_SEARCH_AXES} "
-            "selected axes."
+        raise TrainingJobFailure(
+            f"Training search accepts at most {MAX_TRAINING_SEARCH_AXES} selected axes."
         )
 
     random_samples: int | None = None
     if mode == "random":
         raw_samples = search.get("randomSamples", 10)
         if isinstance(raw_samples, bool) or not isinstance(raw_samples, int):
-            raise InspectorError("Random search sample count must be an integer.")
+            raise TrainingJobFailure("Random search sample count must be an integer.")
         if raw_samples < 1:
-            raise InspectorError("Random search sample count must be at least 1.")
+            raise TrainingJobFailure("Random search sample count must be at least 1.")
         random_samples = raw_samples
 
-    semantic_search = WorkbenchInspectionAdapter.from_package(
-        package
-    ).search_space(preset_name)
+    try:
+        semantic_search = WorkbenchInspectionAdapter.from_package(package).search_space(
+            preset_name
+        )
+    except InspectionFailure as exc:
+        raise TrainingJobFailure(exc.detail) from exc
     axes_by_key = {normalize_key(axis.key): axis for axis in semantic_search.axes}
     ordered_keys: list[str] = []
     selections: dict[str, SearchAxisSelection] = {}
@@ -981,17 +941,17 @@ def _adapt_workbench_search(
     for raw_key, raw_values in values_payload.items():
         axis = axes_by_key.get(normalize_key(str(raw_key)))
         if axis is None:
-            raise InspectorError(f"Unknown search axis '{raw_key}'.")
+            raise TrainingJobFailure(f"Unknown search axis '{raw_key}'.")
         if axis.locked:
-            raise InspectorError(
+            raise TrainingJobFailure(
                 f"Search axis '{axis.key}' is locked by preset '{preset_name}'."
             )
         if not isinstance(raw_values, list) or not raw_values:
-            raise InspectorError(
+            raise TrainingJobFailure(
                 f"Search axis '{axis.key}' requires at least one selected value."
             )
         if len(raw_values) > MAX_TRAINING_SEARCH_AXIS_VALUES:
-            raise InspectorError(
+            raise TrainingJobFailure(
                 f"Search axis '{axis.key}' accepts at most "
                 f"{MAX_TRAINING_SEARCH_AXIS_VALUES} selected values."
             )
@@ -1007,7 +967,7 @@ def _adapt_workbench_search(
             value for value in serialized_values if value not in allowed_values
         ]
         if invalid_values:
-            raise InspectorError(
+            raise TrainingJobFailure(
                 f"Search axis '{axis.key}' received values outside its "
                 f"search space: {invalid_values}."
             )
@@ -1036,10 +996,7 @@ def _workbench_search_payload(search: SearchSpec | None) -> dict[str, Any] | Non
         return None
     payload: dict[str, Any] = {
         "mode": search.mode,
-        "values": {
-            axis.key: list(axis.values or ())
-            for axis in (search.axes or ())
-        },
+        "values": {axis.key: list(axis.values or ()) for axis in (search.axes or ())},
     }
     if search.random_samples is not None:
         payload["randomSamples"] = search.random_samples
@@ -1139,8 +1096,14 @@ class MaterializedTrainingRunPlan:
 
 
 class WorkbenchRunPlanAdapter:
-    def __init__(self, random_source: random.Random | None = None) -> None:
+    def __init__(
+        self,
+        random_source: random.Random | None = None,
+        *,
+        config_snapshots: ConfigSnapshotService | None = None,
+    ) -> None:
         self._random = random_source or random
+        self._config_snapshots = config_snapshots
 
     def resolve_inputs(
         self,
@@ -1154,7 +1117,7 @@ class WorkbenchRunPlanAdapter:
         search: dict[str, Any] | None,
     ) -> SelectedTrainingInputs:
         if not datasets:
-            raise InspectorError("Training requires at least one selected dataset.")
+            raise TrainingJobFailure("Training requires at least one selected dataset.")
 
         parts = _require_package(model)
         try:
@@ -1164,7 +1127,7 @@ class WorkbenchRunPlanAdapter:
                 selected_experiment_task,
             )
         except ValueError as exc:
-            raise InspectorError(str(exc)) from exc
+            raise TrainingJobFailure(str(exc)) from exc
         selected_experiment_task_name = parts.task_name(selected_experiment_task)
         selected_preset_names = self._resolve_presets(
             parts,
@@ -1219,8 +1182,7 @@ class WorkbenchRunPlanAdapter:
             )
             if (
                 canonical_key is not None
-                and config_key_to_model_param(canonical_key)
-                in search_model_params
+                and config_key_to_model_param(canonical_key) in search_model_params
             ):
                 continue
             filtered[raw_key] = raw_value
@@ -1234,11 +1196,17 @@ class WorkbenchRunPlanAdapter:
         effective_overrides: dict[str, Any],
     ) -> dict[str, Any]:
         adapter = WorkbenchInspectionAdapter.from_package(parts)
-        parsed_overrides = adapter.parse_overrides(
-            effective_overrides,
-        ).values
-        for selected_preset in selected_preset_names:
-            adapter.reject_locked_overrides(selected_preset, parsed_overrides)
+        try:
+            parsed_overrides = adapter.parse_overrides(
+                effective_overrides,
+            ).values
+            for selected_preset in selected_preset_names:
+                adapter.reject_locked_overrides(
+                    selected_preset,
+                    parsed_overrides,
+                )
+        except InspectionFailure as exc:
+            raise TrainingJobFailure(exc.detail) from exc
         return dict(parsed_overrides)
 
     def valid_plan_log_folder(self, log_folder: str) -> str:
@@ -1254,12 +1222,209 @@ class WorkbenchRunPlanAdapter:
         monitor_names: list[str] | None,
     ) -> list[str]:
         try:
-            return [
-                monitor.name
-                for monitor in package.resolve_monitors(monitor_names)
-            ]
+            return [monitor.name for monitor in package.resolve_monitors(monitor_names)]
         except ValueError as exc:
-            raise InspectorError(str(exc)) from exc
+            raise TrainingJobFailure(str(exc)) from exc
+
+    def _resolve_snapshot_records(
+        self,
+        snapshot_ids: list[str] | tuple[str, ...],
+        *,
+        model: str,
+        failure_kind: FailureKind = FailureKind.INVALID,
+    ) -> tuple[ConfigSnapshotRecord, ...]:
+        if not snapshot_ids:
+            return ()
+        if self._config_snapshots is None:
+            raise TrainingJobFailure(
+                "Config Snapshot Run Plans are not configured.",
+                kind=failure_kind,
+            )
+        if len(snapshot_ids) != len(set(snapshot_ids)):
+            raise TrainingJobFailure(
+                "Config Snapshot Run Plan contains duplicate snapshot ids.",
+                kind=failure_kind,
+            )
+        records: list[ConfigSnapshotRecord] = []
+        for snapshot_id in snapshot_ids:
+            snapshot = self._config_snapshots.get_snapshot(snapshot_id)
+            if snapshot is None:
+                raise TrainingJobFailure(
+                    f"Config snapshot '{snapshot_id}' no longer exists.",
+                    kind=failure_kind,
+                )
+            if snapshot.model != model:
+                raise TrainingJobFailure(
+                    f"Config snapshot '{snapshot_id}' belongs to Model Package "
+                    f"'{snapshot.model}', not '{model}'.",
+                    kind=failure_kind,
+                )
+            records.append(snapshot)
+        return tuple(records)
+
+    def _snapshot_revisions(
+        self,
+        records: tuple[ConfigSnapshotRecord, ...],
+    ) -> tuple[ConfigSnapshotRevision, ...]:
+        assert self._config_snapshots is not None
+        return tuple(
+            ConfigSnapshotRevision(
+                id=record.id,
+                semantic_revision=self._config_snapshots.semantic_revision(record),
+            )
+            for record in records
+        )
+
+    def _reconcile_submitted_snapshots(
+        self,
+        *,
+        model: str,
+        plan: SubmittedTrainingRunPlan,
+        envelope_snapshot_ids: list[str] | None = None,
+        envelope_overrides: Mapping[str, Any] | None = None,
+    ) -> tuple[SubmittedTrainingRunPlan, tuple[ConfigSnapshotRecord, ...]]:
+        row_snapshot_ids = [
+            run.snapshot_id for run in plan.runs if run.snapshot_id is not None
+        ]
+        revision_ids = [revision.id for revision in plan.snapshot_revisions]
+        if not row_snapshot_ids and not revision_ids:
+            return plan, ()
+        if not plan.snapshot_revisions:
+            raise TrainingJobFailure(
+                "Snapshot provenance requires a backend-issued semantic revision.",
+                kind=FailureKind.CONFLICT,
+            )
+        if set(row_snapshot_ids) != set(revision_ids):
+            raise TrainingJobFailure(
+                "Submitted Snapshot provenance does not match its revision set.",
+                kind=FailureKind.CONFLICT,
+            )
+        if envelope_snapshot_ids and set(envelope_snapshot_ids) != set(revision_ids):
+            raise TrainingJobFailure(
+                "Submitted snapshotIds do not match the Run Plan revision set.",
+                kind=FailureKind.CONFLICT,
+            )
+        records = self._resolve_snapshot_records(
+            revision_ids,
+            model=model,
+            failure_kind=FailureKind.CONFLICT,
+        )
+        current_revisions = self._snapshot_revisions(records)
+        submitted_by_id = {
+            revision.id: revision.semantic_revision
+            for revision in plan.snapshot_revisions
+        }
+        for revision in current_revisions:
+            if submitted_by_id.get(revision.id) != revision.semantic_revision:
+                raise TrainingJobFailure(
+                    f"Config snapshot '{revision.id}' changed semantically. "
+                    "Refresh the Run Plan before starting Training.",
+                    kind=FailureKind.CONFLICT,
+                )
+        records_by_id = {record.id: record for record in records}
+        reconciled_runs: list[SubmittedTrainingRun] = []
+        for run in plan.runs:
+            if run.snapshot_id is None:
+                reconciled_runs.append(run)
+                continue
+            record = records_by_id[run.snapshot_id]
+            reconciled_runs.append(
+                SubmittedTrainingRun(
+                    id=run.id,
+                    preset=record.preset,
+                    dataset=run.dataset,
+                    overrides={
+                        **dict(record.overrides),
+                        **dict(envelope_overrides or {}),
+                    },
+                    snapshot_id=record.id,
+                    snapshot_name=record.name,
+                )
+            )
+        return (
+            SubmittedTrainingRunPlan(
+                runs=reconciled_runs,
+                snapshot_revisions=current_revisions,
+            ),
+            records,
+        )
+
+    def _create_snapshot_plan_for_request(
+        self,
+        *,
+        model: str,
+        preset: str,
+        presets: list[str] | None,
+        experiment_task: str | None,
+        datasets: list[str],
+        overrides: dict[str, Any],
+        log_folder: str,
+        monitors: list[str] | None,
+        search: dict[str, Any] | None,
+        snapshot_ids: list[str],
+    ) -> dict[str, Any]:
+        if search is not None:
+            raise TrainingJobFailure(
+                "Config Snapshot Run Plans cannot be combined with a search."
+            )
+        records = self._resolve_snapshot_records(snapshot_ids, model=model)
+        regular_presets = list(presets) if presets is not None else [preset]
+        combined_presets = [
+            *regular_presets,
+            *(record.preset for record in records),
+        ]
+        selected = self.resolve_inputs(
+            model=model,
+            preset=preset,
+            presets=combined_presets,
+            experiment_task=experiment_task,
+            datasets=datasets,
+            overrides={},
+            search=None,
+        )
+        canonical_regular_presets = (
+            self._resolve_presets(selected.parts, model, preset, regular_presets)
+            if regular_presets
+            else []
+        )
+        submitted_runs: list[SubmittedTrainingRun] = []
+        for regular_preset in canonical_regular_presets:
+            for dataset in selected.request.datasets:
+                index = len(submitted_runs) + 1
+                submitted_runs.append(
+                    SubmittedTrainingRun(
+                        id=f"preset-{regular_preset}-{dataset}-{index}",
+                        preset=regular_preset,
+                        dataset=dataset,
+                        overrides=dict(overrides),
+                    )
+                )
+        for record in records:
+            for dataset in selected.request.datasets:
+                index = len(submitted_runs) + 1
+                submitted_runs.append(
+                    SubmittedTrainingRun(
+                        id=f"snapshot-{record.id}-{dataset}-{index}",
+                        preset=record.preset,
+                        dataset=dataset,
+                        overrides={**dict(record.overrides), **overrides},
+                        snapshot_id=record.id,
+                        snapshot_name=record.name,
+                    )
+                )
+        monitor_names = self.resolve_monitor_names(selected.parts, monitors)
+        plan = SubmittedTrainingRunPlan(
+            runs=submitted_runs,
+            snapshot_revisions=self._snapshot_revisions(records),
+        )
+        return self.from_submitted(
+            model=model,
+            selected=selected,
+            run_plan=plan,
+            log_folder=self.valid_plan_log_folder(log_folder),
+            monitors=monitor_names,
+            snapshot_overlay_overrides=overrides,
+        )
 
     def create_for_request(
         self,
@@ -1273,7 +1438,21 @@ class WorkbenchRunPlanAdapter:
         log_folder: str,
         monitors: list[str] | None,
         search: dict[str, Any] | None,
+        snapshot_ids: list[str] | None = None,
     ) -> dict[str, Any]:
+        if snapshot_ids:
+            return self._create_snapshot_plan_for_request(
+                model=model,
+                preset=preset,
+                presets=presets,
+                experiment_task=experiment_task,
+                datasets=datasets,
+                overrides=overrides,
+                log_folder=log_folder,
+                monitors=monitors,
+                search=search,
+                snapshot_ids=snapshot_ids,
+            )
         selected = self.resolve_inputs(
             model=model,
             preset=preset,
@@ -1320,7 +1499,7 @@ class WorkbenchRunPlanAdapter:
                 ),
             )
         except RunsError as exc:
-            raise InspectorError(str(exc)) from exc
+            raise TrainingJobFailure(str(exc)) from exc
         runs = [
             self._pending_semantic_run(
                 model=model,
@@ -1352,10 +1531,11 @@ class WorkbenchRunPlanAdapter:
         search: SearchSpec | None = None,
     ) -> dict[str, Any]:
         _fields, by_key = self._field_maps(model, run.preset)
-        search_keys = {
-            normalize_key(axis.key)
-            for axis in (search.axes or ())
-        } if search is not None else set()
+        search_keys = (
+            {normalize_key(axis.key) for axis in (search.axes or ())}
+            if search is not None
+            else set()
+        )
         parameters = list(run.parameters)
         if search is not None:
             search_positions = {
@@ -1373,9 +1553,7 @@ class WorkbenchRunPlanAdapter:
                     for parameter in parameters
                     if normalize_key(parameter.key) in search_keys
                 ),
-                key=lambda parameter: search_positions[
-                    normalize_key(parameter.key)
-                ],
+                key=lambda parameter: search_positions[normalize_key(parameter.key)],
             )
             parameters = fixed_parameters + searched_parameters
         changes = []
@@ -1420,6 +1598,8 @@ class WorkbenchRunPlanAdapter:
         run_plan: SubmittedTrainingRunPlan | Mapping[str, Any],
         log_folder: str,
         monitors: list[str] | None = None,
+        envelope_snapshot_ids: list[str] | None = None,
+        snapshot_overlay_overrides: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         monitor_names = monitors or []
         submitted_plan = (
@@ -1427,9 +1607,19 @@ class WorkbenchRunPlanAdapter:
             if isinstance(run_plan, SubmittedTrainingRunPlan)
             else submitted_run_plan_from_payload(run_plan)
         )
+        submitted_plan, _snapshot_records = self._reconcile_submitted_snapshots(
+            model=model,
+            plan=submitted_plan,
+            envelope_snapshot_ids=envelope_snapshot_ids,
+            envelope_overrides=(
+                snapshot_overlay_overrides
+                if snapshot_overlay_overrides is not None
+                else selected.request.overrides
+            ),
+        )
         submitted_runs = submitted_run_plan_to_payload(submitted_plan)["runs"]
         if len(submitted_runs) > MAX_TRAINING_PLANNED_RUNS:
-            raise InspectorError(
+            raise TrainingJobFailure(
                 "Submitted run plan is too large: "
                 f"{len(submitted_runs)} submitted runs exceeds "
                 f"{MAX_TRAINING_PLANNED_RUNS}."
@@ -1440,11 +1630,7 @@ class WorkbenchRunPlanAdapter:
                 selected.request,
                 tuple(
                     SubmittedRun(
-                        id=(
-                            str(row.get("id"))
-                            if row.get("id")
-                            else None
-                        ),
+                        id=(str(row.get("id")) if row.get("id") else None),
                         preset=str(row.get("preset") or ""),
                         dataset=str(row.get("dataset") or ""),
                         overrides=dict(row.get("overrides") or {}),
@@ -1458,7 +1644,7 @@ class WorkbenchRunPlanAdapter:
                 ),
             )
         except RunsError as exc:
-            raise InspectorError(str(exc)) from exc
+            raise TrainingJobFailure(str(exc)) from exc
 
         runs = []
         for index, (row, semantic_run) in enumerate(
@@ -1491,6 +1677,7 @@ class WorkbenchRunPlanAdapter:
             semantic_plan=semantic_plan,
             log_folder=log_folder,
             runs=runs,
+            snapshot_revisions=submitted_plan.snapshot_revisions,
         )
 
     def _resolve_presets(
@@ -1522,9 +1709,11 @@ class WorkbenchRunPlanAdapter:
                 )
             )
         if unknown:
-            raise InspectorError(f"Unknown preset '{unknown[0]}' for model '{model}'.")
+            raise TrainingJobFailure(
+                f"Unknown preset '{unknown[0]}' for model '{model}'."
+            )
         if not selected:
-            raise InspectorError("Training requires at least one selected preset.")
+            raise TrainingJobFailure("Training requires at least one selected preset.")
         return [name for name, _preset in selected]
 
     def _field_maps(
@@ -1532,18 +1721,21 @@ class WorkbenchRunPlanAdapter:
         model: str,
         preset: str,
     ) -> tuple[tuple[ConfigurationField, ...], dict[str, ConfigurationField]]:
-        fields = WorkbenchInspectionAdapter.select(model).configuration(
-            preset
-        ).fields
+        try:
+            fields = (
+                WorkbenchInspectionAdapter.select(model).configuration(preset).fields
+            )
+        except InspectionFailure as exc:
+            raise TrainingJobFailure(exc.detail) from exc
         by_key: dict[str, ConfigurationField] = {}
         for config_field in fields:
             by_key[normalize_key(config_field.key)] = config_field
         for config_field in fields:
-            by_key[
-                normalize_key(config_key_to_model_param(config_field.key))
-            ] = by_key.get(
-                normalize_key(config_key_to_model_param(config_field.key)),
-                config_field,
+            by_key[normalize_key(config_key_to_model_param(config_field.key))] = (
+                by_key.get(
+                    normalize_key(config_key_to_model_param(config_field.key)),
+                    config_field,
+                )
             )
         return fields, by_key
 
@@ -1582,9 +1774,14 @@ class WorkbenchRunPlanAdapter:
             return 0
 
     def _run_total_epochs(self, parts: ModelPackage, run: RunSpec) -> int:
-        parsed_overrides = WorkbenchInspectionAdapter.from_package(
-            parts
-        ).parse_overrides(dict(run.overrides)).values
+        try:
+            parsed_overrides = (
+                WorkbenchInspectionAdapter.from_package(parts)
+                .parse_overrides(dict(run.overrides))
+                .values
+            )
+        except InspectionFailure as exc:
+            raise TrainingJobFailure(exc.detail) from exc
         return self._total_epochs(parts, dict(parsed_overrides))
 
     def _pending_run(
@@ -1634,6 +1831,7 @@ class WorkbenchRunPlanAdapter:
         semantic_plan: RunPlan,
         log_folder: str,
         runs: list[dict[str, Any]],
+        snapshot_revisions: tuple[ConfigSnapshotRevision, ...] = (),
     ) -> dict[str, Any]:
         return {
             **model_identity_payload_from_id(model),
@@ -1649,6 +1847,7 @@ class WorkbenchRunPlanAdapter:
             ),
             "runs": runs,
             "summary": self.summarize(runs),
+            "snapshotRevisions": _snapshot_revisions_to_payload(snapshot_revisions),
         }
 
     def create_run_plan(
@@ -1669,6 +1868,7 @@ class WorkbenchRunPlanAdapter:
                 if command.search is not None
                 else None
             ),
+            snapshot_ids=command.snapshot_ids,
         )
         return training_run_plan_from_payload(payload)
 
@@ -1680,10 +1880,82 @@ class WorkbenchRunPlanAdapter:
     ) -> MaterializedTrainingRunPlan:
         """Accept one job submission and derive its canonical persisted plan."""
 
+        if command.snapshot_ids:
+            if command.run_plan is not None:
+                raise TrainingJobFailure(
+                    "Snapshot Training Jobs do not accept a submitted exact Run Plan.",
+                    kind=FailureKind.CONFLICT,
+                )
+            records = self._resolve_snapshot_records(
+                command.snapshot_ids,
+                model=command.model,
+                failure_kind=FailureKind.CONFLICT,
+            )
+            current_revisions = self._snapshot_revisions(records)
+            submitted_revisions = {
+                revision.id: revision.semantic_revision
+                for revision in command.snapshot_revisions
+            }
+            if set(submitted_revisions) != set(command.snapshot_ids):
+                raise TrainingJobFailure(
+                    "Snapshot Training Jobs require backend-issued semantic "
+                    "revisions for every snapshotId.",
+                    kind=FailureKind.CONFLICT,
+                )
+            for revision in current_revisions:
+                if submitted_revisions.get(revision.id) != revision.semantic_revision:
+                    raise TrainingJobFailure(
+                        f"Config snapshot '{revision.id}' changed semantically. "
+                        "Refresh the Run Plan before starting Training.",
+                        kind=FailureKind.CONFLICT,
+                    )
+            document = self._create_snapshot_plan_for_request(
+                model=command.model,
+                preset=command.preset,
+                presets=command.presets,
+                experiment_task=command.experiment_task,
+                datasets=command.datasets,
+                overrides=command.overrides,
+                log_folder=validated_log_folder,
+                monitors=command.monitors,
+                search=(
+                    training_search_to_payload(command.search)
+                    if command.search is not None
+                    else None
+                ),
+                snapshot_ids=command.snapshot_ids,
+            )
+            package = _require_package(command.model)
+            monitor_names = self.resolve_monitor_names(package, command.monitors)
+            return MaterializedTrainingRunPlan(
+                document=encode_persisted_run_plan(document),
+                monitors=tuple(monitor_names),
+            )
+
+        submitted_plan = command.run_plan
+        snapshot_records: tuple[ConfigSnapshotRecord, ...] = ()
+        if submitted_plan is not None:
+            submitted_plan, snapshot_records = self._reconcile_submitted_snapshots(
+                model=command.model,
+                plan=submitted_plan,
+                envelope_snapshot_ids=command.snapshot_ids,
+                envelope_overrides=command.overrides,
+            )
+        selected_presets = command.presets
+        if snapshot_records:
+            regular_presets = (
+                list(command.presets)
+                if command.presets is not None
+                else [command.preset]
+            )
+            selected_presets = [
+                *regular_presets,
+                *(record.preset for record in snapshot_records),
+            ]
         selected = self.resolve_inputs(
             model=command.model,
             preset=command.preset,
-            presets=command.presets,
+            presets=selected_presets,
             experiment_task=command.experiment_task,
             datasets=command.datasets,
             overrides=command.overrides,
@@ -1701,11 +1973,12 @@ class WorkbenchRunPlanAdapter:
             self.from_submitted(
                 model=command.model,
                 selected=selected,
-                run_plan=command.run_plan,
+                run_plan=submitted_plan,
                 log_folder=validated_log_folder,
                 monitors=monitor_names,
+                envelope_snapshot_ids=command.snapshot_ids,
             )
-            if command.run_plan is not None
+            if submitted_plan is not None
             else self.create(
                 model=command.model,
                 selected=selected,
@@ -1805,11 +2078,14 @@ class WorkbenchRunPlanAdapter:
             semantic_plan=semantic_plan,
             log_folder=str(persisted_plan["logFolder"]),
             runs=expected_rows,
+            snapshot_revisions=_snapshot_revisions_from_payload(
+                persisted_plan.get("snapshotRevisions")
+            ),
         )
+        if "snapshotRevisions" not in persisted_plan:
+            expected_plan.pop("snapshotRevisions", None)
         if persisted_plan.get("summary") != expected_plan["summary"]:
-            raise ValueError(
-                "Run plan summary does not match its accepted Run rows."
-            )
+            raise ValueError("Run plan summary does not match its accepted Run rows.")
         if dict(persisted_plan) != expected_plan:
             raise ValueError(
                 "Persisted Run plan projection does not match its accepted Runs."

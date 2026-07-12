@@ -6,6 +6,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from workbench.backend.failures import FailureKind
 from workbench.backend.run_history.artifacts import (
     ObservedRunArtifact,
     RunArtifactObservation,
@@ -14,6 +15,7 @@ from workbench.backend.run_history.artifacts import (
     _parse_checkpoint_step,
     _run_relative_file_label,
 )
+from workbench.backend.run_history.errors import RunHistoryFailure
 from workbench.backend.run_history.records import (
     LOG_RESPONSE_ITEM_LIMIT,
     LogCheckpoint,
@@ -34,9 +36,10 @@ from workbench.backend.tensorboard.readers import (
 )
 
 LOG_EVENT_CACHE_MAX_ENTRIES = 256
-LOG_TAG_READ_MAX_EVENT_BYTES = 96 * 1024 * 1024
+LOG_TAG_READ_MAX_EVENT_BYTES = 64 * 1024 * 1024
 LOG_TAG_BATCH_READ_MAX_EVENT_BYTES = 64 * 1024 * 1024
 LOG_SCALAR_ACCUMULATOR_CACHE_MAX_ENTRIES = 32
+LOG_SCALAR_READ_MAX_EVENT_BYTES = 64 * 1024 * 1024
 LOG_TAG_KEYS = ("scalars", "histograms", "images", "texts")
 PARAMETER_MONITOR_CHANNELS = {"weights", "bias"}
 LAYER_MONITOR_METRICS = {
@@ -87,18 +90,28 @@ class LogRunQueryService:
         max_tag_batch_event_bytes: int = LOG_TAG_BATCH_READ_MAX_EVENT_BYTES,
         monitor_reader: TensorBoardMonitorReader | None = None,
         parameter_status_reader: TensorBoardParameterStatusReader | None = None,
+        event_cache: TensorBoardEventCache | None = None,
+        max_request_event_bytes: int | None = None,
     ) -> None:
         self.scanner = scanner
         self.scalar_point_limit = scalar_point_limit
         self.max_tag_event_bytes = max(0, int(max_tag_event_bytes))
         self.max_tag_batch_event_bytes = max(0, int(max_tag_batch_event_bytes))
+        self.max_request_event_bytes = max(
+            1,
+            int(
+                max_tag_batch_event_bytes
+                if max_request_event_bytes is None
+                else max_request_event_bytes
+            ),
+        )
         self.monitor_reader = monitor_reader or TensorBoardMonitorReader(
             scalar_point_limit=scalar_point_limit,
         )
         self.parameter_status_reader = (
             parameter_status_reader or TensorBoardParameterStatusReader()
         )
-        self._event_cache = TensorBoardEventCache(
+        self._event_cache = event_cache or TensorBoardEventCache(
             {
                 "tags": LOG_EVENT_CACHE_MAX_ENTRIES,
                 "scalars": LOG_EVENT_CACHE_MAX_ENTRIES,
@@ -173,10 +186,7 @@ class LogRunQueryService:
         self,
         index: EventFileIndex,
     ) -> dict[str, Any]:
-        return {
-            key: []
-            for key in LOG_TAG_KEYS
-        } | {
+        return {key: [] for key in LOG_TAG_KEYS} | {
             "eventBytes": index.total_size,
             "skippedEventFiles": len(index.fingerprint),
             "truncated": True,
@@ -261,8 +271,8 @@ class LogRunQueryService:
                 event_files=event_files,
             )
             if tags is None:
-                exceeds_per_run_tag_budget = (
-                    event_files.exceeds(self.max_tag_event_bytes)
+                exceeds_per_run_tag_budget = event_files.exceeds(
+                    self.max_tag_event_bytes
                 )
                 would_exceed_batch_budget = (
                     self.max_tag_batch_event_bytes > 0
@@ -276,7 +286,11 @@ class LogRunQueryService:
                         cache_generation=cache_generation,
                     )
                 elif would_exceed_batch_budget:
-                    tags = self._batch_budget_skip_tags(event_files)
+                    raise RunHistoryFailure(
+                        "TensorBoard tag event files exceed the shared "
+                        f"{self.max_tag_batch_event_bytes} byte read budget.",
+                        kind=FailureKind.TOO_LARGE,
+                    )
                 else:
                     uncached_event_bytes += event_files.total_size
                     tags = self.read_tags(
@@ -326,9 +340,17 @@ class LogRunQueryService:
             return []
 
         series: list[dict[str, Any]] = []
+        event_read_bytes = 0
         for run in runs:
             cache_generation = self._cache_token()
             event_files = self.scanner.artifact_observation(run).event_files
+            event_read_bytes += event_files.total_size
+            if event_read_bytes > self.max_request_event_bytes:
+                raise RunHistoryFailure(
+                    "TensorBoard scalar event files exceed the shared "
+                    f"{self.max_request_event_bytes} byte read budget.",
+                    kind=FailureKind.TOO_LARGE,
+                )
             cached_tags = self._cached_tags_if_current(
                 run.path,
                 event_files=event_files,
@@ -383,10 +405,18 @@ class LogRunQueryService:
         skipped_event_files = 0
         event_bytes = 0
         skipped_reasons: list[str] = []
+        request_event_bytes = 0
 
         for run in runs:
             cache_generation = self._cache_token()
             event_files = self.scanner.artifact_observation(run).event_files
+            request_event_bytes += event_files.total_size
+            if request_event_bytes > self.max_request_event_bytes:
+                raise RunHistoryFailure(
+                    "TensorBoard media event files exceed the shared "
+                    f"{self.max_request_event_bytes} byte read budget.",
+                    kind=FailureKind.TOO_LARGE,
+                )
             run_tags = self.read_tags(
                 run.path,
                 event_files=event_files,
@@ -423,9 +453,7 @@ class LogRunQueryService:
 
         returned_item_count = len(images) + len(texts)
         truncated_items = [
-            item
-            for item in [*images, *texts]
-            if bool(item.get("truncated"))
+            item for item in [*images, *texts] if bool(item.get("truncated"))
         ]
         truncated = skipped_event_files > 0 or bool(truncated_items)
         reason = None
@@ -556,8 +584,7 @@ class LogRunQueryService:
                     observation.truncation_reasons[0]
                     if observation.truncation_reasons
                     else (
-                        "artifact metadata capped at "
-                        f"{LOG_RESPONSE_ITEM_LIMIT} rows"
+                        f"artifact metadata capped at {LOG_RESPONSE_ITEM_LIMIT} rows"
                         if response_truncated
                         else None
                     )
@@ -630,9 +657,7 @@ class LogRunQueryService:
         cache_generation: int | None = None,
     ) -> dict[str, Any]:
         generation = (
-            self._cache_token()
-            if cache_generation is None
-            else cache_generation
+            self._cache_token() if cache_generation is None else cache_generation
         )
         event_files = event_files or tensorboard_events.event_file_index(run_dir)
         cache_key = self._tags_cache_key(event_files)
@@ -642,10 +667,7 @@ class LogRunQueryService:
 
         tags = {"scalars": set(), "histograms": set(), "images": set(), "texts": set()}
         if event_files.exceeds(self.max_tag_event_bytes):
-            result = {
-                key: sorted(value)
-                for key, value in tags.items()
-            } | {
+            result = {key: sorted(value) for key, value in tags.items()} | {
                 "eventBytes": event_files.total_size,
                 "skippedEventFiles": len(event_files.fingerprint),
                 "truncated": True,
@@ -684,10 +706,7 @@ class LogRunQueryService:
                 if tag.endswith("/text_summary")
             )
         returned_item_count = sum(len(value) for value in tags.values())
-        result = {
-            key: sorted(value)
-            for key, value in tags.items()
-        } | {
+        result = {key: sorted(value) for key, value in tags.items()} | {
             "truncated": False,
             "sourceItemCount": returned_item_count,
             "returnedItemCount": returned_item_count,
@@ -711,9 +730,7 @@ class LogRunQueryService:
         cache_generation: int | None = None,
     ) -> dict[str, dict[str, Any]]:
         generation = (
-            self._cache_token()
-            if cache_generation is None
-            else cache_generation
+            self._cache_token() if cache_generation is None else cache_generation
         )
         event_files = event_files or tensorboard_events.event_file_index(run_dir)
         point_limit = max_points if max_points is not None else self.scalar_point_limit
@@ -734,35 +751,18 @@ class LogRunQueryService:
                 results[tag] = self._copy_scalar_payload(cached)
 
         if uncached_tags:
-            points_by_tag: dict[str, list[dict[str, Any]]] = {
-                tag: [] for tag in uncached_tags
-            }
-            for event_dir in event_files.dirs:
-                accumulator = self._load_scalar_accumulator(
+            try:
+                streamed = tensorboard_events.exact_scalar_tails(
                     event_files,
-                    event_dir,
-                    generation=generation,
+                    uncached_tags,
+                    max_points=point_limit,
+                    byte_budget=self.max_request_event_bytes,
                 )
-                if accumulator is None:
-                    continue
-                for tag in uncached_tags:
-                    try:
-                        points_by_tag[tag].extend(
-                            tensorboard_events.scalar_points(
-                                accumulator,
-                                tag,
-                                None,
-                            )
-                        )
-                    except Exception:
-                        continue
+            except ValueError as exc:
+                raise RunHistoryFailure(str(exc)) from exc
 
             for tag in uncached_tags:
-                result = self._scalar_payload_from_points(
-                    points_by_tag[tag],
-                    point_limit=point_limit,
-                    sampling=sampling,
-                )
+                result = streamed[tag]
                 self._cache_set(
                     "scalars",
                     self._scalar_cache_key(

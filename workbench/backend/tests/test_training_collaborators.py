@@ -12,6 +12,7 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
 import workbench.backend.training_jobs.snapshot as training_job_projector
 from workbench.backend.api.v1.training_mapping import training_job_to_payload
+from workbench.backend.training_jobs.errors import TrainingJobFailure
 from workbench.backend.training_jobs.launcher import (
     TRAINING_LOGS_ROOT_ENV,
     TrainingWorkerLauncher,
@@ -113,6 +114,38 @@ def make_job(root: Path) -> TrainingJobRecord:
 
 
 class TrainingProgressStoreTests(unittest.TestCase):
+    def test_overlong_new_progress_record_is_never_persisted(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            job = make_job(Path(tmp) / "job-1")
+            store = TrainingProgressStore(max_record_bytes=64)
+
+            with self.assertRaisesRegex(
+                TrainingJobFailure,
+                "64 byte record limit",
+            ):
+                store.append_event(job, {"type": "event", "value": "x" * 128})
+
+            self.assertFalse(job.progress_path.exists())
+
+    def test_overlong_progress_record_is_skipped_without_losing_later_event(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            job = make_job(Path(tmp) / "job-1")
+            job.root.mkdir(parents=True)
+            job.progress_path.write_bytes(
+                b'{"type":"oversized","value":"'
+                + b"x" * 128
+                + b'"}\n'
+                + b'{"type":"completed","status":"completed"}\n'
+            )
+            store = TrainingProgressStore(max_record_bytes=64)
+
+            snapshot = store.read_summary(job)
+
+        self.assertEqual(snapshot.total_count, 1)
+        self.assertEqual(snapshot.events[0]["type"], "completed")
+
     def test_progress_store_appends_and_reads_jsonl_events(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             job = make_job(Path(tmp) / "job-1")
@@ -197,10 +230,7 @@ class TrainingProgressStoreTests(unittest.TestCase):
             job = make_job(Path(tmp) / "job-1")
             store = TrainingProgressStore()
             job.root.mkdir(parents=True)
-            events = [
-                {"type": "step", "step": index}
-                for index in range(5_000)
-            ]
+            events = [{"type": "step", "step": index} for index in range(5_000)]
             job.progress_path.write_text(
                 "\n".join(json.dumps(event) for event in events) + "\n",
                 encoding="utf-8",
@@ -219,7 +249,35 @@ class TrainingProgressStoreTests(unittest.TestCase):
         self.assertEqual(stats.total_count, 5_000)
         self.assertEqual(page.total_count, 5_000)
         self.assertEqual(page.events, events[2_450:2_475])
-        self.assertEqual(decode_event.call_count, 2_475)
+        self.assertLessEqual(decode_event.call_count, 25 + 256)
+
+    def test_live_projection_streams_full_history_without_materializing_it(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            job = make_job(Path(tmp) / "job-1")
+            job.root.mkdir(parents=True)
+            events = [
+                {"type": "step", "step": index} for index in range(5_000)
+            ]
+            job.progress_path.write_text(
+                "\n".join(json.dumps(event) for event in events) + "\n",
+                encoding="utf-8",
+            )
+            store = TrainingProgressStore()
+            projections = TrainingLiveProjectionCache()
+
+            with patch.object(
+                store,
+                "_read_events_range",
+                side_effect=AssertionError("must stream into the reducer"),
+            ):
+                snapshot = projections.consume_progress(job, store)
+                projection = projections.project(job, snapshot)
+
+        self.assertEqual(projection.event_count, 5_000)
+        self.assertEqual(len(projection.events_tail), 100)
+        self.assertEqual(projection.events_tail[-1]["step"], 4_999)
 
     def test_progress_summary_retains_terminal_and_monitor_aggregates(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -234,8 +292,7 @@ class TrainingProgressStoreTests(unittest.TestCase):
                 "logDir": "logs/job-1/baseline/Mnist",
             }
             events = [completed] + [
-                {"type": "step", "step": index}
-                for index in range(250)
+                {"type": "step", "step": index} for index in range(250)
             ]
             job.progress_path.write_text(
                 "\n".join(json.dumps(event) for event in events) + "\n",
@@ -413,6 +470,27 @@ class TrainingJobProjectorTests(unittest.TestCase):
             tail,
             [f"log {index} {'x' * 40}" for index in range(17, 20)],
         )
+
+    def test_projector_log_tail_bounds_cr_invalid_utf8_and_no_newline(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            job = make_job(Path(tmp) / "job-1")
+            job.root.mkdir(parents=True)
+            job.log_path.write_bytes(
+                b"\r".join(f"line {index}".encode() for index in range(100))
+                + b"\r"
+                + (b"\xff" * (400 * 1024))
+            )
+
+            tail = TrainingJobProjector().log_tail_snapshot(job)
+
+        encoded = "\n".join(tail.lines).encode("utf-8")
+        self.assertLessEqual(
+            len(encoded),
+            training_job_projector.TRAINING_JOB_LOG_TAIL_MAX_BYTES,
+        )
+        self.assertLessEqual(len(tail.lines), 80)
+        self.assertTrue(tail.truncated)
+        self.assertIn("�", tail.lines[-1])
 
 
 if __name__ == "__main__":
