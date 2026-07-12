@@ -4,32 +4,24 @@ import {
   type TrainingSearchCreateInput,
 } from "@/lib/api";
 import { configKeyToken, type OverrideValues } from "@/lib/config";
+import {
+  DEFAULT_RANDOM_SEARCH_SAMPLES,
+  DEFAULT_TRAINING_SEARCH_STATE,
+  LARGE_GRID_RUN_THRESHOLD,
+  type TrainingSearchLockSummary,
+  type TrainingSearchMode,
+  type TrainingSearchState,
+} from "@/lib/training-search-state";
 
-export type TrainingSearchMode = "off" | "grid" | "random";
-
-export type TrainingSearchState = {
-  mode: TrainingSearchMode;
-  selectedValues: Record<string, ConfigValue[]>;
-  randomSamples: number;
+export {
+  DEFAULT_RANDOM_SEARCH_SAMPLES,
+  DEFAULT_TRAINING_SEARCH_STATE,
+  LARGE_GRID_RUN_THRESHOLD,
 };
-
-export type TrainingSearchLockSummary = {
-  lockedAxisCount: number;
-  lockedAxisLabels: string[];
-  lockedPresetLabels: string[];
-  lockedAxesMessage: string;
-  skippedSelectedAxisCount: number;
-  skippedSelectedAxisLabels: string[];
-  skippedSelectedAxisMessage: string;
-};
-
-export const DEFAULT_RANDOM_SEARCH_SAMPLES = 10;
-export const LARGE_GRID_RUN_THRESHOLD = 100;
-
-export const DEFAULT_TRAINING_SEARCH_STATE: TrainingSearchState = {
-  mode: "off",
-  selectedValues: {},
-  randomSamples: DEFAULT_RANDOM_SEARCH_SAMPLES,
+export type {
+  TrainingSearchLockSummary,
+  TrainingSearchMode,
+  TrainingSearchState,
 };
 
 export function configValueKey(value: ConfigValue) {

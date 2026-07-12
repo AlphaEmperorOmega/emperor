@@ -1,7 +1,7 @@
+import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
 import { Activity } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { TrainingCommandDialog } from "@/features/workbench/components/config/training-command-dialog";
 import {
   TargetSelectorSection,
   type TargetSelectorCommands,
@@ -23,6 +23,14 @@ import {
   modelTypeOptions as createModelTypeOptions,
 } from "@/lib/selection";
 import { buildTrainingCommand } from "@/lib/training-command";
+
+const TrainingCommandDialog = dynamic(
+  () =>
+    import(
+      "@/features/workbench/components/config/training-command-dialog"
+    ).then((module) => module.TrainingCommandDialog),
+  { ssr: false },
+);
 
 function historicalFilterLabel(option: { label: string; count: number }) {
   return option.count > 1 ? `${option.label} (${option.count})` : option.label;

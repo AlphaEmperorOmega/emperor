@@ -25,7 +25,7 @@ import {
 import {
   DEFAULT_TRAINING_SEARCH_STATE,
   type TrainingSearchState,
-} from "@/lib/training-search";
+} from "@/lib/training-search-state";
 import {
   useConfigSnapshotRecords,
 } from "@/features/workbench/state/config-snapshots/use-config-snapshot-records";

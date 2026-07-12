@@ -64,6 +64,7 @@ import {
   useTrainingConfiguration,
   useTrainingWorkspace,
 } from "@/features/workbench/providers/training-provider";
+import { TrainingExecutionProvider } from "@/features/workbench/providers/training-execution-provider";
 import { TargetPresetPanel } from "@/features/workbench/components/screen/target-preset-panel";
 import { readPersistedTargetSelection } from "@/features/workbench/state/target/target-selection-storage";
 import {
@@ -152,9 +153,13 @@ function renderTrainingPanel() {
     <QueryClientProvider client={client}>
       <WorkbenchProviders
         activeWorkspace="training"
-        onOpenFullConfig={vi.fn()}
       >
-        <TrainingPanel />
+        <TrainingExecutionProvider
+          activeWorkspace="training"
+          onOpenFullConfig={vi.fn()}
+        >
+          <TrainingPanel />
+        </TrainingExecutionProvider>
       </WorkbenchProviders>
     </QueryClientProvider>,
   );
@@ -169,10 +174,14 @@ function renderTrainingPanelWithExperiments() {
     <QueryClientProvider client={client}>
       <WorkbenchProviders
         activeWorkspace="training"
-        onOpenFullConfig={vi.fn()}
       >
-        <TargetPresetPanel onOpenFullConfig={vi.fn()} />
-        <TrainingPanel />
+        <TrainingExecutionProvider
+          activeWorkspace="training"
+          onOpenFullConfig={vi.fn()}
+        >
+          <TargetPresetPanel onOpenFullConfig={vi.fn()} />
+          <TrainingPanel />
+        </TrainingExecutionProvider>
       </WorkbenchProviders>
     </QueryClientProvider>,
   );
@@ -1037,9 +1046,14 @@ describe("useWorkbenchState", () => {
     render(
       <QueryClientProvider client={client}>
         <WorkbenchProviders activeWorkspace="training">
-          <ModelTargetProbe />
-          <TrainingTargetProbe />
-          <TrainingWorkspaceReadyProbe testId="training-workspace-ready" />
+          <TrainingExecutionProvider
+            activeWorkspace="training"
+            onOpenFullConfig={vi.fn()}
+          >
+            <ModelTargetProbe />
+            <TrainingTargetProbe />
+            <TrainingWorkspaceReadyProbe testId="training-workspace-ready" />
+          </TrainingExecutionProvider>
         </WorkbenchProviders>
       </QueryClientProvider>,
     );
@@ -1106,9 +1120,14 @@ describe("useWorkbenchState", () => {
     render(
       <QueryClientProvider client={client}>
         <WorkbenchProviders activeWorkspace="training">
-          <ModelTargetProbe />
-          <TrainingTargetProbe />
-          <TrainingWorkspaceReadyProbe testId="training-workspace-ready" />
+          <TrainingExecutionProvider
+            activeWorkspace="training"
+            onOpenFullConfig={vi.fn()}
+          >
+            <ModelTargetProbe />
+            <TrainingTargetProbe />
+            <TrainingWorkspaceReadyProbe testId="training-workspace-ready" />
+          </TrainingExecutionProvider>
         </WorkbenchProviders>
       </QueryClientProvider>,
     );
@@ -1230,18 +1249,23 @@ describe("useWorkbenchState", () => {
     render(
       <QueryClientProvider client={client}>
         <WorkbenchProviders activeWorkspace="training">
-          <TrainingWorkspaceReadyProbe testId="profile-workspace-ready" />
-          <Profiler
-            id="target-contexts"
-            onRender={() => {
-              profilerCommitCount += 1;
-            }}
+          <TrainingExecutionProvider
+            activeWorkspace="training"
+            onOpenFullConfig={vi.fn()}
           >
-            <CatalogProbe />
-            <ModelProbe />
-            <TrainingProbe />
-            <SnapshotsProbe />
-          </Profiler>
+            <TrainingWorkspaceReadyProbe testId="profile-workspace-ready" />
+            <Profiler
+              id="target-contexts"
+              onRender={() => {
+                profilerCommitCount += 1;
+              }}
+            >
+              <CatalogProbe />
+              <ModelProbe />
+              <TrainingProbe />
+              <SnapshotsProbe />
+            </Profiler>
+          </TrainingExecutionProvider>
         </WorkbenchProviders>
       </QueryClientProvider>,
     );

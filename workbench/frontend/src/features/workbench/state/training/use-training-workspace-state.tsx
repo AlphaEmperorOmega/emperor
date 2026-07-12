@@ -1,36 +1,25 @@
 import { useCallback, useMemo } from "react";
 import { buildClusterGrowth } from "@/lib/cluster-growth";
 import { type ConfigSnapshot } from "@/lib/config-snapshots";
-import { type ModelIdentity } from "@/lib/api";
-import { type WorkbenchWorkspace } from "@/types/workbench";
-import { useTrainingDraftState } from "@/features/workbench/state/training/use-training-draft-state";
+import { type TrainingDraftState } from "@/features/workbench/state/training/use-training-configuration-state";
+import { type TrainingDraftSeed } from "@/features/workbench/state/training/use-training-draft-state";
 import { type TrainingJobLifecycle } from "@/features/workbench/state/training/use-training-job-lifecycle";
 import { useTrainingLogFolderState } from "@/features/workbench/state/training/use-training-log-folder-state";
 import { useTrainingPlanState } from "@/features/workbench/state/training/use-training-plan-state";
 
-type TrainingSeed = {
-  modelType: string;
-  model: string;
-  preset: string;
-};
-
 export type TrainingWorkspaceStateInput = {
-  activeWorkspace: WorkbenchWorkspace;
-  models: ModelIdentity[];
-  seed: TrainingSeed;
+  configuration: TrainingDraftState;
   trainingEnabled: boolean;
   protectedReadsEnabled: boolean;
   onOpenFullConfig: () => void;
-  onCreatePresetSnapshot: (target: TrainingSeed) => void;
+  onCreatePresetSnapshot: (target: TrainingDraftSeed) => void;
   onEditConfigSnapshot: (snapshot: ConfigSnapshot) => void;
   onDuplicateConfigSnapshot: (snapshot: ConfigSnapshot) => void;
   trainingJob: TrainingJobLifecycle;
 };
 
 export function useTrainingWorkspaceState({
-  activeWorkspace,
-  models,
-  seed,
+  configuration,
   trainingEnabled,
   protectedReadsEnabled,
   onOpenFullConfig,
@@ -39,14 +28,8 @@ export function useTrainingWorkspaceState({
   onDuplicateConfigSnapshot,
   trainingJob,
 }: TrainingWorkspaceStateInput) {
-  const configuration = useTrainingDraftState({
-    activeWorkspace,
-    models,
-    seed,
-    protectedReadsEnabled,
-  });
   const logFolder = useTrainingLogFolderState({
-    enabled: activeWorkspace === "training" && protectedReadsEnabled,
+    enabled: protectedReadsEnabled,
   });
   const modelSetup = configuration.setup.model;
   const variantSetup = configuration.setup.variants;
@@ -100,8 +83,6 @@ export function useTrainingWorkspaceState({
       launch: lifecycle.launchRunPlan,
     },
   });
-  const clearDraftForConnectionChange =
-    configuration.clearForConnectionChange;
   const clearLogFolderForConnectionChange =
     logFolder.clearForConnectionChange;
   const clearPlanForConnectionChange = planState.clearForConnectionChange;
@@ -142,11 +123,9 @@ export function useTrainingWorkspaceState({
     [onDuplicateConfigSnapshot, variantSetup.snapshots],
   );
   const clearForConnectionChange = useCallback(() => {
-    clearDraftForConnectionChange();
     clearLogFolderForConnectionChange();
     clearPlanForConnectionChange();
   }, [
-    clearDraftForConnectionChange,
     clearLogFolderForConnectionChange,
     clearPlanForConnectionChange,
   ]);
@@ -266,39 +245,7 @@ export function useTrainingWorkspaceState({
     () => ({ draft, plan, job, dialogs, actions }),
     [actions, dialogs, draft, job, plan],
   );
-  const configurationInterface = useMemo(
-    () => ({
-      selectedModelType: modelSetup.selectedType,
-      selectedModel: modelSetup.selected,
-      selectedPrimaryPreset: variantSetup.primaryPreset,
-      selectedSnapshotIds: variantSetup.selectedSnapshotIds,
-      selectedMonitors: monitorSetup.selected,
-      configSections: runtimeDefaults.sections,
-      fieldCount: runtimeDefaults.fieldCount,
-      bulkOverrides: runtimeDefaults.active,
-      inactiveLockedOverrideCount: runtimeDefaults.inactiveLockedCount,
-      schemaLoading: configuration.status.schemaLoading,
-      includeSnapshot: variantSetup.includeSnapshot,
-      excludeSnapshot: variantSetup.excludeSnapshot,
-      updateOverride: runtimeDefaults.edit,
-      clearOverride: runtimeDefaults.clear,
-      resetOverrides: runtimeDefaults.reset,
-    }),
-    [
-      configuration.status.schemaLoading,
-      modelSetup.selected,
-      modelSetup.selectedType,
-      monitorSetup.selected,
-      runtimeDefaults,
-      variantSetup.excludeSnapshot,
-      variantSetup.includeSnapshot,
-      variantSetup.primaryPreset,
-      variantSetup.selectedSnapshotIds,
-    ],
-  );
-
   return {
-    configuration: configurationInterface,
     workspace,
     clearForConnectionChange,
   };
@@ -307,6 +254,3 @@ export function useTrainingWorkspaceState({
 export type TrainingWorkspace = ReturnType<
   typeof useTrainingWorkspaceState
 >["workspace"];
-export type TrainingConfiguration = ReturnType<
-  typeof useTrainingWorkspaceState
->["configuration"];

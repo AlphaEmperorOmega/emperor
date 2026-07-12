@@ -1991,6 +1991,30 @@ describe("WorkbenchApp Logs Workspace", () => {
     await expectLogFilterSelection(user, "Scalar Tags", "train/loss_epoch", true);
   });
 
+  it("keeps log selections when Training is activated after Logs", async () => {
+    setupLogsScenario();
+    renderWorkbench();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+    await selectLogExperiments(user, ["test_model"]);
+    expect(
+      await screen.findByRole("img", {
+        name: /validation\/accuracy_epoch scalar chart/i,
+      }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /^training$/i }));
+    await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+
+    await expectLogFilterSelection(user, "Experiments", "test_model", true);
+    expect(
+      await screen.findByRole("img", {
+        name: /validation\/accuracy_epoch scalar chart/i,
+      }),
+    ).toBeInTheDocument();
+  });
+
   it("splits test score leaderboards by experiment without refetching scalars", async () => {
     const { logScalarRequests } = setupLogsScenario({
       logRunsResponse: logRunsWithSharedDataset(),

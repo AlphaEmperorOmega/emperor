@@ -213,6 +213,14 @@ commands; no raw identity setter or polling callback crosses the ownership seam.
 Training draft and Run Plan reset remain separate and register directly with the
 Workbench Connection transition registry.
 
+Training draft/configuration state and Training Job lifecycle remain in the
+app-scoped provider graph because Model, Full Config, Logs, and header consumers
+use their focused projections. Log-folder selection, Run Plan generation, and
+the Training workspace projection live behind a sticky dynamic execution
+provider. That provider loads on the first Training visit and stays mounted
+after workspace switches, preserving execution state without charging its
+implementation to the initial route bundle.
+
 ## Logs Workspace State
 
 The Logs Workspace Module owns experiment, Run, and scalar-tag loading;

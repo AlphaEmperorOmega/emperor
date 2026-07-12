@@ -10,13 +10,14 @@ import {
   useWorkbenchConnection,
 } from "@/features/workbench/providers/workbench-connection-provider";
 import {
-  useTrainingJobLifecycle,
-  type TrainingJobLifecycle,
-} from "@/features/workbench/state/training/use-training-job-lifecycle";
+  useTrainingJobPolling,
+  type TrainingJobPolling,
+} from "@/features/workbench/state/training/use-training-job-polling";
+import { type TrainingWorkspace } from "@/features/workbench/state/training/use-training-workspace-state";
 import {
   type TrainingConfiguration,
-  type TrainingWorkspace,
-} from "@/features/workbench/state/training/use-training-workspace-state";
+  type TrainingDraftState,
+} from "@/features/workbench/state/training/use-training-configuration-state";
 import { type TrainingJob } from "@/lib/api";
 
 const [TrainingWorkspaceProvider, useTrainingWorkspace] =
@@ -25,6 +26,10 @@ const [TrainingConfigurationProvider, useTrainingConfiguration] =
   createWorkbenchContext<TrainingConfiguration>(
     "TrainingConfigurationContext",
   );
+const [TrainingDraftProvider, useTrainingDraft] =
+  createWorkbenchContext<TrainingDraftState>("TrainingDraftContext");
+const [TrainingPollingContextProvider, useTrainingPolling] =
+  createWorkbenchContext<TrainingJobPolling>("TrainingPollingContext");
 type ActiveTrainingJobProjection = Readonly<{
   activeTrainingJob: TrainingJob | undefined;
 }>;
@@ -36,6 +41,8 @@ const [ActiveTrainingJobProvider, useActiveTrainingJob] =
 export {
   useActiveTrainingJob,
   useTrainingConfiguration,
+  useTrainingDraft,
+  useTrainingPolling,
   useTrainingWorkspace,
 };
 
@@ -44,25 +51,27 @@ export function TrainingLifecycleProvider({
   children,
 }: {
   onJobStarted?: (logFolder: string) => void;
-  children: (lifecycle: TrainingJobLifecycle) => ReactNode;
+  children: ReactNode;
 }) {
   const workbenchConnection = useWorkbenchConnection();
-  const lifecycle = useTrainingJobLifecycle({
+  const polling = useTrainingJobPolling({
     enabled: isWorkbenchProtectedAccessReady(workbenchConnection),
     onJobStarted,
   });
-  useRegisterWorkbenchConnectionReset(lifecycle.clearForConnectionChange);
+  useRegisterWorkbenchConnectionReset(polling.clearForConnectionChange);
   const projection = useMemo<ActiveTrainingJobProjection>(
     () => ({
-      activeTrainingJob: lifecycle.job,
+      activeTrainingJob: polling.job,
     }),
-    [lifecycle.job],
+    [polling.job],
   );
 
   return (
-    <ActiveTrainingJobProvider value={projection}>
-      {children(lifecycle)}
-    </ActiveTrainingJobProvider>
+    <TrainingPollingContextProvider value={polling}>
+      <ActiveTrainingJobProvider value={projection}>
+        {children}
+      </ActiveTrainingJobProvider>
+    </TrainingPollingContextProvider>
   );
 }
 
@@ -107,5 +116,18 @@ export function TrainingConfigurationContextProvider({
     <TrainingConfigurationProvider value={stableValue}>
       {children}
     </TrainingConfigurationProvider>
+  );
+}
+
+export function TrainingDraftContextProvider({
+  value,
+  children,
+}: {
+  value: TrainingDraftState;
+  children: ReactNode;
+}) {
+  const stableValue = useShallowStableValue(value);
+  return (
+    <TrainingDraftProvider value={stableValue}>{children}</TrainingDraftProvider>
   );
 }

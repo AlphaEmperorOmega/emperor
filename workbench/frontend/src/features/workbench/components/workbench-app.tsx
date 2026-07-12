@@ -19,6 +19,14 @@ function LogsWorkspaceProviderLoadingFallback() {
   );
 }
 
+function TrainingExecutionProviderLoadingFallback() {
+  return (
+    <WorkbenchWideWorkspaceRegion>
+      <WorkbenchWorkspaceLoadingStatus label="Loading training workspace…" />
+    </WorkbenchWideWorkspaceRegion>
+  );
+}
+
 const DeferredLogsWorkspaceProvider = dynamic(
   () =>
     import("@/features/workbench/providers/logs-workspace-provider").then(
@@ -27,6 +35,17 @@ const DeferredLogsWorkspaceProvider = dynamic(
   {
     ssr: false,
     loading: LogsWorkspaceProviderLoadingFallback,
+  },
+);
+
+const DeferredTrainingExecutionProvider = dynamic(
+  () =>
+    import(
+      "@/features/workbench/providers/training-execution-provider"
+    ).then((module) => module.TrainingExecutionProvider),
+  {
+    ssr: false,
+    loading: TrainingExecutionProviderLoadingFallback,
   },
 );
 
@@ -43,22 +62,44 @@ export function WorkbenchApp() {
   const clearStartedLogFoldersForConnectionChange = useCallback(() => {
     setStartedLogFolders([]);
   }, []);
-  const workspaceBoundary = workspaceShell.logsWorkspaceActivated
-    ? (content: ReactNode) => (
-        <DeferredLogsWorkspaceProvider
-          enabled={workspaceShell.screen.activeWorkspace === "logs"}
-          startedExperiments={startedLogFolders}
-        >
-          {content}
-        </DeferredLogsWorkspaceProvider>
-      )
+  const hasDeferredWorkspace = workspaceShell.deferredWorkspaceOrder.length > 0;
+  const workspaceBoundary = hasDeferredWorkspace
+    ? (content: ReactNode) => {
+        let boundedContent = content;
+        for (
+          let index = workspaceShell.deferredWorkspaceOrder.length - 1;
+          index >= 0;
+          index -= 1
+        ) {
+          const workspace = workspaceShell.deferredWorkspaceOrder[index];
+          if (workspace === "logs") {
+            boundedContent = (
+              <DeferredLogsWorkspaceProvider
+                enabled={workspaceShell.screen.activeWorkspace === "logs"}
+                startedExperiments={startedLogFolders}
+              >
+                {boundedContent}
+              </DeferredLogsWorkspaceProvider>
+            );
+          } else {
+            boundedContent = (
+              <DeferredTrainingExecutionProvider
+                activeWorkspace={workspaceShell.screen.activeWorkspace}
+                onOpenFullConfig={workspaceShell.screen.fullConfigDialog.open}
+              >
+                {boundedContent}
+              </DeferredTrainingExecutionProvider>
+            );
+          }
+        }
+        return boundedContent;
+      }
     : undefined;
 
   return (
     <WorkbenchProviders
       activeWorkspace={workspaceShell.screen.activeWorkspace}
       onJobStarted={rememberStartedLogFolder}
-      onOpenFullConfig={workspaceShell.screen.fullConfigDialog.open}
       clearShellForConnectionChange={clearStartedLogFoldersForConnectionChange}
     >
       <WorkbenchScreen

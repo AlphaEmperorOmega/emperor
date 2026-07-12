@@ -11,6 +11,7 @@ import userEvent from "@testing-library/user-event";
 import { useEffect, useMemo, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LogsWorkspaceProvider } from "@/features/workbench/providers/logs-workspace-provider";
+import { TrainingExecutionProvider } from "@/features/workbench/providers/training-execution-provider";
 import {
   useModelPackageInspection,
   WorkbenchProviders,
@@ -217,24 +218,28 @@ function renderWorkspaceOverlayHarness({
     <QueryClientProvider client={queryClient}>
       <WorkbenchProviders
         activeWorkspace={activeWorkspace}
-        onOpenFullConfig={fullConfigDialog.open}
       >
-        <LogsWorkspaceProvider enabled={activeWorkspace === "logs"}>
-          {children}
-          {activeWorkspace === "training" && (
-            <WorkbenchWorkspaceRegions
+        <TrainingExecutionProvider
+          activeWorkspace={activeWorkspace}
+          onOpenFullConfig={fullConfigDialog.open}
+        >
+          <LogsWorkspaceProvider enabled={activeWorkspace === "logs"}>
+            {children}
+            {activeWorkspace === "training" && (
+              <WorkbenchWorkspaceRegions
+                activeWorkspace={activeWorkspace}
+                onOpenFullConfig={fullConfigDialog.open}
+              />
+            )}
+            <WorkbenchWorkspaceOverlays
               activeWorkspace={activeWorkspace}
-              onOpenFullConfig={fullConfigDialog.open}
+              fullConfigDialog={fullConfigDialog}
+              featureListDialog={featureListDialog}
+              apiConnectionDialog={apiConnectionDialog}
+              importLogsDialog={importLogsDialog}
             />
-          )}
-          <WorkbenchWorkspaceOverlays
-            activeWorkspace={activeWorkspace}
-            fullConfigDialog={fullConfigDialog}
-            featureListDialog={featureListDialog}
-            apiConnectionDialog={apiConnectionDialog}
-            importLogsDialog={importLogsDialog}
-          />
-        </LogsWorkspaceProvider>
+          </LogsWorkspaceProvider>
+        </TrainingExecutionProvider>
       </WorkbenchProviders>
     </QueryClientProvider>,
   );
@@ -338,7 +343,12 @@ function renderTrainingInterfaceHarness({
   const renderTree = (workspace: WorkbenchWorkspace) => (
     <QueryClientProvider client={queryClient}>
       <WorkbenchProviders activeWorkspace={workspace}>
-        <TrainingInterfaceProbe onChange={onChange} />
+        <TrainingExecutionProvider
+          activeWorkspace={workspace}
+          onOpenFullConfig={vi.fn()}
+        >
+          <TrainingInterfaceProbe onChange={onChange} />
+        </TrainingExecutionProvider>
       </WorkbenchProviders>
     </QueryClientProvider>
   );
@@ -472,6 +482,32 @@ describe("WorkbenchApp Training And Preview", () => {
       .toBeInTheDocument();
     expect(await screen.findByRole("button", { name: /start training/i }))
       .toBeInTheDocument();
+  });
+
+  it("keeps deferred training execution state mounted after the first activation", async () => {
+    setupTrainingScenario();
+    renderWorkbench();
+    const user = userEvent.setup();
+
+    const details = await expandedTrainingDetailsReady(user);
+    await selectNewTrainingLogFolder(user, "sticky_execution_state");
+    expect(within(details).getByLabelText("New log folder")).toHaveValue(
+      "sticky_execution_state",
+    );
+
+    await user.click(screen.getByRole("button", { name: /^model$/i }));
+    expect(screen.queryByLabelText("New log folder")).not.toBeInTheDocument();
+
+    await user.click(
+      within(screen.getByRole("navigation", { name: "Workspace" })).getByRole(
+        "button",
+        { name: /^training\b/i },
+      ),
+    );
+    const restoredDetails = await expandedTrainingDetailsReady(user);
+    expect(within(restoredDetails).getByLabelText("New log folder")).toHaveValue(
+      "sticky_execution_state",
+    );
   });
 
   it("requests training run plans only while the Training workspace is mounted", async () => {

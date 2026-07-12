@@ -16,17 +16,15 @@ import { createWorkbenchContext } from "@/features/workbench/providers/create-co
 import {
   TrainingLifecycleProvider,
   TrainingConfigurationContextProvider,
-  TrainingWorkspaceContextProvider,
+  TrainingDraftContextProvider,
   useActiveTrainingJob,
 } from "@/features/workbench/providers/training-provider";
 import type { useModelPackageInspectionState } from "@/features/workbench/state/target/use-model-package-inspection-state";
-import { useTrainingWorkspaceState } from "@/features/workbench/state/training/use-training-workspace-state";
-import { type TrainingJobLifecycle } from "@/features/workbench/state/training/use-training-job-lifecycle";
+import { useTrainingConfigurationState } from "@/features/workbench/state/training/use-training-configuration-state";
 import {
   type ConfigSnapshotEditorSessionState,
   useConfigSnapshotEditorSessionState,
 } from "@/features/workbench/state/config-snapshots/use-config-snapshot-editor-session";
-import { type FullConfigDialogControls } from "@/features/workbench/state/use-workbench-workspace-shell";
 import { type WorkbenchWorkspace } from "@/types/workbench";
 
 const noop = () => undefined;
@@ -72,26 +70,20 @@ export {
   useWorkbenchConnection,
 };
 
-function TrainingWorkspaceController({
+function TrainingConfigurationController({
   activeWorkspace,
-  onOpenFullConfig,
-  trainingJob,
   children,
 }: {
   activeWorkspace?: WorkbenchWorkspace;
-  onOpenFullConfig?: FullConfigDialogControls["open"];
-  trainingJob: TrainingJobLifecycle;
   children: ReactNode;
 }) {
   const catalog = useModelPackageCatalog();
-  const { capabilities } = useWorkbenchCapabilities();
   const workbenchConnection = useWorkbenchConnection();
   const modelTarget = useModelPackageInspection();
-  const snapshotEditor = useConfigSnapshotEditor();
   const protectedReadsEnabled =
     activeWorkspace === "training" &&
     isWorkbenchProtectedAccessReady(workbenchConnection);
-  const training = useTrainingWorkspaceState({
+  const training = useTrainingConfigurationState({
     activeWorkspace: activeWorkspace ?? "model",
     models: catalog.modelPackages.records,
     seed: {
@@ -99,34 +91,16 @@ function TrainingWorkspaceController({
       model: modelTarget.browser.selectedModel,
       preset: modelTarget.browser.selectedPreset,
     },
-    trainingEnabled: capabilities.trainingEnabled && protectedReadsEnabled,
     protectedReadsEnabled,
-    onOpenFullConfig: () => onOpenFullConfig?.("default", "training"),
-    onCreatePresetSnapshot: (target) => {
-      if (snapshotEditor.actions.beginDraft(target)) {
-        onOpenFullConfig?.("snapshotDraft");
-      }
-    },
-    onEditConfigSnapshot: (snapshot) => {
-      if (snapshotEditor.actions.beginEdit(snapshot)) {
-        onOpenFullConfig?.("snapshotEdit");
-      }
-    },
-    onDuplicateConfigSnapshot: (snapshot) => {
-      if (snapshotEditor.actions.beginDuplicate(snapshot)) {
-        onOpenFullConfig?.("snapshotDraft");
-      }
-    },
-    trainingJob,
   });
   const clearForConnectionChange = training.clearForConnectionChange;
   useRegisterWorkbenchConnectionReset(clearForConnectionChange);
 
   return (
     <TrainingConfigurationContextProvider value={training.configuration}>
-      <TrainingWorkspaceContextProvider value={training.workspace}>
+      <TrainingDraftContextProvider value={training.draft}>
         {children}
-      </TrainingWorkspaceContextProvider>
+      </TrainingDraftContextProvider>
     </TrainingConfigurationContextProvider>
   );
 }
@@ -135,20 +109,15 @@ export type WorkbenchProvidersProps = {
   /** Wired to the logs workspace so a new job's folder appears in its run list. */
   onJobStarted?: (logFolder: string) => void;
   activeWorkspace?: WorkbenchWorkspace;
-  onOpenFullConfig?: FullConfigDialogControls["open"];
   clearShellForConnectionChange?: () => void;
   children: ReactNode;
 };
 
 function WorkbenchCompositionProviders({
   activeWorkspace,
-  onOpenFullConfig,
   clearShellForConnectionChange,
-  trainingJob,
   children,
-}: Omit<WorkbenchProvidersProps, "onJobStarted"> & {
-  trainingJob: TrainingJobLifecycle;
-}) {
+}: Omit<WorkbenchProvidersProps, "onJobStarted">) {
   const activeJob = useActiveTrainingJob();
   const workbenchConnection = useWorkbenchConnection();
   const protectedReadsEnabled = isWorkbenchProtectedAccessReady(
@@ -176,15 +145,13 @@ function WorkbenchCompositionProviders({
           <ConfigSnapshotRecordsProvider value={targetContexts.snapshots}>
             <GraphViewProvider value={graph}>
               <HistoricalRunsProvider value={history}>
-                <TrainingWorkspaceController
+                <TrainingConfigurationController
                   activeWorkspace={activeWorkspace}
-                  onOpenFullConfig={onOpenFullConfig}
-                  trainingJob={trainingJob}
                 >
                   <GraphMonitorProvider value={graphMonitor}>
                     {children}
                   </GraphMonitorProvider>
-                </TrainingWorkspaceController>
+                </TrainingConfigurationController>
               </HistoricalRunsProvider>
             </GraphViewProvider>
           </ConfigSnapshotRecordsProvider>
@@ -202,23 +169,18 @@ function WorkbenchCompositionProviders({
 export function WorkbenchProviders({
   activeWorkspace,
   onJobStarted,
-  onOpenFullConfig,
   clearShellForConnectionChange,
   children,
 }: WorkbenchProvidersProps) {
   return (
     <WorkbenchConnectionProvider>
       <TrainingLifecycleProvider onJobStarted={onJobStarted}>
-        {(trainingJob) => (
-          <WorkbenchCompositionProviders
-            activeWorkspace={activeWorkspace}
-            onOpenFullConfig={onOpenFullConfig}
-            clearShellForConnectionChange={clearShellForConnectionChange}
-            trainingJob={trainingJob}
-          >
-            {children}
-          </WorkbenchCompositionProviders>
-        )}
+        <WorkbenchCompositionProviders
+          activeWorkspace={activeWorkspace}
+          clearShellForConnectionChange={clearShellForConnectionChange}
+        >
+          {children}
+        </WorkbenchCompositionProviders>
       </TrainingLifecycleProvider>
     </WorkbenchConnectionProvider>
   );

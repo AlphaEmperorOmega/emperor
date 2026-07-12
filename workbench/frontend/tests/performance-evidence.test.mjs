@@ -245,6 +245,14 @@ describe("performance evidence Module", () => {
       label: "Training workspace",
       target: "@/features/workbench/components/training-panel",
     });
+    expect(PERFORMANCE_EVIDENCE_POLICY.deferredModules).toContainEqual({
+      label: "Training execution state",
+      target: "@/features/workbench/providers/training-execution-provider",
+    });
+    expect(PERFORMANCE_EVIDENCE_POLICY.requiredMeasured).toEqual({
+      firstLoadBytes: 205_000,
+      routeSpecificBytes: 93_000,
+    });
     expect(PERFORMANCE_EVIDENCE_POLICY.deferredModules).not.toContainEqual(
       expect.objectContaining({
         target:
@@ -255,6 +263,29 @@ describe("performance evidence Module", () => {
       PERFORMANCE_EVIDENCE_POLICY.deferredModules.length,
     );
     expect(() => assertBuildPerformanceBudgets(evidence)).not.toThrow();
+  });
+
+  it("requires measured bundle headroom without changing policy budgets", () => {
+    const evidence = {
+      budgets: {
+        first_load: {
+          budget_bytes: PERFORMANCE_EVIDENCE_POLICY.budgets.firstLoadBytes,
+          gzip_bytes:
+            PERFORMANCE_EVIDENCE_POLICY.requiredMeasured.firstLoadBytes + 1,
+        },
+        route_specific: {
+          budget_bytes: PERFORMANCE_EVIDENCE_POLICY.budgets.routeSpecificBytes,
+          gzip_bytes: 1,
+        },
+      },
+    };
+
+    expect(evidence.budgets.first_load.gzip_bytes).toBeLessThan(
+      evidence.budgets.first_load.budget_bytes,
+    );
+    expect(() => assertBuildPerformanceBudgets(evidence)).toThrow(
+      "required headroom",
+    );
   });
 
   it("rejects deferred scalar chunks owned outside the allowed seam", async () => {

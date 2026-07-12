@@ -9,6 +9,10 @@ export type WorkbenchDialogControls = {
 
 export type FullConfigDialogMode = "default" | "snapshotDraft" | "snapshotEdit";
 export type FullConfigDialogScope = "model" | "training";
+export type DeferredWorkbenchWorkspace = Extract<
+  WorkbenchWorkspace,
+  "logs" | "training"
+>;
 
 export type FullConfigDialogControls = {
   isOpen: boolean;
@@ -29,7 +33,9 @@ export type WorkbenchScreenShell = {
 
 export function useWorkbenchWorkspaceShell() {
   const [activeWorkspace, setActiveWorkspace] = useState<WorkbenchWorkspace>("model");
-  const [logsWorkspaceActivated, setLogsWorkspaceActivated] = useState(false);
+  const [deferredWorkspaceOrder, setDeferredWorkspaceOrder] = useState<
+    DeferredWorkbenchWorkspace[]
+  >([]);
   const [isFullConfigOpen, setIsFullConfigOpen] = useState(false);
   const [fullConfigMode, setFullConfigMode] =
     useState<FullConfigDialogMode>("default");
@@ -41,8 +47,10 @@ export function useWorkbenchWorkspaceShell() {
 
   const changeWorkspace = useCallback((workspace: WorkbenchWorkspace) => {
     setActiveWorkspace(workspace);
-    if (workspace === "logs") {
-      setLogsWorkspaceActivated(true);
+    if (workspace === "logs" || workspace === "training") {
+      setDeferredWorkspaceOrder((current) =>
+        current.includes(workspace) ? current : [...current, workspace],
+      );
     }
     if (workspace !== "model") {
       setIsFullConfigOpen(false);
@@ -95,7 +103,9 @@ export function useWorkbenchWorkspaceShell() {
   };
 
   return {
-    logsWorkspaceActivated,
+    deferredWorkspaceOrder,
+    logsWorkspaceActivated: deferredWorkspaceOrder.includes("logs"),
+    trainingWorkspaceActivated: deferredWorkspaceOrder.includes("training"),
     screen,
   };
 }

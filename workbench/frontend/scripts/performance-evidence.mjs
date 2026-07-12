@@ -8,6 +8,10 @@ const deferredModules = [
     target: "@/features/workbench/providers/logs-workspace-provider",
   },
   {
+    label: "Training execution state",
+    target: "@/features/workbench/providers/training-execution-provider",
+  },
+  {
     label: "ECharts scalar charts",
     target: "@/features/workbench/components/logs/log-scalar-chart",
   },
@@ -54,6 +58,10 @@ export const PERFORMANCE_EVIDENCE_POLICY = Object.freeze({
   budgets: Object.freeze({
     firstLoadBytes: 210_000,
     routeSpecificBytes: 98_000,
+  }),
+  requiredMeasured: Object.freeze({
+    firstLoadBytes: 205_000,
+    routeSpecificBytes: 93_000,
   }),
   deferredModules: Object.freeze(deferredModules),
   scalarChunkAllowedOwners: Object.freeze(scalarChunkAllowedOwners),
@@ -204,6 +212,16 @@ export function assertBuildPerformanceBudgets(evidence) {
   invariant(
     routeSpecific.gzip_bytes <= routeSpecific.budget_bytes,
     `Route-specific JavaScript is ${formatPerformanceKilobytes(routeSpecific.gzip_bytes)}; budget is ${formatPerformanceKilobytes(routeSpecific.budget_bytes)}.`,
+  );
+  invariant(
+    firstLoad.gzip_bytes <=
+      PERFORMANCE_EVIDENCE_POLICY.requiredMeasured.firstLoadBytes,
+    `First-load JavaScript is ${formatPerformanceKilobytes(firstLoad.gzip_bytes)}; required headroom is ${formatPerformanceKilobytes(PERFORMANCE_EVIDENCE_POLICY.requiredMeasured.firstLoadBytes)} within the ${formatPerformanceKilobytes(firstLoad.budget_bytes)} budget.`,
+  );
+  invariant(
+    routeSpecific.gzip_bytes <=
+      PERFORMANCE_EVIDENCE_POLICY.requiredMeasured.routeSpecificBytes,
+    `Route-specific JavaScript is ${formatPerformanceKilobytes(routeSpecific.gzip_bytes)}; required headroom is ${formatPerformanceKilobytes(PERFORMANCE_EVIDENCE_POLICY.requiredMeasured.routeSpecificBytes)} within the ${formatPerformanceKilobytes(routeSpecific.budget_bytes)} budget.`,
   );
 }
 

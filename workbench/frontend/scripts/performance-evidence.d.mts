@@ -185,6 +185,10 @@ export const PERFORMANCE_EVIDENCE_POLICY: Readonly<{
   deferredModules: ReadonlyArray<
     Readonly<{ label: string; target: string }>
   >;
+  requiredMeasured: Readonly<{
+    firstLoadBytes: number;
+    routeSpecificBytes: number;
+  }>;
   scalarChunkAllowedOwners: readonly string[];
   schemaVersion: number;
 }>;
