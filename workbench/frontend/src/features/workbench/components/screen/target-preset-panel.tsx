@@ -2,7 +2,11 @@ import { useMemo, useState } from "react";
 import { Activity } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TrainingCommandDialog } from "@/features/workbench/components/config/training-command-dialog";
-import { TargetSelectorSection } from "@/features/workbench/components/screen/target-selector-section";
+import {
+  TargetSelectorSection,
+  type TargetSelectorCommands,
+  type TargetSelectorView,
+} from "@/features/workbench/components/screen/target-selector-section";
 import {
   useConfigSnapshotRecords,
   useConfigSnapshotEditor,
@@ -79,12 +83,6 @@ export function TargetPresetPanel({
   const [trainingCommandMode, setTrainingCommandMode] =
     useState<TrainingCommandMode | null>(null);
   const [includeAllMonitors, setIncludeAllMonitors] = useState(false);
-  const presetSelectId = "target-preset-select";
-  const experimentTaskSelectId = "target-experiment-task-select";
-  const snapshotSelectId = "target-snapshot-select";
-  const experimentSelectId = "target-experiment-select";
-  const experimentDatasetSelectId = "target-experiment-dataset-select";
-  const experimentPresetSelectId = "target-experiment-preset-select";
   const modelTypeOptions = createModelTypeOptions(models);
   const modelOptions = modelsForType(models, selectedModelType).map((model) => ({
     value: model.model,
@@ -116,6 +114,41 @@ export function TargetPresetPanel({
     description: option.description,
   }));
   const selectedSnapshotName = selectedConfigSnapshot?.name ?? "";
+  const hasSnapshots = snapshotOptions.length > 0;
+  const canActivateHistoricalMode =
+    Boolean(selectedModel) || experimentOptions.length > 0;
+  const activeTargetMode =
+    selectedTargetMode === "snapshot" && hasSnapshots
+      ? "snapshot"
+      : selectedTargetMode === "experiment" && canActivateHistoricalMode
+        ? "experiment"
+        : "preset";
+  const snapshotValue =
+    activeTargetMode === "snapshot" &&
+    snapshotOptions.some((option) => option.value === selectedSnapshotId)
+      ? selectedSnapshotId
+      : "";
+  const historicalExperimentValue =
+    activeTargetMode === "experiment" &&
+    experimentOptions.some(
+      (option) => option.value === selectedHistoricalExperimentFilter,
+    )
+      ? selectedHistoricalExperimentFilter
+      : "";
+  const historicalDatasetValue =
+    activeTargetMode === "experiment" &&
+    experimentDatasetOptions.some(
+      (option) => option.value === selectedHistoricalDatasetFilter,
+    )
+      ? selectedHistoricalDatasetFilter
+      : "";
+  const historicalPresetValue =
+    activeTargetMode === "experiment" &&
+    experimentPresetOptions.some(
+      (option) => option.value === selectedHistoricalPreset,
+    )
+      ? selectedHistoricalPreset
+      : "";
   const targetMonitorNames = useMemo(
     () => targetMonitors.map((monitor) => monitor.name),
     [targetMonitors],
@@ -133,6 +166,57 @@ export function TargetPresetPanel({
       selectedSnapshotId &&
       selectedConfigSnapshot,
   );
+  const snapshotActionsDisabled = Boolean(
+    !configSnapshotsEnabled ||
+      !isSchemaReady ||
+      !selectedModel ||
+      !selectedPreset,
+  );
+  const targetSelectorView = {
+    modelPackage: {
+      modelType: selectedModelType,
+      model: selectedModel,
+      modelTypes: modelTypeOptions,
+      models: modelOptions,
+    },
+    experimentTask: {
+      visible: experimentTaskOptions.length > 0,
+      value: selectedExperimentTask,
+      options: experimentTaskOptions,
+    },
+    source: {
+      activeMode: activeTargetMode,
+      snapshotAvailable: hasSnapshots,
+      historicalAvailable: canActivateHistoricalMode,
+      preset: {
+        value: presetControlValue,
+        options: presetOptions,
+        trainingCommandDisabled: !canOpenPresetTrainingCommand,
+        createSnapshotDisabled: snapshotActionsDisabled,
+      },
+      snapshot: {
+        value: snapshotValue,
+        name: selectedSnapshotName,
+        options: snapshotOptions,
+        trainingCommandDisabled: !canOpenSnapshotTrainingCommand,
+        actionsDisabled: snapshotActionsDisabled,
+      },
+      historical: {
+        experiment: {
+          value: historicalExperimentValue,
+          options: experimentOptions,
+        },
+        dataset: {
+          value: historicalDatasetValue,
+          options: experimentDatasetOptions,
+        },
+        preset: {
+          value: historicalPresetValue,
+          options: experimentPresetOptions,
+        },
+      },
+    },
+  } satisfies TargetSelectorView;
   const commandPreset =
     trainingCommandMode === "snapshot"
       ? selectedConfigSnapshot?.preset ?? selectedPreset
@@ -214,55 +298,30 @@ export function TargetPresetPanel({
       onOpenFullConfig("snapshotDraft");
     }
   };
+  const targetSelectorCommands = {
+    selectModelType: onSelectModelType,
+    selectModel: onSelectModel,
+    selectExperimentTask: onSelectExperimentTask,
+    showPreset: activateTargetPresetMode,
+    showSnapshot: activateTargetSnapshotMode,
+    showHistorical: activateTargetExperimentMode,
+    selectPreset: onSelectPreset,
+    selectSnapshot: onSelectSnapshot,
+    selectHistoricalExperiment: setSelectedHistoricalExperimentFilter,
+    selectHistoricalDataset: setSelectedHistoricalDatasetFilter,
+    selectHistoricalPreset: setSelectedHistoricalPreset,
+    createSnapshot: createPresetSnapshot,
+    editSnapshot: editSelectedSnapshot,
+    duplicateSnapshot: duplicateSelectedSnapshot,
+    openPresetTrainingCommand: () => openTrainingCommand("preset"),
+    openSnapshotTrainingCommand: () => openTrainingCommand("snapshot"),
+  } satisfies TargetSelectorCommands;
 
   return (
     <>
       <TargetSelectorSection
-        selectedModelType={selectedModelType}
-        selectedModel={selectedModel}
-        selectedTargetMode={selectedTargetMode}
-        selectedPreset={selectedPreset}
-        presetControlValue={presetControlValue}
-        selectedSnapshotId={selectedSnapshotId}
-        selectedSnapshotName={selectedSnapshotName}
-        selectedHistoricalExperimentFilter={selectedHistoricalExperimentFilter}
-        selectedHistoricalDatasetFilter={selectedHistoricalDatasetFilter}
-        selectedHistoricalPreset={selectedHistoricalPreset}
-        selectedExperimentTask={selectedExperimentTask}
-        configSnapshotsEnabled={configSnapshotsEnabled}
-        isSchemaReady={isSchemaReady}
-        modelTypeOptions={modelTypeOptions}
-        modelOptions={modelOptions}
-        presetOptions={presetOptions}
-        snapshotOptions={snapshotOptions}
-        experimentTaskOptions={experimentTaskOptions}
-        experimentOptions={experimentOptions}
-        experimentDatasetOptions={experimentDatasetOptions}
-        experimentPresetOptions={experimentPresetOptions}
-        presetSelectId={presetSelectId}
-        experimentTaskSelectId={experimentTaskSelectId}
-        snapshotSelectId={snapshotSelectId}
-        experimentSelectId={experimentSelectId}
-        experimentDatasetSelectId={experimentDatasetSelectId}
-        experimentPresetSelectId={experimentPresetSelectId}
-        presetTrainingCommandDisabled={!canOpenPresetTrainingCommand}
-        snapshotTrainingCommandDisabled={!canOpenSnapshotTrainingCommand}
-        onSelectModelType={onSelectModelType}
-        onSelectModel={onSelectModel}
-        onActivatePresetMode={activateTargetPresetMode}
-        onActivateSnapshotMode={activateTargetSnapshotMode}
-        onActivateExperimentMode={activateTargetExperimentMode}
-        onSelectPreset={onSelectPreset}
-        onSelectSnapshot={onSelectSnapshot}
-        onSelectExperimentTask={onSelectExperimentTask}
-        onSelectHistoricalExperimentFilter={setSelectedHistoricalExperimentFilter}
-        onSelectHistoricalDatasetFilter={setSelectedHistoricalDatasetFilter}
-        onSelectHistoricalPreset={setSelectedHistoricalPreset}
-        onCreateSnapshot={createPresetSnapshot}
-        onEditSnapshot={editSelectedSnapshot}
-        onDuplicateSnapshot={duplicateSelectedSnapshot}
-        onOpenPresetTrainingCommand={() => openTrainingCommand("preset")}
-        onOpenSnapshotTrainingCommand={() => openTrainingCommand("snapshot")}
+        view={targetSelectorView}
+        commands={targetSelectorCommands}
       />
 
       {trainingCommandMode && (

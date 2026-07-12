@@ -17,148 +17,127 @@ import { SectionHeading } from "@/components/ui/section-heading";
 
 type TargetMode = "preset" | "snapshot" | "experiment";
 
-type SelectOption = {
+export type TargetSelectorOption = {
   value: string;
   label: string;
   description?: string;
 };
 
+export type TargetSelectorView = {
+  modelPackage: {
+    modelType: string;
+    model: string;
+    modelTypes: TargetSelectorOption[];
+    models: TargetSelectorOption[];
+  };
+  experimentTask: {
+    visible: boolean;
+    value: string;
+    options: TargetSelectorOption[];
+  };
+  source: {
+    activeMode: TargetMode;
+    snapshotAvailable: boolean;
+    historicalAvailable: boolean;
+    preset: {
+      value: string;
+      options: TargetSelectorOption[];
+      trainingCommandDisabled: boolean;
+      createSnapshotDisabled: boolean;
+    };
+    snapshot: {
+      value: string;
+      name: string;
+      options: TargetSelectorOption[];
+      trainingCommandDisabled: boolean;
+      actionsDisabled: boolean;
+    };
+    historical: {
+      experiment: { value: string; options: TargetSelectorOption[] };
+      dataset: { value: string; options: TargetSelectorOption[] };
+      preset: { value: string; options: TargetSelectorOption[] };
+    };
+  };
+};
+
+export type TargetSelectorCommands = {
+  selectModelType: (modelType: string) => void;
+  selectModel: (model: string) => void;
+  selectExperimentTask: (experimentTask: string) => void;
+  showPreset: () => void;
+  showSnapshot: () => void;
+  showHistorical: () => void;
+  selectPreset: (preset: string) => void;
+  selectSnapshot: (snapshotId: string) => boolean | void;
+  selectHistoricalExperiment: (experiment: string) => void;
+  selectHistoricalDataset: (dataset: string) => void;
+  selectHistoricalPreset: (preset: string) => void;
+  createSnapshot: () => void;
+  editSnapshot: () => void;
+  duplicateSnapshot: () => void;
+  openPresetTrainingCommand: () => void;
+  openSnapshotTrainingCommand: () => void;
+};
+
 const fieldIconClassName = "h-[15px] w-[15px] text-violet";
 
 export function TargetSelectorSection({
-  selectedModelType,
-  selectedModel,
-  selectedTargetMode,
-  selectedPreset,
-  presetControlValue,
-  selectedSnapshotId,
-  selectedSnapshotName,
-  selectedHistoricalExperimentFilter,
-  selectedHistoricalDatasetFilter,
-  selectedHistoricalPreset,
-  selectedExperimentTask,
-  configSnapshotsEnabled,
-  isSchemaReady,
-  modelTypeOptions,
-  modelOptions,
-  presetOptions,
-  snapshotOptions,
-  experimentTaskOptions,
-  experimentOptions,
-  experimentDatasetOptions,
-  experimentPresetOptions,
-  presetSelectId,
-  experimentTaskSelectId,
-  snapshotSelectId,
-  experimentSelectId,
-  experimentDatasetSelectId,
-  experimentPresetSelectId,
-  presetTrainingCommandDisabled,
-  snapshotTrainingCommandDisabled,
-  onSelectModelType,
-  onSelectModel,
-  onActivatePresetMode,
-  onActivateSnapshotMode,
-  onActivateExperimentMode,
-  onSelectPreset,
-  onSelectSnapshot,
-  onSelectExperimentTask,
-  onSelectHistoricalExperimentFilter,
-  onSelectHistoricalDatasetFilter,
-  onSelectHistoricalPreset,
-  onCreateSnapshot,
-  onEditSnapshot,
-  onDuplicateSnapshot,
-  onOpenPresetTrainingCommand,
-  onOpenSnapshotTrainingCommand,
+  view,
+  commands,
 }: {
-  selectedModelType: string;
-  selectedModel: string;
-  selectedTargetMode: TargetMode;
-  selectedPreset: string;
-  presetControlValue: string;
-  selectedSnapshotId: string;
-  selectedSnapshotName: string;
-  selectedHistoricalExperimentFilter: string;
-  selectedHistoricalDatasetFilter: string;
-  selectedHistoricalPreset: string;
-  selectedExperimentTask: string;
-  configSnapshotsEnabled: boolean;
-  isSchemaReady: boolean;
-  modelTypeOptions: SelectOption[];
-  modelOptions: SelectOption[];
-  presetOptions: SelectOption[];
-  snapshotOptions: SelectOption[];
-  experimentTaskOptions: SelectOption[];
-  experimentOptions: SelectOption[];
-  experimentDatasetOptions: SelectOption[];
-  experimentPresetOptions: SelectOption[];
-  presetSelectId: string;
-  experimentTaskSelectId: string;
-  snapshotSelectId: string;
-  experimentSelectId: string;
-  experimentDatasetSelectId: string;
-  experimentPresetSelectId: string;
-  presetTrainingCommandDisabled: boolean;
-  snapshotTrainingCommandDisabled: boolean;
-  onSelectModelType: (modelType: string) => void;
-  onSelectModel: (model: string) => void;
-  onActivatePresetMode: () => void;
-  onActivateSnapshotMode: () => void;
-  onActivateExperimentMode: () => void;
-  onSelectPreset: (preset: string) => void;
-  onSelectSnapshot: (snapshotId: string) => boolean | void;
-  onSelectExperimentTask: (experimentTask: string) => void;
-  onSelectHistoricalExperimentFilter: (experiment: string) => void;
-  onSelectHistoricalDatasetFilter: (dataset: string) => void;
-  onSelectHistoricalPreset: (preset: string) => void;
-  onCreateSnapshot: () => void;
-  onEditSnapshot: () => void;
-  onDuplicateSnapshot: () => void;
-  onOpenPresetTrainingCommand: () => void;
-  onOpenSnapshotTrainingCommand: () => void;
+  view: TargetSelectorView;
+  commands: TargetSelectorCommands;
 }) {
-  const hasSnapshots = snapshotOptions.length > 0;
-  const hasExperimentTasks = experimentTaskOptions.length > 0;
-  const hasExperimentRuns = experimentOptions.length > 0;
-  const canActivateExperimentMode = Boolean(selectedModel) || hasExperimentRuns;
-  const activeTargetMode =
-    selectedTargetMode === "snapshot" && hasSnapshots
-      ? "snapshot"
-      : selectedTargetMode === "experiment" && canActivateExperimentMode
-        ? "experiment"
-        : "preset";
-  const snapshotValue =
-    activeTargetMode === "snapshot" &&
-    snapshotOptions.some((option) => option.value === selectedSnapshotId)
-      ? selectedSnapshotId
-      : "";
-  const experimentValue =
-    activeTargetMode === "experiment" &&
-    experimentOptions.some(
-      (option) => option.value === selectedHistoricalExperimentFilter,
-    )
-      ? selectedHistoricalExperimentFilter
-      : "";
-  const experimentDatasetValue =
-    activeTargetMode === "experiment" &&
-    experimentDatasetOptions.some(
-      (option) => option.value === selectedHistoricalDatasetFilter,
-    )
-      ? selectedHistoricalDatasetFilter
-      : "";
-  const experimentPresetValue =
-    activeTargetMode === "experiment" &&
-    experimentPresetOptions.some(
-      (option) => option.value === selectedHistoricalPreset,
-    )
-      ? selectedHistoricalPreset
-      : "";
-  const snapshotActionsDisabled =
-    !configSnapshotsEnabled ||
-    !isSchemaReady ||
-    !selectedModel ||
-    !selectedPreset;
+  const { modelPackage, experimentTask, source } = view;
+  const activeTargetMode = source.activeMode;
+  const hasSnapshots = source.snapshotAvailable;
+  const hasExperimentTasks = experimentTask.visible;
+  const canActivateExperimentMode = source.historicalAvailable;
+  const selectedModelType = modelPackage.modelType;
+  const selectedModel = modelPackage.model;
+  const modelTypeOptions = modelPackage.modelTypes;
+  const modelOptions = modelPackage.models;
+  const selectedExperimentTask = experimentTask.value;
+  const experimentTaskOptions = experimentTask.options;
+  const presetControlValue = source.preset.value;
+  const presetOptions = source.preset.options;
+  const presetTrainingCommandDisabled = source.preset.trainingCommandDisabled;
+  const snapshotValue = source.snapshot.value;
+  const selectedSnapshotName = source.snapshot.name;
+  const snapshotOptions = source.snapshot.options;
+  const snapshotTrainingCommandDisabled =
+    source.snapshot.trainingCommandDisabled;
+  const snapshotActionsDisabled = source.snapshot.actionsDisabled;
+  const experimentValue = source.historical.experiment.value;
+  const experimentOptions = source.historical.experiment.options;
+  const experimentDatasetValue = source.historical.dataset.value;
+  const experimentDatasetOptions = source.historical.dataset.options;
+  const experimentPresetValue = source.historical.preset.value;
+  const experimentPresetOptions = source.historical.preset.options;
+  const {
+    selectModelType: onSelectModelType,
+    selectModel: onSelectModel,
+    selectExperimentTask: onSelectExperimentTask,
+    showPreset: onActivatePresetMode,
+    showSnapshot: onActivateSnapshotMode,
+    showHistorical: onActivateExperimentMode,
+    selectPreset: onSelectPreset,
+    selectSnapshot: onSelectSnapshot,
+    selectHistoricalExperiment: onSelectHistoricalExperimentFilter,
+    selectHistoricalDataset: onSelectHistoricalDatasetFilter,
+    selectHistoricalPreset: onSelectHistoricalPreset,
+    createSnapshot: onCreateSnapshot,
+    editSnapshot: onEditSnapshot,
+    duplicateSnapshot: onDuplicateSnapshot,
+    openPresetTrainingCommand: onOpenPresetTrainingCommand,
+    openSnapshotTrainingCommand: onOpenSnapshotTrainingCommand,
+  } = commands;
+  const presetSelectId = "target-preset-select";
+  const experimentTaskSelectId = "target-experiment-task-select";
+  const snapshotSelectId = "target-snapshot-select";
+  const experimentSelectId = "target-experiment-select";
+  const experimentDatasetSelectId = "target-experiment-dataset-select";
+  const experimentPresetSelectId = "target-experiment-preset-select";
 
   return (
     <section className="grid gap-3">
@@ -263,7 +242,7 @@ export function TargetSelectorSection({
           <Button
             variant="secondary"
             onClick={onCreateSnapshot}
-            disabled={snapshotActionsDisabled}
+            disabled={source.preset.createSnapshotDisabled}
             className="h-9 justify-center text-xs"
           >
             <FilePlus2 className="h-3.5 w-3.5" aria-hidden />
