@@ -13,21 +13,11 @@ from workbench.backend.training_jobs.progress import (
     TrainingProgressStore,
 )
 from workbench.backend.training_jobs.projection import TrainingLiveProjectionCache
+from workbench.backend.training_jobs.run_plan_adapter import (
+    summarize_training_runs,
+)
 from workbench.backend.training_jobs.snapshot import TrainingJobProjector
 from workbench.backend.training_jobs.store import TrainingJobRecord
-
-
-def _summarize(runs: list[dict[str, Any]]) -> dict[str, int]:
-    statuses = [str(run.get("status") or "Pending") for run in runs]
-    return {
-        "totalRuns": len(runs),
-        "completedRuns": statuses.count("Completed"),
-        "runningRuns": statuses.count("Running"),
-        "pendingRuns": statuses.count("Pending"),
-        "failedRuns": statuses.count("Failed"),
-        "cancelledRuns": statuses.count("Cancelled"),
-        "skippedRuns": statuses.count("Skipped"),
-    }
 
 
 def _run(run_id: str, index: int, dataset: str) -> dict[str, Any]:
@@ -74,7 +64,7 @@ def _job(root: Path) -> TrainingJobRecord:
             "logFolder": "projection-test",
             "isRandomSearch": False,
             "runs": runs,
-            "summary": _summarize(runs),
+            "summary": summarize_training_runs(runs),
         },
         monitors=["linear"],
         log_folder="projection-test",
@@ -172,6 +162,17 @@ def _snapshot(
 
 
 class TrainingProjectionParityTests(unittest.TestCase):
+    def test_projection_cache_bounds_retained_job_reducers(self) -> None:
+        with TemporaryDirectory() as tmp:
+            cache = TrainingLiveProjectionCache(max_cached_jobs=2)
+            for index in range(3):
+                job = _job(Path(tmp) / f"job-{index}")
+                job.id = f"job-{index}"
+                cache.project(job, _snapshot([], reset=True))
+
+        self.assertEqual(cache.cached_job_count, 2)
+        self.assertNotIn("job-0", cache._cache)
+
     def _full_payload(
         self,
         projector: TrainingJobProjector,
@@ -181,7 +182,6 @@ class TrainingProjectionParityTests(unittest.TestCase):
         replay = TrainingLiveProjectionCache().project(
             job,
             _snapshot(events, reset=True),
-            summarize=_summarize,
         )
         return training_job_to_payload(projector.project_snapshot(job, replay))
 
@@ -192,7 +192,7 @@ class TrainingProjectionParityTests(unittest.TestCase):
         job: TrainingJobRecord,
         snapshot: TrainingProgressSnapshot,
     ) -> dict[str, Any]:
-        projection = cache.project(job, snapshot, summarize=_summarize)
+        projection = cache.project(job, snapshot)
         return training_job_to_payload(projector.project_snapshot(job, projection))
 
     def test_replay_and_incremental_fold_match_after_every_event_prefix(self) -> None:
@@ -366,18 +366,18 @@ class TrainingProjectionParityTests(unittest.TestCase):
                 encoding="utf-8",
             )
             first = store.read_snapshot(job)
-            cache.project(job, first, summarize=_summarize)
+            cache.project(job, first)
+            cursor = cache.cursor(job.id)
 
             job.progress_path.write_text(
                 "\n".join(json.dumps(event) for event in rewritten) + "\n",
                 encoding="utf-8",
             )
-            second = store.read_snapshot(job)
-            rebuilt = cache.project(job, second, summarize=_summarize)
+            second = store.read_snapshot(job, cursor=cursor)
+            rebuilt = cache.project(job, second)
             fresh = TrainingLiveProjectionCache().project(
                 job,
                 second,
-                summarize=_summarize,
             )
 
         self.assertTrue(second.reset)
@@ -401,20 +401,23 @@ class TrainingProjectionParityTests(unittest.TestCase):
                 json.dumps(events[0]) + "\n",
                 encoding="utf-8",
             )
-            cache.project(job, store.read_snapshot(job), summarize=_summarize)
+            cache.project(job, store.read_snapshot(job))
+            projection_cursor = cache.cursor(job.id)
 
             with job.progress_path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(events[1]) + "\n")
-            consumed_elsewhere = store.read_snapshot(job)
-            caught_up_snapshot = store.read_snapshot(job)
+            consumed_elsewhere = store.read_summary(job)
+            caught_up_snapshot = store.read_snapshot(
+                job,
+                cursor=projection_cursor,
+            )
             projection = cache.project(
                 job,
                 caught_up_snapshot,
-                summarize=_summarize,
             )
 
-        self.assertEqual(consumed_elsewhere.new_events, [events[1]])
-        self.assertEqual(caught_up_snapshot.new_events, [])
+        self.assertEqual(consumed_elsewhere.new_events, [])
+        self.assertEqual(caught_up_snapshot.new_events, [events[1]])
         self.assertEqual(projection.event_count, 2)
         self.assertEqual(projection.latest_event, events[1])
         self.assertEqual(

@@ -37,7 +37,6 @@ from workbench.backend.training_jobs.launcher import (
     TrainingWorkerLauncher,
 )
 from workbench.backend.training_jobs.lifecycle import (
-    latest_terminal_event,
     terminal_exit_code,
     terminal_status_from_event,
 )
@@ -264,8 +263,8 @@ class _TrainingJobRuntime:
 
     def get_job_view(self, job_id: str) -> TrainingJobView:
         job = self._get_job_record(job_id)
-        snapshot = self._progress_snapshot(job)
-        self._refresh(job, events=snapshot.events)
+        snapshot = self._progress_updates(job)
+        self._refresh(job, snapshot=snapshot)
         payload = self._snapshot(job, snapshot=snapshot)
         self._release_terminal_resources(job)
         return payload
@@ -273,8 +272,8 @@ class _TrainingJobRuntime:
     def cancel_job_view(self, job_id: str) -> TrainingJobView:
         with self._state_lock:
             job = self._get_job_record(job_id)
-            snapshot = self._progress_snapshot(job)
-            self._refresh(job, events=snapshot.events)
+            snapshot = self._progress_updates(job)
+            self._refresh(job, snapshot=snapshot)
             if is_terminal_job_status(job.status):
                 payload = self._snapshot(job, snapshot=snapshot)
             else:
@@ -299,15 +298,14 @@ class _TrainingJobRuntime:
                     job.exit_code = reaped_exit_code
                 job.updated_at = _now()
                 self.job_store.save(job)
-                if not any(
-                    terminal_status_from_event(event) == "cancelled"
-                    for event in snapshot.events
-                ):
+                if terminal_status_from_event(
+                    snapshot.latest_terminal_event or {}
+                ) != "cancelled":
                     self._write_event(
                         job,
                         {"type": "cancelled", "status": "cancelled"},
                     )
-                snapshot = self._progress_snapshot(job)
+                snapshot = self._progress_updates(job)
                 payload = self._snapshot(job, snapshot=snapshot)
         self._release_terminal_resources(job)
         return payload
@@ -315,8 +313,8 @@ class _TrainingJobRuntime:
     def active_job_views(self) -> list[ActiveTrainingJob]:
         active: list[ActiveTrainingJob] = []
         for job in self.job_store.list():
-            snapshot = self._progress_snapshot(job)
-            self._refresh(job, events=snapshot.events)
+            snapshot = self._progress_summary(job)
+            self._refresh(job, snapshot=snapshot)
             if not is_active_job_status(job.status):
                 self._release_terminal_resources(job)
                 continue
@@ -337,22 +335,25 @@ class _TrainingJobRuntime:
         limit: int = 500,
     ) -> TrainingProgressEventsPage:
         job = self._get_job_record(job_id)
-        snapshot = self._progress_snapshot(job)
-        self._refresh(job, events=snapshot.events)
+        snapshot = self._progress_summary(job)
+        self._refresh(job, snapshot=snapshot)
         safe_offset = max(0, offset)
         safe_limit = min(5000, max(1, limit))
-        events = snapshot.events
-        page = events[safe_offset : safe_offset + safe_limit]
-        next_offset = safe_offset + len(page)
+        page = self.progress_store.read_page(
+            job,
+            offset=safe_offset,
+            limit=safe_limit,
+        )
+        next_offset = safe_offset + len(page.events)
         payload = TrainingProgressEventsPage(
             job_id=job.id,
             offset=safe_offset,
             limit=safe_limit,
-            total_count=snapshot.total_count,
+            total_count=page.total_count,
             next_offset=(
-                next_offset if next_offset < snapshot.total_count else None
+                next_offset if next_offset < page.total_count else None
             ),
-            events=page,
+            events=page.events,
         )
         self._release_terminal_resources(job)
         return payload
@@ -374,10 +375,11 @@ class _TrainingJobRuntime:
             raise InspectorError(
                 f"Unknown preset '{preset}' for training job '{job_id}'."
             )
-        self._refresh(job)
+        snapshot = self._progress_summary(job)
+        self._refresh(job, snapshot=snapshot)
         reader_log_dir, event_log_dir = self._trusted_monitor_log_dir(
             job,
-            events=self._events(job),
+            events=snapshot.monitor_events,
             dataset=dataset,
             preset=preset,
         )
@@ -410,10 +412,11 @@ class _TrainingJobRuntime:
             raise InspectorError(
                 f"Unknown preset '{preset}' for training job '{job_id}'."
             )
-        self._refresh(job)
+        snapshot = self._progress_summary(job)
+        self._refresh(job, snapshot=snapshot)
         reader_log_dir, event_log_dir = self._trusted_monitor_log_dir(
             job,
-            events=self._events(job),
+            events=snapshot.monitor_events,
             dataset=dataset,
             preset=preset,
         )
@@ -564,14 +567,12 @@ class _TrainingJobRuntime:
             if self._processes.get(job.id) is process:
                 self._processes.pop(job.id, None)
             self._released_job_ids.add(job.id)
-        self.progress_store.evict(job)
-        self._live_projection_cache.evict(job.id)
 
     def _refresh(
         self,
         job: TrainingJobRecord,
         *,
-        events: list[dict[str, Any]] | None = None,
+        snapshot: TrainingProgressSnapshot | None = None,
     ) -> None:
         with self._state_lock:
             original_state = (job.status, job.exit_code, job.updated_at)
@@ -590,8 +591,8 @@ class _TrainingJobRuntime:
                 exit_code = process.poll()
                 containment_live = exit_code is None
                 exit_code_authoritative = exit_code is not None
-            events = events if events is not None else self._events(job)
-            latest_terminal = latest_terminal_event(events)
+            snapshot = snapshot or self._progress_summary(job)
+            latest_terminal = snapshot.latest_terminal_event
             terminal_status = (
                 terminal_status_from_event(latest_terminal)
                 if latest_terminal is not None
@@ -623,18 +624,22 @@ class _TrainingJobRuntime:
             if original_state != (job.status, job.exit_code, job.updated_at):
                 self.job_store.save(job)
 
-    def _events(self, job: TrainingJobRecord) -> list[dict[str, Any]]:
-        return self._progress_snapshot(job).events
-
-    def _progress_snapshot(
+    def _progress_updates(
         self,
         job: TrainingJobRecord,
     ) -> TrainingProgressSnapshot:
         # Lock order: Training Job state, then the private progress-store lock.
         with self._state_lock:
-            if job.id in self._released_job_ids:
-                return self.progress_store.read_snapshot_uncached(job)
-            return self.progress_store.read_snapshot(job)
+            cursor = self._live_projection_cache.cursor(job.id)
+            return self.progress_store.read_snapshot(job, cursor=cursor)
+
+    def _progress_summary(
+        self,
+        job: TrainingJobRecord,
+    ) -> TrainingProgressSnapshot:
+        # Lock order: Training Job state, then the private progress-store lock.
+        with self._state_lock:
+            return self.progress_store.read_summary(job)
 
     def _write_event(
         self,
@@ -649,7 +654,7 @@ class _TrainingJobRuntime:
         *,
         snapshot: TrainingProgressSnapshot | None = None,
     ) -> TrainingJobView:
-        snapshot = snapshot or self._progress_snapshot(job)
+        snapshot = snapshot or self._progress_updates(job)
         return self.job_projector.project_snapshot(
             job,
             self._live_projection(job, snapshot),
@@ -662,14 +667,7 @@ class _TrainingJobRuntime:
     ) -> TrainingJobLiveProjection:
         # Lock order: Training Job state, then the private projection-cache lock.
         with self._state_lock:
-            if job.id in self._released_job_ids:
-                return self._live_projection_cache.replay(
-                    job,
-                    snapshot,
-                    summarize=self.run_plan_builder.summarize,
-                )
             return self._live_projection_cache.project(
                 job,
                 snapshot,
-                summarize=self.run_plan_builder.summarize,
             )

@@ -3,13 +3,18 @@
 from __future__ import annotations
 
 import copy
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from threading import RLock
 from typing import Any
 
-from workbench.backend.training_jobs.progress import TrainingProgressSnapshot
-from workbench.backend.training_jobs.run_progress import (
-    SummaryCallback,
+from workbench.backend.training_jobs.limits import MAX_TRAINING_PLANNED_RUNS
+from workbench.backend.training_jobs.progress import (
+    TRAINING_PROGRESS_CACHE_JOB_LIMIT,
+    TrainingProgressCursor,
+    TrainingProgressSnapshot,
+)
+from workbench.backend.training_jobs.run_plan_adapter import (
     apply_training_run_progress_event,
     finalize_training_run_progress,
     run_lookup_by_id,
@@ -62,6 +67,7 @@ class _TrainingEventReducer:
     latest_failed_event: dict[str, Any] = field(default_factory=dict)
     result_events: list[dict[str, Any]] = field(default_factory=list)
     cluster_growth: dict[str, _ClusterGrowthState] = field(default_factory=dict)
+    cursor: TrainingProgressCursor | None = None
 
     @classmethod
     def from_job(cls, job: TrainingJobRecord) -> _TrainingEventReducer:
@@ -84,6 +90,7 @@ class _TrainingEventReducer:
             self.latest_failed_event = event
         if event_type == "dataset_completed":
             self.result_events.append(event)
+            self.result_events = self.result_events[-MAX_TRAINING_PLANNED_RUNS:]
         apply_training_run_progress_event(
             runs=self.run_plan_base.get("runs") or [],
             run_by_id=self.run_by_id,
@@ -95,12 +102,10 @@ class _TrainingEventReducer:
         self,
         *,
         job_status: str,
-        summarize: SummaryCallback,
     ) -> TrainingJobLiveProjection:
         run_plan = finalize_training_run_progress(
             self.run_plan_base,
             job_status=job_status,
-            summarize=summarize,
             latest_failed_event=self.latest_failed_event,
         )
         return TrainingJobLiveProjection(
@@ -127,10 +132,12 @@ class _TrainingEventReducer:
         if event_type not in {"cluster_initialized", "neuron_added", "neurons_added"}:
             return
 
-        summary = self.cluster_growth.setdefault(
-            node,
-            _ClusterGrowthState(node=node),
-        )
+        summary = self.cluster_growth.get(node)
+        if summary is None:
+            if len(self.cluster_growth) >= MAX_TRAINING_PLANNED_RUNS:
+                return
+            summary = _ClusterGrowthState(node=node)
+            self.cluster_growth[node] = summary
         if isinstance(event.get("count"), int):
             summary.count = event["count"]
         capacity_total = _capacity_total(event.get("capacity"))
@@ -203,9 +210,24 @@ def _optional_int(value: Any) -> int | None:
 class TrainingLiveProjectionCache:
     """Thread-safe process-local cache around the shared event reducer."""
 
-    def __init__(self) -> None:
-        self._cache: dict[str, _TrainingEventReducer] = {}
+    def __init__(
+        self,
+        *,
+        max_cached_jobs: int = TRAINING_PROGRESS_CACHE_JOB_LIMIT,
+    ) -> None:
+        self._cache: OrderedDict[str, _TrainingEventReducer] = OrderedDict()
+        self._max_cached_jobs = max(1, max_cached_jobs)
         self._lock = RLock()
+
+    @property
+    def cached_job_count(self) -> int:
+        with self._lock:
+            return len(self._cache)
+
+    def cursor(self, job_id: str) -> TrainingProgressCursor | None:
+        with self._lock:
+            reducer = self._cache.get(job_id)
+            return reducer.cursor if reducer is not None else None
 
     def evict(self, job_id: str) -> None:
         """Drop a terminal Training Job's process-local projection state."""
@@ -216,8 +238,6 @@ class TrainingLiveProjectionCache:
         self,
         job: TrainingJobRecord,
         snapshot: TrainingProgressSnapshot,
-        *,
-        summarize: SummaryCallback,
     ) -> TrainingJobLiveProjection:
         with self._lock:
             reducer = self._cache.get(job.id)
@@ -229,31 +249,44 @@ class TrainingLiveProjectionCache:
             ):
                 reducer = _TrainingEventReducer.from_job(job)
                 self._cache[job.id] = reducer
-                events_to_apply = snapshot.events
+                events_to_apply = (
+                    snapshot.new_events
+                    if snapshot.cursor is not None
+                    else snapshot.events
+                )
             else:
-                events_to_apply = snapshot.events[reducer.event_count :]
+                events_to_apply = (
+                    snapshot.new_events
+                    if snapshot.cursor is not None
+                    else snapshot.events[reducer.event_count :]
+                )
 
             for event in events_to_apply:
                 reducer.apply(event)
+            reducer.cursor = snapshot.cursor
+            self._cache.move_to_end(job.id)
+            while len(self._cache) > self._max_cached_jobs:
+                self._cache.popitem(last=False)
             return reducer.snapshot(
                 job_status=job.status,
-                summarize=summarize,
             )
 
     def replay(
         self,
         job: TrainingJobRecord,
         snapshot: TrainingProgressSnapshot,
-        *,
-        summarize: SummaryCallback,
     ) -> TrainingJobLiveProjection:
         """Project a released terminal job without retaining cache state."""
         reducer = _TrainingEventReducer.from_job(job)
-        for event in snapshot.events:
+        for event in (
+            snapshot.new_events
+            if snapshot.cursor is not None
+            else snapshot.events
+        ):
             reducer.apply(event)
+        reducer.cursor = snapshot.cursor
         return reducer.snapshot(
             job_status=job.status,
-            summarize=summarize,
         )
 
 
