@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import Parameter
 
-from emperor.base.utils import Module
+from emperor.base.module import Module
 from emperor.linears.core._validator import LinearValidator
 
 if TYPE_CHECKING:
