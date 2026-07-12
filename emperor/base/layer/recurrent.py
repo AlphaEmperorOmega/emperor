@@ -3,7 +3,7 @@ import torch.nn as nn
 from dataclasses import dataclass, replace
 from torch import Tensor
 from emperor.base.options import LayerNormPositionOptions
-from emperor.base.utils import ConfigBase
+from emperor.base.config import ConfigBase
 
 from .layer import Layer
 from .state import LayerState
@@ -16,7 +16,7 @@ from .residual import ResidualConnection, ResidualConnectionOptions
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emperor.base.utils import Module
+    from emperor.base.module import Module
     from emperor.halting.config import HaltingConfig
     from emperor.halting.core.base import HaltingBase, HaltingStateBase
     from emperor.memory.config import DynamicMemoryConfig

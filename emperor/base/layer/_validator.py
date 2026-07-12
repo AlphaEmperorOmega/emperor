@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import fields
 
-from emperor.base.utils import ConfigBase
+from emperor.base.config import ConfigBase
 from emperor.base.options import LayerNormPositionOptions
 from emperor.base.validator import ValidatorBase
 from .residual import ResidualConnectionOptions

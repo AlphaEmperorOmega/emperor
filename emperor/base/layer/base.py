@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING
 
 from torch import Tensor
 
-from emperor.base.utils import Module
+from emperor.base.module import Module
 
 if TYPE_CHECKING:
     from emperor.memory.options import MemoryPositionOptions

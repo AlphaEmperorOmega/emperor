@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from emperor.base.options import ActivationOptions
-from emperor.base.utils import ConfigBase, optional_field
+from emperor.base.config import ConfigBase, optional_field
 
 from .options import LayerGateOptions
 

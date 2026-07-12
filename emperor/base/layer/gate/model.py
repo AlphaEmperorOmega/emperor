@@ -1,7 +1,7 @@
 from torch import Tensor
 
 from emperor.base.options import ActivationOptions
-from emperor.base.utils import Module
+from emperor.base.module import Module
 
 from ._validator import LayerGateValidator
 from .options import LayerGateOptions
@@ -9,7 +9,7 @@ from .options import LayerGateOptions
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emperor.base.utils import Module as EmperorModule
+    from emperor.base.module import Module as EmperorModule
 
     from .config import GateConfig
     from ..state import LayerState

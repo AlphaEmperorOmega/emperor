@@ -1,7 +1,7 @@
 import torch.nn as nn
 
 from torch import Tensor
-from emperor.base.utils import ConfigBase
+from emperor.base.config import ConfigBase
 from emperor.base.options import (
     ActivationOptions,
     LayerNormPositionOptions,
@@ -17,7 +17,7 @@ from .gate import GateConfig, LayerGate
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emperor.base.utils import Module
+    from emperor.base.module import Module
     from emperor.halting.config import HaltingConfig
     from emperor.halting.core.base import HaltingBase, HaltingStateBase
     from emperor.memory.config import DynamicMemoryConfig

@@ -2,7 +2,7 @@ import types
 
 from typing import get_args, get_origin
 
-from emperor.base.utils import ConfigBase
+from emperor.base.config import ConfigBase
 
 
 class ValidatorBase:
