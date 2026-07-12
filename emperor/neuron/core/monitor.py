@@ -13,27 +13,6 @@ if TYPE_CHECKING:
 
 
 class NeuronClusterMonitorCallback(Callback):
-    """Logs how a neuron cluster grows and routes signals over training.
-
-    Emits scalars under each cluster module's path so the workbench surfaces them
-    in the cluster node's monitor charts. Beyond capacity (``neuron_count`` vs
-    ``capacity``), it captures the cluster's routing dynamics by wrapping
-    ``forward`` to request its ``NeuronClusterTrace`` (entry + per recurrent
-    step), entirely non-invasively: the wrapper is installed in ``on_fit_start``
-    and removed in ``on_fit_end``, and the traced ``forward`` is never edited.
-
-    From the trace it derives route depth, escape / halt fractions, entry-routing
-    entropy, per-neuron spatial utilization, and a recurrence survival curve;
-    growth and pruning pressure are read directly from each neuron's
-    ``batch_counter`` and ``atrophy_counter``, and growth / pruning events
-    from cluster membership changes between logging steps.
-
-    Beam-search clusters (``beam_width > 1``) expose no per-sample route
-    trace, so their ``forward`` is never wrapped and only the structural
-    scalars (capacity, plasticity events, growth and pruning pressure)
-    are logged for them.
-    """
-
     def __init__(self, log_every_n_steps: int = 100, history_size: int = 128):
         super().__init__()
         if log_every_n_steps <= 0:

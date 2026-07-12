@@ -5,20 +5,7 @@ from emperor.base.module import Module
 
 
 class NeuronClusterPlasticityMixin:
-    """Structural plasticity for NeuronCluster: growth machinery and the
-    state-dict reconciliation that keeps checkpoints loadable across
-    cluster-shape changes."""
-
     def _check_neuron_growth(self) -> None:
-        """Grows at most one neuron per training forward.
-
-        Under an initialized process group every rank participates in the
-        collectives below on every training forward, so ranks must call
-        forward in lockstep (standard DDP semantics) or growth deadlocks.
-        The budget and cooldown early returns are safe before the
-        collectives: their buffers advance identically on every rank, so
-        all ranks skip together.
-        """
         if self.growth_threshold is None:
             return
         if self.__has_exhausted_growth_budget():
@@ -76,9 +63,6 @@ class NeuronClusterPlasticityMixin:
         )
 
     def _advance_grown_neuron_warmup(self) -> None:
-        """Counts every warming-up neuron's fade-in down by one. Called once
-        per training forward, before growth, so a neuron grown this forward
-        keeps its full countdown for its first routable forward."""
         if self.growth_warmup_steps is None:
             return
         for neuron in self.cluster.values():
@@ -300,14 +284,6 @@ class NeuronClusterPlasticityMixin:
         return grown_neuron
 
     def _check_neuron_atrophy(self) -> None:
-        """Prunes at most one neuron per training forward.
-
-        A neuron atrophies while it receives no process_signal call; any
-        call resets its counter. The entry plane is never pruned so entry
-        routing always lands on a live neuron. Mirrors the growth collective
-        contract: under an initialized process group every rank must call
-        forward in lockstep or the atrophy all_reduce deadlocks.
-        """
         if self.pruning_threshold is None:
             return
 
@@ -383,13 +359,6 @@ class NeuronClusterPlasticityMixin:
         unexpected_keys,
         error_msgs,
     ) -> None:
-        """Matches cluster membership to the incoming state dict.
-
-        Grown neurons missing from the cluster are rebuilt and pruned
-        neurons missing from the state dict are removed, so strict loads
-        succeed in both directions. A state dict without any cluster keys
-        (a partial or foreign load) leaves the cluster untouched.
-        """
         cluster_prefix = f"{prefix}cluster."
         incoming_neuron_names = self.__incoming_neuron_names(
             state_dict,
@@ -450,8 +419,6 @@ class NeuronClusterPlasticityMixin:
         state_dict,
         prefix: str,
     ) -> None:
-        """Zero-fills cooldown/budget buffers absent from legacy checkpoints
-        so they load strict with a fresh cooldown and an unspent budget."""
         for buffer_name in ("forwards_since_last_growth", "total_growth_count"):
             if getattr(self, buffer_name) is None:
                 continue
@@ -464,8 +431,6 @@ class NeuronClusterPlasticityMixin:
         state_dict,
         cluster_prefix: str,
     ) -> None:
-        """Registers warmup countdown buffers for incoming warmup keys so a
-        neuron checkpointed mid-warmup loads strict and resumes its fade-in."""
         buffer_suffix = ".warmup_remaining_steps"
         for key in list(state_dict.keys()):
             if not key.startswith(cluster_prefix) or not key.endswith(buffer_suffix):
@@ -490,8 +455,6 @@ class NeuronClusterPlasticityMixin:
         state_dict,
         cluster_prefix: str,
     ) -> None:
-        """Zero-fills warmup countdowns absent from legacy checkpoints so a
-        neuron holding a warmup buffer loads strict as fully warmed up."""
         for neuron_name, neuron in self.cluster.items():
             if getattr(neuron, "warmup_remaining_steps", None) is None:
                 continue

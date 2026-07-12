@@ -13,9 +13,6 @@ if TYPE_CHECKING:
 
 
 class NeuronClusterOptimizerSyncCallback(Callback):
-    """Keeps optimizers in sync with neuron cluster membership: grown
-    neurons' trainable parameters are added and pruned neurons' parameters
-    are removed together with their optimizer state."""
 
     def __init__(self) -> None:
         super().__init__()

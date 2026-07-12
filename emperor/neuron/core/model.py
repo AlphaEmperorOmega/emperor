@@ -25,14 +25,6 @@ if TYPE_CHECKING:
 
 
 class NeuronCluster(NeuronClusterModuleBase, NeuronClusterPlasticityMixin):
-    """3D neuron grid with sampler-routed recurrent signal propagation.
-
-    The auxiliary loss returned by ``forward`` is an unnormalized sum over
-    every routed neuron call and recurrent step, so its scale grows with
-    route depth and fan-out. Weight it accordingly when adding it to a
-    training objective.
-    """
-
     def __init__(
         self,
         cfg: NeuronClusterConfig,
