@@ -1,5 +1,4 @@
 import types
-
 from typing import get_args, get_origin
 
 from emperor.base.config import ConfigBase
@@ -15,7 +14,8 @@ class ValidatorBase:
                 continue
             if getattr(cfg, field_name) is None:
                 raise ValueError(
-                    f"{field_name} is required for {cfg.__class__.__name__}, received None"
+                    f"{field_name} is required for {cfg.__class__.__name__}, "
+                    "received None"
                 )
 
     @classmethod
