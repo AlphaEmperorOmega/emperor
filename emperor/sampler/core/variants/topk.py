@@ -1,7 +1,7 @@
 import torch
 
 from torch import Tensor
-from emperor.base.utils import expand_dims
+from emperor.base.tensor import expand_dims
 from emperor.sampler.core.base import SamplerBase
 from emperor.sampler.core.config import SamplerConfig
 from emperor.sampler.core._validator import SamplerTopkValidator

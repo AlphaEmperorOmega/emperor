@@ -4,7 +4,7 @@ import torch
 from torch import Tensor
 from torch.nn import functional as F
 
-from emperor.base.utils import Module
+from emperor.base.module import Module
 
 if TYPE_CHECKING:
     from emperor.sampler.core.config import SamplerConfig

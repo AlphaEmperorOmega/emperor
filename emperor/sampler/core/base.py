@@ -1,7 +1,7 @@
 import torch
 
 from torch import Tensor
-from emperor.base.utils import Module
+from emperor.base.module import Module
 from emperor.sampler.core.config import SamplerConfig
 from emperor.sampler.core.losses import SamplerAuxiliaryLosses
 from emperor.sampler.core._validator import SamplerBaseValidator

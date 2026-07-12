@@ -1,5 +1,5 @@
 from torch import Tensor
-from emperor.base.utils import Module
+from emperor.base.module import Module
 from emperor.sampler.core.routers import RouterModel
 from emperor.sampler.core.config import RouterConfig, SamplerConfig
 from emperor.sampler.core.tracker import SamplerUsageTrackerManager

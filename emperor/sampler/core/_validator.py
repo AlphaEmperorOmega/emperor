@@ -96,7 +96,7 @@ class RouterModelValidator(ValidatorBase):
 
     @staticmethod
     def validate_model_config(model_config: object) -> None:
-        from emperor.base.utils import ConfigBase
+        from emperor.base.config import ConfigBase
 
         if not isinstance(model_config, ConfigBase):
             raise TypeError(

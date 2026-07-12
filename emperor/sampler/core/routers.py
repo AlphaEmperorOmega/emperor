@@ -1,6 +1,6 @@
 from torch import Tensor
 from emperor.base.layer import Layer, LayerStackConfig
-from emperor.base.utils import Module
+from emperor.base.module import Module
 from emperor.sampler.core.config import RouterConfig
 from emperor.sampler.core._validator import RouterModelValidator
 
