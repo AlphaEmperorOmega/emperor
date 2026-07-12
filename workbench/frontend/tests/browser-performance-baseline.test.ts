@@ -1,137 +1,19 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-
-type Distribution = {
-  coefficient_of_variation: number;
-  max: number;
-  mean: number;
-  median: number;
-  min: number;
-  p95: number;
-  stdev: number;
-};
-
-type Operation = {
-  duration_ms: number;
-  label: string;
-  layout_count: number;
-  layout_duration_ms: number;
-  long_task_count: number;
-  long_task_duration_ms: number;
-  react_commits: number;
-  recalc_style_count: number;
-  recalc_style_duration_ms: number;
-  script_duration_ms: number;
-  task_duration_ms: number;
-};
-
-type Threshold = {
-  actual: number;
-  comparator: "maximum" | "minimum";
-  kind: "deterministic" | "informational";
-  limit: number;
-  name: string;
-  passed: boolean;
-  unit: string;
-};
-
-type BrowserPerformanceBaseline = {
-  api: {
-    summary: Record<
-      string,
-      { count: number; duration_ms: Distribution; transfer_bytes: number }
-    >;
-  };
-  build: {
-    budgets: Record<
-      "first_load" | "route_specific",
-      { budget_bytes: number; gzip_bytes: number }
-    >;
-    mode: string;
-  };
-  conditions: {
-    frame_repetitions_per_webgl_sample: number;
-    initial_repetitions: number;
-    initial_warmup: number;
-    long_session_cycle: string[];
-    post_session_workflows: string[];
-    requested_window_pixels: number[];
-    session_repetitions: number;
-    session_warmup: number;
-    steady_state_repetitions: number;
-    viewport_css_pixels: number[];
-    webgl_repetitions: number;
-    webgl_warmup: number;
-    webgl_workflow: string;
-  };
-  diagnostics: {
-    console_errors: unknown[];
-    failed_requests: unknown[];
-    page_exceptions: unknown[];
-  };
-  environment: {
-    browser: { product: string };
-    cpu: { logical_count: number; model: string };
-    gpu: { devices: Array<{ deviceString: string }> };
-    memory_bytes: number;
-    node: string;
-    operating_system: { platform: string; release: string };
-    page: { viewport: { height: number; width: number } };
-  };
-  initial_load: {
-    samples: Array<Record<string, number>>;
-    summary: Record<string, Distribution>;
-  };
-  log_import: Operation;
-  long_session: {
-    heap: {
-      checkpoints: Array<{
-        documents: number;
-        jsEventListeners: number;
-        label: string;
-        nodes: number;
-        usedSize: number;
-      }>;
-      retained_growth_bytes: number;
-      session_growth_bytes: number;
-      steady_state_growth_bytes: number;
-    };
-    samples: Operation[];
-    steady_state_samples: Operation[];
-    steady_state_summary: Record<string, Distribution>;
-    summary: Record<string, Distribution>;
-  };
-  schema_version: number;
-  thresholds: Threshold[];
-  training_job: Operation;
-  webgl: {
-    context_disposal: {
-      contexts_created: number;
-      contexts_lost: number;
-    };
-    frame_interval_ms: Distribution;
-    renderer: string;
-    samples: Array<
-      Operation & {
-        canvas_count_after_close: number;
-        contexts_created: number;
-        contexts_lost: number;
-        frame_intervals_ms: number[];
-        resource_created: Record<string, number>;
-        resource_deleted: Record<string, number>;
-      }
-    >;
-  };
-};
+import {
+  PERFORMANCE_EVIDENCE_POLICY,
+  validateBrowserPerformanceEvidence,
+  type Distribution,
+} from "../scripts/performance-evidence.mjs";
 
 const baselinePath = resolve(
   process.cwd(),
   "../../docs/architecture/browser-performance-baseline-2026-07-10.json",
 );
-const baseline = JSON.parse(
-  readFileSync(baselinePath, "utf8"),
-) as BrowserPerformanceBaseline;
+const baseline = validateBrowserPerformanceEvidence(
+  JSON.parse(readFileSync(baselinePath, "utf8")) as unknown,
+);
 
 function expectDistribution(distribution: Distribution) {
   for (const value of Object.values(distribution)) {
@@ -146,7 +28,9 @@ function expectDistribution(distribution: Distribution) {
 
 describe("browser performance baseline evidence", () => {
   it("records the production workload, environment, warmups, and repetitions", () => {
-    expect(baseline.schema_version).toBe(1);
+    expect(baseline.schema_version).toBe(
+      PERFORMANCE_EVIDENCE_POLICY.schemaVersion,
+    );
     expect(baseline.build.mode).toBe("Next.js production");
     expect(baseline.conditions).toMatchObject({
       frame_repetitions_per_webgl_sample: 60,
@@ -190,10 +74,10 @@ describe("browser performance baseline evidence", () => {
 
   it("preserves bundle budgets and records successful public workflows", () => {
     expect(baseline.build.budgets.first_load).toMatchObject({
-      budget_bytes: 210_000,
+      budget_bytes: PERFORMANCE_EVIDENCE_POLICY.budgets.firstLoadBytes,
     });
     expect(baseline.build.budgets.route_specific).toMatchObject({
-      budget_bytes: 98_000,
+      budget_bytes: PERFORMANCE_EVIDENCE_POLICY.budgets.routeSpecificBytes,
     });
     for (const budget of Object.values(baseline.build.budgets)) {
       expect(budget.gzip_bytes).toBeLessThanOrEqual(budget.budget_bytes);
@@ -323,7 +207,7 @@ describe("browser performance baseline evidence", () => {
       contexts_lost: baseline.conditions.webgl_repetitions,
     });
     expectDistribution(baseline.webgl.frame_interval_ms);
-    expect(baseline.webgl.renderer).toContain("SwiftShader");
+    expect(baseline.webgl.renderer ?? "").toContain("SwiftShader");
     for (const sample of baseline.webgl.samples) {
       expect(sample.contexts_created).toBe(1);
       expect(sample.contexts_lost).toBe(1);

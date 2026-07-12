@@ -1,11 +1,16 @@
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { createServer } from "node:net";
 import os from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { gzipSync } from "node:zlib";
+import {
+  collectBuildPerformanceEvidence,
+  createBrowserPerformanceEvidence,
+  createBrowserPerformanceThresholds,
+  deterministicPerformanceFailures,
+} from "./performance-evidence.mjs";
 
 const SCRIPT_DIRECTORY = dirname(fileURLToPath(import.meta.url));
 const FRONTEND_ROOT = resolve(SCRIPT_DIRECTORY, "..");
@@ -16,8 +21,6 @@ const BACKEND_SCRIPT = resolve(
   "workbench/backend/tests/browser_performance_server.py",
 );
 const NEXT_BINARY = resolve(FRONTEND_ROOT, "node_modules/.bin/next");
-const FIRST_LOAD_BUDGET_BYTES = 210_000;
-const ROUTE_SPECIFIC_BUDGET_BYTES = 98_000;
 const DEFAULTS = {
   initialWarmup: 2,
   initialRepetitions: 7,
@@ -1169,42 +1172,6 @@ async function measureWebglCycle(client, frameRepetitions, label) {
   };
 }
 
-function buildBudgets() {
-  const nextDirectory = resolve(FRONTEND_ROOT, ".next");
-  const appManifest = JSON.parse(
-    readFileSync(resolve(nextDirectory, "app-build-manifest.json"), "utf8"),
-  );
-  const pageFiles = appManifest.pages["/page"].filter((file) => file.endsWith(".js"));
-  const otherFiles = new Set(
-    Object.entries(appManifest.pages)
-      .filter(([entry]) => entry !== "/page")
-      .flatMap(([, files]) => files)
-      .filter((file) => file.endsWith(".js")),
-  );
-  const routeFiles = pageFiles.filter((file) => !otherFiles.has(file));
-  const gzipBytes = (files) =>
-    [...new Set(files)].reduce(
-      (total, file) =>
-        total + gzipSync(readFileSync(resolve(nextDirectory, file))).byteLength,
-      0,
-    );
-  return {
-    first_load: {
-      budget_bytes: FIRST_LOAD_BUDGET_BYTES,
-      gzip_bytes: gzipBytes(pageFiles),
-    },
-    route_specific: {
-      budget_bytes: ROUTE_SPECIFIC_BUDGET_BYTES,
-      gzip_bytes: gzipBytes(routeFiles),
-    },
-  };
-}
-
-function threshold(name, actual, limit, unit, kind, comparator = "maximum") {
-  const passed = comparator === "minimum" ? actual >= limit : actual <= limit;
-  return { actual, comparator, kind, limit, name, passed, unit };
-}
-
 async function runBenchmark(options) {
   if (!existsSync(resolve(FRONTEND_ROOT, ".next/BUILD_ID"))) {
     throw new Error("Production build not found. Run npm run build first.");
@@ -1429,7 +1396,9 @@ async function runBenchmark(options) {
     );
     const browserVersion = await browserClient.send("Browser.getVersion");
     const systemInfo = await browserClient.send("SystemInfo.getInfo");
-    const buildBudgetsResult = buildBudgets();
+    const buildBudgetsResult = collectBuildPerformanceEvidence(
+      resolve(FRONTEND_ROOT, ".next"),
+    ).budgets;
     const apiEntries = await evaluate(
       pageClient,
       `performance.getEntriesByType("resource")
@@ -1512,143 +1481,36 @@ async function runBenchmark(options) {
       heapAfterSession.usedSize === 0
         ? 0
         : steadyStateHeapGrowth / heapAfterSession.usedSize;
-    const thresholds = [
-      threshold(
-        "first-load gzip budget",
-        buildBudgetsResult.first_load.gzip_bytes,
-        FIRST_LOAD_BUDGET_BYTES,
-        "bytes",
-        "deterministic",
-      ),
-      threshold(
-        "route-specific gzip budget",
-        buildBudgetsResult.route_specific.gzip_bytes,
-        ROUTE_SPECIFIC_BUDGET_BYTES,
-        "bytes",
-        "deterministic",
-      ),
-      threshold(
-        "browser workflow failures",
+    const thresholds = createBrowserPerformanceThresholds({
+      browserWorkflowFailures:
         diagnostics.console_errors.length +
-          diagnostics.page_exceptions.length +
-          diagnostics.failed_requests.length,
-        0,
-        "count",
-        "deterministic",
+        diagnostics.page_exceptions.length +
+        diagnostics.failed_requests.length,
+      buildBudgets: buildBudgetsResult,
+      connectedWebglCanvases: Math.max(
+        ...webglSamples.map((sample) => sample.canvas_count_after_close),
       ),
-      threshold(
-        "WebGL contexts disposed",
-        totalContextsLost,
-        totalContextsCreated,
-        "contexts",
-        "deterministic",
-        "minimum",
-      ),
-      threshold(
-        "connected WebGL canvases after close",
-        Math.max(...webglSamples.map((sample) => sample.canvas_count_after_close)),
-        0,
-        "canvases",
-        "deterministic",
-      ),
-      threshold(
-        "graph inspection requests exercised",
-        apiSummary["/inspect"]?.count ?? 0,
-        1,
-        "requests",
-        "deterministic",
-        "minimum",
-      ),
-      threshold(
-        "scalar chart requests exercised",
-        apiSummary["/logs/scalars"]?.count ?? 0,
-        1,
-        "requests",
-        "deterministic",
-        "minimum",
-      ),
-      threshold(
-        "Training Job requests exercised",
-        apiSummary["/training/jobs"]?.count ?? 0,
-        1,
-        "requests",
-        "deterministic",
-        "minimum",
-      ),
-      threshold(
-        "log import requests exercised",
-        apiSummary["/logs/import"]?.count ?? 0,
-        1,
-        "requests",
-        "deterministic",
-        "minimum",
-      ),
-      threshold(
-        "initial workspace-ready p95",
-        initialSummary.workspace_ready_ms.p95,
-        5_000,
-        "ms",
-        "informational",
-      ),
-      threshold(
-        "initial main-thread task p95",
-        initialSummary.task_duration_ms.p95,
-        1_000,
-        "ms",
-        "informational",
-      ),
-      threshold(
-        "long-session cycle p95",
-        sessionSummary.duration_ms.p95,
-        3_000,
-        "ms",
-        "informational",
-      ),
-      threshold(
-        "graph-cache fill retained heap growth",
-        sessionHeapGrowth,
-        20_000_000,
-        "bytes",
-        "informational",
-      ),
-      threshold(
-        "cache-saturated retained heap growth",
-        steadyStateHeapGrowth,
-        5_000_000,
-        "bytes",
-        "informational",
-      ),
-      threshold(
-        "WebGL frame interval p95",
-        summarize(frameIntervals).p95,
-        33.4,
-        "ms",
-        "informational",
-      ),
-      threshold(
-        "initial cumulative layout shift p95",
+      initialCumulativeLayoutShiftP95:
         initialSummary.cumulative_layout_shift.p95,
-        0.1,
-        "score",
-        "informational",
-      ),
-      threshold(
-        "log scalar API p95",
-        apiSummary["/logs/scalars"]?.duration_ms.p95 ?? Number.POSITIVE_INFINITY,
-        1_000,
-        "ms",
-        "informational",
-      ),
-      threshold(
-        "graph inspection API p95",
+      initialTaskDurationP95: initialSummary.task_duration_ms.p95,
+      initialWorkspaceReadyP95: initialSummary.workspace_ready_ms.p95,
+      inspectionApiDurationP95:
         apiSummary["/inspect"]?.duration_ms.p95 ?? Number.POSITIVE_INFINITY,
-        2_000,
-        "ms",
-        "informational",
-      ),
-    ];
+      inspectionRequestCount: apiSummary["/inspect"]?.count ?? 0,
+      logImportRequestCount: apiSummary["/logs/import"]?.count ?? 0,
+      longSessionDurationP95: sessionSummary.duration_ms.p95,
+      scalarApiDurationP95:
+        apiSummary["/logs/scalars"]?.duration_ms.p95 ?? Number.POSITIVE_INFINITY,
+      scalarRequestCount: apiSummary["/logs/scalars"]?.count ?? 0,
+      sessionHeapGrowth,
+      steadyStateHeapGrowth,
+      trainingJobRequestCount: apiSummary["/training/jobs"]?.count ?? 0,
+      webglContextsCreated: totalContextsCreated,
+      webglContextsLost: totalContextsLost,
+      webglFrameIntervalP95: summarize(frameIntervals).p95,
+    });
 
-    const result = {
+    const result = createBrowserPerformanceEvidence({
       api: {
         entries: apiEntries,
         summary: apiSummary,
@@ -1737,7 +1599,6 @@ async function runBenchmark(options) {
         steady_state_summary: steadyStateSummary,
         summary: sessionSummary,
       },
-      schema_version: 1,
       thresholds,
       training_job: trainingResult,
       webgl: {
@@ -1750,10 +1611,8 @@ async function runBenchmark(options) {
         samples: webglSamples,
         vendor: webglSamples[0]?.vendor ?? null,
       },
-    };
-    const deterministicFailures = thresholds.filter(
-      (entry) => entry.kind === "deterministic" && !entry.passed,
-    );
+    });
+    const deterministicFailures = deterministicPerformanceFailures(thresholds);
     return { deterministicFailures, result };
   } finally {
     pageClient?.close();
