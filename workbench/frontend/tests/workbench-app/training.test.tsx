@@ -8,7 +8,7 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useMemo, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LogsWorkspaceProvider } from "@/features/workbench/providers/logs-workspace-provider";
 import {
@@ -230,8 +230,54 @@ function renderWorkspaceOverlayHarness({
   );
 }
 
+function useTrainingTestInterface() {
+  const workspace = useTrainingWorkspace();
+  const { setup, logFolder, runtimeDefaults, searchMetadata, status } =
+    workspace.draft;
+  return useMemo(
+    () => ({
+      ...workspace,
+      draft: {
+        ...workspace.draft,
+        selectedModelType: setup.model.selectedType,
+        selectedModel: setup.model.selected,
+        selectedPrimaryPreset: setup.variants.primaryPreset,
+        selectedPresets: setup.variants.selectedPresets,
+        selectedExperimentTask: setup.experimentTask.selected,
+        selectedSnapshotIds: setup.variants.selectedSnapshotIds,
+        selectedDatasets: setup.datasets.selected,
+        bulkOverrides: runtimeDefaults.active,
+        configSnapshots: setup.variants.snapshots,
+        configSnapshotMutation: setup.variants.snapshotMutation,
+        datasetOptions: setup.datasets.options,
+        experimentTaskOptions: setup.experimentTask.options,
+        monitorOptions: setup.monitors.options,
+        selectedMonitors: setup.monitors.selected,
+        monitorsLoading: setup.monitors.isLoading,
+        searchAxes: searchMetadata.axes,
+        searchLoading: searchMetadata.isLoading,
+        trainingEnabled: status.trainingEnabled,
+        canOpenFullConfig: status.canOpenFullConfig,
+        activeConfigSnapshotCount: status.activeConfigSnapshotCount,
+        selectedPresetCount: status.selectedPresetCount,
+        logFolder: logFolder.state,
+      },
+      actions: {
+        ...workspace.actions,
+        selectModelType: setup.model.selectType,
+        selectModel: setup.model.select,
+        updateSearch: searchMetadata.update,
+        selectLogFolderMode: logFolder.actions.selectMode,
+        selectExistingLogFolder: logFolder.actions.selectExisting,
+        nameNewLogFolder: logFolder.actions.nameNew,
+      },
+    }),
+    [logFolder, runtimeDefaults.active, searchMetadata, setup, status, workspace],
+  );
+}
+
 type TrainingInterfaceSnapshot = {
-  workspace: ReturnType<typeof useTrainingWorkspace>;
+  workspace: ReturnType<typeof useTrainingTestInterface>;
   configuration: ReturnType<typeof useTrainingConfiguration>;
   modelTarget: ReturnType<typeof useModelPackageInspection>;
   activeJob: ReturnType<typeof useActiveTrainingJob>;
@@ -243,7 +289,7 @@ function TrainingInterfaceProbe({
 }: {
   onChange: (snapshot: TrainingInterfaceSnapshot) => void;
 }) {
-  const workspace = useTrainingWorkspace();
+  const workspace = useTrainingTestInterface();
   const configuration = useTrainingConfiguration();
   const modelTarget = useModelPackageInspection();
   const activeJob = useActiveTrainingJob();
@@ -297,7 +343,7 @@ function renderTrainingInterfaceHarness({
 }
 
 function TargetTrainingInputsReady({ onReady }: { onReady: () => void }) {
-  const training = useTrainingWorkspace();
+  const training = useTrainingTestInterface();
   const draft = training.draft;
 
   useEffect(() => {
@@ -502,10 +548,9 @@ describe("WorkbenchApp Training And Preview", () => {
       "runPlan.runs.0.id",
       "server-sentinel-run",
     );
-    expect(trainingBodies[0]).toHaveProperty(
-      "runPlan.runs.0.command",
-      "server-sentinel-command --authoritative",
-    );
+    expect(trainingBodies[0]).not.toHaveProperty("runPlan.runs.0.command");
+    expect(trainingBodies[0]).not.toHaveProperty("runPlan.runs.0.status");
+    expect(trainingBodies[0]).not.toHaveProperty("runPlan.summary");
   });
 
   it("exposes only the five-part Training workspace Interface and focused projections", async () => {
@@ -714,8 +759,7 @@ describe("WorkbenchApp Training And Preview", () => {
       ).not.toBe(originalCommand);
       expect(current?.workspace.plan.canStart).toBe(true);
     });
-    const replacementCommand =
-      current?.workspace.plan.display?.runs[0]?.command;
+    const replacementRunId = current?.workspace.plan.display?.runs[0]?.id;
 
     act(() => {
       current?.workspace.actions.startJob();
@@ -724,9 +768,10 @@ describe("WorkbenchApp Training And Preview", () => {
       expect(trainingBodies).toHaveLength(1);
     });
     expect(trainingBodies[0]).toHaveProperty(
-      "runPlan.runs.0.command",
-      replacementCommand,
+      "runPlan.runs.0.id",
+      replacementRunId,
     );
+    expect(trainingBodies[0]).not.toHaveProperty("runPlan.runs.0.command");
   });
 
   it("rejects a large-grid confirmation retained from an obsolete draft revision", async () => {
@@ -1836,11 +1881,11 @@ describe("WorkbenchApp Training And Preview", () => {
         logFolder: "my_experiment",
         monitors: [],
       });
-      expect(trainingBodies[0]).toHaveProperty("runPlan.summary.totalRuns", 2);
-      expect(trainingBodies[0]).toHaveProperty(
-        "runPlan.summary.remainingEpochs",
-        60,
-      );
+      expect(trainingBodies[0]).toHaveProperty("runPlan.runs");
+      expect(
+        (trainingBodies[0] as { runPlan: { runs: unknown[] } }).runPlan.runs,
+      ).toHaveLength(2);
+      expect(trainingBodies[0]).not.toHaveProperty("runPlan.summary");
     });
   });
 
@@ -2300,15 +2345,14 @@ describe("WorkbenchApp Training And Preview", () => {
       logFolder: "mixed_snapshots",
     });
     expect(trainingBodies[0]).not.toHaveProperty("search");
-    expect(trainingBodies[0]).toHaveProperty("runPlan.summary.totalRuns", 2);
+    expect(
+      (trainingBodies[0] as { runPlan: { runs: unknown[] } }).runPlan.runs,
+    ).toHaveLength(2);
     expect(trainingBodies[0]).toHaveProperty(
       "runPlan.runs.0.overrides.hidden_dim",
       "192",
     );
-    expect(trainingBodies[0]).toHaveProperty(
-      "runPlan.runs.0.command",
-      "source experiment.sh --model-type linears --model linear --preset baseline --experiment-task image-classification --datasets Mnist --logdir mixed_snapshots --config --hidden-dim 192",
-    );
+    expect(trainingBodies[0]).not.toHaveProperty("runPlan.runs.0.command");
     expect(trainingBodies[0]).toHaveProperty(
       "runPlan.runs.1.snapshotId",
       "snap-wide",
@@ -2595,7 +2639,6 @@ describe("WorkbenchApp Training And Preview", () => {
       logFolder: "snapshot_only",
       presets: ["baseline"],
       runPlan: {
-        presets: ["baseline"],
         runs: [
           expect.objectContaining({
             snapshotId: "snap-wide",
@@ -2906,10 +2949,7 @@ describe("WorkbenchApp Training And Preview", () => {
         "runPlan.runs.0.overrides.hidden_dim",
         "192",
       );
-      expect(trainingBodies[1]).toHaveProperty(
-        "runPlan.runs.0.command",
-        "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist --logdir second_plan --config --hidden-dim 192",
-      );
+      expect(trainingBodies[1]).not.toHaveProperty("runPlan.runs.0.command");
     });
   });
 
@@ -3189,7 +3229,9 @@ describe("WorkbenchApp Training And Preview", () => {
           values: { hidden_dim: [64] },
         },
       });
-      expect(trainingBodies[0]).toHaveProperty("runPlan.summary.totalRuns", 1);
+      expect(
+        (trainingBodies[0] as { runPlan: { runs: unknown[] } }).runPlan.runs,
+      ).toHaveLength(1);
       expect(trainingBodies[0]).toHaveProperty(
         "runPlan.runs.0.overrides.hidden_dim",
         64,
@@ -3513,10 +3555,7 @@ describe("WorkbenchApp Training And Preview", () => {
         logFolder: "monitor_run",
         monitors: ["linear"],
       });
-      expect(trainingBodies[0]).toHaveProperty(
-        "runPlan.runs.0.command",
-        "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist --logdir monitor_run --monitors linear",
-      );
+      expect(trainingBodies[0]).not.toHaveProperty("runPlan.runs.0.command");
     });
     expect(
       within(details).getByRole("combobox", {

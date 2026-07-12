@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect } from "react";
+import { type ReactNode } from "react";
 import {
   useWorkbenchState,
   type GraphViewContextValue,
@@ -18,10 +18,10 @@ import {
   TrainingConfigurationContextProvider,
   TrainingWorkspaceContextProvider,
   useActiveTrainingJob,
-  useTrainingLifecycleImplementation,
 } from "@/features/workbench/providers/training-provider";
 import type { useModelPackageInspectionState } from "@/features/workbench/state/target/use-model-package-inspection-state";
 import { useTrainingWorkspaceState } from "@/features/workbench/state/training/use-training-workspace-state";
+import { type TrainingJobLifecycle } from "@/features/workbench/state/training/use-training-job-lifecycle";
 import {
   type ConfigSnapshotEditorSessionState,
   useConfigSnapshotEditorSessionState,
@@ -75,10 +75,12 @@ export {
 function TrainingWorkspaceController({
   activeWorkspace,
   onOpenFullConfig,
+  trainingJob,
   children,
 }: {
   activeWorkspace?: WorkbenchWorkspace;
   onOpenFullConfig?: FullConfigDialogControls["open"];
+  trainingJob: TrainingJobLifecycle;
   children: ReactNode;
 }) {
   const catalog = useModelPackageCatalog();
@@ -86,7 +88,6 @@ function TrainingWorkspaceController({
   const workbenchConnection = useWorkbenchConnection();
   const modelTarget = useModelPackageInspection();
   const snapshotEditor = useConfigSnapshotEditor();
-  const lifecycle = useTrainingLifecycleImplementation();
   const protectedReadsEnabled =
     activeWorkspace === "training" &&
     isWorkbenchProtectedAccessReady(workbenchConnection);
@@ -116,18 +117,10 @@ function TrainingWorkspaceController({
         onOpenFullConfig?.("snapshotDraft");
       }
     },
-    activeTrainingJob: lifecycle.activeTrainingJob,
-    progressError: lifecycle.progressError,
-    onActiveJobIdChange: lifecycle.setActiveJobId,
-    onJobChange: lifecycle.onJobChange,
+    trainingJob,
   });
-  const registerDraftConnectionClear = lifecycle.registerDraftConnectionClear;
   const clearForConnectionChange = training.clearForConnectionChange;
-
-  useEffect(
-    () => registerDraftConnectionClear(clearForConnectionChange),
-    [clearForConnectionChange, registerDraftConnectionClear],
-  );
+  useRegisterWorkbenchConnectionReset(clearForConnectionChange);
 
   return (
     <TrainingConfigurationContextProvider value={training.configuration}>
@@ -151,9 +144,11 @@ function WorkbenchCompositionProviders({
   activeWorkspace,
   onOpenFullConfig,
   clearShellForConnectionChange,
+  trainingJob,
   children,
-}: Omit<WorkbenchProvidersProps, "onJobStarted">) {
-  const lifecycle = useTrainingLifecycleImplementation();
+}: Omit<WorkbenchProvidersProps, "onJobStarted"> & {
+  trainingJob: TrainingJobLifecycle;
+}) {
   const activeJob = useActiveTrainingJob();
   const workbenchConnection = useWorkbenchConnection();
   const protectedReadsEnabled = isWorkbenchProtectedAccessReady(
@@ -167,8 +162,9 @@ function WorkbenchCompositionProviders({
     protectedReadsEnabled,
   });
   useRegisterWorkbenchConnectionReset(clearForConnectionChange);
-  useRegisterWorkbenchConnectionReset(lifecycle.clearForConnectionChange);
-  useRegisterWorkbenchConnectionReset(configSnapshotEditor.actions.close);
+  useRegisterWorkbenchConnectionReset(
+    configSnapshotEditor.actions.close,
+  );
   useRegisterWorkbenchConnectionReset(
     clearShellForConnectionChange ?? noop,
   );
@@ -183,6 +179,7 @@ function WorkbenchCompositionProviders({
                 <TrainingWorkspaceController
                   activeWorkspace={activeWorkspace}
                   onOpenFullConfig={onOpenFullConfig}
+                  trainingJob={trainingJob}
                 >
                   <GraphMonitorProvider value={graphMonitor}>
                     {children}
@@ -212,13 +209,16 @@ export function WorkbenchProviders({
   return (
     <WorkbenchConnectionProvider>
       <TrainingLifecycleProvider onJobStarted={onJobStarted}>
-        <WorkbenchCompositionProviders
-          activeWorkspace={activeWorkspace}
-          onOpenFullConfig={onOpenFullConfig}
-          clearShellForConnectionChange={clearShellForConnectionChange}
-        >
-          {children}
-        </WorkbenchCompositionProviders>
+        {(trainingJob) => (
+          <WorkbenchCompositionProviders
+            activeWorkspace={activeWorkspace}
+            onOpenFullConfig={onOpenFullConfig}
+            clearShellForConnectionChange={clearShellForConnectionChange}
+            trainingJob={trainingJob}
+          >
+            {children}
+          </WorkbenchCompositionProviders>
+        )}
       </TrainingLifecycleProvider>
     </WorkbenchConnectionProvider>
   );

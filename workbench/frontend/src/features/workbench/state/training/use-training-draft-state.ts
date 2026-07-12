@@ -7,16 +7,15 @@ import {
   type SearchAxis,
 } from "@/lib/api";
 import {
-  configKeyToken,
   effectivePresetOverrides,
   lockedOverrideKeys,
-  normalizeAdaptiveOptionOverrides,
-  normalizeConfigOverrides,
+  runtimeDefaultsEditor,
   type OverrideValues,
 } from "@/lib/config";
 import {
   modelNameForId,
   modelTypeForId,
+  modelTypeOptions as createModelTypeOptions,
   modelsForType,
   normalizePrimarySelection,
   normalizeSelection,
@@ -56,24 +55,6 @@ type TrainingDraftStateOptions = {
   seed: TrainingDraftSeed;
   protectedReadsEnabled?: boolean;
 };
-
-function overrideValuesEqual(left: OverrideValues, right: OverrideValues) {
-  const leftEntries = Object.entries(left);
-  const rightEntries = Object.entries(right);
-  if (leftEntries.length !== rightEntries.length) {
-    return false;
-  }
-  return leftEntries.every(([key, value]) => right[key] === value);
-}
-
-function withoutOverride(overrides: OverrideValues, key: string): OverrideValues {
-  const token = configKeyToken(key);
-  return Object.fromEntries(
-    Object.entries(overrides).filter(
-      ([overrideKey]) => configKeyToken(overrideKey) !== token,
-    ),
-  );
-}
 
 export function useTrainingDraftState({
   activeWorkspace,
@@ -135,11 +116,16 @@ export function useTrainingDraftState({
   );
   const {
     records: configSnapshots,
+    status: configSnapshotsStatus,
     actions: configSnapshotActions,
   } = useConfigSnapshotRecords(selectedIdentity, {
     enabled: protectedReadsEnabled,
   });
   const deleteSnapshotRecord = configSnapshotActions.remove;
+  const retrySnapshotRecordMutation = configSnapshotActions.retry;
+  const dismissSnapshotRecordMutation = configSnapshotActions.dismissMutation;
+  const clearSnapshotRecordsForConnectionChange =
+    configSnapshotActions.clearForConnectionChange;
 
   const presets = presetsQuery.data?.presets ?? EMPTY_PRESETS;
   const datasetGroups =
@@ -204,13 +190,9 @@ export function useTrainingDraftState({
     if (configFields.length === 0) {
       return;
     }
-    setBulkOverrides((current) => {
-      const next = normalizeAdaptiveOptionOverrides(
-        configFields,
-        normalizeConfigOverrides(configFields, current),
-      );
-      return overrideValuesEqual(current, next) ? current : next;
-    });
+    setBulkOverrides((current) =>
+      runtimeDefaultsEditor.normalize(configFields, current),
+    );
   }, [configFields]);
 
   useEffect(() => {
@@ -493,14 +475,26 @@ export function useTrainingDraftState({
   );
 
   const removeSnapshot = useCallback(
-    (snapshotId: string) => {
-      setSelectedSnapshotIds((current) =>
-        current.filter((id) => id !== snapshotId),
-      );
-      deleteSnapshotRecord(snapshotId);
+    async (snapshotId: string) => {
+      const outcome = await deleteSnapshotRecord(snapshotId);
+      if (outcome.ok) {
+        setSelectedSnapshotIds((current) =>
+          current.filter((id) => id !== snapshotId),
+        );
+      }
+      return outcome;
     },
     [deleteSnapshotRecord],
   );
+  const retrySnapshotMutation = useCallback(async () => {
+    const outcome = await retrySnapshotRecordMutation();
+    if (outcome?.ok && outcome.kind === "remove" && outcome.snapshotId) {
+      setSelectedSnapshotIds((current) =>
+        current.filter((id) => id !== outcome.snapshotId),
+      );
+    }
+    return outcome;
+  }, [retrySnapshotRecordMutation]);
 
   const selectExperimentTask = useCallback(
     (experimentTask: string) => {
@@ -569,13 +563,7 @@ export function useTrainingDraftState({
   const updateOverride = useCallback(
     (key: string, value: string) => {
       setBulkOverrides((current) =>
-        normalizeAdaptiveOptionOverrides(
-          configFields,
-          normalizeConfigOverrides(configFields, {
-            ...current,
-            [key]: value,
-          }),
-        ),
+        runtimeDefaultsEditor.edit(configFields, current, key, value),
       );
     },
     [configFields],
@@ -584,13 +572,7 @@ export function useTrainingDraftState({
   const clearOverride = useCallback(
     (key: string) => {
       setBulkOverrides((current) =>
-        normalizeAdaptiveOptionOverrides(
-          configFields,
-          normalizeConfigOverrides(
-            configFields,
-            withoutOverride(current, key),
-          ),
-        ),
+        runtimeDefaultsEditor.clear(configFields, current, key),
       );
     },
     [configFields],
@@ -605,65 +587,178 @@ export function useTrainingDraftState({
   }, []);
 
   const clearForConnectionChange = useCallback(() => {
+    clearSnapshotRecordsForConnectionChange();
     setIsInitialized(false);
     setSelectedModelType("");
     setSelectedModel("");
     resetSelectionsForModel();
-  }, [resetSelectionsForModel]);
+  }, [clearSnapshotRecordsForConnectionChange, resetSelectionsForModel]);
 
-  return {
-    selectedModelType,
-    selectedModel,
-    selectedPrimaryPreset,
-    selectedPresets,
-    selectedExperimentTask: activeExperimentTask,
-    selectedDatasets,
-    selectedMonitors,
-    bulkOverrides: effectiveBulkOverrides,
-    selectedSnapshotIds,
-    search,
-    models,
-    presets,
-    datasets,
-    experimentTaskOptions: experimentTaskOptionList,
-    monitors,
-    configSections,
-    configSnapshots: modelConfigSnapshots,
-    searchAxes,
-    monitorsLoading: monitorsQuery.isLoading,
-    schemaLoading: schemaQuery.isLoading,
-    isSchemaReady: schemaQuery.isSuccess,
-    searchLoading: searchSpaceQuery.isLoading,
-    fieldCount,
-    inactiveLockedOverrideCount,
-    snapshotOverrideWarning: "",
-    selectModelType,
-    selectModel,
-    selectPrimaryPreset,
-    setPresetSelection,
-    togglePreset,
-    excludeDraftPreset,
-    makePresetPrimary,
-    selectAllPresets,
-    selectOnlyPrimaryPreset,
-    setSnapshotSelection,
-    includeSnapshot,
-    excludeSnapshot,
-    removeSnapshot,
-    selectExperimentTask,
-    setDatasetSelection,
-    toggleDataset,
-    selectAllDatasets,
-    selectFirstDataset,
-    setMonitorSelection,
-    selectAllMonitors,
-    clearMonitors,
-    updateSearch,
-    updateOverride,
-    clearOverride,
-    resetOverrides,
-    clearForConnectionChange,
-  };
+  const modelTypeOptionList = useMemo(
+    () => createModelTypeOptions(models),
+    [models],
+  );
+  const modelOptionList = useMemo(
+    () =>
+      modelsForType(models, selectedModelType).map((model) => ({
+        value: model.model,
+        label: modelNameForId(model),
+      })),
+    [models, selectedModelType],
+  );
+  const presetOptionList = useMemo(
+    () => presets.map((preset) => ({ value: preset.name, label: preset.name })),
+    [presets],
+  );
+  const setup = useMemo(
+    () => ({
+      model: {
+        selectedType: selectedModelType,
+        selected: selectedModel,
+        typeOptions: modelTypeOptionList,
+        options: modelOptionList,
+        selectType: selectModelType,
+        select: selectModel,
+      },
+      variants: {
+        primaryPreset: selectedPrimaryPreset,
+        selectedPresets,
+        selectedSnapshotIds,
+        presetOptions: presetOptionList,
+        snapshots: modelConfigSnapshots,
+        snapshotMutation: configSnapshotsStatus.mutation,
+        selectPrimaryPreset,
+        selectPresets: setPresetSelection,
+        togglePreset,
+        excludePreset: excludeDraftPreset,
+        makePresetPrimary,
+        selectAllPresets,
+        selectOnlyPrimaryPreset,
+        selectSnapshots: setSnapshotSelection,
+        includeSnapshot,
+        excludeSnapshot,
+        removeSnapshot,
+        retrySnapshotMutation,
+        dismissSnapshotMutation: dismissSnapshotRecordMutation,
+      },
+      experimentTask: {
+        selected: activeExperimentTask,
+        options: experimentTaskOptionList,
+        select: selectExperimentTask,
+      },
+      datasets: {
+        selected: selectedDatasets,
+        options: datasets,
+        select: setDatasetSelection,
+        toggle: toggleDataset,
+        selectAll: selectAllDatasets,
+        selectFirst: selectFirstDataset,
+      },
+      monitors: {
+        selected: selectedMonitors,
+        options: monitors,
+        isLoading: monitorsQuery.isLoading,
+        select: setMonitorSelection,
+        selectAll: selectAllMonitors,
+        clear: clearMonitors,
+      },
+    }),
+    [
+      activeExperimentTask,
+      clearMonitors,
+      configSnapshotsStatus.mutation,
+      datasets,
+      dismissSnapshotRecordMutation,
+      excludeDraftPreset,
+      excludeSnapshot,
+      experimentTaskOptionList,
+      includeSnapshot,
+      makePresetPrimary,
+      modelConfigSnapshots,
+      modelOptionList,
+      modelTypeOptionList,
+      monitors,
+      monitorsQuery.isLoading,
+      presetOptionList,
+      removeSnapshot,
+      retrySnapshotMutation,
+      selectAllDatasets,
+      selectAllMonitors,
+      selectAllPresets,
+      selectExperimentTask,
+      selectFirstDataset,
+      selectModel,
+      selectModelType,
+      selectOnlyPrimaryPreset,
+      selectPrimaryPreset,
+      selectedDatasets,
+      selectedModel,
+      selectedModelType,
+      selectedMonitors,
+      selectedPresets,
+      selectedPrimaryPreset,
+      selectedSnapshotIds,
+      setDatasetSelection,
+      setMonitorSelection,
+      setPresetSelection,
+      setSnapshotSelection,
+      toggleDataset,
+      togglePreset,
+    ],
+  );
+  const runtimeDefaults = useMemo(
+    () => ({
+      active: effectiveBulkOverrides,
+      sections: configSections,
+      fieldCount,
+      inactiveLockedCount: inactiveLockedOverrideCount,
+      edit: updateOverride,
+      clear: clearOverride,
+      reset: resetOverrides,
+    }),
+    [
+      clearOverride,
+      configSections,
+      effectiveBulkOverrides,
+      fieldCount,
+      inactiveLockedOverrideCount,
+      resetOverrides,
+      updateOverride,
+    ],
+  );
+  const searchMetadata = useMemo(
+    () => ({
+      value: search,
+      axes: searchAxes,
+      isLoading: searchSpaceQuery.isLoading,
+      update: updateSearch,
+    }),
+    [search, searchAxes, searchSpaceQuery.isLoading, updateSearch],
+  );
+  const status = useMemo(
+    () => ({
+      schemaLoading: schemaQuery.isLoading,
+      isSchemaReady: schemaQuery.isSuccess,
+    }),
+    [schemaQuery.isLoading, schemaQuery.isSuccess],
+  );
+
+  return useMemo(
+    () => ({
+      setup,
+      runtimeDefaults,
+      searchMetadata,
+      status,
+      clearForConnectionChange,
+    }),
+    [
+      clearForConnectionChange,
+      runtimeDefaults,
+      searchMetadata,
+      setup,
+      status,
+    ],
+  );
 }
 
 export type TrainingDraftState = ReturnType<typeof useTrainingDraftState>;

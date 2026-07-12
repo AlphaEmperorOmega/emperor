@@ -2521,6 +2521,98 @@ export function mockTrainingRunPlan(request: MockTrainingPlanRequest) {
   };
 }
 
+type MockSubmittedTrainingRunPlan = {
+  runs?: Array<{
+    id?: unknown;
+    preset?: unknown;
+    snapshotId?: unknown;
+    snapshotName?: unknown;
+    dataset?: unknown;
+    overrides?: unknown;
+  }>;
+};
+
+function mockAcceptedTrainingRunPlan(
+  request: MockTrainingPlanRequest,
+  submitted: MockSubmittedTrainingRunPlan | undefined,
+  preferred?: ReturnType<typeof mockTrainingRunPlan>,
+) {
+  const submittedRuns = submitted?.runs ?? [];
+  if (
+    preferred &&
+    preferred.runs.length === submittedRuns.length &&
+    preferred.runs.every((run, index) => {
+      const submittedRun = submittedRuns[index];
+      return submittedRun?.id === run.id &&
+        submittedRun.preset === run.preset &&
+        submittedRun.dataset === run.dataset &&
+        JSON.stringify(submittedRun.overrides ?? {}) === JSON.stringify(run.overrides);
+    })
+  ) {
+    return preferred;
+  }
+
+  const basePlan = mockTrainingRunPlan(request);
+  if (submittedRuns.length === 0) {
+    return basePlan;
+  }
+  const runs = submittedRuns.map((submittedRun, index) => {
+    const preset = String(submittedRun.preset ?? request.preset ?? "baseline");
+    const dataset = String(submittedRun.dataset ?? request.datasets?.[0] ?? "Mnist");
+    const overrides = (
+      submittedRun.overrides && typeof submittedRun.overrides === "object"
+        ? submittedRun.overrides
+        : {}
+    ) as Record<string, unknown>;
+    const template = basePlan.runs.find(
+      (run) => run.preset === preset && run.dataset === dataset,
+    ) ?? basePlan.runs[0];
+    const totalEpochs = Number(
+      overrides.NUM_EPOCHS ?? overrides.num_epochs ?? template?.totalEpochs ?? 30,
+    );
+    return {
+      ...template,
+      id: String(submittedRun.id ?? `run-${String(index + 1).padStart(4, "0")}`),
+      index: index + 1,
+      status: "Pending",
+      preset,
+      ...(submittedRun.snapshotId !== undefined
+        ? { snapshotId: submittedRun.snapshotId }
+        : {}),
+      ...(submittedRun.snapshotName !== undefined
+        ? { snapshotName: submittedRun.snapshotName }
+        : {}),
+      dataset,
+      changes: Object.entries(overrides).map(([key, value]) => ({
+        key,
+        label: key.replaceAll("_", " "),
+        value,
+        source: "override",
+      })),
+      overrides,
+      command: mockTrainingCommand({
+        modelType: request.modelType ?? "linears",
+        model: request.model ?? "linear",
+        preset,
+        dataset,
+        logFolder: request.logFolder ?? "",
+        monitors: request.monitors ?? [],
+        overrides,
+      }),
+      totalEpochs,
+      currentEpoch: 0,
+      metrics: {},
+      logDir: null,
+      error: null,
+    };
+  });
+  return {
+    ...basePlan,
+    runs,
+    summary: summarizeMockTrainingRuns(runs),
+  };
+}
+
 type MockTrainingRunSummaryInput = Array<{
   status: string;
   totalEpochs: number;
@@ -2972,6 +3064,7 @@ export function installFetchMock(
   const inspectBodies: unknown[] = [];
   const trainingBodies: unknown[] = [];
   let trainingRunPlanRequestCount = 0;
+  let latestTrainingRunPlan: ReturnType<typeof mockTrainingRunPlan> | undefined;
   let trainingJobPollRequestCount = 0;
   const logScalarRequests: Array<{
     runIds: string[];
@@ -3439,7 +3532,10 @@ export function installFetchMock(
             defaultPlan,
           )
         : defaultPlan;
-      return Promise.resolve(responseBody).then((body) => jsonResponse(body));
+      return Promise.resolve(responseBody).then((body) => {
+        latestTrainingRunPlan = body as ReturnType<typeof mockTrainingRunPlan>;
+        return jsonResponse(body);
+      });
     }
     if (url.endsWith("/inspect")) {
       const inspectRequest = JSON.parse(String(init?.body)) as {
@@ -3462,11 +3558,11 @@ export function installFetchMock(
       latestTrainingRequest = JSON.parse(String(init?.body));
       const trainingRequest = latestTrainingRequest as Record<string, unknown>;
       trainingBodies.push(latestTrainingRequest);
-      const runPlan =
-        (latestTrainingRequest?.runPlan as
-          | ReturnType<typeof mockTrainingRunPlan>
-          | undefined) ??
-        mockTrainingRunPlan(latestTrainingRequest as MockTrainingPlanRequest);
+      const runPlan = mockAcceptedTrainingRunPlan(
+        latestTrainingRequest as MockTrainingPlanRequest,
+        latestTrainingRequest?.runPlan as MockSubmittedTrainingRunPlan | undefined,
+        latestTrainingRunPlan,
+      );
       const logFolder = String(latestTrainingRequest?.logFolder ?? "test_model");
       if (!experimentResponse.experiments.some((entry) => entry.experiment === logFolder)) {
         experimentResponse = {

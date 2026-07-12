@@ -28,6 +28,7 @@ import {
 import { TrainingRunSummaryBadge } from "@/features/workbench/components/training/training-footer-run-summary";
 import { TrainingLogTailCard } from "@/features/workbench/components/training/training-log-tail-card";
 import { TrainingRunPlanCard } from "@/features/workbench/components/training/training-run-plan-card";
+import { WorkbenchWideThreeRegionLayout } from "@/features/workbench/components/_workbench-wide-three-region-layout";
 import { useTrainingWorkspace } from "@/features/workbench/providers/training-provider";
 
 const trainingIconClass = "h-[15px] w-[15px] text-violet";
@@ -35,32 +36,13 @@ const trainingIconClass = "h-[15px] w-[15px] text-violet";
 export function TrainingPanel() {
   const { draft, plan, job: activeJob, dialogs, actions } =
     useTrainingWorkspace();
-  const {
-    datasetOptions,
-    experimentTaskOptions,
-    selectedModelType,
-    selectedModel,
-    selectedPrimaryPreset: selectedPreset,
-    selectedPresets: selectedTrainingPresets,
-    selectedExperimentTask,
-    selectedSnapshotIds: selectedTrainingSnapshotIds,
-    selectedDatasets,
-    bulkOverrides: overrides,
-    configSnapshots: allConfigSnapshots,
-    monitorOptions,
-    snapshotOverrideWarning,
-    selectedMonitors,
-    monitorsLoading,
-    searchAxes,
-    searchLoading,
-    trainingEnabled,
-    canOpenFullConfig,
-    activeConfigSnapshotCount,
-    selectedPresetCount: selectedTrainingPresetCount,
-    modelTypeOptions,
-    modelOptions,
-    presetOptions,
-  } = draft;
+  const { setup, logFolder } = draft;
+  const { variants } = setup;
+  const selectedDatasets = setup.datasets.selected;
+  const selectedMonitors = setup.monitors.selected;
+  const selectedTrainingPresetCount = draft.status.selectedPresetCount;
+  const trainingEnabled = draft.status.trainingEnabled;
+  const canOpenFullConfig = draft.status.canOpenFullConfig;
   const {
     display: progressRunPlan,
     displayedRunCount,
@@ -97,33 +79,6 @@ export function TrainingPanel() {
   } = dialogs.largeGridConfirmation;
   const {
     openFullConfig: onOpenFullConfig,
-    selectModelType: onSelectModelType,
-    selectModel: onSelectModel,
-    selectPrimaryPreset: onSelectPreset,
-    selectPresets: onSetTrainingPresets,
-    selectSnapshots: onSetTrainingSnapshotSelection,
-    togglePreset: onToggleTrainingPreset,
-    excludePreset: onExcludeDraftTrainingPreset,
-    makePresetPrimary: onMakeTrainingPresetPrimary,
-    selectAllPresets: onSelectAllTrainingPresets,
-    selectOnlyPrimaryPreset: onSelectPrimaryTrainingPreset,
-    selectExperimentTask: onSelectExperimentTask,
-    selectDatasets: onSetDatasets,
-    toggleDataset: onToggleDataset,
-    selectAllDatasets: onSelectAllDatasets,
-    selectFirstDataset: onSelectFirstDataset,
-    selectMonitors: onSetMonitors,
-    selectAllMonitors: onSelectAllMonitors,
-    clearMonitors: onClearMonitors,
-    removeSnapshot: onRemoveConfigSnapshot,
-    excludeSnapshot: onExcludeConfigSnapshot,
-    createPresetSnapshot: onCreatePresetSnapshot,
-    editConfigSnapshot: onEditConfigSnapshot,
-    duplicateConfigSnapshot: onDuplicateConfigSnapshot,
-    updateSearch: onTrainingSearchChange,
-    selectLogFolderMode,
-    selectExistingLogFolder: setSelectedExistingLogFolder,
-    nameNewLogFolder: setNewLogFolder,
     startJob: startTraining,
     confirmLargeGridSearch,
     cancelLargeGridSearch,
@@ -132,7 +87,10 @@ export function TrainingPanel() {
     resamplePlan: resampleRunPlan,
     retryPlan: retryRunPlan,
   } = actions;
+  const onExcludeDraftTrainingPreset = variants.excludePreset;
+  const onExcludeConfigSnapshot = variants.excludeSnapshot;
   const {
+    state: {
     existingHelp,
     existingValue: selectedExistingLogFolder,
     isLoading: logFoldersLoading,
@@ -141,7 +99,13 @@ export function TrainingPanel() {
     newValid: newLogFolderValid,
     newValue: newLogFolder,
     options: logFolderOptions,
-  } = draft.logFolder;
+    },
+    actions: {
+      selectMode: selectLogFolderMode,
+      selectExisting: setSelectedExistingLogFolder,
+      nameNew: setNewLogFolder,
+    },
+  } = logFolder;
   const planChangingControlsDisabled = isRunning;
   const setupLockMessage = planChangingControlsDisabled
     ? "Training setup is locked while the active job is running or queued."
@@ -176,10 +140,14 @@ export function TrainingPanel() {
     <section
       id="training-workspace"
       aria-label="Training workspace"
-      className="h-full min-h-[560px] min-w-0 overflow-hidden bg-[linear-gradient(180deg,rgba(13,12,22,0.72),rgba(8,8,14,0.88))] lg:min-h-0"
+      className="h-full min-w-0 overflow-hidden bg-[linear-gradient(180deg,rgba(13,12,22,0.72),rgba(8,8,14,0.88))]"
     >
-      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-x-auto overflow-y-hidden bg-bg-2/90 px-4 py-3 sm:px-5">
-        <div className="mb-3 grid gap-2 empty:hidden">
+      <WorkbenchWideThreeRegionLayout
+        leadingLabel="Training Setup Sidebar"
+        primaryLabel="Training Run List"
+        trailingLabel="Training Status Sidebar"
+        notices={
+          <>
           {trainingError && (
             <InlineStatus tone="danger" compact role="alert">
               {trainingError}
@@ -190,12 +158,10 @@ export function TrainingPanel() {
               Training is disabled by this backend.
             </InlineStatus>
           )}
-        </div>
-        <div className="row-start-2 grid h-full min-h-0 min-w-[920px] grid-cols-[minmax(300px,340px)_minmax(22rem,1fr)_minmax(280px,360px)] items-stretch gap-3 overflow-y-hidden">
-            <aside
-              aria-label="Training Setup Sidebar"
-              className="grid h-full min-h-0 content-start gap-4 overflow-y-auto pr-1"
-            >
+          </>
+        }
+        leading={
+          <>
               {setupLockMessage && (
                 <InlineStatus tone="warning" compact>
                   {setupLockMessage}
@@ -272,78 +238,18 @@ export function TrainingPanel() {
                 </div>
               </section>
 
-              {snapshotOverrideWarning && (
-                <InlineStatus tone="warning" compact>
-                  {snapshotOverrideWarning}
-                </InlineStatus>
-              )}
-
               <TrainingTargetDatasetPanel
-                modelTypeOptions={modelTypeOptions}
-                modelOptions={modelOptions}
-                selectedModelType={selectedModelType}
-                presetOptions={presetOptions}
-                selectedModel={selectedModel}
-                selectedPreset={selectedPreset}
-                selectedTrainingPresets={selectedTrainingPresets}
-                configSnapshots={allConfigSnapshots}
-                selectedTrainingSnapshotIds={selectedTrainingSnapshotIds}
-                experimentTaskOptions={experimentTaskOptions}
-                selectedExperimentTask={selectedExperimentTask}
-                datasetOptions={datasetOptions}
-                selectedDatasets={selectedDatasets}
-                onSelectModelType={onSelectModelType}
-                onSelectModel={onSelectModel}
-                onSelectPreset={onSelectPreset}
-                onSetTrainingPresets={onSetTrainingPresets}
-                onSetTrainingSnapshotSelection={onSetTrainingSnapshotSelection}
-                onToggleTrainingPreset={onToggleTrainingPreset}
-                onMakeTrainingPresetPrimary={onMakeTrainingPresetPrimary}
-                onSelectAllTrainingPresets={onSelectAllTrainingPresets}
-                onSelectPrimaryTrainingPreset={onSelectPrimaryTrainingPreset}
-                onSelectExperimentTask={onSelectExperimentTask}
-                onSetDatasets={onSetDatasets}
-                onToggleDataset={onToggleDataset}
-                onSelectAllDatasets={onSelectAllDatasets}
-                onSelectFirstDataset={onSelectFirstDataset}
-                monitorOptions={monitorOptions}
-                selectedMonitors={selectedMonitors}
-                monitorsLoading={monitorsLoading}
-                onSetMonitors={onSetMonitors}
-                onSelectAllMonitors={onSelectAllMonitors}
-                onClearMonitors={onClearMonitors}
-                onCreatePresetSnapshot={onCreatePresetSnapshot}
-                onEditConfigSnapshot={onEditConfigSnapshot}
-                onDuplicateConfigSnapshot={onDuplicateConfigSnapshot}
-                onDeleteConfigSnapshot={onRemoveConfigSnapshot}
+                setup={setup}
                 disabled={planChangingControlsDisabled}
-                presentation="setup"
               />
 
               <section className="grid gap-2 border-t border-line-soft pt-3">
-                <TrainingSearchSetup
-                  axes={searchAxes}
-                  search={effectiveTrainingSearch}
-                  overrides={overrides}
-                  selectedDatasetCount={selectedDatasets.length}
-                  selectedPresetCount={selectedTrainingPresetCount}
-                  isLoading={searchLoading}
-                  searchLockSummary={searchLockSummary}
-                  disabledReason={
-                    setupLockMessage ||
-                    (activeConfigSnapshotCount > 0
-                      ? "Config snapshots train fixed variants; grid and random search are unavailable."
-                      : undefined)
-                  }
-                  onChange={onTrainingSearchChange}
-                />
+                <TrainingSearchSetup search={plan.search} />
               </section>
-            </aside>
-
-            <main
-              aria-label="Training Run List"
-              className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden"
-            >
+          </>
+        }
+        primary={
+          <>
               <header className="grid gap-3 border-b border-line px-4 py-3 backdrop-blur-xl sm:px-[22px] xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
                 <div className="grid min-w-0 gap-1.5">
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -454,13 +360,10 @@ export function TrainingPanel() {
                 onExcludePreset={onExcludeDraftTrainingPreset}
                 onExcludeSnapshot={onExcludeConfigSnapshot}
               />
-            </main>
-
-            <aside
-              aria-label="Training Status Sidebar"
-              aria-live="polite"
-              className="grid h-full min-h-0 content-start gap-3 overflow-y-auto pr-1"
-            >
+          </>
+        }
+        trailing={
+          <>
               <TrainingRunPlanCard
                 plan={progressRunPlan}
                 job={job}
@@ -533,9 +436,9 @@ export function TrainingPanel() {
               )}
 
               <TrainingLogTailCard logTail={job?.logTail} />
-            </aside>
-        </div>
-      </div>
+          </>
+        }
+      />
       {showLargeGridConfirmation && (
         <DialogShell
           titleId="large-grid-search-title"

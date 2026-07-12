@@ -1,4 +1,3 @@
-import { useMemo } from "react";
 import { Grid2X2, Search, Shuffle, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,36 +7,15 @@ import { SectionHeading } from "@/components/ui/section-heading";
 import { InlineStatus } from "@/features/workbench/components/shared/inline-status";
 import { TrainingSearchAxisList } from "@/features/workbench/components/training-search-axis-list";
 import { ViewModeButton } from "@/features/workbench/components/view-mode-button";
-import {
-  type ConfigValue,
-  type SearchAxis,
-} from "@/lib/api";
-import { type OverrideValues } from "@/lib/config";
+import { type TrainingRunPlanSearch } from "@/features/workbench/state/training/use-training-plan-state";
+import { type ConfigValue, type SearchAxis } from "@/lib/api";
 import { configValueEquals, valueIsSelected } from "@/lib/selection";
 import {
   DEFAULT_RANDOM_SEARCH_SAMPLES,
   DEFAULT_TRAINING_SEARCH_STATE,
-  estimateGridCombinations,
-  estimatePlannedRuns,
-  searchOverrideConflictKeys,
-  selectedSearchAxisCount,
-  unlockedSearchAxes,
   type TrainingSearchMode,
-  type TrainingSearchLockSummary,
   type TrainingSearchState,
 } from "@/lib/training-search";
-
-type TrainingSearchSetupProps = {
-  axes: SearchAxis[];
-  search: TrainingSearchState;
-  overrides: OverrideValues;
-  selectedDatasetCount: number;
-  selectedPresetCount?: number;
-  isLoading?: boolean;
-  searchLockSummary?: TrainingSearchLockSummary;
-  disabledReason?: string;
-  onChange: (search: TrainingSearchState) => void;
-};
 
 function updateSelectedValues(
   current: TrainingSearchState,
@@ -54,53 +32,40 @@ function updateSelectedValues(
 }
 
 export function TrainingSearchSetup({
-  axes,
   search,
-  overrides,
-  selectedDatasetCount,
-  selectedPresetCount = 1,
-  isLoading = false,
-  searchLockSummary,
-  disabledReason,
-  onChange,
-}: TrainingSearchSetupProps) {
+}: {
+  search: TrainingRunPlanSearch;
+}) {
+  const {
+    effective,
+    axes,
+    isLoading,
+    conflictKeys,
+    lockWarning,
+    activeAxisCount,
+    combinationCount,
+    estimatedRunCount,
+    unlockedAxisCount,
+    unlockedAxes,
+    disabledReason,
+    update,
+  } = search;
   const isDisabled = Boolean(disabledReason);
-  const hasSkippedSelectedAxes =
-    (searchLockSummary?.skippedSelectedAxisCount ?? 0) > 0;
-  const combinations = estimateGridCombinations(search.selectedValues);
-  const plannedRuns = estimatePlannedRuns(
-    search,
-    selectedDatasetCount,
-    selectedPresetCount,
-    { emptySearchRunsAsBase: hasSkippedSelectedAxes },
-  );
-  const activeAxisCount = selectedSearchAxisCount(search);
-  const conflictKeys = searchOverrideConflictKeys(overrides, search);
-  const unlockedAxes = useMemo(
-    () => unlockedSearchAxes(axes),
-    [axes],
-  );
-  const searchLockWarning = [
-    searchLockSummary?.lockedAxesMessage,
-    searchLockSummary?.skippedSelectedAxisMessage,
-  ]
-    .filter(Boolean)
-    .join(" ");
 
   function setMode(mode: TrainingSearchMode) {
     if (isDisabled) {
       return;
     }
-    onChange(
+    update(
       mode === "off"
         ? DEFAULT_TRAINING_SEARCH_STATE
         : {
             mode,
             selectedValues:
-              search.mode === "off" ? {} : search.selectedValues,
+              effective.mode === "off" ? {} : effective.selectedValues,
             randomSamples:
-              search.randomSamples > 0
-                ? search.randomSamples
+              effective.randomSamples > 0
+                ? effective.randomSamples
                 : DEFAULT_RANDOM_SEARCH_SAMPLES,
           },
     );
@@ -110,9 +75,14 @@ export function TrainingSearchSetup({
     if (isDisabled || axis.locked) {
       return;
     }
-    const isSelected = (search.selectedValues[axis.key]?.length ?? 0) > 0;
-    onChange(
-      updateSelectedValues(search, axis.key, isSelected ? [] : axis.values),
+    const isSelected =
+      (effective.selectedValues[axis.key]?.length ?? 0) > 0;
+    update(
+      updateSelectedValues(
+        effective,
+        axis.key,
+        isSelected ? [] : axis.values,
+      ),
     );
   }
 
@@ -120,20 +90,20 @@ export function TrainingSearchSetup({
     if (isDisabled || axis.locked) {
       return;
     }
-    const values = search.selectedValues[axis.key] ?? [];
+    const values = effective.selectedValues[axis.key] ?? [];
     const selected = valueIsSelected(values, value);
     const nextValues = selected
       ? values.filter((candidate) => !configValueEquals(candidate, value))
       : [...values, value];
-    onChange(updateSelectedValues(search, axis.key, nextValues));
+    update(updateSelectedValues(effective, axis.key, nextValues));
   }
 
   function selectAllAxes() {
     if (isDisabled) {
       return;
     }
-    onChange({
-      ...search,
+    update({
+      ...effective,
       selectedValues: Object.fromEntries(
         unlockedAxes.map((axis) => [axis.key, axis.values]),
       ),
@@ -144,15 +114,15 @@ export function TrainingSearchSetup({
     if (isDisabled) {
       return;
     }
-    onChange({ ...search, selectedValues: {} });
+    update({ ...effective, selectedValues: {} });
   }
 
   function updateRandomSamples(value: string) {
     if (isDisabled) {
       return;
     }
-    onChange({
-      ...search,
+    update({
+      ...effective,
       randomSamples: value === "" ? 0 : Number(value),
     });
   }
@@ -166,14 +136,14 @@ export function TrainingSearchSetup({
         />
         <SegmentedControl aria-label="Training search mode">
           <ViewModeButton
-            active={search.mode === "off"}
+            active={effective.mode === "off"}
             disabled={isDisabled}
             onClick={() => setMode("off")}
           >
             Off
           </ViewModeButton>
           <ViewModeButton
-            active={search.mode === "grid"}
+            active={effective.mode === "grid"}
             disabled={isDisabled}
             onClick={() => setMode("grid")}
           >
@@ -181,7 +151,7 @@ export function TrainingSearchSetup({
             Grid
           </ViewModeButton>
           <ViewModeButton
-            active={search.mode === "random"}
+            active={effective.mode === "random"}
             disabled={isDisabled}
             onClick={() => setMode("random")}
           >
@@ -197,28 +167,28 @@ export function TrainingSearchSetup({
         </div>
       )}
 
-      {search.mode !== "off" && (
+      {effective.mode !== "off" && (
         <>
-          {searchLockWarning && (
+          {lockWarning && (
             <InlineStatus tone="warning" compact className="px-2.5 py-2 text-xs">
-              {searchLockWarning}
+              {lockWarning}
             </InlineStatus>
           )}
 
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap gap-1.5">
               <Badge>{activeAxisCount} axes</Badge>
-              <Badge>{combinations} combinations</Badge>
-              <Badge>{plannedRuns} planned runs</Badge>
-              {search.mode === "random" && (
-                <Badge>{search.randomSamples} samples</Badge>
+              <Badge>{combinationCount} combinations</Badge>
+              <Badge>{estimatedRunCount} planned runs</Badge>
+              {effective.mode === "random" && (
+                <Badge>{effective.randomSamples} samples</Badge>
               )}
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
               <Button
                 variant="secondary"
                 onClick={selectAllAxes}
-                disabled={isDisabled || unlockedAxes.length === 0}
+                disabled={isDisabled || unlockedAxisCount === 0}
                 className="h-8 px-2.5 text-xs"
               >
                 All axes
@@ -235,7 +205,7 @@ export function TrainingSearchSetup({
             </div>
           </div>
 
-          {search.mode === "random" && (
+          {effective.mode === "random" && (
             <label className="grid max-w-[14rem] gap-1.5">
               <span className="text-xs font-semibold tracking-[0.02em] text-ink-dim">
                 Samples
@@ -244,8 +214,10 @@ export function TrainingSearchSetup({
                 type="number"
                 min={1}
                 step={1}
-                value={search.randomSamples || ""}
-                onChange={(event) => updateRandomSamples(event.target.value)}
+                value={effective.randomSamples || ""}
+                onChange={(event) =>
+                  updateRandomSamples(event.target.value)
+                }
                 aria-label="Random search samples"
                 disabled={isDisabled}
               />
@@ -261,7 +233,7 @@ export function TrainingSearchSetup({
 
           <TrainingSearchAxisList
             axes={axes}
-            search={search}
+            search={effective}
             isLoading={isLoading}
             onToggleAxis={toggleAxis}
             onToggleValue={toggleValue}

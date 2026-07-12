@@ -7,7 +7,6 @@ import {
   jsonObjectSchema,
   type ConfigOverrides,
   type ConfigValue,
-  type JsonObject,
 } from "@/lib/api/schemas";
 
 type ApiRequestOptions = {
@@ -341,66 +340,33 @@ export type TrainingSearchCreateInput = {
   randomSamples?: number;
 };
 
-export type TrainingSearchSubmitInput = {
-  mode: "grid" | "random";
-  values: Record<string, ConfigValue[]>;
-  randomSamples?: number | null;
-};
-
-export type TrainingRunSubmitChangeInput = {
-  key: string;
-  label: string;
-  value: ConfigValue;
-  source: "override" | "search";
-};
-
 export type TrainingRunSubmitInput = {
   id: string;
-  index: number;
-  status: TrainingRun["status"];
   preset: string;
   snapshotId?: string | null;
   snapshotName?: string | null;
   dataset: string;
-  experimentTask?: string;
-  changes: TrainingRunSubmitChangeInput[];
   overrides: ConfigOverrides;
-  command: string;
-  totalEpochs: number;
-  currentEpoch: number;
-  metrics: JsonObject;
-  logDir: string | null;
-  error: string | null;
-  errorTraceback?: string | null;
-};
-
-export type TrainingRunPlanSubmitSummaryInput = {
-  totalRuns: number;
-  completedRuns: number;
-  runningRuns: number;
-  pendingRuns: number;
-  failedRuns: number;
-  cancelledRuns: number;
-  skippedRuns: number;
-  totalEpochs: number;
-  completedEpochs: number;
-  remainingEpochs: number;
 };
 
 export type TrainingRunPlanSubmitInput = {
-  modelType: string;
-  model: string;
-  preset: string;
-  presets: string[];
-  experimentTask?: string;
-  datasets: string[];
-  overrides: ConfigOverrides;
-  search: TrainingSearchSubmitInput | null;
-  logFolder: string;
-  isRandomSearch: boolean;
   runs: TrainingRunSubmitInput[];
-  summary: TrainingRunPlanSubmitSummaryInput;
 };
+
+export function toTrainingRunPlanSubmitInput(
+  plan: TrainingRunPlan,
+): TrainingRunPlanSubmitInput {
+  return {
+    runs: plan.runs.map((run) => ({
+      id: run.id,
+      preset: run.preset,
+      ...(run.snapshotId !== undefined ? { snapshotId: run.snapshotId } : {}),
+      ...(run.snapshotName !== undefined ? { snapshotName: run.snapshotName } : {}),
+      dataset: run.dataset,
+      overrides: run.overrides,
+    })),
+  };
+}
 
 export type TrainingJobCreateInput = {
   modelType: string;

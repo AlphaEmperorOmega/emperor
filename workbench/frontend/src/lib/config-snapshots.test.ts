@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildConfigSnapshotRunPlan,
   configSnapshotOverrideCount,
   configSnapshotOverrideCountLabel,
   configSnapshotOverrideEntries,
@@ -10,6 +9,9 @@ import {
   type ConfigSnapshot,
 } from "@/lib/config-snapshots";
 import { type ConfigField } from "@/lib/api";
+import {
+  materializeConfigSnapshotRunPlan as buildConfigSnapshotRunPlan,
+} from "@/features/workbench/state/training/config-snapshot-run-plan";
 
 type ConfigFieldFixture = Omit<ConfigField, "sectionPath"> &
   Partial<Pick<ConfigField, "sectionPath">>;

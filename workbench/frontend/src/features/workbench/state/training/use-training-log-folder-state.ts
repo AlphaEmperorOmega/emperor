@@ -80,21 +80,43 @@ export function useTrainingLogFolderState({
     setExistingValue("");
     setNewValue("");
   }, []);
+  const state = useMemo(
+    () => ({
+      mode,
+      existingValue,
+      newValue,
+      value: view.value,
+      isValid: view.isValid,
+      options,
+      isLoading: logExperimentsQuery.isLoading,
+      existingHelp: view.existingHelp,
+      newValid: view.newValid,
+      newError: view.newError,
+    }),
+    [
+      existingValue,
+      logExperimentsQuery.isLoading,
+      mode,
+      newValue,
+      options,
+      view.existingHelp,
+      view.isValid,
+      view.newError,
+      view.newValid,
+      view.value,
+    ],
+  );
+  const actions = useMemo(
+    () => ({
+      selectMode: setMode,
+      selectExisting: setExistingValue,
+      nameNew: setNewValue,
+    }),
+    [],
+  );
 
-  return {
-    mode,
-    setMode,
-    existingValue,
-    setExistingValue,
-    newValue,
-    setNewValue,
-    options,
-    isLoading: logExperimentsQuery.isLoading,
-    existingHelp: view.existingHelp,
-    newValid: view.newValid,
-    newError: view.newError,
-    value: view.value,
-    isValid: view.isValid,
-    clearForConnectionChange,
-  };
+  return useMemo(
+    () => ({ state, actions, clearForConnectionChange }),
+    [actions, clearForConnectionChange, state],
+  );
 }

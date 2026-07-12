@@ -1,15 +1,10 @@
 import { useCallback, useMemo } from "react";
 import { buildClusterGrowth } from "@/lib/cluster-growth";
 import { type ConfigSnapshot } from "@/lib/config-snapshots";
-import { type ModelIdentity, type TrainingJob } from "@/lib/api";
-import {
-  modelNameForId,
-  modelsForType,
-  modelTypeOptions as createModelTypeOptions,
-} from "@/lib/selection";
+import { type ModelIdentity } from "@/lib/api";
 import { type WorkbenchWorkspace } from "@/types/workbench";
 import { useTrainingDraftState } from "@/features/workbench/state/training/use-training-draft-state";
-import { useTrainingJobController } from "@/features/workbench/state/training/use-training-job-controller";
+import { type TrainingJobLifecycle } from "@/features/workbench/state/training/use-training-job-lifecycle";
 import { useTrainingLogFolderState } from "@/features/workbench/state/training/use-training-log-folder-state";
 import { useTrainingPlanState } from "@/features/workbench/state/training/use-training-plan-state";
 
@@ -29,10 +24,7 @@ export type TrainingWorkspaceStateInput = {
   onCreatePresetSnapshot: (target: TrainingSeed) => void;
   onEditConfigSnapshot: (snapshot: ConfigSnapshot) => void;
   onDuplicateConfigSnapshot: (snapshot: ConfigSnapshot) => void;
-  activeTrainingJob: TrainingJob | undefined;
-  progressError: string;
-  onActiveJobIdChange: (jobId: string | null) => void;
-  onJobChange: (job: TrainingJob | undefined) => void;
+  trainingJob: TrainingJobLifecycle;
 };
 
 export function useTrainingWorkspaceState({
@@ -45,10 +37,7 @@ export function useTrainingWorkspaceState({
   onCreatePresetSnapshot,
   onEditConfigSnapshot,
   onDuplicateConfigSnapshot,
-  activeTrainingJob,
-  progressError,
-  onActiveJobIdChange,
-  onJobChange,
+  trainingJob,
 }: TrainingWorkspaceStateInput) {
   const configuration = useTrainingDraftState({
     activeWorkspace,
@@ -59,233 +48,179 @@ export function useTrainingWorkspaceState({
   const logFolder = useTrainingLogFolderState({
     enabled: activeWorkspace === "training" && protectedReadsEnabled,
   });
-  const modelTypeOptions = useMemo(
-    () => createModelTypeOptions(configuration.models),
-    [configuration.models],
-  );
-  const modelOptions = useMemo(
-    () =>
-      modelsForType(
-        configuration.models,
-        configuration.selectedModelType,
-      ).map((model) => ({
-        value: model.model,
-        label: modelNameForId(model),
-      })),
-    [configuration.models, configuration.selectedModelType],
-  );
-  const presetOptions = useMemo(
-    () =>
-      configuration.presets.map((preset) => ({
-        value: preset.name,
-        label: preset.name,
-      })),
-    [configuration.presets],
-  );
+  const modelSetup = configuration.setup.model;
+  const variantSetup = configuration.setup.variants;
+  const experimentTaskSetup = configuration.setup.experimentTask;
+  const datasetSetup = configuration.setup.datasets;
+  const monitorSetup = configuration.setup.monitors;
+  const runtimeDefaults = configuration.runtimeDefaults;
+  const searchMetadata = configuration.searchMetadata;
   const selectedSnapshotIdSet = useMemo(
-    () => new Set(configuration.selectedSnapshotIds),
-    [configuration.selectedSnapshotIds],
+    () => new Set(variantSetup.selectedSnapshotIds),
+    [variantSetup.selectedSnapshotIds],
   );
   const selectedSnapshots = useMemo(
     () =>
-      configuration.configSnapshots.filter((snapshot) =>
+      variantSetup.snapshots.filter((snapshot) =>
         selectedSnapshotIdSet.has(snapshot.id),
       ),
-    [configuration.configSnapshots, selectedSnapshotIdSet],
+    [selectedSnapshotIdSet, variantSetup.snapshots],
   );
+  const lifecycle = trainingJob;
   const planState = useTrainingPlanState({
-    configSections: configuration.configSections,
-    overrides: configuration.bulkOverrides,
-    selectedTrainingSnapshots: selectedSnapshots,
-    selectedModelType: configuration.selectedModelType,
-    selectedModel: configuration.selectedModel,
-    selectedPreset: configuration.selectedPrimaryPreset,
-    selectedTrainingPresets: configuration.selectedPresets,
-    selectedExperimentTask: configuration.selectedExperimentTask,
-    selectedDatasets: configuration.selectedDatasets,
-    trainingSearch: configuration.search,
-    searchAxes: configuration.searchAxes,
-    searchLoading: configuration.searchLoading,
-    trainingEnabled,
-    logFolder: logFolder.value,
+    draft: {
+      modelPackage: {
+        modelType: modelSetup.selectedType,
+        model: modelSetup.selected,
+        primaryPreset: variantSetup.primaryPreset,
+        selectedPresets: variantSetup.selectedPresets,
+        selectedSnapshots,
+      },
+      experiment: {
+        task: experimentTaskSetup.selected,
+        datasets: datasetSetup.selected,
+        monitors: monitorSetup.selected,
+        logFolder: logFolder.state.value,
+        hasValidLogFolder: logFolder.state.isValid,
+      },
+      runtimeDefaults: {
+        sections: runtimeDefaults.sections,
+        overrides: runtimeDefaults.active,
+      },
+      searchMetadata,
+    },
+    availability: {
+      trainingEnabled,
+      protectedReadsEnabled,
+    },
+    execution: {
+      activeRunPlan: lifecycle.job?.runPlan,
+      isJobRunning: lifecycle.isRunning,
+      canLaunch: lifecycle.canLaunchRunPlan,
+      launch: lifecycle.launchRunPlan,
+    },
   });
-  const lifecycle = useTrainingJobController({
-    selectedModelType: configuration.selectedModelType,
-    selectedModel: configuration.selectedModel,
-    selectedPreset: configuration.selectedPrimaryPreset,
-    selectedTrainingPresets: configuration.selectedPresets,
-    selectedExperimentTask: configuration.selectedExperimentTask,
-    selectedDatasets: configuration.selectedDatasets,
-    effectiveOverrides: planState.effectiveOverrides,
-    logFolder: logFolder.value,
-    selectedMonitors: configuration.selectedMonitors,
-    trainingSearch: planState.effectiveTrainingSearch,
-    searchPayload: planState.searchPayload,
-    submittedRunPlan: planState.snapshotRunPlan,
-    canPlan: planState.canPlan,
-    protectedReadsEnabled,
-    hasValidLogFolder: logFolder.isValid,
-    plannedRunCount: planState.plannedRunCount,
-    activeTrainingJob,
-    progressError,
-    onActiveJobIdChange,
-    onJobChange,
-  });
-  const setLogFolderMode = logFolder.setMode;
-  const setExistingLogFolder = logFolder.setExistingValue;
-  const setNewLogFolder = logFolder.setNewValue;
   const clearDraftForConnectionChange =
     configuration.clearForConnectionChange;
   const clearLogFolderForConnectionChange =
     logFolder.clearForConnectionChange;
-  const clearLifecycleForConnectionChange =
-    lifecycle.clearForConnectionChange;
+  const clearPlanForConnectionChange = planState.clearForConnectionChange;
 
   const editConfigSnapshot = useCallback(
     (snapshotId: string) => {
-      const snapshot = configuration.configSnapshots.find(
+      const snapshot = variantSetup.snapshots.find(
         (candidate) => candidate.id === snapshotId,
       );
       if (snapshot) {
         onEditConfigSnapshot(snapshot);
       }
     },
-    [configuration.configSnapshots, onEditConfigSnapshot],
+    [onEditConfigSnapshot, variantSetup.snapshots],
   );
   const createPresetSnapshot = useCallback(
     (preset: string) =>
       onCreatePresetSnapshot({
-        modelType: configuration.selectedModelType,
-        model: configuration.selectedModel,
+        modelType: modelSetup.selectedType,
+        model: modelSetup.selected,
         preset,
       }),
     [
-      configuration.selectedModel,
-      configuration.selectedModelType,
+      modelSetup.selected,
+      modelSetup.selectedType,
       onCreatePresetSnapshot,
     ],
   );
   const duplicateConfigSnapshot = useCallback(
     (snapshotId: string) => {
-      const snapshot = configuration.configSnapshots.find(
+      const snapshot = variantSetup.snapshots.find(
         (candidate) => candidate.id === snapshotId,
       );
       if (snapshot) {
         onDuplicateConfigSnapshot(snapshot);
       }
     },
-    [configuration.configSnapshots, onDuplicateConfigSnapshot],
-  );
-  const selectLogFolderMode = useCallback(
-    (mode: "existing" | "new") => setLogFolderMode(mode),
-    [setLogFolderMode],
-  );
-  const selectExistingLogFolder = useCallback(
-    (folder: string) => setExistingLogFolder(folder),
-    [setExistingLogFolder],
-  );
-  const nameNewLogFolder = useCallback(
-    (folder: string) => setNewLogFolder(folder),
-    [setNewLogFolder],
+    [onDuplicateConfigSnapshot, variantSetup.snapshots],
   );
   const clearForConnectionChange = useCallback(() => {
     clearDraftForConnectionChange();
     clearLogFolderForConnectionChange();
-    clearLifecycleForConnectionChange();
+    clearPlanForConnectionChange();
   }, [
     clearDraftForConnectionChange,
-    clearLifecycleForConnectionChange,
     clearLogFolderForConnectionChange,
+    clearPlanForConnectionChange,
   ]);
 
-  const presetCountLabel = `${planState.selectedTrainingPresetCount} preset${
-    planState.selectedTrainingPresetCount === 1 ? "" : "s"
-  }`;
-  const datasetCountLabel = `${configuration.selectedDatasets.length} dataset${
-    configuration.selectedDatasets.length === 1 ? "" : "s"
-  }`;
-  const draft = useMemo(
+  const presetCountLabel = planState.presetCountLabel;
+  const datasetCountLabel = planState.datasetCountLabel;
+  const setup = useMemo(
     () => ({
-      datasetOptions: configuration.datasets,
-      experimentTaskOptions: configuration.experimentTaskOptions,
-      selectedModelType: configuration.selectedModelType,
-      selectedModel: configuration.selectedModel,
-      selectedPrimaryPreset: configuration.selectedPrimaryPreset,
-      selectedPresets: configuration.selectedPresets,
-      selectedExperimentTask: configuration.selectedExperimentTask,
-      selectedSnapshotIds: configuration.selectedSnapshotIds,
-      selectedDatasets: configuration.selectedDatasets,
-      bulkOverrides: configuration.bulkOverrides,
-      configSnapshots: configuration.configSnapshots,
-      monitorOptions: configuration.monitors,
-      snapshotOverrideWarning: configuration.snapshotOverrideWarning,
-      selectedMonitors: configuration.selectedMonitors,
-      monitorsLoading: configuration.monitorsLoading,
-      searchAxes: configuration.searchAxes,
-      searchLoading: configuration.searchLoading,
-      trainingEnabled,
-      canOpenFullConfig: Boolean(
-        configuration.selectedModel &&
-          configuration.selectedPrimaryPreset &&
-          configuration.isSchemaReady,
-      ),
-      modelTypeOptions,
-      modelOptions,
-      presetOptions,
-      logFolder: {
-        mode: logFolder.mode,
-        existingValue: logFolder.existingValue,
-        newValue: logFolder.newValue,
-        options: logFolder.options,
-        isLoading: logFolder.isLoading,
-        existingHelp: logFolder.existingHelp,
-        newValid: logFolder.newValid,
-        newError: logFolder.newError,
+      ...configuration.setup,
+      variants: {
+        ...variantSetup,
+        createPresetSnapshot,
+        editSnapshot: editConfigSnapshot,
+        duplicateSnapshot: duplicateConfigSnapshot,
       },
-      activeConfigSnapshotCount: planState.activeConfigSnapshotCount,
-      selectedPresetCount: planState.selectedTrainingPresetCount,
     }),
     [
-      configuration,
+      configuration.setup,
+      createPresetSnapshot,
+      duplicateConfigSnapshot,
+      editConfigSnapshot,
+      variantSetup,
+    ],
+  );
+  const draft = useMemo(
+    () => ({
+      setup,
       logFolder,
-      modelOptions,
-      modelTypeOptions,
-      presetOptions,
+      runtimeDefaults,
+      searchMetadata,
+      status: {
+        ...configuration.status,
+        trainingEnabled,
+        canOpenFullConfig: Boolean(
+          modelSetup.selected &&
+            variantSetup.primaryPreset &&
+            configuration.status.isSchemaReady
+        ),
+        activeConfigSnapshotCount: planState.activeConfigSnapshotCount,
+        selectedPresetCount: planState.selectedPresetCount,
+      },
+    }),
+    [
+      configuration.status,
+      logFolder,
+      modelSetup.selected,
       planState,
+      runtimeDefaults,
+      searchMetadata,
+      setup,
       trainingEnabled,
+      variantSetup.primaryPreset,
     ],
   );
   const plan = useMemo(
     () => ({
-      display: lifecycle.progressRunPlan,
-      displayedRunCount: lifecycle.displayedRunCount,
-      isPlanning: lifecycle.isProgressPlanning,
-      error: lifecycle.progressPlanError,
-      canStart: lifecycle.canStart,
-      canResample: lifecycle.canResampleRunPlan,
-      canRetry: lifecycle.canRetryRunPlan,
-      isResampling: lifecycle.isResampling,
+      display: planState.displayRunPlan,
+      displayedRunCount: planState.displayedRunCount,
+      isPlanning: planState.isDisplayPlanning,
+      error: planState.displayPlanError,
+      canStart: planState.canStart,
+      canResample: planState.canResample,
+      canRetry: planState.canRetry,
+      isResampling: planState.isResampling,
       presetCountLabel,
       datasetCountLabel,
-      search: {
-        effective: planState.effectiveTrainingSearch,
-        conflictKeys: planState.searchConflictKeys,
-        validation: planState.trainingSearchValidation,
-        lockSummary: planState.searchLockSummary,
-        modeLabel: planState.searchModeLabel,
-        activeAxisCount: planState.activeSearchAxisCount,
-      },
+      selectedPresetCount: planState.selectedPresetCount,
+      datasetCount: planState.datasetCount,
+      search: planState.search,
     }),
     [
       datasetCountLabel,
-      lifecycle,
+      planState,
       presetCountLabel,
-      planState.activeSearchAxisCount,
-      planState.effectiveTrainingSearch,
-      planState.searchConflictKeys,
-      planState.searchLockSummary,
-      planState.searchModeLabel,
-      planState.trainingSearchValidation,
     ],
   );
   const job = useMemo(
@@ -304,63 +239,27 @@ export function useTrainingWorkspaceState({
   const dialogs = useMemo(
     () => ({
       largeGridConfirmation: {
-        isOpen: lifecycle.showLargeGridConfirmation,
-        isRequired: lifecycle.requiresLargeGridConfirmation,
+        isOpen: planState.confirmation.isOpen,
+        isRequired: planState.confirmation.isRequired,
       },
     }),
-    [
-      lifecycle.requiresLargeGridConfirmation,
-      lifecycle.showLargeGridConfirmation,
-    ],
+    [planState.confirmation.isOpen, planState.confirmation.isRequired],
   );
   const actions = useMemo(
     () => ({
       openFullConfig: onOpenFullConfig,
-      selectModelType: configuration.selectModelType,
-      selectModel: configuration.selectModel,
-      selectPrimaryPreset: configuration.selectPrimaryPreset,
-      selectPresets: configuration.setPresetSelection,
-      togglePreset: configuration.togglePreset,
-      excludePreset: configuration.excludeDraftPreset,
-      makePresetPrimary: configuration.makePresetPrimary,
-      selectAllPresets: configuration.selectAllPresets,
-      selectOnlyPrimaryPreset: configuration.selectOnlyPrimaryPreset,
-      selectSnapshots: configuration.setSnapshotSelection,
-      removeSnapshot: configuration.removeSnapshot,
-      excludeSnapshot: configuration.excludeSnapshot,
-      selectExperimentTask: configuration.selectExperimentTask,
-      selectDatasets: configuration.setDatasetSelection,
-      toggleDataset: configuration.toggleDataset,
-      selectAllDatasets: configuration.selectAllDatasets,
-      selectFirstDataset: configuration.selectFirstDataset,
-      selectMonitors: configuration.setMonitorSelection,
-      selectAllMonitors: configuration.selectAllMonitors,
-      clearMonitors: configuration.clearMonitors,
-      createPresetSnapshot,
-      editConfigSnapshot,
-      duplicateConfigSnapshot,
-      updateSearch: configuration.updateSearch,
-      selectLogFolderMode,
-      selectExistingLogFolder,
-      nameNewLogFolder,
-      startJob: lifecycle.startTraining,
-      confirmLargeGridSearch: lifecycle.confirmLargeGridSearch,
-      cancelLargeGridSearch: lifecycle.cancelLargeGridSearch,
+      startJob: planState.actions.start,
+      confirmLargeGridSearch: planState.actions.confirmLargeGridSearch,
+      cancelLargeGridSearch: planState.actions.cancelLargeGridSearch,
       cancelJob: lifecycle.cancelTraining,
       resetJob: lifecycle.resetTraining,
-      resamplePlan: lifecycle.resampleRunPlan,
-      retryPlan: lifecycle.retryRunPlan,
+      resamplePlan: planState.actions.resample,
+      retryPlan: planState.actions.retry,
     }),
     [
-      configuration,
-      createPresetSnapshot,
-      duplicateConfigSnapshot,
-      editConfigSnapshot,
       lifecycle,
-      nameNewLogFolder,
       onOpenFullConfig,
-      selectExistingLogFolder,
-      selectLogFolderMode,
+      planState.actions,
     ],
   );
   const workspace = useMemo(
@@ -369,23 +268,33 @@ export function useTrainingWorkspaceState({
   );
   const configurationInterface = useMemo(
     () => ({
-      selectedModelType: configuration.selectedModelType,
-      selectedModel: configuration.selectedModel,
-      selectedPrimaryPreset: configuration.selectedPrimaryPreset,
-      selectedSnapshotIds: configuration.selectedSnapshotIds,
-      selectedMonitors: configuration.selectedMonitors,
-      configSections: configuration.configSections,
-      fieldCount: configuration.fieldCount,
-      bulkOverrides: configuration.bulkOverrides,
-      inactiveLockedOverrideCount: configuration.inactiveLockedOverrideCount,
-      schemaLoading: configuration.schemaLoading,
-      includeSnapshot: configuration.includeSnapshot,
-      excludeSnapshot: configuration.excludeSnapshot,
-      updateOverride: configuration.updateOverride,
-      clearOverride: configuration.clearOverride,
-      resetOverrides: configuration.resetOverrides,
+      selectedModelType: modelSetup.selectedType,
+      selectedModel: modelSetup.selected,
+      selectedPrimaryPreset: variantSetup.primaryPreset,
+      selectedSnapshotIds: variantSetup.selectedSnapshotIds,
+      selectedMonitors: monitorSetup.selected,
+      configSections: runtimeDefaults.sections,
+      fieldCount: runtimeDefaults.fieldCount,
+      bulkOverrides: runtimeDefaults.active,
+      inactiveLockedOverrideCount: runtimeDefaults.inactiveLockedCount,
+      schemaLoading: configuration.status.schemaLoading,
+      includeSnapshot: variantSetup.includeSnapshot,
+      excludeSnapshot: variantSetup.excludeSnapshot,
+      updateOverride: runtimeDefaults.edit,
+      clearOverride: runtimeDefaults.clear,
+      resetOverrides: runtimeDefaults.reset,
     }),
-    [configuration],
+    [
+      configuration.status.schemaLoading,
+      modelSetup.selected,
+      modelSetup.selectedType,
+      monitorSetup.selected,
+      runtimeDefaults,
+      variantSetup.excludeSnapshot,
+      variantSetup.includeSnapshot,
+      variantSetup.primaryPreset,
+      variantSetup.selectedSnapshotIds,
+    ],
   );
 
   return {

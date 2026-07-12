@@ -77,6 +77,16 @@ const runPlanRequest: TrainingJobCreateInput = {
   overrides: {},
   monitors: [],
   logFolder: "runs",
+  runPlan: {
+    runs: [
+      {
+        id: "run-1",
+        preset: "baseline",
+        dataset: "Mnist",
+        overrides: {},
+      },
+    ],
+  },
 };
 
 function trainingJob(overrides: Partial<TrainingJob> = {}): TrainingJob {

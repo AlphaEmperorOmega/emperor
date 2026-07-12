@@ -41,7 +41,10 @@ const mocks = vi.hoisted(() => ({
   fetchMonitorParameterStatus: vi.fn(),
   fetchLogParameterStatus: vi.fn(),
 }));
-vi.mock("@/lib/api", () => mocks);
+vi.mock("@/lib/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api")>()),
+  ...mocks,
+}));
 
 import { useWorkbenchState } from "@/features/workbench/state/use-workbench-state";
 import { TrainingPanel } from "@/features/workbench/components/training-panel";
@@ -73,7 +76,7 @@ import {
 } from "@/lib/api";
 
 function TrainingWorkspaceReadyProbe({ testId }: { testId: string }) {
-  const { searchLoading } = useTrainingWorkspace().draft;
+  const searchLoading = useTrainingWorkspace().draft.searchMetadata.isLoading;
   return (
     <output data-testid={testId}>
       {searchLoading ? "loading" : "ready"}

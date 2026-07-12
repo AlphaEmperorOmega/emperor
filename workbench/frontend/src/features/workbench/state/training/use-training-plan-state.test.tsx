@@ -1,10 +1,34 @@
-import { renderHook } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
-import { type ConfigField, type SearchAxis } from "@/lib/api";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act, renderHook, waitFor } from "@testing-library/react";
+import { createElement, type ReactNode } from "react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({
+  fetchTrainingRunPlan: vi.fn(),
+}));
+
+vi.mock("@/lib/api", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
+  return {
+    ...actual,
+    fetchTrainingRunPlan: mocks.fetchTrainingRunPlan,
+  };
+});
+
+import {
+  type ConfigField,
+  type SearchAxis,
+  type TrainingRunPlan,
+} from "@/lib/api";
 import { type ConfigSection } from "@/lib/config";
 import { type ConfigSnapshot } from "@/lib/config-snapshots";
-import { type TrainingSearchState } from "@/lib/training-search";
+import {
+  DEFAULT_TRAINING_SEARCH_STATE,
+  type TrainingSearchState,
+} from "@/lib/training-search";
 import { useTrainingPlanState } from "@/features/workbench/state/training/use-training-plan-state";
+
+type PlanInput = Parameters<typeof useTrainingPlanState>[0];
 
 const fields: ConfigField[] = [
   {
@@ -56,6 +80,12 @@ const gridSearch: TrainingSearchState = {
   randomSamples: 10,
 };
 
+const randomSearch: TrainingSearchState = {
+  mode: "random",
+  selectedValues: { hidden_dim: [128, 256] },
+  randomSamples: 1,
+};
+
 const snapshots: ConfigSnapshot[] = [
   {
     id: "wide",
@@ -68,48 +98,164 @@ const snapshots: ConfigSnapshot[] = [
   },
 ];
 
-function renderRequestState({
-  selectedTrainingSnapshots = snapshots,
+function runPlan({
+  totalRuns = 1,
+  search = null,
+  runPrefix = "run",
 }: {
-  selectedTrainingSnapshots?: ConfigSnapshot[];
-} = {}) {
-  return renderHook(() =>
-    useTrainingPlanState({
-      configSections,
-      overrides: { hidden_dim: "192", dropout: "0.2" },
-      selectedTrainingSnapshots,
-      selectedModelType: "linears",
-      selectedModel: "linear",
-      selectedPreset: "baseline",
-      selectedTrainingPresets: ["baseline"],
-      selectedDatasets: ["Mnist"],
-      trainingSearch: gridSearch,
-      searchAxes,
-      searchLoading: false,
+  totalRuns?: number;
+  search?: TrainingRunPlan["search"];
+  runPrefix?: string;
+} = {}): TrainingRunPlan {
+  return {
+    modelType: "linears",
+    model: "linear",
+    preset: "baseline",
+    presets: ["baseline"],
+    experimentTask: "image-classification",
+    datasets: ["Mnist"],
+    overrides: {},
+    search,
+    logFolder: "runs",
+    isRandomSearch: search?.mode === "random",
+    runs: Array.from({ length: totalRuns }, (_, offset) => ({
+      id: `${runPrefix}-${offset + 1}`,
+      index: offset + 1,
+      status: "Pending",
+      preset: "baseline",
+      experimentTask: "image-classification",
+      dataset: "Mnist",
+      changes: [],
+      overrides: {},
+      command: `run ${offset + 1}`,
+      totalEpochs: 10,
+      currentEpoch: 0,
+      metrics: {},
+      logDir: null,
+      error: null,
+      errorTraceback: null,
+    })),
+    summary: {
+      totalRuns,
+      completedRuns: 0,
+      runningRuns: 0,
+      pendingRuns: totalRuns,
+      failedRuns: 0,
+      cancelledRuns: 0,
+      skippedRuns: 0,
+      totalEpochs: totalRuns * 10,
+      completedEpochs: 0,
+      remainingEpochs: totalRuns * 10,
+    },
+  };
+}
+
+function planInput({
+  search = DEFAULT_TRAINING_SEARCH_STATE,
+  selectedSnapshots = [],
+  datasets = ["Mnist"],
+  hasValidLogFolder = true,
+  axes = searchAxes,
+  launch = vi.fn(),
+  updateSearch = vi.fn(),
+  activeRunPlan,
+  isJobRunning = false,
+}: {
+  search?: TrainingSearchState;
+  selectedSnapshots?: ConfigSnapshot[];
+  datasets?: string[];
+  hasValidLogFolder?: boolean;
+  axes?: SearchAxis[];
+  launch?: PlanInput["execution"]["launch"];
+  updateSearch?: PlanInput["draft"]["searchMetadata"]["update"];
+  activeRunPlan?: TrainingRunPlan | null;
+  isJobRunning?: boolean;
+} = {}): PlanInput {
+  return {
+    draft: {
+      modelPackage: {
+        modelType: "linears",
+        model: "linear",
+        primaryPreset: "baseline",
+        selectedPresets: ["baseline"],
+        selectedSnapshots,
+      },
+      experiment: {
+        task: "image-classification",
+        datasets,
+        monitors: ["loss"],
+        logFolder: "runs",
+        hasValidLogFolder,
+      },
+      runtimeDefaults: {
+        sections: configSections,
+        overrides: { hidden_dim: "192", dropout: "0.2" },
+      },
+      searchMetadata: {
+        value: search,
+        axes,
+        isLoading: false,
+        update: updateSearch,
+      },
+    },
+    availability: {
       trainingEnabled: true,
-      logFolder: "runs",
-    }),
+      protectedReadsEnabled: true,
+    },
+    execution: {
+      activeRunPlan,
+      isJobRunning,
+      canLaunch: !isJobRunning,
+      launch,
+    },
+  };
+}
+
+function queryClientWrapper(queryClient: QueryClient) {
+  return function Wrapper({ children }: { children: ReactNode }) {
+    return createElement(QueryClientProvider, { client: queryClient }, children);
+  };
+}
+
+function renderPlan(input: PlanInput) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  });
+  return renderHook(
+    ({ value }: { value: PlanInput }) => useTrainingPlanState(value),
+    {
+      initialProps: { value: input },
+      wrapper: queryClientWrapper(queryClient),
+    },
   );
 }
 
-describe("useTrainingPlanState", () => {
-  it("uses a mixed submitted run plan while at least one snapshot is checked", () => {
-    const { result } = renderRequestState();
+beforeEach(() => {
+  mocks.fetchTrainingRunPlan.mockReset();
+});
 
-    expect(result.current.activeConfigSnapshotCount).toBe(1);
-    expect(result.current.effectiveTrainingSearch.mode).toBe("off");
-    expect(result.current.effectiveOverrides).toEqual({});
-    expect(result.current.searchPayload).toBeUndefined();
-    expect(result.current.snapshotRunPlan?.summary.totalRuns).toBe(2);
-    expect(result.current.snapshotRunPlan?.summary.remainingEpochs).toBe(14);
-    expect(result.current.snapshotRunPlan?.runs[0]).not.toHaveProperty(
-      "snapshotId",
+describe("useTrainingPlanState", () => {
+  it("keeps Config Snapshot Run materialization private and launches its exact mixed plan", async () => {
+    const launch = vi.fn();
+    const { result } = renderPlan(
+      planInput({ search: gridSearch, selectedSnapshots: snapshots, launch }),
     );
-    expect(result.current.snapshotRunPlan?.runs[0].overrides).toEqual({
+
+    expect(mocks.fetchTrainingRunPlan).not.toHaveBeenCalled();
+    expect(result.current.activeConfigSnapshotCount).toBe(1);
+    expect(result.current.search.effective.mode).toBe("off");
+    expect(result.current.search.disabledReason).toContain("fixed variants");
+    await waitFor(() => {
+      expect(result.current.displayRunPlan?.summary.totalRuns).toBe(2);
+      expect(result.current.canStart).toBe(true);
+    });
+    expect(result.current.displayRunPlan?.summary.totalRuns).toBe(2);
+    expect(result.current.displayRunPlan?.summary.remainingEpochs).toBe(14);
+    expect(result.current.displayRunPlan?.runs[0].overrides).toEqual({
       hidden_dim: "192",
       dropout: "0.2",
     });
-    expect(result.current.snapshotRunPlan?.runs[1]).toMatchObject({
+    expect(result.current.displayRunPlan?.runs[1]).toMatchObject({
       snapshotId: "wide",
       snapshotName: "Wide",
       overrides: {
@@ -118,24 +264,225 @@ describe("useTrainingPlanState", () => {
         dropout: "0.2",
       },
     });
-    expect(result.current.plannedRunCount).toBe(2);
-    expect(result.current.canPlan).toBe(true);
+    act(() => result.current.actions.start());
+    expect(launch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        modelType: "linears",
+        model: "linear",
+        monitors: ["loss"],
+        runPlan: {
+          runs: [
+            expect.objectContaining({ id: "preset-baseline-Mnist-1" }),
+            expect.objectContaining({
+              id: "snapshot-wide-Mnist-2",
+              snapshotId: "wide",
+            }),
+          ],
+        },
+      }),
+    );
   });
 
-  it("falls back to normal overrides and search when all snapshots are unchecked", () => {
-    const { result } = renderRequestState({
-      selectedTrainingSnapshots: [],
-    });
+  it("uses the backend-authoritative normal plan and keeps folder validity in start readiness", async () => {
+    const authoritativePlan = runPlan();
+    const launch = vi.fn();
+    mocks.fetchTrainingRunPlan.mockResolvedValue(authoritativePlan);
+    const rendered = renderPlan(
+      planInput({ hasValidLogFolder: false, launch }),
+    );
 
-    expect(result.current.activeConfigSnapshotCount).toBe(0);
-    expect(result.current.effectiveTrainingSearch).toEqual(gridSearch);
-    expect(result.current.effectiveOverrides).toEqual({ dropout: "0.2" });
-    expect(result.current.searchPayload).toEqual({
-      mode: "grid",
-      values: { hidden_dim: [128, 256] },
+    await waitFor(() => {
+      expect(rendered.result.current.displayRunPlan).toBe(authoritativePlan);
     });
-    expect(result.current.snapshotRunPlan).toBeUndefined();
-    expect(result.current.plannedRunCount).toBe(2);
-    expect(result.current.canPlan).toBe(true);
+    expect(mocks.fetchTrainingRunPlan).toHaveBeenCalledWith(
+      {
+        modelType: "linears",
+        model: "linear",
+        preset: "baseline",
+        presets: ["baseline"],
+        experimentTask: "image-classification",
+        datasets: ["Mnist"],
+        overrides: { hidden_dim: "192", dropout: "0.2" },
+        logFolder: "runs",
+        monitors: ["loss"],
+      },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(rendered.result.current.canStart).toBe(false);
+
+    rendered.rerender({
+      value: planInput({ hasValidLogFolder: true, launch }),
+    });
+    await waitFor(() => expect(rendered.result.current.canStart).toBe(true));
+    expect(mocks.fetchTrainingRunPlan).toHaveBeenCalledTimes(1);
+
+    act(() => rendered.result.current.actions.start());
+    expect(launch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        overrides: { hidden_dim: "192", dropout: "0.2" },
+        runPlan: {
+          runs: [expect.objectContaining({ id: "run-1" })],
+        },
+      }),
+    );
+  });
+
+  it("owns grid Search Metadata derivation and submits the authoritative grid plan", async () => {
+    const authoritativePlan = runPlan({
+      totalRuns: 2,
+      search: {
+        mode: "grid",
+        values: { hidden_dim: [128, 256] },
+      },
+    });
+    mocks.fetchTrainingRunPlan.mockResolvedValue(authoritativePlan);
+    const launch = vi.fn();
+    const { result } = renderPlan(planInput({ search: gridSearch, launch }));
+
+    await waitFor(() => expect(result.current.canStart).toBe(true));
+    expect(result.current.search.activeAxisCount).toBe(1);
+    expect(result.current.search.combinationCount).toBe(2);
+    expect(result.current.search.estimatedRunCount).toBe(2);
+    expect(result.current.search.conflictKeys).toEqual(["hidden_dim"]);
+    expect(mocks.fetchTrainingRunPlan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        overrides: { dropout: "0.2" },
+        search: {
+          mode: "grid",
+          values: { hidden_dim: [128, 256] },
+        },
+      }),
+      expect.anything(),
+    );
+
+    act(() => result.current.actions.start());
+    expect(launch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        search: {
+          mode: "grid",
+          values: { hidden_dim: [128, 256] },
+        },
+        runPlan: {
+          runs: [
+            expect.objectContaining({ id: "run-1" }),
+            expect.objectContaining({ id: "run-2" }),
+          ],
+        },
+      }),
+    );
+  });
+
+  it("resamples random plans by advancing their private identity", async () => {
+    mocks.fetchTrainingRunPlan
+      .mockResolvedValueOnce(
+        runPlan({
+          search: {
+            mode: "random",
+            values: { hidden_dim: [128, 256] },
+            randomSamples: 1,
+          },
+          runPrefix: "sample-a",
+        }),
+      )
+      .mockResolvedValueOnce(
+        runPlan({
+          search: {
+            mode: "random",
+            values: { hidden_dim: [128, 256] },
+            randomSamples: 1,
+          },
+          runPrefix: "sample-b",
+        }),
+      );
+    const { result } = renderPlan(planInput({ search: randomSearch }));
+
+    await waitFor(() => {
+      expect(result.current.displayRunPlan?.runs[0].id).toBe("sample-a-1");
+      expect(result.current.canResample).toBe(true);
+    });
+    act(() => result.current.actions.resample());
+    await waitFor(() => {
+      expect(mocks.fetchTrainingRunPlan).toHaveBeenCalledTimes(2);
+      expect(result.current.displayRunPlan?.runs[0].id).toBe("sample-b-1");
+    });
+  });
+
+  it("retries the same failed plan request without changing draft identity", async () => {
+    mocks.fetchTrainingRunPlan
+      .mockRejectedValueOnce(new Error("Planner unavailable."))
+      .mockResolvedValueOnce(runPlan({ runPrefix: "retry" }));
+    const { result } = renderPlan(planInput());
+
+    await waitFor(() => {
+      expect(result.current.canRetry).toBe(true);
+      expect(result.current.displayPlanError).toBe("Planner unavailable.");
+    });
+    act(() => result.current.actions.retry());
+    await waitFor(() => {
+      expect(mocks.fetchTrainingRunPlan).toHaveBeenCalledTimes(2);
+      expect(result.current.displayRunPlan?.runs[0].id).toBe("retry-1");
+      expect(result.current.canRetry).toBe(false);
+    });
+    expect(mocks.fetchTrainingRunPlan.mock.calls[1]?.[0]).toEqual(
+      mocks.fetchTrainingRunPlan.mock.calls[0]?.[0],
+    );
+  });
+
+  it("invalidates a pending large-grid confirmation when the draft revision changes", async () => {
+    mocks.fetchTrainingRunPlan
+      .mockResolvedValueOnce(runPlan({ totalRuns: 110 }))
+      .mockResolvedValueOnce(runPlan({ totalRuns: 110, runPrefix: "changed" }));
+    const launch = vi.fn();
+    const rendered = renderPlan(planInput({ search: gridSearch, launch }));
+
+    await waitFor(() => {
+      expect(rendered.result.current.displayedRunCount).toBe(110);
+      expect(rendered.result.current.confirmation.isRequired).toBe(true);
+    });
+    act(() => rendered.result.current.actions.start());
+    expect(rendered.result.current.confirmation.isOpen).toBe(true);
+    expect(launch).not.toHaveBeenCalled();
+
+    rendered.rerender({
+      value: planInput({
+        search: gridSearch,
+        datasets: ["Cifar10"],
+        launch,
+      }),
+    });
+    await waitFor(() => {
+      expect(rendered.result.current.confirmation.isOpen).toBe(false);
+      expect(mocks.fetchTrainingRunPlan).toHaveBeenCalledTimes(2);
+    });
+    act(() => rendered.result.current.actions.confirmLargeGridSearch());
+    expect(launch).not.toHaveBeenCalled();
+  });
+
+  it("projects unlocked Search Metadata without making rendering derive it", () => {
+    mocks.fetchTrainingRunPlan.mockResolvedValue(runPlan());
+    const updateSearch = vi.fn();
+    const lockedAxis: SearchAxis = {
+      ...searchAxes[0],
+      key: "num_epochs",
+      configKey: "NUM_EPOCHS",
+      searchKey: "SEARCH_SPACE_NUM_EPOCHS",
+      label: "Epochs",
+      values: [5, 10],
+      locked: true,
+      lockedByPresets: ["baseline"],
+    };
+    const { result } = renderPlan(
+      planInput({
+        search: gridSearch,
+        axes: [...searchAxes, lockedAxis],
+        updateSearch,
+      }),
+    );
+
+    expect(result.current.search.unlockedAxes).toEqual(searchAxes);
+    expect(result.current.search.unlockedAxisCount).toBe(1);
+    expect(result.current.search.update).toBe(updateSearch);
+    expect(result.current.search.lockSummary.lockedAxisCount).toBe(1);
+    expect(result.current.search.lockWarning).toContain("preset-owned axis");
   });
 });

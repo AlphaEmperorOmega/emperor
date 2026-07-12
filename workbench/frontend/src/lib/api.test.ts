@@ -53,6 +53,7 @@ import {
   trainingJobEventsSchema,
   trainingProgressEventSchema,
   trainingRunPlanSchema,
+  toTrainingRunPlanSubmitInput,
   updateConfigSnapshot,
 } from "@/lib/api";
 import { mapWithConcurrency } from "@/lib/api/concurrency";
@@ -3804,6 +3805,26 @@ describe("createTrainingJob", () => {
 });
 
 describe("fetchTrainingRunPlan", () => {
+  it("submits only exact run identity and choices from a projected plan", () => {
+    const plan = trainingRunPlanSchema.parse(successfulTrainingRunPlanFixture);
+
+    expect(toTrainingRunPlanSubmitInput(plan)).toEqual({
+      runs: [
+        {
+          id: "run-0001",
+          preset: "baseline",
+          snapshotId: "snapshot-1",
+          snapshotName: "Warm start",
+          dataset: "Mnist",
+          overrides: {
+            learning_rate: 0.01,
+            use_bias: true,
+          },
+        },
+      ],
+    });
+  });
+
   it("posts the run plan request body as JSON", async () => {
     const plan = {
       modelType: "linears",

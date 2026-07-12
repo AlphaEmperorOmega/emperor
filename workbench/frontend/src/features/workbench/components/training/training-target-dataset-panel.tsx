@@ -13,194 +13,96 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
+import { SectionHeading } from "@/components/ui/section-heading";
 import { MultiSelectDropdown } from "@/features/workbench/components/screen/multi-select-dropdown";
 import { SelectOnlyDropdown } from "@/features/workbench/components/screen/select-only-dropdown";
 import { InlineStatus } from "@/features/workbench/components/shared/inline-status";
-import { SectionHeading } from "@/components/ui/section-heading";
 import { StatChip } from "@/features/workbench/components/shared/stat-chip";
-import { SurfacePanel } from "@/components/ui/surface-panel";
 import { ViewModeButton } from "@/features/workbench/components/view-mode-button";
 import { workbenchStatusCopy } from "@/features/workbench/components/shared/status-copy";
-import { type Dataset, type MonitorOption } from "@/lib/api";
+import { type TrainingWorkspace } from "@/features/workbench/state/training/use-training-workspace-state";
 import {
   configSnapshotOverrideCount,
   configSnapshotOverrideCountLabel,
-  type ConfigSnapshot,
 } from "@/lib/config-snapshots";
 
-type SelectOption = {
-  value: string;
-  label: string;
-};
-
+type TrainingSetup = TrainingWorkspace["draft"]["setup"];
 type TrainingConfigTab = "presets" | "snapshots";
 
-const footerIconClass = "h-[15px] w-[15px] text-violet";
-const defaultFieldLabelClass =
-  "text-xs font-semibold tracking-[0.02em] text-ink-dim";
-const fieldLabelWithIconClass = `${defaultFieldLabelClass} inline-flex items-center gap-1.5`;
-const inlineFieldIconClass = "h-3.5 w-3.5 text-violet";
+const setupIconClass = "h-[15px] w-[15px] text-violet";
 
+/** Setup-only rendering Adapter for the grouped Training draft Interface. */
 export function TrainingTargetDatasetPanel({
-  modelTypeOptions = [],
-  modelOptions,
-  selectedModelType = "",
-  presetOptions,
-  selectedModel,
-  selectedPreset,
-  selectedTrainingPresets = selectedPreset ? [selectedPreset] : [],
-  configSnapshots = [],
-  selectedTrainingSnapshotIds = [],
-  experimentTaskOptions = [],
-  selectedExperimentTask = "",
-  datasetOptions,
-  selectedDatasets,
-  monitorOptions = [],
-  selectedMonitors = [],
-  monitorsLoading = false,
-  onSelectModelType,
-  onSelectModel,
-  onSelectPreset,
-  onSetTrainingPresets,
-  onSetTrainingSnapshotSelection,
-  onToggleTrainingPreset,
-  onMakeTrainingPresetPrimary,
-  onSelectAllTrainingPresets,
-  onSelectPrimaryTrainingPreset,
-  onSelectExperimentTask,
-  onSetDatasets,
-  onToggleDataset,
-  onSelectAllDatasets,
-  onSelectFirstDataset,
-  onSetMonitors,
-  onSelectAllMonitors,
-  onClearMonitors,
-  onCreatePresetSnapshot,
-  onEditConfigSnapshot,
-  onDuplicateConfigSnapshot,
-  onDeleteConfigSnapshot,
+  setup,
   disabled = false,
-  presentation = "default",
 }: {
-  modelTypeOptions?: SelectOption[];
-  modelOptions: SelectOption[];
-  selectedModelType?: string;
-  presetOptions: SelectOption[];
-  selectedModel: string;
-  selectedPreset: string;
-  selectedTrainingPresets?: string[];
-  configSnapshots?: ConfigSnapshot[];
-  selectedTrainingSnapshotIds?: string[];
-  experimentTaskOptions?: SelectOption[];
-  selectedExperimentTask?: string;
-  datasetOptions: Dataset[];
-  selectedDatasets: string[];
-  monitorOptions?: MonitorOption[];
-  selectedMonitors?: string[];
-  monitorsLoading?: boolean;
-  onSelectModelType?: (modelType: string) => void;
-  onSelectModel: (model: string) => void;
-  onSelectPreset: (preset: string) => void;
-  onSetTrainingPresets?: (presets: string[]) => void;
-  onSetTrainingSnapshotSelection?: (snapshotIds: string[]) => void;
-  onToggleTrainingPreset?: (preset: string) => void;
-  onMakeTrainingPresetPrimary?: (preset: string) => void;
-  onSelectAllTrainingPresets?: () => void;
-  onSelectPrimaryTrainingPreset?: () => void;
-  onSelectExperimentTask?: (experimentTask: string) => void;
-  onSetDatasets?: (datasets: string[]) => void;
-  onToggleDataset?: (dataset: string) => void;
-  onSelectAllDatasets: () => void;
-  onSelectFirstDataset: () => void;
-  onSetMonitors?: (monitors: string[]) => void;
-  onSelectAllMonitors?: () => void;
-  onClearMonitors?: () => void;
-  onCreatePresetSnapshot?: (preset: string) => void;
-  onEditConfigSnapshot?: (snapshotId: string) => void;
-  onDuplicateConfigSnapshot?: (snapshotId: string) => void;
-  onDeleteConfigSnapshot?: (snapshotId: string) => void;
+  setup: TrainingSetup;
   disabled?: boolean;
-  presentation?: "default" | "footer" | "setup";
 }) {
-  const isFooterPresentation = presentation === "footer";
-  const isSetupPresentation = presentation === "setup";
-  const [activeTrainingConfigTab, setActiveTrainingConfigTab] =
+  const { model, variants, experimentTask, datasets, monitors } = setup;
+  const [activeConfigTab, setActiveConfigTab] =
     useState<TrainingConfigTab>("presets");
-  const trainingConfigTabsId = useId();
-  const presetsTabId = `${trainingConfigTabsId}-presets-tab`;
-  const snapshotsTabId = `${trainingConfigTabsId}-snapshots-tab`;
-  const presetsPanelId = `${trainingConfigTabsId}-presets-panel`;
-  const snapshotsPanelId = `${trainingConfigTabsId}-snapshots-panel`;
-  const datasetCount = `${selectedDatasets.length} / ${datasetOptions.length}`;
-  const monitorCount = `${selectedMonitors.length} / ${monitorOptions.length}`;
-  const trainingPresetCount = `${selectedTrainingPresets.length} / ${presetOptions.length}`;
-  const trainingSnapshotCount = `${selectedTrainingSnapshotIds.length} / ${configSnapshots.length}`;
-  const trainingPresetDisabledValues =
-    selectedTrainingPresets.length === 1 && selectedTrainingSnapshotIds.length === 0
-      ? selectedTrainingPresets
+  const tabsId = useId();
+  const presetsTabId = `${tabsId}-presets-tab`;
+  const snapshotsTabId = `${tabsId}-snapshots-tab`;
+  const presetsPanelId = `${tabsId}-presets-panel`;
+  const snapshotsPanelId = `${tabsId}-snapshots-panel`;
+  const snapshotMutationPending =
+    variants.snapshotMutation.phase === "pending";
+  const presetDisabledValues =
+    variants.selectedPresets.length === 1 &&
+    variants.selectedSnapshotIds.length === 0
+      ? variants.selectedPresets
       : [];
   const datasetDisabledValues =
-    selectedDatasets.length === 1 ? selectedDatasets : [];
-  const showExperimentTaskControl = experimentTaskOptions.length > 0;
-  const trainingPresetOptions = presetOptions.map((preset) => ({
+    datasets.selected.length === 1 ? datasets.selected : [];
+  const presetOptions = variants.presetOptions.map((preset) => ({
     value: preset.value,
     label: preset.label,
     description: preset.value,
-    actions: onCreatePresetSnapshot && !disabled
-      ? [
+    actions: disabled
+      ? undefined
+      : [
           {
             label: `Create snapshot from ${preset.value}`,
             tooltip: `Create a Config Snapshot from ${preset.value} defaults`,
             icon: <FilePlus2 className="h-3.5 w-3.5" aria-hidden />,
-            onAction: onCreatePresetSnapshot,
+            onAction: variants.createPresetSnapshot,
           },
-        ]
-      : undefined,
+        ],
   }));
-  const trainingSnapshotOptions = configSnapshots.map((snapshot) => {
-    const overrideCount = configSnapshotOverrideCount(snapshot);
-    return {
-      value: snapshot.id,
-      label: snapshot.name,
-      description: `${snapshot.preset} · ${configSnapshotOverrideCountLabel(overrideCount)}`,
-      meta: <span>{snapshot.preset}</span>,
-      actions: disabled
+  const snapshotOptions = variants.snapshots.map((snapshot) => ({
+    value: snapshot.id,
+    label: snapshot.name,
+    description: `${snapshot.preset} · ${configSnapshotOverrideCountLabel(
+      configSnapshotOverrideCount(snapshot),
+    )}`,
+    meta: <span>{snapshot.preset}</span>,
+    actions:
+      disabled || snapshotMutationPending
         ? undefined
         : [
-            ...(onEditConfigSnapshot
-              ? [
-                  {
-                    label: `Edit snapshot ${snapshot.name}`,
-                    tooltip: "Edit this Config Snapshot",
-                    icon: <Pencil className="h-3.5 w-3.5" aria-hidden />,
-                    onAction: onEditConfigSnapshot,
-                  },
-                ]
-              : []),
-            ...(onDuplicateConfigSnapshot
-              ? [
-                  {
-                    label: `Duplicate snapshot ${snapshot.name}`,
-                    tooltip: "Duplicate this Config Snapshot",
-                    icon: <Copy className="h-3.5 w-3.5" aria-hidden />,
-                    onAction: onDuplicateConfigSnapshot,
-                  },
-                ]
-              : []),
-            ...(onDeleteConfigSnapshot
-              ? [
-                  {
-                    label: `Delete snapshot ${snapshot.name}`,
-                    tooltip: "Delete this Config Snapshot",
-                    icon: <Trash2 className="h-3.5 w-3.5" aria-hidden />,
-                    onAction: onDeleteConfigSnapshot,
-                  },
-                ]
-              : []),
+            {
+              label: `Edit snapshot ${snapshot.name}`,
+              tooltip: "Edit this Config Snapshot",
+              icon: <Pencil className="h-3.5 w-3.5" aria-hidden />,
+              onAction: variants.editSnapshot,
+            },
+            {
+              label: `Duplicate snapshot ${snapshot.name}`,
+              tooltip: "Duplicate this Config Snapshot",
+              icon: <Copy className="h-3.5 w-3.5" aria-hidden />,
+              onAction: variants.duplicateSnapshot,
+            },
+            {
+              label: `Delete snapshot ${snapshot.name}`,
+              tooltip: "Delete this Config Snapshot",
+              icon: <Trash2 className="h-3.5 w-3.5" aria-hidden />,
+              onAction: variants.removeSnapshot,
+            },
           ],
-    };
-  });
-  const trainingDatasetOptions = datasetOptions.map((dataset) => ({
+  }));
+  const datasetOptions = datasets.options.map((dataset) => ({
     value: dataset.name,
     label: dataset.label,
     description: dataset.name,
@@ -210,7 +112,7 @@ export function TrainingTargetDatasetPanel({
       </span>
     ),
   }));
-  const trainingMonitorOptions = monitorOptions.map((monitor) => ({
+  const monitorOptions = monitors.options.map((monitor) => ({
     value: monitor.name,
     label: monitor.label,
     description: monitor.description,
@@ -219,230 +121,47 @@ export function TrainingTargetDatasetPanel({
         <span>{monitor.kinds.join(" / ")}</span>
       ) : undefined,
   }));
-  const showMonitorField =
-    Boolean(onSetMonitors) || monitorOptions.length > 0 || monitorsLoading;
-  function changeTrainingPresets(nextPresets: string[]) {
-    if (onSetTrainingPresets) {
-      onSetTrainingPresets(nextPresets);
-      return;
-    }
-    const changedPreset = presetOptions.find(
-      (preset) =>
-        selectedTrainingPresets.includes(preset.value) !==
-        nextPresets.includes(preset.value),
-    );
-    if (changedPreset) {
-      onToggleTrainingPreset?.(changedPreset.value);
-    }
-  }
-
-  function changeTrainingSnapshots(nextSnapshotIds: string[]) {
-    onSetTrainingSnapshotSelection?.(nextSnapshotIds);
-  }
-
-  function makeTrainingPresetPrimary(preset: string) {
-    if (onMakeTrainingPresetPrimary) {
-      onMakeTrainingPresetPrimary(preset);
-      return;
-    }
-    onSelectPreset(preset);
-  }
-
-  function changeDatasets(nextDatasets: string[]) {
-    if (onSetDatasets) {
-      onSetDatasets(nextDatasets);
-      return;
-    }
-    const changedDataset = datasetOptions.find(
-      (dataset) =>
-        selectedDatasets.includes(dataset.name) !==
-        nextDatasets.includes(dataset.name),
-    );
-    if (changedDataset) {
-      onToggleDataset?.(changedDataset.name);
-    }
-  }
-
-  function changeMonitors(nextMonitors: string[]) {
-    onSetMonitors?.(nextMonitors);
-  }
-
-  const modelTypeControl =
-    modelTypeOptions.length > 0 && onSelectModelType ? (
-      <SelectOnlyDropdown
-        label="training model type"
-        value={selectedModelType}
-        options={modelTypeOptions}
-        onChange={onSelectModelType}
-        placeholder="Select type"
-        disabled={disabled}
-      />
-    ) : null;
-
-  const modelControl = (
+  const modelTypeControl = model.typeOptions.length > 0 && (
     <SelectOnlyDropdown
-      label="training model"
-      value={selectedModel}
-      options={modelOptions}
-      onChange={onSelectModel}
-      placeholder="Select model"
+      label="training model type"
+      value={model.selectedType}
+      options={model.typeOptions}
+      onChange={model.selectType}
+      placeholder="Select type"
       disabled={disabled}
     />
-  );
-  const modelSelectorGridClass = modelTypeControl
-    ? isSetupPresentation
-      ? "grid min-w-0 gap-2"
-      : "grid min-w-0 grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] gap-2"
-    : "grid min-w-0 gap-2";
-  const modelTypeLabel = (
-    <span className={fieldLabelWithIconClass}>
-      <Layers className={inlineFieldIconClass} aria-hidden />
-      Model Type
-    </span>
-  );
-  const modelNameLabel = (
-    <span className={fieldLabelWithIconClass}>
-      <Cpu className={inlineFieldIconClass} aria-hidden />
-      Model Name
-    </span>
-  );
-  const modelLabel = (
-    <span className={fieldLabelWithIconClass}>
-      <Cpu className={inlineFieldIconClass} aria-hidden />
-      Model
-    </span>
-  );
-  const experimentTaskControl = showExperimentTaskControl ? (
-    <SelectOnlyDropdown
-      label="Experiment task"
-      value={selectedExperimentTask}
-      options={experimentTaskOptions}
-      onChange={onSelectExperimentTask ?? (() => undefined)}
-      placeholder="Select task"
-      disabled={disabled || !onSelectExperimentTask}
-    />
-  ) : null;
-  const experimentTaskLabel = (
-    <span className={fieldLabelWithIconClass}>
-      <Activity className={inlineFieldIconClass} aria-hidden />
-      Experiment Task
-    </span>
-  );
-
-  const experimentTaskField = !experimentTaskControl ? null : isFooterPresentation ? (
-    <SurfacePanel
-      className="min-w-0"
-      icon={<Activity className={footerIconClass} aria-hidden />}
-      title="Experiment Task"
-    >
-      {experimentTaskControl}
-    </SurfacePanel>
-  ) : isSetupPresentation ? (
-    <div className="grid min-w-0 gap-2">
-      <div className="flex min-h-[28px] flex-wrap items-center justify-between gap-2">
-        <SectionHeading
-          icon={<Activity className={footerIconClass} aria-hidden />}
-          title="Experiment Task"
-        />
-      </div>
-      {experimentTaskControl}
-    </div>
-  ) : (
-    <div className="grid min-w-0 gap-1.5">
-      {experimentTaskLabel}
-      {experimentTaskControl}
-    </div>
-  );
-
-  const modelField = isFooterPresentation ? (
-    <SurfacePanel
-      className="min-w-0"
-      icon={<Layers className={footerIconClass} aria-hidden />}
-      title="Model"
-    >
-      <div className={modelSelectorGridClass}>
-        {modelTypeControl && (
-          <div className="grid min-w-0 gap-1.5">
-            {modelTypeLabel}
-            {modelTypeControl}
-          </div>
-        )}
-        <div className="grid min-w-0 gap-1.5">
-          {modelTypeControl && modelNameLabel}
-          {modelControl}
-        </div>
-      </div>
-    </SurfacePanel>
-  ) : isSetupPresentation ? (
-    <div className={modelSelectorGridClass}>
-      {modelTypeControl && (
-        <div className="grid min-w-0 gap-2">
-          <div className="flex min-h-[28px] flex-wrap items-center justify-between gap-2">
-            <SectionHeading
-              icon={<Layers className={footerIconClass} aria-hidden />}
-              title="Model Type"
-            />
-          </div>
-          {modelTypeControl}
-        </div>
-      )}
-      <div className="grid min-w-0 gap-2">
-        <div className="flex min-h-[28px] flex-wrap items-center justify-between gap-2">
-          <SectionHeading
-            icon={<Cpu className={footerIconClass} aria-hidden />}
-            title={modelTypeControl ? "Model Name" : "Model"}
-          />
-        </div>
-        {modelControl}
-      </div>
-    </div>
-  ) : (
-    <div className={modelSelectorGridClass}>
-      {modelTypeControl && (
-        <div className="grid min-w-0 gap-1.5">
-          {modelTypeLabel}
-          {modelTypeControl}
-        </div>
-      )}
-      <div className="grid min-w-0 gap-1.5">
-        {modelTypeControl ? modelNameLabel : modelLabel}
-        {modelControl}
-      </div>
-    </div>
   );
 
   const presetsControls = (
     <>
       <MultiSelectDropdown
         label="Presets"
-        values={selectedTrainingPresets}
-        options={trainingPresetOptions}
-        onChange={changeTrainingPresets}
-        disabledValues={trainingPresetDisabledValues}
+        values={variants.selectedPresets}
+        options={presetOptions}
+        onChange={variants.selectPresets}
+        disabledValues={presetDisabledValues}
         disabled={disabled}
-        primaryValue={selectedPreset}
-        onPrimaryChange={makeTrainingPresetPrimary}
+        primaryValue={variants.primaryPreset}
+        onPrimaryChange={variants.makePresetPrimary}
         placeholder="Select presets"
         emptyMessage="No presets for this model"
       />
       {presetOptions.length === 0 && (
-        <InlineStatus compact>
-          No presets for this model
-        </InlineStatus>
+        <InlineStatus compact>No presets for this model</InlineStatus>
       )}
       <div className="grid grid-cols-2 gap-2">
         <Button
           variant="secondary"
-          onClick={onSelectAllTrainingPresets}
-          disabled={disabled || presetOptions.length === 0 || !onSelectAllTrainingPresets}
+          onClick={variants.selectAllPresets}
+          disabled={disabled || presetOptions.length === 0}
           className="h-9 text-[13px]"
         >
           All
         </Button>
         <Button
           variant="ghost"
-          onClick={onSelectPrimaryTrainingPreset}
-          disabled={disabled || !selectedPreset || !onSelectPrimaryTrainingPreset}
+          onClick={variants.selectOnlyPrimaryPreset}
+          disabled={disabled || !variants.primaryPreset}
           className="h-9 border border-line bg-white/[0.025] text-[13px]"
         >
           Primary only
@@ -450,27 +169,55 @@ export function TrainingTargetDatasetPanel({
       </div>
     </>
   );
-
   const snapshotControls = (
     <>
       <MultiSelectDropdown
         label="Config snapshots"
-        values={selectedTrainingSnapshotIds}
-        options={trainingSnapshotOptions}
-        onChange={changeTrainingSnapshots}
-        disabled={disabled}
+        values={variants.selectedSnapshotIds}
+        options={snapshotOptions}
+        onChange={variants.selectSnapshots}
+        disabled={disabled || snapshotMutationPending}
         placeholder="Select snapshots"
         emptyMessage="No config snapshots for this model"
       />
-      {configSnapshots.length === 0 && (
-        <InlineStatus compact>
-          No config snapshots for this model
+      {variants.snapshots.length === 0 && (
+        <InlineStatus compact>No config snapshots for this model</InlineStatus>
+      )}
+      {variants.snapshotMutation.phase === "pending" && (
+        <InlineStatus busy compact>
+          {variants.snapshotMutation.kind === "remove"
+            ? "Removing Config Snapshot…"
+            : "Updating Config Snapshot…"}
+        </InlineStatus>
+      )}
+      {variants.snapshotMutation.phase === "failed" && (
+        <InlineStatus tone="danger" role="alert" compact>
+          <div className="grid gap-2">
+            <span>{variants.snapshotMutation.error}</span>
+            <div className="flex flex-wrap gap-2">
+              {variants.snapshotMutation.canRetry && (
+                <Button
+                  variant="secondary"
+                  onClick={() => void variants.retrySnapshotMutation()}
+                  className="h-8 text-xs"
+                >
+                  Retry change
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                onClick={variants.dismissSnapshotMutation}
+                className="h-8 text-xs"
+              >
+                Dismiss
+              </Button>
+            </div>
+          </div>
         </InlineStatus>
       )}
     </>
   );
-
-  const trainingConfigTabs = (
+  const configTabs = (
     <SegmentedControl
       aria-label="Training config selector"
       variant="tablist"
@@ -480,8 +227,8 @@ export function TrainingTargetDatasetPanel({
         variant="tab"
         id={presetsTabId}
         controls={presetsPanelId}
-        active={activeTrainingConfigTab === "presets"}
-        onClick={() => setActiveTrainingConfigTab("presets")}
+        active={activeConfigTab === "presets"}
+        onClick={() => setActiveConfigTab("presets")}
       >
         <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
         Presets
@@ -490,8 +237,8 @@ export function TrainingTargetDatasetPanel({
         variant="tab"
         id={snapshotsTabId}
         controls={snapshotsPanelId}
-        active={activeTrainingConfigTab === "snapshots"}
-        onClick={() => setActiveTrainingConfigTab("snapshots")}
+        active={activeConfigTab === "snapshots"}
+        onClick={() => setActiveConfigTab("snapshots")}
       >
         <Camera className="h-3.5 w-3.5" aria-hidden />
         Snapshots
@@ -499,270 +246,183 @@ export function TrainingTargetDatasetPanel({
     </SegmentedControl>
   );
 
-  const presetsField = isFooterPresentation ? (
-    <SurfacePanel
-      className="min-w-0"
-      icon={<SlidersHorizontal className={footerIconClass} aria-hidden />}
-      title="Presets"
-      detail={
-        <StatChip>
-          {activeTrainingConfigTab === "snapshots"
-            ? trainingSnapshotCount
-            : trainingPresetCount}
-        </StatChip>
-      }
-    >
-      {trainingConfigTabs}
-      <div
-        id={presetsPanelId}
-        role="tabpanel"
-        aria-labelledby={presetsTabId}
-        aria-label="Presets"
-        hidden={activeTrainingConfigTab !== "presets"}
-        className="grid gap-2"
-      >
-        {activeTrainingConfigTab === "presets" ? presetsControls : null}
-      </div>
-      <div
-        id={snapshotsPanelId}
-        role="tabpanel"
-        aria-labelledby={snapshotsTabId}
-        aria-label="Snapshots"
-        hidden={activeTrainingConfigTab !== "snapshots"}
-        className="grid gap-2"
-      >
-        {activeTrainingConfigTab === "snapshots" ? snapshotControls : null}
-      </div>
-    </SurfacePanel>
-  ) : isSetupPresentation ? (
-    <div className="grid min-w-0 gap-2">
-      <div className="flex min-h-[28px] flex-wrap items-center justify-between gap-2">
-        <SectionHeading
-          icon={<SlidersHorizontal className={footerIconClass} aria-hidden />}
-          title="Variants"
-        />
-        <StatChip>
-          {activeTrainingConfigTab === "snapshots"
-            ? trainingSnapshotCount
-            : trainingPresetCount}
-        </StatChip>
-      </div>
-      {trainingConfigTabs}
-      <div
-        id={presetsPanelId}
-        role="tabpanel"
-        aria-labelledby={presetsTabId}
-        aria-label="Presets"
-        hidden={activeTrainingConfigTab !== "presets"}
-        className="grid gap-2"
-      >
-        {activeTrainingConfigTab === "presets" ? presetsControls : null}
-      </div>
-      <div
-        id={snapshotsPanelId}
-        role="tabpanel"
-        aria-labelledby={snapshotsTabId}
-        aria-label="Snapshots"
-        hidden={activeTrainingConfigTab !== "snapshots"}
-        className="grid gap-2"
-      >
-        {activeTrainingConfigTab === "snapshots" ? snapshotControls : null}
-      </div>
-    </div>
-  ) : (
-    <div className="grid min-w-0 gap-1.5">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className={defaultFieldLabelClass}>Presets</div>
-        <StatChip>{trainingPresetCount}</StatChip>
-      </div>
-      {presetsControls}
-    </div>
-  );
-
-  const datasetsControls = (
-    <>
-      <MultiSelectDropdown
-        label="Training datasets"
-        values={selectedDatasets}
-        options={trainingDatasetOptions}
-        onChange={changeDatasets}
-        disabledValues={datasetDisabledValues}
-        disabled={disabled}
-        placeholder="Select datasets"
-        emptyMessage="No datasets for this model"
-      />
-      {datasetOptions.length === 0 && (
-        <InlineStatus compact>
-          No datasets for this model
-        </InlineStatus>
-      )}
-      <div className="grid grid-cols-2 gap-2">
-        <Button
-          variant="secondary"
-          onClick={onSelectAllDatasets}
-          disabled={disabled || datasetOptions.length === 0}
-          className="h-9 text-[13px]"
-        >
-          All
-        </Button>
-        <Button
-          variant="ghost"
-          onClick={onSelectFirstDataset}
-          disabled={disabled || datasetOptions.length === 0}
-          className="h-9 border border-line bg-white/[0.025] text-[13px]"
-        >
-          First
-        </Button>
-      </div>
-    </>
-  );
-
-  const datasetsField = isFooterPresentation ? (
-    <SurfacePanel
-      className="xl:min-h-0"
-      icon={<Database className={footerIconClass} aria-hidden />}
-      title="Datasets"
-      detail={<StatChip>{datasetCount}</StatChip>}
-    >
-      {datasetsControls}
-    </SurfacePanel>
-  ) : isSetupPresentation ? (
-    <div className="grid min-w-0 gap-2">
-      <div className="flex min-h-[28px] flex-wrap items-center justify-between gap-2">
-        <SectionHeading
-          icon={<Database className={footerIconClass} aria-hidden />}
-          title="Datasets"
-        />
-        <StatChip>{datasetCount}</StatChip>
-      </div>
-      {datasetsControls}
-    </div>
-  ) : (
-    <div className="xl:min-h-0 grid gap-2">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <SectionHeading
-          icon={<Database className="h-[15px] w-[15px] text-violet" aria-hidden />}
-          title="Datasets"
-        />
-        <StatChip>{datasetCount}</StatChip>
-      </div>
-      {datasetsControls}
-    </div>
-  );
-
-  const monitorsControls = (
-    <>
-      <MultiSelectDropdown
-        label="Training monitors"
-        values={selectedMonitors}
-        options={trainingMonitorOptions}
-        onChange={changeMonitors}
-        disabled={disabled}
-        placeholder={`${monitorCount} selected`}
-        emptyMessage={workbenchStatusCopy.empty.optionalMonitors}
-      />
-      {monitorsLoading && (
-        <InlineStatus compact>
-          {workbenchStatusCopy.loading.monitorOptions}
-        </InlineStatus>
-      )}
-      {!monitorsLoading && monitorOptions.length === 0 && (
-        <InlineStatus compact>
-          {workbenchStatusCopy.empty.optionalMonitors}
-        </InlineStatus>
-      )}
-      <div className="grid grid-cols-2 gap-2">
-        <Button
-          variant="secondary"
-          onClick={onSelectAllMonitors}
-          disabled={disabled || monitorOptions.length === 0 || !onSelectAllMonitors}
-          className="h-9 text-[13px]"
-        >
-          All
-        </Button>
-        <Button
-          variant="ghost"
-          onClick={onClearMonitors}
-          disabled={disabled || selectedMonitors.length === 0 || !onClearMonitors}
-          className="h-9 border border-line bg-white/[0.025] text-[13px]"
-        >
-          None
-        </Button>
-      </div>
-    </>
-  );
-
-  const monitorsField = !showMonitorField ? null : isFooterPresentation ? (
-    <SurfacePanel
-      className="xl:min-h-0"
-      icon={<Activity className={footerIconClass} aria-hidden />}
-      title="Signals"
-      detail={<StatChip>{monitorCount}</StatChip>}
-    >
-      {monitorsControls}
-    </SurfacePanel>
-  ) : isSetupPresentation ? (
-    <div className="grid min-w-0 gap-2">
-      <div className="flex min-h-[28px] flex-wrap items-center justify-between gap-2">
-        <SectionHeading
-          icon={<Activity className={footerIconClass} aria-hidden />}
-          title="Signals"
-        />
-        <StatChip>{monitorCount}</StatChip>
-      </div>
-      {monitorsControls}
-    </div>
-  ) : (
-    <div className="xl:min-h-0 grid gap-2">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <SectionHeading
-          icon={<Activity className="h-[15px] w-[15px] text-violet" aria-hidden />}
-          title="Signals"
-        />
-        <StatChip>{monitorCount}</StatChip>
-      </div>
-      {monitorsControls}
-    </div>
-  );
-
-  if (isFooterPresentation) {
-    return (
-      <>
-        {experimentTaskField}
-        {modelField}
-        {presetsField}
-        {datasetsField}
-        {monitorsField}
-      </>
-    );
-  }
-
-  if (isSetupPresentation) {
-    return (
-      <div className="grid min-w-0 gap-3">
-        {experimentTaskField}
-        {modelField}
-        {presetsField}
-        {datasetsField}
-        {monitorsField}
-      </div>
-    );
-  }
-
   return (
-    <div className="grid content-start gap-3 xl:h-full xl:grid-rows-[auto_minmax(0,1fr)] xl:content-stretch">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
-        {experimentTaskField && (
-          <div className="sm:col-span-2 xl:col-span-1 2xl:col-span-2">
-            {experimentTaskField}
+    <div className="grid min-w-0 gap-3">
+      {experimentTask.options.length > 0 && (
+        <div className="grid min-w-0 gap-2">
+          <div className="flex min-h-[28px] flex-wrap items-center justify-between gap-2">
+            <SectionHeading
+              icon={<Activity className={setupIconClass} aria-hidden />}
+              title="Experiment Task"
+            />
+          </div>
+          <SelectOnlyDropdown
+            label="Experiment task"
+            value={experimentTask.selected}
+            options={experimentTask.options}
+            onChange={experimentTask.select}
+            placeholder="Select task"
+            disabled={disabled}
+          />
+        </div>
+      )}
+
+      <div className="grid min-w-0 gap-2">
+        {modelTypeControl && (
+          <div className="grid min-w-0 gap-2">
+            <div className="flex min-h-[28px] flex-wrap items-center justify-between gap-2">
+              <SectionHeading
+                icon={<Layers className={setupIconClass} aria-hidden />}
+                title="Model Type"
+              />
+            </div>
+            {modelTypeControl}
           </div>
         )}
-        {modelField}
-        {presetsField}
+        <div className="grid min-w-0 gap-2">
+          <div className="flex min-h-[28px] flex-wrap items-center justify-between gap-2">
+            <SectionHeading
+              icon={<Cpu className={setupIconClass} aria-hidden />}
+              title={modelTypeControl ? "Model Name" : "Model"}
+            />
+          </div>
+          <SelectOnlyDropdown
+            label="training model"
+            value={model.selected}
+            options={model.options}
+            onChange={model.select}
+            placeholder="Select model"
+            disabled={disabled}
+          />
+        </div>
       </div>
 
-      {datasetsField}
-      {monitorsField}
+      <div className="grid min-w-0 gap-2">
+        <div className="flex min-h-[28px] flex-wrap items-center justify-between gap-2">
+          <SectionHeading
+            icon={<SlidersHorizontal className={setupIconClass} aria-hidden />}
+            title="Variants"
+          />
+          <StatChip>
+            {activeConfigTab === "snapshots"
+              ? `${variants.selectedSnapshotIds.length} / ${variants.snapshots.length}`
+              : `${variants.selectedPresets.length} / ${variants.presetOptions.length}`}
+          </StatChip>
+        </div>
+        {configTabs}
+        <div
+          id={presetsPanelId}
+          role="tabpanel"
+          aria-labelledby={presetsTabId}
+          aria-label="Presets"
+          hidden={activeConfigTab !== "presets"}
+          className="grid gap-2"
+        >
+          {activeConfigTab === "presets" ? presetsControls : null}
+        </div>
+        <div
+          id={snapshotsPanelId}
+          role="tabpanel"
+          aria-labelledby={snapshotsTabId}
+          aria-label="Snapshots"
+          hidden={activeConfigTab !== "snapshots"}
+          className="grid gap-2"
+        >
+          {activeConfigTab === "snapshots" ? snapshotControls : null}
+        </div>
+      </div>
+
+      <div className="grid min-w-0 gap-2">
+        <div className="flex min-h-[28px] flex-wrap items-center justify-between gap-2">
+          <SectionHeading
+            icon={<Database className={setupIconClass} aria-hidden />}
+            title="Datasets"
+          />
+          <StatChip>
+            {datasets.selected.length} / {datasets.options.length}
+          </StatChip>
+        </div>
+        <MultiSelectDropdown
+          label="Training datasets"
+          values={datasets.selected}
+          options={datasetOptions}
+          onChange={datasets.select}
+          disabledValues={datasetDisabledValues}
+          disabled={disabled}
+          placeholder="Select datasets"
+          emptyMessage="No datasets for this model"
+        />
+        {datasets.options.length === 0 && (
+          <InlineStatus compact>No datasets for this model</InlineStatus>
+        )}
+        <div className="grid grid-cols-2 gap-2">
+          <Button
+            variant="secondary"
+            onClick={datasets.selectAll}
+            disabled={disabled || datasets.options.length === 0}
+            className="h-9 text-[13px]"
+          >
+            All
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={datasets.selectFirst}
+            disabled={disabled || datasets.options.length === 0}
+            className="h-9 border border-line bg-white/[0.025] text-[13px]"
+          >
+            First
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid min-w-0 gap-2">
+        <div className="flex min-h-[28px] flex-wrap items-center justify-between gap-2">
+          <SectionHeading
+            icon={<Activity className={setupIconClass} aria-hidden />}
+            title="Signals"
+          />
+          <StatChip>
+            {monitors.selected.length} / {monitors.options.length}
+          </StatChip>
+        </div>
+        <MultiSelectDropdown
+          label="Training monitors"
+          values={monitors.selected}
+          options={monitorOptions}
+          onChange={monitors.select}
+          disabled={disabled}
+          placeholder={`${monitors.selected.length} / ${monitors.options.length} selected`}
+          emptyMessage={workbenchStatusCopy.empty.optionalMonitors}
+        />
+        {monitors.isLoading && (
+          <InlineStatus compact>
+            {workbenchStatusCopy.loading.monitorOptions}
+          </InlineStatus>
+        )}
+        {!monitors.isLoading && monitors.options.length === 0 && (
+          <InlineStatus compact>
+            {workbenchStatusCopy.empty.optionalMonitors}
+          </InlineStatus>
+        )}
+        <div className="grid grid-cols-2 gap-2">
+          <Button
+            variant="secondary"
+            onClick={monitors.selectAll}
+            disabled={disabled || monitors.options.length === 0}
+            className="h-9 text-[13px]"
+          >
+            All
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={monitors.clear}
+            disabled={disabled || monitors.selected.length === 0}
+            className="h-9 border border-line bg-white/[0.025] text-[13px]"
+          >
+            None
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
