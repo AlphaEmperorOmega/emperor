@@ -2,25 +2,23 @@ from __future__ import annotations
 
 import os
 import unittest
+from unittest.mock import patch
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
-from emperor.inspection import (
-    InspectionRequest,
-    configuration_schema,
-    parse_overrides,
-    search_space_schema,
-)
-from emperor.inspection import (
-    inspect_model as inspect_model_semantically,
-)
-from emperor.model_packages import ModelPackage, model_package
+from emperor.inspection import InspectionRequest
+from emperor.model_packages import ModelPackage
 
-from workbench.backend.inspection_errors import call_inspection, call_model_package
+from workbench.backend.api.v1.routers.models import (
+    _config_schema as http_config_schema,
+)
+from workbench.backend.api.v1.routers.models import (
+    _search_space as http_search_space,
+)
+from workbench.backend.inspection_adapter import WorkbenchInspectionAdapter
 from workbench.backend.inspection_serialization import (
     configuration_schema_payload,
     inspection_result_payload,
-    model_presets_payload,
     search_space_payload,
 )
 from workbench.backend.inspector.errors import InspectorError
@@ -31,6 +29,7 @@ from workbench.backend.inspector.schema import (
     search_space_schema as legacy_search_space_schema,
 )
 from workbench.backend.inspector.service import inspect_model as legacy_inspect_model
+from workbench.backend.services.inspection import InspectionService
 
 
 class InspectionAdapterEquivalenceTests(unittest.TestCase):
@@ -40,19 +39,14 @@ class InspectionAdapterEquivalenceTests(unittest.TestCase):
             "missing",
             "models.__inspection_missing__",
         )
+        adapter = WorkbenchInspectionAdapter.from_package(package)
 
         calls = (
-            lambda: call_inspection(configuration_schema, package),
-            lambda: call_inspection(
-                parse_overrides,
-                package,
+            adapter.configuration,
+            lambda: adapter.parse_overrides(
                 {"HIDDEN_DIM": "1"},
             ),
-            lambda: call_model_package(
-                package,
-                model_presets_payload,
-                package,
-            ),
+            adapter.presets_payload,
         )
         for call in calls:
             with self.subTest(call=call):
@@ -94,10 +88,8 @@ class InspectionAdapterEquivalenceTests(unittest.TestCase):
         )
         for model_id, preset, dataset, experiment_task in cases:
             with self.subTest(model=model_id):
-                package = model_package(model_id)
-                assert package is not None
-                semantic = inspect_model_semantically(
-                    package,
+                adapter = WorkbenchInspectionAdapter.select(model_id)
+                expected = adapter.inspect_payload(
                     InspectionRequest(
                         preset=preset,
                         dataset=dataset,
@@ -105,7 +97,7 @@ class InspectionAdapterEquivalenceTests(unittest.TestCase):
                     ),
                 )
                 self.assertEqual(
-                    inspection_result_payload(semantic),
+                    expected,
                     legacy_inspect_model(
                         model_id,
                         preset,
@@ -127,24 +119,102 @@ class InspectionAdapterEquivalenceTests(unittest.TestCase):
         )
         for model_id, preset, presets in cases:
             with self.subTest(model=model_id, preset=preset, presets=presets):
-                package = model_package(model_id)
-                assert package is not None
+                adapter = WorkbenchInspectionAdapter.select(model_id)
                 self.assertEqual(
-                    configuration_schema_payload(
-                        configuration_schema(package, preset=preset)
-                    ),
+                    adapter.configuration_payload(preset),
                     legacy_config_schema(model_id, preset),
                 )
                 self.assertEqual(
-                    search_space_payload(
-                        search_space_schema(
-                            package,
-                            preset=preset,
-                            presets=presets,
-                        )
-                    ),
+                    adapter.search_space_payload(preset, presets),
                     legacy_search_space_schema(model_id, preset, presets),
                 )
+
+    def test_canonical_adapter_owns_selected_inspection_and_payloads(self) -> None:
+        adapter = WorkbenchInspectionAdapter.select("linears/linear")
+        request = InspectionRequest(
+            preset="baseline",
+            dataset="Mnist",
+            experiment_task="image-classification",
+        )
+
+        self.assertEqual(
+            adapter.inspect_payload(request),
+            inspection_result_payload(adapter.inspect(request)),
+        )
+        self.assertEqual(
+            adapter.configuration_payload("baseline"),
+            configuration_schema_payload(adapter.configuration("baseline")),
+        )
+        self.assertEqual(
+            adapter.search_space_payload("baseline"),
+            search_space_payload(adapter.search_space("baseline")),
+        )
+
+    def test_legacy_graph_and_schema_paths_delegate_to_canonical_adapter(
+        self,
+    ) -> None:
+        graph_calls: list[str] = []
+        configuration_calls: list[str] = []
+        search_calls: list[str] = []
+        original_graph = WorkbenchInspectionAdapter.inspect_payload
+        original_configuration = WorkbenchInspectionAdapter.configuration_payload
+        original_search = WorkbenchInspectionAdapter.search_space_payload
+
+        def inspect_payload(adapter, request):  # type: ignore[no-untyped-def]
+            graph_calls.append(adapter.package.catalog_key)
+            return original_graph(adapter, request)
+
+        def configuration_payload(  # type: ignore[no-untyped-def]
+            adapter,
+            preset,
+        ):
+            configuration_calls.append(adapter.package.catalog_key)
+            return original_configuration(adapter, preset)
+
+        def search_payload(adapter, preset, presets=None):  # type: ignore[no-untyped-def]
+            search_calls.append(adapter.package.catalog_key)
+            return original_search(adapter, preset, presets)
+
+        with (
+            patch.object(
+                WorkbenchInspectionAdapter,
+                "inspect_payload",
+                inspect_payload,
+            ),
+            patch.object(
+                WorkbenchInspectionAdapter,
+                "configuration_payload",
+                configuration_payload,
+            ),
+            patch.object(
+                WorkbenchInspectionAdapter,
+                "search_space_payload",
+                search_payload,
+            ),
+        ):
+            legacy_inspect_model(
+                "linears/linear",
+                "baseline",
+                dataset="Mnist",
+            )
+            legacy_config_schema("linears/linear", "baseline")
+            legacy_search_space_schema("linears/linear", "baseline")
+            InspectionService().inspect(
+                model_type="linears",
+                model="linear",
+                preset="baseline",
+                overrides={},
+                dataset="Mnist",
+            )
+            http_config_schema("linears", "linear", "baseline")
+            http_search_space("linears", "linear", "baseline", None)
+
+        self.assertEqual(graph_calls, ["linears/linear", "linears/linear"])
+        self.assertEqual(
+            configuration_calls,
+            ["linears/linear", "linears/linear"],
+        )
+        self.assertEqual(search_calls, ["linears/linear", "linears/linear"])
 
 
 if __name__ == "__main__":

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import os
 import re
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 import torch
 
@@ -12,6 +13,8 @@ TensorShape = tuple[int, ...]
 
 MAX_TENSOR_SHAPES_PER_NODE = 12
 MAX_CHECKPOINT_GRAPH_SHAPE_BYTES = 256 * 1024 * 1024
+MAX_CHECKPOINT_GRAPH_CANDIDATES = 32
+MAX_CHECKPOINT_GRAPH_AGGREGATE_BYTES = 512 * 1024 * 1024
 _OVERSIZED_CHECKPOINT_REASON = "checkpointTooLarge"
 
 _DIRECT_STACK_WEIGHT_RE = re.compile(
@@ -90,28 +93,115 @@ class CheckpointGraphShapes:
     )
 
 
+@dataclass(frozen=True, slots=True)
+class CheckpointLoadBudgets:
+    max_candidates: int = MAX_CHECKPOINT_GRAPH_CANDIDATES
+    max_file_bytes: int = MAX_CHECKPOINT_GRAPH_SHAPE_BYTES
+    max_aggregate_bytes: int = MAX_CHECKPOINT_GRAPH_AGGREGATE_BYTES
+
+    def __post_init__(self) -> None:
+        if self.max_candidates < 1:
+            raise ValueError("Checkpoint candidate limit must be positive.")
+        if self.max_file_bytes < 1:
+            raise ValueError("Checkpoint per-file byte limit must be positive.")
+        if self.max_aggregate_bytes < 1:
+            raise ValueError("Checkpoint aggregate byte limit must be positive.")
+
+
+DEFAULT_CHECKPOINT_LOAD_BUDGETS = CheckpointLoadBudgets()
+
+
+class FrozenCheckpointCandidate(Protocol):
+    path: Path
+    size_bytes: int
+    modified_at_ns: int
+
+
+CheckpointConfigInterpreter = Callable[
+    [Mapping[str, TensorShape]], Mapping[str, Any]
+]
+
+
 def load_checkpoint_graph_shapes(
-    checkpoint_paths: Iterable[Path],
+    checkpoint_candidates: Iterable[Path | FrozenCheckpointCandidate],
+    *,
+    budgets: CheckpointLoadBudgets = DEFAULT_CHECKPOINT_LOAD_BUDGETS,
+    package_config_interpreter: CheckpointConfigInterpreter | None = None,
 ) -> CheckpointGraphShapes | None:
     fallback_reasons: list[str] = []
-    for checkpoint_path in checkpoint_paths:
-        skip_reason = _checkpoint_shape_skip_reason(checkpoint_path)
-        if skip_reason is not None:
-            fallback_reasons.append(skip_reason)
-            continue
-        try:
-            checkpoint = torch.load(
-                checkpoint_path,
-                map_location="cpu",
-                weights_only=True,
+    attempted_bytes = 0
+    for index, candidate in enumerate(checkpoint_candidates):
+        if index >= budgets.max_candidates:
+            fallback_reasons.append(
+                f"checkpointCandidateLimit:{budgets.max_candidates}"
             )
-        except Exception:
+            break
+        checkpoint_path, expected_size, expected_modified_at_ns = (
+            _checkpoint_candidate_fields(candidate)
+        )
+        try:
+            checkpoint_file = checkpoint_path.open("rb")
+        except OSError:
+            fallback_reasons.append("checkpointUnavailable")
             continue
+        with checkpoint_file:
+            try:
+                stat = os.fstat(checkpoint_file.fileno())
+            except OSError:
+                fallback_reasons.append("checkpointUnavailable")
+                continue
+            checkpoint_size = int(stat.st_size)
+            if (
+                expected_size is not None
+                and expected_modified_at_ns is not None
+                and (
+                    checkpoint_size != expected_size
+                    or int(stat.st_mtime_ns) != expected_modified_at_ns
+                )
+            ):
+                fallback_reasons.append("checkpointChanged")
+                continue
+            if checkpoint_size > budgets.max_file_bytes:
+                fallback_reasons.append(
+                    f"{_OVERSIZED_CHECKPOINT_REASON}:"
+                    f"{checkpoint_size}>{budgets.max_file_bytes}"
+                )
+                continue
+            if attempted_bytes + checkpoint_size > budgets.max_aggregate_bytes:
+                fallback_reasons.append(
+                    "checkpointAggregateTooLarge:"
+                    f"{attempted_bytes}+{checkpoint_size}>"
+                    f"{budgets.max_aggregate_bytes}"
+                )
+                continue
+            attempted_bytes += checkpoint_size
+            try:
+                checkpoint = torch.load(
+                    checkpoint_file,
+                    map_location="cpu",
+                    weights_only=True,
+                )
+            except Exception:
+                continue
+            try:
+                loaded_stat = os.fstat(checkpoint_file.fileno())
+            except OSError:
+                fallback_reasons.append("checkpointUnavailable")
+                continue
+            if (
+                int(loaded_stat.st_size) != checkpoint_size
+                or int(loaded_stat.st_mtime_ns) != int(stat.st_mtime_ns)
+            ):
+                fallback_reasons.append("checkpointChanged")
+                continue
 
         state_dict = _state_dict_from_checkpoint(checkpoint)
         if state_dict is None:
             continue
-        shapes = checkpoint_graph_shapes_from_state_dict(state_dict)
+        shapes = checkpoint_graph_shapes_from_state_dict(
+            state_dict,
+            package_config_interpreter=package_config_interpreter,
+        )
         if shapes is not None:
             return shapes
     if fallback_reasons:
@@ -125,28 +215,33 @@ def load_checkpoint_graph_shapes(
     return None
 
 
-def _checkpoint_shape_skip_reason(checkpoint_path: Path) -> str | None:
-    try:
-        checkpoint_size = checkpoint_path.stat().st_size
-    except OSError:
-        return "checkpointUnavailable"
-    if checkpoint_size > MAX_CHECKPOINT_GRAPH_SHAPE_BYTES:
-        return (
-            f"{_OVERSIZED_CHECKPOINT_REASON}:"
-            f"{checkpoint_size}>{MAX_CHECKPOINT_GRAPH_SHAPE_BYTES}"
-        )
-    return None
+def _checkpoint_candidate_fields(
+    candidate: Path | FrozenCheckpointCandidate,
+) -> tuple[Path, int | None, int | None]:
+    if isinstance(candidate, Path):
+        return candidate, None, None
+    return candidate.path, candidate.size_bytes, candidate.modified_at_ns
 
 
 def checkpoint_graph_shapes_from_state_dict(
     state_dict: Mapping[str, Any],
+    *,
+    package_config_interpreter: CheckpointConfigInterpreter | None = None,
 ) -> CheckpointGraphShapes | None:
     tensor_shapes = _tensor_shapes(state_dict)
     if not tensor_shapes:
         return None
     diagnostics: list[str] = []
+    config_overrides = _config_overrides(tensor_shapes, diagnostics)
+    if package_config_interpreter is not None:
+        try:
+            package_overrides = dict(package_config_interpreter(tensor_shapes))
+        except Exception:
+            diagnostics.append("packageCheckpointMetadataUnavailable")
+        else:
+            config_overrides.update(package_overrides)
     return CheckpointGraphShapes(
-        config_overrides=_config_overrides(tensor_shapes, diagnostics),
+        config_overrides=config_overrides,
         parameter_shapes=_parameter_shapes(tensor_shapes),
         coverage_counts=_coverage_counts(tensor_shapes),
         tensor_count=len(tensor_shapes),

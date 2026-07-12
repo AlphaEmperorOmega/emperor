@@ -39,7 +39,7 @@ from torch import nn
 
 from workbench.backend.inspector.checkpoint_shapes import (
     MAX_CHECKPOINT_GRAPH_SHAPE_BYTES,
-    CheckpointGraphShapes,
+    CheckpointLoadBudgets,
     checkpoint_graph_shapes_from_state_dict,
 )
 from workbench.backend.inspector.discovery import discover_models, list_model_presets
@@ -50,10 +50,7 @@ from workbench.backend.log_experiments import (
     LogExperimentMutationCoordinator,
 )
 from workbench.backend.run_history import RunHistoryService
-from workbench.backend.services.inspection import (
-    InspectionService,
-    _checkpoint_overrides,
-)
+from workbench.backend.services.inspection import InspectionService
 from workbench.backend.tests.helpers import write_tensorboard_run
 
 
@@ -150,33 +147,48 @@ class InspectorGraphTests(unittest.TestCase):
     def test_historical_checkpoint_invalid_preset_maps_to_workbench_error(
         self,
     ) -> None:
-        package = model_package("linears/linear")
-        assert package is not None
-
-        for checkpoint_overrides in (
-            {"hidden_dim": 64},
-            {"adaptive_generator_stack_num_layers": 2},
-        ):
-            with self.subTest(overrides=checkpoint_overrides):
-                shapes = CheckpointGraphShapes(
-                    config_overrides=checkpoint_overrides,
-                    parameter_shapes={},
-                    coverage_counts={},
-                    tensor_count=0,
-                )
-                with self.assertRaisesRegex(
-                    InspectorError,
-                    "Unknown preset 'missing'",
-                ) as raised:
-                    _checkpoint_overrides(
-                        model_id="linears/linear",
-                        preset="missing",
-                        package=package,
-                        checkpoint_shapes=shapes,
-                        saved_run_overrides={},
-                        request_overrides={},
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = Path(tmp) / "logs"
+            run_dir = write_tensorboard_run(
+                logs_root,
+                [
+                    "exp_linear",
+                    "linears",
+                    "linear",
+                    "MISSING",
+                    "Mnist",
+                    "run_20260601_010203",
+                    "version_0",
+                ],
+            )
+            torch.save(
+                {
+                    "state_dict": checkpoint_state_dict(
+                        input_dim=8,
+                        hidden_dim=16,
+                        output_dim=4,
+                        layer_count=1,
                     )
-                self.assertEqual(raised.exception.status_code, 400)
+                },
+                run_dir / "checkpoints" / "epoch=0-step=1.ckpt",
+            )
+            run_history = _run_history(logs_root)
+            run_id = _first_run_id(run_history)
+
+            with self.assertRaisesRegex(
+                InspectorError,
+                "Unknown preset 'missing'",
+            ) as raised:
+                InspectionService(run_history).inspect(
+                    model_type="linears",
+                    model="linear",
+                    preset="missing",
+                    dataset="Mnist",
+                    overrides={},
+                    log_run_id=run_id,
+                )
+
+        self.assertEqual(raised.exception.status_code, 400)
 
     def test_graph_serializer_preserves_depth_first_named_child_order(self) -> None:
         nodes, edges = serialize_graph(TinyGraphFixture())
@@ -1343,6 +1355,234 @@ class InspectorGraphTests(unittest.TestCase):
                 reason.startswith("checkpointTooLarge:")
                 for reason in root_checkpoint["fallbackReasons"]
             )
+        )
+
+    def test_historical_inspection_bounds_checkpoint_candidate_attempts(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = Path(tmp) / "logs"
+            run_dir = logs_root.joinpath(
+                "exp_linear",
+                "linears",
+                "linear",
+                "BASELINE",
+                "Mnist",
+                "run_20260601_010203",
+                "version_0",
+            )
+            checkpoint_dir = run_dir / "checkpoints"
+            checkpoint_dir.mkdir(parents=True)
+            for index in range(40):
+                checkpoint_dir.joinpath(
+                    f"epoch=0-step={index}.ckpt"
+                ).write_bytes(b"not-a-checkpoint")
+            run_history = _run_history(logs_root)
+            run_id = _first_run_id(run_history)
+
+            with mock.patch(
+                "workbench.backend.inspector.checkpoint_shapes.torch.load",
+                side_effect=RuntimeError("malformed checkpoint"),
+            ) as torch_load:
+                result = InspectionService(run_history).inspect(
+                    model_type="linears",
+                    model="linear",
+                    preset="baseline",
+                    dataset="Mnist",
+                    overrides={},
+                    log_run_id=run_id,
+                )
+
+        self.assertEqual(torch_load.call_count, 32)
+        root_checkpoint = nodes_by_id(result["nodes"])["__root__"]["details"][
+            "checkpoint"
+        ]
+        self.assertEqual(
+            root_checkpoint["fallbackReasons"],
+            ["checkpointCandidateLimit:32"],
+        )
+
+    def test_historical_inspection_bounds_aggregate_checkpoint_bytes(
+        self,
+    ) -> None:
+        malformed_checkpoint = b"bad-checkpoint"
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = Path(tmp) / "logs"
+            run_dir = logs_root.joinpath(
+                "exp_linear",
+                "linears",
+                "linear",
+                "BASELINE",
+                "Mnist",
+                "run_20260601_010203",
+                "version_0",
+            )
+            checkpoint_dir = run_dir / "checkpoints"
+            checkpoint_dir.mkdir(parents=True)
+            for index in range(2):
+                checkpoint_dir.joinpath(
+                    f"epoch=0-step={index}.ckpt"
+                ).write_bytes(malformed_checkpoint)
+            run_history = _run_history(logs_root)
+            run_id = _first_run_id(run_history)
+
+            with mock.patch(
+                "workbench.backend.inspector.checkpoint_shapes.torch.load",
+                side_effect=RuntimeError("malformed checkpoint"),
+            ) as torch_load:
+                result = InspectionService(
+                    run_history,
+                    checkpoint_load_budgets=CheckpointLoadBudgets(
+                        max_candidates=4,
+                        max_file_bytes=64,
+                        max_aggregate_bytes=len(malformed_checkpoint),
+                    ),
+                ).inspect(
+                    model_type="linears",
+                    model="linear",
+                    preset="baseline",
+                    dataset="Mnist",
+                    overrides={},
+                    log_run_id=run_id,
+                )
+
+        self.assertEqual(torch_load.call_count, 1)
+        root_checkpoint = nodes_by_id(result["nodes"])["__root__"]["details"][
+            "checkpoint"
+        ]
+        self.assertIn(
+            "checkpointAggregateTooLarge:",
+            root_checkpoint["fallbackReasons"][0],
+        )
+
+    def test_historical_inspection_rejects_a_checkpoint_changed_after_context(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = Path(tmp) / "logs"
+            run_dir = write_tensorboard_run(
+                logs_root,
+                [
+                    "exp_linear",
+                    "linears",
+                    "linear",
+                    "BASELINE",
+                    "Mnist",
+                    "run_20260601_010203",
+                    "version_0",
+                ],
+            )
+            run_history = _run_history(logs_root)
+            run_id = _first_run_id(run_history)
+            context = run_history.inspection_context(run_id)
+            checkpoint = run_dir / "checkpoints" / "epoch=0-step=1.ckpt"
+            checkpoint.write_bytes(checkpoint.read_bytes() + b"changed")
+            frozen_source = mock.Mock()
+            frozen_source.inspection_context.return_value = context
+
+            with mock.patch(
+                "workbench.backend.inspector.checkpoint_shapes.torch.load",
+                side_effect=AssertionError("changed checkpoint was loaded"),
+            ) as torch_load:
+                result = InspectionService(frozen_source).inspect(
+                    model_type="linears",
+                    model="linear",
+                    preset="baseline",
+                    dataset="Mnist",
+                    overrides={},
+                    log_run_id=run_id,
+                )
+
+        torch_load.assert_not_called()
+        root_checkpoint = nodes_by_id(result["nodes"])["__root__"]["details"][
+            "checkpoint"
+        ]
+        self.assertEqual(root_checkpoint["reason"], "structuralFallback")
+        self.assertEqual(
+            root_checkpoint["fallbackReasons"],
+            ["checkpointChanged"],
+        )
+
+    def test_historical_inspection_uses_package_checkpoint_metadata_extension(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = Path(tmp) / "logs"
+            run_dir = write_tensorboard_run(
+                logs_root,
+                [
+                    "exp_linear",
+                    "linears",
+                    "linear",
+                    "BASELINE",
+                    "Mnist",
+                    "run_20260601_010203",
+                    "version_0",
+                ],
+            )
+            torch.save(
+                {
+                    "state_dict": checkpoint_state_dict(
+                        input_dim=8,
+                        hidden_dim=16,
+                        output_dim=4,
+                        layer_count=1,
+                    )
+                },
+                run_dir / "checkpoints" / "epoch=0-step=1.ckpt",
+            )
+            run_history = _run_history(logs_root)
+            run_id = _first_run_id(run_history)
+
+            with mock.patch(
+                "models.linears.linear.checkpoint_metadata."
+                "checkpoint_config_overrides",
+                return_value={"hidden_dim": 40},
+            ) as interpret_checkpoint:
+                result = InspectionService(run_history).inspect(
+                    model_type="linears",
+                    model="linear",
+                    preset="baseline",
+                    dataset="Mnist",
+                    overrides={},
+                    log_run_id=run_id,
+                )
+            with mock.patch(
+                "models.linears.linear.checkpoint_metadata."
+                "checkpoint_config_overrides",
+                side_effect=RuntimeError("invalid package metadata"),
+            ):
+                fallback_result = InspectionService(run_history).inspect(
+                    model_type="linears",
+                    model="linear",
+                    preset="baseline",
+                    dataset="Mnist",
+                    overrides={},
+                    log_run_id=run_id,
+                )
+
+        interpret_checkpoint.assert_called_once()
+        tensor_shapes = interpret_checkpoint.call_args.args[0]
+        self.assertEqual(
+            tensor_shapes["input_model.model.weight_params"],
+            (8, 16),
+        )
+        node_by_id = nodes_by_id(result["nodes"])
+        self.assertEqual(node_by_id["input_model"]["details"]["dims"], "8 -> 40")
+        self.assertEqual(
+            node_by_id["input_model.model"]["details"]["weightShape"],
+            "8 x 16",
+        )
+        fallback_nodes = nodes_by_id(fallback_result["nodes"])
+        self.assertEqual(
+            fallback_nodes["input_model"]["details"]["dims"],
+            "8 -> 16",
+        )
+        self.assertEqual(
+            fallback_nodes["__root__"]["details"]["checkpoint"][
+                "fallbackReasons"
+            ],
+            ["packageCheckpointMetadataUnavailable"],
         )
 
     def test_inspection_service_keeps_request_overrides_strict_with_log_run(

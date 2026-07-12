@@ -20,6 +20,15 @@ ActiveLogWriterSource = Callable[[], Iterable[ActiveLogWriter]]
 
 
 @dataclass(frozen=True, slots=True)
+class HistoricalCheckpointCandidate:
+    """One contained checkpoint frozen for a historical Inspection read."""
+
+    path: Path
+    size_bytes: int
+    modified_at_ns: int
+
+
+@dataclass(frozen=True, slots=True)
 class HistoricalInspectionContext:
     """Minimum historical Run state needed by Workbench Inspection."""
 
@@ -28,7 +37,13 @@ class HistoricalInspectionContext:
     preset: str
     dataset: str
     params: Mapping[str, Any]
-    checkpoint_paths: tuple[Path, ...]
+    checkpoint_candidates: tuple[HistoricalCheckpointCandidate, ...]
+
+    @property
+    def checkpoint_paths(self) -> tuple[Path, ...]:
+        """Compatibility projection; loading uses the frozen candidates."""
+
+        return tuple(candidate.path for candidate in self.checkpoint_candidates)
 
 
 class HistoricalInspectionSource(Protocol):
@@ -40,6 +55,7 @@ class HistoricalInspectionSource(Protocol):
 __all__ = [
     "ActiveLogWriter",
     "ActiveLogWriterSource",
+    "HistoricalCheckpointCandidate",
     "HistoricalInspectionContext",
     "HistoricalInspectionSource",
 ]

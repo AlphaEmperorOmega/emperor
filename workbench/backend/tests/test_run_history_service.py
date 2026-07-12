@@ -80,6 +80,13 @@ class RunHistoryServiceContractTests(unittest.TestCase):
                 context.checkpoint_paths,
                 (run_dir / "checkpoints" / "epoch=0-step=1.ckpt",),
             )
+            checkpoint = context.checkpoint_candidates[0]
+            checkpoint_stat = checkpoint.path.stat()
+            self.assertEqual(checkpoint.size_bytes, checkpoint_stat.st_size)
+            self.assertEqual(
+                checkpoint.modified_at_ns,
+                checkpoint_stat.st_mtime_ns,
+            )
             with self.assertRaises(TypeError):
                 context.params["batch_size"] = 16  # type: ignore[index]
 

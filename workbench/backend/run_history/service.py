@@ -25,6 +25,7 @@ from workbench.backend.run_history.archive import (
 )
 from workbench.backend.run_history.contracts import (
     ActiveLogWriterSource,
+    HistoricalCheckpointCandidate,
     HistoricalInspectionContext,
 )
 from workbench.backend.run_history.deletion import (
@@ -460,22 +461,29 @@ class RunHistoryService:
             self._query.saved_params_for_run(run)
         )
         root = self._scanner.resolved_root()
-        checkpoint_paths: list[Path] = []
+        checkpoint_candidates: list[HistoricalCheckpointCandidate] = []
         for candidate in self._query.checkpoint_paths_for_resolved_run(run):
             try:
                 resolved = candidate.resolve(strict=True)
                 resolved.relative_to(root)
+                stat = resolved.stat()
             except (OSError, ValueError):
                 continue
             if resolved.is_file():
-                checkpoint_paths.append(resolved)
+                checkpoint_candidates.append(
+                    HistoricalCheckpointCandidate(
+                        path=resolved,
+                        size_bytes=int(stat.st_size),
+                        modified_at_ns=int(stat.st_mtime_ns),
+                    )
+                )
         return HistoricalInspectionContext(
             run_id=run.id,
             model=run.model,
             preset=run.preset,
             dataset=run.dataset,
             params=params,
-            checkpoint_paths=tuple(checkpoint_paths),
+            checkpoint_candidates=tuple(checkpoint_candidates),
         )
 
 
