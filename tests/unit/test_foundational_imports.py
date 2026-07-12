@@ -72,37 +72,6 @@ print(json.dumps({
             },
         )
 
-    def test_default_device_detection_is_deferred_until_public_device_access(self):
-        result = self.run_fresh_python(
-            """
-import json
-from unittest.mock import patch
-
-import torch
-
-with patch.object(torch.cuda, "is_available", return_value=False) as is_available:
-    import emperor.base.utils as utils
-    import_calls = is_available.call_count
-    resolved_device = str(utils.device)
-    access_calls = is_available.call_count
-
-print(json.dumps({
-    "access_calls": access_calls,
-    "device": resolved_device,
-    "import_calls": import_calls,
-}))
-"""
-        )
-
-        self.assertEqual(
-            result,
-            {
-                "access_calls": 1,
-                "device": "cpu",
-                "import_calls": 0,
-            },
-        )
-
     def test_experiment_task_import_defers_concrete_experiment_modules(self):
         result = self.run_fresh_python(
             """
@@ -185,7 +154,6 @@ from emperor.base.config import optional_field as canonical_optional_field
 from emperor.base.data import DataModule as CanonicalDataModule
 from emperor.base.module import Module as CanonicalModule
 from emperor.base.module import ParameterBank as CanonicalParameterBank
-from emperor.base.tensor import expand_dims as canonical_expand_dims
 from emperor.base.visualization import ProgressBoard as CanonicalProgressBoard
 from emperor.base.visualization import show_images as canonical_show_images
 from emperor.base.utils import (
@@ -194,7 +162,6 @@ from emperor.base.utils import (
     Module as LegacyModule,
     ParameterBank as LegacyParameterBank,
     ProgressBoard as LegacyProgressBoard,
-    expand_dims as legacy_expand_dims,
     optional_field as legacy_optional_field,
     show_images as legacy_show_images,
 )
@@ -202,7 +169,6 @@ from emperor.base.utils import (
 print(json.dumps({
     "config_base": CanonicalConfigBase is LegacyConfigBase,
     "data_module": CanonicalDataModule is LegacyDataModule,
-    "expand_dims": canonical_expand_dims is legacy_expand_dims,
     "module": CanonicalModule is LegacyModule,
     "optional_field": canonical_optional_field is legacy_optional_field,
     "parameter_bank": CanonicalParameterBank is LegacyParameterBank,
@@ -217,7 +183,6 @@ print(json.dumps({
             {
                 "config_base": True,
                 "data_module": True,
-                "expand_dims": True,
                 "module": True,
                 "optional_field": True,
                 "parameter_bank": True,

@@ -1,12 +1,11 @@
-import torch
+from typing import TYPE_CHECKING
 
+import torch
 from torch import Tensor
-from emperor.base.tensor import expand_dims
+
+from emperor.sampler.core._validator import SamplerTopkValidator
 from emperor.sampler.core.base import SamplerBase
 from emperor.sampler.core.config import SamplerConfig
-from emperor.sampler.core._validator import SamplerTopkValidator
-
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
@@ -40,9 +39,9 @@ class SamplerTopk(SamplerBase):
         _, topk_deterministic_indices = probabilities.topk(num_deterministic, dim=-1)
 
         masked_probs = probabilities + 1e-6
-        batch_indices = expand_dims(
-            torch.arange(probabilities.size(0), device=probabilities.device), dim=1
-        )
+        batch_indices = torch.arange(
+            probabilities.size(0), device=probabilities.device
+        ).unsqueeze(dim=1)
         masked_probs[batch_indices, topk_deterministic_indices] = 0
         topk_random_indices = torch.multinomial(masked_probs, self.num_topk_samples)
 

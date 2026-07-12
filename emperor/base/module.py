@@ -8,7 +8,6 @@ from lightning import LightningModule
 from torch.nn import Linear, Parameter, Sequential
 
 from emperor.base.config import ConfigBase
-from emperor.base.tensor import cpu, numpy, randn, to
 from emperor.base.visualization import ProgressBoard
 
 if TYPE_CHECKING:
@@ -47,7 +46,7 @@ class Module(LightningModule):
                 n = self.trainer.num_val_batches / self.plot_valid_per_epoch
             self.board.draw(
                 x,
-                numpy(to(value, cpu())),
+                value.detach().cpu().numpy(),
                 ("train_" if train else "val_") + key,
                 every_n=int(n),
             )
@@ -227,7 +226,7 @@ class ParameterBank(Module):
         self.parameter_bank = self.__create_bank()
 
     def __create_bank(self) -> Parameter:
-        default_params = randn(*self.shape)
+        default_params = torch.randn(*self.shape)
         parameter_bank = Parameter(default_params)
         self.initializer(parameter_bank)
         return parameter_bank
