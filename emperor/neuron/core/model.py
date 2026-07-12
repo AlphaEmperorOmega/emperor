@@ -6,7 +6,8 @@ import torch
 from torch import Tensor
 from torch.nn import ModuleDict
 
-from emperor.base.utils import ConfigBase, Module
+from emperor.base.config import ConfigBase
+from emperor.base.module import Module
 from emperor.neuron.core.base import NeuronClusterModuleBase
 from emperor.neuron.core.config import NeuronClusterConfig, TerminalConfig
 from emperor.neuron.core.plasticity import NeuronClusterPlasticityMixin

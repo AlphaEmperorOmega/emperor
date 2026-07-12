@@ -2,7 +2,7 @@ import torch
 
 from torch import Tensor
 
-from emperor.base.utils import Module
+from emperor.base.module import Module
 from emperor.neuron.core.options import TerminalConnectionShapeOptions
 from emperor.neuron.core._validator import (
     AxonsValidator,

@@ -1,6 +1,6 @@
 from torch import Tensor
 
-from emperor.base.utils import ConfigBase
+from emperor.base.config import ConfigBase
 from emperor.base.validator import ValidatorBase
 
 from typing import TYPE_CHECKING

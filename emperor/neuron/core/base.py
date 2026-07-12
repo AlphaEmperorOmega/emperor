@@ -3,7 +3,7 @@ import re
 from torch import Tensor
 from torch.nn import ModuleDict
 
-from emperor.base.utils import Module
+from emperor.base.module import Module
 
 
 class NeuronClusterModuleBase(Module):

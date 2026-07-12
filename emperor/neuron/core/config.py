@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from emperor.base.utils import ConfigBase, optional_field
+from emperor.base.config import ConfigBase, optional_field
 from emperor.halting.config import HaltingConfig
 from emperor.neuron.core.options import (
     TerminalConnectionShapeOptions,
