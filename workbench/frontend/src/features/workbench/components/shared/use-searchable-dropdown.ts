@@ -1,5 +1,9 @@
 import {
+  type ChangeEvent,
+  type FocusEvent,
   type KeyboardEvent,
+  type MouseEvent,
+  type RefCallback,
   useCallback,
   useEffect,
   useId,
@@ -7,235 +11,478 @@ import {
   useRef,
   useState,
 } from "react";
-import { usePopupDismissal } from "@/features/workbench/components/shared/use-popup-dismissal";
 
-export type SearchableDropdownOption = {
-  value: string;
-  label: string;
-  description?: string;
-};
+const SCROLL_LOAD_THRESHOLD_PX = 48;
+const LOCAL_APPEND_DELAY_MS = 100;
 
-export function useSearchableDropdownCore<
-  Option extends SearchableDropdownOption,
->({
-  id,
-  idSuffix,
-  options,
-  disabled,
-}: {
+type SearchablePopupMode = "single-select" | "multi-select";
+
+type SearchablePopupInteractionOptions<Option> = {
+  mode: SearchablePopupMode;
   id?: string;
   idSuffix: string;
   options: Option[];
-  disabled: boolean;
+  optionKey: (option: Option) => string;
+  optionSearchText: (option: Option) => string;
+  optionRevision?: (option: Option) => string;
+  selectedKey?: string;
+  disabled?: boolean;
+  isOptionDisabled?: (option: Option) => boolean;
+  onActivate: (option: Option) => void;
+  pagination?: { initialVisibleCount: number; pageSize: number };
+};
+
+type OptionInteraction<ElementType extends HTMLElement> = {
+  ref: RefCallback<ElementType>;
+  onMouseDown: (event: MouseEvent<ElementType>) => void;
+  onMouseEnter: () => void;
+  onClick: () => void;
+  onKeyDown: (event: KeyboardEvent<ElementType>) => void;
+};
+
+function joinedOptionKey<Option>(
+  options: Option[],
+  keyForOption: (option: Option) => string,
+) {
+  return options.map(keyForOption).join("\u0000");
+}
+
+function clearTimer(timer: {
+  current: ReturnType<typeof setTimeout> | null;
 }) {
+  if (timer.current !== null) {
+    clearTimeout(timer.current);
+    timer.current = null;
+  }
+}
+
+export function useSearchablePopupInteraction<
+  Option,
+  OptionElement extends HTMLElement = HTMLElement,
+>({
+  mode,
+  id,
+  idSuffix,
+  options,
+  optionKey,
+  optionSearchText,
+  optionRevision,
+  selectedKey,
+  disabled = false,
+  isOptionDisabled,
+  onActivate,
+  pagination,
+}: SearchablePopupInteractionOptions<Option>) {
   const generatedId = useId();
-  const triggerId = id ?? `${generatedId}-${idSuffix}`;
-  const listboxId = `${triggerId}-options`;
-  const searchId = `${triggerId}-search`;
+  const singleSelect = mode === "single-select";
+  const controlId = id ?? `${generatedId}-${idSuffix}`;
+  const searchId = `${controlId}-search`;
+  const popupId = `${controlId}-options`;
   const rootRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
-  const panelRef = useRef<HTMLDivElement | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
-  const [isOpen, setIsOpen] = useState(false);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const optionRefs = useRef<Array<OptionElement | null>>([]);
+  const appendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingKeyboardIndexRef = useRef<number | null>(null);
+  const onActivateRef = useRef(onActivate);
   const [query, setQuery] = useState("");
+  const [isOpen, setIsOpen] = useState(false);
   const normalizedQuery = query.trim().toLowerCase();
-  const filteredOptions = useMemo(() => {
-    if (!normalizedQuery) {
-      return options;
-    }
-    return options.filter((option) =>
-      [option.label, option.value, option.description ?? ""]
-        .join(" ")
-        .toLowerCase()
-        .includes(normalizedQuery),
-    );
-  }, [normalizedQuery, options]);
-  const filteredOptionsKey = useMemo(
-    () => filteredOptions.map((option) => option.value).join("\u0000"),
-    [filteredOptions],
+  const matchingOptions = useMemo(
+    () =>
+      normalizedQuery
+        ? options.filter((option) =>
+            optionSearchText(option).toLowerCase().includes(normalizedQuery),
+          )
+        : options,
+    [normalizedQuery, optionSearchText, options],
   );
+  const matchingKey = joinedOptionKey(matchingOptions, optionKey);
+  const sourceRevisionKey = joinedOptionKey(
+    options,
+    optionRevision ?? optionKey,
+  );
+  const sourceInitialIndex =
+    options.length === 0
+      ? -1
+      : singleSelect && selectedKey !== undefined
+        ? Math.max(
+            0,
+            options.findIndex((option) => optionKey(option) === selectedKey),
+          )
+        : 0;
+  const matchingInitialIndex =
+    matchingOptions.length === 0
+      ? -1
+      : singleSelect && selectedKey !== undefined
+        ? Math.max(
+            0,
+            matchingOptions.findIndex(
+              (option) => optionKey(option) === selectedKey,
+            ),
+          )
+        : 0;
+  const initialVisibleCount =
+    pagination?.initialVisibleCount ?? matchingOptions.length;
+  const pageSize = pagination?.pageSize ?? initialVisibleCount;
+  const [visibleCount, setVisibleCount] = useState(() =>
+    Math.min(initialVisibleCount, matchingOptions.length),
+  );
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(matchingInitialIndex);
+  const visibleOptions = matchingOptions.slice(0, visibleCount);
+  const hasMore = visibleCount < matchingOptions.length;
+  const activeOption =
+    isOpen && activeIndex >= 0 ? visibleOptions[activeIndex] : undefined;
+  const activeOptionId = activeOption
+    ? `${popupId}-option-${activeIndex}`
+    : undefined;
 
-  const openDropdown = useCallback(() => {
-    if (disabled) {
-      return;
-    }
-    setQuery("");
-    setIsOpen(true);
-  }, [disabled]);
+  onActivateRef.current = onActivate;
 
-  const closeDropdown = useCallback((restoreFocus = false) => {
+  function focusOption(index: number) {
+    window.requestAnimationFrame(() => optionRefs.current[index]?.focus());
+  }
+
+  const dismiss = useCallback((restoreFocus = false) => {
     setIsOpen(false);
     setQuery("");
+    pendingKeyboardIndexRef.current = null;
     if (restoreFocus) {
       triggerRef.current?.focus();
     }
   }, []);
 
-  const toggleDropdown = useCallback(() => {
-    if (isOpen) {
-      closeDropdown();
+  function loadMore() {
+    if (
+      appendTimerRef.current !== null ||
+      visibleCount >= matchingOptions.length
+    ) {
       return;
     }
-    openDropdown();
-  }, [closeDropdown, isOpen, openDropdown]);
+    setIsLoadingMore(true);
+    appendTimerRef.current = setTimeout(() => {
+      appendTimerRef.current = null;
+      setVisibleCount((current) =>
+        Math.min(current + pageSize, matchingOptions.length),
+      );
+      setIsLoadingMore(false);
+    }, LOCAL_APPEND_DELAY_MS);
+  }
 
-  const handleRootBlur = useCallback(
-    (relatedTarget: EventTarget | null) => {
-      const nextTarget = relatedTarget as Node | null;
-      if (nextTarget && rootRef.current?.contains(nextTarget)) {
+  function moveActiveOption(direction: 1 | -1, moveFocus: boolean) {
+    if (visibleOptions.length === 0) {
+      return;
+    }
+    setActiveIndex((current) => {
+      if (
+        direction === 1 &&
+        current >= visibleOptions.length - 1 &&
+        hasMore
+      ) {
+        pendingKeyboardIndexRef.current = visibleOptions.length;
+        loadMore();
+        return current;
+      }
+      const nextIndex =
+        current < 0
+          ? direction === 1
+            ? 0
+            : visibleOptions.length - 1
+          : (current + direction + visibleOptions.length) % visibleOptions.length;
+      if (moveFocus) {
+        focusOption(nextIndex);
+      }
+      return nextIndex;
+    });
+  }
+
+  function focusEdgeOption(edge: "first" | "last") {
+    if (visibleOptions.length === 0) {
+      return;
+    }
+    const index = edge === "first" ? 0 : visibleOptions.length - 1;
+    setActiveIndex(index);
+    focusOption(index);
+  }
+
+  function activate(option: Option) {
+    if (isOptionDisabled?.(option)) {
+      return;
+    }
+    if (singleSelect) {
+      dismiss(true);
+    }
+    onActivateRef.current(option);
+  }
+
+  function open() {
+    if (disabled || options.length === 0) {
+      return;
+    }
+    setQuery("");
+    setActiveIndex(sourceInitialIndex);
+    setIsOpen(true);
+  }
+
+  function handleTriggerKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
+    if (isOpen && singleSelect) {
+      handleNavigableKey(event, activeOption, false, true);
+      return;
+    }
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      if (!singleSelect) {
+        open();
         return;
       }
-      closeDropdown();
-    },
-    [closeDropdown],
-  );
+      if (disabled || options.length === 0) {
+        return;
+      }
+      const direction = event.key === "ArrowDown" ? 1 : -1;
+      const nextIndex =
+        (sourceInitialIndex + direction + options.length) % options.length;
+      setIsOpen(true);
+      setActiveIndex(nextIndex);
+      focusOption(nextIndex);
+      return;
+    }
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      if (isOpen) {
+        dismiss();
+      } else {
+        open();
+      }
+      return;
+    }
+    if (event.key === "Escape" && isOpen) {
+      event.preventDefault();
+      dismiss(true);
+    }
+  }
+
+  function handleSearchKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (!singleSelect) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        dismiss(true);
+      } else if (event.key === "ArrowDown" && visibleOptions.length > 0) {
+        event.preventDefault();
+        const nextIndex = activeIndex >= 0 ? activeIndex : 0;
+        setActiveIndex(nextIndex);
+        focusOption(nextIndex);
+      }
+      return;
+    }
+    handleNavigableKey(event, activeOption, true, false);
+  }
+
+  function handleNavigableKey<ElementType extends HTMLElement>(
+    event: KeyboardEvent<ElementType>,
+    option: Option | undefined,
+    resetSearch: boolean,
+    allowSpace: boolean,
+  ) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      dismiss(true);
+      return;
+    }
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      if (visibleOptions.length === 0) {
+        return;
+      }
+      event.preventDefault();
+      if (resetSearch) {
+        setQuery("");
+      }
+      moveActiveOption(event.key === "ArrowDown" ? 1 : -1, true);
+      return;
+    }
+    if (
+      (event.key === "Home" || event.key === "End") &&
+      visibleOptions.length > 0
+    ) {
+      event.preventDefault();
+      focusEdgeOption(event.key === "Home" ? "first" : "last");
+      return;
+    }
+    if (event.key === "Enter" || (allowSpace && event.key === " ")) {
+      if (allowSpace || option) {
+        event.preventDefault();
+      }
+      if (option) {
+        activate(option);
+      }
+    }
+  }
+
+  function handleOptionKeyDown(
+    event: KeyboardEvent<OptionElement>,
+    option: Option,
+  ) {
+    handleNavigableKey(event, option, false, true);
+  }
+
+  function optionInteraction(
+    index: number,
+    option: Option,
+  ): OptionInteraction<OptionElement> {
+    return {
+      ref: (node) => {
+        optionRefs.current[index] = node;
+      },
+      onMouseDown: (event) => event.preventDefault(),
+      onMouseEnter: () => setActiveIndex(index),
+      onClick: () => {
+        setActiveIndex(index);
+        activate(option);
+      },
+      onKeyDown: (event) => handleOptionKeyDown(event, option),
+    };
+  }
+
+  function handleRootBlur(event: FocusEvent<HTMLDivElement>) {
+    const nextTarget = event.relatedTarget as Node | null;
+    if (!nextTarget || !rootRef.current?.contains(nextTarget)) {
+      dismiss();
+    }
+  }
+
+  function handleScroll() {
+    const scrollContainer = scrollContainerRef.current;
+    if (!scrollContainer || !hasMore || isLoadingMore) {
+      return;
+    }
+    const distanceFromBottom =
+      scrollContainer.scrollHeight -
+      scrollContainer.scrollTop -
+      scrollContainer.clientHeight;
+    if (distanceFromBottom <= SCROLL_LOAD_THRESHOLD_PX) {
+      loadMore();
+    }
+  }
+
+  useEffect(() => {
+    if (singleSelect) {
+      dismiss();
+      setActiveIndex(sourceInitialIndex);
+    }
+  }, [dismiss, selectedKey, singleSelect, sourceInitialIndex, sourceRevisionKey]);
 
   useEffect(() => {
     if (isOpen) {
-      searchRef.current?.focus();
+      setActiveIndex(matchingInitialIndex);
     }
-  }, [isOpen]);
+    // Matching identity is the lifecycle reset signal; opening is handled by open().
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matchingKey]);
+
+  useEffect(() => {
+    clearTimer(appendTimerRef);
+    pendingKeyboardIndexRef.current = null;
+    setIsLoadingMore(false);
+    setVisibleCount(Math.min(initialVisibleCount, matchingOptions.length));
+    return () => clearTimer(appendTimerRef);
+  }, [
+    initialVisibleCount,
+    matchingKey,
+    matchingOptions.length,
+  ]);
+
+  useEffect(() => {
+    const pendingIndex = pendingKeyboardIndexRef.current;
+    if (pendingIndex !== null && pendingIndex < visibleOptions.length) {
+      pendingKeyboardIndexRef.current = null;
+      setActiveIndex(pendingIndex);
+      window.requestAnimationFrame(() =>
+        optionRefs.current[pendingIndex]?.focus(),
+      );
+      return;
+    }
+    setActiveIndex((current) =>
+      current >= visibleOptions.length
+        ? visibleOptions.length > 0
+          ? visibleOptions.length - 1
+          : -1
+        : current,
+    );
+  }, [visibleOptions.length]);
 
   useEffect(() => {
     if (disabled) {
-      closeDropdown();
+      dismiss();
     }
-  }, [closeDropdown, disabled]);
+  }, [disabled, dismiss]);
 
-  usePopupDismissal({
-    open: isOpen,
-    onClose: closeDropdown,
-    triggerRef,
-    panelRef,
-  });
-
-  return {
-    triggerId,
-    listboxId,
-    searchId,
-    rootRef,
-    triggerRef,
-    panelRef,
-    searchRef,
-    isOpen,
-    query,
-    setQuery,
-    filteredOptions,
-    filteredOptionsKey,
-    openDropdown,
-    closeDropdown,
-    toggleDropdown,
-    handleRootBlur,
-  };
-}
-
-type DropdownNavigationOptions = {
-  optionCount: number;
-  fallbackIndex?: number;
-  onMovePastEnd?: () => boolean;
-  onEscape: () => void;
-};
-
-export function useDropdownOptionNavigation<
-  ElementType extends HTMLElement = HTMLElement,
->({
-  optionCount,
-  fallbackIndex = 0,
-  onMovePastEnd,
-  onEscape,
-}: DropdownNavigationOptions) {
-  const optionRefs = useRef<Array<ElementType | null>>([]);
-  const [activeIndex, setActiveIndex] = useState(-1);
-
-  const focusOption = useCallback((index: number) => {
-    window.requestAnimationFrame(() => {
-      optionRefs.current[index]?.focus();
-    });
-  }, []);
-
-  const focusFirstOption = useCallback(() => {
-    if (optionCount === 0) {
+  useEffect(() => {
+    if (!isOpen) {
       return;
     }
-    setActiveIndex(0);
-    focusOption(0);
-  }, [focusOption, optionCount]);
+    searchRef.current?.focus();
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        dismiss();
+      }
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [dismiss, isOpen]);
 
-  const focusLastOption = useCallback(() => {
-    if (optionCount === 0) {
+  useEffect(() => {
+    const scrollContainer = scrollContainerRef.current;
+    if (
+      !scrollContainer ||
+      !hasMore ||
+      isLoadingMore ||
+      scrollContainer.clientHeight <= 0
+    ) {
       return;
     }
-    const lastIndex = optionCount - 1;
-    setActiveIndex(lastIndex);
-    focusOption(lastIndex);
-  }, [focusOption, optionCount]);
-
-  const moveActiveOption = useCallback(
-    (direction: 1 | -1) => {
-      if (optionCount === 0) {
-        return;
+    const autoFillTimer = setTimeout(() => {
+      if (scrollContainer.scrollHeight <= scrollContainer.clientHeight) {
+        loadMore();
       }
-      setActiveIndex((current) => {
-        const startIndex = current >= 0 ? current : fallbackIndex;
-        if (
-          direction === 1 &&
-          startIndex >= optionCount - 1 &&
-          onMovePastEnd?.()
-        ) {
-          return current;
-        }
-        const nextIndex =
-          (startIndex + direction + optionCount) % optionCount;
-        focusOption(nextIndex);
-        return nextIndex;
-      });
-    },
-    [fallbackIndex, focusOption, onMovePastEnd, optionCount],
-  );
-
-  const handleOptionKeyDown = useCallback(
-    (event: KeyboardEvent<ElementType>, onActivate: () => void) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onEscape();
-        return;
-      }
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        moveActiveOption(1);
-        return;
-      }
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        moveActiveOption(-1);
-        return;
-      }
-      if (event.key === "Home") {
-        event.preventDefault();
-        focusFirstOption();
-        return;
-      }
-      if (event.key === "End") {
-        event.preventDefault();
-        focusLastOption();
-        return;
-      }
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        onActivate();
-      }
-    },
-    [focusFirstOption, focusLastOption, moveActiveOption, onEscape],
-  );
+    }, 0);
+    return () => clearTimeout(autoFillTimer);
+    // The listed values fully describe the paging closure used by loadMore().
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasMore, isLoadingMore, matchingOptions.length, pageSize, visibleCount]);
 
   return {
-    optionRefs,
-    activeIndex,
-    setActiveIndex,
-    focusOption,
-    focusFirstOption,
-    focusLastOption,
-    moveActiveOption,
-    handleOptionKeyDown,
+    ids: {
+      control: controlId,
+      search: searchId,
+      popup: popupId,
+      active: activeOptionId,
+    },
+    state: {
+      isOpen,
+      query,
+      options: visibleOptions,
+      activeIndex,
+      active: activeOption,
+      loading: isLoadingMore,
+    },
+    root: { ref: rootRef, onBlur: handleRootBlur },
+    trigger: {
+      ref: triggerRef,
+      onClick: () => (isOpen ? dismiss() : open()),
+      onKeyDown: handleTriggerKeyDown,
+    },
+    search: {
+      ref: searchRef,
+      onChange: (event: ChangeEvent<HTMLInputElement>) =>
+        setQuery(event.target.value),
+      onKeyDown: handleSearchKeyDown,
+    },
+    collection: {
+      ref: scrollContainerRef,
+      onScroll: handleScroll,
+      option: optionInteraction,
+    },
+    close: dismiss,
   };
 }
