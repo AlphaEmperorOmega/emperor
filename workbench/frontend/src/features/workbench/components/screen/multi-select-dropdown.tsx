@@ -209,8 +209,8 @@ export function MultiSelectDropdown({
         aria-label={`${label} ${countSummary}`}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
-        aria-controls={ids.popup}
-        aria-activedescendant={ids.active}
+        aria-controls={isOpen ? ids.popup : undefined}
+        aria-activedescendant={isOpen ? ids.active : undefined}
         disabled={disabled}
         onClick={trigger.onClick}
         onKeyDown={trigger.onKeyDown}

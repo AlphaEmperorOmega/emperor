@@ -103,6 +103,25 @@ async function openDropdown(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("MultiSelectDropdown", () => {
+  it("only references popup descendants while they are mounted", async () => {
+    const user = userEvent.setup();
+    renderDropdown();
+
+    const control = screen.getByRole("combobox", { name: /^targets\b/i });
+    expect(control).not.toHaveAttribute("aria-controls");
+    expect(control).not.toHaveAttribute("aria-activedescendant");
+
+    const popup = await openDropdown(user);
+    expect(control).toHaveAttribute("aria-controls", popup.id);
+    expect(document.getElementById(control.getAttribute("aria-activedescendant") ?? ""))
+      .toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+    expect(popup).not.toBeInTheDocument();
+    expect(control).not.toHaveAttribute("aria-controls");
+    expect(control).not.toHaveAttribute("aria-activedescendant");
+  });
+
   it("applies custom trigger classes after the default trigger styling", () => {
     const onChange = vi.fn();
     render(

@@ -74,7 +74,7 @@ export function ConfigFieldSearch({
           aria-label="Search config fields"
           aria-haspopup="dialog"
           aria-expanded={isOpen}
-          aria-controls={ids.popup}
+          aria-controls={isOpen ? ids.popup : undefined}
           autoComplete="off"
           placeholder="Search fields, keys, or sections…"
           spellCheck={false}

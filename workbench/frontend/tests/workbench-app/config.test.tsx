@@ -2995,13 +2995,16 @@ describe("WorkbenchApp Full Config", () => {
     });
 
     expect(search).toHaveAttribute("aria-expanded", "false");
-    expect(search).toHaveAttribute("aria-controls");
+    expect(search).not.toHaveAttribute("aria-controls");
     expect(search).toHaveAttribute("aria-haspopup", "dialog");
     expect(search).not.toHaveAttribute("aria-activedescendant");
 
     await user.type(search, "hidden");
 
     expect(search).toHaveAttribute("aria-expanded", "true");
+    expect(search).toHaveAttribute("aria-controls");
+    expect(document.getElementById(search.getAttribute("aria-controls") ?? ""))
+      .toBeInTheDocument();
     expect(search).not.toHaveAttribute("aria-activedescendant");
     const searchPopup = fullConfigSearchPopup(dialog);
     const hiddenDimRow = fullConfigSearchResultRow(searchPopup, /hidden dim/i);
@@ -3013,6 +3016,13 @@ describe("WorkbenchApp Full Config", () => {
     expect(
       within(hiddenDimRow).getByRole("textbox", { name: /current value/i }),
     ).toHaveValue("256");
+
+    await user.click(
+      within(dialog).getByRole("button", { name: "Clear config search" }),
+    );
+    expect(search).toHaveAttribute("aria-expanded", "false");
+    expect(search).not.toHaveAttribute("aria-controls");
+    expect(search).not.toHaveAttribute("aria-activedescendant");
   });
 
   it("lazy-loads full config field search results instead of showing a hidden-count footer", async () => {

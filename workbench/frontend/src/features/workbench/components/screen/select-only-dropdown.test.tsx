@@ -10,6 +10,34 @@ const options = [
 ];
 
 describe("SelectOnlyDropdown", () => {
+  it("only references popup descendants while they are mounted", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <SelectOnlyDropdown
+        label="Model"
+        value="linear"
+        options={options}
+        onChange={() => {}}
+      />,
+    );
+
+    const control = screen.getByRole("combobox", { name: "Model" });
+    expect(control).not.toHaveAttribute("aria-controls");
+    expect(control).not.toHaveAttribute("aria-activedescendant");
+
+    await user.click(control);
+    const popup = screen.getByRole("listbox", { name: "Model options" });
+    expect(control).toHaveAttribute("aria-controls", popup.id);
+    expect(document.getElementById(control.getAttribute("aria-activedescendant") ?? ""))
+      .toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+    expect(popup).not.toBeInTheDocument();
+    expect(control).not.toHaveAttribute("aria-controls");
+    expect(control).not.toHaveAttribute("aria-activedescendant");
+  });
+
   it("filters options with search and shows an empty result message", async () => {
     const user = userEvent.setup();
 
