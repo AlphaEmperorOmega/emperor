@@ -1,7 +1,7 @@
 import torch
 
 from torch import Tensor
-from emperor.base.utils import Module
+from emperor.base.module import Module
 from emperor.augmentations.adaptive_parameters.config import (
     AdaptiveParameterAugmentationConfig,
 )

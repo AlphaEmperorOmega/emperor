@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from emperor.base.utils import ConfigBase, optional_field
+from emperor.base.config import ConfigBase, optional_field
 from emperor.parametric.core.mixtures.options import ClipParameterOptions
 
 from typing import TYPE_CHECKING

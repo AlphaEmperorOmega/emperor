@@ -1,4 +1,4 @@
-from emperor.base.utils import Module
+from emperor.base.module import Module
 from emperor.parametric.core.mixtures._validator import AdaptiveMixtureValidator
 
 from typing import TYPE_CHECKING

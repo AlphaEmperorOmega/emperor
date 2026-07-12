@@ -1,7 +1,7 @@
 from torch import Tensor
 
 from emperor.base.layer import Layer, LayerState
-from emperor.base.utils import Module
+from emperor.base.module import Module
 from emperor.parametric.core._validator import ParametricHandlerValidator
 from emperor.parametric.core.mixtures.config import (
     GeneratorBiasMixtureConfig,
