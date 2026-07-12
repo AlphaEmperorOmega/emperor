@@ -18,10 +18,12 @@ class Cifar10(DataModule):
         self,
         batch_size=64,
         resize: tuple = (32, 32),
+        seed: int | None = None,
     ):
         super().__init__()
         self.batch_size = batch_size
         self.resize = resize
+        self.seed = None if seed is None else int(seed)
         width, height = resize
         self.flattened_input_dim: int = width * height * 3
 
@@ -40,8 +42,13 @@ class Cifar10(DataModule):
         val_size = int(len(full_train) * self.val_split)
         train_size = len(full_train) - val_size
         self.train, self.val = torch.utils.data.random_split(
-            full_train, [train_size, val_size],
-            generator=torch.Generator().manual_seed(42),
+            full_train,
+            [train_size, val_size],
+            generator=(
+                torch.Generator().manual_seed(self.seed)
+                if self.seed is not None
+                else None
+            ),
         )
 
     def _setup_validate(self) -> None:
@@ -53,8 +60,13 @@ class Cifar10(DataModule):
         val_size = int(len(full_train) * self.val_split)
         train_size = len(full_train) - val_size
         _, self.val = torch.utils.data.random_split(
-            full_train, [train_size, val_size],
-            generator=torch.Generator().manual_seed(42),
+            full_train,
+            [train_size, val_size],
+            generator=(
+                torch.Generator().manual_seed(self.seed)
+                if self.seed is not None
+                else None
+            ),
         )
 
     def _setup_test(self) -> None:
@@ -109,6 +121,11 @@ class Cifar10(DataModule):
             shuffle=train,
             num_workers=self.num_workers,
             drop_last=True,
+            generator=(
+                torch.Generator().manual_seed(self.seed)
+                if train and self.seed is not None
+                else None
+            ),
         )
 
     def _get_test_dataloader(self):

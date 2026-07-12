@@ -182,7 +182,7 @@ class _Multi30k(DataModule):
         root: str | os.PathLike[str] = "data",
         num_workers: int = 0,
         downloader: DownloadFunction | None = None,
-        seed: int = 0,
+        seed: int | None = None,
     ) -> None:
         super().__init__(root=str(root), num_workers=num_workers)
         requested_pair = language_pair or type(self).language_pair
@@ -203,7 +203,7 @@ class _Multi30k(DataModule):
             self.source_sequence_length, self.target_sequence_length
         )
         self.language_pair = tuple(requested_pair)
-        self.seed = int(seed)
+        self.seed = None if seed is None else int(seed)
         self._downloader = downloader or _download_file
         self.cache_dir = Path(self.root) / "multi30k" / SOURCE_COMMIT
         self.archive_dir = self.cache_dir / "archives"
@@ -550,7 +550,11 @@ class _Multi30k(DataModule):
     def _loader(self, dataset, *, shuffle: bool) -> torch.utils.data.DataLoader:
         if dataset is None:
             raise RuntimeError("Call setup() before requesting a Multi30k data loader")
-        generator = torch.Generator().manual_seed(self.seed) if shuffle else None
+        generator = (
+            torch.Generator().manual_seed(self.seed)
+            if shuffle and self.seed is not None
+            else None
+        )
         return torch.utils.data.DataLoader(
             dataset,
             batch_size=self.batch_size,

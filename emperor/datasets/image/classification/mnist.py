@@ -19,10 +19,12 @@ class Mnist(DataModule):
         self,
         batch_size,
         resize=(28, 28),
+        seed: int | None = None,
     ):
         super().__init__()
         self.batch_size = batch_size
         self.resize = resize
+        self.seed = None if seed is None else int(seed)
 
     def prepare_data(self) -> None:
         datasets.MNIST(root=self.root, train=True, download=True)
@@ -39,7 +41,11 @@ class Mnist(DataModule):
         self.train, self.val = torch.utils.data.random_split(
             full_train,
             [train_size, val_size],
-            generator=torch.Generator().manual_seed(42),
+            generator=(
+                torch.Generator().manual_seed(self.seed)
+                if self.seed is not None
+                else None
+            ),
         )
 
     def _setup_validate(self) -> None:
@@ -53,7 +59,11 @@ class Mnist(DataModule):
         _, self.val = torch.utils.data.random_split(
             full_train,
             [train_size, val_size],
-            generator=torch.Generator().manual_seed(42),
+            generator=(
+                torch.Generator().manual_seed(self.seed)
+                if self.seed is not None
+                else None
+            ),
         )
 
     def _setup_test(self) -> None:
@@ -92,6 +102,11 @@ class Mnist(DataModule):
             shuffle=train,
             num_workers=self.num_workers,
             drop_last=True,
+            generator=(
+                torch.Generator().manual_seed(self.seed)
+                if train and self.seed is not None
+                else None
+            ),
         )
 
     def _get_test_dataloader(self):

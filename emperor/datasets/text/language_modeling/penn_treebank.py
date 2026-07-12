@@ -55,6 +55,7 @@ class PennTreebank(DataModule):
         root: str = "data",
         num_workers: int = 4,
         drop_last: bool = True,
+        seed: int | None = None,
     ) -> None:
         super().__init__(root=root, num_workers=num_workers)
         if batch_size <= 0:
@@ -64,6 +65,7 @@ class PennTreebank(DataModule):
         self.batch_size = batch_size
         self.sequence_length = sequence_length
         self.drop_last = drop_last
+        self.seed = None if seed is None else int(seed)
         self.tokenizer = get_tokenizer("basic_english")
         self.vocab = None
         self._legacy_split_tokens: dict[str, tuple[str, ...]] | None = None
@@ -156,6 +158,11 @@ class PennTreebank(DataModule):
             shuffle=train,
             num_workers=self.num_workers,
             drop_last=self.drop_last,
+            generator=(
+                torch.Generator().manual_seed(self.seed)
+                if train and self.seed is not None
+                else None
+            ),
         )
 
     def _get_test_dataloader(self):

@@ -267,7 +267,7 @@ class _TorchTextBertPretraining(DataModule):
         root: str = "data",
         num_workers: int = 4,
         drop_last: bool = True,
-        seed: int = 0,
+        seed: int | None = None,
     ) -> None:
         if sequence_length < 5:
             raise ValueError("sequence_length must be at least 5.")
@@ -278,7 +278,7 @@ class _TorchTextBertPretraining(DataModule):
         self.mlm_probability = mlm_probability
         self.random_next_probability = random_next_probability
         self.drop_last = drop_last
-        self.seed = seed
+        self.seed = None if seed is None else int(seed)
         self.tokenizer: Tokenizer | None = None
         self.special_token_ids: BertSpecialTokenIds | None = None
         self.collator: BertPretrainingCollator | None = None
@@ -290,29 +290,39 @@ class _TorchTextBertPretraining(DataModule):
         self._dataset(self.validation_split)
         self._dataset(self.test_split)
 
+    def _rng(self, offset: int = 0) -> random.Random | None:
+        if self.seed is None:
+            return None
+        return random.Random(self.seed + offset)
+
+    def _generator(self, offset: int = 0) -> torch.Generator | None:
+        if self.seed is None:
+            return None
+        return torch.Generator().manual_seed(self.seed + offset)
+
     def _setup_fit(self) -> None:
         self._build_tokenizer()
         self.train = self._build_dataset(
             self._dataset(self.train_split),
-            rng=random.Random(self.seed),
+            rng=self._rng(),
         )
         self.val = self._build_dataset(
             self._dataset(self.validation_split),
-            rng=random.Random(self.seed + 1),
+            rng=self._rng(1),
         )
 
     def _setup_validate(self) -> None:
         self._build_tokenizer()
         self.val = self._build_dataset(
             self._dataset(self.validation_split),
-            rng=random.Random(self.seed + 1),
+            rng=self._rng(1),
         )
 
     def _setup_test(self) -> None:
         self._build_tokenizer()
         self.test = self._build_dataset(
             self._dataset(self.test_split),
-            rng=random.Random(self.seed + 2),
+            rng=self._rng(2),
         )
 
     def _get_test_dataloader(self):
@@ -352,13 +362,13 @@ class _TorchTextBertPretraining(DataModule):
             special_token_ids=self.special_token_ids,
             vocab_size=self.actual_vocab_size,
             mlm_probability=self.mlm_probability,
-            generator=torch.Generator().manual_seed(self.seed),
+            generator=self._generator(),
         )
 
     def _build_dataset(
         self,
         data_iter,
-        rng: random.Random,
+        rng: random.Random | None,
     ) -> torch.utils.data.TensorDataset:
         if self.tokenizer is None or self.special_token_ids is None:
             raise RuntimeError("Tokenizer must be built before the dataset.")
@@ -396,9 +406,7 @@ class _TorchTextBertPretraining(DataModule):
             num_workers=self.num_workers,
             drop_last=self.drop_last,
             collate_fn=self.collator,
-            generator=torch.Generator().manual_seed(
-                self.seed if train else self.seed + 1
-            ),
+            generator=self._generator(0 if train else 1),
         )
 
     def _text_labels(self, indices) -> list:
