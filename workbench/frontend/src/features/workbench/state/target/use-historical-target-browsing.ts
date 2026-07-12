@@ -3,8 +3,6 @@ import {
   useEffect,
   useMemo,
   useState,
-  type Dispatch,
-  type SetStateAction,
 } from "react";
 import { type LogRun, type LogRunTags, type ModelIdentity } from "@/lib/api";
 import { useLogRunsQuery, useLogTagsQuery } from "@/features/workbench/state/logs/use-log-queries";
@@ -15,29 +13,15 @@ import { logQueryKeys } from "@/lib/query-keys";
 
 const HISTORICAL_RUN_PAGE_LIMIT = 500;
 
-type HistoricalRunSelectionState = {
-  selectedLogRunId: string | null;
-  selectedHistoricalExperimentFilter: string;
-  setSelectedHistoricalExperimentFilter: (experiment: string) => void;
-  selectedHistoricalDatasetFilter: string;
-  setSelectedHistoricalDatasetFilter: (dataset: string) => void;
-  selectedHistoricalPreset: string;
-  setSelectedHistoricalPreset: (preset: string) => void;
-  setSelectedLogRunId: Dispatch<SetStateAction<string | null>>;
-  clearHistoricalSelectionForTarget: () => void;
-};
-
-type HistoricalRunsStateInput = {
+type HistoricalTargetBrowsingInput = {
   selectedModelType: string;
   selectedModel: string;
   selectedExperimentTask?: string;
   runsEnabled?: boolean;
   tagsEnabled?: boolean;
-  syncSelectedLogRun: (selectedLogRun: LogRun) => void;
-  selection: HistoricalRunSelectionState;
 };
 
-type HistoricalRunsProviderSlice = {
+type HistoricalTargetBrowsingProjection = {
   historicalMonitorRuns: LogRun[];
   historicalExperimentOptions: ReturnType<
     typeof deriveDatasetSelectionState
@@ -64,7 +48,7 @@ type HistoricalRunsProviderSlice = {
     ReturnType<typeof deriveDatasetSelectionState>["selectedLogRunMonitorEligibility"];
 };
 
-type HistoricalRunsGraphPreviewState = {
+type HistoricalTargetGraphFacts = {
   historicalMonitorRuns: LogRun[];
   selectedHistoricalExperiment: string;
   selectedHistoricalDataset: string;
@@ -73,12 +57,22 @@ type HistoricalRunsGraphPreviewState = {
   filteredHistoricalRunIds: string[];
 };
 
-type HistoricalRunsState = {
-  history: HistoricalRunsProviderSlice;
-  graphPreview: HistoricalRunsGraphPreviewState;
+type HistoricalTargetBrowsingState = {
+  browsing: HistoricalTargetBrowsingProjection;
+  graphFacts: HistoricalTargetGraphFacts;
+  coordination: {
+    selectedRun?: LogRun;
+    clearForTargetChange: () => void;
+  };
 };
 
-export function useHistoricalRunSelectionState(): HistoricalRunSelectionState {
+export function useHistoricalTargetBrowsing({
+  selectedModelType,
+  selectedModel,
+  selectedExperimentTask = "",
+  runsEnabled = true,
+  tagsEnabled = true,
+}: HistoricalTargetBrowsingInput): HistoricalTargetBrowsingState {
   const [selectedLogRunId, setSelectedLogRunId] = useState<string | null>(null);
   const [
     selectedHistoricalExperimentFilter,
@@ -132,51 +126,6 @@ export function useHistoricalRunSelectionState(): HistoricalRunSelectionState {
     },
     [selectedHistoricalPreset],
   );
-
-  return useMemo(
-    () => ({
-      selectedLogRunId,
-      selectedHistoricalExperimentFilter,
-      setSelectedHistoricalExperimentFilter,
-      selectedHistoricalDatasetFilter,
-      setSelectedHistoricalDatasetFilter,
-      selectedHistoricalPreset,
-      setSelectedHistoricalPreset: setSelectedHistoricalPresetFilter,
-      setSelectedLogRunId,
-      clearHistoricalSelectionForTarget,
-    }),
-    [
-      clearHistoricalSelectionForTarget,
-      selectedHistoricalDatasetFilter,
-      selectedHistoricalExperimentFilter,
-      selectedHistoricalPreset,
-      selectedLogRunId,
-      setSelectedHistoricalDatasetFilter,
-      setSelectedHistoricalExperimentFilter,
-      setSelectedHistoricalPresetFilter,
-    ],
-  );
-}
-
-export function useHistoricalRunsState({
-  selectedModelType,
-  selectedModel,
-  selectedExperimentTask = "",
-  runsEnabled = true,
-  tagsEnabled = true,
-  syncSelectedLogRun,
-  selection,
-}: HistoricalRunsStateInput): HistoricalRunsState {
-  const {
-    selectedLogRunId,
-    selectedHistoricalExperimentFilter,
-    setSelectedHistoricalExperimentFilter,
-    selectedHistoricalDatasetFilter,
-    setSelectedHistoricalDatasetFilter,
-    selectedHistoricalPreset,
-    setSelectedHistoricalPreset,
-    setSelectedLogRunId,
-  } = selection;
 
   const logRunFilters = useMemo(
     () =>
@@ -327,7 +276,7 @@ export function useHistoricalRunsState({
 
   useEffect(() => {
     if (!selectedHistoricalExperimentFilter || !selectedHistoricalDatasetFilter) {
-      setSelectedHistoricalPreset("");
+      setSelectedHistoricalPresetFilter("");
       return;
     }
     if (
@@ -336,14 +285,14 @@ export function useHistoricalRunsState({
         (option) => option.value === selectedHistoricalPreset,
       )
     ) {
-      setSelectedHistoricalPreset("");
+      setSelectedHistoricalPresetFilter("");
     }
   }, [
     historicalPresetOptions,
     selectedHistoricalDatasetFilter,
     selectedHistoricalExperimentFilter,
     selectedHistoricalPreset,
-    setSelectedHistoricalPreset,
+    setSelectedHistoricalPresetFilter,
   ]);
 
   useEffect(() => {
@@ -389,14 +338,7 @@ export function useHistoricalRunsState({
     visibleHistoricalRuns,
   ]);
 
-  useEffect(() => {
-    if (!selectedModel || !selectedLogRun) {
-      return;
-    }
-    syncSelectedLogRun(selectedLogRun);
-  }, [selectedLogRun, selectedModel, syncSelectedLogRun]);
-
-  const history = useMemo(
+  const browsing = useMemo(
     () => ({
       historicalMonitorRuns,
       historicalExperimentOptions,
@@ -407,7 +349,7 @@ export function useHistoricalRunsState({
       selectedHistoricalDatasetFilter,
       setSelectedHistoricalDatasetFilter,
       selectedHistoricalPreset,
-      setSelectedHistoricalPreset,
+      setSelectedHistoricalPreset: setSelectedHistoricalPresetFilter,
       selectedHistoricalExperiment,
       selectedHistoricalDataset,
       selectedHistoricalRunPreset,
@@ -433,10 +375,10 @@ export function useHistoricalRunsState({
       selectedLogRunMonitorEligibility,
       setSelectedHistoricalDatasetFilter,
       setSelectedHistoricalExperimentFilter,
-      setSelectedHistoricalPreset,
+      setSelectedHistoricalPresetFilter,
     ],
   );
-  const graphPreview = useMemo(
+  const graphFacts = useMemo(
     () => ({
       historicalMonitorRuns,
       selectedHistoricalExperiment,
@@ -455,11 +397,16 @@ export function useHistoricalRunsState({
     ],
   );
 
-  return useMemo(
+  const coordination = useMemo(
     () => ({
-      history,
-      graphPreview,
+      selectedRun: selectedLogRun,
+      clearForTargetChange: clearHistoricalSelectionForTarget,
     }),
-    [graphPreview, history],
+    [clearHistoricalSelectionForTarget, selectedLogRun],
+  );
+
+  return useMemo(
+    () => ({ browsing, graphFacts, coordination }),
+    [browsing, coordination, graphFacts],
   );
 }

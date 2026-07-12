@@ -13,10 +13,6 @@ import {
 import { useTrainingConfiguration } from "@/features/workbench/providers/training-provider";
 import { useConfigSnapshotEditorState } from "@/features/workbench/state/config-snapshots/use-config-snapshot-editor";
 import {
-  type ConfigSnapshotMutationOutcome,
-  type ConfigSnapshotMutationStatus,
-} from "@/features/workbench/state/config-snapshots/use-config-snapshot-records";
-import {
   type FullConfigDialogMode,
   type FullConfigDialogScope,
 } from "@/features/workbench/state/use-workbench-workspace-shell";
@@ -26,22 +22,6 @@ export type FullConfigSessionKind =
   | "training"
   | "snapshot-draft"
   | "snapshot-edit";
-
-const idleConfigSnapshotMutation: ConfigSnapshotMutationStatus = {
-  phase: "idle",
-  kind: null,
-  snapshotId: null,
-  error: "",
-  canRetry: false,
-};
-
-async function retryUnavailableConfigSnapshotMutation(): Promise<
-  ConfigSnapshotMutationOutcome | null
-> {
-  return null;
-}
-
-function dismissUnavailableConfigSnapshotMutation() {}
 
 export function useFullConfigSession({
   mode,
@@ -137,16 +117,9 @@ export function useFullConfigSession({
   const recordGroups = isSnapshot
     ? editorSession.recordGroups
     : snapshotLibrary.records.allGroups;
-  const compatibleSnapshotLibrary = snapshotLibrary as typeof snapshotLibrary & {
-    mutation?: ConfigSnapshotMutationStatus;
-    actions: typeof snapshotLibrary.actions & {
-      retryMutation?: () => Promise<ConfigSnapshotMutationOutcome | null>;
-      dismissMutation?: () => void;
-    };
-  };
   const mutation = isSnapshot
     ? editorSession.status.mutation
-    : compatibleSnapshotLibrary.mutation ?? idleConfigSnapshotMutation;
+    : snapshotLibrary.mutation;
   const loadSnapshot = isSnapshot
     ? snapshotEditor.actions.load
     : snapshotLibrary.actions.selectTarget;
@@ -158,12 +131,10 @@ export function useFullConfigSession({
     : snapshotLibrary.actions.remove;
   const retryMutation = isSnapshot
     ? snapshotEditor.actions.retryMutation
-    : compatibleSnapshotLibrary.actions.retryMutation ??
-      retryUnavailableConfigSnapshotMutation;
+    : snapshotLibrary.actions.retryMutation;
   const dismissMutation = isSnapshot
     ? snapshotEditor.actions.dismissMutation
-    : compatibleSnapshotLibrary.actions.dismissMutation ??
-      dismissUnavailableConfigSnapshotMutation;
+    : snapshotLibrary.actions.dismissMutation;
 
   const toggleSnapshotRunSelection = useCallback(
     (snapshotId: string) => {

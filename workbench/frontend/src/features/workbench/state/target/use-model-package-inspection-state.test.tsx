@@ -5,9 +5,16 @@ const mocks = vi.hoisted(() => ({
   useWorkbenchQueries: vi.fn(),
   useConfigSnapshotRecords: vi.fn(),
   useInspectionPreviewState: vi.fn(),
+  useLogRunsQuery: vi.fn(),
+  useLogTagsQuery: vi.fn(),
   requestPreview: vi.fn(),
   clearPreview: vi.fn(),
   writeTargetSelection: vi.fn(),
+  renameSnapshotRecord: vi.fn(),
+  removeSnapshotRecord: vi.fn(),
+  retrySnapshotRecordMutation: vi.fn(),
+  dismissSnapshotRecordMutation: vi.fn(),
+  clearSnapshotRecordsForConnectionChange: vi.fn(),
 }));
 
 vi.mock("@/features/workbench/state/use-workbench-queries", () => ({
@@ -45,6 +52,11 @@ vi.mock(
   }),
 );
 
+vi.mock("@/features/workbench/state/logs/use-log-queries", () => ({
+  useLogRunsQuery: mocks.useLogRunsQuery,
+  useLogTagsQuery: mocks.useLogTagsQuery,
+}));
+
 vi.mock(
   "@/features/workbench/state/target/target-selection-storage",
   async (importOriginal) => {
@@ -70,6 +82,7 @@ import {
   type ConfigSnapshotRecord,
   type DatasetGroup,
   type LogRun,
+  type LogRunTags,
   type MonitorOption,
 } from "@/lib/api";
 import {
@@ -101,6 +114,8 @@ let configSnapshotsError = false;
 let schemaFieldsByPreset: Record<string, ConfigField[]> = {};
 let schemaQueryError = false;
 let datasetGroupsOverride: DatasetGroup[] | undefined;
+let historicalRuns: LogRun[] = [];
+let historicalRunTags: LogRunTags[] = [];
 
 function query<TData>(data: TData) {
   return {
@@ -193,6 +208,52 @@ function renderTargetState() {
   return renderHook(() => useModelPackageInspectionState({}));
 }
 
+async function selectHistoricalRunThroughInspection(
+  result: ReturnType<typeof renderTargetState>["result"],
+  run: LogRun,
+) {
+  act(() => {
+    result.current.contexts.model.actions.browseHistoricalRuns();
+  });
+  await waitFor(() => {
+    expect(
+      result.current.historical.browsing.historicalExperimentOptions.some(
+        (option) => option.value === run.experiment,
+      ),
+    ).toBe(true);
+  });
+  act(() => {
+    result.current.historical.browsing.setSelectedHistoricalExperimentFilter(
+      run.experiment,
+    );
+  });
+  await waitFor(() => {
+    expect(
+      result.current.historical.browsing.historicalDatasetOptions.some(
+        (option) => option.value === run.dataset,
+      ),
+    ).toBe(true);
+  });
+  act(() => {
+    result.current.historical.browsing.setSelectedHistoricalDatasetFilter(
+      run.dataset,
+    );
+  });
+  await waitFor(() => {
+    expect(
+      result.current.historical.browsing.historicalPresetOptions.some(
+        (option) => option.value === run.preset,
+      ),
+    ).toBe(true);
+  });
+  act(() => {
+    result.current.historical.browsing.setSelectedHistoricalPreset(run.preset);
+  });
+  await waitFor(() => {
+    expect(result.current.historical.browsing.selectedLogRunId).toBe(run.id);
+  });
+}
+
 beforeEach(() => {
   window.localStorage.clear();
   snapshots = [];
@@ -202,9 +263,43 @@ beforeEach(() => {
   schemaFieldsByPreset = {};
   schemaQueryError = false;
   datasetGroupsOverride = undefined;
+  historicalRuns = [];
+  historicalRunTags = [];
   mocks.requestPreview.mockReset();
   mocks.clearPreview.mockReset();
   mocks.writeTargetSelection.mockReset();
+  mocks.renameSnapshotRecord.mockReset().mockImplementation(async ({ id }) => ({
+    ok: true,
+    kind: "rename",
+    snapshotId: id,
+    record: null,
+  }));
+  mocks.removeSnapshotRecord.mockReset().mockImplementation(async (id) => {
+    snapshots = snapshots.filter((snapshot) => snapshot.id !== id);
+    return {
+      ok: true,
+      kind: "remove",
+      snapshotId: id,
+      record: null,
+    };
+  });
+  mocks.retrySnapshotRecordMutation.mockReset().mockResolvedValue(null);
+  mocks.dismissSnapshotRecordMutation.mockReset();
+  mocks.clearSnapshotRecordsForConnectionChange.mockReset();
+  mocks.useLogRunsQuery.mockReset().mockImplementation(({ enabled }) => ({
+    data: enabled ? { runs: historicalRuns } : undefined,
+    isLoading: false,
+    isSuccess: Boolean(enabled),
+    isError: false,
+    error: null,
+  }));
+  mocks.useLogTagsQuery.mockReset().mockImplementation(({ enabled }) => ({
+    data: enabled ? { runs: historicalRunTags } : undefined,
+    isLoading: false,
+    isSuccess: Boolean(enabled),
+    isError: false,
+    error: null,
+  }));
   mocks.useInspectionPreviewState.mockReset().mockImplementation(() => ({
     response: undefined,
     request: null,
@@ -317,15 +412,49 @@ beforeEach(() => {
           isReady: false,
           isError: true,
           error: new Error("snapshot read failed"),
+          mutation: {
+            phase: "idle",
+            kind: null,
+            snapshotId: null,
+            error: "",
+            canRetry: false,
+          },
         }
       : configSnapshotsLoading
-        ? { isLoading: true, isReady: false, isError: false, error: null }
-        : { isLoading: false, isReady: true, isError: false, error: null },
+        ? {
+            isLoading: true,
+            isReady: false,
+            isError: false,
+            error: null,
+            mutation: {
+              phase: "idle",
+              kind: null,
+              snapshotId: null,
+              error: "",
+              canRetry: false,
+            },
+          }
+        : {
+            isLoading: false,
+            isReady: true,
+            isError: false,
+            error: null,
+            mutation: {
+              phase: "idle",
+              kind: null,
+              snapshotId: null,
+              error: "",
+              canRetry: false,
+            },
+          },
     actions: {
       create: vi.fn(),
-      rename: vi.fn(),
+      rename: mocks.renameSnapshotRecord,
       update: vi.fn(),
-      remove: vi.fn(),
+      remove: mocks.removeSnapshotRecord,
+      retry: mocks.retrySnapshotRecordMutation,
+      dismissMutation: mocks.dismissSnapshotRecordMutation,
+      clearForConnectionChange: mocks.clearSnapshotRecordsForConnectionChange,
     },
   }));
 });
@@ -543,6 +672,8 @@ describe("useModelPackageInspectionState", () => {
   });
 
   it("syncs a selected historical run into the target without keeping overrides", async () => {
+    const run = logRun({ id: "run-fast" });
+    historicalRuns = [run];
     const { result } = renderTargetState();
 
     await waitFor(() => {
@@ -558,9 +689,7 @@ describe("useModelPackageInspectionState", () => {
       );
     });
     const transitionRevision = result.current.inspection.transition.revision;
-    act(() => {
-      result.current.selectHistoricalRunTarget(logRun({ id: "run-fast" }));
-    });
+    await selectHistoricalRunThroughInspection(result, run);
 
     expect(result.current.contexts.model.target).toMatchObject({
       kind: "historical-run",
@@ -591,6 +720,13 @@ describe("useModelPackageInspectionState", () => {
   });
 
   it("syncs a selected historical run whose preset and dataset are absent from the catalog", async () => {
+    const run = logRun({
+      id: "kaggle-run",
+      experiment: "kaggle_linear_all",
+      preset: "KAGGLE_LINEAR",
+      dataset: "KaggleDigits",
+    });
+    historicalRuns = [run];
     const { result } = renderTargetState();
 
     await waitFor(() => {
@@ -606,16 +742,7 @@ describe("useModelPackageInspectionState", () => {
         "128",
       );
     });
-    act(() => {
-      result.current.selectHistoricalRunTarget(
-        logRun({
-          id: "kaggle-run",
-          experiment: "kaggle_linear_all",
-          preset: "KAGGLE_LINEAR",
-          dataset: "KaggleDigits",
-        }),
-      );
-    });
+    await selectHistoricalRunThroughInspection(result, run);
 
     expect(result.current.contexts.model.target).toMatchObject({
       kind: "historical-run",
@@ -648,6 +775,8 @@ describe("useModelPackageInspectionState", () => {
   });
 
   it("exits a historical target before editing preset Runtime Defaults", async () => {
+    const run = logRun({ id: "run-fast" });
+    historicalRuns = [run];
     const { result } = renderTargetState();
 
     await waitFor(() => {
@@ -656,9 +785,7 @@ describe("useModelPackageInspectionState", () => {
       );
     });
 
-    act(() => {
-      result.current.selectHistoricalRunTarget(logRun({ id: "run-fast" }));
-    });
+    await selectHistoricalRunThroughInspection(result, run);
 
     await waitFor(() => {
       expect(result.current.contexts.model.target).toMatchObject({
@@ -691,6 +818,8 @@ describe("useModelPackageInspectionState", () => {
   });
 
   it("resets a historical target to its compatible catalog preset", async () => {
+    const run = logRun({ id: "run-fast" });
+    historicalRuns = [run];
     const { result } = renderTargetState();
 
     await waitFor(() => {
@@ -699,9 +828,7 @@ describe("useModelPackageInspectionState", () => {
       );
     });
 
-    act(() => {
-      result.current.selectHistoricalRunTarget(logRun({ id: "run-fast" }));
-    });
+    await selectHistoricalRunThroughInspection(result, run);
 
     await waitFor(() => {
       expect(result.current.contexts.model.target).toMatchObject({
@@ -887,7 +1014,7 @@ describe("useModelPackageInspectionState", () => {
     });
   });
 
-  it("normalizes adaptive flag updates in preset override state", async () => {
+  it("repairs adaptive edits and suppresses a flag returned to its Runtime Default", async () => {
     schemaFieldsByPreset = { baseline: adaptiveConfigFields };
     const { result } = renderTargetState();
 
@@ -916,9 +1043,7 @@ describe("useModelPackageInspectionState", () => {
       );
     });
 
-    expect(result.current.contexts.model.runtimeDefaults.active).toEqual({
-      weight_option_flag: "false",
-    });
+    expect(result.current.contexts.model.runtimeDefaults.active).toEqual({});
   });
 
   it("normalizes old adaptive snapshot overrides before preview", async () => {
@@ -1425,7 +1550,7 @@ describe("useModelPackageInspectionState", () => {
         updatedAt: "2026-06-01T00:00:00.000Z",
       },
     ];
-    const { result } = renderTargetState();
+    const { result, rerender } = renderTargetState();
 
     await waitFor(() => {
       expect(result.current.contexts.model.browser.selectedPreset).toBe(
@@ -1439,9 +1564,12 @@ describe("useModelPackageInspectionState", () => {
     });
     const transitionRevision = result.current.inspection.transition.revision;
 
-    act(() => {
-      result.current.contexts.snapshots.actions.remove("snapshot-baseline");
+    await act(async () => {
+      await result.current.contexts.snapshots.actions.remove(
+        "snapshot-baseline",
+      );
     });
+    rerender();
 
     expect(result.current.contexts.model.target.kind).toBe("preset");
     expect(result.current.contexts.model.browser.selectedSnapshotId).toBe(
@@ -1450,6 +1578,73 @@ describe("useModelPackageInspectionState", () => {
     expect(result.current.contexts.model.runtimeDefaults.active).toEqual(
       {},
     );
+    expect(result.current.inspection.transition).toEqual({
+      revision: transitionRevision + 1,
+      cause: "target-changed",
+    });
+  });
+
+  it("retains the active snapshot after failed removal and reconciles it after retry", async () => {
+    snapshots = [
+      {
+        id: "snapshot-baseline",
+        name: "Baseline tuned",
+        modelType: "linears",
+        model: "linear",
+        preset: "baseline",
+        overrides: { hidden_size: "256" },
+        createdAt: "2026-06-01T00:00:00.000Z",
+        updatedAt: "2026-06-01T00:00:00.000Z",
+      },
+    ];
+    mocks.removeSnapshotRecord.mockResolvedValueOnce({
+      ok: false,
+      kind: "remove",
+      snapshotId: "snapshot-baseline",
+      error: "Removal rejected.",
+      retryable: true,
+    });
+    mocks.retrySnapshotRecordMutation.mockImplementationOnce(async () => {
+      snapshots = [];
+      return {
+        ok: true,
+        kind: "remove",
+        snapshotId: "snapshot-baseline",
+        record: null,
+      };
+    });
+    const { result, rerender } = renderTargetState();
+    await waitFor(() => {
+      expect(result.current.contexts.model.browser.selectedPreset).toBe(
+        "baseline",
+      );
+    });
+    act(() => {
+      result.current.contexts.model.actions.selectSnapshotTarget(
+        "snapshot-baseline",
+      );
+    });
+    const transitionRevision = result.current.inspection.transition.revision;
+
+    await act(async () => {
+      await result.current.contexts.snapshots.actions.remove(
+        "snapshot-baseline",
+      );
+    });
+    expect(result.current.contexts.model.target.kind).toBe("snapshot");
+    expect(result.current.contexts.model.browser.selectedSnapshotId).toBe(
+      "snapshot-baseline",
+    );
+    expect(result.current.inspection.transition.revision).toBe(
+      transitionRevision,
+    );
+
+    await act(async () => {
+      await result.current.contexts.snapshots.actions.retryMutation();
+    });
+    rerender();
+    expect(result.current.contexts.model.target.kind).toBe("preset");
+    expect(result.current.contexts.model.browser.selectedSnapshotId).toBe("");
     expect(result.current.inspection.transition).toEqual({
       revision: transitionRevision + 1,
       cause: "target-changed",
@@ -1631,6 +1826,13 @@ describe("useModelPackageInspectionState", () => {
   });
 
   it("rejects a historical Run from another Model Package atomically", async () => {
+    historicalRuns = [
+      logRun({
+        id: "wrong-package",
+        modelType: "experts",
+        model: "linear",
+      }),
+    ];
     const { result } = renderTargetState();
 
     await waitFor(() => {
@@ -1642,16 +1844,13 @@ describe("useModelPackageInspectionState", () => {
     const transition = result.current.inspection.transition;
 
     act(() => {
-      result.current.selectHistoricalRunTarget(
-        logRun({
-          id: "wrong-package",
-          modelType: "experts",
-          model: "linear",
-        }),
-      );
+      result.current.contexts.model.actions.browseHistoricalRuns();
     });
 
     expect(result.current.contexts.model.target.kind).toBe("preset");
+    expect(
+      result.current.historical.browsing.historicalExperimentOptions,
+    ).toEqual([]);
     expect(result.current.inspection.transition).toEqual(transition);
     expect(mocks.requestPreview).not.toHaveBeenCalled();
   });
@@ -1700,6 +1899,8 @@ describe("useModelPackageInspectionState", () => {
   });
 
   it("treats an Experiment Task change as browsing while a historical target remains complete", async () => {
+    const run = logRun({ id: "run-fast" });
+    historicalRuns = [run];
     const { result } = renderTargetState();
 
     await waitFor(() => {
@@ -1707,9 +1908,7 @@ describe("useModelPackageInspectionState", () => {
         "baseline",
       );
     });
-    act(() => {
-      result.current.selectHistoricalRunTarget(logRun({ id: "run-fast" }));
-    });
+    await selectHistoricalRunThroughInspection(result, run);
     const transition = result.current.inspection.transition;
     mocks.requestPreview.mockClear();
 
@@ -1813,6 +2012,33 @@ describe("useModelPackageInspectionState", () => {
       revision: ++revision,
       cause: "target-changed",
     });
+  });
+
+  it("suppresses a semantic transition for a token-equivalent no-op edit", async () => {
+    const { result } = renderTargetState();
+
+    await waitFor(() => {
+      expect(result.current.contexts.model.browser.selectedModel).toBe("linear");
+    });
+    act(() => {
+      result.current.contexts.model.actions.editRuntimeDefault(
+        "hidden_size",
+        "128",
+      );
+    });
+    const transition = result.current.inspection.transition;
+
+    act(() => {
+      result.current.contexts.model.actions.editRuntimeDefault(
+        "HIDDEN-SIZE",
+        "128",
+      );
+    });
+
+    expect(result.current.contexts.model.runtimeDefaults.active).toEqual({
+      hidden_size: "128",
+    });
+    expect(result.current.inspection.transition).toBe(transition);
   });
 
   it("exits a snapshot target when clearing an already-empty preset draft", async () => {

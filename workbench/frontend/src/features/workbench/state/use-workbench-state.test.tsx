@@ -958,6 +958,29 @@ describe("useWorkbenchState", () => {
     expect(result.current.targetContexts.model).toBe(target);
   });
 
+  it("keeps historical browsing out of the focused target context identity", async () => {
+    mocks.fetchLogRuns.mockResolvedValue({
+      runs: [logRun({ id: "history-identity" })],
+    });
+    const { result } = renderWorkbenchState();
+
+    await waitFor(() => {
+      expect(result.current.history.historicalExperimentOptions).toEqual([
+        historicalOption("exp_linear", 1, "checking"),
+      ]);
+    });
+    const target = result.current.targetContexts.model;
+
+    act(() => {
+      result.current.history.setSelectedHistoricalExperimentFilter("exp_linear");
+    });
+
+    await waitFor(() => {
+      expect(result.current.history.historicalDatasetOptions.length).toBe(1);
+    });
+    expect(result.current.targetContexts.model).toBe(target);
+  });
+
   it("keeps the target context identity stable when only the active job changes", async () => {
     const { result } = renderWorkbenchState();
 
@@ -1152,7 +1175,7 @@ describe("useWorkbenchState", () => {
       "status",
       "target",
     ]);
-    expect(keys("snapshots")).toEqual(["actions", "records"]);
+    expect(keys("snapshots")).toEqual(["actions", "mutation", "records"]);
   });
 
   it("profiles a Model-only override without committing unrelated target consumers", async () => {

@@ -76,7 +76,7 @@ export function overrideValue(overrides: OverrideValues, key: string) {
   return entry?.[1];
 }
 
-export function normalizeConfigOverrides(
+function normalizeConfigOverrides(
   fields: ConfigField[],
   overrides: OverrideValues,
 ): OverrideValues {
@@ -828,7 +828,7 @@ function deleteOverrideByKey(overrides: OverrideValues, key: string) {
   }
 }
 
-export function normalizeAdaptiveOptionOverrides(
+function normalizeAdaptiveOptionOverrides(
   fields: ConfigField[],
   overrides: OverrideValues,
 ): OverrideValues {

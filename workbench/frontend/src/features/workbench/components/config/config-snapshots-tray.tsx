@@ -46,11 +46,6 @@ type ConfigSnapshotActionResult =
   | { ok: true }
   | { ok: false; error: string };
 
-type ConfigSnapshotActionHandlerResult =
-  | ConfigSnapshotActionResult
-  | void
-  | Promise<ConfigSnapshotActionResult | void>;
-
 const idleConfigSnapshotMutation: ConfigSnapshotMutationStatus = {
   phase: "idle",
   kind: null,
@@ -370,8 +365,8 @@ export function ConfigSnapshotsTray({
   onLoad,
   onRename,
   onRemove,
-  onRetryMutation = async () => null,
-  onDismissMutation = () => undefined,
+  onRetryMutation,
+  onDismissMutation,
   onToggleSelection,
 }: {
   groups: ConfigSnapshotGroup[];
@@ -384,10 +379,10 @@ export function ConfigSnapshotsTray({
   onRename: (
     snapshotId: string,
     name: string,
-  ) => ConfigSnapshotActionHandlerResult;
-  onRemove: (snapshotId: string) => ConfigSnapshotActionHandlerResult;
-  onRetryMutation?: () => Promise<ConfigSnapshotMutationOutcome | null>;
-  onDismissMutation?: () => void;
+  ) => Promise<ConfigSnapshotActionResult>;
+  onRemove: (snapshotId: string) => Promise<ConfigSnapshotActionResult>;
+  onRetryMutation: () => Promise<ConfigSnapshotMutationOutcome | null>;
+  onDismissMutation: () => void;
   onToggleSelection: (snapshotId: string) => void;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -424,7 +419,7 @@ export function ConfigSnapshotsTray({
   async function renameSnapshot(snapshotId: string, name: string) {
     setSubmittedError("");
     const result = await onRename(snapshotId, name);
-    if (!result || result.ok) {
+    if (result.ok) {
       setEditingId(null);
       return;
     }
@@ -434,7 +429,7 @@ export function ConfigSnapshotsTray({
   async function removeSnapshot(snapshotId: string) {
     setSubmittedError("");
     const result = await onRemove(snapshotId);
-    if (result && !result.ok) {
+    if (!result.ok) {
       setSubmittedError(result.error);
     }
   }

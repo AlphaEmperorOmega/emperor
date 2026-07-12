@@ -7,12 +7,10 @@ import {
   type Preset,
 } from "@/lib/api";
 import {
-  configKeyToken,
   effectivePresetOverrides,
   lockedOverrideKeys,
-  normalizeAdaptiveOptionOverrides,
-  normalizeConfigOverrides,
   overrideDigest,
+  runtimeDefaultsEditor,
   type ActiveOverrideScope,
   type OverrideValues,
 } from "@/lib/config";
@@ -54,6 +52,7 @@ import {
 import {
   useInspectionTargetState,
 } from "@/features/workbench/state/target/_inspection-target-state";
+import { useHistoricalTargetBrowsing } from "@/features/workbench/state/target/use-historical-target-browsing";
 
 const EMPTY_MODEL_IDS: ModelIdentity[] = [];
 const EMPTY_PRESETS: Preset[] = [];
@@ -61,32 +60,12 @@ const EMPTY_DATASET_GROUPS: DatasetGroup[] = [];
 const EMPTY_MONITORS: MonitorOption[] = [];
 
 type ModelPackageInspectionStateOptions = {
-  onModelSelected?: () => void;
-  onTargetPresetSelected?: () => void;
-  onTargetSnapshotSelected?: () => void;
+  historicalRunsEnabled?: boolean;
   protectedReadsEnabled?: boolean;
 };
 
 function overridesAreEmpty(overrides: OverrideValues) {
   return Object.keys(overrides).length === 0;
-}
-
-function overrideValuesEqual(left: OverrideValues, right: OverrideValues) {
-  const leftEntries = Object.entries(left);
-  const rightEntries = Object.entries(right);
-  if (leftEntries.length !== rightEntries.length) {
-    return false;
-  }
-  return leftEntries.every(([key, value]) => right[key] === value);
-}
-
-function withoutOverride(overrides: OverrideValues, key: string): OverrideValues {
-  const token = configKeyToken(key);
-  return Object.fromEntries(
-    Object.entries(overrides).filter(
-      ([overrideKey]) => configKeyToken(overrideKey) !== token,
-    ),
-  );
 }
 
 function snapshotTargetSemanticKey({
@@ -123,9 +102,7 @@ function useStableStateSlice<Target extends Record<PropertyKey, unknown>>(
 }
 
 export function useModelPackageInspectionState({
-  onModelSelected,
-  onTargetPresetSelected,
-  onTargetSnapshotSelected,
+  historicalRunsEnabled = false,
   protectedReadsEnabled = true,
 }: ModelPackageInspectionStateOptions) {
   const inspectionPreview = useInspectionPreviewState();
@@ -240,6 +217,10 @@ export function useModelPackageInspectionState({
   });
   const renameSnapshotRecord = configSnapshotActions.rename;
   const deleteSnapshotRecord = configSnapshotActions.remove;
+  const retrySnapshotRecordMutation = configSnapshotActions.retry;
+  const dismissSnapshotRecordMutation = configSnapshotActions.dismissMutation;
+  const clearSnapshotRecordsForConnectionChange =
+    configSnapshotActions.clearForConnectionChange;
   const {
     modelsQuery,
     presetsQuery,
@@ -323,13 +304,9 @@ export function useModelPackageInspectionState({
     if (configFields.length === 0) {
       return;
     }
-    setPresetOverrides((current) => {
-      const next = normalizeAdaptiveOptionOverrides(
-        configFields,
-        normalizeConfigOverrides(configFields, current),
-      );
-      return overrideValuesEqual(current, next) ? current : next;
-    });
+    setPresetOverrides((current) =>
+      runtimeDefaultsEditor.normalize(configFields, current),
+    );
   }, [configFields, setPresetOverrides]);
   const selectedConfigSnapshot = useMemo(
     () =>
@@ -350,12 +327,9 @@ export function useModelPackageInspectionState({
   const selectedSnapshotOverrides = useMemo(
     () =>
       selectedConfigSnapshot && selectedSnapshotSchemaReady
-        ? normalizeAdaptiveOptionOverrides(
+        ? runtimeDefaultsEditor.replace(
             configFields,
-            normalizeConfigOverrides(
-              configFields,
-              selectedConfigSnapshot.overrides,
-            ),
+            selectedConfigSnapshot.overrides,
           )
         : {},
     [configFields, selectedConfigSnapshot, selectedSnapshotSchemaReady],
@@ -464,11 +438,129 @@ export function useModelPackageInspectionState({
     inspectionPreview.request,
     inspectionPreview.response,
   ]);
+  const syncSelectedLogRun = useCallback(
+    (selectedLogRun: LogRun) => {
+      if (
+        !selectedModel ||
+        selectedLogRun.modelType !== selectedModelType ||
+        selectedLogRun.model !== selectedModel
+      ) {
+        return;
+      }
+      const rawPreset = selectedLogRun.preset;
+      const rawDataset = selectedLogRun.dataset;
+      const runExperimentTask = selectedLogRun.experimentTask ?? null;
+      const catalogPreset = resolveRunPresetName(selectedLogRun, presets);
+      const catalogDataset = datasetNames.includes(rawDataset) ? rawDataset : "";
+      const overridesAlreadyEmpty = overridesAreEmpty(presetOverrides);
+      const catalogPresetSynced = !catalogPreset || selectedPreset === catalogPreset;
+      const catalogDatasetSynced =
+        !catalogDataset || selectionValuesEqual(selectedDatasets, [catalogDataset]);
+      const alreadySynced =
+        selectedTargetMode === "experiment" &&
+        selectedExperimentRunId === selectedLogRun.id &&
+        selectedExperimentName === selectedLogRun.experiment &&
+        selectedExperimentPreset === rawPreset &&
+        selectedExperimentDataset === rawDataset &&
+        (selectedExperimentTarget?.experimentTask ?? null) === runExperimentTask &&
+        selectedSnapshotId === "" &&
+        catalogPresetSynced &&
+        catalogDatasetSynced;
+      if (alreadySynced) {
+        return;
+      }
+
+      cancelTargetRestoration();
+      setSelectedTargetBrowserMode("experiment");
+      targetTransitions.toHistoricalRun({
+        runId: selectedLogRun.id,
+        experiment: selectedLogRun.experiment,
+        preset: rawPreset,
+        dataset: rawDataset,
+        experimentTask: runExperimentTask,
+      });
+      if (runExperimentTask) {
+        setSelectedExperimentTask(runExperimentTask);
+      }
+      if (catalogPreset && selectedPreset !== catalogPreset) {
+        setSelectedPreset(catalogPreset);
+      }
+      if (catalogDataset) {
+        setSelectedDatasets((current) =>
+          selectionValuesEqual(current, [catalogDataset])
+            ? current
+            : [catalogDataset],
+        );
+      }
+      if (!overridesAlreadyEmpty) {
+        clearPresetOverrides();
+      }
+      emitInspectionTransition("target-changed");
+      issueInspectionPreview({
+        modelType: selectedModelType,
+        model: selectedModel,
+        preset: rawPreset,
+        experimentTask: runExperimentTask || undefined,
+        dataset: rawDataset,
+        overrides: {},
+        targetMode: "experiment",
+        targetId: selectedLogRun.id,
+        logRunId: selectedLogRun.id,
+      });
+    },
+    [
+      cancelTargetRestoration,
+      clearPresetOverrides,
+      datasetNames,
+      emitInspectionTransition,
+      issueInspectionPreview,
+      presetOverrides,
+      presets,
+      selectedDatasets,
+      selectedExperimentDataset,
+      selectedExperimentName,
+      selectedExperimentPreset,
+      selectedExperimentRunId,
+      selectedExperimentTarget,
+      selectedModel,
+      selectedModelType,
+      selectedPreset,
+      selectedSnapshotId,
+      selectedTargetMode,
+      setSelectedPreset,
+      targetTransitions,
+    ],
+  );
+  const historicalTargetActive =
+    selectedTargetBrowserMode === "experiment" ||
+    selectedTargetMode === "experiment";
+  const historicalTarget = useHistoricalTargetBrowsing({
+    selectedModelType,
+    selectedModel,
+    selectedExperimentTask: activeExperimentTask,
+    runsEnabled:
+      protectedReadsEnabled && (historicalRunsEnabled || historicalTargetActive),
+    tagsEnabled: protectedReadsEnabled && historicalTargetActive,
+  });
+  const selectedHistoricalRun = historicalTarget.coordination.selectedRun;
+  const clearHistoricalTarget =
+    historicalTarget.coordination.clearForTargetChange;
+  useEffect(() => {
+    if (selectedHistoricalRun) {
+      syncSelectedLogRun(selectedHistoricalRun);
+    }
+  }, [selectedHistoricalRun, syncSelectedLogRun]);
   const clearInspectionForConnectionChange = useCallback(() => {
     lastRequestedPreviewTargetKeyRef.current = "";
     suppressedAutomaticPreviewTargetKeyRef.current = "";
+    clearHistoricalTarget();
+    clearSnapshotRecordsForConnectionChange();
     clearPreviewForConnectionChange();
-  }, [clearPreviewForConnectionChange]);
+  }, [
+    clearHistoricalTarget,
+    clearPreviewForConnectionChange,
+    clearSnapshotRecordsForConnectionChange,
+  ]);
   const selectModel = useCallback(
     (model: string, modelType = selectedModelType) => {
       const nextModel = modelNameForId(model);
@@ -491,7 +583,7 @@ export function useModelPackageInspectionState({
       selectTargetModel(nextModel);
       setSelectedExperimentTask("");
       setSelectedDatasets([]);
-      onModelSelected?.();
+      clearHistoricalTarget();
       emitInspectionTransition("target-changed");
       return true;
     },
@@ -499,7 +591,7 @@ export function useModelPackageInspectionState({
       clearPreview,
       cancelTargetRestoration,
       catalogModels,
-      onModelSelected,
+      clearHistoricalTarget,
       emitInspectionTransition,
       selectTargetModel,
       selectedModelType,
@@ -624,15 +716,15 @@ export function useModelPackageInspectionState({
     clearPreview();
     setSelectedTargetBrowserMode("preset");
     targetTransitions.toPreset(selectedPreset);
-    onTargetPresetSelected?.();
+    clearHistoricalTarget();
     lastRequestedPreviewTargetKeyRef.current = "";
     emitInspectionTransition("target-changed");
   }, [
     clearPreview,
+    clearHistoricalTarget,
     configSnapshotsStatus.isReady,
     emitInspectionTransition,
     isRestoringTargetSelection,
-    onTargetPresetSelected,
     presetNames,
     presetsReady,
     selectedConfigSnapshot,
@@ -865,141 +957,16 @@ export function useModelPackageInspectionState({
     });
   }, [datasetNames, datasetsQuery.isSuccess]);
 
-  const syncSelectedLogRun = useCallback(
-    (selectedLogRun: LogRun) => {
-      if (
-        !selectedModel ||
-        selectedLogRun.modelType !== selectedModelType ||
-        selectedLogRun.model !== selectedModel
-      ) {
-        return;
-      }
-      cancelTargetRestoration();
-      const rawPreset = selectedLogRun.preset;
-      const rawDataset = selectedLogRun.dataset;
-      const runExperimentTask = selectedLogRun.experimentTask ?? null;
-      const catalogPreset = resolveRunPresetName(
-        selectedLogRun,
-        presets,
-      );
-      const catalogDataset = datasetNames.includes(rawDataset)
-        ? rawDataset
-        : "";
-      const overridesAlreadyEmpty = overridesAreEmpty(presetOverrides);
-      const catalogPresetSynced =
-        !catalogPreset || selectedPreset === catalogPreset;
-      const catalogDatasetSynced =
-        !catalogDataset ||
-        selectionValuesEqual(selectedDatasets, [catalogDataset]);
-      const alreadySynced =
-        selectedTargetMode === "experiment" &&
-        selectedExperimentRunId === selectedLogRun.id &&
-        selectedExperimentName === selectedLogRun.experiment &&
-        selectedExperimentPreset === rawPreset &&
-        selectedExperimentDataset === rawDataset &&
-        (selectedExperimentTarget?.experimentTask ?? null) === runExperimentTask &&
-        selectedSnapshotId === "" &&
-        catalogPresetSynced &&
-        catalogDatasetSynced;
-      if (alreadySynced) {
-        return;
-      }
-
-      setSelectedTargetBrowserMode("experiment");
-      targetTransitions.toHistoricalRun({
-        runId: selectedLogRun.id,
-        experiment: selectedLogRun.experiment,
-        preset: rawPreset,
-        dataset: rawDataset,
-        experimentTask: runExperimentTask,
-      });
-      if (runExperimentTask) {
-        setSelectedExperimentTask(runExperimentTask);
-      }
-      if (catalogPreset && selectedPreset !== catalogPreset) {
-        setSelectedPreset(catalogPreset);
-      }
-      if (catalogDataset) {
-        setSelectedDatasets((current) =>
-          selectionValuesEqual(current, [catalogDataset])
-            ? current
-            : [catalogDataset],
-        );
-      }
-      if (!overridesAlreadyEmpty) {
-        clearPresetOverrides();
-      }
-      emitInspectionTransition("target-changed");
-      issueInspectionPreview({
-        modelType: selectedModelType,
-        model: selectedModel,
-        preset: rawPreset,
-        experimentTask: runExperimentTask || undefined,
-        dataset: rawDataset,
-        overrides: {},
-        targetMode: "experiment",
-        targetId: selectedLogRun.id,
-        logRunId: selectedLogRun.id,
-      });
-    },
-    [
-      clearPresetOverrides,
-      cancelTargetRestoration,
-      datasetNames,
-      presets,
-      presetOverrides,
-      issueInspectionPreview,
-      emitInspectionTransition,
-      selectedDatasets,
-      selectedExperimentDataset,
-      selectedExperimentName,
-      selectedExperimentPreset,
-      selectedExperimentRunId,
-      selectedExperimentTarget,
-      selectedModel,
-      selectedModelType,
-      selectedPreset,
-      selectedSnapshotId,
-      selectedTargetMode,
-      setSelectedPreset,
-      targetTransitions,
-    ],
-  );
-
-  const removeConfigSnapshot = useCallback(
-    (snapshotId: string) => {
-      if (
-        selectedTargetMode === "snapshot" &&
-        selectedSnapshotId === snapshotId
-      ) {
-        cancelTargetRestoration();
-        setSelectedTargetBrowserMode("preset");
-        targetTransitions.toPreset(selectedPreset);
-        onTargetPresetSelected?.();
-        lastRequestedPreviewTargetKeyRef.current = "";
-        emitInspectionTransition("target-changed");
-      }
-      deleteSnapshotRecord(snapshotId);
-    },
-    [
-      cancelTargetRestoration,
-      deleteSnapshotRecord,
-      emitInspectionTransition,
-      onTargetPresetSelected,
-      selectedSnapshotId,
-      selectedPreset,
-      selectedTargetMode,
-      targetTransitions,
-    ],
-  );
-
   const renameConfigSnapshot = useCallback(
-    (snapshotId: string, name: string) => {
+    async (snapshotId: string, name: string) => {
       const snapshot = configSnapshots.find(
         (candidate) => candidate.id === snapshotId,
       );
       if (!snapshot) {
-        return;
+        return {
+          ok: false as const,
+          error: "Snapshot unavailable.",
+        };
       }
       const validation = validateConfigSnapshotName({
         modelType: snapshot.modelType,
@@ -1010,16 +977,15 @@ export function useModelPackageInspectionState({
         excludeSnapshotId: snapshotId,
       });
       if (!validation.ok) {
-        return;
+        return validation;
       }
-      renameSnapshotRecord({
+      return renameSnapshotRecord({
         id: snapshotId,
         name: validation.name,
       });
     },
     [configSnapshots, renameSnapshotRecord],
   );
-
   const suppressAutomaticPreviewForPreset = useCallback(
     (preset: string) => {
       const previewDataset = selectedDatasets[0] ?? selectedExperimentDataset;
@@ -1052,11 +1018,11 @@ export function useModelPackageInspectionState({
       suppressAutomaticPreviewForPreset(preset);
       setSelectedTargetBrowserMode("preset");
       targetTransitions.toPreset(preset);
-      onTargetPresetSelected?.();
+      clearHistoricalTarget();
       selectPreset(preset);
     },
     [
-      onTargetPresetSelected,
+      clearHistoricalTarget,
       selectPreset,
       suppressAutomaticPreviewForPreset,
       targetTransitions,
@@ -1130,11 +1096,11 @@ export function useModelPackageInspectionState({
       cancelTargetRestoration();
       setSelectedTargetBrowserMode("snapshot");
       targetTransitions.toSnapshot(snapshot.id, snapshot.preset);
-      onTargetSnapshotSelected?.();
+      clearHistoricalTarget();
       setSelectedPreset(snapshot.preset);
-      const normalizedSnapshotOverrides = normalizeAdaptiveOptionOverrides(
+      const normalizedSnapshotOverrides = runtimeDefaultsEditor.replace(
         configFields,
-        normalizeConfigOverrides(configFields, snapshot.overrides),
+        snapshot.overrides,
       );
       const snapshotSchemaReady =
         schemaQuery.isSuccess && selectedPreset === snapshot.preset;
@@ -1174,6 +1140,7 @@ export function useModelPackageInspectionState({
       modelConfigSnapshots,
       activeExperimentTask,
       cancelTargetRestoration,
+      clearHistoricalTarget,
       configFields,
       presetNames,
       issueInspectionPreview,
@@ -1184,7 +1151,6 @@ export function useModelPackageInspectionState({
       selectedModel,
       selectedModelType,
       selectedPreset,
-      onTargetSnapshotSelected,
       setSelectedPreset,
       targetTransitions,
     ],
@@ -1306,7 +1272,7 @@ export function useModelPackageInspectionState({
     cancelTargetRestoration();
     setSelectedTargetBrowserMode("preset");
     targetTransitions.toPreset(selectedPreset);
-    onTargetPresetSelected?.();
+    clearHistoricalTarget();
     clearPresetOverrides();
     emitInspectionTransition("target-changed");
     const previewDataset = selectedDatasets[0] ?? "";
@@ -1327,8 +1293,8 @@ export function useModelPackageInspectionState({
   }, [
     activeExperimentTask,
     cancelTargetRestoration,
+    clearHistoricalTarget,
     clearPresetOverrides,
-    onTargetPresetSelected,
     issueInspectionPreview,
     emitInspectionTransition,
     selectedDatasets,
@@ -1349,16 +1315,15 @@ export function useModelPackageInspectionState({
       if (exitsNonPresetTarget) {
         setSelectedTargetBrowserMode("preset");
         targetTransitions.toPreset(selectedPreset);
-        onTargetPresetSelected?.();
+        clearHistoricalTarget();
       }
-      const nextOverrides = normalizeAdaptiveOptionOverrides(
+      const nextOverrides = runtimeDefaultsEditor.edit(
         configFields,
-        normalizeConfigOverrides(configFields, {
-          ...presetOverrides,
-          [key]: value,
-        }),
+        presetOverrides,
+        key,
+        value,
       );
-      if (overrideValuesEqual(nextOverrides, presetOverrides)) {
+      if (nextOverrides === presetOverrides) {
         if (exitsNonPresetTarget) {
           emitInspectionTransition("target-changed");
         }
@@ -1369,9 +1334,9 @@ export function useModelPackageInspectionState({
     },
     [
       cancelTargetRestoration,
+      clearHistoricalTarget,
       configFields,
       emitInspectionTransition,
-      onTargetPresetSelected,
       presetOverrides,
       selectedPreset,
       selectedTargetMode,
@@ -1388,16 +1353,14 @@ export function useModelPackageInspectionState({
       if (exitsNonPresetTarget) {
         setSelectedTargetBrowserMode("preset");
         targetTransitions.toPreset(selectedPreset);
-        onTargetPresetSelected?.();
+        clearHistoricalTarget();
       }
-      const nextOverrides = normalizeAdaptiveOptionOverrides(
+      const nextOverrides = runtimeDefaultsEditor.clear(
         configFields,
-        normalizeConfigOverrides(
-          configFields,
-          withoutOverride(presetOverrides, key),
-        ),
+        presetOverrides,
+        key,
       );
-      if (overrideValuesEqual(nextOverrides, presetOverrides)) {
+      if (nextOverrides === presetOverrides) {
         if (exitsNonPresetTarget) {
           emitInspectionTransition("target-changed");
         }
@@ -1408,9 +1371,9 @@ export function useModelPackageInspectionState({
     },
     [
       cancelTargetRestoration,
+      clearHistoricalTarget,
       configFields,
       emitInspectionTransition,
-      onTargetPresetSelected,
       presetOverrides,
       selectedPreset,
       selectedTargetMode,
@@ -1546,11 +1509,14 @@ export function useModelPackageInspectionState({
   });
   const snapshotActions = useStableStateSlice({
     selectTarget: selectTargetSnapshot,
-    remove: removeConfigSnapshot,
+    remove: deleteSnapshotRecord,
     rename: renameConfigSnapshot,
+    retryMutation: retrySnapshotRecordMutation,
+    dismissMutation: dismissSnapshotRecordMutation,
   });
   const snapshots = useStableStateSlice({
     records: snapshotRecords,
+    mutation: configSnapshotsStatus.mutation,
     actions: snapshotActions,
   });
   const inspection = useStableStateSlice({
@@ -1560,6 +1526,10 @@ export function useModelPackageInspectionState({
     clear: inspectionPreview.clear,
     clearForConnectionChange: clearInspectionForConnectionChange,
   });
+  const historical = useStableStateSlice({
+    browsing: historicalTarget.browsing,
+    graphFacts: historicalTarget.graphFacts,
+  });
   const contexts = useMemo(
     () => ({ catalog, model, snapshots }),
     [catalog, model, snapshots],
@@ -1567,13 +1537,13 @@ export function useModelPackageInspectionState({
   return useMemo(
     () => ({
       contexts,
-      selectHistoricalRunTarget: syncSelectedLogRun,
+      historical,
       inspection,
     }),
     [
       contexts,
+      historical,
       inspection,
-      syncSelectedLogRun,
     ],
   );
 }
