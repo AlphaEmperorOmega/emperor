@@ -4,7 +4,7 @@ from torch.nn import Sequential
 from torch.nn import functional as F
 
 from emperor.base.layer import Layer, LayerStack, LayerStackConfig, LayerState
-from emperor.base.utils import Module
+from emperor.base.module import Module
 from emperor.memory.config import DynamicMemoryConfig
 from emperor.memory.core._validator import DynamicMemoryValidator
 from emperor.memory.options import MemoryPositionOptions
