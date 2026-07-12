@@ -13,6 +13,38 @@ CORE_PACKAGE_DIRS = ("emperor", "models")
 CORE_PACKAGE_ROOTS = frozenset(CORE_PACKAGE_DIRS)
 WORKBENCH_BACKEND_DIR = REPO_ROOT / "workbench" / "backend"
 WORKBENCH_TESTS_DIR = WORKBENCH_BACKEND_DIR / "tests"
+WORKBENCH_TEST_HELPERS = WORKBENCH_TESTS_DIR / "helpers.py"
+TRAINING_JOB_SERVICE_TEST = WORKBENCH_TESTS_DIR / "test_training_job_service.py"
+WORKBENCH_INSPECTION_ADAPTER = WORKBENCH_BACKEND_DIR / "inspection_adapter.py"
+WORKBENCH_HISTORICAL_INSPECTION = (
+    WORKBENCH_BACKEND_DIR / "historical_inspection.py"
+)
+WORKBENCH_INSPECTION_SERVICE = (
+    WORKBENCH_BACKEND_DIR / "services" / "inspection.py"
+)
+WORKBENCH_RUN_PLAN_ADAPTER = (
+    WORKBENCH_BACKEND_DIR / "training_jobs" / "run_plan_adapter.py"
+)
+RUN_PLAN_ADAPTATION_IMPORTS = frozenset(
+    {
+        "PlanningBudget",
+        "RunRequest",
+        "SearchAxisSelection",
+        "SearchSpec",
+        "SubmittedRun",
+        "accept_run_plan",
+        "plan_runs",
+    }
+)
+WORKBENCH_INSPECTION_IMPLEMENTATION_MODULES = frozenset(
+    {
+        "workbench.backend.inspection_errors",
+        "workbench.backend.inspection_serialization",
+    }
+)
+LEGACY_WORKBENCH_MODELS_IMPORTS = frozenset(
+    {(WORKBENCH_BACKEND_DIR / "cli.py", "models.parser")}
+)
 REMOVED_SHALLOW_INSPECTION_PATHS = (
     WORKBENCH_BACKEND_DIR / "services" / "models.py",
     WORKBENCH_BACKEND_DIR / "inspector" / "config_classes.py",
@@ -43,6 +75,9 @@ REMOVED_TRAINING_JOB_IMPLEMENTATION_PATHS = (
     WORKBENCH_BACKEND_DIR / "training_run_plans.py",
     WORKBENCH_BACKEND_DIR / "training_run_progress.py",
     WORKBENCH_BACKEND_DIR / "training_worker_launcher.py",
+    WORKBENCH_BACKEND_DIR / "training_jobs" / "plans.py",
+    WORKBENCH_BACKEND_DIR / "training_jobs" / "run_progress.py",
+    WORKBENCH_BACKEND_DIR / "training_jobs" / "serialization.py",
 )
 REMOVED_RUN_HISTORY_IMPLEMENTATION_PATHS = (
     WORKBENCH_BACKEND_DIR / "log_experiment_mutations.py",
@@ -271,6 +306,114 @@ class DependencyDirectionTests(unittest.TestCase):
         ]
 
         self.assertEqual([], violations)
+
+    def test_workbench_uses_public_model_package_interface_except_cli(self) -> None:
+        violations = [
+            source_import.format_for_failure()
+            for source_import in _absolute_imports_under([WORKBENCH_BACKEND_DIR])
+            if not source_import.path.is_relative_to(WORKBENCH_TESTS_DIR)
+            and source_import.root == "models"
+            and (source_import.path, source_import.module)
+            not in LEGACY_WORKBENCH_MODELS_IMPORTS
+        ]
+
+        self.assertEqual([], violations)
+
+    def test_workbench_inspection_adaptation_has_one_implementation(self) -> None:
+        violations = [
+            source_import.format_for_failure()
+            for source_import in _absolute_imports_under([WORKBENCH_BACKEND_DIR])
+            if not source_import.path.is_relative_to(WORKBENCH_TESTS_DIR)
+            and source_import.path != WORKBENCH_INSPECTION_ADAPTER
+            and source_import.module in WORKBENCH_INSPECTION_IMPLEMENTATION_MODULES
+        ]
+
+        self.assertEqual([], violations)
+
+    def test_historical_inspection_policy_has_one_deep_interface(self) -> None:
+        service_source = WORKBENCH_INSPECTION_SERVICE.read_text(encoding="utf-8")
+        historical_source = WORKBENCH_HISTORICAL_INSPECTION.read_text(
+            encoding="utf-8"
+        )
+        graph_test_source = (WORKBENCH_TESTS_DIR / "test_inspector_graph.py").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("WorkbenchHistoricalInspection", service_source)
+        self.assertNotIn("load_checkpoint_graph_shapes", service_source)
+        self.assertNotIn("def _checkpoint_overrides", service_source)
+        self.assertIn("def _checkpoint_overrides", historical_source)
+        self.assertNotIn("_checkpoint_overrides", graph_test_source)
+        self.assertEqual(
+            MODEL_CATALOG["linears/linear"].checkpoint_metadata_module,
+            "models.linears.linear.checkpoint_metadata",
+        )
+
+    def test_workbench_run_plan_adaptation_has_one_implementation(self) -> None:
+        violations: list[str] = []
+        for path in _python_files([WORKBENCH_BACKEND_DIR]):
+            if path == WORKBENCH_RUN_PLAN_ADAPTER or path.is_relative_to(
+                WORKBENCH_TESTS_DIR
+            ):
+                continue
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.ImportFrom):
+                    continue
+                if node.level != 0 or node.module != "emperor.runs":
+                    continue
+                duplicated = sorted(
+                    alias.name
+                    for alias in node.names
+                    if alias.name in RUN_PLAN_ADAPTATION_IMPORTS
+                )
+                if duplicated:
+                    relative_path = path.relative_to(REPO_ROOT)
+                    violations.append(
+                        f"{relative_path}:{node.lineno}: {', '.join(duplicated)}"
+                    )
+
+        self.assertEqual([], violations)
+
+    def test_worker_plan_tests_target_the_shared_adapter_interface(self) -> None:
+        worker_test = WORKBENCH_TESTS_DIR / "test_training_worker.py"
+        source = worker_test.read_text(encoding="utf-8")
+
+        self.assertIn("run_plan_adapter.accept_worker_run_plan", source)
+        self.assertNotIn("training_worker._accepted_plan", source)
+
+    def test_training_job_workflow_harness_uses_public_interface(self) -> None:
+        helper_tree = ast.parse(
+            WORKBENCH_TEST_HELPERS.read_text(encoding="utf-8"),
+            filename=str(WORKBENCH_TEST_HELPERS),
+        )
+        private_runtime_subclasses = [
+            node.name
+            for node in ast.walk(helper_tree)
+            if isinstance(node, ast.ClassDef)
+            and any(
+                isinstance(base, ast.Name) and base.id == "_TrainingJobRuntime"
+                for base in node.bases
+            )
+        ]
+        private_runtime_assignments = [
+            target.lineno
+            for node in ast.walk(helper_tree)
+            if isinstance(node, (ast.Assign, ast.AnnAssign))
+            for target in (
+                node.targets if isinstance(node, ast.Assign) else [node.target]
+            )
+            if isinstance(target, ast.Attribute) and target.attr == "_runtime"
+        ]
+        public_workflow_private_imports = [
+            source_import.format_for_failure()
+            for source_import in _absolute_imports(TRAINING_JOB_SERVICE_TEST)
+            if source_import.module == "workbench.backend.training_jobs.runtime"
+        ]
+
+        self.assertEqual([], private_runtime_subclasses)
+        self.assertEqual([], private_runtime_assignments)
+        self.assertEqual([], public_workflow_private_imports)
 
     def test_model_packages_do_not_import_other_model_configs(self) -> None:
         violations = []
