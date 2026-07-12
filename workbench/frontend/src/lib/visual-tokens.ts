@@ -109,6 +109,7 @@ export const workbenchVisualTokens = Object.freeze({
   panel: "#0d0f17",
   panel2: "#11131d",
   scene: "#05070d",
+  selectedControl: "#7058dc",
   structureOverlay: "rgba(8,9,15,0.92)",
   violet: "#a99aff",
   violetDeep: "#8f7cff",

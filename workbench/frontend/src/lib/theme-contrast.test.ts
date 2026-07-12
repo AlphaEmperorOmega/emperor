@@ -400,6 +400,46 @@ describe("Workbench design-system adapters", () => {
       (Math.max(focusLuminance, backgroundLuminance) + 0.05) /
         (Math.min(focusLuminance, backgroundLuminance) + 0.05),
     ).toBeGreaterThanOrEqual(MINIMUM_FOCUS_CONTRAST);
+
+    expect(
+      contrastRatio(
+        workbenchVisualTokens.white,
+        workbenchVisualTokens.selectedControl,
+      ),
+      "white on selected-control",
+    ).toBeGreaterThanOrEqual(MINIMUM_NORMAL_TEXT_CONTRAST);
+    const selectedControlHover = composite(
+      "rgba(112,88,220,0.9)",
+      workbenchVisualTokens.panel2,
+    );
+    expect(
+      contrastRatio(
+        workbenchVisualTokens.white,
+        `rgb(${selectedControlHover.join(",")})`,
+      ),
+      "white on selected-control/90 over panel-2",
+    ).toBeGreaterThanOrEqual(MINIMUM_NORMAL_TEXT_CONTRAST);
+  });
+
+  it("uses the selected-control surface for white-text buttons and view controls", () => {
+    const selectedControlSources = productionAuditSources.filter(({ source }) =>
+      source.includes("bg-selected-control"),
+    );
+    expect(selectedControlSources.map(({ path }) => path)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("/components/ui/button.tsx"),
+        expect.stringContaining("/components/view-mode-button.tsx"),
+        expect.stringContaining("/components/logs/logs-chart-panel.tsx"),
+      ]),
+    );
+    for (const { path, source } of selectedControlSources) {
+      expect(source, path).toMatch(/bg-selected-control(?:\/90)?[^"\n]*text-white|bg-selected-control text-white/);
+    }
+    for (const { path, source } of productionAuditSources) {
+      expect(source, path).not.toMatch(
+        /bg-(?:violet|violet-deep)(?=\s)[^"\n]*text-white/,
+      );
+    }
   });
 
   it("audits all 119 production component and visual-support files", () => {

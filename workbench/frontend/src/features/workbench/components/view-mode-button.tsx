@@ -34,7 +34,7 @@ export function ViewModeButton({
       className={cn(
         "inline-flex h-touch min-w-touch items-center gap-2 rounded-control-sm px-3 text-xs font-semibold transition-[color,background-color,border-color,box-shadow,transform] duration-150 ease-out focus:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-1 focus-visible:ring-offset-bg md:h-control-sm md:min-w-0",
         active
-          ? "bg-violet-deep text-white shadow-control-active"
+          ? "bg-selected-control text-white shadow-control-active"
           : "text-ink-faint hover:bg-control-active hover:text-ink",
         disabled && "cursor-not-allowed opacity-50 hover:bg-transparent hover:text-ink-faint",
       )}

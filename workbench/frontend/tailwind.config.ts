@@ -27,6 +27,7 @@ export const workbenchTailwindColorAliases = {
   "violet-deep": "violetDeep",
   "violet-text": "violetText",
   "violet-muted": "violetMuted",
+  "selected-control": "selectedControl",
   blue: "blue",
   cyan: "cyan",
   ok: "ok",

@@ -70,7 +70,7 @@ describe("Button", () => {
     );
     const button = screen.getByRole("button", { name: "run" });
     expect(button).toHaveClass(
-      "bg-violet-deep",
+      "bg-selected-control",
       "border-violet/70",
       "shadow-primary",
       "focus-visible:ring-focus",

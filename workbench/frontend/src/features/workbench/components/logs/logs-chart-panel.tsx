@@ -196,7 +196,7 @@ function ScalarChartLayoutControl({
             className={cn(
               "inline-flex h-touch min-w-touch items-center gap-1.5 rounded-control-sm px-2 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-focus md:h-control-sm md:min-w-0",
               active
-                ? "bg-violet-deep text-white shadow-control-active"
+                ? "bg-selected-control text-white shadow-control-active"
                 : "text-ink-faint hover:bg-control-active hover:text-ink",
             )}
           >
