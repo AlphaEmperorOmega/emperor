@@ -231,7 +231,11 @@ class CliCompatibilityImportTests(unittest.TestCase):
                 ],
             ),
             patch.object(cli, "model_id_from_parts", return_value="broken/missing"),
-            patch.object(cli, "model_package", return_value=package),
+            patch.object(
+                cli.WorkbenchInspectionAdapter,
+                "select",
+                return_value=cli.WorkbenchInspectionAdapter.from_package(package),
+            ),
             self.assertRaisesRegex(
                 InspectorError,
                 "Failed to import model package 'broken/missing'",
@@ -250,14 +254,17 @@ class CliCompatibilityImportTests(unittest.TestCase):
 
         with (
             patch.object(cli, "_parse_args", side_effect=parser_exit) as parse_args,
-            patch.object(cli, "inspect_model") as inspect_model,
+            patch.object(
+                cli.WorkbenchInspectionAdapter,
+                "inspect_payload",
+            ) as inspect_payload,
         ):
             with self.assertRaises(SystemExit) as raised:
                 cli.main()
 
         self.assertIs(raised.exception, parser_exit)
         parse_args.assert_called_once_with()
-        inspect_model.assert_not_called()
+        inspect_payload.assert_not_called()
 
 
 class ModelPackageCompatibilityTests(unittest.TestCase):

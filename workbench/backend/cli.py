@@ -12,17 +12,15 @@ from emperor.inspection import (
     InspectionError,
     InspectionRequest,
     ParsedOverrides,
-    inspect_model,
 )
-from emperor.model_packages import model_id_from_parts, model_package
+from emperor.model_packages import model_id_from_parts
 from models.parser import (
     get_experiment_parser,
     resolve_dataset_names,
     resolve_experiment_mode,
 )
 
-from workbench.backend.inspection_errors import call_model_package
-from workbench.backend.inspection_serialization import inspection_result_payload
+from workbench.backend.inspection_adapter import WorkbenchInspectionAdapter
 from workbench.backend.inspector.errors import InspectorError
 
 
@@ -120,11 +118,9 @@ def _parse_args() -> argparse.Namespace:
             f"Unknown model: --model-type {model_args.model_type} "
             f"--model {model_args.model}"
         )
-    package = model_package(model_id)
-    if package is None:
-        raise SystemExit(f"Unknown model: {model_id}")
-    preset_names, config_package = call_model_package(
-        package,
+    adapter = WorkbenchInspectionAdapter.select(model_id)
+    package = adapter.package
+    preset_names, config_package = adapter.call_package(
         _parser_metadata,
         package,
     )
@@ -149,12 +145,11 @@ def _parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = _parse_args()
-    package = model_package(args.model_id)
-    if package is None:
-        raise SystemExit(f"Unknown model: {args.model_id}")
+    adapter = WorkbenchInspectionAdapter.select(args.model_id)
+    package = adapter.package
     if getattr(args, "monitors", None):
         raise SystemExit("--print-model inspection does not support --monitors.")
-    preset_type = call_model_package(package, lambda: package.preset_type)
+    preset_type = adapter.call_package(lambda: package.preset_type)
     mode = resolve_experiment_mode(args, preset_type)
     if (
         mode.search_mode is not None
@@ -169,15 +164,13 @@ def main() -> None:
         list(preset_type)
         if args.all_presets
         else [
-            call_model_package(
-                package,
+            adapter.call_package(
                 package.resolve_preset,
                 args.preset,
             )
         ]
     )
-    dataset_options = call_model_package(
-        package,
+    dataset_options = adapter.call_package(
         package.dataset_options_for_task,
         mode.experiment_task,
     )
@@ -189,11 +182,9 @@ def main() -> None:
 
     results = []
     for preset in preset_members:
-        semantic_result = inspect_model(
-            package,
+        result = adapter.inspect_payload(
             InspectionRequest(
-                preset=call_model_package(
-                    package,
+                preset=adapter.call_package(
                     package.preset_name,
                     preset,
                 ),
@@ -201,7 +192,6 @@ def main() -> None:
                 overrides=ParsedOverrides(mode.config_overrides),
             ),
         )
-        result = inspection_result_payload(semantic_result)
         results.append((preset, result))
 
     if args.format == "json":
@@ -211,7 +201,7 @@ def main() -> None:
         print(json.dumps(payload, indent=2))
         return
 
-    presets = call_model_package(package, lambda: package.presets)
+    presets = adapter.call_package(lambda: package.presets)
     for preset, result in results:
         _print_result(preset, presets, 0, 1, result)
 

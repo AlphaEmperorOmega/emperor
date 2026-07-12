@@ -25,36 +25,27 @@ router = APIRouter(
 
 
 def _list_models() -> list[dict[str, str]]:
-    from emperor.model_packages import discover_model_packages
+    from workbench.backend.inspection_adapter import WorkbenchInspectionAdapter
 
-    return [package.identity.to_payload() for package in discover_model_packages()]
+    return WorkbenchInspectionAdapter.catalog_payload()
 
 
 def _list_presets(model_type: str, model: str) -> list[dict[str, Any]]:
-    from workbench.backend.inspection_errors import call_model_package
-    from workbench.backend.inspection_serialization import model_presets_payload
-    from workbench.backend.model_identity import require_model_package
+    from workbench.backend.inspection_adapter import WorkbenchInspectionAdapter
 
-    package = require_model_package(model_type, model)
-    return call_model_package(package, model_presets_payload, package)
+    return WorkbenchInspectionAdapter.select_parts(model_type, model).presets_payload()
 
 
 def _list_datasets(model_type: str, model: str) -> dict[str, Any]:
-    from workbench.backend.inspection_errors import call_model_package
-    from workbench.backend.inspection_serialization import model_datasets_payload
-    from workbench.backend.model_identity import require_model_package
+    from workbench.backend.inspection_adapter import WorkbenchInspectionAdapter
 
-    package = require_model_package(model_type, model)
-    return call_model_package(package, model_datasets_payload, package)
+    return WorkbenchInspectionAdapter.select_parts(model_type, model).datasets_payload()
 
 
 def _list_monitors(model_type: str, model: str) -> list[dict[str, Any]]:
-    from workbench.backend.inspection_errors import call_model_package
-    from workbench.backend.inspection_serialization import model_monitors_payload
-    from workbench.backend.model_identity import require_model_package
+    from workbench.backend.inspection_adapter import WorkbenchInspectionAdapter
 
-    package = require_model_package(model_type, model)
-    return call_model_package(package, model_monitors_payload, package)
+    return WorkbenchInspectionAdapter.select_parts(model_type, model).monitors_payload()
 
 
 def _config_schema(
@@ -62,17 +53,13 @@ def _config_schema(
     model: str,
     preset: str | None,
 ) -> dict[str, Any]:
-    from emperor.inspection import configuration_schema
+    from workbench.backend.inspection_adapter import WorkbenchInspectionAdapter
 
-    from workbench.backend.inspection_errors import call_inspection
-    from workbench.backend.inspection_serialization import (
-        configuration_schema_payload,
-    )
-    from workbench.backend.model_identity import require_model_package
-
-    package = require_model_package(model_type, model)
-    return configuration_schema_payload(
-        call_inspection(configuration_schema, package, preset)
+    return WorkbenchInspectionAdapter.select_parts(
+        model_type,
+        model,
+    ).configuration_payload(
+        preset
     )
 
 
@@ -82,15 +69,14 @@ def _search_space(
     preset: str | None,
     presets: list[str] | None,
 ) -> dict[str, Any]:
-    from emperor.inspection import search_space_schema
+    from workbench.backend.inspection_adapter import WorkbenchInspectionAdapter
 
-    from workbench.backend.inspection_errors import call_inspection
-    from workbench.backend.inspection_serialization import search_space_payload
-    from workbench.backend.model_identity import require_model_package
-
-    package = require_model_package(model_type, model)
-    return search_space_payload(
-        call_inspection(search_space_schema, package, preset, presets)
+    return WorkbenchInspectionAdapter.select_parts(
+        model_type,
+        model,
+    ).search_space_payload(
+        preset,
+        presets,
     )
 
 

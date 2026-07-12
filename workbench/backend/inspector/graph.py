@@ -10,18 +10,17 @@ from emperor.inspection import (
     RUNTIME_ROLE,
     GraphRole,
     graph_role,
-    inspect_model_graph,
     module_details,
     parameter_count,
     parameter_size_bytes,
 )
 from torch.nn import Module
 
-from workbench.backend.inspection_serialization import model_graph_payload
+from workbench.backend.inspection_adapter import inspect_module_graph_payload
 
 
 def serialize_graph(module: Module):
-    return model_graph_payload(inspect_model_graph(module))
+    return inspect_module_graph_payload(module)
 
 
 __all__ = [
