@@ -859,6 +859,100 @@ export function normalizeAdaptiveOptionOverrides(
   return next;
 }
 
+function runtimeDefaultOverridesEqual(
+  left: OverrideValues,
+  right: OverrideValues,
+) {
+  const leftEntries = Object.entries(left);
+  const rightEntries = Object.entries(right);
+  return (
+    leftEntries.length === rightEntries.length &&
+    leftEntries.every(([key, value]) => right[key] === value)
+  );
+}
+
+function withoutRuntimeDefaultOverride(
+  overrides: OverrideValues,
+  key: string,
+) {
+  const token = configKeyToken(key);
+  return Object.fromEntries(
+    Object.entries(overrides).filter(
+      ([overrideKey]) => configKeyToken(overrideKey) !== token,
+    ),
+  );
+}
+
+function normalizedRuntimeDefaultOverrides(
+  fields: ConfigField[],
+  overrides: OverrideValues,
+) {
+  return normalizeAdaptiveOptionOverrides(
+    fields,
+    normalizeConfigOverrides(fields, overrides),
+  );
+}
+
+function preserveRuntimeDefaultOverrideIdentity(
+  current: OverrideValues,
+  next: OverrideValues,
+) {
+  return runtimeDefaultOverridesEqual(current, next) ? current : next;
+}
+
+/**
+ * Canonical Runtime Defaults editing for lifecycle owners. Drafts retain
+ * preset-locked values so they can become active again under another preset;
+ * effectivePresetOverrides remains the read-side locked-field projection.
+ */
+export const runtimeDefaultsEditor = {
+  normalize(fields: ConfigField[], current: OverrideValues) {
+    return preserveRuntimeDefaultOverrideIdentity(
+      current,
+      normalizedRuntimeDefaultOverrides(fields, current),
+    );
+  },
+
+  replace(fields: ConfigField[], overrides: OverrideValues | undefined) {
+    return normalizedRuntimeDefaultOverrides(fields, overrides ?? {});
+  },
+
+  edit(
+    fields: ConfigField[],
+    current: OverrideValues,
+    key: string,
+    value: string,
+  ) {
+    const field = configFieldByKey(fields, key);
+    const token = configKeyToken(key);
+    const existingKey = Object.keys(current).find(
+      (overrideKey) => configKeyToken(overrideKey) === token,
+    );
+    const withoutExisting = withoutRuntimeDefaultOverride(current, key);
+    const edited =
+      field && isDefaultConfigFieldValue(field, value)
+        ? withoutExisting
+        : {
+            ...withoutExisting,
+            [field?.key ?? existingKey ?? key]: value,
+          };
+    return preserveRuntimeDefaultOverrideIdentity(
+      current,
+      normalizedRuntimeDefaultOverrides(fields, edited),
+    );
+  },
+
+  clear(fields: ConfigField[], current: OverrideValues, key: string) {
+    return preserveRuntimeDefaultOverrideIdentity(
+      current,
+      normalizedRuntimeDefaultOverrides(
+        fields,
+        withoutRuntimeDefaultOverride(current, key),
+      ),
+    );
+  },
+};
+
 function adaptiveFlagKeyForOptionField(fieldKey: string) {
   const fieldToken = configKeyToken(fieldKey);
   return ADAPTIVE_OPTION_PAIRS.find(

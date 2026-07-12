@@ -11,12 +11,11 @@ import {
   filterConfigSectionsForSearch,
   inheritedHiddenModelFieldHint,
   inheritedStackSectionHint,
-  isDefaultConfigFieldValue,
   lockedOverrideKeys,
-  normalizeAdaptiveOptionOverrides,
   normalizeConfigFieldValue,
   overrideDigest,
   overrideValueForConfigField,
+  runtimeDefaultsEditor,
   type ConfigSection,
 } from "@/lib/config";
 import { type ConfigField } from "@/lib/api";
@@ -384,7 +383,9 @@ describe("config field value normalization", () => {
     });
 
     expect(normalizeConfigFieldValue(intField, "256")).toBe("256");
-    expect(isDefaultConfigFieldValue(intField, "256")).toBe(true);
+    expect(
+      runtimeDefaultsEditor.edit([intField], {}, "hidden_dim", "256"),
+    ).toEqual({});
   });
 
   it("matches float defaults against equivalent string input", () => {
@@ -395,7 +396,9 @@ describe("config field value normalization", () => {
     });
 
     expect(normalizeConfigFieldValue(floatField, "0.2")).toBe("0.2");
-    expect(isDefaultConfigFieldValue(floatField, "0.2")).toBe(true);
+    expect(
+      runtimeDefaultsEditor.edit([floatField], {}, "dropout", "0.2"),
+    ).toEqual({});
   });
 
   it("preserves invalid numeric text as a raw override value", () => {
@@ -411,7 +414,9 @@ describe("config field value normalization", () => {
     });
 
     expect(normalizeConfigFieldValue(intField, "abc")).toBe("abc");
-    expect(isDefaultConfigFieldValue(intField, "abc")).toBe(false);
+    expect(
+      runtimeDefaultsEditor.edit([intField], {}, "hidden_dim", "abc"),
+    ).toEqual({ hidden_dim: "abc" });
     expect(overrideValueForConfigField(floatField, "abc")).toBe("abc");
   });
 
@@ -423,7 +428,9 @@ describe("config field value normalization", () => {
     });
 
     expect(normalizeConfigFieldValue(boolField, "false")).toBe("false");
-    expect(isDefaultConfigFieldValue(boolField, "false")).toBe(true);
+    expect(
+      runtimeDefaultsEditor.edit([boolField], {}, "gate_flag", "false"),
+    ).toEqual({});
   });
 
   it("normalizes nullable null and empty UI values consistently", () => {
@@ -437,8 +444,92 @@ describe("config field value normalization", () => {
     expect(defaultConfigFieldValue(nullableField)).toBe("null");
     expect(normalizeConfigFieldValue(nullableField, null)).toBe("null");
     expect(normalizeConfigFieldValue(nullableField, "")).toBe("null");
-    expect(isDefaultConfigFieldValue(nullableField, "")).toBe(true);
+    expect(
+      runtimeDefaultsEditor.edit(
+        [nullableField],
+        {},
+        "optional_hidden_dim",
+        "",
+      ),
+    ).toEqual({});
     expect(overrideValueForConfigField(nullableField, "")).toBe("");
+  });
+});
+
+describe("Runtime Defaults editor", () => {
+  const hiddenDim = field({
+    key: "hidden_dim",
+    configKey: "HIDDEN_DIM",
+    type: "int",
+    default: 256,
+  });
+
+  it("canonicalizes replacement keys while retaining inactive locked values", () => {
+    const lockedLayerWidth = field({
+      key: "layer_width",
+      configKey: "LAYER_WIDTH",
+      type: "int",
+      default: 64,
+      locked: true,
+      lockedValue: 96,
+    });
+
+    expect(
+      runtimeDefaultsEditor.replace([hiddenDim, lockedLayerWidth], {
+        HIDDEN_DIM: "128",
+        LAYER_WIDTH: "192",
+      }),
+    ).toEqual({
+      hidden_dim: "128",
+      layer_width: "192",
+    });
+  });
+
+  it("suppresses default-equivalent edits with token-aware removal", () => {
+    expect(
+      runtimeDefaultsEditor.edit(
+        [hiddenDim],
+        { HIDDEN_DIM: "128", unknown: "kept" },
+        "hidden-dim",
+        "256",
+      ),
+    ).toEqual({ unknown: "kept" });
+  });
+
+  it("applies adaptive repair after semantic edits and clears", () => {
+    const enabled = runtimeDefaultsEditor.edit(
+      adaptiveOptionFields,
+      {},
+      "WEIGHT_OPTION_FLAG",
+      "true",
+    );
+
+    expect(enabled).toEqual({
+      weight_option_flag: "true",
+      weight_option: "SingleModelDynamicWeightConfig",
+    });
+    expect(
+      runtimeDefaultsEditor.clear(
+        adaptiveOptionFields,
+        enabled,
+        "weight-option-flag",
+      ),
+    ).toEqual({});
+  });
+
+  it("preserves object identity when normalization or an edit is a no-op", () => {
+    const current = { hidden_dim: "128" };
+
+    expect(runtimeDefaultsEditor.normalize([hiddenDim], current)).toBe(current);
+    expect(
+      runtimeDefaultsEditor.edit([hiddenDim], current, "hidden_dim", "128"),
+    ).toBe(current);
+    expect(
+      runtimeDefaultsEditor.edit([], current, "HIDDEN-DIM", "128"),
+    ).toBe(current);
+    expect(
+      runtimeDefaultsEditor.clear([hiddenDim], current, "missing"),
+    ).toBe(current);
   });
 });
 
@@ -512,7 +603,7 @@ describe("adaptive option override helpers", () => {
     ];
 
     for (const { flagKey, optionKey, optionValue } of cases) {
-      const normalized = normalizeAdaptiveOptionOverrides(adaptiveOptionFields, {
+      const normalized = runtimeDefaultsEditor.replace(adaptiveOptionFields, {
         [flagKey]: "true",
       });
 
@@ -546,7 +637,7 @@ describe("adaptive option override helpers", () => {
     ];
 
     expect(
-      normalizeAdaptiveOptionOverrides(routerFields, {
+      runtimeDefaultsEditor.replace(routerFields, {
         router_weight_option_flag: "true",
       }),
     ).toMatchObject({
@@ -555,7 +646,7 @@ describe("adaptive option override helpers", () => {
     });
 
     expect(
-      normalizeAdaptiveOptionOverrides(routerFields, {
+      runtimeDefaultsEditor.replace(routerFields, {
         router_weight_option_flag: "false",
         router_weight_option: "LayeredWeightedBankDynamicWeightConfig",
       }),
@@ -563,7 +654,7 @@ describe("adaptive option override helpers", () => {
   });
 
   it("clears only the paired adaptive option when a flag is disabled", () => {
-    const normalized = normalizeAdaptiveOptionOverrides(adaptiveOptionFields, {
+    const normalized = runtimeDefaultsEditor.replace(adaptiveOptionFields, {
       weight_option_flag: "false",
       weight_option: "DualModelDynamicWeightConfig",
       hidden_dim: "128",
@@ -576,7 +667,7 @@ describe("adaptive option override helpers", () => {
   });
 
   it("clears paired adaptive options when the flag is at its inactive default", () => {
-    const normalized = normalizeAdaptiveOptionOverrides(adaptiveOptionFields, {
+    const normalized = runtimeDefaultsEditor.replace(adaptiveOptionFields, {
       row_mask_option: "OuterProductMaskConfig",
       hidden_dim: "128",
     });
