@@ -3,7 +3,7 @@ import torch.nn as nn
 
 from torch import Tensor
 from torch.nn import Parameter
-from emperor.base.utils import Module
+from emperor.base.module import Module
 from emperor.base.layer import LayerStackConfig
 from emperor.base.layer.layer import Layer
 from emperor.patch.core._validator import PatchValidator
