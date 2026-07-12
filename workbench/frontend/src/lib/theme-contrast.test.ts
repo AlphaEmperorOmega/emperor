@@ -1,26 +1,53 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import tailwindConfig from "../../tailwind.config";
+import tailwindConfig, { workbenchCssVariables } from "../../tailwind.config";
+import { buildEmperorTheme } from "@/lib/echarts/theme";
+import { workbenchGraphEdgeVisual } from "@/lib/graph/visuals";
+import {
+  workbenchVisualTokens,
+  type WorkbenchVisualTokenName,
+} from "@/lib/visual-tokens";
 
 const MINIMUM_NORMAL_TEXT_CONTRAST = 4.5;
-const primarySurfaceNames = ["bg", "bg-2", "panel", "panel-2", "card-a", "card-b"] as const;
+const primarySurfaceNames = [
+  "bg",
+  "bg2",
+  "panel",
+  "panel2",
+  "cardA",
+  "cardB",
+] as const satisfies readonly WorkbenchVisualTokenName[];
 
-type ThemeColor = (typeof primarySurfaceNames)[number] | "ink-faint";
+const cssTokenNames = {
+  "--amber": "amber",
+  "--bg": "bg",
+  "--bg-2": "bg2",
+  "--blue": "blue",
+  "--card-a": "cardA",
+  "--card-b": "cardB",
+  "--cyan": "cyan",
+  "--graph-grid": "graphGrid",
+  "--ink": "ink",
+  "--ink-dim": "inkDim",
+  "--ink-faint": "inkFaint",
+  "--line": "line",
+  "--line-soft": "lineSoft",
+  "--ok": "ok",
+  "--panel": "panel",
+  "--panel-2": "panel2",
+  "--violet": "violet",
+  "--violet-deep": "violetDeep",
+} as const satisfies Record<string, WorkbenchVisualTokenName>;
 
-const themeColors = tailwindConfig.theme?.extend?.colors as Record<ThemeColor, string>;
+const themeColors = tailwindConfig.theme?.extend?.colors as Record<
+  string,
+  string
+>;
 const globalsCss = readFileSync(
   fileURLToPath(new URL("../../app/globals.css", import.meta.url)),
   "utf8",
 );
-
-function cssCustomProperty(name: ThemeColor) {
-  const match = globalsCss.match(new RegExp(`--${name}:\\s*(#[0-9a-f]{6});`, "i"));
-  if (!match) {
-    throw new Error(`Missing --${name} CSS custom property`);
-  }
-  return match[1].toLowerCase();
-}
 
 function relativeLuminance(hexColor: string) {
   const channels = hexColor
@@ -45,21 +72,85 @@ function contrastRatio(firstColor: string, secondColor: string) {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
-describe("normal faint-text theme contrast", () => {
-  it("keeps the CSS custom properties and Tailwind colors synchronized", () => {
-    for (const colorName of ["ink-faint", ...primarySurfaceNames] as const) {
-      expect(cssCustomProperty(colorName)).toBe(themeColors[colorName].toLowerCase());
+describe("Workbench visual-token adapters", () => {
+  it("generates CSS custom properties from the token owner", () => {
+    for (const [cssName, tokenName] of Object.entries(cssTokenNames)) {
+      expect(workbenchCssVariables[cssName as keyof typeof workbenchCssVariables]).toBe(
+        workbenchVisualTokens[tokenName],
+      );
+      expect(globalsCss).not.toMatch(new RegExp(`${cssName}:\\s*(?:#|rgba?\\()`, "i"));
     }
+    expect(workbenchCssVariables["--grad"]).toBe(
+      `linear-gradient(135deg, ${workbenchVisualTokens.gradientStart} 0%, ${workbenchVisualTokens.gradientMiddle} 48%, ${workbenchVisualTokens.gradientEnd} 100%)`,
+    );
+    expect(globalsCss).toContain("radial-gradient(var(--graph-grid)");
   });
 
-  it("meets WCAG AA contrast on every primary surface", () => {
-    const faintText = themeColors["ink-faint"];
+  it("derives every named Tailwind color from a semantic token", () => {
+    const tokenValues = new Set<string>(Object.values(workbenchVisualTokens));
+    for (const [name, value] of Object.entries(themeColors)) {
+      expect(tokenValues.has(value), `${name} ${value}`).toBe(true);
+    }
+    expect(themeColors).toMatchObject({
+      accent: workbenchVisualTokens.violet,
+      amberline: workbenchVisualTokens.amber,
+      border: workbenchVisualTokens.line,
+      muted: workbenchVisualTokens.inkDim,
+      subtle: workbenchVisualTokens.lineSoft,
+      surface: workbenchVisualTokens.bg2,
+    });
+  });
 
+  it("translates the same semantic facts into ECharts and graph canvas styles", () => {
+    const theme = buildEmperorTheme("fixture-mono");
+    const categoryAxis = theme.categoryAxis as {
+      axisLabel: { color: string };
+      axisLine: { lineStyle: { color: string } };
+      splitLine: { lineStyle: { color: string } };
+    };
+    const tooltip = theme.tooltip as {
+      backgroundColor: string;
+      borderColor: string;
+      axisPointer: {
+        label: { backgroundColor: string; color: string };
+      };
+    };
+    const dataZoom = theme.dataZoom as {
+      fillerColor: string;
+      moveHandleStyle: { color: string };
+    };
+
+    expect(categoryAxis.axisLabel.color).toBe(workbenchVisualTokens.inkFaint);
+    expect(categoryAxis.axisLine.lineStyle.color).toBe(workbenchVisualTokens.line);
+    expect(categoryAxis.splitLine.lineStyle.color).toBe(
+      workbenchVisualTokens.lineSoft,
+    );
+    expect(tooltip).toMatchObject({
+      backgroundColor: workbenchVisualTokens.panel,
+      borderColor: workbenchVisualTokens.line,
+      axisPointer: {
+        label: {
+          backgroundColor: workbenchVisualTokens.violet,
+          color: workbenchVisualTokens.bg,
+        },
+      },
+    });
+    expect(dataZoom).toMatchObject({
+      fillerColor: workbenchVisualTokens.accentFill,
+      moveHandleStyle: { color: workbenchVisualTokens.inkFaint },
+    });
+    expect(workbenchGraphEdgeVisual()).toMatchObject({
+      markerEnd: { color: workbenchVisualTokens.gradientMiddle },
+      style: { stroke: workbenchVisualTokens.violetDeep },
+    });
+  });
+
+  it("keeps normal faint text at WCAG AA contrast on every primary surface", () => {
     for (const surfaceName of primarySurfaceNames) {
-      const surface = themeColors[surfaceName];
+      const surface = workbenchVisualTokens[surfaceName];
       expect(
-        contrastRatio(faintText, surface),
-        `ink-faint ${faintText} on ${surfaceName} ${surface}`,
+        contrastRatio(workbenchVisualTokens.inkFaint, surface),
+        `inkFaint ${workbenchVisualTokens.inkFaint} on ${surfaceName} ${surface}`,
       ).toBeGreaterThanOrEqual(MINIMUM_NORMAL_TEXT_CONTRAST);
     }
   });

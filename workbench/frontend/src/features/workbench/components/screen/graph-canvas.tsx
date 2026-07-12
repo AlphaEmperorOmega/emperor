@@ -13,6 +13,7 @@ import { type ParameterActivityMinimapState } from "@/features/workbench/state/g
 import { useGraphView } from "@/features/workbench/providers/workbench-providers";
 import { type InspectResponse } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { workbenchVisualTokens } from "@/lib/visual-tokens";
 
 export function GraphPreviewPanel({
   graph,
@@ -68,7 +69,7 @@ export function GraphPreviewPanel({
         onlyRenderVisibleElements
         nodeClickDistance={4}
       >
-        <Background gap={26} color="rgba(255,255,255,0.05)" />
+        <Background gap={26} color={workbenchVisualTokens.graphGrid} />
         <Controls showInteractive={false} position="bottom-left" />
         {graph && (
           <Panel

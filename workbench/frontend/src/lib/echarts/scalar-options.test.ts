@@ -5,6 +5,7 @@ import {
   SCALAR_OPTION_DOWNSAMPLE_THRESHOLD,
   type ScalarLine,
 } from "@/lib/echarts/scalar-options";
+import { workbenchVisualTokens } from "@/lib/visual-tokens";
 
 function lineWith(points: ScalarLine["points"]): ScalarLine {
   return { id: "run-a", name: "Run A", color: "#7c6dff", points };
@@ -222,6 +223,9 @@ describe("buildScalarLineOption", () => {
     expect(data[0].name).toContain("Run A: epoch=0-step=2.ckpt (epoch 0, step 2)");
     expect(data[0].name).toContain("Run B: epoch=1-step=2.ckpt (epoch 1, step 2)");
     expect(data[0].name).not.toContain("last.ckpt");
+    expect(seriesOf(option)[0].markLine?.lineStyle).toMatchObject({
+      color: workbenchVisualTokens.checkpointMarker,
+    });
   });
 
   it("suppresses checkpoint mark lines in wall-time mode", () => {

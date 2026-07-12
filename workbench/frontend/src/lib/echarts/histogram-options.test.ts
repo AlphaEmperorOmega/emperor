@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { CustomSeriesOption } from "echarts";
 import type { HistogramData } from "@/types/monitor";
 import { buildHistogramBarOption } from "@/lib/echarts/histogram-options";
+import { workbenchVisualTokens } from "@/lib/visual-tokens";
 
 const histogram: HistogramData = {
   tag: "layer/weights/histogram",
@@ -30,6 +31,9 @@ describe("buildHistogramBarOption", () => {
     expect(series.type).toBe("custom");
     expect(data).toHaveLength(3);
     expect(data[0]).toEqual([-1, 0, 3]);
+    expect((series.itemStyle as { color?: string }).color).toBe(
+      workbenchVisualTokens.violet,
+    );
   });
 
   it("uses value axes for both dimensions", () => {

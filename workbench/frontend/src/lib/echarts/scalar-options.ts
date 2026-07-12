@@ -6,6 +6,7 @@ import type {
 import type { ScalarDomain } from "@/types/monitor";
 import { formatNumber } from "@/lib/format";
 import { applyEmaSmoothing } from "@/lib/echarts/smoothing";
+import { workbenchVisualTokens } from "@/lib/visual-tokens";
 
 export type ScalarXMode = "step" | "wallTime";
 export type ScalarYScale = "linear" | "log";
@@ -297,7 +298,7 @@ export function buildScalarLineOption(
           symbol: "none",
           silent: false,
           lineStyle: {
-            color: "rgba(255,255,255,0.42)",
+            color: workbenchVisualTokens.checkpointMarker,
             type: "dashed",
             width: 1,
           },

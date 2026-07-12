@@ -17,9 +17,10 @@ import {
   type ScalarSeries,
 } from "@/types/monitor";
 import { type LogRun } from "@/lib/api";
+import { workbenchVisualTokens } from "@/lib/visual-tokens";
 
 // Single-run monitor scalars keep their original cyan accent.
-const SINGLE_SCALAR_COLOR = "#7fd0ff";
+const SINGLE_SCALAR_COLOR = workbenchVisualTokens.cyan;
 
 // Scalar (line) charts in the modal share one group so the crosshair + tooltip
 // track the same step across a node's metrics. Histograms use a value x-axis and

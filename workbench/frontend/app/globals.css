@@ -5,24 +5,6 @@
 
 :root {
   color-scheme: dark;
-  --bg: #06060c;
-  --bg-2: #090910;
-  --panel: #0c0c15;
-  --panel-2: #0f0f1a;
-  --card-a: #161622;
-  --card-b: #0e0e18;
-  --ink: #ecebf5;
-  --ink-dim: #9c9cb6;
-  --ink-faint: #80809b;
-  --line: rgba(255, 255, 255, 0.07);
-  --line-soft: rgba(255, 255, 255, 0.045);
-  --violet: #a78bfa;
-  --violet-deep: #8b5cf6;
-  --blue: #6ea8ff;
-  --cyan: #7fd0ff;
-  --ok: #56d6a0;
-  --amber: #ffd166;
-  --grad: linear-gradient(135deg, #a98bff 0%, #7c8dff 48%, #6fc3ff 100%);
   --grad-edge: linear-gradient(
     150deg,
     rgba(169, 139, 255, 0.45),
@@ -205,7 +187,7 @@ textarea {
   background:
     radial-gradient(620px 480px at 28% 38%, rgba(124, 92, 255, 0.07), transparent 60%),
     radial-gradient(560px 460px at 78% 72%, rgba(58, 122, 255, 0.06), transparent 60%),
-    radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+    radial-gradient(var(--graph-grid) 1px, transparent 1px);
   background-color: transparent;
   background-size: auto, auto, 26px 26px;
 }

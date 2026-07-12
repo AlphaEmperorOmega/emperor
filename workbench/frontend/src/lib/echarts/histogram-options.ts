@@ -6,8 +6,7 @@ import type {
 } from "echarts";
 import type { HistogramData } from "@/types/monitor";
 import { formatNumber } from "@/lib/format";
-
-const HISTOGRAM_COLOR = "#a78bfa";
+import { workbenchVisualTokens } from "@/lib/visual-tokens";
 
 export type HistogramBarOptions = {
   /** Fixed y-axis maximum so paired comparison histograms share a scale. */
@@ -43,7 +42,7 @@ export function buildHistogramBarOption(
   histogram: HistogramData,
   options: HistogramBarOptions = {},
 ): EChartsOption {
-  const { maxCount, color = HISTOGRAM_COLOR } = options;
+  const { maxCount, color = workbenchVisualTokens.violet } = options;
   const data = histogram.buckets.map((bucket) => [bucket.left, bucket.right, bucket.count]);
   return {
     animation: false,

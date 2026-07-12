@@ -234,7 +234,7 @@ export function DeleteSubsetRunsDialog({
               </p>
               <div className="grid gap-2 rounded-[12px] border border-danger-line/70 bg-danger-soft p-3 sm:grid-cols-3">
                 <div className="min-w-0">
-                  <div className="text-[11px] font-bold uppercase tracking-[0.09em] text-[#fda4af]">
+                  <div className="text-[11px] font-bold uppercase tracking-[0.09em] text-danger-text">
                     Experiment
                   </div>
                   <div className="mt-1 truncate font-mono text-xs text-ink">
@@ -242,7 +242,7 @@ export function DeleteSubsetRunsDialog({
                   </div>
                 </div>
                 <div className="min-w-0">
-                  <div className="text-[11px] font-bold uppercase tracking-[0.09em] text-[#fda4af]">
+                  <div className="text-[11px] font-bold uppercase tracking-[0.09em] text-danger-text">
                     {targetLabel}
                   </div>
                   <div className="mt-1 truncate font-mono text-xs text-ink">
@@ -250,7 +250,7 @@ export function DeleteSubsetRunsDialog({
                   </div>
                 </div>
                 <div className="min-w-0">
-                  <div className="text-[11px] font-bold uppercase tracking-[0.09em] text-[#fda4af]">
+                  <div className="text-[11px] font-bold uppercase tracking-[0.09em] text-danger-text">
                     Matched Runs
                   </div>
                   <div className="mt-1 font-mono text-xs text-ink">{runCount}</div>
@@ -276,8 +276,8 @@ export function DeleteSubsetRunsDialog({
             </div>
 
             {blockers.length > 0 && (
-              <div className="grid gap-2 rounded-[12px] border border-danger-line bg-danger-soft p-3 text-sm text-[#fecdd3]">
-                <div className="flex items-start gap-2 font-semibold text-[#fda4af]">
+              <div className="grid gap-2 rounded-[12px] border border-danger-line bg-danger-soft p-3 text-sm text-danger-detail">
+                <div className="flex items-start gap-2 font-semibold text-danger-text">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
                   <span>A training job is still writing to this log folder.</span>
                 </div>
