@@ -83,6 +83,7 @@ function renderDeletion(
   overrides: Partial<{
     active: boolean;
     enabled: boolean;
+    runs: LogRun[];
     selectedExperiments: Set<string>;
   }> = {},
 ) {
@@ -101,7 +102,7 @@ function renderDeletion(
     (currentProps) =>
       useLogsDeletionState({
         ...currentProps,
-        runs: [run],
+        runs: currentProps.runs ?? [run],
         onExperimentDeleted,
         onRunsDeleted,
       }),
@@ -121,6 +122,40 @@ beforeEach(() => {
 });
 
 describe("Logs deletion lifecycle", () => {
+  it("builds stable subset filters from the Runs owned by the deletion target", async () => {
+    const runZ = {
+      ...logRun("run-z"),
+      dataset: "Cifar10",
+      modelType: "transformer",
+      model: "tiny",
+    };
+    mocks.createPlan.mockResolvedValue(plan);
+    const { result } = renderDeletion({ runs: [runZ, run, runZ] });
+
+    act(() => {
+      result.current.actions.openPreset({
+        value: "BASELINE",
+        label: "BASELINE",
+        count: 2,
+      });
+    });
+    await waitFor(() => expect(result.current.operation?.phase).toBe("ready"));
+
+    expect(mocks.createPlan).toHaveBeenCalledWith(
+      {
+        experiments: ["exp_a"],
+        datasets: ["Cifar10", "Mnist"],
+        models: [
+          { modelType: "linears", model: "linear" },
+          { modelType: "transformer", model: "tiny" },
+        ],
+        presets: ["BASELINE"],
+        runIds: ["run-a", "run-z"],
+      },
+      expect.any(Object),
+    );
+  });
+
   it("enforces a disabled capability before planning or mutation", async () => {
     const { result } = renderDeletion({ enabled: false });
 

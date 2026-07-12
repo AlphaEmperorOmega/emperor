@@ -7,6 +7,8 @@ import {
   useState,
 } from "react";
 import {
+  DEFAULT_LOG_SCALAR_MAX_POINTS,
+  LOG_SCALAR_SAMPLING,
   type LogCheckpoint,
   type LogRun,
   type LogScalarSeries,
@@ -20,13 +22,12 @@ import {
   useLogScalarsQuery,
 } from "@/features/workbench/state/logs/use-log-queries";
 import { logQueryKeys } from "@/lib/query-keys";
-import { type LogsWorkspaceImplementation } from "@/features/workbench/state/logs/_use-logs-workspace-state";
+import { type LogsChartSource } from "@/features/workbench/state/logs/_use-logs-workspace-state";
 import {
   LOG_METRIC_GROUPS,
   type ChecklistOption,
   type LogMetricGroupKey,
   type LogMetricsByGroup,
-  type LogMetricTagsByGroup,
   type TrainValidationScalarPair,
   buildTrainValidationScalarPairs,
   defaultTrainValidationScalarPairSuffixes,
@@ -49,10 +50,84 @@ import {
   type LogMetricDirection,
   type LogMetricPointPolicy,
 } from "@/features/workbench/state/logs/log-metric-ranking";
-import {
-  buildLogScalarChunkQueryInputs,
-  buildLogScalarQueryInput,
-} from "@/features/workbench/state/logs/_logs-scalar-query-plan";
+
+const LOG_SCALAR_TAG_CHUNK_SIZE = 6;
+// Ten Runs keeps the first progressive response bounded while cutting the
+// common 100-Run/six-tag view from 50 serialized requests to 10.
+const LOG_SCALAR_RUN_CHUNK_SIZE = 10;
+
+function buildLogScalarQueryInput({
+  enabled,
+  group,
+  selectedTagList,
+  visibleRunIds,
+}: {
+  enabled: boolean;
+  group?: string;
+  selectedTagList: string[];
+  visibleRunIds: string[];
+}): LogScalarQueryInput {
+  return {
+    runIds: visibleRunIds,
+    tags: selectedTagList,
+    enabled: enabled && visibleRunIds.length > 0 && selectedTagList.length > 0,
+    group,
+    queryKey: logQueryKeys.scalarsForRunsAndTags(
+      visibleRunIds,
+      selectedTagList,
+      {
+        group,
+        maxPoints: DEFAULT_LOG_SCALAR_MAX_POINTS,
+        sampling: LOG_SCALAR_SAMPLING,
+      },
+    ),
+  };
+}
+
+function chunkUniqueValues(values: string[], chunkSize: number) {
+  const uniqueValues = Array.from(new Set(values));
+  const chunks: string[][] = [];
+  for (let index = 0; index < uniqueValues.length; index += chunkSize) {
+    chunks.push(uniqueValues.slice(index, index + chunkSize));
+  }
+  return chunks;
+}
+
+function buildLogScalarChunkQueryInputs({
+  enabled,
+  group,
+  requestedTags,
+  selectedTagList,
+  visibleRunIds,
+}: {
+  enabled: boolean;
+  group: string;
+  requestedTags: Set<string>;
+  selectedTagList: string[];
+  visibleRunIds: string[];
+}) {
+  const requestedSelectedTags = selectedTagList.filter((tag) =>
+    requestedTags.has(tag),
+  );
+  const tagChunks = chunkUniqueValues(
+    requestedSelectedTags,
+    LOG_SCALAR_TAG_CHUNK_SIZE,
+  );
+  const runChunks = chunkUniqueValues(
+    visibleRunIds,
+    LOG_SCALAR_RUN_CHUNK_SIZE,
+  );
+  return runChunks.flatMap((runIds) =>
+    tagChunks.map((tags) =>
+      buildLogScalarQueryInput({
+        enabled,
+        group,
+        selectedTagList: tags,
+        visibleRunIds: runIds,
+      }),
+    ),
+  );
+}
 
 export type LogsChartEmptyState = {
   title: string;
@@ -79,7 +154,7 @@ export type LogScalarTagQueryState = LogMetricGroupScalarQueryState & {
   hasRequested: boolean;
 };
 
-export type LogMetricGroupScalarQueryStates = Record<
+type LogMetricGroupScalarQueryStates = Record<
   LogMetricGroupKey,
   LogMetricGroupScalarQueryState
 >;
@@ -105,7 +180,7 @@ export type LogBestRunViewModel = {
   onPointPolicyChange: (policy: LogMetricPointPolicy) => void;
 };
 
-export type LogMetricGroupScalarQuerySnapshot =
+type LogMetricGroupScalarQuerySnapshot =
   LogMetricGroupScalarQueryState & {
     active: boolean;
   };
@@ -125,7 +200,7 @@ function scopedScalarQueryState({
   };
 }
 
-export function deriveLogMetricGroupScalarQueryStates(
+function deriveLogMetricGroupScalarQueryStates(
   snapshots: Record<LogMetricGroupKey, LogMetricGroupScalarQuerySnapshot>,
 ): LogMetricGroupScalarQueryStates {
   return {
@@ -134,24 +209,6 @@ export function deriveLogMetricGroupScalarQueryStates(
     test: scopedScalarQueryState(snapshots.test),
     other: scopedScalarQueryState(snapshots.other),
   };
-}
-
-export function bestRunMetricGroupForActiveScalarQuery({
-  activeGroups,
-  selectedTagsByGroup,
-  tag,
-}: {
-  activeGroups: Record<LogMetricGroupKey, boolean>;
-  selectedTagsByGroup: LogMetricTagsByGroup;
-  tag: string | null;
-}): LogMetricGroupKey | null {
-  if (!tag) {
-    return null;
-  }
-  const group = metricGroupForTag(tag);
-  return activeGroups[group] && selectedTagsByGroup[group].includes(tag)
-    ? group
-    : null;
 }
 
 export function groupLogScalarSeriesByTag(seriesList: LogScalarSeries[]) {
@@ -168,15 +225,6 @@ export function groupLogScalarSeriesByTag(seriesList: LogScalarSeries[]) {
     }
   }
   return byTag;
-}
-
-export function countGroupedLogScalarSeries(
-  seriesByTag: Map<string, LogScalarSeries[]>,
-) {
-  return Array.from(seriesByTag.values()).reduce(
-    (total, series) => total + series.length,
-    0,
-  );
 }
 
 const BEST_RUN_DEFAULT_TAGS = [
@@ -407,24 +455,6 @@ function mergeLogScalarTagQueryState(
     error: current?.error ?? snapshot.error,
   });
 }
-
-export type LogsChartSource = Pick<
-  LogsWorkspaceImplementation,
-  | "collapsedMetricGroups"
-  | "confusionMatrixRateTags"
-  | "enabled"
-  | "loadedScalarTagRunCount"
-  | "refreshLogLists"
-  | "runsQuery"
-  | "selectedTagList"
-  | "setSelectedDetailRunId"
-  | "tagOptions"
-  | "tagsQuery"
-  | "toggleMetricGroup"
-  | "toggleTag"
-  | "visibleRunIds"
-  | "visibleRuns"
->;
 
 export function useLogsChartViewModel(state: LogsChartSource) {
   const [accordionGridMode, setAccordionGridMode] =

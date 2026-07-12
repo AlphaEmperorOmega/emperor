@@ -2,14 +2,11 @@ import { performance } from "node:perf_hooks";
 import { gzipSync } from "node:zlib";
 import { z } from "zod";
 import { logScalarSeriesSchema } from "@/lib/api/logs";
-import {
-  buildLogScalarChunkQueryInputs,
-  chunkScalarRunIdsForQueries,
-  chunkScalarTagsForQueries,
-} from "@/features/workbench/state/logs/_logs-scalar-query-plan";
 
 const SYNTHETIC_POINTS_PER_SERIES = 20;
 const SAMPLE_COUNT = 3;
+const CURRENT_RUN_CHUNK_SIZE = 10;
+const CURRENT_TAG_CHUNK_SIZE = 6;
 const responseSchema = z.object({ series: z.array(logScalarSeriesSchema) });
 const points = Array.from({ length: SYNTHETIC_POINTS_PER_SERIES }, (_, index) => ({
   step: index,
@@ -19,9 +16,18 @@ const points = Array.from({ length: SYNTHETIC_POINTS_PER_SERIES }, (_, index) =>
 
 type ScalarRequest = { runIds: string[]; tags: string[] };
 
+function chunkUniqueValues(values: string[], size: number) {
+  const uniqueValues = Array.from(new Set(values));
+  const chunks: string[][] = [];
+  for (let index = 0; index < uniqueValues.length; index += size) {
+    chunks.push(uniqueValues.slice(index, index + size));
+  }
+  return chunks;
+}
+
 function baselinePlan(runIds: string[], tags: string[]): ScalarRequest[] {
-  const runChunks = chunkScalarRunIdsForQueries(runIds, 2);
-  const tagChunks = chunkScalarTagsForQueries(tags, 6);
+  const runChunks = chunkUniqueValues(runIds, 2);
+  const tagChunks = chunkUniqueValues(tags, CURRENT_TAG_CHUNK_SIZE);
   return runChunks.flatMap((requestRunIds) =>
     tagChunks.map((requestTags) => ({
       runIds: requestRunIds,
@@ -31,16 +37,14 @@ function baselinePlan(runIds: string[], tags: string[]): ScalarRequest[] {
 }
 
 function currentPlan(runIds: string[], tags: string[]): ScalarRequest[] {
-  return buildLogScalarChunkQueryInputs({
-    enabled: true,
-    group: "benchmark",
-    requestedTags: new Set(tags),
-    selectedTagList: tags,
-    visibleRunIds: runIds,
-  }).map(({ runIds: requestRunIds, tags: requestTags }) => ({
-    runIds: requestRunIds,
-    tags: requestTags,
-  }));
+  const runChunks = chunkUniqueValues(runIds, CURRENT_RUN_CHUNK_SIZE);
+  const tagChunks = chunkUniqueValues(tags, CURRENT_TAG_CHUNK_SIZE);
+  return runChunks.flatMap((requestRunIds) =>
+    tagChunks.map((requestTags) => ({
+      runIds: requestRunIds,
+      tags: requestTags,
+    })),
+  );
 }
 
 function requestPayload({ runIds, tags }: ScalarRequest) {

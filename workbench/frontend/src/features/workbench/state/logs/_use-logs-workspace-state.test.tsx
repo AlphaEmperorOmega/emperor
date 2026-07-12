@@ -32,10 +32,10 @@ vi.mock("@/lib/api", () => ({
 }));
 
 import {
-  useLogsWorkspaceImplementation,
+  useLogsWorkspaceState,
   type LogsTargetScope,
 } from "@/features/workbench/state/logs/_use-logs-workspace-state";
-import { type LogRun } from "@/lib/api";
+import { type LogRun, type LogRunTags } from "@/lib/api";
 
 function logRun(overrides: Partial<LogRun> & Pick<LogRun, "id">): LogRun {
   const experiment = overrides.experiment ?? "exp_a";
@@ -64,8 +64,18 @@ function logRun(overrides: Partial<LogRun> & Pick<LogRun, "id">): LogRun {
   };
 }
 
-function values(selection: Set<string>) {
-  return Array.from(selection);
+function values(selection: readonly string[]) {
+  return [...selection];
+}
+
+function logRunTags(runId: string, scalarTags: string[]): LogRunTags {
+  return {
+    runId,
+    scalarTags,
+    histogramTags: [],
+    imageTags: [],
+    textTags: [],
+  };
 }
 
 function deferred<T>() {
@@ -97,7 +107,7 @@ function renderLogsWorkspaceState(
 
   return renderHook(
     (props) =>
-      useLogsWorkspaceImplementation({
+      useLogsWorkspaceState({
         enabled: props.enabled,
         targetScope: props.targetScope,
       }),
@@ -109,7 +119,7 @@ function renderLogsWorkspaceState(
   );
 }
 
-describe("Logs workspace Implementation", () => {
+describe("Logs workspace state", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     const runs = [
@@ -146,20 +156,20 @@ describe("Logs workspace Implementation", () => {
     const { result } = renderLogsWorkspaceState();
 
     await waitFor(() => {
-      expect(result.current.experimentOptions.map((option) => option.value))
+      expect(result.current.browser.filters.experiments.options.map((option) => option.value))
         .toEqual(["exp_a", "exp_b"]);
     });
 
     act(() => {
-      result.current.toggleExperiment("exp_a");
+      result.current.browser.actions.toggleFilter("experiments", "exp_a");
     });
 
     await waitFor(() => {
-      expect(values(result.current.selectedDatasets)).toEqual(["Cifar10"]);
-      expect(values(result.current.selectedModels)).toEqual(["linears/linear"]);
-      expect(values(result.current.selectedPresets)).toEqual(["baseline"]);
+      expect(result.current.browser.filters.datasets.selectedValues).toEqual(["Cifar10"]);
+      expect(result.current.browser.filters.models.selectedValues).toEqual(["linears/linear"]);
+      expect(result.current.browser.filters.presets.selectedValues).toEqual(["baseline"]);
     });
-    expect(result.current.visibleRuns.map((run) => run.id)).toEqual(["a-cifar"]);
+    expect(result.current.charts.visibleRuns.map((run) => run.id)).toEqual(["a-cifar"]);
   });
 
   it("waits for fresh experiment runs before selecting first dataset, model, and preset", async () => {
@@ -184,12 +194,12 @@ describe("Logs workspace Implementation", () => {
     const { result } = renderLogsWorkspaceState();
 
     await waitFor(() => {
-      expect(result.current.experimentOptions.map((option) => option.value))
+      expect(result.current.browser.filters.experiments.options.map((option) => option.value))
         .toEqual(["exp_a", "exp_b"]);
     });
 
     act(() => {
-      result.current.toggleExperiment("exp_a");
+      result.current.browser.actions.toggleFilter("experiments", "exp_a");
     });
     await waitFor(() => {
       expect(mocks.fetchLogRuns).toHaveBeenCalledWith(
@@ -205,11 +215,11 @@ describe("Logs workspace Implementation", () => {
     });
 
     await waitFor(() => {
-      expect(values(result.current.selectedDatasets)).toEqual(["Cifar10"]);
-      expect(values(result.current.selectedModels)).toEqual(["linears/linear"]);
-      expect(values(result.current.selectedPresets)).toEqual(["baseline"]);
+      expect(result.current.browser.filters.datasets.selectedValues).toEqual(["Cifar10"]);
+      expect(result.current.browser.filters.models.selectedValues).toEqual(["linears/linear"]);
+      expect(result.current.browser.filters.presets.selectedValues).toEqual(["baseline"]);
     });
-    expect(result.current.visibleRuns.map((run) => run.id)).toEqual(["a-cifar"]);
+    expect(result.current.charts.visibleRuns.map((run) => run.id)).toEqual(["a-cifar"]);
     await waitFor(() => {
       expect(mocks.fetchLogTags).toHaveBeenCalledWith(
         { runIds: ["a-cifar"] },
@@ -219,6 +229,153 @@ describe("Logs workspace Implementation", () => {
     expect(mocks.fetchLogTags).not.toHaveBeenCalledWith(
       { runIds: ["a-cifar", "a-mnist"] },
       expect.any(Object),
+    );
+  });
+
+  it("keeps the current tag selection until a newly selected experiment has fresh tags", async () => {
+    const combinedTags = deferred<{ runs: LogRunTags[] }>();
+    mocks.fetchLogTags.mockImplementation(({ runIds }: { runIds: string[] }) => {
+      if (runIds.includes("b-cifar")) {
+        return combinedTags.promise;
+      }
+      return Promise.resolve({
+        runs: runIds.map((runId) => logRunTags(runId, ["legacy/weight"])),
+      });
+    });
+    const { result } = renderLogsWorkspaceState();
+
+    await waitFor(() =>
+      expect(result.current.browser.filters.experiments.options).toHaveLength(2),
+    );
+    act(() => {
+      result.current.browser.actions.toggleFilter("experiments", "exp_a");
+    });
+    await waitFor(() =>
+      expect(result.current.browser.filters.tags.options.map(({ value }) => value))
+        .toEqual(["legacy/weight"]),
+    );
+    await waitFor(() =>
+      expect(result.current.charts.visibleRunIds).toEqual(["a-cifar"]),
+    );
+    act(() => {
+      result.current.browser.actions.toggleFilter("tags", "legacy/weight");
+      result.current.browser.actions.toggleFilter("experiments", "exp_b");
+    });
+
+    await waitFor(() =>
+      expect(mocks.fetchLogTags).toHaveBeenCalledWith(
+        { runIds: ["a-cifar", "b-cifar"] },
+        expect.any(Object),
+      ),
+    );
+    expect(result.current.browser.filters.tags.selectedValues).toEqual([
+      "legacy/weight",
+    ]);
+
+    act(() => {
+      combinedTags.resolve({
+        runs: [
+          logRunTags("a-cifar", ["legacy/weight"]),
+          logRunTags("b-cifar", ["validation/accuracy_epoch"]),
+        ],
+      });
+    });
+
+    await waitFor(() =>
+      expect(result.current.browser.filters.tags.selectedValues).toEqual([
+        "validation/accuracy_epoch",
+      ]),
+    );
+  });
+
+  it("preserves a selected tag shared by a newly selected experiment", async () => {
+    mocks.fetchLogTags.mockImplementation(({ runIds }: { runIds: string[] }) =>
+      Promise.resolve({
+        runs: runIds.map((runId) =>
+          logRunTags(
+            runId,
+            runId === "b-cifar"
+              ? ["shared/metric", "custom/new"]
+              : ["shared/metric"],
+          ),
+        ),
+      }),
+    );
+    const { result } = renderLogsWorkspaceState();
+
+    await waitFor(() =>
+      expect(result.current.browser.filters.experiments.options).toHaveLength(2),
+    );
+    act(() => {
+      result.current.browser.actions.toggleFilter("experiments", "exp_a");
+    });
+    await waitFor(() =>
+      expect(result.current.browser.filters.tags.options.map(({ value }) => value))
+        .toEqual(["shared/metric"]),
+    );
+    act(() => {
+      result.current.browser.actions.toggleFilter("tags", "shared/metric");
+    });
+    await waitFor(() =>
+      expect(result.current.browser.filters.tags.selectedValues).toEqual([
+        "shared/metric",
+      ]),
+    );
+    act(() => {
+      result.current.browser.actions.toggleFilter("experiments", "exp_b");
+    });
+
+    await waitFor(() =>
+      expect(result.current.browser.filters.tags.options.map(({ value }) => value))
+        .toEqual(["custom/new", "shared/metric"]),
+    );
+    expect(result.current.browser.filters.tags.selectedValues).toEqual([
+      "shared/metric",
+    ]);
+  });
+
+  it("falls back to fresh non-standard tags when the previous selection is stale", async () => {
+    mocks.fetchLogTags.mockImplementation(({ runIds }: { runIds: string[] }) =>
+      Promise.resolve({
+        runs: runIds.map((runId) =>
+          logRunTags(
+            runId,
+            runId === "b-cifar"
+              ? ["custom/first", "custom/second"]
+              : ["legacy/weight"],
+          ),
+        ),
+      }),
+    );
+    const { result } = renderLogsWorkspaceState();
+
+    await waitFor(() =>
+      expect(result.current.browser.filters.experiments.options).toHaveLength(2),
+    );
+    act(() => {
+      result.current.browser.actions.toggleFilter("experiments", "exp_a");
+    });
+    await waitFor(() =>
+      expect(result.current.browser.filters.tags.options.map(({ value }) => value))
+        .toEqual(["legacy/weight"]),
+    );
+    act(() => {
+      result.current.browser.actions.toggleFilter("tags", "legacy/weight");
+    });
+    await waitFor(() =>
+      expect(result.current.browser.filters.tags.selectedValues).toEqual([
+        "legacy/weight",
+      ]),
+    );
+    act(() => {
+      result.current.browser.actions.toggleFilter("experiments", "exp_b");
+    });
+
+    await waitFor(() =>
+      expect(result.current.browser.filters.tags.selectedValues).toEqual([
+        "custom/first",
+        "custom/second",
+      ]),
     );
   });
 
@@ -294,20 +451,20 @@ describe("Logs workspace Implementation", () => {
     const { result } = renderLogsWorkspaceState();
 
     await waitFor(() => {
-      expect(result.current.experimentOptions.map((option) => option.value))
+      expect(result.current.browser.filters.experiments.options.map((option) => option.value))
         .toEqual(["large_exp"]);
     });
 
     act(() => {
-      result.current.toggleExperiment("large_exp");
+      result.current.browser.actions.toggleFilter("experiments", "large_exp");
     });
 
     await waitFor(() => {
-      expect(result.current.datasetOptions.map((option) => option.value))
+      expect(result.current.browser.filters.datasets.options.map((option) => option.value))
         .toEqual(["Mnist", "ZebraSet"]);
-      expect(result.current.modelOptions.map((option) => option.value))
+      expect(result.current.browser.filters.models.options.map((option) => option.value))
         .toEqual(["linears/linear", "linears/wide_linear"]);
-      expect(result.current.presetOptions.map((option) => option.value))
+      expect(result.current.browser.filters.presets.options.map((option) => option.value))
         .toEqual(["AAA_CONTROL", "BASELINE"]);
     });
     expect(mocks.fetchLogRuns).toHaveBeenCalledWith(
@@ -319,21 +476,21 @@ describe("Logs workspace Implementation", () => {
     );
 
     act(() => {
-      result.current.selectAllDatasets();
-      result.current.selectAllModels();
-      result.current.selectAllPresets();
+      result.current.browser.actions.selectAll("datasets");
+      result.current.browser.actions.selectAll("models");
+      result.current.browser.actions.selectAll("presets");
     });
 
     await waitFor(() => {
-      expect(result.current.visibleRunIds).toHaveLength(100);
+      expect(result.current.charts.visibleRunIds).toHaveLength(100);
     });
-    expect(result.current.loadedRunCount).toBe(100);
-    expect(result.current.totalRunCount).toBe(105);
-    expect(result.current.canLoadMoreRuns).toBe(true);
-    expect(result.current.canLoadMoreScalarTags).toBe(false);
+    expect(result.current.browser.pagination.runs.loaded).toBe(100);
+    expect(result.current.browser.pagination.runs.total).toBe(105);
+    expect(result.current.browser.pagination.runs.canLoadMore).toBe(true);
+    expect(result.current.browser.pagination.scalarTags.canLoadMore).toBe(false);
 
     act(() => {
-      result.current.loadMoreRuns();
+      result.current.browser.actions.loadMoreRuns();
     });
 
     await waitFor(() => {
@@ -344,31 +501,31 @@ describe("Logs workspace Implementation", () => {
         }),
         expect.any(Object),
       );
-      expect(result.current.visibleRunIds).toHaveLength(105);
+      expect(result.current.charts.visibleRunIds).toHaveLength(105);
     });
-    expect(result.current.canLoadMoreRuns).toBe(false);
+    expect(result.current.browser.pagination.runs.canLoadMore).toBe(false);
     await waitFor(() => {
       expect(mocks.fetchLogTags).toHaveBeenCalledWith(
         { runIds: runs.slice(0, 100).map((run) => run.id) },
         expect.any(Object),
       );
     });
-    expect(result.current.loadedScalarTagRunCount).toBe(100);
-    expect(result.current.totalScalarTagRunCount).toBe(105);
-    expect(result.current.canLoadMoreScalarTags).toBe(true);
+    expect(result.current.browser.pagination.scalarTags.loadedRuns).toBe(100);
+    expect(result.current.browser.pagination.scalarTags.totalRuns).toBe(105);
+    expect(result.current.browser.pagination.scalarTags.canLoadMore).toBe(true);
 
-    const datasetOptionsBefore = result.current.datasetOptions.map(
+    const datasetOptionsBefore = result.current.browser.filters.datasets.options.map(
       (option) => option.value,
     );
-    const modelOptionsBefore = result.current.modelOptions.map(
+    const modelOptionsBefore = result.current.browser.filters.models.options.map(
       (option) => option.value,
     );
-    const presetOptionsBefore = result.current.presetOptions.map(
+    const presetOptionsBefore = result.current.browser.filters.presets.options.map(
       (option) => option.value,
     );
 
     act(() => {
-      result.current.loadMoreScalarTags();
+      result.current.browser.actions.loadMoreScalarTags();
     });
 
     await waitFor(() => {
@@ -378,14 +535,14 @@ describe("Logs workspace Implementation", () => {
       );
     });
     await waitFor(() => {
-      expect(result.current.loadedScalarTagRunCount).toBe(105);
+      expect(result.current.browser.pagination.scalarTags.loadedRuns).toBe(105);
     });
-    expect(result.current.canLoadMoreScalarTags).toBe(false);
-    expect(result.current.datasetOptions.map((option) => option.value))
+    expect(result.current.browser.pagination.scalarTags.canLoadMore).toBe(false);
+    expect(result.current.browser.filters.datasets.options.map((option) => option.value))
       .toEqual(datasetOptionsBefore);
-    expect(result.current.modelOptions.map((option) => option.value))
+    expect(result.current.browser.filters.models.options.map((option) => option.value))
       .toEqual(modelOptionsBefore);
-    expect(result.current.presetOptions.map((option) => option.value))
+    expect(result.current.browser.filters.presets.options.map((option) => option.value))
       .toEqual(presetOptionsBefore);
   });
 
@@ -396,14 +553,14 @@ describe("Logs workspace Implementation", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.experimentOptions.map((option) => option.value))
+      expect(result.current.browser.filters.experiments.options.map((option) => option.value))
         .toEqual(["exp_a", "exp_b"]);
     });
     expect(mocks.fetchLogRuns).not.toHaveBeenCalled();
     expect(mocks.fetchLogTags).not.toHaveBeenCalled();
 
     act(() => {
-      result.current.toggleExperiment("exp_a");
+      result.current.browser.actions.toggleFilter("experiments", "exp_a");
     });
 
     await waitFor(() => {
@@ -418,14 +575,14 @@ describe("Logs workspace Implementation", () => {
     const rendered = renderLogsWorkspaceState();
 
     await waitFor(() => {
-      expect(rendered.result.current.experimentOptions).toHaveLength(2);
+      expect(rendered.result.current.browser.filters.experiments.options).toHaveLength(2);
     });
     act(() => {
-      rendered.result.current.toggleExperiment("exp_a");
+      rendered.result.current.browser.actions.toggleFilter("experiments", "exp_a");
     });
     await waitFor(() => {
-      expect(rendered.result.current.scopeMode).toBe("custom");
-      expect(values(rendered.result.current.selectedExperiments)).toEqual(["exp_a"]);
+      expect(rendered.result.current.browser.scope.mode).toBe("custom");
+      expect(values(rendered.result.current.browser.filters.experiments.selectedValues)).toEqual(["exp_a"]);
     });
 
     rendered.rerender({
@@ -438,16 +595,16 @@ describe("Logs workspace Implementation", () => {
       },
     });
 
-    expect(rendered.result.current.scopeMode).toBe("custom");
-    expect(values(rendered.result.current.selectedExperiments)).toEqual(["exp_a"]);
+    expect(rendered.result.current.browser.scope.mode).toBe("custom");
+    expect(values(rendered.result.current.browser.filters.experiments.selectedValues)).toEqual(["exp_a"]);
 
     act(() => {
-      rendered.result.current.useCurrentTargetScope();
+      rendered.result.current.browser.scope.useCurrentTarget();
     });
 
     await waitFor(() => {
-      expect(rendered.result.current.scopeMode).toBe("target");
-      expect(values(rendered.result.current.selectedExperiments)).toEqual([]);
+      expect(rendered.result.current.browser.scope.mode).toBe("target");
+      expect(values(rendered.result.current.browser.filters.experiments.selectedValues)).toEqual([]);
       expect(mocks.fetchLogRuns).toHaveBeenCalledWith(
         expect.objectContaining({
           filters: expect.objectContaining({
@@ -465,15 +622,15 @@ describe("Logs workspace Implementation", () => {
     const { result } = renderLogsWorkspaceState();
 
     await waitFor(() => {
-      expect(result.current.experimentOptions).toHaveLength(2);
+      expect(result.current.browser.filters.experiments.options).toHaveLength(2);
     });
     act(() => {
-      result.current.includeStartedExperiment("fresh_run");
+      result.current.commands.includeStartedExperiment("fresh_run");
     });
 
     await waitFor(() => {
-      expect(result.current.scopeMode).toBe("custom");
-      expect(values(result.current.selectedExperiments)).toEqual(["fresh_run"]);
+      expect(result.current.browser.scope.mode).toBe("custom");
+      expect(result.current.browser.filters.experiments.selectedValues).toEqual([]);
       expect(mocks.fetchLogRuns).toHaveBeenCalledWith(
         expect.objectContaining({ filters: { experiment: ["fresh_run"] } }),
         expect.any(Object),
@@ -481,16 +638,15 @@ describe("Logs workspace Implementation", () => {
     });
 
     act(() => {
-      result.current.useCurrentTargetScope();
-      result.current.showAllRuns();
+      result.current.browser.scope.useCurrentTarget();
+      result.current.browser.scope.showAllRuns();
     });
 
     await waitFor(() => {
-      expect(result.current.scopeMode).toBe("custom");
-      expect(values(result.current.selectedExperiments)).toEqual([
+      expect(result.current.browser.scope.mode).toBe("custom");
+      expect(values(result.current.browser.filters.experiments.selectedValues)).toEqual([
         "exp_a",
         "exp_b",
-        "fresh_run",
       ]);
     });
   });
@@ -498,10 +654,10 @@ describe("Logs workspace Implementation", () => {
   it("clears connection-scoped Logs selections through one private command", async () => {
     const { result } = renderLogsWorkspaceState();
 
-    await waitFor(() => expect(result.current.experimentOptions).toHaveLength(2));
+    await waitFor(() => expect(result.current.browser.filters.experiments.options).toHaveLength(2));
     act(() => {
-      result.current.includeStartedExperiment("fresh_run");
-      result.current.setSelectedDetailRunId("a-cifar");
+      result.current.commands.includeStartedExperiment("fresh_run");
+      result.current.charts.setSelectedDetailRunId("a-cifar");
       result.current.deletion.actions.openExperiment({
         value: "fresh_run",
         label: "fresh_run",
@@ -509,18 +665,22 @@ describe("Logs workspace Implementation", () => {
       });
     });
     await waitFor(() => {
-      expect(result.current.scopeMode).toBe("custom");
-      expect(values(result.current.selectedExperiments)).toEqual(["fresh_run"]);
+      expect(result.current.browser.scope.mode).toBe("custom");
+      expect(result.current.browser.filters.experiments.selectedValues).toEqual([]);
+      expect(mocks.fetchLogRuns).toHaveBeenCalledWith(
+        expect.objectContaining({ filters: { experiment: ["fresh_run"] } }),
+        expect.any(Object),
+      );
     });
 
-    act(() => result.current.clearForConnectionChange());
+    act(() => result.current.commands.clearForConnectionChange());
 
-    expect(result.current.scopeMode).toBe("target");
-    expect(values(result.current.selectedExperiments)).toEqual([]);
-    expect(result.current.selectedDetailRunId).toBeNull();
+    expect(result.current.browser.scope.mode).toBe("target");
+    expect(values(result.current.browser.filters.experiments.selectedValues)).toEqual([]);
+    expect(result.current.detail.selectedRun).toBeUndefined();
     expect(result.current.deletion.operation).toBeNull();
-    act(() => result.current.showAllRuns());
-    expect(values(result.current.selectedExperiments)).toEqual(["exp_a", "exp_b"]);
+    act(() => result.current.browser.scope.showAllRuns());
+    expect(values(result.current.browser.filters.experiments.selectedValues)).toEqual(["exp_a", "exp_b"]);
   });
 
   it("owns all, none, and toggle transitions for every caller-facing filter", async () => {
@@ -536,69 +696,69 @@ describe("Logs workspace Implementation", () => {
       }),
     );
     const { result } = renderLogsWorkspaceState();
-    const sortedValues = (selection: Set<string>) =>
-      Array.from(selection).sort((left, right) => left.localeCompare(right));
+    const sortedValues = (selection: readonly string[]) =>
+      [...selection].sort((left, right) => left.localeCompare(right));
 
-    await waitFor(() => expect(result.current.experimentOptions).toHaveLength(2));
-    act(() => result.current.toggleExperiment("exp_a"));
+    await waitFor(() => expect(result.current.browser.filters.experiments.options).toHaveLength(2));
+    act(() => result.current.browser.actions.toggleFilter("experiments", "exp_a"));
     await waitFor(() => {
-      expect(result.current.tagOptions.map((option) => option.value)).toEqual([
+      expect(result.current.browser.filters.tags.options.map((option) => option.value)).toEqual([
         "train/loss_epoch",
         "custom/tag",
       ]);
     });
 
-    act(() => result.current.selectAllTags());
-    expect(sortedValues(result.current.selectedTags)).toEqual([
+    act(() => result.current.browser.actions.selectAll("tags"));
+    expect(sortedValues(result.current.browser.filters.tags.selectedValues)).toEqual([
       "custom/tag",
       "train/loss_epoch",
     ]);
-    act(() => result.current.selectNoTags());
-    expect(result.current.selectedTags.size).toBe(0);
-    act(() => result.current.toggleTag("custom/tag"));
-    expect(sortedValues(result.current.selectedTags)).toEqual(["custom/tag"]);
+    act(() => result.current.browser.actions.selectNone("tags"));
+    expect(result.current.browser.filters.tags.selectedValues).toHaveLength(0);
+    act(() => result.current.browser.actions.toggleFilter("tags", "custom/tag"));
+    expect(sortedValues(result.current.browser.filters.tags.selectedValues)).toEqual(["custom/tag"]);
 
-    act(() => result.current.selectAllDatasets());
-    expect(sortedValues(result.current.selectedDatasets)).toEqual([
+    act(() => result.current.browser.actions.selectAll("datasets"));
+    expect(sortedValues(result.current.browser.filters.datasets.selectedValues)).toEqual([
       "Cifar10",
       "Mnist",
     ]);
-    act(() => result.current.selectNoDatasets());
-    expect(result.current.selectedDatasets.size).toBe(0);
-    act(() => result.current.toggleDataset("Mnist"));
-    expect(sortedValues(result.current.selectedDatasets)).toEqual(["Mnist"]);
+    act(() => result.current.browser.actions.selectNone("datasets"));
+    expect(result.current.browser.filters.datasets.selectedValues).toHaveLength(0);
+    act(() => result.current.browser.actions.toggleFilter("datasets", "Mnist"));
+    expect(sortedValues(result.current.browser.filters.datasets.selectedValues)).toEqual(["Mnist"]);
 
-    act(() => result.current.selectAllModels());
-    expect(sortedValues(result.current.selectedModels)).toEqual([
+    act(() => result.current.browser.actions.selectAll("models"));
+    expect(sortedValues(result.current.browser.filters.models.selectedValues)).toEqual([
       "linears/linear",
       "linears/wide_linear",
     ]);
-    act(() => result.current.selectNoModels());
-    expect(result.current.selectedModels.size).toBe(0);
-    act(() => result.current.toggleModel("linears/wide_linear"));
-    expect(sortedValues(result.current.selectedModels)).toEqual([
+    act(() => result.current.browser.actions.selectNone("models"));
+    expect(result.current.browser.filters.models.selectedValues).toHaveLength(0);
+    act(() => result.current.browser.actions.toggleFilter("models", "linears/wide_linear"));
+    expect(sortedValues(result.current.browser.filters.models.selectedValues)).toEqual([
       "linears/wide_linear",
     ]);
 
-    act(() => result.current.selectAllPresets());
-    expect(sortedValues(result.current.selectedPresets)).toEqual([
+    act(() => result.current.browser.actions.selectAll("presets"));
+    expect(sortedValues(result.current.browser.filters.presets.selectedValues)).toEqual([
       "baseline",
       "wide",
     ]);
-    act(() => result.current.selectNoPresets());
-    expect(result.current.selectedPresets.size).toBe(0);
-    act(() => result.current.togglePreset("wide"));
-    expect(sortedValues(result.current.selectedPresets)).toEqual(["wide"]);
+    act(() => result.current.browser.actions.selectNone("presets"));
+    expect(result.current.browser.filters.presets.selectedValues).toHaveLength(0);
+    act(() => result.current.browser.actions.toggleFilter("presets", "wide"));
+    expect(sortedValues(result.current.browser.filters.presets.selectedValues)).toEqual(["wide"]);
 
-    act(() => result.current.selectAllExperiments());
-    expect(sortedValues(result.current.selectedExperiments)).toEqual([
+    act(() => result.current.browser.actions.selectAll("experiments"));
+    expect(sortedValues(result.current.browser.filters.experiments.selectedValues)).toEqual([
       "exp_a",
       "exp_b",
     ]);
-    act(() => result.current.selectNoExperiments());
-    expect(result.current.selectedExperiments.size).toBe(0);
-    act(() => result.current.toggleExperiment("exp_b"));
-    expect(sortedValues(result.current.selectedExperiments)).toEqual(["exp_b"]);
+    act(() => result.current.browser.actions.selectNone("experiments"));
+    expect(result.current.browser.filters.experiments.selectedValues).toHaveLength(0);
+    act(() => result.current.browser.actions.toggleFilter("experiments", "exp_b"));
+    expect(sortedValues(result.current.browser.filters.experiments.selectedValues)).toEqual(["exp_b"]);
   });
 
   it("prunes a Training-created experiment after its last loaded run is deleted", async () => {
@@ -644,10 +804,10 @@ describe("Logs workspace Implementation", () => {
     });
     const { result } = renderLogsWorkspaceState();
 
-    act(() => result.current.includeStartedExperiment("fresh_run"));
+    act(() => result.current.commands.includeStartedExperiment("fresh_run"));
     await waitFor(() => {
-      expect(result.current.visibleRunIds).toEqual([freshRun.id]);
-      expect(values(result.current.selectedExperiments)).toEqual(["fresh_run"]);
+      expect(result.current.charts.visibleRunIds).toEqual([freshRun.id]);
+      expect(values(result.current.browser.filters.experiments.selectedValues)).toEqual(["fresh_run"]);
     });
 
     act(() => {
@@ -663,10 +823,10 @@ describe("Logs workspace Implementation", () => {
     await act(async () => result.current.deletion.actions.confirm());
 
     await waitFor(() => {
-      expect(result.current.experimentOptions).toEqual([]);
-      expect(values(result.current.selectedExperiments)).toEqual([]);
-      expect(result.current.visibleRunIds).toEqual([]);
-      expect(result.current.selectedRun).toBeUndefined();
+      expect(result.current.browser.filters.experiments.options).toEqual([]);
+      expect(values(result.current.browser.filters.experiments.selectedValues)).toEqual([]);
+      expect(result.current.charts.visibleRunIds).toEqual([]);
+      expect(result.current.detail.selectedRun).toBeUndefined();
     });
   });
 
@@ -712,9 +872,9 @@ describe("Logs workspace Implementation", () => {
     });
     const { result } = renderLogsWorkspaceState();
 
-    act(() => result.current.includeStartedExperiment("fresh_run"));
+    act(() => result.current.commands.includeStartedExperiment("fresh_run"));
     await waitFor(() => {
-      expect(result.current.selectedRun?.id).toBe(freshRun.id);
+      expect(result.current.detail.selectedRun?.id).toBe(freshRun.id);
     });
     act(() => {
       result.current.deletion.actions.openPreset({
@@ -733,14 +893,14 @@ describe("Logs workspace Implementation", () => {
       expect(mocks.fetchLogRuns.mock.calls.length).toBeGreaterThan(
         runRequestCountBeforeDeletion,
       );
-      expect(result.current.visibleRunIds).toEqual([]);
-      expect(result.current.selectedRun).toBeUndefined();
+      expect(result.current.charts.visibleRunIds).toEqual([]);
+      expect(result.current.detail.selectedRun).toBeUndefined();
     });
 
     act(() => runsRefresh.resolve({ runs: [] }));
     await waitFor(() => {
-      expect(result.current.visibleRunIds).toEqual([]);
-      expect(result.current.selectedRun).toBeUndefined();
+      expect(result.current.charts.visibleRunIds).toEqual([]);
+      expect(result.current.detail.selectedRun).toBeUndefined();
     });
   });
 
@@ -786,10 +946,10 @@ describe("Logs workspace Implementation", () => {
     mocks.deleteLogRuns.mockImplementation(() => deletion.promise);
     const rendered = renderLogsWorkspaceState();
 
-    act(() => rendered.result.current.includeStartedExperiment("fresh_run"));
+    act(() => rendered.result.current.commands.includeStartedExperiment("fresh_run"));
     await waitFor(() => {
-      expect(rendered.result.current.visibleRunIds).toEqual([freshRun.id]);
-      expect(values(rendered.result.current.selectedExperiments)).toEqual([
+      expect(rendered.result.current.charts.visibleRunIds).toEqual([freshRun.id]);
+      expect(values(rendered.result.current.browser.filters.experiments.selectedValues)).toEqual([
         "fresh_run",
       ]);
     });
@@ -823,15 +983,15 @@ describe("Logs workspace Implementation", () => {
     await act(async () => {
       await confirmation;
     });
-    expect(values(rendered.result.current.selectedExperiments)).toEqual([
+    expect(values(rendered.result.current.browser.filters.experiments.selectedValues)).toEqual([
       "fresh_run",
     ]);
 
     rendered.rerender({ enabled: true, targetScope });
     await waitFor(() => {
-      expect(rendered.result.current.experimentOptions).toEqual([]);
-      expect(values(rendered.result.current.selectedExperiments)).toEqual([]);
-      expect(rendered.result.current.visibleRunIds).toEqual([]);
+      expect(rendered.result.current.browser.filters.experiments.options).toEqual([]);
+      expect(values(rendered.result.current.browser.filters.experiments.selectedValues)).toEqual([]);
+      expect(rendered.result.current.charts.visibleRunIds).toEqual([]);
     });
   });
 
@@ -886,10 +1046,10 @@ describe("Logs workspace Implementation", () => {
     });
     const { result } = renderLogsWorkspaceState();
 
-    act(() => result.current.includeStartedExperiment("fresh_run"));
+    act(() => result.current.commands.includeStartedExperiment("fresh_run"));
     await waitFor(() => {
-      expect(result.current.visibleRunIds).toEqual([freshRun.id]);
-      expect(values(result.current.selectedExperiments)).toEqual(["fresh_run"]);
+      expect(result.current.charts.visibleRunIds).toEqual([freshRun.id]);
+      expect(values(result.current.browser.filters.experiments.selectedValues)).toEqual(["fresh_run"]);
     });
     act(() => {
       result.current.deletion.actions.openPreset({
@@ -904,18 +1064,18 @@ describe("Logs workspace Implementation", () => {
     await act(async () => result.current.deletion.actions.confirm());
 
     await waitFor(() => {
-      expect(result.current.experimentsQuery.error).toEqual(
+      expect(result.current.browser.status.experimentsError).toEqual(
         new Error("experiment refresh unavailable"),
       );
-      expect(values(result.current.selectedExperiments)).toEqual(["fresh_run"]);
-      expect(result.current.visibleRunIds).toEqual([]);
+      expect(values(result.current.browser.filters.experiments.selectedValues)).toEqual(["fresh_run"]);
+      expect(result.current.charts.visibleRunIds).toEqual([]);
     });
 
-    await act(async () => result.current.refreshLogLists());
+    await act(async () => result.current.browser.actions.refresh());
     await waitFor(() => {
-      expect(result.current.experimentsQuery.error).toBeNull();
-      expect(result.current.experimentOptions).toEqual([]);
-      expect(values(result.current.selectedExperiments)).toEqual([]);
+      expect(result.current.browser.status.experimentsError).toBeNull();
+      expect(result.current.browser.filters.experiments.options).toEqual([]);
+      expect(values(result.current.browser.filters.experiments.selectedValues)).toEqual([]);
     });
   });
 });

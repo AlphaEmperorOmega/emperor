@@ -10,8 +10,11 @@ import {
   type LogRunDeletePlan,
   type LogRunDeleteResponse,
 } from "@/lib/api";
-import { type ChecklistOption } from "@/features/workbench/state/logs/logs-selectors";
-import { buildLogRunDeleteFilters } from "@/features/workbench/state/logs/_logs-selection-state";
+import { modelIdentityFromLegacyId } from "@/lib/selection";
+import {
+  logRunModelKey,
+  type ChecklistOption,
+} from "@/features/workbench/state/logs/logs-selectors";
 
 type LogsDeletePhase =
   | "planning"
@@ -68,6 +71,24 @@ export type LogsDeletionImplementation = LogsDeletion & {
 
 function logDeletionDisabledError() {
   return new Error("Log deletion is disabled by backend capabilities.");
+}
+
+function sortedUnique(values: string[]) {
+  return Array.from(new Set(values)).sort((left, right) =>
+    left.localeCompare(right),
+  );
+}
+
+function buildLogRunDeleteFilters(runs: LogRun[]): LogRunDeleteFilters {
+  return {
+    experiments: sortedUnique(runs.map((run) => run.experiment)),
+    datasets: sortedUnique(runs.map((run) => run.dataset)),
+    models: sortedUnique(runs.map((run) => logRunModelKey(run))).map(
+      modelIdentityFromLegacyId,
+    ),
+    presets: sortedUnique(runs.map((run) => run.preset)),
+    runIds: sortedUnique(runs.map((run) => run.id)),
+  };
 }
 
 function presetDeleteTarget({

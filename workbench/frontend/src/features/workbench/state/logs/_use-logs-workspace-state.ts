@@ -9,7 +9,9 @@ import {
 } from "react";
 import {
   type LogExperimentDeleteResponse,
+  type LogRun,
   type LogRunDeleteResponse,
+  type LogRunFacets,
   type LogRunTags,
 } from "@/lib/api";
 import {
@@ -21,35 +23,28 @@ import {
 import { useLogQueryCache } from "@/features/workbench/state/logs/use-log-query-cache";
 import { logQueryKeys } from "@/lib/query-keys";
 import {
+  modelIdentityKey,
+  modelNameForId,
+  modelTypeForId,
+} from "@/lib/selection";
+import {
   useLogsDeletionState,
+  type LogsDeletion as LogsDeletionProjection,
   type LogsSubsetDeleteTarget,
 } from "@/features/workbench/state/logs/_logs-deletion-state";
 import {
+  buildCountOptions,
   buildExperimentOptions,
   buildLogScalarTagOptions,
+  buildModelCountOptions,
   isDefaultScalarTag,
+  logRunModelKey,
+  type ChecklistOption,
   type LogMetricGroupKey,
   selectedOptionsSet,
   setAllValues,
   setNoValues,
 } from "@/features/workbench/state/logs/logs-selectors";
-import {
-  addValueToInitializedSelection,
-  addValuesToInitializedSelection,
-  buildCommonRunFacetOptions,
-  buildExperimentScalarTagSeedSelection,
-  effectiveSelectionForAvailableValues,
-  filterVisibleLogRuns,
-  nextSelectedDetailRunId,
-  normalizeRunFacetSelection,
-  pruneSelectionToAvailableValues,
-  pruneDeletedDetailRunId,
-  removeStartedExperiment,
-  removeValueFromSelection,
-  selectionSetOrDefault,
-  startedRunSelections,
-  sortedSelectionValues,
-} from "@/features/workbench/state/logs/_logs-selection-state";
 
 const TARGET_LOG_RUN_LIMIT = 5;
 const CUSTOM_LOG_RUN_LIMIT = 100;
@@ -109,6 +104,434 @@ function selectionMatchesValues(selection: Set<string>, values: string[]) {
   return values.every((value) => selection.has(value));
 }
 
+type NullableSelection = Set<string> | null;
+
+function sortedSelectionValues(values: Set<string>) {
+  return Array.from(values).sort((left, right) => left.localeCompare(right));
+}
+
+function selectionSetOrDefault(
+  selection: NullableSelection,
+  defaultSelection: Set<string>,
+) {
+  return selection ?? defaultSelection;
+}
+
+function pruneSelectionToAvailableValues(
+  selection: NullableSelection,
+  availableValues: string[],
+): NullableSelection {
+  if (selection === null) {
+    return null;
+  }
+  const available = new Set(availableValues);
+  const next = new Set(
+    Array.from(selection).filter((value) => available.has(value)),
+  );
+  return next.size === selection.size ? selection : next;
+}
+
+function firstAvailableSelection(availableValues: string[]) {
+  return new Set(availableValues.slice(0, 1));
+}
+
+function normalizeRunFacetSelection({
+  selection,
+  availableValues,
+  selectFirstAvailable,
+}: {
+  selection: NullableSelection;
+  availableValues: string[];
+  selectFirstAvailable: boolean;
+}): NullableSelection {
+  if (selectFirstAvailable) {
+    return firstAvailableSelection(availableValues);
+  }
+  const next = pruneSelectionToAvailableValues(selection, availableValues);
+  if (
+    selection !== null &&
+    selection.size > 0 &&
+    next !== null &&
+    next.size === 0 &&
+    availableValues.length > 0
+  ) {
+    return firstAvailableSelection(availableValues);
+  }
+  return next;
+}
+
+function effectiveSelectionForAvailableValues(
+  selection: NullableSelection,
+  availableValues: string[],
+) {
+  return selectionSetOrDefault(
+    pruneSelectionToAvailableValues(selection, availableValues),
+    new Set(availableValues),
+  );
+}
+
+function addValuesToInitializedSelection(
+  selection: NullableSelection,
+  values: Set<string>,
+): NullableSelection {
+  if (selection === null || values.size === 0) {
+    return selection;
+  }
+  const next = new Set(selection);
+  for (const value of values) {
+    next.add(value);
+  }
+  return next;
+}
+
+function addValueToInitializedSelection(
+  selection: NullableSelection,
+  value: string,
+): NullableSelection {
+  if (selection === null || selection.has(value)) {
+    return selection;
+  }
+  const next = new Set(selection);
+  next.add(value);
+  return next;
+}
+
+function removeValueFromSelection({
+  selection,
+  fallbackValues,
+  value,
+}: {
+  selection: NullableSelection;
+  fallbackValues: string[];
+  value: string;
+}) {
+  const next = new Set(selection ?? fallbackValues);
+  next.delete(value);
+  return next;
+}
+
+function startedRunSelections({
+  runs,
+  startedExperiments,
+}: {
+  runs: LogRun[];
+  startedExperiments: Set<string>;
+}) {
+  const startedRuns = runs.filter((run) =>
+    startedExperiments.has(run.experiment),
+  );
+  return {
+    hasStartedRuns: startedRuns.length > 0,
+    experiments: new Set(startedRuns.map((run) => run.experiment)),
+    datasets: new Set(startedRuns.map((run) => run.dataset)),
+    models: new Set(startedRuns.map((run) => logRunModelKey(run))),
+    presets: new Set(startedRuns.map((run) => run.preset)),
+  };
+}
+
+type CommonRunFacetOptions = {
+  datasets: ChecklistOption[];
+  models: ChecklistOption[];
+  presets: ChecklistOption[];
+};
+
+type ExperimentFacets = LogRunFacets["experiments"][number];
+
+function intersectExperimentFacetValues({
+  runs,
+  selectedExperiments,
+  valueForRun,
+}: {
+  runs: LogRun[];
+  selectedExperiments: Set<string>;
+  valueForRun: (run: LogRun) => string;
+}) {
+  let commonValues: Set<string> | null = null;
+  for (const experiment of selectedExperiments) {
+    const experimentValues = new Set(
+      runs
+        .filter((run) => run.experiment === experiment)
+        .map((run) => valueForRun(run)),
+    );
+    if (commonValues === null) {
+      commonValues = experimentValues;
+      continue;
+    }
+    const previousCommon = commonValues as Set<string>;
+    commonValues = new Set(
+      Array.from(previousCommon).filter((value) =>
+        experimentValues.has(value),
+      ),
+    );
+  }
+  return commonValues ?? new Set<string>();
+}
+
+function commonServerFacetValues<Value>(
+  experiments: ExperimentFacets[],
+  valuesForExperiment: (
+    experiment: ExperimentFacets,
+  ) => Array<{ value: string; count: number; item: Value }>,
+) {
+  let common: Set<string> | null = null;
+  const counts = new Map<string, { count: number; item: Value }>();
+  for (const experiment of experiments) {
+    const values = valuesForExperiment(experiment);
+    const experimentValues = new Set(values.map(({ value }) => value));
+    if (common === null) {
+      common = experimentValues;
+    } else {
+      const previousCommon = common as Set<string>;
+      common = new Set(
+        Array.from(previousCommon).filter((value) =>
+          experimentValues.has(value),
+        ),
+      );
+    }
+    for (const { value, count, item } of values) {
+      const current = counts.get(value);
+      counts.set(value, { count: (current?.count ?? 0) + count, item });
+    }
+  }
+  return Array.from(common ?? [])
+    .map((value) => ({ value, ...counts.get(value)! }))
+    .sort((left, right) => left.value.localeCompare(right.value));
+}
+
+function buildCommonRunFacetOptions({
+  runs,
+  selectedExperiments,
+  facets,
+}: {
+  runs: LogRun[];
+  selectedExperiments: Set<string>;
+  facets?: LogRunFacets | null;
+}): CommonRunFacetOptions {
+  if (selectedExperiments.size === 0) {
+    return { datasets: [], models: [], presets: [] };
+  }
+
+  const selectedExperimentFacets = facets?.experiments.filter((facet) =>
+    selectedExperiments.has(facet.experiment),
+  );
+  if (
+    selectedExperimentFacets &&
+    selectedExperimentFacets.length === selectedExperiments.size
+  ) {
+    const datasets = commonServerFacetValues(
+      selectedExperimentFacets,
+      (experiment) =>
+        experiment.datasets.map((item) => ({
+          value: item.value,
+          count: item.count,
+          item,
+        })),
+    ).map(({ value, count }) => ({ value, label: value, count }));
+    const presets = commonServerFacetValues(
+      selectedExperimentFacets,
+      (experiment) =>
+        experiment.presets.map((item) => ({
+          value: item.value,
+          count: item.count,
+          item,
+        })),
+    ).map(({ value, count }) => ({ value, label: value, count }));
+    const models = commonServerFacetValues(
+      selectedExperimentFacets,
+      (experiment) =>
+        experiment.models.map((item) => ({
+          value: modelIdentityKey(item),
+          count: item.count,
+          item,
+        })),
+    ).map(({ value, count, item }) => ({
+      value,
+      label: `${modelNameForId(item)} · ${modelTypeForId(item)}`,
+      count,
+    }));
+    return { datasets, models, presets };
+  }
+
+  const selectedRuns = runs.filter((run) =>
+    selectedExperiments.has(run.experiment),
+  );
+  const commonDatasets = intersectExperimentFacetValues({
+    runs,
+    selectedExperiments,
+    valueForRun: (run) => run.dataset,
+  });
+  const commonModels = intersectExperimentFacetValues({
+    runs,
+    selectedExperiments,
+    valueForRun: logRunModelKey,
+  });
+  const commonPresets = intersectExperimentFacetValues({
+    runs,
+    selectedExperiments,
+    valueForRun: (run) => run.preset,
+  });
+  return {
+    datasets: buildCountOptions(
+      selectedRuns.filter((run) => commonDatasets.has(run.dataset)),
+      "dataset",
+    ),
+    models: buildModelCountOptions(
+      selectedRuns.filter((run) => commonModels.has(logRunModelKey(run))),
+    ),
+    presets: buildCountOptions(
+      selectedRuns.filter((run) => commonPresets.has(run.preset)),
+      "preset",
+    ),
+  };
+}
+
+function filterVisibleLogRuns(
+  runs: LogRun[],
+  selections: {
+    experiments: Set<string>;
+    datasets: Set<string>;
+    models: Set<string>;
+    presets: Set<string>;
+  },
+) {
+  return runs.filter(
+    (run) =>
+      selections.experiments.has(run.experiment) &&
+      selections.datasets.has(run.dataset) &&
+      selections.models.has(logRunModelKey(run)) &&
+      selections.presets.has(run.preset),
+  );
+}
+
+function experimentScalarTags(
+  tagRuns: LogRunTags[],
+  tagOptionValues: string[],
+) {
+  const scalarTags = new Set<string>();
+  for (const runTags of tagRuns) {
+    for (const tag of runTags.scalarTags) {
+      scalarTags.add(tag);
+    }
+  }
+  return tagOptionValues.filter((tag) => scalarTags.has(tag));
+}
+
+function appendUniqueTags(target: string[], tags: string[]) {
+  const existing = new Set(target);
+  for (const tag of tags) {
+    if (!existing.has(tag)) {
+      existing.add(tag);
+      target.push(tag);
+    }
+  }
+}
+
+function buildExperimentScalarTagSeedSelection({
+  visibleRuns,
+  tagRuns,
+  pendingExperiments,
+  selectedTags,
+  tagOptionValues,
+  selectAllLimit,
+}: {
+  visibleRuns: LogRun[];
+  tagRuns: LogRunTags[] | undefined;
+  pendingExperiments: Set<string>;
+  selectedTags: NullableSelection;
+  tagOptionValues: string[];
+  selectAllLimit: number;
+}) {
+  const loadedExperiments = new Set<string>();
+  const tagsByRunId = new Map(
+    (tagRuns ?? []).map((runTags) => [runTags.runId, runTags]),
+  );
+  const replacementTags: string[] = [];
+
+  for (const experiment of pendingExperiments) {
+    const experimentRuns = visibleRuns.filter(
+      (run) => run.experiment === experiment,
+    );
+    if (experimentRuns.length === 0) {
+      continue;
+    }
+    const loadedTagRuns = experimentRuns
+      .map((run) => tagsByRunId.get(run.id))
+      .filter((runTags): runTags is LogRunTags => Boolean(runTags));
+    if (loadedTagRuns.length !== experimentRuns.length) {
+      continue;
+    }
+    loadedExperiments.add(experiment);
+    if (selectedTags === null) {
+      continue;
+    }
+    const availableTags = experimentScalarTags(
+      loadedTagRuns,
+      tagOptionValues,
+    );
+    if (
+      availableTags.length === 0 ||
+      availableTags.some((tag) => selectedTags.has(tag))
+    ) {
+      continue;
+    }
+    const defaultTags = availableTags.filter((tag) => isDefaultScalarTag(tag));
+    appendUniqueTags(
+      replacementTags,
+      defaultTags.length > 0
+        ? defaultTags
+        : availableTags.slice(0, selectAllLimit),
+    );
+  }
+
+  return {
+    loadedExperiments,
+    selectedTags:
+      replacementTags.length > 0
+        ? new Set(replacementTags.slice(0, selectAllLimit))
+        : selectedTags,
+  };
+}
+
+function nextSelectedDetailRunId(
+  selectedDetailRunId: string | null,
+  visibleRuns: LogRun[],
+) {
+  if (visibleRuns.length === 0) {
+    return null;
+  }
+  if (
+    selectedDetailRunId &&
+    visibleRuns.some((run) => run.id === selectedDetailRunId)
+  ) {
+    return selectedDetailRunId;
+  }
+  return visibleRuns[0].id;
+}
+
+function pruneDeletedDetailRunId({
+  selectedDetailRunId,
+  deletedRunIds,
+}: {
+  selectedDetailRunId: string | null;
+  deletedRunIds: Set<string>;
+}) {
+  return selectedDetailRunId && deletedRunIds.has(selectedDetailRunId)
+    ? null
+    : selectedDetailRunId;
+}
+
+function removeStartedExperiment(
+  startedExperiments: Set<string>,
+  experiment: string,
+) {
+  if (!startedExperiments.has(experiment)) {
+    return startedExperiments;
+  }
+  const next = new Set(startedExperiments);
+  next.delete(experiment);
+  return next;
+}
+
 export type LogsScopeMode = "target" | "custom";
 
 export type LogsTargetScope = {
@@ -118,13 +541,70 @@ export type LogsTargetScope = {
   datasets: string[];
 };
 
+export type LogsBrowserFilterKey =
+  | "experiments"
+  | "datasets"
+  | "models"
+  | "presets"
+  | "tags";
+
+export type LogsBrowserFilter = {
+  options: ChecklistOption[];
+  selectedValues: string[];
+};
+
+export type LogsBrowser = {
+  scope: {
+    mode: LogsScopeMode;
+    target: LogsTargetScope;
+    canUseCurrentTarget: boolean;
+    allRunsSelected: boolean;
+    useCurrentTarget: () => void;
+    showAllRuns: () => void;
+  };
+  filters: Record<LogsBrowserFilterKey, LogsBrowserFilter>;
+  status: {
+    isScanning: boolean;
+    isRefreshing: boolean;
+    runsError: unknown;
+    experimentsError: unknown;
+    tagsError: unknown;
+  };
+  results: {
+    hasExperiments: boolean;
+    hasRuns: boolean;
+  };
+  pagination: {
+    runs: {
+      loaded: number;
+      total: number;
+      canLoadMore: boolean;
+      isLoadingMore: boolean;
+    };
+    scalarTags: {
+      loadedRuns: number;
+      totalRuns: number;
+      canLoadMore: boolean;
+      isLoadingMore: boolean;
+    };
+  };
+  actions: {
+    toggleFilter: (filter: LogsBrowserFilterKey, value: string) => void;
+    selectAll: (filter: LogsBrowserFilterKey) => void;
+    selectNone: (filter: LogsBrowserFilterKey) => void;
+    refresh: () => Promise<void>;
+    loadMoreRuns: () => void;
+    loadMoreScalarTags: () => void;
+  };
+};
+
 /**
  * Owns all state for the logs workspace: the run/experiment/tag queries, the
  * multi-facet selection sets (experiment/dataset/model/preset/run/tag), the
  * detail-run selection, and experiment deletion. Returned to the workspace
  * panels as a single object so they stay presentational.
  */
-export function useLogsWorkspaceImplementation({
+function useLogsWorkspaceImplementation({
   enabled,
   logDeletionEnabled = true,
   targetScope,
@@ -630,6 +1110,9 @@ export function useLogsWorkspaceImplementation({
     [defaultSelectedTags, selectedTags],
   );
   const tagDataNeedsFreshOptions =
+    shouldSelectFirstRunFacets ||
+    runsQuery.isFetching ||
+    Boolean(runsQuery.isPlaceholderData) ||
     tagsQuery.isFetching ||
     tagsQuery.isLoading ||
     tagsQuery.isError ||
@@ -1060,6 +1543,231 @@ export function useLogsWorkspaceImplementation({
   };
 }
 
-export type LogsWorkspaceImplementation = ReturnType<
+type LogsWorkspaceImplementation = ReturnType<
   typeof useLogsWorkspaceImplementation
 >;
+
+export type LogsChartSource = Pick<
+  LogsWorkspaceImplementation,
+  | "collapsedMetricGroups"
+  | "confusionMatrixRateTags"
+  | "enabled"
+  | "loadedScalarTagRunCount"
+  | "refreshLogLists"
+  | "runsQuery"
+  | "selectedTagList"
+  | "setSelectedDetailRunId"
+  | "tagOptions"
+  | "tagsQuery"
+  | "toggleMetricGroup"
+  | "toggleTag"
+  | "visibleRunIds"
+  | "visibleRuns"
+>;
+
+export type LogsDetailSource = Pick<
+  LogsWorkspaceImplementation,
+  "enabled" | "selectedRun"
+>;
+
+export type LogsDeletion = Pick<
+  LogsDeletionProjection,
+  "enabled" | "presetTargetExperiment" | "operation" | "actions"
+>;
+
+export type LogsWorkspaceState = {
+  browser: LogsBrowser;
+  charts: LogsChartSource;
+  detail: LogsDetailSource;
+  deletion: LogsDeletion;
+  commands: {
+    includeStartedExperiment: (experiment: string) => void;
+    clearForConnectionChange: () => void;
+  };
+};
+
+function selectedBrowserValues(
+  selected: Set<string>,
+  options: ChecklistOption[],
+) {
+  return options
+    .filter((option) => selected.has(option.value))
+    .map((option) => option.value);
+}
+
+function hasCompleteTarget(target: LogsTargetScope) {
+  return Boolean(
+    target.modelType &&
+      target.model &&
+      target.preset &&
+      target.datasets.length > 0,
+  );
+}
+
+function logsBrowserProjection(state: LogsWorkspaceImplementation): LogsBrowser {
+  const filters: LogsBrowser["filters"] = {
+    experiments: {
+      options: state.experimentOptions,
+      selectedValues: selectedBrowserValues(
+        state.selectedExperiments,
+        state.experimentOptions,
+      ),
+    },
+    datasets: {
+      options: state.datasetOptions,
+      selectedValues: selectedBrowserValues(
+        state.selectedDatasets,
+        state.datasetOptions,
+      ),
+    },
+    models: {
+      options: state.modelOptions,
+      selectedValues: selectedBrowserValues(
+        state.selectedModels,
+        state.modelOptions,
+      ),
+    },
+    presets: {
+      options: state.presetOptions,
+      selectedValues: selectedBrowserValues(
+        state.selectedPresets,
+        state.presetOptions,
+      ),
+    },
+    tags: {
+      options: state.tagOptions,
+      selectedValues: selectedBrowserValues(
+        state.selectedTags,
+        state.tagOptions,
+      ),
+    },
+  };
+  const toggleActions: Record<
+    LogsBrowserFilterKey,
+    (value: string) => void
+  > = {
+    experiments: state.toggleExperiment,
+    datasets: state.toggleDataset,
+    models: state.toggleModel,
+    presets: state.togglePreset,
+    tags: state.toggleTag,
+  };
+  const allActions: Record<LogsBrowserFilterKey, () => void> = {
+    experiments: state.selectAllExperiments,
+    datasets: state.selectAllDatasets,
+    models: state.selectAllModels,
+    presets: state.selectAllPresets,
+    tags: state.selectAllTags,
+  };
+  const noneActions: Record<LogsBrowserFilterKey, () => void> = {
+    experiments: state.selectNoExperiments,
+    datasets: state.selectNoDatasets,
+    models: state.selectNoModels,
+    presets: state.selectNoPresets,
+    tags: state.selectNoTags,
+  };
+  const allExperimentValues = filters.experiments.options.map(
+    (option) => option.value,
+  );
+
+  return {
+    scope: {
+      mode: state.scopeMode,
+      target: state.targetScope,
+      canUseCurrentTarget: hasCompleteTarget(state.targetScope),
+      allRunsSelected:
+        state.scopeMode === "custom" &&
+        filters.experiments.selectedValues.length === allExperimentValues.length &&
+        allExperimentValues.every((value) =>
+          filters.experiments.selectedValues.includes(value),
+        ),
+      useCurrentTarget: state.useCurrentTargetScope,
+      showAllRuns: state.showAllRuns,
+    },
+    filters,
+    status: {
+      isScanning: state.runsQuery.isLoading || state.experimentsQuery.isLoading,
+      isRefreshing:
+        state.runsQuery.isFetching || state.experimentsQuery.isFetching,
+      runsError: state.runsQuery.error,
+      experimentsError: state.experimentsQuery.error,
+      tagsError: state.tagsQuery.error,
+    },
+    results: {
+      hasExperiments: state.experimentOptions.length > 0,
+      hasRuns: state.runs.length > 0,
+    },
+    pagination: {
+      runs: {
+        loaded: state.loadedRunCount,
+        total: state.totalRunCount,
+        canLoadMore: state.canLoadMoreRuns,
+        isLoadingMore: state.isLoadingMoreRuns,
+      },
+      scalarTags: {
+        loadedRuns: state.loadedScalarTagRunCount,
+        totalRuns: state.totalScalarTagRunCount,
+        canLoadMore: state.canLoadMoreScalarTags,
+        isLoadingMore: state.isLoadingMoreScalarTags,
+      },
+    },
+    actions: {
+      toggleFilter: (filter, value) => toggleActions[filter](value),
+      selectAll: (filter) => allActions[filter](),
+      selectNone: (filter) => noneActions[filter](),
+      refresh: state.refreshLogLists,
+      loadMoreRuns: state.loadMoreRuns,
+      loadMoreScalarTags: state.loadMoreScalarTags,
+    },
+  };
+}
+
+function logsChartProjection(
+  state: LogsWorkspaceImplementation,
+): LogsChartSource {
+  return {
+    collapsedMetricGroups: state.collapsedMetricGroups,
+    confusionMatrixRateTags: state.confusionMatrixRateTags,
+    enabled: state.enabled,
+    loadedScalarTagRunCount: state.loadedScalarTagRunCount,
+    refreshLogLists: state.refreshLogLists,
+    runsQuery: state.runsQuery,
+    selectedTagList: state.selectedTagList,
+    setSelectedDetailRunId: state.setSelectedDetailRunId,
+    tagOptions: state.tagOptions,
+    tagsQuery: state.tagsQuery,
+    toggleMetricGroup: state.toggleMetricGroup,
+    toggleTag: state.toggleTag,
+    visibleRunIds: state.visibleRunIds,
+    visibleRuns: state.visibleRuns,
+  };
+}
+
+function logsDeletionProjection(
+  state: LogsWorkspaceImplementation,
+): LogsDeletion {
+  return {
+    enabled: state.deletion.enabled,
+    presetTargetExperiment: state.deletion.presetTargetExperiment,
+    operation: state.deletion.operation,
+    actions: state.deletion.actions,
+  };
+}
+
+export function useLogsWorkspaceState(input: {
+  enabled: boolean;
+  logDeletionEnabled?: boolean;
+  targetScope: LogsTargetScope;
+}): LogsWorkspaceState {
+  const state = useLogsWorkspaceImplementation(input);
+  return {
+    browser: logsBrowserProjection(state),
+    charts: logsChartProjection(state),
+    detail: { enabled: state.enabled, selectedRun: state.selectedRun },
+    deletion: logsDeletionProjection(state),
+    commands: {
+      includeStartedExperiment: state.includeStartedExperiment,
+      clearForConnectionChange: state.clearForConnectionChange,
+    },
+  };
+}
