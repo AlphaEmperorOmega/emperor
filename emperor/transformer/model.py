@@ -1,5 +1,5 @@
 from torch import Tensor
-from emperor.base.utils import Module
+from emperor.base.module import Module
 from emperor.transformer.core._validator import TransformerValidator
 
 from typing import TYPE_CHECKING

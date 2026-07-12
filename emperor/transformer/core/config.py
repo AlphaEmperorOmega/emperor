@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 
 from emperor.base.layer import LayerConfig
 from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.utils import ConfigBase, optional_field
+from emperor.base.config import ConfigBase, optional_field
 
 if TYPE_CHECKING:
     from emperor.attention.core.variants.independent_attention.config import (

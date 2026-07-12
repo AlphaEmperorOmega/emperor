@@ -9,7 +9,7 @@ from emperor.attention.core.state import AttentionLayerState
 from emperor.base.layer import Layer, LayerState
 from emperor.base.layer.residual import ResidualConnection, ResidualConnectionOptions
 from emperor.base.options import LayerNormPositionOptions
-from emperor.base.utils import Module
+from emperor.base.module import Module
 from emperor.transformer.core._validator import TransformerValidator
 
 if TYPE_CHECKING:

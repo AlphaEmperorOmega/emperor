@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING
 
 from emperor.base.layer import LayerStackConfig, RecurrentLayerConfig
-from emperor.base.utils import ConfigBase
+from emperor.base.config import ConfigBase
 from emperor.base.validator import ValidatorBase
 from emperor.experts.config import MixtureOfExpertsModelConfig
 

@@ -4,7 +4,7 @@ import torch.nn as nn
 
 from torch import Tensor
 from torch.nn import ModuleList
-from emperor.base.utils import Module
+from emperor.base.module import Module
 from emperor.transformer.core._validator import TransformerValidator
 
 from typing import TYPE_CHECKING

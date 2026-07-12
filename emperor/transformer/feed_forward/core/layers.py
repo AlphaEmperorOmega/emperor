@@ -1,5 +1,6 @@
 from torch import Tensor
-from emperor.base.utils import ConfigBase, Module
+from emperor.base.config import ConfigBase
+from emperor.base.module import Module
 from emperor.base.layer import Layer
 from emperor.transformer.feed_forward.core._validator import FeedForwardValidator
 
