@@ -1,6 +1,19 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const chartMocks = vi.hoisted(() => ({ options: [] as unknown[] }));
+
+vi.mock("@/features/workbench/components/charts/echart", async () => {
+  const { createElement } = await import("react");
+  return {
+    EChart: ({ option }: { option: unknown }) => {
+      chartMocks.options.push(option);
+      return createElement("div", { "data-testid": "echart" });
+    },
+  };
+});
+
 import {
   buildTrainValidationScalarLines,
   LazyLogScalarChart,
@@ -9,7 +22,15 @@ import {
   LogTrainValidationScalarChart,
 } from "@/features/workbench/components/logs/log-scalar-chart";
 import { formatRunLabel } from "@/features/workbench/state/logs/logs-selectors";
-import { type LogRun, type LogScalarSeries } from "@/lib/api";
+import {
+  type LogCheckpoint,
+  type LogRun,
+  type LogScalarSeries,
+} from "@/lib/api";
+
+beforeEach(() => {
+  chartMocks.options.length = 0;
+});
 
 function logRun(overrides: Partial<LogRun> = {}): LogRun {
   return {
@@ -92,7 +113,8 @@ function renderTrainValidationChart({
   );
 }
 
-describe("LogScalarChart", () => {
+describe("Logs scalar rendering", () => {
+  describe("train-validation line Adapter", () => {
   it("builds train-validation comparison lines with phase labels and stable ids", () => {
     const run = logRun();
     const lines = buildTrainValidationScalarLines({
@@ -144,6 +166,10 @@ describe("LogScalarChart", () => {
     expect(lines.filter((line) => line.runId === "run-2").map((line) => line.tag))
       .toEqual(["train/loss_epoch", "validation/loss_epoch"]);
   });
+
+  });
+
+  describe("shared lazy contract", () => {
 
   it("shows train-validation loading and error states inside the lazy chart shell", async () => {
     const originalObserver = globalThis.IntersectionObserver;
@@ -405,6 +431,134 @@ describe("LogScalarChart", () => {
       }
     }
   });
+
+  });
+
+  describe("shared card contract and Adapter projections", () => {
+
+  it.each(["ordinary", "train-validation"] as const)(
+    "projects checkpoint markers once through the %s Adapter",
+    (kind) => {
+      const checkpoint: LogCheckpoint = {
+        id: "checkpoint-1",
+        runId: "run-1",
+        filename: "epoch=0-step=2.ckpt",
+        relativePath: "kaggle_linear_all/run-1/checkpoints/epoch=0-step=2.ckpt",
+        epoch: 0,
+        step: 2,
+        sizeBytes: 2048,
+        modifiedAt: "2026-06-01T01:03:00Z",
+      };
+      const sharedProps = {
+        runsById: new Map([["run-1", logRun()]]),
+        checkpointsByRunId: new Map([["run-1", [checkpoint]]]),
+        runOrder: ["run-1"],
+        onSelectRun: vi.fn(),
+      };
+
+      if (kind === "ordinary") {
+        render(
+          <LogScalarChart
+            {...sharedProps}
+            tag="train/loss"
+            series={[scalarSeries({ tag: "train/loss" })]}
+          />,
+        );
+      } else {
+        render(
+          <LogTrainValidationScalarChart
+            {...sharedProps}
+            suffix="loss_epoch"
+            trainTag="train/loss_epoch"
+            validationTag="validation/loss_epoch"
+            series={[
+              scalarSeries({ tag: "train/loss_epoch" }),
+              scalarSeries({ tag: "validation/loss_epoch" }),
+            ]}
+          />,
+        );
+      }
+
+      const option = chartMocks.options.at(-1) as {
+        series?: Array<{
+          markLine?: { data?: Array<{ name: string; xAxis: number }> };
+        }>;
+      };
+      expect(option.series?.[0]?.markLine?.data).toEqual([
+        {
+          name: `${formatRunLabel(logRun())}: epoch=0-step=2.ckpt (epoch 0, step 2)`,
+          xAxis: 2,
+        },
+      ]);
+    },
+  );
+
+  it.each(["ordinary", "train-validation"] as const)(
+    "shares legend selection, hover, focus, and highlighting through the %s Adapter",
+    (kind) => {
+      const runs = [
+        logRun({ id: "run-1", runName: "run-1" }),
+        logRun({ id: "run-2", runName: "run-2", timestamp: null }),
+      ];
+      const onSelectRun = vi.fn();
+      const onHoverRunChange = vi.fn();
+      const sharedProps = {
+        runsById: new Map(runs.map((run) => [run.id, run])),
+        checkpointsByRunId: new Map<string, LogCheckpoint[]>(),
+        runOrder: runs.map((run) => run.id),
+        onSelectRun,
+        onHoverRunChange,
+        highlightedRunId: "run-1",
+      };
+      let secondLabel: string;
+
+      if (kind === "ordinary") {
+        render(
+          <LogScalarChart
+            {...sharedProps}
+            tag="train/loss"
+            series={runs.map((run) =>
+              scalarSeries({ runId: run.id, tag: "train/loss" }),
+            )}
+          />,
+        );
+        secondLabel = formatRunLabel(runs[1]);
+      } else {
+        render(
+          <LogTrainValidationScalarChart
+            {...sharedProps}
+            suffix="loss_epoch"
+            trainTag="train/loss_epoch"
+            validationTag="validation/loss_epoch"
+            series={runs.map((run) =>
+              scalarSeries({ runId: run.id, tag: "train/loss_epoch" }),
+            )}
+          />,
+        );
+        secondLabel = `${formatRunLabel(runs[1])} · Train`;
+      }
+
+      const secondButton = screen.getByText(secondLabel).closest("button");
+      if (!(secondButton instanceof HTMLButtonElement)) {
+        throw new Error("Expected the second Run legend entry to be interactive");
+      }
+      expect(secondButton).toHaveClass("opacity-30");
+
+      fireEvent.pointerEnter(secondButton);
+      fireEvent.pointerLeave(secondButton);
+      fireEvent.focus(secondButton);
+      fireEvent.blur(secondButton);
+      fireEvent.click(secondButton);
+
+      expect(onHoverRunChange.mock.calls).toEqual([
+        ["run-2"],
+        [null],
+        ["run-2"],
+        [null],
+      ]);
+      expect(onSelectRun).toHaveBeenCalledWith("run-2");
+    },
+  );
 
   it("shows the chronological displayed trend for decreasing loss", () => {
     render(
@@ -720,5 +874,6 @@ describe("LogScalarChart", () => {
     const dialog = await screen.findByRole("dialog", { name: tag });
     expect(within(dialog).getByText(displayName)).toBeInTheDocument();
     expect(within(dialog).getByText(body)).toBeInTheDocument();
+  });
   });
 });
