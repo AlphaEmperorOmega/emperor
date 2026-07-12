@@ -42,10 +42,6 @@ from workbench.backend.training_jobs.lifecycle import (
     terminal_status_from_event,
 )
 from workbench.backend.training_jobs.monitoring import TrainingMonitorLocator
-from workbench.backend.training_jobs.plans import (
-    SelectedTrainingInputs,
-    TrainingRunPlanBuilder,
-)
 from workbench.backend.training_jobs.progress import (
     TrainingProgressSnapshot,
     TrainingProgressStore,
@@ -54,9 +50,9 @@ from workbench.backend.training_jobs.projection import (
     TrainingJobLiveProjection,
     TrainingLiveProjectionCache,
 )
-from workbench.backend.training_jobs.serialization import (
-    training_run_plan_to_payload,
-    training_search_to_payload,
+from workbench.backend.training_jobs.run_plan_adapter import (
+    WorkbenchRunPlanAdapter,
+    encode_persisted_run_plan,
 )
 from workbench.backend.training_jobs.snapshot import TrainingJobProjector
 from workbench.backend.training_jobs.status import (
@@ -116,7 +112,7 @@ class _TrainingJobRuntime:
             )
         self.monitor_reader = TensorBoardMonitorReader()
         self.parameter_status_reader = TensorBoardParameterStatusReader()
-        self.run_plan_builder = TrainingRunPlanBuilder()
+        self.run_plan_adapter = WorkbenchRunPlanAdapter()
         self.job_store = job_store or FileSystemTrainingJobStore(self.root)
         self.progress_store = TrainingProgressStore()
         self.monitor_locator = TrainingMonitorLocator()
@@ -131,63 +127,19 @@ class _TrainingJobRuntime:
         self,
         command: CreateTrainingJobCommand,
     ) -> TrainingJobView:
-        return self._create_job_view(
-            model=command.model,
-            preset=command.preset,
-            presets=command.presets,
-            experiment_task=command.experiment_task,
-            datasets=command.datasets,
-            overrides=command.overrides,
-            log_folder=command.log_folder,
-            monitors=command.monitors,
-            search=(
-                training_search_to_payload(command.search)
-                if command.search is not None
-                else None
-            ),
-            run_plan=(
-                training_run_plan_to_payload(command.run_plan)
-                if command.run_plan is not None
-                else None
-            ),
-        )
+        return self._create_job_view(command)
 
     def _create_job_view(
         self,
-        *,
-        model: str,
-        preset: str,
-        presets: list[str] | None,
-        experiment_task: str | None,
-        datasets: list[str],
-        overrides: dict[str, Any],
-        log_folder: str,
-        monitors: list[str] | None,
-        search: dict[str, Any] | None,
-        run_plan: dict[str, Any] | None,
+        command: CreateTrainingJobCommand,
     ) -> TrainingJobView:
-        validated_log_folder = validate_log_experiment_name(log_folder)
-
-        selected = self.run_plan_builder.resolve_inputs(
-            model=model,
-            preset=preset,
-            presets=presets,
-            experiment_task=experiment_task,
-            datasets=datasets,
-            overrides=overrides,
-            search=search,
-        )
-        selected_monitors = self.run_plan_builder.resolve_monitor_names(
-            selected.parts,
-            monitors,
-        )
-        materialized_run_plan = self._materialize_job_run_plan(
-            model=model,
-            selected=selected,
-            run_plan=run_plan,
+        validated_log_folder = validate_log_experiment_name(command.log_folder)
+        materialized = self.run_plan_adapter.materialize_training_job(
+            command,
             validated_log_folder=validated_log_folder,
-            monitors=selected_monitors,
         )
+        materialized_run_plan = materialized.document
+        selected_monitors = list(materialized.monitors)
         planned_run_count = materialized_run_plan["summary"]["totalRuns"]
 
         self._ensure_job_log_folder(validated_log_folder)
@@ -196,11 +148,9 @@ class _TrainingJobRuntime:
         job_root = self._create_job_root(job_id)
         payload = self._build_worker_payload(
             job_id=job_id,
-            model=model,
             selected_monitors=selected_monitors,
             planned_run_count=planned_run_count,
             materialized_run_plan=materialized_run_plan,
-            validated_log_folder=validated_log_folder,
         )
         try:
             launch = self.worker_launcher.launch(
@@ -213,7 +163,7 @@ class _TrainingJobRuntime:
         try:
             job = self._register_job(
                 job_id=job_id,
-                model=model,
+                model=command.model,
                 payload=payload,
                 materialized_run_plan=materialized_run_plan,
                 validated_log_folder=validated_log_folder,
@@ -227,7 +177,7 @@ class _TrainingJobRuntime:
                 {
                     "type": "job_started",
                     "status": "running",
-                    **model_identity_payload_from_id(model),
+                    **model_identity_payload_from_id(command.model),
                     "preset": job.preset,
                     "presets": job.presets,
                     "experimentTask": job.experiment_task,
@@ -243,30 +193,6 @@ class _TrainingJobRuntime:
             except Exception:
                 pass
             raise
-
-    def _materialize_job_run_plan(
-        self,
-        *,
-        model: str,
-        selected: SelectedTrainingInputs,
-        run_plan: dict[str, Any] | None,
-        validated_log_folder: str,
-        monitors: list[str],
-    ) -> dict[str, Any]:
-        if run_plan is not None:
-            return self.run_plan_builder.from_submitted(
-                model=model,
-                selected=selected,
-                run_plan=run_plan,
-                log_folder=validated_log_folder,
-                monitors=monitors,
-            )
-        return self.run_plan_builder.create(
-            model=model,
-            selected=selected,
-            log_folder=validated_log_folder,
-            monitors=monitors,
-        )
 
     def _ensure_job_log_folder(self, validated_log_folder: str) -> None:
         # Validate the top-level folder immediately before the worker starts.
@@ -286,25 +212,15 @@ class _TrainingJobRuntime:
         self,
         *,
         job_id: str,
-        model: str,
         selected_monitors: list[str],
         planned_run_count: int,
         materialized_run_plan: dict[str, Any],
-        validated_log_folder: str,
     ) -> dict[str, Any]:
         return {
             "id": job_id,
-            **model_identity_payload_from_id(model),
-            "preset": materialized_run_plan["preset"],
-            "presets": materialized_run_plan["presets"],
-            "experimentTask": materialized_run_plan["experimentTask"],
-            "datasets": materialized_run_plan["datasets"],
-            "overrides": dict(materialized_run_plan.get("overrides") or {}),
-            "search": materialized_run_plan.get("search"),
             "plannedRunCount": planned_run_count,
-            "runPlan": materialized_run_plan,
+            "runPlan": encode_persisted_run_plan(materialized_run_plan),
             "monitors": selected_monitors,
-            "logFolder": validated_log_folder,
         }
 
     def _register_job(
@@ -323,12 +239,12 @@ class _TrainingJobRuntime:
         job = TrainingJobRecord(
             id=job_id,
             model=model,
-            preset=payload["preset"],
-            presets=payload["presets"],
-            experiment_task=payload["experimentTask"],
-            datasets=payload["datasets"],
-            overrides=payload["overrides"],
-            search=payload["search"],
+            preset=materialized_run_plan["preset"],
+            presets=materialized_run_plan["presets"],
+            experiment_task=materialized_run_plan["experimentTask"],
+            datasets=materialized_run_plan["datasets"],
+            overrides=materialized_run_plan["overrides"],
+            search=materialized_run_plan["search"],
             planned_run_count=payload["plannedRunCount"],
             run_plan=materialized_run_plan,
             monitors=payload["monitors"],

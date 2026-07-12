@@ -21,7 +21,9 @@ from models.linears.linear.presets import ExperimentPreset
 from models.package_cli import run_model_package_cli
 
 from workbench.backend.training_jobs import worker as training_worker
-from workbench.backend.training_jobs.plans import TrainingRunPlanBuilder
+from workbench.backend.training_jobs.run_plan_adapter import (
+    WorkbenchRunPlanAdapter,
+)
 
 
 def _semantic_rows(plan) -> list[tuple[str, str, str, dict]]:
@@ -84,7 +86,7 @@ class RunsCliEquivalenceTests(unittest.TestCase):
         finally:
             random.setstate(random_state)
 
-        builder = TrainingRunPlanBuilder(random_source=random.Random(13))
+        builder = WorkbenchRunPlanAdapter(random_source=random.Random(13))
         selected = builder.resolve_inputs(
             model="linears/linear",
             preset="baseline",
@@ -108,16 +110,8 @@ class RunsCliEquivalenceTests(unittest.TestCase):
         )
         worker_payload = {
             "id": "equivalence-job",
-            "modelType": "linears",
-            "model": "linear",
-            "preset": serialized_plan["preset"],
-            "presets": serialized_plan["presets"],
-            "experimentTask": serialized_plan["experimentTask"],
-            "datasets": serialized_plan["datasets"],
-            "overrides": serialized_plan["overrides"],
-            "search": serialized_plan["search"],
             "monitors": ["linear"],
-            "logFolder": serialized_plan["logFolder"],
+            "plannedRunCount": len(serialized_plan["runs"]),
             "runPlan": serialized_plan,
         }
         with tempfile.TemporaryDirectory() as tmp:

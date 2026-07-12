@@ -22,23 +22,60 @@ from workbench.backend.log_experiments import (
 from workbench.backend.run_history import RunHistoryService
 from workbench.backend.run_history.records import LogRunDeleteFilters
 from workbench.backend.services.inspection import InspectionService
+from workbench.backend.training_jobs.contracts import (
+    CreateTrainingJobCommand,
+    TrainingSearch,
+)
+from workbench.backend.training_jobs.run_plan_adapter import (
+    submitted_run_plan_from_payload,
+    training_search_from_payload,
+)
 from workbench.backend.training_jobs.runtime import _TrainingJobRuntime
 from workbench.backend.training_jobs.service import TrainingJobService
 
 
-class TrainingJobRuntimeHarness(_TrainingJobRuntime):
-    """Test-only access to private lifecycle state and raw compatibility calls."""
+class TrainingJobServiceHarness:
+    """Real public Training Job composition plus explicit private-seam access."""
+
+    def __init__(self, **runtime_options: Any) -> None:
+        mutation_coordinator = runtime_options.pop(
+            "mutation_coordinator",
+            LogExperimentMutationCoordinator(),
+        )
+        self.service = TrainingJobService(
+            mutation_coordinator=mutation_coordinator,
+            **runtime_options,
+        )
+
+    def __getattr__(self, name: str) -> Any:
+        """Temporarily preserve private-runtime access for unmigrated tests."""
+
+        return getattr(self.runtime, name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name == "service" or "service" not in self.__dict__:
+            object.__setattr__(self, name, value)
+            return
+        runtime = self.runtime
+        if hasattr(runtime, name):
+            setattr(runtime, name, value)
+            return
+        object.__setattr__(self, name, value)
+
+    @property
+    def runtime(self) -> _TrainingJobRuntime:
+        return self.service._runtime
 
     @property
     def jobs(self):
-        return {job.id: job for job in self.job_store.list()}
+        return {job.id: job for job in self.runtime.job_store.list()}
 
     @property
     def runner(self):
-        return self.worker_launcher.runner
+        return self.runtime.worker_launcher.runner
 
     def create_run_plan(self, **kwargs: Any) -> dict[str, Any]:
-        return self.run_plan_builder.create_for_request(
+        return self.runtime.run_plan_adapter.create_for_request(
             model=kwargs["model"],
             preset=kwargs["preset"],
             presets=kwargs.get("presets"),
@@ -50,35 +87,43 @@ class TrainingJobRuntimeHarness(_TrainingJobRuntime):
             search=kwargs.get("search"),
         )
 
-    def create_job(self, **kwargs: Any) -> dict[str, Any]:
+    def create_job_payload(self, **kwargs: Any) -> dict[str, Any]:
+        search = kwargs.get("search")
+        if search is not None and not isinstance(search, TrainingSearch):
+            search = training_search_from_payload(search)
+        run_plan = kwargs.get("run_plan")
+        if run_plan is not None and not hasattr(run_plan, "runs"):
+            run_plan = submitted_run_plan_from_payload(run_plan)
         return training_job_to_payload(
-            self._create_job_view(
-                model=kwargs["model"],
-                preset=kwargs["preset"],
-                presets=kwargs.get("presets"),
-                experiment_task=kwargs.get("experiment_task"),
-                datasets=kwargs["datasets"],
-                overrides=kwargs["overrides"],
-                log_folder=kwargs["log_folder"],
-                monitors=kwargs.get("monitors"),
-                search=kwargs.get("search"),
-                run_plan=kwargs.get("run_plan"),
+            self.service.create_job(
+                CreateTrainingJobCommand(
+                    model=kwargs["model"],
+                    preset=kwargs["preset"],
+                    presets=kwargs.get("presets"),
+                    experiment_task=kwargs.get("experiment_task"),
+                    datasets=kwargs["datasets"],
+                    overrides=kwargs["overrides"],
+                    log_folder=kwargs["log_folder"],
+                    monitors=list(kwargs.get("monitors") or []),
+                    search=search,
+                    run_plan=run_plan,
+                )
             )
         )
 
-    def get_job(self, job_id: str) -> dict[str, Any]:
-        return training_job_to_payload(self.get_job_view(job_id))
+    def get_job_payload(self, job_id: str) -> dict[str, Any]:
+        return training_job_to_payload(self.service.get_job(job_id))
 
-    def cancel_job(self, job_id: str) -> dict[str, Any]:
-        return training_job_to_payload(self.cancel_job_view(job_id))
+    def cancel_job_payload(self, job_id: str) -> dict[str, Any]:
+        return training_job_to_payload(self.service.cancel_job(job_id))
 
-    def active_jobs(self) -> list[dict[str, Any]]:
+    def active_job_payloads(self) -> list[dict[str, Any]]:
         return [
             active_training_job_to_payload(job)
-            for job in self.active_job_views()
+            for job in self.service.active_jobs()
         ]
 
-    def get_job_events(
+    def get_job_events_payload(
         self,
         job_id: str,
         *,
@@ -86,34 +131,56 @@ class TrainingJobRuntimeHarness(_TrainingJobRuntime):
         limit: int = 500,
     ) -> dict[str, Any]:
         return training_events_page_to_payload(
-            self.get_job_events_page(
+            self.service.get_job_events(
                 job_id,
                 offset=offset,
                 limit=limit,
             )
         )
 
-
-class _TrainingJobServiceHarness(TrainingJobService):
-    """Test-only service composition around a private lifecycle runtime."""
-
-    def __init__(
+    def get_monitor_data(
         self,
-        runtime: _TrainingJobRuntime,
+        job_id: str,
         *,
-        mutation_coordinator: LogExperimentMutationCoordinator,
-    ) -> None:
-        self._runtime = runtime
-        self._mutation_coordinator = mutation_coordinator
+        node_path: str,
+        dataset: str | None = None,
+        preset: str | None = None,
+    ) -> dict[str, Any]:
+        return self.service.get_monitor_data(
+            job_id,
+            node_path=node_path,
+            dataset=dataset,
+            preset=preset,
+        )
+
+    def get_parameter_status(
+        self,
+        job_id: str,
+        *,
+        dataset: str | None = None,
+        preset: str | None = None,
+    ) -> dict[str, Any]:
+        return self.service.get_parameter_status(
+            job_id,
+            dataset=dataset,
+            preset=preset,
+        )
+
+    create_job = create_job_payload
+    get_job = get_job_payload
+    cancel_job = cancel_job_payload
+    active_jobs = active_job_payloads
+    get_job_events = get_job_events_payload
 
 
-def attach_training_runtime(app, runtime: _TrainingJobRuntime):
-    """Install a test runtime behind the app's shared typed capability."""
+def attach_training_service(app, harness: TrainingJobServiceHarness):
+    """Install a service-backed test runtime behind the app capability."""
     services = app.state.workbench_services
-    training_jobs = _TrainingJobServiceHarness(
-        runtime,
+    training_jobs = TrainingJobService._from_runtime(
+        harness.runtime,
         mutation_coordinator=services.log_experiment_mutations,
     )
+    harness.service = training_jobs
     run_history = RunHistoryService(
         logs_root=services.settings.logs_root,
         mutation_coordinator=services.log_experiment_mutations,
@@ -128,11 +195,18 @@ def attach_training_runtime(app, runtime: _TrainingJobRuntime):
     return app
 
 
-def create_app_with_training_runtime(settings, runtime: _TrainingJobRuntime):
-    """Create an app whose Training Jobs capability uses a test runtime."""
+def create_app_with_training_service(settings, harness: TrainingJobServiceHarness):
+    """Create an app whose Training Jobs capability uses a service test rig."""
     from workbench.backend.main import create_app
 
-    return attach_training_runtime(create_app(settings), runtime)
+    return attach_training_service(create_app(settings), harness)
+
+
+# Transitional aliases keep the untouched tests green while their callers move
+# to the public-service vocabulary in a following commit.
+TrainingJobRuntimeHarness = TrainingJobServiceHarness
+attach_training_runtime = attach_training_service
+create_app_with_training_runtime = create_app_with_training_service
 
 
 class FakeProcess:
@@ -247,13 +321,13 @@ def delete_filters_for_runs(
 
 def create_progress_test_job(
     root: Path,
-) -> tuple[TrainingJobRuntimeHarness, dict[str, object], Path]:
-    manager = TrainingJobRuntimeHarness(
+) -> tuple[TrainingJobServiceHarness, dict[str, object], Path]:
+    manager = TrainingJobServiceHarness(
         root=root / "jobs",
         logs_root=root / "logs",
         runner=FakeRunner(),
     )
-    payload = manager.create_job(
+    payload = manager.create_job_payload(
         model="linears/linear",
         preset="baseline",
         datasets=["Mnist"],

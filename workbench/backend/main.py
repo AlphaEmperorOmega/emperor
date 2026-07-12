@@ -29,7 +29,9 @@ from workbench.backend.run_history import RunHistoryService
 from workbench.backend.services.config_snapshots import ConfigSnapshotService
 from workbench.backend.services.inspection import InspectionService
 from workbench.backend.training_jobs import TrainingJobService
-from workbench.backend.training_jobs.plans import TrainingRunPlanService
+from workbench.backend.training_jobs.run_plan_adapter import (
+    WorkbenchRunPlanAdapter,
+)
 
 __all__ = ["WorkbenchApiSettings", "create_app", "app"]
 
@@ -60,7 +62,7 @@ def create_app(
         inspection=InspectionService(run_history),
         run_history=run_history,
         training_jobs=training_jobs,
-        training_run_plans=TrainingRunPlanService(),
+        training_run_plans=WorkbenchRunPlanAdapter(),
         log_experiment_mutations=log_experiment_mutations,
     )
 

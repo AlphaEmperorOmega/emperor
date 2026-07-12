@@ -83,6 +83,8 @@ class TrainingRunChangeResponse(ApiResponseModel):
 
 
 class SubmittedTrainingRunChangeRequest(ApiResponseModel):
+    """Legacy standalone shape; submitted Run rows no longer consume it."""
+
     key: str
     label: str
     value: ConfigValue
@@ -118,29 +120,11 @@ class TrainingRunResponse(ApiResponseModel):
 
 class SubmittedTrainingRunRequest(ApiResponseModel):
     id: str
-    index: int
-    status: Literal[
-        "Pending",
-        "Running",
-        "Completed",
-        "Failed",
-        "Cancelled",
-        "Skipped",
-    ] = "Pending"
     preset: str
     snapshotId: str | None = None
     snapshotName: str | None = None
     dataset: str
-    experimentTask: str = ""
-    changes: list[SubmittedTrainingRunChangeRequest] = Field(default_factory=list)
     overrides: ConfigOverrides = Field(default_factory=dict)
-    command: str
-    totalEpochs: int
-    currentEpoch: int = 0
-    metrics: JsonObject = Field(default_factory=dict)
-    logDir: str | None = None
-    error: str | None = None
-    errorTraceback: str | None = None
 
 
 class TrainingRunPlanSummaryResponse(ApiResponseModel):
@@ -157,6 +141,8 @@ class TrainingRunPlanSummaryResponse(ApiResponseModel):
 
 
 class SubmittedTrainingRunPlanSummaryRequest(ApiResponseModel):
+    """Legacy standalone shape; submitted Run Plans no longer consume it."""
+
     totalRuns: int = 0
     completedRuns: int = 0
     runningRuns: int = 0
@@ -185,24 +171,10 @@ class TrainingRunPlanResponse(ApiResponseModel):
 
 
 class SubmittedTrainingRunPlanRequest(ApiResponseModel):
-    modelType: str
-    model: str
-    preset: str
-    presets: list[str] = Field(default_factory=list)
-    experimentTask: str = ""
-    datasets: list[str] = Field(
-        default_factory=list,
-        max_length=MAX_TRAINING_DATASETS,
-    )
-    overrides: ConfigOverrides = Field(default_factory=dict)
-    search: TrainingSearchRequest | None = None
-    logFolder: str = ""
-    isRandomSearch: bool = False
     runs: list[SubmittedTrainingRunRequest] = Field(
         default_factory=list,
         max_length=MAX_TRAINING_PLANNED_RUNS,
     )
-    summary: SubmittedTrainingRunPlanSummaryRequest
 
 
 class TrainingResultLinkResponse(ApiResponseModel):

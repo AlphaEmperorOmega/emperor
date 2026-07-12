@@ -37,7 +37,9 @@ from workbench.backend.schemas import (
     TrainingRunPlanResponse,
 )
 from workbench.backend.training_jobs import TrainingJobService
-from workbench.backend.training_jobs.plans import TrainingRunPlanService
+from workbench.backend.training_jobs.run_plan_adapter import (
+    WorkbenchRunPlanAdapter,
+)
 
 router = APIRouter(
     prefix="/training",
@@ -78,7 +80,7 @@ async def create_training_job(
 async def create_training_run_plan(
     request: TrainingRunPlanCreateRequest,
     service: Annotated[
-        TrainingRunPlanService,
+        WorkbenchRunPlanAdapter,
         Depends(get_training_run_plan_service),
     ],
 ) -> TrainingRunPlanResponse:

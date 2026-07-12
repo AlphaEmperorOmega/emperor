@@ -18,13 +18,16 @@ from emperor.runs.progress import (
     NeuronClusterGrowthCallback,
 )
 
+from workbench.backend.training_jobs import run_plan_adapter
 from workbench.backend.training_jobs import worker as training_worker
 from workbench.backend.training_jobs.launcher import TRAINING_LOGS_ROOT_ENV
 from workbench.backend.training_jobs.limits import (
     MAX_TRAINING_DATASETS,
     MAX_TRAINING_MONITORS,
 )
-from workbench.backend.training_jobs.plans import TrainingRunPlanBuilder
+from workbench.backend.training_jobs.run_plan_adapter import (
+    WorkbenchRunPlanAdapter,
+)
 
 COMMON_PROGRESS_EVENT_KEYS = {
     "timestamp",
@@ -56,7 +59,7 @@ def worker_payload(
     search: dict | None = None,
     monitors: list[str] | None = None,
 ) -> dict[str, object]:
-    builder = TrainingRunPlanBuilder()
+    builder = WorkbenchRunPlanAdapter()
     selected = builder.resolve_inputs(
         model="linears/linear",
         preset=preset,
@@ -73,16 +76,8 @@ def worker_payload(
     )
     return {
         "id": "job-123",
-        "modelType": "linears",
-        "model": "linear",
-        "preset": plan["preset"],
-        "presets": plan["presets"],
-        "experimentTask": plan["experimentTask"],
-        "datasets": plan["datasets"],
-        "overrides": plan["overrides"],
-        "search": plan["search"],
         "monitors": monitors or [],
-        "logFolder": "unit_logs",
+        "plannedRunCount": len(plan["runs"]),
         "runPlan": plan,
     }
 
@@ -99,7 +94,7 @@ class TrainingWorkerPlanAcceptanceTests(unittest.TestCase):
         package = training_worker.load_model_parts("linears/linear")
 
         with patch("emperor.runs.planning.plan_runs") as plan_runs:
-            plan = training_worker._accepted_plan(package, payload)
+            plan = run_plan_adapter.accept_worker_run_plan(package, payload)
 
         plan_runs.assert_not_called()
         self.assertEqual(len(plan.runs), 1)
@@ -124,7 +119,7 @@ class TrainingWorkerPlanAcceptanceTests(unittest.TestCase):
                     ValueError,
                     "non-empty materialized run plan",
                 ):
-                    training_worker._accepted_plan(package, payload)
+                    run_plan_adapter.accept_worker_run_plan(package, payload)
 
     def test_worker_rejects_non_object_and_foreign_rows(self) -> None:
         package = training_worker.load_model_parts("linears/linear")
@@ -134,7 +129,7 @@ class TrainingWorkerPlanAcceptanceTests(unittest.TestCase):
             "runPlan": {**base["runPlan"], "runs": ["not-a-row"]},
         }
         with self.assertRaisesRegex(ValueError, "row 1 must be an object"):
-            training_worker._accepted_plan(package, non_object)
+            run_plan_adapter.accept_worker_run_plan(package, non_object)
 
         foreign = {
             **base,
@@ -145,7 +140,7 @@ class TrainingWorkerPlanAcceptanceTests(unittest.TestCase):
             },
         }
         with self.assertRaisesRegex(ValueError, "does not match selected model"):
-            training_worker._accepted_plan(package, foreign)
+            run_plan_adapter.accept_worker_run_plan(package, foreign)
 
     def test_worker_revalidates_locked_row_overrides(self) -> None:
         payload = worker_payload(preset="gating", presets=["gating"])
@@ -153,7 +148,15 @@ class TrainingWorkerPlanAcceptanceTests(unittest.TestCase):
         package = training_worker.load_model_parts("linears/linear")
 
         with self.assertRaisesRegex(ValueError, "locked fields"):
-            training_worker._accepted_plan(package, payload)
+            run_plan_adapter.accept_worker_run_plan(package, payload)
+
+    def test_worker_rejects_tampered_derived_epoch_total(self) -> None:
+        payload = worker_payload(overrides={"num_epochs": 7})
+        payload["runPlan"]["runs"][0]["totalEpochs"] = 999
+        package = training_worker.load_model_parts("linears/linear")
+
+        with self.assertRaisesRegex(ValueError, "total epochs"):
+            run_plan_adapter.accept_worker_run_plan(package, payload)
 
     def test_worker_rejects_stale_or_tampered_plan_envelopes(self) -> None:
         package = training_worker.load_model_parts("linears/linear")
@@ -177,7 +180,7 @@ class TrainingWorkerPlanAcceptanceTests(unittest.TestCase):
                 payload = copy.deepcopy(worker_payload())
                 payload["runPlan"][field] = value
                 with self.assertRaisesRegex(ValueError, message):
-                    training_worker._accepted_plan(package, payload)
+                    run_plan_adapter.accept_worker_run_plan(package, payload)
 
         for field, limit in (
             ("datasets", MAX_TRAINING_DATASETS),
@@ -185,18 +188,19 @@ class TrainingWorkerPlanAcceptanceTests(unittest.TestCase):
         ):
             with self.subTest(field=field):
                 payload = copy.deepcopy(worker_payload())
-                payload[field] = [f"value-{index}" for index in range(limit + 1)]
+                target = payload if field == "monitors" else payload["runPlan"]
+                target[field] = [f"value-{index}" for index in range(limit + 1)]
                 with self.assertRaisesRegex(
                     ValueError,
                     f"at most {limit} {field}",
                 ):
-                    training_worker._accepted_plan(package, payload)
+                    run_plan_adapter.accept_worker_run_plan(package, payload)
 
         payload = copy.deepcopy(worker_payload())
         del payload["runPlan"]["modelType"]
         del payload["runPlan"]["model"]
         with self.assertRaisesRegex(ValueError, "valid model identity"):
-            training_worker._accepted_plan(package, payload)
+            run_plan_adapter.accept_worker_run_plan(package, payload)
 
     def test_worker_rejects_structurally_erased_plan_state(self) -> None:
         package = training_worker.load_model_parts("linears/linear")
@@ -205,7 +209,7 @@ class TrainingWorkerPlanAcceptanceTests(unittest.TestCase):
                 payload = copy.deepcopy(worker_payload())
                 del payload["runPlan"]["runs"][0][field]
                 with self.assertRaisesRegex(ValueError, field):
-                    training_worker._accepted_plan(package, payload)
+                    run_plan_adapter.accept_worker_run_plan(package, payload)
 
         for field in (
             "preset",
@@ -218,10 +222,9 @@ class TrainingWorkerPlanAcceptanceTests(unittest.TestCase):
         ):
             with self.subTest(envelope_field=field):
                 payload = copy.deepcopy(worker_payload())
-                del payload[field]
                 del payload["runPlan"][field]
                 with self.assertRaisesRegex(ValueError, "requires"):
-                    training_worker._accepted_plan(package, payload)
+                    run_plan_adapter.accept_worker_run_plan(package, payload)
 
     def test_worker_rejects_limits_before_copying_private_plan_or_search(self) -> None:
         package = training_worker.load_model_parts("linears/linear")
@@ -231,10 +234,10 @@ class TrainingWorkerPlanAcceptanceTests(unittest.TestCase):
             for _index in range(2001)
         ]
         with (
-            patch.object(training_worker, "SubmittedRun") as submitted_run,
+            patch.object(run_plan_adapter, "SubmittedRun") as submitted_run,
             self.assertRaisesRegex(ValueError, "submitted runs exceeds 2000"),
         ):
-            training_worker._accepted_plan(package, payload)
+            run_plan_adapter.accept_worker_run_plan(package, payload)
         submitted_run.assert_not_called()
 
         for search, message in (
@@ -263,13 +266,12 @@ class TrainingWorkerPlanAcceptanceTests(unittest.TestCase):
         ):
             with self.subTest(message=message):
                 payload = copy.deepcopy(worker_payload())
-                payload["search"] = search
                 payload["runPlan"]["search"] = copy.deepcopy(search)
                 with (
-                    patch.object(training_worker, "SubmittedRun") as submitted_run,
+                    patch.object(run_plan_adapter, "SubmittedRun") as submitted_run,
                     self.assertRaisesRegex(ValueError, message),
                 ):
-                    training_worker._accepted_plan(package, payload)
+                    run_plan_adapter.accept_worker_run_plan(package, payload)
                 submitted_run.assert_not_called()
 
 

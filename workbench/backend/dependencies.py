@@ -15,7 +15,9 @@ from workbench.backend.run_history import RunHistoryService
 from workbench.backend.services.config_snapshots import ConfigSnapshotService
 from workbench.backend.services.inspection import InspectionService
 from workbench.backend.training_jobs import TrainingJobService
-from workbench.backend.training_jobs.plans import TrainingRunPlanService
+from workbench.backend.training_jobs.run_plan_adapter import (
+    WorkbenchRunPlanAdapter,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,7 +27,7 @@ class WorkbenchServices:
     inspection: InspectionService
     run_history: RunHistoryService
     training_jobs: TrainingJobService
-    training_run_plans: TrainingRunPlanService
+    training_run_plans: WorkbenchRunPlanAdapter
     log_experiment_mutations: LogExperimentMutationCoordinator
 
 
@@ -65,7 +67,7 @@ async def get_training_job_service(
 
 async def get_training_run_plan_service(
     services: Annotated[WorkbenchServices, Depends(get_workbench_services)],
-) -> TrainingRunPlanService:
+) -> WorkbenchRunPlanAdapter:
     return services.training_run_plans
 
 

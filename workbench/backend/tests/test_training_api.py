@@ -25,8 +25,12 @@ from workbench.backend.schemas import (
 from workbench.backend.tests.helpers import (
     FakeProcess,
     FakeRunner,
-    TrainingJobRuntimeHarness,
-    create_app_with_training_runtime,
+    TrainingJobServiceHarness,
+    create_app_with_training_service,
+)
+from workbench.backend.training_jobs.run_plan_adapter import (
+    submitted_run_plan_from_payload,
+    submitted_run_plan_to_payload,
 )
 
 EXPECTED_TRAINING_JOB_RESPONSE_FIELDS = (
@@ -108,12 +112,12 @@ class TrainingApiLifecycleTests(unittest.TestCase):
         process: FakeProcess | None = None,
     ):
         logs_root = root / "logs"
-        manager = TrainingJobRuntimeHarness(
+        manager = TrainingJobServiceHarness(
             root=root / "jobs",
             logs_root=logs_root,
             runner=FakeRunner(process),
         )
-        app = create_app_with_training_runtime(
+        app = create_app_with_training_service(
             WorkbenchApiSettings(
                 logs_root=str(logs_root),
                 allow_unsafe_local_mutations=True,
@@ -223,43 +227,56 @@ class TrainingApiLifecycleTests(unittest.TestCase):
 
     def test_submitted_run_plan_overrides_are_config_values(self) -> None:
         base_payload = {
-            "modelType": "linears",
-            "model": "linear",
-            "preset": "baseline",
-            "presets": ["baseline"],
-            "datasets": ["Mnist"],
-            "overrides": {"hidden_dim": 128, "use_bias": True},
-            "search": None,
-            "logFolder": "api_schema",
-            "isRandomSearch": False,
-            "runs": [],
-            "summary": {
-                "totalRuns": 0,
-                "completedRuns": 0,
-                "runningRuns": 0,
-                "pendingRuns": 0,
-                "failedRuns": 0,
-                "cancelledRuns": 0,
-                "skippedRuns": 0,
-                "totalEpochs": 0,
-                "completedEpochs": 0,
-                "remainingEpochs": 0,
-            },
+            "runs": [
+                {
+                    "id": "run-1",
+                    "preset": "baseline",
+                    "dataset": "Mnist",
+                    "overrides": {"hidden_dim": 128, "use_bias": True},
+                }
+            ],
         }
 
         request = SubmittedTrainingRunPlanRequest.model_validate(base_payload)
 
         self.assertEqual(
-            request.overrides,
+            request.runs[0].overrides,
             {"hidden_dim": 128, "use_bias": True},
         )
         with self.assertRaises(ValidationError):
             SubmittedTrainingRunPlanRequest.model_validate(
                 {
-                    **base_payload,
-                    "overrides": {"scheduler": {"name": "cosine"}},
+                    "runs": [
+                        {
+                            **base_payload["runs"][0],
+                            "overrides": {"scheduler": {"name": "cosine"}},
+                        }
+                    ],
                 }
             )
+
+    def test_submitted_run_plan_rejects_response_only_projection_fields(self) -> None:
+        row = {
+            "id": "run-1",
+            "preset": "baseline",
+            "dataset": "Mnist",
+            "overrides": {},
+        }
+        SubmittedTrainingRunPlanRequest.model_validate({"runs": [row]})
+
+        for response_only_payload in (
+            {"runs": [row], "summary": {"totalRuns": 1}},
+            {"runs": [{**row, "status": "Pending"}]},
+            {"runs": [{**row, "command": "client command"}]},
+            {"runs": [{**row, "totalEpochs": 999}]},
+            {"runs": [{**row, "currentEpoch": 1}]},
+            {"runs": [{**row, "metrics": {"client": 1}}]},
+        ):
+            with self.subTest(payload=response_only_payload):
+                with self.assertRaises(ValidationError):
+                    SubmittedTrainingRunPlanRequest.model_validate(
+                        response_only_payload
+                    )
 
     def test_training_request_schemas_do_not_cap_preset_selection_count(self) -> None:
         presets = [f"preset-{index}" for index in range(2501)]
@@ -272,36 +289,13 @@ class TrainingApiLifecycleTests(unittest.TestCase):
             "overrides": {},
             "logFolder": "api_schema",
         }
-        submitted_payload = {
-            **create_payload,
-            "search": None,
-            "isRandomSearch": False,
-            "runs": [],
-            "summary": {
-                "totalRuns": 0,
-                "completedRuns": 0,
-                "runningRuns": 0,
-                "pendingRuns": 0,
-                "failedRuns": 0,
-                "cancelledRuns": 0,
-                "skippedRuns": 0,
-                "totalEpochs": 0,
-                "completedEpochs": 0,
-                "remainingEpochs": 0,
-            },
-        }
-
         job_request = TrainingJobCreateRequest.model_validate(
             {**create_payload, "monitors": []}
         )
         run_plan_request = TrainingRunPlanCreateRequest.model_validate(create_payload)
-        submitted_request = SubmittedTrainingRunPlanRequest.model_validate(
-            submitted_payload
-        )
 
         self.assertEqual(job_request.presets, presets)
         self.assertEqual(run_plan_request.presets, presets)
-        self.assertEqual(submitted_request.presets, presets)
 
     def test_training_run_plan_rejects_nested_override_object_at_api_boundary(
         self,
@@ -843,7 +837,11 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                             "logFolder": "api_schema",
                             "monitors": ["linear"],
                             "search": None,
-                            "runPlan": run_plan_response.json(),
+                            "runPlan": submitted_run_plan_to_payload(
+                                submitted_run_plan_from_payload(
+                                    run_plan_response.json()
+                                )
+                            ),
                         },
                     )
                     return run_plan_response, create_response
@@ -914,6 +912,9 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                     duplicate = dict(run_plan["runs"][0])
                     duplicate["index"] = 2
                     run_plan["runs"].append(duplicate)
+                    submitted_run_plan = submitted_run_plan_to_payload(
+                        submitted_run_plan_from_payload(run_plan)
+                    )
                     return await client.post(
                         "/training/jobs",
                         json={
@@ -924,7 +925,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                             "overrides": {},
                             "logFolder": "duplicate_ids",
                             "monitors": [],
-                            "runPlan": run_plan,
+                            "runPlan": submitted_run_plan,
                         },
                     )
 
@@ -965,7 +966,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                     job_id = create_response.json()["id"]
                     job = manager.jobs[job_id]
                     for step in range(5):
-                        manager._write_event(
+                        manager.runtime._write_event(
                             job,
                             {
                                 "type": "step",
@@ -1061,7 +1062,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
             response = asyncio.run(call_api())
 
             self.assertEqual(manager.jobs, {})
-            self.assertEqual(manager.active_jobs(), [])
+            self.assertEqual(manager.active_job_payloads(), [])
             self.assertFalse((root / "jobs").exists())
             self.assertFalse((root / "logs" / "path_like_dataset").exists())
 

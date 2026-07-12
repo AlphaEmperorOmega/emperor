@@ -137,21 +137,19 @@ class TrainingJobTests(unittest.TestCase):
             "runs": [
                 {
                     "id": f"{dataset.lower()}-row",
-                    "index": index,
                     "preset": "baseline",
                     "dataset": dataset,
-                    "overrides": {},
-                    "totalEpochs": total_epochs,
+                    "overrides": {"NUM_EPOCHS": total_epochs},
                 }
-                for index, dataset in enumerate(datasets, start=1)
+                for dataset in datasets
             ]
         }
-        manager = TrainingJobRuntimeHarness(
+        manager = TrainingJobServiceHarness(
             root=root / "jobs",
             logs_root=root / "logs",
             runner=FakeRunner(process),
         )
-        payload = manager.create_job(
+        payload = manager.create_job_payload(
             model="linears/linear",
             preset="baseline",
             datasets=datasets,
@@ -1205,25 +1203,13 @@ while True:
             self.assertEqual(payload["monitors"], ["linear"])
             self.assertEqual(payload["logFolder"], "test_model")
             self.assertEqual(worker_payload["monitors"], ["linear"])
-            self.assertEqual(worker_payload["preset"], "baseline")
-            self.assertEqual(worker_payload["presets"], ["baseline"])
-            self.assertEqual(worker_payload["logFolder"], "test_model")
             self.assertEqual(
                 set(worker_payload),
                 {
                     "id",
-                    "modelType",
-                    "model",
-                    "preset",
-                    "presets",
-                    "experimentTask",
-                    "datasets",
-                    "overrides",
-                    "search",
                     "plannedRunCount",
                     "runPlan",
                     "monitors",
-                    "logFolder",
                 },
             )
             self.assertEqual(
@@ -1244,20 +1230,6 @@ while True:
                 },
             )
             self.assertEqual(worker_payload["runPlan"], payload["runPlan"])
-            for key in (
-                "preset",
-                "presets",
-                "experimentTask",
-                "datasets",
-                "overrides",
-                "search",
-                "logFolder",
-            ):
-                with self.subTest(worker_plan_envelope=key):
-                    self.assertEqual(
-                        worker_payload[key],
-                        worker_payload["runPlan"][key],
-                    )
             self.assertEqual(payload["pid"], 1234)
             self.assertTrue((logs_root / "test_model").is_dir())
             self.assertTrue(runner.commands)
@@ -2185,7 +2157,10 @@ while True:
         self.assertEqual(payload["preset"], "baseline")
         self.assertEqual(payload["presets"], ["baseline", "gating"])
         self.assertEqual(payload["plannedRunCount"], 4)
-        self.assertEqual(worker_payload["presets"], ["baseline", "gating"])
+        self.assertEqual(
+            worker_payload["runPlan"]["presets"],
+            ["baseline", "gating"],
+        )
 
     def test_training_job_rejects_unknown_selected_preset(self) -> None:
         manager = TrainingJobRuntimeHarness(runner=FakeRunner())

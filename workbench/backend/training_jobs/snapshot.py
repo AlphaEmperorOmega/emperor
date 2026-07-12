@@ -11,7 +11,7 @@ from workbench.backend.training_jobs.contracts import (
 )
 from workbench.backend.training_jobs.monitoring import TrainingMonitorLocator
 from workbench.backend.training_jobs.projection import TrainingJobLiveProjection
-from workbench.backend.training_jobs.serialization import (
+from workbench.backend.training_jobs.run_plan_adapter import (
     training_run_plan_from_payload,
     training_search_from_payload,
 )

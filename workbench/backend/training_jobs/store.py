@@ -20,6 +20,11 @@ from workbench.backend.storage.local_files import (
     resolve_under_root,
     write_json_atomic,
 )
+from workbench.backend.training_jobs.run_plan_adapter import (
+    TrainingRunPlanDocument,
+    decode_persisted_run_plan,
+    encode_persisted_run_plan,
+)
 
 METADATA_FILENAME = "metadata.json"
 
@@ -38,7 +43,7 @@ class TrainingJobRecord:
     overrides: dict[str, Any]
     search: dict[str, Any] | None
     planned_run_count: int
-    run_plan: dict[str, Any]
+    run_plan: TrainingRunPlanDocument
     monitors: list[str]
     log_folder: str
     command: list[str]
@@ -240,7 +245,7 @@ def _record_to_metadata(job: TrainingJobRecord) -> dict[str, Any]:
         "overrides": job.overrides,
         "search": job.search,
         "planned_run_count": job.planned_run_count,
-        "run_plan": job.run_plan,
+        "run_plan": encode_persisted_run_plan(job.run_plan),
         "monitors": job.monitors,
         "log_folder": job.log_folder,
         "command": job.command,
@@ -280,7 +285,7 @@ def _record_from_metadata(
         overrides=dict(payload["overrides"]),
         search=(dict(payload["search"]) if payload.get("search") is not None else None),
         planned_run_count=int(payload["planned_run_count"]),
-        run_plan=dict(payload["run_plan"]),
+        run_plan=decode_persisted_run_plan(payload["run_plan"]),
         monitors=[str(item) for item in payload["monitors"]],
         log_folder=str(payload["log_folder"]),
         command=[str(item) for item in payload["command"]],

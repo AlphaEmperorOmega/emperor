@@ -12,7 +12,10 @@ from workbench.backend.training_jobs.contracts import (
     TrainingProgressEventsPage,
     TrainingResultLinkView,
 )
-from workbench.backend.training_jobs.serialization import training_run_plan_to_payload
+from workbench.backend.training_jobs.run_plan_adapter import (
+    training_run_plan_to_payload,
+    training_search_to_payload,
+)
 
 
 def _result_link_to_payload(link: TrainingResultLinkView) -> dict[str, Any]:
@@ -20,10 +23,6 @@ def _result_link_to_payload(link: TrainingResultLinkView) -> dict[str, Any]:
 
 
 def training_job_to_payload(job: TrainingJobView) -> dict[str, Any]:
-    from workbench.backend.training_jobs.serialization import (
-        training_search_to_payload,
-    )
-
     return {
         "id": job.id,
         "status": job.status,

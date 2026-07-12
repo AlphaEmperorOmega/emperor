@@ -928,19 +928,13 @@ SCHEMA_PARITY_CASES = (
     ),
     SchemaParityCase(
         schemas.TrainingSearchRequest,
-        "TrainingSearchSubmitInput",
+        "TrainingSearchCreateInput",
         TRAINING_SEARCH_FIELDS,
         TRAINING_SEARCH_REQUIRED_FIELDS,
     ),
     SchemaParityCase(
         schemas.TrainingRunChangeResponse,
         "trainingRunChangeSchema",
-        TRAINING_RUN_CHANGE_FIELDS,
-        TRAINING_RUN_CHANGE_FIELDS,
-    ),
-    SchemaParityCase(
-        schemas.SubmittedTrainingRunChangeRequest,
-        "TrainingRunSubmitChangeInput",
         TRAINING_RUN_CHANGE_FIELDS,
         TRAINING_RUN_CHANGE_FIELDS,
     ),
@@ -953,18 +947,12 @@ SCHEMA_PARITY_CASES = (
     SchemaParityCase(
         schemas.SubmittedTrainingRunRequest,
         "TrainingRunSubmitInput",
-        TRAINING_RUN_FIELDS,
-        TRAINING_RUN_REQUIRED_FIELDS,
+        ("id", "preset", "snapshotId", "snapshotName", "dataset", "overrides"),
+        ("id", "preset", "dataset", "overrides"),
     ),
     SchemaParityCase(
         schemas.TrainingRunPlanSummaryResponse,
         "trainingRunPlanSummarySchema",
-        TRAINING_RUN_PLAN_SUMMARY_FIELDS,
-        TRAINING_RUN_PLAN_SUMMARY_FIELDS,
-    ),
-    SchemaParityCase(
-        schemas.SubmittedTrainingRunPlanSummaryRequest,
-        "TrainingRunPlanSubmitSummaryInput",
         TRAINING_RUN_PLAN_SUMMARY_FIELDS,
         TRAINING_RUN_PLAN_SUMMARY_FIELDS,
     ),
@@ -977,8 +965,8 @@ SCHEMA_PARITY_CASES = (
     SchemaParityCase(
         schemas.SubmittedTrainingRunPlanRequest,
         "TrainingRunPlanSubmitInput",
-        TRAINING_RUN_PLAN_FIELDS,
-        TRAINING_RUN_PLAN_FIELDS,
+        ("runs",),
+        ("runs",),
     ),
     SchemaParityCase(
         schemas.TrainingResultLinkResponse,
@@ -1398,11 +1386,9 @@ HIGH_RISK_SCHEMA_PARITY_GROUPS = {
         schemas.TrainingSearchResponse,
         schemas.TrainingSearchRequest,
         schemas.TrainingRunChangeResponse,
-        schemas.SubmittedTrainingRunChangeRequest,
         schemas.TrainingRunResponse,
         schemas.SubmittedTrainingRunRequest,
         schemas.TrainingRunPlanSummaryResponse,
-        schemas.SubmittedTrainingRunPlanSummaryRequest,
         schemas.TrainingRunPlanResponse,
         schemas.SubmittedTrainingRunPlanRequest,
         schemas.TrainingResultLinkResponse,
@@ -1628,13 +1614,13 @@ class ApiSchemaContractTests(unittest.TestCase):
 
     def test_opaque_json_fields_use_named_json_openapi_schemas(self) -> None:
         expected_refs = {
-            ("GraphConfigFieldResponse", "value"): "JsonValue-Output",
-            ("GraphNodeResponse", "details"): "JsonObject-Output",
-            ("LogRunResponse", "metrics"): "JsonObject-Output",
-            ("LogRunArtifactsResponse", "params"): "JsonObject-Output",
-            ("LogRunArtifactsResponse", "metrics"): "JsonObject-Output",
-            ("TrainingRunResponse", "metrics"): "JsonObject-Output",
-            ("TrainingJobResponse", "metrics"): "JsonObject-Output",
+            ("GraphConfigFieldResponse", "value"): "JsonValue",
+            ("GraphNodeResponse", "details"): "JsonObject",
+            ("LogRunResponse", "metrics"): "JsonObject",
+            ("LogRunArtifactsResponse", "params"): "JsonObject",
+            ("LogRunArtifactsResponse", "metrics"): "JsonObject",
+            ("TrainingRunResponse", "metrics"): "JsonObject",
+            ("TrainingJobResponse", "metrics"): "JsonObject",
         }
 
         for (schema_name, field_name), ref_name in expected_refs.items():

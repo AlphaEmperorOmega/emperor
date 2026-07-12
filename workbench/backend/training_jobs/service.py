@@ -49,6 +49,20 @@ class TrainingJobService:
         )
         self._mutation_coordinator = mutation_coordinator
 
+    @classmethod
+    def _from_runtime(
+        cls,
+        runtime: _TrainingJobRuntime,
+        *,
+        mutation_coordinator: LogExperimentMutationCoordinator,
+    ) -> TrainingJobService:
+        """Compose the public Interface around an existing private runtime seam."""
+
+        service = cls.__new__(cls)
+        service._runtime = runtime
+        service._mutation_coordinator = mutation_coordinator
+        return service
+
     def create_job(self, command: CreateTrainingJobCommand) -> TrainingJobView:
         with self._mutation_coordinator.coordinate([command.log_folder]):
             return self._runtime.create_job_from_command(command)

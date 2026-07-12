@@ -12,8 +12,8 @@ from workbench.backend.training_jobs.contracts import (
     CreateTrainingRunPlanCommand,
     TrainingSearch,
 )
-from workbench.backend.training_jobs.serialization import (
-    training_run_plan_from_payload,
+from workbench.backend.training_jobs.run_plan_adapter import (
+    submitted_run_plan_from_payload,
     training_search_from_payload,
 )
 
@@ -46,7 +46,7 @@ def create_training_job_command(
     request: TrainingJobCreateRequest,
 ) -> CreateTrainingJobCommand:
     run_plan = (
-        training_run_plan_from_payload(request.runPlan.model_dump())
+        submitted_run_plan_from_payload(request.runPlan.model_dump())
         if request.runPlan is not None
         else None
     )
@@ -57,7 +57,7 @@ def create_training_job_command(
         experiment_task=(
             request.experimentTask
             if request.experimentTask is not None
-            else (run_plan.experiment_task if run_plan is not None else None)
+            else None
         ),
         datasets=request.datasets,
         overrides=request.overrides,

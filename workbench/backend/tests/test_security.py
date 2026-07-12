@@ -189,7 +189,7 @@ class RouteAuthIntegrationTests(unittest.TestCase):
             TrainingJobView,
             TrainingRunPlanView,
         )
-        from workbench.backend.training_jobs.serialization import (
+        from workbench.backend.training_jobs.run_plan_adapter import (
             training_run_plan_from_payload,
             training_search_to_payload,
         )
