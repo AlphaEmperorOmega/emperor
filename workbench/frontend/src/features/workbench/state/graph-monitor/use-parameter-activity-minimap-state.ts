@@ -1,18 +1,10 @@
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
 import {
-  fetchLogParameterStatus,
   type InspectResponse,
-  type LogParameterStatusResponse,
   type LogRun,
 } from "@/lib/api";
-import { monitorQueryKeys } from "@/lib/query-keys";
-import {
-  deriveParameterActivityByNodePath,
-  deriveParameterStatusPathMismatch,
-} from "@/features/workbench/state/graph-monitor/graph-monitor-selectors";
+import { useExperimentMonitorParameterActivity } from "@/features/workbench/state/graph-monitor/use-experiment-monitor-parameter-activity";
 import { deriveParameterActivityMinimapModel } from "@/lib/graph";
-import { createLinearMonitorTargetResolver } from "@/lib/graph/monitor-targets";
 import { type MonitorEligibility } from "@/lib/historical-monitor-runs";
 import {
   type GraphParameterActivity,
@@ -64,62 +56,15 @@ export function useParameterActivityMinimapState({
       selectedRunSource &&
       selectedLogRunMonitorEligibility === "eligible",
   );
-  const linearMonitorTargetResolver = useMemo(
-    () => createLinearMonitorTargetResolver(graph),
-    [graph],
-  );
-  const statusQuery = useQuery<LogParameterStatusResponse>({
-    queryKey: selectedExperimentRunId
-      ? monitorQueryKeys.historicalParameterStatus([selectedExperimentRunId])
-      : (["monitor-parameter-status", "inactive-minimap-run"] as const),
-    queryFn: ({ signal }) =>
-      fetchLogParameterStatus(
-        { runIds: [selectedExperimentRunId] },
-        { signal },
-      ),
-    enabled: protectedReadsEnabled && statusQueryEnabled,
-    retry: false,
+  const parameterActivity = useExperimentMonitorParameterActivity({
+    graph,
+    source: selectedRunSource,
+    enabled: statusQueryEnabled,
+    protectedReadsEnabled,
   });
-  const isStatusLoading = Boolean(
-    protectedReadsEnabled &&
-      statusQueryEnabled &&
-      !statusQuery.data &&
-      (statusQuery.isFetching || statusQuery.isLoading),
-  );
-  const activityByNodePath = useMemo(
-    () =>
-      deriveParameterActivityByNodePath({
-        graph,
-        source: selectedRunSource,
-        status: statusQuery.data,
-        statusLoading: isStatusLoading,
-        linearMonitorTargetResolver,
-      }),
-    [
-      graph,
-      isStatusLoading,
-      linearMonitorTargetResolver,
-      selectedRunSource,
-      statusQuery.data,
-    ],
-  );
-  const isPathMismatch = useMemo(
-    () =>
-      deriveParameterStatusPathMismatch({
-        graph,
-        source: selectedRunSource,
-        status: statusQuery.data,
-        statusLoading: isStatusLoading,
-        linearMonitorTargetResolver,
-      }),
-    [
-      graph,
-      isStatusLoading,
-      linearMonitorTargetResolver,
-      selectedRunSource,
-      statusQuery.data,
-    ],
-  );
+  const activityByNodePath = parameterActivity.activityByNodePath;
+  const isStatusLoading = parameterActivity.isLoading;
+  const isPathMismatch = parameterActivity.isPathMismatch;
   const parameterNodeCount = useMemo(
     () =>
       deriveParameterActivityMinimapModel({
@@ -136,7 +81,7 @@ export function useParameterActivityMinimapState({
         ? "Checking monitor data for this Training Run"
         : selectedLogRunMonitorEligibility === "ineligible"
           ? "No monitor data for this Training Run"
-          : statusQuery.isError
+          : parameterActivity.isError
             ? "Could not load parameter activity for this Training Run"
             : isPathMismatch
               ? "Monitor paths do not match this graph"
