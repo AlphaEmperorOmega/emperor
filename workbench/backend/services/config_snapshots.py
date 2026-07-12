@@ -13,36 +13,37 @@ client input.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Mapping
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any
 
 from emperor.inspection import (
+    ConfigurationField,
+    ConfigurationSchema,
     InspectionError,
     InspectionRequest,
-    configuration_schema,
-    validate_configuration,
 )
 from emperor.model_packages import (
     model_identity_payload_from_id,
-    model_package,
     normalize_key,
 )
 
-from workbench.backend.config_snapshots import ConfigSnapshotRecord, ConfigSnapshotStore
-from workbench.backend.inspection_errors import call_inspection
-from workbench.backend.inspection_serialization import configuration_schema_payload
+from workbench.backend.config_snapshots import (
+    ConfigSnapshotConflictError,
+    ConfigSnapshotConflictReason,
+    ConfigSnapshotRecord,
+    ConfigSnapshotStore,
+)
+from workbench.backend.inspection_adapter import WorkbenchInspectionAdapter
 from workbench.backend.inspector.errors import InspectorError
 
-IDENTITY_SEPARATOR = "\x00"
 
-
-def config_schema(model: str, preset: str | None = None) -> dict[str, Any]:
-    package = model_package(model)
-    if package is None:
-        raise InspectorError(f"Unknown model: {model}")
-    return configuration_schema_payload(
-        call_inspection(configuration_schema, package, preset)
-    )
+def config_schema(
+    model: str,
+    preset: str | None = None,
+) -> ConfigurationSchema:
+    return WorkbenchInspectionAdapter.select(model).configuration(preset)
 
 
 class ConfigSnapshotService:
@@ -71,28 +72,23 @@ class ConfigSnapshotService:
     ) -> dict[str, Any]:
         if not model or not preset:
             raise InspectorError("Select a model and preset first.")
-        snapshot_name = self._validated_snapshot_name(
-            model=model,
-            preset=preset,
-            name=name,
-        )
-
-        fields = config_schema(model, preset)["fields"]
+        snapshot_name = self._validated_snapshot_name(name)
+        fields = config_schema(model, preset).fields
         entries = self._validated_override_entries(
             model=model,
             preset=preset,
             fields=fields,
             overrides=overrides,
         )
-
-        snapshot = ConfigSnapshotRecord(
-            id=uuid.uuid4().hex,
-            model=model,
-            preset=preset,
-            name=snapshot_name,
-            overrides={entry["key"]: entry["value"] for entry in entries},
+        snapshot = self._create_snapshot_record(
+            ConfigSnapshotRecord(
+                id=uuid.uuid4().hex,
+                model=model,
+                preset=preset,
+                name=snapshot_name,
+                overrides={entry["key"]: entry["value"] for entry in entries},
+            )
         )
-        self._save_snapshot_record(snapshot)
         return _snapshot_to_api(snapshot)
 
     def rename_snapshot(self, snapshot_id: str, name: str) -> dict[str, Any]:
@@ -105,26 +101,31 @@ class ConfigSnapshotService:
         name: str | None = None,
         overrides: dict[str, str] | None = None,
     ) -> dict[str, Any]:
-        snapshot = self._require_snapshot(snapshot_id)
-        if name is not None:
-            snapshot.name = self._validated_snapshot_name(
-                model=snapshot.model,
-                preset=snapshot.preset,
-                name=name,
-                exclude_snapshot_id=snapshot.id,
-            )
+        current = self._require_snapshot(snapshot_id)
+        snapshot_name = (
+            self._validated_snapshot_name(name) if name is not None else current.name
+        )
+        snapshot_overrides = current.overrides
         if overrides is not None:
-            fields = config_schema(snapshot.model, snapshot.preset)["fields"]
+            fields = config_schema(current.model, current.preset).fields
             entries = self._validated_override_entries(
-                model=snapshot.model,
-                preset=snapshot.preset,
+                model=current.model,
+                preset=current.preset,
                 fields=fields,
                 overrides=overrides,
-                exclude_snapshot_id=snapshot.id,
             )
-            snapshot.overrides = {entry["key"]: entry["value"] for entry in entries}
-        snapshot.updated_at = _now()
-        self._save_snapshot_record(snapshot)
+            snapshot_overrides = {
+                entry["key"]: entry["value"] for entry in entries
+            }
+        replacement = replace(
+            current,
+            name=snapshot_name,
+            overrides=snapshot_overrides,
+            updated_at=_now(),
+        )
+        snapshot = self._update_snapshot_record(current, replacement)
+        if snapshot is None:
+            raise InspectorError(f"Unknown config snapshot '{snapshot_id}'.")
         return _snapshot_to_api(snapshot)
 
     def delete_snapshot(self, snapshot_id: str) -> dict[str, Any]:
@@ -162,9 +163,26 @@ class ConfigSnapshotService:
         except ValueError as exc:
             raise InspectorError("Invalid config snapshot storage path.") from exc
 
-    def _save_snapshot_record(self, snapshot: ConfigSnapshotRecord) -> None:
+    def _create_snapshot_record(
+        self,
+        snapshot: ConfigSnapshotRecord,
+    ) -> ConfigSnapshotRecord:
         try:
-            self._store.save(snapshot)
+            return self._store.create(snapshot)
+        except ConfigSnapshotConflictError as exc:
+            raise _snapshot_conflict_error(exc) from exc
+        except ValueError as exc:
+            raise InspectorError("Invalid config snapshot storage path.") from exc
+
+    def _update_snapshot_record(
+        self,
+        current: ConfigSnapshotRecord,
+        replacement: ConfigSnapshotRecord,
+    ) -> ConfigSnapshotRecord | None:
+        try:
+            return self._store.update(current, replacement)
+        except ConfigSnapshotConflictError as exc:
+            raise _snapshot_conflict_error(exc) from exc
         except ValueError as exc:
             raise InspectorError("Invalid config snapshot storage path.") from exc
 
@@ -174,23 +192,10 @@ class ConfigSnapshotService:
         except ValueError as exc:
             raise InspectorError("Invalid config snapshot storage path.") from exc
 
-    def _validated_snapshot_name(
-        self,
-        *,
-        model: str,
-        preset: str,
-        name: str,
-        exclude_snapshot_id: str | None = None,
-    ) -> str:
+    def _validated_snapshot_name(self, name: str) -> str:
         snapshot_name = name.strip()
         if not snapshot_name:
             raise InspectorError("Config snapshot name cannot be empty.")
-        normalized_name = _normalize_snapshot_name(snapshot_name)
-        for existing in self._list_snapshot_records(model):
-            if existing.id == exclude_snapshot_id or existing.preset != preset:
-                continue
-            if _normalize_snapshot_name(existing.name) == normalized_name:
-                raise InspectorError("A snapshot with this name already exists.")
         return snapshot_name
 
     def _validated_override_entries(
@@ -198,14 +203,13 @@ class ConfigSnapshotService:
         *,
         model: str,
         preset: str,
-        fields: list[dict[str, Any]],
-        overrides: dict[str, str],
-        exclude_snapshot_id: str | None = None,
+        fields: tuple[ConfigurationField, ...],
+        overrides: Mapping[str, str],
     ) -> list[dict[str, str]]:
         entries, locked_fields = _override_entries(fields, overrides)
         if locked_fields:
             locked_names = ", ".join(
-                str(field.get("label") or field["key"]) for field in locked_fields[:3]
+                _field_label(field) for field in locked_fields[:3]
             )
             raise InspectorError(
                 f"Snapshots cannot include preset-locked fields: {locked_names}."
@@ -216,16 +220,6 @@ class ConfigSnapshotService:
             )
 
         _validate_snapshot_config(model=model, preset=preset, entries=entries)
-
-        identity = _identity(model, preset, entries)
-        for existing in self._list_snapshot_records(model):
-            if existing.id == exclude_snapshot_id or existing.preset != preset:
-                continue
-            existing_entries, _ = _override_entries(fields, existing.overrides)
-            if _identity(model, preset, existing_entries) == identity:
-                raise InspectorError(
-                    "A snapshot with these config values already exists."
-                )
         return entries
 
 
@@ -236,17 +230,17 @@ def _validate_snapshot_config(
     entries: list[dict[str, str]],
 ) -> None:
     overrides = {entry["key"]: entry["value"] for entry in entries}
-    package = model_package(model)
-    if package is None:
-        raise InspectorError(f"Unknown model: {model}")
+    adapter = WorkbenchInspectionAdapter.select(model)
     try:
-        validate_configuration(
-            package,
+        adapter.validate(
             InspectionRequest(preset=preset, overrides=overrides),
         )
-    except InspectionError as exc:
+    except InspectorError as exc:
+        cause = exc.__cause__
+        detail_source = cause if isinstance(cause, InspectionError) else exc
         raise InspectorError(
-            f"Invalid config snapshot overrides: {_snapshot_config_error_detail(exc)}"
+            "Invalid config snapshot overrides: "
+            f"{_snapshot_config_error_detail(detail_source)}"
         ) from exc
     except Exception as exc:
         detail = str(exc) or type(exc).__name__
@@ -269,12 +263,28 @@ def _now() -> str:
     return datetime.now(UTC).isoformat()
 
 
+def _snapshot_conflict_error(exc: ConfigSnapshotConflictError) -> InspectorError:
+    messages = {
+        ConfigSnapshotConflictReason.ID: (
+            "A config snapshot with this id already exists."
+        ),
+        ConfigSnapshotConflictReason.NAME: "A snapshot with this name already exists.",
+        ConfigSnapshotConflictReason.RUNTIME_DEFAULTS: (
+            "A snapshot with these config values already exists."
+        ),
+        ConfigSnapshotConflictReason.STALE: (
+            "The config snapshot changed concurrently. Retry the update."
+        ),
+    }
+    return InspectorError(messages[exc.reason])
+
+
 def _snapshot_to_api(snapshot: ConfigSnapshotRecord) -> dict[str, Any]:
     try:
-        fields = config_schema(snapshot.model, snapshot.preset)["fields"]
+        fields = config_schema(snapshot.model, snapshot.preset).fields
         overrides = _canonical_override_values(fields, snapshot.overrides)
     except Exception:
-        overrides = snapshot.overrides
+        overrides = dict(snapshot.overrides)
     return {
         "id": snapshot.id,
         **model_identity_payload_from_id(snapshot.model),
@@ -287,29 +297,29 @@ def _snapshot_to_api(snapshot: ConfigSnapshotRecord) -> dict[str, Any]:
 
 
 def _override_entries(
-    fields: list[dict[str, Any]],
-    overrides: dict[str, str],
-) -> tuple[list[dict[str, str]], list[dict[str, Any]]]:
+    fields: tuple[ConfigurationField, ...],
+    overrides: Mapping[str, str],
+) -> tuple[list[dict[str, str]], list[ConfigurationField]]:
     entries: list[dict[str, str]] = []
-    locked_fields: list[dict[str, Any]] = []
+    locked_fields: list[ConfigurationField] = []
     canonical_overrides = _canonical_override_values(fields, overrides)
     for field in fields:
-        key = field["key"]
+        key = field.key
         if key not in canonical_overrides:
             continue
-        if field.get("locked"):
+        if field.locked:
             locked_fields.append(field)
         normalized = _normalize_value_for_field(field, canonical_overrides.get(key, ""))
         if normalized == _default_value_for_field(field):
             continue
-        value = "" if field.get("nullable") and normalized == "null" else normalized
+        value = "" if field.nullable and normalized == "null" else normalized
         entries.append({"key": key, "value": value})
     return entries, locked_fields
 
 
 def _canonical_override_values(
-    fields: list[dict[str, Any]],
-    overrides: dict[str, str],
+    fields: tuple[ConfigurationField, ...],
+    overrides: Mapping[str, str],
 ) -> dict[str, str]:
     fields_by_key = _fields_by_override_key(fields)
     canonical: dict[str, str] = {}
@@ -317,34 +327,32 @@ def _canonical_override_values(
         field = fields_by_key.get(normalize_key(str(raw_key)))
         if field is None:
             continue
-        key = str(field["key"])
+        key = field.key
         normalized = _normalize_value_for_field(field, raw_value)
         canonical[key] = (
-            "" if field.get("nullable") and normalized == "null" else normalized
+            "" if field.nullable and normalized == "null" else normalized
         )
     return canonical
 
 
 def _fields_by_override_key(
-    fields: list[dict[str, Any]],
-) -> dict[str, dict[str, Any]]:
-    fields_by_key: dict[str, dict[str, Any]] = {}
+    fields: tuple[ConfigurationField, ...],
+) -> dict[str, ConfigurationField]:
+    fields_by_key: dict[str, ConfigurationField] = {}
     for field in fields:
-        for key_name in (field.get("key"), field.get("configKey")):
-            if isinstance(key_name, str) and key_name:
-                fields_by_key.setdefault(normalize_key(key_name), field)
+        fields_by_key.setdefault(normalize_key(field.key), field)
     return fields_by_key
 
 
-def _default_value_for_field(field: dict[str, Any]) -> str:
-    return _normalize_value_for_field(field, field.get("default"))
+def _default_value_for_field(field: ConfigurationField) -> str:
+    return _normalize_value_for_field(field, field.default)
 
 
-def _normalize_value_for_field(field: dict[str, Any], value: Any) -> str:
+def _normalize_value_for_field(field: ConfigurationField, value: Any) -> str:
     raw = "" if value is None else str(value).strip()
-    if field.get("nullable") and raw == "":
+    if field.nullable and raw == "":
         return "null"
-    field_type = field.get("type")
+    field_type = field.value_type
     if field_type == "bool":
         lowered = raw.lower()
         if lowered in ("true", "false"):
@@ -359,17 +367,12 @@ def _normalize_value_for_field(field: dict[str, Any], value: Any) -> str:
     return raw
 
 
+def _field_label(field: ConfigurationField) -> str:
+    return field.key.lower().replace("_", " ")
+
+
 def _to_number(raw: str) -> float | None:
     try:
         return float(raw)
     except (TypeError, ValueError):
         return None
-
-
-def _normalize_snapshot_name(name: str) -> str:
-    return name.strip().casefold()
-
-
-def _identity(model: str, preset: str, entries: list[dict[str, str]]) -> str:
-    parts = [model, preset, *(f"{entry['key']}={entry['value']}" for entry in entries)]
-    return IDENTITY_SEPARATOR.join(parts)

@@ -8,49 +8,58 @@ from typing import Any
 from unittest import mock
 
 import httpx
+from emperor.inspection import ConfigurationField, ConfigurationSchema
+from emperor.model_packages import ModelIdentity
 
 from workbench.backend.api import create_app
 from workbench.backend.settings import WorkbenchApiSettings
 
 # Synthetic config schema so the API tests stay fast and model-independent while
 # still exercising the real validation (non-default, locked, dedupe).
-FAKE_FIELDS: dict[str, Any] = {
-    "modelType": "linears",
-    "model": "linear",
-    "fields": [
-        {
-            "key": "LEARNING_RATE",
-            "configKey": "LEARNING_RATE",
-            "type": "float",
-            "default": 0.001,
-            "nullable": False,
-            "locked": False,
-            "label": "learning rate",
-        },
-        {
-            "key": "BATCH_SIZE",
-            "configKey": "BATCH_SIZE",
-            "type": "int",
-            "default": 64,
-            "nullable": False,
-            "locked": False,
-            "label": "batch size",
-        },
-        {
-            "key": "SEED",
-            "configKey": "SEED",
-            "type": "int",
-            "default": 42,
-            "nullable": False,
-            "locked": True,
-            "label": "seed",
-        },
-    ],
-}
+FAKE_SCHEMA = ConfigurationSchema(
+    identity=ModelIdentity("linears", "linear"),
+    fields=(
+        ConfigurationField(
+            key="LEARNING_RATE",
+            flag="--learning-rate",
+            section_path=("Training",),
+            description="Learning rate.",
+            value_type="float",
+            default=0.001,
+            nullable=False,
+            choices=(),
+        ),
+        ConfigurationField(
+            key="BATCH_SIZE",
+            flag="--batch-size",
+            section_path=("Training",),
+            description="Batch size.",
+            value_type="int",
+            default=64,
+            nullable=False,
+            choices=(),
+        ),
+        ConfigurationField(
+            key="SEED",
+            flag="--seed",
+            section_path=("Training",),
+            description="Seed.",
+            value_type="int",
+            default=42,
+            nullable=False,
+            choices=(),
+            locked=True,
+        ),
+    ),
+)
 
 
-def fake_config_schema(model: str, preset: str | None = None) -> dict[str, Any]:
-    return FAKE_FIELDS
+def fake_config_schema(
+    model: str,
+    preset: str | None = None,
+) -> ConfigurationSchema:
+    del model, preset
+    return FAKE_SCHEMA
 
 
 def fake_validate_snapshot_config(**_kwargs: Any) -> None:

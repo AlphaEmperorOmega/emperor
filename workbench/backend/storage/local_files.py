@@ -81,7 +81,7 @@ def read_json_object(path: Path) -> dict[str, Any] | None:
 
     try:
         payload = json.loads(Path(path).read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return None
     return payload if isinstance(payload, dict) else None
 

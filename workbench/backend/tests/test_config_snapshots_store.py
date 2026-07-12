@@ -2,10 +2,16 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from collections.abc import Iterator
+from contextlib import contextmanager
+from dataclasses import FrozenInstanceError, replace
 from pathlib import Path
 
 from workbench.backend.config_snapshots import (
+    ConfigSnapshotConflictError,
+    ConfigSnapshotConflictReason,
     ConfigSnapshotRecord,
+    ConfigSnapshotStore,
     FileSystemConfigSnapshotStore,
     InMemoryConfigSnapshotStore,
 )
@@ -15,34 +21,140 @@ def make_record(
     snapshot_id: str = "snap-1",
     model: str = "experts/linear",
     preset: str = "base",
-    name: str = "tuned",
+    name: str | None = None,
     overrides: dict[str, str] | None = None,
     created_at: str | None = None,
 ) -> ConfigSnapshotRecord:
-    record = ConfigSnapshotRecord(
+    return ConfigSnapshotRecord(
         id=snapshot_id,
         model=model,
         preset=preset,
-        name=name,
-        overrides=overrides if overrides is not None else {"learning_rate": "0.01"},
+        name=name if name is not None else f"tuned-{snapshot_id}",
+        overrides=(
+            overrides
+            if overrides is not None
+            else {"learning_rate": f"value-{snapshot_id}"}
+        ),
+        **({"created_at": created_at} if created_at is not None else {}),
     )
-    if created_at is not None:
-        record.created_at = created_at
-    return record
+
+
+def create_record(
+    store: ConfigSnapshotStore,
+    record: ConfigSnapshotRecord,
+) -> ConfigSnapshotRecord:
+    return store.create(record)
+
+
+@contextmanager
+def config_snapshot_stores() -> Iterator[list[tuple[str, ConfigSnapshotStore]]]:
+    with tempfile.TemporaryDirectory() as tmp:
+        yield [
+            ("memory", InMemoryConfigSnapshotStore()),
+            ("filesystem", FileSystemConfigSnapshotStore(Path(tmp))),
+        ]
+
+
+class ConfigSnapshotStoreContractTests(unittest.TestCase):
+    def test_records_are_immutable_values_for_both_adapters(self) -> None:
+        with config_snapshot_stores() as stores:
+            for adapter, store in stores:
+                with self.subTest(adapter=adapter):
+                    source_overrides = {"learning_rate": "0.01"}
+                    created = create_record(
+                        store,
+                        make_record(overrides=source_overrides),
+                    )
+                    source_overrides["learning_rate"] = "0.5"
+
+                    loaded = store.get(created.id)
+                    self.assertIsNotNone(loaded)
+                    assert loaded is not None
+                    self.assertEqual(loaded.overrides, {"learning_rate": "0.01"})
+                    with self.assertRaises(FrozenInstanceError):
+                        loaded.name = "mutated"  # type: ignore[misc]
+                    with self.assertRaises(TypeError):
+                        loaded.overrides["learning_rate"] = "0.5"  # type: ignore[index]
+
+    def test_conflicts_and_failed_replacements_publish_nothing_for_both_adapters(
+        self,
+    ) -> None:
+        with config_snapshot_stores() as stores:
+            for adapter, store in stores:
+                with self.subTest(adapter=adapter):
+                    original = create_record(store, make_record())
+
+                    with self.assertRaises(ConfigSnapshotConflictError) as name:
+                        create_record(
+                            store,
+                            make_record(
+                                snapshot_id="name-conflict",
+                                name=original.name.upper(),
+                            ),
+                        )
+                    self.assertEqual(
+                        name.exception.reason,
+                        ConfigSnapshotConflictReason.NAME,
+                    )
+
+                    with self.assertRaises(ConfigSnapshotConflictError) as values:
+                        create_record(
+                            store,
+                            make_record(
+                                snapshot_id="values-conflict",
+                                overrides=dict(original.overrides),
+                            ),
+                        )
+                    self.assertEqual(
+                        values.exception.reason,
+                        ConfigSnapshotConflictReason.RUNTIME_DEFAULTS,
+                    )
+
+                    replacement = replace(
+                        original,
+                        name="updated",
+                        updated_at="2026-02-01",
+                    )
+                    self.assertEqual(
+                        store.update(original, replacement),
+                        replacement,
+                    )
+                    with self.assertRaises(ConfigSnapshotConflictError) as stale:
+                        store.update(
+                            original,
+                            replace(original, name="stale", updated_at="2026-02-02"),
+                        )
+                    self.assertEqual(
+                        stale.exception.reason,
+                        ConfigSnapshotConflictReason.STALE,
+                    )
+
+                    with self.assertRaisesRegex(ValueError, "record identity"):
+                        store.update(
+                            replacement,
+                            replace(replacement, model="other"),
+                        )
+
+                    loaded = store.get(original.id)
+                    self.assertEqual(loaded, replacement)
+                    self.assertEqual(
+                        [snapshot.id for snapshot in store.list_all()],
+                        [original.id],
+                    )
 
 
 class InMemoryConfigSnapshotStoreTests(unittest.TestCase):
     def test_saves_and_lists_scoped_by_model(self) -> None:
         store = InMemoryConfigSnapshotStore()
-        store.save(make_record(snapshot_id="a", model="m1"))
-        store.save(make_record(snapshot_id="b", model="m2"))
+        create_record(store, make_record(snapshot_id="a", model="m1"))
+        create_record(store, make_record(snapshot_id="b", model="m2"))
 
         self.assertEqual([s.id for s in store.list("m1")], ["a"])
         self.assertEqual([s.id for s in store.list("m2")], ["b"])
 
     def test_get_and_delete(self) -> None:
         store = InMemoryConfigSnapshotStore()
-        store.save(make_record(snapshot_id="a"))
+        create_record(store, make_record(snapshot_id="a"))
 
         self.assertIsNotNone(store.get("a"))
         self.assertTrue(store.delete("a"))
@@ -51,14 +163,21 @@ class InMemoryConfigSnapshotStoreTests(unittest.TestCase):
 
     def test_list_is_sorted_by_created_at(self) -> None:
         store = InMemoryConfigSnapshotStore()
-        store.save(make_record(snapshot_id="b", model="m", created_at="2026-01-02"))
-        store.save(make_record(snapshot_id="a", model="m", created_at="2026-01-01"))
+        create_record(
+            store,
+            make_record(snapshot_id="b", model="m", created_at="2026-01-02"),
+        )
+        create_record(
+            store,
+            make_record(snapshot_id="a", model="m", created_at="2026-01-01"),
+        )
 
         self.assertEqual([s.id for s in store.list("m")], ["a", "b"])
 
     def test_list_all_is_sorted_across_models(self) -> None:
         store = InMemoryConfigSnapshotStore()
-        store.save(
+        create_record(
+            store,
             make_record(
                 snapshot_id="b",
                 model="m2",
@@ -66,7 +185,8 @@ class InMemoryConfigSnapshotStoreTests(unittest.TestCase):
                 created_at="2026-01-02",
             )
         )
-        store.save(
+        create_record(
+            store,
             make_record(
                 snapshot_id="a",
                 model="m1",
@@ -74,7 +194,8 @@ class InMemoryConfigSnapshotStoreTests(unittest.TestCase):
                 created_at="2026-01-02",
             )
         )
-        store.save(
+        create_record(
+            store,
             make_record(
                 snapshot_id="c",
                 model="m1",
@@ -90,7 +211,8 @@ class FileSystemConfigSnapshotStoreTests(unittest.TestCase):
     def test_persists_across_store_instances(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             first = FileSystemConfigSnapshotStore(Path(tmp))
-            first.save(
+            create_record(
+                first,
                 make_record(snapshot_id="a", model="m1", overrides={"lr": "0.02"})
             )
 
@@ -105,14 +227,14 @@ class FileSystemConfigSnapshotStoreTests(unittest.TestCase):
     def test_writes_one_file_per_snapshot_under_model_directory(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             store = FileSystemConfigSnapshotStore(Path(tmp))
-            store.save(make_record(snapshot_id="a", model="m1"))
+            create_record(store, make_record(snapshot_id="a", model="m1"))
 
             self.assertTrue((Path(tmp) / "m1" / "a.json").exists())
 
     def test_delete_removes_the_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             store = FileSystemConfigSnapshotStore(Path(tmp))
-            store.save(make_record(snapshot_id="a", model="m1"))
+            create_record(store, make_record(snapshot_id="a", model="m1"))
 
             self.assertTrue(store.delete("a"))
             self.assertFalse((Path(tmp) / "m1" / "a.json").exists())
@@ -121,7 +243,10 @@ class FileSystemConfigSnapshotStoreTests(unittest.TestCase):
     def test_nested_model_paths_can_be_found_for_delete(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             store = FileSystemConfigSnapshotStore(Path(tmp))
-            store.save(make_record(snapshot_id="a", model="linears/linear"))
+            create_record(
+                store,
+                make_record(snapshot_id="a", model="linears/linear"),
+            )
 
             self.assertTrue((Path(tmp) / "linears" / "linear" / "a.json").exists())
             self.assertEqual(
@@ -134,7 +259,8 @@ class FileSystemConfigSnapshotStoreTests(unittest.TestCase):
     def test_list_all_finds_nested_model_paths_and_sorts(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             store = FileSystemConfigSnapshotStore(Path(tmp))
-            store.save(
+            create_record(
+                store,
                 make_record(
                     snapshot_id="b",
                     model="linears/linear_adaptive",
@@ -142,7 +268,8 @@ class FileSystemConfigSnapshotStoreTests(unittest.TestCase):
                     created_at="2026-01-02",
                 )
             )
-            store.save(
+            create_record(
+                store,
                 make_record(
                     snapshot_id="c",
                     model="linears/linear",
@@ -150,7 +277,8 @@ class FileSystemConfigSnapshotStoreTests(unittest.TestCase):
                     created_at="2026-01-03",
                 )
             )
-            store.save(
+            create_record(
+                store,
                 make_record(
                     snapshot_id="a",
                     model="linears/linear",
@@ -183,6 +311,16 @@ class FileSystemConfigSnapshotStoreTests(unittest.TestCase):
             model_dir = Path(tmp) / "m1"
             model_dir.mkdir(parents=True)
             (model_dir / "broken.json").write_text("{not json", encoding="utf-8")
+
+            self.assertEqual(store.list("m1"), [])
+            self.assertEqual(store.list_all(), [])
+
+    def test_non_utf8_corrupt_files_are_ignored(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = FileSystemConfigSnapshotStore(Path(tmp))
+            model_dir = Path(tmp) / "m1"
+            model_dir.mkdir(parents=True)
+            (model_dir / "broken.json").write_bytes(bytes((255, 254)))
 
             self.assertEqual(store.list("m1"), [])
             self.assertEqual(store.list_all(), [])
@@ -224,7 +362,7 @@ class FileSystemConfigSnapshotStoreTests(unittest.TestCase):
             for model in cases:
                 with self.subTest(model=model):
                     with self.assertRaises(ValueError):
-                        store.save(make_record(snapshot_id="a", model=model))
+                        create_record(store, make_record(snapshot_id="a", model=model))
                     with self.assertRaises(ValueError):
                         store.list(model)
             self.assertFalse(outside.exists())
@@ -247,7 +385,10 @@ class FileSystemConfigSnapshotStoreTests(unittest.TestCase):
             for snapshot_id in cases:
                 with self.subTest(snapshot_id=snapshot_id):
                     with self.assertRaises(ValueError):
-                        store.save(make_record(snapshot_id=snapshot_id, model="m1"))
+                        create_record(
+                            store,
+                            make_record(snapshot_id=snapshot_id, model="m1"),
+                        )
                     with self.assertRaises(ValueError):
                         store.get(snapshot_id)
                     with self.assertRaises(ValueError):
@@ -270,7 +411,10 @@ class FileSystemConfigSnapshotStoreTests(unittest.TestCase):
             store = FileSystemConfigSnapshotStore(snapshots_root)
 
             with self.assertRaises(ValueError):
-                store.save(make_record(snapshot_id="a", model="linked/linear"))
+                create_record(
+                    store,
+                    make_record(snapshot_id="a", model="linked/linear"),
+                )
             with self.assertRaises(ValueError):
                 store.list("linked/linear")
             self.assertEqual(list(outside.iterdir()), [])

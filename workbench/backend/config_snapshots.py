@@ -10,12 +10,19 @@ serialized to JSON on disk, one file per snapshot under
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from enum import StrEnum
 from pathlib import Path
+from threading import Lock, RLock
+from types import MappingProxyType
 from typing import Protocol
 
-from models.catalog import model_id_from_payload, model_identity_payload_from_id
+from emperor.model_packages import (
+    model_id_from_payload,
+    model_identity_payload_from_id,
+)
 
 from workbench.backend.storage.local_files import (
     read_json_object,
@@ -33,19 +40,46 @@ def _now() -> str:
     return datetime.now(UTC).isoformat()
 
 
-@dataclass
+@dataclass(frozen=True)
 class ConfigSnapshotRecord:
     id: str
     model: str
     preset: str
     name: str
-    overrides: dict[str, str]
+    overrides: Mapping[str, str]
     created_at: str = field(default_factory=_now)
     updated_at: str = field(default_factory=_now)
 
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "overrides",
+            MappingProxyType(dict(self.overrides)),
+        )
+
+
+class ConfigSnapshotConflictReason(StrEnum):
+    ID = "id"
+    NAME = "name"
+    RUNTIME_DEFAULTS = "runtime-defaults"
+    STALE = "stale"
+
+
+class ConfigSnapshotConflictError(Exception):
+    def __init__(self, reason: ConfigSnapshotConflictReason) -> None:
+        self.reason = reason
+        super().__init__(reason.value)
+
 
 class ConfigSnapshotStore(Protocol):
-    def save(self, snapshot: ConfigSnapshotRecord) -> None:
+    def create(self, snapshot: ConfigSnapshotRecord) -> ConfigSnapshotRecord:
+        ...
+
+    def update(
+        self,
+        current: ConfigSnapshotRecord,
+        replacement: ConfigSnapshotRecord,
+    ) -> ConfigSnapshotRecord | None:
         ...
 
     def get(self, snapshot_id: str) -> ConfigSnapshotRecord | None:
@@ -64,47 +98,129 @@ class ConfigSnapshotStore(Protocol):
 class InMemoryConfigSnapshotStore:
     def __init__(self) -> None:
         self._snapshots: dict[str, ConfigSnapshotRecord] = {}
+        self._lock = RLock()
 
     @property
     def snapshots(self) -> dict[str, ConfigSnapshotRecord]:
-        return self._snapshots
+        with self._lock:
+            return dict(self._snapshots)
 
-    def save(self, snapshot: ConfigSnapshotRecord) -> None:
-        self._snapshots[snapshot.id] = snapshot
+    def create(self, snapshot: ConfigSnapshotRecord) -> ConfigSnapshotRecord:
+        with self._lock:
+            _require_no_snapshot_conflict(snapshot, self._records())
+            self._snapshots[snapshot.id] = snapshot
+            return snapshot
+
+    def update(
+        self,
+        current: ConfigSnapshotRecord,
+        replacement: ConfigSnapshotRecord,
+    ) -> ConfigSnapshotRecord | None:
+        with self._lock:
+            _require_same_snapshot_identity(current, replacement)
+            observed = self._snapshots.get(current.id)
+            if observed is None:
+                return None
+            if observed != current:
+                raise ConfigSnapshotConflictError(
+                    ConfigSnapshotConflictReason.STALE
+                )
+            _require_no_snapshot_conflict(
+                replacement,
+                self._records(),
+                exclude_snapshot_id=current.id,
+            )
+            self._snapshots[current.id] = replacement
+            return replacement
 
     def get(self, snapshot_id: str) -> ConfigSnapshotRecord | None:
-        return self._snapshots.get(snapshot_id)
+        with self._lock:
+            return self._snapshots.get(snapshot_id)
 
     def list(self, model: str) -> list[ConfigSnapshotRecord]:
-        snapshots = [
-            snapshot
-            for snapshot in self._snapshots.values()
-            if snapshot.model == model
-        ]
-        return sorted(snapshots, key=lambda snapshot: snapshot.created_at)
+        with self._lock:
+            snapshots = [
+                snapshot
+                for snapshot in self._snapshots.values()
+                if snapshot.model == model
+            ]
+            return sorted(snapshots, key=lambda snapshot: snapshot.created_at)
 
     def list_all(self) -> list[ConfigSnapshotRecord]:
-        return sorted(self._snapshots.values(), key=_snapshot_sort_key)
+        with self._lock:
+            return list(self._records())
 
     def delete(self, snapshot_id: str) -> bool:
-        return self._snapshots.pop(snapshot_id, None) is not None
+        with self._lock:
+            return self._snapshots.pop(snapshot_id, None) is not None
+
+    def _records(self) -> tuple[ConfigSnapshotRecord, ...]:
+        return tuple(sorted(self._snapshots.values(), key=_snapshot_sort_key))
+
+
+_FILE_STORE_LOCKS_GUARD = Lock()
+_FILE_STORE_LOCKS: dict[Path, RLock] = {}
+
+
+def _file_store_lock(root: Path) -> RLock:
+    with _FILE_STORE_LOCKS_GUARD:
+        return _FILE_STORE_LOCKS.setdefault(root, RLock())
 
 
 class FileSystemConfigSnapshotStore:
     def __init__(self, root: Path) -> None:
-        self.root = Path(root)
+        self.root = resolve_root(Path(root))
+        self._lock = _file_store_lock(self.root)
 
-    def save(self, snapshot: ConfigSnapshotRecord) -> None:
-        snapshot_path = self._snapshot_path(snapshot.model, snapshot.id)
-        write_json_atomic(snapshot_path, _record_to_metadata(snapshot))
+    def create(self, snapshot: ConfigSnapshotRecord) -> ConfigSnapshotRecord:
+        with self._lock:
+            snapshot_path = self._snapshot_path(snapshot.model, snapshot.id)
+            _require_no_snapshot_conflict(snapshot, tuple(self._list_all()))
+            if snapshot_path.exists() or snapshot_path.is_symlink():
+                raise ConfigSnapshotConflictError(
+                    ConfigSnapshotConflictReason.ID
+                )
+            write_json_atomic(snapshot_path, _record_to_metadata(snapshot))
+            return snapshot
+
+    def update(
+        self,
+        current: ConfigSnapshotRecord,
+        replacement: ConfigSnapshotRecord,
+    ) -> ConfigSnapshotRecord | None:
+        with self._lock:
+            _require_same_snapshot_identity(current, replacement)
+            observed = self._get(current.id)
+            if observed is None:
+                return None
+            if observed != current:
+                raise ConfigSnapshotConflictError(
+                    ConfigSnapshotConflictReason.STALE
+                )
+            _require_no_snapshot_conflict(
+                replacement,
+                tuple(self._list_all()),
+                exclude_snapshot_id=current.id,
+            )
+            snapshot_path = self._snapshot_path(current.model, current.id)
+            write_json_atomic(snapshot_path, _record_to_metadata(replacement))
+            return replacement
 
     def get(self, snapshot_id: str) -> ConfigSnapshotRecord | None:
+        with self._lock:
+            return self._get(snapshot_id)
+
+    def _get(self, snapshot_id: str) -> ConfigSnapshotRecord | None:
         snapshot_path = self._find_snapshot_path(snapshot_id)
         if snapshot_path is None:
             return None
         return self._read_metadata(snapshot_path)
 
     def list(self, model: str) -> list[ConfigSnapshotRecord]:
+        with self._lock:
+            return self._list(model)
+
+    def _list(self, model: str) -> list[ConfigSnapshotRecord]:
         model_root = self._model_root(model)
         if not model_root.exists():
             return []
@@ -119,6 +235,10 @@ class FileSystemConfigSnapshotStore:
         return sorted(snapshots, key=lambda snapshot: snapshot.created_at)
 
     def list_all(self) -> list[ConfigSnapshotRecord]:
+        with self._lock:
+            return self._list_all()
+
+    def _list_all(self) -> list[ConfigSnapshotRecord]:
         if not self.root.exists():
             return []
         snapshots: list[ConfigSnapshotRecord] = []
@@ -135,11 +255,12 @@ class FileSystemConfigSnapshotStore:
         return sorted(snapshots, key=_snapshot_sort_key)
 
     def delete(self, snapshot_id: str) -> bool:
-        snapshot_path = self._find_snapshot_path(snapshot_id)
-        if snapshot_path is None:
-            return False
-        snapshot_path.unlink()
-        return True
+        with self._lock:
+            snapshot_path = self._find_snapshot_path(snapshot_id)
+            if snapshot_path is None:
+                return False
+            snapshot_path.unlink()
+            return True
 
     def _snapshot_path(self, model: str, snapshot_id: str) -> Path:
         model_root = self._model_root(model)
@@ -220,7 +341,7 @@ def _record_to_metadata(snapshot: ConfigSnapshotRecord) -> dict[str, object]:
         "id": snapshot.id,
         "preset": snapshot.preset,
         "name": snapshot.name,
-        "overrides": snapshot.overrides,
+        "overrides": dict(snapshot.overrides),
         "created_at": snapshot.created_at,
         "updated_at": snapshot.updated_at,
     }
@@ -251,3 +372,39 @@ def _record_from_metadata(payload: dict[str, object]) -> ConfigSnapshotRecord:
 
 def _snapshot_sort_key(snapshot: ConfigSnapshotRecord) -> tuple[str, str, str, str]:
     return (snapshot.model, snapshot.preset, snapshot.created_at, snapshot.id)
+
+
+def _require_same_snapshot_identity(
+    current: ConfigSnapshotRecord,
+    replacement: ConfigSnapshotRecord,
+) -> None:
+    if (
+        replacement.id != current.id
+        or replacement.model != current.model
+        or replacement.preset != current.preset
+        or replacement.created_at != current.created_at
+    ):
+        raise ValueError("config snapshot update cannot change record identity")
+
+
+def _require_no_snapshot_conflict(
+    candidate: ConfigSnapshotRecord,
+    existing_snapshots: tuple[ConfigSnapshotRecord, ...],
+    *,
+    exclude_snapshot_id: str | None = None,
+) -> None:
+    candidate_name = candidate.name.strip().casefold()
+    candidate_overrides = dict(candidate.overrides)
+    for existing in existing_snapshots:
+        if existing.id == exclude_snapshot_id:
+            continue
+        if existing.id == candidate.id:
+            raise ConfigSnapshotConflictError(ConfigSnapshotConflictReason.ID)
+        if existing.model != candidate.model or existing.preset != candidate.preset:
+            continue
+        if existing.name.strip().casefold() == candidate_name:
+            raise ConfigSnapshotConflictError(ConfigSnapshotConflictReason.NAME)
+        if dict(existing.overrides) == candidate_overrides:
+            raise ConfigSnapshotConflictError(
+                ConfigSnapshotConflictReason.RUNTIME_DEFAULTS
+            )

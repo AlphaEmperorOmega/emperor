@@ -106,12 +106,15 @@ class LocalFileJsonTests(unittest.TestCase):
             root = Path(tmp)
             missing = root / "missing.json"
             invalid = root / "invalid.json"
+            invalid_utf8 = root / "invalid-utf8.json"
             non_object = root / "list.json"
             invalid.write_text("{not json", encoding="utf-8")
+            invalid_utf8.write_bytes(bytes((255, 254)))
             non_object.write_text("[1, 2]", encoding="utf-8")
 
             self.assertIsNone(read_json_object(missing))
             self.assertIsNone(read_json_object(invalid))
+            self.assertIsNone(read_json_object(invalid_utf8))
             self.assertIsNone(read_json_object(non_object))
 
 
