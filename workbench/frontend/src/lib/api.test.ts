@@ -56,7 +56,6 @@ import {
   toTrainingRunPlanSubmitInput,
   updateConfigSnapshot,
 } from "@/lib/api";
-import { mapWithConcurrency } from "@/lib/api/concurrency";
 import {
   requestJson,
   WORKBENCH_MUTATION_HEADER_NAME,
@@ -284,48 +283,6 @@ describe("shared API value schemas", () => {
         count: 3,
       }),
     ).toThrow();
-  });
-});
-
-describe("API request scheduling", () => {
-  it("preserves output order with bounded concurrency", async () => {
-    const result = await mapWithConcurrency([3, 1, 2], 2, async (value) => {
-      await new Promise((resolve) => setTimeout(resolve, value));
-      return value * 10;
-    });
-
-    expect(result).toEqual([30, 10, 20]);
-  });
-
-  it("never exceeds the configured concurrency", async () => {
-    let active = 0;
-    let maxActive = 0;
-
-    await mapWithConcurrency([1, 2, 3, 4, 5], 2, async (value) => {
-      active += 1;
-      maxActive = Math.max(maxActive, active);
-      await new Promise((resolve) => setTimeout(resolve, 1));
-      active -= 1;
-      return value;
-    });
-
-    expect(maxActive).toBe(2);
-  });
-
-  it("stops launching new work and propagates request failures", async () => {
-    const error = new Error("request failed");
-    const calls: number[] = [];
-
-    await expect(
-      mapWithConcurrency([1, 2, 3, 4], 2, async (value) => {
-        calls.push(value);
-        if (value === 1) {
-          throw error;
-        }
-        return new Promise<number>(() => {});
-      }),
-    ).rejects.toBe(error);
-    expect(calls).toEqual([1, 2]);
   });
 });
 
@@ -3262,6 +3219,106 @@ describe("POST requests", () => {
     );
     expect(media.images[0].dataUrl).toBe("data:image/png;base64,AAAA");
     expect(media.texts[0].text).toBe("cat -> dog");
+  });
+
+  it("keeps media aggregation in request order when chunks finish out of order", async () => {
+    const pending: Array<{
+      body: { imageTags: string[] };
+      resolve: (response: Response) => void;
+    }> = [];
+    const mediaFetchMock = vi.fn<FetchFn>((_input, init) => {
+      const response = createDeferred<Response>();
+      pending.push({
+        body: JSON.parse(String((init as RequestInit).body)) as {
+          imageTags: string[];
+        },
+        resolve: response.resolve,
+      });
+      return response.promise;
+    });
+    vi.stubGlobal("fetch", mediaFetchMock);
+    const resolveRequest = (index: number) => {
+      const request = pending[index];
+      const tag = request?.body.imageTags[0];
+      if (!request || !tag) {
+        throw new Error(`Expected pending media request ${index}`);
+      }
+      request.resolve(
+        fakeResponse({
+          json: () =>
+            Promise.resolve({
+              images: [
+                {
+                  runId: "run-1",
+                  tag,
+                  step: index,
+                  wallTime: 1000 + index,
+                  mimeType: "image/png",
+                  dataUrl: "data:image/png;base64,AAAA",
+                },
+              ],
+              texts: [],
+            }),
+        }),
+      );
+    };
+    const imageTags = Array.from(
+      { length: 41 },
+      (_, index) => `validation/image-${index}`,
+    );
+
+    const mediaPromise = fetchLogMedia({
+      runIds: ["run-1"],
+      imageTags,
+      textTags: [],
+    });
+
+    expect(pending).toHaveLength(2);
+    resolveRequest(1);
+    await flushAsyncWork();
+    expect(pending).toHaveLength(3);
+    resolveRequest(2);
+    resolveRequest(0);
+    const media = await mediaPromise;
+
+    expect(mediaFetchMock).toHaveBeenCalledTimes(3);
+    expect(media.images.map((image) => image.tag)).toEqual([
+      "validation/image-0",
+      "validation/image-20",
+      "validation/image-40",
+    ]);
+  });
+
+  it("stops launching queued media chunks after a request failure", async () => {
+    const pending: Array<ReturnType<typeof createDeferred<Response>>> = [];
+    const mediaFetchMock = vi.fn<FetchFn>(() => {
+      const response = createDeferred<Response>();
+      pending.push(response);
+      return response.promise;
+    });
+    vi.stubGlobal("fetch", mediaFetchMock);
+    const imageTags = Array.from(
+      { length: 61 },
+      (_, index) => `validation/image-${index}`,
+    );
+    const mediaPromise = fetchLogMedia({
+      runIds: ["run-1"],
+      imageTags,
+      textTags: [],
+    });
+    const rejection = expect(mediaPromise).rejects.toThrow("request failed");
+
+    expect(pending).toHaveLength(2);
+    pending[0].reject(new Error("request failed"));
+    await rejection;
+    pending[1].resolve(
+      fakeResponse({
+        json: () => Promise.resolve({ images: [], texts: [] }),
+      }),
+    );
+    await flushAsyncWork();
+
+    expect(mediaFetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("chunks oversized log media tag requests to match backend limits", async () => {

@@ -1,7 +1,6 @@
 import { z } from "zod";
 
 import { requestJson } from "@/lib/api/client";
-import { mapWithConcurrency } from "@/lib/api/concurrency";
 import { type ModelIdentity } from "@/lib/api/models";
 import {
   imageDataUrlSchema,
@@ -244,6 +243,49 @@ type FetchPaginatedResult<TPage, TItem> = {
 };
 
 const LOG_SCALAR_GLOBAL_REQUEST_CONCURRENCY = 1;
+
+function scheduleLogRequests<TRequest, TResponse>(
+  requests: readonly TRequest[],
+  limit: number,
+  send: (request: TRequest) => Promise<TResponse>,
+): Promise<TResponse[]> {
+  const responses = new Array<TResponse>(requests.length);
+  let nextIndex = 0;
+  let activeCount = 0;
+  let settled = false;
+
+  return new Promise<TResponse[]>((resolve, reject) => {
+    const launch = () => {
+      if (settled) {
+        return;
+      }
+      if (nextIndex >= requests.length && activeCount === 0) {
+        settled = true;
+        resolve(responses);
+        return;
+      }
+      while (activeCount < limit && nextIndex < requests.length) {
+        const index = nextIndex;
+        nextIndex += 1;
+        activeCount += 1;
+        send(requests[index]).then(
+          (response) => {
+            activeCount -= 1;
+            responses[index] = response;
+            launch();
+          },
+          (error: unknown) => {
+            settled = true;
+            reject(error);
+          },
+        );
+      }
+    };
+
+    launch();
+  });
+}
+
 let activeLogScalarRequestCount = 0;
 type PendingLogScalarRequest = {
   run: () => void;
@@ -485,7 +527,7 @@ export async function fetchLogTags(
     });
   }
 
-  const pages = await mapWithConcurrency(
+  const pages = await scheduleLogRequests(
     runIdChunks,
     LOG_TAG_REQUEST_CONCURRENCY,
     (runIds) =>
@@ -535,7 +577,7 @@ export function fetchLogScalars(input: {
     );
   }
 
-  return mapWithConcurrency(
+  return scheduleLogRequests(
     requests,
     LOG_SCALAR_REQUEST_CONCURRENCY,
     ({ runIds, tags }) =>
@@ -588,7 +630,7 @@ export function fetchLogMedia(input: {
     requests.push({ runIds: input.runIds, imageTags: [], textTags: [] });
   }
 
-  return mapWithConcurrency(
+  return scheduleLogRequests(
     requests,
     LOG_TENSORBOARD_REQUEST_CONCURRENCY,
     (request) =>
