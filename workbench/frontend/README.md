@@ -244,6 +244,12 @@ train-validation comparisons adapt phase-labelled solid and dashed lines. The
 shared ECharts option builder remains the single owner of axes, smoothing,
 zoom, checkpoint markers, and emphasis.
 
+Scalar, multi-Run scalar, and histogram charts retain concise image labels and
+visible summaries. Their adjacent Chart Data action opens the shared,
+keyboard-contained table dialog with 100-row pagination, source-series identity,
+and an explicit warning whenever API metadata says the returned dataset is
+incomplete.
+
 ## Full Config Sessions
 
 The internal Full Config coordination Module adapts the active shell token into

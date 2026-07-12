@@ -5,6 +5,12 @@ import { Badge } from "@/components/ui/badge";
 import { ChartFrame } from "@/features/workbench/components/monitor/chart-frame";
 import { EChart } from "@/features/workbench/components/charts/echart";
 import { SurfacePanel } from "@/components/ui/surface-panel";
+import {
+  ChartDataAction,
+  formatChartWallTime,
+  type ChartDataColumn,
+  type ChartDataCompleteness,
+} from "@/features/workbench/components/shared/chart-data-dialog";
 import { buildScalarLineOption } from "@/lib/echarts/scalar-options";
 import { buildHistogramBarOption } from "@/lib/echarts/histogram-options";
 import { multiRunLineColors } from "@/lib/charts";
@@ -26,6 +32,69 @@ const SINGLE_SCALAR_COLOR = workbenchVisualTokens.cyan;
 // track the same step across a node's metrics. Histograms use a value x-axis and
 // are deliberately left out of the group.
 const MONITOR_SCALAR_GROUP = "monitor-scalars";
+
+type ScalarPoint = ScalarSeries["points"][number];
+type HistogramBucket = HistogramData["buckets"][number];
+type MultiRunScalarRow = ScalarPoint & { series: string };
+
+const scalarColumns: readonly ChartDataColumn<ScalarPoint>[] = [
+  { key: "step", label: "Step", align: "right", render: (point) => point.step },
+  {
+    key: "wall-time",
+    label: "Wall time",
+    render: (point) => formatChartWallTime(point.wallTime),
+  },
+  {
+    key: "value",
+    label: "Value",
+    align: "right",
+    render: (point) => formatNumber(point.value),
+  },
+];
+
+const multiRunScalarColumns: readonly ChartDataColumn<MultiRunScalarRow>[] = [
+  { key: "series", label: "Run", render: (row) => row.series },
+  ...scalarColumns,
+];
+
+const histogramColumns: readonly ChartDataColumn<HistogramBucket>[] = [
+  {
+    key: "lower-bound",
+    label: "Inclusive lower bound",
+    align: "right",
+    render: (bucket) => formatNumber(bucket.left),
+  },
+  {
+    key: "upper-bound",
+    label: "Exclusive upper bound",
+    align: "right",
+    render: (bucket) => formatNumber(bucket.right),
+  },
+  {
+    key: "count",
+    label: "Count",
+    align: "right",
+    render: (bucket) => formatNumber(bucket.count),
+  },
+];
+
+function monitorItemCompleteness(item: {
+  sourceItemCount?: number | null;
+  returnedItemCount?: number | null;
+  truncated?: boolean | null;
+  truncationReason?: string | null;
+}): ChartDataCompleteness {
+  return {
+    incomplete: Boolean(
+      item.truncated ||
+        (typeof item.sourceItemCount === "number" &&
+          typeof item.returnedItemCount === "number" &&
+          item.sourceItemCount > item.returnedItemCount),
+    ),
+    reason: item.truncationReason,
+    sourceRowCount: item.sourceItemCount,
+  };
+}
 
 function runDisplayName(run: LogRun) {
   return formatRunDisplayName({
@@ -51,6 +120,14 @@ export function ScalarChart({ series, domain }: { series: ScalarSeries; domain?:
       title={series.label}
       subtitle={series.tag}
       badge={latest && <Badge>step {latest.step}</Badge>}
+      actions={
+        <ChartDataAction
+          chartTitle={series.label}
+          columns={scalarColumns}
+          rows={points}
+          completeness={monitorItemCompleteness(series)}
+        />
+      }
       footer={
         <>
           {points.length === 0 ? (
@@ -87,6 +164,14 @@ export function HistogramChart({
       title={histogram.tag.split("/").slice(-2).join("/")}
       subtitle={histogram.tag}
       badge={<Badge>step {histogram.step}</Badge>}
+      actions={
+        <ChartDataAction
+          chartTitle={histogram.tag}
+          columns={histogramColumns}
+          rows={histogram.buckets}
+          completeness={monitorItemCompleteness(histogram)}
+        />
+      }
       footer={
         <>
           <span>{histogram.buckets.length} buckets</span>
@@ -157,6 +242,33 @@ export function MultiRunScalarChart({ metric }: { metric: MultiRunScalarMetric }
       points: entry.series.points,
     })),
   );
+  const tableRows: MultiRunScalarRow[] = metric.entries.flatMap((entry) =>
+    entry.series.points.map((point) => ({
+      ...point,
+      series: runDisplayName(entry.run),
+    })),
+  );
+  const incompleteEntries = metric.entries.filter(
+    ({ series }) => monitorItemCompleteness(series).incomplete,
+  );
+  const knownSourceRowCounts = metric.entries.flatMap(({ series }) =>
+    typeof series.sourceItemCount === "number" ? [series.sourceItemCount] : [],
+  );
+  const completeness: ChartDataCompleteness = {
+    incomplete: incompleteEntries.length > 0,
+    sourceRowCount:
+      knownSourceRowCounts.length === metric.entries.length
+        ? knownSourceRowCounts.reduce((total, count) => total + count, 0)
+        : null,
+    reason:
+      incompleteEntries.find(({ series }) => series.truncationReason)?.series
+        .truncationReason ??
+      (incompleteEntries.length > 0
+        ? `${incompleteEntries.length} run ${
+            incompleteEntries.length === 1 ? "series was" : "series were"
+          } truncated.`
+        : null),
+  };
 
   return (
     <ChartFrame
@@ -165,6 +277,14 @@ export function MultiRunScalarChart({ metric }: { metric: MultiRunScalarMetric }
         metric.entries.length + metric.missingRuns.length
       } runs`}
       badge={latestStep !== undefined && <Badge>step {latestStep}</Badge>}
+      actions={
+        <ChartDataAction
+          chartTitle={metric.key}
+          columns={multiRunScalarColumns}
+          rows={tableRows}
+          completeness={completeness}
+        />
+      }
       footer={
         <>
           <span>min {minLabel}</span>

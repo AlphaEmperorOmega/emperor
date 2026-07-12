@@ -14,6 +14,12 @@ import { IconButton } from "@/components/ui/icon-button";
 import { SurfacePanel } from "@/components/ui/surface-panel";
 import { EChart } from "@/features/workbench/components/charts/echart";
 import { ErrorPanel } from "@/features/workbench/components/error-panel";
+import {
+  ChartDataAction,
+  formatChartWallTime,
+  type ChartDataColumn,
+  type ChartDataCompleteness,
+} from "@/features/workbench/components/shared/chart-data-dialog";
 import { TrainingMetricInfoDialog } from "@/features/workbench/components/shared/training-metric-info-dialog";
 import { type LogCheckpoint, type LogRun, type LogScalarSeries } from "@/lib/api";
 import {
@@ -50,6 +56,26 @@ type DisplayedScalarPoint = {
   seriesOrder: number;
   pointOrder: number;
 };
+
+type LogScalarDataRow = LogScalarSeries["points"][number] & {
+  series: string;
+};
+
+const logScalarDataColumns: readonly ChartDataColumn<LogScalarDataRow>[] = [
+  { key: "series", label: "Series", render: (row) => row.series },
+  { key: "step", label: "Step", align: "right", render: (row) => row.step },
+  {
+    key: "wall-time",
+    label: "Wall time",
+    render: (row) => formatChartWallTime(row.wallTime),
+  },
+  {
+    key: "value",
+    label: "Value",
+    align: "right",
+    render: (row) => formatNumber(row.value),
+  },
+];
 
 function compareDisplayedScalarPoints(
   left: DisplayedScalarPoint,
@@ -345,6 +371,42 @@ export function LogScalarChartCard({
     () => summarizeDisplayedScalars(summarySeries, runOrder, xMode),
     [runOrder, summarySeries, xMode],
   );
+  const tableRows = useMemo<LogScalarDataRow[]>(
+    () =>
+      summarySeries.flatMap((entry) => {
+        const run = runsById.get(entry.runId);
+        const runLabel = run ? formatRunLabel(run) : entry.runId;
+        return entry.points.map((point) => ({
+          ...point,
+          series: `${runLabel} · ${entry.tag}`,
+        }));
+      }),
+    [runsById, summarySeries],
+  );
+  const tableCompleteness = useMemo<ChartDataCompleteness>(() => {
+    const incompleteSeries = summarySeries.filter(
+      (entry) =>
+        Boolean(entry.truncated) ||
+        (typeof entry.sourcePointCount === "number" &&
+          entry.sourcePointCount > entry.points.length),
+    );
+    const knownSourceCounts = summarySeries.flatMap((entry) =>
+      typeof entry.sourcePointCount === "number" ? [entry.sourcePointCount] : [],
+    );
+    return {
+      incomplete: incompleteSeries.length > 0,
+      sourceRowCount:
+        knownSourceCounts.length === summarySeries.length
+          ? knownSourceCounts.reduce((total, count) => total + count, 0)
+          : null,
+      reason:
+        incompleteSeries.length > 0
+          ? `${incompleteSeries.length} ${
+              incompleteSeries.length === 1 ? "series was" : "series were"
+            } truncated by the scalar API point limit.`
+          : null,
+    };
+  }, [summarySeries]);
   const chartHighlightedRunId = legendEntries.some(
     (entry) => entry.runId === highlightedRunId,
   )
@@ -392,6 +454,12 @@ export function LogScalarChartCard({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
+          <ChartDataAction
+            chartTitle={title}
+            columns={logScalarDataColumns}
+            rows={tableRows}
+            completeness={tableCompleteness}
+          />
           <IconButton
             label={`Explain metric ${title}`}
             title={`Explain ${title}`}

@@ -814,6 +814,51 @@ describe("Logs scalar rendering", () => {
     expect(onSelectRun).toHaveBeenCalledWith(selectedRun.id);
   });
 
+  it("exposes every returned log scalar point with series identity and truncation", async () => {
+    const user = userEvent.setup();
+    const run = logRun();
+    render(
+      <LogScalarChart
+        tag="train/accuracy"
+        series={[
+          scalarSeries({
+            sourcePointCount: 205,
+            truncated: true,
+          }),
+        ]}
+        runsById={new Map([[run.id, run]])}
+        checkpointsByRunId={new Map()}
+        runOrder={[run.id]}
+        onSelectRun={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "View chart data" }));
+    const dialog = screen.getByRole("dialog", { name: "train/accuracy" });
+    const table = within(dialog).getByRole("table");
+    expect(within(table).getByRole("columnheader", { name: "Series" }))
+      .toBeInTheDocument();
+    expect(within(table).getByRole("columnheader", { name: "Step" }))
+      .toBeInTheDocument();
+    expect(within(table).getByRole("columnheader", { name: "Wall time" }))
+      .toBeInTheDocument();
+    expect(
+      Array.from(table.querySelectorAll("tbody td:first-child")).map(
+        (cell) => cell.textContent,
+      ),
+    ).toEqual([
+      expect.stringContaining("train/accuracy"),
+      expect.stringContaining("train/accuracy"),
+    ]);
+    expect(within(table).getByText("0.75")).toBeInTheDocument();
+    expect(within(dialog).getByRole("note")).toHaveTextContent(
+      "source reported 205 rows",
+    );
+    expect(within(dialog).getByRole("note")).toHaveTextContent(
+      "truncated by the scalar API point limit",
+    );
+  });
+
   it("opens metric info from the scalar chart card header", async () => {
     const user = userEvent.setup();
     const infoButtonLabel = "Explain metric train/accuracy";
