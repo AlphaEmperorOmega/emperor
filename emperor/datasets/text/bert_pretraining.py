@@ -84,8 +84,7 @@ def build_bert_next_sentence_pairs(
             if index != sentence_a_index and index != true_next_index
         ]
         use_random_next = (
-            bool(random_next_candidates)
-            and rng.random() < random_next_probability
+            bool(random_next_candidates) and rng.random() < random_next_probability
         )
         if use_random_next:
             sentence_b_index = rng.choice(random_next_candidates)
@@ -348,9 +347,7 @@ class _TorchTextBertPretraining(DataModule):
             vocab_size=self.target_vocab_size,
         )
         self.special_token_ids = get_bert_special_token_ids(self.tokenizer)
-        self.actual_vocab_size = self.tokenizer.get_vocab_size(
-            with_added_tokens=True
-        )
+        self.actual_vocab_size = self.tokenizer.get_vocab_size(with_added_tokens=True)
         self.collator = BertPretrainingCollator(
             special_token_ids=self.special_token_ids,
             vocab_size=self.actual_vocab_size,

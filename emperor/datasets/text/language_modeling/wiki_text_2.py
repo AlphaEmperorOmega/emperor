@@ -112,9 +112,7 @@ class WikiText2(DataModule):
         datasets = WikiText2Dataset.splits(field, root=self.root)
         self._legacy_split_tokens = {
             split: tuple(
-                token
-                for example in dataset.examples
-                for token in example.text
+                token for example in dataset.examples for token in example.text
             )
             for split, dataset in zip(
                 ("train", "valid", "test"),
