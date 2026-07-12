@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { type ConfigSection, sectionTitlesFromSignature } from "@/lib/config";
+import { sectionTitlesFromSignature } from "@/lib/config";
 
 // Manages which config sections are open in the full-config dialog, keeping the
 // open set in sync with the section list and supporting jump-to-section (which
 // opens the target, then scrolls to it).
 export function useConfigDialogSections(
-  sections: ConfigSection[],
+  sections: Array<{ title: string }>,
   autoOpenKey?: string,
   initialOpenTitles?: string[],
 ) {

@@ -6,40 +6,34 @@ import {
 } from "@/features/workbench/components/config/config-field-control";
 import { surfacePanelClassName } from "@/components/ui/surface-panel";
 import {
-  type ConfigSearchOption,
-  type OverrideValues,
-  fieldValue,
-  hasOverride,
-} from "@/lib/config";
+  type RuntimeDefaultsSearchOptionPresentation,
+} from "@/features/workbench/state/full-config/runtime-defaults-schema-presentation";
 import { cn } from "@/lib/utils";
 
 function ConfigSearchResultItem({
   option,
   popupId,
-  overrides,
   isActive,
   isSelected,
-  disabledReason,
   onSelect,
   onFieldChange,
   onFieldReset,
 }: {
-  option: ConfigSearchOption;
+  option: RuntimeDefaultsSearchOptionPresentation;
   popupId: string;
-  overrides: OverrideValues;
   isActive: boolean;
   isSelected: boolean;
-  disabledReason?: string;
-  onSelect: (option: ConfigSearchOption) => void;
+  onSelect: (option: RuntimeDefaultsSearchOptionPresentation) => void;
   onFieldChange: (key: string, value: string) => void;
   onFieldReset: (key: string) => void;
 }) {
   const titleId = `${popupId}-field-${option.key}-title`;
   const editorId = `${popupId}-field-${option.key}-value`;
-  const isOverridden = hasOverride(overrides, option.field.key);
-  const isPresetOwned = Boolean(option.field.locked);
+  const isOverridden = option.field.isModified;
+  const isPresetOwned = option.field.isPresetOwned;
   const showCurrentValue = isOverridden || isPresetOwned;
-  const currentValueLabel = fieldValue(option.field, overrides);
+  const currentValueLabel = option.field.value;
+  const disabledReason = option.field.disabledReason;
 
   return (
     <div
@@ -86,8 +80,7 @@ function ConfigSearchResultItem({
         )}
       </span>
       <ConfigFieldValueEditor
-        field={option.field}
-        overrides={overrides}
+        presentation={option.field}
         onChange={onFieldChange}
         onReset={onFieldReset}
         controlId={editorId}
@@ -111,20 +104,16 @@ export function ConfigSearchResults({
   isLoadingMore,
   activeIndex,
   selectedFieldKey,
-  overrides,
-  disabledFieldReasons,
   onSelect,
   onFieldChange,
   onFieldReset,
 }: {
   popupId: string;
-  visibleOptions: ConfigSearchOption[];
+  visibleOptions: RuntimeDefaultsSearchOptionPresentation[];
   isLoadingMore: boolean;
   activeIndex: number;
   selectedFieldKey: string | null;
-  overrides: OverrideValues;
-  disabledFieldReasons?: Map<string, string>;
-  onSelect: (option: ConfigSearchOption) => void;
+  onSelect: (option: RuntimeDefaultsSearchOptionPresentation) => void;
   onFieldChange: (key: string, value: string) => void;
   onFieldReset: (key: string) => void;
 }) {
@@ -148,10 +137,8 @@ export function ConfigSearchResults({
           key={option.key}
           option={option}
           popupId={popupId}
-          overrides={overrides}
           isActive={index === activeIndex}
           isSelected={option.key === selectedFieldKey}
-          disabledReason={disabledFieldReasons?.get(option.key)}
           onSelect={onSelect}
           onFieldChange={onFieldChange}
           onFieldReset={onFieldReset}

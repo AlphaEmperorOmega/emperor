@@ -23,9 +23,9 @@ import {
 import type { useModelPackageInspectionState } from "@/features/workbench/state/target/use-model-package-inspection-state";
 import { useTrainingWorkspaceState } from "@/features/workbench/state/training/use-training-workspace-state";
 import {
-  type ConfigSnapshotEditorState,
-  useConfigSnapshotEditorState,
-} from "@/features/workbench/state/config-snapshots/use-config-snapshot-editor";
+  type ConfigSnapshotEditorSessionState,
+  useConfigSnapshotEditorSessionState,
+} from "@/features/workbench/state/config-snapshots/use-config-snapshot-editor-session";
 import { type FullConfigDialogControls } from "@/features/workbench/state/use-workbench-workspace-shell";
 import { type WorkbenchWorkspace } from "@/types/workbench";
 
@@ -51,7 +51,7 @@ const [ConfigSnapshotRecordsProvider, useConfigSnapshotRecords] =
     "ConfigSnapshotRecordsContext",
   );
 const [ConfigSnapshotEditorProvider, useConfigSnapshotEditor] =
-  createWorkbenchContext<ConfigSnapshotEditorState>(
+  createWorkbenchContext<ConfigSnapshotEditorSessionState>(
     "ConfigSnapshotEditorContext",
   );
 const [GraphViewProvider, useGraphView] =
@@ -159,9 +159,7 @@ function WorkbenchCompositionProviders({
   const protectedReadsEnabled = isWorkbenchProtectedAccessReady(
     workbenchConnection,
   );
-  const configSnapshotEditor = useConfigSnapshotEditorState({
-    protectedReadsEnabled,
-  });
+  const configSnapshotEditor = useConfigSnapshotEditorSessionState();
   const { targetContexts, graph, history, graphMonitor, clearForConnectionChange } =
     useWorkbenchState({
     activeWorkspace,

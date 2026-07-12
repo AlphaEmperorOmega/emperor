@@ -6,13 +6,7 @@ import { Input } from "@/components/ui/input";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SelectOnlyDropdown } from "@/features/workbench/components/screen/select-only-dropdown";
 import { HoverTooltip } from "@/features/workbench/components/shared/hover-tooltip";
-import { type ConfigField } from "@/lib/api";
-import {
-  type OverrideValues,
-  configFieldSelectOptions,
-  fieldValue,
-  hasOverride,
-} from "@/lib/config";
+import { type RuntimeDefaultsFieldPresentation } from "@/features/workbench/state/full-config/runtime-defaults-schema-presentation";
 import { cn } from "@/lib/utils";
 
 type ConfigFieldControlDensity = "comfortable" | "compact";
@@ -108,26 +102,23 @@ function BooleanSegmentedControl({
 }
 
 function ConfigFieldLabelContent({
-  field,
-  displayLabel,
+  presentation,
   labelTextId,
-  isModified,
-  isLocked,
   isControlDisabled,
   disabledReason,
   statusBadgeClassName,
 }: {
-  field: ConfigField;
-  displayLabel?: string;
+  presentation: RuntimeDefaultsFieldPresentation;
   labelTextId?: string;
-  isModified: boolean;
-  isLocked: boolean;
   isControlDisabled: boolean;
   disabledReason?: string;
   statusBadgeClassName?: string;
 }) {
+  const field = presentation.schema;
+  const isModified = presentation.isModified;
+  const isLocked = presentation.isPresetOwned;
   const description = field.description?.trim() ?? "";
-  const label = displayLabel ?? field.label;
+  const label = presentation.label;
 
   return (
     <>
@@ -188,8 +179,7 @@ function ConfigFieldLabelContent({
 }
 
 export function ConfigFieldValueEditor({
-  field,
-  overrides,
+  presentation,
   onChange,
   onReset,
   controlId,
@@ -201,8 +191,7 @@ export function ConfigFieldValueEditor({
   controlLabelledBy,
   className,
 }: {
-  field: ConfigField;
-  overrides: OverrideValues;
+  presentation: RuntimeDefaultsFieldPresentation;
   onChange: (key: string, value: string) => void;
   onReset: (key: string) => void;
   controlId: string;
@@ -214,10 +203,11 @@ export function ConfigFieldValueEditor({
   disabled?: boolean;
   className?: string;
 }) {
-  const value = fieldValue(field, overrides);
+  const field = presentation.schema;
+  const value = presentation.value;
   const choices = field.choices;
-  const isModified = hasOverride(overrides, field.key);
-  const isLocked = field.locked;
+  const isModified = presentation.isModified;
+  const isLocked = presentation.isPresetOwned;
   const isControlDisabled = isLocked || disabled;
   const isCompact = density === "compact";
   const showResetButton = isModified;
@@ -248,7 +238,7 @@ export function ConfigFieldValueEditor({
       {field.type === "bool" ? (
         <BooleanSegmentedControl
           id={controlId}
-          label={controlLabel ?? field.label}
+          label={controlLabel ?? presentation.label}
           labelledBy={controlLabelledBy}
           value={value}
           disabled={isControlDisabled}
@@ -259,9 +249,9 @@ export function ConfigFieldValueEditor({
       ) : choices.length > 0 ? (
         <SelectOnlyDropdown
           id={controlId}
-          label={controlLabel ?? field.label}
+          label={controlLabel ?? presentation.label}
           value={value}
-          options={configFieldSelectOptions(field, overrides)}
+          options={presentation.selectOptions}
           disabled={isControlDisabled}
           onChange={(nextValue) => onChange(field.key, nextValue)}
           placeholder="None"
@@ -315,9 +305,7 @@ export function ConfigFieldValueEditor({
 }
 
 export function ConfigFieldControl({
-  field,
-  displayLabel,
-  overrides,
+  presentation,
   onChange,
   onReset,
   density = "comfortable",
@@ -325,9 +313,7 @@ export function ConfigFieldControl({
   disabled = false,
   disabledReason,
 }: {
-  field: ConfigField;
-  displayLabel?: string;
-  overrides: OverrideValues;
+  presentation: RuntimeDefaultsFieldPresentation;
   onChange: (key: string, value: string) => void;
   onReset: (key: string) => void;
   density?: ConfigFieldControlDensity;
@@ -335,14 +321,14 @@ export function ConfigFieldControl({
   disabled?: boolean;
   disabledReason?: string;
 }) {
+  const field = presentation.schema;
   const id = `${idPrefix}-${field.key}`;
   const labelTextId = `${id}-label-text`;
-  const isModified = hasOverride(overrides, field.key);
-  const isLocked = field.locked === true;
+  const isLocked = presentation.isPresetOwned;
   const isControlDisabled = disabled && !isLocked;
   const isCompact = density === "compact";
   const statusBadgeClassName = isCompact ? "px-1 py-0.5 text-xs" : undefined;
-  const label = displayLabel ?? field.label;
+  const label = presentation.label;
 
   return (
     <div
@@ -357,19 +343,15 @@ export function ConfigFieldControl({
     >
       <div className={cn("grid", isCompact ? "gap-1" : "gap-1.5")}>
         <ConfigFieldLabelContent
-          field={field}
-          displayLabel={label}
+          presentation={presentation}
           labelTextId={labelTextId}
-          isModified={isModified}
-          isLocked={isLocked}
           isControlDisabled={isControlDisabled}
           disabledReason={disabledReason}
           statusBadgeClassName={statusBadgeClassName}
         />
       </div>
       <ConfigFieldValueEditor
-        field={field}
-        overrides={overrides}
+        presentation={presentation}
         onChange={onChange}
         onReset={onReset}
         controlId={id}

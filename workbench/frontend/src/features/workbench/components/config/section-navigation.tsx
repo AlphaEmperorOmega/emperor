@@ -1,14 +1,6 @@
 import { ChevronDown, ListTree } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import {
-  type ConfigSection,
-  type OverrideValues,
-  configSectionFields,
-  displayConfigSectionTitle,
-  modifiedCount,
-  presetOwnedCount,
-  sectionElementId,
-} from "@/lib/config";
+import { type RuntimeDefaultsSectionPresentation } from "@/features/workbench/state/full-config/runtime-defaults-schema-presentation";
 import { cn } from "@/lib/utils";
 import { ConfigMetricBadge } from "@/features/workbench/components/config/config-metric-badge";
 import { SectionHeading } from "@/components/ui/section-heading";
@@ -16,29 +8,23 @@ import { surfacePanelClassName } from "@/components/ui/surface-panel";
 
 export function SectionNavigation({
   sections,
-  overrides,
   openSectionTitles,
-  disabledSectionTitles,
   areAllSectionsOpen,
   emptyMessage,
   variant = "sidebar",
   ariaLabel = "Full config sections",
   title = "Sections",
-  sectionIdPrefix,
   onJumpToSection,
   onToggleSection,
   onToggleAllSections,
 }: {
-  sections: ConfigSection[];
-  overrides: OverrideValues;
+  sections: RuntimeDefaultsSectionPresentation[];
   openSectionTitles: Set<string>;
-  disabledSectionTitles?: Set<string>;
   areAllSectionsOpen: boolean;
   emptyMessage?: string;
   variant?: "sidebar" | "inline";
   ariaLabel?: string;
   title?: string;
-  sectionIdPrefix?: string;
   onJumpToSection: (title: string) => void;
   onToggleSection: (title: string) => void;
   onToggleAllSections: () => void;
@@ -87,14 +73,17 @@ export function SectionNavigation({
             {emptyMessage ?? "No sections"}
           </div>
         )}
-        {sections.map((section, index) => {
-          const fields = configSectionFields(section);
-          const sectionModifiedCount = modifiedCount(fields, overrides);
-          const sectionPresetOwnedCount = presetOwnedCount(fields);
-          const displayTitle = displayConfigSectionTitle(section.title);
+        {sections.map((section) => {
+          const {
+            fieldCount,
+            overrideCount: sectionModifiedCount,
+            presetCount: sectionPresetOwnedCount,
+            state,
+          } = section.treeMetrics;
+          const displayTitle = section.displayTitle;
           const hasOverride = sectionModifiedCount > 0;
           const hasPreset = sectionPresetOwnedCount > 0;
-          const hasBoth = hasOverride && hasPreset;
+          const hasBoth = state === "override-and-preset";
           const rowStateClass = hasBoth
             ? "border-amber/35 bg-[linear-gradient(90deg,rgba(255,209,102,0.075),rgba(167,139,250,0.095))] ring-1 ring-violet/20 hover:bg-[linear-gradient(90deg,rgba(255,209,102,0.11),rgba(167,139,250,0.13))]"
             : hasOverride
@@ -102,9 +91,9 @@ export function SectionNavigation({
               : hasPreset
                 ? "border-amber/30 bg-amber/[0.055] hover:bg-amber/[0.09]"
                 : "";
-          const sectionId = sectionElementId(index, section.title, sectionIdPrefix);
+          const sectionId = section.id;
           const panelId = `${sectionId}-fields`;
-          const isSectionDisabled = disabledSectionTitles?.has(section.title) ?? false;
+          const isSectionDisabled = section.isDisabled;
           const isSectionOpen =
             !isSectionDisabled && openSectionTitles.has(section.title);
           return (
@@ -132,7 +121,7 @@ export function SectionNavigation({
                 </button>
                 <span className="flex shrink-0 items-center gap-1 px-2 transition-opacity group-hover/section-row:pointer-events-none group-hover/section-row:opacity-0 group-focus-within/section-row:pointer-events-none group-focus-within/section-row:opacity-0">
                   <ConfigMetricBadge
-                    count={fields.length}
+                    count={fieldCount}
                     kind="fields"
                     focusable={false}
                     tooltipPosition="bottom"

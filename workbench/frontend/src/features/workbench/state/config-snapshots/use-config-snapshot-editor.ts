@@ -20,7 +20,6 @@ import {
 } from "@/features/workbench/state/config-snapshots/use-config-snapshot-records";
 import {
   type ConfigSnapshotEditorSessionState,
-  useConfigSnapshotEditorSessionState,
 } from "@/features/workbench/state/config-snapshots/use-config-snapshot-editor-session";
 
 function createSnapshotId() {
@@ -33,14 +32,12 @@ function createSnapshotId() {
  * Inspection target merely to materialize editor state.
  */
 export function useConfigSnapshotEditorState({
-  sessionState: providedSessionState,
+  sessionState,
   protectedReadsEnabled = true,
 }: {
-  sessionState?: ConfigSnapshotEditorSessionState;
+  sessionState: ConfigSnapshotEditorSessionState;
   protectedReadsEnabled?: boolean;
 }) {
-  const fallbackSessionState = useConfigSnapshotEditorSessionState();
-  const sessionState = providedSessionState ?? fallbackSessionState;
   const { session, actions: sessionActions } = sessionState;
   const [draft, setDraft] = useState<OverrideValues>(
     () => ({ ...(session?.overrides ?? {}) }),

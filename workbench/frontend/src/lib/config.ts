@@ -752,7 +752,7 @@ export function overrideValueForConfigField(
   return field.nullable && normalizedValue === "null" ? "" : normalizedValue;
 }
 
-export function isDefaultConfigFieldValue(
+function isDefaultConfigFieldValue(
   field: ConfigField,
   value: ConfigValue | string,
 ) {
