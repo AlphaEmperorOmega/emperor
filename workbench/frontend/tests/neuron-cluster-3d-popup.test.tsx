@@ -1,19 +1,22 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
-import {
-  installFetchMock,
-  locationInspectResponse,
-  neuronModelsResponse,
-  renderWorkbench,
-  resetWorkbenchAppTestState,
-} from "./workbench-app/support";
+import { graphHarness } from "./workbench-app/support";
+
+const {
+  setup: setupGraphScenario,
+  app: { render: renderWorkbench, reset: resetWorkbenchAppTestState },
+  fixtures: {
+    locations: locationInspectResponse,
+    neuronModels: neuronModelsResponse,
+  },
+} = graphHarness;
 
 describe("NeuronCluster 3D popup", () => {
   beforeEach(resetWorkbenchAppTestState);
 
   it("shows the 3D button when the neuron model type is selected and opens DialogShell", async () => {
-    installFetchMock({
+    setupGraphScenario({
       inspectResponse: locationInspectResponse,
       modelsResponse: neuronModelsResponse,
     });
@@ -35,7 +38,7 @@ describe("NeuronCluster 3D popup", () => {
   });
 
   it("closes from the close button and Escape", async () => {
-    installFetchMock({
+    setupGraphScenario({
       inspectResponse: locationInspectResponse,
       modelsResponse: neuronModelsResponse,
     });
@@ -71,7 +74,7 @@ describe("NeuronCluster 3D popup", () => {
   });
 
   it("passes slice state to the scene and reveals mapped coordinates in full mode", async () => {
-    installFetchMock({
+    setupGraphScenario({
       inspectResponse: locationInspectResponse,
       modelsResponse: neuronModelsResponse,
     });

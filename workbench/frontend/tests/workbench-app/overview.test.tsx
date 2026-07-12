@@ -1,25 +1,34 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  IMPLEMENTED_FEATURES,
-  capabilitiesResponse,
-  commandField,
-  expandedTrainingDetails,
-  installFetchMock,
-  inspectResponse,
-  jsonResponse,
-  logRunsResponse,
-  openFullConfig,
-  openTrainingMultiSelect,
-  renderWorkbench,
-  resetWorkbenchAppTestState,
-  schemaResponse,
-  selectTargetOption,
-  setTrainingMultiSelectOption,
-  typeConfigFieldValue,
-  waitForTargetValue,
-} from "./support";
+import { overviewHarness } from "./support";
+
+const {
+  setup: setupOverviewScenario,
+  app: { render: renderWorkbench, reset: resetWorkbenchAppTestState },
+  fixtures: {
+    capabilities: capabilitiesResponse,
+    implementedFeatures: IMPLEMENTED_FEATURES,
+    inspection: inspectResponse,
+    logRuns: logRunsResponse,
+    schema: schemaResponse,
+  },
+  config: {
+    commandField,
+    open: openFullConfig,
+    typeFieldValue: typeConfigFieldValue,
+  },
+  network: { jsonResponse },
+  target: {
+    selectOption: selectTargetOption,
+    waitForValue: waitForTargetValue,
+  },
+  training: {
+    expandedDetails: expandedTrainingDetails,
+    openMultiSelect: openTrainingMultiSelect,
+    setMultiSelectOption: setTrainingMultiSelectOption,
+  },
+} = overviewHarness;
 import {
   readPersistedTargetSelection,
 } from "@/features/workbench/state/target/target-selection-storage";
@@ -37,7 +46,7 @@ describe("WorkbenchApp Overview", () => {
   beforeEach(resetWorkbenchAppTestState);
 
   it("keeps Model and Full Config free of unrelated workspace requests", async () => {
-    const { fetchMock } = installFetchMock();
+    const { fetchMock } = setupOverviewScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -71,7 +80,7 @@ describe("WorkbenchApp Overview", () => {
   });
 
   it("renders model and preset selectors from API data", async () => {
-    installFetchMock();
+    setupOverviewScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -122,7 +131,7 @@ describe("WorkbenchApp Overview", () => {
   });
 
   it("shows config status pills while keeping graph count pills out of the header", async () => {
-    installFetchMock();
+    setupOverviewScenario();
     renderWorkbench();
 
     const header = document.querySelector("header");
@@ -141,7 +150,7 @@ describe("WorkbenchApp Overview", () => {
   });
 
   it("renders workspace navigation in the header without duplicating it in the sidebar", async () => {
-    installFetchMock();
+    setupOverviewScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -185,7 +194,7 @@ describe("WorkbenchApp Overview", () => {
       configurable: true,
       value: { writeText },
     });
-    installFetchMock();
+    setupOverviewScenario();
     renderWorkbench();
 
     const apiButton = screen.getByRole("button", {
@@ -237,7 +246,7 @@ describe("WorkbenchApp Overview", () => {
 
   it("retries a transient capability failure from API Connection", async () => {
     const user = userEvent.setup();
-    const { fetchMock } = installFetchMock();
+    const { fetchMock } = setupOverviewScenario();
     const defaultFetch = fetchMock.getMockImplementation();
     let capabilityRequestCount = 0;
     fetchMock.mockImplementation((input, init) => {
@@ -273,7 +282,7 @@ describe("WorkbenchApp Overview", () => {
   it("completes hosted bearer login, protected access, replacement, and logout", async () => {
     const user = userEvent.setup();
     let acceptedToken = "first-hosted-token";
-    const { fetchMock, logImportRequests } = installFetchMock({
+    const { fetchMock, logImportRequests } = setupOverviewScenario({
       capabilitiesResponse: {
         ...capabilitiesResponse,
         authMode: "bearer",
@@ -424,7 +433,7 @@ describe("WorkbenchApp Overview", () => {
   });
 
   it("renders flat header action buttons in order in the top nav", async () => {
-    installFetchMock();
+    setupOverviewScenario();
     renderWorkbench();
 
     const header = document.querySelector("header");
@@ -476,7 +485,7 @@ describe("WorkbenchApp Overview", () => {
 
   it("opens the native file picker from the visible choose button", async () => {
     const user = userEvent.setup();
-    installFetchMock({
+    setupOverviewScenario({
       capabilitiesResponse: {
         ...capabilitiesResponse,
         uploadsEnabled: true,
@@ -505,7 +514,7 @@ describe("WorkbenchApp Overview", () => {
 
   it("allows oversized zip selection when upload size is unlimited", async () => {
     const user = userEvent.setup();
-    installFetchMock({
+    setupOverviewScenario({
       capabilitiesResponse: {
         ...capabilitiesResponse,
         uploadsEnabled: true,
@@ -533,7 +542,7 @@ describe("WorkbenchApp Overview", () => {
 
   it("blocks oversized zip selection when upload size is capped", async () => {
     const user = userEvent.setup();
-    installFetchMock({
+    setupOverviewScenario({
       capabilitiesResponse: {
         ...capabilitiesResponse,
         uploadsEnabled: true,
@@ -565,7 +574,7 @@ describe("WorkbenchApp Overview", () => {
       WORKBENCH_API_BASE_URL_STORAGE_KEY,
       "https://api.example.test/workbench",
     );
-    const { fetchMock, logImportRequests } = installFetchMock({
+    const { fetchMock, logImportRequests } = setupOverviewScenario({
       capabilitiesResponse: {
         ...capabilitiesResponse,
         uploadsEnabled: true,
@@ -624,7 +633,7 @@ describe("WorkbenchApp Overview", () => {
       skippedFileCount: 0,
       destinationRoot: "/workspace/logs",
     };
-    installFetchMock({
+    setupOverviewScenario({
       capabilitiesResponse: {
         ...capabilitiesResponse,
         uploadsEnabled: true,
@@ -657,7 +666,7 @@ describe("WorkbenchApp Overview", () => {
 
   it("shows an import error from the backend", async () => {
     const user = userEvent.setup();
-    installFetchMock({
+    setupOverviewScenario({
       capabilitiesResponse: {
         ...capabilitiesResponse,
         uploadsEnabled: true,
@@ -684,7 +693,7 @@ describe("WorkbenchApp Overview", () => {
 
   it("shows disabled state when the backend does not expose upload capability", async () => {
     const user = userEvent.setup();
-    installFetchMock({
+    setupOverviewScenario({
       capabilitiesResponse: {
         ...capabilitiesResponse,
         uploadsEnabled: false,
@@ -705,7 +714,7 @@ describe("WorkbenchApp Overview", () => {
 
   it("uses and resets a runtime API URL from the existing connection dialog", async () => {
     const user = userEvent.setup();
-    const { fetchMock } = installFetchMock();
+    const { fetchMock } = setupOverviewScenario();
     const defaultFetch = fetchMock.getMockImplementation();
     const nextCapabilities = deferred<Response>();
     fetchMock.mockImplementation((input, init) => {
@@ -808,7 +817,7 @@ describe("WorkbenchApp Overview", () => {
 
   it("shows an inline validation error for invalid runtime API URLs", async () => {
     const user = userEvent.setup();
-    const { fetchMock } = installFetchMock();
+    const { fetchMock } = setupOverviewScenario();
     renderWorkbench();
 
     await user.click(screen.getByRole("button", { name: /api connection settings/i }));
@@ -832,7 +841,7 @@ describe("WorkbenchApp Overview", () => {
 
   it("restores the authoritative API URL after same-identity Use and Reset", async () => {
     const user = userEvent.setup();
-    const { fetchMock } = installFetchMock();
+    const { fetchMock } = setupOverviewScenario();
     renderWorkbench();
 
     await user.click(screen.getByRole("button", { name: /api connection settings/i }));
@@ -855,7 +864,7 @@ describe("WorkbenchApp Overview", () => {
 
   it("refetches active API status queries after switching backends", async () => {
     const user = userEvent.setup();
-    const { fetchMock } = installFetchMock();
+    const { fetchMock } = setupOverviewScenario();
     const defaultFetch = fetchMock.getMockImplementation();
     fetchMock.mockImplementation((input, init) => {
       const url = String(input);
@@ -903,7 +912,7 @@ describe("WorkbenchApp Overview", () => {
   });
 
   it("shows preset-owned field count in the top header", async () => {
-    installFetchMock({
+    setupOverviewScenario({
       schemaResponse: {
         ...schemaResponse,
         fields: schemaResponse.fields.map((field) =>
@@ -938,7 +947,7 @@ describe("WorkbenchApp Overview", () => {
   });
 
   it("supports keyboard selection and Escape on target dropdowns", async () => {
-    installFetchMock();
+    setupOverviewScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -967,7 +976,7 @@ describe("WorkbenchApp Overview", () => {
   });
 
   it("requests the initial preview for the first selected preset", async () => {
-    const { inspectBodies } = installFetchMock();
+    const { inspectBodies } = setupOverviewScenario();
     renderWorkbench();
 
     expect(await screen.findByText("main_model.0")).toBeInTheDocument();
@@ -982,7 +991,7 @@ describe("WorkbenchApp Overview", () => {
   });
 
   it("defaults the target panel to Presets and renders all target mode tabs", async () => {
-    installFetchMock();
+    setupOverviewScenario();
     renderWorkbench();
 
     await waitForTargetValue("preset", "baseline");
@@ -1007,7 +1016,7 @@ describe("WorkbenchApp Overview", () => {
   });
 
   it("keeps performance-only experiment runs selectable without graph activity", async () => {
-    installFetchMock({
+    setupOverviewScenario({
       logRunsResponse: {
         runs: logRunsResponse.runs.map((run) => ({
           ...run,
@@ -1049,7 +1058,7 @@ describe("WorkbenchApp Overview", () => {
   });
 
   it("shows only current-model snapshots in the target snapshot selector", async () => {
-    installFetchMock({
+    setupOverviewScenario({
       configSnapshotsResponse: {
         modelType: "linears",
         model: "linear",
@@ -1105,7 +1114,7 @@ describe("WorkbenchApp Overview", () => {
 
   it("selects a snapshot target with its preset and saved overrides", async () => {
     let inspectBodies: unknown[] = [];
-    ({ inspectBodies } = installFetchMock({
+    ({ inspectBodies } = setupOverviewScenario({
       configSnapshotsResponse: {
         modelType: "linears",
         model: "linear",
@@ -1181,7 +1190,7 @@ describe("WorkbenchApp Overview", () => {
   });
 
   it("restores the selected model and snapshot target after a refresh", async () => {
-    const { inspectBodies } = installFetchMock({
+    const { inspectBodies } = setupOverviewScenario({
       configSnapshotsResponse: {
         modelType: "linears",
         model: "linear",
@@ -1258,7 +1267,7 @@ describe("WorkbenchApp Overview", () => {
   });
 
   it("browses Presets without replacing a snapshot until a preset is selected", async () => {
-    const { inspectBodies } = installFetchMock({
+    const { inspectBodies } = setupOverviewScenario({
       configSnapshotsResponse: {
         modelType: "linears",
         model: "linear",
@@ -1315,7 +1324,7 @@ describe("WorkbenchApp Overview", () => {
   });
 
   it("refreshes snapshot options when the selected model changes", async () => {
-    installFetchMock({
+    setupOverviewScenario({
       configSnapshotsResponse: {
         modelType: "linears",
         model: "linear",
@@ -1377,7 +1386,7 @@ describe("WorkbenchApp Overview", () => {
   });
 
   it("opens a target preset training command with a local all-monitors toggle", async () => {
-    installFetchMock();
+    setupOverviewScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -1466,7 +1475,7 @@ describe("WorkbenchApp Overview", () => {
   });
 
   it("opens a snapshot training command with the snapshot preset and overrides", async () => {
-    installFetchMock({
+    setupOverviewScenario({
       configSnapshotsResponse: {
         modelType: "linears",
         model: "linear",
@@ -1509,7 +1518,7 @@ describe("WorkbenchApp Overview", () => {
   });
 
   it("disables the target training command button without a selected dataset", async () => {
-    installFetchMock({
+    setupOverviewScenario({
       datasetsResponse: {
         modelType: "linears",
         model: "linear",
@@ -1532,7 +1541,7 @@ describe("WorkbenchApp Overview", () => {
   });
 
   it("opens and closes the implemented features dialog without API side effects", async () => {
-    const { inspectBodies, trainingBodies } = installFetchMock();
+    const { inspectBodies, trainingBodies } = setupOverviewScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -1565,7 +1574,7 @@ describe("WorkbenchApp Overview", () => {
   });
 
   it("keeps training dataset selection out of model preview requests", async () => {
-    const { inspectBodies } = installFetchMock();
+    const { inspectBodies } = setupOverviewScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -1594,7 +1603,7 @@ describe("WorkbenchApp Overview", () => {
   });
 
   it("keeps dataset selection out of the main sidebar", async () => {
-    installFetchMock();
+    setupOverviewScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -1618,7 +1627,7 @@ describe("WorkbenchApp Overview", () => {
   });
 
   it("renders experiment runs as a Target mode and keeps the active run selected", async () => {
-    const { inspectBodies } = installFetchMock({
+    const { inspectBodies } = setupOverviewScenario({
       logRunsResponse: {
         runs: [
           logRunsResponse.runs[1],
@@ -1710,7 +1719,7 @@ describe("WorkbenchApp Overview", () => {
   });
 
   it("refreshes experiment run options when the selected model changes", async () => {
-    installFetchMock({
+    setupOverviewScenario({
       logRunsResponse: {
         runs: [
           {
@@ -1791,7 +1800,7 @@ describe("WorkbenchApp Overview", () => {
   });
 
   it("selecting a historical run syncs preset and dataset, clears overrides, and refreshes preview", async () => {
-    const { inspectBodies } = installFetchMock();
+    const { inspectBodies } = setupOverviewScenario();
     renderWorkbench();
     const user = userEvent.setup();
 

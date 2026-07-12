@@ -5,80 +5,11 @@ import { expect, vi } from "vitest";
 import { WorkbenchApp } from "@/features/workbench/components/workbench-app";
 import { type Capabilities } from "@/lib/api";
 import { loadWorkbenchConnectionRuntime } from "@/lib/api/_connection-runtime";
-import type { GraphParameterActivity } from "@/lib/graph";
-export { IMPLEMENTED_FEATURES } from "@/lib/feature-catalog";
+import { IMPLEMENTED_FEATURES } from "@/lib/feature-catalog";
 
 type MockModelIdentity = { modelType: string; model: string };
 
-export type MockNodeData = {
-  nodeId: string;
-  label: string;
-  typeName: string;
-  description?: string | null;
-  subtitle: string;
-  path: string;
-  graphRole: "architecture" | "internal" | "runtime";
-  parameterCount: number;
-  parameterSizeBytes: number;
-  details: Record<string, unknown>;
-  config: {
-    typeName: string;
-    fields: Array<{ key: string; value: unknown; description?: string | null }>;
-  } | null;
-  childCount: number;
-  childSummaries: Array<{
-    label: string;
-    nestedLabel?: string;
-    dims?: string;
-    count?: number;
-    kind: "child" | "mechanism" | "overflow";
-    title?: string;
-  }>;
-  clusterDiagram?: {
-    instantiated: number;
-    capacityTotal: number;
-    planes: Array<{
-      z: number;
-      cells: Array<{ filled: boolean; title: string }>;
-    }>;
-  };
-  stackDiagram?: {
-    cells: Array<{
-      label: string;
-      title: string;
-      dims?: string;
-      kind: "layer" | "overflow" | "total";
-    }>;
-    dims?: string;
-    totalLayers: number;
-    hasOverflow: boolean;
-  };
-  graphDetailMode: "simple" | "basic" | "full";
-  height: number;
-  isRootNode: boolean;
-  isExpanded: boolean;
-  canToggleExpansion: boolean;
-  canOpenMonitor?: boolean;
-  parameterActivity?: GraphParameterActivity;
-  isDetailsExpanded: boolean;
-  onActivateNode: () => void;
-  onToggleExpansion: () => void;
-  onOpenMonitor?: () => void;
-  onToggleDetails: () => void;
-};
-
-type MockMinimapNodeData = {
-  nodeId: string;
-  path: string;
-  activity?: GraphParameterActivity;
-  isParameterBearing: boolean;
-  canToggleExpansion: boolean;
-  isExpanded: boolean;
-  onToggleExpansion: () => void;
-  onOpenMonitor?: () => void;
-};
-
-export type MockConfigSnapshot = {
+type MockConfigSnapshot = {
   id: string;
   modelType: string;
   model: string;
@@ -89,558 +20,9 @@ export type MockConfigSnapshot = {
   updatedAt: string;
 };
 
-export function detailText(value: unknown) {
-  if (value === null || value === undefined) {
-    return "";
-  }
-  if (typeof value === "object") {
-    return JSON.stringify(value);
-  }
-  return String(value);
-}
+vi.mock("@xyflow/react", async () => import("./react-flow-test-adapter"));
 
-export function configDetailText(value: unknown) {
-  if (value === null || value === undefined) {
-    return "None";
-  }
-  return detailText(value);
-}
-
-export function nodeDetailRows(
-  details: Record<string, unknown>,
-  config: MockNodeData["config"],
-) {
-  if (config) {
-    return config.fields.map((field) => ({
-      key: field.key,
-      value: field.value,
-      text: configDetailText(field.value),
-    }));
-  }
-
-  const previewOnlyKeys = new Set([
-    "weightShape",
-    "biasShape",
-    "dims",
-    "inputDim",
-    "inputShape",
-    "hiddenDim",
-    "outputDim",
-    "outputShape",
-    "shapeTransition",
-    "cluster",
-    "terminalReach",
-  ]);
-  return Object.entries(details)
-    .filter(([key]) => !previewOnlyKeys.has(key))
-    .map(([key, value]) => ({ key, value, text: detailText(value) }));
-}
-
-export function formatExactCount(count: number) {
-  return new Intl.NumberFormat("en-US").format(count);
-}
-
-export function formatCompactCount(count: number) {
-  const absoluteCount = Math.abs(count);
-  if (absoluteCount < 1000) {
-    return formatExactCount(count);
-  }
-  const units = [
-    { suffix: "B", value: 1_000_000_000 },
-    { suffix: "M", value: 1_000_000 },
-    { suffix: "K", value: 1_000 },
-  ];
-  const unit = units.find((candidate) => absoluteCount >= candidate.value);
-  if (!unit) {
-    return formatExactCount(count);
-  }
-  const value = count / unit.value;
-  const formatted = value >= 100 ? value.toFixed(0) : value.toFixed(1);
-  return `${formatted.replace(/\.0$/, "")}${unit.suffix}`;
-}
-
-export function formatModelSize(bytes: number | null | undefined) {
-  if (typeof bytes !== "number" || !Number.isFinite(bytes) || bytes <= 0) {
-    return undefined;
-  }
-  const megabytes = bytes / (1024 * 1024);
-  if (megabytes < 0.01) {
-    return "<0.01 MB";
-  }
-  if (megabytes < 10) {
-    return `${megabytes.toFixed(2).replace(/\.?0+$/, "")} MB`;
-  }
-  if (megabytes < 100) {
-    return `${megabytes.toFixed(1).replace(/\.0$/, "")} MB`;
-  }
-  return `${formatExactCount(Math.round(megabytes))} MB`;
-}
-
-export function simpleGraphParamText(parameterCount: number) {
-  return parameterCount > 0 ? `${formatCompactCount(parameterCount)} params` : undefined;
-}
-
-export function dimensionValueText(value: unknown) {
-  if (typeof value === "string") {
-    const text = value.trim();
-    if (text.length === 0) {
-      return undefined;
-    }
-    const numericValue = Number(text);
-    return Number.isFinite(numericValue) && numericValue > 0 ? text : undefined;
-  }
-  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
-    return String(value);
-  }
-  return undefined;
-}
-
-export function dimRange(inputDim: string | undefined, outputDim: string | undefined) {
-  return inputDim && outputDim ? `${inputDim} -> ${outputDim}` : undefined;
-}
-
-export function dimsFromText(value: unknown) {
-  if (typeof value !== "string") {
-    return undefined;
-  }
-
-  const parts = value.trim().split(/\s*->\s*/);
-  if (parts.length !== 2) {
-    return undefined;
-  }
-
-  return dimRange(dimensionValueText(parts[0]), dimensionValueText(parts[1]));
-}
-
-export function configFieldValue(config: MockNodeData["config"], key: string) {
-  return config?.fields.find((field) => field.key === key)?.value;
-}
-
-export function nodeDimsText(details: Record<string, unknown>, config: MockNodeData["config"]) {
-  const dims = dimsFromText(details.dims);
-  if (dims) {
-    return dims;
-  }
-
-  return (
-    dimRange(dimensionValueText(details.inputDim), dimensionValueText(details.outputDim)) ??
-    dimRange(
-      dimensionValueText(configFieldValue(config, "input_dim")),
-      dimensionValueText(configFieldValue(config, "output_dim")),
-    )
-  );
-}
-
-export function parameterShapeRows(details: Record<string, unknown>) {
-  return [
-    ["weightShape", "W"],
-    ["biasShape", "b"],
-  ].flatMap(([key, label]) => {
-    const value = details[key];
-    return typeof value === "string" && value.length > 0
-      ? [{ key, label, shape: value }]
-      : [];
-  });
-}
-
-function MockGraphParameterIndicators({
-  activity,
-}: {
-  activity?: GraphParameterActivity;
-}) {
-  if (!activity) {
-    return null;
-  }
-
-  return (
-    <span data-testid="graph-parameter-indicators">
-      <span role="img" aria-label={`Weights parameter activity: ${activity.weights.status}`}>
-        W
-      </span>
-      {activity.bias && (
-        <span role="img" aria-label={`Bias parameter activity: ${activity.bias.status}`}>
-          b
-        </span>
-      )}
-    </span>
-  );
-}
-
-vi.mock("@xyflow/react", () => ({
-  ReactFlowProvider: ({ children }: { children: React.ReactNode }) => (
-    <>{children}</>
-  ),
-  ReactFlow: ({
-    nodes,
-    edges,
-    onNodeClick,
-    nodesDraggable,
-    nodesConnectable,
-    elementsSelectable,
-    nodesFocusable,
-    nodeClickDistance,
-    onlyRenderVisibleElements,
-    onMoveStart,
-    onMoveEnd,
-    children,
-  }: {
-    nodes: Array<{
-      id: string;
-      type?: string;
-      position: { x: number; y: number };
-      style?: { height?: number };
-      data: MockNodeData | MockMinimapNodeData;
-    }>;
-    edges: Array<{ id: string; source: string; target: string }>;
-    onNodeClick?: (event: unknown, node: { id: string }) => void;
-    nodesDraggable?: boolean;
-    nodesConnectable?: boolean;
-    elementsSelectable?: boolean;
-    nodesFocusable?: boolean;
-    nodeClickDistance?: number;
-    onlyRenderVisibleElements?: boolean;
-    onMoveStart?: () => void;
-    onMoveEnd?: () => void;
-    children: React.ReactNode;
-  }) => {
-    expect(nodesDraggable).toBe(false);
-    expect(nodesConnectable).toBe(false);
-    expect(elementsSelectable).toBe(false);
-    expect(nodesFocusable).toBe(false);
-    expect(nodeClickDistance).toBe(4);
-
-    return (
-      <div
-        data-testid="flow"
-        data-only-render-visible-elements={
-          onlyRenderVisibleElements ? "true" : "false"
-        }
-        data-has-move-handlers={onMoveStart && onMoveEnd ? "true" : "false"}
-      >
-        {nodes.map((node) => (
-          <div
-            key={node.id}
-            data-testid={`node-${node.id}`}
-            data-x={node.position.x}
-            data-y={node.position.y}
-            data-height={
-              node.style?.height ??
-              (node.type === "parameterActivityMinimapNode"
-                ? undefined
-                : (node.data as MockNodeData).height)
-            }
-          >
-            {(() => {
-              if (node.type === "parameterActivityMinimapNode") {
-                const data = node.data as MockMinimapNodeData;
-
-                return (
-                  <div
-                    aria-label={
-                      data.isParameterBearing
-                        ? `Parameter activity for ${data.path}`
-                        : `Parameter activity branch ${data.path}`
-                    }
-                    data-testid={`parameter-activity-minimap-node-${data.nodeId}`}
-                  >
-                    {data.canToggleExpansion && (
-                      <button
-                        type="button"
-                        aria-label={`${data.isExpanded ? "Collapse" : "Expand"} ${data.path}`}
-                        aria-expanded={data.isExpanded}
-                        onClick={data.onToggleExpansion}
-                      >
-                        toggle
-                      </button>
-                    )}
-                    {data.activity && (
-                      <>
-                        <span
-                          aria-label={`Weights ${data.activity.weights.status}`}
-                          className={data.activity.weights.status}
-                        >
-                          W
-                        </span>
-                        {data.activity.bias && (
-                          <span
-                            aria-label={`Bias ${data.activity.bias.status}`}
-                            className={data.activity.bias.status}
-                          >
-                            b
-                          </span>
-                        )}
-                      </>
-                    )}
-                    {data.onOpenMonitor && (
-                      <button
-                        type="button"
-                        aria-label={`Open monitor charts for ${data.path}`}
-                        onClick={data.onOpenMonitor}
-                      >
-                        monitor
-                      </button>
-                    )}
-                  </div>
-                );
-              }
-
-              const data = node.data;
-
-              const moduleData = data as MockNodeData;
-              const isSimpleMode = moduleData.graphDetailMode === "simple";
-              const {
-                onOpenMonitor,
-                onToggleDetails,
-                onToggleExpansion,
-              } = moduleData;
-              const parameterShapes = parameterShapeRows(moduleData.details);
-              const detailRows = nodeDetailRows(moduleData.details, moduleData.config);
-              const simpleParamText = isSimpleMode
-                ? simpleGraphParamText(moduleData.parameterCount)
-                : undefined;
-              const modelSizeText = moduleData.isRootNode
-                ? formatModelSize(moduleData.parameterSizeBytes)
-                : undefined;
-              const simpleDimsText = isSimpleMode
-                ? nodeDimsText(moduleData.details, moduleData.config) ?? moduleData.stackDiagram?.dims
-                : undefined;
-              const detailToggleLabel = moduleData.config ? "Config options" : "Details";
-              const cardLabel = moduleData.canToggleExpansion
-                ? `Select and ${moduleData.isExpanded ? "collapse" : "expand"} ${moduleData.path}`
-                : `Select ${moduleData.path}`;
-
-              return (
-                <>
-                  {!isSimpleMode && parameterShapes.length > 0 && (
-                    <div data-testid={`parameter-shapes-${node.id}`}>
-                      {parameterShapes.map((entry) => (
-                        <div
-                          key={entry.key}
-                          aria-label={`${entry.label} shape ${entry.shape}`}
-                        >
-                          <span>{entry.label}</span>
-                          <span>{entry.shape}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    aria-label={cardLabel}
-                    aria-expanded={moduleData.canToggleExpansion ? moduleData.isExpanded : undefined}
-                    onClick={() => {
-                      moduleData.onActivateNode();
-                      onNodeClick?.({}, node);
-                    }}
-                  >
-                    <div>
-                      <span>{moduleData.label}</span>
-                      {isSimpleMode && simpleParamText && (
-                        <span title={`${formatExactCount(moduleData.parameterCount)} parameters`}>
-                          {simpleParamText}
-                        </span>
-                      )}
-                      {isSimpleMode && modelSizeText && (
-                        <span
-                          title={`${formatExactCount(
-                            moduleData.parameterSizeBytes,
-                          )} bytes of parameter tensors`}
-                        >
-                          {modelSizeText}
-                        </span>
-                      )}
-                      {isSimpleMode && simpleDimsText && (
-                        <span title={`input/output: ${simpleDimsText}`}>{simpleDimsText}</span>
-                      )}
-                      {!isSimpleMode && moduleData.childCount > 0 && (
-                        <span>
-                          {moduleData.childCount}{" "}
-                          {moduleData.childCount === 1 ? "child" : "children"}
-                        </span>
-                      )}
-                      {!isSimpleMode && moduleData.parameterCount > 0 && (
-                        <span title={`${formatExactCount(moduleData.parameterCount)} parameters`}>
-                          {formatCompactCount(moduleData.parameterCount)}
-                        </span>
-                      )}
-                      {!isSimpleMode && modelSizeText && (
-                        <span
-                          title={`${formatExactCount(
-                            moduleData.parameterSizeBytes,
-                          )} bytes of parameter tensors`}
-                        >
-                          {modelSizeText}
-                        </span>
-                      )}
-                      <MockGraphParameterIndicators
-                        activity={moduleData.parameterActivity}
-                      />
-                    </div>
-                    {!isSimpleMode && <span>{moduleData.subtitle}</span>}
-                    {!isSimpleMode && moduleData.clusterDiagram ? (
-                      <div data-testid={`cluster-diagram-${node.id}`}>
-                        <span>Cluster map</span>
-                        <span>
-                          {moduleData.clusterDiagram.instantiated} / {moduleData.clusterDiagram.capacityTotal}
-                        </span>
-                        {moduleData.clusterDiagram.planes.flatMap((plane) =>
-                          plane.cells.map((cell, index) => (
-                            <span
-                              key={`${plane.z}-${cell.title}-${index}`}
-                              aria-label={cell.title}
-                            >
-                              {cell.filled ? "filled" : "empty"}
-                            </span>
-                          )),
-                        )}
-                      </div>
-                    ) : !isSimpleMode && moduleData.stackDiagram ? (
-                      <div data-testid={`stack-diagram-${node.id}`}>
-                        {moduleData.stackDiagram.cells.map((cell, index) => (
-                          <div
-                            key={`${cell.kind}-${cell.label}-${index}`}
-                            aria-label={cell.title}
-                            title={cell.title}
-                          >
-                            <span>{cell.label}</span>
-                            {cell.dims && <span>{cell.dims}</span>}
-                          </div>
-                        ))}
-                      </div>
-                    ) : !isSimpleMode && (
-                      <div data-testid={`child-summaries-${node.id}`}>
-                        {moduleData.childSummaries.map((summary, index) => {
-                          const summaryLabel = summary.nestedLabel
-                            ? `${summary.label} ${summary.nestedLabel}`
-                            : summary.label;
-                          const summaryAccessibleLabel = summary.dims
-                            ? `${summaryLabel} ${summary.dims}`
-                            : summaryLabel;
-                          const summaryTitle = summary.title
-                            ? summary.dims
-                              ? `${summary.title} ${summary.dims}`
-                              : summary.title
-                            : summaryAccessibleLabel;
-
-                          return (
-                            <div
-                              key={`${summary.kind}-${summary.label}-${index}`}
-                              aria-label={summaryAccessibleLabel}
-                              title={summaryTitle}
-                            >
-                              {summary.kind === "overflow" ? (
-                                <span>{summary.label}</span>
-                              ) : summary.nestedLabel ? (
-                                <>
-                                  <span>{summary.label}</span>
-                                  <span aria-hidden>›</span>
-                                  <span>{summary.nestedLabel}</span>
-                                  {summary.dims && <span>{summary.dims}</span>}
-                                </>
-                              ) : (
-                                <>
-                                  <span>
-                                    {summary.count ? `${summary.label} x${summary.count}` : summary.label}
-                                  </span>
-                                  {summary.dims && <span>{summary.dims}</span>}
-                                </>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                    {moduleData.canToggleExpansion && (
-                      <button
-                        type="button"
-                        aria-label={`${moduleData.isExpanded ? "Collapse" : "Expand"} tree ${moduleData.path}`}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onToggleExpansion();
-                        }}
-                      >
-                        toggle
-                      </button>
-                    )}
-                    {!isSimpleMode && moduleData.canOpenMonitor && moduleData.onOpenMonitor && (
-                      <button
-                        type="button"
-                        aria-label={`Open monitor charts for ${moduleData.path}`}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onOpenMonitor?.();
-                        }}
-                      >
-                        monitor
-                      </button>
-                    )}
-                    {!isSimpleMode && detailRows.length > 0 && (
-                      <button
-                        type="button"
-                        aria-label={`${detailToggleLabel} for ${moduleData.path}`}
-                        aria-expanded={moduleData.isDetailsExpanded}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onToggleDetails();
-                        }}
-                      >
-                        {detailToggleLabel}
-                      </button>
-                    )}
-                    {!isSimpleMode && moduleData.isDetailsExpanded && detailRows.length > 0 && (
-                      <div>
-                        {detailRows.map((entry) => (
-                          <div key={entry.key}>
-                            <span>{entry.key}</span>
-                            <span>{entry.text}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </>
-              );
-            })()}
-          </div>
-        ))}
-        {edges.map((edge) => (
-          <div key={edge.id} data-testid={`edge-${edge.id}`}>
-            {edge.source} to {edge.target}
-          </div>
-        ))}
-        {children}
-      </div>
-    );
-  },
-  Background: () => null,
-  Controls: () => null,
-  Panel: ({
-    position,
-    className,
-    style,
-    children,
-  }: {
-    position?: string;
-    className?: string;
-    style?: React.CSSProperties;
-    children: React.ReactNode;
-  }) => (
-    <div
-      data-testid={`flow-panel-${position ?? "default"}`}
-      data-position={position}
-      className={className}
-      style={style}
-    >
-      {children}
-    </div>
-  ),
-  Handle: () => null,
-  MarkerType: { ArrowClosed: "arrowclosed" },
-  Position: { Left: "left", Right: "right" },
-}));
-
-export const modelsResponse = {
+const modelsResponse = {
   models: [
     { modelType: "linears", model: "linear" },
     { modelType: "bert", model: "linear" },
@@ -653,7 +35,7 @@ export const modelsResponse = {
     { modelType: "vit", model: "expert_linear_adaptive" },
   ],
 };
-export const neuronModelsResponse = {
+const neuronModelsResponse = {
   models: [
     { modelType: "neuron", model: "linear" },
     { modelType: "neuron", model: "linear_adaptive" },
@@ -661,7 +43,7 @@ export const neuronModelsResponse = {
     { modelType: "neuron", model: "expert_linear_adaptive" },
   ],
 };
-export const presetsResponse = {
+const presetsResponse = {
   modelType: "linears",
   model: "linear",
   presets: [
@@ -673,22 +55,22 @@ export const presetsResponse = {
     },
   ],
 };
-export const bertPresetsResponse = {
+const bertPresetsResponse = {
   modelType: "bert",
   model: "linear",
   presets: [{ name: "bert-baseline", label: "BERT_BASELINE", description: "Bert baseline" }],
 };
-export const vitPresetsResponse = {
+const vitPresetsResponse = {
   modelType: "vit",
   model: "linear",
   presets: [{ name: "baseline", label: "BASELINE", description: "ViT baseline" }],
 };
-export const neuronPresetsResponse = {
+const neuronPresetsResponse = {
   modelType: "neuron",
   model: "linear",
   presets: [{ name: "baseline", label: "BASELINE", description: "Baseline" }],
 };
-export const datasetsResponse = {
+const datasetsResponse = {
   modelType: "linears",
   model: "linear",
   defaultExperimentTask: "image-classification",
@@ -703,7 +85,7 @@ export const datasetsResponse = {
     },
   ],
 };
-export const bertDatasetsResponse = {
+const bertDatasetsResponse = {
   modelType: "bert",
   model: "linear",
   defaultExperimentTask: "bert-pretraining",
@@ -717,7 +99,7 @@ export const bertDatasetsResponse = {
     },
   ],
 };
-export const vitDatasetsResponse = {
+const vitDatasetsResponse = {
   modelType: "vit",
   model: "linear",
   defaultExperimentTask: "image-classification",
@@ -731,7 +113,7 @@ export const vitDatasetsResponse = {
     },
   ],
 };
-export const neuronDatasetsResponse = {
+const neuronDatasetsResponse = {
   modelType: "neuron",
   model: "linear",
   defaultExperimentTask: "image-classification",
@@ -745,7 +127,7 @@ export const neuronDatasetsResponse = {
     },
   ],
 };
-export const monitorsResponse = {
+const monitorsResponse = {
   modelType: "linears",
   model: "linear",
   monitors: [
@@ -765,7 +147,7 @@ export const monitorsResponse = {
     },
   ],
 };
-export const neuronMonitorsResponse = {
+const neuronMonitorsResponse = {
   modelType: "neuron",
   model: "linear",
   monitors: [] as Array<{
@@ -776,7 +158,7 @@ export const neuronMonitorsResponse = {
     defaultEnabled: boolean;
   }>,
 };
-export const capabilitiesResponse: Capabilities = {
+const capabilitiesResponse: Capabilities = {
   authMode: "none",
   trainingEnabled: true,
   trainingCancellationCapability: "strict-cgroup",
@@ -790,15 +172,15 @@ export const capabilitiesResponse: Capabilities = {
   dataSourcesEnabled: false,
   dataSources: [],
 };
-export const configSnapshotsResponse = {
+const configSnapshotsResponse = {
   modelType: "linears",
   model: "linear",
   snapshots: [] as MockConfigSnapshot[],
 };
-export const configSnapshotLibraryResponse = {
+const configSnapshotLibraryResponse = {
   snapshots: [] as MockConfigSnapshot[],
 };
-export const logRunsResponse = {
+const logRunsResponse = {
   runs: [
     {
       id: "log-mnist",
@@ -839,13 +221,13 @@ export const logRunsResponse = {
     },
   ],
 };
-export const logExperimentsResponse = {
+const logExperimentsResponse = {
   experiments: [
     { experiment: "test_model", runCount: 1, relativePath: "test_model" },
     { experiment: "test_model_2", runCount: 1, relativePath: "test_model_2" },
   ],
 };
-export type MockLogTags =
+type MockLogTags =
   | string[]
   | {
       scalarTags?: string[];
@@ -854,7 +236,7 @@ export type MockLogTags =
       textTags?: string[];
     };
 
-export function logTagsPayload(tags: MockLogTags | undefined) {
+function logTagsPayload(tags: MockLogTags | undefined) {
   if (Array.isArray(tags)) {
     return {
       scalarTags: tags,
@@ -871,7 +253,7 @@ export function logTagsPayload(tags: MockLogTags | undefined) {
   };
 }
 
-export const logTagsByRun: Record<string, MockLogTags> = {
+const logTagsByRun: Record<string, MockLogTags> = {
   "log-mnist": [
     "validation/accuracy_epoch",
     "validation/loss_epoch",
@@ -895,7 +277,7 @@ export const logTagsByRun: Record<string, MockLogTags> = {
     "main_model.0.model/weights/mean",
   ],
 };
-export const logScalarSeries = [
+const logScalarSeries = [
   {
     runId: "log-mnist",
     tag: "train/loss_epoch",
@@ -1036,7 +418,7 @@ export const logScalarSeries = [
   },
 ];
 
-export type MockLogCheckpoint = {
+type MockLogCheckpoint = {
   id: string;
   runId: string;
   filename: string;
@@ -1047,7 +429,7 @@ export type MockLogCheckpoint = {
   modifiedAt: string;
 };
 
-export type MockLogArtifact = {
+type MockLogArtifact = {
   id: string;
   kind: string;
   label: string;
@@ -1064,7 +446,7 @@ type MockLogRunArtifacts = {
   checkpoints: MockLogCheckpoint[];
 };
 
-export const logCheckpointsByRun: Record<string, MockLogCheckpoint[]> = {
+const logCheckpointsByRun: Record<string, MockLogCheckpoint[]> = {
   "log-mnist": [
     {
       id: "ckpt-log-mnist-2",
@@ -1163,7 +545,7 @@ function defaultArtifactsForRun(
   };
 }
 
-export function buildLargeLogFixture(count = 64) {
+function buildLargeLogFixture(count = 64) {
   const runs = Array.from({ length: count }, (_, index) => {
     const number = String(index + 1).padStart(2, "0");
     const experiment = `experiment_${number}`;
@@ -1211,7 +593,7 @@ export function buildLargeLogFixture(count = 64) {
   };
 }
 
-export function buildKaggleLinearLogFixture() {
+function buildKaggleLinearLogFixture() {
   const normalRun = {
     ...logRunsResponse.runs[0],
     id: "normal-linear",
@@ -1356,7 +738,7 @@ export function buildKaggleLinearLogFixture() {
   };
 }
 
-export function buildSubsetDeleteFixture() {
+function buildSubsetDeleteFixture() {
   const runs = [
     {
       ...logRunsResponse.runs[0],
@@ -1422,7 +804,7 @@ export function buildSubsetDeleteFixture() {
   };
 }
 
-export function buildHistoricalMonitorFixture(count = 6) {
+function buildHistoricalMonitorFixture(count = 6) {
   const runs = Array.from({ length: count }, (_, index) => {
     const number = String(index + 1).padStart(2, "0");
     const runName = `monitor_run_${number}_20260601_${number}0000`;
@@ -1461,7 +843,7 @@ export function buildHistoricalMonitorFixture(count = 6) {
   };
 }
 
-export const schemaResponse = {
+const schemaResponse = {
   modelType: "linears",
   model: "linear",
   fields: [
@@ -1515,7 +897,7 @@ export const schemaResponse = {
     },
   ],
 };
-export function schemaResponseWithDescriptions(descriptions: Record<string, string>) {
+function schemaResponseWithDescriptions(descriptions: Record<string, string>) {
   return {
     ...schemaResponse,
     fields: schemaResponse.fields.map((field) => ({
@@ -1524,7 +906,7 @@ export function schemaResponseWithDescriptions(descriptions: Record<string, stri
     })),
   };
 }
-export const searchSpaceResponse = {
+const searchSpaceResponse = {
   modelType: "linears",
   model: "linear",
   preset: "baseline",
@@ -1567,7 +949,7 @@ export const searchSpaceResponse = {
     },
   ],
 };
-export const inspectResponse = {
+const inspectResponse = {
   modelType: "linears",
   model: "linear",
   preset: "baseline",
@@ -1722,7 +1104,7 @@ export const inspectResponse = {
   ],
 };
 
-export const parameterShapeInspectResponse = {
+const parameterShapeInspectResponse = {
   ...inspectResponse,
   nodes: inspectResponse.nodes.map((node) =>
     node.id === "main_model.0.model"
@@ -1738,7 +1120,7 @@ export const parameterShapeInspectResponse = {
   ),
 };
 
-export const repeatedLayersInspectResponse = {
+const repeatedLayersInspectResponse = {
   modelType: "linears",
   model: "linear",
   preset: "baseline",
@@ -1834,7 +1216,7 @@ export const repeatedLayersInspectResponse = {
   ],
 };
 
-export const monitorScopeInspectResponse = {
+const monitorScopeInspectResponse = {
   modelType: "linears",
   model: "linear",
   preset: "baseline",
@@ -1956,7 +1338,7 @@ export const monitorScopeInspectResponse = {
   ],
 };
 
-export const stackContainerInspectResponse = {
+const stackContainerInspectResponse = {
   modelType: "linears",
   model: "linear",
   preset: "baseline",
@@ -2018,7 +1400,7 @@ export const stackContainerInspectResponse = {
   ],
 };
 
-export const manyRepeatedLayersInspectResponse = {
+const manyRepeatedLayersInspectResponse = {
   modelType: "linears",
   model: "linear",
   preset: "baseline",
@@ -2064,7 +1446,7 @@ export const manyRepeatedLayersInspectResponse = {
   ]).flat(),
 };
 
-export const mechanismMetadataInspectResponse = {
+const mechanismMetadataInspectResponse = {
   modelType: "linears",
   model: "linear",
   preset: "baseline",
@@ -2101,7 +1483,7 @@ export const mechanismMetadataInspectResponse = {
   ],
 };
 
-export const mechanismChildrenInspectResponse = {
+const mechanismChildrenInspectResponse = {
   modelType: "linears",
   model: "linear",
   preset: "baseline",
@@ -2161,7 +1543,7 @@ export const mechanismChildrenInspectResponse = {
   ],
 };
 
-export const tallSummaryInspectResponse = {
+const tallSummaryInspectResponse = {
   modelType: "linears",
   model: "linear",
   preset: "baseline",
@@ -2244,8 +1626,8 @@ export const tallSummaryInspectResponse = {
   ],
 };
 
-export const longSelectedNodeId = "model.0.model.adaptive_behaviour.mask_model.model.1";
-export const longSelectedNodeInspectResponse = {
+const longSelectedNodeId = "model.0.model.adaptive_behaviour.mask_model.model.1";
+const longSelectedNodeInspectResponse = {
   modelType: "linears",
   model: "linear",
   preset: "baseline",
@@ -2264,7 +1646,7 @@ export const longSelectedNodeInspectResponse = {
   edges: [],
 };
 
-export const locationInspectResponse = {
+const locationInspectResponse = {
   modelType: "linears",
   model: "linear",
   preset: "baseline",
@@ -2354,7 +1736,7 @@ export const locationInspectResponse = {
   ],
 };
 
-export function jsonResponse(body: unknown, status = 200) {
+function jsonResponse(body: unknown, status = 200) {
   return Promise.resolve(
     new Response(JSON.stringify(body), {
       status,
@@ -2363,7 +1745,7 @@ export function jsonResponse(body: unknown, status = 200) {
   );
 }
 
-export type MockTrainingPlanRequest = {
+type MockTrainingPlanRequest = {
   modelType?: string;
   model?: string;
   preset?: string;
@@ -2379,7 +1761,7 @@ export type MockTrainingPlanRequest = {
   };
 };
 
-export function mockTrainingSearchCombinations(request: MockTrainingPlanRequest) {
+function mockTrainingSearchCombinations(request: MockTrainingPlanRequest) {
   const search = request.search;
   if (!search) {
     return [{ changes: [] as unknown[], overrides: {} as Record<string, unknown> }];
@@ -2408,7 +1790,7 @@ export function mockTrainingSearchCombinations(request: MockTrainingPlanRequest)
   return combinations;
 }
 
-export function mockTrainingCommand(input: {
+function mockTrainingCommand(input: {
   modelType: string;
   model: string;
   preset: string;
@@ -2445,7 +1827,7 @@ export function mockTrainingCommand(input: {
   return parts.join(" ");
 }
 
-export function mockTrainingRunPlan(request: MockTrainingPlanRequest) {
+function mockTrainingRunPlan(request: MockTrainingPlanRequest) {
   const modelType = request.modelType ?? "linears";
   const model = request.model ?? "linear";
   const preset = request.preset ?? "baseline";
@@ -2650,7 +2032,7 @@ function summarizeMockTrainingRuns(runs: MockTrainingRunSummaryInput) {
   };
 }
 
-export function completedMockTrainingRunPlan(request: MockTrainingPlanRequest) {
+function completedMockTrainingRunPlan(request: MockTrainingPlanRequest) {
   const plan = mockTrainingRunPlan(request);
   const runs = plan.runs.map((run) => ({
     ...run,
@@ -2716,7 +2098,7 @@ type MockTrainingJobStatus =
   | "failed"
   | "cancelled";
 
-export function mockTrainingJobPayload(
+function mockTrainingJobPayload(
   request: MockTrainingPlanRequest,
   { status }: { status: MockTrainingJobStatus },
 ) {
@@ -2775,20 +2157,20 @@ export function mockTrainingJobPayload(
   };
 }
 
-export type MockMonitorScalarSeries = {
+type MockMonitorScalarSeries = {
   tag: string;
   label: string;
   points: Array<{ step: number; wallTime: number; value: number }>;
 };
 
-export type MockMonitorHistogram = {
+type MockMonitorHistogram = {
   tag: string;
   step: number;
   wallTime: number;
   buckets: Array<{ left: number; right: number; count: number }>;
 };
 
-export type MockMonitorImage = {
+type MockMonitorImage = {
   tag: string;
   step: number;
   wallTime: number;
@@ -2796,13 +2178,13 @@ export type MockMonitorImage = {
   dataUrl: string;
 };
 
-export type MockMonitorPayload = {
+type MockMonitorPayload = {
   scalarSeries: MockMonitorScalarSeries[];
   histograms: MockMonitorHistogram[];
   images: MockMonitorImage[];
 };
 
-export type MockMonitorRequestContext = {
+type MockMonitorRequestContext = {
   jobId: string;
   nodePath: string;
   preset: string | null;
@@ -2810,10 +2192,10 @@ export type MockMonitorRequestContext = {
   logDir: string | null;
 };
 
-export const tinyPngDataUrl =
+const tinyPngDataUrl =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 
-export function mockScalarSeries(
+function mockScalarSeries(
   nodePath: string,
   suffix: string,
   values: [number, number] = [0.1, 0.2],
@@ -2828,7 +2210,7 @@ export function mockScalarSeries(
   };
 }
 
-export function mockHistogram(nodePath: string, suffix = "histogram/usage_fraction") {
+function mockHistogram(nodePath: string, suffix = "histogram/usage_fraction") {
   return {
     tag: `${nodePath}/${suffix}`,
     step: 2,
@@ -2840,7 +2222,7 @@ export function mockHistogram(nodePath: string, suffix = "histogram/usage_fracti
   };
 }
 
-export function mockMonitorImage(nodePath: string, suffix = "heatmap/usage_fraction") {
+function mockMonitorImage(nodePath: string, suffix = "heatmap/usage_fraction") {
   return {
     tag: `${nodePath}/${suffix}`,
     step: 2,
@@ -2850,7 +2232,7 @@ export function mockMonitorImage(nodePath: string, suffix = "heatmap/usage_fract
   };
 }
 
-export function defaultMonitorPayload(nodePath: string): MockMonitorPayload {
+function defaultMonitorPayload(nodePath: string): MockMonitorPayload {
   return {
     scalarSeries: [mockScalarSeries(nodePath, "output/mean")],
     histograms: [mockHistogram(nodePath)],
@@ -2858,7 +2240,7 @@ export function defaultMonitorPayload(nodePath: string): MockMonitorPayload {
   };
 }
 
-export function defaultLogRunMonitorPayload(nodePath: string): MockMonitorPayload {
+function defaultLogRunMonitorPayload(nodePath: string): MockMonitorPayload {
   return {
     scalarSeries: [mockScalarSeries(nodePath, "output/mean", [0.11, 0.22])],
     histograms: [],
@@ -2866,7 +2248,7 @@ export function defaultLogRunMonitorPayload(nodePath: string): MockMonitorPayloa
   };
 }
 
-export function semanticMonitorPayload(nodePath: string): MockMonitorPayload {
+function semanticMonitorPayload(nodePath: string): MockMonitorPayload {
   return {
     scalarSeries: [
       mockScalarSeries(nodePath, "input/mean", [0.1, 0.15]),
@@ -2885,7 +2267,7 @@ export function semanticMonitorPayload(nodePath: string): MockMonitorPayload {
   };
 }
 
-export function withParameterCounts(body: unknown) {
+function withParameterCounts(body: unknown) {
   if (typeof body !== "object" || body === null) {
     return body;
   }
@@ -2962,8 +2344,7 @@ function withPreviewIdentity(
   };
 }
 
-export function installFetchMock(
-  options: {
+type FetchScenarioOptions = {
     inspectError?: boolean;
     inspectResponse?: unknown;
     inspectResponseFactory?: (requestIndex: number) => unknown | Promise<unknown>;
@@ -3056,11 +2437,12 @@ export function installFetchMock(
 	      model: string;
 	      snapshots: MockConfigSnapshot[];
     };
-    configSnapshotLibraryResponse?: {
-      snapshots: MockConfigSnapshot[];
-    };
-  } = {},
-) {
+  configSnapshotLibraryResponse?: {
+    snapshots: MockConfigSnapshot[];
+  };
+};
+
+function installFetchMock(options: FetchScenarioOptions = {}) {
   const inspectBodies: unknown[] = [];
   const trainingBodies: unknown[] = [];
   let trainingRunPlanRequestCount = 0;
@@ -4027,7 +3409,141 @@ export function installFetchMock(
   };
 }
 
-export function renderWorkbench() {
+type ScenarioObservations = ReturnType<typeof installFetchMock>;
+
+type ConfigScenarioOptions = Pick<
+  FetchScenarioOptions,
+  | "configSnapshotLibraryResponse"
+  | "configSnapshotsResponse"
+  | "schemaResponse"
+>;
+
+type GraphScenarioOptions = Pick<
+  FetchScenarioOptions,
+  "inspectResponse" | "inspectResponseFactory" | "modelsResponse"
+>;
+
+type LogsScenarioOptions = Pick<
+  FetchScenarioOptions,
+  | "capabilitiesResponse"
+  | "deleteLogExperimentError"
+  | "deleteLogRunPlanErrorFactory"
+  | "deleteLogRunsBlockers"
+  | "deleteLogRunsErrorFactory"
+  | "logCheckpointsByRun"
+  | "logExperimentsResponse"
+  | "logMediaResponse"
+  | "logRunArtifactsByRun"
+  | "logRunsResponse"
+  | "logScalarResponseFactory"
+  | "logScalarSeries"
+  | "logTagsByRun"
+  | "logTagsResponseFactory"
+>;
+
+type MonitorScenarioOptions = Pick<
+  FetchScenarioOptions,
+  | "inspectError"
+  | "inspectResponse"
+  | "logParameterStatusResponse"
+  | "logRunMonitorDataResponse"
+  | "logRunsResponse"
+  | "logTagsByRun"
+  | "monitorDataResponse"
+>;
+
+type OverviewScenarioOptions = Pick<
+  FetchScenarioOptions,
+  | "capabilitiesResponse"
+  | "configSnapshotsResponse"
+  | "datasetsResponse"
+  | "inspectResponseFactory"
+  | "logImportError"
+  | "logImportResponse"
+  | "logImportResponseFactory"
+  | "logRunsResponse"
+  | "logTagsByRun"
+  | "schemaResponse"
+>;
+
+type TrainingScenarioOptions = Pick<
+  FetchScenarioOptions,
+  | "cancelTrainingJobError"
+  | "capabilitiesResponse"
+  | "configSnapshotsResponse"
+  | "createTrainingJobResponseFactory"
+  | "datasetsResponse"
+  | "inspectResponseFactory"
+  | "logRunsResponse"
+  | "presetsResponse"
+  | "schemaResponse"
+  | "searchSpaceResponse"
+  | "searchSpaceResponseFactory"
+  | "trainingJobResponseFactory"
+  | "trainingJobStatus"
+  | "trainingRunPlanResponseFactory"
+>;
+
+function setupConfigScenario(
+  options: ConfigScenarioOptions = {},
+): Pick<
+  ScenarioObservations,
+  | "configSnapshotCreateRequests"
+  | "configSnapshotUpdateRequests"
+  | "inspectBodies"
+> {
+  return installFetchMock(options);
+}
+
+function setupGraphScenario(
+  options: GraphScenarioOptions = {},
+): Pick<ScenarioObservations, "inspectBodies"> {
+  return installFetchMock(options);
+}
+
+function setupLogsScenario(
+  options: LogsScenarioOptions = {},
+): Pick<
+  ScenarioObservations,
+  | "deleteExperimentRequests"
+  | "deleteRunPlanRequests"
+  | "deleteRunRequests"
+  | "fetchMock"
+  | "logArtifactRequests"
+  | "logCheckpointRequests"
+  | "logMediaRequests"
+  | "logRunRequests"
+  | "logScalarRequests"
+  | "logTagRequests"
+> {
+  return installFetchMock(options);
+}
+
+function setupMonitorScenario(
+  options: MonitorScenarioOptions = {},
+): Pick<
+  ScenarioObservations,
+  "fetchMock" | "logRunMonitorDataRequests" | "monitorDataRequests"
+> {
+  return installFetchMock(options);
+}
+
+function setupOverviewScenario(
+  options: OverviewScenarioOptions = {},
+): Pick<
+  ScenarioObservations,
+  "fetchMock" | "inspectBodies" | "logImportRequests" | "trainingBodies"
+> {
+  return installFetchMock(options);
+}
+
+function setupTrainingScenario(
+  options: TrainingScenarioOptions = {},
+): Pick<ScenarioObservations, "fetchMock" | "inspectBodies" | "trainingBodies"> {
+  return installFetchMock(options);
+}
+
+function renderWorkbench() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   });
@@ -4039,7 +3555,7 @@ export function renderWorkbench() {
   return { ...rendered, queryClient };
 }
 
-export async function waitForOpenFullConfigButton(
+async function waitForOpenFullConfigButton(
   user: ReturnType<typeof userEvent.setup> = userEvent.setup(),
 ) {
   if (!screen.queryByRole("button", { name: /open full config/i })) {
@@ -4064,23 +3580,23 @@ type TargetDropdownLabel =
   | "experiment"
   | "dataset";
 
-export async function findTargetCombobox(label: TargetDropdownLabel) {
+async function findTargetCombobox(label: TargetDropdownLabel) {
   return screen.findByRole("combobox", {
     name: new RegExp(`^${label}$`, "i"),
   });
 }
 
-export async function waitForTargetValue(label: TargetDropdownLabel, value: string) {
+async function waitForTargetValue(label: TargetDropdownLabel, value: string) {
   const control = await findTargetCombobox(label);
   await waitFor(() => expect(control).toHaveTextContent(value));
   return control;
 }
 
-export function targetListboxName(label: TargetDropdownLabel) {
+function targetListboxName(label: TargetDropdownLabel) {
   return new RegExp(`^${label} options$`, "i");
 }
 
-export async function openTargetDropdown(
+async function openTargetDropdown(
   user: ReturnType<typeof userEvent.setup>,
   label: TargetDropdownLabel,
 ) {
@@ -4092,7 +3608,7 @@ export async function openTargetDropdown(
   return { control, listbox };
 }
 
-export async function selectSearchableDropdownOption(
+async function selectSearchableDropdownOption(
   user: ReturnType<typeof userEvent.setup>,
   control: HTMLElement,
   optionName: string | RegExp,
@@ -4130,7 +3646,7 @@ export async function selectSearchableDropdownOption(
   });
 }
 
-export async function selectTargetOption(
+async function selectTargetOption(
   user: ReturnType<typeof userEvent.setup>,
   label: TargetDropdownLabel,
   optionName: string,
@@ -4156,12 +3672,12 @@ export async function selectTargetOption(
   return control;
 }
 
-export async function openFullConfig(user: ReturnType<typeof userEvent.setup>) {
+async function openFullConfig(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await waitForOpenFullConfigButton(user));
   return screen.findByRole("dialog", { name: /full configuration/i });
 }
 
-export async function typeConfigFieldValue(
+async function typeConfigFieldValue(
   user: ReturnType<typeof userEvent.setup>,
   dialog: HTMLElement,
   label: RegExp,
@@ -4173,13 +3689,13 @@ export async function typeConfigFieldValue(
   return input;
 }
 
-export function fullConfigSearchPopup(dialog: HTMLElement) {
+function fullConfigSearchPopup(dialog: HTMLElement) {
   return within(dialog).getByRole("dialog", {
     name: /matching config fields/i,
   });
 }
 
-export function fullConfigSearchResultRow(popup: HTMLElement, name: RegExp) {
+function fullConfigSearchResultRow(popup: HTMLElement, name: RegExp) {
   const row = within(popup)
     .getAllByRole("group", { name: /config search result/i })
     .find((candidate) =>
@@ -4193,7 +3709,7 @@ export function fullConfigSearchResultRow(popup: HTMLElement, name: RegExp) {
   return row;
 }
 
-export function configFieldRowFor(control: HTMLElement) {
+function configFieldRowFor(control: HTMLElement) {
   const controlGrid = control.closest(".grid");
   const row = controlGrid?.parentElement;
 
@@ -4204,7 +3720,7 @@ export function configFieldRowFor(control: HTMLElement) {
   return row;
 }
 
-export function configFieldGridFor(control: HTMLElement) {
+function configFieldGridFor(control: HTMLElement) {
   const row = configFieldRowFor(control);
   const grid = row.parentElement;
 
@@ -4215,7 +3731,7 @@ export function configFieldGridFor(control: HTMLElement) {
   return grid;
 }
 
-export function expectResponsiveConfigFieldGrid(grid: HTMLElement) {
+function expectResponsiveConfigFieldGrid(grid: HTMLElement) {
   expect(Array.from(grid.classList)).toEqual(
     expect.arrayContaining([
       "grid",
@@ -4228,7 +3744,7 @@ export function expectResponsiveConfigFieldGrid(grid: HTMLElement) {
   expect(grid.classList).not.toContain("grid-cols-1");
 }
 
-export function fullConfigSectionFor(accordion: HTMLElement) {
+function fullConfigSectionFor(accordion: HTMLElement) {
   const section = accordion.closest("section");
 
   if (!(section instanceof HTMLElement)) {
@@ -4238,7 +3754,7 @@ export function fullConfigSectionFor(accordion: HTMLElement) {
   return section;
 }
 
-export function fullConfigSectionNavRowFor(sectionNav: HTMLElement, name: RegExp) {
+function fullConfigSectionNavRowFor(sectionNav: HTMLElement, name: RegExp) {
   const jump = within(sectionNav).getByRole("button", { name });
   const row = jump.parentElement?.parentElement;
 
@@ -4249,7 +3765,7 @@ export function fullConfigSectionNavRowFor(sectionNav: HTMLElement, name: RegExp
   return row;
 }
 
-export async function openTrainingWorkspace(user: ReturnType<typeof userEvent.setup>) {
+async function openTrainingWorkspace(user: ReturnType<typeof userEvent.setup>) {
   const existingWorkspace = document.getElementById("training-workspace");
   if (existingWorkspace instanceof HTMLElement) {
     return existingWorkspace;
@@ -4271,11 +3787,11 @@ export async function openTrainingWorkspace(user: ReturnType<typeof userEvent.se
   return workspace;
 }
 
-export async function expandTrainingPanel(user: ReturnType<typeof userEvent.setup>) {
+async function expandTrainingPanel(user: ReturnType<typeof userEvent.setup>) {
   await openTrainingWorkspace(user);
 }
 
-export async function expandedTrainingDetails(user: ReturnType<typeof userEvent.setup>) {
+async function expandedTrainingDetails(user: ReturnType<typeof userEvent.setup>) {
   const details = await openTrainingWorkspace(user);
   if (!(details instanceof HTMLElement)) {
     throw new Error("Expected Training workspace details to render");
@@ -4283,7 +3799,7 @@ export async function expandedTrainingDetails(user: ReturnType<typeof userEvent.
   return details;
 }
 
-export async function expandedTrainingDetailsReady(user: ReturnType<typeof userEvent.setup>) {
+async function expandedTrainingDetailsReady(user: ReturnType<typeof userEvent.setup>) {
   const details = await expandedTrainingDetails(user);
   await waitFor(() => {
     expect(
@@ -4294,7 +3810,7 @@ export async function expandedTrainingDetailsReady(user: ReturnType<typeof userE
   return details;
 }
 
-export async function setTargetHiddenDimOverride(
+async function setTargetHiddenDimOverride(
   user: ReturnType<typeof userEvent.setup>,
   value: string,
 ) {
@@ -4310,7 +3826,7 @@ export async function setTargetHiddenDimOverride(
   return undefined;
 }
 
-export async function selectTrainingTargetOption(
+async function selectTrainingTargetOption(
   user: ReturnType<typeof userEvent.setup>,
   label: "model type" | "model" | "preset",
   optionName: string,
@@ -4323,21 +3839,21 @@ export async function selectTrainingTargetOption(
   return control;
 }
 
-export type TrainingMultiSelectLabel =
+type TrainingMultiSelectLabel =
   | "Presets"
   | "Config snapshots"
   | "Training datasets"
   | "Training monitors";
 
-export function trainingMultiSelectName(label: TrainingMultiSelectLabel) {
+function trainingMultiSelectName(label: TrainingMultiSelectLabel) {
   return new RegExp(`^${label}\\b`, "i");
 }
 
-export function trainingMultiSelectOptionsName(label: TrainingMultiSelectLabel) {
+function trainingMultiSelectOptionsName(label: TrainingMultiSelectLabel) {
   return new RegExp(`^${label} options$`, "i");
 }
 
-export async function openTrainingMultiSelect(
+async function openTrainingMultiSelect(
   user: ReturnType<typeof userEvent.setup>,
   details: HTMLElement,
   label: TrainingMultiSelectLabel,
@@ -4357,7 +3873,7 @@ export async function openTrainingMultiSelect(
   return { control, listbox };
 }
 
-export async function setTrainingMultiSelectOption(
+async function setTrainingMultiSelectOption(
   user: ReturnType<typeof userEvent.setup>,
   details: HTMLElement,
   label: TrainingMultiSelectLabel,
@@ -4372,7 +3888,7 @@ export async function setTrainingMultiSelectOption(
   return option;
 }
 
-export async function selectTrainingMonitorOption(
+async function selectTrainingMonitorOption(
   user: ReturnType<typeof userEvent.setup>,
   optionName: RegExp,
 ) {
@@ -4386,7 +3902,7 @@ export async function selectTrainingMonitorOption(
   return details;
 }
 
-export async function selectNewTrainingLogFolder(
+async function selectNewTrainingLogFolder(
   user: ReturnType<typeof userEvent.setup>,
   name = "my_experiment",
 ) {
@@ -4397,7 +3913,7 @@ export async function selectNewTrainingLogFolder(
   await user.type(input, name);
 }
 
-export async function selectExistingTrainingLogFolder(
+async function selectExistingTrainingLogFolder(
   user: ReturnType<typeof userEvent.setup>,
   name = "test_model",
 ) {
@@ -4433,7 +3949,7 @@ export async function selectExistingTrainingLogFolder(
   });
 }
 
-export function fullConfigSectionGridFor(accordion: HTMLElement) {
+function fullConfigSectionGridFor(accordion: HTMLElement) {
   const section = fullConfigSectionFor(accordion);
   if (!section.parentElement) {
     throw new Error("Expected full config accordion to render inside the section grid");
@@ -4441,7 +3957,7 @@ export function fullConfigSectionGridFor(accordion: HTMLElement) {
   return section.parentElement;
 }
 
-export function expectFullConfigSectionGrid(grid: HTMLElement) {
+function expectFullConfigSectionGrid(grid: HTMLElement) {
   expect(Array.from(grid.classList)).toEqual(
     expect.arrayContaining([
       "grid",
@@ -4456,7 +3972,7 @@ export function expectFullConfigSectionGrid(grid: HTMLElement) {
   expect(grid.classList).not.toContain("2xl:grid-cols-3");
 }
 
-export async function openTrainingCommand(
+async function openTrainingCommand(
   user: ReturnType<typeof userEvent.setup>,
   dialog: HTMLElement,
 ) {
@@ -4464,11 +3980,11 @@ export async function openTrainingCommand(
   return screen.findByRole("dialog", { name: /training command/i });
 }
 
-export function commandField(dialog: HTMLElement) {
+function commandField(dialog: HTMLElement) {
   return within(dialog).getByRole("textbox", { name: /^training command$/i });
 }
 
-export function expectLogsChecklistRowSizing(control: HTMLElement) {
+function expectLogsChecklistRowSizing(control: HTMLElement) {
   const row = control.closest('[role="presentation"]');
   const optionList = control.closest('[role="listbox"]');
 
@@ -4489,7 +4005,7 @@ export function expectLogsChecklistRowSizing(control: HTMLElement) {
   expect(control).toHaveClass("grid", "min-w-0");
 }
 
-export function scalarChartGridFor(chart: HTMLElement) {
+function scalarChartGridFor(chart: HTMLElement) {
   const chartSection = chart.closest("section");
   const grid = chartSection?.parentElement;
 
@@ -4500,17 +4016,17 @@ export function scalarChartGridFor(chart: HTMLElement) {
   return grid;
 }
 
-export function logMetricGroupToggle(label: string) {
+function logMetricGroupToggle(label: string) {
   return screen.getByRole("button", {
     name: new RegExp(`^${label}\\s+\\d+\\s+metrics?$`, "i"),
   });
 }
 
-export function logValidationExamplesToggle() {
+function logValidationExamplesToggle() {
   return screen.getByRole("button", { name: /^Validation Examples\b/i });
 }
 
-export function deferred<T>() {
+function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((resolver) => {
     resolve = resolver;
@@ -4518,10 +4034,10 @@ export function deferred<T>() {
   return { promise, resolve };
 }
 
-export let scrollIntoViewMock: ReturnType<typeof vi.fn>;
+let scrollIntoViewMock: ReturnType<typeof vi.fn>;
 
 
-export function resetWorkbenchAppTestState() {
+function resetWorkbenchAppTestState() {
   vi.restoreAllMocks();
   try {
     window.localStorage?.clear?.();
@@ -4541,3 +4057,169 @@ export function resetWorkbenchAppTestState() {
     value: undefined,
   });
 }
+
+const appDriver = {
+  render: renderWorkbench,
+  reset: resetWorkbenchAppTestState,
+};
+
+const targetDriver = {
+  selectOption: selectTargetOption,
+  waitForValue: waitForTargetValue,
+};
+
+export const configHarness = {
+  setup: setupConfigScenario,
+  app: appDriver,
+  fixtures: {
+    schema: schemaResponse,
+    schemaWithDescriptions: schemaResponseWithDescriptions,
+  },
+  config: {
+    commandField,
+    fieldGridFor: configFieldGridFor,
+    fieldRowFor: configFieldRowFor,
+    fullSectionGridFor: fullConfigSectionGridFor,
+    open: openFullConfig,
+    openTrainingCommand,
+    responsiveFieldGrid: expectResponsiveConfigFieldGrid,
+    searchPopup: fullConfigSearchPopup,
+    searchResultRow: fullConfigSearchResultRow,
+    sectionFor: fullConfigSectionFor,
+    sectionGrid: expectFullConfigSectionGrid,
+    sectionNavRowFor: fullConfigSectionNavRowFor,
+    typeFieldValue: typeConfigFieldValue,
+    waitForOpenButton: waitForOpenFullConfigButton,
+  },
+  dropdown: { selectOption: selectSearchableDropdownOption },
+  target: targetDriver,
+  get scrollIntoViewMock() {
+    return scrollIntoViewMock;
+  },
+};
+
+export const graphHarness = {
+  setup: setupGraphScenario,
+  app: appDriver,
+  fixtures: {
+    defaultInspection: inspectResponse,
+    locations: locationInspectResponse,
+    manyRepeatedLayers: manyRepeatedLayersInspectResponse,
+    mechanismChildren: mechanismChildrenInspectResponse,
+    mechanismMetadata: mechanismMetadataInspectResponse,
+    neuronModels: neuronModelsResponse,
+    parameterShapes: parameterShapeInspectResponse,
+    repeatedLayers: repeatedLayersInspectResponse,
+    stackContainer: stackContainerInspectResponse,
+    tallSummary: tallSummaryInspectResponse,
+  },
+  config: {
+    open: openFullConfig,
+    typeFieldValue: typeConfigFieldValue,
+  },
+  target: { selectOption: selectTargetOption },
+  tools: { deferred },
+};
+
+export const logsHarness = {
+  setup: setupLogsScenario,
+  app: appDriver,
+  fixtures: {
+    buildKaggleLinear: buildKaggleLinearLogFixture,
+    buildLarge: buildLargeLogFixture,
+    buildSubsetDelete: buildSubsetDeleteFixture,
+    capabilities: capabilitiesResponse,
+    runs: logRunsResponse,
+    scalarSeries: logScalarSeries,
+    tagsByRun: logTagsByRun,
+  },
+  ui: {
+    expectChecklistRowSizing: expectLogsChecklistRowSizing,
+    metricGroupToggle: logMetricGroupToggle,
+    scalarChartGridFor,
+    validationExamplesToggle: logValidationExamplesToggle,
+  },
+  tools: { deferred },
+};
+
+export const monitorHarness = {
+  setup: setupMonitorScenario,
+  app: appDriver,
+  fixtures: {
+    buildHistorical: buildHistoricalMonitorFixture,
+    defaultLogRunPayload: defaultLogRunMonitorPayload,
+    longSelectedNodeId,
+    longSelectedNodeInspection: longSelectedNodeInspectResponse,
+    monitorScopeInspection: monitorScopeInspectResponse,
+    parameterShapeInspection: parameterShapeInspectResponse,
+    repeatedLayersInspection: repeatedLayersInspectResponse,
+    semanticPayload: semanticMonitorPayload,
+  },
+  dropdown: { selectOption: selectSearchableDropdownOption },
+  training: {
+    selectMonitorOption: selectTrainingMonitorOption,
+    selectNewLogFolder: selectNewTrainingLogFolder,
+  },
+  tools: { deferred },
+};
+
+export const overviewHarness = {
+  setup: setupOverviewScenario,
+  app: appDriver,
+  fixtures: {
+    capabilities: capabilitiesResponse,
+    implementedFeatures: IMPLEMENTED_FEATURES,
+    inspection: inspectResponse,
+    logRuns: logRunsResponse,
+    schema: schemaResponse,
+  },
+  config: {
+    commandField,
+    open: openFullConfig,
+    typeFieldValue: typeConfigFieldValue,
+  },
+  network: { jsonResponse },
+  target: targetDriver,
+  training: {
+    expandedDetails: expandedTrainingDetails,
+    openMultiSelect: openTrainingMultiSelect,
+    setMultiSelectOption: setTrainingMultiSelectOption,
+  },
+};
+
+export const trainingHarness = {
+  setup: setupTrainingScenario,
+  app: appDriver,
+  fixtures: {
+    capabilities: capabilitiesResponse,
+    inspection: inspectResponse,
+    presets: presetsResponse,
+    schema: schemaResponse,
+    schemaWithDescriptions: schemaResponseWithDescriptions,
+    searchSpace: searchSpaceResponse,
+  },
+  config: {
+    commandField,
+    open: openFullConfig,
+    searchPopup: fullConfigSearchPopup,
+    searchResultRow: fullConfigSearchResultRow,
+    typeFieldValue: typeConfigFieldValue,
+  },
+  target: {
+    selectOption: selectTargetOption,
+    setHiddenDimOverride: setTargetHiddenDimOverride,
+    waitForValue: waitForTargetValue,
+  },
+  training: {
+    expandedDetails: expandedTrainingDetails,
+    expandedDetailsReady: expandedTrainingDetailsReady,
+    mockJobPayload: mockTrainingJobPayload,
+    openMultiSelect: openTrainingMultiSelect,
+    selectExistingLogFolder: selectExistingTrainingLogFolder,
+    selectMonitorOption: selectTrainingMonitorOption,
+    selectNewLogFolder: selectNewTrainingLogFolder,
+    selectTargetOption: selectTrainingTargetOption,
+    setMultiSelectOption: setTrainingMultiSelectOption,
+  },
+  tools: { deferred },
+};

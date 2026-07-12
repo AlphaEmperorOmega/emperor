@@ -1,32 +1,35 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
-import {
-  buildHistoricalMonitorFixture,
-  defaultLogRunMonitorPayload,
-  deferred,
-  installFetchMock,
-  longSelectedNodeId,
-  longSelectedNodeInspectResponse,
-  monitorScopeInspectResponse,
-  parameterShapeInspectResponse,
-  renderWorkbench,
-  repeatedLayersInspectResponse,
-  resetWorkbenchAppTestState,
-  selectSearchableDropdownOption,
-  selectNewTrainingLogFolder,
-  selectTrainingMonitorOption,
-  semanticMonitorPayload,
-} from "./support";
+import { monitorHarness } from "./support";
+
+const {
+  setup: setupMonitorScenario,
+  app: { render: renderWorkbench, reset: resetWorkbenchAppTestState },
+  fixtures: {
+    buildHistorical: buildHistoricalMonitorFixture,
+    defaultLogRunPayload: defaultLogRunMonitorPayload,
+    longSelectedNodeId,
+    longSelectedNodeInspection: longSelectedNodeInspectResponse,
+    monitorScopeInspection: monitorScopeInspectResponse,
+    parameterShapeInspection: parameterShapeInspectResponse,
+    repeatedLayersInspection: repeatedLayersInspectResponse,
+    semanticPayload: semanticMonitorPayload,
+  },
+  dropdown: { selectOption: selectSearchableDropdownOption },
+  training: {
+    selectMonitorOption: selectTrainingMonitorOption,
+    selectNewLogFolder: selectNewTrainingLogFolder,
+  },
+  tools: { deferred },
+} = monitorHarness;
 
 describe("WorkbenchApp Monitor Charts And Errors", () => {
   beforeEach(resetWorkbenchAppTestState);
 
-  async function selectExperimentRun(
+  async function selectHistoricalMonitorGroup(
     user: ReturnType<typeof userEvent.setup>,
-    optionName: string | RegExp,
   ) {
-    void optionName;
     const experimentsTab = await screen.findByRole("radio", { name: "Experiments" });
     await waitFor(() => expect(experimentsTab).not.toBeDisabled());
     await user.click(experimentsTab);
@@ -38,7 +41,7 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
     await user.click(
       within(
         await screen.findByRole("listbox", { name: /^experiment options$/i }),
-      ).getByRole("option", { name: /^monitor_exp/ }),
+      ).getByRole("option", { name: /^monitor_exp(?: \(\d+\))?$/ }),
     );
 
     const datasetControl = await screen.findByRole("combobox", {
@@ -99,7 +102,7 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
   }
 
   it("opens selected-node monitor charts for the active training job", async () => {
-    const { monitorDataRequests } = installFetchMock();
+    const { monitorDataRequests } = setupMonitorScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -143,7 +146,7 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
   });
 
   it("groups selected-node monitor charts into semantic accordions", async () => {
-    const { monitorDataRequests } = installFetchMock({
+    const { monitorDataRequests } = setupMonitorScenario({
       monitorDataResponse: ({ nodePath }) => semanticMonitorPayload(nodePath),
     });
     renderWorkbench();
@@ -300,7 +303,7 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
   });
 
   it("compares selected-node monitor charts with a numeric sibling layer", async () => {
-    const { monitorDataRequests } = installFetchMock({
+    const { monitorDataRequests } = setupMonitorScenario({
       inspectResponse: repeatedLayersInspectResponse,
       monitorDataResponse: ({ nodePath }) => semanticMonitorPayload(nodePath),
     });
@@ -453,7 +456,7 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
   });
 
   it("switches selected-node comparison scope to input and output linear layers", async () => {
-    const { monitorDataRequests } = installFetchMock({
+    const { monitorDataRequests } = setupMonitorScenario({
       inspectResponse: monitorScopeInspectResponse,
       monitorDataResponse: ({ nodePath }) => semanticMonitorPayload(nodePath),
     });
@@ -541,7 +544,7 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
   });
 
   it("opens graph-card monitor charts for the wrapped linear target", async () => {
-    const { monitorDataRequests } = installFetchMock({
+    const { monitorDataRequests } = setupMonitorScenario({
       inspectResponse: repeatedLayersInspectResponse,
     });
     renderWorkbench();
@@ -577,7 +580,7 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
   });
 
   it("opens input/output graph-card monitor modals with all-layers scope selected", async () => {
-    const { monitorDataRequests } = installFetchMock({
+    const { monitorDataRequests } = setupMonitorScenario({
       inspectResponse: monitorScopeInspectResponse,
       monitorDataResponse: ({ nodePath }) => semanticMonitorPayload(nodePath),
     });
@@ -626,7 +629,7 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
   });
 
   it("hides graph-card monitor buttons when the active job lacks the linear monitor", async () => {
-    installFetchMock();
+    setupMonitorScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -649,17 +652,13 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
 
   it("opens selected-node monitor charts for the latest five filtered historical runs", async () => {
     const fixture = buildHistoricalMonitorFixture();
-    const { logRunMonitorDataRequests } = installFetchMock({
+    const { logRunMonitorDataRequests } = setupMonitorScenario({
       ...fixture,
     });
     renderWorkbench();
     const user = userEvent.setup();
 
-    // Pick a run so its experiment/dataset drives the historical monitor group.
-    await selectExperimentRun(
-      user,
-      "monitor_exp · BASELINE · Mnist · 2026-06-01 06:00:00",
-    );
+    await selectHistoricalMonitorGroup(user);
     await user.click(
       await screen.findByRole("button", { name: /select and expand main_model\.0/i }),
     );
@@ -699,7 +698,7 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
 
   it("renders graph parameter activity after selecting an experiment dataset and preset", async () => {
     const fixture = buildHistoricalMonitorFixture(1);
-    const { fetchMock } = installFetchMock({
+    const { fetchMock } = setupMonitorScenario({
       ...fixture,
       inspectResponse: parameterShapeInspectResponse,
       logParameterStatusResponse: ({ runIds }) => ({
@@ -731,9 +730,11 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
     renderWorkbench();
     const user = userEvent.setup();
 
-    await selectExperimentRun(
-      user,
-      "monitor_exp · BASELINE · Mnist · 2026-06-01 01:00:00",
+    await selectHistoricalMonitorGroup(user);
+    await user.click(
+      await screen.findByRole("button", {
+        name: /select and expand main_model\.0/i,
+      }),
     );
 
     await waitFor(() => {
@@ -744,16 +745,16 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
       ).toBe(true);
     });
     expect(
-      await screen.findByLabelText("Weights parameter activity: updated"),
+      await screen.findByLabelText(/weights activity updated/i),
     ).toBeInTheDocument();
     expect(
-      await screen.findByLabelText("Bias parameter activity: unchanged"),
+      await screen.findByLabelText(/bias activity unchanged/i),
     ).toBeInTheDocument();
   });
 
   it("opens a selected-run parameter activity minimap from the graph controls", async () => {
     const fixture = buildHistoricalMonitorFixture(1);
-    installFetchMock({
+    setupMonitorScenario({
       ...fixture,
       inspectResponse: parameterShapeInspectResponse,
       logParameterStatusResponse: ({ runIds }) => ({
@@ -785,10 +786,7 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
     renderWorkbench();
     const user = userEvent.setup();
 
-    await selectExperimentRun(
-      user,
-      "monitor_exp · BASELINE · Mnist · 2026-06-01 01:00:00",
-    );
+    await selectHistoricalMonitorGroup(user);
 
     const minimapButton = await screen.findByRole("button", {
       name: /open parameter activity minimap/i,
@@ -839,7 +837,7 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
 
   it("shows a monitor path mismatch when historical status cannot attach to the graph", async () => {
     const fixture = buildHistoricalMonitorFixture(1);
-    installFetchMock({
+    setupMonitorScenario({
       ...fixture,
       inspectResponse: parameterShapeInspectResponse,
       logParameterStatusResponse: ({ runIds }) => ({
@@ -871,14 +869,11 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
     renderWorkbench();
     const user = userEvent.setup();
 
-    await selectExperimentRun(
-      user,
-      "monitor_exp · BASELINE · Mnist · 2026-06-01 01:00:00",
-    );
+    await selectHistoricalMonitorGroup(user);
 
     expect(await screen.findByText("path mismatch")).toBeInTheDocument();
     expect(
-      screen.queryByLabelText("Weights parameter activity: updated"),
+      screen.queryByLabelText(/weights activity updated/i),
     ).not.toBeInTheDocument();
   });
 
@@ -947,7 +942,7 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
         },
       ],
     });
-    installFetchMock({
+    setupMonitorScenario({
       ...fixture,
       logRunsResponse: { runs },
       logTagsByRun: {
@@ -1005,31 +1000,41 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
 
     await selectExperiment(/^monitor_exp_a/);
     await selectDatasetAndPreset();
+    await user.click(
+      await screen.findByRole("button", {
+        name: /select and expand main_model\.0/i,
+      }),
+    );
 
     expect(
-      await screen.findByLabelText("Weights parameter activity: updated"),
+      await screen.findByLabelText(/weights activity updated/i),
     ).toBeInTheDocument();
     expect(
-      await screen.findByLabelText("Bias parameter activity: unchanged"),
+      await screen.findByLabelText(/bias activity unchanged/i),
     ).toBeInTheDocument();
 
     await selectExperiment(/^monitor_exp_b/);
 
     expect(
-      screen.queryByLabelText("Weights parameter activity: updated"),
+      screen.queryByLabelText(/weights activity updated/i),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByLabelText("Bias parameter activity: unchanged"),
+      screen.queryByLabelText(/bias activity unchanged/i),
     ).not.toBeInTheDocument();
     expect(await screen.findByText("pending")).toBeInTheDocument();
 
     await selectDatasetAndPreset();
+    await user.click(
+      await screen.findByRole("button", {
+        name: /select and expand main_model\.0/i,
+      }),
+    );
 
     expect(
-      await screen.findByLabelText("Weights parameter activity: loading"),
+      await screen.findByLabelText(/weights activity loading/i),
     ).toBeInTheDocument();
     expect(
-      await screen.findByLabelText("Bias parameter activity: loading"),
+      await screen.findByLabelText(/bias activity loading/i),
     ).toBeInTheDocument();
     expect(screen.getByText("activity")).toBeInTheDocument();
     expect(screen.getByText("loading")).toBeInTheDocument();
@@ -1037,22 +1042,22 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
     statusB.resolve(statusPayload("historical-b", "unchanged", "updated"));
 
     expect(
-      await screen.findByLabelText("Weights parameter activity: unchanged"),
+      await screen.findByLabelText(/weights activity unchanged/i),
     ).toBeInTheDocument();
     expect(
-      await screen.findByLabelText("Bias parameter activity: updated"),
+      await screen.findByLabelText(/bias activity updated/i),
     ).toBeInTheDocument();
     expect(
-      screen.queryByLabelText("Weights parameter activity: updated"),
+      screen.queryByLabelText(/weights activity updated/i),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByLabelText("Bias parameter activity: unchanged"),
+      screen.queryByLabelText(/bias activity unchanged/i),
     ).not.toBeInTheDocument();
   });
 
   it("keeps performance-only historical runs selectable without graph activity", async () => {
     const fixture = buildHistoricalMonitorFixture(1);
-    const { fetchMock } = installFetchMock({
+    const { fetchMock } = setupMonitorScenario({
       ...fixture,
       logTagsByRun: {
         "historical-01": {
@@ -1066,19 +1071,16 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
     renderWorkbench();
     const user = userEvent.setup();
 
-    await selectExperimentRun(
-      user,
-      "monitor_exp · BASELINE · Mnist · 2026-06-01 01:00:00",
-    );
+    await selectHistoricalMonitorGroup(user);
 
     expect(
       await screen.findByText("No monitor data for graph activity"),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^monitor charts$/i })).toBeDisabled();
     expect(
-      screen.queryByLabelText(/Weights parameter activity:/i),
+      screen.queryByLabelText(/weights activity/i),
     ).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/Bias parameter activity:/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/bias activity/i)).not.toBeInTheDocument();
     expect(
       fetchMock.mock.calls.some(([url]) =>
         String(url).endsWith("/logs/parameter-status"),
@@ -1094,7 +1096,7 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
         deferred<ReturnType<typeof defaultLogRunMonitorPayload>>(),
       ]),
     );
-    installFetchMock({
+    setupMonitorScenario({
       ...fixture,
       logRunMonitorDataResponse: ({ jobId, nodePath }) => {
         const delayed = delayedRuns.get(jobId);
@@ -1107,10 +1109,7 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
     renderWorkbench();
     const user = userEvent.setup();
 
-    await selectExperimentRun(
-      user,
-      "monitor_exp · BASELINE · Mnist · 2026-06-01 05:00:00",
-    );
+    await selectHistoricalMonitorGroup(user);
     await user.click(
       await screen.findByRole("button", { name: /select and expand main_model\.0/i }),
     );
@@ -1146,18 +1145,14 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
 
   it("compares historical monitor charts through log-run monitor-data requests", async () => {
     const fixture = buildHistoricalMonitorFixture(2);
-    const { logRunMonitorDataRequests } = installFetchMock({
+    const { logRunMonitorDataRequests } = setupMonitorScenario({
       inspectResponse: repeatedLayersInspectResponse,
       ...fixture,
     });
     renderWorkbench();
     const user = userEvent.setup();
 
-    // Pick a run so its experiment/dataset drives the historical monitor group.
-    await selectExperimentRun(
-      user,
-      "monitor_exp · BASELINE · Mnist · 2026-06-01 02:00:00",
-    );
+    await selectHistoricalMonitorGroup(user);
     await user.click(
       await screen.findByRole("button", { name: /select and expand main_model\.0/i }),
     );
@@ -1189,7 +1184,7 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
 
   it("prefers an active linear training job over filtered historical monitor runs", async () => {
     const fixture = buildHistoricalMonitorFixture(2);
-    const { monitorDataRequests, logRunMonitorDataRequests } = installFetchMock({
+    const { monitorDataRequests, logRunMonitorDataRequests } = setupMonitorScenario({
       ...fixture,
       monitorDataResponse: ({ nodePath }) => semanticMonitorPayload(nodePath),
     });
@@ -1220,7 +1215,7 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
   });
 
   it("keeps long selected node ids from squeezing the path column", async () => {
-    installFetchMock({ inspectResponse: longSelectedNodeInspectResponse });
+    setupMonitorScenario({ inspectResponse: longSelectedNodeInspectResponse });
     renderWorkbench();
 
     const idRow = (await screen.findAllByTitle(longSelectedNodeId)).find((element) =>
@@ -1239,7 +1234,7 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
   });
 
   it("renders a non-crashing API error panel", async () => {
-    installFetchMock({ inspectError: true });
+    setupMonitorScenario({ inspectError: true });
     renderWorkbench();
 
     expect(await screen.findByText("Preview failed")).toBeInTheDocument();

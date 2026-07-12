@@ -2,31 +2,37 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { type ConfigField } from "@/lib/api";
-import {
-  commandField,
-  configFieldGridFor,
-  configFieldRowFor,
-  expectFullConfigSectionGrid,
-  expectResponsiveConfigFieldGrid,
-  fullConfigSearchPopup,
-  fullConfigSearchResultRow,
-  fullConfigSectionFor,
-  fullConfigSectionGridFor,
-  fullConfigSectionNavRowFor,
-  installFetchMock,
-  openFullConfig,
-  openTrainingCommand,
-  renderWorkbench,
-  resetWorkbenchAppTestState,
-  schemaResponse,
-  schemaResponseWithDescriptions,
-  scrollIntoViewMock,
-  selectSearchableDropdownOption,
-  selectTargetOption,
-  typeConfigFieldValue,
-  waitForOpenFullConfigButton,
-  waitForTargetValue,
-} from "./support";
+import { configHarness } from "./support";
+
+const {
+  setup: setupConfigScenario,
+  app: { render: renderWorkbench, reset: resetWorkbenchAppTestState },
+  fixtures: {
+    schema: schemaResponse,
+    schemaWithDescriptions: schemaResponseWithDescriptions,
+  },
+  config: {
+    commandField,
+    fieldGridFor: configFieldGridFor,
+    fieldRowFor: configFieldRowFor,
+    fullSectionGridFor: fullConfigSectionGridFor,
+    open: openFullConfig,
+    openTrainingCommand,
+    responsiveFieldGrid: expectResponsiveConfigFieldGrid,
+    searchPopup: fullConfigSearchPopup,
+    searchResultRow: fullConfigSearchResultRow,
+    sectionFor: fullConfigSectionFor,
+    sectionGrid: expectFullConfigSectionGrid,
+    sectionNavRowFor: fullConfigSectionNavRowFor,
+    typeFieldValue: typeConfigFieldValue,
+    waitForOpenButton: waitForOpenFullConfigButton,
+  },
+  dropdown: { selectOption: selectSearchableDropdownOption },
+  target: {
+    selectOption: selectTargetOption,
+    waitForValue: waitForTargetValue,
+  },
+} = configHarness;
 
 function accordionPanelFor(accordion: HTMLElement) {
   const panelId = accordion.getAttribute("aria-controls");
@@ -1100,7 +1106,7 @@ describe("WorkbenchApp Full Config", () => {
   beforeEach(resetWorkbenchAppTestState);
 
   it("keeps full config controls out of the left sidebar", async () => {
-    installFetchMock();
+    setupConfigScenario();
     renderWorkbench();
 
     expect(await screen.findByText("main_model.0")).toBeInTheDocument();
@@ -1118,7 +1124,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("keeps Full Config while browsing Runs and hides it for a selected historical target", async () => {
-    installFetchMock();
+    setupConfigScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -1145,7 +1151,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("keeps the global snapshot library out of the model sidebar", async () => {
-    installFetchMock({
+    setupConfigScenario({
       configSnapshotsResponse: {
         modelType: "linears",
         model: "linear",
@@ -1175,7 +1181,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("opens snapshot draft config from the preset sidebar action", async () => {
-    installFetchMock();
+    setupConfigScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -1194,9 +1200,41 @@ describe("WorkbenchApp Full Config", () => {
     ).toBeInTheDocument();
   });
 
+  it("creates a Config Snapshot directly from Model Full Config", async () => {
+    const { configSnapshotCreateRequests } = setupConfigScenario();
+    renderWorkbench();
+    const user = userEvent.setup();
+
+    await user.click(await waitForOpenFullConfigButton());
+    const dialog = await screen.findByRole("dialog", {
+      name: /full configuration/i,
+    });
+    await typeConfigFieldValue(user, dialog, /hidden dim/i, "128");
+    await user.click(
+      within(dialog).getByRole("button", { name: "Add Config Snapshot" }),
+    );
+
+    const saveDialog = await screen.findByRole("dialog", {
+      name: "Add Config Snapshot",
+    });
+    await user.type(within(saveDialog).getByLabelText(/^name$/i), "Model wide");
+    await user.click(
+      within(saveDialog).getByRole("button", { name: "Add Snapshot" }),
+    );
+
+    await waitFor(() => expect(configSnapshotCreateRequests).toHaveLength(1));
+    expect(configSnapshotCreateRequests[0]).toMatchObject({
+      modelType: "linears",
+      model: "linear",
+      preset: "baseline",
+      name: "Model wide",
+      overrides: { hidden_dim: "128" },
+    });
+  });
+
   it("duplicates the selected snapshot as a new snapshot", async () => {
     const { configSnapshotCreateRequests, configSnapshotUpdateRequests } =
-      installFetchMock({
+      setupConfigScenario({
         configSnapshotsResponse: {
           modelType: "linears",
           model: "linear",
@@ -1261,7 +1299,7 @@ describe("WorkbenchApp Full Config", () => {
 
   it("edits the selected snapshot with an update request", async () => {
     const { configSnapshotCreateRequests, configSnapshotUpdateRequests } =
-      installFetchMock({
+      setupConfigScenario({
         configSnapshotsResponse: {
           modelType: "linears",
           model: "linear",
@@ -1319,7 +1357,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("opens the full config popup with section accordions expanded by default", async () => {
-    installFetchMock();
+    setupConfigScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -1456,7 +1494,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("shows backend field descriptions from the full config label help button", async () => {
-    installFetchMock({
+    setupConfigScenario({
       schemaResponse: schemaResponseWithDescriptions({
         hidden_dim:
           "Sets the hidden feature width used by the main layer stack.",
@@ -1495,7 +1533,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("keeps layer stack-prefixed fields in the parent accordion", async () => {
-    installFetchMock({
+    setupConfigScenario({
       schemaResponse: {
         ...schemaResponse,
         fields: [
@@ -1543,7 +1581,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("shows shared layer stack submodule defaults as a top-level accordion", async () => {
-    installFetchMock({
+    setupConfigScenario({
       schemaResponse: {
         ...schemaResponse,
         fields: [
@@ -1596,7 +1634,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("locks controlled config accordions until their header flag is enabled", async () => {
-    installFetchMock({
+    setupConfigScenario({
       schemaResponse: {
         ...schemaResponse,
         fields: [
@@ -1754,7 +1792,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("uses adaptive option flags as section header controls", async () => {
-    installFetchMock({ schemaResponse: adaptiveComponentSchemaResponse() });
+    setupConfigScenario({ schemaResponse: adaptiveComponentSchemaResponse() });
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -1902,7 +1940,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("uses nested option accordions for boundary model sections", async () => {
-    installFetchMock({ schemaResponse: boundaryModelSchemaResponse() });
+    setupConfigScenario({ schemaResponse: boundaryModelSchemaResponse() });
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -2009,7 +2047,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("renders gate option enum selects in controlled gate sections", async () => {
-    installFetchMock({ schemaResponse: gateOptionSchemaResponse() });
+    setupConfigScenario({ schemaResponse: gateOptionSchemaResponse() });
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -2168,7 +2206,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("groups halting, memory, and recurrent stack prefixes into nested config accordions", async () => {
-    installFetchMock({ schemaResponse: nestedControlledSchemaResponse() });
+    setupConfigScenario({ schemaResponse: nestedControlledSchemaResponse() });
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -2388,7 +2426,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("renders experts sampler router options as nested config accordions", async () => {
-    installFetchMock({ schemaResponse: expertsSamplerSchemaResponse() });
+    setupConfigScenario({ schemaResponse: expertsSamplerSchemaResponse() });
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -2446,7 +2484,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("renders router controller accordions beside router stack options", async () => {
-    installFetchMock({ schemaResponse: expertsSamplerRouterControllerSchemaResponse() });
+    setupConfigScenario({ schemaResponse: expertsSamplerRouterControllerSchemaResponse() });
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -2490,7 +2528,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("auto-opens the experts sampler router path for router stack search matches", async () => {
-    installFetchMock({ schemaResponse: expertsSamplerSchemaResponse() });
+    setupConfigScenario({ schemaResponse: expertsSamplerSchemaResponse() });
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -2536,7 +2574,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("renders mixture of experts stack options as nested config accordions", async () => {
-    installFetchMock({ schemaResponse: expertsMixtureSchemaResponse() });
+    setupConfigScenario({ schemaResponse: expertsMixtureSchemaResponse() });
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -2584,7 +2622,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("renders expert attention mode as a nested accordion switch", async () => {
-    installFetchMock({ schemaResponse: expertsMixtureSchemaResponse() });
+    setupConfigScenario({ schemaResponse: expertsMixtureSchemaResponse() });
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -2625,7 +2663,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("renders expert K/V projections without a mode switch when the schema omits it", async () => {
-    installFetchMock({
+    setupConfigScenario({
       schemaResponse: expertsMixtureWithoutAttentionModeFlagSchemaResponse(),
     });
     renderWorkbench();
@@ -2653,7 +2691,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("renders expert controller accordions beside expert stack options", async () => {
-    installFetchMock({ schemaResponse: expertsMixtureControllerSchemaResponse() });
+    setupConfigScenario({ schemaResponse: expertsMixtureControllerSchemaResponse() });
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -2698,7 +2736,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("auto-opens the mixture expert stack path for expert stack search matches", async () => {
-    installFetchMock({ schemaResponse: expertsMixtureSchemaResponse() });
+    setupConfigScenario({ schemaResponse: expertsMixtureSchemaResponse() });
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -2740,7 +2778,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("renders stack booleans as two-option segmented controls", async () => {
-    installFetchMock({
+    setupConfigScenario({
       schemaResponse: {
         ...schemaResponse,
         fields: [
@@ -2831,7 +2869,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("uses nested flag reasons for search results and auto-opens nested matches", async () => {
-    installFetchMock({ schemaResponse: nestedControlledSchemaResponse() });
+    setupConfigScenario({ schemaResponse: nestedControlledSchemaResponse() });
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -2905,7 +2943,7 @@ describe("WorkbenchApp Full Config", () => {
       fullConfigSearchPopup(dialog),
       /hidden dim/i,
     );
-    scrollIntoViewMock.mockClear();
+    configHarness.scrollIntoViewMock.mockClear();
     await user.click(
       within(recurrentGateRow).getByRole("button", {
         name: /hidden dim/i,
@@ -2913,7 +2951,7 @@ describe("WorkbenchApp Full Config", () => {
     );
 
     expect(search).toHaveValue("recurrent gate stack hidden dim");
-    expect(scrollIntoViewMock).toHaveBeenCalledWith({
+    expect(configHarness.scrollIntoViewMock).toHaveBeenCalledWith({
       block: "start",
       behavior: "smooth",
     });
@@ -2945,7 +2983,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("shows an accessible full config field search", async () => {
-    installFetchMock();
+    setupConfigScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -2976,7 +3014,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("lazy-loads full config field search results instead of showing a hidden-count footer", async () => {
-    installFetchMock({ schemaResponse: gateOptionSchemaResponse() });
+    setupConfigScenario({ schemaResponse: gateOptionSchemaResponse() });
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -3036,7 +3074,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("filters full config cards and sidebar sections while typing", async () => {
-    installFetchMock();
+    setupConfigScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -3064,7 +3102,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("finds full config fields by flag and key", async () => {
-    installFetchMock();
+    setupConfigScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -3091,7 +3129,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("does not match full config fields by current or default value text", async () => {
-    installFetchMock();
+    setupConfigScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -3111,7 +3149,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("selects a dropdown field and filters to exactly that field", async () => {
-    installFetchMock();
+    setupConfigScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -3134,14 +3172,14 @@ describe("WorkbenchApp Full Config", () => {
     expect(
       within(dialog).queryByRole("dialog", { name: /matching config fields/i }),
     ).not.toBeInTheDocument();
-    expect(scrollIntoViewMock).toHaveBeenCalledWith({
+    expect(configHarness.scrollIntoViewMock).toHaveBeenCalledWith({
       block: "start",
       behavior: "smooth",
     });
   });
 
   it("edits a numeric field from full config search results", async () => {
-    const { inspectBodies } = installFetchMock();
+    const { inspectBodies } = setupConfigScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -3235,7 +3273,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("edits enum and bool fields from full config search results", async () => {
-    installFetchMock();
+    setupConfigScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -3302,7 +3340,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("resets a modified select field from full config search results", async () => {
-    installFetchMock();
+    setupConfigScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -3370,7 +3408,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("clears full config search and restores all sections and fields", async () => {
-    installFetchMock();
+    setupConfigScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -3391,7 +3429,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("shows empty states when full config search has no matches", async () => {
-    installFetchMock();
+    setupConfigScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -3412,7 +3450,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("sidebar section clicks reopen collapsed sections and scroll to them", async () => {
-    installFetchMock();
+    setupConfigScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -3436,7 +3474,7 @@ describe("WorkbenchApp Full Config", () => {
 
     expect(layerAccordion).toHaveAttribute("aria-expanded", "false");
     expect(within(dialog).queryByLabelText(/hidden dim/i)).not.toBeInTheDocument();
-    expect(scrollIntoViewMock).not.toHaveBeenCalled();
+    expect(configHarness.scrollIntoViewMock).not.toHaveBeenCalled();
 
     await user.click(
       within(layerNavRow).getByRole("button", {
@@ -3446,14 +3484,14 @@ describe("WorkbenchApp Full Config", () => {
 
     expect(layerAccordion).toHaveAttribute("aria-expanded", "true");
     expect(within(dialog).getByLabelText(/hidden dim/i)).toBeInTheDocument();
-    expect(scrollIntoViewMock).toHaveBeenCalledWith({
+    expect(configHarness.scrollIntoViewMock).toHaveBeenCalledWith({
       block: "start",
       behavior: "smooth",
     });
   });
 
   it("keeps filtered accordion metric pills non-tabbable and number-only", async () => {
-    installFetchMock();
+    setupConfigScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -3476,7 +3514,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("shows popup config metric tooltips on hover and focus", async () => {
-    installFetchMock();
+    setupConfigScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -3502,7 +3540,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("collapsing a popup config section hides its field controls", async () => {
-    installFetchMock();
+    setupConfigScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -3532,7 +3570,7 @@ describe("WorkbenchApp Full Config", () => {
 
 
   it("editing a popup field updates overrides", async () => {
-    installFetchMock();
+    setupConfigScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -3565,7 +3603,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("clears only the reverted popup field override when it returns to default", async () => {
-    installFetchMock();
+    setupConfigScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -3614,7 +3652,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("clears section-header boolean override styling when toggled back to default", async () => {
-    installFetchMock();
+    setupConfigScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -3648,7 +3686,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("highlights a section gradient when it has an override and a preset-owned field", async () => {
-    installFetchMock({
+    setupConfigScenario({
       schemaResponse: {
         ...schemaResponse,
         fields: schemaResponse.fields.map((field) =>
@@ -3690,7 +3728,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("renders stack layer count as an editable text input with inline reset", async () => {
-    installFetchMock();
+    setupConfigScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -3736,7 +3774,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("inline field reset restores only one modified popup field", async () => {
-    installFetchMock();
+    setupConfigScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -3782,7 +3820,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("popup Update Preview posts selected model, preset, and overrides", async () => {
-    const { inspectBodies } = installFetchMock();
+    const { inspectBodies } = setupConfigScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -3805,7 +3843,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("opens a training command popup without closing full config", async () => {
-    installFetchMock();
+    setupConfigScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -3820,7 +3858,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("uses the current selected preset and omits --config when there are no overrides", async () => {
-    installFetchMock();
+    setupConfigScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -3836,7 +3874,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("includes live overrides in display order before Update Preview", async () => {
-    installFetchMock();
+    setupConfigScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -3858,7 +3896,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("keeps invalid numeric text as a draft override for preview and command generation", async () => {
-    const { inspectBodies } = installFetchMock();
+    const { inspectBodies } = setupConfigScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -3892,7 +3930,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("updates the training command after resetting overrides", async () => {
-    installFetchMock();
+    setupConfigScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -3913,7 +3951,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("shell-quotes override values and omits default-equivalent nullable empty overrides", async () => {
-    installFetchMock({
+    setupConfigScenario({
       schemaResponse: {
         ...schemaResponse,
         fields: [
@@ -3964,7 +4002,7 @@ describe("WorkbenchApp Full Config", () => {
       configurable: true,
       value: { writeText },
     });
-    installFetchMock();
+    setupConfigScenario();
     renderWorkbench();
 
     const dialog = await openFullConfig(user);
@@ -3979,7 +4017,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("closing the training command popup leaves the full config dialog open", async () => {
-    installFetchMock();
+    setupConfigScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -3993,7 +4031,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("popup Reset Overrides clears override state", async () => {
-    installFetchMock();
+    setupConfigScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -4013,7 +4051,7 @@ describe("WorkbenchApp Full Config", () => {
   });
 
   it("close button removes the full config dialog", async () => {
-    installFetchMock();
+    setupConfigScenario();
     renderWorkbench();
     const user = userEvent.setup();
 

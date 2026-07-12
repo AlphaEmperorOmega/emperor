@@ -1,32 +1,34 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
-import {
-  deferred,
-  installFetchMock,
-  inspectResponse,
-  locationInspectResponse,
-  manyRepeatedLayersInspectResponse,
-  mechanismChildrenInspectResponse,
-  mechanismMetadataInspectResponse,
-  neuronModelsResponse,
-  openFullConfig,
-  parameterShapeInspectResponse,
-  renderWorkbench,
-  repeatedLayersInspectResponse,
-  resetWorkbenchAppTestState,
-  selectTargetOption,
-  stackContainerInspectResponse,
-  tallSummaryInspectResponse,
-  typeConfigFieldValue,
-} from "./support";
+import { graphHarness } from "./support";
+
+const {
+  setup: setupGraphScenario,
+  app: { render: renderWorkbench, reset: resetWorkbenchAppTestState },
+  fixtures: {
+    defaultInspection: inspectResponse,
+    locations: locationInspectResponse,
+    manyRepeatedLayers: manyRepeatedLayersInspectResponse,
+    mechanismChildren: mechanismChildrenInspectResponse,
+    mechanismMetadata: mechanismMetadataInspectResponse,
+    neuronModels: neuronModelsResponse,
+    parameterShapes: parameterShapeInspectResponse,
+    repeatedLayers: repeatedLayersInspectResponse,
+    stackContainer: stackContainerInspectResponse,
+    tallSummary: tallSummaryInspectResponse,
+  },
+  config: { open: openFullConfig, typeFieldValue: typeConfigFieldValue },
+  target: { selectOption: selectTargetOption },
+  tools: { deferred },
+} = graphHarness;
 
 describe("WorkbenchApp Graph Workspace", () => {
   beforeEach(resetWorkbenchAppTestState);
 
   it("does not mount the graph canvas before inspected graph data exists", async () => {
     const pendingInspection = deferred<unknown>();
-    installFetchMock({
+    setupGraphScenario({
       inspectResponseFactory: () => pendingInspection.promise,
     });
     renderWorkbench();
@@ -40,7 +42,7 @@ describe("WorkbenchApp Graph Workspace", () => {
   });
 
   it("renders graph nodes progressively by default", async () => {
-    installFetchMock();
+    setupGraphScenario();
     renderWorkbench();
 
     expect(await screen.findByText("main_model.0")).toBeInTheDocument();
@@ -60,7 +62,7 @@ describe("WorkbenchApp Graph Workspace", () => {
   });
 
   it("shows child count beside the graph card title", async () => {
-    installFetchMock({ inspectResponse: repeatedLayersInspectResponse });
+    setupGraphScenario({ inspectResponse: repeatedLayersInspectResponse });
     renderWorkbench();
 
     const modelNode = await screen.findByTestId("node-model");
@@ -68,7 +70,7 @@ describe("WorkbenchApp Graph Workspace", () => {
   });
 
   it("renders total params in the right sidebar summary", async () => {
-    installFetchMock();
+    setupGraphScenario();
     renderWorkbench();
 
     const heading = await screen.findByRole("heading", { name: /node details/i });
@@ -90,7 +92,7 @@ describe("WorkbenchApp Graph Workspace", () => {
   });
 
   it("renders graph parameter badges only for nodes with parameters", async () => {
-    installFetchMock();
+    setupGraphScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -128,7 +130,7 @@ describe("WorkbenchApp Graph Workspace", () => {
       ),
     };
     let inspectBodies: unknown[] = [];
-    ({ inspectBodies } = installFetchMock({
+    ({ inspectBodies } = setupGraphScenario({
       inspectResponseFactory: (requestIndex) => {
         const request = inspectBodies[requestIndex] as { preset?: string } | undefined;
         return request?.preset === "recurrent-gating-halting"
@@ -166,7 +168,7 @@ describe("WorkbenchApp Graph Workspace", () => {
   });
 
   it("renders layer dims on the inner-model graph-card row", async () => {
-    installFetchMock();
+    setupGraphScenario();
     renderWorkbench();
 
     const layerNode = await screen.findByTestId("node-main_model.0");
@@ -180,7 +182,7 @@ describe("WorkbenchApp Graph Workspace", () => {
   });
 
   it("renders weight and bias shapes only on the graph cards that own them", async () => {
-    installFetchMock({ inspectResponse: parameterShapeInspectResponse });
+    setupGraphScenario({ inspectResponse: parameterShapeInspectResponse });
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -194,12 +196,12 @@ describe("WorkbenchApp Graph Workspace", () => {
     const ownerNode = await screen.findByTestId("node-main_model.0.model");
     const shapes = within(ownerNode).getByTestId("parameter-shapes-main_model.0.model");
     expect(within(shapes).getByLabelText("W shape 128 x 128")).toBeInTheDocument();
-    expect(within(shapes).getByLabelText("b shape 128")).toBeInTheDocument();
+    expect(within(shapes).getByLabelText("B shape 128")).toBeInTheDocument();
     expect(within(screen.getByTestId("node-main_model.0")).queryByText("128 x 128")).not.toBeInTheDocument();
   });
 
   it("renders repeated layer children as separate graph card pills", async () => {
-    installFetchMock({ inspectResponse: repeatedLayersInspectResponse });
+    setupGraphScenario({ inspectResponse: repeatedLayersInspectResponse });
     renderWorkbench();
 
     const modelNode = await screen.findByTestId("node-model");
@@ -210,7 +212,7 @@ describe("WorkbenchApp Graph Workspace", () => {
   });
 
   it("summarizes long layer stacks with an ellipsis and total count", async () => {
-    installFetchMock({ inspectResponse: manyRepeatedLayersInspectResponse });
+    setupGraphScenario({ inspectResponse: manyRepeatedLayersInspectResponse });
     renderWorkbench();
 
     const modelNode = await screen.findByTestId("node-model");
@@ -223,7 +225,7 @@ describe("WorkbenchApp Graph Workspace", () => {
   });
 
   it("builds basic-mode child summaries from the filtered graph", async () => {
-    installFetchMock();
+    setupGraphScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -242,8 +244,8 @@ describe("WorkbenchApp Graph Workspace", () => {
     expect(within(fullLayerNode).getByText("SelfAttentionProcessor")).toBeInTheDocument();
   });
 
-  it("renders simple graph cards with inline metrics only", async () => {
-    installFetchMock({ inspectResponse: parameterShapeInspectResponse });
+  it("renders simple graph cards with inline metrics and footer stats", async () => {
+    setupGraphScenario({ inspectResponse: parameterShapeInspectResponse });
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -270,7 +272,7 @@ describe("WorkbenchApp Graph Workspace", () => {
     expect(within(layerNode).getByTitle("input/output: 128 -> 128")).toHaveTextContent(
       "128 -> 128",
     );
-    expect(within(layerNode).queryByText("3 children")).not.toBeInTheDocument();
+    expect(within(layerNode).getByText("3 children")).toBeInTheDocument();
     expect(within(layerNode).queryByTestId("child-summaries-main_model.0")).not.toBeInTheDocument();
     expect(within(layerNode).queryByTestId("parameter-shapes-main_model.0")).not.toBeInTheDocument();
     expect(
@@ -290,7 +292,7 @@ describe("WorkbenchApp Graph Workspace", () => {
   });
 
   it("renders stack-derived dims on simple stack container cards", async () => {
-    installFetchMock({ inspectResponse: stackContainerInspectResponse });
+    setupGraphScenario({ inspectResponse: stackContainerInspectResponse });
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -310,7 +312,7 @@ describe("WorkbenchApp Graph Workspace", () => {
   });
 
   it("expands simple-mode cards using the basic graph topology", async () => {
-    installFetchMock();
+    setupGraphScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -339,7 +341,7 @@ describe("WorkbenchApp Graph Workspace", () => {
   });
 
   it("renders enabled gate and halting metadata as child summary rows", async () => {
-    installFetchMock({ inspectResponse: mechanismMetadataInspectResponse });
+    setupGraphScenario({ inspectResponse: mechanismMetadataInspectResponse });
     renderWorkbench();
 
     const controllerNode = await screen.findByTestId("node-controller");
@@ -348,7 +350,7 @@ describe("WorkbenchApp Graph Workspace", () => {
   });
 
   it("does not duplicate mechanism summaries when matching child nodes exist", async () => {
-    installFetchMock({ inspectResponse: mechanismChildrenInspectResponse });
+    setupGraphScenario({ inspectResponse: mechanismChildrenInspectResponse });
     renderWorkbench();
 
     const controllerNode = await screen.findByTestId("node-controller");
@@ -358,7 +360,7 @@ describe("WorkbenchApp Graph Workspace", () => {
   });
 
   it("uses child summary rows when computing graph card height", async () => {
-    installFetchMock({ inspectResponse: tallSummaryInspectResponse });
+    setupGraphScenario({ inspectResponse: tallSummaryInspectResponse });
     renderWorkbench();
 
     const blockNode = await screen.findByTestId("node-block");
@@ -370,7 +372,7 @@ describe("WorkbenchApp Graph Workspace", () => {
   });
 
   it("expands graph nodes and collapses the opened graph", async () => {
-    installFetchMock();
+    setupGraphScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -396,7 +398,7 @@ describe("WorkbenchApp Graph Workspace", () => {
   });
 
   it("opens the structure tree and reveals a clicked graph path", async () => {
-    installFetchMock();
+    setupGraphScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -440,7 +442,7 @@ describe("WorkbenchApp Graph Workspace", () => {
   });
 
   it("collapses an expanded graph card when its body is clicked again", async () => {
-    installFetchMock();
+    setupGraphScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -461,7 +463,7 @@ describe("WorkbenchApp Graph Workspace", () => {
   });
 
   it("keeps root graph cards expanded when their body is clicked", async () => {
-    installFetchMock();
+    setupGraphScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -477,7 +479,7 @@ describe("WorkbenchApp Graph Workspace", () => {
   });
 
   it("selects leaf graph cards without changing expansion", async () => {
-    installFetchMock();
+    setupGraphScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -496,7 +498,7 @@ describe("WorkbenchApp Graph Workspace", () => {
   });
 
   it("expands another card on the first body click after one card is already open", async () => {
-    installFetchMock({ inspectResponse: repeatedLayersInspectResponse });
+    setupGraphScenario({ inspectResponse: repeatedLayersInspectResponse });
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -511,7 +513,7 @@ describe("WorkbenchApp Graph Workspace", () => {
   });
 
   it("expands and collapses the current-mode subtree from the chevron", async () => {
-    installFetchMock();
+    setupGraphScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -552,7 +554,7 @@ describe("WorkbenchApp Graph Workspace", () => {
   });
 
   it("keeps chevron expansion in basic detail mode and does not select the card", async () => {
-    installFetchMock();
+    setupGraphScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -572,7 +574,7 @@ describe("WorkbenchApp Graph Workspace", () => {
   });
 
   it("keeps opened graph cards visibly separated", async () => {
-    installFetchMock();
+    setupGraphScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -591,7 +593,7 @@ describe("WorkbenchApp Graph Workspace", () => {
   });
 
   it("opens card details without expanding the subgraph", async () => {
-    installFetchMock();
+    setupGraphScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -608,7 +610,7 @@ describe("WorkbenchApp Graph Workspace", () => {
   });
 
   it("relayouts graph cards when details change card height", async () => {
-    installFetchMock();
+    setupGraphScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -630,7 +632,7 @@ describe("WorkbenchApp Graph Workspace", () => {
   });
 
   it("collapse all keeps card detail accordions open", async () => {
-    installFetchMock();
+    setupGraphScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -651,7 +653,7 @@ describe("WorkbenchApp Graph Workspace", () => {
   });
 
   it("can switch between opened and entire graph scopes", async () => {
-    installFetchMock();
+    setupGraphScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -673,7 +675,7 @@ describe("WorkbenchApp Graph Workspace", () => {
   });
 
   it("selects cards in entire scope without changing opened-scope expansion", async () => {
-    installFetchMock();
+    setupGraphScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -688,7 +690,7 @@ describe("WorkbenchApp Graph Workspace", () => {
   });
 
   it("switches between basic and full graph detail", async () => {
-    installFetchMock();
+    setupGraphScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -716,7 +718,7 @@ describe("WorkbenchApp Graph Workspace", () => {
   });
 
   it("shows the complete graph only in full entire mode", async () => {
-    installFetchMock();
+    setupGraphScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -735,7 +737,7 @@ describe("WorkbenchApp Graph Workspace", () => {
   });
 
   it("collapse all keeps the selected graph detail mode", async () => {
-    installFetchMock();
+    setupGraphScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -757,7 +759,7 @@ describe("WorkbenchApp Graph Workspace", () => {
   });
 
   it("renders graph-only preview controls with the selected cluster locations card", async () => {
-    installFetchMock({ inspectResponse: locationInspectResponse });
+    setupGraphScenario({ inspectResponse: locationInspectResponse });
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -821,7 +823,7 @@ describe("WorkbenchApp Graph Workspace", () => {
   });
 
   it("shows the 3D cluster button when the neuron model type is selected", async () => {
-    installFetchMock({
+    setupGraphScenario({
       inspectResponse: locationInspectResponse,
       modelsResponse: neuronModelsResponse,
     });
@@ -836,7 +838,7 @@ describe("WorkbenchApp Graph Workspace", () => {
   });
 
   it("opens and closes the 3D cluster popup from the neuron type button", async () => {
-    installFetchMock({
+    setupGraphScenario({
       inspectResponse: locationInspectResponse,
       modelsResponse: neuronModelsResponse,
     });
@@ -883,7 +885,7 @@ describe("WorkbenchApp Graph Workspace", () => {
   });
 
   it("updates 3D cluster slice controls locally", async () => {
-    installFetchMock({
+    setupGraphScenario({
       inspectResponse: locationInspectResponse,
       modelsResponse: neuronModelsResponse,
     });
@@ -912,7 +914,7 @@ describe("WorkbenchApp Graph Workspace", () => {
   });
 
   it("reveals a mapped 3D coordinate in full graph detail mode", async () => {
-    installFetchMock({
+    setupGraphScenario({
       inspectResponse: locationInspectResponse,
       modelsResponse: neuronModelsResponse,
     });
@@ -939,7 +941,7 @@ describe("WorkbenchApp Graph Workspace", () => {
   });
 
   it("keeps the 3D popup on the cluster for an unmapped coordinate", async () => {
-    installFetchMock({
+    setupGraphScenario({
       modelsResponse: neuronModelsResponse,
       inspectResponse: {
         ...locationInspectResponse,
@@ -985,7 +987,7 @@ describe("WorkbenchApp Graph Workspace", () => {
   });
 
   it("closes the 3D popup when selection moves away from the cluster", async () => {
-    installFetchMock({
+    setupGraphScenario({
       inspectResponse: locationInspectResponse,
       modelsResponse: neuronModelsResponse,
     });
@@ -1013,7 +1015,7 @@ describe("WorkbenchApp Graph Workspace", () => {
   });
 
   it("keeps selected cluster locations visible when switching detail modes", async () => {
-    installFetchMock({ inspectResponse: locationInspectResponse });
+    setupGraphScenario({ inspectResponse: locationInspectResponse });
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -1051,7 +1053,7 @@ describe("WorkbenchApp Graph Workspace", () => {
   });
 
   it("reveals a graph node from a location and keeps node details selected", async () => {
-    installFetchMock({ inspectResponse: locationInspectResponse });
+    setupGraphScenario({ inspectResponse: locationInspectResponse });
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -1075,7 +1077,7 @@ describe("WorkbenchApp Graph Workspace", () => {
   });
 
   it("displays selected node metadata", async () => {
-    installFetchMock();
+    setupGraphScenario();
     renderWorkbench();
     const user = userEvent.setup();
 

@@ -27,38 +27,47 @@ import {
   WorkbenchWorkspaceOverlays,
 } from "@/features/workbench/components/workbench-workspaces";
 import { type WorkbenchWorkspace } from "@/types/workbench";
-import {
-  capabilitiesResponse,
-  commandField,
-  deferred,
-  expandedTrainingDetails,
-  expandedTrainingDetailsReady,
-  fullConfigSearchPopup,
-  fullConfigSearchResultRow,
-  inspectResponse,
-  installFetchMock,
-  mockTrainingJobPayload,
-  openFullConfig,
-  openTrainingMultiSelect,
-  renderWorkbench,
-  resetWorkbenchAppTestState,
-  schemaResponse,
-  schemaResponseWithDescriptions,
-  searchSpaceResponse,
-  presetsResponse,
-  selectExistingTrainingLogFolder,
-  selectNewTrainingLogFolder,
-  selectTargetOption,
-  selectTrainingMonitorOption,
-  selectTrainingTargetOption,
-  setTargetHiddenDimOverride,
-  setTrainingMultiSelectOption,
-  typeConfigFieldValue,
-  waitForTargetValue,
-} from "./support";
+import { trainingHarness } from "./support";
+
+const {
+  setup: setupTrainingScenario,
+  app: { render: renderWorkbench, reset: resetWorkbenchAppTestState },
+  fixtures: {
+    capabilities: capabilitiesResponse,
+    inspection: inspectResponse,
+    presets: presetsResponse,
+    schema: schemaResponse,
+    schemaWithDescriptions: schemaResponseWithDescriptions,
+    searchSpace: searchSpaceResponse,
+  },
+  config: {
+    commandField,
+    open: openFullConfig,
+    searchPopup: fullConfigSearchPopup,
+    searchResultRow: fullConfigSearchResultRow,
+    typeFieldValue: typeConfigFieldValue,
+  },
+  target: {
+    selectOption: selectTargetOption,
+    setHiddenDimOverride: setTargetHiddenDimOverride,
+    waitForValue: waitForTargetValue,
+  },
+  training: {
+    expandedDetails: expandedTrainingDetails,
+    expandedDetailsReady: expandedTrainingDetailsReady,
+    mockJobPayload: mockTrainingJobPayload,
+    openMultiSelect: openTrainingMultiSelect,
+    selectExistingLogFolder: selectExistingTrainingLogFolder,
+    selectMonitorOption: selectTrainingMonitorOption,
+    selectNewLogFolder: selectNewTrainingLogFolder,
+    selectTargetOption: selectTrainingTargetOption,
+    setMultiSelectOption: setTrainingMultiSelectOption,
+  },
+  tools: { deferred },
+} = trainingHarness;
 
 function trainingRunPlanCalls(
-  fetchMock: ReturnType<typeof installFetchMock>["fetchMock"],
+  fetchMock: ReturnType<typeof setupTrainingScenario>["fetchMock"],
 ) {
   return fetchMock.mock.calls.filter(([input]) =>
     String(input).endsWith("/training/run-plan"),
@@ -66,7 +75,7 @@ function trainingRunPlanCalls(
 }
 
 function trainingJobPollCalls(
-  fetchMock: ReturnType<typeof installFetchMock>["fetchMock"],
+  fetchMock: ReturnType<typeof setupTrainingScenario>["fetchMock"],
 ) {
   return fetchMock.mock.calls.filter(([input]) =>
     String(input).endsWith("/training/jobs/job-1"),
@@ -74,7 +83,7 @@ function trainingJobPollCalls(
 }
 
 function trainingRunPlanRequestBodies(
-  fetchMock: ReturnType<typeof installFetchMock>["fetchMock"],
+  fetchMock: ReturnType<typeof setupTrainingScenario>["fetchMock"],
 ) {
   return trainingRunPlanCalls(fetchMock).map(([, init]) =>
     JSON.parse(String((init as RequestInit | undefined)?.body)),
@@ -82,7 +91,7 @@ function trainingRunPlanRequestBodies(
 }
 
 function modelCatalogCalls(
-  fetchMock: ReturnType<typeof installFetchMock>["fetchMock"],
+  fetchMock: ReturnType<typeof setupTrainingScenario>["fetchMock"],
 ) {
   return fetchMock.mock.calls.filter(([input]) => String(input).endsWith("/models"));
 }
@@ -444,7 +453,7 @@ describe("WorkbenchApp Training And Preview", () => {
   beforeEach(resetWorkbenchAppTestState);
 
   it("mounts Training as its own workspace", async () => {
-    installFetchMock();
+    setupTrainingScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -466,7 +475,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("requests training run plans only while the Training workspace is mounted", async () => {
-    const { fetchMock } = installFetchMock();
+    const { fetchMock } = setupTrainingScenario();
     const modelReady = vi.fn();
 
     const modelRender = renderWorkspaceOverlayHarness({
@@ -503,7 +512,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("submits the current backend Run plan through the Training Interface", async () => {
-    const { trainingBodies } = installFetchMock({
+    const { trainingBodies } = setupTrainingScenario({
       trainingRunPlanResponseFactory: (_request, _requestIndex, defaultPlan) => ({
         ...defaultPlan,
         runs: defaultPlan.runs.map((run, index) =>
@@ -555,7 +564,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("exposes only the five-part Training workspace Interface and focused projections", async () => {
-    installFetchMock();
+    setupTrainingScenario();
     let current: TrainingInterfaceSnapshot | undefined;
     renderTrainingInterfaceHarness({
       onChange: (snapshot) => {
@@ -591,7 +600,7 @@ describe("WorkbenchApp Training And Preview", () => {
 
   it("retries a failed backend Run plan through a semantic Training action", async () => {
     let shouldFail = true;
-    const { fetchMock } = installFetchMock({
+    const { fetchMock } = setupTrainingScenario({
       trainingRunPlanResponseFactory: (_request, _requestIndex, defaultPlan) =>
         shouldFail
           ? Promise.reject(new Error("run plan unavailable"))
@@ -624,7 +633,7 @@ describe("WorkbenchApp Training And Preview", () => {
   it("keeps an obsolete Run plan response from replacing the current draft plan", async () => {
     const obsoletePlan = deferred<unknown>();
     let obsoleteResponse: unknown;
-    const { fetchMock } = installFetchMock({
+    const { fetchMock } = setupTrainingScenario({
       trainingRunPlanResponseFactory: (request, _requestIndex, defaultPlan) => {
         if (request.logFolder === "obsolete_plan") {
           obsoleteResponse = defaultPlan;
@@ -700,7 +709,7 @@ describe("WorkbenchApp Training And Preview", () => {
 
   it("resampling replaces only the draft Run plan and submits the replacement", async () => {
     let randomPlanResponseCount = 0;
-    const { trainingBodies } = installFetchMock({
+    const { trainingBodies } = setupTrainingScenario({
       trainingRunPlanResponseFactory: (request, _requestIndex, defaultPlan) => {
         if (request.search?.mode !== "random") {
           return defaultPlan;
@@ -789,7 +798,7 @@ describe("WorkbenchApp Training And Preview", () => {
         },
       ],
     };
-    const { trainingBodies } = installFetchMock({
+    const { trainingBodies } = setupTrainingScenario({
       searchSpaceResponse: largeSearchSpace,
     });
     let current: TrainingInterfaceSnapshot | undefined;
@@ -846,7 +855,7 @@ describe("WorkbenchApp Training And Preview", () => {
 
   it("keeps a failed create out of active Job state and permits a fresh create", async () => {
     let shouldFail = true;
-    const { trainingBodies } = installFetchMock({
+    const { trainingBodies } = setupTrainingScenario({
       createTrainingJobResponseFactory: (request) =>
         shouldFail
           ? Promise.reject(new Error("training create unavailable"))
@@ -897,7 +906,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("does not rewrite an established Training draft after a Model workspace change", async () => {
-    installFetchMock();
+    setupTrainingScenario();
     let current: TrainingInterfaceSnapshot | undefined;
     renderTrainingInterfaceHarness({
       onChange: (snapshot) => {
@@ -925,7 +934,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("seeds the Training draft from the current Model target on first open", async () => {
-    installFetchMock();
+    setupTrainingScenario();
     let current: TrainingInterfaceSnapshot | undefined;
     const rendered = renderTrainingInterfaceHarness({
       activeWorkspace: "model",
@@ -959,7 +968,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("retains an active Training Job across draft and workspace changes", async () => {
-    installFetchMock({ trainingJobStatus: "running" });
+    setupTrainingScenario({ trainingJobStatus: "running" });
     let current: TrainingInterfaceSnapshot | undefined;
     const rendered = renderTrainingInterfaceHarness({
       onChange: (snapshot) => {
@@ -1001,7 +1010,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("clears Training internals through the connection composition command", async () => {
-    installFetchMock({ trainingJobStatus: "running" });
+    setupTrainingScenario({ trainingJobStatus: "running" });
     let current: TrainingInterfaceSnapshot | undefined;
     renderTrainingInterfaceHarness({
       onChange: (snapshot) => {
@@ -1059,7 +1068,7 @@ describe("WorkbenchApp Training And Preview", () => {
   it("ignores a create response that completes after a connection change", async () => {
     const pendingCreate = deferred<unknown>();
     let createRequest: Parameters<typeof mockTrainingJobPayload>[0] | undefined;
-    const { trainingBodies } = installFetchMock({
+    const { trainingBodies } = setupTrainingScenario({
       createTrainingJobResponseFactory: (request) => {
         createRequest = request as Parameters<typeof mockTrainingJobPayload>[0];
         return pendingCreate.promise;
@@ -1110,7 +1119,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("keeps active job polling mounted while the Training workspace is hidden", async () => {
-    const { fetchMock } = installFetchMock({ trainingJobStatus: "running" });
+    const { fetchMock } = setupTrainingScenario({ trainingJobStatus: "running" });
     let current: TrainingInterfaceSnapshot | undefined;
     const rendered = renderTrainingInterfaceHarness({
       onChange: (snapshot) => {
@@ -1152,7 +1161,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("keeps the running job cancellable when cancel fails", async () => {
-    const { fetchMock } = installFetchMock({
+    const { fetchMock } = setupTrainingScenario({
       trainingJobStatus: "running",
       cancelTrainingJobError:
         "Training job 'job-1' process survived terminate and kill.",
@@ -1193,7 +1202,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("shows cancel errors in the Training workspace header", async () => {
-    installFetchMock({
+    setupTrainingScenario({
       trainingJobStatus: "running",
       cancelTrainingJobError:
         "Training job 'job-1' process survived terminate and kill.",
@@ -1222,7 +1231,7 @@ describe("WorkbenchApp Training And Preview", () => {
 
   it("does not let stale running polls overwrite a cancelled mutation", async () => {
     const stalePoll = deferred<unknown>();
-    const { fetchMock } = installFetchMock({
+    const { fetchMock } = setupTrainingScenario({
       trainingJobResponseFactory: (requestIndex) =>
         requestIndex === 0
           ? stalePoll.promise
@@ -1297,7 +1306,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("renders preset-locked fields disabled with their reason", async () => {
-    installFetchMock({
+    setupTrainingScenario({
       schemaResponse: {
         ...schemaResponse,
         fields: schemaResponse.fields.map((field) =>
@@ -1418,7 +1427,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("Training workspace shows the three-zone setup, run list, and status layout", async () => {
-    installFetchMock();
+    setupTrainingScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -1743,7 +1752,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("training setup target changes do not change preview overrides or main target", async () => {
-    const { trainingBodies } = installFetchMock();
+    const { trainingBodies } = setupTrainingScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -1852,7 +1861,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("Training workspace posts selected model, preset, datasets, and overrides", async () => {
-    const { trainingBodies } = installFetchMock();
+    const { trainingBodies } = setupTrainingScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -1891,7 +1900,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("Training Full Config does not mutate Model workspace overrides", async () => {
-    installFetchMock();
+    setupTrainingScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -1926,7 +1935,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("shows backend field descriptions in Training Full Configuration", async () => {
-    installFetchMock({
+    setupTrainingScenario({
       schemaResponse: schemaResponseWithDescriptions({
         hidden_dim:
           "Sets the hidden feature width used by the training layer stack.",
@@ -1965,7 +1974,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("shows multiple planned training runs and posts selected presets", async () => {
-    const { trainingBodies } = installFetchMock();
+    const { trainingBodies } = setupTrainingScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -2041,7 +2050,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("selects all presets when more than fifty are available", async () => {
-    const { fetchMock } = installFetchMock({
+    const { fetchMock } = setupTrainingScenario({
       presetsResponse: largePresetsResponse,
     });
     renderWorkbench();
@@ -2085,7 +2094,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("shows planned training runs and row commands before training starts", async () => {
-    installFetchMock();
+    setupTrainingScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -2119,7 +2128,7 @@ describe("WorkbenchApp Training And Preview", () => {
 
   it("keeps the running preset and dataset row visible with active progress", async () => {
     let runningJob: unknown;
-    installFetchMock({
+    setupTrainingScenario({
       createTrainingJobResponseFactory: (request) => {
         const job = mockTrainingJobPayload(
           request as Parameters<typeof mockTrainingJobPayload>[0],
@@ -2197,7 +2206,7 @@ describe("WorkbenchApp Training And Preview", () => {
       createdAt: "2026-06-01T00:00:00.000Z",
       updatedAt: "2026-06-01T00:00:00.000Z",
     };
-    const { trainingBodies } = installFetchMock({
+    const { trainingBodies } = setupTrainingScenario({
       schemaResponse: {
         ...schemaResponse,
         fields: [
@@ -2373,7 +2382,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("opens snapshot draft config from a preset row action without changing preset inclusion", async () => {
-    installFetchMock();
+    setupTrainingScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -2451,7 +2460,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("opens edit and duplicate config from snapshot row actions without row toggles", async () => {
-    installFetchMock({
+    setupTrainingScenario({
       schemaResponse: {
         ...schemaResponse,
         fields: [
@@ -2550,7 +2559,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("submits a Config Snapshot-only plan after removing every base preset", async () => {
-    const { trainingBodies } = installFetchMock({
+    const { trainingBodies } = setupTrainingScenario({
       schemaResponse: {
         ...schemaResponse,
         fields: [
@@ -2653,7 +2662,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("deselects a snapshot run across datasets and syncs setup variants", async () => {
-    installFetchMock({
+    setupTrainingScenario({
       schemaResponse: {
         ...schemaResponse,
         fields: [
@@ -2746,7 +2755,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("shows Resample in the Training run list for random search before start", async () => {
-    const { fetchMock } = installFetchMock();
+    const { fetchMock } = setupTrainingScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -2770,7 +2779,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("keeps completed job progress visible after the draft config changes", async () => {
-    installFetchMock();
+    setupTrainingScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -2835,7 +2844,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("resets completed training progress back to the current draft plan", async () => {
-    installFetchMock();
+    setupTrainingScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -2879,7 +2888,7 @@ describe("WorkbenchApp Training And Preview", () => {
     let createCount = 0;
     let latestRequest: Parameters<typeof mockTrainingJobPayload>[0] | undefined;
     const pendingCreate = deferred<unknown>();
-    installFetchMock({
+    setupTrainingScenario({
       createTrainingJobResponseFactory: (request) => {
         latestRequest = request as Parameters<typeof mockTrainingJobPayload>[0];
         createCount += 1;
@@ -2914,7 +2923,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("starts the next training run from the changed draft plan after completion", async () => {
-    const { trainingBodies } = installFetchMock();
+    const { trainingBodies } = setupTrainingScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -2955,7 +2964,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("making a selected preset primary updates the training target and resets search state", async () => {
-    const { inspectBodies } = installFetchMock();
+    const { inspectBodies } = setupTrainingScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -3026,7 +3035,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("removing the current primary preset keeps the target preset unchanged", async () => {
-    installFetchMock();
+    setupTrainingScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -3063,7 +3072,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("keeps the last selected preset selected in the preset multiselect", async () => {
-    installFetchMock();
+    setupTrainingScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -3084,7 +3093,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("keeps the last dataset selected in the dataset multiselect", async () => {
-    installFetchMock();
+    setupTrainingScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -3109,7 +3118,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("filters training multiselect options and selects matching results", async () => {
-    installFetchMock();
+    setupTrainingScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -3153,7 +3162,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("multiplies grid planned runs by selected presets and datasets", async () => {
-    installFetchMock({
+    setupTrainingScenario({
       searchSpaceResponse: {
         ...searchSpaceResponse,
         axes: [
@@ -3195,7 +3204,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("starts grid search with selected axis values and omits conflicting overrides", async () => {
-    const { trainingBodies } = installFetchMock();
+    const { trainingBodies } = setupTrainingScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -3241,7 +3250,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("posts random search with the configured sample count", async () => {
-    const { trainingBodies } = installFetchMock();
+    const { trainingBodies } = setupTrainingScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -3269,7 +3278,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("selects all search axes and values from the grid setup", async () => {
-    const { trainingBodies } = installFetchMock();
+    const { trainingBodies } = setupTrainingScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -3299,7 +3308,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("skips preset-owned axes when selecting all grid search axes", async () => {
-    const { trainingBodies } = installFetchMock({
+    const { trainingBodies } = setupTrainingScenario({
       presetsResponse: searchLockPresetsResponse,
       searchSpaceResponseFactory: searchSpaceWithPresetLocks,
     });
@@ -3360,7 +3369,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("skips an already selected axis when a new preset owns it", async () => {
-    const { trainingBodies } = installFetchMock({
+    const { trainingBodies } = setupTrainingScenario({
       presetsResponse: searchLockPresetsResponse,
       searchSpaceResponseFactory: searchSpaceWithPresetLocks,
     });
@@ -3425,7 +3434,7 @@ describe("WorkbenchApp Training And Preview", () => {
         },
       ],
     };
-    const { trainingBodies } = installFetchMock({
+    const { trainingBodies } = setupTrainingScenario({
       searchSpaceResponse: largeSearchSpace,
     });
     renderWorkbench();
@@ -3468,7 +3477,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("Training workspace includes selected monitors in run-plan commands and job submissions", async () => {
-    const { fetchMock, trainingBodies } = installFetchMock();
+    const { fetchMock, trainingBodies } = setupTrainingScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -3566,7 +3575,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("requires a valid log folder before starting training", async () => {
-    const { trainingBodies } = installFetchMock();
+    const { trainingBodies } = setupTrainingScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -3603,7 +3612,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("disables training planning and submission when capabilities disable training", async () => {
-    const { fetchMock, trainingBodies } = installFetchMock({
+    const { fetchMock, trainingBodies } = setupTrainingScenario({
       capabilitiesResponse: {
         ...capabilitiesResponse,
         authMode: "bearer",
@@ -3629,7 +3638,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("prunes datasets when the Training Experiment Task changes", async () => {
-    const { fetchMock, trainingBodies } = installFetchMock({
+    const { fetchMock, trainingBodies } = setupTrainingScenario({
       datasetsResponse: {
         modelType: "linears",
         model: "linear",
@@ -3712,7 +3721,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("keeps Start Training disabled when the selected model has no datasets", async () => {
-    const { trainingBodies } = installFetchMock({
+    const { trainingBodies } = setupTrainingScenario({
       datasetsResponse: {
         modelType: "linears",
         model: "linear",
@@ -3740,7 +3749,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("posts the selected existing log folder", async () => {
-    const { trainingBodies } = installFetchMock();
+    const { trainingBodies } = setupTrainingScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -3753,7 +3762,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("checks the started experiment when switching to logs", async () => {
-    const { trainingBodies } = installFetchMock();
+    const { trainingBodies } = setupTrainingScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -3778,7 +3787,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("does not replay a started folder after the Workbench connection changes", async () => {
-    const { trainingBodies } = installFetchMock();
+    const { trainingBodies } = setupTrainingScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -3819,7 +3828,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("Full config Update Preview sends a new inspect request for the same selection", async () => {
-    const { inspectBodies } = installFetchMock();
+    const { inspectBodies } = setupTrainingScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -3838,7 +3847,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("changing the main-menu preset preserves overrides and refreshes the preview", async () => {
-    const { inspectBodies } = installFetchMock();
+    const { inspectBodies } = setupTrainingScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -3863,7 +3872,7 @@ describe("WorkbenchApp Training And Preview", () => {
   });
 
   it("resetting overrides refreshes the preview when a target is selected", async () => {
-    const { inspectBodies } = installFetchMock();
+    const { inspectBodies } = setupTrainingScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -3886,7 +3895,7 @@ describe("WorkbenchApp Training And Preview", () => {
 
   it("clears the displayed graph while a preview refresh is pending", async () => {
     const nextPreview = deferred<unknown>();
-    installFetchMock({
+    setupTrainingScenario({
       logRunsResponse: { runs: [] },
       inspectResponseFactory: (requestIndex) =>
         requestIndex === 1 ? nextPreview.promise : inspectResponse,

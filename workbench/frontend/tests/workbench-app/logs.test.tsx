@@ -1,23 +1,28 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
-import {
-  buildKaggleLinearLogFixture,
-  buildLargeLogFixture,
-  buildSubsetDeleteFixture,
-  capabilitiesResponse,
-  deferred,
-  expectLogsChecklistRowSizing,
-  installFetchMock,
-  logTagsByRun,
-  logMetricGroupToggle,
-  logValidationExamplesToggle,
-  logRunsResponse,
-  logScalarSeries,
-  renderWorkbench,
-  resetWorkbenchAppTestState,
-  scalarChartGridFor,
-} from "./support";
+import { logsHarness } from "./support";
+
+const {
+  setup: setupLogsScenario,
+  app: { render: renderWorkbench, reset: resetWorkbenchAppTestState },
+  fixtures: {
+    buildKaggleLinear: buildKaggleLinearLogFixture,
+    buildLarge: buildLargeLogFixture,
+    buildSubsetDelete: buildSubsetDeleteFixture,
+    capabilities: capabilitiesResponse,
+    runs: logRunsResponse,
+    scalarSeries: logScalarSeries,
+    tagsByRun: logTagsByRun,
+  },
+  ui: {
+    expectChecklistRowSizing: expectLogsChecklistRowSizing,
+    metricGroupToggle: logMetricGroupToggle,
+    scalarChartGridFor,
+    validationExamplesToggle: logValidationExamplesToggle,
+  },
+  tools: { deferred },
+} = logsHarness;
 
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -322,7 +327,7 @@ describe("WorkbenchApp Logs Workspace", () => {
   beforeEach(resetWorkbenchAppTestState);
 
   it("opens logs without selecting runs or loading TensorBoard data", async () => {
-    const { logScalarRequests, logTagRequests } = installFetchMock();
+    const { logScalarRequests, logTagRequests } = setupLogsScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -340,7 +345,7 @@ describe("WorkbenchApp Logs Workspace", () => {
   });
 
   it("moves explicitly between the current target and all-runs scope", async () => {
-    const { logRunRequests } = installFetchMock();
+    const { logRunRequests } = setupLogsScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -402,7 +407,7 @@ describe("WorkbenchApp Logs Workspace", () => {
   });
 
   it("opens logs scoped to the current target dataset and applies common filters from experiment selection", async () => {
-    const { logRunRequests, logScalarRequests } = installFetchMock();
+    const { logRunRequests, logScalarRequests } = setupLogsScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -494,7 +499,7 @@ describe("WorkbenchApp Logs Workspace", () => {
   });
 
   it("renders the train-vs-validation accordion after best run and keeps it cold while collapsed", async () => {
-    const { logScalarRequests } = installFetchMock();
+    const { logScalarRequests } = setupLogsScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -537,7 +542,7 @@ describe("WorkbenchApp Logs Workspace", () => {
   });
 
   it("renders a selected train-vs-validation pair and omits incomplete pair options", async () => {
-    const { logScalarRequests } = installFetchMock({
+    const { logScalarRequests } = setupLogsScenario({
       logTagsByRun: {
         "log-mnist": scalarTagsWithEpochDefaults(
           "validation/precision",
@@ -600,7 +605,7 @@ describe("WorkbenchApp Logs Workspace", () => {
           "test_model/linear/WIDE/Mnist/wide_20260601_030405/version_0",
       },
     ];
-    installFetchMock({
+    setupLogsScenario({
       logRunsResponse: { runs },
       logExperimentsResponse: {
         experiments: [
@@ -645,7 +650,7 @@ describe("WorkbenchApp Logs Workspace", () => {
           "test_model/linear/BASELINE/Cifar10/bbb_20260601_020304/version_0",
       },
     ];
-    installFetchMock({
+    setupLogsScenario({
       logRunsResponse: { runs },
       logExperimentsResponse: {
         experiments: [
@@ -716,7 +721,7 @@ describe("WorkbenchApp Logs Workspace", () => {
   });
 
   it("keeps scalar tag options available but checks only epoch defaults", async () => {
-    installFetchMock({
+    setupLogsScenario({
       logTagsByRun: {
         "log-mnist": scalarTagsWithEpochDefaults(
           "train/loss",
@@ -829,7 +834,7 @@ describe("WorkbenchApp Logs Workspace", () => {
     if (!Array.isArray(defaultMnistTags)) {
       throw new Error("Expected default Mnist log tags to be scalar tag names");
     }
-    installFetchMock({
+    setupLogsScenario({
       logTagsByRun: {
         "log-mnist": {
           scalarTags: [...defaultMnistTags, ...matrixRateTags],
@@ -893,7 +898,7 @@ describe("WorkbenchApp Logs Workspace", () => {
         metrics: { "test/accuracy": 0.73 },
       },
     ];
-    const { logScalarRequests, logTagRequests } = installFetchMock({
+    const { logScalarRequests, logTagRequests } = setupLogsScenario({
       logRunsResponse: { runs },
       logExperimentsResponse: {
         experiments: [
@@ -1043,7 +1048,7 @@ describe("WorkbenchApp Logs Workspace", () => {
     ];
     const expandedScalarResponse = deferred<unknown>();
     let delayExpandedScalarReads = false;
-    const { logScalarRequests, logTagRequests } = installFetchMock({
+    const { logScalarRequests, logTagRequests } = setupLogsScenario({
       logRunsResponse: { runs },
       logExperimentsResponse: {
         experiments: [
@@ -1189,7 +1194,7 @@ describe("WorkbenchApp Logs Workspace", () => {
   });
 
   it("keeps validation examples collapsed until the accordion is opened", async () => {
-    const { logMediaRequests } = installFetchMock({
+    const { logMediaRequests } = setupLogsScenario({
       logTagsByRun: {
         "log-mnist": {
           scalarTags: scalarTagsWithEpochDefaults("validation/accuracy"),
@@ -1266,7 +1271,7 @@ describe("WorkbenchApp Logs Workspace", () => {
       "validation/confusion_matrix/true_class_1/predicted_class_0/count",
       "validation/confusion_matrix/true_class_1/predicted_class_1/count",
     ];
-    const { logScalarRequests } = installFetchMock({
+    const { logScalarRequests } = setupLogsScenario({
       logTagsByRun: {
         "log-mnist": {
           scalarTags: [...matrixRateTags, ...matrixCountTags],
@@ -1334,7 +1339,7 @@ describe("WorkbenchApp Logs Workspace", () => {
   });
 
   it("collapses logs metric groups without changing selected tags or refetching scalars", async () => {
-    const { logScalarRequests } = installFetchMock();
+    const { logScalarRequests } = setupLogsScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -1408,7 +1413,7 @@ describe("WorkbenchApp Logs Workspace", () => {
   });
 
   it("filters train and validation plots from accordion plot selectors", async () => {
-    const { logScalarRequests } = installFetchMock();
+    const { logScalarRequests } = setupLogsScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -1499,7 +1504,7 @@ describe("WorkbenchApp Logs Workspace", () => {
   });
 
   it("opens a metric plot selector without collapsing its accordion", async () => {
-    installFetchMock();
+    setupLogsScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -1550,7 +1555,7 @@ describe("WorkbenchApp Logs Workspace", () => {
 
   it("keeps loaded scalar groups visible while the default-open Train group loads", async () => {
     const trainScalarResponse = deferred<unknown>();
-    const { logScalarRequests } = installFetchMock({
+    const { logScalarRequests } = setupLogsScenario({
       logScalarResponseFactory: (body) => {
         if (body.tags.includes("train/loss_epoch")) {
           return trainScalarResponse.promise;
@@ -1597,7 +1602,7 @@ describe("WorkbenchApp Logs Workspace", () => {
       relativePath: `partial_scalar/linear/BASELINE/Mnist/${run.runName}/version_0`,
     }));
     const failedRunId = runs.at(-1)?.id;
-    const { logScalarRequests } = installFetchMock({
+    const { logScalarRequests } = setupLogsScenario({
       logRunsResponse: { runs },
       logExperimentsResponse: {
         experiments: [
@@ -1667,7 +1672,7 @@ describe("WorkbenchApp Logs Workspace", () => {
     );
     const runs = [...logRunsWithSharedDataset().runs, ...extraRuns];
     const delayedTagChunk = deferred<null>();
-    const { logTagRequests } = installFetchMock({
+    const { logTagRequests } = setupLogsScenario({
       logRunsResponse: { runs },
       logExperimentsResponse: {
         experiments: runs.map((run) => ({
@@ -1759,7 +1764,7 @@ describe("WorkbenchApp Logs Workspace", () => {
   });
 
   it("shows checkpoints, params, and artifacts in run details", async () => {
-    const { logArtifactRequests, logCheckpointRequests } = installFetchMock();
+    const { logArtifactRequests, logCheckpointRequests } = setupLogsScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -1839,7 +1844,7 @@ describe("WorkbenchApp Logs Workspace", () => {
       modifiedAt: "2026-06-01T01:03:00Z",
     };
 
-    installFetchMock({
+    setupLogsScenario({
       logRunsResponse: { runs: [longRun] },
       logExperimentsResponse: {
         experiments: [
@@ -1929,7 +1934,7 @@ describe("WorkbenchApp Logs Workspace", () => {
   });
 
   it("renders non-standard scalar tags in the Other metric group", async () => {
-    installFetchMock();
+    setupLogsScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -1961,7 +1966,7 @@ describe("WorkbenchApp Logs Workspace", () => {
   });
 
   it("keeps collapsed logs metric groups collapsed after switching workspaces", async () => {
-    installFetchMock();
+    setupLogsScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -1987,7 +1992,7 @@ describe("WorkbenchApp Logs Workspace", () => {
   });
 
   it("splits test score leaderboards by experiment without refetching scalars", async () => {
-    const { logScalarRequests } = installFetchMock({
+    const { logScalarRequests } = setupLogsScenario({
       logRunsResponse: logRunsWithSharedDataset(),
     });
     renderWorkbench();
@@ -2110,7 +2115,7 @@ describe("WorkbenchApp Logs Workspace", () => {
       { runId: "log-cifar", accuracy: 0.73, loss: 0.27 },
       { runId: "log-cifar-alt", accuracy: 0.95, loss: 0.5 },
     ];
-    installFetchMock({
+    setupLogsScenario({
       logRunsResponse: { runs },
       logExperimentsResponse: {
         experiments: [
@@ -2233,7 +2238,7 @@ describe("WorkbenchApp Logs Workspace", () => {
   });
 
   it("switches historical scalar accordion layouts without refetching scalars", async () => {
-    const { logScalarRequests } = installFetchMock();
+    const { logScalarRequests } = setupLogsScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -2327,7 +2332,7 @@ describe("WorkbenchApp Logs Workspace", () => {
   });
 
   it("switches individual metric chart layouts without refetching scalars", async () => {
-    const { logScalarRequests } = installFetchMock();
+    const { logScalarRequests } = setupLogsScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -2400,7 +2405,7 @@ describe("WorkbenchApp Logs Workspace", () => {
   });
 
   it("links scalar legend hover across charts in the same metric accordion", async () => {
-    installFetchMock({
+    setupLogsScenario({
       logRunsResponse: logRunsWithSharedDataset(),
     });
     renderWorkbench();
@@ -2467,7 +2472,7 @@ describe("WorkbenchApp Logs Workspace", () => {
   });
 
   it("logs workspace experiment and tag checkboxes hide chart content", async () => {
-    installFetchMock({
+    setupLogsScenario({
       logRunsResponse: logRunsWithSharedDataset(),
     });
     renderWorkbench();
@@ -2539,7 +2544,7 @@ describe("WorkbenchApp Logs Workspace", () => {
   });
 
   it("requests checkpoint markers only for visible log runs", async () => {
-    const { logCheckpointRequests } = installFetchMock({
+    const { logCheckpointRequests } = setupLogsScenario({
       logRunsResponse: {
         runs: logRunsWithSharedDataset().runs.map((run) =>
           run.id === "log-cifar" ? { ...run, checkpointCount: 1 } : run,
@@ -2601,7 +2606,7 @@ describe("WorkbenchApp Logs Workspace", () => {
   });
 
   it("deletes a log experiment after exact-name confirmation", async () => {
-    const { fetchMock, deleteExperimentRequests, logScalarRequests } = installFetchMock();
+    const { fetchMock, deleteExperimentRequests, logScalarRequests } = setupLogsScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -2649,7 +2654,7 @@ describe("WorkbenchApp Logs Workspace", () => {
   });
 
   it("does not render the sidebar-level delete visible runs action", async () => {
-    installFetchMock();
+    setupLogsScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -2663,7 +2668,7 @@ describe("WorkbenchApp Logs Workspace", () => {
 
   it("hides destructive log deletion actions when capabilities disable them", async () => {
     const { deleteExperimentRequests, deleteRunPlanRequests, deleteRunRequests } =
-      installFetchMock({
+      setupLogsScenario({
         capabilitiesResponse: {
           ...capabilitiesResponse,
           logDeletionEnabled: false,
@@ -2695,7 +2700,7 @@ describe("WorkbenchApp Logs Workspace", () => {
   });
 
   it("deletes preset row runs using the target experiment and preset", async () => {
-    const { deleteRunPlanRequests, deleteRunRequests } = installFetchMock(
+    const { deleteRunPlanRequests, deleteRunRequests } = setupLogsScenario(
       buildSubsetDeleteFixture(),
     );
     renderWorkbench();
@@ -2737,7 +2742,7 @@ describe("WorkbenchApp Logs Workspace", () => {
   });
 
   it("cancels a planned preset deletion without issuing a mutation", async () => {
-    const { deleteRunPlanRequests, deleteRunRequests } = installFetchMock(
+    const { deleteRunPlanRequests, deleteRunRequests } = setupLogsScenario(
       buildSubsetDeleteFixture(),
     );
     renderWorkbench();
@@ -2765,7 +2770,7 @@ describe("WorkbenchApp Logs Workspace", () => {
   });
 
   it("retries preset deletion planning after a scoped plan failure", async () => {
-    const { deleteRunPlanRequests, deleteRunRequests } = installFetchMock({
+    const { deleteRunPlanRequests, deleteRunRequests } = setupLogsScenario({
       ...buildSubsetDeleteFixture(),
       deleteLogRunPlanErrorFactory: (requestIndex) =>
         requestIndex === 0 ? "delete plan unavailable" : undefined,
@@ -2795,7 +2800,7 @@ describe("WorkbenchApp Logs Workspace", () => {
   });
 
   it("retains a preset plan while a failed mutation is retried", async () => {
-    const { deleteRunRequests } = installFetchMock({
+    const { deleteRunRequests } = setupLogsScenario({
       ...buildSubsetDeleteFixture(),
       deleteLogRunsErrorFactory: (requestIndex) =>
         requestIndex === 0 ? "delete mutation unavailable" : undefined,
@@ -2831,7 +2836,7 @@ describe("WorkbenchApp Logs Workspace", () => {
   });
 
   it("blocks preset row deletion when an active training job uses an affected folder", async () => {
-    const { deleteRunRequests } = installFetchMock({
+    const { deleteRunRequests } = setupLogsScenario({
       ...buildSubsetDeleteFixture(),
       deleteLogRunsBlockers: [
         { id: "job-1", logFolder: "test_model", status: "running" },
@@ -2875,7 +2880,7 @@ describe("WorkbenchApp Logs Workspace", () => {
       logRunsResponse: { runs: sharedRuns },
     };
     const { deleteExperimentRequests, logScalarRequests } =
-      installFetchMock(sharedFixture);
+      setupLogsScenario(sharedFixture);
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -3037,7 +3042,7 @@ describe("WorkbenchApp Logs Workspace", () => {
         metrics: { "test/accuracy": 0.7 + index / 1000 },
       };
     });
-    const { logRunRequests } = installFetchMock({
+    const { logRunRequests } = setupLogsScenario({
       logRunsResponse: { runs },
       logExperimentsResponse: {
         experiments: [
@@ -3126,7 +3131,7 @@ describe("WorkbenchApp Logs Workspace", () => {
       ...fixture,
       logRunsResponse: { runs: sharedRuns },
     };
-    const { logRunRequests, logTagRequests } = installFetchMock(sharedFixture);
+    const { logRunRequests, logTagRequests } = setupLogsScenario(sharedFixture);
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -3186,7 +3191,7 @@ describe("WorkbenchApp Logs Workspace", () => {
   });
 
   it("does not delete a log experiment when the dialog is cancelled", async () => {
-    const { deleteExperimentRequests } = installFetchMock();
+    const { deleteExperimentRequests } = setupLogsScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -3217,7 +3222,7 @@ describe("WorkbenchApp Logs Workspace", () => {
   });
 
   it("keeps the delete dialog open and shows backend errors", async () => {
-    const { deleteExperimentRequests } = installFetchMock({
+    const { deleteExperimentRequests } = setupLogsScenario({
       deleteLogExperimentError: "Refusing to delete symlink log experiment: test_model",
     });
     renderWorkbench();
@@ -3243,7 +3248,7 @@ describe("WorkbenchApp Logs Workspace", () => {
   });
 
   it("omits stale scalar tags from chart requests after experiment filtering", async () => {
-    const { logScalarRequests } = installFetchMock({
+    const { logScalarRequests } = setupLogsScenario({
       logRunsResponse: logRunsWithSharedDataset(),
       logTagsByRun: {
         "log-mnist": ["train/loss", "validation/accuracy"],
@@ -3329,7 +3334,7 @@ describe("WorkbenchApp Logs Workspace", () => {
     }));
     const runs = [priorRun, ...kaggleRuns];
     const monitorTag = "main_model.0.model/weights/mean";
-    const { logScalarRequests, logTagRequests } = installFetchMock({
+    const { logScalarRequests, logTagRequests } = setupLogsScenario({
       logRunsResponse: { runs },
       logExperimentsResponse: {
         experiments: [
@@ -3487,7 +3492,7 @@ describe("WorkbenchApp Logs Workspace", () => {
       metrics: { "test/accuracy": 0.9 },
     };
     const runs = [expACifarRun, expAMnistRun, expBCifarRun, expBConvRun];
-    const { logRunRequests, logTagRequests } = installFetchMock({
+    const { logRunRequests, logTagRequests } = setupLogsScenario({
       logRunsResponse: { runs },
       logExperimentsResponse: {
         experiments: [
@@ -3600,7 +3605,7 @@ describe("WorkbenchApp Logs Workspace", () => {
       relativePath:
         "exp_b/wide-linear/WIDE_ONLY/Cifar10/exp_b_cifar_20260601_020304/version_0",
     };
-    const { logScalarRequests, logTagRequests } = installFetchMock({
+    const { logScalarRequests, logTagRequests } = setupLogsScenario({
       logRunsResponse: { runs: [mnistRun, cifarRun] },
       logExperimentsResponse: {
         experiments: [
@@ -3641,7 +3646,7 @@ describe("WorkbenchApp Logs Workspace", () => {
         textTags: string[];
       }>;
     }>();
-    const { logScalarRequests, logTagRequests } = installFetchMock({
+    const { logScalarRequests, logTagRequests } = setupLogsScenario({
       logRunsResponse: fixture.logRunsResponse,
       logExperimentsResponse: fixture.logExperimentsResponse,
       logTagsByRun: fixture.logTagsByRun,
@@ -3715,7 +3720,7 @@ describe("WorkbenchApp Logs Workspace", () => {
   });
 
   it("shows the scalar empty state without scalar fetches when event runs have no tags", async () => {
-    const { logScalarRequests } = installFetchMock({
+    const { logScalarRequests } = setupLogsScenario({
       logRunsResponse: {
         runs: [
           {
