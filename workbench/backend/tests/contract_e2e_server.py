@@ -10,8 +10,8 @@ import uvicorn
 from workbench.backend.api import WorkbenchApiSettings
 from workbench.backend.tests.helpers import (
     FakeRunner,
-    TrainingJobRuntimeHarness,
-    create_app_with_training_runtime,
+    TrainingJobServiceHarness,
+    create_app_with_training_service,
 )
 
 
@@ -35,13 +35,13 @@ def main() -> None:
         allow_log_imports=False,
         training_cancellation_mode="process-group",
     )
-    training_manager = TrainingJobRuntimeHarness(
+    training_manager = TrainingJobServiceHarness(
         root=root / "jobs",
         logs_root=logs_root,
         runner=FakeRunner(),
         cancellation_mode="process-group",
     )
-    app = create_app_with_training_runtime(settings, training_manager)
+    app = create_app_with_training_service(settings, training_manager)
     uvicorn.run(
         app,
         host="127.0.0.1",

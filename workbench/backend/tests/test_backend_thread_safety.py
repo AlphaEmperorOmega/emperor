@@ -12,7 +12,7 @@ from workbench.backend.tensorboard.readers import (
     TensorBoardParameterStatusReader,
 )
 from workbench.backend.tests.helpers import (
-    TrainingJobRuntimeHarness,
+    TrainingJobServiceHarness,
 )
 from workbench.backend.training_jobs.progress import (
     TrainingProgressSnapshot,
@@ -88,7 +88,7 @@ class BackendThreadSafetyTests(unittest.TestCase):
             self.assertEqual(len(store.list()), 64)
 
     def test_training_live_projection_cache_handles_concurrent_reads(self) -> None:
-        manager = TrainingJobRuntimeHarness(job_store=InMemoryTrainingJobStore())
+        manager = TrainingJobServiceHarness(job_store=InMemoryTrainingJobStore())
         job = training_job_record("job-1", Path("/tmp/jobs"))
         events = [
             {
@@ -130,7 +130,7 @@ class BackendThreadSafetyTests(unittest.TestCase):
 
         def project(index: int) -> int:
             snapshot = snapshots[index % len(snapshots)]
-            return manager._live_projection(job, snapshot).event_count
+            return manager.runtime._live_projection(job, snapshot).event_count
 
         with ThreadPoolExecutor(max_workers=8) as executor:
             counts = list(executor.map(project, range(80)))

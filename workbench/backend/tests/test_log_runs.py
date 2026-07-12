@@ -38,8 +38,8 @@ from workbench.backend.run_history.scanner import LogRunScanner
 from workbench.backend.tensorboard import events as tensorboard_events
 from workbench.backend.tests.helpers import (
     FakeRunner,
-    TrainingJobRuntimeHarness,
-    create_app_with_training_runtime,
+    TrainingJobServiceHarness,
+    create_app_with_training_service,
     delete_filters_for_runs,
     write_tensorboard_run,
 )
@@ -1747,12 +1747,12 @@ class RunHistoryAndApiTests(unittest.TestCase):
                             "version_0",
                         ],
                     )
-                    manager = TrainingJobRuntimeHarness(
+                    manager = TrainingJobServiceHarness(
                         root=Path(tmp) / "jobs",
                         logs_root=logs_root,
                         runner=FakeRunner(),
                     )
-                    job = manager.create_job(
+                    job = manager.create_job_payload(
                         model="linears/linear",
                         preset="baseline",
                         datasets=["Mnist"],
@@ -1762,7 +1762,7 @@ class RunHistoryAndApiTests(unittest.TestCase):
                     )
                     job_id = str(job["id"])
                     if job_status == "cancelled":
-                        manager.cancel_job(job_id)
+                        manager.cancel_job_payload(job_id)
                     elif job_status == "completed":
                         manager.runner.process.exit_code = 0
                     elif job_status == "failed":
@@ -1772,10 +1772,10 @@ class RunHistoryAndApiTests(unittest.TestCase):
 
                     async def call_api(
                         logs_root: Path = logs_root,
-                        manager: TrainingJobRuntimeHarness = manager,
+                        manager: TrainingJobServiceHarness = manager,
                     ) -> httpx.Response:
                         transport = httpx.ASGITransport(
-                            app=create_app_with_training_runtime(
+                            app=create_app_with_training_service(
                                 WorkbenchApiSettings(
                                     logs_root=str(logs_root),
                                     allow_unsafe_local_mutations=True,
@@ -1849,12 +1849,12 @@ class RunHistoryAndApiTests(unittest.TestCase):
                     "version_0",
                 ],
             )
-            original_manager = TrainingJobRuntimeHarness(
+            original_manager = TrainingJobServiceHarness(
                 root=root / "jobs",
                 logs_root=logs_root,
                 runner=FakeRunner(),
             )
-            job = original_manager.create_job(
+            job = original_manager.create_job_payload(
                 model="linears/linear",
                 preset="baseline",
                 datasets=["Mnist"],
@@ -1864,7 +1864,7 @@ class RunHistoryAndApiTests(unittest.TestCase):
             )
             job_id = str(job["id"])
             self.assertEqual(
-                original_manager.active_jobs(),
+                original_manager.active_job_payloads(),
                 [
                     {
                         "id": job_id,
@@ -1874,13 +1874,13 @@ class RunHistoryAndApiTests(unittest.TestCase):
                 ],
             )
 
-            fresh_manager = TrainingJobRuntimeHarness(
+            fresh_manager = TrainingJobServiceHarness(
                 root=root / "jobs",
                 logs_root=logs_root,
                 runner=FakeRunner(),
             )
             self.assertEqual(
-                fresh_manager.active_jobs(),
+                fresh_manager.active_job_payloads(),
                 [
                     {
                         "id": job_id,
@@ -1892,7 +1892,7 @@ class RunHistoryAndApiTests(unittest.TestCase):
 
             async def call_api() -> httpx.Response:
                 transport = httpx.ASGITransport(
-                    app=create_app_with_training_runtime(
+                    app=create_app_with_training_service(
                         WorkbenchApiSettings(
                             logs_root=str(logs_root),
                             allow_unsafe_local_mutations=True,
@@ -1917,7 +1917,7 @@ class RunHistoryAndApiTests(unittest.TestCase):
             self.assertTrue(logs_root.joinpath("test_model").exists())
             self.assertTrue(run_dir.exists())
             self.assertEqual(
-                original_manager.active_jobs(),
+                original_manager.active_job_payloads(),
                 [
                     {
                         "id": job_id,
@@ -1948,12 +1948,12 @@ class RunHistoryAndApiTests(unittest.TestCase):
                     "version_0",
                 ],
             )
-            original_manager = TrainingJobRuntimeHarness(
+            original_manager = TrainingJobServiceHarness(
                 root=root / "jobs",
                 logs_root=logs_root,
                 runner=FakeRunner(),
             )
-            job = original_manager.create_job(
+            job = original_manager.create_job_payload(
                 model="linears/linear",
                 preset="baseline",
                 datasets=["Mnist"],
@@ -1963,7 +1963,7 @@ class RunHistoryAndApiTests(unittest.TestCase):
             )
             job_id = str(job["id"])
             self.assertEqual(
-                original_manager.active_jobs(),
+                original_manager.active_job_payloads(),
                 [
                     {
                         "id": job_id,
@@ -1972,7 +1972,7 @@ class RunHistoryAndApiTests(unittest.TestCase):
                     }
                 ],
             )
-            fresh_manager = TrainingJobRuntimeHarness(
+            fresh_manager = TrainingJobServiceHarness(
                 root=root / "jobs",
                 logs_root=logs_root,
                 runner=FakeRunner(),
@@ -1988,7 +1988,7 @@ class RunHistoryAndApiTests(unittest.TestCase):
 
             async def create_plan() -> httpx.Response:
                 transport = httpx.ASGITransport(
-                    app=create_app_with_training_runtime(
+                    app=create_app_with_training_service(
                         WorkbenchApiSettings(
                             logs_root=str(logs_root),
                             allow_unsafe_local_mutations=True,
@@ -2024,7 +2024,7 @@ class RunHistoryAndApiTests(unittest.TestCase):
 
             async def delete_runs() -> httpx.Response:
                 transport = httpx.ASGITransport(
-                    app=create_app_with_training_runtime(
+                    app=create_app_with_training_service(
                         WorkbenchApiSettings(
                             logs_root=str(logs_root),
                             allow_unsafe_local_mutations=True,
@@ -2072,12 +2072,12 @@ class RunHistoryAndApiTests(unittest.TestCase):
                     "version_0",
                 ],
             )
-            original_manager = TrainingJobRuntimeHarness(
+            original_manager = TrainingJobServiceHarness(
                 root=root / "jobs",
                 logs_root=logs_root,
                 runner=FakeRunner(),
             )
-            job = original_manager.create_job(
+            job = original_manager.create_job_payload(
                 model="linears/linear",
                 preset="baseline",
                 datasets=["Mnist"],
@@ -2087,7 +2087,7 @@ class RunHistoryAndApiTests(unittest.TestCase):
             )
             job_id = str(job["id"])
             self.assertEqual(
-                original_manager.active_jobs(),
+                original_manager.active_job_payloads(),
                 [
                     {
                         "id": job_id,
@@ -2096,7 +2096,7 @@ class RunHistoryAndApiTests(unittest.TestCase):
                     }
                 ],
             )
-            fresh_manager = TrainingJobRuntimeHarness(
+            fresh_manager = TrainingJobServiceHarness(
                 root=root / "jobs",
                 logs_root=logs_root,
                 runner=FakeRunner(),
@@ -2104,7 +2104,7 @@ class RunHistoryAndApiTests(unittest.TestCase):
 
             async def call_api() -> httpx.Response:
                 transport = httpx.ASGITransport(
-                    app=create_app_with_training_runtime(
+                    app=create_app_with_training_service(
                         WorkbenchApiSettings(
                             logs_root=str(logs_root),
                             allow_unsafe_local_mutations=True,
@@ -2149,12 +2149,12 @@ class RunHistoryAndApiTests(unittest.TestCase):
                     "version_0",
                 ],
             )
-            manager = TrainingJobRuntimeHarness(
+            manager = TrainingJobServiceHarness(
                 root=Path(tmp) / "jobs",
                 logs_root=logs_root,
                 runner=FakeRunner(),
             )
-            manager.create_job(
+            manager.create_job_payload(
                 model="linears/linear",
                 preset="baseline",
                 datasets=["Mnist"],
@@ -2165,7 +2165,7 @@ class RunHistoryAndApiTests(unittest.TestCase):
 
             async def call_api() -> tuple[httpx.Response, httpx.Response]:
                 transport = httpx.ASGITransport(
-                    app=create_app_with_training_runtime(
+                    app=create_app_with_training_service(
                         WorkbenchApiSettings(
                             logs_root=str(logs_root),
                             allow_unsafe_local_mutations=True,

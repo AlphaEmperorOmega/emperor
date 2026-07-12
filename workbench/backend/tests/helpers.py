@@ -47,21 +47,6 @@ class TrainingJobServiceHarness:
             **runtime_options,
         )
 
-    def __getattr__(self, name: str) -> Any:
-        """Temporarily preserve private-runtime access for unmigrated tests."""
-
-        return getattr(self.runtime, name)
-
-    def __setattr__(self, name: str, value: Any) -> None:
-        if name == "service" or "service" not in self.__dict__:
-            object.__setattr__(self, name, value)
-            return
-        runtime = self.runtime
-        if hasattr(runtime, name):
-            setattr(runtime, name, value)
-            return
-        object.__setattr__(self, name, value)
-
     @property
     def runtime(self) -> _TrainingJobRuntime:
         return self.service._runtime
@@ -166,13 +151,6 @@ class TrainingJobServiceHarness:
             preset=preset,
         )
 
-    create_job = create_job_payload
-    get_job = get_job_payload
-    cancel_job = cancel_job_payload
-    active_jobs = active_job_payloads
-    get_job_events = get_job_events_payload
-
-
 def attach_training_service(app, harness: TrainingJobServiceHarness):
     """Install a service-backed test runtime behind the app capability."""
     services = app.state.workbench_services
@@ -200,13 +178,6 @@ def create_app_with_training_service(settings, harness: TrainingJobServiceHarnes
     from workbench.backend.main import create_app
 
     return attach_training_service(create_app(settings), harness)
-
-
-# Transitional aliases keep the untouched tests green while their callers move
-# to the public-service vocabulary in a following commit.
-TrainingJobRuntimeHarness = TrainingJobServiceHarness
-attach_training_runtime = attach_training_service
-create_app_with_training_runtime = create_app_with_training_service
 
 
 class FakeProcess:

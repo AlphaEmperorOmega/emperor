@@ -12,8 +12,8 @@ import httpx
 
 from workbench.backend.api import WorkbenchApiSettings, create_app
 from workbench.backend.tests.helpers import (
-    TrainingJobRuntimeHarness,
-    create_app_with_training_runtime,
+    TrainingJobServiceHarness,
+    create_app_with_training_service,
 )
 
 
@@ -125,12 +125,12 @@ class RequestStrictnessTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             logs_root = Path(tmp) / "logs"
-            manager = TrainingJobRuntimeHarness(
+            manager = TrainingJobServiceHarness(
                 root=Path(tmp) / "jobs",
                 logs_root=logs_root,
                 runner=FakeRunner(),
             )
-            test_app = create_app_with_training_runtime(
+            test_app = create_app_with_training_service(
                 WorkbenchApiSettings(logs_root=str(logs_root)),
                 manager,
             )

@@ -21,8 +21,8 @@ from workbench.backend.run_history import service as run_history_service_module
 from workbench.backend.run_history.scanner import LogRunScanner
 from workbench.backend.tests.helpers import (
     FakeRunner,
-    TrainingJobRuntimeHarness,
-    create_app_with_training_runtime,
+    TrainingJobServiceHarness,
+    create_app_with_training_service,
     write_tensorboard_run,
 )
 
@@ -58,12 +58,12 @@ class LogExperimentMutationApiTests(unittest.TestCase):
                 "version_0",
             ],
         )
-        manager = TrainingJobRuntimeHarness(
+        manager = TrainingJobServiceHarness(
             root=root / "jobs",
             logs_root=logs_root,
             runner=FakeRunner(),
         )
-        app = create_app_with_training_runtime(
+        app = create_app_with_training_service(
             WorkbenchApiSettings(
                 logs_root=str(logs_root),
                 allow_unsafe_local_mutations=True,
@@ -164,7 +164,7 @@ class LogExperimentMutationApiTests(unittest.TestCase):
     def test_training_job_start_serializes_experiment_delete(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             app, manager, logs_root = self._create_app(Path(tmp))
-            original_create_job = manager.create_job_from_command
+            original_create_job = manager.runtime.create_job_from_command
             start_entered = threading.Event()
             release_start = threading.Event()
 
@@ -201,7 +201,7 @@ class LogExperimentMutationApiTests(unittest.TestCase):
                     )
 
             with patch.object(
-                manager,
+                manager.runtime,
                 "create_job_from_command",
                 side_effect=paused_create_job,
             ):
@@ -220,7 +220,7 @@ class LogExperimentMutationApiTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             app, manager, logs_root = self._create_app(Path(tmp))
             delete_request = self._filtered_delete_request(logs_root)
-            original_create_job = manager.create_job_from_command
+            original_create_job = manager.runtime.create_job_from_command
             start_entered = threading.Event()
             release_start = threading.Event()
 
@@ -254,7 +254,7 @@ class LogExperimentMutationApiTests(unittest.TestCase):
                     )
 
             with patch.object(
-                manager,
+                manager.runtime,
                 "create_job_from_command",
                 side_effect=paused_create_job,
             ):
@@ -383,7 +383,7 @@ class LogExperimentMutationApiTests(unittest.TestCase):
     def test_training_job_start_serializes_archive_import(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             app, manager, logs_root = self._create_app(Path(tmp))
-            original_create_job = manager.create_job_from_command
+            original_create_job = manager.runtime.create_job_from_command
             start_entered = threading.Event()
             release_start = threading.Event()
             archive = _zip_bytes(
@@ -428,7 +428,7 @@ class LogExperimentMutationApiTests(unittest.TestCase):
                     )
 
             with patch.object(
-                manager,
+                manager.runtime,
                 "create_job_from_command",
                 side_effect=paused_create_job,
             ):

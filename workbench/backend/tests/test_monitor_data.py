@@ -21,8 +21,8 @@ from workbench.backend.tensorboard.readers import (
 )
 from workbench.backend.tests.helpers import (
     FakeRunner,
-    TrainingJobRuntimeHarness,
-    create_app_with_training_runtime,
+    TrainingJobServiceHarness,
+    create_app_with_training_service,
 )
 
 
@@ -650,12 +650,12 @@ class TrainingMonitorDataTests(unittest.TestCase):
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            manager = TrainingJobRuntimeHarness(
+            manager = TrainingJobServiceHarness(
                 root=Path(tmp) / "jobs",
                 logs_root=Path(tmp) / "logs",
                 runner=FakeRunner(),
             )
-            payload = manager.create_job(
+            payload = manager.create_job_payload(
                 model="linears/linear",
                 preset="baseline",
                 datasets=["Mnist"],
@@ -664,7 +664,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
                 monitors=["linear"],
             )
             job = manager.jobs[payload["id"]]
-            manager._write_event(
+            manager.runtime._write_event(
                 job,
                 {
                     "type": "dataset_started",
@@ -690,12 +690,12 @@ class TrainingMonitorDataTests(unittest.TestCase):
 
     def test_training_job_monitor_data_rejects_unknown_dataset(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            manager = TrainingJobRuntimeHarness(
+            manager = TrainingJobServiceHarness(
                 root=Path(tmp) / "jobs",
                 logs_root=Path(tmp) / "logs",
                 runner=FakeRunner(),
             )
-            payload = manager.create_job(
+            payload = manager.create_job_payload(
                 model="linears/linear",
                 preset="baseline",
                 datasets=["Mnist"],
@@ -718,12 +718,12 @@ class TrainingMonitorDataTests(unittest.TestCase):
 
     def test_training_job_monitor_data_rejects_unknown_preset(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            manager = TrainingJobRuntimeHarness(
+            manager = TrainingJobServiceHarness(
                 root=Path(tmp) / "jobs",
                 logs_root=Path(tmp) / "logs",
                 runner=FakeRunner(),
             )
-            payload = manager.create_job(
+            payload = manager.create_job_payload(
                 model="linears/linear",
                 preset="baseline",
                 presets=["baseline"],
@@ -750,12 +750,12 @@ class TrainingMonitorDataTests(unittest.TestCase):
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            manager = TrainingJobRuntimeHarness(
+            manager = TrainingJobServiceHarness(
                 root=Path(tmp) / "jobs",
                 logs_root=Path(tmp) / "logs",
                 runner=FakeRunner(),
             )
-            payload = manager.create_job(
+            payload = manager.create_job_payload(
                 model="linears/linear",
                 preset="baseline",
                 presets=["baseline", "gating"],
@@ -765,7 +765,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
                 monitors=["linear"],
             )
             job = manager.jobs[payload["id"]]
-            manager._write_event(
+            manager.runtime._write_event(
                 job,
                 {
                     "type": "dataset_started",
@@ -775,7 +775,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
                     "logDir": str(Path(tmp) / "logs" / "cifar10"),
                 },
             )
-            manager._write_event(
+            manager.runtime._write_event(
                 job,
                 {
                     "type": "dataset_started",
@@ -813,12 +813,12 @@ class TrainingMonitorDataTests(unittest.TestCase):
             other_experiment.mkdir(parents=True)
             symlink_escape.parent.mkdir(parents=True)
             symlink_escape.symlink_to(outside_log_dir, target_is_directory=True)
-            manager = TrainingJobRuntimeHarness(
+            manager = TrainingJobServiceHarness(
                 root=root / "jobs",
                 logs_root=logs_root,
                 runner=FakeRunner(),
             )
-            payload = manager.create_job(
+            payload = manager.create_job_payload(
                 model="linears/linear",
                 preset="baseline",
                 datasets=["Mnist"],
@@ -834,7 +834,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
                 symlink_escape,
             ):
                 with self.subTest(log_dir=untrusted_log_dir):
-                    manager._write_event(
+                    manager.runtime._write_event(
                         job,
                         {
                             "type": "dataset_started",
@@ -877,12 +877,12 @@ class TrainingMonitorDataTests(unittest.TestCase):
             writer.flush()
             writer.close()
 
-            manager = TrainingJobRuntimeHarness(
+            manager = TrainingJobServiceHarness(
                 root=root,
                 logs_root=Path(tmp) / "logs",
                 runner=FakeRunner(),
             )
-            payload = manager.create_job(
+            payload = manager.create_job_payload(
                 model="linears/linear",
                 preset="baseline",
                 datasets=["Mnist"],
@@ -891,7 +891,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
                 monitors=["linear"],
             )
             job = manager.jobs[payload["id"]]
-            manager._write_event(
+            manager.runtime._write_event(
                 job,
                 {
                     "type": "dataset_started",
@@ -943,12 +943,12 @@ class TrainingMonitorDataTests(unittest.TestCase):
             gating_writer.flush()
             gating_writer.close()
 
-            manager = TrainingJobRuntimeHarness(
+            manager = TrainingJobServiceHarness(
                 root=root,
                 logs_root=Path(tmp) / "logs",
                 runner=FakeRunner(),
             )
-            payload = manager.create_job(
+            payload = manager.create_job_payload(
                 model="linears/linear",
                 preset="baseline",
                 presets=["baseline", "gating"],
@@ -958,7 +958,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
                 monitors=["linear"],
             )
             job = manager.jobs[payload["id"]]
-            manager._write_event(
+            manager.runtime._write_event(
                 job,
                 {
                     "type": "dataset_started",
@@ -968,7 +968,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
                     "logDir": str(baseline_dir),
                 },
             )
-            manager._write_event(
+            manager.runtime._write_event(
                 job,
                 {
                     "type": "dataset_started",
@@ -1031,12 +1031,12 @@ class TrainingMonitorDataTests(unittest.TestCase):
             gating_writer.flush()
             gating_writer.close()
 
-            manager = TrainingJobRuntimeHarness(
+            manager = TrainingJobServiceHarness(
                 root=root,
                 logs_root=logs_root,
                 runner=FakeRunner(),
             )
-            payload = manager.create_job(
+            payload = manager.create_job_payload(
                 model="linears/linear",
                 preset="baseline",
                 presets=["baseline", "gating"],
@@ -1046,7 +1046,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
                 monitors=["linear"],
             )
             job = manager.jobs[payload["id"]]
-            manager._write_event(
+            manager.runtime._write_event(
                 job,
                 {
                     "type": "dataset_started",
@@ -1056,7 +1056,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
                     "logDir": str(baseline_dir),
                 },
             )
-            manager._write_event(
+            manager.runtime._write_event(
                 job,
                 {
                     "type": "dataset_started",
@@ -1066,7 +1066,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
                     "logDir": str(gating_dir),
                 },
             )
-            app = create_app_with_training_runtime(
+            app = create_app_with_training_service(
                 WorkbenchApiSettings(logs_root=str(logs_root)),
                 manager,
             )
@@ -1087,12 +1087,12 @@ class TrainingMonitorDataTests(unittest.TestCase):
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            manager = TrainingJobRuntimeHarness(
+            manager = TrainingJobServiceHarness(
                 root=root / "jobs",
                 logs_root=root / "logs",
                 runner=FakeRunner(),
             )
-            payload = manager.create_job(
+            payload = manager.create_job_payload(
                 model="linears/linear",
                 preset="baseline",
                 datasets=["Mnist"],
@@ -1101,7 +1101,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
                 monitors=["linear"],
             )
             job = manager.jobs[payload["id"]]
-            manager._write_event(
+            manager.runtime._write_event(
                 job,
                 {
                     "type": "dataset_started",
