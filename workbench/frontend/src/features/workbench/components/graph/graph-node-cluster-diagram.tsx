@@ -55,6 +55,7 @@ export function ClusterDiagramView({
 
   return (
     <div
+      role="img"
       className="shrink-0 overflow-hidden"
       style={{
         height: graphCardGeometry.clusterDiagram.headerHeight + gridHeight,
@@ -122,7 +123,6 @@ export function ClusterDiagramView({
                   <div
                     key={`${plane.z}-${cell.x}-${cell.y}`}
                     title={cell.title}
-                    aria-label={cell.title}
                     onMouseEnter={() => {
                       if (cell.filled && cell.reach) {
                         setHoveredReach(cell.reach);

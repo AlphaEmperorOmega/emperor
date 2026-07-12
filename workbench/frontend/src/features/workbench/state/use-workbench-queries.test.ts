@@ -63,8 +63,6 @@ beforeEach(() => {
     historicalMonitorDataEnabled: true,
     uploadsEnabled: false,
     maxUploadSize: null,
-    dataSourcesEnabled: false,
-    dataSources: [],
   });
   mocks.fetchModels
     .mockReset()

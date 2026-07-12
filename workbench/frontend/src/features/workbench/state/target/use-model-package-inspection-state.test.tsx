@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   useWorkbenchQueries: vi.fn(),
   useConfigSnapshotRecords: vi.fn(),
   useInspectionPreviewState: vi.fn(),
+  useInfiniteLogRunsQuery: vi.fn(),
   useLogRunsQuery: vi.fn(),
   useLogTagsQuery: vi.fn(),
   requestPreview: vi.fn(),
@@ -29,8 +30,6 @@ vi.mock("@/features/workbench/state/use-workbench-queries", () => ({
     historicalMonitorDataEnabled: true,
     uploadsEnabled: false,
     maxUploadSize: null,
-    dataSourcesEnabled: false,
-    dataSources: [],
   },
   useWorkbenchQueries: mocks.useWorkbenchQueries,
 }));
@@ -53,6 +52,7 @@ vi.mock(
 );
 
 vi.mock("@/features/workbench/state/logs/use-log-queries", () => ({
+  useInfiniteLogRunsQuery: mocks.useInfiniteLogRunsQuery,
   useLogRunsQuery: mocks.useLogRunsQuery,
   useLogTagsQuery: mocks.useLogTagsQuery,
 }));
@@ -104,8 +104,6 @@ const capabilities = {
   historicalMonitorDataEnabled: true,
   uploadsEnabled: false,
   maxUploadSize: null,
-  dataSourcesEnabled: false,
-  dataSources: [],
 };
 let snapshots: ConfigSnapshotRecord[] = [];
 let monitorOptions: MonitorOption[] = [];
@@ -148,6 +146,77 @@ function logRun(overrides: Partial<LogRun> & Pick<LogRun, "id">): LogRun {
     hasHparams: overrides.hasHparams ?? true,
     metrics: overrides.metrics ?? {},
   };
+}
+
+function facetValues(values: string[]) {
+  return Array.from(
+    values.reduce(
+      (counts, value) => counts.set(value, (counts.get(value) ?? 0) + 1),
+      new Map<string, number>(),
+    ),
+    ([value, count]) => ({ value, count }),
+  ).sort((left, right) => left.value.localeCompare(right.value));
+}
+
+function logRunFacets(runs: LogRun[]) {
+  const grouped = new Map<string, LogRun[]>();
+  for (const run of runs) {
+    const experimentRuns = grouped.get(run.experiment) ?? [];
+    experimentRuns.push(run);
+    grouped.set(run.experiment, experimentRuns);
+  }
+  return {
+    experiments: Array.from(grouped)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([experiment, experimentRuns]) => ({
+        experiment,
+        runCount: experimentRuns.length,
+        datasets: facetValues(experimentRuns.map((run) => run.dataset)),
+        models: Array.from(
+          experimentRuns.reduce((models, run) => {
+            const key = `${run.modelType}\0${run.model}`;
+            const current = models.get(key);
+            models.set(key, {
+              modelType: run.modelType,
+              model: run.model,
+              count: (current?.count ?? 0) + 1,
+            });
+            return models;
+          }, new Map<string, { modelType: string; model: string; count: number }>()),
+          ([, value]) => value,
+        ).sort((left, right) =>
+          `${left.modelType}/${left.model}`.localeCompare(
+            `${right.modelType}/${right.model}`,
+          ),
+        ),
+        presets: facetValues(experimentRuns.map((run) => run.preset)),
+      })),
+  };
+}
+
+function filterHistoricalRuns(filters: {
+  experiment?: readonly string[];
+  experimentTask?: string;
+  models?: readonly { modelType: string; model: string }[];
+  preset?: readonly string[];
+  dataset?: readonly string[];
+}) {
+  const taskAware = historicalRuns.some((run) => Boolean(run.experimentTask));
+  return historicalRuns.filter(
+    (run) =>
+      (!filters.experiment?.length ||
+        filters.experiment.includes(run.experiment)) &&
+      (!filters.models?.length ||
+        filters.models.some(
+          (model) =>
+            model.modelType === run.modelType && model.model === run.model,
+        )) &&
+      (!filters.preset?.length || filters.preset.includes(run.preset)) &&
+      (!filters.dataset?.length || filters.dataset.includes(run.dataset)) &&
+      (!filters.experimentTask ||
+        !taskAware ||
+        run.experimentTask === filters.experimentTask),
+  );
 }
 
 function configField(
@@ -286,13 +355,32 @@ beforeEach(() => {
   mocks.retrySnapshotRecordMutation.mockReset().mockResolvedValue(null);
   mocks.dismissSnapshotRecordMutation.mockReset();
   mocks.clearSnapshotRecordsForConnectionChange.mockReset();
-  mocks.useLogRunsQuery.mockReset().mockImplementation(({ enabled }) => ({
-    data: enabled ? { runs: historicalRuns } : undefined,
-    isLoading: false,
-    isSuccess: Boolean(enabled),
-    isError: false,
-    error: null,
-  }));
+  mocks.useLogRunsQuery
+    .mockReset()
+    .mockImplementation(({ enabled, filters = {} }) => {
+      const runs = filterHistoricalRuns(filters);
+      return {
+        data: enabled ? { runs, facets: logRunFacets(runs) } : undefined,
+        isLoading: false,
+        isFetching: false,
+        isSuccess: Boolean(enabled),
+        isError: false,
+        error: null,
+      };
+    });
+  mocks.useInfiniteLogRunsQuery
+    .mockReset()
+    .mockImplementation(({ enabled }) => ({
+      data: enabled ? { pages: [{ runs: historicalRuns }] } : undefined,
+      isLoading: false,
+      isFetching: false,
+      isFetchingNextPage: false,
+      isSuccess: Boolean(enabled),
+      isError: false,
+      error: null,
+      hasNextPage: false,
+      fetchNextPage: vi.fn(),
+    }));
   mocks.useLogTagsQuery.mockReset().mockImplementation(({ enabled }) => ({
     data: enabled ? { runs: historicalRunTags } : undefined,
     isLoading: false,

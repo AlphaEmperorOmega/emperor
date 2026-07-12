@@ -163,6 +163,14 @@ export function DialogShell({
         return;
       }
 
+      const eventDialog =
+        event.target instanceof Element
+          ? event.target.closest<HTMLElement>("[role='dialog']")
+          : null;
+      if (eventDialog && eventDialog !== dialogElement) {
+        return;
+      }
+
       if (event.key === "Escape" && closeOnEscapeRef.current && onCloseRef.current) {
         event.preventDefault();
         event.stopPropagation();

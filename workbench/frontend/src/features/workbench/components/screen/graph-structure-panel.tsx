@@ -172,10 +172,10 @@ export function GraphStructurePanel({
   }, [graph, selectedNodeId]);
 
   return (
-    <aside
+    <section
       id={panelId}
       data-testid="graph-structure-panel"
-      aria-label="Graph structure"
+      aria-labelledby={`${panelId}-title`}
       onClick={stopPanelEvent}
       onMouseDown={stopPanelEvent}
       onPointerDown={stopPanelEvent}
@@ -183,7 +183,12 @@ export function GraphStructurePanel({
     >
       <div className="flex min-w-0 items-center justify-between gap-3 border-b border-white/[0.08] px-3 py-2.5">
         <div className="min-w-0">
-          <h2 className="truncate type-compact font-bold text-ink">Structure</h2>
+          <h2
+            id={`${panelId}-title`}
+            className="truncate type-compact font-bold text-ink"
+          >
+            Structure
+          </h2>
           <div className="mt-0.5 font-mono type-caption text-ink-faint">
             {formatCompactCount(graph?.nodes.length ?? 0)} nodes
           </div>
@@ -220,6 +225,6 @@ export function GraphStructurePanel({
           </div>
         )}
       </div>
-    </aside>
+    </section>
   );
 }

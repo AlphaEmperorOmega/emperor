@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { monitorHarness } from "./support";
 
 const {
@@ -62,6 +62,33 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
       within(
         await screen.findByRole("listbox", { name: /^preset options$/i }),
       ).getByRole("option", { name: /^BASELINE/ }),
+    );
+
+    await waitFor(
+      () => {
+        expect(
+          vi.mocked(fetch).mock.calls.some(([url, init]) =>
+            String(url).endsWith("/inspect") &&
+            typeof init?.body === "string" &&
+            init.body.includes('"logRunId"'),
+          ),
+        ).toBe(true);
+      },
+      { timeout: 5000 },
+    );
+    await waitFor(
+      () => {
+        expect(
+          screen.queryAllByRole("status").some((status) =>
+            /previewbuilding|experimentpending|monitorchecking|activityloading/i
+              .test(status.textContent ?? ""),
+          ),
+        ).toBe(false);
+        expect(
+          screen.queryByText(/resolving the newest monitor runs/i),
+        ).not.toBeInTheDocument();
+      },
+      { timeout: 5000 },
     );
   }
 
@@ -696,6 +723,84 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
       .not.toBeInTheDocument();
   });
 
+  it("pages beyond 500 historical runs to resolve monitor eligibility", async () => {
+    const seedRun = buildHistoricalMonitorFixture(1).logRunsResponse.runs[0];
+    const runs = Array.from({ length: 501 }, (_, index) => {
+      const number = String(index + 1).padStart(4, "0");
+      return {
+        ...seedRun,
+        id: `deep-history-${number}`,
+        runName: `deep_history_${number}`,
+        timestamp: String(501 - index).padStart(4, "0"),
+        relativePath:
+          `monitor_exp/linear/BASELINE/Mnist/deep_history_${number}/version_0`,
+        hasLayerMonitorData: index === 500,
+      };
+    });
+    const logTagsByRun = Object.fromEntries(
+      runs.map((run, index) => [
+        run.id,
+        {
+          scalarTags:
+            index === 500
+              ? ["main_model.0.model/weights/mean"]
+              : [],
+          histogramTags: [],
+          imageTags: [],
+          textTags: [],
+        },
+      ]),
+    );
+    const { logRunMonitorDataRequests, logRunRequests } = setupMonitorScenario({
+      logRunsResponse: { runs },
+      logTagsByRun,
+    });
+    renderWorkbench();
+    const user = userEvent.setup();
+
+    await selectHistoricalMonitorGroup(user);
+    await waitFor(
+      () => {
+        expect(
+          logRunRequests.some(
+            (request) => request.offset === 500 && request.limit === 50,
+          ),
+        ).toBe(true);
+      },
+      { timeout: 5000 },
+    );
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /select and expand main_model\.0/i,
+      }),
+    );
+    await user.click(
+      await screen.findByRole("button", {
+        name: /^select main_model\.0\.model$/i,
+      }),
+    );
+    await waitFor(
+      () => {
+        expect(
+          screen.getByRole("button", { name: /^monitor charts$/i }),
+        ).toBeEnabled();
+      },
+      { timeout: 5000 },
+    );
+    await user.click(screen.getByRole("button", { name: /^monitor charts$/i }));
+
+    await screen.findByRole("dialog", { name: /monitor charts/i });
+    await waitFor(() => {
+      expect(logRunMonitorDataRequests).toEqual([
+        {
+          runId: "deep-history-0501",
+          nodePath: "main_model.0.model",
+        },
+      ]);
+    });
+  });
+
   it("renders graph parameter activity after selecting an experiment dataset and preset", async () => {
     const fixture = buildHistoricalMonitorFixture(1);
     const { fetchMock } = setupMonitorScenario({
@@ -1000,6 +1105,24 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
 
     await selectExperiment(/^monitor_exp_a/);
     await selectDatasetAndPreset();
+    await waitFor(() => {
+      expect(
+        vi.mocked(fetch).mock.calls.some(
+          ([url, init]) =>
+            String(url).endsWith("/inspect") &&
+            typeof init?.body === "string" &&
+            init.body.includes('"logRunId":"historical-a"'),
+        ),
+      ).toBe(true);
+    });
+    await waitFor(() => {
+      expect(
+        screen.queryAllByRole("status").some((status) =>
+          /previewbuilding|experimentpending|monitorchecking|activityloading/i
+            .test(status.textContent ?? ""),
+        ),
+      ).toBe(false);
+    });
     await user.click(
       await screen.findByRole("button", {
         name: /select and expand main_model\.0/i,

@@ -6,7 +6,6 @@ import {
   useMemo,
 } from "react";
 import { Check, ChevronDown, Loader2, Search } from "lucide-react";
-import { flushSync } from "react-dom";
 import { IconButton } from "@/components/ui/icon-button";
 import {
   checkboxCheckedClassName,
@@ -185,7 +184,6 @@ export function MultiSelectDropdown({
   ) {
     event.preventDefault();
     event.stopPropagation();
-    flushSync(() => close());
     action.onAction(option.value);
   }
 
@@ -296,13 +294,23 @@ export function MultiSelectDropdown({
               const isDisabled = disabledValueSet.has(option.value);
               const isPrimary = isSelected && primaryValue === option.value;
               const isActive = index === activeIndex;
-              const actions = option.actions ?? [];
               return (
                 <div
+                  {...collection.option(index, option)}
                   key={option.value}
-                  role="presentation"
+                  id={`${ids.popup}-option-${index}`}
+                  role="option"
+                  tabIndex={-1}
+                  aria-label={optionAccessibleName(option)}
+                  aria-describedby={
+                    option.metaTooltip
+                      ? `${ids.popup}-option-${index}-meta`
+                      : undefined
+                  }
+                  aria-selected={isSelected}
+                  aria-disabled={isDisabled || undefined}
                   className={cn(
-                    "group relative grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2",
+                    "group relative grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-focus",
                     dropdownOptionClassName,
                     dropdownOptionStateClassName({
                       active: isActive,
@@ -311,124 +319,86 @@ export function MultiSelectDropdown({
                     }),
                   )}
                 >
-                  <div
-                    {...collection.option(index, option)}
-                    id={`${ids.popup}-option-${index}`}
-                    role="option"
-                    tabIndex={-1}
-                    aria-label={optionAccessibleName(option)}
-                    aria-describedby={
-                      option.metaTooltip
-                        ? `${ids.popup}-option-${index}-meta`
-                        : undefined
-                    }
-                    aria-selected={isSelected}
-                    aria-disabled={isDisabled || undefined}
+                  <span
                     className={cn(
-                      "grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-control-md focus:outline-none focus-visible:ring-2 focus-visible:ring-focus",
+                      checkboxIndicatorClassName,
+                      isSelected
+                        ? checkboxCheckedClassName
+                        : checkboxUncheckedClassName,
                       isDisabled ? "cursor-default" : "cursor-pointer",
                     )}
+                    aria-hidden
                   >
-                    <span
+                    <Check
                       className={cn(
-                        checkboxIndicatorClassName,
-                        isSelected
-                          ? checkboxCheckedClassName
-                          : checkboxUncheckedClassName,
+                        "h-3 w-3 text-white transition",
+                        !isSelected && "opacity-0",
                       )}
                       aria-hidden
+                    />
+                  </span>
+                  <span className="grid min-w-0 gap-0.5">
+                    <span
+                      className={cn(
+                        option.wrapLabel
+                          ? "whitespace-normal break-words leading-4 [overflow-wrap:anywhere]"
+                          : "truncate",
+                      )}
                     >
-                      <Check
-                        className={cn(
-                          "h-3 w-3 text-white transition",
-                          !isSelected && "opacity-0",
-                        )}
-                        aria-hidden
-                      />
+                      {option.label}
                     </span>
-                    <span className="grid min-w-0 gap-0.5">
+                    {option.description && (
                       <span
                         className={cn(
+                          "font-mono text-xs text-ink-dim",
                           option.wrapLabel
-                            ? "whitespace-normal break-words leading-4 [overflow-wrap:anywhere]"
+                            ? "whitespace-normal break-words [overflow-wrap:anywhere]"
                             : "truncate",
                         )}
                       >
-                        {option.label}
+                        {option.description}
                       </span>
-                      {option.description && (
-                        <span
-                          className={cn(
-                            "font-mono text-xs text-ink-dim",
-                            option.wrapLabel
-                              ? "whitespace-normal break-words [overflow-wrap:anywhere]"
-                              : "truncate",
-                          )}
-                        >
-                          {option.description}
-                        </span>
-                      )}
-                    </span>
-                    <span className="flex shrink-0 items-center gap-1.5">
-                      {isPrimary && (
-                        <span className="rounded-control-md border border-violet/35 bg-violet/[0.12] px-2 py-0.5 font-mono type-meta uppercase tracking-label text-violet">
-                          primary
-                        </span>
-                      )}
-                      {option.meta && (
-                        <span className="font-mono text-xs text-ink-dim">
-                          {option.meta}
-                        </span>
-                      )}
-                    </span>
-                  </div>
+                    )}
+                  </span>
+                  <span className="flex shrink-0 items-center gap-1.5">
+                    {isPrimary && (
+                      <span className="rounded-control-md border border-violet/35 bg-violet/[0.12] px-2 py-0.5 font-mono type-meta uppercase tracking-label text-violet">
+                        primary
+                      </span>
+                    )}
+                    {option.meta && (
+                      <span className="font-mono text-xs text-ink-dim">
+                        {option.meta}
+                      </span>
+                    )}
+                  </span>
                   {option.metaTooltip && (
                     <span
                       id={`${ids.popup}-option-${index}-meta`}
                       role="tooltip"
-                      className="pointer-events-none absolute right-10 top-1/2 z-30 -translate-y-1/2 whitespace-nowrap rounded-control-md border border-line-soft bg-panel px-2 py-1 font-sans type-meta font-bold leading-none text-ink opacity-0 shadow-panel transition-opacity group-focus-within:opacity-100 group-hover:opacity-100"
+                      className="pointer-events-none absolute right-3 top-1/2 z-30 -translate-y-1/2 whitespace-nowrap rounded-control-md border border-line-soft bg-panel px-2 py-1 font-sans type-meta font-bold leading-none text-ink opacity-0 shadow-panel transition-opacity group-focus:opacity-100 group-hover:opacity-100"
                     >
                       {option.metaTooltip}
-                    </span>
-                  )}
-                  {actions.length > 0 && (
-                    <span className="flex shrink-0 items-center gap-1.5">
-                      {actions.map((action) => (
-                        <HoverTooltip
-                          key={action.label}
-                          tooltip={action.tooltip}
-                          tooltipClassName="right-0"
-                        >
-                          {(triggerProps) => (
-                            <IconButton
-                              label={action.label}
-                              icon={action.icon}
-                              size="sm"
-                              variant="ghost"
-                              onMouseDown={handleOptionActionMouseDown}
-                              onClick={(event) =>
-                                handleOptionActionClick(event, option, action)
-                              }
-                              onKeyDown={handleOptionActionKeyDown}
-                              className="h-touch w-touch rounded-control-sm text-ink-faint hover:text-violet focus-visible:text-violet md:h-control-sm md:w-control-sm"
-                              {...triggerProps}
-                            />
-                          )}
-                        </HoverTooltip>
-                      ))}
                     </span>
                   )}
                 </div>
               );
             })}
             {visibleOptions.length === 0 && (
-              <div className="px-3 py-4 text-sm text-ink-faint">
+              <div
+                role="option"
+                aria-selected="false"
+                aria-disabled="true"
+                className="px-3 py-4 text-sm text-ink-faint"
+              >
                 {options.length === 0 ? emptyMessage : noResultsMessage}
               </div>
             )}
             {isLoadingMore && (
               <div
-                role="status"
+                role="option"
+                aria-selected="false"
+                aria-disabled="true"
                 aria-label={`Loading more ${label.toLowerCase()}…`}
                 className="flex items-center justify-center gap-2 px-3 py-3 text-xs font-semibold text-ink-dim"
               >
@@ -437,23 +407,64 @@ export function MultiSelectDropdown({
               </div>
             )}
           </div>
-          {activeOption && canMakeActiveOptionPrimary && (
-            <div className="border-t border-line-soft bg-black/15 px-3 py-2">
-              <button
-                type="button"
-                aria-label={`Make ${activeOption.label} Primary`}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={(event) => handlePrimaryAction(event, activeOption.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Escape") {
-                    event.preventDefault();
-                    close(true);
+          {activeOption &&
+            ((activeOption.actions?.length ?? 0) > 0 ||
+              canMakeActiveOptionPrimary) && (
+            <div
+              role="toolbar"
+              aria-label={`${activeOption.label} actions`}
+              className="flex flex-wrap items-center gap-1.5 border-t border-line-soft bg-black/15 px-3 py-2"
+            >
+              {(activeOption.actions ?? []).map((action) => {
+                const accessibleLabel = action.label
+                  .toLocaleLowerCase()
+                  .includes(activeOption.label.toLocaleLowerCase())
+                  ? action.label
+                  : `${action.label} for ${activeOption.label}`;
+                return (
+                  <HoverTooltip
+                    key={action.label}
+                    tooltip={action.tooltip}
+                    tooltipClassName="right-0"
+                  >
+                    {(triggerProps) => (
+                      <IconButton
+                        label={accessibleLabel}
+                        icon={action.icon}
+                        size="sm"
+                        variant="ghost"
+                        onMouseDown={handleOptionActionMouseDown}
+                        onClick={(event) =>
+                          handleOptionActionClick(event, activeOption, action)
+                        }
+                        onKeyDown={handleOptionActionKeyDown}
+                        className="h-touch w-touch rounded-control-sm text-ink-faint hover:text-violet focus-visible:text-violet md:h-control-sm md:w-control-sm"
+                        {...triggerProps}
+                      />
+                    )}
+                  </HoverTooltip>
+                );
+              })}
+              {canMakeActiveOptionPrimary && (
+                <button
+                  type="button"
+                  aria-label={`Make ${activeOption.label} Primary`}
+                  onClick={(event) =>
+                    handlePrimaryAction(event, activeOption.value)
                   }
-                }}
-                className="inline-flex h-touch max-w-full items-center rounded-control-sm border border-line bg-control px-2.5 font-sans type-meta font-bold text-ink-dim transition hover:border-violet/35 hover:bg-violet/10 hover:text-violet focus:outline-none focus-visible:ring-2 focus-visible:ring-focus md:h-control-sm"
-              >
-                <span className="truncate">Make {activeOption.label} Primary</span>
-              </button>
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") {
+                      event.preventDefault();
+                      close(true);
+                    }
+                  }}
+                  className="inline-flex h-touch max-w-full items-center rounded-control-sm border border-line bg-control px-2.5 font-sans type-meta font-bold text-ink-dim transition hover:border-violet/35 hover:bg-violet/10 hover:text-violet focus:outline-none focus-visible:ring-2 focus-visible:ring-focus md:h-control-sm"
+                >
+                  <span className="truncate">
+                    Make {activeOption.label} Primary
+                  </span>
+                </button>
+              )}
             </div>
           )}
         </DropdownShell>

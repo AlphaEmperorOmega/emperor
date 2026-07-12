@@ -74,8 +74,8 @@ describe("WorkbenchApp Graph Workspace", () => {
     renderWorkbench();
 
     const heading = await screen.findByRole("heading", { name: /node details/i });
-    const sidebar = heading.closest("aside");
-    if (!sidebar) {
+    const sidebar = heading.closest('[data-workbench-region="details"]');
+    if (!(sidebar instanceof HTMLElement)) {
       throw new Error("Expected Node Details heading to render inside the sidebar");
     }
 
@@ -427,8 +427,8 @@ describe("WorkbenchApp Graph Workspace", () => {
 
     expect(await screen.findByTestId("node-main_model.0.model")).toBeInTheDocument();
     const detailsHeading = await screen.findByRole("heading", { name: /node details/i });
-    const detailsPanel = detailsHeading.closest("aside");
-    if (!detailsPanel) {
+    const detailsPanel = detailsHeading.closest('[data-workbench-region="details"]');
+    if (!(detailsPanel instanceof HTMLElement)) {
       throw new Error("Expected Node Details heading to render inside the sidebar");
     }
     expect(within(detailsPanel).getAllByText("main_model.0.model").length).toBeGreaterThan(0);
@@ -1027,7 +1027,7 @@ describe("WorkbenchApp Graph Workspace", () => {
     expect(within(clusterDiagram).getByText("Cluster map")).toBeInTheDocument();
     expect(within(clusterDiagram).getByText("1 / 4")).toBeInTheDocument();
     expect(
-      within(clusterDiagram).getByLabelText(/Neuron \(1, 1, 1\).*active/i),
+      within(clusterDiagram).getByTitle(/Neuron \(1, 1, 1\).*active/i),
     ).toBeInTheDocument();
     expect(
       await within(card).findByRole("group", { name: /^model\.cluster locations$/i }),

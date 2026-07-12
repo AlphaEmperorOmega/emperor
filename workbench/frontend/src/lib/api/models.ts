@@ -47,6 +47,7 @@ export const configFieldSchema = z.object({
   default: configValueSchema,
   nullable: z.boolean(),
   choices: z.array(configValueSchema),
+  maximum: z.number().nullable().optional(),
   locked: z.boolean().optional(),
   lockedValue: configValueSchema.optional(),
   lockedReason: z.string().optional(),

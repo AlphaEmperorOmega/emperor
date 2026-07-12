@@ -1,6 +1,9 @@
 import { z } from "zod";
 
-import { requestJson } from "@/lib/api/client";
+import {
+  requestJson,
+  type MutationRequestOptions,
+} from "@/lib/api/client";
 import { modelIdentitySchema, type ModelIdentity } from "@/lib/api/models";
 
 export const logExperimentDeleteSchema = z.object({
@@ -68,6 +71,11 @@ export type LogRunDeleteCandidate = z.infer<typeof logRunDeleteCandidateSchema>;
 export type LogRunDeletePlan = z.infer<typeof logRunDeletePlanSchema>;
 export type LogRunDeleteResponse = z.infer<typeof logRunDeleteSchema>;
 
+export type LogPresetDeleteTarget = {
+  experiment: string;
+  preset: string;
+};
+
 export type LogRunDeleteFilters = {
   experiments: string[];
   datasets: string[];
@@ -76,13 +84,17 @@ export type LogRunDeleteFilters = {
   runIds: string[];
 };
 
-export function deleteLogExperiment(experiment: string) {
+export function deleteLogExperiment(
+  experiment: string,
+  mutation: MutationRequestOptions,
+) {
   return requestJson(
     `/logs/experiments/${encodeURIComponent(experiment)}`,
     logExperimentDeleteSchema,
     {
       method: "DELETE",
     },
+    { mutation },
   );
 }
 
@@ -93,9 +105,43 @@ export function createLogRunDeletePlan(filters: LogRunDeleteFilters) {
   });
 }
 
-export function deleteLogRuns(filters: LogRunDeleteFilters) {
-  return requestJson("/logs/runs/delete", logRunDeleteSchema, {
-    method: "POST",
-    body: JSON.stringify(filters),
-  });
+export function createLogPresetDeletePlan(target: LogPresetDeleteTarget) {
+  return requestJson(
+    "/logs/runs/preset-delete-plan",
+    logRunDeletePlanSchema,
+    {
+      method: "POST",
+      body: JSON.stringify(target),
+    },
+  );
+}
+
+export function deleteLogPreset(
+  target: LogPresetDeleteTarget,
+  mutation: MutationRequestOptions,
+) {
+  return requestJson(
+    "/logs/runs/preset-delete",
+    logRunDeleteSchema,
+    {
+      method: "POST",
+      body: JSON.stringify(target),
+    },
+    { mutation },
+  );
+}
+
+export function deleteLogRuns(
+  filters: LogRunDeleteFilters,
+  mutation: MutationRequestOptions,
+) {
+  return requestJson(
+    "/logs/runs/delete",
+    logRunDeleteSchema,
+    {
+      method: "POST",
+      body: JSON.stringify(filters),
+    },
+    { mutation },
+  );
 }

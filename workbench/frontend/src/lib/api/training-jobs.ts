@@ -1,6 +1,9 @@
 import { z } from "zod";
 
-import { requestJson } from "@/lib/api/client";
+import {
+  requestJson,
+  type MutationRequestOptions,
+} from "@/lib/api/client";
 import {
   configOverridesSchema,
   configValueSchema,
@@ -60,6 +63,11 @@ export const trainingRunPlanSummarySchema = z.object({
   remainingEpochs: z.number(),
 });
 
+export const configSnapshotRevisionSchema = z.object({
+  id: z.string(),
+  semanticRevision: z.string().length(64),
+});
+
 export const trainingRunPlanSchema = z.object({
   modelType: z.string(),
   model: z.string(),
@@ -79,6 +87,7 @@ export const trainingRunPlanSchema = z.object({
   isRandomSearch: z.boolean(),
   runs: z.array(trainingRunSchema),
   summary: trainingRunPlanSummarySchema,
+  snapshotRevisions: z.array(configSnapshotRevisionSchema).optional(),
 });
 
 const trainingProgressStatusSchema = z.enum([
@@ -307,6 +316,7 @@ export const trainingJobSchema = z.object({
   eventsTruncated: z.boolean().optional().default(false),
   clusterGrowth: z.array(trainingClusterGrowthSchema).optional().default([]),
   logTail: z.array(z.string()),
+  logTailTruncated: z.boolean().optional().default(false),
   resultLinks: z.array(
     z.object({
       preset: z.string().nullable().optional(),
@@ -351,6 +361,7 @@ export type TrainingRunSubmitInput = {
 
 export type TrainingRunPlanSubmitInput = {
   runs: TrainingRunSubmitInput[];
+  snapshotRevisions?: Array<z.infer<typeof configSnapshotRevisionSchema>>;
 };
 
 export function toTrainingRunPlanSubmitInput(
@@ -365,6 +376,7 @@ export function toTrainingRunPlanSubmitInput(
       dataset: run.dataset,
       overrides: run.overrides,
     })),
+    snapshotRevisions: plan.snapshotRevisions ?? [],
   };
 }
 
@@ -380,6 +392,13 @@ export type TrainingJobCreateInput = {
   monitors: string[];
   search?: TrainingSearchCreateInput;
   runPlan?: TrainingRunPlanSubmitInput;
+  snapshotIds?: string[];
+  snapshotRevisions?: Array<z.infer<typeof configSnapshotRevisionSchema>>;
+};
+
+export type TrainingJobReconcileInput = {
+  action: "mark-failed";
+  reason: string;
 };
 
 export type TrainingRunPlanCreateInput = {
@@ -393,13 +412,22 @@ export type TrainingRunPlanCreateInput = {
   logFolder?: string;
   monitors?: string[];
   search?: TrainingSearchCreateInput;
+  snapshotIds?: string[];
 };
 
-export function createTrainingJob(input: TrainingJobCreateInput) {
-  return requestJson("/training/jobs", trainingJobSchema, {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
+export function createTrainingJob(
+  input: TrainingJobCreateInput,
+  mutation: MutationRequestOptions,
+) {
+  return requestJson(
+    "/training/jobs",
+    trainingJobSchema,
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    },
+    { mutation },
+  );
 }
 
 export function fetchTrainingRunPlan(
@@ -442,8 +470,27 @@ export function fetchTrainingJobEvents(
   );
 }
 
-export function cancelTrainingJob(id: string) {
-  return requestJson(`/training/jobs/${encodeURIComponent(id)}/cancel`, trainingJobSchema, {
-    method: "POST",
-  });
+export function cancelTrainingJob(id: string, mutation: MutationRequestOptions) {
+  return requestJson(
+    `/training/jobs/${encodeURIComponent(id)}/cancel`,
+    trainingJobSchema,
+    { method: "POST" },
+    { mutation },
+  );
+}
+
+export function reconcileTrainingJob(
+  id: string,
+  input: TrainingJobReconcileInput,
+  mutation: MutationRequestOptions,
+) {
+  return requestJson(
+    `/training/jobs/${encodeURIComponent(id)}/reconcile`,
+    trainingJobSchema,
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    },
+    { mutation },
+  );
 }

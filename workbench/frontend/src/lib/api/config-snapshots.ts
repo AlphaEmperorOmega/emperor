@@ -1,6 +1,9 @@
 import { z } from "zod";
 
-import { requestJson } from "@/lib/api/client";
+import {
+  requestJson,
+  type MutationRequestOptions,
+} from "@/lib/api/client";
 import { type ModelIdentity } from "@/lib/api/models";
 
 export const configSnapshotSchema = z.object({
@@ -66,20 +69,33 @@ export function fetchConfigSnapshotLibrary(options: ApiRequestOptions = {}) {
   );
 }
 
-export function createConfigSnapshot(input: ConfigSnapshotCreateInput) {
-  return requestJson("/config-snapshots", configSnapshotSchema, {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
+export function createConfigSnapshot(
+  input: ConfigSnapshotCreateInput,
+  mutation: MutationRequestOptions,
+) {
+  return requestJson(
+    "/config-snapshots",
+    configSnapshotSchema,
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    },
+    { mutation },
+  );
 }
 
-export function renameConfigSnapshot(snapshotId: string, name: string) {
-  return updateConfigSnapshot(snapshotId, { name });
+export function renameConfigSnapshot(
+  snapshotId: string,
+  name: string,
+  mutation: MutationRequestOptions,
+) {
+  return updateConfigSnapshot(snapshotId, { name }, mutation);
 }
 
 export function updateConfigSnapshot(
   snapshotId: string,
   input: ConfigSnapshotUpdateInput,
+  mutation: MutationRequestOptions,
 ) {
   return requestJson(
     `/config-snapshots/${encodeURIComponent(snapshotId)}`,
@@ -88,15 +104,20 @@ export function updateConfigSnapshot(
       method: "PATCH",
       body: JSON.stringify(input),
     },
+    { mutation },
   );
 }
 
-export function deleteConfigSnapshot(snapshotId: string) {
+export function deleteConfigSnapshot(
+  snapshotId: string,
+  mutation: MutationRequestOptions,
+) {
   return requestJson(
     `/config-snapshots/${encodeURIComponent(snapshotId)}`,
     configSnapshotsSchema,
     {
       method: "DELETE",
     },
+    { mutation },
   );
 }

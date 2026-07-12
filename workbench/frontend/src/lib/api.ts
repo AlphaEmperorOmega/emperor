@@ -1,7 +1,11 @@
 export {
+  createMutationRequestOptions,
   isUnauthorizedApiError,
 } from "@/lib/api/client";
-export type { UnauthorizedApiError } from "@/lib/api/client";
+export type {
+  MutationRequestOptions,
+  UnauthorizedApiError,
+} from "@/lib/api/client";
 export * from "@/lib/api/config-snapshots";
 export * from "@/lib/api/deletion";
 export * from "@/lib/api/health";

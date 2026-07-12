@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/api", () => ({
+  createMutationRequestOptions: () => ({ idempotencyKey: "snapshot-command" }),
   fetchConfigSnapshots: mocks.fetch,
   createConfigSnapshot: mocks.create,
   renameConfigSnapshot: mocks.rename,

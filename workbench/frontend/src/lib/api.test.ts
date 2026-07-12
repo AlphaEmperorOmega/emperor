@@ -9,12 +9,15 @@ import {
 } from "@/features/workbench/providers/_workbench-connection-actions";
 import {
   cancelTrainingJob,
+  createMutationRequestOptions,
   createConfigSnapshot,
+  createLogPresetDeletePlan,
   createLogRunDeletePlan,
   createTrainingJob,
   configOverridesSchema,
   deleteConfigSnapshot,
   deleteLogExperiment,
+  deleteLogPreset,
   deleteLogRuns,
   fetchCapabilities,
   fetchConfigSchema,
@@ -58,6 +61,7 @@ import {
 } from "@/lib/api";
 import {
   requestJson,
+  IDEMPOTENCY_HEADER_NAME,
   WORKBENCH_MUTATION_HEADER_NAME,
 } from "@/lib/api/client";
 import {
@@ -75,6 +79,10 @@ import {
 
 const BASE = "http://127.0.0.1:9999";
 const linearIdentity = { modelType: "linears", model: "linear" } as const;
+
+function mutationOptions() {
+  return createMutationRequestOptions();
+}
 
 function getWorkbenchApiBaseUrl() {
   return loadWorkbenchConnectionRuntime().apiBaseUrl;
@@ -124,8 +132,10 @@ const capabilitiesResponse = {
   historicalMonitorDataEnabled: true,
   uploadsEnabled: false,
   maxUploadSize: null,
-  dataSourcesEnabled: false,
-  dataSources: [],
+  maxActiveTrainingJobs: 2,
+  trainingJobMemoryLimitBytes: 16 * 1024 ** 3,
+  trainingJobCpuLimit: 8,
+  trainingJobProcessLimit: 512,
 };
 
 type FakeResponseInit = {
@@ -609,6 +619,7 @@ const successfulTrainingJobFixture = {
     },
   ],
   logTail: ["epoch 3 trainLoss=0.42"],
+  logTailTruncated: false,
   resultLinks: [
     {
       preset: "baseline",
@@ -940,7 +951,7 @@ describe("successful API fixtures", () => {
         },
         logFolder: "workbench-training/job-123",
         monitors: ["weights", "activations"],
-      }),
+      }, mutationOptions()),
     );
 
     expect(result.runPlan?.runs[0].changes).toHaveLength(2);
@@ -1081,7 +1092,7 @@ describe("successful API fixtures", () => {
         status: "cancelled",
         exitCode: 0,
       },
-      () => cancelTrainingJob("job-123"),
+      () => cancelTrainingJob("job-123", mutationOptions()),
     );
 
     expect(result.status).toBe("cancelled");
@@ -1201,7 +1212,7 @@ describe("successful API fixtures", () => {
         deletedRunCount: 1,
         deletedRelativePath: "workbench-training",
       },
-      () => deleteLogExperiment("workbench-training"),
+      () => deleteLogExperiment("workbench-training", mutationOptions()),
     );
 
     expect(result.deletedRunIds).toEqual(["run-1"]);
@@ -1220,7 +1231,7 @@ describe("successful API fixtures", () => {
   it("accepts a delete runs response fixture", async () => {
     const result = await validateSuccessfulFixture(
       successfulLogDeleteResponse,
-      () => deleteLogRuns(logDeleteFilters),
+      () => deleteLogRuns(logDeleteFilters, mutationOptions()),
     );
 
     expect(result.deletedRunCount).toBe(1);
@@ -1263,6 +1274,7 @@ describe("requestJson success", () => {
     expect(headers.get("content-type")).toBe("application/json");
     expect(headers.has("Authorization")).toBe(false);
     expect(headers.has("X-Workbench-Mutation")).toBe(false);
+    expect(headers.has(IDEMPOTENCY_HEADER_NAME)).toBe(false);
   });
 
   it("attaches no authorization header when no session token is stored", async () => {
@@ -1277,7 +1289,7 @@ describe("requestJson success", () => {
     expect(headers.has("Authorization")).toBe(false);
   });
 
-  it("attaches mutation proof to unsafe methods only and removes caller spoofing from safe methods", async () => {
+  it("attaches mutation proof only to explicitly declared mutations", async () => {
     const fetchMock = stubFetch(
       fakeResponse({ json: () => Promise.resolve({ status: "ok" }) }),
     );
@@ -1286,23 +1298,38 @@ describe("requestJson success", () => {
     for (const method of ["GET", "HEAD", "OPTIONS", "POST", "PUT", "PATCH", "DELETE"]) {
       await requestJson("/method-matrix", schema, {
         method,
-        headers: { [WORKBENCH_MUTATION_HEADER_NAME]: "caller-value" },
+        headers: {
+          [WORKBENCH_MUTATION_HEADER_NAME]: "caller-value",
+          [IDEMPOTENCY_HEADER_NAME]: "caller-key",
+        },
       });
     }
+    await requestJson(
+      "/method-matrix",
+      schema,
+      { method: "POST" },
+      { mutation: { idempotencyKey: "logical-command-1" } },
+    );
 
     expect(
       fetchMock.mock.calls.map(([, init]) => ({
         method: init?.method,
+        idempotencyKey: new Headers(init?.headers).get(IDEMPOTENCY_HEADER_NAME),
         mutation: new Headers(init?.headers).get(WORKBENCH_MUTATION_HEADER_NAME),
       })),
     ).toEqual([
-      { method: "GET", mutation: null },
-      { method: "HEAD", mutation: null },
-      { method: "OPTIONS", mutation: null },
-      { method: "POST", mutation: "true" },
-      { method: "PUT", mutation: "true" },
-      { method: "PATCH", mutation: "true" },
-      { method: "DELETE", mutation: "true" },
+      { method: "GET", idempotencyKey: null, mutation: null },
+      { method: "HEAD", idempotencyKey: null, mutation: null },
+      { method: "OPTIONS", idempotencyKey: null, mutation: null },
+      { method: "POST", idempotencyKey: null, mutation: null },
+      { method: "PUT", idempotencyKey: null, mutation: null },
+      { method: "PATCH", idempotencyKey: null, mutation: null },
+      { method: "DELETE", idempotencyKey: null, mutation: null },
+      {
+        method: "POST",
+        idempotencyKey: "logical-command-1",
+        mutation: "true",
+      },
     ]);
   });
 
@@ -1498,7 +1525,8 @@ describe("requestJson success", () => {
     expect(request.method).toBe("POST");
     expect(request.body).toBe(JSON.stringify(input));
     expect(headers.get("Authorization")).toBe("Bearer hosted-secret");
-    expect(headers.get("X-Workbench-Mutation")).toBe("true");
+    expect(headers.has(WORKBENCH_MUTATION_HEADER_NAME)).toBe(false);
+    expect(headers.has(IDEMPOTENCY_HEADER_NAME)).toBe(false);
   });
 });
 
@@ -1514,7 +1542,7 @@ describe("requestMultipartJson success", () => {
     const file = new File(["zip-bytes"], "logs.zip", {
       type: "application/zip",
     });
-    const result = await importLogArchive(file);
+    const result = await importLogArchive(file, mutationOptions());
 
     expect(result).toEqual(successfulLogArchiveImportResponse);
     const [url, init] = fetchMock.mock.calls[0];
@@ -1525,6 +1553,7 @@ describe("requestMultipartJson success", () => {
     expect(request.body).toBeInstanceOf(FormData);
     expect(headers.get("Authorization")).toBe("Bearer hosted-secret");
     expect(headers.get("X-Workbench-Mutation")).toBe("true");
+    expect(headers.get(IDEMPOTENCY_HEADER_NAME)).toMatch(/^[0-9a-f-]{36}$/);
     expect(headers.has("content-type")).toBe(false);
     const archive = (request.body as FormData).get("archive");
     expect(archive).toBeInstanceOf(File);
@@ -1808,7 +1837,9 @@ describe("requestJson error handling", () => {
       }),
     );
 
-    await expect(deleteLogExperiment("test_model")).rejects.toThrow(
+    await expect(
+      deleteLogExperiment("test_model", mutationOptions()),
+    ).rejects.toThrow(
       `Invalid API response for DELETE /logs/experiments/test_model from ${BASE}: deletedRunIds.0:`,
     );
   });
@@ -1848,8 +1879,6 @@ describe("requestJson error handling", () => {
             historicalMonitorDataEnabled: true,
             uploadsEnabled: false,
             maxUploadSize: null,
-            dataSourcesEnabled: false,
-            dataSources: [],
           }),
       }),
     );
@@ -1862,10 +1891,8 @@ describe("requestJson error handling", () => {
   it.each([
     ["uploadsEnabled", { uploadsEnabled: "no" }, "uploadsEnabled:"],
     ["maxUploadSize", { maxUploadSize: "unlimited" }, "maxUploadSize:"],
-    ["dataSourcesEnabled", { dataSourcesEnabled: "no" }, "dataSourcesEnabled:"],
-    ["dataSources", { dataSources: "default-server-data" }, "dataSources:"],
   ])(
-    "throws with request context when capabilities placeholder %s is malformed",
+    "throws with request context when capability %s is malformed",
     async (_field, override, issuePath) => {
       stubFetch(
         fakeResponse({
@@ -1896,7 +1923,7 @@ describe("URL and query construction", () => {
     expect(result).toEqual(capabilitiesResponse);
   });
 
-  it("defaults additive capabilities placeholders from older payloads", async () => {
+  it("defaults additive capabilities from older payloads", async () => {
     const legacyCapabilities = {
       authMode: "none",
       trainingEnabled: true,
@@ -2561,7 +2588,7 @@ describe("URL and query construction", () => {
       }),
     );
 
-    const result = await deleteLogExperiment("test_model");
+    const result = await deleteLogExperiment("test_model", mutationOptions());
 
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe(`${BASE}/logs/experiments/test_model`);
@@ -2582,7 +2609,7 @@ describe("URL and query construction", () => {
       }),
     );
 
-    await deleteLogExperiment("test model/one");
+    await deleteLogExperiment("test model/one", mutationOptions());
 
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe(`${BASE}/logs/experiments/test%20model%2Fone`);
@@ -3403,6 +3430,168 @@ describe("POST requests", () => {
     ]);
   });
 
+  it.each([51, 100])(
+    "chunks %i log media run IDs into backend-valid requests",
+    async (runCount) => {
+      const requestBodies: Array<{ runIds: string[] }> = [];
+      const mediaFetchMock = vi.fn<FetchFn>((_input, init) => {
+        const body = JSON.parse(String((init as RequestInit).body)) as {
+          runIds: string[];
+        };
+        requestBodies.push(body);
+        return Promise.resolve(
+          fakeResponse({
+            json: () =>
+              Promise.resolve({
+                images: [],
+                texts: [],
+                sourceItemCount: body.runIds.length,
+                returnedItemCount: body.runIds.length,
+              }),
+          }),
+        );
+      });
+      vi.stubGlobal("fetch", mediaFetchMock);
+      const runIds = Array.from({ length: runCount }, (_, index) => `run-${index}`);
+
+      const media = await fetchLogMedia({
+        runIds,
+        imageTags: ["validation/image"],
+        textTags: ["validation/text"],
+      });
+
+      expect(requestBodies.map((body) => body.runIds.length)).toEqual(
+        runCount === 51 ? [50, 1] : [50, 50],
+      );
+      expect(media.sourceItemCount).toBe(runCount);
+      expect(media.returnedItemCount).toBe(runCount);
+    },
+  );
+
+  it("aggregates media truncation metadata across run batches", async () => {
+    let requestIndex = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<FetchFn>(() => {
+        const index = requestIndex;
+        requestIndex += 1;
+        return Promise.resolve(
+          fakeResponse({
+            json: () =>
+              Promise.resolve({
+                images: [],
+                texts: [],
+                eventBytes: index === 0 ? 128 : 64,
+                skippedEventFiles: index,
+                sourceItemCount: 50,
+                returnedItemCount: index === 0 ? 50 : 49,
+                truncated: index === 1,
+                truncationReason: index === 1 ? "read budget reached" : null,
+              }),
+          }),
+        );
+      }),
+    );
+
+    const media = await fetchLogMedia({
+      runIds: Array.from({ length: 100 }, (_, index) => `run-${index}`),
+      imageTags: ["validation/image"],
+      textTags: [],
+    });
+
+    expect(media).toMatchObject({
+      eventBytes: 192,
+      skippedEventFiles: 1,
+      sourceItemCount: 100,
+      returnedItemCount: 99,
+      truncated: true,
+      truncationReason: "read budget reached",
+    });
+  });
+
+  it("rejects an aborted media query and does not schedule later batches", async () => {
+    const controller = new AbortController();
+    const mediaFetchMock = vi.fn<FetchFn>((_input, init) =>
+      new Promise<Response>((_resolve, reject) => {
+        const signal = (init as RequestInit).signal;
+        signal?.addEventListener(
+          "abort",
+          () => reject(new DOMException("Aborted", "AbortError")),
+          { once: true },
+        );
+      }),
+    );
+    vi.stubGlobal("fetch", mediaFetchMock);
+    const mediaPromise = fetchLogMedia(
+      {
+        runIds: Array.from({ length: 101 }, (_, index) => `run-${index}`),
+        imageTags: ["validation/image"],
+        textTags: [],
+      },
+      { signal: controller.signal },
+    );
+
+    expect(mediaFetchMock).toHaveBeenCalledTimes(2);
+    controller.abort();
+
+    await expect(mediaPromise).rejects.toMatchObject({ name: "AbortError" });
+    await flushAsyncWork();
+    expect(mediaFetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("chunks checkpoints by run ID and preserves request order", async () => {
+    const pending: Array<{
+      runIds: string[];
+      resolve: (response: Response) => void;
+    }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<FetchFn>((_input, init) => {
+        const response = createDeferred<Response>();
+        const body = JSON.parse(String((init as RequestInit).body)) as {
+          runIds: string[];
+        };
+        pending.push({ runIds: body.runIds, resolve: response.resolve });
+        return response.promise;
+      }),
+    );
+    const checkpointsPromise = fetchLogCheckpoints({
+      runIds: Array.from({ length: 100 }, (_, index) => `run-${index}`),
+    });
+    const resolveBatch = (index: number) => {
+      const request = pending[index];
+      request.resolve(
+        fakeResponse({
+          json: () =>
+            Promise.resolve({
+              checkpoints: [
+                {
+                  id: `checkpoint-${index}`,
+                  runId: request.runIds[0],
+                  filename: `batch-${index}.ckpt`,
+                  relativePath: `checkpoints/batch-${index}.ckpt`,
+                  epoch: null,
+                  step: index,
+                  sizeBytes: 8,
+                  modifiedAt: "2026-06-01T00:00:00Z",
+                },
+              ],
+            }),
+        }),
+      );
+    };
+
+    expect(pending.map((request) => request.runIds.length)).toEqual([50, 50]);
+    resolveBatch(1);
+    resolveBatch(0);
+    const checkpoints = await checkpointsPromise;
+
+    expect(checkpoints.checkpoints.map((checkpoint) => checkpoint.id)).toEqual([
+      "checkpoint-0",
+      "checkpoint-1",
+    ]);
+  });
+
   it("fetches checkpoint metadata and run artifacts", async () => {
     const checkpointFetchMock = stubFetch(
       fakeResponse({
@@ -3522,6 +3711,50 @@ describe("POST requests", () => {
     expect(result.candidates[0].relativePath).toContain("version_0");
   });
 
+  it("posts semantic preset deletion planning without mutation headers", async () => {
+    const target = { experiment: "workbench-training", preset: "baseline" };
+    const fetchMock = stubFetch(
+      fakeResponse({
+        json: () => Promise.resolve(successfulLogDeletePlanFixture),
+      }),
+    );
+
+    const result = await createLogPresetDeletePlan(target);
+
+    const [url, init] = fetchMock.mock.calls[0];
+    const headers = new Headers((init as RequestInit).headers);
+    expect(url).toBe(`${BASE}/logs/runs/preset-delete-plan`);
+    expect((init as RequestInit).method).toBe("POST");
+    expect((init as RequestInit).body).toBe(JSON.stringify(target));
+    expect(headers.get(WORKBENCH_MUTATION_HEADER_NAME)).toBeNull();
+    expect(headers.get(IDEMPOTENCY_HEADER_NAME)).toBeNull();
+    expect(result.candidateCount).toBe(1);
+  });
+
+  it("posts semantic preset deletion with its caller-owned mutation key", async () => {
+    const target = { experiment: "workbench-training", preset: "baseline" };
+    const fetchMock = stubFetch(
+      fakeResponse({
+        json: () => Promise.resolve(successfulLogDeleteResponse),
+      }),
+    );
+
+    const result = await deleteLogPreset(target, {
+      idempotencyKey: "preset-delete-command",
+    });
+
+    const [url, init] = fetchMock.mock.calls[0];
+    const headers = new Headers((init as RequestInit).headers);
+    expect(url).toBe(`${BASE}/logs/runs/preset-delete`);
+    expect((init as RequestInit).method).toBe("POST");
+    expect((init as RequestInit).body).toBe(JSON.stringify(target));
+    expect(headers.get(WORKBENCH_MUTATION_HEADER_NAME)).toBe("true");
+    expect(headers.get(IDEMPOTENCY_HEADER_NAME)).toBe(
+      "preset-delete-command",
+    );
+    expect(result.deletedRunIds).toEqual(["run-1"]);
+  });
+
   it("posts filtered log-run delete requests as JSON", async () => {
     const filters = {
       experiments: ["test_model"],
@@ -3574,7 +3807,7 @@ describe("POST requests", () => {
       }),
     );
 
-    const result = await deleteLogRuns(filters);
+    const result = await deleteLogRuns(filters, mutationOptions());
 
     expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/logs/runs/delete`);
     expect((fetchMock.mock.calls[0][1] as RequestInit).method).toBe("POST");
@@ -3611,7 +3844,7 @@ describe("POST requests", () => {
     };
     const fetchMock = stubFetch(fakeResponse({ json: () => Promise.resolve(job) }));
 
-    await cancelTrainingJob("j1");
+    await cancelTrainingJob("j1", mutationOptions());
 
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe(`${BASE}/training/jobs/j1/cancel`);
@@ -3678,7 +3911,7 @@ describe("POST requests", () => {
 
     const cancelFetchMock = stubFetch(fakeResponse({ json: () => Promise.resolve(job) }));
 
-    await cancelTrainingJob("job/a?b");
+    await cancelTrainingJob("job/a?b", mutationOptions());
 
     expect(cancelFetchMock.mock.calls[0][0]).toBe(
       `${BASE}/training/jobs/job%2Fa%3Fb/cancel`,
@@ -3695,7 +3928,9 @@ describe("POST requests", () => {
       }),
     );
 
-    await expect(deleteLogExperiment("missing")).rejects.toThrow(
+    await expect(
+      deleteLogExperiment("missing", mutationOptions()),
+    ).rejects.toThrow(
       `DELETE /logs/experiments/missing from ${BASE} failed with 400: Unknown log experiment: missing`,
     );
   });
@@ -3720,7 +3955,7 @@ describe("POST requests", () => {
         models: [linearIdentity],
         presets: ["BASELINE"],
         runIds: ["run-1"],
-      }),
+      }, mutationOptions()),
     ).rejects.toThrow(
       `POST /logs/runs/delete from ${BASE} failed with 400: A training job is still writing to this log folder.`,
     );
@@ -3740,7 +3975,10 @@ describe("POST requests", () => {
     );
 
     await expect(
-      importLogArchive(new File(["zip-bytes"], "logs.zip")),
+      importLogArchive(
+        new File(["zip-bytes"], "logs.zip"),
+        mutationOptions(),
+      ),
     ).rejects.toThrow(
       `POST /logs/import from ${BASE} failed with 400: Unsafe archive path contains traversal: ../escaped.txt`,
     );
@@ -3852,7 +4090,7 @@ describe("createTrainingJob", () => {
       logFolder: "test_model",
       monitors: [],
     };
-    await createTrainingJob(input);
+    await createTrainingJob(input, mutationOptions());
 
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe(`${BASE}/training/jobs`);
@@ -3879,6 +4117,7 @@ describe("fetchTrainingRunPlan", () => {
           },
         },
       ],
+      snapshotRevisions: [],
     });
   });
 
@@ -4006,7 +4245,7 @@ describe("config snapshots", () => {
       overrides: { learning_rate: "0.01" },
     };
 
-    await createConfigSnapshot(input);
+    await createConfigSnapshot(input, mutationOptions());
 
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe(`${BASE}/config-snapshots`);
@@ -4019,7 +4258,7 @@ describe("config snapshots", () => {
       fakeResponse({ json: () => Promise.resolve(snapshot) }),
     );
 
-    await renameConfigSnapshot("snap-1", "new name");
+    await renameConfigSnapshot("snap-1", "new name", mutationOptions());
 
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe(`${BASE}/config-snapshots/snap-1`);
@@ -4036,7 +4275,7 @@ describe("config snapshots", () => {
       overrides: { learning_rate: "0.02" },
     };
 
-    await updateConfigSnapshot("snap-1", input);
+    await updateConfigSnapshot("snap-1", input, mutationOptions());
 
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe(`${BASE}/config-snapshots/snap-1`);
@@ -4052,7 +4291,7 @@ describe("config snapshots", () => {
       }),
     );
 
-    const result = await deleteConfigSnapshot("snap-1");
+    const result = await deleteConfigSnapshot("snap-1", mutationOptions());
 
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe(`${BASE}/config-snapshots/snap-1`);

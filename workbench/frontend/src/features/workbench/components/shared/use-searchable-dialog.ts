@@ -44,8 +44,11 @@ export function useSearchableDialogInteraction<Option>({
   const rootRef = useRef<HTMLDivElement | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
   const popupRef = useRef<HTMLDivElement | null>(null);
+  const optionTitleRefs = useRef(new Map<string, HTMLButtonElement>());
   const appendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingActiveIndexRef = useRef<number | null>(null);
+  const pendingFocusIndexRef = useRef<number | null>(null);
+  const suppressNextFocusOpenRef = useRef(false);
   const onActivateRef = useRef(onActivate);
   const onQueryChangeRef = useRef(onQueryChange);
   const onClearRef = useRef(onClear);
@@ -69,9 +72,6 @@ export function useSearchableDialogInteraction<Option>({
   );
   const hasMore = visibleCount < matchingOptions.length;
   const isOpen = hasFocusWithin && openRequested && trimmedQuery.length > 0;
-  const activeOption =
-    isOpen && activeIndex >= 0 ? visibleOptions[activeIndex] : undefined;
-
   onActivateRef.current = onActivate;
   onQueryChangeRef.current = onQueryChange;
   onClearRef.current = onClear;
@@ -87,7 +87,14 @@ export function useSearchableDialogInteraction<Option>({
   const dismiss = useCallback(() => {
     setOpenRequested(false);
     pendingActiveIndexRef.current = null;
+    pendingFocusIndexRef.current = null;
   }, []);
+
+  const restoreSearchFocus = useCallback(() => {
+    suppressNextFocusOpenRef.current = true;
+    dismiss();
+    queueMicrotask(() => searchRef.current?.focus());
+  }, [dismiss]);
 
   const loadMore = useCallback(() => {
     if (
@@ -107,31 +114,44 @@ export function useSearchableDialogInteraction<Option>({
     return true;
   }, [matchingOptions.length, pageSize, visibleCount]);
 
+  const focusOption = useCallback(
+    (index: number) => {
+      const option = visibleOptions[index];
+      if (!option) return false;
+      setActiveIndex(index);
+      const key = optionKey(option);
+      queueMicrotask(() => optionTitleRefs.current.get(key)?.focus());
+      return true;
+    },
+    [optionKey, visibleOptions],
+  );
+
   const moveActiveOption = useCallback(
-    (direction: 1 | -1) => {
+    (direction: 1 | -1, currentIndex = activeIndex) => {
       if (visibleOptions.length === 0) {
         return;
       }
       setOpenRequested(true);
-      setActiveIndex((current) => {
-        if (
-          direction === 1 &&
-          current >= visibleOptions.length - 1 &&
-          hasMore
-        ) {
-          pendingActiveIndexRef.current = visibleOptions.length;
-          loadMore();
-          return current;
-        }
-        if (current < 0) {
-          return direction === 1 ? 0 : visibleOptions.length - 1;
-        }
-        return (
-          (current + direction + visibleOptions.length) % visibleOptions.length
-        );
-      });
+      if (
+        direction === 1 &&
+        currentIndex >= visibleOptions.length - 1 &&
+        hasMore
+      ) {
+        pendingActiveIndexRef.current = visibleOptions.length;
+        pendingFocusIndexRef.current = visibleOptions.length;
+        loadMore();
+        return;
+      }
+      const nextIndex =
+        currentIndex < 0
+          ? direction === 1
+            ? 0
+            : visibleOptions.length - 1
+          : (currentIndex + direction + visibleOptions.length) %
+            visibleOptions.length;
+      focusOption(nextIndex);
     },
-    [hasMore, loadMore, visibleOptions.length],
+    [activeIndex, focusOption, hasMore, loadMore, visibleOptions.length],
   );
 
   const activate = useCallback(
@@ -144,6 +164,10 @@ export function useSearchableDialogInteraction<Option>({
 
   const handleRootFocus = useCallback(() => {
     setHasFocusWithin(true);
+    if (suppressNextFocusOpenRef.current) {
+      suppressNextFocusOpenRef.current = false;
+      return;
+    }
     setOpenRequested(trimmedQuery.length > 0);
   }, [trimmedQuery.length]);
 
@@ -162,24 +186,50 @@ export function useSearchableDialogInteraction<Option>({
     setOpenRequested(nextQuery.trim().length > 0);
   }, []);
 
+  const handleSearchClick = useCallback(() => {
+    setOpenRequested(trimmedQuery.length > 0);
+  }, [trimmedQuery.length]);
+
   const handleSearchKeyDown = useCallback(
     (event: KeyboardEvent<HTMLInputElement>) => {
       if (event.key === "ArrowDown" || event.key === "ArrowUp") {
         event.preventDefault();
-        moveActiveOption(event.key === "ArrowDown" ? 1 : -1);
-        return;
-      }
-      if (event.key === "Enter" && activeOption) {
-        event.preventDefault();
-        activate(activeOption);
+        setOpenRequested(true);
+        focusOption(event.key === "ArrowDown" ? 0 : visibleOptions.length - 1);
         return;
       }
       if (event.key === "Escape" && isOpen) {
         event.preventDefault();
-        dismiss();
+        restoreSearchFocus();
       }
     },
-    [activate, activeOption, dismiss, isOpen, moveActiveOption],
+    [focusOption, isOpen, restoreSearchFocus, visibleOptions.length],
+  );
+
+  const handleOptionKeyDown = useCallback(
+    (index: number, event: KeyboardEvent<HTMLButtonElement>) => {
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        moveActiveOption(event.key === "ArrowDown" ? 1 : -1, index);
+      } else if (event.key === "Home") {
+        event.preventDefault();
+        focusOption(0);
+      } else if (event.key === "End") {
+        event.preventDefault();
+        focusOption(visibleOptions.length - 1);
+      }
+    },
+    [focusOption, moveActiveOption, visibleOptions.length],
+  );
+
+  const handlePopupKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLDivElement>) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      restoreSearchFocus();
+    },
+    [restoreSearchFocus],
   );
 
   const handleScroll = useCallback(() => {
@@ -223,7 +273,15 @@ export function useSearchableDialogInteraction<Option>({
     }
     pendingActiveIndexRef.current = null;
     setActiveIndex(pendingIndex);
-  }, [visibleOptions.length]);
+    if (pendingFocusIndexRef.current === pendingIndex) {
+      pendingFocusIndexRef.current = null;
+      const option = visibleOptions[pendingIndex];
+      if (option) {
+        const key = optionKey(option);
+        queueMicrotask(() => optionTitleRefs.current.get(key)?.focus());
+      }
+    }
+  }, [optionKey, visibleOptions, visibleOptions.length]);
 
   useEffect(() => {
     if (activeIndex < visibleOptions.length) {
@@ -257,16 +315,36 @@ export function useSearchableDialogInteraction<Option>({
 
   return {
     ids: { control: controlId, popup: popupId },
-    state: { isOpen, visibleOptions, isLoadingMore, activeIndex },
+    state: {
+      isOpen,
+      visibleOptions,
+      isLoadingMore,
+      activeIndex,
+      matchingCount: matchingOptions.length,
+    },
     root: { ref: rootRef, onFocus: handleRootFocus, onBlur: handleRootBlur },
     search: {
       ref: searchRef,
       onChange: handleSearchChange,
+      onClick: handleSearchClick,
       onKeyDown: handleSearchKeyDown,
       clear: clearSearch,
     },
-    popup: { ref: popupRef },
+    popup: { ref: popupRef, onKeyDown: handlePopupKeyDown },
     collection: { onScroll: handleScroll },
-    actions: { activate },
+    actions: {
+      activate,
+      optionTitle: (option: Option, index: number) => ({
+        ref: (element: HTMLButtonElement | null) => {
+          const key = optionKey(option);
+          if (element) optionTitleRefs.current.set(key, element);
+          else optionTitleRefs.current.delete(key);
+        },
+        tabIndex: index === activeIndex ? 0 : -1,
+        onFocus: () => setActiveIndex(index),
+        onKeyDown: (event: KeyboardEvent<HTMLButtonElement>) =>
+          handleOptionKeyDown(index, event),
+      }),
+    },
   };
 }

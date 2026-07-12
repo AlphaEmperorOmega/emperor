@@ -169,8 +169,10 @@ const capabilitiesResponse: Capabilities = {
   historicalMonitorDataEnabled: true,
   uploadsEnabled: true,
   maxUploadSize: null,
-  dataSourcesEnabled: false,
-  dataSources: [],
+  maxActiveTrainingJobs: 2,
+  trainingJobMemoryLimitBytes: 16 * 1024 ** 3,
+  trainingJobCpuLimit: 8,
+  trainingJobProcessLimit: 512,
 };
 const configSnapshotsResponse = {
   modelType: "linears",
@@ -188,6 +190,7 @@ const logRunsResponse = {
       experiment: "test_model",
       modelType: "linears",
       model: "linear",
+      experimentTask: "image-classification",
       preset: "BASELINE",
       dataset: "Mnist",
       runName: "aaa_20260601_010203",
@@ -206,6 +209,7 @@ const logRunsResponse = {
       experiment: "test_model_2",
       modelType: "linears",
       model: "linear",
+      experimentTask: "image-classification",
       preset: "BASELINE",
       dataset: "Cifar10",
       runName: "bbb_20260601_020304",
@@ -1750,10 +1754,16 @@ type MockTrainingPlanRequest = {
   model?: string;
   preset?: string;
   presets?: string[];
+  experimentTask?: string;
   datasets?: string[];
   overrides?: Record<string, unknown>;
   monitors?: string[];
   logFolder?: string;
+  snapshotIds?: string[];
+  snapshotRevisions?: Array<{
+    id: string;
+    semanticRevision: string;
+  }>;
   search?: {
     mode: "grid" | "random";
     values: Record<string, unknown[]>;
@@ -1794,6 +1804,7 @@ function mockTrainingCommand(input: {
   modelType: string;
   model: string;
   preset: string;
+  experimentTask?: string;
   dataset: string;
   logFolder: string;
   monitors?: string[];
@@ -1808,9 +1819,11 @@ function mockTrainingCommand(input: {
     input.model,
     "--preset",
     input.preset,
-    "--datasets",
-    input.dataset,
   ];
+  if (input.experimentTask) {
+    parts.push("--experiment-task", input.experimentTask);
+  }
+  parts.push("--datasets", input.dataset);
   if (input.logFolder) {
     parts.push("--logdir", input.logFolder);
   }
@@ -1827,11 +1840,14 @@ function mockTrainingCommand(input: {
   return parts.join(" ");
 }
 
-function mockTrainingRunPlan(request: MockTrainingPlanRequest) {
+function mockTrainingRunPlan(
+  request: MockTrainingPlanRequest,
+  snapshotRecords: MockConfigSnapshot[] = [],
+) {
   const modelType = request.modelType ?? "linears";
   const model = request.model ?? "linear";
   const preset = request.preset ?? "baseline";
-  const presets = request.presets?.length ? request.presets : [preset];
+  const selectedPresets = request.presets ?? [preset];
   const datasets = request.datasets?.length ? request.datasets : ["Cifar10"];
   const overrides = request.overrides ?? {};
   const fixedChanges = Object.entries(overrides).map(([key, value]) => ({
@@ -1841,7 +1857,7 @@ function mockTrainingRunPlan(request: MockTrainingPlanRequest) {
     source: "override",
   }));
   const combinations = mockTrainingSearchCombinations(request);
-  const runs = presets.flatMap((runPreset) =>
+  const presetRuns = selectedPresets.flatMap((runPreset) =>
     datasets.flatMap((dataset) =>
       combinations.map((combination) => {
         const rowOverrides = { ...overrides, ...combination.overrides };
@@ -1858,12 +1874,15 @@ function mockTrainingRunPlan(request: MockTrainingPlanRequest) {
             modelType,
             model,
             preset: runPreset,
+            experimentTask: request.experimentTask,
             dataset,
             logFolder: request.logFolder ?? "",
             monitors: request.monitors ?? [],
             overrides: rowOverrides,
           }),
-          totalEpochs: Number(overrides.num_epochs ?? 30),
+          totalEpochs: Number(
+            rowOverrides.num_epochs ?? rowOverrides.NUM_EPOCHS ?? 30,
+          ),
           currentEpoch: 0,
           metrics: {},
           logDir: null,
@@ -1871,23 +1890,77 @@ function mockTrainingRunPlan(request: MockTrainingPlanRequest) {
         };
       }),
     ),
-  ).map((run, index) => ({
+  );
+  const selectedSnapshots = (request.snapshotIds ?? []).flatMap((snapshotId) => {
+    const snapshot = snapshotRecords.find((candidate) => candidate.id === snapshotId);
+    return snapshot ? [snapshot] : [];
+  });
+  const snapshotRuns = selectedSnapshots.flatMap((snapshot) =>
+    datasets.map((dataset) => {
+      const rowOverrides = { ...snapshot.overrides, ...overrides };
+      return {
+        id: "",
+        index: 0,
+        status: "Pending",
+        preset: snapshot.preset,
+        snapshotId: snapshot.id,
+        snapshotName: snapshot.name,
+        dataset,
+        changes: Object.entries(rowOverrides).map(([key, value]) => ({
+          key,
+          label: key.replaceAll("_", " "),
+          value,
+          source: "override",
+        })),
+        overrides: rowOverrides,
+        command: mockTrainingCommand({
+          modelType,
+          model,
+          preset: snapshot.preset,
+          experimentTask: request.experimentTask,
+          dataset,
+          logFolder: request.logFolder ?? "",
+          monitors: request.monitors ?? [],
+          overrides: rowOverrides,
+        }),
+        totalEpochs: Number(
+          rowOverrides.num_epochs ?? rowOverrides.NUM_EPOCHS ?? 30,
+        ),
+        currentEpoch: 0,
+        metrics: {},
+        logDir: null,
+        error: null,
+      };
+    }),
+  );
+  const runs = [...presetRuns, ...snapshotRuns].map((run, index) => ({
     ...run,
     id: `run-${String(index + 1).padStart(4, "0")}`,
     index: index + 1,
   }));
+  const planPresets = Array.from(
+    new Set([
+      ...selectedPresets,
+      ...selectedSnapshots.map((snapshot) => snapshot.preset),
+    ]),
+  );
   const totalEpochs = runs.reduce((total, run) => total + run.totalEpochs, 0);
   return {
     modelType,
     model,
-    preset: presets[0],
-    presets,
+    preset: planPresets.includes(preset) ? preset : planPresets[0] ?? preset,
+    presets: planPresets,
+    experimentTask: request.experimentTask ?? "",
     datasets,
     overrides,
     search: request.search ?? null,
     logFolder: request.logFolder ?? "",
     isRandomSearch: request.search?.mode === "random",
     runs,
+    snapshotRevisions: selectedSnapshots.map((snapshot, index) => ({
+      id: snapshot.id,
+      semanticRevision: String(index + 1).padStart(64, "0"),
+    })),
     summary: {
       totalRuns: runs.length,
       completedRuns: 0,
@@ -1936,6 +2009,9 @@ function mockAcceptedTrainingRunPlan(
 
   const basePlan = mockTrainingRunPlan(request);
   if (submittedRuns.length === 0) {
+    if ((request.snapshotIds?.length ?? 0) > 0 && preferred) {
+      return preferred;
+    }
     return basePlan;
   }
   const runs = submittedRuns.map((submittedRun, index) => {
@@ -2032,8 +2108,11 @@ function summarizeMockTrainingRuns(runs: MockTrainingRunSummaryInput) {
   };
 }
 
-function completedMockTrainingRunPlan(request: MockTrainingPlanRequest) {
-  const plan = mockTrainingRunPlan(request);
+function completedMockTrainingRunPlan(
+  request: MockTrainingPlanRequest,
+  preferred?: ReturnType<typeof mockTrainingRunPlan>,
+) {
+  const plan = preferred ?? mockTrainingRunPlan(request);
   const runs = plan.runs.map((run) => ({
     ...run,
     status: "Completed",
@@ -2051,8 +2130,11 @@ function completedMockTrainingRunPlan(request: MockTrainingPlanRequest) {
   };
 }
 
-function cancelledMockTrainingRunPlan(request: MockTrainingPlanRequest) {
-  const plan = mockTrainingRunPlan(request);
+function cancelledMockTrainingRunPlan(
+  request: MockTrainingPlanRequest,
+  preferred?: ReturnType<typeof mockTrainingRunPlan>,
+) {
+  const plan = preferred ?? mockTrainingRunPlan(request);
   const runs = plan.runs.map((run) => ({
     ...run,
     status: run.status === "Running" ? "Cancelled" : "Skipped",
@@ -2067,8 +2149,11 @@ function cancelledMockTrainingRunPlan(request: MockTrainingPlanRequest) {
   };
 }
 
-function failedMockTrainingRunPlan(request: MockTrainingPlanRequest) {
-  const plan = mockTrainingRunPlan(request);
+function failedMockTrainingRunPlan(
+  request: MockTrainingPlanRequest,
+  preferred?: ReturnType<typeof mockTrainingRunPlan>,
+) {
+  const plan = preferred ?? mockTrainingRunPlan(request);
   let failedSeen = false;
   const runs = plan.runs.map((run) => {
     if (!failedSeen) {
@@ -2101,16 +2186,17 @@ type MockTrainingJobStatus =
 function mockTrainingJobPayload(
   request: MockTrainingPlanRequest,
   { status }: { status: MockTrainingJobStatus },
+  preferredPlan?: ReturnType<typeof mockTrainingRunPlan>,
 ) {
   const logFolder = request.logFolder ?? "test_model";
   const runPlan =
     status === "completed"
-      ? completedMockTrainingRunPlan(request)
+      ? completedMockTrainingRunPlan(request, preferredPlan)
       : status === "cancelled"
-        ? cancelledMockTrainingRunPlan(request)
+        ? cancelledMockTrainingRunPlan(request, preferredPlan)
         : status === "failed"
-          ? failedMockTrainingRunPlan(request)
-      : mockTrainingRunPlan(request);
+          ? failedMockTrainingRunPlan(request, preferredPlan)
+      : preferredPlan ?? mockTrainingRunPlan(request);
   const isCompleted = status === "completed";
   const isFailed = status === "failed";
   const isCancelled = status === "cancelled";
@@ -2481,12 +2567,15 @@ function installFetchMock(options: FetchScenarioOptions = {}) {
     models: string[];
     presets: string[];
     datasets: string[];
+    experimentTask: string | null;
     hasEventFiles: string | null;
     projection: string | null;
     limit: number;
     offset: number;
   }> = [];
   const deleteExperimentRequests: string[] = [];
+	const deletePresetPlanRequests: Array<{ experiment: string; preset: string }> = [];
+	const deletePresetRequests: Array<{ experiment: string; preset: string }> = [];
 	  const deleteRunPlanRequests: Array<{
 	    experiments: string[];
 	    datasets: string[];
@@ -2569,52 +2658,72 @@ function installFetchMock(options: FetchScenarioOptions = {}) {
     );
   }
 
-	  function deletePlanPayload(filters: {
-	    experiments: string[];
-	    datasets: string[];
-	    models: MockModelIdentity[];
-	    presets: string[];
-	    runIds: string[];
-	  }) {
-    const candidates = matchingDeleteRuns(filters);
-    const blockers = options.deleteLogRunsBlockers ?? [];
-    return {
-      candidateCount: candidates.length,
-      counts: {
-        runs: candidates.length,
-        experiments: uniqueSorted(candidates.map((run) => run.experiment)).length,
-        datasets: uniqueSorted(candidates.map((run) => run.dataset)).length,
-	        models: uniqueSorted(candidates.map((run) => `${run.modelType}/${run.model}`)).length,
-        presets: uniqueSorted(candidates.map((run) => run.preset)).length,
-      },
-      affected: {
-        experiments: uniqueSorted(candidates.map((run) => run.experiment)),
-        datasets: uniqueSorted(candidates.map((run) => run.dataset)),
-	        models: uniqueSorted(candidates.map((run) => `${run.modelType}/${run.model}`))
-	          .map((value) => {
-	            const [modelType, model] = value.split("/", 2);
-	            return { modelType, model };
-	          }),
-        presets: uniqueSorted(candidates.map((run) => run.preset)),
-        runIds: uniqueSorted(candidates.map((run) => run.id)),
-      },
-      candidates: candidates.map((run) => ({
-	        id: run.id,
-	        experiment: run.experiment,
-	        modelType: run.modelType,
-	        model: run.model,
-        preset: run.preset,
-        dataset: run.dataset,
-        runName: run.runName,
-        version: run.version,
-        relativePath: run.relativePath,
-      })),
-      blockedByActiveJobs: blockers,
-      canDelete: candidates.length > 0 && blockers.length === 0,
-    };
-  }
+	function deletePlanForCandidates(candidates: typeof logResponse.runs) {
+	  const blockers = options.deleteLogRunsBlockers ?? [];
+	  const returnedCandidates = candidates.slice(0, 500);
+	  const truncated = returnedCandidates.length < candidates.length;
+	  return {
+	    candidateCount: candidates.length,
+	    sourceItemCount: candidates.length,
+	    returnedItemCount: returnedCandidates.length,
+	    truncated,
+	    truncationReason: truncated
+	      ? "delete candidates capped at 500 rows"
+	      : null,
+	    counts: {
+	      runs: candidates.length,
+	      experiments: uniqueSorted(candidates.map((run) => run.experiment)).length,
+	      datasets: uniqueSorted(candidates.map((run) => run.dataset)).length,
+	      models: uniqueSorted(candidates.map((run) => `${run.modelType}/${run.model}`)).length,
+	      presets: uniqueSorted(candidates.map((run) => run.preset)).length,
+	    },
+	    affected: {
+	      experiments: uniqueSorted(candidates.map((run) => run.experiment)),
+	      datasets: uniqueSorted(candidates.map((run) => run.dataset)),
+	      models: uniqueSorted(candidates.map((run) => `${run.modelType}/${run.model}`))
+	        .map((value) => {
+	          const [modelType, model] = value.split("/", 2);
+	          return { modelType, model };
+	        }),
+	      presets: uniqueSorted(candidates.map((run) => run.preset)),
+	      runIds: uniqueSorted(candidates.map((run) => run.id)),
+	    },
+	    candidates: returnedCandidates.map((run) => ({
+	      id: run.id,
+	      experiment: run.experiment,
+	      modelType: run.modelType,
+	      model: run.model,
+	      preset: run.preset,
+	      dataset: run.dataset,
+	      runName: run.runName,
+	      version: run.version,
+	      relativePath: run.relativePath,
+	    })),
+	    blockedByActiveJobs: blockers,
+	    canDelete: candidates.length > 0 && blockers.length === 0,
+	  };
+	}
 
-  const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+	function deletePlanPayload(filters: {
+	  experiments: string[];
+	  datasets: string[];
+	  models: MockModelIdentity[];
+	  presets: string[];
+	  runIds: string[];
+	}) {
+	  return deletePlanForCandidates(matchingDeleteRuns(filters));
+	}
+
+	function presetDeletePlanPayload(target: { experiment: string; preset: string }) {
+	  return deletePlanForCandidates(
+	    logResponse.runs.filter(
+	      (run) =>
+	        run.experiment === target.experiment && run.preset === target.preset,
+	    ),
+	  );
+	}
+
+  const dispatchFetch = (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const endsWithAny = (suffixes: string[]) =>
       suffixes.some((suffix) => url.endsWith(suffix));
@@ -2695,6 +2804,18 @@ function installFetchMock(options: FetchScenarioOptions = {}) {
 	        ),
 	      };
 	      return jsonResponse(snapshot);
+	    }
+	    if (url.includes("/config-snapshots/") && init?.method === "DELETE") {
+	      const snapshotId = decodeURIComponent(
+	        url.split("/config-snapshots/")[1] ?? "",
+	      );
+	      configSnapshotResponse = {
+	        ...configSnapshotResponse,
+	        snapshots: configSnapshotResponse.snapshots.filter(
+	          (snapshot) => snapshot.id !== snapshotId,
+	        ),
+	      };
+	      return jsonResponse(configSnapshotResponse);
 	    }
 	    if (url.includes("/config-snapshots?")) {
 	      const parsedUrl = new URL(url);
@@ -2904,7 +3025,10 @@ function installFetchMock(options: FetchScenarioOptions = {}) {
     }
     if (url.endsWith("/training/run-plan")) {
       const request = JSON.parse(String(init?.body)) as MockTrainingPlanRequest;
-      const defaultPlan = mockTrainingRunPlan(request);
+      const defaultPlan = mockTrainingRunPlan(
+        request,
+        configSnapshotResponse.snapshots,
+      );
       const requestIndex = trainingRunPlanRequestCount;
       trainingRunPlanRequestCount += 1;
       const responseBody = options.trainingRunPlanResponseFactory
@@ -2962,6 +3086,7 @@ function installFetchMock(options: FetchScenarioOptions = {}) {
               {
                 status: "running",
               },
+              runPlan,
             ),
             runPlan,
             monitors: latestTrainingRequest?.monitors ?? [],
@@ -2978,6 +3103,7 @@ function installFetchMock(options: FetchScenarioOptions = {}) {
         : mockTrainingJobPayload(
             (latestTrainingRequest ?? { logFolder }) as MockTrainingPlanRequest,
             { status: "cancelled" },
+            latestTrainingRunPlan,
           );
       return Promise.resolve(responseBody).then((body) => jsonResponse(body));
     }
@@ -2994,6 +3120,7 @@ function installFetchMock(options: FetchScenarioOptions = {}) {
         mockTrainingJobPayload(
           (latestTrainingRequest ?? { logFolder }) as MockTrainingPlanRequest,
           { status: options.trainingJobStatus ?? "completed" },
+          latestTrainingRunPlan,
         ),
       );
     }
@@ -3049,6 +3176,67 @@ function installFetchMock(options: FetchScenarioOptions = {}) {
           nodes: [],
         },
       );
+    }
+    if (url.endsWith("/logs/runs/preset-delete-plan")) {
+      const body = JSON.parse(String(init?.body)) as {
+        experiment: string;
+        preset: string;
+      };
+      deletePresetPlanRequests.push(body);
+      const planError =
+        options.deleteLogRunPlanErrorFactory?.(
+          deletePresetPlanRequests.length - 1,
+        ) ?? options.deleteLogRunPlanError;
+      if (planError) {
+        return jsonResponse({ detail: planError }, 400);
+      }
+      return jsonResponse(presetDeletePlanPayload(body));
+    }
+    if (url.endsWith("/logs/runs/preset-delete")) {
+      const body = JSON.parse(String(init?.body)) as {
+        experiment: string;
+        preset: string;
+      };
+      deletePresetRequests.push(body);
+      const deleteError =
+        options.deleteLogRunsErrorFactory?.(deletePresetRequests.length - 1) ??
+        options.deleteLogRunsError;
+      if (deleteError) {
+        return jsonResponse({ detail: deleteError }, 400);
+      }
+      const plan = presetDeletePlanPayload(body);
+      if (!plan.canDelete) {
+        return jsonResponse(
+          { detail: "A training job is still writing to this log folder." },
+          400,
+        );
+      }
+      const deletedRuns = logResponse.runs.filter(
+        (run) =>
+          run.experiment === body.experiment && run.preset === body.preset,
+      );
+      const deletedRunIds = new Set(deletedRuns.map((run) => run.id));
+      logResponse = {
+        runs: logResponse.runs.filter((run) => !deletedRunIds.has(run.id)),
+      };
+      const runCounts = new Map<string, number>();
+      for (const run of logResponse.runs) {
+        runCounts.set(run.experiment, (runCounts.get(run.experiment) ?? 0) + 1);
+      }
+      experimentResponse = {
+        experiments: experimentResponse.experiments
+          .map((entry) => ({
+            ...entry,
+            runCount: runCounts.get(entry.experiment) ?? 0,
+          }))
+          .filter((entry) => entry.runCount > 0),
+      };
+      return jsonResponse({
+        ...plan,
+        deletedRunIds: deletedRuns.map((run) => run.id),
+        deletedRunCount: deletedRuns.length,
+        deletedRelativePaths: deletedRuns.map((run) => run.relativePath),
+      });
     }
     if (url.endsWith("/logs/runs/delete-plan")) {
 	      const body = JSON.parse(String(init?.body)) as {
@@ -3137,6 +3325,7 @@ function installFetchMock(options: FetchScenarioOptions = {}) {
       const selectedModels = parsedUrl.searchParams.getAll("model");
       const selectedPresets = parsedUrl.searchParams.getAll("preset");
       const selectedDatasets = parsedUrl.searchParams.getAll("dataset");
+      const experimentTask = parsedUrl.searchParams.get("experimentTask");
       const hasEventFiles = parsedUrl.searchParams.get("hasEventFiles");
       const projection = parsedUrl.searchParams.get("projection");
       const offset = Number(parsedUrl.searchParams.get("offset") ?? 0);
@@ -3149,6 +3338,7 @@ function installFetchMock(options: FetchScenarioOptions = {}) {
         models: selectedModels,
         presets: selectedPresets,
         datasets: selectedDatasets,
+        experimentTask,
         hasEventFiles,
         projection,
         limit,
@@ -3174,6 +3364,12 @@ function installFetchMock(options: FetchScenarioOptions = {}) {
           return false;
         }
         if (selectedDatasets.length > 0 && !selectedDatasets.includes(run.dataset)) {
+          return false;
+        }
+        if (
+          experimentTask &&
+          !("experimentTask" in run && run.experimentTask === experimentTask)
+        ) {
           return false;
         }
         if (hasEventFiles === "true" && run.eventFileCount <= 0) {
@@ -3386,6 +3582,132 @@ function installFetchMock(options: FetchScenarioOptions = {}) {
       return Promise.resolve(responseBody).then((payload) => jsonResponse(payload));
     }
     return jsonResponse({ detail: `Unhandled ${url}` }, 404);
+  };
+
+  const replayedMutations = new Map<
+    string,
+    { fingerprint: string; response: Response }
+  >();
+
+  function requestBodyFingerprint(body: BodyInit | null | undefined) {
+    if (body instanceof FormData) {
+      return JSON.stringify(
+        Array.from(body.entries(), ([name, value]) => [
+          name,
+          value instanceof File
+            ? { name: value.name, size: value.size, type: value.type }
+            : value,
+        ]),
+      );
+    }
+    return body === undefined || body === null ? "" : String(body);
+  }
+
+  function declaredMutation(method: string, pathname: string) {
+    return (
+      (method === "POST" && pathname === "/training/jobs") ||
+      (method === "POST" &&
+        /^\/training\/jobs\/[^/]+\/(cancel|reconcile)$/.test(pathname)) ||
+      (method === "POST" && pathname === "/config-snapshots") ||
+      ((method === "PATCH" || method === "DELETE") &&
+        pathname.startsWith("/config-snapshots/")) ||
+      (method === "POST" && pathname === "/logs/import") ||
+      (method === "DELETE" && pathname.startsWith("/logs/experiments/")) ||
+      (method === "POST" &&
+        (pathname === "/logs/runs/delete" ||
+          pathname === "/logs/runs/preset-delete"))
+    );
+  }
+
+  function fixtureApiPath(pathname: string) {
+    const starts = ["/training/", "/config-snapshots", "/logs/"]
+      .map((prefix) => pathname.indexOf(prefix))
+      .filter((index) => index >= 0);
+    return starts.length > 0 ? pathname.slice(Math.min(...starts)) : pathname;
+  }
+
+  function oversizedRequest(pathname: string, init?: RequestInit) {
+    if (String(init?.method ?? "GET").toUpperCase() !== "POST") return null;
+    if (!init?.body || init.body instanceof FormData) return null;
+    let body: Record<string, unknown>;
+    try {
+      body = JSON.parse(String(init.body)) as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+    const exceeds = (key: string, limit: number) =>
+      Array.isArray(body[key]) && body[key].length > limit;
+    const runLimited = new Set([
+      "/logs/tags",
+      "/logs/scalars",
+      "/logs/media",
+      "/logs/checkpoints",
+      "/logs/parameter-status",
+    ]);
+    if (runLimited.has(pathname) && exceeds("runIds", 50)) {
+      return "runIds exceeds the 50-item backend limit";
+    }
+    if (pathname === "/logs/media") {
+      if (exceeds("imageTags", 20) || exceeds("textTags", 20)) {
+        return "media tags exceed the 20-item backend limit";
+      }
+    }
+    if (pathname === "/logs/scalars" && exceeds("tags", 50)) {
+      return "scalar tags exceed the 50-item backend limit";
+    }
+    if (pathname === "/logs/runs/delete") {
+      for (const key of ["experiments", "datasets", "models", "presets", "runIds"]) {
+        if (exceeds(key, 50)) return `${key} exceeds the 50-item backend limit`;
+      }
+    }
+    return null;
+  }
+
+  const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    const parsedUrl = new URL(url, "http://testserver");
+    const apiPath = fixtureApiPath(parsedUrl.pathname);
+    const method = String(init?.method ?? "GET").toUpperCase();
+    const isMutation = declaredMutation(method, apiPath);
+    const headers = new Headers(init?.headers);
+    const mutationHeader = headers.get("X-Workbench-Mutation");
+    const idempotencyKey = headers.get("Idempotency-Key");
+    if (isMutation && (mutationHeader !== "true" || !idempotencyKey)) {
+      return jsonResponse(
+        { detail: "Declared mutations require mutation and idempotency headers." },
+        428,
+      );
+    }
+    if (!isMutation && (mutationHeader !== null || idempotencyKey !== null)) {
+      return jsonResponse(
+        { detail: "Read-only requests must not carry mutation headers." },
+        400,
+      );
+    }
+    const oversized = oversizedRequest(apiPath, init);
+    if (oversized) return jsonResponse({ detail: oversized }, 422);
+
+    if (!isMutation) return dispatchFetch(input, init);
+
+    const replayKey = `${method} ${apiPath} ${idempotencyKey}`;
+    const fingerprint = `${url}\n${requestBodyFingerprint(init?.body)}`;
+    const replay = replayedMutations.get(replayKey);
+    if (replay) {
+      if (replay.fingerprint !== fingerprint) {
+        return jsonResponse(
+          { detail: "Idempotency-Key was already used for a different request." },
+          409,
+        );
+      }
+      return Promise.resolve(replay.response.clone());
+    }
+    return dispatchFetch(input, init).then((response) => {
+      replayedMutations.set(replayKey, {
+        fingerprint,
+        response: response.clone(),
+      });
+      return response;
+    });
   });
   vi.stubGlobal("fetch", fetchMock);
   return {
@@ -3401,6 +3723,8 @@ function installFetchMock(options: FetchScenarioOptions = {}) {
     logArtifactRequests,
     logRunRequests,
     deleteExperimentRequests,
+    deletePresetPlanRequests,
+    deletePresetRequests,
     deleteRunPlanRequests,
     deleteRunRequests,
     logImportRequests,
@@ -3506,6 +3830,8 @@ function setupLogsScenario(
 ): Pick<
   ScenarioObservations,
   | "deleteExperimentRequests"
+  | "deletePresetPlanRequests"
+  | "deletePresetRequests"
   | "deleteRunPlanRequests"
   | "deleteRunRequests"
   | "fetchMock"
@@ -3523,7 +3849,10 @@ function setupMonitorScenario(
   options: MonitorScenarioOptions = {},
 ): Pick<
   ScenarioObservations,
-  "fetchMock" | "logRunMonitorDataRequests" | "monitorDataRequests"
+  | "fetchMock"
+  | "logRunMonitorDataRequests"
+  | "logRunRequests"
+  | "monitorDataRequests"
 > {
   return installFetchMock(options);
 }
@@ -3698,9 +4027,13 @@ function fullConfigSearchPopup(dialog: HTMLElement) {
 function fullConfigSearchResultRow(popup: HTMLElement, name: RegExp) {
   const row = within(popup)
     .getAllByRole("group", { name: /config search result/i })
-    .find((candidate) =>
-      within(candidate).queryByRole("button", { name }),
-    );
+    .find((candidate) => {
+      const title = candidate.querySelector<HTMLElement>(
+        "button[data-config-field-label]",
+      );
+      name.lastIndex = 0;
+      return title ? name.test(title.textContent ?? "") : false;
+    });
 
   if (!(row instanceof HTMLElement)) {
     throw new Error(`Expected a full config search result matching ${name}`);
@@ -3884,6 +4217,9 @@ async function setTrainingMultiSelectOption(
   const option = within(listbox).getByRole("option", { name: optionName });
   if ((option.getAttribute("aria-selected") === "true") !== selected) {
     await user.click(option);
+    await waitFor(() => {
+      expect(option).toHaveAttribute("aria-selected", String(selected));
+    });
   }
   return option;
 }
@@ -3985,13 +4321,9 @@ function commandField(dialog: HTMLElement) {
 }
 
 function expectLogsChecklistRowSizing(control: HTMLElement) {
-  const row = control.closest('[role="presentation"]');
   const optionList = control.closest('[role="listbox"]');
 
-  if (
-    !(row instanceof HTMLElement) ||
-    !(optionList instanceof HTMLElement)
-  ) {
+  if (!(optionList instanceof HTMLElement)) {
     throw new Error("Expected the logs filter option to render in a grid row");
   }
 
@@ -4001,8 +4333,11 @@ function expectLogsChecklistRowSizing(control: HTMLElement) {
       "overflow-y-auto",
     ]),
   );
-  expect(row).toHaveClass("grid", "grid-cols-[minmax(0,1fr)_auto]");
-  expect(control).toHaveClass("grid", "min-w-0");
+  expect(control).toHaveClass(
+    "grid",
+    "min-w-0",
+    "grid-cols-[auto_minmax(0,1fr)_auto]",
+  );
 }
 
 function scalarChartGridFor(chart: HTMLElement) {

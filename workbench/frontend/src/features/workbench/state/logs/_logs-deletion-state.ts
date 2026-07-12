@@ -1,20 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import {
-  createLogRunDeletePlan,
+  createLogPresetDeletePlan,
+  createMutationRequestOptions,
   deleteLogExperiment,
-  deleteLogRuns,
+  deleteLogPreset,
+  type LogPresetDeleteTarget,
   type LogExperimentDeleteResponse,
-  type LogRun,
-  type LogRunDeleteFilters,
   type LogRunDeletePlan,
   type LogRunDeleteResponse,
+  type MutationRequestOptions,
 } from "@/lib/api";
-import { modelIdentityFromLegacyId } from "@/lib/selection";
-import {
-  logRunModelKey,
-  type ChecklistOption,
-} from "@/features/workbench/state/logs/logs-selectors";
+import { type ChecklistOption } from "@/features/workbench/state/logs/logs-selectors";
 
 type LogsDeletePhase =
   | "planning"
@@ -35,22 +32,23 @@ type ExperimentOperation = {
   option: ChecklistOption;
   phase: Exclude<LogsDeletePhase, "planning" | "planFailed">;
   error: unknown;
+  mutation: MutationRequestOptions;
 };
 
 type SubsetOperation = {
   kind: "preset";
   target: LogsSubsetDeleteTarget;
-  filters: LogRunDeleteFilters;
   phase: LogsDeletePhase;
   plan: LogRunDeletePlan | undefined;
   error: unknown;
+  mutation: MutationRequestOptions;
 };
 
 type InternalOperation = ExperimentOperation | SubsetOperation;
 
 export type LogsDeletionOperation =
-  | ExperimentOperation
-  | Omit<SubsetOperation, "filters">;
+  | Omit<ExperimentOperation, "mutation">
+  | Omit<SubsetOperation, "mutation">;
 
 export type LogsDeletion = {
   enabled: boolean;
@@ -73,67 +71,40 @@ function logDeletionDisabledError() {
   return new Error("Log deletion is disabled by backend capabilities.");
 }
 
-function sortedUnique(values: string[]) {
-  return Array.from(new Set(values)).sort((left, right) =>
-    left.localeCompare(right),
-  );
-}
-
-function buildLogRunDeleteFilters(runs: LogRun[]): LogRunDeleteFilters {
-  return {
-    experiments: sortedUnique(runs.map((run) => run.experiment)),
-    datasets: sortedUnique(runs.map((run) => run.dataset)),
-    models: sortedUnique(runs.map((run) => logRunModelKey(run))).map(
-      modelIdentityFromLegacyId,
-    ),
-    presets: sortedUnique(runs.map((run) => run.preset)),
-    runIds: sortedUnique(runs.map((run) => run.id)),
-  };
-}
-
 function presetDeleteTarget({
   experiment,
   option,
-  runs,
 }: {
   experiment: string;
   option: ChecklistOption;
-  runs: LogRun[];
-}): { target: LogsSubsetDeleteTarget; filters: LogRunDeleteFilters } | null {
-  const targetRuns = runs.filter(
-    (run) => run.experiment === experiment && run.preset === option.value,
-  );
-  if (targetRuns.length === 0) {
-    return null;
-  }
-  const filters = buildLogRunDeleteFilters(targetRuns);
+}): LogsSubsetDeleteTarget {
   return {
-    target: {
+    kind: "preset",
+    value: option.value,
+    experiment,
+    key: JSON.stringify({
       kind: "preset",
       value: option.value,
       experiment,
-      key: JSON.stringify({
-        kind: "preset",
-        value: option.value,
-        experiment,
-        filters,
-      }),
-    },
-    filters,
+    }),
   };
+}
+
+function semanticPresetTarget(
+  target: LogsSubsetDeleteTarget,
+): LogPresetDeleteTarget {
+  return { experiment: target.experiment, preset: target.value };
 }
 
 export function useLogsDeletionState({
   active,
   enabled,
-  runs,
   selectedExperiments,
   onExperimentDeleted,
   onRunsDeleted,
 }: {
   active: boolean;
   enabled: boolean;
-  runs: LogRun[];
   selectedExperiments: Set<string>;
   onExperimentDeleted: (result: LogExperimentDeleteResponse) => void;
   onRunsDeleted: (
@@ -145,9 +116,25 @@ export function useLogsDeletionState({
   const operationRef = useRef<InternalOperation | null>(null);
   const revisionRef = useRef(0);
   const connectionGenerationRef = useRef(0);
-  const experimentMutation = useMutation({ mutationFn: deleteLogExperiment });
-  const planMutation = useMutation({ mutationFn: createLogRunDeletePlan });
-  const subsetMutation = useMutation({ mutationFn: deleteLogRuns });
+  const experimentMutation = useMutation({
+    mutationFn: ({
+      experiment,
+      mutation,
+    }: {
+      experiment: string;
+      mutation: MutationRequestOptions;
+    }) => deleteLogExperiment(experiment, mutation),
+  });
+  const planMutation = useMutation({ mutationFn: createLogPresetDeletePlan });
+  const subsetMutation = useMutation({
+    mutationFn: ({
+      target,
+      mutation,
+    }: {
+      target: LogPresetDeleteTarget;
+      mutation: MutationRequestOptions;
+    }) => deleteLogPreset(target, mutation),
+  });
   const selectedExperimentValues = Array.from(selectedExperiments);
   const presetTargetExperiment =
     selectedExperimentValues.length === 1 ? selectedExperimentValues[0] : null;
@@ -203,6 +190,7 @@ export function useLogsDeletionState({
         option,
         phase: "ready",
         error: null,
+        mutation: createMutationRequestOptions(),
       });
     },
     [enabled, experimentMutation, planMutation, publish, subsetMutation],
@@ -223,7 +211,9 @@ export function useLogsDeletionState({
       };
       publish(planning);
       try {
-        const plan = await planMutation.mutateAsync(current.filters);
+        const plan = await planMutation.mutateAsync(
+          semanticPresetTarget(current.target),
+        );
         if (
           revisionRef.current === revision &&
           connectionGenerationRef.current === connectionGeneration
@@ -248,24 +238,20 @@ export function useLogsDeletionState({
       if (!enabled || !presetTargetExperiment) {
         return;
       }
-      const prepared = presetDeleteTarget({
+      const target = presetDeleteTarget({
         experiment: presetTargetExperiment,
         option,
-        runs,
       });
-      if (!prepared) {
-        return;
-      }
       experimentMutation.reset();
       planMutation.reset();
       subsetMutation.reset();
       const next: SubsetOperation = {
         kind: "preset",
-        target: prepared.target,
-        filters: prepared.filters,
+        target,
         phase: "planning",
         plan: undefined,
         error: null,
+        mutation: createMutationRequestOptions(),
       };
       void loadPlan(next).catch(() => undefined);
     },
@@ -275,7 +261,6 @@ export function useLogsDeletionState({
       loadPlan,
       planMutation,
       presetTargetExperiment,
-      runs,
       subsetMutation,
     ],
   );
@@ -306,12 +291,18 @@ export function useLogsDeletionState({
     publish({ ...current, phase: "mutating", error: null });
     try {
       if (current.kind === "experiment") {
-        const result = await experimentMutation.mutateAsync(current.option.value);
+        const result = await experimentMutation.mutateAsync({
+          experiment: current.option.value,
+          mutation: current.mutation,
+        });
         if (connectionGenerationRef.current === connectionGeneration) {
           onExperimentDeleted(result);
         }
       } else {
-        const result = await subsetMutation.mutateAsync(current.filters);
+        const result = await subsetMutation.mutateAsync({
+          target: semanticPresetTarget(current.target),
+          mutation: current.mutation,
+        });
         if (connectionGenerationRef.current === connectionGeneration) {
           onRunsDeleted(result, current.target);
         }
@@ -343,7 +334,12 @@ export function useLogsDeletionState({
           plan: operation.plan,
           error: operation.error,
         }
-      : operation
+      : {
+          kind: operation.kind,
+          option: operation.option,
+          phase: operation.phase,
+          error: operation.error,
+        }
     : null;
 
   return {

@@ -5,6 +5,8 @@ import {
   type ConfigSnapshotRecord,
   type ConfigSnapshotUpdateInput,
   type ModelIdentity,
+  type MutationRequestOptions,
+  createMutationRequestOptions,
   fetchConfigSnapshots,
 } from "@/lib/api";
 import { type ConfigSnapshotMutationCommand } from "@/features/workbench/state/config-snapshots/_config-snapshot-mutation";
@@ -93,9 +95,11 @@ export function useConfigSnapshotRecords(
     mutationFn: async ({
       command,
       generation,
+      mutation: mutationOptions,
     }: {
       command: ConfigSnapshotMutationCommand;
       generation: number;
+      mutation: MutationRequestOptions;
     }) => {
       const { persistConfigSnapshotMutation } = await import(
         "@/features/workbench/state/config-snapshots/_config-snapshot-mutation"
@@ -103,6 +107,7 @@ export function useConfigSnapshotRecords(
       return persistConfigSnapshotMutation(
         queryClient,
         command,
+        mutationOptions,
         () => generationRef.current === generation,
       );
     },
@@ -130,6 +135,7 @@ export function useConfigSnapshotRecords(
   const run = useCallback(
     async (
       command: ConfigSnapshotMutationCommand,
+      mutationOptions: MutationRequestOptions = createMutationRequestOptions(),
     ): Promise<ConfigSnapshotMutationOutcome> => {
       if (!enabled) {
         return failedOutcome(
@@ -147,7 +153,11 @@ export function useConfigSnapshotRecords(
       }
       const generation = generationRef.current;
       try {
-        const execution = await mutateAsync({ command, generation });
+        const execution = await mutateAsync({
+          command,
+          generation,
+          mutation: mutationOptions,
+        });
         if (generationRef.current !== generation) {
           return failedOutcome(
             command,
@@ -169,7 +179,7 @@ export function useConfigSnapshotRecords(
   const retry = useCallback(() => {
     return mutationIsError &&
       mutationRequest?.generation === generationRef.current
-      ? run(mutationRequest.command)
+      ? run(mutationRequest.command, mutationRequest.mutation)
       : Promise.resolve(null);
   }, [mutationIsError, mutationRequest, run]);
   const dismissMutation = useCallback(() => {

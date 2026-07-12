@@ -4,6 +4,7 @@ import {
   type ConfigSnapshotRecord,
   type ConfigSnapshotUpdateInput,
   type ModelIdentity,
+  type MutationRequestOptions,
   createConfigSnapshot,
   deleteConfigSnapshot,
   renameConfigSnapshot,
@@ -25,9 +26,12 @@ export type ConfigSnapshotMutationExecution = {
   identity: ModelIdentity;
 };
 
-async function persist(command: ConfigSnapshotMutationCommand) {
+async function persist(
+  command: ConfigSnapshotMutationCommand,
+  mutation: MutationRequestOptions,
+) {
   if (command.kind === "remove") {
-    const library = await deleteConfigSnapshot(command.id);
+    const library = await deleteConfigSnapshot(command.id, mutation);
     return {
       kind: command.kind,
       snapshotId: command.id,
@@ -38,10 +42,10 @@ async function persist(command: ConfigSnapshotMutationCommand) {
   }
   const record =
     command.kind === "create"
-      ? await createConfigSnapshot(command.input)
+      ? await createConfigSnapshot(command.input, mutation)
       : command.kind === "rename"
-        ? await renameConfigSnapshot(command.id, command.name)
-        : await updateConfigSnapshot(command.id, command.input);
+        ? await renameConfigSnapshot(command.id, command.name, mutation)
+        : await updateConfigSnapshot(command.id, command.input, mutation);
   return {
     kind: command.kind,
     snapshotId: record.id,
@@ -54,9 +58,10 @@ async function persist(command: ConfigSnapshotMutationCommand) {
 export async function persistConfigSnapshotMutation(
   queryClient: QueryClient,
   command: ConfigSnapshotMutationCommand,
+  mutation: MutationRequestOptions,
   isCurrent: () => boolean,
 ) {
-  const execution = await persist(command);
+  const execution = await persist(command, mutation);
   if (isCurrent()) {
     const modelQueryKey = workbenchQueryKeys.configSnapshots(
       execution.identity.modelType,

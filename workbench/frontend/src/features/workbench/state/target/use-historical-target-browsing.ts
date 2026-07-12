@@ -1,17 +1,34 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
-import { type LogRun, type LogRunTags, type ModelIdentity } from "@/lib/api";
-import { useLogRunsQuery, useLogTagsQuery } from "@/features/workbench/state/logs/use-log-queries";
+  type LogRun,
+  type LogRunFacets,
+  type LogRunTags,
+  type ModelIdentity,
+} from "@/lib/api";
 import {
-  deriveDatasetSelectionState,
-} from "@/features/workbench/state/logs/historical-run-selection";
+  useInfiniteLogRunsQuery,
+  useLogRunsQuery,
+  useLogTagsQuery,
+} from "@/features/workbench/state/logs/use-log-queries";
+import {
+  HISTORICAL_MONITOR_RUN_LIMIT,
+  logRunHasLayerMonitorData,
+  monitorEligibilityDescription,
+  sortLogRunsNewestFirst,
+  type HistoricalRunOption,
+  type MonitorEligibility,
+} from "@/lib/historical-monitor-runs";
 import { logQueryKeys } from "@/lib/query-keys";
 
-const HISTORICAL_RUN_PAGE_LIMIT = 500;
+const HISTORICAL_FACET_PAGE_LIMIT = 1;
+const HISTORICAL_TARGET_PAGE_LIMIT = 50;
+
+type HistoricalBrowsePhase = "idle" | "loading" | "error" | "empty" | "ready";
+
+export type HistoricalBrowseStatus = {
+  phase: HistoricalBrowsePhase;
+  message: string;
+};
 
 type HistoricalTargetBrowsingInput = {
   selectedModelType: string;
@@ -23,15 +40,10 @@ type HistoricalTargetBrowsingInput = {
 
 type HistoricalTargetBrowsingProjection = {
   historicalMonitorRuns: LogRun[];
-  historicalExperimentOptions: ReturnType<
-    typeof deriveDatasetSelectionState
-  >["historicalExperimentOptions"];
-  historicalDatasetOptions: ReturnType<
-    typeof deriveDatasetSelectionState
-  >["historicalDatasetOptions"];
-  historicalPresetOptions: ReturnType<
-    typeof deriveDatasetSelectionState
-  >["historicalPresetOptions"];
+  historicalExperimentOptions: HistoricalRunOption[];
+  historicalDatasetOptions: HistoricalRunOption[];
+  historicalPresetOptions: HistoricalRunOption[];
+  historicalBrowseStatus: HistoricalBrowseStatus;
   selectedHistoricalExperimentFilter: string;
   setSelectedHistoricalExperimentFilter: (experiment: string) => void;
   selectedHistoricalDatasetFilter: string;
@@ -44,8 +56,7 @@ type HistoricalTargetBrowsingProjection = {
   selectedLogRunId: string | null;
   selectedLogRun?: LogRun;
   logRunTagsLoading: boolean;
-  selectedLogRunMonitorEligibility:
-    ReturnType<typeof deriveDatasetSelectionState>["selectedLogRunMonitorEligibility"];
+  selectedLogRunMonitorEligibility: MonitorEligibility | undefined;
 };
 
 type HistoricalTargetGraphFacts = {
@@ -66,6 +77,44 @@ type HistoricalTargetBrowsingState = {
   };
 };
 
+function checkingOption(value: string, count: number): HistoricalRunOption {
+  return {
+    value,
+    label: value,
+    count,
+    monitorEligibility: "checking",
+    description: monitorEligibilityDescription("checking"),
+  };
+}
+
+function experimentFacetOptions(facets: LogRunFacets | null | undefined) {
+  return (facets?.experiments ?? []).map((facet) =>
+    checkingOption(facet.experiment, facet.runCount),
+  );
+}
+
+function selectedExperimentFacet(
+  facets: LogRunFacets | null | undefined,
+  experiment: string,
+) {
+  return facets?.experiments.find((facet) => facet.experiment === experiment);
+}
+
+function errorStatus(label: string): HistoricalBrowseStatus {
+  return { phase: "error", message: `Unable to load ${label}.` };
+}
+
+function runMonitorEligibility(
+  run: LogRun,
+  tagsByRunId: ReadonlyMap<string, LogRunTags>,
+): MonitorEligibility {
+  const tags = tagsByRunId.get(run.id);
+  if (tags) return logRunHasLayerMonitorData(tags) ? "eligible" : "ineligible";
+  if (run.hasLayerMonitorData === true) return "eligible";
+  if (run.hasLayerMonitorData === false) return "ineligible";
+  return "checking";
+}
+
 export function useHistoricalTargetBrowsing({
   selectedModelType,
   selectedModel,
@@ -74,60 +123,46 @@ export function useHistoricalTargetBrowsing({
   tagsEnabled = true,
 }: HistoricalTargetBrowsingInput): HistoricalTargetBrowsingState {
   const [selectedLogRunId, setSelectedLogRunId] = useState<string | null>(null);
-  const [
-    selectedHistoricalExperimentFilter,
-    setSelectedHistoricalExperimentFilterValue,
-  ] = useState("");
-  const [
-    selectedHistoricalDatasetFilter,
-    setSelectedHistoricalDatasetFilterValue,
-  ] = useState("");
-  const [selectedHistoricalPreset, setSelectedHistoricalPreset] = useState("");
+  const [selectedHistoricalExperimentFilter, setExperiment] = useState("");
+  const [selectedHistoricalDatasetFilter, setDataset] = useState("");
+  const [selectedHistoricalPreset, setPreset] = useState("");
 
   const clearHistoricalSelectionForTarget = useCallback(() => {
-    setSelectedHistoricalExperimentFilterValue("");
-    setSelectedHistoricalDatasetFilterValue("");
-    setSelectedHistoricalPreset("");
+    setExperiment("");
+    setDataset("");
+    setPreset("");
     setSelectedLogRunId(null);
   }, []);
 
   const setSelectedHistoricalExperimentFilter = useCallback(
     (experiment: string) => {
-      if (experiment === selectedHistoricalExperimentFilter) {
-        return;
-      }
-      setSelectedHistoricalExperimentFilterValue(experiment);
-      setSelectedHistoricalDatasetFilterValue("");
-      setSelectedHistoricalPreset("");
+      if (experiment === selectedHistoricalExperimentFilter) return;
+      setExperiment(experiment);
+      setDataset("");
+      setPreset("");
       setSelectedLogRunId(null);
     },
     [selectedHistoricalExperimentFilter],
   );
-
   const setSelectedHistoricalDatasetFilter = useCallback(
     (dataset: string) => {
-      if (dataset === selectedHistoricalDatasetFilter) {
-        return;
-      }
-      setSelectedHistoricalDatasetFilterValue(dataset);
-      setSelectedHistoricalPreset("");
+      if (dataset === selectedHistoricalDatasetFilter) return;
+      setDataset(dataset);
+      setPreset("");
       setSelectedLogRunId(null);
     },
     [selectedHistoricalDatasetFilter],
   );
-
   const setSelectedHistoricalPresetFilter = useCallback(
     (preset: string) => {
-      if (preset === selectedHistoricalPreset) {
-        return;
-      }
-      setSelectedHistoricalPreset(preset);
+      if (preset === selectedHistoricalPreset) return;
+      setPreset(preset);
       setSelectedLogRunId(null);
     },
     [selectedHistoricalPreset],
   );
 
-  const logRunFilters = useMemo(
+  const baseFilters = useMemo(
     () =>
       selectedModel && selectedModelType
         ? {
@@ -137,94 +172,172 @@ export function useHistoricalTargetBrowsing({
                 model: selectedModel,
               } satisfies ModelIdentity,
             ],
+            ...(selectedExperimentTask
+              ? { experimentTask: selectedExperimentTask }
+              : {}),
           }
         : undefined,
-    [selectedModel, selectedModelType],
+    [selectedExperimentTask, selectedModel, selectedModelType],
   );
-  const logRunsQuery = useLogRunsQuery({
-    enabled: runsEnabled && Boolean(selectedModel && selectedModelType),
-    filters: logRunFilters,
-    pagination: { limit: HISTORICAL_RUN_PAGE_LIMIT, offset: 0 },
+  const baseQueryEnabled = runsEnabled && Boolean(baseFilters);
+  const experimentQuery = useLogRunsQuery({
+    enabled: baseQueryEnabled,
+    filters: baseFilters,
+    pagination: { limit: HISTORICAL_FACET_PAGE_LIMIT, offset: 0 },
     projection: "summary",
     keepPreviousData: false,
   });
-  const selectedRunCandidateState = useMemo(
-    () =>
-      deriveDatasetSelectionState({
-        logRuns: logRunsQuery.data?.runs,
-        modelRunTags: undefined,
-        selectedModelType,
-        selectedModel,
-        selectedExperimentTask,
-        selectedHistoricalExperimentFilter,
-        selectedHistoricalDatasetFilter,
-        selectedHistoricalPreset,
-        selectedLogRunId,
-      }),
-    [
-      logRunsQuery.data?.runs,
-      selectedHistoricalDatasetFilter,
-      selectedHistoricalExperimentFilter,
-      selectedHistoricalPreset,
-      selectedExperimentTask,
-      selectedLogRunId,
-      selectedModel,
-      selectedModelType,
-    ],
-  );
-  const selectedHistoricalRunIdsForTags = useMemo(
-    () => selectedRunCandidateState.filteredHistoricalRuns.map((run) => run.id),
-    [selectedRunCandidateState.filteredHistoricalRuns],
-  );
-  const logRunTagsQuery = useLogTagsQuery({
-    runIds: selectedHistoricalRunIdsForTags,
-    enabled: tagsEnabled && selectedHistoricalRunIdsForTags.length > 0,
-    queryKey: logQueryKeys.filteredHistoricalRunTags(
-      selectedHistoricalRunIdsForTags,
-    ),
+  const datasetQuery = useLogRunsQuery({
+    enabled: baseQueryEnabled && Boolean(selectedHistoricalExperimentFilter),
+    filters: baseFilters
+      ? {
+          ...baseFilters,
+          experiment: [selectedHistoricalExperimentFilter],
+        }
+      : undefined,
+    pagination: { limit: HISTORICAL_FACET_PAGE_LIMIT, offset: 0 },
+    projection: "summary",
+    keepPreviousData: false,
   });
-  const selectedRunTags = useMemo(() => {
-    if (!tagsEnabled || selectedHistoricalRunIdsForTags.length === 0) {
-      return undefined;
-    }
-    const selectedRunIds = new Set(selectedHistoricalRunIdsForTags);
-    return (logRunTagsQuery.data?.runs ?? []).filter((tags) =>
-      selectedRunIds.has(tags.runId),
+  const presetQuery = useLogRunsQuery({
+    enabled:
+      baseQueryEnabled &&
+      Boolean(
+        selectedHistoricalExperimentFilter && selectedHistoricalDatasetFilter,
+      ),
+    filters: baseFilters
+      ? {
+          ...baseFilters,
+          experiment: [selectedHistoricalExperimentFilter],
+          dataset: [selectedHistoricalDatasetFilter],
+        }
+      : undefined,
+    pagination: { limit: HISTORICAL_FACET_PAGE_LIMIT, offset: 0 },
+    projection: "summary",
+    keepPreviousData: false,
+  });
+  const hasCompleteCascade = Boolean(
+    selectedHistoricalExperimentFilter &&
+      selectedHistoricalDatasetFilter &&
+      selectedHistoricalPreset,
+  );
+  const exactRunsQuery = useInfiniteLogRunsQuery({
+    enabled: baseQueryEnabled && hasCompleteCascade,
+    filters: baseFilters
+      ? {
+          ...baseFilters,
+          experiment: [selectedHistoricalExperimentFilter],
+          dataset: [selectedHistoricalDatasetFilter],
+          preset: [selectedHistoricalPreset],
+        }
+      : undefined,
+    pageSize: HISTORICAL_TARGET_PAGE_LIMIT,
+    projection: "summary",
+    keepPreviousData: false,
+  });
+  const exactRuns = useMemo(
+    () => exactRunsQuery.data?.pages.flatMap((page) => page.runs) ?? [],
+    [exactRunsQuery.data?.pages],
+  );
+
+  const historicalExperimentOptions = useMemo(
+    () => experimentFacetOptions(experimentQuery.data?.facets),
+    [experimentQuery.data?.facets],
+  );
+  const historicalDatasetOptions = useMemo(() => {
+    const facet = selectedExperimentFacet(
+      datasetQuery.data?.facets,
+      selectedHistoricalExperimentFilter,
+    );
+    return (facet?.datasets ?? []).map(({ value, count }) =>
+      checkingOption(value, count),
     );
   }, [
-    logRunTagsQuery.data?.runs,
-    selectedHistoricalRunIdsForTags,
-    tagsEnabled,
+    datasetQuery.data?.facets,
+    selectedHistoricalExperimentFilter,
   ]);
-  const datasetSelectionState = useMemo(
-    () =>
-      deriveDatasetSelectionState({
-        logRuns: logRunsQuery.data?.runs,
-        modelRunTags: selectedRunTags,
-        selectedModelType,
-        selectedModel,
-        selectedExperimentTask,
-        selectedHistoricalExperimentFilter,
-        selectedHistoricalDatasetFilter,
-        selectedHistoricalPreset,
-        selectedLogRunId,
-      }),
-    [
-      logRunsQuery.data?.runs,
-      selectedRunTags,
-      selectedHistoricalDatasetFilter,
+  const historicalPresetOptions = useMemo(() => {
+    const facet = selectedExperimentFacet(
+      presetQuery.data?.facets,
       selectedHistoricalExperimentFilter,
-      selectedHistoricalPreset,
-      selectedExperimentTask,
-      selectedLogRunId,
-      selectedModel,
-      selectedModelType,
-    ],
-  );
+    );
+    return (facet?.presets ?? []).map(({ value, count }) =>
+      checkingOption(value, count),
+    );
+  }, [
+    presetQuery.data?.facets,
+    selectedHistoricalExperimentFilter,
+  ]);
+
+  const exactRunIds = useMemo(() => exactRuns.map((run) => run.id), [exactRuns]);
+  const logRunTagsQuery = useLogTagsQuery({
+    runIds: exactRunIds,
+    enabled: tagsEnabled && exactRunIds.length > 0,
+    queryKey: logQueryKeys.filteredHistoricalRunTags(exactRunIds),
+  });
+  const selectedRunTags = useMemo(() => {
+    if (!tagsEnabled || exactRunIds.length === 0) return undefined;
+    const ids = new Set(exactRunIds);
+    return (logRunTagsQuery.data?.runs ?? []).filter((tags) => ids.has(tags.runId));
+  }, [exactRunIds, logRunTagsQuery.data?.runs, tagsEnabled]);
+  const datasetSelectionState = useMemo(() => {
+    const taskAware = exactRuns.some((run) => Boolean(run.experimentTask));
+    const visibleHistoricalRuns = sortLogRunsNewestFirst(
+      exactRuns.filter(
+        (run) =>
+          run.modelType === selectedModelType &&
+          run.model === selectedModel &&
+          run.experiment === selectedHistoricalExperimentFilter &&
+          run.dataset === selectedHistoricalDatasetFilter &&
+          run.preset === selectedHistoricalPreset &&
+          (!selectedExperimentTask ||
+            !taskAware ||
+            run.experimentTask === selectedExperimentTask),
+      ),
+    );
+    const tagsByRunId = new Map(
+      (selectedRunTags ?? []).map((tags) => [tags.runId, tags]),
+    );
+    const selectedLogRun = selectedLogRunId
+      ? visibleHistoricalRuns.find((run) => run.id === selectedLogRunId)
+      : undefined;
+    const eligibleRuns = visibleHistoricalRuns.filter(
+      (run) => runMonitorEligibility(run, tagsByRunId) === "eligible",
+    );
+    return {
+      visibleHistoricalRuns,
+      selectedHistoricalExperiment:
+        selectedLogRun?.experiment ??
+        (hasCompleteCascade ? selectedHistoricalExperimentFilter : ""),
+      selectedHistoricalDataset:
+        selectedLogRun?.dataset ??
+        (hasCompleteCascade ? selectedHistoricalDatasetFilter : ""),
+      selectedHistoricalRunPreset:
+        selectedLogRun?.preset ??
+        (hasCompleteCascade ? selectedHistoricalPreset : ""),
+      historicalMonitorRuns: eligibleRuns.slice(
+        0,
+        HISTORICAL_MONITOR_RUN_LIMIT,
+      ),
+      filteredHistoricalRunIds: eligibleRuns.map((run) => run.id),
+      selectedLogRun,
+      selectedLogRunMonitorEligibility: selectedLogRun
+        ? runMonitorEligibility(selectedLogRun, tagsByRunId)
+        : undefined,
+    };
+  }, [
+    exactRuns,
+    hasCompleteCascade,
+    selectedRunTags,
+    selectedHistoricalDatasetFilter,
+    selectedHistoricalExperimentFilter,
+    selectedHistoricalPreset,
+    selectedExperimentTask,
+    selectedLogRunId,
+    selectedModel,
+    selectedModelType,
+  ]);
   const {
-    historicalExperimentOptions,
-    historicalDatasetOptions,
-    historicalPresetOptions,
     visibleHistoricalRuns,
     selectedHistoricalExperiment,
     selectedHistoricalDataset,
@@ -234,11 +347,51 @@ export function useHistoricalTargetBrowsing({
     selectedLogRun,
     selectedLogRunMonitorEligibility,
   } = datasetSelectionState;
+  const resolvedTagIds = useMemo(
+    () => new Set((selectedRunTags ?? []).map((tags) => tags.runId)),
+    [selectedRunTags],
+  );
+  const loadedRunsResolved = exactRuns.every(
+    (run) =>
+      (run.hasLayerMonitorData !== undefined &&
+        run.hasLayerMonitorData !== null) ||
+      resolvedTagIds.has(run.id),
+  );
+  const fetchNextExactRunsPage = exactRunsQuery.fetchNextPage;
+  const hasNextExactRunsPage = exactRunsQuery.hasNextPage;
+  const exactRunsFetching = exactRunsQuery.isFetching;
+  const exactRunsFetchingNextPage = exactRunsQuery.isFetchingNextPage;
+
   useEffect(() => {
-    if (!selectedModel) {
-      setSelectedHistoricalExperimentFilter("");
+    if (
+      !hasCompleteCascade ||
+      !tagsEnabled ||
+      exactRunsFetching ||
+      exactRunsFetchingNextPage ||
+      logRunTagsQuery.isFetching ||
+      logRunTagsQuery.isError ||
+      !loadedRunsResolved ||
+      historicalMonitorRuns.length >= HISTORICAL_MONITOR_RUN_LIMIT ||
+      !hasNextExactRunsPage
+    ) {
       return;
     }
+    void fetchNextExactRunsPage();
+  }, [
+    exactRunsFetching,
+    exactRunsFetchingNextPage,
+    fetchNextExactRunsPage,
+    hasCompleteCascade,
+    hasNextExactRunsPage,
+    historicalMonitorRuns.length,
+    loadedRunsResolved,
+    logRunTagsQuery.isError,
+    logRunTagsQuery.isFetching,
+    tagsEnabled,
+  ]);
+
+  useEffect(() => {
+    if (!experimentQuery.isSuccess || experimentQuery.isFetching) return;
     if (
       selectedHistoricalExperimentFilter &&
       !historicalExperimentOptions.some(
@@ -248,17 +401,18 @@ export function useHistoricalTargetBrowsing({
       setSelectedHistoricalExperimentFilter("");
     }
   }, [
+    experimentQuery.isFetching,
+    experimentQuery.isSuccess,
     historicalExperimentOptions,
     selectedHistoricalExperimentFilter,
-    selectedModel,
     setSelectedHistoricalExperimentFilter,
   ]);
-
   useEffect(() => {
     if (!selectedHistoricalExperimentFilter) {
       setSelectedHistoricalDatasetFilter("");
       return;
     }
+    if (!datasetQuery.isSuccess || datasetQuery.isFetching) return;
     if (
       selectedHistoricalDatasetFilter &&
       !historicalDatasetOptions.some(
@@ -268,17 +422,19 @@ export function useHistoricalTargetBrowsing({
       setSelectedHistoricalDatasetFilter("");
     }
   }, [
+    datasetQuery.isFetching,
+    datasetQuery.isSuccess,
     historicalDatasetOptions,
     selectedHistoricalDatasetFilter,
     selectedHistoricalExperimentFilter,
     setSelectedHistoricalDatasetFilter,
   ]);
-
   useEffect(() => {
     if (!selectedHistoricalExperimentFilter || !selectedHistoricalDatasetFilter) {
       setSelectedHistoricalPresetFilter("");
       return;
     }
+    if (!presetQuery.isSuccess || presetQuery.isFetching) return;
     if (
       selectedHistoricalPreset &&
       !historicalPresetOptions.some(
@@ -289,53 +445,97 @@ export function useHistoricalTargetBrowsing({
     }
   }, [
     historicalPresetOptions,
+    presetQuery.isFetching,
+    presetQuery.isSuccess,
     selectedHistoricalDatasetFilter,
     selectedHistoricalExperimentFilter,
     selectedHistoricalPreset,
     setSelectedHistoricalPresetFilter,
   ]);
-
   useEffect(() => {
-    if (!selectedModel) {
-      setSelectedLogRunId(null);
-      return;
-    }
-    if (logRunsQuery.isLoading && !logRunsQuery.data) {
-      return;
-    }
+    if (!hasCompleteCascade || !exactRunsQuery.isSuccess) return;
     setSelectedLogRunId((current) =>
-      current && selectedLogRun?.id === current
-        ? current
-        : null,
+      current && selectedLogRun?.id === current ? current : null,
     );
-  }, [
-    logRunsQuery.data,
-    logRunsQuery.isLoading,
-    selectedModel,
-    selectedLogRun,
-    setSelectedLogRunId,
-  ]);
-
+  }, [hasCompleteCascade, exactRunsQuery.isSuccess, selectedLogRun]);
   useEffect(() => {
+    if (!hasCompleteCascade) return;
+    const newestRun = visibleHistoricalRuns[0];
+    setSelectedLogRunId((current) =>
+      current === (newestRun?.id ?? null) ? current : newestRun?.id ?? null,
+    );
+  }, [hasCompleteCascade, visibleHistoricalRuns]);
+
+  const historicalBrowseStatus = useMemo<HistoricalBrowseStatus>(() => {
+    if (!baseQueryEnabled) return { phase: "idle", message: "" };
+    if (experimentQuery.isLoading || experimentQuery.isFetching)
+      return { phase: "loading", message: "Loading historical experiments…" };
+    if (experimentQuery.isError) return errorStatus("historical experiments");
+    if (!experimentQuery.data?.facets)
+      return errorStatus("historical experiment facets");
+    if (historicalExperimentOptions.length === 0)
+      return { phase: "empty", message: "No historical experiments match this model and task." };
+    if (!selectedHistoricalExperimentFilter) return { phase: "ready", message: "" };
+    if (datasetQuery.isLoading || datasetQuery.isFetching)
+      return { phase: "loading", message: "Loading historical datasets…" };
+    if (datasetQuery.isError) return errorStatus("historical datasets");
+    if (!datasetQuery.data?.facets)
+      return errorStatus("historical dataset facets");
+    if (historicalDatasetOptions.length === 0)
+      return { phase: "empty", message: "No historical datasets match this experiment." };
+    if (!selectedHistoricalDatasetFilter) return { phase: "ready", message: "" };
+    if (presetQuery.isLoading || presetQuery.isFetching)
+      return { phase: "loading", message: "Loading historical presets…" };
+    if (presetQuery.isError) return errorStatus("historical presets");
+    if (!presetQuery.data?.facets)
+      return errorStatus("historical preset facets");
+    if (historicalPresetOptions.length === 0)
+      return { phase: "empty", message: "No historical presets match this dataset." };
+    if (!selectedHistoricalPreset) return { phase: "ready", message: "" };
+    if (exactRunsQuery.isError || logRunTagsQuery.isError)
+      return errorStatus("historical runs");
     if (
-      !selectedModel ||
-      !selectedHistoricalExperimentFilter ||
-      !selectedHistoricalDatasetFilter ||
-      !selectedHistoricalPreset
+      exactRunsQuery.isLoading ||
+      exactRunsQuery.isFetching ||
+      logRunTagsQuery.isLoading ||
+      logRunTagsQuery.isFetching
     ) {
-      return;
+      return { phase: "loading", message: "Resolving the newest monitor runs…" };
     }
-    const resolvedRun = visibleHistoricalRuns[0];
-    setSelectedLogRunId((current) =>
-      current === (resolvedRun?.id ?? null) ? current : resolvedRun?.id ?? null,
-    );
+    if (exactRuns.length === 0)
+      return { phase: "empty", message: "No runs match the selected historical group." };
+    if (!exactRunsQuery.hasNextPage && historicalMonitorRuns.length === 0)
+      return { phase: "empty", message: "No monitor-eligible runs match the selected historical group." };
+    return { phase: "ready", message: "" };
   }, [
+    baseQueryEnabled,
+    datasetQuery.data?.facets,
+    datasetQuery.isError,
+    datasetQuery.isFetching,
+    datasetQuery.isLoading,
+    exactRuns.length,
+    exactRunsQuery.hasNextPage,
+    exactRunsQuery.isError,
+    exactRunsQuery.isFetching,
+    exactRunsQuery.isLoading,
+    experimentQuery.data?.facets,
+    experimentQuery.isError,
+    experimentQuery.isFetching,
+    experimentQuery.isLoading,
+    historicalDatasetOptions.length,
+    historicalExperimentOptions.length,
+    historicalMonitorRuns.length,
+    historicalPresetOptions.length,
+    logRunTagsQuery.isError,
+    logRunTagsQuery.isFetching,
+    logRunTagsQuery.isLoading,
+    presetQuery.isError,
+    presetQuery.isFetching,
+    presetQuery.isLoading,
+    presetQuery.data?.facets,
     selectedHistoricalDatasetFilter,
     selectedHistoricalExperimentFilter,
     selectedHistoricalPreset,
-    selectedModel,
-    setSelectedLogRunId,
-    visibleHistoricalRuns,
   ]);
 
   const browsing = useMemo(
@@ -344,6 +544,7 @@ export function useHistoricalTargetBrowsing({
       historicalExperimentOptions,
       historicalDatasetOptions,
       historicalPresetOptions,
+      historicalBrowseStatus,
       selectedHistoricalExperimentFilter,
       setSelectedHistoricalExperimentFilter,
       selectedHistoricalDatasetFilter,
@@ -355,19 +556,25 @@ export function useHistoricalTargetBrowsing({
       selectedHistoricalRunPreset,
       selectedLogRunId,
       selectedLogRun,
-      logRunTagsLoading: logRunTagsQuery.isLoading,
+      logRunTagsLoading:
+        logRunTagsQuery.isLoading ||
+        logRunTagsQuery.isFetching ||
+        exactRunsQuery.isFetchingNextPage,
       selectedLogRunMonitorEligibility,
     }),
     [
-      historicalMonitorRuns,
+      exactRunsQuery.isFetchingNextPage,
+      historicalBrowseStatus,
       historicalDatasetOptions,
       historicalExperimentOptions,
+      historicalMonitorRuns,
       historicalPresetOptions,
+      logRunTagsQuery.isFetching,
       logRunTagsQuery.isLoading,
-      selectedHistoricalDatasetFilter,
       selectedHistoricalDataset,
-      selectedHistoricalExperimentFilter,
+      selectedHistoricalDatasetFilter,
       selectedHistoricalExperiment,
+      selectedHistoricalExperimentFilter,
       selectedHistoricalPreset,
       selectedHistoricalRunPreset,
       selectedLogRun,
@@ -396,7 +603,6 @@ export function useHistoricalTargetBrowsing({
       selectedHistoricalRunPreset,
     ],
   );
-
   const coordination = useMemo(
     () => ({
       selectedRun: selectedLogRun,

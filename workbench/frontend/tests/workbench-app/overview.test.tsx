@@ -1057,10 +1057,10 @@ describe("WorkbenchApp Overview", () => {
     });
     expect(
       within(experimentOptions).getByRole("option", { name: "test_model" }),
-    ).toHaveTextContent("no monitor data");
+    ).toHaveTextContent("monitor checking");
     expect(
       within(experimentOptions).getByRole("option", { name: "test_model_2" }),
-    ).toHaveTextContent("no monitor data");
+    ).toHaveTextContent("monitor checking");
   });
 
   it("shows only current-model snapshots in the target snapshot selector", async () => {
@@ -1645,6 +1645,7 @@ describe("WorkbenchApp Overview", () => {
             experiment: "bert_experiment",
             modelType: "bert",
             model: "linear",
+            experimentTask: "bert-pretraining",
             preset: "BERT_BASELINE",
             dataset: "ToyText",
             relativePath:
@@ -1709,6 +1710,7 @@ describe("WorkbenchApp Overview", () => {
         modelType: "linears",
         model: "linear",
         preset: "BASELINE",
+        experimentTask: "image-classification",
         dataset: "Cifar10",
         overrides: {},
         logRunId: "log-cifar",
@@ -1747,6 +1749,7 @@ describe("WorkbenchApp Overview", () => {
             group: "exp_bert",
             modelType: "bert",
             model: "linear",
+            experimentTask: "bert-pretraining",
             preset: "BERT_BASELINE",
             dataset: "ToyText",
             timestamp: "2026-06-01 03:00:00",
@@ -1835,6 +1838,7 @@ describe("WorkbenchApp Overview", () => {
         modelType: "linears",
         model: "linear",
         preset: "BASELINE",
+        experimentTask: "image-classification",
         dataset: "Mnist",
         overrides: {},
         logRunId: "log-mnist",

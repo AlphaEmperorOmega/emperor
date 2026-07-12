@@ -14,6 +14,7 @@ import {
   type WorkbenchConnectionActionEnvironment,
 } from "@/features/workbench/providers/_workbench-connection-actions";
 import {
+  createMutationRequestOptions,
   isUnauthorizedApiError,
 } from "@/lib/api/client";
 import {
@@ -280,24 +281,30 @@ describe.skipIf(!RUN_CONTRACT_E2E)(
         modelType: "linears",
       });
 
-      const snapshot = await createConfigSnapshot({
-        model: "linear",
-        modelType: "linears",
-        name: "alpha snapshot",
-        overrides: { batch_size: "2" },
-        preset: "baseline",
-      });
+      const snapshot = await createConfigSnapshot(
+        {
+          model: "linear",
+          modelType: "linears",
+          name: "alpha snapshot",
+          overrides: { batch_size: "2" },
+          preset: "baseline",
+        },
+        createMutationRequestOptions(),
+      );
       expect(snapshot.name).toBe("alpha snapshot");
 
-      const job = await createTrainingJob({
-        datasets: ["Mnist"],
-        logFolder: "contract_e2e",
-        model: "linear",
-        modelType: "linears",
-        monitors: [],
-        overrides: {},
-        preset: "baseline",
-      });
+      const job = await createTrainingJob(
+        {
+          datasets: ["Mnist"],
+          logFolder: "contract_e2e",
+          model: "linear",
+          modelType: "linears",
+          monitors: [],
+          overrides: {},
+          preset: "baseline",
+        },
+        createMutationRequestOptions(),
+      );
       expect(job).toMatchObject({
         logTail: ["fake training log"],
         model: "linear",

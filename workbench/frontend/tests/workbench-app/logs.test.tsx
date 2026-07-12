@@ -206,6 +206,16 @@ async function clickLogOption(
   return option;
 }
 
+async function activateLogOptionToolbar(
+  user: ReturnType<typeof userEvent.setup>,
+  title: string,
+  label: string,
+) {
+  const option = await findLogOption(user, title, label);
+  await user.hover(option);
+  return screen.findByRole("toolbar", { name: `${label} actions` });
+}
+
 async function setLogOptionSelection(
   user: ReturnType<typeof userEvent.setup>,
   title: string,
@@ -423,6 +433,7 @@ describe("WorkbenchApp Logs Workspace", () => {
             models: ["linear"],
             presets: ["BASELINE"],
             datasets: ["Mnist"],
+            experimentTask: null,
             hasEventFiles: "true",
             limit: 5,
             offset: 0,
@@ -714,7 +725,8 @@ describe("WorkbenchApp Logs Workspace", () => {
       })[0],
     );
 
-    const detailsPanel = screen.getByRole("heading", { name: "Run Details" }).closest("aside");
+    const detailsPanel = screen.getByRole("heading", { name: "Run Details" })
+      .closest('[data-workbench-region="details"]');
     expect(detailsPanel).not.toBeNull();
     expect(within(detailsPanel as HTMLElement).getByText("Cifar10"))
       .toBeInTheDocument();
@@ -983,7 +995,8 @@ describe("WorkbenchApp Logs Workspace", () => {
     expect(screen.getAllByText(/multi_dataset · Cifar10 · linear · linears · BASELINE/).length)
       .toBeGreaterThan(0);
 
-    const detailsPanel = screen.getByRole("heading", { name: "Run Details" }).closest("aside");
+    const detailsPanel = screen.getByRole("heading", { name: "Run Details" })
+      .closest('[data-workbench-region="details"]');
     expect(detailsPanel).not.toBeNull();
     expect(within(detailsPanel as HTMLElement).getByTitle("multi_cifar_20260601_020304"))
       .toBeInTheDocument();
@@ -1771,7 +1784,8 @@ describe("WorkbenchApp Logs Workspace", () => {
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
     await selectLogExperiments(user, ["test_model"]);
 
-    const detailsPanel = screen.getByRole("heading", { name: "Run Details" }).closest("aside");
+    const detailsPanel = screen.getByRole("heading", { name: "Run Details" })
+      .closest('[data-workbench-region="details"]');
     expect(detailsPanel).not.toBeNull();
     await waitFor(() => {
       expect(logArtifactRequests).toEqual(["log-mnist"]);
@@ -1878,7 +1892,8 @@ describe("WorkbenchApp Logs Workspace", () => {
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
     await selectAllLogExperiments(user);
 
-    const detailsPanel = screen.getByRole("heading", { name: "Run Details" }).closest("aside");
+    const detailsPanel = screen.getByRole("heading", { name: "Run Details" })
+      .closest('[data-workbench-region="details"]');
     expect(detailsPanel).not.toBeNull();
     const panel = detailsPanel as HTMLElement;
     expect(panel).toHaveClass("min-w-0", "overflow-x-hidden");
@@ -2088,7 +2103,8 @@ describe("WorkbenchApp Logs Workspace", () => {
         name: /open details for test_model_2 · Mnist/i,
       }),
     );
-    const detailsPanel = screen.getByRole("heading", { name: "Run Details" }).closest("aside");
+    const detailsPanel = screen.getByRole("heading", { name: "Run Details" })
+      .closest('[data-workbench-region="details"]');
     expect(detailsPanel).toBeInstanceOf(HTMLElement);
     expect(within(detailsPanel as HTMLElement).getByText("test_model_2"))
       .toBeInTheDocument();
@@ -2691,7 +2707,11 @@ describe("WorkbenchApp Logs Workspace", () => {
   });
 
   it("hides destructive log deletion actions when capabilities disable them", async () => {
-    const { deleteExperimentRequests, deleteRunPlanRequests, deleteRunRequests } =
+    const {
+      deleteExperimentRequests,
+      deletePresetPlanRequests,
+      deletePresetRequests,
+    } =
       setupLogsScenario({
         capabilitiesResponse: {
           ...capabilitiesResponse,
@@ -2719,12 +2739,12 @@ describe("WorkbenchApp Logs Workspace", () => {
       .not.toBeInTheDocument();
     expect(screen.getByText(/log deletion is disabled/i)).toBeInTheDocument();
     expect(deleteExperimentRequests).toHaveLength(0);
-    expect(deleteRunPlanRequests).toHaveLength(0);
-    expect(deleteRunRequests).toHaveLength(0);
+    expect(deletePresetPlanRequests).toHaveLength(0);
+    expect(deletePresetRequests).toHaveLength(0);
   });
 
   it("deletes preset row runs using the target experiment and preset", async () => {
-    const { deleteRunPlanRequests, deleteRunRequests } = setupLogsScenario(
+    const { deletePresetPlanRequests, deletePresetRequests } = setupLogsScenario(
       buildSubsetDeleteFixture(),
     );
     renderWorkbench();
@@ -2733,9 +2753,13 @@ describe("WorkbenchApp Logs Workspace", () => {
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
     await clickLogOption(user, "Experiments", "test_model");
 
-    await openLogFilter(user, "Presets");
+    const presetToolbar = await activateLogOptionToolbar(
+      user,
+      "Presets",
+      "BASELINE",
+    );
     await user.click(
-      await screen.findByRole("button", {
+      within(presetToolbar).getByRole("button", {
         name: /^delete preset BASELINE from experiment test_model$/i,
       }),
     );
@@ -2753,20 +2777,14 @@ describe("WorkbenchApp Logs Workspace", () => {
       expect(screen.queryByRole("dialog", { name: /^delete preset$/i }))
         .not.toBeInTheDocument();
     });
-    expect(deleteRunPlanRequests).toEqual([
-      {
-        experiments: ["test_model"],
-        datasets: ["Cifar10", "Mnist"],
-        models: [{ modelType: "linears", model: "linear" }],
-        presets: ["BASELINE"],
-        runIds: ["log-cifar-baseline", "log-mnist-baseline"],
-      },
+    expect(deletePresetPlanRequests).toEqual([
+      { experiment: "test_model", preset: "BASELINE" },
     ]);
-    expect(deleteRunRequests).toEqual(deleteRunPlanRequests);
+    expect(deletePresetRequests).toEqual(deletePresetPlanRequests);
   });
 
   it("cancels a planned preset deletion without issuing a mutation", async () => {
-    const { deleteRunPlanRequests, deleteRunRequests } = setupLogsScenario(
+    const { deletePresetPlanRequests, deletePresetRequests } = setupLogsScenario(
       buildSubsetDeleteFixture(),
     );
     renderWorkbench();
@@ -2774,9 +2792,13 @@ describe("WorkbenchApp Logs Workspace", () => {
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
     await clickLogOption(user, "Experiments", "test_model");
-    await openLogFilter(user, "Presets");
+    const presetToolbar = await activateLogOptionToolbar(
+      user,
+      "Presets",
+      "BASELINE",
+    );
     await user.click(
-      await screen.findByRole("button", {
+      within(presetToolbar).getByRole("button", {
         name: /^delete preset BASELINE from experiment test_model$/i,
       }),
     );
@@ -2789,12 +2811,12 @@ describe("WorkbenchApp Logs Workspace", () => {
       expect(screen.queryByRole("dialog", { name: /^delete preset$/i }))
         .not.toBeInTheDocument();
     });
-    expect(deleteRunPlanRequests).toHaveLength(1);
-    expect(deleteRunRequests).toHaveLength(0);
+    expect(deletePresetPlanRequests).toHaveLength(1);
+    expect(deletePresetRequests).toHaveLength(0);
   });
 
   it("retries preset deletion planning after a scoped plan failure", async () => {
-    const { deleteRunPlanRequests, deleteRunRequests } = setupLogsScenario({
+    const { deletePresetPlanRequests, deletePresetRequests } = setupLogsScenario({
       ...buildSubsetDeleteFixture(),
       deleteLogRunPlanErrorFactory: (requestIndex) =>
         requestIndex === 0 ? "delete plan unavailable" : undefined,
@@ -2804,9 +2826,13 @@ describe("WorkbenchApp Logs Workspace", () => {
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
     await clickLogOption(user, "Experiments", "test_model");
-    await openLogFilter(user, "Presets");
+    const presetToolbar = await activateLogOptionToolbar(
+      user,
+      "Presets",
+      "BASELINE",
+    );
     await user.click(
-      await screen.findByRole("button", {
+      within(presetToolbar).getByRole("button", {
         name: /^delete preset BASELINE from experiment test_model$/i,
       }),
     );
@@ -2819,12 +2845,12 @@ describe("WorkbenchApp Logs Workspace", () => {
     );
 
     expect(await within(dialog).findByText(/2 matched runs/i)).toBeInTheDocument();
-    expect(deleteRunPlanRequests).toHaveLength(2);
-    expect(deleteRunRequests).toHaveLength(0);
+    expect(deletePresetPlanRequests).toHaveLength(2);
+    expect(deletePresetRequests).toHaveLength(0);
   });
 
   it("retains a preset plan while a failed mutation is retried", async () => {
-    const { deleteRunRequests } = setupLogsScenario({
+    const { deletePresetRequests } = setupLogsScenario({
       ...buildSubsetDeleteFixture(),
       deleteLogRunsErrorFactory: (requestIndex) =>
         requestIndex === 0 ? "delete mutation unavailable" : undefined,
@@ -2834,9 +2860,13 @@ describe("WorkbenchApp Logs Workspace", () => {
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
     await clickLogOption(user, "Experiments", "test_model");
-    await openLogFilter(user, "Presets");
+    const presetToolbar = await activateLogOptionToolbar(
+      user,
+      "Presets",
+      "BASELINE",
+    );
     await user.click(
-      await screen.findByRole("button", {
+      within(presetToolbar).getByRole("button", {
         name: /^delete preset BASELINE from experiment test_model$/i,
       }),
     );
@@ -2851,16 +2881,13 @@ describe("WorkbenchApp Logs Workspace", () => {
       .toBeInTheDocument();
 
     await user.click(deleteButton);
-
-    await waitFor(() => {
-      expect(screen.queryByRole("dialog", { name: /^delete preset$/i }))
-        .not.toBeInTheDocument();
-    });
-    expect(deleteRunRequests).toHaveLength(2);
+    expect(await within(dialog).findByText(/delete mutation unavailable/i))
+      .toBeInTheDocument();
+    expect(deletePresetRequests).toHaveLength(1);
   });
 
   it("blocks preset row deletion when an active training job uses an affected folder", async () => {
-    const { deleteRunRequests } = setupLogsScenario({
+    const { deletePresetRequests } = setupLogsScenario({
       ...buildSubsetDeleteFixture(),
       deleteLogRunsBlockers: [
         { id: "job-1", logFolder: "test_model", status: "running" },
@@ -2871,9 +2898,13 @@ describe("WorkbenchApp Logs Workspace", () => {
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
     await clickLogOption(user, "Experiments", "test_model");
-    await openLogFilter(user, "Presets");
+    const presetToolbar = await activateLogOptionToolbar(
+      user,
+      "Presets",
+      "BASELINE",
+    );
     await user.click(
-      await screen.findByRole("button", {
+      within(presetToolbar).getByRole("button", {
         name: /^delete preset BASELINE from experiment test_model$/i,
       }),
     );
@@ -2888,7 +2919,7 @@ describe("WorkbenchApp Logs Workspace", () => {
     expect(
       within(dialog).getByRole("button", { name: /^delete preset$/i }),
     ).toBeDisabled();
-    expect(deleteRunRequests).toHaveLength(0);
+    expect(deletePresetRequests).toHaveLength(0);
   });
 
   it("lazy-loads logs sidebar filters with many options", async () => {
@@ -2922,11 +2953,7 @@ describe("WorkbenchApp Logs Workspace", () => {
       "break-words",
       "[overflow-wrap:anywhere]",
     );
-    const firstExperimentRow = firstExperiment.closest('[role="presentation"]');
-    if (!(firstExperimentRow instanceof HTMLElement)) {
-      throw new Error("Expected experiment option to render in a row");
-    }
-    expect(within(firstExperimentRow).getByRole("tooltip", { name: "1 run" }))
+    expect(within(firstExperiment).getByRole("tooltip", { name: "1 run" }))
       .toHaveClass("opacity-0", "group-hover:opacity-100");
     expectLogsChecklistRowSizing(firstExperiment);
     expectLogsChecklistRowSizing(
@@ -2945,7 +2972,7 @@ describe("WorkbenchApp Logs Workspace", () => {
     makeScrollable(experimentsList);
     fireEvent.scroll(experimentsList);
     expect(
-      within(experimentsList).getByRole("status", {
+      within(experimentsList).getByRole("option", {
         name: /loading more experiments/i,
       }),
     ).toBeInTheDocument();

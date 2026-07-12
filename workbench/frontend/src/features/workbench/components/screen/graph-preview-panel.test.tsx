@@ -159,6 +159,19 @@ describe("GraphPreviewPanel", () => {
     expect(childSummaries).toContainElement(activityTrigger);
     expect(activityRow).toBeInstanceOf(HTMLElement);
     expect(activityRow).not.toHaveAttribute("role", "button");
+    expect(
+      document.querySelectorAll('.react-flow__node[tabindex="0"]'),
+    ).toHaveLength(0);
+    expect(
+      document.querySelectorAll('.react-flow__edge[tabindex="0"]'),
+    ).toHaveLength(0);
+    const controls = document.querySelector(".react-flow__controls");
+    expect(controls).toBeInstanceOf(HTMLElement);
+    expect(
+      within(controls as HTMLElement)
+        .getAllByRole("button")
+        .map((button) => button.getAttribute("aria-label")),
+    ).toEqual(["Zoom In", "Zoom Out", "Fit View"]);
   });
 
   it("keeps the parameter activity minimap React Flow store isolated from the outer graph", async () => {
@@ -305,6 +318,13 @@ describe("GraphPreviewPanel", () => {
     );
 
     await screen.findByTestId("parameter-activity-minimap-node-minimap-linear");
+
+    expect(
+      document.querySelectorAll('.react-flow__node[tabindex="0"]'),
+    ).toHaveLength(0);
+    expect(
+      document.querySelectorAll('.react-flow__edge[tabindex="0"]'),
+    ).toHaveLength(0);
 
     const branchNode = screen.getByTestId("parameter-activity-minimap-node-minimap-branch");
 

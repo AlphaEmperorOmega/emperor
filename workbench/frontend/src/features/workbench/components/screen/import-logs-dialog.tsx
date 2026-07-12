@@ -24,7 +24,12 @@ import {
   useWorkbenchConnection,
 } from "@/features/workbench/providers/workbench-connection-provider";
 import { useLogQueryCache } from "@/features/workbench/state/logs/use-log-query-cache";
-import { importLogArchive, type LogArchiveImportResponse } from "@/lib/api";
+import {
+  createMutationRequestOptions,
+  importLogArchive,
+  type LogArchiveImportResponse,
+  type MutationRequestOptions,
+} from "@/lib/api";
 import { formatBytes } from "@/lib/format";
 
 const logImportsDisabledMessage = "Log imports are disabled by this backend.";
@@ -73,11 +78,13 @@ export function ImportLogsDialog({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<LogArchiveImportResponse | null>(null);
   const operationGenerationRef = useRef(0);
+  const importMutationRef = useRef<MutationRequestOptions | null>(null);
   const uploadControllerRef = useRef<AbortController | null>(null);
   const clearForConnectionChange = useCallback(() => {
     operationGenerationRef.current += 1;
     uploadControllerRef.current?.abort();
     uploadControllerRef.current = null;
+    importMutationRef.current = null;
     setSelectedFile(null);
     setIsImporting(false);
     setError(null);
@@ -108,6 +115,7 @@ export function ImportLogsDialog({ onClose }: { onClose: () => void }) {
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null;
+    importMutationRef.current = null;
     setSelectedFile(file);
     setResult(null);
     if (file && !file.name.toLowerCase().endsWith(".zip")) {
@@ -152,14 +160,19 @@ export function ImportLogsDialog({ onClose }: { onClose: () => void }) {
     const operationGeneration = operationGenerationRef.current;
     const uploadController = new AbortController();
     uploadControllerRef.current = uploadController;
+    const mutation =
+      importMutationRef.current ?? createMutationRequestOptions();
+    importMutationRef.current = mutation;
     try {
       const importResult = await importLogArchive(selectedFile, {
+        ...mutation,
         signal: uploadController.signal,
       });
       if (operationGenerationRef.current !== operationGeneration) {
         return;
       }
       setResult(importResult);
+      importMutationRef.current = null;
       setSelectedFile(null);
       if (fileInputRef.current) {
         fileInputRef.current.value = "";

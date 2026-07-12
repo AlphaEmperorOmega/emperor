@@ -64,6 +64,7 @@ const baseJob: TrainingJob = {
   eventsTruncated: false,
   clusterGrowth: [],
   logTail: [],
+  logTailTruncated: false,
   resultLinks: [],
 };
 

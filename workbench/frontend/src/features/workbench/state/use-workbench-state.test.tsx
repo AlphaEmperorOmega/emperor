@@ -41,10 +41,19 @@ const mocks = vi.hoisted(() => ({
   fetchMonitorParameterStatus: vi.fn(),
   fetchLogParameterStatus: vi.fn(),
 }));
-vi.mock("@/lib/api", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/api")>()),
-  ...mocks,
-}));
+vi.mock("@/lib/api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api")>();
+  return {
+    ...actual,
+    ...mocks,
+    fetchLogRuns: async (...args: Parameters<typeof actual.fetchLogRuns>) => {
+      const response = await mocks.fetchLogRuns(...args);
+      return response.facets
+        ? response
+        : { ...response, facets: logRunFacets(response.runs) };
+    },
+  };
+});
 
 import { useWorkbenchState } from "@/features/workbench/state/use-workbench-state";
 import { TrainingPanel } from "@/features/workbench/components/training-panel";
@@ -222,6 +231,88 @@ function logRun(overrides: Partial<LogRun> & Pick<LogRun, "id">): LogRun {
     hasHparams: overrides.hasHparams ?? true,
     hasLayerMonitorData: overrides.hasLayerMonitorData,
     metrics: overrides.metrics ?? {},
+  };
+}
+
+type MockLogRunsInput = {
+  filters?: {
+    experiment?: readonly string[];
+    experimentTask?: string;
+    models?: readonly ModelIdentity[];
+    preset?: readonly string[];
+    dataset?: readonly string[];
+  };
+};
+
+function facetValues(values: string[]) {
+  return Array.from(
+    values.reduce(
+      (counts, value) => counts.set(value, (counts.get(value) ?? 0) + 1),
+      new Map<string, number>(),
+    ),
+    ([value, count]) => ({ value, count }),
+  ).sort((left, right) => left.value.localeCompare(right.value));
+}
+
+function logRunFacets(runs: LogRun[]) {
+  const grouped = new Map<string, LogRun[]>();
+  for (const run of runs) {
+    const experimentRuns = grouped.get(run.experiment) ?? [];
+    experimentRuns.push(run);
+    grouped.set(run.experiment, experimentRuns);
+  }
+  return {
+    experiments: Array.from(grouped)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([experiment, experimentRuns]) => ({
+        experiment,
+        runCount: experimentRuns.length,
+        datasets: facetValues(experimentRuns.map((run) => run.dataset)),
+        models: Array.from(
+          experimentRuns.reduce((models, run) => {
+            const key = `${run.modelType}\0${run.model}`;
+            const current = models.get(key);
+            models.set(key, {
+              modelType: run.modelType,
+              model: run.model,
+              count: (current?.count ?? 0) + 1,
+            });
+            return models;
+          }, new Map<string, { modelType: string; model: string; count: number }>()),
+          ([, value]) => value,
+        ).sort((left, right) =>
+          `${left.modelType}/${left.model}`.localeCompare(
+            `${right.modelType}/${right.model}`,
+          ),
+        ),
+        presets: facetValues(experimentRuns.map((run) => run.preset)),
+      })),
+  };
+}
+
+function mockFilteredLogRuns(runs: LogRun[]) {
+  return (input?: MockLogRunsInput) => {
+    const filters = input?.filters;
+    const hasTaskMetadata = runs.some((run) => Boolean(run.experimentTask));
+    const filteredRuns = runs.filter(
+      (run) =>
+        (!filters?.experiment?.length ||
+          filters.experiment.includes(run.experiment)) &&
+        (!filters?.models?.length ||
+          filters.models.some(
+            (model) =>
+              model.modelType === run.modelType && model.model === run.model,
+          )) &&
+        (!filters?.preset?.length || filters.preset.includes(run.preset)) &&
+        (!filters?.dataset?.length || filters.dataset.includes(run.dataset)) &&
+        (!filters?.experimentTask ||
+          !hasTaskMetadata ||
+          run.experimentTask === filters.experimentTask),
+    );
+    return Promise.resolve({
+      runs: filteredRuns,
+      facets: logRunFacets(filteredRuns),
+    });
   };
 }
 
@@ -519,6 +610,7 @@ function trainingJob(overrides: Partial<TrainingJob> = {}): TrainingJob {
     eventsTruncated: overrides.eventsTruncated ?? false,
     clusterGrowth: overrides.clusterGrowth ?? [],
     logTail: overrides.logTail ?? [],
+    logTailTruncated: overrides.logTailTruncated ?? false,
     resultLinks: overrides.resultLinks ?? [],
   };
 }
@@ -725,8 +817,6 @@ beforeEach(() => {
     historicalMonitorDataEnabled: true,
     uploadsEnabled: false,
     maxUploadSize: null,
-    dataSourcesEnabled: false,
-    dataSources: [],
   });
   mocks.fetchModels.mockReset().mockResolvedValue({
     models: [
@@ -1324,8 +1414,6 @@ describe("useWorkbenchState", () => {
       historicalMonitorDataEnabled: true,
       uploadsEnabled: false,
       maxUploadSize: null,
-      dataSourcesEnabled: false,
-      dataSources: [],
     });
 
     const { result } = renderWorkbenchState();
@@ -1343,31 +1431,22 @@ describe("useWorkbenchState", () => {
   });
 
   it("defers historical tag reads until an experiment run group is selected", async () => {
-    mocks.fetchLogRuns.mockImplementation(
-      (input?: { filters?: { models?: ModelIdentity[] } }) => {
-        const runs = input?.filters?.models?.some(
-          (model) => model.modelType === "linears" && model.model === "linear",
-        )
-          ? [
-              logRun({
-                id: "linear-history",
-                experiment: "exp_linear",
-                preset: "Fast",
-                dataset: "FashionMnist",
-                timestamp: "2026-06-02 01:02:03",
-              }),
-              logRun({
-                id: "other-history",
-                experiment: "exp_linear",
-                preset: "baseline",
-                dataset: "Mnist",
-                timestamp: "2026-06-03 01:02:03",
-              }),
-            ]
-          : [];
-        return Promise.resolve({ runs });
-      },
-    );
+    mocks.fetchLogRuns.mockImplementation(mockFilteredLogRuns([
+      logRun({
+        id: "linear-history",
+        experiment: "exp_linear",
+        preset: "Fast",
+        dataset: "FashionMnist",
+        timestamp: "2026-06-02 01:02:03",
+      }),
+      logRun({
+        id: "other-history",
+        experiment: "exp_linear",
+        preset: "baseline",
+        dataset: "Mnist",
+        timestamp: "2026-06-03 01:02:03",
+      }),
+    ]));
     const { result } = renderWorkbenchState({ activeWorkspace: "model" });
 
     await waitFor(() => {
@@ -1382,10 +1461,11 @@ describe("useWorkbenchState", () => {
     await waitFor(() => {
       expect(mocks.fetchLogRuns).toHaveBeenCalledWith(
         expect.objectContaining({
-          filters: {
+          filters: expect.objectContaining({
+            experimentTask: "image-classification",
             models: [{ modelType: "linears", model: "linear" }],
-          },
-          pagination: { limit: 500, offset: 0 },
+          }),
+          pagination: { limit: 1, offset: 0 },
           projection: "summary",
         }),
         expect.any(Object),
@@ -1715,8 +1795,8 @@ describe("useWorkbenchState", () => {
 
   it("clears historical run selection when switching model type", async () => {
     mockPublicModelCatalog();
-    mocks.fetchLogRuns.mockResolvedValueOnce({
-      runs: [
+    mocks.fetchLogRuns.mockImplementation(
+      mockFilteredLogRuns([
         logRun({
           id: "linears-history",
           modelType: "linears",
@@ -1724,8 +1804,8 @@ describe("useWorkbenchState", () => {
           preset: "Fast",
           dataset: "FashionMnist",
         }),
-      ],
-    });
+      ]),
+    );
     const { result } = renderWorkbenchState();
 
     await selectHistoricalRunThroughCascade(
@@ -1758,7 +1838,7 @@ describe("useWorkbenchState", () => {
 
   it("clears historical browser selection while preserving the complete target on connection change", async () => {
     mockPublicModelCatalog();
-    mocks.fetchLogRuns.mockResolvedValueOnce({
+    mocks.fetchLogRuns.mockResolvedValue({
       runs: [
         logRun({
           id: "connection-history",
@@ -1823,7 +1903,7 @@ describe("useWorkbenchState", () => {
         },
       ],
     });
-    mocks.fetchLogRuns.mockResolvedValueOnce({
+    mocks.fetchLogRuns.mockResolvedValue({
       runs: [
         logRun({
           id: "image-run",
@@ -2025,8 +2105,8 @@ describe("useWorkbenchState", () => {
 
   it("selects the newest matching run from the experiment dataset preset cascade", async () => {
     mocks.inspectModel.mockResolvedValue(monitorGraph());
-    mocks.fetchLogRuns.mockResolvedValueOnce({
-      runs: [
+    mocks.fetchLogRuns.mockImplementation(
+      mockFilteredLogRuns([
         logRun({
           id: "baseline-old",
           experiment: "exp_linear",
@@ -2055,8 +2135,8 @@ describe("useWorkbenchState", () => {
           dataset: "FashionMnist",
           timestamp: "2026-06-04 01:02:03",
         }),
-      ],
-    });
+      ]),
+    );
     mocks.fetchLogParameterStatus.mockImplementation(
       (input: { runIds: string[] }) =>
         Promise.resolve({
@@ -2142,7 +2222,7 @@ describe("useWorkbenchState", () => {
     });
     await waitFor(() => {
       expect(mocks.fetchLogTags).toHaveBeenCalledWith({
-        runIds: ["baseline-new", "baseline-old"],
+        runIds: ["baseline-old", "baseline-new"],
       }, expect.any(Object));
       expect(mocks.fetchLogParameterStatus).toHaveBeenCalledWith({
         runIds: ["baseline-new", "baseline-old"],
@@ -2248,7 +2328,7 @@ describe("useWorkbenchState", () => {
           preset: request.preset,
         }),
     );
-    mocks.fetchLogRuns.mockResolvedValueOnce({
+    mocks.fetchLogRuns.mockResolvedValue({
       runs: [
         logRun({
           id: "baseline-run",
@@ -2316,8 +2396,8 @@ describe("useWorkbenchState", () => {
     });
     await waitFor(() => {
       expect(result.current.history.historicalPresetOptions).toEqual([
-        historicalOption("fast", 1, "checking"),
         historicalOption("baseline", 1, "checking"),
+        historicalOption("fast", 1, "checking"),
       ]);
     });
 
@@ -2359,7 +2439,7 @@ describe("useWorkbenchState", () => {
   it("keeps an experiment switch pending and shows loading parameter activity until status resolves", async () => {
     const statusB = deferred<ReturnType<typeof parameterStatus>>();
 
-    mocks.fetchLogRuns.mockResolvedValueOnce({
+    mocks.fetchLogRuns.mockResolvedValue({
       runs: [
         logRun({
           id: "run-a",
@@ -2404,8 +2484,8 @@ describe("useWorkbenchState", () => {
 
     await waitFor(() => {
       expect(result.current.history.historicalExperimentOptions).toEqual([
-        historicalOption("exp_b", 1, "checking"),
         historicalOption("exp_a", 1, "checking"),
+        historicalOption("exp_b", 1, "checking"),
       ]);
     });
 
@@ -2535,7 +2615,7 @@ describe("useWorkbenchState", () => {
       ],
     });
 
-    mocks.fetchLogRuns.mockResolvedValueOnce({
+    mocks.fetchLogRuns.mockResolvedValue({
       runs: [
         logRun({
           id: "test-linear-run",
@@ -2722,7 +2802,7 @@ describe("useWorkbenchState", () => {
   it("does not block experiment options or preview selection while tags load", async () => {
     const delayedTags = deferred<ReturnType<typeof parameterLogTags>>();
 
-    mocks.fetchLogRuns.mockResolvedValueOnce({
+    mocks.fetchLogRuns.mockResolvedValue({
       runs: [
         logRun({
           id: "slow-tags-run",
@@ -2834,7 +2914,7 @@ describe("useWorkbenchState", () => {
   });
 
   it("switches from an experiment target back to a preset target with empty overrides", async () => {
-    mocks.fetchLogRuns.mockResolvedValueOnce({
+    mocks.fetchLogRuns.mockResolvedValue({
       runs: [
         logRun({
           id: "linear-history",
@@ -2910,7 +2990,7 @@ describe("useWorkbenchState", () => {
         },
       ],
     });
-    mocks.fetchLogRuns.mockResolvedValueOnce({
+    mocks.fetchLogRuns.mockResolvedValue({
       runs: [
         logRun({
           id: "linear-history",
@@ -3101,7 +3181,7 @@ describe("useWorkbenchState", () => {
 
   it("requests historical parameter status for the selected monitor run group", async () => {
     mocks.inspectModel.mockResolvedValue(monitorGraph());
-    mocks.fetchLogRuns.mockResolvedValueOnce({
+    mocks.fetchLogRuns.mockResolvedValue({
       runs: [
         logRun({
           id: "run-new",
@@ -3159,7 +3239,7 @@ describe("useWorkbenchState", () => {
     const oldStatus = deferred<ReturnType<typeof parameterStatus>>();
     const finalStatus = deferred<ReturnType<typeof parameterStatus>>();
 
-    mocks.fetchLogRuns.mockResolvedValueOnce({
+    mocks.fetchLogRuns.mockResolvedValue({
       runs: [
         logRun({
           id: "run-old",
@@ -3524,7 +3604,7 @@ describe("useWorkbenchState", () => {
   });
 
   it("does not render snapshot actions in experiment target mode", async () => {
-    mocks.fetchLogRuns.mockResolvedValueOnce({
+    mocks.fetchLogRuns.mockResolvedValue({
       runs: [
         logRun({
           id: "linear-history",
@@ -3692,7 +3772,7 @@ describe("useWorkbenchState", () => {
   });
 
   it("allows training while a historical experiment run is selected", async () => {
-    mocks.fetchLogRuns.mockResolvedValueOnce({
+    mocks.fetchLogRuns.mockResolvedValue({
       runs: [
         logRun({
           id: "historical-run",

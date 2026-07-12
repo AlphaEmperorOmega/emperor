@@ -66,6 +66,7 @@ function trainingJob(events: TrainingProgressEvent[]): TrainingJob {
     eventsTruncated: false,
     clusterGrowth: [],
     logTail: [],
+    logTailTruncated: false,
     resultLinks: [],
   };
 }

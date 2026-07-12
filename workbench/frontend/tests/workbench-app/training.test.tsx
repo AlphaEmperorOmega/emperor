@@ -423,9 +423,22 @@ async function waitForTargetTrainingInputs(onReady: () => void) {
 }
 
 function trainingRunList(details: HTMLElement) {
-  return within(details).getByRole("region", {
-    name: "Training Run List",
-  });
+  const runList = details.querySelector<HTMLElement>(
+    '[data-workbench-region="wide-primary"]',
+  );
+  if (!runList) throw new Error("Expected the Training Run List region");
+  return runList;
+}
+
+async function activateTrainingOptionToolbar(
+  user: ReturnType<typeof userEvent.setup>,
+  listbox: HTMLElement,
+  optionName: RegExp,
+  toolbarName: string,
+) {
+  const option = within(listbox).getByRole("option", { name: optionName });
+  await user.hover(option);
+  return screen.findByRole("toolbar", { name: `${toolbarName} actions` });
 }
 
 async function openTrainingFullConfig(
@@ -1469,15 +1482,17 @@ describe("WorkbenchApp Training And Preview", () => {
 
     const details = await expandedTrainingDetailsReady(user);
 
-    const setupSidebar = within(details).getByRole("complementary", {
-      name: "Training Setup Sidebar",
-    });
-    const runList = within(details).getByRole("region", {
-      name: "Training Run List",
-    });
-    const statusSidebar = within(details).getByRole("complementary", {
-      name: "Training Status Sidebar",
-    });
+    const setupSidebar = details.querySelector<HTMLElement>(
+      '[data-workbench-region="wide-leading"]',
+    );
+    const runList = trainingRunList(details);
+    const statusSidebar = details.querySelector<HTMLElement>(
+      '[data-workbench-region="wide-trailing"]',
+    );
+    if (!setupSidebar || !statusSidebar) {
+      throw new Error("Expected the Training setup and status regions");
+    }
+    expect(within(details).queryAllByRole("complementary")).toHaveLength(0);
     const trainingHeading = within(runList).getByRole("heading", {
       name: /^training$/i,
     });
@@ -2163,7 +2178,7 @@ describe("WorkbenchApp Training And Preview", () => {
       name: /training command/i,
     });
     expect(commandField(commandDialog)).toHaveValue(
-      "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist",
+      "source experiment.sh --model-type linears --model linear --preset baseline --experiment-task image-classification --datasets Mnist",
     );
   });
 
@@ -2226,9 +2241,10 @@ describe("WorkbenchApp Training And Preview", () => {
       expect(within(runList).getByText("1 / 30 epochs")).toBeInTheDocument();
     });
 
-    const statusSidebar = within(details).getByRole("complementary", {
-      name: "Training Status Sidebar",
-    });
+    const statusSidebar = details.querySelector<HTMLElement>(
+      '[data-workbench-region="wide-trailing"]',
+    );
+    if (!statusSidebar) throw new Error("Expected the Training status region");
     expect(within(statusSidebar).getByText("Active Run")).toBeInTheDocument();
     expect(within(statusSidebar).getByText("running")).toBeInTheDocument();
     expect(within(statusSidebar).getByText("Active run")).toBeInTheDocument();
@@ -2322,6 +2338,13 @@ describe("WorkbenchApp Training And Preview", () => {
     ).toBeInTheDocument();
 
     await user.click(snapshotOption);
+    await waitFor(() => {
+      expect(
+        within(details).getByRole("combobox", {
+          name: /^config snapshots\s+1\s*\/\s*1 selected$/i,
+        }),
+      ).toHaveTextContent("Wide snapshot");
+    });
     await user.keyboard("{Escape}");
 
     await findTrainingRunSummary(
@@ -2394,28 +2417,11 @@ describe("WorkbenchApp Training And Preview", () => {
     expect(trainingBodies[0]).toMatchObject({
       overrides: {},
       logFolder: "mixed_snapshots",
+      snapshotIds: ["snap-wide"],
+      snapshotRevisions: [expect.objectContaining({ id: "snap-wide" })],
     });
     expect(trainingBodies[0]).not.toHaveProperty("search");
-    expect(
-      (trainingBodies[0] as { runPlan: { runs: unknown[] } }).runPlan.runs,
-    ).toHaveLength(2);
-    expect(trainingBodies[0]).toHaveProperty(
-      "runPlan.runs.0.overrides.hidden_dim",
-      "192",
-    );
-    expect(trainingBodies[0]).not.toHaveProperty("runPlan.runs.0.command");
-    expect(trainingBodies[0]).toHaveProperty(
-      "runPlan.runs.1.snapshotId",
-      "snap-wide",
-    );
-    expect(trainingBodies[0]).toHaveProperty(
-      "runPlan.runs.1.snapshotName",
-      "Wide snapshot",
-    );
-    expect(trainingBodies[0]).toHaveProperty(
-      "runPlan.runs.1.overrides.hidden_dim",
-      "192",
-    );
+    expect(trainingBodies[0]).not.toHaveProperty("runPlan");
     expect(snapshotRecord.overrides).toEqual({
       hidden_dim: "128",
       num_epochs: "5",
@@ -2443,8 +2449,14 @@ describe("WorkbenchApp Training And Preview", () => {
     expect(baselineOption).toHaveAttribute("aria-disabled", "true");
     expect(unselectedPresetOption).toHaveAttribute("aria-selected", "false");
 
+    const presetToolbar = await activateTrainingOptionToolbar(
+      user,
+      listbox,
+      /recurrent-gating-halting/i,
+      "recurrent-gating-halting",
+    );
     await user.click(
-      within(listbox).getByRole("button", {
+      within(presetToolbar).getByRole("button", {
         name: "Create snapshot from recurrent-gating-halting",
       }),
     );
@@ -2556,8 +2568,14 @@ describe("WorkbenchApp Training And Preview", () => {
     expect(control).toHaveAccessibleName("Config snapshots 0 / 1 selected");
     expect(control).toHaveTextContent("Select snapshots");
 
+    const snapshotToolbar = await activateTrainingOptionToolbar(
+      user,
+      listbox,
+      /wide snapshot/i,
+      "Wide snapshot",
+    );
     await user.click(
-      within(listbox).getByRole("button", {
+      within(snapshotToolbar).getByRole("button", {
         name: "Edit snapshot Wide snapshot",
       }),
     );
@@ -2583,8 +2601,14 @@ describe("WorkbenchApp Training And Preview", () => {
       details,
       "Config snapshots",
     ));
+    const duplicateToolbar = await activateTrainingOptionToolbar(
+      user,
+      listbox,
+      /wide snapshot/i,
+      "Wide snapshot",
+    );
     await user.click(
-      within(listbox).getByRole("button", {
+      within(duplicateToolbar).getByRole("button", {
         name: "Duplicate snapshot Wide snapshot",
       }),
     );
@@ -2689,16 +2713,10 @@ describe("WorkbenchApp Training And Preview", () => {
     expect(trainingBodies[0]).toMatchObject({
       logFolder: "snapshot_only",
       presets: ["baseline"],
-      runPlan: {
-        runs: [
-          expect.objectContaining({
-            snapshotId: "snap-wide",
-            snapshotName: "Wide snapshot",
-            preset: "baseline",
-          }),
-        ],
-      },
+      snapshotIds: ["snap-wide"],
+      snapshotRevisions: [expect.objectContaining({ id: "snap-wide" })],
     });
+    expect(trainingBodies[0]).not.toHaveProperty("runPlan");
     expect(trainingBodies[0]).not.toHaveProperty("search");
   });
 
@@ -3539,7 +3557,7 @@ describe("WorkbenchApp Training And Preview", () => {
       name: /training command/i,
     });
     expect(commandField(commandDialog)).toHaveValue(
-      "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist --monitors linear",
+      "source experiment.sh --model-type linears --model linear --preset baseline --experiment-task image-classification --datasets Mnist --monitors linear",
     );
     await user.click(
       within(commandDialog).getByRole("button", {
@@ -3556,7 +3574,7 @@ describe("WorkbenchApp Training And Preview", () => {
         name: /^training commands$/i,
       }),
     ).toHaveValue(
-      "(\n  set -e\n  source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist --monitors linear\n)",
+      "(\n  set -e\n  source experiment.sh --model-type linears --model linear --preset baseline --experiment-task image-classification --datasets Mnist --monitors linear\n)",
     );
     await user.click(
       within(commandDialog).getByRole("button", {
@@ -3584,7 +3602,7 @@ describe("WorkbenchApp Training And Preview", () => {
       name: /training command/i,
     });
     expect(commandField(commandDialog)).toHaveValue(
-      "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist",
+      "source experiment.sh --model-type linears --model linear --preset baseline --experiment-task image-classification --datasets Mnist",
     );
     await user.click(
       within(commandDialog).getByRole("button", {

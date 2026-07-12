@@ -107,6 +107,9 @@ function buildTrainingDraftRequest({
     overrides: effectiveOverrides,
     logFolder: experiment.logFolder,
     monitors: experiment.monitors,
+    ...(modelPackage.selectedSnapshots.length > 0
+      ? { snapshotIds: modelPackage.selectedSnapshots.map((snapshot) => snapshot.id) }
+      : {}),
     ...(searchPayload ? { search: searchPayload } : {}),
   };
 }
@@ -124,6 +127,7 @@ function buildTrainingJobRequest({
   const presets =
     runPlan.presets.length > 0 ? runPlan.presets : draftRequest.presets;
   const experimentTask = runPlan.experimentTask || draftRequest.experimentTask;
+  const hasSnapshots = (draftRequest.snapshotIds?.length ?? 0) > 0;
   return {
     ...draftRequest,
     preset: runPlan.preset || draftRequest.preset,
@@ -131,7 +135,9 @@ function buildTrainingJobRequest({
     ...(experimentTask ? { experimentTask } : {}),
     logFolder: draftRequest.logFolder ?? "",
     monitors: draftRequest.monitors ?? [],
-    runPlan: toTrainingRunPlanSubmitInput(runPlan),
+    ...(hasSnapshots
+      ? { snapshotRevisions: runPlan.snapshotRevisions ?? [] }
+      : { runPlan: toTrainingRunPlanSubmitInput(runPlan) }),
   };
 }
 
@@ -168,7 +174,7 @@ export function useTrainingPlanState({
   const effectiveOverrides = useMemo<OverrideValues>(
     () =>
       hasActiveConfigSnapshots
-        ? {}
+        ? editablePresetOverrides
         : buildEffectiveOverrides(
             editablePresetOverrides,
             effectiveTrainingSearch,
@@ -220,40 +226,39 @@ export function useTrainingPlanState({
         ? {
             modelType: modelPackage.modelType,
             model: modelPackage.model,
-            selectedPreset: modelPackage.primaryPreset,
-            selectedTrainingPresets: modelPackage.selectedPresets,
-            selectedExperimentTask: experiment.task,
-            selectedDatasets: experiment.datasets,
-            snapshots: modelPackage.selectedSnapshots,
-            sections: runtimeDefaults.sections,
-            bulkOverrides: editablePresetOverrides,
+            preset: modelPackage.primaryPreset,
+            presets: modelPackage.selectedPresets,
+            ...(experiment.task ? { experimentTask: experiment.task } : {}),
+            datasets: experiment.datasets,
+            overrides: editablePresetOverrides,
             logFolder: experiment.logFolder,
+            monitors: experiment.monitors,
+            snapshotIds: modelPackage.selectedSnapshots.map(
+              (snapshot) => snapshot.id,
+            ),
           }
         : null,
     [
       editablePresetOverrides,
       experiment.datasets,
       experiment.logFolder,
+      experiment.monitors,
       experiment.task,
       modelPackage.model,
       modelPackage.modelType,
       modelPackage.primaryPreset,
       modelPackage.selectedPresets,
       modelPackage.selectedSnapshots,
-      runtimeDefaults.sections,
       snapshotDraftReady,
     ],
   );
   const snapshotPlanQuery = useQuery({
     queryKey: ["training-config-snapshot-run-plan", snapshotPlanInput],
-    queryFn: async () => {
+    queryFn: ({ signal }) => {
       if (!snapshotPlanInput) {
         throw new Error("Config Snapshot Run Plan input is not ready.");
       }
-      const { materializeConfigSnapshotRunPlan } = await import(
-        "@/features/workbench/state/training/config-snapshot-run-plan"
-      );
-      return materializeConfigSnapshotRunPlan(snapshotPlanInput);
+      return fetchTrainingRunPlan(snapshotPlanInput, { signal });
     },
     enabled:
       availability.protectedReadsEnabled && snapshotPlanInput !== null,

@@ -46,7 +46,12 @@ export function ConfigFieldSearch({
   });
   const {
     ids,
-    state: { isOpen, visibleOptions, isLoadingMore, activeIndex },
+    state: {
+      isOpen,
+      visibleOptions,
+      isLoadingMore,
+      matchingCount,
+    },
     root,
     search,
     popup,
@@ -75,11 +80,13 @@ export function ConfigFieldSearch({
           aria-haspopup="dialog"
           aria-expanded={isOpen}
           aria-controls={isOpen ? ids.popup : undefined}
+          aria-describedby={`${ids.control}-result-count`}
           autoComplete="off"
           placeholder="Search fields, keys, or sections…"
           spellCheck={false}
           value={query}
           onChange={search.onChange}
+          onClick={search.onClick}
           onKeyDown={search.onKeyDown}
           className="h-touch rounded-panel border-line bg-control-field pl-9 pr-12 type-body shadow-panel focus-visible:ring-focus md:h-control-lg md:pr-10"
         />
@@ -96,6 +103,16 @@ export function ConfigFieldSearch({
           </Button>
         )}
       </div>
+      <span
+        id={`${ids.control}-result-count`}
+        role="status"
+        aria-live="polite"
+        className="sr-only"
+      >
+        {query.trim()
+          ? `${matchingCount} matching config ${matchingCount === 1 ? "field" : "fields"}.`
+          : ""}
+      </span>
 
       {isOpen && (
         <DropdownShell
@@ -103,6 +120,7 @@ export function ConfigFieldSearch({
           id={ids.popup}
           role="dialog"
           ariaLabel="Matching config fields"
+          onKeyDown={popup.onKeyDown}
           onScroll={collection.onScroll}
           className="max-h-[min(34rem,calc(100vh-14rem))] overflow-y-auto p-2"
         >
@@ -110,9 +128,9 @@ export function ConfigFieldSearch({
             popupId={ids.popup}
             visibleOptions={visibleOptions}
             isLoadingMore={isLoadingMore}
-            activeIndex={activeIndex}
             selectedFieldKey={selectedFieldKey}
             onSelect={actions.activate}
+            optionTitle={actions.optionTitle}
             onFieldChange={onFieldChange}
             onFieldReset={onFieldReset}
           />

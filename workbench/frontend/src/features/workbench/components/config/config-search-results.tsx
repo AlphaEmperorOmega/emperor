@@ -1,4 +1,5 @@
 import { Loader2 } from "lucide-react";
+import { type KeyboardEventHandler } from "react";
 import { Badge } from "@/components/ui/badge";
 import {
   ConfigFieldOverrideIcon,
@@ -13,17 +14,22 @@ import { cn } from "@/lib/utils";
 function ConfigSearchResultItem({
   option,
   popupId,
-  isActive,
   isSelected,
   onSelect,
+  titleInteraction,
   onFieldChange,
   onFieldReset,
 }: {
   option: RuntimeDefaultsSearchOptionPresentation;
   popupId: string;
-  isActive: boolean;
   isSelected: boolean;
   onSelect: (option: RuntimeDefaultsSearchOptionPresentation) => void;
+  titleInteraction: {
+    ref: (element: HTMLButtonElement | null) => void;
+    tabIndex: number;
+    onFocus: () => void;
+    onKeyDown: KeyboardEventHandler<HTMLButtonElement>;
+  };
   onFieldChange: (key: string, value: string) => void;
   onFieldReset: (key: string) => void;
 }) {
@@ -45,14 +51,18 @@ function ConfigSearchResultItem({
         "min-w-0 gap-2 px-3 py-2.5 transition",
         isPresetOwned ? "border-amber/35 bg-amber/[0.055]" : "border-line-soft bg-black/15",
         isSelected && "border-violet/45 bg-violet/10",
-        isActive ? "ring-1 ring-violet/45" : "hover:border-line hover:bg-white/[0.035]",
+        "focus-within:ring-1 focus-within:ring-violet/45 hover:border-line hover:bg-white/[0.035]",
       )}
     >
       <span className="flex min-w-0 items-start justify-between gap-2">
         <button
+          ref={titleInteraction.ref}
           id={titleId}
           type="button"
           onClick={() => onSelect(option)}
+          onFocus={titleInteraction.onFocus}
+          onKeyDown={titleInteraction.onKeyDown}
+          tabIndex={titleInteraction.tabIndex}
           data-config-field-label=""
           className={cn(
             "flex min-h-touch min-w-0 items-center gap-1.5 rounded-chip text-left text-sm font-semibold underline-offset-4 transition hover:text-violet hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-focus md:min-h-control",
@@ -84,8 +94,8 @@ function ConfigSearchResultItem({
         onChange={onFieldChange}
         onReset={onFieldReset}
         controlId={editorId}
-        controlLabel="Current value"
-        resetLabel="Reset search result override"
+        controlLabel={`${option.label} current value`}
+        resetLabel={`Reset ${option.label} search result override`}
         resetTitle={`Reset ${option.label} override`}
         density="compact"
         disabled={Boolean(disabledReason)}
@@ -102,18 +112,26 @@ export function ConfigSearchResults({
   popupId,
   visibleOptions,
   isLoadingMore,
-  activeIndex,
   selectedFieldKey,
   onSelect,
+  optionTitle,
   onFieldChange,
   onFieldReset,
 }: {
   popupId: string;
   visibleOptions: RuntimeDefaultsSearchOptionPresentation[];
   isLoadingMore: boolean;
-  activeIndex: number;
   selectedFieldKey: string | null;
   onSelect: (option: RuntimeDefaultsSearchOptionPresentation) => void;
+  optionTitle: (
+    option: RuntimeDefaultsSearchOptionPresentation,
+    index: number,
+  ) => {
+    ref: (element: HTMLButtonElement | null) => void;
+    tabIndex: number;
+    onFocus: () => void;
+    onKeyDown: KeyboardEventHandler<HTMLButtonElement>;
+  };
   onFieldChange: (key: string, value: string) => void;
   onFieldReset: (key: string) => void;
 }) {
@@ -137,9 +155,9 @@ export function ConfigSearchResults({
           key={option.key}
           option={option}
           popupId={popupId}
-          isActive={index === activeIndex}
           isSelected={option.key === selectedFieldKey}
           onSelect={onSelect}
+          titleInteraction={optionTitle(option, index)}
           onFieldChange={onFieldChange}
           onFieldReset={onFieldReset}
         />

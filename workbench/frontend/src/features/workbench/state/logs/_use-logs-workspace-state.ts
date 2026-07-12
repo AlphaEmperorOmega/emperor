@@ -1257,7 +1257,6 @@ function useLogsWorkspaceImplementation({
   const deletion = useLogsDeletionState({
     active: enabled,
     enabled: logDeletionEnabled,
-    runs,
     selectedExperiments: experimentSet,
     onExperimentDeleted,
     onRunsDeleted,

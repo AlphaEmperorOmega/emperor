@@ -114,6 +114,7 @@ function job(
     eventsTruncated: false,
     clusterGrowth: [],
     logTail: [],
+    logTailTruncated: false,
     resultLinks: [],
     ...overrides,
   };

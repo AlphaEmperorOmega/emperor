@@ -66,6 +66,7 @@ export function GraphPreviewPanel({
         nodesConnectable={false}
         elementsSelectable={false}
         nodesFocusable={false}
+        edgesFocusable={false}
         onlyRenderVisibleElements
         nodeClickDistance={4}
       >

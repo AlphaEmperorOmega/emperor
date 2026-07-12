@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   cancelTrainingJob,
+  createMutationRequestOptions,
   createTrainingJob,
+  type MutationRequestOptions,
   type TrainingJobCreateInput,
 } from "@/lib/api";
 import { useLogQueryCache } from "@/features/workbench/state/logs/use-log-query-cache";
@@ -23,6 +25,17 @@ type TrainingLogRefreshSnapshot = {
   terminalStatus: string | null;
 };
 
+type CreateTrainingCommand = {
+  request: TrainingJobCreateInput;
+  fingerprint: string;
+  mutation: MutationRequestOptions;
+};
+
+type CancelTrainingCommand = {
+  jobId: string;
+  mutation: MutationRequestOptions;
+};
+
 const emptyLogRefreshSnapshot: TrainingLogRefreshSnapshot = {
   jobId: null,
   logDir: null,
@@ -39,6 +52,8 @@ export function useTrainingJobExecution({
   const [mutationError, setMutationError] =
     useState<TrainingMutationError | null>(null);
   const mutationGenerationRef = useRef(0);
+  const createCommandRef = useRef<CreateTrainingCommand | null>(null);
+  const cancelCommandRef = useRef<CancelTrainingCommand | null>(null);
   const logRefreshSnapshotRef = useRef(emptyLogRefreshSnapshot);
   const queryClient = useQueryClient();
   const { invalidateLogLists, refreshAfterMutation } = useLogQueryCache();
@@ -73,16 +88,18 @@ export function useTrainingJobExecution({
     }
   }, [invalidateLogLists, polling.job, refreshAfterMutation]);
   const createMutation = useMutation({
-    mutationFn: createTrainingJob,
+    mutationFn: ({ request, mutation }: CreateTrainingCommand) =>
+      createTrainingJob(request, mutation),
     onMutate: () => {
       setMutationError(null);
       return { generation: mutationGenerationRef.current };
     },
-    onSuccess: (job, _request, context) => {
+    onSuccess: (job, _command, context) => {
       if (context.generation !== mutationGenerationRef.current) {
         return;
       }
       queryClient.setQueryData(trainingQueryKeys.job(job.id), job);
+      createCommandRef.current = null;
       setMutationError(null);
       polling.activateJob(job);
       void refreshAfterMutation();
@@ -95,12 +112,13 @@ export function useTrainingJobExecution({
     },
   });
   const cancelMutation = useMutation({
-    mutationFn: cancelTrainingJob,
+    mutationFn: ({ jobId, mutation }: CancelTrainingCommand) =>
+      cancelTrainingJob(jobId, mutation),
     onMutate: () => {
       setMutationError(null);
       return { generation: mutationGenerationRef.current };
     },
-    onSuccess: async (job, _jobId, context) => {
+    onSuccess: async (job, _command, context) => {
       if (context.generation !== mutationGenerationRef.current) {
         return;
       }
@@ -110,17 +128,18 @@ export function useTrainingJobExecution({
         return;
       }
       queryClient.setQueryData(jobQueryKey, job);
+      cancelCommandRef.current = null;
       setMutationError(null);
       polling.activateJob(job);
       void refreshAfterMutation();
     },
-    onError: (error, jobId, context) => {
+    onError: (error, command, context) => {
       if (context?.generation !== mutationGenerationRef.current) {
         return;
       }
       setMutationError({
         action: "cancel",
-        jobId,
+        jobId: command.jobId,
         message: errorMessage(error),
       });
     },
@@ -140,22 +159,46 @@ export function useTrainingJobExecution({
   const launchRunPlan = useCallback(
     (request: TrainingJobCreateInput) => {
       if (canLaunchRunPlan) {
+        const fingerprint = JSON.stringify(request);
+        const previous = createCommandRef.current;
+        const command =
+          mutationError?.action === "create" &&
+          previous?.fingerprint === fingerprint
+            ? previous
+            : {
+                request,
+                fingerprint,
+                mutation: createMutationRequestOptions(),
+              };
+        createCommandRef.current = command;
         setMutationError(null);
-        createMutation.mutate(request);
+        createMutation.mutate(command);
       }
     },
-    [canLaunchRunPlan, createMutation],
+    [canLaunchRunPlan, createMutation, mutationError?.action],
   );
   const cancelTraining = useCallback(() => {
     if (enabled && polling.job?.id && !cancelMutation.isPending) {
-      cancelMutation.mutate(polling.job.id);
+      const previous = cancelCommandRef.current;
+      const command =
+        mutationError?.action === "cancel" &&
+        previous?.jobId === polling.job.id
+          ? previous
+          : {
+              jobId: polling.job.id,
+              mutation: createMutationRequestOptions(),
+            };
+      cancelCommandRef.current = command;
+      cancelMutation.mutate(command);
     }
-  }, [cancelMutation, enabled, polling.job?.id]);
+  }, [cancelMutation, enabled, mutationError?.action, polling.job?.id]);
   const resetTraining = useCallback(() => {
     if (hasPendingMutation) {
       return;
     }
     setMutationError(null);
+    createCommandRef.current = null;
+    cancelCommandRef.current = null;
     createMutation.reset();
     cancelMutation.reset();
     polling.resetObservedJob();
@@ -163,6 +206,8 @@ export function useTrainingJobExecution({
   const clearForConnectionChange = useCallback(() => {
     mutationGenerationRef.current += 1;
     logRefreshSnapshotRef.current = emptyLogRefreshSnapshot;
+    createCommandRef.current = null;
+    cancelCommandRef.current = null;
     setMutationError(null);
     createMutation.reset();
     cancelMutation.reset();

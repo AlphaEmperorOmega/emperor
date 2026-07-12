@@ -141,7 +141,7 @@ describe("MultiSelectDropdown", () => {
     );
   });
 
-  it("renders row actions without adding them to the option accessible name", async () => {
+  it("renders active-option actions in a sibling toolbar, never inside the listbox", async () => {
     const user = userEvent.setup();
     renderDropdown();
 
@@ -158,9 +158,13 @@ describe("MultiSelectDropdown", () => {
       }),
     ).not.toBeInTheDocument();
     expect(
-      within(listbox).getByRole("button", {
+      screen.getByRole("button", {
         name: "Create snapshot from baseline",
       }),
+    ).toBeInTheDocument();
+    expect(within(listbox).queryByRole("button")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("toolbar", { name: "Baseline actions" }),
     ).toBeInTheDocument();
   });
 
@@ -197,7 +201,7 @@ describe("MultiSelectDropdown", () => {
     expect(screen.getByRole("tooltip")).toHaveClass(
       "opacity-0",
       "group-hover:opacity-100",
-      "group-focus-within:opacity-100",
+      "group-focus:opacity-100",
     );
     expect(
       within(listbox).queryByRole("option", {
@@ -210,9 +214,9 @@ describe("MultiSelectDropdown", () => {
     const user = userEvent.setup();
     const { onAction, onChange } = renderDropdown();
 
-    const listbox = await openDropdown(user);
+    await openDropdown(user);
     await user.click(
-      within(listbox).getByRole("button", {
+      screen.getByRole("button", {
         name: "Create snapshot from baseline",
       }),
     );
@@ -225,19 +229,18 @@ describe("MultiSelectDropdown", () => {
     const user = userEvent.setup();
     const { onAction, onChange } = renderDropdown();
 
-    let listbox = await openDropdown(user);
+    const listbox = await openDropdown(user);
     await user.tab();
     expect(
-      within(listbox).getByRole("button", {
+      screen.getByRole("button", {
         name: "Create snapshot from baseline",
       }),
     ).toHaveFocus();
     await user.keyboard("{Enter}");
 
-    listbox = await openDropdown(user);
-    await user.tab();
+    expect(listbox).toBeInTheDocument();
     expect(
-      within(listbox).getByRole("button", {
+      screen.getByRole("button", {
         name: "Create snapshot from baseline",
       }),
     ).toHaveFocus();
@@ -253,8 +256,8 @@ describe("MultiSelectDropdown", () => {
     const user = userEvent.setup();
     renderDropdown();
 
-    const listbox = await openDropdown(user);
-    const action = within(listbox).getByRole("button", {
+    await openDropdown(user);
+    const action = screen.getByRole("button", {
       name: "Create snapshot from baseline",
     });
 
@@ -282,23 +285,23 @@ describe("MultiSelectDropdown", () => {
     );
   });
 
-  it("closes before the row action callback runs", async () => {
+  it("keeps focus and the popup while the toolbar action runs", async () => {
     const user = userEvent.setup();
-    const onAction = vi.fn(() => {
-      expect(
-        screen.queryByRole("listbox", { name: "Targets options" }),
-      ).not.toBeInTheDocument();
-    });
+    const onAction = vi.fn();
     renderDropdown({ onAction });
 
     const listbox = await openDropdown(user);
     await user.click(
-      within(listbox).getByRole("button", {
+      screen.getByRole("button", {
         name: "Create snapshot from baseline",
       }),
     );
 
     expect(onAction).toHaveBeenCalledWith("baseline");
+    expect(listbox).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Create snapshot from baseline" }),
+    ).toHaveFocus();
   });
 
   it("keeps row actions available when row selection is disabled", async () => {
@@ -314,7 +317,7 @@ describe("MultiSelectDropdown", () => {
     ).toHaveAttribute("aria-disabled", "true");
 
     await user.click(
-      within(listbox).getByRole("button", {
+      screen.getByRole("button", {
         name: "Create snapshot from baseline",
       }),
     );
@@ -347,7 +350,7 @@ describe("MultiSelectDropdown", () => {
     fireEvent.scroll(listbox);
 
     expect(
-      within(listbox).getByRole("status", { name: /loading more targets/i }),
+      within(listbox).getByRole("option", { name: /loading more targets/i }),
     ).toBeInTheDocument();
     await waitFor(() => {
       expect(

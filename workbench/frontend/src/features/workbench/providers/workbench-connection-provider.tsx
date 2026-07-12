@@ -41,8 +41,10 @@ export const DEFAULT_WORKBENCH_CAPABILITIES: WorkbenchFeatureCapabilities = {
   historicalMonitorDataEnabled: true,
   uploadsEnabled: true,
   maxUploadSize: null,
-  dataSourcesEnabled: false,
-  dataSources: [],
+  maxActiveTrainingJobs: 2,
+  trainingJobMemoryLimitBytes: 16 * 1024 ** 3,
+  trainingJobCpuLimit: 8,
+  trainingJobProcessLimit: 512,
 };
 
 export type WorkbenchAuthenticationState =
@@ -99,8 +101,10 @@ function featureCapabilities({
   historicalMonitorDataEnabled,
   uploadsEnabled,
   maxUploadSize,
-  dataSourcesEnabled,
-  dataSources,
+  maxActiveTrainingJobs,
+  trainingJobMemoryLimitBytes,
+  trainingJobCpuLimit,
+  trainingJobProcessLimit,
 }: Capabilities): WorkbenchFeatureCapabilities {
   return {
     trainingEnabled,
@@ -112,8 +116,10 @@ function featureCapabilities({
     historicalMonitorDataEnabled,
     uploadsEnabled,
     maxUploadSize,
-    dataSourcesEnabled,
-    dataSources,
+    maxActiveTrainingJobs,
+    trainingJobMemoryLimitBytes,
+    trainingJobCpuLimit,
+    trainingJobProcessLimit,
   };
 }
 

@@ -7,6 +7,33 @@ import {
 
 export const WORKBENCH_MUTATION_HEADER_NAME = "X-Workbench-Mutation";
 export const WORKBENCH_MUTATION_HEADER_VALUE = "true";
+export const IDEMPOTENCY_HEADER_NAME = "Idempotency-Key";
+
+export type MutationRequestOptions = Readonly<{
+  idempotencyKey: string;
+}>;
+
+export function createMutationRequestOptions(): MutationRequestOptions {
+  return { idempotencyKey: mutationRequestId() };
+}
+
+function mutationRequestId() {
+  if (typeof globalThis.crypto?.randomUUID === "function") {
+    return globalThis.crypto.randomUUID();
+  }
+  const bytes = new Uint8Array(16);
+  globalThis.crypto.getRandomValues(bytes);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0"));
+  return [
+    hex.slice(0, 4).join(""),
+    hex.slice(4, 6).join(""),
+    hex.slice(6, 8).join(""),
+    hex.slice(8, 10).join(""),
+    hex.slice(10).join(""),
+  ].join("-");
+}
 
 const errorBodySchema = z.object({ detail: z.unknown() }).partial();
 
@@ -86,6 +113,7 @@ function requestHeaders(
   authToken: string | null,
   initHeaders?: HeadersInit,
   contentType: string | null = "application/json",
+  mutation?: MutationRequestOptions,
 ) {
   const headers = new Headers(
     contentType ? { "content-type": contentType } : undefined,
@@ -99,10 +127,17 @@ function requestHeaders(
   if (authToken) {
     headers.set("Authorization", `Bearer ${authToken}`);
   }
-  if (["GET", "HEAD", "OPTIONS"].includes(method)) {
-    headers.delete(WORKBENCH_MUTATION_HEADER_NAME);
-  } else {
+  headers.delete(WORKBENCH_MUTATION_HEADER_NAME);
+  headers.delete(IDEMPOTENCY_HEADER_NAME);
+  if (mutation) {
+    if (["GET", "HEAD", "OPTIONS"].includes(method)) {
+      throw new Error(`${method} requests cannot be declared as mutations.`);
+    }
+    if (!mutation.idempotencyKey) {
+      throw new Error("Mutation requests require an idempotency key.");
+    }
     headers.set(WORKBENCH_MUTATION_HEADER_NAME, WORKBENCH_MUTATION_HEADER_VALUE);
+    headers.set(IDEMPOTENCY_HEADER_NAME, mutation.idempotencyKey);
   }
   return headers;
 }
@@ -207,7 +242,10 @@ export async function requestJson<TSchema extends z.ZodTypeAny>(
   path: string,
   schema: TSchema,
   init?: RequestInit,
-  policy: { authenticationProbe?: boolean } = {},
+  policy: {
+    authenticationProbe?: boolean;
+    mutation?: MutationRequestOptions;
+  } = {},
 ): Promise<z.output<TSchema>> {
   throwIfAborted(init?.signal);
   const method = requestMethod(init);
@@ -220,7 +258,13 @@ export async function requestJson<TSchema extends z.ZodTypeAny>(
   try {
     request = {
       ...init,
-      headers: requestHeaders(method, connection.authToken, init?.headers),
+      headers: requestHeaders(
+        method,
+        connection.authToken,
+        init?.headers,
+        "application/json",
+        policy.mutation,
+      ),
     };
   } catch (error) {
     throw redactedError(error, connection.authToken);
@@ -258,6 +302,7 @@ export async function requestMultipartJson<TSchema extends z.ZodTypeAny>(
   schema: TSchema,
   formData: FormData,
   init?: Omit<RequestInit, "body">,
+  policy: { mutation?: MutationRequestOptions } = {},
 ): Promise<z.output<TSchema>> {
   throwIfAborted(init?.signal);
   const method = requestMethod({ method: init?.method ?? "POST" });
@@ -269,7 +314,13 @@ export async function requestMultipartJson<TSchema extends z.ZodTypeAny>(
       ...init,
       method,
       body: formData,
-      headers: requestHeaders(method, connection.authToken, init?.headers, null),
+      headers: requestHeaders(
+        method,
+        connection.authToken,
+        init?.headers,
+        null,
+        policy.mutation,
+      ),
     };
   } catch (error) {
     throw redactedError(error, connection.authToken);

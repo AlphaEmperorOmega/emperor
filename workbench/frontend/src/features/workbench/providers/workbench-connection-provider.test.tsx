@@ -27,8 +27,6 @@ const capabilities = {
   historicalMonitorDataEnabled: true,
   uploadsEnabled: true,
   maxUploadSize: null,
-  dataSourcesEnabled: false,
-  dataSources: [],
 };
 
 function jsonResponse(body: unknown, status = 200) {

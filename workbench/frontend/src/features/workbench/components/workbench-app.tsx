@@ -10,6 +10,7 @@ import {
   WorkbenchWorkspaceLoadingStatus,
 } from "@/features/workbench/components/workbench-workspace-layout";
 import { useWorkbenchWorkspaceShell } from "@/features/workbench/state/use-workbench-workspace-shell";
+import { type WorkbenchWorkspace } from "@/types/workbench";
 
 function LogsWorkspaceProviderLoadingFallback() {
   return (
@@ -49,8 +50,12 @@ const DeferredTrainingExecutionProvider = dynamic(
   },
 );
 
-export function WorkbenchApp() {
-  const workspaceShell = useWorkbenchWorkspaceShell();
+export function WorkbenchApp({
+  initialWorkspace = "model",
+}: {
+  initialWorkspace?: WorkbenchWorkspace;
+}) {
+  const workspaceShell = useWorkbenchWorkspaceShell(initialWorkspace);
   const [startedLogFolders, setStartedLogFolders] = useState<readonly string[]>(
     [],
   );

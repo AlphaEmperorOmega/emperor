@@ -202,10 +202,14 @@ export type LogRunArtifacts = z.infer<typeof logRunArtifactsSchema>;
 
 const DEFAULT_LOG_PAGE_LIMIT = 500;
 export const DEFAULT_LOG_SCALAR_MAX_POINTS = 500;
+export const LOG_REQUEST_LIMITS = Object.freeze({
+  runIds: 50,
+  mediaTags: 20,
+});
 export const LOG_TAG_RUN_REQUEST_LIMIT = 20;
 export const LOG_SCALAR_RUN_REQUEST_LIMIT = 10;
 export const LOG_SCALAR_TAG_REQUEST_LIMIT = 50;
-export const LOG_MEDIA_TAG_REQUEST_LIMIT = 20;
+export const LOG_MEDIA_TAG_REQUEST_LIMIT = LOG_REQUEST_LIMITS.mediaTags;
 export const LOG_TAG_REQUEST_CONCURRENCY = 1;
 export const LOG_TENSORBOARD_REQUEST_CONCURRENCY = 2;
 export const LOG_SCALAR_REQUEST_CONCURRENCY = 1;
@@ -443,6 +447,7 @@ async function fetchPaginated<TPage extends PaginatedPage, TItem>({
 
 export type FetchLogRunsFilters = {
   experiment?: readonly string[];
+  experimentTask?: string;
   models?: readonly ModelIdentity[];
   preset?: readonly string[];
   dataset?: readonly string[];
@@ -467,6 +472,7 @@ export async function fetchLogRuns(
     params: filters
       ? {
           experiment: filters.experiment,
+          experimentTask: filters.experimentTask,
           modelType: filters.models?.map((model) => model.modelType),
           model: filters.models?.map((model) => model.model),
           preset: filters.preset,
@@ -604,31 +610,36 @@ export function fetchLogMedia(input: {
   imageTags: string[];
   textTags: string[];
 }, options: ApiRequestOptions = {}) {
-  const imageChunks = chunkList(input.imageTags, LOG_MEDIA_TAG_REQUEST_LIMIT);
-  const textChunks = chunkList(input.textTags, LOG_MEDIA_TAG_REQUEST_LIMIT);
-  if (imageChunks.length <= 1 && textChunks.length <= 1) {
-    return requestJson("/logs/media", logMediaSchema, {
-      method: "POST",
-      signal: options.signal,
-      body: JSON.stringify(input),
-    });
+  const runIdChunks = chunkListForRequestDimension(
+    input.runIds,
+    LOG_REQUEST_LIMITS.runIds,
+  );
+  const imageChunks = chunkList(input.imageTags, LOG_REQUEST_LIMITS.mediaTags);
+  const textChunks = chunkList(input.textTags, LOG_REQUEST_LIMITS.mediaTags);
+  const tagRequests =
+    imageChunks.length <= 1 && textChunks.length <= 1
+      ? [
+          {
+            imageTags: imageChunks[0] ?? [],
+            textTags: textChunks[0] ?? [],
+          },
+        ]
+      : [
+          ...imageChunks.map((imageTags) => ({
+            imageTags,
+            textTags: [] as string[],
+          })),
+          ...textChunks.map((textTags) => ({
+            imageTags: [] as string[],
+            textTags,
+          })),
+        ];
+  if (tagRequests.length === 0) {
+    tagRequests.push({ imageTags: [], textTags: [] });
   }
-
-  const requests = [
-    ...imageChunks.map((imageTags) => ({
-      runIds: input.runIds,
-      imageTags,
-      textTags: [] as string[],
-    })),
-    ...textChunks.map((textTags) => ({
-      runIds: input.runIds,
-      imageTags: [] as string[],
-      textTags,
-    })),
-  ];
-  if (requests.length === 0) {
-    requests.push({ runIds: input.runIds, imageTags: [], textTags: [] });
-  }
+  const requests = runIdChunks.flatMap((runIds) =>
+    tagRequests.map((tags) => ({ runIds, ...tags })),
+  );
 
   return scheduleLogRequests(
     requests,
@@ -640,24 +651,43 @@ export function fetchLogMedia(input: {
         body: JSON.stringify(request),
       }),
   ).then((pages) => ({
-    eventBytes: pages.reduce((total, page) => total + (page.eventBytes ?? 0), 0) || null,
-    skippedEventFiles:
-      pages.reduce((total, page) => total + (page.skippedEventFiles ?? 0), 0) ||
-      null,
-    sourceItemCount: pages.reduce(
-      (total, page) => total + (page.sourceItemCount ?? 0),
-      0,
-    ),
-    returnedItemCount: pages.reduce(
-      (total, page) => total + (page.returnedItemCount ?? 0),
-      0,
-    ),
-    truncated: pages.some((page) => Boolean(page.truncated)),
-    truncationReason:
-      pages.find((page) => page.truncationReason)?.truncationReason ?? null,
+    ...aggregateResponseMetadata(pages),
     images: pages.flatMap((page) => page.images),
     texts: pages.flatMap((page) => page.texts),
   }));
+}
+
+function aggregateOptionalCount(
+  pages: Array<z.infer<typeof responseMetadataSchema>>,
+  key: "eventBytes" | "skippedEventFiles" | "sourceItemCount" | "returnedItemCount",
+) {
+  const values = pages
+    .map((page) => page[key])
+    .filter((value): value is number => typeof value === "number");
+  return values.length > 0
+    ? values.reduce((total, value) => total + value, 0)
+    : null;
+}
+
+function aggregateResponseMetadata(
+  pages: Array<z.infer<typeof responseMetadataSchema>>,
+) {
+  const truncationReasons = Array.from(
+    new Set(
+      pages
+        .map((page) => page.truncationReason)
+        .filter((reason): reason is string => Boolean(reason)),
+    ),
+  );
+  return {
+    eventBytes: aggregateOptionalCount(pages, "eventBytes"),
+    skippedEventFiles: aggregateOptionalCount(pages, "skippedEventFiles"),
+    sourceItemCount: aggregateOptionalCount(pages, "sourceItemCount"),
+    returnedItemCount: aggregateOptionalCount(pages, "returnedItemCount"),
+    truncated: pages.some((page) => page.truncated === true),
+    truncationReason:
+      truncationReasons.length > 0 ? truncationReasons.join("; ") : null,
+  };
 }
 
 function chunkList<TItem>(items: TItem[], chunkSize: number) {
@@ -676,11 +706,23 @@ export function fetchLogCheckpoints(
   input: { runIds: string[] },
   options: ApiRequestOptions = {},
 ) {
-  return requestJson("/logs/checkpoints", logCheckpointsSchema, {
-    method: "POST",
-    signal: options.signal,
-    body: JSON.stringify(input),
-  });
+  const requests = chunkListForRequestDimension(
+    input.runIds,
+    LOG_REQUEST_LIMITS.runIds,
+  );
+  return scheduleLogRequests(
+    requests,
+    LOG_TENSORBOARD_REQUEST_CONCURRENCY,
+    (runIds) =>
+      requestJson("/logs/checkpoints", logCheckpointsSchema, {
+        method: "POST",
+        signal: options.signal,
+        body: JSON.stringify({ runIds }),
+      }),
+  ).then((pages) => ({
+    ...aggregateResponseMetadata(pages),
+    checkpoints: pages.flatMap((page) => page.checkpoints),
+  }));
 }
 
 export function fetchLogRunArtifacts(

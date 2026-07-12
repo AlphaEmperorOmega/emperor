@@ -74,6 +74,7 @@ function trainingJob(overrides: Partial<TrainingJob> = {}): TrainingJob {
     eventsTruncated: overrides.eventsTruncated ?? false,
     clusterGrowth: overrides.clusterGrowth ?? [],
     logTail: overrides.logTail ?? [],
+    logTailTruncated: overrides.logTailTruncated ?? false,
     resultLinks: overrides.resultLinks ?? [],
   };
 }

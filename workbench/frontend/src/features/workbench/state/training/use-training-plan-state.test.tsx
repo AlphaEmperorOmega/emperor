@@ -235,13 +235,37 @@ beforeEach(() => {
 });
 
 describe("useTrainingPlanState", () => {
-  it("keeps Config Snapshot Run materialization private and launches its exact mixed plan", async () => {
+  it("uses the backend-authoritative Config Snapshot plan and revisions", async () => {
     const launch = vi.fn();
+    const authoritativePlan = runPlan({ totalRuns: 2 });
+    authoritativePlan.runs[0] = {
+      ...authoritativePlan.runs[0]!,
+      id: "preset-baseline-Mnist-1",
+      overrides: { hidden_dim: "192", dropout: "0.2" },
+      totalEpochs: 10,
+    };
+    authoritativePlan.runs[1] = {
+      ...authoritativePlan.runs[1]!,
+      id: "snapshot-wide-Mnist-2",
+      snapshotId: "wide",
+      snapshotName: "Wide",
+      overrides: {
+        hidden_dim: "192",
+        num_epochs: "4",
+        dropout: "0.2",
+      },
+      totalEpochs: 4,
+    };
+    authoritativePlan.snapshotRevisions = [
+      { id: "wide", semanticRevision: "a".repeat(64) },
+    ];
+    authoritativePlan.summary.totalEpochs = 14;
+    authoritativePlan.summary.remainingEpochs = 14;
+    mocks.fetchTrainingRunPlan.mockResolvedValue(authoritativePlan);
     const { result } = renderPlan(
       planInput({ search: gridSearch, selectedSnapshots: snapshots, launch }),
     );
 
-    expect(mocks.fetchTrainingRunPlan).not.toHaveBeenCalled();
     expect(result.current.activeConfigSnapshotCount).toBe(1);
     expect(result.current.search.effective.mode).toBe("off");
     expect(result.current.search.disabledReason).toContain("fixed variants");
@@ -249,6 +273,13 @@ describe("useTrainingPlanState", () => {
       expect(result.current.displayRunPlan?.summary.totalRuns).toBe(2);
       expect(result.current.canStart).toBe(true);
     });
+    expect(mocks.fetchTrainingRunPlan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        snapshotIds: ["wide"],
+        overrides: { hidden_dim: "192", dropout: "0.2" },
+      }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
     expect(result.current.displayRunPlan?.summary.totalRuns).toBe(2);
     expect(result.current.displayRunPlan?.summary.remainingEpochs).toBe(14);
     expect(result.current.displayRunPlan?.runs[0].overrides).toEqual({
@@ -270,17 +301,11 @@ describe("useTrainingPlanState", () => {
         modelType: "linears",
         model: "linear",
         monitors: ["loss"],
-        runPlan: {
-          runs: [
-            expect.objectContaining({ id: "preset-baseline-Mnist-1" }),
-            expect.objectContaining({
-              id: "snapshot-wide-Mnist-2",
-              snapshotId: "wide",
-            }),
-          ],
-        },
+        snapshotIds: ["wide"],
+        snapshotRevisions: authoritativePlan.snapshotRevisions,
       }),
     );
+    expect(launch.mock.calls[0][0]).not.toHaveProperty("runPlan");
   });
 
   it("uses the backend-authoritative normal plan and keeps folder validity in start readiness", async () => {
@@ -320,9 +345,9 @@ describe("useTrainingPlanState", () => {
     expect(launch).toHaveBeenCalledWith(
       expect.objectContaining({
         overrides: { hidden_dim: "192", dropout: "0.2" },
-        runPlan: {
+        runPlan: expect.objectContaining({
           runs: [expect.objectContaining({ id: "run-1" })],
-        },
+        }),
       }),
     );
   });
@@ -362,12 +387,12 @@ describe("useTrainingPlanState", () => {
           mode: "grid",
           values: { hidden_dim: [128, 256] },
         },
-        runPlan: {
+        runPlan: expect.objectContaining({
           runs: [
             expect.objectContaining({ id: "run-1" }),
             expect.objectContaining({ id: "run-2" }),
           ],
-        },
+        }),
       }),
     );
   });

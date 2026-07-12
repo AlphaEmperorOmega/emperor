@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { type LogRun } from "@/lib/api";
 
 const mocks = vi.hoisted(() => ({
+  createMutationRequestOptions: vi.fn(),
   createPlan: vi.fn(),
   deleteExperiment: vi.fn(),
   deleteRuns: vi.fn(),
@@ -12,9 +13,10 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api")>()),
-  createLogRunDeletePlan: mocks.createPlan,
+  createMutationRequestOptions: mocks.createMutationRequestOptions,
+  createLogPresetDeletePlan: mocks.createPlan,
   deleteLogExperiment: mocks.deleteExperiment,
-  deleteLogRuns: mocks.deleteRuns,
+  deleteLogPreset: mocks.deleteRuns,
 }));
 
 import { useLogsDeletionState } from "@/features/workbench/state/logs/_logs-deletion-state";
@@ -51,13 +53,7 @@ function logRun(id: string): LogRun {
 }
 
 const run = logRun("run-a");
-const filters = {
-  experiments: ["exp_a"],
-  datasets: ["Mnist"],
-  models: [{ modelType: "linears", model: "linear" }],
-  presets: ["BASELINE"],
-  runIds: ["run-a"],
-};
+const target = { experiment: "exp_a", preset: "BASELINE" };
 const plan = {
   candidateCount: 1,
   counts: { runs: 1, experiments: 1, datasets: 1, models: 1, presets: 1 },
@@ -83,7 +79,6 @@ function renderDeletion(
   overrides: Partial<{
     active: boolean;
     enabled: boolean;
-    runs: LogRun[];
     selectedExperiments: Set<string>;
   }> = {},
 ) {
@@ -102,7 +97,6 @@ function renderDeletion(
     (currentProps) =>
       useLogsDeletionState({
         ...currentProps,
-        runs: currentProps.runs ?? [run],
         onExperimentDeleted,
         onRunsDeleted,
       }),
@@ -116,21 +110,20 @@ function renderDeletion(
 }
 
 beforeEach(() => {
+  mocks.createMutationRequestOptions
+    .mockReset()
+    .mockImplementation(() => ({
+      idempotencyKey: `command-${mocks.createMutationRequestOptions.mock.calls.length}`,
+    }));
   mocks.createPlan.mockReset();
   mocks.deleteExperiment.mockReset();
   mocks.deleteRuns.mockReset();
 });
 
 describe("Logs deletion lifecycle", () => {
-  it("builds stable subset filters from the Runs owned by the deletion target", async () => {
-    const runZ = {
-      ...logRun("run-z"),
-      dataset: "Cifar10",
-      modelType: "transformer",
-      model: "tiny",
-    };
+  it("plans a semantic preset target even when no matching Runs are loaded locally", async () => {
     mocks.createPlan.mockResolvedValue(plan);
-    const { result } = renderDeletion({ runs: [runZ, run, runZ] });
+    const { result } = renderDeletion();
 
     act(() => {
       result.current.actions.openPreset({
@@ -142,16 +135,7 @@ describe("Logs deletion lifecycle", () => {
     await waitFor(() => expect(result.current.operation?.phase).toBe("ready"));
 
     expect(mocks.createPlan).toHaveBeenCalledWith(
-      {
-        experiments: ["exp_a"],
-        datasets: ["Cifar10", "Mnist"],
-        models: [
-          { modelType: "linears", model: "linear" },
-          { modelType: "transformer", model: "tiny" },
-        ],
-        presets: ["BASELINE"],
-        runIds: ["run-a", "run-z"],
-      },
+      target,
       expect.any(Object),
     );
   });
@@ -193,7 +177,7 @@ describe("Logs deletion lifecycle", () => {
     });
     expect(result.current.operation?.phase).toBe("planning");
     await waitFor(() => expect(mocks.createPlan).toHaveBeenCalled());
-    expect(mocks.createPlan.mock.calls[0]?.[0]).toEqual(filters);
+    expect(mocks.createPlan.mock.calls[0]?.[0]).toEqual(target);
 
     act(() => result.current.actions.cancel());
     await act(async () => pendingPlan.resolve(plan));
@@ -220,8 +204,8 @@ describe("Logs deletion lifecycle", () => {
 
     expect(result.current.operation?.phase).toBe("ready");
     expect(mocks.createPlan.mock.calls.map(([input]) => input)).toEqual([
-      filters,
-      filters,
+      target,
+      target,
     ]);
   });
 
@@ -256,9 +240,13 @@ describe("Logs deletion lifecycle", () => {
 
     expect(result.current.operation).toBeNull();
     expect(mocks.deleteRuns.mock.calls.map(([input]) => input)).toEqual([
-      filters,
-      filters,
+      target,
+      target,
     ]);
+    const mutationKeys = mocks.deleteRuns.mock.calls.map(
+      ([, mutation]) => mutation.idempotencyKey,
+    );
+    expect(mutationKeys[0]).toBe(mutationKeys[1]);
     expect(onRunsDeleted).toHaveBeenCalledTimes(1);
   });
 

@@ -14,6 +14,7 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 import { ViewModeButton } from "@/features/workbench/components/view-mode-button";
 import { SelectOnlyDropdown } from "@/features/workbench/components/screen/select-only-dropdown";
 import { SectionHeading } from "@/components/ui/section-heading";
+import { type HistoricalBrowseStatus } from "@/features/workbench/state/target/use-historical-target-browsing";
 
 type TargetMode = "preset" | "snapshot" | "experiment";
 
@@ -53,6 +54,7 @@ export type TargetSelectorView = {
       actionsDisabled: boolean;
     };
     historical: {
+      status: HistoricalBrowseStatus;
       experiment: { value: string; options: TargetSelectorOption[] };
       dataset: { value: string; options: TargetSelectorOption[] };
       preset: { value: string; options: TargetSelectorOption[] };
@@ -109,6 +111,7 @@ export function TargetSelectorSection({
     source.snapshot.trainingCommandDisabled;
   const snapshotActionsDisabled = source.snapshot.actionsDisabled;
   const experimentValue = source.historical.experiment.value;
+  const historicalStatus = source.historical.status;
   const experimentOptions = source.historical.experiment.options;
   const experimentDatasetValue = source.historical.dataset.value;
   const experimentDatasetOptions = source.historical.dataset.options;
@@ -354,6 +357,19 @@ export function TargetSelectorSection({
               className="min-w-0"
             />
           </div>
+          {historicalStatus.message && (
+            <p
+              role={historicalStatus.phase === "error" ? "alert" : "status"}
+              aria-live={historicalStatus.phase === "error" ? undefined : "polite"}
+              className={
+                historicalStatus.phase === "error"
+                  ? "text-xs leading-5 text-danger-text"
+                  : "text-xs leading-5 text-ink-faint"
+              }
+            >
+              {historicalStatus.message}
+            </p>
+          )}
         </div>
       )}
     </section>

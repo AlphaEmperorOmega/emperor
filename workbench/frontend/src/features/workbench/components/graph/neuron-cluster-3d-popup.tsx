@@ -451,7 +451,10 @@ function NeuronCluster3DPopup({
           </SceneErrorBoundary>
         </div>
 
-        <aside className="grid min-h-0 min-w-0 content-start gap-4 overflow-x-hidden overflow-y-auto border-t border-line bg-black/20 p-4 lg:border-l lg:border-t-0">
+        <aside
+          aria-label="3D cluster controls and cell details"
+          className="grid min-h-0 min-w-0 content-start gap-4 overflow-x-hidden overflow-y-auto border-t border-line bg-black/20 p-4 lg:border-l lg:border-t-0"
+        >
           <div className="grid grid-cols-2 gap-2">
             <StatChip tone="soft">{scene.activeCells.length} active</StatChip>
             <StatChip tone="soft">{scene.capacityTotal} capacity</StatChip>

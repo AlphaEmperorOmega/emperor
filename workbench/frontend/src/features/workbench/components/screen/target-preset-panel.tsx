@@ -80,6 +80,7 @@ export function TargetPresetPanel({
     historicalExperimentOptions,
     historicalDatasetOptions,
     historicalPresetOptions,
+    historicalBrowseStatus,
     selectedHistoricalExperimentFilter,
     setSelectedHistoricalExperimentFilter,
     selectedHistoricalDatasetFilter,
@@ -210,6 +211,7 @@ export function TargetPresetPanel({
         actionsDisabled: snapshotActionsDisabled,
       },
       historical: {
+        status: historicalBrowseStatus,
         experiment: {
           value: historicalExperimentValue,
           options: experimentOptions,

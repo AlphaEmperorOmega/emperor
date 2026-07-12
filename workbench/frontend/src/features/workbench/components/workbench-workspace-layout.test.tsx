@@ -45,14 +45,15 @@ describe("Workbench workspace layout", () => {
       "xl:overflow-hidden",
       "2xl:grid-cols-[344px_minmax(0,1fr)_332px]",
     );
-    expect(sidebar.tagName).toBe("ASIDE");
+    expect(sidebar.tagName).toBe("DIV");
     expect(sidebar).toHaveClass("border-b", "xl:border-b-0", "xl:border-r");
     expect(primary).toHaveClass(
       "min-h-[520px]",
       "sm:min-h-[640px]",
       "xl:min-h-0",
     );
-    expect(details.tagName).toBe("ASIDE");
+    expect(details.tagName).toBe("DIV");
+    expect(details).toHaveAttribute("tabindex", "0");
     expect(details).toHaveClass("border-t", "xl:border-l", "xl:border-t-0");
     expect(
       sidebar.compareDocumentPosition(primary) &
@@ -62,6 +63,7 @@ describe("Workbench workspace layout", () => {
       primary.compareDocumentPosition(details) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+    expect(screen.queryAllByRole("complementary")).toHaveLength(0);
   });
 
   it("gives wide workspaces and loading fallbacks the complete grid span", () => {
@@ -127,13 +129,13 @@ describe("Workbench workspace layout", () => {
       "xl:space-y-0",
       "xl:grid-cols-[minmax(280px,320px)_minmax(0,1fr)_minmax(280px,340px)]",
     );
-    expect(leading.tagName).toBe("ASIDE");
-    expect(leading).toHaveAttribute("aria-label", "Setup region");
-    expect(primary.tagName).toBe("SECTION");
-    expect(primary).toHaveAttribute("aria-label", "Runs region");
+    expect(leading.tagName).toBe("DIV");
+    expect(leading).toHaveAttribute("data-region-label", "Setup region");
+    expect(primary.tagName).toBe("DIV");
+    expect(primary).toHaveAttribute("data-region-label", "Runs region");
     expect(primary).toHaveClass("min-h-[600px]", "xl:min-h-0");
-    expect(trailing.tagName).toBe("ASIDE");
-    expect(trailing).toHaveAttribute("aria-label", "Status region");
+    expect(trailing.tagName).toBe("DIV");
+    expect(trailing).toHaveAttribute("data-region-label", "Status region");
     expect(trailing).toHaveAttribute("aria-live", "polite");
     expect(leading).toHaveClass("overflow-visible", "xl:overflow-y-auto");
     expect(trailing).toHaveClass("overflow-visible", "xl:overflow-y-auto");
@@ -148,5 +150,6 @@ describe("Workbench workspace layout", () => {
       primary.compareDocumentPosition(trailing) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+    expect(screen.queryAllByRole("complementary")).toHaveLength(0);
   });
 });

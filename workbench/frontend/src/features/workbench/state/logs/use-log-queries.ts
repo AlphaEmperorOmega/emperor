@@ -78,9 +78,11 @@ export function useInfiniteLogRunsQuery({
   filters,
   pageSize,
   projection,
+  keepPreviousData: shouldKeepPreviousData = true,
 }: QueryOptions &
   Pick<FetchLogRunsInput, "filters" | "projection"> & {
     pageSize: number;
+    keepPreviousData?: boolean;
   }) {
   return useInfiniteQuery({
     queryKey: logQueryKeys.runs({
@@ -104,7 +106,7 @@ export function useInfiniteLogRunsQuery({
       lastPage.hasMore
         ? (lastPage.offset ?? 0) + (lastPage.limit ?? pageSize)
         : undefined,
-    placeholderData: keepPreviousData,
+    placeholderData: shouldKeepPreviousData ? keepPreviousData : undefined,
     retry: false,
     staleTime: LOG_RUNS_STALE_TIME_MS,
   });

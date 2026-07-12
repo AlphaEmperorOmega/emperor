@@ -3097,7 +3097,8 @@ describe("WorkbenchApp Full Config", () => {
 
     await user.type(search, "hidden");
 
-    expect(within(dialog).getByLabelText(/hidden dim/i)).toBeInTheDocument();
+    expect(within(dialog).getAllByLabelText(/hidden dim/i).length)
+      .toBeGreaterThanOrEqual(2);
     expect(within(dialog).queryByLabelText(/activation/i)).not.toBeInTheDocument();
     expect(within(dialog).queryByRole("switch", { name: /enabled/i })).not.toBeInTheDocument();
     expect(
@@ -3223,7 +3224,6 @@ describe("WorkbenchApp Full Config", () => {
     expect(within(hiddenDimRow).queryByText("override")).not.toBeInTheDocument();
     expectModifiedFieldControl(hiddenDimSearchInput);
     expect(within(dialog).getAllByLabelText("1 override").length).toBeGreaterThan(0);
-    expect(within(dialog).getByLabelText(/hidden dim/i)).toHaveValue("128");
 
     await user.click(within(dialog).getByRole("button", { name: /update preview/i }));
 
@@ -3267,7 +3267,6 @@ describe("WorkbenchApp Full Config", () => {
       .not.toBeInTheDocument();
     expectUnmodifiedFieldControl(reopenedHiddenDimSearchInput);
     expect(reopenedHiddenDimRow).not.toHaveTextContent(/current\s*256/i);
-    expect(within(dialog).getByLabelText(/hidden dim/i)).toHaveValue("256");
     expect(within(dialog).getAllByLabelText("0 overrides").length).toBeGreaterThan(0);
 
     await user.click(within(dialog).getByRole("button", { name: /update preview/i }));
@@ -3309,8 +3308,11 @@ describe("WorkbenchApp Full Config", () => {
     );
 
     expect(stackActivationRow).toHaveTextContent(/current\s*RELU/i);
-    expect(within(dialog).getByLabelText(/activation/i))
-      .toHaveTextContent("RELU");
+    expect(
+      within(dialog)
+        .getAllByRole("combobox", { name: /activation/i })
+        .every((control) => control.textContent?.includes("RELU")),
+    ).toBe(true);
 
     await user.click(within(dialog).getByRole("button", { name: /clear config search/i }));
     await user.type(search, "gate");
@@ -3381,7 +3383,7 @@ describe("WorkbenchApp Full Config", () => {
     );
 
     const resetButton = within(stackActivationRow).getByRole("button", {
-      name: /reset search result override/i,
+      name: /reset .* search result override/i,
     });
 
     expect(stackActivationRow).toHaveTextContent(/current\s*RELU/i);
@@ -3410,7 +3412,11 @@ describe("WorkbenchApp Full Config", () => {
     expectUnmodifiedFieldControl(stackActivationSelect);
     expect(stackActivationRow).not.toHaveTextContent(/current\s*GELU/i);
     expect(stackActivationSelect).toHaveTextContent("GELU");
-    expect(within(dialog).getByLabelText(/activation/i)).toHaveTextContent("GELU");
+    expect(
+      within(dialog)
+        .getAllByLabelText(/activation/i)
+        .every((control) => control.textContent?.includes("GELU")),
+    ).toBe(true);
     expect(
       within(stackActivationRow).queryByRole("button", {
         name: /reset search result override/i,

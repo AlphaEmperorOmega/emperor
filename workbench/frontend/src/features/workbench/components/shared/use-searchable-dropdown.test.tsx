@@ -157,10 +157,12 @@ function SearchDialogHarness({
           id={ids.popup}
           role="dialog"
           aria-label="Matching records"
+          onKeyDown={popup.onKeyDown}
           onScroll={collection.onScroll}
         >
           {state.visibleOptions.map((option, index) => (
             <button
+              {...actions.optionTitle(option, index)}
               key={option.value}
               type="button"
               data-active={index === state.activeIndex || undefined}
@@ -249,7 +251,7 @@ describe("useSearchablePopupInteraction", () => {
     });
   });
 
-  it("keeps dialog focus on its input while paging and activating", async () => {
+  it("moves real dialog focus through lazy rows while paging and activating", async () => {
     const user = userEvent.setup();
     const onActivate = vi.fn();
     const onClear = vi.fn();
@@ -268,13 +270,14 @@ describe("useSearchablePopupInteraction", () => {
     await user.keyboard("{ArrowDown}");
     dialog = screen.getByRole("dialog", { name: "Matching records" });
     await user.keyboard("{ArrowDown}");
+    await user.keyboard("{ArrowDown}");
     await waitFor(() => {
       expect(within(dialog).getByRole("button", { name: "Gamma" })).toHaveAttribute(
         "data-active",
         "true",
       );
     });
-    expect(search).toHaveFocus();
+    expect(within(dialog).getByRole("button", { name: "Gamma" })).toHaveFocus();
 
     await user.keyboard("{Enter}");
     expect(onActivate).toHaveBeenCalledWith(testOptions[2]);

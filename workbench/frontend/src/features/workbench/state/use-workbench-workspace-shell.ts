@@ -1,5 +1,8 @@
-import { useCallback, useState } from "react";
-import { type WorkbenchWorkspace } from "@/types/workbench";
+import { useCallback, useEffect, useState } from "react";
+import {
+  parseWorkbenchWorkspace,
+  type WorkbenchWorkspace,
+} from "@/types/workbench";
 
 export type WorkbenchDialogControls = {
   isOpen: boolean;
@@ -31,11 +34,18 @@ export type WorkbenchScreenShell = {
   importLogsDialog: WorkbenchDialogControls;
 };
 
-export function useWorkbenchWorkspaceShell() {
-  const [activeWorkspace, setActiveWorkspace] = useState<WorkbenchWorkspace>("model");
+export function useWorkbenchWorkspaceShell(
+  initialWorkspace: WorkbenchWorkspace = "model",
+) {
+  const [activeWorkspace, setActiveWorkspace] =
+    useState<WorkbenchWorkspace>(initialWorkspace);
   const [deferredWorkspaceOrder, setDeferredWorkspaceOrder] = useState<
     DeferredWorkbenchWorkspace[]
-  >([]);
+  >(() =>
+    initialWorkspace === "logs" || initialWorkspace === "training"
+      ? [initialWorkspace]
+      : [],
+  );
   const [isFullConfigOpen, setIsFullConfigOpen] = useState(false);
   const [fullConfigMode, setFullConfigMode] =
     useState<FullConfigDialogMode>("default");
@@ -45,17 +55,38 @@ export function useWorkbenchWorkspaceShell() {
   const [isApiConnectionOpen, setIsApiConnectionOpen] = useState(false);
   const [isImportLogsOpen, setIsImportLogsOpen] = useState(false);
 
-  const changeWorkspace = useCallback((workspace: WorkbenchWorkspace) => {
+  const applyWorkspace = useCallback((workspace: WorkbenchWorkspace) => {
     setActiveWorkspace(workspace);
     if (workspace === "logs" || workspace === "training") {
       setDeferredWorkspaceOrder((current) =>
         current.includes(workspace) ? current : [...current, workspace],
       );
     }
-    if (workspace !== "model") {
-      setIsFullConfigOpen(false);
-    }
+    setIsFullConfigOpen(false);
+    setIsFeatureListOpen(false);
+    setIsApiConnectionOpen(false);
+    setIsImportLogsOpen(false);
   }, []);
+  const changeWorkspace = useCallback(
+    (workspace: WorkbenchWorkspace) => {
+      if (workspace === activeWorkspace) return;
+      applyWorkspace(workspace);
+      const url = new URL(location.href);
+      url.searchParams.set("workspace", workspace);
+      history.pushState(history.state, "", url);
+    },
+    [activeWorkspace, applyWorkspace],
+  );
+  useEffect(() => {
+    const handlePopState = () => {
+      const workspace = parseWorkbenchWorkspace(
+        new URL(location.href).searchParams.get("workspace"),
+      );
+      applyWorkspace(workspace);
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [applyWorkspace]);
   const openFullConfig = useCallback(
     (
       mode: FullConfigDialogMode = "default",

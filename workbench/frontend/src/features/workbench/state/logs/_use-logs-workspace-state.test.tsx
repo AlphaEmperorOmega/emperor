@@ -4,8 +4,11 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  createLogPresetDeletePlan: vi.fn(),
   createLogRunDeletePlan: vi.fn(),
+  createMutationRequestOptions: vi.fn(),
   deleteLogExperiment: vi.fn(),
+  deleteLogPreset: vi.fn(),
   deleteLogRuns: vi.fn(),
   fetchLogCheckpoints: vi.fn(),
   fetchLogExperiments: vi.fn(),
@@ -19,8 +22,11 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/api", () => ({
   DEFAULT_LOG_SCALAR_MAX_POINTS: 500,
   LOG_SCALAR_SAMPLING: "auto",
+  createLogPresetDeletePlan: mocks.createLogPresetDeletePlan,
   createLogRunDeletePlan: mocks.createLogRunDeletePlan,
+  createMutationRequestOptions: mocks.createMutationRequestOptions,
   deleteLogExperiment: mocks.deleteLogExperiment,
+  deleteLogPreset: mocks.deleteLogPreset,
   deleteLogRuns: mocks.deleteLogRuns,
   fetchLogCheckpoints: mocks.fetchLogCheckpoints,
   fetchLogExperiments: mocks.fetchLogExperiments,
@@ -122,6 +128,17 @@ function renderLogsWorkspaceState(
 describe("Logs workspace state", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.createMutationRequestOptions.mockReturnValue({
+      idempotencyKey: "logs-workspace-command",
+    });
+    mocks.createLogPresetDeletePlan.mockResolvedValue({
+      candidateCount: 0,
+      counts: { runs: 0, experiments: 0, datasets: 0, models: 0, presets: 0 },
+      affected: { experiments: [], datasets: [], models: [], presets: [], runIds: [] },
+      candidates: [],
+      blockedByActiveJobs: [],
+      canDelete: true,
+    });
     const runs = [
       logRun({ id: "a-cifar" }),
       logRun({
@@ -792,8 +809,8 @@ describe("Logs workspace state", () => {
       canDelete: true,
       truncated: false,
     };
-    mocks.createLogRunDeletePlan.mockResolvedValue(plan);
-    mocks.deleteLogRuns.mockImplementation(() => {
+    mocks.createLogPresetDeletePlan.mockResolvedValue(plan);
+    mocks.deleteLogPreset.mockImplementation(() => {
       deleted = true;
       return Promise.resolve({
         ...plan,
@@ -860,8 +877,8 @@ describe("Logs workspace state", () => {
       canDelete: true,
       truncated: false,
     };
-    mocks.createLogRunDeletePlan.mockResolvedValue(plan);
-    mocks.deleteLogRuns.mockImplementation(() => {
+    mocks.createLogPresetDeletePlan.mockResolvedValue(plan);
+    mocks.deleteLogPreset.mockImplementation(() => {
       deleted = true;
       return Promise.resolve({
         ...plan,
@@ -942,8 +959,8 @@ describe("Logs workspace state", () => {
       deletedRelativePaths: [freshRun.relativePath],
     };
     const deletion = deferred<typeof response>();
-    mocks.createLogRunDeletePlan.mockResolvedValue(plan);
-    mocks.deleteLogRuns.mockImplementation(() => deletion.promise);
+    mocks.createLogPresetDeletePlan.mockResolvedValue(plan);
+    mocks.deleteLogPreset.mockImplementation(() => deletion.promise);
     const rendered = renderLogsWorkspaceState();
 
     act(() => rendered.result.current.commands.includeStartedExperiment("fresh_run"));
@@ -1034,8 +1051,8 @@ describe("Logs workspace state", () => {
       canDelete: true,
       truncated: false,
     };
-    mocks.createLogRunDeletePlan.mockResolvedValue(plan);
-    mocks.deleteLogRuns.mockImplementation(() => {
+    mocks.createLogPresetDeletePlan.mockResolvedValue(plan);
+    mocks.deleteLogPreset.mockImplementation(() => {
       deleted = true;
       return Promise.resolve({
         ...plan,

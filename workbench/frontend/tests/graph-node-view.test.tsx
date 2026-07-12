@@ -1254,7 +1254,8 @@ describe("GraphNodeView", () => {
       2 * graphCardGeometry.clusterDiagram.cellSize +
       graphCardGeometry.clusterDiagram.cellGap;
     const plane = within(diagram).getByTitle("Z plane 1");
-    const activeCell = within(diagram).getByLabelText(/Neuron \(1, 1, 1\).*active/i);
+    const activeCell = within(diagram).getByTitle(/Neuron \(1, 1, 1\).*active/i);
+    expect(diagram).toHaveAttribute("role", "img");
     expect(within(diagram).getByText("Cluster map")).toBeInTheDocument();
     expect(within(diagram).getByText("2 / 8")).toBeInTheDocument();
     expect(within(diagram).getByText("1z")).toHaveClass(
@@ -1280,7 +1281,7 @@ describe("GraphNodeView", () => {
       graphCardGeometry.clusterDiagram.cellSize,
     );
     expect(activeCell).toHaveClass("border-violet/45");
-    expect(within(diagram).getByLabelText(/Neuron \(2, 1, 1\).*empty/i)).toHaveClass(
+    expect(within(diagram).getByTitle(/Neuron \(2, 1, 1\).*empty/i)).toHaveClass(
       "border-line-soft",
     );
     expect(screen.queryByTestId("child-summaries-neuron_cluster")).not.toBeInTheDocument();
@@ -1343,10 +1344,10 @@ describe("GraphNodeView", () => {
     });
 
     const diagram = screen.getByTestId("cluster-diagram-neuron_cluster");
-    const source = within(diagram).getByLabelText(/Neuron \(1, 1, 1\).*active/i);
-    const activeReach = within(diagram).getByLabelText(/Neuron \(2, 1, 1\).*active/i);
-    const emptyReach = within(diagram).getByLabelText(/Neuron \(3, 1, 1\).*empty/i);
-    const unrelated = within(diagram).getByLabelText(/Neuron \(2, 2, 1\).*empty/i);
+    const source = within(diagram).getByTitle(/Neuron \(1, 1, 1\).*active/i);
+    const activeReach = within(diagram).getByTitle(/Neuron \(2, 1, 1\).*active/i);
+    const emptyReach = within(diagram).getByTitle(/Neuron \(3, 1, 1\).*empty/i);
+    const unrelated = within(diagram).getByTitle(/Neuron \(2, 2, 1\).*empty/i);
 
     fireEvent.mouseEnter(source);
 
@@ -1406,8 +1407,8 @@ describe("GraphNodeView", () => {
     });
 
     const diagram = screen.getByTestId("cluster-diagram-neuron_cluster");
-    const source = within(diagram).getByLabelText(/Neuron \(1, 1, 1\).*active/i);
-    const emptyReach = within(diagram).getByLabelText(/Neuron \(2, 1, 1\).*empty/i);
+    const source = within(diagram).getByTitle(/Neuron \(1, 1, 1\).*active/i);
+    const emptyReach = within(diagram).getByTitle(/Neuron \(2, 1, 1\).*empty/i);
 
     fireEvent.mouseEnter(source);
     expect(emptyReach).toHaveClass("bg-cyan/15");
@@ -1468,7 +1469,7 @@ describe("GraphNodeView", () => {
     });
 
     const diagram = screen.getByTestId("cluster-diagram-neuron_cluster");
-    const emptyCell = within(diagram).getByLabelText(/Neuron \(2, 1, 1\).*empty/i);
+    const emptyCell = within(diagram).getByTitle(/Neuron \(2, 1, 1\).*empty/i);
 
     fireEvent.mouseEnter(emptyCell);
 
