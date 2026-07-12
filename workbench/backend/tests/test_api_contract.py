@@ -1765,9 +1765,6 @@ class ApiIntegrationContractTests(unittest.TestCase):
 
         from workbench.backend.api import app
         from workbench.backend.core.config import get_workbench_api_settings
-        from workbench.backend.training_jobs.cgroups import (
-            requested_cancellation_capability,
-        )
 
         async def call_api() -> httpx.Response:
             transport = httpx.ASGITransport(app=app)
@@ -1786,8 +1783,9 @@ class ApiIntegrationContractTests(unittest.TestCase):
             {
                 "authMode": "none",
                 "trainingEnabled": False,
-                "trainingCancellationCapability": requested_cancellation_capability(
-                    get_workbench_api_settings().training_cancellation_mode
+                "trainingCancellationCapability": (
+                    app.state.workbench_services.training_jobs
+                    .cancellation_capability()
                 ),
                 "logDeletionEnabled": False,
                 "configSnapshotsEnabled": False,
@@ -1802,6 +1800,84 @@ class ApiIntegrationContractTests(unittest.TestCase):
                 "dataSources": [],
             },
         )
+
+    def test_capabilities_endpoint_uses_app_scoped_training_interface(
+        self,
+    ) -> None:
+        from unittest.mock import patch
+
+        import httpx
+
+        from workbench.backend.api import WorkbenchApiSettings, create_app
+
+        test_app = create_app(
+            WorkbenchApiSettings(training_cancellation_mode="strict-cgroup")
+        )
+        training_jobs = test_app.state.workbench_services.training_jobs
+
+        async def call_api() -> httpx.Response:
+            transport = httpx.ASGITransport(app=test_app)
+            async with httpx.AsyncClient(
+                transport=transport,
+                base_url="http://testserver",
+            ) as client:
+                return await client.get("/capabilities")
+
+        with patch.object(
+            training_jobs,
+            "cancellation_capability",
+            return_value="process-group",
+            create=True,
+        ) as observe_capability:
+            response = asyncio.run(call_api())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json()["trainingCancellationCapability"],
+            "process-group",
+        )
+        observe_capability.assert_called_once_with()
+
+    def test_capabilities_endpoint_degrades_unavailable_strict_probe(
+        self,
+    ) -> None:
+        from unittest.mock import patch
+
+        import httpx
+
+        from workbench.backend.api import WorkbenchApiSettings, create_app
+        from workbench.backend.training_jobs.cgroups import (
+            CgroupV2Manager,
+            StrictCancellationUnavailable,
+        )
+
+        with patch.object(
+            CgroupV2Manager,
+            "__init__",
+            side_effect=StrictCancellationUnavailable("missing /proc"),
+        ) as construct_cgroups:
+            test_app = create_app(
+                WorkbenchApiSettings(
+                    training_cancellation_mode="strict-cgroup",
+                )
+            )
+
+            async def call_api() -> httpx.Response:
+                transport = httpx.ASGITransport(app=test_app)
+                async with httpx.AsyncClient(
+                    transport=transport,
+                    base_url="http://testserver",
+                ) as client:
+                    return await client.get("/capabilities")
+
+            response = asyncio.run(call_api())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json()["trainingCancellationCapability"],
+            "unsupported",
+        )
+        construct_cgroups.assert_called_once_with()
 
     def test_capabilities_endpoint_keeps_hosted_uploads_disabled_by_default(
         self,

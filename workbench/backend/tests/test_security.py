@@ -229,6 +229,9 @@ class RouteAuthIntegrationTests(unittest.TestCase):
                 }
 
         class FakeTrainingJobService:
+            def cancellation_capability(self) -> str:
+                return "process-group"
+
             def create_job(self, command) -> TrainingJobView:
                 return TrainingJobView(
                     id="job-1",

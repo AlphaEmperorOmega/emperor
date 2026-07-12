@@ -51,14 +51,6 @@ def current_cgroup_path() -> Path:
     return CGROUP_V2_MOUNT / relative.lstrip("/")
 
 
-def requested_cancellation_capability(
-    mode: TrainingCancellationMode,
-) -> TrainingCancellationCapability:
-    if mode == "process-group":
-        return "process-group" if os.name == "posix" else "unsupported"
-    return "strict-cgroup" if CgroupV2Manager().is_available() else "unsupported"
-
-
 @dataclass(frozen=True, slots=True)
 class CgroupV2Job:
     path: Path
@@ -153,20 +145,30 @@ class CgroupV2Manager:
         base_path: Path | None = None,
         namespace: str = CGROUP_NAMESPACE,
     ) -> None:
-        self.base_path = base_path or (
-            current_cgroup_path() if _is_linux() else CGROUP_V2_MOUNT
-        )
+        self._base_path = base_path
         self.namespace = require_safe_name(namespace, "cgroup namespace")
+
+    @property
+    def base_path(self) -> Path:
+        if self._base_path is None:
+            self._base_path = (
+                current_cgroup_path() if _is_linux() else CGROUP_V2_MOUNT
+            )
+        return self._base_path
 
     def is_available(self) -> bool:
         if not _is_linux():
             return False
         if not (CGROUP_V2_MOUNT / "cgroup.controllers").exists():
             return False
-        return (
-            self.base_path.is_dir()
-            and os.access(self.base_path, os.W_OK | os.X_OK)
-        )
+        try:
+            base_path = self.base_path
+            return base_path.is_dir() and os.access(
+                base_path,
+                os.W_OK | os.X_OK,
+            )
+        except (OSError, StrictCancellationUnavailable):
+            return False
 
     def require_available(self) -> None:
         if not _is_linux():
@@ -238,5 +240,4 @@ __all__ = [
     "StrictCancellationUnavailable",
     "TrainingCancellationCapability",
     "TrainingCancellationMode",
-    "requested_cancellation_capability",
 ]

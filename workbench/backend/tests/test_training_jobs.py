@@ -694,13 +694,23 @@ class TrainingJobTests(unittest.TestCase):
 
     def test_strict_cgroup_unavailable_fails_training_start(self) -> None:
         class UnavailableCgroupManager:
+            def __init__(self) -> None:
+                self.probe_count = 0
+                self.create_count = 0
+
+            def is_available(self) -> bool:
+                self.probe_count += 1
+                return False
+
             def create_job_cgroup(self, job_id: str):
+                self.create_count += 1
                 raise StrictCancellationUnavailable(
                     "Strict training cancellation requires a writable cgroup."
                 )
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
+            cgroups = UnavailableCgroupManager()
             manager = TrainingJobServiceHarness(
                 root=root / "jobs",
                 logs_root=root / "logs",
@@ -708,10 +718,14 @@ class TrainingJobTests(unittest.TestCase):
                     cwd=Path.cwd(),
                     runner=FakeRunner(),
                     cancellation_mode="strict-cgroup",
-                    cgroup_manager=UnavailableCgroupManager(),
+                    cgroup_manager=cgroups,
                 ),
             )
 
+            self.assertEqual(
+                manager.service.cancellation_capability(),
+                "unsupported",
+            )
             with self.assertRaisesRegex(
                 InspectorError,
                 "requires a writable cgroup",
@@ -724,6 +738,9 @@ class TrainingJobTests(unittest.TestCase):
                     log_folder="strict_unavailable",
                     monitors=[],
                 )
+
+        self.assertEqual(cgroups.probe_count, 1)
+        self.assertEqual(cgroups.create_count, 1)
 
     def test_terminal_progress_event_does_not_finish_live_process_scope(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

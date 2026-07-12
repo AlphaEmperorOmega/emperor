@@ -11,11 +11,12 @@ from workbench.backend.api.mutation_policy import (
     operation_policy_enabled,
 )
 from workbench.backend.core.config import WorkbenchApiSettings
-from workbench.backend.dependencies import get_workbench_settings
-from workbench.backend.schemas import CapabilitiesResponse
-from workbench.backend.training_jobs.cgroups import (
-    requested_cancellation_capability,
+from workbench.backend.dependencies import (
+    get_training_job_service,
+    get_workbench_settings,
 )
+from workbench.backend.schemas import CapabilitiesResponse
+from workbench.backend.training_jobs import TrainingJobService
 
 router = APIRouter(
     tags=["capabilities"],
@@ -30,6 +31,10 @@ router = APIRouter(
 )
 async def capabilities(
     settings: Annotated[WorkbenchApiSettings, Depends(get_workbench_settings)],
+    training_jobs: Annotated[
+        TrainingJobService,
+        Depends(get_training_job_service),
+    ],
 ) -> CapabilitiesResponse:
     local_mutations_enabled = operation_policy_enabled(
         HttpOperationPolicy.LOCAL_MUTATION,
@@ -42,9 +47,7 @@ async def capabilities(
     return CapabilitiesResponse(
         authMode=settings.auth_mode,
         trainingEnabled=local_mutations_enabled,
-        trainingCancellationCapability=requested_cancellation_capability(
-            settings.training_cancellation_mode
-        ),
+        trainingCancellationCapability=training_jobs.cancellation_capability(),
         logDeletionEnabled=local_mutations_enabled,
         configSnapshotsEnabled=local_mutations_enabled,
         uploadsEnabled=log_imports_enabled,

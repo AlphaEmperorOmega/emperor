@@ -21,6 +21,7 @@ from workbench.backend.tensorboard.readers import (
 from workbench.backend.training_jobs.cgroups import (
     CgroupV2Manager,
     StrictCancellationUnavailable,
+    TrainingCancellationCapability,
     TrainingCancellationMode,
 )
 from workbench.backend.training_jobs.contracts import (
@@ -100,14 +101,12 @@ class _TrainingJobRuntime:
             )
         if worker_launcher is not None:
             self.worker_launcher = worker_launcher
-            self.cgroup_manager = worker_launcher.cgroup_manager
         else:
-            self.cgroup_manager = cgroup_manager or CgroupV2Manager()
             self.worker_launcher = TrainingWorkerLauncher(
                 cwd=self.cwd,
                 runner=runner,
                 cancellation_mode=cancellation_mode,
-                cgroup_manager=self.cgroup_manager,
+                cgroup_manager=cgroup_manager,
             )
         self.monitor_reader = TensorBoardMonitorReader()
         self.parameter_status_reader = TensorBoardParameterStatusReader()
@@ -121,6 +120,9 @@ class _TrainingJobRuntime:
         self._processes: dict[str, ProcessHandle] = {}
         self._released_job_ids: set[str] = set()
         self._live_projection_cache = TrainingLiveProjectionCache()
+
+    def cancellation_capability(self) -> TrainingCancellationCapability:
+        return self.worker_launcher.cancellation_capability()
 
     def create_job_from_command(
         self,
@@ -523,7 +525,10 @@ class _TrainingJobRuntime:
     ) -> ProcessHandle | None:
         if job.cancellation_mode != "strict-cgroup":
             return None
-        cgroup = self.cgroup_manager.from_job_id(job.id)
+        cgroup = self.worker_launcher.recover_job_cgroup(
+            job.id,
+            persisted_mode=job.cancellation_mode,
+        )
         if cgroup is None or not cgroup.has_processes():
             return None
         return PersistedCgroupProcessHandle(
@@ -538,7 +543,10 @@ class _TrainingJobRuntime:
             process = self._processes.get(job.id)
         if process is not None and process.poll() is None:
             return True
-        cgroup = self.cgroup_manager.from_job_id(job.id)
+        cgroup = self.worker_launcher.recover_job_cgroup(
+            job.id,
+            persisted_mode=job.cancellation_mode,
+        )
         return bool(cgroup and cgroup.has_processes())
 
     def _release_terminal_resources(self, job: TrainingJobRecord) -> None:
@@ -555,10 +563,9 @@ class _TrainingJobRuntime:
                     process.wait(timeout=0)
                 except subprocess.TimeoutExpired:
                     return
-            cgroup = (
-                self.cgroup_manager.from_job_id(job.id)
-                if job.cancellation_mode == "strict-cgroup"
-                else None
+            cgroup = self.worker_launcher.recover_job_cgroup(
+                job.id,
+                persisted_mode=job.cancellation_mode,
             )
             if cgroup is not None:
                 if cgroup.has_processes():

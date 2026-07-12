@@ -10,6 +10,7 @@ from workbench.backend.log_experiments import (
 )
 from workbench.backend.training_jobs.cgroups import (
     CgroupV2Manager,
+    TrainingCancellationCapability,
     TrainingCancellationMode,
 )
 from workbench.backend.training_jobs.contracts import (
@@ -18,7 +19,10 @@ from workbench.backend.training_jobs.contracts import (
     TrainingJobView,
     TrainingProgressEventsPage,
 )
-from workbench.backend.training_jobs.launcher import ProcessRunner
+from workbench.backend.training_jobs.launcher import (
+    ProcessRunner,
+    TrainingWorkerLauncher,
+)
 from workbench.backend.training_jobs.runtime import (
     _TrainingJobRuntime,
 )
@@ -35,6 +39,7 @@ class TrainingJobService:
         logs_root: Path | str = "logs",
         runner: ProcessRunner | None = None,
         job_store: TrainingJobStore | None = None,
+        worker_launcher: TrainingWorkerLauncher | None = None,
         cancellation_mode: TrainingCancellationMode | None = None,
         cgroup_manager: CgroupV2Manager | None = None,
     ) -> None:
@@ -44,6 +49,7 @@ class TrainingJobService:
             logs_root=logs_root,
             runner=runner,
             job_store=job_store,
+            worker_launcher=worker_launcher,
             cancellation_mode=cancellation_mode,
             cgroup_manager=cgroup_manager,
         )
@@ -113,6 +119,9 @@ class TrainingJobService:
 
     def cancel_job(self, job_id: str) -> TrainingJobView:
         return self._runtime.cancel_job_view(job_id)
+
+    def cancellation_capability(self) -> TrainingCancellationCapability:
+        return self._runtime.cancellation_capability()
 
     def active_jobs(self) -> list[ActiveTrainingJob]:
         return self._runtime.active_job_views()

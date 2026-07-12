@@ -11,12 +11,14 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from threading import Lock
 from typing import Any, Protocol
 
 from workbench.backend.training_jobs.cgroups import (
     CgroupV2Job,
     CgroupV2Manager,
     StrictCancellationUnavailable,
+    TrainingCancellationCapability,
     TrainingCancellationMode,
 )
 
@@ -49,6 +51,60 @@ class ProcessRunner(Protocol):
         log_path: Path,
     ) -> ProcessHandle:
         ...
+
+
+class TrainingCancellationAdapter:
+    """Configured containment selection, observation, and cgroup recovery."""
+
+    def __init__(
+        self,
+        *,
+        mode: TrainingCancellationMode,
+        cgroup_manager: CgroupV2Manager | None = None,
+    ) -> None:
+        self.mode = mode
+        self._cgroup_manager = cgroup_manager
+        self._manager_lock = Lock()
+
+    def capability(self) -> TrainingCancellationCapability:
+        if self.mode == "process-group":
+            return "process-group" if os.name == "posix" else "unsupported"
+        try:
+            manager = self._manager()
+            return "strict-cgroup" if manager.is_available() else "unsupported"
+        except (OSError, StrictCancellationUnavailable):
+            return "unsupported"
+
+    def create_job_cgroup(self, job_id: str) -> CgroupV2Job:
+        if self.mode != "strict-cgroup":
+            raise RuntimeError(
+                "Per-job cgroups are only valid in strict-cgroup mode."
+            )
+        return self._manager().create_job_cgroup(job_id)
+
+    def recover_job_cgroup(
+        self,
+        job_id: str,
+        *,
+        persisted_mode: TrainingCancellationMode,
+    ) -> CgroupV2Job | None:
+        if persisted_mode != "strict-cgroup":
+            return None
+        try:
+            return self._manager().from_job_id(job_id)
+        except (OSError, StrictCancellationUnavailable):
+            return None
+
+    def _manager(self) -> CgroupV2Manager:
+        manager = self._cgroup_manager
+        if manager is not None:
+            return manager
+        with self._manager_lock:
+            manager = self._cgroup_manager
+            if manager is None:
+                manager = CgroupV2Manager()
+                self._cgroup_manager = manager
+        return manager
 
 
 @dataclass(frozen=True, slots=True)
@@ -251,12 +307,33 @@ class TrainingWorkerLauncher:
     ) -> None:
         self.cwd = cwd
         self.runner = runner or SubprocessRunner()
-        self.cancellation_mode: TrainingCancellationMode = (
+        selected_mode: TrainingCancellationMode = (
             cancellation_mode
             or ("process-group" if runner is not None else "strict-cgroup")
         )
-        self.cgroup_manager = cgroup_manager or CgroupV2Manager()
+        self.cancellation = TrainingCancellationAdapter(
+            mode=selected_mode,
+            cgroup_manager=cgroup_manager,
+        )
         self.cgroup_join_timeout = cgroup_join_timeout
+
+    @property
+    def cancellation_mode(self) -> TrainingCancellationMode:
+        return self.cancellation.mode
+
+    def cancellation_capability(self) -> TrainingCancellationCapability:
+        return self.cancellation.capability()
+
+    def recover_job_cgroup(
+        self,
+        job_id: str,
+        *,
+        persisted_mode: TrainingCancellationMode,
+    ) -> CgroupV2Job | None:
+        return self.cancellation.recover_job_cgroup(
+            job_id,
+            persisted_mode=persisted_mode,
+        )
 
     def launch(
         self,
@@ -272,7 +349,7 @@ class TrainingWorkerLauncher:
         ready_path: Path | None = None
         launched_command = command
         if self.cancellation_mode == "strict-cgroup":
-            cgroup = self.cgroup_manager.create_job_cgroup(str(payload["id"]))
+            cgroup = self.cancellation.create_job_cgroup(str(payload["id"]))
             ready_path = job_root / "cgroup.ready"
             launched_command = self._wrap_strict_cgroup_command(
                 command,
@@ -398,6 +475,7 @@ __all__ = [
     "ProcessGroupHandle",
     "ProcessRunner",
     "SubprocessRunner",
+    "TrainingCancellationAdapter",
     "TrainingProcessContainment",
     "TrainingWorkerLaunch",
     "TrainingWorkerLauncher",
