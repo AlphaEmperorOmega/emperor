@@ -20,7 +20,7 @@ from tokenizers.models import WordPiece
 from tokenizers.normalizers import BertNormalizer
 from tokenizers.pre_tokenizers import BertPreTokenizer
 
-from emperor.base.utils import DataModule
+from emperor.base.data import DataModule
 
 SOURCE_COMMIT = "a3d2e0d26b56f3846f66a952536ffed4e401d05a"
 SOURCE_BASE_URL = (

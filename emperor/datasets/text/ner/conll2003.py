@@ -3,7 +3,7 @@ import torch.utils.data
 
 from datasets import load_dataset
 
-from emperor.base.utils import DataModule
+from emperor.base.data import DataModule
 
 
 # CoNLL-2003 NER tag set (BIO scheme)

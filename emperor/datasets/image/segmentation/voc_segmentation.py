@@ -7,7 +7,7 @@ import torchvision.transforms.functional as F
 from PIL import Image
 from torchvision.transforms.transforms import Compose
 
-from emperor.base.utils import DataModule
+from emperor.base.data import DataModule
 
 
 class _SegmentationDataset(torch.utils.data.Dataset):

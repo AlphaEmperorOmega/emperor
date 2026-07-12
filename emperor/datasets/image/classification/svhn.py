@@ -3,7 +3,7 @@ import torch.utils
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
 
-from emperor.base.utils import DataModule
+from emperor.base.data import DataModule
 from torchvision.transforms.transforms import Compose
 
 

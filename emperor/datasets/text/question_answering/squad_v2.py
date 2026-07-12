@@ -5,7 +5,7 @@ from datasets import load_dataset
 from torchtext.data.utils import get_tokenizer
 from torchtext.vocab import build_vocab_from_iterator
 
-from emperor.base.utils import DataModule
+from emperor.base.data import DataModule
 
 
 def _yield_tokens(samples, tokenizer):

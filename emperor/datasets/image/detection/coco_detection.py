@@ -5,7 +5,7 @@ import torchvision.transforms as transforms
 
 from torchvision.transforms.transforms import Compose
 
-from emperor.base.utils import DataModule
+from emperor.base.data import DataModule
 
 
 def _collate_fn(batch):

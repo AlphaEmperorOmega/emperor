@@ -3,7 +3,7 @@ import torch.utils.data
 import numpy as np
 import gymnasium as gym
 
-from emperor.base.utils import DataModule
+from emperor.base.data import DataModule
 
 
 class _TransitionDataset(torch.utils.data.Dataset):

@@ -2,9 +2,9 @@ import torch
 import torch.utils
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
-
-from emperor.base.utils import DataModule
 from torchvision.transforms.transforms import Compose
+
+from emperor.base.data import DataModule
 
 
 class Cifar100(DataModule):

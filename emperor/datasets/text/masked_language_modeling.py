@@ -9,7 +9,7 @@ from torchtext.datasets import WikiText2 as WikiText2Dataset
 from torchtext.datasets import WikiText103 as WikiText103Dataset
 from torchtext.vocab import build_vocab_from_iterator
 
-from emperor.base.utils import DataModule
+from emperor.base.data import DataModule
 from emperor.datasets.text.vocabulary import (
     BERT_SPECIAL_TOKENS,
     BertSpecialTokenIds,

@@ -13,7 +13,7 @@ from torch import Tensor
 from torchtext.datasets import PennTreebank as PennTreebankDataset
 from torchtext.datasets import WikiText2 as WikiText2Dataset
 
-from emperor.base.utils import DataModule
+from emperor.base.data import DataModule
 from emperor.datasets.text.masked_language_modeling import (
     MaskedLanguageModelingCollator,
 )
