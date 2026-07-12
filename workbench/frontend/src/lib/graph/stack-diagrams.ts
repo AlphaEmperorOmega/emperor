@@ -1,8 +1,7 @@
 import { type GraphNode, type InspectResponse } from "@/lib/api";
 import {
-  STACK_CONTAINER_TYPE_NAMES,
-  STACK_DIAGRAM_LIMIT,
-  STACK_DIAGRAM_VISIBLE_BEFORE_OVERFLOW,
+  graphDiagramLimits,
+  graphDisplayTypeNames,
 } from "@/lib/graph/constants";
 import {
   directChildNodes,
@@ -97,18 +96,18 @@ function createStackDiagramCells(
   nodesById: Map<string, GraphNode>,
 ): StackDiagramCell[] {
   const visibleEntries =
-    entries.length > STACK_DIAGRAM_LIMIT
-      ? entries.slice(0, STACK_DIAGRAM_VISIBLE_BEFORE_OVERFLOW)
+    entries.length > graphDiagramLimits.stack.total
+      ? entries.slice(0, graphDiagramLimits.stack.visibleBeforeOverflow)
       : entries;
   const layerCells = visibleEntries.map((entry) => stackLayerCell(entry, navigation, nodesById));
 
-  if (entries.length <= STACK_DIAGRAM_LIMIT) {
+  if (entries.length <= graphDiagramLimits.stack.total) {
     return layerCells;
   }
 
   const lastEntry = entries[entries.length - 1];
   const hiddenLayerCount =
-    entries.length - STACK_DIAGRAM_VISIBLE_BEFORE_OVERFLOW - 1;
+    entries.length - graphDiagramLimits.stack.visibleBeforeOverflow - 1;
 
   return [
     ...layerCells,
@@ -142,7 +141,7 @@ function stackDiagramFromContainer(
     cells: createStackDiagramCells(layerEntries, navigation, nodesById),
     ...(dims ? { dims } : {}),
     totalLayers: layerEntries.length,
-    hasOverflow: layerEntries.length > STACK_DIAGRAM_LIMIT,
+    hasOverflow: layerEntries.length > graphDiagramLimits.stack.total,
   };
 }
 
@@ -174,7 +173,10 @@ export function buildStackDiagrams(
       continue;
     }
 
-    if (!STACK_CONTAINER_TYPE_NAMES.has(node.typeName) || pathSegment === "expert_modules") {
+    if (
+      !graphDisplayTypeNames.stackContainers.has(node.typeName) ||
+      pathSegment === "expert_modules"
+    ) {
       continue;
     }
 

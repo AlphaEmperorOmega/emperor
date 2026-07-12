@@ -1,44 +1,80 @@
-export const NODE_WIDTH = 360;
-export const SIMPLE_NODE_HEIGHT = 118;
-export const GRAPH_NODE_VERTICAL_PADDING = 32;
-export const GRAPH_NODE_TITLE_LINE_HEIGHT = 24;
-export const GRAPH_NODE_SUBTITLE_MARGIN_TOP = 6;
-export const GRAPH_NODE_SUBTITLE_HEIGHT = 20;
-export const GRAPH_NODE_ACTION_BAR_MARGIN_TOP = 6;
-export const GRAPH_NODE_ACTION_BAR_HEIGHT = 32;
-export const GRAPH_NODE_CONTENT_MARGIN_TOP = 8;
-export const GRAPH_NODE_METADATA_MARGIN_TOP = 12;
-export const CHILD_SUMMARY_EMPTY_HEIGHT = 24;
-export const CHILD_SUMMARY_ROW_HEIGHT = 36;
-export const CHILD_SUMMARY_ROW_GAP = 8;
-export const PARAMETER_SHAPE_LIST_MARGIN_TOP = 8;
-export const PARAMETER_SHAPE_ROW_HEIGHT = 28;
-export const PARAMETER_SHAPE_ROW_GAP = 4;
-export const EXPERT_DIAGRAM_HEIGHT = 104;
-export const EXPERT_DIAGRAM_LIMIT = 7;
-export const EXPERT_DIAGRAM_VISIBLE_BEFORE_OVERFLOW = 5;
-export const STACK_DIAGRAM_LIMIT = 3;
-export const STACK_DIAGRAM_VISIBLE_BEFORE_OVERFLOW = 2;
-export const LAYER_STACK_SUMMARY_LIMIT = 3;
-export const LAYER_STACK_VISIBLE_BEFORE_OVERFLOW = 2;
-export const CLUSTER_DIAGRAM_CELL_HEIGHT = 20;
-export const CLUSTER_DIAGRAM_CELL_GAP = 4;
-export const CLUSTER_DIAGRAM_HEADER_HEIGHT = 52;
-export const CLUSTER_DIAGRAM_MAX_DIM = 8;
-export const CLUSTER_DIAGRAM_MAX_PLANES = 4;
-export const DETAIL_ROW_GAP = 4;
-export const DETAIL_ROW_HEIGHT = 32;
-export const GRAPH_VERTICAL_CARD_GAP = 24;
-export const GRAPH_HORIZONTAL_CARD_GAP = 72;
-export const SEMANTIC_LABEL_TYPE_NAMES = new Set([
-  "LayerStack",
-  "ModuleList",
-  "Sequential",
-]);
-export const STACK_CONTAINER_TYPE_NAMES = new Set([
-  "LayerStack",
-  "ModuleList",
-  "Sequential",
-]);
-export const GATE_SUMMARY_LABEL = "Gate";
-export const HALTING_SUMMARY_LABEL = "Halting mechanism";
+export const graphCardGeometry = {
+  width: 360,
+  simpleHeight: 118,
+  paddingBlock: 16,
+  titleLineHeight: 24,
+  subtitle: {
+    marginBlockStart: 6,
+    height: 20,
+  },
+  actionBar: {
+    marginBlockStart: 6,
+    height: 32,
+  },
+  contentMarginBlockStart: 8,
+  details: {
+    marginBlockStart: 12,
+    rowGap: 4,
+    rowHeight: 32,
+  },
+  childSummary: {
+    rowGap: 8,
+    rowHeight: 36,
+  },
+  parameterShapes: {
+    marginBlockStart: 8,
+    rowGap: 4,
+    rowHeight: 28,
+  },
+  expertDiagram: {
+    height: 104,
+  },
+  clusterDiagram: {
+    cellSize: 20,
+    cellGap: 4,
+    headerHeight: 52,
+  },
+  layout: {
+    nodeGap: 24,
+    rankGap: 72,
+  },
+} as const;
+
+export const parameterActivityMinimapGeometry = {
+  activityNodeWidth: 104,
+  branchNodeWidth: 42,
+  nodeHeight: 42,
+  nodeGap: graphCardGeometry.layout.nodeGap,
+  rankGap: Math.round(
+    (graphCardGeometry.layout.rankGap / graphCardGeometry.width) * 104,
+  ),
+} as const;
+
+export const graphDiagramLimits = {
+  expert: {
+    total: 7,
+    visibleBeforeOverflow: 5,
+  },
+  stack: {
+    total: 3,
+    visibleBeforeOverflow: 2,
+  },
+  layerSummary: {
+    total: 3,
+    visibleBeforeOverflow: 2,
+  },
+  cluster: {
+    maxDimension: 8,
+    maxPlanes: 4,
+  },
+} as const;
+
+export const graphDisplayTypeNames = {
+  semanticLabels: new Set(["LayerStack", "ModuleList", "Sequential"]),
+  stackContainers: new Set(["LayerStack", "ModuleList", "Sequential"]),
+} as const;
+
+export const graphDisplayLabels = {
+  gateSummary: "Gate",
+  haltingSummary: "Halting mechanism",
+} as const;

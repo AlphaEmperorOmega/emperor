@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { GraphNodeChildSummaries } from "@/features/workbench/components/graph/graph-node-child-summaries";
 import { type GraphParameterActivity } from "@/lib/graph";
+import { graphCardGeometry } from "@/lib/graph/constants";
 
 const activity: GraphParameterActivity = {
   targetPath: "main_model.0.model",
@@ -34,7 +35,6 @@ const activity: GraphParameterActivity = {
 };
 
 const neutralSummaryRowClasses = [
-  "h-9",
   "rounded-[10px]",
   "border",
   "border-line-soft",
@@ -54,6 +54,9 @@ const mechanismHighlightClasses = [
 
 function expectNeutralSummaryRow(row: HTMLElement) {
   expect(row).toHaveClass(...neutralSummaryRowClasses);
+  expect(row).toHaveStyle({
+    height: `${graphCardGeometry.childSummary.rowHeight}px`,
+  });
   expect(row.className).not.toContain("linear-gradient");
 
   for (const className of mechanismHighlightClasses) {
@@ -109,7 +112,10 @@ describe("GraphNodeChildSummaries", () => {
       "graph-parameter-indicator-bias",
     );
 
-    expect(row).toHaveClass("h-9", "rounded-[10px]", "gap-2", "overflow-hidden");
+    expect(row).toHaveClass("rounded-[10px]", "gap-2", "overflow-hidden");
+    expect(row).toHaveStyle({
+      height: `${graphCardGeometry.childSummary.rowHeight}px`,
+    });
     expect(row).toHaveAttribute("aria-label", "LinearLayer 128 -> 64");
     expect(row).not.toHaveAttribute("role", "button");
     expect(row).not.toHaveAttribute("tabindex");

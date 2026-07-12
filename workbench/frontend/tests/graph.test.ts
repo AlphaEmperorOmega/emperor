@@ -42,11 +42,17 @@ import {
   buildLinearMonitorComparisonCandidateGroups,
   buildLinearMonitorComparisonCandidates,
   createMonitorTargetResolver,
+  decorateGraphSelection,
+  deriveGraphDisplayModel,
+  projectGraphDisplay,
   resolveMonitorTarget,
   resolveLinearMonitorTarget,
+  type GraphDetailMode,
+  type ProjectGraphDisplayOptions,
 } from "@/lib/graph";
-import { SIMPLE_NODE_HEIGHT } from "@/lib/graph/constants";
+import { graphCardGeometry } from "@/lib/graph/constants";
 import { inspectResponseSchema, type GraphNode, type InspectResponse } from "@/lib/api";
+import { workbenchVisualTokens } from "@/lib/visual-tokens";
 
 type GraphRole = GraphNode["graphRole"];
 
@@ -84,6 +90,37 @@ function graph(
       source,
       target,
     })),
+  };
+}
+
+type DisplayLayoutOptions = Partial<ProjectGraphDisplayOptions> & {
+  graphDetailMode?: GraphDetailMode;
+  selectedNodeId?: string | null;
+};
+
+function layoutGraphDisplay(
+  graph: InspectResponse | undefined,
+  options: DisplayLayoutOptions = {},
+) {
+  const {
+    graphDetailMode = "basic",
+    selectedNodeId = null,
+    ...projectionOptions
+  } = options;
+  const model = deriveGraphDisplayModel(graph, graphDetailMode);
+  const projection = projectGraphDisplay(model, {
+    graphScope: "opened",
+    expandedGraphNodeIds: new Set(),
+    expandedDetailNodeIds: new Set(),
+    onActivateNode: () => {},
+    onToggleExpansion: () => {},
+    onToggleDetails: () => {},
+    ...projectionOptions,
+  });
+  const layout = layoutGraph(projection);
+  return {
+    ...layout,
+    nodes: decorateGraphSelection(layout.nodes, selectedNodeId),
   };
 }
 
@@ -2379,7 +2416,7 @@ describe("filterGraphByExpansion", () => {
   });
 });
 
-describe("layoutGraph", () => {
+describe("graph display projection and layout", () => {
   it("uses typeName for card labels even when the API label is semantic", () => {
     const g = graph(
       [
@@ -2391,18 +2428,8 @@ describe("layoutGraph", () => {
       ],
       [],
     );
-    const nav = buildGraphNavigation(g);
-    const { nodes } = layoutGraph(g, {
+    const { nodes } = layoutGraphDisplay(g, {
       graphDetailMode: "basic",
-      navigation: nav,
-      childSummariesById: buildChildSummaries(g, nav),
-      expandedGraphNodeIds: new Set(),
-      expandedDetailNodeIds: new Set(),
-      enableExpansion: true,
-      selectedNodeId: null,
-      onActivateNode: () => {},
-      onToggleExpansion: () => {},
-      onToggleDetails: () => {},
     });
 
     expect(nodes[0].data.label).toBe("LayerStack");
@@ -2416,18 +2443,9 @@ describe("layoutGraph", () => {
       [node("a", { parameterCount: 1234 }), node("b", { typeName: "Layer" })],
       [["a", "b"]],
     );
-    const nav = buildGraphNavigation(g);
-    const { nodes, edges } = layoutGraph(g, {
+    const { nodes, edges } = layoutGraphDisplay(g, {
       graphDetailMode: "basic",
-      navigation: nav,
-      childSummariesById: buildChildSummaries(g, nav),
-      expandedGraphNodeIds: new Set(),
-      expandedDetailNodeIds: new Set(),
-      enableExpansion: true,
       selectedNodeId: "a",
-      onActivateNode: () => {},
-      onToggleExpansion: () => {},
-      onToggleDetails: () => {},
     });
 
     expect(nodes.map((n) => n.id)).toEqual(["a", "b"]);
@@ -2437,6 +2455,10 @@ describe("layoutGraph", () => {
     expect(nodes[1].data.label).toBe("Layer");
     expect(typeof nodes[0].position.x).toBe("number");
     expect(edges.map((e) => e.id)).toEqual(["a-b"]);
+    expect(edges[0]).toMatchObject({
+      markerEnd: { color: workbenchVisualTokens.gradientMiddle },
+      style: { stroke: workbenchVisualTokens.violetDeep, strokeWidth: 2 },
+    });
   });
 
   it("does not reserve a header badge row in full mode", () => {
@@ -2444,18 +2466,9 @@ describe("layoutGraph", () => {
       [node("a", { parameterCount: 1234 }), node("b", { typeName: "Layer" })],
       [["a", "b"]],
     );
-    const nav = buildGraphNavigation(g);
-    const { nodes } = layoutGraph(g, {
+    const { nodes } = layoutGraphDisplay(g, {
       graphDetailMode: "full",
-      navigation: nav,
-      childSummariesById: buildChildSummaries(g, nav),
-      expandedGraphNodeIds: new Set(),
-      expandedDetailNodeIds: new Set(),
-      enableExpansion: true,
       selectedNodeId: "a",
-      onActivateNode: () => {},
-      onToggleExpansion: () => {},
-      onToggleDetails: () => {},
     });
 
     expect(nodes[0].data.height).toBe(164);
@@ -2474,18 +2487,9 @@ describe("layoutGraph", () => {
       ],
       [["a", "b"]],
     );
-    const nav = buildGraphNavigation(g);
-    const { nodes } = layoutGraph(g, {
+    const { nodes } = layoutGraphDisplay(g, {
       graphDetailMode: "basic",
-      navigation: nav,
-      childSummariesById: buildChildSummaries(g, nav),
-      expandedGraphNodeIds: new Set(),
-      expandedDetailNodeIds: new Set(),
-      enableExpansion: true,
       selectedNodeId: "a",
-      onActivateNode: () => {},
-      onToggleExpansion: () => {},
-      onToggleDetails: () => {},
     });
 
     expect(nodes[0].data.height).toBe(164);
@@ -2504,18 +2508,9 @@ describe("layoutGraph", () => {
       ],
       [["a", "b"]],
     );
-    const nav = buildGraphNavigation(g);
-    const { nodes } = layoutGraph(g, {
+    const { nodes } = layoutGraphDisplay(g, {
       graphDetailMode: "basic",
-      navigation: nav,
-      childSummariesById: buildChildSummaries(g, nav),
-      expandedGraphNodeIds: new Set(),
-      expandedDetailNodeIds: new Set(),
-      enableExpansion: true,
       selectedNodeId: "a",
-      onActivateNode: () => {},
-      onToggleExpansion: () => {},
-      onToggleDetails: () => {},
     });
 
     expect(nodes[0].data.height).toBe(200);
@@ -2533,18 +2528,9 @@ describe("layoutGraph", () => {
       ],
       [],
     );
-    const nav = buildGraphNavigation(g);
-    const { nodes } = layoutGraph(g, {
+    const { nodes } = layoutGraphDisplay(g, {
       graphDetailMode: "basic",
-      navigation: nav,
-      childSummariesById: buildChildSummaries(g, nav),
-      expandedGraphNodeIds: new Set(),
-      expandedDetailNodeIds: new Set(),
-      enableExpansion: true,
       selectedNodeId: "a",
-      onActivateNode: () => {},
-      onToggleExpansion: () => {},
-      onToggleDetails: () => {},
     });
 
     expect(nodes[0].data.height).toBe(156);
@@ -2569,18 +2555,9 @@ describe("layoutGraph", () => {
       ],
       [],
     );
-    const nav = buildGraphNavigation(g);
-    const { nodes } = layoutGraph(g, {
+    const { nodes } = layoutGraphDisplay(g, {
       graphDetailMode: "basic",
-      navigation: nav,
-      childSummariesById: buildChildSummaries(g, nav),
-      expandedGraphNodeIds: new Set(),
-      expandedDetailNodeIds: new Set(),
-      enableExpansion: true,
       selectedNodeId: "a",
-      onActivateNode: () => {},
-      onToggleExpansion: () => {},
-      onToggleDetails: () => {},
     });
 
     expect(nodes[0].data.height).toBe(156);
@@ -2600,18 +2577,10 @@ describe("layoutGraph", () => {
       ],
       [["a", "b"]],
     );
-    const nav = buildGraphNavigation(g);
-    const { nodes } = layoutGraph(g, {
+    const { nodes } = layoutGraphDisplay(g, {
       graphDetailMode: "basic",
-      navigation: nav,
-      childSummariesById: buildChildSummaries(g, nav),
-      expandedGraphNodeIds: new Set(),
       expandedDetailNodeIds: new Set(["a"]),
-      enableExpansion: true,
       selectedNodeId: "a",
-      onActivateNode: () => {},
-      onToggleExpansion: () => {},
-      onToggleDetails: () => {},
     });
 
     expect(nodes[0].data.height).toBe(244);
@@ -2638,30 +2607,14 @@ describe("layoutGraph", () => {
       ],
       [["a", "b"]],
     );
-    const nav = buildGraphNavigation(g);
-    const collapsed = layoutGraph(g, {
+    const collapsed = layoutGraphDisplay(g, {
       graphDetailMode: "basic",
-      navigation: nav,
-      childSummariesById: buildChildSummaries(g, nav),
-      expandedGraphNodeIds: new Set(),
-      expandedDetailNodeIds: new Set(),
-      enableExpansion: true,
       selectedNodeId: "a",
-      onActivateNode: () => {},
-      onToggleExpansion: () => {},
-      onToggleDetails: () => {},
     }).nodes[0];
-    const expanded = layoutGraph(g, {
+    const expanded = layoutGraphDisplay(g, {
       graphDetailMode: "basic",
-      navigation: nav,
-      childSummariesById: buildChildSummaries(g, nav),
-      expandedGraphNodeIds: new Set(),
       expandedDetailNodeIds: new Set(["a"]),
-      enableExpansion: true,
       selectedNodeId: "a",
-      onActivateNode: () => {},
-      onToggleExpansion: () => {},
-      onToggleDetails: () => {},
     }).nodes[0];
 
     expect(collapsed.data.height).toBe(200);
@@ -2697,26 +2650,16 @@ describe("layoutGraph", () => {
         ] as [string, string]),
       ],
     );
-    const nav = buildGraphNavigation(g);
-    const expertDiagramsById = buildExpertDiagrams(g, nav);
     const baseOptions = {
       graphDetailMode: "basic" as const,
-      navigation: nav,
-      childSummariesById: buildChildSummaries(g, nav),
-      expertDiagramsById,
-      expandedGraphNodeIds: new Set<string>(),
-      enableExpansion: true,
       selectedNodeId: "moe",
-      onActivateNode: () => {},
-      onToggleExpansion: () => {},
-      onToggleDetails: () => {},
     };
 
-    const collapsed = layoutGraph(g, {
+    const collapsed = layoutGraphDisplay(g, {
       ...baseOptions,
       expandedDetailNodeIds: new Set<string>(),
     }).nodes[0];
-    const expanded = layoutGraph(g, {
+    const expanded = layoutGraphDisplay(g, {
       ...baseOptions,
       expandedDetailNodeIds: new Set(["moe"]),
     }).nodes[0];
@@ -2752,26 +2695,16 @@ describe("layoutGraph", () => {
         `main_model.${index}`,
       ] as [string, string]),
     );
-    const nav = buildGraphNavigation(g);
-    const stackDiagramsById = buildStackDiagrams(g, nav);
     const baseOptions = {
       graphDetailMode: "basic" as const,
-      navigation: nav,
-      childSummariesById: buildChildSummaries(g, nav),
-      stackDiagramsById,
-      expandedGraphNodeIds: new Set<string>(),
-      enableExpansion: true,
       selectedNodeId: "main_model",
-      onActivateNode: () => {},
-      onToggleExpansion: () => {},
-      onToggleDetails: () => {},
     };
 
-    const collapsed = layoutGraph(g, {
+    const collapsed = layoutGraphDisplay(g, {
       ...baseOptions,
       expandedDetailNodeIds: new Set<string>(),
     }).nodes[0];
-    const expanded = layoutGraph(g, {
+    const expanded = layoutGraphDisplay(g, {
       ...baseOptions,
       expandedDetailNodeIds: new Set(["main_model"]),
     }).nodes[0];
@@ -2805,19 +2738,9 @@ describe("layoutGraph", () => {
       ],
       [],
     );
-    const nav = buildGraphNavigation(g);
-    const { nodes } = layoutGraph(g, {
+    const { nodes } = layoutGraphDisplay(g, {
       graphDetailMode: "basic",
-      navigation: nav,
-      childSummariesById: buildChildSummaries(g, nav),
-      clusterDiagramsById: buildClusterDiagrams(g),
-      expandedGraphNodeIds: new Set<string>(),
-      expandedDetailNodeIds: new Set<string>(),
-      enableExpansion: true,
       selectedNodeId: "neuron_cluster",
-      onActivateNode: () => {},
-      onToggleExpansion: () => {},
-      onToggleDetails: () => {},
     });
 
     expect(nodes[0].data.clusterDiagram?.instantiated).toBe(2);
@@ -2873,19 +2796,9 @@ describe("layoutGraph", () => {
         ["model.cluster", "model.cluster.terminal_b"],
       ],
     );
-    const nav = buildGraphNavigation(g);
-    const { nodes } = layoutGraph(g, {
+    const { nodes } = layoutGraphDisplay(g, {
       graphDetailMode: "basic",
-      navigation: nav,
-      childSummariesById: buildChildSummaries(g, nav),
-      clusterDiagramsById: buildClusterDiagrams(g),
-      expandedGraphNodeIds: new Set<string>(),
-      expandedDetailNodeIds: new Set<string>(),
-      enableExpansion: true,
       selectedNodeId: "model.cluster",
-      onActivateNode: () => {},
-      onToggleExpansion: () => {},
-      onToggleDetails: () => {},
     });
 
     const clusterNode = nodes.find((node) => node.id === "model.cluster");
@@ -2920,19 +2833,9 @@ describe("layoutGraph", () => {
         `main_model.layers.${index}`,
       ] as [string, string]),
     );
-    const nav = buildGraphNavigation(g);
-    const { nodes } = layoutGraph(g, {
+    const { nodes } = layoutGraphDisplay(g, {
       graphDetailMode: "basic",
-      navigation: nav,
-      childSummariesById: buildChildSummaries(g, nav),
-      stackDiagramsById: buildStackDiagrams(g, nav),
-      expandedGraphNodeIds: new Set<string>(),
-      expandedDetailNodeIds: new Set<string>(),
-      enableExpansion: true,
       selectedNodeId: "main_model",
-      onActivateNode: () => {},
-      onToggleExpansion: () => {},
-      onToggleDetails: () => {},
     });
 
     expect(nodes[0].data.stackDiagram?.cells.map((cell) => cell.label)).toEqual([
@@ -2959,40 +2862,18 @@ describe("layoutGraph", () => {
       ],
       [["a", "b"]],
     );
-    const nav = buildGraphNavigation(g);
-    const { nodes } = layoutGraph(g, {
+    const { nodes } = layoutGraphDisplay(g, {
       graphDetailMode: "simple",
-      navigation: nav,
-      childSummariesById: buildChildSummaries(g, nav),
-      expandedGraphNodeIds: new Set(),
       expandedDetailNodeIds: new Set(["a"]),
-      enableExpansion: true,
       selectedNodeId: "a",
-      onActivateNode: () => {},
-      onToggleExpansion: () => {},
-      onToggleDetails: () => {},
     });
 
     expect(nodes[0].data.graphDetailMode).toBe("simple");
-    expect(nodes[0].data.height).toBe(SIMPLE_NODE_HEIGHT);
-    expect(nodes[0].style?.height).toBe(SIMPLE_NODE_HEIGHT);
+    expect(nodes[0].data.height).toBe(graphCardGeometry.simpleHeight);
+    expect(nodes[0].style?.height).toBe(graphCardGeometry.simpleHeight);
   });
 
   it("returns empty layout for undefined graph", () => {
-    const nav = buildGraphNavigation(undefined);
-    expect(
-      layoutGraph(undefined, {
-        graphDetailMode: "basic",
-        navigation: nav,
-        childSummariesById: new Map(),
-        expandedGraphNodeIds: new Set(),
-        expandedDetailNodeIds: new Set(),
-        enableExpansion: true,
-        selectedNodeId: null,
-        onActivateNode: () => {},
-        onToggleExpansion: () => {},
-        onToggleDetails: () => {},
-      }),
-    ).toEqual({ nodes: [], edges: [] });
+    expect(layoutGraphDisplay(undefined)).toEqual({ nodes: [], edges: [] });
   });
 });

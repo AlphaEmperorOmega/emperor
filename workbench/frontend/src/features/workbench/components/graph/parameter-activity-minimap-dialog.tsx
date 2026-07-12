@@ -18,7 +18,6 @@ import {
   Background,
   Controls,
   Handle,
-  MarkerType,
   Position,
   ReactFlow,
   ReactFlowProvider,
@@ -42,21 +41,12 @@ import {
   type GraphParameterActivity,
   type ParameterActivityMinimapModel,
 } from "@/lib/graph";
-import {
-  GRAPH_HORIZONTAL_CARD_GAP,
-  GRAPH_VERTICAL_CARD_GAP,
-  NODE_WIDTH,
-} from "@/lib/graph/constants";
+import { parameterActivityMinimapGeometry } from "@/lib/graph/constants";
+import { workbenchGraphEdgeVisual } from "@/lib/graph/visuals";
 import { type GraphNode, type InspectResponse } from "@/lib/api";
+import { workbenchVisualTokens } from "@/lib/visual-tokens";
 import { cn } from "@/lib/utils";
 import { type MonitorChartsSource } from "@/types/monitor";
-
-const MINIMAP_NODE_WIDTH = 104;
-const MINIMAP_NODE_HEIGHT = 42;
-const MINIMAP_BRANCH_NODE_WIDTH = MINIMAP_NODE_HEIGHT;
-const MINIMAP_HORIZONTAL_CARD_GAP = Math.round(
-  (GRAPH_HORIZONTAL_CARD_GAP / NODE_WIDTH) * MINIMAP_NODE_WIDTH,
-);
 
 export type ParameterActivityMinimapNodeData = {
   nodeId: string;
@@ -102,7 +92,9 @@ function activityChannels(activity: GraphParameterActivity) {
 }
 
 function minimapNodeWidth(activity: GraphParameterActivity | undefined) {
-  return activity ? MINIMAP_NODE_WIDTH : MINIMAP_BRANCH_NODE_WIDTH;
+  return activity
+    ? parameterActivityMinimapGeometry.activityNodeWidth
+    : parameterActivityMinimapGeometry.branchNodeWidth;
 }
 
 function ParameterActivityMinimapNode({
@@ -119,9 +111,13 @@ function ParameterActivityMinimapNode({
       aria-label={nodeLabel}
       data-testid={`parameter-activity-minimap-node-${data.nodeId}`}
       className={cn(
-        "nodrag nopan edge flex h-[42px] items-center justify-center overflow-hidden rounded-card px-1.5 shadow-[0_18px_40px_-28px_rgba(0,0,0,0.95)] transition hover:brightness-110",
-        data.activity ? "w-[104px] gap-1" : "w-[42px]",
+        "nodrag nopan edge flex items-center justify-center overflow-hidden rounded-card px-1.5 shadow-[0_18px_40px_-28px_rgba(0,0,0,0.95)] transition hover:brightness-110",
+        data.activity ? "gap-1" : undefined,
       )}
+      style={{
+        height: parameterActivityMinimapGeometry.nodeHeight,
+        width: minimapNodeWidth(data.activity),
+      }}
     >
       <Handle
         type="target"
@@ -217,14 +213,14 @@ function layoutMinimapNodes({
   dagreGraph.setDefaultEdgeLabel(() => ({}));
   dagreGraph.setGraph({
     rankdir: "LR",
-    nodesep: GRAPH_VERTICAL_CARD_GAP,
-    ranksep: MINIMAP_HORIZONTAL_CARD_GAP,
+    nodesep: parameterActivityMinimapGeometry.nodeGap,
+    ranksep: parameterActivityMinimapGeometry.rankGap,
   });
   graph.nodes.forEach((node) => {
     const activity = activityByNodePath?.get(node.path);
     dagreGraph.setNode(node.id, {
       width: minimapNodeWidth(activity),
-      height: MINIMAP_NODE_HEIGHT,
+      height: parameterActivityMinimapGeometry.nodeHeight,
     });
   });
   graph.edges.forEach((edge) => {
@@ -245,11 +241,13 @@ function layoutMinimapNodes({
         type: "parameterActivityMinimapNode",
         position: {
           x: (position?.x ?? width / 2) - width / 2,
-          y: (position?.y ?? MINIMAP_NODE_HEIGHT / 2) - MINIMAP_NODE_HEIGHT / 2,
+          y:
+            (position?.y ?? parameterActivityMinimapGeometry.nodeHeight / 2) -
+            parameterActivityMinimapGeometry.nodeHeight / 2,
         },
         style: {
           width,
-          height: MINIMAP_NODE_HEIGHT,
+          height: parameterActivityMinimapGeometry.nodeHeight,
         },
         data: {
           nodeId: node.id,
@@ -268,8 +266,7 @@ function layoutMinimapNodes({
     id: edge.id,
     source: edge.source,
     target: edge.target,
-    markerEnd: { type: MarkerType.ArrowClosed, color: "#7c8dff" },
-    style: { stroke: "#8b5cf6", strokeWidth: 2 },
+    ...workbenchGraphEdgeVisual(),
   }));
 
   return { nodes, edges };
@@ -395,7 +392,7 @@ function ParameterActivityMinimapDialogContent({
               onlyRenderVisibleElements
               nodeClickDistance={4}
             >
-              <Background gap={22} color="rgba(255,255,255,0.045)" />
+              <Background gap={22} color={workbenchVisualTokens.lineSoft} />
               <Controls showInteractive={false} position="bottom-left" />
             </ReactFlow>
           </ReactFlowProvider>

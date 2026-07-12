@@ -33,6 +33,7 @@ import {
   parameterShapeDimsText,
   simpleGraphParamText,
 } from "@/lib/graph";
+import { graphCardGeometry } from "@/lib/graph/constants";
 import { cn } from "@/lib/utils";
 
 const GraphNodeViewportMovingContext = createContext(false);
@@ -224,10 +225,14 @@ const GraphNodeView = memo(function GraphNodeView({
         data-testid={`graph-node-card-${data.nodeId}`}
         onClick={handleActivate}
         className={cn(
-          "nodrag nopan edge relative flex w-full flex-col overflow-hidden rounded-card px-4 pb-4 pt-4 shadow-[0_18px_40px_-28px_rgba(0,0,0,0.95)] transition",
+          "nodrag nopan edge relative flex w-full flex-col overflow-hidden rounded-card px-4 shadow-[0_18px_40px_-28px_rgba(0,0,0,0.95)] transition",
           selected ? "edge-sel" : "hover:brightness-110",
         )}
-        style={{ height: data.height }}
+        style={{
+          height: data.height,
+          paddingBottom: graphCardGeometry.paddingBlock,
+          paddingTop: graphCardGeometry.paddingBlock,
+        }}
       >
         <button
           type="button"
@@ -309,7 +314,11 @@ function GraphNodeActionBar({
 }) {
   return (
     <div
-      className="mt-1.5 flex h-8 shrink-0 items-center justify-between gap-2"
+      className="flex shrink-0 items-center justify-between gap-2"
+      style={{
+        height: graphCardGeometry.actionBar.height,
+        marginTop: graphCardGeometry.actionBar.marginBlockStart,
+      }}
       data-testid={`graph-node-action-bar-${nodeId}`}
     >
       <div className="flex min-w-0 items-center gap-1.5">

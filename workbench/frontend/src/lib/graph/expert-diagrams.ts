@@ -1,8 +1,5 @@
 import { type GraphNode, type InspectResponse } from "@/lib/api";
-import {
-  EXPERT_DIAGRAM_LIMIT,
-  EXPERT_DIAGRAM_VISIBLE_BEFORE_OVERFLOW,
-} from "@/lib/graph/constants";
+import { graphDiagramLimits } from "@/lib/graph/constants";
 import {
   detailCount,
   directChildNodes,
@@ -55,7 +52,7 @@ function descendantExpertCount(
 }
 
 function createExpertDiagramCells(totalExperts: number): ExpertDiagramCell[] {
-  if (totalExperts <= EXPERT_DIAGRAM_LIMIT) {
+  if (totalExperts <= graphDiagramLimits.expert.total) {
     return Array.from({ length: totalExperts }, (_, index) => ({
       label: `E${index}`,
       title: `Expert ${index}`,
@@ -65,15 +62,20 @@ function createExpertDiagramCells(totalExperts: number): ExpertDiagramCell[] {
   }
 
   return [
-    ...Array.from({ length: EXPERT_DIAGRAM_VISIBLE_BEFORE_OVERFLOW }, (_, index) => ({
-      label: `E${index}`,
-      title: `Expert ${index}`,
-      kind: "expert" as const,
-      expertIndex: index,
-    })),
+    ...Array.from(
+      { length: graphDiagramLimits.expert.visibleBeforeOverflow },
+      (_, index) => ({
+        label: `E${index}`,
+        title: `Expert ${index}`,
+        kind: "expert" as const,
+        expertIndex: index,
+      }),
+    ),
     {
       label: "...",
-      title: `${totalExperts - EXPERT_DIAGRAM_VISIBLE_BEFORE_OVERFLOW} more experts`,
+      title: `${
+        totalExperts - graphDiagramLimits.expert.visibleBeforeOverflow
+      } more experts`,
       kind: "overflow" as const,
     },
     {
@@ -122,7 +124,7 @@ export function buildExpertDiagrams(
         samplerTitle: samplerNode.path,
         cells: createExpertDiagramCells(totalExperts),
         totalExperts,
-        hasOverflow: totalExperts > EXPERT_DIAGRAM_LIMIT,
+        hasOverflow: totalExperts > graphDiagramLimits.expert.total,
       });
       continue;
     }
@@ -158,7 +160,7 @@ export function buildExpertDiagrams(
       cells: createExpertDiagramCells(totalExperts),
       totalExperts,
       layerCount: layerCount && layerCount > 0 ? layerCount : undefined,
-      hasOverflow: totalExperts > EXPERT_DIAGRAM_LIMIT,
+      hasOverflow: totalExperts > graphDiagramLimits.expert.total,
     });
   }
 

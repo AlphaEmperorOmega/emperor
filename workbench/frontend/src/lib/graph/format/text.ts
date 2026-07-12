@@ -1,5 +1,5 @@
 import { type GraphNode } from "@/lib/api";
-import { SEMANTIC_LABEL_TYPE_NAMES } from "@/lib/graph/constants";
+import { graphDisplayTypeNames } from "@/lib/graph/constants";
 import { lastPathSegment } from "@/lib/graph/helpers";
 import { type GraphCoordinate } from "@/lib/graph/types";
 
@@ -187,7 +187,10 @@ function humanizePathSegment(segment: string) {
 function semanticPathLabel(node: GraphNode) {
   const pathSegment = lastPathSegment(node.path);
   const hasSemanticPathSegment = pathSegment.length > 0 && !/^\d+$/.test(pathSegment);
-  if (SEMANTIC_LABEL_TYPE_NAMES.has(node.typeName) && hasSemanticPathSegment) {
+  if (
+    graphDisplayTypeNames.semanticLabels.has(node.typeName) &&
+    hasSemanticPathSegment
+  ) {
     return humanizePathSegment(pathSegment);
   }
   return undefined;

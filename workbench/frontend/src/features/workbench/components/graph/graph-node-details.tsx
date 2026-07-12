@@ -4,6 +4,7 @@ import {
   nodeDetailEntryText,
   type NodeDetailEntry,
 } from "@/lib/graph/format/text";
+import { graphCardGeometry } from "@/lib/graph/constants";
 
 export function GraphNodeDetails({
   detailsId,
@@ -19,11 +20,19 @@ export function GraphNodeDetails({
   }
 
   return (
-    <div id={detailsId} className="mt-3 grid shrink-0 gap-1">
+    <div
+      id={detailsId}
+      className="grid shrink-0"
+      style={{
+        marginTop: graphCardGeometry.details.marginBlockStart,
+        rowGap: graphCardGeometry.details.rowGap,
+      }}
+    >
       {entries.map((entry) => (
         <div
           key={entry.key}
-          className="grid h-8 grid-cols-[96px_minmax(0,1fr)] items-center gap-2 rounded-[8px] border border-line-soft bg-black/20 px-2.5 text-[12.5px]"
+          className="grid grid-cols-[96px_minmax(0,1fr)] items-center gap-2 rounded-[8px] border border-line-soft bg-black/20 px-2.5 text-[12.5px]"
+          style={{ height: graphCardGeometry.details.rowHeight }}
         >
           <span className="truncate font-medium text-ink-dim">{entry.key}</span>
           <span className="truncate font-mono text-ink">

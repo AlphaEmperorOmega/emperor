@@ -1,26 +1,5 @@
 import { type GraphNode } from "@/lib/api";
-import {
-  CHILD_SUMMARY_EMPTY_HEIGHT,
-  CHILD_SUMMARY_ROW_GAP,
-  CHILD_SUMMARY_ROW_HEIGHT,
-  DETAIL_ROW_GAP,
-  DETAIL_ROW_HEIGHT,
-  EXPERT_DIAGRAM_HEIGHT,
-  CLUSTER_DIAGRAM_CELL_GAP,
-  CLUSTER_DIAGRAM_CELL_HEIGHT,
-  CLUSTER_DIAGRAM_HEADER_HEIGHT,
-  GRAPH_NODE_ACTION_BAR_HEIGHT,
-  GRAPH_NODE_ACTION_BAR_MARGIN_TOP,
-  GRAPH_NODE_CONTENT_MARGIN_TOP,
-  GRAPH_NODE_METADATA_MARGIN_TOP,
-  GRAPH_NODE_SUBTITLE_HEIGHT,
-  GRAPH_NODE_SUBTITLE_MARGIN_TOP,
-  GRAPH_NODE_TITLE_LINE_HEIGHT,
-  GRAPH_NODE_VERTICAL_PADDING,
-  PARAMETER_SHAPE_LIST_MARGIN_TOP,
-  PARAMETER_SHAPE_ROW_HEIGHT,
-  PARAMETER_SHAPE_ROW_GAP,
-} from "@/lib/graph/constants";
+import { graphCardGeometry } from "@/lib/graph/constants";
 import {
   nodeDetailEntries,
   parameterShapeEntries,
@@ -29,18 +8,10 @@ import {
   type ChildSummary,
   type ClusterDiagram,
   type ExpertDiagram,
-  type GraphDetailMode,
   type StackDiagram,
 } from "@/lib/graph/types";
 
 export type GraphNodeHeightInput = {
-  title: string;
-  parameterCount: number;
-  parameterSizeBytes: number;
-  childCount: number;
-  graphDetailMode: GraphDetailMode;
-  canToggleExpansion: boolean;
-  isRootNode: boolean;
   details: GraphNode["details"];
   config: GraphNode["config"];
   childSummaries: ChildSummary[];
@@ -51,28 +22,27 @@ export type GraphNodeHeightInput = {
 };
 
 function childSummaryListHeight(childSummaries: ChildSummary[]) {
-  if (childSummaries.length === 0) {
-    return CHILD_SUMMARY_EMPTY_HEIGHT;
-  }
-
   return (
-    childSummaries.length * CHILD_SUMMARY_ROW_HEIGHT +
-    (childSummaries.length - 1) * CHILD_SUMMARY_ROW_GAP
+    childSummaries.length * graphCardGeometry.childSummary.rowHeight +
+    Math.max(childSummaries.length - 1, 0) *
+      graphCardGeometry.childSummary.rowGap
   );
 }
 
 function stackDiagramHeight(stackDiagram: StackDiagram) {
   return (
-    stackDiagram.cells.length * CHILD_SUMMARY_ROW_HEIGHT +
-    Math.max(stackDiagram.cells.length - 1, 0) * CHILD_SUMMARY_ROW_GAP
+    stackDiagram.cells.length * graphCardGeometry.childSummary.rowHeight +
+    Math.max(stackDiagram.cells.length - 1, 0) *
+      graphCardGeometry.childSummary.rowGap
   );
 }
 
 function clusterDiagramHeight(clusterDiagram: ClusterDiagram) {
   return (
-    CLUSTER_DIAGRAM_HEADER_HEIGHT +
-    clusterDiagram.rows * CLUSTER_DIAGRAM_CELL_HEIGHT +
-    Math.max(clusterDiagram.rows - 1, 0) * CLUSTER_DIAGRAM_CELL_GAP
+    graphCardGeometry.clusterDiagram.headerHeight +
+    clusterDiagram.rows * graphCardGeometry.clusterDiagram.cellSize +
+    Math.max(clusterDiagram.rows - 1, 0) *
+      graphCardGeometry.clusterDiagram.cellGap
   );
 }
 
@@ -84,17 +54,17 @@ function parameterShapeListHeight(input: GraphNodeHeightInput) {
 
   const rowCount = Math.ceil(entries.length / 2);
   return (
-    PARAMETER_SHAPE_LIST_MARGIN_TOP +
-    rowCount * PARAMETER_SHAPE_ROW_HEIGHT +
-    Math.max(rowCount - 1, 0) * PARAMETER_SHAPE_ROW_GAP
+    graphCardGeometry.parameterShapes.marginBlockStart +
+    rowCount * graphCardGeometry.parameterShapes.rowHeight +
+    Math.max(rowCount - 1, 0) * graphCardGeometry.parameterShapes.rowGap
   );
 }
 
 function nonSimpleHeaderHeight() {
   return (
-    GRAPH_NODE_TITLE_LINE_HEIGHT +
-    GRAPH_NODE_SUBTITLE_MARGIN_TOP +
-    GRAPH_NODE_SUBTITLE_HEIGHT
+    graphCardGeometry.titleLineHeight +
+    graphCardGeometry.subtitle.marginBlockStart +
+    graphCardGeometry.subtitle.height
   );
 }
 
@@ -102,7 +72,7 @@ function summaryBlockHeight(input: GraphNodeHeightInput) {
   const contentHeight = input.stackDiagram
     ? stackDiagramHeight(input.stackDiagram)
     : input.expertDiagram
-      ? EXPERT_DIAGRAM_HEIGHT
+      ? graphCardGeometry.expertDiagram.height
       : input.clusterDiagram
         ? clusterDiagramHeight(input.clusterDiagram)
         : input.childSummaries.length > 0
@@ -113,7 +83,7 @@ function summaryBlockHeight(input: GraphNodeHeightInput) {
     return 0;
   }
 
-  return GRAPH_NODE_CONTENT_MARGIN_TOP + contentHeight;
+  return graphCardGeometry.contentMarginBlockStart + contentHeight;
 }
 
 function detailRowsHeight(rowCount: number, isExpanded: boolean) {
@@ -122,9 +92,9 @@ function detailRowsHeight(rowCount: number, isExpanded: boolean) {
   }
 
   return (
-    GRAPH_NODE_METADATA_MARGIN_TOP +
-    rowCount * DETAIL_ROW_HEIGHT +
-    Math.max(rowCount - 1, 0) * DETAIL_ROW_GAP
+    graphCardGeometry.details.marginBlockStart +
+    rowCount * graphCardGeometry.details.rowHeight +
+    Math.max(rowCount - 1, 0) * graphCardGeometry.details.rowGap
   );
 }
 
@@ -132,12 +102,12 @@ export function graphNodeHeight(input: GraphNodeHeightInput) {
   const detailEntries = nodeDetailEntries(input.details, input.config);
 
   return (
-    GRAPH_NODE_VERTICAL_PADDING +
+    graphCardGeometry.paddingBlock * 2 +
     nonSimpleHeaderHeight() +
     parameterShapeListHeight(input) +
     summaryBlockHeight(input) +
     detailRowsHeight(detailEntries.length, input.isDetailsExpanded) +
-    GRAPH_NODE_ACTION_BAR_MARGIN_TOP +
-    GRAPH_NODE_ACTION_BAR_HEIGHT
+    graphCardGeometry.actionBar.marginBlockStart +
+    graphCardGeometry.actionBar.height
   );
 }

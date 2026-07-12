@@ -1,11 +1,7 @@
 import { useMemo, useState } from "react";
 import { type ClusterDiagram, formatExactCount } from "@/lib/graph";
 import { type ClusterDiagramReach } from "@/lib/graph/types";
-import {
-  CLUSTER_DIAGRAM_CELL_GAP,
-  CLUSTER_DIAGRAM_CELL_HEIGHT,
-  CLUSTER_DIAGRAM_HEADER_HEIGHT,
-} from "@/lib/graph/constants";
+import { graphCardGeometry } from "@/lib/graph/constants";
 import {
   CLUSTER_DIAGRAM_WIDTH,
   clusterDiagramGridHeight,
@@ -59,8 +55,11 @@ export function ClusterDiagramView({
 
   return (
     <div
-      className="mt-2 shrink-0 overflow-hidden"
-      style={{ height: CLUSTER_DIAGRAM_HEADER_HEIGHT + gridHeight }}
+      className="shrink-0 overflow-hidden"
+      style={{
+        height: graphCardGeometry.clusterDiagram.headerHeight + gridHeight,
+        marginTop: graphCardGeometry.contentMarginBlockStart,
+      }}
       data-testid={`cluster-diagram-${nodeId}`}
       aria-label={`Neuron cluster map for ${nodeId}`}
     >
@@ -107,8 +106,8 @@ export function ClusterDiagramView({
             <div
               className="grid"
               style={{
-                gap: CLUSTER_DIAGRAM_CELL_GAP,
-                gridTemplateColumns: `repeat(${diagram.columns}, ${CLUSTER_DIAGRAM_CELL_HEIGHT}px)`,
+                gap: graphCardGeometry.clusterDiagram.cellGap,
+                gridTemplateColumns: `repeat(${diagram.columns}, ${graphCardGeometry.clusterDiagram.cellSize}px)`,
               }}
             >
               {plane.cells.map((cell) => {
@@ -149,8 +148,8 @@ export function ClusterDiagramView({
                       isDimmed && "opacity-35",
                     )}
                     style={{
-                      height: CLUSTER_DIAGRAM_CELL_HEIGHT,
-                      width: CLUSTER_DIAGRAM_CELL_HEIGHT,
+                      height: graphCardGeometry.clusterDiagram.cellSize,
+                      width: graphCardGeometry.clusterDiagram.cellSize,
                     }}
                   />
                 );

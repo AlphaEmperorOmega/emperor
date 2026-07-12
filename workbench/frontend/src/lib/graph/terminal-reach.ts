@@ -1,8 +1,5 @@
 import { type GraphNode } from "@/lib/api";
-import {
-  CLUSTER_DIAGRAM_MAX_DIM,
-  CLUSTER_DIAGRAM_MAX_PLANES,
-} from "@/lib/graph/constants";
+import { graphDiagramLimits } from "@/lib/graph/constants";
 import { asGraphCoordinate, graphCoordinates, isRecord } from "@/lib/graph/helpers";
 import {
   type GraphCoordinate,
@@ -60,14 +57,20 @@ export function buildTerminalReachGrid(
   const minY = Math.min(...ys);
   const fullColumns = Math.max(...xs) - minX + 1;
   const fullRows = Math.max(...ys) - minY + 1;
-  const columns = Math.min(fullColumns, CLUSTER_DIAGRAM_MAX_DIM);
-  const rows = Math.min(fullRows, CLUSTER_DIAGRAM_MAX_DIM);
+  const columns = Math.min(
+    fullColumns,
+    graphDiagramLimits.cluster.maxDimension,
+  );
+  const rows = Math.min(fullRows, graphDiagramLimits.cluster.maxDimension);
 
   const reachKeys = new Set(connections.map((coordinate) => coordinate.join(",")));
   const planeZs = Array.from(
     new Set([position[2], ...connections.map((coordinate) => coordinate[2])]),
   ).sort((a, b) => a - b);
-  const visiblePlaneZs = planeZs.slice(0, CLUSTER_DIAGRAM_MAX_PLANES);
+  const visiblePlaneZs = planeZs.slice(
+    0,
+    graphDiagramLimits.cluster.maxPlanes,
+  );
 
   const planes: TerminalReachPlane[] = visiblePlaneZs.map((z) => {
     const cells: TerminalReachCell[] = [];

@@ -16,11 +16,12 @@ import { GraphPreviewPanel } from "@/features/workbench/components/screen/graph-
 import { ParameterActivityMinimapDialog } from "@/features/workbench/components/graph/parameter-activity-minimap-dialog";
 import { layoutGraph } from "@/lib/graph/layout";
 import {
-  buildChildSummaries,
-  buildGraphNavigation,
+  deriveGraphDisplayModel,
+  projectGraphDisplay,
   type GraphParameterActivity,
 } from "@/lib/graph";
 import { type GraphNode, type InspectResponse } from "@/lib/api";
+import { parameterActivityMinimapGeometry } from "@/lib/graph/constants";
 import { type MonitorChartsSource } from "@/types/monitor";
 
 vi.mock("@/features/workbench/components/monitor/monitor-charts-modal", () => ({
@@ -67,7 +68,7 @@ function OuterFlowStoreProbe({
 
 describe("GraphPreviewPanel", () => {
   it("renders real React Flow graph nodes with child parameter activity rows", () => {
-    const root = node("root", { typeName: "LayerStack", path: "main_model" });
+    const root = node("root", { typeName: "Model", path: "main_model" });
     const layer = node("layer", {
       typeName: "Layer",
       path: "main_model.0",
@@ -104,19 +105,11 @@ describe("GraphPreviewPanel", () => {
         observedPoints: 2,
       },
     };
-    const navigation = buildGraphNavigation(graph);
-    const { nodes, edges } = layoutGraph(graph, {
-      graphDetailMode: "basic",
-      navigation,
-      childSummariesById: buildChildSummaries(graph, navigation),
-      childSummarySourceNodesById: new Map(graph.nodes.map((candidate) => [
-        candidate.id,
-        candidate,
-      ])),
+    const displayModel = deriveGraphDisplayModel(graph, "basic");
+    const display = projectGraphDisplay(displayModel, {
+      graphScope: "opened",
       expandedGraphNodeIds: new Set(["layer"]),
       expandedDetailNodeIds: new Set(),
-      enableExpansion: true,
-      selectedNodeId: null,
       parameterActivityForNode: (candidate) =>
         candidate.id === "layer" || candidate.id === "linear"
           ? activity
@@ -125,6 +118,7 @@ describe("GraphPreviewPanel", () => {
       onToggleExpansion: () => {},
       onToggleDetails: () => {},
     });
+    const { nodes, edges } = layoutGraph(display);
 
     render(
       <div style={{ width: 900, height: 600 }}>
@@ -314,12 +308,12 @@ describe("GraphPreviewPanel", () => {
     const branchNode = screen.getByTestId("parameter-activity-minimap-node-minimap-branch");
 
     expect(screen.getByTestId("rf__node-minimap-branch")).toHaveStyle({
-      width: "42px",
-      height: "42px",
+      width: `${parameterActivityMinimapGeometry.branchNodeWidth}px`,
+      height: `${parameterActivityMinimapGeometry.nodeHeight}px`,
     });
     expect(screen.getByTestId("rf__node-minimap-linear")).toHaveStyle({
-      width: "104px",
-      height: "42px",
+      width: `${parameterActivityMinimapGeometry.activityNodeWidth}px`,
+      height: `${parameterActivityMinimapGeometry.nodeHeight}px`,
     });
 
     const collapseBranchButton = branchNode.querySelector<HTMLButtonElement>(

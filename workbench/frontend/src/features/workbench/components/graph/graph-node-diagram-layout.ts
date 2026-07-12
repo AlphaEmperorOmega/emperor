@@ -3,13 +3,12 @@ import {
   type ExpertDiagram,
 } from "@/lib/graph";
 import {
-  CLUSTER_DIAGRAM_CELL_GAP,
-  CLUSTER_DIAGRAM_CELL_HEIGHT,
-  NODE_WIDTH,
+  graphCardGeometry,
 } from "@/lib/graph/constants";
 
 export const GRAPH_NODE_HORIZONTAL_PADDING = 64;
-export const EXPERT_DIAGRAM_WIDTH = NODE_WIDTH - GRAPH_NODE_HORIZONTAL_PADDING;
+export const EXPERT_DIAGRAM_WIDTH =
+  graphCardGeometry.width - GRAPH_NODE_HORIZONTAL_PADDING;
 export const EXPERT_DIAGRAM_GAP = 4;
 export const EXPERT_DIAGRAM_OVERFLOW_WIDTH = 30;
 export const EXPERT_DIAGRAM_TOTAL_WIDTH = 86;
@@ -71,14 +70,16 @@ export function expertDiagramCellCenters(
 
 export function clusterDiagramGridHeight(diagram: ClusterDiagram) {
   return (
-    diagram.rows * CLUSTER_DIAGRAM_CELL_HEIGHT +
-    Math.max(diagram.rows - 1, 0) * CLUSTER_DIAGRAM_CELL_GAP
+    diagram.rows * graphCardGeometry.clusterDiagram.cellSize +
+    Math.max(diagram.rows - 1, 0) *
+      graphCardGeometry.clusterDiagram.cellGap
   );
 }
 
 export function clusterDiagramPlaneWidth(diagram: ClusterDiagram) {
   return (
-    diagram.columns * CLUSTER_DIAGRAM_CELL_HEIGHT +
-    Math.max(diagram.columns - 1, 0) * CLUSTER_DIAGRAM_CELL_GAP
+    diagram.columns * graphCardGeometry.clusterDiagram.cellSize +
+    Math.max(diagram.columns - 1, 0) *
+      graphCardGeometry.clusterDiagram.cellGap
   );
 }

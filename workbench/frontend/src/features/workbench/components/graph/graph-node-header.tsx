@@ -2,6 +2,7 @@ import { type GraphDetailMode } from "@/lib/graph";
 import {
   GraphNodeSimpleBadges,
 } from "@/features/workbench/components/graph/graph-node-badges";
+import { graphCardGeometry } from "@/lib/graph/constants";
 
 export function GraphNodeHeader({
   nodeId,
@@ -56,11 +57,21 @@ export function GraphNodeHeader({
         className="flex min-w-0 items-start gap-2"
         data-testid={`graph-node-title-row-${nodeId}`}
       >
-        <div className="min-w-0 flex-1 truncate text-[18px] font-bold leading-6 text-ink">
+        <div
+          className="min-w-0 flex-1 truncate text-[18px] font-bold text-ink"
+          style={{ lineHeight: `${graphCardGeometry.titleLineHeight}px` }}
+        >
           {label}
         </div>
       </div>
-      <div className="mt-1.5 truncate font-mono text-[13px] leading-5 text-ink-dim">
+      <div
+        className="truncate font-mono text-[13px] text-ink-dim"
+        style={{
+          height: graphCardGeometry.subtitle.height,
+          lineHeight: `${graphCardGeometry.subtitle.height}px`,
+          marginTop: graphCardGeometry.subtitle.marginBlockStart,
+        }}
+      >
         {subtitle}
       </div>
     </div>

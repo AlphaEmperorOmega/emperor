@@ -9,12 +9,7 @@ import { graphParameterActivityStatusClassNames } from "@/features/workbench/com
 import { SelectedNodeDetails } from "@/features/workbench/components/graph/selected-node-details";
 import type { GraphNode } from "@/lib/api";
 import type { WorkbenchNodeData } from "@/lib/graph";
-import {
-  CLUSTER_DIAGRAM_CELL_HEIGHT,
-  CLUSTER_DIAGRAM_HEADER_HEIGHT,
-  CLUSTER_DIAGRAM_CELL_GAP,
-  SIMPLE_NODE_HEIGHT,
-} from "@/lib/graph/constants";
+import { graphCardGeometry } from "@/lib/graph/constants";
 import { EXPERT_DIAGRAM_SAMPLER_WIDTH } from "@/features/workbench/components/graph/graph-node-diagram-layout";
 
 vi.mock("@xyflow/react", async (importOriginal) => {
@@ -74,14 +69,17 @@ describe("GraphNodeView", () => {
   it("keeps explicit bottom padding around the card contents", () => {
     renderGraphNode();
 
-    expect(screen.getByTestId("graph-node-card-main_model.0")).toHaveClass(
+    const card = screen.getByTestId("graph-node-card-main_model.0");
+    expect(card).toHaveClass(
       "nodrag",
       "nopan",
       "edge",
       "px-4",
-      "pb-4",
-      "pt-4",
     );
+    expect(card).toHaveStyle({
+      paddingBottom: `${graphCardGeometry.paddingBlock}px`,
+      paddingTop: `${graphCardGeometry.paddingBlock}px`,
+    });
   });
 
   it("renders basic-mode parameter and child badges in the footer", () => {
@@ -105,9 +103,17 @@ describe("GraphNodeView", () => {
     expect(params).toHaveTextContent("12.5K params");
     expect(params).toHaveClass("shrink-0", "whitespace-nowrap");
     expect(children).toHaveClass("shrink-0", "whitespace-nowrap");
-    expect(actionBar).toHaveClass("mt-1.5", "h-8", "items-center");
+    expect(actionBar).toHaveClass("items-center");
+    expect(actionBar).toHaveStyle({
+      height: `${graphCardGeometry.actionBar.height}px`,
+      marginTop: `${graphCardGeometry.actionBar.marginBlockStart}px`,
+    });
     expect(actionBar).not.toHaveClass("mt-auto", "h-10", "items-end");
-    expect(screen.getByText("main_model.0")).toHaveClass("mt-1.5", "leading-5");
+    expect(screen.getByText("main_model.0")).toHaveStyle({
+      height: `${graphCardGeometry.subtitle.height}px`,
+      lineHeight: `${graphCardGeometry.subtitle.height}px`,
+      marginTop: `${graphCardGeometry.subtitle.marginBlockStart}px`,
+    });
   });
 
   it("renders class names as card titles with semantic subtitles", () => {
@@ -168,7 +174,11 @@ describe("GraphNodeView", () => {
       "h-6",
       "whitespace-nowrap",
     );
-    expect(screen.getByText("main_model.0")).toHaveClass("mt-1.5", "leading-5");
+    expect(screen.getByText("main_model.0")).toHaveStyle({
+      height: `${graphCardGeometry.subtitle.height}px`,
+      lineHeight: `${graphCardGeometry.subtitle.height}px`,
+      marginTop: `${graphCardGeometry.subtitle.marginBlockStart}px`,
+    });
   });
 
   it("renders model size only on the root model node", () => {
@@ -276,7 +286,7 @@ describe("GraphNodeView", () => {
         path: "main_model.block_model",
         childCount: 0,
         canToggleExpansion: false,
-        height: SIMPLE_NODE_HEIGHT,
+        height: graphCardGeometry.simpleHeight,
       },
       { isViewportMoving: true },
     );
@@ -611,8 +621,8 @@ describe("GraphNodeView", () => {
     const summaries = screen.getByText("LinearLayer").parentElement?.parentElement;
     expect(summaries).not.toHaveClass("overflow-hidden");
     expect(summaries).not.toHaveClass("flex-1");
-    expect(screen.getByText("LinearLayer").parentElement).toHaveClass(
-      "h-9",
+    const row = screen.getByText("LinearLayer").parentElement;
+    expect(row).toHaveClass(
       "rounded-[10px]",
       "border",
       "border-line-soft",
@@ -621,6 +631,9 @@ describe("GraphNodeView", () => {
       "text-[13px]",
       "leading-none",
     );
+    expect(row).toHaveStyle({
+      height: `${graphCardGeometry.childSummary.rowHeight}px`,
+    });
   });
 
   it("renders mechanism summary rows with neutral child row styling", () => {
@@ -630,7 +643,6 @@ describe("GraphNodeView", () => {
 
     const gateSummary = screen.getByText("Gate").parentElement;
     expect(gateSummary).toHaveClass(
-      "h-9",
       "rounded-[10px]",
       "border",
       "border-line-soft",
@@ -639,6 +651,9 @@ describe("GraphNodeView", () => {
       "text-ink-dim",
       "leading-none",
     );
+    expect(gateSummary).toHaveStyle({
+      height: `${graphCardGeometry.childSummary.rowHeight}px`,
+    });
     expect(gateSummary).not.toHaveClass("border-violet/30");
     expect(gateSummary).not.toHaveClass("text-violet-text");
     expect(gateSummary).not.toHaveClass(
@@ -658,8 +673,9 @@ describe("GraphNodeView", () => {
 
     const shapes = screen.getByTestId("parameter-shapes-main_model.0");
     expect(shapes).toHaveClass("grid-cols-2");
-    expect(within(shapes).getByLabelText("W shape 128 x 128")).toHaveClass(
-      "h-7",
+    const weights = within(shapes).getByLabelText("W shape 128 x 128");
+    const bias = within(shapes).getByLabelText("B shape 128");
+    expect(weights).toHaveClass(
       "rounded-[7px]",
       "border-violet/25",
       "bg-violet/15",
@@ -668,7 +684,13 @@ describe("GraphNodeView", () => {
       "leading-none",
       "shadow-[inset_0_-1px_0_rgba(146,113,255,0.24)]",
     );
-    expect(within(shapes).getByLabelText("B shape 128")).toHaveClass("h-7", "text-[12px]");
+    expect(weights).toHaveStyle({
+      height: `${graphCardGeometry.parameterShapes.rowHeight}px`,
+    });
+    expect(bias).toHaveClass("text-[12px]");
+    expect(bias).toHaveStyle({
+      height: `${graphCardGeometry.parameterShapes.rowHeight}px`,
+    });
     expect(within(shapes).getByText("W")).toBeInTheDocument();
     expect(within(shapes).getByText("W")).toHaveClass("truncate");
     expect(within(shapes).getByText("128 x 128")).toBeInTheDocument();
@@ -790,7 +812,10 @@ describe("GraphNodeView", () => {
       "grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)]",
     );
     expect(dims).toHaveTextContent("256 -> 10");
-    expect(dims).toHaveClass("h-7", "rounded-[7px]", "px-2", "text-[12px]");
+    expect(dims).toHaveClass("rounded-[7px]", "px-2", "text-[12px]");
+    expect(dims).toHaveStyle({
+      height: `${graphCardGeometry.parameterShapes.rowHeight}px`,
+    });
     expect(dims).not.toHaveClass("h-5", "px-1.5", "text-[10px]");
     expect(dims.parentElement).toBe(shapes);
     expect(weights.parentElement).toBe(shapes);
@@ -870,7 +895,10 @@ describe("GraphNodeView", () => {
 
     const summary = screen.getByLabelText("LinearLayer 128 -> 64");
     expect(summary).toHaveAttribute("title", "LinearLayer 128 -> 64");
-    expect(summary).toHaveClass("h-9", "rounded-[10px]", "gap-2", "overflow-hidden");
+    expect(summary).toHaveClass("rounded-[10px]", "gap-2", "overflow-hidden");
+    expect(summary).toHaveStyle({
+      height: `${graphCardGeometry.childSummary.rowHeight}px`,
+    });
     expect(within(summary).getByText("LinearLayer")).toHaveClass("flex-1", "truncate");
     expect(within(summary).getByText("128 -> 64")).toHaveClass(
       "shrink-0",
@@ -912,11 +940,14 @@ describe("GraphNodeView", () => {
     expect(detailsButton).toHaveClass("h-7", "w-7");
     expect(detailsButton).toHaveTextContent("");
     expect(details).not.toBeNull();
-    expect(within(details!).getByText("bias_flag").parentElement).toHaveClass(
-      "h-8",
+    const detailRow = within(details!).getByText("bias_flag").parentElement;
+    expect(detailRow).toHaveClass(
       "grid-cols-[96px_minmax(0,1fr)]",
       "text-[12.5px]",
     );
+    expect(detailRow).toHaveStyle({
+      height: `${graphCardGeometry.details.rowHeight}px`,
+    });
     expect(within(details!).getByText("adaptive_augmentation_config")).toBeInTheDocument();
     expect(within(details!).getByText("None")).toBeInTheDocument();
     expect(within(details!).queryByText("weightShape")).not.toBeInTheDocument();
@@ -1034,7 +1065,10 @@ describe("GraphNodeView", () => {
     const layer2 = within(diagram).getByTitle("Layer 2 · LinearLayer · 128 -> 128");
     expect(layer0).toHaveTextContent("Layer 0 · LinearLayer");
     expect(layer0).toHaveAttribute("aria-label", "Layer 0 · LinearLayer · 128 -> 128");
-    expect(layer0).toHaveClass("h-9", "rounded-[10px]", "px-3", "text-[13px]");
+    expect(layer0).toHaveClass("rounded-[10px]", "px-3", "text-[13px]");
+    expect(layer0).toHaveStyle({
+      height: `${graphCardGeometry.childSummary.rowHeight}px`,
+    });
     expect(within(layer0).getByText("Layer 0 · LinearLayer")).toHaveClass(
       "min-w-0",
       "flex-1",
@@ -1080,12 +1114,18 @@ describe("GraphNodeView", () => {
     const layer0 = within(diagram).getByTitle(
       "Layer 0 · MixtureOfExpertsLayerWithVeryLongName · 128 -> 128",
     );
-    expect(diagram).toHaveClass("grid", "gap-2");
+    expect(diagram).toHaveClass("grid");
+    expect(diagram).toHaveStyle({
+      marginTop: `${graphCardGeometry.contentMarginBlockStart}px`,
+      rowGap: `${graphCardGeometry.childSummary.rowGap}px`,
+    });
     expect(diagram).not.toHaveClass("h-[160px]");
-    expect(layer0).toHaveClass("h-9", "rounded-[10px]", "px-3", "text-[13px]");
+    expect(layer0).toHaveClass("rounded-[10px]", "px-3", "text-[13px]");
     expect(layer0.style.left).toBe("");
     expect(layer0.style.width).toBe("");
-    expect(layer0.style.height).toBe("");
+    expect(layer0.style.height).toBe(
+      `${graphCardGeometry.childSummary.rowHeight}px`,
+    );
     expect(within(layer0).getByText("Layer 0 · MixtureOfExpertsLayerWithVeryLongName"))
       .toHaveClass("min-w-0", "flex-1", "truncate");
     expect(within(layer0).getByText("128 -> 128")).toHaveClass("shrink-0", "text-right");
@@ -1194,10 +1234,12 @@ describe("GraphNodeView", () => {
 
     const diagram = screen.getByTestId("cluster-diagram-neuron_cluster");
     const headerHeight =
-      CLUSTER_DIAGRAM_HEADER_HEIGHT +
-      2 * CLUSTER_DIAGRAM_CELL_HEIGHT +
-      CLUSTER_DIAGRAM_CELL_GAP;
-    const planeWidth = 2 * CLUSTER_DIAGRAM_CELL_HEIGHT + CLUSTER_DIAGRAM_CELL_GAP;
+      graphCardGeometry.clusterDiagram.headerHeight +
+      2 * graphCardGeometry.clusterDiagram.cellSize +
+      graphCardGeometry.clusterDiagram.cellGap;
+    const planeWidth =
+      2 * graphCardGeometry.clusterDiagram.cellSize +
+      graphCardGeometry.clusterDiagram.cellGap;
     const plane = within(diagram).getByTitle("Z plane 1");
     const activeCell = within(diagram).getByLabelText(/Neuron \(1, 1, 1\).*active/i);
     expect(within(diagram).getByText("Cluster map")).toBeInTheDocument();
@@ -1218,8 +1260,12 @@ describe("GraphNodeView", () => {
     );
     expect(Number.parseFloat(diagram.style.height)).toBe(headerHeight);
     expect(Number.parseFloat(plane.style.width)).toBe(planeWidth);
-    expect(Number.parseFloat(activeCell.style.height)).toBe(CLUSTER_DIAGRAM_CELL_HEIGHT);
-    expect(Number.parseFloat(activeCell.style.width)).toBe(CLUSTER_DIAGRAM_CELL_HEIGHT);
+    expect(Number.parseFloat(activeCell.style.height)).toBe(
+      graphCardGeometry.clusterDiagram.cellSize,
+    );
+    expect(Number.parseFloat(activeCell.style.width)).toBe(
+      graphCardGeometry.clusterDiagram.cellSize,
+    );
     expect(activeCell).toHaveClass("border-violet/45");
     expect(within(diagram).getByLabelText(/Neuron \(2, 1, 1\).*empty/i)).toHaveClass(
       "border-line-soft",
@@ -1538,7 +1584,7 @@ describe("GraphNodeView", () => {
         fields: [{ key: "dropout", value: 0.2 }],
       },
       isDetailsExpanded: true,
-      height: SIMPLE_NODE_HEIGHT,
+      height: graphCardGeometry.simpleHeight,
     });
 
     const card = screen.getByTestId("graph-node-card-main_model.0");
@@ -1599,7 +1645,7 @@ describe("GraphNodeView", () => {
         ],
       },
       isDetailsExpanded: true,
-      height: SIMPLE_NODE_HEIGHT,
+      height: graphCardGeometry.simpleHeight,
     });
 
     const card = screen.getByTestId("graph-node-card-main_model");
@@ -1636,7 +1682,7 @@ describe("GraphNodeView", () => {
           observedPoints: 2,
         },
       },
-      height: SIMPLE_NODE_HEIGHT,
+      height: graphCardGeometry.simpleHeight,
     });
 
     const actionBar = screen.getByTestId("graph-node-action-bar-main_model.0");
@@ -1667,7 +1713,7 @@ describe("GraphNodeView", () => {
         inputDim: 256,
         outputDim: 512,
       },
-      height: SIMPLE_NODE_HEIGHT,
+      height: graphCardGeometry.simpleHeight,
     });
 
     const card = screen.getByTestId("graph-node-card-main_model.0");

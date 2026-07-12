@@ -1,5 +1,6 @@
 import { type StackDiagram } from "@/lib/graph";
 import { GraphChip } from "@/features/workbench/components/graph/graph-chip";
+import { graphCardGeometry } from "@/lib/graph/constants";
 import { cn } from "@/lib/utils";
 
 export function StackDiagramView({
@@ -11,7 +12,11 @@ export function StackDiagramView({
 }) {
   return (
     <div
-      className="mt-2 grid shrink-0 content-start gap-2"
+      className="grid shrink-0 content-start"
+      style={{
+        marginTop: graphCardGeometry.contentMarginBlockStart,
+        rowGap: graphCardGeometry.childSummary.rowGap,
+      }}
       data-testid={`stack-diagram-${nodeId}`}
       aria-label={`Layer stack diagram for ${nodeId}`}
     >
@@ -22,11 +27,12 @@ export function StackDiagramView({
           aria-label={cell.title}
           tone="default"
           className={cn(
-            "relative flex h-9 min-w-0 items-center gap-2 overflow-hidden rounded-[10px] px-3 text-[13px] font-medium",
+            "relative flex min-w-0 items-center gap-2 overflow-hidden rounded-[10px] px-3 text-[13px] font-medium",
             cell.kind === "overflow"
               ? "justify-center text-center font-mono tracking-[0.18em]"
               : "justify-between text-left",
           )}
+          style={{ height: graphCardGeometry.childSummary.rowHeight }}
         >
           {cell.kind === "overflow" ? (
             <span className="w-full truncate text-center">{cell.label}</span>

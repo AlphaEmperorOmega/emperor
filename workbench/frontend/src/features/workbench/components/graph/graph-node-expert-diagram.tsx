@@ -1,7 +1,7 @@
 import { type ExpertDiagram } from "@/lib/graph";
 import {
-  EXPERT_DIAGRAM_HEIGHT,
-  EXPERT_DIAGRAM_VISIBLE_BEFORE_OVERFLOW,
+  graphCardGeometry,
+  graphDiagramLimits,
 } from "@/lib/graph/constants";
 import {
   EXPERT_DIAGRAM_OVERFLOW_WIDTH,
@@ -22,22 +22,26 @@ export function ExpertDiagramView({
 }) {
   const cellCenters = expertDiagramCellCenters(
     diagram,
-    EXPERT_DIAGRAM_VISIBLE_BEFORE_OVERFLOW,
+    graphDiagramLimits.expert.visibleBeforeOverflow,
   );
   const gridTemplateColumns = diagram.hasOverflow
-    ? `repeat(${EXPERT_DIAGRAM_VISIBLE_BEFORE_OVERFLOW}, minmax(0, 1fr)) ${EXPERT_DIAGRAM_OVERFLOW_WIDTH}px ${EXPERT_DIAGRAM_TOTAL_WIDTH}px`
+    ? `repeat(${graphDiagramLimits.expert.visibleBeforeOverflow}, minmax(0, 1fr)) ${EXPERT_DIAGRAM_OVERFLOW_WIDTH}px ${EXPERT_DIAGRAM_TOTAL_WIDTH}px`
     : `repeat(${diagram.cells.length}, minmax(0, 1fr))`;
 
   return (
     <div
-      className="mt-2 h-[104px] shrink-0"
+      className="shrink-0"
+      style={{
+        height: graphCardGeometry.expertDiagram.height,
+        marginTop: graphCardGeometry.contentMarginBlockStart,
+      }}
       data-testid={`expert-diagram-${nodeId}`}
       aria-label={`Expert routing diagram for ${nodeId}`}
     >
       <div className="relative h-full w-full">
         <svg
           className="pointer-events-none absolute inset-0 h-full w-full text-violet/50"
-          viewBox={`0 0 ${EXPERT_DIAGRAM_WIDTH} ${EXPERT_DIAGRAM_HEIGHT}`}
+          viewBox={`0 0 ${EXPERT_DIAGRAM_WIDTH} ${graphCardGeometry.expertDiagram.height}`}
           fill="none"
           aria-hidden
         >

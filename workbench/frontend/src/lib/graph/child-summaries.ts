@@ -1,9 +1,7 @@
 import { type GraphNode, type InspectResponse } from "@/lib/api";
 import {
-  GATE_SUMMARY_LABEL,
-  HALTING_SUMMARY_LABEL,
-  LAYER_STACK_SUMMARY_LIMIT,
-  LAYER_STACK_VISIBLE_BEFORE_OVERFLOW,
+  graphDiagramLimits,
+  graphDisplayLabels,
 } from "@/lib/graph/constants";
 import { directChildNodes, isRecord, lastPathSegment } from "@/lib/graph/helpers";
 import { nodeDimsText, nodeTitle } from "@/lib/graph/formatting";
@@ -20,10 +18,10 @@ function detailFlag(details: GraphNode["details"], key: "gate" | "halting") {
 function childSummaryLabel(node: GraphNode) {
   const pathSegment = lastPathSegment(node.path);
   if (pathSegment === "gate" || pathSegment === "gate_model") {
-    return GATE_SUMMARY_LABEL;
+    return graphDisplayLabels.gateSummary;
   }
   if (pathSegment === "halting" || pathSegment === "halting_model") {
-    return HALTING_SUMMARY_LABEL;
+    return graphDisplayLabels.haltingSummary;
   }
   return nodeTitle(node);
 }
@@ -85,14 +83,16 @@ function childSummary(
 
 function collapseLayerStackSummaries(childSummaries: ChildSummary[]) {
   const layerSummaries = childSummaries.filter((summary) => summary.stackKind === "layer");
-  if (layerSummaries.length <= LAYER_STACK_SUMMARY_LIMIT) {
+  if (layerSummaries.length <= graphDiagramLimits.layerSummary.total) {
     return childSummaries;
   }
 
   let emittedLayerCount = 0;
   let insertedOverflow = false;
   const hiddenLayerCount =
-    layerSummaries.length - LAYER_STACK_VISIBLE_BEFORE_OVERFLOW - 1;
+    layerSummaries.length -
+    graphDiagramLimits.layerSummary.visibleBeforeOverflow -
+    1;
 
   return childSummaries.flatMap((summary) => {
     if (summary.stackKind !== "layer") {
@@ -100,7 +100,10 @@ function collapseLayerStackSummaries(childSummaries: ChildSummary[]) {
     }
 
     emittedLayerCount += 1;
-    if (emittedLayerCount <= LAYER_STACK_VISIBLE_BEFORE_OVERFLOW) {
+    if (
+      emittedLayerCount <=
+      graphDiagramLimits.layerSummary.visibleBeforeOverflow
+    ) {
       return [summary];
     }
 
@@ -147,12 +150,24 @@ export function buildChildSummaries(
 
     const labels = new Set(childSummaries.map((summary) => summary.label));
 
-    if (detailFlag(node.details, "gate") && !labels.has(GATE_SUMMARY_LABEL)) {
-      childSummaries.push({ label: GATE_SUMMARY_LABEL, kind: "mechanism" });
-      labels.add(GATE_SUMMARY_LABEL);
+    if (
+      detailFlag(node.details, "gate") &&
+      !labels.has(graphDisplayLabels.gateSummary)
+    ) {
+      childSummaries.push({
+        label: graphDisplayLabels.gateSummary,
+        kind: "mechanism",
+      });
+      labels.add(graphDisplayLabels.gateSummary);
     }
-    if (detailFlag(node.details, "halting") && !labels.has(HALTING_SUMMARY_LABEL)) {
-      childSummaries.push({ label: HALTING_SUMMARY_LABEL, kind: "mechanism" });
+    if (
+      detailFlag(node.details, "halting") &&
+      !labels.has(graphDisplayLabels.haltingSummary)
+    ) {
+      childSummaries.push({
+        label: graphDisplayLabels.haltingSummary,
+        kind: "mechanism",
+      });
     }
 
     summariesById.set(node.id, collapseLayerStackSummaries(childSummaries));

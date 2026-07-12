@@ -5,14 +5,10 @@ import {
   type GraphParameterActivity,
   type GraphScope,
   ancestorNodeIds,
-  buildChildSummaries,
-  buildClusterDiagrams,
-  buildExpertDiagrams,
-  buildGraphNavigation,
-  buildStackDiagrams,
+  decorateGraphSelection,
+  deriveGraphDisplayModel,
   expandableSubtreeNodeIds,
-  filterGraphByDetail,
-  filterGraphByExpansion,
+  projectGraphDisplay,
 } from "@/lib/graph";
 
 // The dagre-backed layout is loaded only after graph data exists. Keeping the
@@ -60,49 +56,18 @@ export function useGraphViewState(
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [cluster3dNodeId, setCluster3dNodeId] = useState<string | null>(null);
 
-  const fullGraphNavigation = useMemo(() => buildGraphNavigation(graph), [graph]);
-  const fullNodeIds = useMemo(
-    () => new Set((graph?.nodes ?? []).map((node) => node.id)),
-    [graph],
-  );
-  const graphForDetail = useMemo(
-    () => filterGraphByDetail(graph, graphDetailMode),
+  const graphDisplayModel = useMemo(
+    () => deriveGraphDisplayModel(graph, graphDetailMode),
     [graph, graphDetailMode],
   );
-  const graphNavigation = useMemo(() => buildGraphNavigation(graphForDetail), [graphForDetail]);
-  const childSummariesById = useMemo(
-    () => buildChildSummaries(graphForDetail, graphNavigation),
-    [graphForDetail, graphNavigation],
-  );
-  const childSummarySourceNodesById = useMemo(
-    () => new Map((graphForDetail?.nodes ?? []).map((node) => [node.id, node])),
-    [graphForDetail],
-  );
-  const expertDiagramsById = useMemo(
-    () => buildExpertDiagrams(graphForDetail, graphNavigation),
-    [graphForDetail, graphNavigation],
-  );
-  const stackDiagramsById = useMemo(
-    () => buildStackDiagrams(graphForDetail, graphNavigation),
-    [graphForDetail, graphNavigation],
-  );
-  const clusterDiagramsById = useMemo(
-    () => buildClusterDiagrams(graphForDetail),
-    [graphForDetail],
-  );
-  const detailNodeIds = useMemo(
-    () => new Set((graphForDetail?.nodes ?? []).map((node) => node.id)),
-    [graphForDetail],
-  );
-  const fullClusterNodeIds = useMemo(
-    () =>
-      new Set(
-        (graph?.nodes ?? [])
-          .filter((node) => node.typeName === "NeuronCluster")
-          .map((node) => node.id),
-      ),
-    [graph],
-  );
+  const {
+    fullNavigation: fullGraphNavigation,
+    fullNodeIds,
+    fullClusterNodeIds,
+    detailGraph: graphForDetail,
+    detailNavigation: graphNavigation,
+    detailNodeIds,
+  } = graphDisplayModel;
 
   const activateGraphNode = useCallback((nodeId: string) => {
     setSelectedNodeId(nodeId);
@@ -256,13 +221,38 @@ export function useGraphViewState(
     setCluster3dNodeId(null);
   }, []);
 
-  const graphForDisplay = useMemo(
-    () => filterGraphByExpansion(graphForDetail, graphNavigation, expandedGraphNodeIds, graphScope),
-    [expandedGraphNodeIds, graphForDetail, graphNavigation, graphScope],
+  const graphDisplay = useMemo(
+    () =>
+      projectGraphDisplay(graphDisplayModel, {
+        graphScope,
+        expandedGraphNodeIds,
+        expandedDetailNodeIds,
+        canOpenMonitor: canOpenMonitor ? canOpenGraphNodeMonitor : undefined,
+        parameterActivityForNode,
+        onActivateNode: activateGraphNode,
+        onToggleExpansion: toggleGraphNodeExpansion,
+        onOpenMonitor: onOpenMonitor ? openGraphNodeMonitor : undefined,
+        onToggleDetails: toggleNodeDetails,
+      }),
+    [
+      activateGraphNode,
+      canOpenGraphNodeMonitor,
+      canOpenMonitor,
+      expandedDetailNodeIds,
+      expandedGraphNodeIds,
+      graphDisplayModel,
+      graphScope,
+      onOpenMonitor,
+      openGraphNodeMonitor,
+      parameterActivityForNode,
+      toggleGraphNodeExpansion,
+      toggleNodeDetails,
+    ],
   );
+  const graphForDisplay = graphDisplay.graph;
 
   const [layoutGraph, setLayoutGraph] = useState<LayoutGraphFn | null>(null);
-  const hasGraphToLayout = Boolean(graphForDisplay?.nodes.length);
+  const hasGraphToLayout = graphDisplay.cards.length > 0;
   useEffect(() => {
     if (!hasGraphToLayout || layoutGraph) {
       return;
@@ -286,47 +276,8 @@ export function useGraphViewState(
     if (!layoutGraph) {
       return EMPTY_GRAPH_LAYOUT;
     }
-    return layoutGraph(graphForDisplay, {
-      graphDetailMode,
-      navigation: graphNavigation,
-      childSummariesById,
-      childSummarySourceNodesById,
-      expertDiagramsById,
-      stackDiagramsById,
-      clusterDiagramsById,
-      expandedGraphNodeIds,
-      expandedDetailNodeIds,
-      enableExpansion: graphScope === "opened",
-      selectedNodeId: null,
-      canOpenMonitor: canOpenMonitor ? canOpenGraphNodeMonitor : undefined,
-      parameterActivityForNode,
-      onActivateNode: activateGraphNode,
-      onToggleExpansion: toggleGraphNodeExpansion,
-      onOpenMonitor: onOpenMonitor ? openGraphNodeMonitor : undefined,
-      onToggleDetails: toggleNodeDetails,
-    });
-  }, [
-    layoutGraph,
-    activateGraphNode,
-    expandedDetailNodeIds,
-    expandedGraphNodeIds,
-    graphDetailMode,
-    graphForDisplay,
-    graphNavigation,
-    graphScope,
-    canOpenMonitor,
-    canOpenGraphNodeMonitor,
-    parameterActivityForNode,
-    openGraphNodeMonitor,
-    onOpenMonitor,
-    childSummariesById,
-    childSummarySourceNodesById,
-    clusterDiagramsById,
-    expertDiagramsById,
-    stackDiagramsById,
-    toggleGraphNodeExpansion,
-    toggleNodeDetails,
-  ]);
+    return layoutGraph(graphDisplay);
+  }, [graphDisplay, layoutGraph]);
 
   const edges = baseLayout.edges;
 
@@ -334,12 +285,7 @@ export function useGraphViewState(
   // node whose selection changed gets a new object; all others keep their
   // reference so React Flow and the memoized node view skip re-rendering them.
   const nodes = useMemo(
-    () =>
-      baseLayout.nodes.map((node) =>
-        node.selected === (node.id === selectedNodeId)
-          ? node
-          : { ...node, selected: node.id === selectedNodeId },
-      ),
+    () => decorateGraphSelection(baseLayout.nodes, selectedNodeId),
     [baseLayout, selectedNodeId],
   );
 

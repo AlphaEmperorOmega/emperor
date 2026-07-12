@@ -4,6 +4,7 @@ import {
   type GraphParameterActivity,
   type GraphParameterActivityChannel,
 } from "@/lib/graph";
+import { graphCardGeometry } from "@/lib/graph/constants";
 import { cn } from "@/lib/utils";
 
 type ParameterShapeEntry = {
@@ -49,10 +50,15 @@ export function GraphNodeParameterShapes({
   return (
     <div
       className={cn(
-        "mt-2 grid shrink-0 items-center gap-1",
+        "grid shrink-0 items-center",
         dimsText && "grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)]",
         !dimsText && "grid-cols-2",
       )}
+      style={{
+        columnGap: graphCardGeometry.parameterShapes.rowGap,
+        marginTop: graphCardGeometry.parameterShapes.marginBlockStart,
+        rowGap: graphCardGeometry.parameterShapes.rowGap,
+      }}
       data-testid={`parameter-shapes-${nodeId}`}
     >
       {dimsText && (
@@ -61,7 +67,8 @@ export function GraphNodeParameterShapes({
           data-testid={`parameter-shape-dims-${nodeId}`}
           title={`input/output: ${dimsText}`}
           tone="default"
-          className="inline-flex h-7 w-fit max-w-full items-center rounded-[7px] px-2 text-[12px]"
+          className="inline-flex w-fit max-w-full items-center rounded-[7px] px-2 text-[12px]"
+          style={{ height: graphCardGeometry.parameterShapes.rowHeight }}
         >
           <span className="truncate font-mono text-ink">{dimsText}</span>
         </GraphChip>
@@ -92,11 +99,12 @@ export function GraphNodeParameterShapes({
             }
             tone={channel ? "none" : "violet"}
             className={cn(
-              "grid h-7 min-w-0 grid-cols-[18px_minmax(0,1fr)] items-center gap-1.5 rounded-[7px] px-2 text-[12px]",
+              "grid min-w-0 grid-cols-[18px_minmax(0,1fr)] items-center gap-1.5 rounded-[7px] px-2 text-[12px]",
               channel
                 ? graphParameterActivityStatusClassNames[channel.status]
                 : "border-violet/25 bg-violet/15",
             )}
+            style={{ height: graphCardGeometry.parameterShapes.rowHeight }}
           >
             <span
               className={cn(

@@ -70,6 +70,17 @@ export {
 } from "@/lib/graph/navigation";
 export { filterGraphByDetail, filterGraphByExpansion } from "@/lib/graph/filtering";
 export {
+  decorateGraphSelection,
+  deriveGraphDisplayModel,
+  projectGraphDisplay,
+} from "@/lib/graph/display";
+export type {
+  GraphDisplayCard,
+  GraphDisplayModel,
+  GraphDisplayProjection,
+  ProjectGraphDisplayOptions,
+} from "@/lib/graph/display";
+export {
   collapseParameterActivityMinimapNodes,
   deriveParameterActivityMinimapModel,
   expandAllParameterActivityMinimapNodes,

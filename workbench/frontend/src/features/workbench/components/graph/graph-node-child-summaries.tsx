@@ -3,6 +3,7 @@ import { ChevronRight } from "lucide-react";
 import { GraphChip } from "@/features/workbench/components/graph/graph-chip";
 import { GraphParameterIndicators } from "@/features/workbench/components/graph/graph-parameter-indicators";
 import { type ChildSummary, type WorkbenchNodeData } from "@/lib/graph";
+import { graphCardGeometry } from "@/lib/graph/constants";
 import { cn } from "@/lib/utils";
 
 export function GraphNodeChildSummaries({
@@ -20,7 +21,11 @@ export function GraphNodeChildSummaries({
 
   return (
     <div
-      className="mt-2 grid min-h-6 shrink-0 content-start gap-2"
+      className="grid shrink-0 content-start"
+      style={{
+        marginTop: graphCardGeometry.contentMarginBlockStart,
+        rowGap: graphCardGeometry.childSummary.rowGap,
+      }}
       data-testid={`child-summaries-${nodeId}`}
     >
       {summaries.map((summary, index) => (
@@ -68,9 +73,10 @@ function GraphNodeChildSummaryRow({
       data-testid={`child-summary-${nodeId}-${index}`}
       title={summaryTitle}
       className={cn(
-        "relative flex h-9 items-center gap-2 overflow-hidden rounded-[10px] px-3 text-[13px] font-medium",
+        "relative flex items-center gap-2 overflow-hidden rounded-[10px] px-3 text-[13px] font-medium",
         summary.kind === "overflow" ? "bg-white/[0.035]" : undefined,
       )}
+      style={{ height: graphCardGeometry.childSummary.rowHeight }}
     >
       {summary.kind === "overflow" ? (
         <span className="w-full text-center tracking-[0.18em]">
