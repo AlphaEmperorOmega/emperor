@@ -11,6 +11,7 @@ import {
   useWorkbenchConnection,
 } from "@/features/workbench/providers/workbench-connection-provider";
 import { requestJson } from "@/lib/api/client";
+import { WORKBENCH_API_BASE_URL_STORAGE_KEY } from "@/lib/api/_connection-runtime";
 import { workbenchQueryKeys } from "@/lib/query-keys";
 
 type FetchFn = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -500,10 +501,19 @@ describe("Workbench Connection caller Interface", () => {
     const acceptedProbe = new Promise<Response>((resolve) => {
       resolveAccepted = resolve;
     });
-    const cacheAtProbe: Array<{ query: unknown; mutations: number }> = [];
+    const cacheAtProbe: Array<{
+      capabilities: unknown;
+      health: unknown;
+      mutations: number;
+      query: unknown;
+    }> = [];
     const fetchMock = connectionFetch({
       onModels: (authorization) => {
         cacheAtProbe.push({
+          capabilities: queryClient.getQueryData(
+            workbenchQueryKeys.capabilities(),
+          ),
+          health: queryClient.getQueryData(workbenchQueryKeys.health()),
           query: queryClient.getQueryData(["protected", "old"]),
           mutations: queryClient.getMutationCache().getAll().length,
         });
@@ -572,7 +582,12 @@ describe("Workbench Connection caller Interface", () => {
     });
     expect(result.current.connection.authentication.hasToken).toBe(true);
 
-    expect(cacheAtProbe[0]).toEqual({ query: undefined, mutations: 0 });
+    expect(cacheAtProbe[0]).toMatchObject({
+      capabilities: { authMode: "bearer" },
+      health: { status: "ok" },
+      mutations: 0,
+      query: undefined,
+    });
 
     await act(async () => {
       expect(await result.current.connection.actions.signIn("accepted")).toEqual({
@@ -970,6 +985,57 @@ describe("Workbench Connection caller Interface", () => {
     } finally {
       Object.defineProperty(window, "sessionStorage", originalDescriptor!);
     }
+  });
+
+  it("restores the previous identity when query cancellation rejects", async () => {
+    vi.stubGlobal("fetch", connectionFetch());
+    const queryClient = createQueryClient();
+    const reset = vi.fn();
+    const { result } = renderHook(
+      () => {
+        const connection = useWorkbenchConnection();
+        useRegisterWorkbenchConnectionReset(reset);
+        return connection;
+      },
+      { wrapper: wrapper(queryClient) },
+    );
+
+    await waitFor(() => {
+      expect(result.current.authentication.state).toBe("unauthenticated");
+    });
+    await act(async () => {
+      await result.current.actions.useApiBaseUrl(
+        "https://current.example.test",
+      );
+    });
+    await waitFor(() => {
+      expect(result.current.connection.apiBaseUrl).toBe(
+        "https://current.example.test",
+      );
+    });
+    reset.mockClear();
+    queryClient.setQueryData(["protected", "retained"], { retained: true });
+    vi.spyOn(queryClient, "cancelQueries").mockRejectedValueOnce(
+      new Error("query cancellation failed"),
+    );
+
+    await act(async () => {
+      await expect(
+        result.current.actions.useApiBaseUrl("https://next.example.test"),
+      ).rejects.toThrow("query cancellation failed");
+    });
+
+    expect(result.current.connection).toMatchObject({
+      apiBaseUrl: "https://current.example.test",
+      isChanging: false,
+    });
+    expect(
+      window.localStorage.getItem(WORKBENCH_API_BASE_URL_STORAGE_KEY),
+    ).toBe("https://current.example.test");
+    expect(queryClient.getQueryData(["protected", "retained"])).toEqual({
+      retained: true,
+    });
+    expect(reset).not.toHaveBeenCalled();
   });
 
   it("does not reset identity when local storage silently retains the saved URL", async () => {

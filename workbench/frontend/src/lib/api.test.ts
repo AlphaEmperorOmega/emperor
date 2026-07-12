@@ -1,5 +1,12 @@
+import { QueryClient } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
+import {
+  resetApiBaseUrl,
+  signIn,
+  useApiBaseUrl as applyApiBaseUrl,
+  type WorkbenchConnectionActionEnvironment,
+} from "@/features/workbench/providers/_workbench-connection-actions";
 import {
   cancelTrainingJob,
   createConfigSnapshot,
@@ -55,21 +62,12 @@ import {
 } from "@/lib/api/client";
 import {
   loadWorkbenchConnectionRuntime,
-  normalizeWorkbenchApiBaseUrl,
   observeWorkbenchAuthMode,
   validateWorkbenchApiBaseUrl,
+  workbenchConnectionRuntimeSnapshot,
   WORKBENCH_API_BASE_URL,
   WORKBENCH_API_BASE_URL_STORAGE_KEY,
 } from "@/lib/api/_connection-runtime";
-import {
-  beginWorkbenchConnectionTransition,
-  commitWorkbenchApiBaseUrl,
-  commitWorkbenchAuthToken,
-  finishWorkbenchConnectionTransition,
-  persistDefaultWorkbenchApiBaseUrl,
-  persistWorkbenchApiBaseUrl,
-  persistWorkbenchAuthToken,
-} from "@/lib/api/_connection-runtime-actions";
 
 // Characterization tests: assert the CURRENT behavior of the API client
 // (URL/verb/body construction and requestJson error handling) so later
@@ -82,40 +80,36 @@ function getWorkbenchApiBaseUrl() {
   return loadWorkbenchConnectionRuntime().apiBaseUrl;
 }
 
-function setWorkbenchApiBaseUrl(url: string) {
-  const validation = validateWorkbenchApiBaseUrl(url);
-  if (!validation.ok) {
-    throw new Error(validation.message);
-  }
-  const persisted = persistWorkbenchApiBaseUrl(validation.value);
-  if (!persisted.ok) {
-    throw new Error(persisted.message);
-  }
-  beginWorkbenchConnectionTransition();
-  commitWorkbenchApiBaseUrl(validation.value);
-  finishWorkbenchConnectionTransition();
-  return validation.value;
+function connectionEnvironment(): WorkbenchConnectionActionEnvironment {
+  return {
+    publishRuntime: () => undefined,
+    queryClient: new QueryClient(),
+    resetProtectedState: () => undefined,
+    setIsChanging: () => undefined,
+  };
 }
 
-function resetWorkbenchApiBaseUrl() {
-  const persisted = persistDefaultWorkbenchApiBaseUrl();
-  if (!persisted.ok) {
-    throw new Error(persisted.message);
+async function setWorkbenchApiBaseUrl(url: string) {
+  const outcome = await applyApiBaseUrl(connectionEnvironment(), url);
+  if (!outcome.ok) {
+    throw new Error(outcome.message);
   }
-  beginWorkbenchConnectionTransition();
-  commitWorkbenchApiBaseUrl(WORKBENCH_API_BASE_URL);
-  finishWorkbenchConnectionTransition();
+  return workbenchConnectionRuntimeSnapshot().apiBaseUrl;
+}
+
+async function resetWorkbenchApiBaseUrl() {
+  const outcome = await resetApiBaseUrl(connectionEnvironment());
+  if (!outcome.ok) {
+    throw new Error(outcome.message);
+  }
   return WORKBENCH_API_BASE_URL;
 }
 
-function setSessionAuthToken(token: string) {
-  const persisted = persistWorkbenchAuthToken(token);
-  if (!persisted.ok) {
-    throw new Error(persisted.message);
+async function setSessionAuthToken(token: string) {
+  const outcome = await signIn(connectionEnvironment(), token);
+  if (!outcome.ok) {
+    throw new Error(outcome.message);
   }
-  beginWorkbenchConnectionTransition();
-  commitWorkbenchAuthToken(token);
-  finishWorkbenchConnectionTransition();
   observeWorkbenchAuthMode("none");
 }
 
@@ -179,10 +173,10 @@ beforeEach(() => {
   observeWorkbenchAuthMode("none");
 });
 
-afterEach(() => {
+afterEach(async () => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
-  resetWorkbenchApiBaseUrl();
+  await resetWorkbenchApiBaseUrl();
   window.localStorage.clear();
   window.sessionStorage.clear();
 });
@@ -1358,7 +1352,7 @@ describe("requestJson success", () => {
     const fetchMock = stubFetch(
       fakeResponse({ json: () => Promise.resolve({ models: [] }) }),
     );
-    setSessionAuthToken("hosted-secret");
+    await setSessionAuthToken("hosted-secret");
 
     await fetchModels();
 
@@ -1372,9 +1366,9 @@ describe("requestJson success", () => {
       fakeResponse({ json: () => Promise.resolve({ status: "ok" }) }),
     );
 
-    setWorkbenchApiBaseUrl(" https://api.example.test/workbench/// ");
+    await setWorkbenchApiBaseUrl(" https://api.example.test/workbench/// ");
     await fetchHealth();
-    setWorkbenchApiBaseUrl("http://127.0.0.1:7777");
+    await setWorkbenchApiBaseUrl("http://127.0.0.1:7777");
     await fetchHealth();
 
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
@@ -1388,7 +1382,7 @@ describe("requestJson success", () => {
       fakeResponse({ json: () => Promise.resolve({ status: "ok" }) }),
     );
 
-    resetWorkbenchApiBaseUrl();
+    await resetWorkbenchApiBaseUrl();
 
     expect(getWorkbenchApiBaseUrl()).toBe(BASE);
     await fetchHealth();
@@ -1439,9 +1433,9 @@ describe("requestJson success", () => {
     });
 
     expect(getWorkbenchApiBaseUrl()).toBe("https://stored-api.example.test");
-    expect(() =>
+    await expect(
       setWorkbenchApiBaseUrl("https://runtime-api.example.test"),
-    ).toThrow(/could not persist/i);
+    ).rejects.toThrow(/could not persist/i);
 
     expect(getWorkbenchApiBaseUrl()).toBe("https://stored-api.example.test");
     await fetchHealth();
@@ -1481,7 +1475,9 @@ describe("requestJson success", () => {
       expect(getWorkbenchApiBaseUrl()).toBe(
         "https://stored-api.example.test",
       );
-      expect(() => resetWorkbenchApiBaseUrl()).toThrow(/could not clear/i);
+      await expect(resetWorkbenchApiBaseUrl()).rejects.toThrow(
+        /could not clear/i,
+      );
 
       expect(window.localStorage.getItem(WORKBENCH_API_BASE_URL_STORAGE_KEY)).toBe(
         "https://stored-api.example.test",
@@ -1498,13 +1494,18 @@ describe("requestJson success", () => {
     }
   });
 
-  it("rejects runtime API URLs with query strings or fragments", () => {
-    expect(normalizeWorkbenchApiBaseUrl("https://api.example.test?debug=true"))
-      .toBeNull();
-    expect(normalizeWorkbenchApiBaseUrl("https://api.example.test/workbench#status"))
-      .toBeNull();
-    expect(() => setWorkbenchApiBaseUrl("https://api.example.test?debug=true"))
-      .toThrow(/without credentials, query, or fragment/i);
+  it("rejects runtime API URLs with query strings or fragments", async () => {
+    expect(
+      validateWorkbenchApiBaseUrl("https://api.example.test?debug=true"),
+    ).toMatchObject({ ok: false });
+    expect(
+      validateWorkbenchApiBaseUrl(
+        "https://api.example.test/workbench#status",
+      ),
+    ).toMatchObject({ ok: false });
+    await expect(
+      setWorkbenchApiBaseUrl("https://api.example.test?debug=true"),
+    ).rejects.toThrow(/without credentials, query, or fragment/i);
   });
 
   it("preserves POST request init fields when attaching the bearer token", async () => {
@@ -1522,7 +1523,7 @@ describe("requestJson success", () => {
           }),
       }),
     );
-    setSessionAuthToken("hosted-secret");
+    await setSessionAuthToken("hosted-secret");
 
     const input = {
       modelType: "linears",
@@ -1550,7 +1551,7 @@ describe("requestMultipartJson success", () => {
         json: () => Promise.resolve(successfulLogArchiveImportResponse),
       }),
     );
-    setSessionAuthToken("hosted-secret");
+    await setSessionAuthToken("hosted-secret");
 
     const file = new File(["zip-bytes"], "logs.zip", {
       type: "application/zip",
@@ -1576,7 +1577,7 @@ describe("requestMultipartJson success", () => {
 describe("requestJson error handling", () => {
   it("redacts a session token rejected during header construction", async () => {
     const token = "invalid-header-token\r\ncredential";
-    setSessionAuthToken(token);
+    await setSessionAuthToken(token);
     const fetchMock = stubFetch(
       fakeResponse({ json: () => Promise.resolve({ ok: true }) }),
     );
@@ -1595,7 +1596,7 @@ describe("requestJson error handling", () => {
 
   it("redacts the active bearer token from every normalized request error", async () => {
     const token = "redaction-sentinel-token";
-    setSessionAuthToken(token);
+    await setSessionAuthToken(token);
     const assertRedacted = (error: unknown) => {
       expect(JSON.stringify(error)).not.toContain(token);
       expect(String(error)).not.toContain(token);
@@ -1664,7 +1665,7 @@ describe("requestJson error handling", () => {
     const request = requestJson("/slow-error", z.object({ ok: z.boolean() }));
     await Promise.resolve();
 
-    setWorkbenchApiBaseUrl("https://changed-during-error.example.test");
+    await setWorkbenchApiBaseUrl("https://changed-during-error.example.test");
     errorBody.resolve({ detail: "obsolete unauthorized" });
 
     await expect(request).rejects.toMatchObject({

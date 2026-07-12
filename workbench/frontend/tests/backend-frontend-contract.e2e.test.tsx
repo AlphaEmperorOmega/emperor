@@ -4,26 +4,22 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { QueryClient } from "@tanstack/react-query";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import {
+  logout,
+  resetApiBaseUrl,
+  signIn,
+  useApiBaseUrl as applyApiBaseUrl,
+  type WorkbenchConnectionActionEnvironment,
+} from "@/features/workbench/providers/_workbench-connection-actions";
 import {
   isUnauthorizedApiError,
 } from "@/lib/api/client";
 import {
   observeWorkbenchAuthMode,
-  validateWorkbenchApiBaseUrl,
   workbenchConnectionRuntimeSnapshot,
-  WORKBENCH_API_BASE_URL,
 } from "@/lib/api/_connection-runtime";
-import {
-  beginWorkbenchConnectionTransition,
-  commitWorkbenchApiBaseUrl,
-  commitWorkbenchAuthToken,
-  finishWorkbenchConnectionTransition,
-  persistClearedWorkbenchAuthToken,
-  persistDefaultWorkbenchApiBaseUrl,
-  persistWorkbenchApiBaseUrl,
-  persistWorkbenchAuthToken,
-} from "@/lib/api/_connection-runtime-actions";
 import {
   createConfigSnapshot,
   fetchConfigSnapshotLibrary,
@@ -53,53 +49,43 @@ type RunningBackend = {
 
 const backends: RunningBackend[] = [];
 const nativeFetch = globalThis.fetch;
+const connectionEnvironment: WorkbenchConnectionActionEnvironment = {
+  publishRuntime: () => undefined,
+  queryClient: new QueryClient(),
+  resetProtectedState: () => undefined,
+  setIsChanging: () => undefined,
+};
 
 function getWorkbenchApiBaseUrl() {
   return workbenchConnectionRuntimeSnapshot().apiBaseUrl;
 }
 
-function setWorkbenchApiBaseUrl(url: string) {
-  const validation = validateWorkbenchApiBaseUrl(url);
-  if (!validation.ok) {
-    throw new Error(validation.message);
+async function setWorkbenchApiBaseUrl(url: string) {
+  const outcome = await applyApiBaseUrl(connectionEnvironment, url);
+  if (!outcome.ok) {
+    throw new Error(outcome.message);
   }
-  const persisted = persistWorkbenchApiBaseUrl(validation.value);
-  if (!persisted.ok) {
-    throw new Error(persisted.message);
-  }
-  beginWorkbenchConnectionTransition();
-  commitWorkbenchApiBaseUrl(validation.value);
-  finishWorkbenchConnectionTransition();
 }
 
-function resetWorkbenchApiBaseUrl() {
-  const persisted = persistDefaultWorkbenchApiBaseUrl();
-  if (!persisted.ok) {
-    throw new Error(persisted.message);
+async function resetWorkbenchApiBaseUrl() {
+  const outcome = await resetApiBaseUrl(connectionEnvironment);
+  if (!outcome.ok) {
+    throw new Error(outcome.message);
   }
-  beginWorkbenchConnectionTransition();
-  commitWorkbenchApiBaseUrl(WORKBENCH_API_BASE_URL);
-  finishWorkbenchConnectionTransition();
 }
 
-function setSessionAuthToken(token: string) {
-  const persisted = persistWorkbenchAuthToken(token);
-  if (!persisted.ok) {
-    throw new Error(persisted.message);
+async function setSessionAuthToken(token: string) {
+  const outcome = await signIn(connectionEnvironment, token);
+  if (!outcome.ok) {
+    throw new Error(outcome.message);
   }
-  beginWorkbenchConnectionTransition();
-  commitWorkbenchAuthToken(token);
-  finishWorkbenchConnectionTransition();
 }
 
-function clearSessionAuthToken() {
-  const persisted = persistClearedWorkbenchAuthToken();
-  if (!persisted.ok) {
-    throw new Error(persisted.message);
+async function clearSessionAuthToken() {
+  const outcome = await logout(connectionEnvironment);
+  if (!outcome.ok) {
+    throw new Error(outcome.message);
   }
-  beginWorkbenchConnectionTransition();
-  commitWorkbenchAuthToken(null);
-  finishWorkbenchConnectionTransition();
 }
 
 async function unusedLoopbackPort() {
@@ -249,13 +235,13 @@ describe.skipIf(!RUN_CONTRACT_E2E)(
 
     afterAll(async () => {
       globalThis.fetch = nativeFetch;
-      clearSessionAuthToken();
-      resetWorkbenchApiBaseUrl();
+      await clearSessionAuthToken();
+      await resetWorkbenchApiBaseUrl();
       await Promise.all(backends.map(stopBackend));
     }, 15_000);
 
     it("crosses auth, mutation, origin, error, and logout boundaries", async () => {
-      setWorkbenchApiBaseUrl(alpha.baseUrl);
+      await setWorkbenchApiBaseUrl(alpha.baseUrl);
       expect(getWorkbenchApiBaseUrl()).toBe(alpha.baseUrl);
       await expect(fetchHealth()).resolves.toEqual({ status: "ok" });
       await expect(fetchCapabilities()).resolves.toMatchObject({
@@ -279,14 +265,14 @@ describe.skipIf(!RUN_CONTRACT_E2E)(
         });
       }
 
-      setSessionAuthToken("wrong-token");
+      await setSessionAuthToken("wrong-token");
       observeWorkbenchAuthMode("bearer");
       expect(
         isUnauthorizedApiError(
           await captureError(fetchModels),
         ),
       ).toBe(true);
-      setSessionAuthToken(TOKEN);
+      await setSessionAuthToken(TOKEN);
       observeWorkbenchAuthMode("bearer");
       const models = await fetchModels();
       expect(models.models).toContainEqual({
@@ -323,7 +309,7 @@ describe.skipIf(!RUN_CONTRACT_E2E)(
         status: "running",
       });
 
-      setWorkbenchApiBaseUrl(beta.baseUrl);
+      await setWorkbenchApiBaseUrl(beta.baseUrl);
       expect(getWorkbenchApiBaseUrl()).toBe(beta.baseUrl);
       await expect(fetchCapabilities()).resolves.toMatchObject({
         authMode: "bearer",
@@ -345,7 +331,7 @@ describe.skipIf(!RUN_CONTRACT_E2E)(
       });
       expect(String(normalizedError)).toContain(beta.baseUrl);
 
-      setWorkbenchApiBaseUrl(alpha.baseUrl);
+      await setWorkbenchApiBaseUrl(alpha.baseUrl);
       observeWorkbenchAuthMode("bearer");
       await expect(
         fetchModels(),
@@ -354,7 +340,7 @@ describe.skipIf(!RUN_CONTRACT_E2E)(
         snapshots: [expect.objectContaining({ id: snapshot.id })],
       });
 
-      clearSessionAuthToken();
+      await clearSessionAuthToken();
       const logoutError = await captureError(() =>
         fetchModels(),
       );

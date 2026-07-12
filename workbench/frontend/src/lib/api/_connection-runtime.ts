@@ -1,10 +1,11 @@
 export const WORKBENCH_API_URL_ENV_NAME = "NEXT_PUBLIC_WORKBENCH_API_URL";
-export const WORKBENCH_API_ALLOWED_ORIGINS_ENV_NAME =
+const WORKBENCH_API_ALLOWED_ORIGINS_ENV_NAME =
   "NEXT_PUBLIC_WORKBENCH_API_ALLOWED_ORIGINS";
-export const DEFAULT_WORKBENCH_API_BASE_URL = "http://127.0.0.1:9999";
+const DEFAULT_WORKBENCH_API_BASE_URL = "http://127.0.0.1:9999";
 export const WORKBENCH_API_BASE_URL_STORAGE_KEY =
   "emperor.workbench.apiBaseUrl";
-const AUTH_TOKEN_STORAGE_KEY = "emperor.workbench.authToken";
+export const WORKBENCH_AUTH_TOKEN_STORAGE_KEY =
+  "emperor.workbench.authToken";
 
 export type WorkbenchStorageAvailability = "available" | "unavailable";
 
@@ -23,7 +24,7 @@ type RuntimeStorageMessages = {
   sessionToken: string | null;
 };
 
-export type WorkbenchConnectionRuntimeState = {
+type WorkbenchConnectionRuntimeState = {
   apiBaseUrl: string;
   authToken: string | null;
   revision: number;
@@ -55,7 +56,7 @@ function workbenchConnectionChangedError() {
   return error;
 }
 
-export function normalizeWorkbenchApiBaseUrl(url: string) {
+function normalizeWorkbenchApiBaseUrl(url: string) {
   const trimmedUrl = url.trim();
   if (!trimmedUrl) {
     return null;
@@ -163,11 +164,11 @@ function storageAdapter(kind: "localStorage" | "sessionStorage") {
 const localStorageAdapter = () => storageAdapter("localStorage");
 const sessionStorageAdapter = () => storageAdapter("sessionStorage");
 
-export function getWorkbenchApiAllowedOrigins() {
+function getWorkbenchApiAllowedOrigins() {
   return Array.from(workbenchApiOriginLock.allowedOrigins);
 }
 
-export function isWorkbenchApiBaseUrlAllowed(url: string) {
+function isWorkbenchApiBaseUrlAllowed(url: string) {
   if (!workbenchApiOriginLock.locked) {
     return true;
   }
@@ -204,7 +205,7 @@ export function validateWorkbenchApiBaseUrl(
   return { ok: true, value: normalizedUrl };
 }
 
-export function assertWorkbenchApiBaseUrlAllowed(url: string) {
+function assertWorkbenchApiBaseUrlAllowed(url: string) {
   if (configurationError) {
     throw new Error(configurationError);
   }
@@ -289,7 +290,7 @@ function readStoredAuthToken(storage: Storage | null) {
   }
   try {
     return {
-      value: storage.getItem(AUTH_TOKEN_STORAGE_KEY),
+      value: storage.getItem(WORKBENCH_AUTH_TOKEN_STORAGE_KEY),
       availability: "available" as const,
       message: null,
     };
@@ -336,11 +337,6 @@ function state() {
   return runtimeState;
 }
 
-/** Private mutable seam for the lazy action Implementation. */
-export function workbenchConnectionRuntimeStateForActions() {
-  return state();
-}
-
 export function workbenchConnectionRuntimeSnapshot(): WorkbenchConnectionRuntimeSnapshot {
   const current = state();
   return {
@@ -350,6 +346,13 @@ export function workbenchConnectionRuntimeSnapshot(): WorkbenchConnectionRuntime
     storage: { ...current.storage },
     storageMessages: { ...current.storageMessages },
   };
+}
+
+/** Scoped mutable capability for the one lazy Workbench Connection Implementation. */
+export function withWorkbenchConnectionRuntimeTransition<Result>(
+  implementation: (current: WorkbenchConnectionRuntimeState) => Result,
+) {
+  return implementation(state());
 }
 
 export function isWorkbenchAuthenticationVerified() {
@@ -402,9 +405,6 @@ export function captureWorkbenchConnectionRequest(
   authenticationProbe = false,
 ) {
   const current = state();
-  if (configurationError) {
-    throw new Error(configurationError);
-  }
   if (current.transitioning) {
     throw workbenchConnectionChangedError();
   }
