@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -15,6 +16,7 @@ from workbench.backend.run_history.records import (
     LogRunDeletePlan,
 )
 from workbench.backend.run_history.scanner import LogRunScanner
+from workbench.backend.tensorboard.events import EventFileIndex, event_file_index
 
 
 def _log_run(
@@ -59,6 +61,11 @@ def _delete_candidate(relative_path: str) -> LogRunDeleteCandidate:
     )
 
 
+@dataclass(frozen=True, slots=True)
+class _StaticArtifactObservation:
+    event_files: EventFileIndex
+
+
 class StaticLogRunScanner:
     def __init__(self, runs: list[LogRun]) -> None:
         self.runs_by_id = {run.id: run for run in runs}
@@ -71,12 +78,16 @@ class StaticLogRunScanner:
             raise InspectorError(f"Unknown log run id: {unknown[0]}")
         return [self.runs_by_id[run_id] for run_id in dict.fromkeys(run_ids)]
 
+    def artifact_observation(self, run: LogRun) -> _StaticArtifactObservation:
+        return _StaticArtifactObservation(event_file_index(run.path))
+
 
 class RecordingMonitorReader:
     def __init__(self) -> None:
         self.calls: list[dict[str, Any]] = []
 
     def read(self, **kwargs: Any) -> dict[str, Any]:
+        kwargs.pop("event_files", None)
         self.calls.append(kwargs)
         return {"source": "monitor", **kwargs}
 
@@ -86,6 +97,7 @@ class RecordingParameterStatusReader:
         self.calls: list[dict[str, Any]] = []
 
     def read(self, **kwargs: Any) -> dict[str, Any]:
+        kwargs.pop("event_files", None)
         self.calls.append(kwargs)
         return {"source": "parameter-status", **kwargs}
 
@@ -105,7 +117,14 @@ class StubLogRunQueryService(LogRunQueryService):
         )
         self.scalar_requests: list[tuple[Path, str]] = []
 
-    def read_tags(self, run_dir: Path) -> dict[str, list[str]]:
+    def read_tags(
+        self,
+        run_dir: Path,
+        *,
+        event_files: object | None = None,
+        cache_generation: int | None = None,
+    ) -> dict[str, list[str]]:
+        del event_files, cache_generation
         if run_dir.name == "run-1":
             return {
                 "scalars": ["accuracy", "loss"],
@@ -143,7 +162,10 @@ class StubLogRunQueryService(LogRunQueryService):
         *,
         max_points: int | None = None,
         sampling: str = "tail",
+        event_files: object | None = None,
+        cache_generation: int | None = None,
     ) -> dict[str, dict[str, Any]]:
+        del event_files, cache_generation
         return {
             tag: self.read_scalar_series(
                 run_dir,
@@ -194,7 +216,7 @@ class LogRunQueryServiceTests(unittest.TestCase):
                 return BatchAccumulator()
 
             with patch(
-                "workbench.backend.run_history.query.load_event_accumulator",
+                "workbench.backend.tensorboard.events.load_event_accumulator",
                 load_accumulator,
             ):
                 service.read_tags(run_dir)

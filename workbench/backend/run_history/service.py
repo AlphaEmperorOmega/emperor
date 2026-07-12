@@ -213,7 +213,7 @@ class RunHistoryService:
     ) -> tuple[list[LogRun], dict[str, Any]]:
         with self._run_listing_lock:
             generation = self._run_listing_generation
-        catalog = self._scanner.list_runs()
+        catalog = self._scanner.list_runs(result_projection="none")
         catalog_signature = tuple(id(run) for run in catalog)
         cache_key = (
             tuple(sorted(experiment_set)),
@@ -283,7 +283,11 @@ class RunHistoryService:
         )
         runs = []
         for run in filtered_runs[offset : offset + limit]:
-            response = run.to_response()
+            projected = self._scanner.project_run(
+                run,
+                include_metrics=projection == "full",
+            )
+            response = projected.to_response()
             if projection == "summary":
                 response["metrics"] = {}
                 response["hasLayerMonitorData"] = None

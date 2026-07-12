@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from emperor.model_packages import model_identity_payload_from_id
+
+if TYPE_CHECKING:
+    from workbench.backend.run_history.artifacts import RunArtifactObservation
 
 LOG_RESPONSE_ITEM_LIMIT = 500
 
@@ -30,6 +33,11 @@ class LogRun:
     experimentTask: str | None = None
     metrics: dict[str, Any] = field(default_factory=dict)
     path: Path = field(repr=False, compare=False, default=Path())
+    artifacts: RunArtifactObservation | None = field(
+        repr=False,
+        compare=False,
+        default=None,
+    )
 
     def to_response(self) -> dict[str, Any]:
         return {

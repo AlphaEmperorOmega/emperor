@@ -3,22 +3,18 @@ from __future__ import annotations
 import base64
 import copy
 import re
-from collections import OrderedDict
 from pathlib import Path
-from threading import RLock
 from typing import Any
 
 from tensorboard.backend.event_processing import event_accumulator
 
+from workbench.backend.tensorboard import events as tensorboard_events
 from workbench.backend.tensorboard.events import (
     DEFAULT_TENSORBOARD_SIZE_GUIDANCE,
     MAX_TENSORBOARD_IMAGE_SUMMARY_BYTES,
-    event_dirs,
-    event_file_fingerprint,
-    event_file_index,
-    event_file_total_size,
+    EventFileIndex,
+    TensorBoardEventCache,
     finite_float,
-    load_event_accumulator,
     scalar_points,
 )
 
@@ -95,8 +91,11 @@ def empty_parameter_status(
     }
 
 
-def skipped_event_metadata(root: Path, *, limit: int) -> dict[str, Any]:
-    index = event_file_index(root)
+def skipped_event_metadata(
+    index: EventFileIndex,
+    *,
+    limit: int,
+) -> dict[str, Any]:
     return {
         "eventBytes": index.total_size,
         "skippedEventFiles": len(index.fingerprint),
@@ -110,6 +109,40 @@ def skipped_event_metadata(root: Path, *, limit: int) -> dict[str, Any]:
     }
 
 
+class _TensorBoardPayloadCache:
+    def __init__(self) -> None:
+        self._cache = TensorBoardEventCache(
+            {"payload": MONITOR_EVENT_CACHE_MAX_ENTRIES}
+        )
+
+    def token(self) -> int:
+        return self._cache.token()
+
+    def get(self, key: tuple[Any, ...]) -> dict[str, Any] | None:
+        cached = self._cache.get("payload", key)
+        return copy.deepcopy(cached) if cached is not None else None
+
+    def publish(
+        self,
+        key: tuple[Any, ...],
+        value: dict[str, Any],
+        *,
+        generation: int,
+    ) -> None:
+        self._cache.publish(
+            "payload",
+            key,
+            copy.deepcopy(value),
+            generation=generation,
+        )
+
+    def clear_roots(self, roots: set[str]) -> None:
+        self._cache.clear_roots(roots)
+
+    def clear(self) -> None:
+        self._cache.clear()
+
+
 class TensorBoardMonitorReader:
     def __init__(
         self,
@@ -121,47 +154,13 @@ class TensorBoardMonitorReader:
         self.scalar_point_limit = scalar_point_limit
         self.bucket_limit = bucket_limit
         self.max_event_bytes = max(0, int(max_event_bytes))
-        self._cache: OrderedDict[tuple[Any, ...], dict[str, Any]] = OrderedDict()
-        self._cache_generation = 0
-        self._cache_lock = RLock()
-
-    def _cache_token(self) -> int:
-        with self._cache_lock:
-            return self._cache_generation
-
-    def _cache_get(self, key: tuple[Any, ...]) -> dict[str, Any] | None:
-        with self._cache_lock:
-            if key not in self._cache:
-                return None
-            self._cache.move_to_end(key)
-            return copy.deepcopy(self._cache[key])
-
-    def _cache_set(
-        self,
-        key: tuple[Any, ...],
-        value: dict[str, Any],
-        *,
-        generation: int,
-    ) -> None:
-        with self._cache_lock:
-            if generation != self._cache_generation:
-                return
-            self._cache[key] = copy.deepcopy(value)
-            self._cache.move_to_end(key)
-            while len(self._cache) > MONITOR_EVENT_CACHE_MAX_ENTRIES:
-                self._cache.popitem(last=False)
+        self._payload_cache = _TensorBoardPayloadCache()
 
     def clear_roots(self, roots: set[str]) -> None:
-        with self._cache_lock:
-            self._cache_generation += 1
-            for key in list(self._cache):
-                if key and key[0] in roots:
-                    self._cache.pop(key, None)
+        self._payload_cache.clear_roots(roots)
 
     def clear_cache(self) -> None:
-        with self._cache_lock:
-            self._cache_generation += 1
-            self._cache.clear()
+        self._payload_cache.clear()
 
     def read(
         self,
@@ -170,8 +169,9 @@ class TensorBoardMonitorReader:
         node_path: str,
         dataset: str | None,
         log_dir: str | None,
+        event_files: EventFileIndex | None = None,
     ) -> dict[str, Any]:
-        generation = self._cache_token()
+        generation = self._payload_cache.token()
         response = empty_monitor_data(
             job_id=job_id,
             node_path=node_path,
@@ -183,27 +183,23 @@ class TensorBoardMonitorReader:
         root = Path(log_dir)
         if not root.exists():
             return response
-        if (
-            self.max_event_bytes > 0
-            and event_file_total_size(root) > self.max_event_bytes
-        ):
-            response.update(skipped_event_metadata(root, limit=self.max_event_bytes))
+        index = event_files or tensorboard_events.event_file_index(root)
+        if index.exceeds(self.max_event_bytes):
+            response.update(skipped_event_metadata(index, limit=self.max_event_bytes))
             return response
 
-        cache_key = (
-            root.as_posix(),
-            event_file_fingerprint(root),
+        cache_key = index.cache_key(
             job_id,
             node_path,
             dataset,
         )
-        cached = self._cache_get(cache_key)
+        cached = self._payload_cache.get(cache_key)
         if cached is not None:
             return cached
 
         prefixes = [f"{alias}/" for alias in monitor_path_aliases(node_path)]
-        for run_dir in event_dirs(root):
-            accumulator = load_event_accumulator(run_dir)
+        for run_dir in index.dirs:
+            accumulator = index.load_accumulator(run_dir)
             if accumulator is None:
                 continue
             try:
@@ -223,7 +219,7 @@ class TensorBoardMonitorReader:
         response["scalarSeries"].sort(key=lambda series: series["tag"])
         response["histograms"].sort(key=lambda item: item["tag"])
         response["images"].sort(key=lambda item: item["tag"])
-        self._cache_set(cache_key, response, generation=generation)
+        self._payload_cache.publish(cache_key, response, generation=generation)
         return response
 
     def _matching_tags(
@@ -367,47 +363,13 @@ class TensorBoardParameterStatusReader:
             **DEFAULT_TENSORBOARD_SIZE_GUIDANCE,
             event_accumulator.SCALARS: self.scalar_point_limit,
         }
-        self._cache: OrderedDict[tuple[Any, ...], dict[str, Any]] = OrderedDict()
-        self._cache_generation = 0
-        self._cache_lock = RLock()
-
-    def _cache_token(self) -> int:
-        with self._cache_lock:
-            return self._cache_generation
-
-    def _cache_get(self, key: tuple[Any, ...]) -> dict[str, Any] | None:
-        with self._cache_lock:
-            if key not in self._cache:
-                return None
-            self._cache.move_to_end(key)
-            return copy.deepcopy(self._cache[key])
-
-    def _cache_set(
-        self,
-        key: tuple[Any, ...],
-        value: dict[str, Any],
-        *,
-        generation: int,
-    ) -> None:
-        with self._cache_lock:
-            if generation != self._cache_generation:
-                return
-            self._cache[key] = copy.deepcopy(value)
-            self._cache.move_to_end(key)
-            while len(self._cache) > MONITOR_EVENT_CACHE_MAX_ENTRIES:
-                self._cache.popitem(last=False)
+        self._payload_cache = _TensorBoardPayloadCache()
 
     def clear_roots(self, roots: set[str]) -> None:
-        with self._cache_lock:
-            self._cache_generation += 1
-            for key in list(self._cache):
-                if key and key[0] in roots:
-                    self._cache.pop(key, None)
+        self._payload_cache.clear_roots(roots)
 
     def clear_cache(self) -> None:
-        with self._cache_lock:
-            self._cache_generation += 1
-            self._cache.clear()
+        self._payload_cache.clear()
 
     def read(
         self,
@@ -416,8 +378,9 @@ class TensorBoardParameterStatusReader:
         preset: str | None,
         dataset: str | None,
         log_dir: str | None,
+        event_files: EventFileIndex | None = None,
     ) -> dict[str, Any]:
-        generation = self._cache_token()
+        generation = self._payload_cache.token()
         response = empty_parameter_status(
             source_id=source_id,
             preset=preset,
@@ -429,25 +392,21 @@ class TensorBoardParameterStatusReader:
         root = Path(log_dir)
         if not root.exists():
             return response
-        if (
-            self.max_event_bytes > 0
-            and event_file_total_size(root) > self.max_event_bytes
-        ):
-            response.update(skipped_event_metadata(root, limit=self.max_event_bytes))
+        index = event_files or tensorboard_events.event_file_index(root)
+        if index.exceeds(self.max_event_bytes):
+            response.update(skipped_event_metadata(index, limit=self.max_event_bytes))
             return response
 
-        cache_key = (
-            root.as_posix(),
-            event_file_fingerprint(root),
+        cache_key = index.cache_key(
             source_id,
             preset,
             dataset,
         )
-        cached = self._cache_get(cache_key)
+        cached = self._payload_cache.get(cache_key)
         if cached is not None:
             return cached
 
-        scalars_by_node = self._read_parameter_scalars(root)
+        scalars_by_node = self._read_parameter_scalars(index)
         response["nodes"] = [
             {
                 "nodePath": node_path,
@@ -464,16 +423,16 @@ class TensorBoardParameterStatusReader:
             }
             for node_path, channel_data in sorted(scalars_by_node.items())
         ]
-        self._cache_set(cache_key, response, generation=generation)
+        self._payload_cache.publish(cache_key, response, generation=generation)
         return response
 
     def _read_parameter_scalars(
         self,
-        root: Path,
+        index: EventFileIndex,
     ) -> dict[str, dict[str, dict[str, Any]]]:
         scalars_by_node: dict[str, dict[str, dict[str, Any]]] = {}
-        for run_dir in event_dirs(root):
-            accumulator = load_event_accumulator(
+        for run_dir in index.dirs:
+            accumulator = index.load_accumulator(
                 run_dir,
                 size_guidance=self._size_guidance,
             )

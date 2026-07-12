@@ -133,7 +133,7 @@ class LogRunDeletionPlanner:
             return []
         return [
             run
-            for run in self.scanner.list_runs()
+            for run in self.scanner.list_runs(result_projection="none")
             if run.experiment in experiment_set
             and run.dataset in dataset_set
             and run.model in model_set
@@ -154,7 +154,9 @@ class LogRunDeletionExecutor:
         root = self.scanner.resolved_root()
         target = _validated_log_experiment_delete_path(root, experiment)
         runs = [
-            run for run in self.scanner.list_runs() if run.experiment == experiment
+            run
+            for run in self.scanner.list_runs(result_projection="none")
+            if run.experiment == experiment
         ]
 
         if not target.is_dir():

@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
+import os
 import re
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from threading import RLock
 from typing import Any
 
 from workbench.backend.run_history.paths import resolved_under_root
-from workbench.backend.tensorboard.events import event_file_fingerprint
+from workbench.backend.tensorboard import events as tensorboard_events
+from workbench.backend.tensorboard.events import EventFileIndex
 
 CHECKPOINT_EPOCH_RE = re.compile(r"(?:^|[-_])epoch=(?P<value>\d+)(?:[-_]|$)")
 CHECKPOINT_STEP_RE = re.compile(r"(?:^|[-_])step=(?P<value>\d+)(?:[-_]|$)")
@@ -19,34 +24,163 @@ HPARAM_FLOAT_RE = re.compile(
     r"^[+-]?(?:(?:\d+\.\d*)|(?:\.\d+)|(?:\d+))(?:[eE][+-]?\d+)$"
     r"|^[+-]?(?:(?:\d+\.\d*)|(?:\.\d+))$"
 )
+DEFAULT_RUN_ARTIFACT_MAX_FILES = 10_000
+DEFAULT_RUN_ARTIFACT_MAX_DEPTH = 16
+DEFAULT_RUN_METADATA_FILE_MAX_BYTES = 4 * 1024 * 1024
 
-EventFingerprint = tuple[tuple[str, int, int], ...]
+
+@dataclass(frozen=True, slots=True)
+class RunArtifactBudgets:
+    max_files: int = DEFAULT_RUN_ARTIFACT_MAX_FILES
+    max_depth: int = DEFAULT_RUN_ARTIFACT_MAX_DEPTH
+    max_metadata_file_bytes: int = DEFAULT_RUN_METADATA_FILE_MAX_BYTES
+
+    def __post_init__(self) -> None:
+        if self.max_files < 1:
+            raise ValueError("Run Artifact max_files must be positive.")
+        if self.max_depth < 0:
+            raise ValueError("Run Artifact max_depth cannot be negative.")
+        if self.max_metadata_file_bytes < 1:
+            raise ValueError(
+                "Run Artifact max_metadata_file_bytes must be positive."
+            )
 
 
-def _read_result_payload(result_path: Path) -> dict[str, Any]:
+DEFAULT_RUN_ARTIFACT_BUDGETS = RunArtifactBudgets()
+
+
+@dataclass(frozen=True, slots=True)
+class ObservedRunArtifact:
+    path: Path
+    relative_path: str
+    size: int
+    modified_at_ns: int
+
+    @property
+    def modified_at(self) -> str:
+        return (
+            datetime.fromtimestamp(self.modified_at_ns / 1_000_000_000, UTC)
+            .isoformat()
+            .replace("+00:00", "Z")
+        )
+
+
+class RunArtifactObservation:
+    """One bounded, freshness-keyed view of a Run's readable artifacts."""
+
+    def __init__(
+        self,
+        *,
+        root: Path,
+        run_dir: Path,
+        budgets: RunArtifactBudgets,
+        event_files: EventFileIndex,
+        event_artifacts: tuple[ObservedRunArtifact, ...],
+        result: ObservedRunArtifact | None,
+        hparams: ObservedRunArtifact | None,
+        checkpoints: tuple[ObservedRunArtifact, ...],
+        fingerprint: tuple[tuple[Any, ...], ...],
+        observed_entry_count: int,
+        truncation_reasons: tuple[str, ...],
+    ) -> None:
+        self.root = root
+        self.run_dir = run_dir
+        self.budgets = budgets
+        self.event_files = event_files
+        self.event_artifacts = event_artifacts
+        self.result = result
+        self.hparams = hparams
+        self.checkpoints = checkpoints
+        self.fingerprint = fingerprint
+        self.observed_entry_count = observed_entry_count
+        self.truncation_reasons = truncation_reasons
+        self._result_payload: dict[str, Any] | None = None
+        self._result_loaded = False
+        self._hparams_payload: dict[str, Any] | None = None
+        self._hparams_loaded = False
+        self._metadata_lock = RLock()
+
+    @property
+    def truncated(self) -> bool:
+        return bool(self.truncation_reasons)
+
+    @property
+    def artifact_count(self) -> int:
+        return (
+            len(self.event_artifacts)
+            + len(self.checkpoints)
+            + int(self.result is not None)
+            + int(self.hparams is not None)
+        )
+
+    def experiment_task(self) -> str | None:
+        value = self._result().get("experimentTask")
+        return value if isinstance(value, str) and value else None
+
+    def metrics(self) -> dict[str, Any]:
+        return self._result_object("metrics")
+
+    def params(self) -> dict[str, Any]:
+        return self._result_object("params")
+
+    def hparams_values(self) -> dict[str, Any]:
+        with self._metadata_lock:
+            if not self._hparams_loaded:
+                self._hparams_payload = (
+                    _read_hparams_flat(
+                        self.hparams.path,
+                        max_bytes=self.budgets.max_metadata_file_bytes,
+                    )
+                    if self.hparams is not None
+                    else {}
+                )
+                self._hparams_loaded = True
+            return copy.deepcopy(self._hparams_payload or {})
+
+    def _result(self) -> dict[str, Any]:
+        with self._metadata_lock:
+            if not self._result_loaded:
+                self._result_payload = (
+                    _read_result_payload(
+                        self.result.path,
+                        max_bytes=self.budgets.max_metadata_file_bytes,
+                    )
+                    if self.result is not None
+                    else {}
+                )
+                self._result_loaded = True
+            return self._result_payload or {}
+
+    def _result_object(self, key: str) -> dict[str, Any]:
+        value = self._result().get(key)
+        return copy.deepcopy(value) if isinstance(value, dict) else {}
+
+
+def _read_bounded_text(path: Path, *, max_bytes: int) -> str | None:
     try:
-        payload = json.loads(result_path.read_text(encoding="utf-8"))
+        with path.open("rb") as source:
+            raw = source.read(max_bytes + 1)
+    except OSError:
+        return None
+    if len(raw) > max_bytes:
+        return None
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+
+
+def _read_result_payload(
+    result_path: Path,
+    *,
+    max_bytes: int = DEFAULT_RUN_METADATA_FILE_MAX_BYTES,
+) -> dict[str, Any]:
+    try:
+        text = _read_bounded_text(result_path, max_bytes=max_bytes)
+        payload = json.loads(text) if text is not None else None
     except Exception:
         return {}
     return payload if isinstance(payload, dict) else {}
-
-
-def _read_result_object(result_path: Path, key: str) -> dict[str, Any]:
-    value = _read_result_payload(result_path).get(key)
-    return value if isinstance(value, dict) else {}
-
-
-def _read_result_metrics(result_path: Path) -> dict[str, Any]:
-    return _read_result_object(result_path, "metrics")
-
-
-def _read_result_experiment_task(result_path: Path) -> str | None:
-    value = _read_result_payload(result_path).get("experimentTask")
-    return value if isinstance(value, str) and value else None
-
-
-def _read_result_params(result_path: Path) -> dict[str, Any]:
-    return _read_result_object(result_path, "params")
 
 
 def _parse_hparam_value(raw_value: str) -> bool | int | float | str | None:
@@ -81,11 +215,15 @@ def _parse_hparam_value(raw_value: str) -> bool | int | float | str | None:
     return value
 
 
-def _read_hparams_flat(hparams_path: Path) -> dict[str, Any]:
-    try:
-        lines = hparams_path.read_text(encoding="utf-8").splitlines()
-    except Exception:
+def _read_hparams_flat(
+    hparams_path: Path,
+    *,
+    max_bytes: int = DEFAULT_RUN_METADATA_FILE_MAX_BYTES,
+) -> dict[str, Any]:
+    text = _read_bounded_text(hparams_path, max_bytes=max_bytes)
+    if text is None:
         return {}
+    lines = text.splitlines()
 
     values: dict[str, Any] = {}
     for raw_line in lines:
@@ -106,18 +244,6 @@ def _read_hparams_flat(hparams_path: Path) -> dict[str, Any]:
     return values
 
 
-def _file_modified_at(path: Path) -> str:
-    return (
-        datetime.fromtimestamp(path.stat().st_mtime, UTC)
-        .isoformat()
-        .replace("+00:00", "Z")
-    )
-
-
-def _relative_file_path(root: Path, path: Path) -> str:
-    return path.relative_to(root).as_posix()
-
-
 def _run_relative_file_label(run_dir: Path, path: Path) -> str:
     try:
         return path.relative_to(run_dir).as_posix()
@@ -125,26 +251,179 @@ def _run_relative_file_label(run_dir: Path, path: Path) -> str:
         return path.name
 
 
-def _safe_artifact_file(path: Path, root: Path) -> Path | None:
-    if not path.is_file():
-        return None
+def _observed_artifact(
+    path: Path,
+    *,
+    root: Path,
+) -> ObservedRunArtifact | None:
     resolved = resolved_under_root(path, root)
     if resolved is None or not resolved.is_file():
         return None
-    return resolved
+    try:
+        stat = resolved.stat()
+        relative_path = resolved.relative_to(root).as_posix()
+    except (OSError, ValueError):
+        return None
+    return ObservedRunArtifact(
+        path=resolved,
+        relative_path=relative_path,
+        size=int(stat.st_size),
+        modified_at_ns=int(stat.st_mtime_ns),
+    )
 
 
-def _safe_artifact_files(run_dir: Path, root: Path, pattern: str) -> list[Path]:
-    files: list[Path] = []
-    for path in sorted(run_dir.rglob(pattern)):
-        resolved = _safe_artifact_file(path, root)
-        if resolved is not None:
-            files.append(resolved)
-    return files
+def observe_run_artifacts(
+    run_dir: Path,
+    root: Path,
+    *,
+    budgets: RunArtifactBudgets = DEFAULT_RUN_ARTIFACT_BUDGETS,
+) -> RunArtifactObservation:
+    """Observe every readable Run Artifact through one bounded tree walk."""
+    resolved_root = root.resolve()
+    resolved_run = resolved_under_root(run_dir, resolved_root)
+    if resolved_run is None or not resolved_run.is_dir():
+        raise ValueError(f"Run Artifact root is not contained: {run_dir}")
 
+    event_candidates: list[Path] = []
+    checkpoints: list[ObservedRunArtifact] = []
+    result: ObservedRunArtifact | None = None
+    hparams: ObservedRunArtifact | None = None
+    fingerprint: list[tuple[Any, ...]] = []
+    truncation_reasons: list[str] = []
+    observed_entry_count = 0
+    pending: list[tuple[Path, int]] = [(resolved_run, 0)]
+    stop = False
 
-def _event_file_fingerprint(run_dir: Path) -> EventFingerprint:
-    return event_file_fingerprint(run_dir)
+    while pending and not stop:
+        current, depth = pending.pop()
+        try:
+            current_stat = current.stat()
+            current_relative = current.relative_to(resolved_run).as_posix()
+            with os.scandir(current) as scanned:
+                entries = sorted(scanned, key=lambda entry: entry.name)
+        except (OSError, ValueError):
+            truncation_reasons.append(
+                "Run Artifact traversal encountered an unreadable directory."
+            )
+            continue
+        fingerprint.append(
+            (
+                "dir",
+                current_relative,
+                int(current_stat.st_size),
+                int(current_stat.st_mtime_ns),
+            )
+        )
+        child_dirs: list[Path] = []
+        for entry in entries:
+            if observed_entry_count >= budgets.max_files:
+                truncation_reasons.append(
+                    "Run Artifact observation reached its filesystem item cap: "
+                    f"{budgets.max_files}."
+                )
+                stop = True
+                break
+            observed_entry_count += 1
+            candidate = Path(entry.path)
+            if entry.name.startswith("events.out.tfevents."):
+                event_candidates.append(candidate)
+                continue
+            try:
+                is_directory = entry.is_dir(follow_symlinks=False)
+                is_file = entry.is_file(follow_symlinks=False)
+                is_symlink = entry.is_symlink()
+            except OSError:
+                continue
+            if is_directory:
+                if depth >= budgets.max_depth:
+                    truncation_reasons.append(
+                        "Run Artifact observation reached its recursion cap: "
+                        f"{budgets.max_depth}."
+                    )
+                else:
+                    child_dirs.append(candidate)
+                continue
+            if not is_file and not is_symlink:
+                continue
+            artifact = _observed_artifact(candidate, root=resolved_root)
+            if artifact is None:
+                continue
+            try:
+                run_relative = candidate.relative_to(resolved_run)
+            except ValueError:
+                continue
+            if len(run_relative.parts) == 1 and candidate.name == "result.json":
+                result = artifact
+            elif (
+                len(run_relative.parts) == 1
+                and candidate.name == "hparams.yaml"
+            ):
+                hparams = artifact
+            elif candidate.suffix == ".ckpt":
+                checkpoints.append(artifact)
+            else:
+                continue
+            fingerprint.append(
+                (
+                    "file",
+                    artifact.relative_path,
+                    artifact.size,
+                    artifact.modified_at_ns,
+                )
+            )
+        pending.extend((path, depth + 1) for path in reversed(child_dirs))
+
+    event_files = tensorboard_events.event_file_index(
+        resolved_run,
+        candidates=tuple(event_candidates),
+    )
+    event_artifacts = tuple(
+        ObservedRunArtifact(
+            path=path,
+            relative_path=path.relative_to(resolved_root).as_posix(),
+            size=size,
+            modified_at_ns=modified_at_ns,
+        )
+        for path, (_fingerprint_path, size, modified_at_ns) in zip(
+            event_files.files,
+            event_files.fingerprint,
+            strict=True,
+        )
+    )
+    fingerprint.extend(
+        (
+            "event",
+            artifact.relative_path,
+            artifact.size,
+            artifact.modified_at_ns,
+        )
+        for artifact in event_artifacts
+    )
+    for label, artifact in (("result.json", result), ("hparams.yaml", hparams)):
+        if (
+            artifact is not None
+            and artifact.size > budgets.max_metadata_file_bytes
+        ):
+            truncation_reasons.append(
+                f"{label} exceeds the Run metadata byte cap: "
+                f"{artifact.size} > {budgets.max_metadata_file_bytes}."
+            )
+
+    return RunArtifactObservation(
+        root=resolved_root,
+        run_dir=resolved_run,
+        budgets=budgets,
+        event_files=event_files,
+        event_artifacts=event_artifacts,
+        result=result,
+        hparams=hparams,
+        checkpoints=tuple(
+            sorted(checkpoints, key=lambda artifact: artifact.relative_path)
+        ),
+        fingerprint=tuple(sorted(fingerprint)),
+        observed_entry_count=observed_entry_count,
+        truncation_reasons=tuple(dict.fromkeys(truncation_reasons)),
+    )
 
 
 def _file_id(run_id: str, relative_path: str) -> str:
@@ -170,18 +449,16 @@ def _parse_checkpoint_step(filename: str) -> int | None:
 
 
 __all__ = [
-    "EventFingerprint",
-    "_event_file_fingerprint",
+    "DEFAULT_RUN_ARTIFACT_BUDGETS",
+    "DEFAULT_RUN_ARTIFACT_MAX_DEPTH",
+    "DEFAULT_RUN_ARTIFACT_MAX_FILES",
+    "DEFAULT_RUN_METADATA_FILE_MAX_BYTES",
+    "ObservedRunArtifact",
+    "RunArtifactBudgets",
+    "RunArtifactObservation",
     "_file_id",
-    "_file_modified_at",
     "_parse_checkpoint_epoch",
     "_parse_checkpoint_step",
-    "_read_result_experiment_task",
-    "_read_hparams_flat",
-    "_read_result_metrics",
-    "_read_result_params",
-    "_relative_file_path",
     "_run_relative_file_label",
-    "_safe_artifact_file",
-    "_safe_artifact_files",
+    "observe_run_artifacts",
 ]

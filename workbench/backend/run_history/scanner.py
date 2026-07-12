@@ -6,25 +6,25 @@ import hashlib
 import re
 import time
 from collections import Counter
+from dataclasses import replace
 from pathlib import Path
 from threading import RLock
-from typing import Any
+from typing import Any, Literal
 
 from emperor.model_packages import MODEL_CATALOG, model_id_from_payload
 
 from workbench.backend.inspector.errors import InspectorError
 from workbench.backend.log_experiments import is_valid_log_experiment_name
 from workbench.backend.run_history.artifacts import (
-    _read_result_experiment_task,
-    _read_result_metrics,
-    _safe_artifact_file,
-    _safe_artifact_files,
+    RunArtifactObservation,
+    observe_run_artifacts,
 )
 from workbench.backend.run_history.paths import resolved_under_root
 from workbench.backend.run_history.records import LogExperiment, LogRun
 
 RUN_TIMESTAMP_RE = re.compile(r"(?P<timestamp>\d{8}_\d{6})$")
 LogRunCatalogFingerprint = tuple[tuple[Any, ...], ...]
+RunResultProjection = Literal["full", "summary", "none"]
 
 
 def _resolved_logs_root(logs_root: Path) -> Path:
@@ -71,16 +71,30 @@ class LogRunScanner:
         self.cache_ttl_seconds = max(0.0, float(cache_ttl_seconds))
         self._runs_cache: list[LogRun] | None = None
         self._runs_cache_fingerprint: LogRunCatalogFingerprint | None = None
+        self._artifact_observations: dict[str, RunArtifactObservation] = {}
         self._runs_cache_deadline = 0.0
         self._cache_generation = 0
         self._cache_lock = RLock()
 
-    def list_runs(self) -> list[LogRun]:
+    def list_runs(
+        self,
+        *,
+        result_projection: RunResultProjection = "full",
+    ) -> list[LogRun]:
         now = time.monotonic()
+        cached_runs: list[LogRun] | None = None
+        cached_observations: dict[str, RunArtifactObservation] = {}
         with self._cache_lock:
             generation = self._cache_generation
             if self._runs_cache is not None and now < self._runs_cache_deadline:
-                return list(self._runs_cache)
+                cached_runs = list(self._runs_cache)
+                cached_observations = dict(self._artifact_observations)
+        if cached_runs is not None:
+            return self._project_runs(
+                cached_runs,
+                cached_observations,
+                result_projection=result_projection,
+            )
 
         root = self.resolved_root()
         if not root.exists():
@@ -88,10 +102,11 @@ class LogRunScanner:
                 if generation == self._cache_generation:
                     self._runs_cache = []
                     self._runs_cache_fingerprint = ()
+                    self._artifact_observations = {}
                     self._runs_cache_deadline = now + self.cache_ttl_seconds
             return []
 
-        version_dirs, fingerprint = self._version_dirs_and_fingerprint(root)
+        observations, fingerprint = self._version_dirs_and_fingerprint(root)
         with self._cache_lock:
             if (
                 generation == self._cache_generation
@@ -99,11 +114,27 @@ class LogRunScanner:
                 and self._runs_cache_fingerprint == fingerprint
             ):
                 self._runs_cache_deadline = now + self.cache_ttl_seconds
-                return list(self._runs_cache)
+                cached_runs = list(self._runs_cache)
+                cached_observations = dict(self._artifact_observations)
+        if cached_runs is not None:
+            return self._project_runs(
+                cached_runs,
+                cached_observations,
+                result_projection=result_projection,
+            )
 
         runs: list[LogRun] = []
-        for version_dir in version_dirs:
-            run = self.parse_run(root, version_dir)
+        observations_by_path = {
+            observation.run_dir.as_posix(): observation
+            for observation in observations
+        }
+        for observation in observations:
+            run = self.parse_run(
+                root,
+                observation.run_dir,
+                artifacts=observation,
+                result_projection="none",
+            )
             if run is not None:
                 runs.append(run)
         sorted_runs = sorted(
@@ -123,21 +154,62 @@ class LogRunScanner:
             if generation == self._cache_generation:
                 self._runs_cache = list(sorted_runs)
                 self._runs_cache_fingerprint = fingerprint
+                self._artifact_observations = observations_by_path
                 self._runs_cache_deadline = now + self.cache_ttl_seconds
-        return sorted_runs
+        return self._project_runs(
+            sorted_runs,
+            observations_by_path,
+            result_projection=result_projection,
+        )
+
+    def _project_runs(
+        self,
+        runs: list[LogRun],
+        observations: dict[str, RunArtifactObservation],
+        *,
+        result_projection: RunResultProjection,
+    ) -> list[LogRun]:
+        if result_projection == "none":
+            return list(runs)
+        return [
+            self._project_run(
+                run,
+                observations[run.path.as_posix()],
+                result_projection=result_projection,
+            )
+            for run in runs
+        ]
+
+    def _project_run(
+        self,
+        run: LogRun,
+        artifacts: RunArtifactObservation,
+        *,
+        result_projection: RunResultProjection,
+    ) -> LogRun:
+        if result_projection == "none":
+            return run
+        return replace(
+            run,
+            experimentTask=artifacts.experiment_task(),
+            metrics=(
+                artifacts.metrics() if result_projection == "full" else {}
+            ),
+        )
 
     def clear_cache(self) -> None:
         with self._cache_lock:
             self._cache_generation += 1
             self._runs_cache = None
             self._runs_cache_fingerprint = None
+            self._artifact_observations = {}
             self._runs_cache_deadline = 0.0
 
     def _version_dirs_and_fingerprint(
         self,
         root: Path,
-    ) -> tuple[list[Path], LogRunCatalogFingerprint]:
-        version_dirs: list[Path] = []
+    ) -> tuple[list[RunArtifactObservation], LogRunCatalogFingerprint]:
+        observations: list[RunArtifactObservation] = []
         fingerprint: list[tuple[Any, ...]] = []
         for version_dir in sorted(root.rglob("version_*")):
             if not version_dir.is_dir():
@@ -145,46 +217,31 @@ class LogRunScanner:
             resolved = self.resolve_under_root(version_dir, root)
             if resolved is None:
                 continue
-            version_dirs.append(resolved)
             try:
                 relative_path = resolved.relative_to(root).as_posix()
             except ValueError:
                 continue
-            fingerprint.append(("dir", relative_path, *self._path_stat(resolved)))
-            for pattern in (
-                "result.json",
-                "hparams.yaml",
-                "events.out.tfevents.*",
-                "*.ckpt",
-            ):
-                for artifact in sorted(resolved.glob(pattern)):
-                    artifact_resolved = self.resolve_under_root(artifact, root)
-                    if artifact_resolved is None or not artifact_resolved.is_file():
-                        continue
-                    try:
-                        artifact_relative = artifact_resolved.relative_to(
-                            root
-                        ).as_posix()
-                    except ValueError:
-                        continue
-                    fingerprint.append(
-                        ("file", artifact_relative, *self._path_stat(artifact_resolved))
-                    )
-        return version_dirs, tuple(fingerprint)
-
-    def _path_stat(self, path: Path) -> tuple[int, int]:
-        try:
-            stat = path.stat()
-        except OSError:
-            return (0, 0)
-        return (int(stat.st_mtime_ns), int(stat.st_size))
+            observation = observe_run_artifacts(resolved, root)
+            observations.append(observation)
+            fingerprint.append(
+                (
+                    "run",
+                    relative_path,
+                    observation.fingerprint,
+                    observation.truncation_reasons,
+                )
+            )
+        return observations, tuple(fingerprint)
 
     def list_experiments(self) -> list[LogExperiment]:
         root = self.resolved_root()
         if not root.exists():
             return []
 
-        run_counts = Counter(run.experiment for run in self.list_runs())
+        run_counts = Counter(
+            run.experiment
+            for run in self.list_runs(result_projection="none")
+        )
         experiments: list[LogExperiment] = []
         for child in sorted(root.iterdir(), key=lambda path: path.name):
             if not child.is_dir() or child.is_symlink():
@@ -209,7 +266,14 @@ class LogRunScanner:
     def resolve_under_root(self, path: Path, root: Path) -> Path | None:
         return resolved_under_root(path, root)
 
-    def parse_run(self, root: Path, version_dir: Path) -> LogRun | None:
+    def parse_run(
+        self,
+        root: Path,
+        version_dir: Path,
+        *,
+        artifacts: RunArtifactObservation | None = None,
+        result_projection: RunResultProjection = "full",
+    ) -> LogRun | None:
         try:
             relative = version_dir.relative_to(root)
         except ValueError:
@@ -230,52 +294,72 @@ class LogRunScanner:
         group = "/".join(group_parts) if group_parts else None
         experiment = parts[0]
         relative_path = relative.as_posix()
-        result_path = _safe_artifact_file(version_dir / "result.json", root)
-        hparams_path = _safe_artifact_file(version_dir / "hparams.yaml", root)
-        event_files = _safe_artifact_files(
-            version_dir,
-            root,
-            "events.out.tfevents.*",
-        )
-        checkpoints = _safe_artifact_files(version_dir, root, "*.ckpt")
+        artifacts = artifacts or observe_run_artifacts(version_dir, root)
 
-        return LogRun(
+        run = LogRun(
             id=_run_id(relative_path),
             group=group,
             experiment=experiment,
             model=model,
             preset=preset,
-            experimentTask=(
-                _read_result_experiment_task(result_path) if result_path else None
-            ),
+            experimentTask=None,
             dataset=dataset,
             runName=run_name,
             timestamp=_display_timestamp(run_name),
             version=version,
             relativePath=relative_path,
-            hasResult=result_path is not None,
-            eventFileCount=len(event_files),
-            checkpointCount=len(checkpoints),
-            hasHparams=hparams_path is not None,
-            metrics=_read_result_metrics(result_path) if result_path else {},
+            hasResult=artifacts.result is not None,
+            eventFileCount=len(artifacts.event_artifacts),
+            checkpointCount=len(artifacts.checkpoints),
+            hasHparams=artifacts.hparams is not None,
+            metrics={},
             path=version_dir,
+            artifacts=artifacts,
         )
+        return self._project_run(
+            run,
+            artifacts,
+            result_projection=result_projection,
+        )
+
+    def project_run(
+        self,
+        run: LogRun,
+        *,
+        include_metrics: bool,
+    ) -> LogRun:
+        return self._project_run(
+            run,
+            self.artifact_observation(run),
+            result_projection="full" if include_metrics else "summary",
+        )
+
+    def artifact_observation(self, run: LogRun) -> RunArtifactObservation:
+        if isinstance(run.artifacts, RunArtifactObservation):
+            return run.artifacts
+        cache_key = run.path.as_posix()
+        with self._cache_lock:
+            cached = self._artifact_observations.get(cache_key)
+        if cached is not None:
+            return cached
+        observation = observe_run_artifacts(run.path, self.resolved_root())
+        with self._cache_lock:
+            return self._artifact_observations.setdefault(
+                cache_key,
+                observation,
+            )
 
     def resolve_runs(self, run_ids: list[str]) -> list[LogRun]:
         if not run_ids:
             return []
-        runs_by_id = {run.id: run for run in self.list_runs()}
+        runs_by_id = {
+            run.id: run
+            for run in self.list_runs(result_projection="none")
+        }
         unknown = [run_id for run_id in run_ids if run_id not in runs_by_id]
         if unknown:
             raise InspectorError(f"Unknown log run id: {unknown[0]}")
         return [runs_by_id[run_id] for run_id in dict.fromkeys(run_ids)]
-
-    def artifact_path(self, run: LogRun, filename: str) -> Path | None:
-        return _safe_artifact_file(run.path / filename, self.resolved_root())
-
-    def artifact_files(self, run: LogRun, pattern: str) -> list[Path]:
-        return _safe_artifact_files(run.path, self.resolved_root(), pattern)
-
 
 __all__ = [
     "LogRunCatalogFingerprint",

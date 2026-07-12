@@ -19,6 +19,11 @@ from workbench.backend.log_experiments import (
     validate_log_experiment_name,
 )
 from workbench.backend.run_history import RunHistoryService
+from workbench.backend.run_history import artifacts as run_artifacts
+from workbench.backend.run_history.artifacts import (
+    RunArtifactBudgets,
+    observe_run_artifacts,
+)
 from workbench.backend.run_history.deletion import LogRunDeletionExecutor
 from workbench.backend.run_history.query import LogRunQueryService
 from workbench.backend.run_history.records import (
@@ -30,6 +35,7 @@ from workbench.backend.run_history.records import (
     LogRunDeleteResult,
 )
 from workbench.backend.run_history.scanner import LogRunScanner
+from workbench.backend.tensorboard import events as tensorboard_events
 from workbench.backend.tests.helpers import (
     FakeRunner,
     TrainingJobRuntimeHarness,
@@ -516,6 +522,220 @@ class RunHistoryAndApiTests(unittest.TestCase):
         self.assertEqual([run.id for run in first], [run.id for run in second])
         self.assertEqual([run.id for run in first], [run.id for run in third])
         self.assertEqual(parse.call_count, 2)
+
+    def test_expired_catalog_detects_new_nested_event_and_checkpoint(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = Path(tmp) / "logs"
+            run_dir = logs_root.joinpath(
+                "linear",
+                "BASELINE",
+                "Mnist",
+                "nested_20260601_010203",
+                "version_0",
+            )
+            nested = run_dir / "already-present"
+            nested.mkdir(parents=True)
+            scanner = LogRunScanner(logs_root=logs_root, cache_ttl_seconds=0)
+
+            initial = scanner.list_runs()[0]
+            nested.joinpath("events.out.tfevents.new").write_bytes(b"event")
+            nested.joinpath("epoch=1-step=2.ckpt").write_bytes(b"checkpoint")
+            changed = scanner.list_runs()[0]
+
+        self.assertEqual(initial.eventFileCount, 0)
+        self.assertEqual(initial.checkpointCount, 0)
+        self.assertEqual(changed.eventFileCount, 1)
+        self.assertEqual(changed.checkpointCount, 1)
+
+    def test_summary_listing_parses_result_once_without_projecting_metrics(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = Path(tmp) / "logs"
+            run_dir = write_tensorboard_run(
+                logs_root,
+                ["linear", "BASELINE", "Mnist", "aaa_20260601_010203", "version_0"],
+            )
+            run_dir.joinpath("result.json").write_text(
+                json.dumps(
+                    {
+                        "experimentTask": "image_classification",
+                        "metrics": {"test/accuracy": 0.9},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            service = _run_history(logs_root)
+
+            with patch.object(
+                run_artifacts,
+                "_read_result_payload",
+                wraps=run_artifacts._read_result_payload,
+            ) as read_result, patch.object(
+                run_artifacts.RunArtifactObservation,
+                "metrics",
+                side_effect=AssertionError(
+                    "summary projection must not materialize metrics"
+                ),
+            ) as project_metrics:
+                payload = service.list_runs(
+                    limit=10,
+                    offset=0,
+                    projection="summary",
+                )["runs"][0]
+
+        self.assertEqual(payload["experimentTask"], "image_classification")
+        self.assertEqual(payload["metrics"], {})
+        self.assertEqual(read_result.call_count, 1)
+        project_metrics.assert_not_called()
+
+    def test_run_artifact_observation_reuses_one_bounded_metadata_parse(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            run_dir = root / "version_0"
+            run_dir.mkdir()
+            run_dir.joinpath("result.json").write_text(
+                json.dumps(
+                    {
+                        "experimentTask": "image_classification",
+                        "metrics": {"accuracy": 0.9},
+                        "params": {"batch_size": 8},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            observation = observe_run_artifacts(run_dir, root)
+
+            with patch.object(
+                run_artifacts,
+                "_read_result_payload",
+                wraps=run_artifacts._read_result_payload,
+            ) as read_result:
+                experiment_task = observation.experiment_task()
+                metrics = observation.metrics()
+                params = observation.params()
+
+        self.assertEqual(experiment_task, "image_classification")
+        self.assertEqual(metrics, {"accuracy": 0.9})
+        self.assertEqual(params, {"batch_size": 8})
+        read_result.assert_called_once()
+
+    def test_run_artifact_observation_enforces_file_depth_and_byte_budgets(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            run_dir = root / "version_0"
+            deep = run_dir / "level-1" / "level-2"
+            deep.mkdir(parents=True)
+            run_dir.joinpath("result.json").write_text(
+                json.dumps({"metrics": {"accuracy": 0.9}}),
+                encoding="utf-8",
+            )
+            for name in ("a.ckpt", "b.ckpt", "c.ckpt"):
+                run_dir.joinpath(name).write_bytes(b"checkpoint")
+            deep.joinpath("deep.ckpt").write_bytes(b"checkpoint")
+
+            observation = observe_run_artifacts(
+                run_dir,
+                root,
+                budgets=RunArtifactBudgets(
+                    max_files=5,
+                    max_depth=1,
+                    max_metadata_file_bytes=8,
+                ),
+            )
+            depth_limited = observe_run_artifacts(
+                run_dir,
+                root,
+                budgets=RunArtifactBudgets(
+                    max_files=100,
+                    max_depth=1,
+                    max_metadata_file_bytes=1024,
+                ),
+            )
+
+        self.assertLessEqual(observation.observed_entry_count, 5)
+        self.assertLessEqual(len(observation.checkpoints), 3)
+        self.assertEqual(observation.metrics(), {})
+        self.assertTrue(observation.truncated)
+        self.assertTrue(
+            any("item cap" in reason for reason in observation.truncation_reasons)
+        )
+        self.assertTrue(
+            any("byte cap" in reason for reason in observation.truncation_reasons)
+        )
+        self.assertNotIn(
+            "deep.ckpt",
+            {artifact.path.name for artifact in depth_limited.checkpoints},
+        )
+        self.assertTrue(
+            any(
+                "recursion cap" in reason
+                for reason in depth_limited.truncation_reasons
+            )
+        )
+
+    def test_run_artifact_observation_composes_shared_event_index(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            run_dir = root / "version_0"
+            nested = run_dir / "nested"
+            nested.mkdir(parents=True)
+            event_file = nested / "events.out.tfevents.test"
+            event_file.write_bytes(b"event")
+
+            with patch.object(
+                tensorboard_events,
+                "event_file_index",
+                wraps=tensorboard_events.event_file_index,
+            ) as observe_events:
+                observation = observe_run_artifacts(run_dir, root)
+
+        observe_events.assert_called_once_with(
+            run_dir,
+            candidates=(event_file,),
+        )
+        self.assertEqual(observation.event_files.files, (event_file,))
+        self.assertEqual(
+            tuple(artifact.path for artifact in observation.event_artifacts),
+            (event_file,),
+        )
+
+    def test_run_history_tensorboard_query_reuses_catalog_event_index(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = Path(tmp) / "logs"
+            run_dir = logs_root.joinpath(
+                "linear",
+                "BASELINE",
+                "Mnist",
+                "aaa_20260601_010203",
+                "version_0",
+            )
+            run_dir.mkdir(parents=True)
+            run_dir.joinpath("events.out.tfevents.test").write_bytes(b"event")
+            scanner = LogRunScanner(logs_root=logs_root)
+            query = LogRunQueryService(scanner=scanner)
+
+            with (
+                patch.object(
+                    tensorboard_events,
+                    "event_file_index",
+                    wraps=tensorboard_events.event_file_index,
+                ) as observe_events,
+                patch.object(
+                    tensorboard_events,
+                    "load_event_accumulator",
+                    return_value=FakeTensorBoardAccumulator(),
+                ),
+            ):
+                run_id = scanner.list_runs(result_projection="none")[0].id
+                tags = query.tags_for_runs([run_id])
+
+        self.assertEqual(observe_events.call_count, 1)
+        self.assertEqual(tags[0]["scalarTags"], ["train/loss"])
 
     def test_run_history_reads_checkpoints_and_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -2374,7 +2594,7 @@ class RunHistoryAndApiTests(unittest.TestCase):
                 return FakeTensorBoardAccumulator()
 
             with patch(
-                "workbench.backend.run_history.query.load_event_accumulator",
+                "workbench.backend.tensorboard.events.load_event_accumulator",
                 load_accumulator,
             ):
                 first_tags = service.read_tags(run_dir)
@@ -2422,7 +2642,7 @@ class RunHistoryAndApiTests(unittest.TestCase):
             )
 
             with patch(
-                "workbench.backend.run_history.query.load_event_accumulator",
+                "workbench.backend.tensorboard.events.load_event_accumulator",
                 return_value=MultiTagAccumulator(),
             ) as load:
                 loss = service.read_scalar_series_batch(
@@ -2454,7 +2674,7 @@ class RunHistoryAndApiTests(unittest.TestCase):
             )
 
             with patch(
-                "workbench.backend.run_history.query.load_event_accumulator"
+                "workbench.backend.tensorboard.events.load_event_accumulator"
             ) as load:
                 tags = service.read_tags(run_dir)
 
@@ -2507,7 +2727,7 @@ class RunHistoryAndApiTests(unittest.TestCase):
                 return FakeTensorBoardAccumulator()
 
             with patch(
-                "workbench.backend.run_history.query.load_event_accumulator",
+                "workbench.backend.tensorboard.events.load_event_accumulator",
                 load_accumulator,
             ):
                 payloads = service.tags_for_runs(
@@ -2563,7 +2783,7 @@ class RunHistoryAndApiTests(unittest.TestCase):
             )
 
             with patch(
-                "workbench.backend.run_history.query.load_event_accumulator",
+                "workbench.backend.tensorboard.events.load_event_accumulator",
                 return_value=FakeTensorBoardAccumulator(),
             ) as load:
                 first_payloads = service.tags_for_runs(
@@ -2607,7 +2827,7 @@ class RunHistoryAndApiTests(unittest.TestCase):
             )
 
             with patch(
-                "workbench.backend.run_history.query.load_event_accumulator",
+                "workbench.backend.tensorboard.events.load_event_accumulator",
                 return_value=FakeTensorBoardAccumulator(),
             ) as load:
                 service.tags_for_runs([run_ids["first_20260601_010203"]])
@@ -2762,7 +2982,7 @@ class RunHistoryAndApiTests(unittest.TestCase):
                     headers={"X-Workbench-Mutation": "true"},
                 ) as client:
                     with patch(
-                        "workbench.backend.run_history.query.load_event_accumulator"
+                        "workbench.backend.tensorboard.events.load_event_accumulator"
                     ) as load:
                         before_response = await client.get("/logs/runs")
                         load.assert_not_called()

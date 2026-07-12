@@ -6,6 +6,7 @@ import threading
 import unittest
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -15,6 +16,7 @@ from workbench.backend.log_experiments import (
 )
 from workbench.backend.run_history import RunHistoryService
 from workbench.backend.run_history.scanner import LogRunScanner
+from workbench.backend.tensorboard import events as tensorboard_events
 from workbench.backend.tests.helpers import write_tensorboard_run
 
 
@@ -215,15 +217,10 @@ class RunHistorySecurityAndFreshnessTests(unittest.TestCase):
                 loads.append(event_dir)
                 return _OutsideAccumulator()
 
-            with (
-                patch(
-                    "workbench.backend.run_history.query.load_event_accumulator",
-                    load_outside,
-                ),
-                patch(
-                    "workbench.backend.tensorboard.readers.load_event_accumulator",
-                    load_outside,
-                ),
+            with patch.object(
+                tensorboard_events,
+                "load_event_accumulator",
+                load_outside,
             ):
                 tags = service.tags_for_runs([run_id])
                 scalars = service.scalars_for_runs(
@@ -279,26 +276,23 @@ class RunHistorySecurityAndFreshnessTests(unittest.TestCase):
                     "new",
                 )
             archive.seek(0)
+            observe_event_files = tensorboard_events.event_file_index
+
+            def fixed_event_files(root: Path, **kwargs: Any):
+                return replace(
+                    observe_event_files(root, **kwargs),
+                    fingerprint=fixed_fingerprint,
+                )
 
             with (
-                patch(
-                    "workbench.backend.run_history.query._event_file_fingerprint",
-                    return_value=fixed_fingerprint,
+                patch.object(
+                    tensorboard_events,
+                    "event_file_index",
+                    side_effect=fixed_event_files,
                 ),
-                patch(
-                    "workbench.backend.run_history.query.event_file_fingerprint",
-                    return_value=fixed_fingerprint,
-                ),
-                patch(
-                    "workbench.backend.tensorboard.readers.event_file_fingerprint",
-                    return_value=fixed_fingerprint,
-                ),
-                patch(
-                    "workbench.backend.run_history.query.load_event_accumulator",
-                    load_version,
-                ),
-                patch(
-                    "workbench.backend.tensorboard.readers.load_event_accumulator",
+                patch.object(
+                    tensorboard_events,
+                    "load_event_accumulator",
                     load_version,
                 ),
             ):

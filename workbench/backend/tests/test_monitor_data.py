@@ -113,15 +113,12 @@ class TensorBoardMonitorReaderFailureTests(unittest.TestCase):
         accumulators: list[object | None],
     ) -> dict:
         run_dirs = [log_dir / f"run-{index}" for index, _ in enumerate(accumulators)]
-        with (
-            patch(
-                "workbench.backend.tensorboard.readers.event_dirs",
-                return_value=run_dirs,
-            ),
-            patch(
-                "workbench.backend.tensorboard.readers.load_event_accumulator",
-                side_effect=accumulators,
-            ),
+        for index, run_dir in enumerate(run_dirs):
+            run_dir.mkdir()
+            run_dir.joinpath(f"events.out.tfevents.{index}").write_bytes(b"events")
+        with patch(
+            "workbench.backend.tensorboard.events.load_event_accumulator",
+            side_effect=accumulators,
         ):
             return TensorBoardMonitorReader().read(
                 job_id="job-1",
@@ -181,7 +178,7 @@ class TensorBoardMonitorReaderFailureTests(unittest.TestCase):
             reader = TensorBoardMonitorReader(max_event_bytes=4)
 
             with patch(
-                "workbench.backend.tensorboard.readers.load_event_accumulator"
+                "workbench.backend.tensorboard.events.load_event_accumulator"
             ) as load:
                 data = reader.read(
                     job_id="job-1",
@@ -256,16 +253,10 @@ class TensorBoardMonitorReaderFailureTests(unittest.TestCase):
             event_file.write_text("first", encoding="utf-8")
             reader = TensorBoardMonitorReader()
 
-            with (
-                patch(
-                    "workbench.backend.tensorboard.readers.event_dirs",
-                    return_value=[log_dir],
-                ),
-                patch(
-                    "workbench.backend.tensorboard.readers.load_event_accumulator",
-                    return_value=NoMatchingMonitorAccumulator(),
-                ) as load,
-            ):
+            with patch(
+                "workbench.backend.tensorboard.events.load_event_accumulator",
+                return_value=NoMatchingMonitorAccumulator(),
+            ) as load:
                 first = reader.read(
                     job_id="job-1",
                     node_path="main_model.0.model",
@@ -452,7 +443,7 @@ class TensorBoardParameterStatusReaderTests(unittest.TestCase):
             reader = TensorBoardParameterStatusReader(max_event_bytes=4)
 
             with patch(
-                "workbench.backend.tensorboard.readers.load_event_accumulator"
+                "workbench.backend.tensorboard.events.load_event_accumulator"
             ) as load:
                 data = reader.read(
                     source_id="job-1",
@@ -488,16 +479,10 @@ class TensorBoardParameterStatusReaderTests(unittest.TestCase):
             event_file.write_text("first", encoding="utf-8")
             reader = TensorBoardParameterStatusReader()
 
-            with (
-                patch(
-                    "workbench.backend.tensorboard.readers.event_dirs",
-                    return_value=[log_dir],
-                ),
-                patch(
-                    "workbench.backend.tensorboard.readers.load_event_accumulator",
-                    return_value=ParameterStatusAccumulator(),
-                ) as load,
-            ):
+            with patch(
+                "workbench.backend.tensorboard.events.load_event_accumulator",
+                return_value=ParameterStatusAccumulator(),
+            ) as load:
                 first = reader.read(
                     source_id="job-1",
                     preset=None,
@@ -534,16 +519,10 @@ class TensorBoardParameterStatusReaderTests(unittest.TestCase):
             )
             reader = TensorBoardParameterStatusReader(scalar_point_limit=7)
 
-            with (
-                patch(
-                    "workbench.backend.tensorboard.readers.event_dirs",
-                    return_value=[log_dir],
-                ),
-                patch(
-                    "workbench.backend.tensorboard.readers.load_event_accumulator",
-                    return_value=ParameterStatusAccumulator(),
-                ) as load,
-            ):
+            with patch(
+                "workbench.backend.tensorboard.events.load_event_accumulator",
+                return_value=ParameterStatusAccumulator(),
+            ) as load:
                 reader.read(
                     source_id="job-1",
                     preset=None,
@@ -563,15 +542,9 @@ class TensorBoardParameterStatusReaderTests(unittest.TestCase):
             )
             reader = TensorBoardParameterStatusReader(scalar_point_limit=3)
 
-            with (
-                patch(
-                    "workbench.backend.tensorboard.readers.event_dirs",
-                    return_value=[log_dir],
-                ),
-                patch(
-                    "workbench.backend.tensorboard.readers.load_event_accumulator",
-                    return_value=LargeParameterStatusAccumulator(),
-                ),
+            with patch(
+                "workbench.backend.tensorboard.events.load_event_accumulator",
+                return_value=LargeParameterStatusAccumulator(),
             ):
                 data = reader.read(
                     source_id="job-1",
@@ -627,7 +600,7 @@ class HistoricalMonitorDataFailureTests(unittest.TestCase):
             run_id, run_dir = self.write_historical_run(logs_root)
 
             with patch(
-                "workbench.backend.tensorboard.readers.load_event_accumulator",
+                "workbench.backend.tensorboard.events.load_event_accumulator",
                 return_value=TagsFailureAccumulator(),
             ):
                 response = asyncio.run(call_api(logs_root, run_id))

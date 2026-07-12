@@ -9,8 +9,11 @@ from __future__ import annotations
 
 import base64
 import math
+from collections import OrderedDict
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from threading import RLock
 from typing import Any
 
 from tensorboard.backend.event_processing import event_accumulator
@@ -32,11 +35,96 @@ MAX_TENSORBOARD_IMAGE_SUMMARY_BYTES = 1_000_000
 EventFileFingerprint = tuple[tuple[str, int, int], ...]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class EventFileIndex:
+    root: Path
     dirs: tuple[Path, ...]
+    files: tuple[Path, ...]
     fingerprint: EventFileFingerprint
     total_size: int
+
+    def cache_key(self, *parts: Any) -> tuple[Any, ...]:
+        return (self.root.as_posix(), self.fingerprint, *parts)
+
+    def exceeds(self, byte_limit: int) -> bool:
+        return byte_limit > 0 and self.total_size > byte_limit
+
+    def load_accumulator(
+        self,
+        event_dir: Path,
+        *,
+        size_guidance: dict[int, int] | None = None,
+    ) -> Any | None:
+        """Load one directory from this contained observation only."""
+        if event_dir not in self.dirs:
+            return None
+        if size_guidance is None:
+            return load_event_accumulator(event_dir)
+        return load_event_accumulator(event_dir, size_guidance=size_guidance)
+
+
+class TensorBoardEventCache:
+    """Generation-safe root-keyed LRU cache group for event projections."""
+
+    def __init__(self, limits: Mapping[str, int]) -> None:
+        if not limits or any(limit < 1 for limit in limits.values()):
+            raise ValueError("TensorBoard event cache limits must be positive.")
+        self._limits = dict(limits)
+        self._caches: dict[str, OrderedDict[tuple[Any, ...], Any]] = {
+            name: OrderedDict() for name in limits
+        }
+        self._generation = 0
+        self._lock = RLock()
+
+    def token(self) -> int:
+        with self._lock:
+            return self._generation
+
+    def get(self, cache_name: str, key: tuple[Any, ...]) -> Any | None:
+        with self._lock:
+            cache = self._caches[cache_name]
+            if key not in cache:
+                return None
+            cache.move_to_end(key)
+            return cache[key]
+
+    def publish(
+        self,
+        cache_name: str,
+        key: tuple[Any, ...],
+        value: Any,
+        *,
+        generation: int,
+    ) -> None:
+        with self._lock:
+            if generation != self._generation:
+                return
+            cache = self._caches[cache_name]
+            cache[key] = value
+            cache.move_to_end(key)
+            while len(cache) > self._limits[cache_name]:
+                cache.popitem(last=False)
+
+    def clear_roots(self, roots: set[str]) -> None:
+        if not roots:
+            return
+        with self._lock:
+            self._generation += 1
+            for cache in self._caches.values():
+                for key in list(cache):
+                    cached_root = str(key[0]) if key else ""
+                    if any(
+                        cached_root == root
+                        or cached_root.startswith(f"{root}/")
+                        for root in roots
+                    ):
+                        cache.pop(key, None)
+
+    def clear(self) -> None:
+        with self._lock:
+            self._generation += 1
+            for cache in self._caches.values():
+                cache.clear()
 
 
 def finite_float(value: Any) -> float:
@@ -66,22 +154,11 @@ def scalar_points(
     ]
 
 
-def event_dirs(root: Path) -> list[Path]:
-    """Return the sorted, de-duplicated directories under ``root`` holding events."""
-    return list(event_file_index(root).dirs)
-
-
-def event_file_total_size(root: Path) -> int:
-    """Return total bytes for TensorBoard event files below ``root``."""
-    return event_file_index(root).total_size
-
-
-def event_file_fingerprint(root: Path) -> EventFileFingerprint:
-    """Return event-file identity data for cache invalidation."""
-    return event_file_index(root).fingerprint
-
-
-def event_file_index(root: Path) -> EventFileIndex:
+def event_file_index(
+    root: Path,
+    *,
+    candidates: tuple[Path, ...] | None = None,
+) -> EventFileIndex:
     """Return a contained event-file index in one tree walk.
 
     ``EventAccumulator`` reads every matching event file in a directory. If any
@@ -91,11 +168,22 @@ def event_file_index(root: Path) -> EventFileIndex:
     try:
         trusted_root = root.resolve(strict=True)
     except OSError:
-        return EventFileIndex(dirs=(), fingerprint=(), total_size=0)
+        return EventFileIndex(
+            root=root,
+            dirs=(),
+            files=(),
+            fingerprint=(),
+            total_size=0,
+        )
 
-    files_by_dir: dict[Path, list[tuple[Path, int, int]]] = {}
+    files_by_dir: dict[Path, list[tuple[Path, Path, int, int]]] = {}
     unsafe_dirs: set[Path] = set()
-    for path in root.rglob("events.out.tfevents.*"):
+    paths = candidates if candidates is not None else tuple(
+        root.rglob("events.out.tfevents.*")
+    )
+    for path in paths:
+        if not path.name.startswith("events.out.tfevents."):
+            continue
         event_dir = path.parent
         try:
             resolved = path.resolve(strict=True)
@@ -110,21 +198,28 @@ def event_file_index(root: Path) -> EventFileIndex:
         except OSError:
             continue
         files_by_dir.setdefault(event_dir, []).append(
-            (path, int(stat.st_size), int(stat.st_mtime_ns))
+            (path, resolved, int(stat.st_size), int(stat.st_mtime_ns))
         )
 
     dirs: list[Path] = []
+    files: list[Path] = []
     fingerprint: list[tuple[str, int, int]] = []
     total = 0
     for event_dir in sorted(files_by_dir):
         if event_dir in unsafe_dirs:
             continue
         dirs.append(event_dir)
-        for path, size, modified_at in files_by_dir[event_dir]:
+        for path, resolved, size, modified_at in sorted(
+            files_by_dir[event_dir],
+            key=lambda item: item[0],
+        ):
+            files.append(resolved)
             total += size
             fingerprint.append((path.as_posix(), size, modified_at))
     return EventFileIndex(
+        root=root,
         dirs=tuple(dirs),
+        files=tuple(files),
         fingerprint=tuple(sorted(fingerprint)),
         total_size=total,
     )

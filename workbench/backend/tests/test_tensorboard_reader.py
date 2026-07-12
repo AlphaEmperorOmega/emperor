@@ -30,8 +30,108 @@ class FakeScalarAccumulator:
         return self.events_by_tag[tag]
 
 
+class FakeTagsAccumulator:
+    def Tags(self) -> dict[str, list[str]]:
+        return {
+            "scalars": [],
+            "histograms": [],
+            "images": [],
+            "tensors": [],
+        }
+
+
 @unittest.skipIf(tensorboard_reader is None, "tensorboard is not installed")
 class TensorBoardReaderTests(unittest.TestCase):
+    def test_monitor_read_reuses_one_shared_event_file_observation(self) -> None:
+        from workbench.backend.tensorboard.readers import TensorBoardMonitorReader
+
+        assert tensorboard_reader is not None
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            root.joinpath("events.out.tfevents.test").write_bytes(b"events")
+            with (
+                patch.object(
+                    tensorboard_reader,
+                    "event_file_index",
+                    wraps=tensorboard_reader.event_file_index,
+                ) as observe,
+                patch.object(
+                    tensorboard_reader,
+                    "load_event_accumulator",
+                    return_value=FakeTagsAccumulator(),
+                ) as load,
+            ):
+                TensorBoardMonitorReader().read(
+                    job_id="job-1",
+                    node_path="main",
+                    dataset="Mnist",
+                    log_dir=str(root),
+                )
+
+        self.assertEqual(observe.call_count, 1)
+        load.assert_called_once_with(root)
+
+    def test_parameter_read_reuses_one_shared_event_file_observation(self) -> None:
+        from workbench.backend.tensorboard.readers import (
+            TensorBoardParameterStatusReader,
+        )
+
+        assert tensorboard_reader is not None
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            root.joinpath("events.out.tfevents.test").write_bytes(b"events")
+            reader = TensorBoardParameterStatusReader()
+            with (
+                patch.object(
+                    tensorboard_reader,
+                    "event_file_index",
+                    wraps=tensorboard_reader.event_file_index,
+                ) as observe,
+                patch.object(
+                    tensorboard_reader,
+                    "load_event_accumulator",
+                    return_value=FakeTagsAccumulator(),
+                ) as load,
+            ):
+                reader.read(
+                    source_id="run-1",
+                    preset="baseline",
+                    dataset="Mnist",
+                    log_dir=str(root),
+                )
+
+        self.assertEqual(observe.call_count, 1)
+        load.assert_called_once_with(root, size_guidance=reader._size_guidance)
+
+    def test_tag_read_reuses_one_shared_event_file_observation(self) -> None:
+        from workbench.backend.run_history.query import LogRunQueryService
+        from workbench.backend.run_history.scanner import LogRunScanner
+
+        assert tensorboard_reader is not None
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            root.joinpath("events.out.tfevents.test").write_bytes(b"events")
+            query = LogRunQueryService(scanner=LogRunScanner())
+            with (
+                patch.object(
+                    tensorboard_reader,
+                    "event_file_index",
+                    wraps=tensorboard_reader.event_file_index,
+                ) as observe,
+                patch.object(
+                    tensorboard_reader,
+                    "load_event_accumulator",
+                    return_value=FakeTagsAccumulator(),
+                ) as load,
+            ):
+                query.read_tags(root)
+
+        self.assertEqual(observe.call_count, 1)
+        load.assert_called_once_with(
+            root,
+            size_guidance=tensorboard_reader.TENSORBOARD_TAG_SIZE_GUIDANCE,
+        )
+
     def test_finite_float_coerces_values_and_replaces_non_finite_values(self) -> None:
         assert tensorboard_reader is not None
 
@@ -61,28 +161,102 @@ class TensorBoardReaderTests(unittest.TestCase):
             ],
         )
 
-    def test_event_dirs_returns_sorted_deduplicated_event_parent_dirs(self) -> None:
+    def test_event_file_index_observes_dirs_fingerprint_and_size_once(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             first = root / "a" / "nested"
             second = root / "z"
             first.mkdir(parents=True)
             second.mkdir(parents=True)
-            (first / "events.out.tfevents.first").write_text("", encoding="utf-8")
-            (first / "events.out.tfevents.second").write_text("", encoding="utf-8")
-            (second / "events.out.tfevents.third").write_text("", encoding="utf-8")
+            (first / "events.out.tfevents.first").write_text("a", encoding="utf-8")
+            (first / "events.out.tfevents.second").write_text("bb", encoding="utf-8")
+            (second / "events.out.tfevents.third").write_text("ccc", encoding="utf-8")
             (root / "events.out.other").write_text("", encoding="utf-8")
 
             assert tensorboard_reader is not None
-            self.assertEqual(tensorboard_reader.event_dirs(root), [first, second])
+            index = tensorboard_reader.event_file_index(root)
 
-    def test_event_dirs_returns_empty_for_missing_or_empty_root(self) -> None:
+        self.assertEqual(index.root, root)
+        self.assertEqual(index.dirs, (first, second))
+        self.assertEqual(
+            index.files,
+            (
+                first / "events.out.tfevents.first",
+                first / "events.out.tfevents.second",
+                second / "events.out.tfevents.third",
+            ),
+        )
+        self.assertEqual(index.total_size, 6)
+        self.assertEqual(
+            [(path, size) for path, size, _modified_at in index.fingerprint],
+            [
+                ((first / "events.out.tfevents.first").as_posix(), 1),
+                ((first / "events.out.tfevents.second").as_posix(), 2),
+                ((second / "events.out.tfevents.third").as_posix(), 3),
+            ],
+        )
+
+    def test_event_file_index_returns_empty_for_missing_or_empty_root(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
 
             assert tensorboard_reader is not None
-            self.assertEqual(tensorboard_reader.event_dirs(root), [])
-            self.assertEqual(tensorboard_reader.event_dirs(root / "missing"), [])
+            empty = tensorboard_reader.event_file_index(root)
+            missing = tensorboard_reader.event_file_index(root / "missing")
+
+        self.assertEqual(empty.dirs, ())
+        self.assertEqual(empty.fingerprint, ())
+        self.assertEqual(empty.total_size, 0)
+        self.assertEqual(missing.dirs, ())
+        self.assertEqual(missing.fingerprint, ())
+        self.assertEqual(missing.total_size, 0)
+
+    def test_event_file_index_excludes_an_entire_mixed_escape_directory(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            mixed = root / "mixed"
+            trusted = root / "trusted"
+            outside = root.parent / f"{root.name}-outside-event"
+            mixed.mkdir()
+            trusted.mkdir()
+            mixed.joinpath("events.out.tfevents.safe").write_bytes(b"safe")
+            outside.write_bytes(b"outside")
+            mixed.joinpath("events.out.tfevents.escape").symlink_to(outside)
+            trusted.joinpath("events.out.tfevents.safe").write_bytes(b"trusted")
+
+            try:
+                assert tensorboard_reader is not None
+                index = tensorboard_reader.event_file_index(root)
+            finally:
+                outside.unlink(missing_ok=True)
+
+        self.assertEqual(index.dirs, (trusted,))
+        self.assertEqual(index.total_size, len(b"trusted"))
+        self.assertEqual(len(index.fingerprint), 1)
+
+    def test_event_cache_lru_and_generation_reject_stale_publication(self) -> None:
+        assert tensorboard_reader is not None
+        cache = tensorboard_reader.TensorBoardEventCache({"payload": 2})
+        generation = cache.token()
+        first = ("/runs/first", (), "value")
+        nested = ("/runs/first/nested", (), "accumulator")
+        second = ("/runs/second", (), "value")
+        third = ("/runs/third", (), "value")
+        cache.publish("payload", first, 1, generation=generation)
+        cache.publish("payload", nested, "nested", generation=generation)
+        self.assertEqual(cache.get("payload", first), 1)
+        cache.publish("payload", second, 2, generation=generation)
+
+        self.assertIsNone(cache.get("payload", nested))
+        cache.clear_roots({"/runs/first"})
+        cache.publish("payload", first, 4, generation=generation)
+        current_generation = cache.token()
+        cache.publish("payload", third, 3, generation=current_generation)
+
+        self.assertIsNone(cache.get("payload", first))
+        self.assertEqual(cache.get("payload", third), 3)
 
     def test_load_event_accumulator_reloads_and_returns_accumulator(self) -> None:
         assert tensorboard_reader is not None
