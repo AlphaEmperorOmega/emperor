@@ -1,9 +1,9 @@
 import { AppHeader } from "@/features/workbench/components/screen/app-header";
 import {
-  WorkbenchWorkspaceMain,
+  WorkbenchWorkspaceRegions,
   WorkbenchWorkspaceOverlays,
-  WorkbenchWorkspaceSidebar,
 } from "@/features/workbench/components/workbench-workspaces";
+import { WorkbenchWorkspaceFrame } from "@/features/workbench/components/workbench-workspace-layout";
 import { type WorkbenchScreenShell } from "@/features/workbench/state/use-workbench-workspace-shell";
 import { type ReactNode } from "react";
 
@@ -22,18 +22,6 @@ export function WorkbenchScreen({
     apiConnectionDialog,
     importLogsDialog,
   } = shell;
-  const workspaceContent = (
-    <>
-      <WorkbenchWorkspaceSidebar
-        activeWorkspace={activeWorkspace}
-        onOpenFullConfig={fullConfigDialog.open}
-      />
-      <WorkbenchWorkspaceMain
-        activeWorkspace={activeWorkspace}
-      />
-    </>
-  );
-
   return (
     <main className="grid h-dvh min-h-0 grid-rows-[60px_minmax(0,1fr)] overflow-hidden bg-bg text-ink">
       <a
@@ -50,15 +38,12 @@ export function WorkbenchScreen({
         onOpenImportLogs={importLogsDialog.open}
       />
 
-      <section
-        id="workbench-workspace-content"
-        tabIndex={-1}
-        className="grid min-h-0 grid-cols-1 overflow-auto lg:grid-cols-[344px_minmax(0,1fr)_332px] lg:overflow-hidden"
-      >
-        {workspaceBoundary
-          ? workspaceBoundary(workspaceContent)
-          : workspaceContent}
-      </section>
+      <WorkbenchWorkspaceFrame workspaceBoundary={workspaceBoundary}>
+        <WorkbenchWorkspaceRegions
+          activeWorkspace={activeWorkspace}
+          onOpenFullConfig={fullConfigDialog.open}
+        />
+      </WorkbenchWorkspaceFrame>
 
       <WorkbenchWorkspaceOverlays
         activeWorkspace={activeWorkspace}

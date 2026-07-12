@@ -4,6 +4,11 @@ import { PreviewPanel } from "@/features/workbench/components/screen/preview-pan
 import { PreviewToolbar } from "@/features/workbench/components/screen/preview-toolbar";
 import { WorkbenchModelSidebar } from "@/features/workbench/components/workbench-model-sidebar";
 import {
+  WorkbenchThreeRegionLayout,
+  WorkbenchWideWorkspaceRegion,
+  WorkbenchWorkspaceLoadingStatus,
+} from "@/features/workbench/components/workbench-workspace-layout";
+import {
   useGraphMonitor,
   useGraphView,
 } from "@/features/workbench/providers/workbench-providers";
@@ -14,15 +19,7 @@ import {
 import { type WorkbenchWorkspace } from "@/types/workbench";
 
 function TrainingWorkspaceLoadingFallback() {
-  return (
-    <div
-      className="grid h-full min-h-[560px] place-items-center lg:min-h-0"
-      role="status"
-      aria-label="Loading training workspace"
-    >
-      <span className="text-xs text-ink-faint">Loading training workspace</span>
-    </div>
-  );
+  return <WorkbenchWorkspaceLoadingStatus label="Loading training workspace" />;
 }
 
 const TrainingPanel = dynamic(
@@ -100,65 +97,45 @@ const ConnectedNeuronCluster3DPopup = dynamic(
   { ssr: false },
 );
 
-export function WorkbenchWorkspaceSidebar({
+export function WorkbenchWorkspaceRegions({
   activeWorkspace,
   onOpenFullConfig,
 }: {
   activeWorkspace: WorkbenchWorkspace;
   onOpenFullConfig: FullConfigDialogControls["open"];
 }) {
-  const isModelWorkspace = activeWorkspace === "model";
-  const isLogsWorkspace = activeWorkspace === "logs";
-
-  if (activeWorkspace === "training") {
-    return null;
-  }
-
-  return (
-    <aside className="min-h-0 overflow-y-auto border-b border-line bg-[linear-gradient(180deg,rgba(13,12,22,0.6),rgba(8,8,13,0.4))] px-4 pb-7 pt-[18px] backdrop-blur lg:border-b-0 lg:border-r">
-      <div className="grid gap-[22px]">
-        {isModelWorkspace ? (
-          <WorkbenchModelSidebar onOpenFullConfig={onOpenFullConfig} />
-        ) : isLogsWorkspace ? (
-          <ConnectedLogsSidebarPanel />
-        ) : null}
-      </div>
-    </aside>
-  );
-}
-
-export function WorkbenchWorkspaceMain({
-  activeWorkspace,
-}: {
-  activeWorkspace: WorkbenchWorkspace;
-}) {
   if (activeWorkspace === "model") {
     return (
-      <>
-        <div className="grid min-h-[560px] grid-rows-[56px_minmax(0,1fr)] bg-transparent lg:min-h-0">
-          <PreviewToolbar />
-          <PreviewPanel />
-        </div>
-
-        <NodeDetailsPanel />
-      </>
+      <WorkbenchThreeRegionLayout
+        sidebar={
+          <WorkbenchModelSidebar onOpenFullConfig={onOpenFullConfig} />
+        }
+        primary={
+          <div className="grid h-full min-h-0 grid-rows-[56px_minmax(0,1fr)] bg-transparent">
+            <PreviewToolbar />
+            <PreviewPanel />
+          </div>
+        }
+        details={<NodeDetailsPanel />}
+      />
     );
   }
 
   if (activeWorkspace === "logs") {
     return (
-      <>
-        <ConnectedLogsGraphPreviewPanel />
-        <ConnectedLogRunDetailsPanel />
-      </>
+      <WorkbenchThreeRegionLayout
+        sidebar={<ConnectedLogsSidebarPanel />}
+        primary={<ConnectedLogsGraphPreviewPanel />}
+        details={<ConnectedLogRunDetailsPanel />}
+      />
     );
   }
 
   if (activeWorkspace === "training") {
     return (
-      <div className="grid h-full min-h-[560px] min-w-0 grid-rows-[minmax(0,1fr)] overflow-hidden lg:col-span-3 lg:min-h-0">
+      <WorkbenchWideWorkspaceRegion>
         <TrainingPanel />
-      </div>
+      </WorkbenchWideWorkspaceRegion>
     );
   }
 

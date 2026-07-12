@@ -5,17 +5,17 @@ import dynamic from "next/dynamic";
 import { type ReactNode, useCallback, useState } from "react";
 import { WorkbenchProviders } from "@/features/workbench/providers/workbench-providers";
 import { WorkbenchScreen } from "@/features/workbench/components/workbench-screen";
+import {
+  WorkbenchWideWorkspaceRegion,
+  WorkbenchWorkspaceLoadingStatus,
+} from "@/features/workbench/components/workbench-workspace-layout";
 import { useWorkbenchWorkspaceShell } from "@/features/workbench/state/use-workbench-workspace-shell";
 
 function LogsWorkspaceProviderLoadingFallback() {
   return (
-    <div
-      className="grid h-full min-h-[560px] place-items-center lg:col-span-3 lg:min-h-0"
-      role="status"
-      aria-label="Loading logs workspace"
-    >
-      <span className="text-xs text-ink-faint">Loading logs workspace</span>
-    </div>
+    <WorkbenchWideWorkspaceRegion>
+      <WorkbenchWorkspaceLoadingStatus label="Loading logs workspace" />
+    </WorkbenchWideWorkspaceRegion>
   );
 }
 

@@ -23,7 +23,7 @@ import {
 } from "@/features/workbench/providers/training-provider";
 import { trainingQueryKeys } from "@/lib/query-keys";
 import {
-  WorkbenchWorkspaceMain,
+  WorkbenchWorkspaceRegions,
   WorkbenchWorkspaceOverlays,
 } from "@/features/workbench/components/workbench-workspaces";
 import { type WorkbenchWorkspace } from "@/types/workbench";
@@ -213,8 +213,9 @@ function renderWorkspaceOverlayHarness({
         <LogsWorkspaceProvider enabled={activeWorkspace === "logs"}>
           {children}
           {activeWorkspace === "training" && (
-            <WorkbenchWorkspaceMain
+            <WorkbenchWorkspaceRegions
               activeWorkspace={activeWorkspace}
+              onOpenFullConfig={fullConfigDialog.open}
             />
           )}
           <WorkbenchWorkspaceOverlays
