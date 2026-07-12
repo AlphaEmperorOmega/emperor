@@ -28,7 +28,7 @@ export function TrainingLogTailCard({ logTail = [] }: { logTail?: string[] }) {
       title="Log Tail"
       detail={<StatChip>{lineCountLabel(displayedLineCount)}</StatChip>}
     >
-      <pre className="max-h-36 overflow-y-auto overflow-x-hidden whitespace-pre-wrap rounded-[10px] border border-line bg-black/25 p-2 font-mono text-xs leading-5 text-ink-dim [overflow-wrap:anywhere]">
+      <pre className="max-h-36 overflow-y-auto overflow-x-hidden whitespace-pre-wrap rounded-control border border-line bg-black/25 p-2 font-mono text-xs leading-5 text-ink-dim [overflow-wrap:anywhere]">
         {boundedLogTailText}
       </pre>
     </SurfacePanel>

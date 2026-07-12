@@ -8,7 +8,7 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
       ref={ref}
       className={cn(
         fieldControlClassName,
-        "h-9 px-2.5 font-mono text-sm placeholder:text-ink-faint",
+        "h-touch px-3 font-mono type-body tabular-nums placeholder:text-ink-faint md:h-control",
         className,
       )}
       {...props}

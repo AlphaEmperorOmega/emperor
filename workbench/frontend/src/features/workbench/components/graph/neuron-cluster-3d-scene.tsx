@@ -7,10 +7,12 @@ import {
   type Cluster3DSceneModel,
   type GraphCoordinate,
 } from "@/lib/graph";
+import {
+  workbenchVisualTokens,
+  workbenchVisualizationTokens,
+} from "@/lib/visual-tokens";
 
 const CELL_SPACING = 1.12;
-const REACH_HALO_FILL_COLOR = "#94a3b8";
-const REACH_HALO_WIREFRAME_COLOR = "#cbd5e1";
 
 type SceneProps = {
   scene: Cluster3DSceneModel;
@@ -26,11 +28,8 @@ type RenderCell = {
   coordinate: GraphCoordinate;
 };
 
-const categoryColors: Record<Cluster3DCell["category"], string> = {
-  initial: "#8da2ff",
-  grown: "#22d3ee",
-  recentAdded: "#f59e0b",
-};
+const categoryColors: Record<Cluster3DCell["category"], string> =
+  workbenchVisualizationTokens.clusterCategories;
 
 function coordinatePosition(
   coordinate: GraphCoordinate,
@@ -153,7 +152,7 @@ function CapacityBounds({ capacity }: { capacity: GraphCoordinate }) {
         ]}
       />
       <meshBasicMaterial
-        color="#9ca3af"
+        color={workbenchVisualTokens.clusterBounds}
         wireframe
         transparent
         opacity={0.35}
@@ -176,7 +175,12 @@ function SelectedOutline({
   return (
     <mesh position={[x, y, z]}>
       <sphereGeometry args={[0.46, 20, 14]} />
-      <meshBasicMaterial color="#f8fafc" wireframe transparent opacity={0.95} />
+      <meshBasicMaterial
+        color={workbenchVisualTokens.clusterSelected}
+        wireframe
+        transparent
+        opacity={0.95}
+      />
     </mesh>
   );
 }
@@ -213,7 +217,7 @@ function ReachHighlights({
       <InstancedCells
         cells={reachCells}
         capacity={capacity}
-        color={REACH_HALO_FILL_COLOR}
+        color={workbenchVisualTokens.clusterReach}
         opacity={0.035}
         radius={0.58}
         depthWrite={false}
@@ -222,7 +226,7 @@ function ReachHighlights({
       <InstancedCells
         cells={reachCells}
         capacity={capacity}
-        color={REACH_HALO_WIREFRAME_COLOR}
+        color={workbenchVisualTokens.clusterReachWireframe}
         opacity={0.09}
         radius={0.6}
         depthWrite={false}
@@ -291,7 +295,7 @@ function ClusterCells({
       <InstancedCells
         cells={ghostCells}
         capacity={scene.capacity}
-        color="#64748b"
+        color={workbenchVisualTokens.clusterGhost}
         opacity={0.14}
         radius={0.22}
       />
@@ -343,7 +347,7 @@ export function NeuronCluster3DScene(props: SceneProps) {
       onWheel={(event) => event.stopPropagation()}
       className="h-full min-h-[420px] w-full"
     >
-      <color attach="background" args={["#05070d"]} />
+      <color attach="background" args={[workbenchVisualTokens.scene]} />
       <ambientLight intensity={0.85} />
       <CapacityBounds capacity={props.scene.capacity} />
       <ClusterCells {...props} />

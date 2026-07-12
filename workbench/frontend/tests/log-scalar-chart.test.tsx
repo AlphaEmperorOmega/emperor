@@ -779,11 +779,11 @@ describe("Logs scalar rendering", () => {
       throw new Error("Expected scalar chart to render inside a surface section");
     }
     expect(chartCard).toHaveClass(
-      "rounded-[10px]",
+      "rounded-panel",
       "border",
       "border-line",
-      "bg-white/[0.018]",
-      "p-4",
+      "bg-panel-2/70",
+      "p-region",
     );
     expect(chartCard).not.toHaveClass("edge", "rounded-card");
 

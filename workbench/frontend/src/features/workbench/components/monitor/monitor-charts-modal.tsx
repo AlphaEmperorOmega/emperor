@@ -146,7 +146,7 @@ function LazyMonitorChart({
         render()
       ) : (
         <div
-          className="min-h-40 rounded-[10px] border border-line-soft bg-white/[0.018]"
+          className="min-h-40 rounded-control border border-line-soft bg-white/[0.018]"
           aria-label={`${label} chart placeholder`}
         />
       )}
@@ -619,14 +619,14 @@ function ComparisonCharts({
   return (
     <div className="grid gap-4">
       <div className="grid gap-3 md:grid-cols-2">
-        <div className="rounded-[10px] border border-line-soft bg-white/[0.018] p-3">
-          <div className="text-xs font-bold uppercase tracking-[0.08em] text-ink-dim">
+        <div className="rounded-control border border-line-soft bg-white/[0.018] p-3">
+          <div className="text-xs font-bold uppercase tracking-label text-ink-dim">
             Primary layer
           </div>
           <div className="mt-1 break-words font-mono text-xs text-ink">{primaryNode.path}</div>
         </div>
-        <div className="rounded-[10px] border border-line-soft bg-white/[0.018] p-3">
-          <div className="text-xs font-bold uppercase tracking-[0.08em] text-ink-dim">
+        <div className="rounded-control border border-line-soft bg-white/[0.018] p-3">
+          <div className="text-xs font-bold uppercase tracking-label text-ink-dim">
             Comparison layer
           </div>
           <div className="mt-1 break-words font-mono text-xs text-ink">
@@ -658,14 +658,14 @@ function MultiRunComparisonCharts({
   return (
     <div className="grid gap-4">
       <div className="grid gap-3 md:grid-cols-2">
-        <div className="rounded-[10px] border border-line-soft bg-white/[0.018] p-3">
-          <div className="text-xs font-bold uppercase tracking-[0.08em] text-ink-dim">
+        <div className="rounded-control border border-line-soft bg-white/[0.018] p-3">
+          <div className="text-xs font-bold uppercase tracking-label text-ink-dim">
             Primary layer
           </div>
           <div className="mt-1 break-words font-mono text-xs text-ink">{primaryNode.path}</div>
         </div>
-        <div className="rounded-[10px] border border-line-soft bg-white/[0.018] p-3">
-          <div className="text-xs font-bold uppercase tracking-[0.08em] text-ink-dim">
+        <div className="rounded-control border border-line-soft bg-white/[0.018] p-3">
+          <div className="text-xs font-bold uppercase tracking-label text-ink-dim">
             Comparison layer
           </div>
           <div className="mt-1 break-words font-mono text-xs text-ink">
@@ -676,7 +676,7 @@ function MultiRunComparisonCharts({
 
       <div className="grid gap-4 xl:grid-cols-2">
         <div className="grid min-w-0 content-start gap-3">
-          <div className="text-xs font-bold uppercase tracking-[0.08em] text-ink-dim">
+          <div className="text-xs font-bold uppercase tracking-label text-ink-dim">
             Primary overlays
           </div>
           <MultiRunMonitorCharts
@@ -685,7 +685,7 @@ function MultiRunComparisonCharts({
           />
         </div>
         <div className="grid min-w-0 content-start gap-3">
-          <div className="text-xs font-bold uppercase tracking-[0.08em] text-ink-dim">
+          <div className="text-xs font-bold uppercase tracking-label text-ink-dim">
             Comparison overlays
           </div>
           {comparisonResults && hasHistoricalMonitorData(comparisonResults) ? (
@@ -788,14 +788,14 @@ export function MonitorChartsModal({
       titleId="monitor-charts-title"
       size="fullscreen"
       onClose={onClose}
-      className="grid bg-black/70 p-3 sm:p-6"
+      className="grid bg-black/80 p-region sm:p-shell-wide"
       panelClassName="grid max-h-full min-h-0 max-w-5xl grid-rows-[auto_minmax(0,1fr)] justify-self-center"
     >
-        <div className="grid gap-3 border-b border-line bg-panel/85 p-4 backdrop-blur sm:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="grid gap-panel border-b border-line bg-panel/90 p-region backdrop-blur-xl sm:grid-cols-[minmax(0,1fr)_auto]">
           <div className="min-w-0">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <h2 id="monitor-charts-title" className="text-base font-semibold text-ink">
-                Monitor charts
+              <h2 id="monitor-charts-title" className="type-title text-balance font-semibold text-ink">
+                Monitor Charts
               </h2>
               {activeJob ? (
                 <>
@@ -839,7 +839,7 @@ export function MonitorChartsModal({
                     setComparisonScope(nextScope as LinearMonitorComparisonScope)
                   }
                   className="min-w-36"
-                  triggerClassName="h-9 min-w-36 rounded-[10px] px-2 text-sm"
+                  triggerClassName="h-touch min-w-36 rounded-control px-2 text-sm md:h-control"
                 />
               </LabeledField>
             )}
@@ -856,7 +856,7 @@ export function MonitorChartsModal({
                   options={comparisonPathOptions}
                   onChange={setComparisonPath}
                   className="min-w-44"
-                  triggerClassName="h-9 min-w-44 rounded-[10px] px-2 text-sm"
+                  triggerClassName="h-touch min-w-44 rounded-control px-2 text-sm md:h-control"
                 />
               </LabeledField>
             )}
@@ -873,7 +873,7 @@ export function MonitorChartsModal({
                   options={sourcePresetOptions}
                   onChange={setPreset}
                   className="min-w-32"
-                  triggerClassName="h-9 min-w-32 rounded-[10px] px-2 text-sm"
+                  triggerClassName="h-touch min-w-32 rounded-control px-2 text-sm md:h-control"
                 />
               </LabeledField>
             )}
@@ -889,7 +889,7 @@ export function MonitorChartsModal({
                 options={sourceDatasetOptions}
                 onChange={setDataset}
                 className="min-w-32"
-                triggerClassName="h-9 min-w-32 rounded-[10px] px-2 text-sm"
+                triggerClassName="h-touch min-w-32 rounded-control px-2 text-sm md:h-control"
               />
             </LabeledField>
             <Button
@@ -909,7 +909,7 @@ export function MonitorChartsModal({
           </div>
         </div>
 
-        <div className="min-h-0 overflow-y-auto bg-bg-2/80 p-4">
+        <div className="min-h-0 overflow-y-auto bg-bg-2/80 p-region">
           {hasData && historicalRunGroup && (
             <div className="mb-3 grid gap-2">
               <HistoricalMonitorProgressRow

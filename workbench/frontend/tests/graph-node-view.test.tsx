@@ -74,7 +74,7 @@ describe("GraphNodeView", () => {
       "nodrag",
       "nopan",
       "edge",
-      "px-4",
+      "px-region",
     );
     expect(card).toHaveStyle({
       paddingBottom: `${graphCardGeometry.paddingBlock}px`,
@@ -271,7 +271,11 @@ describe("GraphNodeView", () => {
     expect(screen.queryByRole("button", { name: /config options for main_model\.0/i }))
       .not.toBeInTheDocument();
 
-    fireEvent.click(shell);
+    fireEvent.click(
+      within(shell).getByRole("button", {
+        name: /select and expand main_model\.0/i,
+      }),
+    );
 
     expect(onActivateNode).toHaveBeenCalledTimes(1);
   });
@@ -414,7 +418,7 @@ describe("GraphNodeView", () => {
       }),
     );
 
-    const dialog = screen.getByRole("dialog", { name: "Component info" });
+    const dialog = screen.getByRole("dialog", { name: "Component Info" });
     expect(within(dialog).getByText("LinearLayer")).toBeInTheDocument();
     expect(within(dialog).getAllByText("main_model.0.model").length).toBeGreaterThan(0);
     expect(
@@ -436,7 +440,7 @@ describe("GraphNodeView", () => {
 
     fireEvent.click(within(dialog).getByRole("button", { name: "Close component info" }));
 
-    expect(screen.queryByRole("dialog", { name: "Component info" }))
+    expect(screen.queryByRole("dialog", { name: "Component Info" }))
       .not.toBeInTheDocument();
   });
 
@@ -456,7 +460,7 @@ describe("GraphNodeView", () => {
       }),
     );
 
-    const dialog = screen.getByRole("dialog", { name: "Component info" });
+    const dialog = screen.getByRole("dialog", { name: "Component Info" });
     expect(within(dialog).getByText("Dropout")).toBeInTheDocument();
     expect(within(dialog).getByText("No description available")).toBeInTheDocument();
     expect(within(dialog).getByText("No config")).toBeInTheDocument();
@@ -555,12 +559,13 @@ describe("GraphNodeView", () => {
     ).toBeTruthy();
     expect(indicators).not.toHaveClass("h-7", "rounded-[8px]");
     expect(monitorButton).toHaveClass(
-      "h-6",
-      "w-6",
-      "rounded-[7px]",
-      "border-violet/30",
-      "bg-violet/10",
-      "shadow-[inset_0_-1px_0_rgba(146,113,255,0.22)]",
+      "h-touch",
+      "w-touch",
+      "md:h-control-sm",
+      "md:w-control-sm",
+      "rounded-control-sm",
+      "border-violet/35",
+      "bg-accent-soft",
     );
     expect(monitorButton).not.toHaveClass(
       "border-transparent",
@@ -623,12 +628,12 @@ describe("GraphNodeView", () => {
     expect(summaries).not.toHaveClass("flex-1");
     const row = screen.getByText("LinearLayer").parentElement;
     expect(row).toHaveClass(
-      "rounded-[10px]",
+      "rounded-control-md",
       "border",
       "border-line-soft",
-      "bg-white/[0.02]",
+      "bg-control",
       "px-3",
-      "text-[13px]",
+      "type-compact",
       "leading-none",
     );
     expect(row).toHaveStyle({
@@ -643,11 +648,11 @@ describe("GraphNodeView", () => {
 
     const gateSummary = screen.getByText("Gate").parentElement;
     expect(gateSummary).toHaveClass(
-      "rounded-[10px]",
+      "rounded-control-md",
       "border",
       "border-line-soft",
-      "bg-white/[0.02]",
-      "text-[13px]",
+      "bg-control",
+      "type-compact",
       "text-ink-dim",
       "leading-none",
     );
@@ -657,7 +662,7 @@ describe("GraphNodeView", () => {
     expect(gateSummary).not.toHaveClass("border-violet/30");
     expect(gateSummary).not.toHaveClass("text-violet-text");
     expect(gateSummary).not.toHaveClass(
-      "shadow-[inset_0_-1px_0_rgba(146,113,255,0.24)]",
+      "shadow-control-selected",
     );
     expect(gateSummary?.className).not.toContain("linear-gradient");
   });
@@ -676,18 +681,17 @@ describe("GraphNodeView", () => {
     const weights = within(shapes).getByLabelText("W shape 128 x 128");
     const bias = within(shapes).getByLabelText("B shape 128");
     expect(weights).toHaveClass(
-      "rounded-[7px]",
+      "rounded-control-md",
       "border-violet/25",
       "bg-violet/15",
       "px-2",
-      "text-[12px]",
+      "type-label",
       "leading-none",
-      "shadow-[inset_0_-1px_0_rgba(146,113,255,0.24)]",
     );
     expect(weights).toHaveStyle({
       height: `${graphCardGeometry.parameterShapes.rowHeight}px`,
     });
-    expect(bias).toHaveClass("text-[12px]");
+    expect(bias).toHaveClass("type-label");
     expect(bias).toHaveStyle({
       height: `${graphCardGeometry.parameterShapes.rowHeight}px`,
     });
@@ -812,11 +816,11 @@ describe("GraphNodeView", () => {
       "grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)]",
     );
     expect(dims).toHaveTextContent("256 -> 10");
-    expect(dims).toHaveClass("rounded-[7px]", "px-2", "text-[12px]");
+    expect(dims).toHaveClass("rounded-control-md", "px-2", "type-label");
     expect(dims).toHaveStyle({
       height: `${graphCardGeometry.parameterShapes.rowHeight}px`,
     });
-    expect(dims).not.toHaveClass("h-5", "px-1.5", "text-[10px]");
+    expect(dims).not.toHaveClass("h-5", "px-1.5", "type-caption");
     expect(dims.parentElement).toBe(shapes);
     expect(weights.parentElement).toBe(shapes);
     expect(bias.parentElement).toBe(shapes);
@@ -895,7 +899,7 @@ describe("GraphNodeView", () => {
 
     const summary = screen.getByLabelText("LinearLayer 128 -> 64");
     expect(summary).toHaveAttribute("title", "LinearLayer 128 -> 64");
-    expect(summary).toHaveClass("rounded-[10px]", "gap-2", "overflow-hidden");
+    expect(summary).toHaveClass("rounded-control-md", "gap-2", "overflow-hidden");
     expect(summary).toHaveStyle({
       height: `${graphCardGeometry.childSummary.rowHeight}px`,
     });
@@ -937,13 +941,18 @@ describe("GraphNodeView", () => {
     expect(screen.getByTestId("parameter-shapes-main_model.0")).toBeInTheDocument();
     expect(detailsButton).toHaveAttribute("aria-expanded", "true");
     expect(detailsButton).toHaveAttribute("title", "Config options for main_model.0");
-    expect(detailsButton).toHaveClass("h-7", "w-7");
+    expect(detailsButton).toHaveClass(
+      "h-touch",
+      "w-touch",
+      "md:h-control-sm",
+      "md:w-control-sm",
+    );
     expect(detailsButton).toHaveTextContent("");
     expect(details).not.toBeNull();
     const detailRow = within(details!).getByText("bias_flag").parentElement;
     expect(detailRow).toHaveClass(
       "grid-cols-[96px_minmax(0,1fr)]",
-      "text-[12.5px]",
+      "type-compact",
     );
     expect(detailRow).toHaveStyle({
       height: `${graphCardGeometry.details.rowHeight}px`,
@@ -1065,7 +1074,7 @@ describe("GraphNodeView", () => {
     const layer2 = within(diagram).getByTitle("Layer 2 · LinearLayer · 128 -> 128");
     expect(layer0).toHaveTextContent("Layer 0 · LinearLayer");
     expect(layer0).toHaveAttribute("aria-label", "Layer 0 · LinearLayer · 128 -> 128");
-    expect(layer0).toHaveClass("rounded-[10px]", "px-3", "text-[13px]");
+    expect(layer0).toHaveClass("rounded-control-md", "px-3", "type-compact");
     expect(layer0).toHaveStyle({
       height: `${graphCardGeometry.childSummary.rowHeight}px`,
     });
@@ -1120,7 +1129,7 @@ describe("GraphNodeView", () => {
       rowGap: `${graphCardGeometry.childSummary.rowGap}px`,
     });
     expect(diagram).not.toHaveClass("h-[160px]");
-    expect(layer0).toHaveClass("rounded-[10px]", "px-3", "text-[13px]");
+    expect(layer0).toHaveClass("rounded-control-md", "px-3", "type-compact");
     expect(layer0.style.left).toBe("");
     expect(layer0.style.width).toBe("");
     expect(layer0.style.height).toBe(
@@ -1149,7 +1158,7 @@ describe("GraphNodeView", () => {
             kind: "layer",
             layerIndex: 1,
           },
-          { label: "...", title: "5 more layers", kind: "overflow" },
+          { label: "…", title: "5 more layers", kind: "overflow" },
           {
             label: "Layer 7 · LinearLayer",
             title: "Layer 7 · LinearLayer · 256 -> 10",
@@ -1166,7 +1175,7 @@ describe("GraphNodeView", () => {
       .querySelector('[data-testid="stack-diagram-main_model.0"]')
       ?.querySelector("svg");
     expect(connector).toBeNull();
-    expect(screen.getByTitle("5 more layers")).toHaveTextContent("...");
+    expect(screen.getByTitle("5 more layers")).toHaveTextContent("…");
     expect(screen.getByTitle("Layer 7 · LinearLayer · 256 -> 10"))
       .toHaveTextContent("Layer 7 · LinearLayer");
     expect(screen.getByTitle("Layer 7 · LinearLayer · 256 -> 10"))
@@ -1197,7 +1206,11 @@ describe("GraphNodeView", () => {
       .toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^expand tree main_model\.0$/i }))
       .toBeInTheDocument();
-    fireEvent.click(screen.getByText("128 -> 128"));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /select and expand main_model\.0/i,
+      }),
+    );
     expect(onActivateNode).toHaveBeenCalledTimes(1);
   });
 
@@ -1245,15 +1258,15 @@ describe("GraphNodeView", () => {
     expect(within(diagram).getByText("Cluster map")).toBeInTheDocument();
     expect(within(diagram).getByText("2 / 8")).toBeInTheDocument();
     expect(within(diagram).getByText("1z")).toHaveClass(
-      "rounded-[7px]",
+      "rounded-chip",
       "border-violet/25",
       "px-1.5",
       "py-1",
-      "text-[10px]",
+      "type-caption",
       "leading-none",
     );
     expect(within(diagram).getByText("clipped")).toHaveClass(
-      "rounded-[7px]",
+      "rounded-chip",
       "border-line-soft",
       "px-1.5",
       "py-1",
@@ -1485,17 +1498,17 @@ describe("GraphNodeView", () => {
     const expert0 = within(diagram).getByTitle("Expert 0");
     expect(expert0).toHaveClass(
       "h-8",
-      "rounded-[8px]",
-      "text-[12px]",
+      "rounded-control-md",
+      "type-label",
       "leading-none",
     );
     expect(within(expert0).getByText("E0")).toHaveClass("truncate");
     expect(expert0).toHaveTextContent("E0");
     expect(within(diagram).getByTitle("main_model.0.sampler")).toHaveClass(
       "h-8",
-      "rounded-[8px]",
+      "rounded-control-md",
       "px-2",
-      "text-[12px]",
+      "type-label",
     );
     expect(Number.parseFloat(within(diagram).getByTitle("main_model.0.sampler").style.width))
       .toBe(EXPERT_DIAGRAM_SAMPLER_WIDTH);
@@ -1516,7 +1529,7 @@ describe("GraphNodeView", () => {
           { label: "E2", title: "Expert 2", kind: "expert", expertIndex: 2 },
           { label: "E3", title: "Expert 3", kind: "expert", expertIndex: 3 },
           { label: "E4", title: "Expert 4", kind: "expert", expertIndex: 4 },
-          { label: "...", title: "3 more experts", kind: "overflow" },
+          { label: "…", title: "3 more experts", kind: "overflow" },
           { label: "8 experts", title: "8 experts total", kind: "total" },
         ],
       },
@@ -1548,7 +1561,11 @@ describe("GraphNodeView", () => {
       .toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^expand tree main_model\.0$/i }))
       .toBeInTheDocument();
-    fireEvent.click(screen.getByText("E0"));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /select and expand main_model\.0/i,
+      }),
+    );
     expect(onActivateNode).toHaveBeenCalledTimes(1);
   });
 

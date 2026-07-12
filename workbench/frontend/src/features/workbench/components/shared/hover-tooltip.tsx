@@ -41,7 +41,7 @@ export function HoverTooltip({
         style={isTooltipVisible ? tooltipStyle : undefined}
         className={cn(
           isTooltipVisible
-            ? "pointer-events-none absolute top-[calc(100%+6px)] z-30 whitespace-nowrap rounded-[7px] border border-line-soft bg-panel px-2 py-1 font-sans text-[11px] font-bold leading-none text-ink shadow-panel"
+            ? "pointer-events-none absolute top-[calc(100%+6px)] z-30 whitespace-nowrap rounded-chip border border-line-hover bg-panel px-2 py-1.5 font-sans type-meta font-semibold leading-none text-ink shadow-panel"
             : "sr-only",
           isTooltipVisible && tooltipClassName,
         )}

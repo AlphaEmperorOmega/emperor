@@ -64,7 +64,7 @@ function SnapshotOverrideSummary({ overrides }: { overrides: OverrideValues }) {
       {entries.slice(0, 3).map(([key, value]) => (
         <span
           key={key}
-          className="max-w-full truncate rounded-[7px] border border-line bg-white/[0.035] px-2 py-0.5 font-mono text-xs text-ink-dim"
+          className="max-w-full truncate rounded-control-md border border-line bg-white/[0.035] px-2 py-0.5 font-mono text-xs text-ink-dim"
           title={`${key}=${value || "None"}`}
         >
           {key}={value || "None"}
@@ -210,25 +210,27 @@ export function AddConfigSnapshotDialog({
           disabled={isPending}
           size="sm"
           variant="edge"
-          className="rounded-[9px] border-line-soft bg-white/[0.025] hover:bg-white/[0.055]"
+          className="rounded-control border-line-soft bg-white/[0.025] hover:bg-white/[0.055]"
           icon={<X className="h-4 w-4" aria-hidden />}
         />
       </div>
 
       <label className="grid gap-1.5">
-        <span className="text-xs font-bold uppercase tracking-[0.08em] text-ink-dim">
+        <span className="text-xs font-bold uppercase tracking-label text-ink-dim">
           Name
         </span>
         <Input
+          name="config-snapshot-name"
           value={name}
-          placeholder="Unique snapshot name"
+          placeholder="e.g. baseline-fast…"
           onChange={(event) => {
             setName(event.target.value);
             setSubmittedError("");
             onDismissMutation?.();
           }}
           disabled={isPending}
-          autoFocus
+          autoComplete="off"
+          data-autofocus="true"
         />
       </label>
 
@@ -243,7 +245,7 @@ export function AddConfigSnapshotDialog({
             {entries.map((entry) => (
               <div
                 key={entry.key}
-                className="flex min-w-0 items-center justify-between gap-2 rounded-[8px] border border-line-soft bg-black/18 px-2 py-1.5 text-xs"
+                className="flex min-w-0 items-center justify-between gap-2 rounded-control-md border border-line-soft bg-black/[0.18] px-2 py-1.5 text-xs"
               >
                 <span className="truncate text-ink">{entry.label}</span>
                 <span className="max-w-[12rem] truncate font-mono text-violet">
@@ -256,7 +258,7 @@ export function AddConfigSnapshotDialog({
           <div
             className={cn(
               surfacePanelClassName,
-              "border-dashed border-faint bg-black/18 px-2 py-2 text-xs text-ink-faint",
+              "border-dashed border-faint bg-black/[0.18] px-2 py-2 text-xs text-ink-faint",
             )}
           >
             No non-default draft overrides.
@@ -267,7 +269,7 @@ export function AddConfigSnapshotDialog({
       {error && (
         <div
           role="alert"
-          className="rounded-[9px] border border-danger-line bg-danger-soft px-3 py-2 text-sm text-danger-text"
+          className="rounded-control border border-danger-line bg-danger-soft px-3 py-2 text-sm text-danger-text"
         >
           {error}
         </div>
@@ -325,13 +327,15 @@ function SnapshotNameEditor({
   return (
     <div className="flex min-w-0 items-center gap-1.5">
       <Input
+        name="config-snapshot-rename"
         value={value}
         aria-label="Snapshot name"
         onChange={(event) => setValue(event.target.value)}
         onKeyDown={keyDown}
         disabled={pending}
-        className="h-8 text-xs"
-        autoFocus
+        className="h-touch text-xs md:h-control-sm"
+        autoComplete="off"
+        data-autofocus="true"
       />
       <IconButton
         label="Save snapshot name"
@@ -493,16 +497,16 @@ export function ConfigSnapshotsTray({
                     variant="secondary"
                     onClick={() => void retryMutation()}
                     disabled={isMutationPending}
-                    className="h-8 text-xs"
+                    className="h-touch text-xs md:h-control-sm"
                   >
-                    Retry change
+                Retry Change
                   </Button>
                 )}
                 <Button
                   variant="ghost"
                   onClick={dismissMutation}
                   disabled={isMutationPending}
-                  className="h-8 text-xs"
+                  className="h-touch text-xs md:h-control-sm"
                 >
                   Dismiss
                 </Button>
@@ -576,6 +580,7 @@ export function ConfigSnapshotsTray({
                           <div className="flex min-w-0 items-start justify-between gap-2">
                             <div className="flex min-w-0 items-start gap-2">
                               <Checkbox
+                                name={`training-config-snapshot-${snapshot.id}`}
                                 checked={isIncluded}
                                 onCheckedChange={() => onToggleSelection(snapshot.id)}
                                 aria-label={`Include snapshot ${snapshot.name} in training`}
@@ -624,10 +629,10 @@ export function ConfigSnapshotsTray({
                         <Button
                           variant="secondary"
                           onClick={() => requestLoad(snapshot)}
-                          className="h-8 justify-center px-2.5 text-xs"
+                          className="h-touch justify-center px-2.5 text-xs md:h-control-sm"
                         >
                           <Play className="h-3.5 w-3.5" aria-hidden />
-                          Load
+                        Load Snapshot
                         </Button>
                       </div>
                     );

@@ -162,7 +162,7 @@ export function TrainingSearchSetup({
       </div>
 
       {disabledReason && (
-        <div className="rounded-[9px] border border-line bg-white/[0.025] px-2.5 py-2 text-xs text-ink-faint">
+        <div className="rounded-control border border-line bg-white/[0.025] px-2.5 py-2 text-xs text-ink-faint">
           {disabledReason}
         </div>
       )}
@@ -189,15 +189,15 @@ export function TrainingSearchSetup({
                 variant="secondary"
                 onClick={selectAllAxes}
                 disabled={isDisabled || unlockedAxisCount === 0}
-                className="h-8 px-2.5 text-xs"
+                className="h-touch px-2.5 text-xs md:h-control-sm"
               >
-                All axes
+                All Axes
               </Button>
               <Button
                 variant="ghost"
                 onClick={clearAxes}
                 disabled={isDisabled || activeAxisCount === 0}
-                className="h-8 border border-line bg-white/[0.025] px-2.5 text-xs"
+                className="h-touch border border-line bg-panel-2/80 px-2.5 text-xs md:h-control-sm"
               >
                 <X className="h-3.5 w-3.5" aria-hidden />
                 Clear
@@ -207,13 +207,16 @@ export function TrainingSearchSetup({
 
           {effective.mode === "random" && (
             <label className="grid max-w-[14rem] gap-1.5">
-              <span className="text-xs font-semibold tracking-[0.02em] text-ink-dim">
+              <span className="text-xs font-semibold tracking-meta text-ink-dim">
                 Samples
               </span>
               <Input
+                name="training-random-samples"
                 type="number"
                 min={1}
                 step={1}
+                inputMode="numeric"
+                autoComplete="off"
                 value={effective.randomSamples || ""}
                 onChange={(event) =>
                   updateRandomSamples(event.target.value)
@@ -225,7 +228,7 @@ export function TrainingSearchSetup({
           )}
 
           {conflictKeys.length > 0 && (
-            <div className="rounded-[9px] border border-amber/30 bg-amber/[0.055] px-2.5 py-2 text-xs text-amber">
+            <div className="rounded-control border border-amber/30 bg-amber/[0.055] px-2.5 py-2 text-xs text-amber">
               {conflictKeys.length} fixed override
               {conflictKeys.length === 1 ? "" : "s"} replaced by search axes.
             </div>

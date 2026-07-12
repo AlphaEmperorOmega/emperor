@@ -3309,10 +3309,11 @@ describe("useWorkbenchState", () => {
       const heading = screen.getByText(label).closest("div");
       expect(heading).toHaveClass(
         "flex",
+        "min-w-0",
         "items-center",
         "gap-2",
         "uppercase",
-        "tracking-[0.09em]",
+        "type-label",
       );
       expect(heading?.querySelector("svg")).toBeInTheDocument();
     }

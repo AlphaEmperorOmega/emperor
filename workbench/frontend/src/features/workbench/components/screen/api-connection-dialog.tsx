@@ -35,7 +35,7 @@ function Readout({
   value: string;
 }) {
   return (
-    <div className="grid gap-1 rounded-[8px] border border-line-soft bg-black/[0.18] px-3 py-2.5">
+    <div className="grid gap-1 rounded-control-md border border-line-soft bg-black/[0.18] px-3 py-2.5">
       <dt className="text-xs font-semibold text-ink-faint">{label}</dt>
       <dd className="min-w-0 break-all font-mono text-sm text-ink">{value}</dd>
     </div>
@@ -54,25 +54,28 @@ function CopyableEnvValue({
   const { status, copy } = useCopyToClipboard(value);
 
   return (
-    <div className="grid gap-2 rounded-[8px] border border-line-soft bg-black/[0.18] p-3">
+    <div className="grid min-w-0 gap-2 rounded-control-md border border-line-soft bg-black/[0.18] p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="text-xs font-semibold text-ink-faint">{label}</div>
         <Button
           variant="secondary"
           onClick={copy}
           aria-label={copyLabel}
-          className="h-8 px-2.5 text-xs"
+          className="h-touch px-2.5 text-xs md:h-control-sm"
         >
           <Copy className="h-3.5 w-3.5" aria-hidden />
           Copy
         </Button>
       </div>
       <textarea
+        name={`${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-readout`}
         readOnly
         aria-label={label}
         value={value}
         rows={2}
-        className="min-h-[64px] w-full resize-none rounded-[8px] border border-line bg-control-field px-3 py-2 font-mono text-[13px] leading-5 text-ink outline-none focus-visible:border-violet/60 focus-visible:ring-2 focus-visible:ring-focus"
+        spellCheck={false}
+        translate="no"
+        className="min-h-[64px] w-full min-w-0 resize-none rounded-control-md border border-line bg-control-field px-3 py-2 font-mono type-compact leading-5 text-ink outline-none focus-visible:border-violet/70 focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-1 focus-visible:ring-offset-bg"
       />
       <div
         role={status === "failed" ? "alert" : "status"}
@@ -242,11 +245,11 @@ export function ApiConnectionDialog({ onClose }: { onClose: () => void }) {
         </header>
       }
     >
-      <div className="grid gap-4 overflow-y-auto p-4 sm:p-5">
+      <div className="grid min-w-0 gap-4 overflow-x-hidden overflow-y-auto p-4 sm:p-5">
         {connection.configurationError && (
           <div
             role="alert"
-            className="rounded-[8px] border border-danger-line bg-danger-surface px-3 py-2.5 text-sm leading-6 text-danger-text"
+            className="rounded-control-md border border-danger-line bg-danger-soft px-3 py-2.5 text-sm leading-6 text-danger-text"
           >
             {connection.configurationError}
           </div>
@@ -254,12 +257,12 @@ export function ApiConnectionDialog({ onClose }: { onClose: () => void }) {
         {storage.message && (
           <div
             role="alert"
-            className="rounded-[8px] border border-danger-line bg-danger-surface px-3 py-2.5 text-sm leading-6 text-danger-text"
+            className="rounded-control-md border border-danger-line bg-danger-soft px-3 py-2.5 text-sm leading-6 text-danger-text"
           >
             {storage.message}
           </div>
         )}
-        <div className="rounded-[8px] border border-amber/[0.25] bg-amber/[0.08] px-3 py-2.5 text-sm leading-6 text-ink-dim">
+        <div className="rounded-control-md border border-amber/[0.25] bg-amber/[0.08] px-3 py-2.5 text-sm leading-6 text-ink-dim">
           CORS is enforced by the API server. Set{" "}
           <code className="font-mono text-ink">{CORS_ENV_NAME}</code> in the
           backend deployment; browser frontend code cannot add the required
@@ -273,7 +276,7 @@ export function ApiConnectionDialog({ onClose }: { onClose: () => void }) {
         </dl>
 
         <form
-          className="grid gap-3 rounded-[8px] border border-line-soft bg-black/[0.18] p-3"
+          className="grid gap-3 rounded-control-md border border-line-soft bg-black/[0.18] p-3"
           onSubmit={handleAuth}
         >
           <label
@@ -285,6 +288,7 @@ export function ApiConnectionDialog({ onClose }: { onClose: () => void }) {
           <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
             <Input
               id="workbench-session-bearer-token"
+              name="session-bearer-token"
               type="password"
               autoComplete="current-password"
               spellCheck={false}
@@ -295,26 +299,26 @@ export function ApiConnectionDialog({ onClose }: { onClose: () => void }) {
                   setAuthStorageError(null);
                 }
               }}
-              placeholder={authentication.hasToken ? "Enter replacement token" : "Enter token"}
+              placeholder={authentication.hasToken ? "Enter replacement token…" : "Enter token…"}
             />
             <Button
               variant="primary"
               type="submit"
-              className="h-9"
+              className="h-touch md:h-control"
               disabled={!tokenInput.trim()}
             >
               <KeyRound className="h-3.5 w-3.5" aria-hidden />
-              {authentication.hasToken ? "Replace token" : "Sign in"}
+              {authentication.hasToken ? "Replace Token" : "Sign In"}
             </Button>
             {authentication.hasToken && (
               <Button
                 variant="secondary"
                 type="button"
-                className="h-9"
+                className="h-touch md:h-control"
                 onClick={handleLogout}
               >
                 <LogOut className="h-3.5 w-3.5" aria-hidden />
-                Log out
+                Log Out
               </Button>
             )}
           </div>
@@ -332,12 +336,12 @@ export function ApiConnectionDialog({ onClose }: { onClose: () => void }) {
             <Button
               variant="secondary"
               type="button"
-              className="h-9 justify-self-start"
+              className="h-touch justify-self-start md:h-control"
               onClick={handleRetry}
               disabled={connection.isChanging}
             >
               <RefreshCw className="h-3.5 w-3.5" aria-hidden />
-              Try again
+              Try Again
             </Button>
           )}
           <p className="text-xs leading-5 text-ink-faint">
@@ -348,7 +352,7 @@ export function ApiConnectionDialog({ onClose }: { onClose: () => void }) {
         </form>
 
         <form
-          className="grid gap-3 rounded-[8px] border border-line-soft bg-black/[0.18] p-3"
+          className="grid gap-3 rounded-control-md border border-line-soft bg-black/[0.18] p-3"
           onSubmit={handleUse}
         >
           <label
@@ -360,6 +364,11 @@ export function ApiConnectionDialog({ onClose }: { onClose: () => void }) {
           <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
             <Input
               id="workbench-api-base-url"
+              name="api-base-url"
+              type="url"
+              inputMode="url"
+              autoComplete="url"
+              spellCheck={false}
               value={inputValue}
               onChange={(event) => {
                 setInputValue(event.target.value);
@@ -369,20 +378,20 @@ export function ApiConnectionDialog({ onClose }: { onClose: () => void }) {
               }}
               aria-invalid={Boolean(error)}
               aria-describedby={error ? "workbench-api-base-url-error" : undefined}
-              placeholder="Configured default API URL"
+              placeholder="e.g. http://127.0.0.1:8000…"
             />
-            <Button variant="primary" type="submit" className="h-9">
+            <Button variant="primary" type="submit" className="h-touch md:h-control">
               <Plug className="h-3.5 w-3.5" aria-hidden />
-              Use
+              Use API URL
             </Button>
             <Button
               variant="secondary"
               type="button"
-              className="h-9"
+              className="h-touch md:h-control"
               onClick={handleReset}
             >
               <RotateCcw className="h-3.5 w-3.5" aria-hidden />
-              Reset
+              Reset URL
             </Button>
           </div>
           <div
@@ -416,7 +425,7 @@ export function ApiConnectionDialog({ onClose }: { onClose: () => void }) {
           Hosted or read-only backends can leave local mutation endpoints
           disabled. Training, log deletion, and config snapshots require
           backend-side unsafe local mutation opt-in with{" "}
-          <code className="font-mono text-ink">
+          <code className="break-all font-mono text-ink">
             WORKBENCH_API_ALLOW_UNSAFE_LOCAL_MUTATIONS=true
           </code>{" "}
           only when those local mutations are intentionally allowed.

@@ -14,7 +14,7 @@ export type StatusCardProps = {
 
 function IconFrame({ children }: { children: ReactNode }) {
   return (
-    <div className="flex h-10 w-10 items-center justify-center rounded-[10px] border border-line bg-white/[0.04] text-violet">
+    <div className="flex h-touch w-touch items-center justify-center rounded-control border border-accent-line bg-accent-soft text-violet shadow-control-accent">
       {children}
     </div>
   );
@@ -37,15 +37,18 @@ export function StatusCard({
 
   if (layout === "page") {
     return (
-      <main className="grid min-h-screen place-items-center bg-bg p-6 text-ink">
+      <main className="grid min-h-screen place-items-center bg-bg p-shell-wide text-ink">
         <SurfacePanel
           padding="spacious"
-          className="max-w-md justify-items-center text-center"
+          role={busy ? "status" : undefined}
+          aria-busy={busy || undefined}
+          aria-live={busy ? "polite" : undefined}
+          className="max-w-md justify-items-center border-line-hover bg-panel text-center shadow-panel"
         >
           {framedIcon && <IconFrame>{framedIcon}</IconFrame>}
           <div>
-            <h1 className="text-lg font-bold">{title}</h1>
-            {detail && <p className="mt-1 text-sm leading-6 text-ink-dim">{detail}</p>}
+            <h1 className="type-display text-balance font-bold">{title}</h1>
+            {detail && <p className="mt-2 text-pretty type-body text-ink-dim">{detail}</p>}
           </div>
           {actions}
         </SurfacePanel>
@@ -55,15 +58,18 @@ export function StatusCard({
 
   if (layout === "overlay") {
     return (
-      <div className="absolute inset-0 flex items-center justify-center p-6">
+      <div className="absolute inset-0 flex items-center justify-center p-shell-wide">
         <SurfacePanel
           padding="spacious"
-          className="max-w-[360px] justify-items-center text-center shadow-panel"
+          role={busy ? "status" : undefined}
+          aria-busy={busy || undefined}
+          aria-live={busy ? "polite" : undefined}
+          className="max-w-[360px] justify-items-center border-line-hover bg-panel/95 text-center shadow-panel backdrop-blur-sm"
         >
           {framedIcon && <IconFrame>{framedIcon}</IconFrame>}
           <div>
-            <div className="text-sm font-semibold text-ink">{title}</div>
-            {detail && <div className="mt-1 text-xs leading-5 text-ink-faint">{detail}</div>}
+            <div className="type-title text-balance font-semibold text-ink">{title}</div>
+            {detail && <div className="mt-2 text-pretty text-xs leading-5 text-ink-faint">{detail}</div>}
           </div>
           {actions}
         </SurfacePanel>
@@ -73,16 +79,19 @@ export function StatusCard({
 
   if (layout === "chart") {
     return (
-      <div className="grid h-full min-h-[360px] place-items-center p-6">
+      <div className="grid h-full min-h-[360px] place-items-center p-shell-wide">
         <SurfacePanel
           padding="spacious"
+          role={busy ? "status" : undefined}
+          aria-busy={busy || undefined}
+          aria-live={busy ? "polite" : undefined}
           className="max-w-md justify-items-center text-center shadow-panel"
         >
           {busy && defaultBusyIcon("h-5 w-5 animate-spin text-violet")}
           {icon && <IconFrame>{icon}</IconFrame>}
           <div>
-            <div className="text-sm font-semibold text-ink">{title}</div>
-            {detail && <div className="mt-1 text-xs leading-5 text-ink-faint">{detail}</div>}
+            <div className="type-title text-balance font-semibold text-ink">{title}</div>
+            {detail && <div className="mt-2 text-pretty text-xs leading-5 text-ink-faint">{detail}</div>}
           </div>
           {actions}
         </SurfacePanel>
@@ -91,7 +100,7 @@ export function StatusCard({
   }
 
   const inlineClasses =
-    "rounded-[10px] border border-danger-line bg-danger-soft p-3 text-sm text-danger-text";
+    "rounded-panel border border-danger-line bg-danger-soft p-panel type-body text-danger-text";
   const inlineDetailClasses =
     tone === "danger" ? "mt-1 text-danger-detail" : "mt-1 text-ink-faint";
 

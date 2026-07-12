@@ -413,7 +413,7 @@ async function waitForTargetTrainingInputs(onReady: () => void) {
 }
 
 function trainingRunList(details: HTMLElement) {
-  return within(details).getByRole("main", {
+  return within(details).getByRole("region", {
     name: "Training Run List",
   });
 }
@@ -1436,7 +1436,7 @@ describe("WorkbenchApp Training And Preview", () => {
     const setupSidebar = within(details).getByRole("complementary", {
       name: "Training Setup Sidebar",
     });
-    const runList = within(details).getByRole("main", {
+    const runList = within(details).getByRole("region", {
       name: "Training Run List",
     });
     const statusSidebar = within(details).getByRole("complementary", {
@@ -1530,8 +1530,13 @@ describe("WorkbenchApp Training And Preview", () => {
       name: "Log experiment folder",
     });
     expect(logFolderSelector.tagName).toBe("BUTTON");
-    expect(logFolderSelector).toHaveClass("h-10");
-    expect(logFolderSelector.parentElement).toHaveClass("h-10", "min-h-10");
+    expect(logFolderSelector).toHaveClass("h-touch", "md:h-control-lg");
+    expect(logFolderSelector.parentElement).toHaveClass(
+      "h-touch",
+      "min-h-touch",
+      "md:h-control-lg",
+      "md:min-h-control-lg",
+    );
     const trainingConfigSelector = within(setupSidebar).getByRole("tablist", {
       name: /training config selector/i,
     });
@@ -1726,7 +1731,7 @@ describe("WorkbenchApp Training And Preview", () => {
       name: "New log folder",
     });
     expect(setupSidebar).toContainElement(newLogFolderInput);
-    expect(newLogFolderInput).toHaveClass("h-10");
+    expect(newLogFolderInput).toHaveClass("h-touch", "md:h-control-lg");
     expect(within(setupSidebar).getByText("Enter a folder name.")).toHaveClass(
       "min-h-4",
       "leading-4",
@@ -2060,10 +2065,10 @@ describe("WorkbenchApp Training And Preview", () => {
     const allPresetsButton = within(details)
       .getAllByRole("button", { name: /^All$/i })
       .find((button) =>
-        button.parentElement?.textContent?.includes("Primary only"),
+        button.parentElement?.textContent?.includes("Primary Only"),
       );
     if (!(allPresetsButton instanceof HTMLElement)) {
-      throw new Error("Expected preset All button to render near Primary only");
+      throw new Error("Expected preset All button to render near Primary Only");
     }
 
     await user.click(allPresetsButton);
@@ -2433,10 +2438,10 @@ describe("WorkbenchApp Training And Preview", () => {
     const allPresetsButton = within(details)
       .getAllByRole("button", { name: /^All$/i })
       .find((button) =>
-        button.parentElement?.textContent?.includes("Primary only"),
+        button.parentElement?.textContent?.includes("Primary Only"),
       );
     if (!(allPresetsButton instanceof HTMLElement)) {
-      throw new Error("Expected preset All button to render near Primary only");
+      throw new Error("Expected preset All button to render near Primary Only");
     }
     const primaryOnlyButton = within(details).getByRole("button", {
       name: /^Primary only$/i,
@@ -3808,7 +3813,11 @@ describe("WorkbenchApp Training And Preview", () => {
     const apiUrlInput = within(connectionDialog).getByLabelText("API base URL");
     await user.clear(apiUrlInput);
     await user.type(apiUrlInput, "https://replacement.example.test");
-    await user.click(within(connectionDialog).getByRole("button", { name: /^use$/i }));
+    await user.click(
+      within(connectionDialog).getByRole("button", {
+        name: /^use api url$/i,
+      }),
+    );
     await user.click(
       within(connectionDialog).getByRole("button", {
         name: /close api connection settings/i,

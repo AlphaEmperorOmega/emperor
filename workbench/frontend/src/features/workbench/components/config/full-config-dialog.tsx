@@ -163,12 +163,12 @@ export function FullConfigDialog({
       onClose={closeFullConfig}
       panelClassName="full-config-dialog-shell"
       header={
-        <header className="full-config-dialog-chrome full-config-dialog-header sticky top-0 z-10 border-b border-line-soft px-4 py-3 backdrop-blur sm:px-5">
+        <header className="full-config-dialog-chrome full-config-dialog-header sticky top-0 z-10 border-b border-line-soft px-region py-panel backdrop-blur-xl sm:px-shell">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <h2
                 id="full-config-title"
-                className="flex items-center gap-2 text-base font-semibold text-ink"
+                className="flex items-center gap-2 type-title text-balance font-semibold text-ink"
               >
                 <SlidersHorizontal
                   className="h-[15px] w-[15px] text-violet"
@@ -212,7 +212,7 @@ export function FullConfigDialog({
                 label="Close full config"
                 onClick={closeFullConfig}
                 variant="edge"
-                className="border-line-soft bg-white/[0.025] shadow-[inset_0_1px_0_rgba(255,255,255,0.035)] hover:border-line hover:bg-white/[0.055]"
+                className="border-line-soft bg-white/[0.025] shadow-control hover:border-line hover:bg-white/[0.055]"
                 icon={<X className="h-4 w-4" aria-hidden />}
               />
             </div>
@@ -220,7 +220,7 @@ export function FullConfigDialog({
         </header>
       }
       footer={
-        <footer className="full-config-dialog-chrome full-config-dialog-footer sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-2 border-t border-line-soft px-4 py-3 backdrop-blur sm:px-5">
+        <footer className="full-config-dialog-chrome full-config-dialog-footer sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-2 border-t border-line-soft px-region py-panel backdrop-blur-xl sm:px-shell">
           <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="secondary"
@@ -336,9 +336,9 @@ export function FullConfigDialog({
         </>
       }
     >
-      <div className="full-config-dialog-body min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
+      <div className="full-config-dialog-body min-h-0 flex-1 overflow-y-auto p-region sm:px-shell">
         {isLoading ? (
-          <InlineStatus>
+          <InlineStatus busy>
             {workbenchStatusCopy.loading.configSchema}
           </InlineStatus>
         ) : fieldCount === 0 ? (
@@ -346,7 +346,7 @@ export function FullConfigDialog({
             {workbenchStatusCopy.empty.configFields}
           </InlineStatus>
         ) : (
-          <div className="grid min-h-0 gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
+          <div className="grid min-h-0 gap-shell lg:grid-cols-[300px_minmax(0,1fr)]">
             {!isTrainingScope && displayedSnapshotGroups.length > 0 && (
               <div className="lg:col-span-2">
                 <ConfigSnapshotsTray

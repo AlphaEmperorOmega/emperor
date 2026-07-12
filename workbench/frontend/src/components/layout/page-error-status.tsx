@@ -10,7 +10,7 @@ export function FullPageError({
 }) {
   return (
     <StatusCard
-      title="Something went wrong"
+      title="Something Went Wrong"
       detail={
         message ??
         "The workbench hit an unexpected error. You can retry, or check that the backend API is running."
@@ -18,7 +18,7 @@ export function FullPageError({
       icon={<span className="text-base font-bold" aria-hidden>!</span>}
       actions={
         <Button variant="primary" onClick={onRetry} className="px-4 font-bold">
-          Try again
+          Try Again
         </Button>
       }
       layout="page"

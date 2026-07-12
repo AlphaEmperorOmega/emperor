@@ -19,7 +19,7 @@ import {
 import { type WorkbenchWorkspace } from "@/types/workbench";
 
 function TrainingWorkspaceLoadingFallback() {
-  return <WorkbenchWorkspaceLoadingStatus label="Loading training workspace" />;
+  return <WorkbenchWorkspaceLoadingStatus label="Loading training workspace…" />;
 }
 
 const TrainingPanel = dynamic(

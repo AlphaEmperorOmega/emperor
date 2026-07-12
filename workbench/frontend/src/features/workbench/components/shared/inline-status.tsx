@@ -12,7 +12,7 @@ export type InlineStatusProps = {
 };
 
 const toneClasses: Record<NonNullable<InlineStatusProps["tone"]>, string> = {
-  default: "border-faint bg-white/[0.018] text-ink-faint",
+  default: "border-line bg-panel-2/70 text-ink-faint",
   danger: "border-danger-line bg-danger-soft text-danger-text",
   warning: "border-amber/40 bg-amber/[0.12] text-amber",
   success: "border-ok/30 bg-ok/10 text-ok",
@@ -28,10 +28,11 @@ export function InlineStatus({
 }: InlineStatusProps) {
   return (
     <div
-      role={role ?? (busy ? "status" : undefined)}
+      role={role ?? (tone === "danger" ? "alert" : busy ? "status" : undefined)}
+      aria-live={busy ? "polite" : undefined}
       className={cn(
-        "rounded-[10px] border border-dashed text-sm",
-        compact ? "p-3" : "p-4",
+        "rounded-panel border type-body",
+        compact ? "p-panel" : "p-region",
         toneClasses[tone],
         className,
       )}

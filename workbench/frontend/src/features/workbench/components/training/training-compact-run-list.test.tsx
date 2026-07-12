@@ -164,7 +164,7 @@ describe("TrainingCompactRunList", () => {
 
     await user.click(
       within(commandDialog).getByRole("button", {
-        name: "Close training command",
+        name: "Close Training Command",
       }),
     );
     await user.click(screen.getByRole("button", { name: "Full error for run 1" }));
@@ -335,7 +335,7 @@ describe("TrainingCompactRunList", () => {
 
   it("renders loading, empty, and error states", () => {
     const { rerender } = render(<TrainingCompactRunList isLoading />);
-    expect(screen.getByText("Planning training runs")).toBeInTheDocument();
+    expect(screen.getByText("Planning training runs…")).toBeInTheDocument();
 
     rerender(<TrainingCompactRunList />);
     expect(screen.getByText("No training runs planned")).toBeInTheDocument();

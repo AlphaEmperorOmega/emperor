@@ -135,7 +135,7 @@ const GraphNodeView = memo(function GraphNodeView({
       : undefined;
   const expansionButton = data.canToggleExpansion ? (
     <GraphIconButton
-      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] border border-line bg-white/[0.03] text-ink-dim transition hover:border-white/20 hover:bg-white/[0.07] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+      className="flex h-touch w-touch shrink-0 items-center justify-center rounded-control-md border border-line bg-panel-2/90 text-ink-dim transition-[color,background-color,border-color] duration-150 hover:border-line-hover hover:bg-control-hover hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-focus md:h-control-sm md:w-control-sm"
       label={`${data.isExpanded ? "Collapse" : "Expand"} tree ${data.path}`}
       onClick={data.onToggleExpansion}
       icon={
@@ -148,7 +148,7 @@ const GraphNodeView = memo(function GraphNodeView({
   ) : null;
   const componentInfoButton = (
     <GraphIconButton
-      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] border border-line bg-white/[0.03] text-ink-dim transition hover:border-white/20 hover:bg-white/[0.07] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+      className="flex h-touch w-touch shrink-0 items-center justify-center rounded-control-md border border-line bg-panel-2/90 text-ink-dim transition-[color,background-color,border-color] duration-150 hover:border-line-hover hover:bg-control-hover hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-focus md:h-control-sm md:w-control-sm"
       label={`Open component info for ${data.path}`}
       onClick={() => setIsComponentInfoOpen(true)}
       icon={<Info className="h-3.5 w-3.5" aria-hidden />}
@@ -173,7 +173,7 @@ const GraphNodeView = memo(function GraphNodeView({
           type="button"
           title={monitorLabel}
           aria-label={monitorLabel}
-          className="nodrag nopan flex h-6 w-6 shrink-0 items-center justify-center rounded-[7px] border border-violet/30 bg-violet/10 text-violet-muted shadow-[inset_0_-1px_0_rgba(146,113,255,0.22)] transition hover:border-violet/50 hover:bg-violet/20 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          className="nodrag nopan flex h-touch w-touch shrink-0 items-center justify-center rounded-control-sm border border-violet/35 bg-accent-soft text-violet-muted transition-[color,background-color,border-color] duration-150 hover:border-violet/60 hover:bg-violet/20 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-focus md:h-control-sm md:w-control-sm"
           onClick={handleMonitorClick}
           onKeyDown={handleMonitorKeyDown}
         >
@@ -184,7 +184,7 @@ const GraphNodeView = memo(function GraphNodeView({
 
     return (
       <GraphIconButton
-        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] border border-violet/25 bg-violet/10 text-violet-muted transition hover:border-violet/45 hover:bg-violet/20 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        className="flex h-touch w-touch shrink-0 items-center justify-center rounded-control-md border border-violet/30 bg-accent-soft text-violet-muted transition-[color,background-color,border-color] duration-150 hover:border-violet/55 hover:bg-violet/20 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-focus md:h-control-sm md:w-control-sm"
         label={monitorLabel}
         onClick={() => data.onOpenMonitor?.()}
         icon={<LineChart className="h-3.5 w-3.5" aria-hidden />}
@@ -223,10 +223,9 @@ const GraphNodeView = memo(function GraphNodeView({
         role="group"
         aria-label={data.path}
         data-testid={`graph-node-card-${data.nodeId}`}
-        onClick={handleActivate}
         className={cn(
-          "nodrag nopan edge relative flex w-full flex-col overflow-hidden rounded-card px-4 shadow-[0_18px_40px_-28px_rgba(0,0,0,0.95)] transition",
-          selected ? "edge-sel" : "hover:brightness-110",
+          "nodrag nopan edge relative flex w-full flex-col overflow-hidden rounded-card px-region transition-[background-color,border-color,box-shadow] duration-150 ease-out",
+          selected ? "edge-sel" : "hover:border-line-hover",
         )}
         style={{
           height: data.height,
@@ -240,10 +239,10 @@ const GraphNodeView = memo(function GraphNodeView({
           aria-expanded={data.canToggleExpansion ? data.isExpanded : undefined}
           onClick={handleSelectClick}
           onKeyDown={handleSelectKeyDown}
-          className="absolute inset-0 z-0 rounded-card focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          className="absolute inset-0 z-0 rounded-card focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus"
         />
         <Handle type="target" position={Position.Left} />
-        <div className="relative z-10 flex h-full w-full flex-col">
+        <div className="pointer-events-none relative z-10 flex h-full w-full flex-col [&_button]:pointer-events-auto [&_[role=button]]:pointer-events-auto">
           <GraphNodeHeader
             nodeId={data.nodeId}
             label={data.label}
@@ -355,41 +354,40 @@ function MovingGraphNodeShell({
 
   return (
     <div
-      role="button"
-      tabIndex={0}
-      aria-label={activateLabel}
-      aria-expanded={data.canToggleExpansion ? data.isExpanded : undefined}
+      role="group"
+      aria-label={data.path}
       data-testid={`graph-node-moving-${data.nodeId}`}
-      onClick={onActivate}
-      onKeyDown={(event) => {
-        if (event.key !== "Enter" && event.key !== " ") {
-          return;
-        }
-        event.preventDefault();
-        onActivate();
-      }}
       className={cn(
-        "nodrag nopan edge flex w-full flex-col justify-center overflow-hidden rounded-card px-5 py-4 transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-focus",
+        "nodrag nopan edge relative flex w-full flex-col justify-center overflow-hidden rounded-card px-shell py-region transition-none",
         selected && "edge-sel",
       )}
       style={{ height: data.height }}
     >
+      <button
+        type="button"
+        aria-label={activateLabel}
+        aria-expanded={data.canToggleExpansion ? data.isExpanded : undefined}
+        onClick={onActivate}
+        className="absolute inset-0 z-0 rounded-card focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus"
+      />
       <Handle type="target" position={Position.Left} />
-      <div className="min-w-0 truncate text-[16px] font-bold leading-5 text-ink">
-        {data.label}
-      </div>
-      <div className="mt-1 min-w-0 truncate font-mono text-[11px] leading-4 text-ink-dim">
-        {data.path}
-      </div>
-      <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5 overflow-hidden font-mono text-[10px] font-semibold text-ink-faint">
-        {parameterText && <span className="shrink-0">{parameterText}</span>}
-        {modelSizeText && <span className="shrink-0">{modelSizeText}</span>}
-        {simpleDimsText && <span className="shrink-0">{simpleDimsText}</span>}
-        {data.childCount > 0 && (
-          <span className="shrink-0">
-            {data.childCount} {data.childCount === 1 ? "child" : "children"}
-          </span>
-        )}
+      <div className="pointer-events-none relative z-10 min-w-0">
+        <div className="min-w-0 truncate type-title font-bold leading-5 text-ink">
+          {data.label}
+        </div>
+        <div className="mt-1 min-w-0 truncate font-mono type-meta leading-4 text-ink-dim">
+          {data.path}
+        </div>
+        <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5 overflow-hidden font-mono type-caption font-semibold text-ink-faint">
+          {parameterText && <span className="shrink-0">{parameterText}</span>}
+          {modelSizeText && <span className="shrink-0">{modelSizeText}</span>}
+          {simpleDimsText && <span className="shrink-0">{simpleDimsText}</span>}
+          {data.childCount > 0 && (
+            <span className="shrink-0">
+              {data.childCount} {data.childCount === 1 ? "child" : "children"}
+            </span>
+          )}
+        </div>
       </div>
       <Handle type="source" position={Position.Right} />
     </div>

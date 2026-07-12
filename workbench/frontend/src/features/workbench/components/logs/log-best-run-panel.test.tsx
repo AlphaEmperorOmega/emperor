@@ -127,11 +127,11 @@ describe("LogBestRunPanel", () => {
     expect(panel).toBeInstanceOf(HTMLElement);
     const section = panel as HTMLElement;
     expect(section).toHaveClass(
-      "rounded-[10px]",
+      "rounded-panel",
       "border",
       "border-line",
-      "bg-white/[0.018]",
-      "p-4",
+      "bg-panel-2/70",
+      "p-region",
     );
     expect(section).not.toHaveClass("edge", "rounded-card");
     expect(within(section).getByText(/best run per visible dataset/i))
@@ -209,7 +209,7 @@ describe("LogBestRunPanel", () => {
       />,
     );
     expect(screen.getByRole("status")).toHaveTextContent(
-      "Loading best run scalar points",
+      "Loading best run scalar points…",
     );
 
     rerender(

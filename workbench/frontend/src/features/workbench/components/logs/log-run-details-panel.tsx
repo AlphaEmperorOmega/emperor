@@ -9,6 +9,7 @@ import { SurfacePanel } from "@/components/ui/surface-panel";
 import { useLogRunDetail } from "@/features/workbench/providers/logs-workspace-provider";
 import { formatMetricValue } from "@/features/workbench/state/logs/logs-selectors";
 import { type LogRun, type LogRunArtifacts } from "@/lib/api";
+import { formatBytes, formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 const metadataCardClassName = "w-full min-w-0";
@@ -46,7 +47,7 @@ function DetailRow({
     "min-w-0 whitespace-normal break-words [overflow-wrap:anywhere]";
 
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-start gap-2 rounded-[9px] border border-line-soft bg-black/20 px-3 py-2 text-xs">
+    <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-start gap-2 rounded-control border border-line-soft bg-black/20 px-3 py-2 text-xs">
       <span
         className={cn("font-mono text-ink-dim", textContainmentClasses)}
         title={labelTitle}
@@ -66,34 +67,6 @@ function DetailRow({
   );
 }
 
-function formatFileSize(sizeBytes: number) {
-  if (!Number.isFinite(sizeBytes) || sizeBytes < 0) {
-    return "0 B";
-  }
-  if (sizeBytes < 1024) {
-    return `${sizeBytes} B`;
-  }
-  const kib = sizeBytes / 1024;
-  if (kib < 1024) {
-    return `${kib.toFixed(1).replace(/\.0$/, "")} KB`;
-  }
-  return `${(kib / 1024).toFixed(1).replace(/\.0$/, "")} MB`;
-}
-
-function formatModifiedAt(modifiedAt: string) {
-  const date = new Date(modifiedAt);
-  if (Number.isNaN(date.getTime())) {
-    return modifiedAt;
-  }
-  return date.toLocaleString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 function checkpointDetail({
   epoch,
   step,
@@ -103,8 +76,8 @@ function checkpointDetail({
   return [
     epoch === null ? "epoch unknown" : `epoch ${epoch}`,
     step === null ? "step unknown" : `step ${step}`,
-    formatFileSize(sizeBytes),
-    formatModifiedAt(modifiedAt),
+    formatBytes(sizeBytes),
+    formatDateTime(modifiedAt),
   ].join(" · ");
 }
 
@@ -224,7 +197,7 @@ export function LogRunDetailsPanel({
             <SectionHeading as="h3" title="Checkpoints" />
             {artifactsLoading ? (
               <InlineStatus className="border-line-soft bg-transparent p-0 px-3 py-4">
-                Loading checkpoints
+                Loading checkpoints…
               </InlineStatus>
             ) : artifactsError ? (
               <InlineStatus className="border-line-soft bg-transparent p-0 px-3 py-4">
@@ -253,7 +226,7 @@ export function LogRunDetailsPanel({
             <SectionHeading as="h3" title="Params" />
             {artifactsLoading ? (
               <InlineStatus className="border-line-soft bg-transparent p-0 px-3 py-4">
-                Loading params
+                Loading params…
               </InlineStatus>
             ) : artifactsError ? (
               <InlineStatus className="border-line-soft bg-transparent p-0 px-3 py-4">
@@ -307,7 +280,7 @@ export function LogRunDetailsPanel({
             <SectionHeading as="h3" title="Artifacts" />
             {artifactsLoading ? (
               <InlineStatus className="border-line-soft bg-transparent p-0 px-3 py-4">
-                Loading artifacts
+                Loading artifacts…
               </InlineStatus>
             ) : artifactsError ? (
               <InlineStatus className="border-line-soft bg-transparent p-0 px-3 py-4">
@@ -326,13 +299,13 @@ export function LogRunDetailsPanel({
                     labelTitle={artifact.label}
                     value={[
                       artifact.kind,
-                      formatFileSize(artifact.sizeBytes),
-                      formatModifiedAt(artifact.modifiedAt),
+                      formatBytes(artifact.sizeBytes),
+                      formatDateTime(artifact.modifiedAt),
                     ].join(" · ")}
                     valueTitle={[
                       artifact.kind,
-                      formatFileSize(artifact.sizeBytes),
-                      formatModifiedAt(artifact.modifiedAt),
+                      formatBytes(artifact.sizeBytes),
+                      formatDateTime(artifact.modifiedAt),
                     ].join(" · ")}
                   />
                 ))}

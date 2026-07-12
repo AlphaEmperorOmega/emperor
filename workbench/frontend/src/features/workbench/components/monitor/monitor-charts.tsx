@@ -109,7 +109,7 @@ export function MonitorImage({ image }: { image: MonitorImageData }) {
         subtitle={image.tag}
         badge={<Badge>step {image.step}</Badge>}
       >
-        <div className="grid min-h-40 place-items-center rounded-[10px] border border-line-soft bg-black/25 p-4 text-center">
+        <div className="grid min-h-40 place-items-center rounded-control border border-line-soft bg-black/25 p-4 text-center">
           <div className="grid gap-1">
             <div className="text-sm font-semibold text-ink">Payload omitted</div>
             <div className="max-w-sm text-xs leading-5 text-ink-faint">
@@ -135,7 +135,7 @@ export function MonitorImage({ image }: { image: MonitorImageData }) {
         height={320}
         sizes="(min-width: 1280px) 33vw, (min-width: 768px) 50vw, 100vw"
         unoptimized
-        className="max-h-64 w-full rounded-[10px] border border-line-soft bg-black/25 object-contain"
+        className="max-h-64 w-full rounded-control border border-line-soft bg-black/25 object-contain"
       />
     </ChartFrame>
   );
@@ -212,7 +212,7 @@ export function RunVisualCard({
   children: ReactNode;
 }) {
   return (
-    <div className="overflow-hidden rounded-[10px] border border-line-soft bg-white/[0.018]">
+    <div className="overflow-hidden rounded-control border border-line-soft bg-white/[0.018]">
       <div className="border-b border-line-soft px-3 py-2">
         <div className="truncate text-xs font-semibold text-ink" title={runDisplayName(run)}>
           {runDisplayName(run)}

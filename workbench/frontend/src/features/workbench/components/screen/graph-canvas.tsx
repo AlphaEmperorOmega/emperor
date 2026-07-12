@@ -94,9 +94,9 @@ export function GraphPreviewPanel({
                     setIsMinimapOpen((current) => !current);
                   }}
                   className={cn(
-                    "shadow-[0_14px_34px_rgba(0,0,0,0.32)]",
+                    "shadow-floating",
                     isMinimapOpen &&
-                      "border-cyan-200/45 bg-cyan-300/[0.11] text-ink",
+                      "border-cyan/45 bg-cyan/[0.11] text-ink",
                   )}
                 />
               )}
@@ -112,8 +112,8 @@ export function GraphPreviewPanel({
                   setIsStructureOpen((current) => !current);
                 }}
                 className={cn(
-                  "shadow-[0_14px_34px_rgba(0,0,0,0.32)]",
-                  isStructureOpen && "border-cyan-200/45 bg-cyan-300/[0.11] text-ink",
+                  "shadow-floating",
+                  isStructureOpen && "border-cyan/45 bg-cyan/[0.11] text-ink",
                 )}
               />
               {isStructureOpen && (
@@ -156,7 +156,7 @@ export function GraphPreviewPanel({
                       event.stopPropagation();
                       onOpenCluster3d(cluster3dNodeId);
                     }}
-                    className="grid h-10 w-10 place-items-center rounded-[10px] border border-cyan-200/35 bg-black/45 text-cyan-100 shadow-[0_18px_40px_-24px_rgba(0,0,0,0.95)] backdrop-blur-md transition hover:border-cyan-200/55 hover:bg-cyan-300/[0.13] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                    className="grid h-control-lg w-control-lg place-items-center rounded-control border border-cyan/35 bg-panel/90 text-cyan shadow-panel backdrop-blur-md transition-[color,background-color,border-color,box-shadow,transform] duration-150 ease-out hover:border-cyan/60 hover:bg-cyan/10 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
                   >
                     <Box className="h-[17px] w-[17px]" aria-hidden />
                   </button>

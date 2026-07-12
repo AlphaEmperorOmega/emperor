@@ -35,6 +35,7 @@ import {
   type LogMetricChartLayoutGroupKey,
   type ScalarChartGridMode,
 } from "@/features/workbench/providers/logs-workspace-provider";
+import { formatDecimal } from "@/lib/format";
 import { cn, errorMessage } from "@/lib/utils";
 
 const LazyLogScalarChart = dynamic(
@@ -126,7 +127,7 @@ function plotCountLabel(count: number) {
 
 function mediaCountLabel(imageCount: number, textCount: number, isLoading: boolean) {
   if (isLoading) {
-    return "Loading";
+    return "Loading…";
   }
   const count = imageCount + textCount;
   if (count === 0) {
@@ -145,7 +146,7 @@ function matrixCountLabel({
   isLoading: boolean;
 }) {
   if (isLoading && !isLoaded) {
-    return "Loading";
+    return "Loading…";
   }
   if (!isLoaded) {
     return "Available";
@@ -193,9 +194,9 @@ function ScalarChartLayoutControl({
             tabIndex={active ? 0 : -1}
             onClick={() => onModeChange(optionMode)}
             className={cn(
-              "inline-flex h-8 items-center gap-1.5 rounded-control-sm px-2 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-focus",
+              "inline-flex h-touch min-w-touch items-center gap-1.5 rounded-control-sm px-2 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-focus md:h-control-sm md:min-w-0",
               active
-                ? "bg-grad text-white shadow-control-active"
+                ? "bg-violet-deep text-white shadow-control-active"
                 : "text-ink-faint hover:bg-control-active hover:text-ink",
             )}
           >
@@ -226,15 +227,15 @@ function LogsAccordionHeader({
   return (
     <div
       className={cn(
-        "grid w-full min-w-0 gap-2 rounded-[10px] border border-line bg-white/[0.025] p-2 transition hover:border-white/15 hover:bg-white/[0.055]",
+        "grid w-full min-w-0 gap-2 rounded-control border border-line bg-white/[0.025] p-2 transition hover:border-white/15 hover:bg-white/[0.055]",
         actions
-          ? "grid-cols-1 md:grid-cols-[minmax(12rem,1fr)_minmax(18rem,36rem)] md:items-center"
+          ? "items-center [grid-template-columns:repeat(auto-fit,minmax(min(20rem,100%),1fr))]"
           : "grid-cols-1",
       )}
     >
       <button
         type="button"
-        className="flex min-w-0 items-center justify-between gap-3 rounded-[8px] px-1 py-1 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        className="flex min-h-touch min-w-0 items-center justify-between gap-3 rounded-control-md px-1 py-1 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-focus md:min-h-control"
         aria-expanded={!isCollapsed}
         aria-controls={controlsId}
         onClick={onToggle}
@@ -336,7 +337,7 @@ function LogPlotSelectorControls({
       />
       <Button
         variant="secondary"
-        className="h-9 shrink-0 px-2 text-xs"
+        className="h-touch shrink-0 px-2 text-xs md:h-control"
         aria-label={`Select all ${groupLabel} plots`}
         onClick={() => onChange(options.map((option) => option.value))}
       >
@@ -344,7 +345,7 @@ function LogPlotSelectorControls({
       </Button>
       <Button
         variant="ghost"
-        className="h-9 shrink-0 border border-line bg-white/[0.025] px-2 text-xs"
+        className="h-touch shrink-0 border border-line bg-panel-2/80 px-2 text-xs md:h-control"
         aria-label={`Select no ${groupLabel} plots`}
         onClick={() => onChange([])}
       >
@@ -362,7 +363,7 @@ function ChartEmptyState({ title, detail, busy }: LogsChartEmptyState) {
         className="max-w-md justify-items-center text-center shadow-panel"
       >
         {busy && <Loader2 className="h-5 w-5 animate-spin text-violet" aria-hidden />}
-        <div className="flex h-10 w-10 items-center justify-center rounded-[10px] border border-line bg-white/[0.04] text-violet">
+        <div className="flex h-10 w-10 items-center justify-center rounded-control border border-line bg-white/[0.04] text-violet">
           <LineChart className="h-5 w-5" aria-hidden />
         </div>
         <div>
@@ -613,7 +614,7 @@ export function LogsChartPanel({ charts }: { charts: LogsCharts }) {
                 })}
             </div>
             {hiddenMetricCount > 0 && (
-              <div className="rounded-[10px] border border-line-soft bg-white/[0.018] px-3 py-3 text-center text-xs text-ink-faint">
+              <div className="rounded-control border border-line-soft bg-white/[0.018] px-3 py-3 text-center text-xs text-ink-faint">
                 Showing {visibleMetrics.length} of{" "}
                 {trainValidationComparisonMetrics.length} paired charts. Narrow
                 selected plots to inspect the rest.
@@ -682,7 +683,7 @@ export function LogsChartPanel({ charts }: { charts: LogsCharts }) {
     );
     const metricHeaderActions = plotSelector ? (
       <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-        <div className="min-w-[15rem] flex-1">{plotSelector}</div>
+        <div className="min-w-[12rem] flex-1">{plotSelector}</div>
         {chartLayoutControl}
       </div>
     ) : (
@@ -729,7 +730,7 @@ export function LogsChartPanel({ charts }: { charts: LogsCharts }) {
                     role="status"
                     className={fullSpanClass}
                   >
-                    Loading {group.label} scalar points
+                    Loading {group.label} scalar points…
                   </InlineStatus>
                 )}
               {!hasNoSelectedPlots &&
@@ -766,7 +767,7 @@ export function LogsChartPanel({ charts }: { charts: LogsCharts }) {
                 })}
             </div>
             {hiddenMetricCount > 0 && (
-              <div className="rounded-[10px] border border-line-soft bg-white/[0.018] px-3 py-3 text-center text-xs text-ink-faint">
+              <div className="rounded-control border border-line-soft bg-white/[0.018] px-3 py-3 text-center text-xs text-ink-faint">
                 Showing {visibleMetrics.length} of {renderedMetrics.length} charts in
                 this group. Narrow selected tags to inspect the rest.
               </div>
@@ -847,7 +848,7 @@ export function LogsChartPanel({ charts }: { charts: LogsCharts }) {
             )}
             {isConfusionMatrixLoading && confusionHeatmaps.length === 0 && (
               <InlineStatus busy compact role="status">
-                Loading confusion matrix scalar points
+                Loading confusion matrix scalar points…
               </InlineStatus>
             )}
             {!isConfusionMatrixLoading &&
@@ -866,18 +867,19 @@ export function LogsChartPanel({ charts }: { charts: LogsCharts }) {
   };
 
   return (
-    <div className="grid min-h-0 grid-rows-[56px_minmax(0,1fr)]">
-      <div className="flex min-w-0 items-center justify-between gap-3 border-b border-line bg-panel/45 px-4">
+    <div className="grid min-h-0 grid-rows-[56px_minmax(0,1fr)] bg-bg-2/40">
+      <div className="flex min-w-0 items-center justify-between gap-panel overflow-hidden border-b border-line bg-panel/55 px-region shadow-divider sm:px-shell">
         <div className="min-w-0">
-          <div className="text-sm font-bold text-ink">Historical Scalars</div>
+          <h1 className="text-sm font-bold text-ink">Historical Scalars</h1>
           <div className="truncate font-mono text-xs text-ink-faint">
             {visibleRunCount} runs · {selectedTagCount} selected tags
           </div>
         </div>
-        <div className="flex min-w-0 items-center justify-end gap-2 overflow-x-auto">
+        <div className="flex min-w-0 items-center justify-end gap-2 overflow-x-auto overscroll-x-contain [scrollbar-width:none]">
           <label className="flex shrink-0 items-center gap-2 text-xs text-ink-faint">
             <span>Smooth</span>
             <input
+              name="scalar-smoothing"
               type="range"
               min={0}
               max={0.99}
@@ -885,10 +887,10 @@ export function LogsChartPanel({ charts }: { charts: LogsCharts }) {
               value={smoothing}
               onChange={(event) => onSmoothingChange(Number(event.target.value))}
               aria-label="Scalar smoothing"
-              className="h-1 w-24 cursor-pointer accent-violet"
+              className="h-touch w-24 cursor-pointer rounded-full accent-violet focus:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg md:h-control"
             />
             <span className="w-8 font-mono tabular-nums text-ink-dim">
-              {smoothing.toFixed(2)}
+              {formatDecimal(smoothing, 2)}
             </span>
           </label>
           <SegmentedControl aria-label="Scalar x axis" className="shrink-0">
@@ -920,7 +922,7 @@ export function LogsChartPanel({ charts }: { charts: LogsCharts }) {
           />
           <Button
             variant="secondary"
-            className="h-8 shrink-0 px-2"
+            className="h-touch shrink-0 px-2 md:h-control-sm"
             onClick={onRefresh}
             disabled={isRefreshDisabled}
             aria-label="Refresh scalar charts"
@@ -933,8 +935,8 @@ export function LogsChartPanel({ charts }: { charts: LogsCharts }) {
         </div>
       </div>
 
-      <div className="min-h-0 overflow-y-auto p-4">
-        <div className="grid gap-5">
+      <div className="min-h-0 overflow-y-auto p-region">
+        <div className="grid gap-shell">
           <LogBestRunPanel bestRun={bestRun} onSelectRun={onSelectRun} />
           {renderTrainValidationComparisonSection()}
           <LogTestScoresPanel
@@ -951,7 +953,7 @@ export function LogsChartPanel({ charts }: { charts: LogsCharts }) {
             <>
               {isTagRefreshLoading && (
                 <InlineStatus busy compact role="status">
-                  Refreshing TensorBoard tags
+                  Refreshing TensorBoard tags…
                 </InlineStatus>
               )}
               {checkpointError && (

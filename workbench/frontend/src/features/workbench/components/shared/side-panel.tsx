@@ -25,11 +25,11 @@ export function SidePanel({
   return (
     <div className={cn(sidePanelClassName, className)}>
       {hasHeader && (
-        <div className={cn("mb-4 grid gap-3", headerClassName)}>
+        <div className={cn("mb-region grid gap-panel", headerClassName)}>
           {(title !== undefined || actions !== undefined) && (
             <div className="flex items-center justify-between gap-3">
               {title !== undefined && (
-                <h2 className="text-base font-bold text-ink">{title}</h2>
+                <h2 className="type-title text-balance font-bold text-ink">{title}</h2>
               )}
               {actions}
             </div>

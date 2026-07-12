@@ -111,7 +111,7 @@ function ParameterActivityMinimapNode({
       aria-label={nodeLabel}
       data-testid={`parameter-activity-minimap-node-${data.nodeId}`}
       className={cn(
-        "nodrag nopan edge flex items-center justify-center overflow-hidden rounded-card px-1.5 shadow-[0_18px_40px_-28px_rgba(0,0,0,0.95)] transition hover:brightness-110",
+        "nodrag nopan edge flex items-center justify-center overflow-hidden rounded-card px-1.5 shadow-panel transition hover:brightness-110",
         data.activity ? "gap-1" : undefined,
       )}
       style={{
@@ -134,7 +134,7 @@ function ParameterActivityMinimapNode({
             data.onToggleExpansion();
           }}
           onMouseDown={stopPropagation}
-          className="nodrag nopan relative z-10 grid h-7 w-7 shrink-0 place-items-center rounded-[8px] border border-line bg-white/[0.03] text-ink-dim transition hover:border-white/20 hover:bg-white/[0.07] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          className="nodrag nopan relative z-10 grid h-touch w-touch shrink-0 place-items-center rounded-control-md border border-line bg-control text-ink-dim transition-colors hover:border-line-hover hover:bg-control-hover hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-focus md:h-control-sm md:w-control-sm"
         >
           <ChevronRight
             className={cn(
@@ -153,7 +153,7 @@ function ParameterActivityMinimapNode({
               title={channel.title}
               aria-label={channel.title}
               className={cn(
-                "inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded-[6px] border px-1.5 font-mono text-[11px] font-bold leading-none",
+                "inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded-chip border px-1.5 font-mono type-meta font-bold leading-none",
                 graphParameterActivityStatusClassNames[channel.channel.status],
               )}
             >
@@ -172,7 +172,7 @@ function ParameterActivityMinimapNode({
             data.onOpenMonitor?.();
           }}
           onMouseDown={stopPropagation}
-          className="nodrag nopan relative z-10 grid h-6 w-6 shrink-0 place-items-center rounded-[7px] border border-violet/30 bg-violet/10 text-violet-muted shadow-[inset_0_-1px_0_rgba(146,113,255,0.22)] transition hover:border-violet/50 hover:bg-violet/20 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          className="nodrag nopan relative z-10 grid h-touch w-touch shrink-0 place-items-center rounded-control-sm border border-violet/30 bg-accent-soft text-violet-muted transition-colors hover:border-violet/50 hover:bg-violet/20 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-focus md:h-control-sm md:w-control-sm"
         >
           <LineChart className="h-3.5 w-3.5" aria-hidden />
         </button>
@@ -330,7 +330,7 @@ function ParameterActivityMinimapDialogContent({
         titleId="parameter-activity-minimap-title"
         size="fullscreen"
         onClose={onClose}
-        className="grid bg-black/72 p-3 sm:p-6"
+        className="grid bg-black/[0.72] p-3 sm:p-6"
         panelClassName="grid max-h-full min-h-0 w-[min(1200px,calc(100vw-1.5rem))] max-w-none grid-rows-[auto_minmax(0,1fr)] justify-self-center sm:w-[min(1200px,calc(100vw-3rem))]"
       >
         <header className="flex min-w-0 items-center justify-between gap-3 border-b border-line bg-panel/90 p-3 backdrop-blur sm:p-4">
@@ -368,7 +368,7 @@ function ParameterActivityMinimapDialogContent({
             />
           </div>
         </header>
-        <div className="min-h-[60vh] min-w-0 bg-[radial-gradient(circle_at_35%_20%,rgba(34,211,238,0.08),transparent_34%),linear-gradient(180deg,rgba(7,9,16,0.96),rgba(5,6,10,0.98))]">
+        <div className="min-h-[60vh] min-w-0 bg-minimap">
           <ReactFlowProvider
             initialNodes={flow.nodes}
             initialEdges={flow.edges}

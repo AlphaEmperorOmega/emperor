@@ -456,12 +456,18 @@ describe("WorkbenchApp Overview", () => {
     ).toEqual(actionButtons);
     for (const button of actionButtons) {
       expect(button).toHaveClass(
-        "h-9",
+        "h-touch",
+        "min-w-touch",
+        "md:h-control",
+        "md:min-w-0",
         "gap-1.5",
         "rounded-control-sm",
-        "border-0",
+        "border",
+        "border-transparent",
         "bg-transparent",
+        "type-body",
         "text-ink-dim",
+        "hover:border-line-soft",
         "hover:bg-control-hover",
         "hover:text-ink",
         "focus-visible:ring-focus",
@@ -748,7 +754,7 @@ describe("WorkbenchApp Overview", () => {
 
     await user.clear(input);
     await user.type(input, " https://api.example.test/workbench/// ");
-    await user.click(within(dialog).getByRole("button", { name: /^use$/i }));
+    await user.click(within(dialog).getByRole("button", { name: /^use api url$/i }));
 
     await waitFor(() => {
       expect(input).toHaveValue("https://api.example.test/workbench");
@@ -791,7 +797,7 @@ describe("WorkbenchApp Overview", () => {
     });
 
     const requestCountBeforeReset = fetchMock.mock.calls.length;
-    await user.click(within(dialog).getByRole("button", { name: /^reset$/i }));
+    await user.click(within(dialog).getByRole("button", { name: /^reset url$/i }));
 
     await waitFor(() => {
       expect(input).toHaveValue("http://127.0.0.1:9999");
@@ -830,7 +836,7 @@ describe("WorkbenchApp Overview", () => {
 
     await user.clear(input);
     await user.type(input, "https://api.example.test?debug=true");
-    await user.click(within(dialog).getByRole("button", { name: /^use$/i }));
+    await user.click(within(dialog).getByRole("button", { name: /^use api url$/i }));
 
     expect(within(dialog).getByRole("alert")).toHaveTextContent(
       /without credentials, query, or fragment/i,
@@ -851,12 +857,12 @@ describe("WorkbenchApp Overview", () => {
 
     await user.clear(input);
     await user.type(input, " http://127.0.0.1:9999/// ");
-    await user.click(within(dialog).getByRole("button", { name: /^use$/i }));
+    await user.click(within(dialog).getByRole("button", { name: /^use api url$/i }));
     expect(input).toHaveValue("http://127.0.0.1:9999");
 
     await user.clear(input);
     await user.type(input, "https://unapplied.example.test");
-    await user.click(within(dialog).getByRole("button", { name: /^reset$/i }));
+    await user.click(within(dialog).getByRole("button", { name: /^reset url$/i }));
     expect(input).toHaveValue("http://127.0.0.1:9999");
     expect(window.localStorage.getItem(WORKBENCH_API_BASE_URL_STORAGE_KEY)).toBeNull();
     expect(fetchMock.mock.calls).toHaveLength(requestCount);
@@ -894,7 +900,7 @@ describe("WorkbenchApp Overview", () => {
     const input = within(dialog).getByLabelText("API base URL");
     await user.clear(input);
     await user.type(input, "https://api-online.example.test");
-    await user.click(within(dialog).getByRole("button", { name: /^use$/i }));
+    await user.click(within(dialog).getByRole("button", { name: /^use api url$/i }));
 
     await waitFor(() => {
       expect(

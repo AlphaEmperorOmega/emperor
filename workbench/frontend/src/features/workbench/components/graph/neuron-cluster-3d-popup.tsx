@@ -40,7 +40,7 @@ const DynamicNeuronCluster3DScene = dynamic(
     ssr: false,
     loading: () => (
       <div className="grid h-full min-h-[360px] place-items-center text-sm text-ink-faint">
-        Loading 3D view
+        Loading 3D view…
       </div>
     ),
   },
@@ -118,16 +118,16 @@ function AxisSliceControls({
   const label = axis.toUpperCase();
 
   return (
-    <section aria-label={`${label} slices`} className="grid gap-2">
+    <section aria-label={`${label} slices`} className="grid min-w-0 gap-2">
       <div className="flex items-center justify-between gap-2">
-        <span className="font-mono text-[11px] font-bold uppercase text-ink-faint">
+        <span className="font-mono type-meta font-bold uppercase text-ink-faint">
           {label} slices
         </span>
-        <span className="font-mono text-[11px] text-ink-faint">
+        <span className="font-mono type-meta text-ink-faint">
           {controls.visible.size}/{controls.values.length}
         </span>
       </div>
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex min-w-0 flex-wrap gap-1">
         {controls.values.map((value) => {
           const isVisible = controls.visible.has(value);
           return (
@@ -139,9 +139,9 @@ function AxisSliceControls({
               title={`${label} ${value}`}
               onClick={() => controls.toggle(value)}
               className={cn(
-                "grid h-7 min-w-7 place-items-center rounded-[7px] border px-2 font-mono text-[11px] font-bold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-focus",
+                "grid h-touch min-w-touch place-items-center rounded-control-md border px-2 font-mono type-meta font-bold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-focus md:h-control-sm md:min-w-control-sm",
                 isVisible
-                  ? "border-cyan-200/45 bg-cyan-300/[0.12] text-cyan-50"
+                  ? "border-cyan/45 bg-cyan/[0.12] text-cyan"
                   : "border-line bg-black/25 text-ink-faint hover:border-line-soft hover:text-ink",
               )}
             >
@@ -163,7 +163,7 @@ function CellDetail({
 }) {
   if (!selectedCell) {
     return (
-      <div className="rounded-[8px] border border-line bg-black/20 p-3 text-sm text-ink-faint">
+      <div className="rounded-control-md border border-line bg-black/20 p-3 text-sm text-ink-faint">
         Select a cell to inspect its coordinate and graph mapping.
       </div>
     );
@@ -171,7 +171,7 @@ function CellDetail({
 
   const reach = selectedCell.reach;
   return (
-    <div className="rounded-[8px] border border-cyan-200/25 bg-cyan-300/[0.06] p-3">
+    <div className="rounded-control-md border border-cyan/25 bg-cyan/[0.06] p-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-mono text-sm font-bold text-ink">
           {formatGraphCoordinate(selectedCell.coordinate)}
@@ -233,14 +233,14 @@ function Fallback2DPanel({
             aria-label={`Select coordinate ${formatGraphCoordinate(cell.coordinate)}`}
             onClick={() => onSelectCell(cell)}
             className={cn(
-              "rounded-[8px] border p-2 text-left font-mono text-[11px] transition focus:outline-none focus-visible:ring-2 focus-visible:ring-focus",
+              "rounded-control-md border p-2 text-left font-mono type-meta transition [content-visibility:auto] [contain-intrinsic-size:44px] focus:outline-none focus-visible:ring-2 focus-visible:ring-focus",
               cell.key === selectedKey
-                ? "border-amber-200/70 bg-amber-300/[0.16] text-amber-50"
-                : "border-line bg-white/[0.035] text-ink-dim hover:border-cyan-200/35 hover:text-ink",
+                ? "border-amber/70 bg-amber/[0.16] text-amber"
+                : "border-line bg-white/[0.035] text-ink-dim hover:border-cyan/35 hover:text-ink",
             )}
           >
             <span className="block font-bold">{formatGraphCoordinate(cell.coordinate)}</span>
-            <span className="mt-1 block text-[10px] uppercase">{cell.category}</span>
+            <span className="mt-1 block type-caption uppercase">{cell.category}</span>
           </button>
         ))}
       </div>
@@ -268,18 +268,18 @@ function CoordinateList({
   );
 
   return (
-    <section aria-label="3D cluster coordinates" className="grid gap-2">
+    <section aria-label="3D cluster coordinates" className="grid min-w-0 gap-2">
       <div className="flex items-center justify-between gap-2">
-        <span className="font-mono text-[11px] font-bold uppercase text-ink-faint">
+        <span className="font-mono type-meta font-bold uppercase text-ink-faint">
           Coordinates
         </span>
-        <span className="font-mono text-[11px] text-ink-faint">
+        <span className="font-mono type-meta text-ink-faint">
           {visibleCells.length}/{scene.activeCells.length}
         </span>
       </div>
       <div className="grid max-h-44 gap-1.5 overflow-auto pr-1">
         {visibleCells.length === 0 ? (
-          <div className="rounded-[7px] border border-line bg-black/20 px-2.5 py-2 text-xs text-ink-faint">
+          <div className="rounded-control-md border border-line bg-black/20 px-2.5 py-2 text-xs text-ink-faint">
             No active coordinates are visible with the current slice filters.
           </div>
         ) : (
@@ -293,16 +293,16 @@ function CoordinateList({
                 aria-label={`Select coordinate ${formatGraphCoordinate(cell.coordinate)} ${cell.category}`}
                 onClick={() => onSelectCell(cell)}
                 className={cn(
-                  "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-[7px] border px-2.5 py-2 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-focus",
+                  "grid min-h-touch grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-control-md border px-2.5 py-2 text-left transition [content-visibility:auto] [contain-intrinsic-size:44px] focus:outline-none focus-visible:ring-2 focus-visible:ring-focus md:min-h-control",
                   isSelected
-                    ? "border-amber-200/70 bg-amber-300/[0.16] text-amber-50"
-                    : "border-line bg-white/[0.035] text-ink-dim hover:border-cyan-200/35 hover:text-ink",
+                    ? "border-amber/70 bg-amber/[0.16] text-amber"
+                    : "border-line bg-white/[0.035] text-ink-dim hover:border-cyan/35 hover:text-ink",
                 )}
               >
-                <span className="font-mono text-[11px] font-bold">
+                <span className="font-mono type-meta font-bold">
                   {formatGraphCoordinate(cell.coordinate)}
                 </span>
-                <span className="rounded-[6px] border border-line-soft px-1.5 py-0.5 text-[10px] uppercase">
+                <span className="rounded-chip border border-line-soft px-1.5 py-0.5 type-caption uppercase">
                   {cell.category}
                 </span>
               </button>
@@ -406,12 +406,12 @@ function NeuronCluster3DPopup({
       ariaLabel={`3D neuron cluster ${scene.clusterNodePath}`}
       size="fullscreen"
       onClose={onClose}
-      panelClassName="h-[80vh] min-h-[80vh] max-h-[80vh] bg-[linear-gradient(180deg,rgba(14,16,24,0.98),rgba(8,10,16,0.98))]"
+      panelClassName="h-[80vh] min-h-[80vh] max-h-[80vh] bg-cluster-panel"
       header={
         <div className="flex min-w-0 items-center justify-between gap-3 border-b border-line px-4 py-3">
           <SectionHeading
             as="h2"
-            icon={<Box className="h-[15px] w-[15px] text-cyan-100" aria-hidden />}
+            icon={<Box className="h-[15px] w-[15px] text-cyan" aria-hidden />}
             title="3D Cluster"
           />
           <span className="min-w-0 flex-1 truncate font-mono text-xs text-ink-faint">
@@ -422,7 +422,7 @@ function NeuronCluster3DPopup({
             aria-label="Close 3D cluster view"
             title="Close"
             onClick={onClose}
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-[8px] border border-line bg-white/[0.035] text-ink-dim transition hover:border-line-soft hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+            className="grid h-touch w-touch shrink-0 place-items-center rounded-control-md border border-line bg-control text-ink-dim transition-colors hover:border-line-hover hover:bg-control-hover hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-focus md:h-control md:w-control"
           >
             <X className="h-4 w-4" aria-hidden />
           </button>
@@ -434,7 +434,11 @@ function NeuronCluster3DPopup({
         onPointerDown={(event) => event.stopPropagation()}
         onWheel={(event) => event.stopPropagation()}
       >
-        <div className="relative min-h-[420px] overflow-hidden bg-black/20">
+        <div
+          role="img"
+          aria-label={`Interactive 3D neuron cluster ${scene.clusterNodePath}. Use the coordinate list to select cells with a keyboard.`}
+          className="relative min-h-[420px] overflow-hidden bg-black/20"
+        >
           <SceneErrorBoundary fallback={fallback}>
             <DynamicNeuronCluster3DScene
               scene={scene}
@@ -447,7 +451,7 @@ function NeuronCluster3DPopup({
           </SceneErrorBoundary>
         </div>
 
-        <aside className="grid min-h-0 content-start gap-4 overflow-auto border-t border-line bg-black/20 p-4 lg:border-l lg:border-t-0">
+        <aside className="grid min-h-0 min-w-0 content-start gap-4 overflow-x-hidden overflow-y-auto border-t border-line bg-black/20 p-4 lg:border-l lg:border-t-0">
           <div className="grid grid-cols-2 gap-2">
             <StatChip tone="soft">{scene.activeCells.length} active</StatChip>
             <StatChip tone="soft">{scene.capacityTotal} capacity</StatChip>
@@ -463,7 +467,7 @@ function NeuronCluster3DPopup({
             <button
               type="button"
               onClick={resetSlices}
-              className="inline-flex h-9 items-center gap-2 rounded-[8px] border border-line bg-white/[0.035] px-3 text-xs font-bold text-ink-dim transition hover:border-cyan-200/35 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+              className="inline-flex h-touch items-center gap-2 rounded-control-md border border-line bg-control px-3 text-xs font-bold text-ink-dim transition-colors hover:border-cyan/35 hover:bg-control-hover hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-focus md:h-control"
             >
               <RotateCcw className="h-3.5 w-3.5" aria-hidden />
               Reset
@@ -472,7 +476,7 @@ function NeuronCluster3DPopup({
               type="button"
               onClick={isolateSelected}
               disabled={!selectedCell}
-              className="inline-flex h-9 items-center gap-2 rounded-[8px] border border-line bg-white/[0.035] px-3 text-xs font-bold text-ink-dim transition hover:border-amber-200/35 hover:text-ink disabled:cursor-not-allowed disabled:opacity-45 focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+              className="inline-flex h-touch items-center gap-2 rounded-control-md border border-line bg-control px-3 text-xs font-bold text-ink-dim transition-colors hover:border-amber/35 hover:bg-control-hover hover:text-ink disabled:cursor-not-allowed disabled:opacity-45 focus:outline-none focus-visible:ring-2 focus-visible:ring-focus md:h-control"
             >
               <LocateFixed className="h-3.5 w-3.5" aria-hidden />
               Isolate
@@ -492,7 +496,7 @@ function NeuronCluster3DPopup({
             onSelectCell={handleSelectCell}
           />
 
-          <div className="flex items-center gap-2 rounded-[8px] border border-line bg-white/[0.025] p-2 text-xs text-ink-faint">
+          <div className="flex items-center gap-2 rounded-control-md border border-line bg-white/[0.025] p-2 text-xs text-ink-faint">
             {scene.renderGhostCells ? (
               <Eye className="h-4 w-4 text-ink-dim" aria-hidden />
             ) : (

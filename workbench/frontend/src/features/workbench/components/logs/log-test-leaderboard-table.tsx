@@ -99,7 +99,7 @@ function LogTestLeaderboardContent({
           className="w-full min-w-[920px] border-separate border-spacing-0 text-left text-xs"
           aria-label={tableAriaLabel ?? `${tag} test leaderboard`}
         >
-          <thead className="sticky top-0 z-10 bg-bg-2/95 text-[11px] uppercase tracking-[0.08em] text-ink-faint">
+          <thead className="sticky top-0 z-10 bg-bg-2/95 type-meta uppercase tracking-label text-ink-faint">
             <tr>
               {["Rank", tag, "Experiment", "Dataset", "Model", "Preset", "Run", "Step"].map(
                 (heading) => (
@@ -146,7 +146,7 @@ function LogTestLeaderboardContent({
                       <div className="flex min-w-0 items-center gap-2">
                         <button
                           type="button"
-                          className="min-w-0 truncate text-left font-semibold text-ink-dim transition hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                          className="min-h-touch min-w-0 truncate text-left font-semibold text-ink-dim transition hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-focus md:min-h-control-sm"
                           title={runLabel}
                           aria-label={`Open run details for ${runLabel}`}
                           onClick={() => onSelectRun(row.runId)}
@@ -155,7 +155,7 @@ function LogTestLeaderboardContent({
                         </button>
                         <Button
                           variant="ghost"
-                          className="h-7 shrink-0 rounded-[8px] px-2 text-[11px]"
+                          className="h-touch shrink-0 rounded-control-md px-2 type-meta md:h-control-sm"
                           aria-label={`Open details for ${runLabel}`}
                           onClick={() => onSelectRun(row.runId)}
                         >
@@ -174,7 +174,7 @@ function LogTestLeaderboardContent({
         </table>
       </div>
       {hiddenRowCount > 0 && (
-        <div className="rounded-[10px] border border-line-soft bg-white/[0.018] px-3 py-2 text-center text-xs text-ink-faint">
+        <div className="rounded-control border border-line-soft bg-white/[0.018] px-3 py-2 text-center text-xs text-ink-faint">
           Showing top {visibleRows.length} of {rows.length} runs.
         </div>
       )}

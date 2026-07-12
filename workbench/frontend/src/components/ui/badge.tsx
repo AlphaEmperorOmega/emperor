@@ -30,7 +30,7 @@ export function Badge({ className, variant = "default", ...props }: BadgeProps) 
   return (
     <span
       className={cn(
-        "inline-flex max-w-full min-w-0 whitespace-normal rounded-control-sm border border-line bg-control px-2 py-0.5 font-mono text-xs font-semibold leading-tight text-ink-dim [overflow-wrap:anywhere]",
+        "inline-flex max-w-full min-w-0 whitespace-normal rounded-chip border border-line bg-control px-2 py-1 font-mono type-meta font-semibold leading-4 text-ink-dim [overflow-wrap:anywhere]",
         badgeVariantClassNames[variant],
         className,
       )}

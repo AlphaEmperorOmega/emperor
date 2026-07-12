@@ -1127,7 +1127,7 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
         name: /output\/mean multi-run scalar chart/i,
       }),
     ).toBeInTheDocument();
-    expect(within(dialog).queryByText("Loading monitor data")).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("Loading monitor data…")).not.toBeInTheDocument();
     expect(
       within(dialog).getByText(/Primary: loaded 2 of 5 historical runs/i),
     ).toBeInTheDocument();

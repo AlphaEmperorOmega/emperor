@@ -27,9 +27,9 @@ export function StackDiagramView({
           aria-label={cell.title}
           tone="default"
           className={cn(
-            "relative flex min-w-0 items-center gap-2 overflow-hidden rounded-[10px] px-3 text-[13px] font-medium",
+            "relative flex min-w-0 items-center gap-2 overflow-hidden px-3 type-compact font-medium",
             cell.kind === "overflow"
-              ? "justify-center text-center font-mono tracking-[0.18em]"
+              ? "justify-center text-center font-mono tracking-wordmark"
               : "justify-between text-left",
           )}
           style={{ height: graphCardGeometry.childSummary.rowHeight }}
@@ -40,7 +40,7 @@ export function StackDiagramView({
             <>
               <span className="min-w-0 flex-1 truncate">{cell.label}</span>
               {cell.dims && (
-                <span className="shrink-0 text-right font-mono text-[12px] font-semibold text-ink">
+                <span className="shrink-0 text-right font-mono type-label font-semibold text-ink">
                   {cell.dims}
                 </span>
               )}

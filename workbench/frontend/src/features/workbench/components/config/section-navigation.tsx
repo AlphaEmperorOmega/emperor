@@ -52,7 +52,7 @@ export function SectionNavigation({
           type="button"
           onClick={onToggleAllSections}
           disabled={sections.length === 0}
-          className="min-w-[5.75rem] shrink-0 whitespace-nowrap rounded-[8px] border border-line bg-white/[0.035] px-2 py-1 text-xs font-semibold uppercase tracking-[0.08em] text-ink-dim transition hover:border-violet/30 hover:bg-violet/10 hover:text-violet focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          className="h-touch min-w-[5.75rem] shrink-0 whitespace-nowrap rounded-control-md border border-line bg-control px-2 text-xs font-semibold uppercase tracking-label text-ink-dim transition-colors hover:border-violet/30 hover:bg-violet/10 hover:text-violet focus:outline-none focus-visible:ring-2 focus-visible:ring-focus md:h-control-sm"
         >
           {areAllSectionsOpen ? "Close All" : "Open All"}
         </button>
@@ -85,7 +85,7 @@ export function SectionNavigation({
           const hasPreset = sectionPresetOwnedCount > 0;
           const hasBoth = state === "override-and-preset";
           const rowStateClass = hasBoth
-            ? "border-amber/35 bg-[linear-gradient(90deg,rgba(255,209,102,0.075),rgba(167,139,250,0.095))] ring-1 ring-violet/20 hover:bg-[linear-gradient(90deg,rgba(255,209,102,0.11),rgba(167,139,250,0.13))]"
+            ? "border-amber/35 bg-config-navigation ring-1 ring-violet/20 hover:bg-config-navigation-hover"
             : hasOverride
               ? "border-violet/30 bg-violet/[0.055] hover:bg-violet/15"
               : hasPreset
@@ -102,7 +102,7 @@ export function SectionNavigation({
               className={cn(
                 "group/section-row grid min-h-11 min-w-[13rem] grid-cols-[minmax(0,1fr)_2.25rem] border-b border-line-soft transition focus-within:ring-2 focus-within:ring-focus hover:bg-violet/10 last:border-b-0",
                 isInline
-                  ? "rounded-[9px] border border-line-soft last:border-b"
+                  ? "rounded-control border border-line-soft last:border-b"
                   : "lg:min-w-0",
                 isSectionDisabled && "opacity-70",
                 rowStateClass,
@@ -113,7 +113,7 @@ export function SectionNavigation({
                   type="button"
                   aria-label={`Jump to ${displayTitle}`}
                   onClick={() => onJumpToSection(section.title)}
-                  className="min-h-11 min-w-0 px-2.5 py-2 text-left focus:outline-none"
+                  className="min-h-11 min-w-0 px-2.5 py-2 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus"
                 >
                   <span className="block min-w-0 truncate text-sm font-semibold text-ink transition-opacity group-hover/section-row:opacity-0 group-focus-within/section-row:opacity-0">
                     {displayTitle}
@@ -156,7 +156,7 @@ export function SectionNavigation({
                 aria-controls={panelId}
                 disabled={isSectionDisabled}
                 onClick={() => onToggleSection(section.title)}
-                className="flex min-h-full items-center justify-center border-l border-line-soft text-ink-faint transition hover:bg-white/[0.05] hover:text-ink focus:outline-none disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-ink-faint"
+                className="flex min-h-full items-center justify-center border-l border-line-soft text-ink-faint transition-colors hover:bg-control-hover hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-ink-faint"
               >
                 <ChevronDown
                   className={cn(

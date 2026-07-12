@@ -14,7 +14,7 @@ import { useWorkbenchWorkspaceShell } from "@/features/workbench/state/use-workb
 function LogsWorkspaceProviderLoadingFallback() {
   return (
     <WorkbenchWideWorkspaceRegion>
-      <WorkbenchWorkspaceLoadingStatus label="Loading logs workspace" />
+      <WorkbenchWorkspaceLoadingStatus label="Loading logs workspace…" />
     </WorkbenchWideWorkspaceRegion>
   );
 }

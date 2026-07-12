@@ -8,6 +8,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { type TrainingJob, type TrainingRun, type TrainingRunPlan } from "@/lib/api";
+import { formatSignificantNumber } from "@/lib/format";
 
 type StatusMeta = {
   className: string;
@@ -134,7 +135,7 @@ export function getTrainingRunDraftRemoval({
 
 export function formatTrainingMetricValue(value: unknown) {
   if (typeof value === "number" && Number.isFinite(value)) {
-    return Number.parseFloat(value.toPrecision(4)).toString();
+    return formatSignificantNumber(value);
   }
   return String(value);
 }

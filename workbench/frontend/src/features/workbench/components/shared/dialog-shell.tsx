@@ -19,14 +19,14 @@ export type DialogShellProps = {
 };
 
 const dialogOverlayClassName =
-  "fixed inset-0 z-50 flex items-center justify-center overscroll-contain bg-black/70 p-3 backdrop-blur-sm sm:p-6";
+  "safe-dialog-inset fixed inset-0 z-50 flex items-center justify-center overscroll-contain bg-black/80 backdrop-blur-md";
 
 const dialogPanelClassNames: Record<NonNullable<DialogShellProps["size"]>, string> = {
-  sm: "flex max-h-[calc(100vh-1.5rem)] w-full max-w-lg flex-col overflow-hidden sm:max-h-[calc(100vh-3rem)]",
-  md: "flex max-h-[calc(100vh-1.5rem)] w-full max-w-3xl flex-col overflow-hidden sm:max-h-[calc(100vh-3rem)]",
-  lg: "flex max-h-[calc(100vh-1.5rem)] w-full max-w-4xl flex-col overflow-hidden sm:max-h-[calc(100vh-3rem)]",
+  sm: "flex min-w-0 max-h-[calc(100vh-1.5rem)] w-full max-w-full flex-col overflow-hidden sm:max-h-[calc(100vh-3rem)] sm:max-w-lg",
+  md: "flex min-w-0 max-h-[calc(100vh-1.5rem)] w-full max-w-full flex-col overflow-hidden sm:max-h-[calc(100vh-3rem)] sm:max-w-3xl",
+  lg: "flex min-w-0 max-h-[calc(100vh-1.5rem)] w-full max-w-full flex-col overflow-hidden sm:max-h-[calc(100vh-3rem)] sm:max-w-4xl",
   fullscreen:
-    "flex max-h-[calc(100vh-1.5rem)] w-full max-w-[92rem] flex-col overflow-hidden sm:max-h-[calc(100vh-3rem)]",
+    "flex min-w-0 max-h-[calc(100vh-1.5rem)] w-full max-w-full flex-col overflow-hidden sm:max-h-[calc(100vh-3rem)] sm:max-w-[92rem]",
 };
 
 const dialogPanelVariantClassNames: Record<
@@ -34,9 +34,9 @@ const dialogPanelVariantClassNames: Record<
   string
 > = {
   edge:
-    "edge rounded-card shadow-[0_24px_80px_rgba(0,0,0,0.58)]",
+    "edge rounded-dialog shadow-dialog",
   surface:
-    "rounded-[10px] border border-line bg-panel shadow-[0_24px_80px_rgba(0,0,0,0.58)]",
+    "rounded-dialog border border-line-hover bg-panel shadow-dialog",
 };
 
 const focusableSelector = [
@@ -95,11 +95,16 @@ function focusableElements(dialog: HTMLElement) {
 }
 
 function initialFocusTarget(dialog: HTMLElement) {
-  const requestedTarget = dialog.querySelector<HTMLElement>(
-    "[autofocus], [data-autofocus='true']",
-  );
-  if (requestedTarget && visibleAndFocusable(requestedTarget)) {
-    return requestedTarget;
+  const prefersDesktopFocus =
+    typeof window.matchMedia !== "function" ||
+    window.matchMedia("(min-width: 768px)").matches;
+  if (prefersDesktopFocus) {
+    const requestedTarget = dialog.querySelector<HTMLElement>(
+      "[autofocus], [data-autofocus='true']",
+    );
+    if (requestedTarget && visibleAndFocusable(requestedTarget)) {
+      return requestedTarget;
+    }
   }
   return focusableElements(dialog)[0] ?? dialog;
 }

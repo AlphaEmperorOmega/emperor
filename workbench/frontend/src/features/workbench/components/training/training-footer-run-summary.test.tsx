@@ -125,7 +125,7 @@ function expectStatusPill(label: string, value: string) {
   if (!(pill instanceof HTMLElement)) {
     throw new Error(`Expected ${label} to render inside a status pill`);
   }
-  expect(pill).toHaveClass("h-[34px]", "rounded-[9px]", "border-line");
+  expect(pill).toHaveClass("h-control", "rounded-control-md", "border-line");
   expect(pill.querySelector("svg")).toBeInTheDocument();
   expect(pill).toHaveTextContent(label);
   expect(pill).toHaveTextContent(value);
@@ -155,7 +155,7 @@ describe("TrainingFooterRunSummary", () => {
 
     rerender(<TrainingFooterRunSummary isLoading />);
     expect(screen.getByRole("status")).toHaveAccessibleName(
-      "Training run summary: planning training runs",
+      "Training run summary: planning training runs…",
     );
     expectStatusPill("runs", "planning");
 

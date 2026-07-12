@@ -25,21 +25,7 @@ import {
 } from "@/features/workbench/providers/workbench-connection-provider";
 import { useLogQueryCache } from "@/features/workbench/state/logs/use-log-query-cache";
 import { importLogArchive, type LogArchiveImportResponse } from "@/lib/api";
-
-function formatFileSize(size: number) {
-  if (size < 1024) {
-    return `${size} B`;
-  }
-  const units = ["KB", "MB", "GB"];
-  let value = size / 1024;
-  for (const unit of units) {
-    if (value < 1024 || unit === "GB") {
-      return `${value.toFixed(value < 10 ? 1 : 0).replace(/\.0$/, "")} ${unit}`;
-    }
-    value /= 1024;
-  }
-  return `${size} B`;
-}
+import { formatBytes } from "@/lib/format";
 
 const logImportsDisabledMessage = "Log imports are disabled by this backend.";
 const logImportsDisabledHint =
@@ -130,7 +116,7 @@ export function ImportLogsDialog({ onClose }: { onClose: () => void }) {
     }
     if (file && maxUploadSize !== null && file.size > maxUploadSize) {
       setError(
-        `Selected file is larger than the ${formatFileSize(maxUploadSize)} limit.`,
+        `Selected file is larger than the ${formatBytes(maxUploadSize)} limit.`,
       );
       return;
     }
@@ -155,7 +141,7 @@ export function ImportLogsDialog({ onClose }: { onClose: () => void }) {
       setError(
         maxUploadSize === null
           ? "Selected file is too large."
-          : `Selected file is larger than the ${formatFileSize(maxUploadSize)} limit.`,
+          : `Selected file is larger than the ${formatBytes(maxUploadSize)} limit.`,
       );
       return;
     }
@@ -230,7 +216,7 @@ export function ImportLogsDialog({ onClose }: { onClose: () => void }) {
     >
       <form className="grid gap-4 overflow-y-auto p-4 sm:p-5" onSubmit={handleSubmit}>
         {!uploadsEnabled && (
-          <div className="rounded-[8px] border border-amber/[0.25] bg-amber/[0.08] px-3 py-2.5 text-sm leading-6 text-ink-dim">
+          <div className="rounded-control-md border border-amber/[0.25] bg-amber/[0.08] px-3 py-2.5 text-sm leading-6 text-ink-dim">
             <p>{logImportsDisabledMessage}</p>
             <p className="mt-1 text-xs text-ink-faint">
               {logImportsDisabledHint}
@@ -238,7 +224,7 @@ export function ImportLogsDialog({ onClose }: { onClose: () => void }) {
           </div>
         )}
 
-        <div className="grid gap-3 rounded-[8px] border border-line-soft bg-black/[0.18] p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+        <div className="grid gap-3 rounded-control-md border border-line-soft bg-black/[0.18] p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
           <label
             id="log-archive-file-label"
             htmlFor="log-archive-file"
@@ -254,10 +240,11 @@ export function ImportLogsDialog({ onClose }: { onClose: () => void }) {
             className="w-full sm:w-auto"
           >
             <FileArchive className="h-3.5 w-3.5" aria-hidden />
-            Choose Zip
+            Choose ZIP
           </Button>
           <input
             id="log-archive-file"
+            name="log-archive-file"
             ref={fileInputRef}
             type="file"
             accept=".zip,application/zip,application/x-zip-compressed"
@@ -268,20 +255,20 @@ export function ImportLogsDialog({ onClose }: { onClose: () => void }) {
           />
         </div>
 
-        <div className="rounded-[8px] border border-line-soft bg-black/[0.18] px-3 py-2.5">
+        <div className="rounded-control-md border border-line-soft bg-black/[0.18] px-3 py-2.5">
           <div className="text-xs font-semibold text-ink-faint">Selected file</div>
           <div className="mt-1 min-h-5 break-all text-sm text-ink">
             {selectedFile ? selectedFile.name : "No file selected"}
           </div>
           <div className="mt-1 text-xs font-medium text-ink-faint">
-            {selectedFile ? formatFileSize(selectedFile.size) : "Select a .zip archive"}
+            {selectedFile ? formatBytes(selectedFile.size) : "Select a .zip archive"}
           </div>
         </div>
 
         {result && (
           <div
             role="status"
-            className="flex items-start gap-2 rounded-[8px] border border-ok/[0.28] bg-ok/[0.08] px-3 py-2.5 text-sm leading-6 text-ink-dim"
+            className="flex items-start gap-2 rounded-control-md border border-ok/[0.28] bg-ok/[0.08] px-3 py-2.5 text-sm leading-6 text-ink-dim"
           >
             <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-ok" aria-hidden />
             <span>
@@ -294,7 +281,7 @@ export function ImportLogsDialog({ onClose }: { onClose: () => void }) {
         {error && (
           <div
             role="alert"
-            className="flex items-start gap-2 rounded-[8px] border border-danger-line bg-danger-soft px-3 py-2.5 text-sm leading-6 text-danger-text"
+            className="flex items-start gap-2 rounded-control-md border border-danger-line bg-danger-soft px-3 py-2.5 text-sm leading-6 text-danger-text"
           >
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
             <span>{error}</span>
@@ -311,7 +298,7 @@ export function ImportLogsDialog({ onClose }: { onClose: () => void }) {
             ) : (
               <Upload className="h-3.5 w-3.5" aria-hidden />
             )}
-            {isImporting ? "Importing..." : "Import Logs"}
+            {isImporting ? "Importing…" : "Import Logs"}
           </Button>
         </div>
       </form>

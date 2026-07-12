@@ -67,7 +67,7 @@ export function GraphNodeParameterShapes({
           data-testid={`parameter-shape-dims-${nodeId}`}
           title={`input/output: ${dimsText}`}
           tone="default"
-          className="inline-flex w-fit max-w-full items-center rounded-[7px] px-2 text-[12px]"
+          className="inline-flex w-fit max-w-full items-center px-2 type-label"
           style={{ height: graphCardGeometry.parameterShapes.rowHeight }}
         >
           <span className="truncate font-mono text-ink">{dimsText}</span>
@@ -99,7 +99,7 @@ export function GraphNodeParameterShapes({
             }
             tone={channel ? "none" : "violet"}
             className={cn(
-              "grid min-w-0 grid-cols-[18px_minmax(0,1fr)] items-center gap-1.5 rounded-[7px] px-2 text-[12px]",
+              "grid min-w-0 grid-cols-[18px_minmax(0,1fr)] items-center gap-1.5 px-2 type-label",
               channel
                 ? graphParameterActivityStatusClassNames[channel.status]
                 : "border-violet/25 bg-violet/15",

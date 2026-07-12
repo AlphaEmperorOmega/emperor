@@ -36,7 +36,8 @@ describe("FullPageStatus", () => {
   it("renders the loading title without optional detail text", () => {
     render(<FullPageLoading />);
 
-    expect(screen.getByRole("heading", { name: "Loading workbench" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Loading Workbench…" })).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "true");
     expect(screen.queryByText(/Start the API/i)).not.toBeInTheDocument();
   });
 });
@@ -48,7 +49,7 @@ describe("FullPageError", () => {
     render(<FullPageError onRetry={onRetry} />);
 
     expect(screen.getByText(/unexpected error/i)).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Try again" }));
+    await user.click(screen.getByRole("button", { name: "Try Again" }));
     expect(onRetry).toHaveBeenCalledTimes(1);
   });
 
@@ -76,11 +77,10 @@ describe("StatusCard", () => {
       const action = screen.getByRole("button", { name: "Retry" });
       const surface = action.closest("div");
       expect(surface).toHaveClass(
-        "rounded-[10px]",
+        "rounded-panel",
         "border",
-        "border-line",
-        "bg-white/[0.018]",
-        "p-4",
+        "p-region",
+        "shadow-panel",
       );
       expect(surface).not.toHaveClass("edge", "rounded-card");
       expect(screen.getByText("Loading scalars")).toBeInTheDocument();
@@ -101,10 +101,10 @@ describe("StatusCard", () => {
 
     const inlineSurface = screen.getByRole("button", { name: "Cancel" }).closest("div");
     expect(inlineSurface).toHaveClass(
-      "rounded-[10px]",
+      "rounded-panel",
       "border-line",
-      "bg-white/[0.018]",
-      "p-3",
+      "bg-panel-2/70",
+      "p-panel",
     );
     expect(inlineSurface).not.toHaveClass("edge", "rounded-card");
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
@@ -121,7 +121,7 @@ describe("StatusCard", () => {
 
     const alert = screen.getByRole("alert");
     expect(alert).toHaveClass(
-      "rounded-[10px]",
+      "rounded-panel",
       "border-danger-line",
       "bg-danger-soft",
       "text-danger-text",
@@ -366,10 +366,16 @@ describe("DialogShell", () => {
     );
 
     const dialog = screen.getByRole("dialog", { name: "Surface Dialog" });
+    expect(dialog.parentElement).toHaveClass(
+      "safe-dialog-inset",
+      "overscroll-contain",
+    );
     expect(dialog).toHaveClass(
-      "rounded-[10px]",
+      "min-w-0",
+      "max-w-full",
+      "rounded-dialog",
       "border",
-      "border-line",
+      "border-line-hover",
       "bg-panel",
     );
     expect(dialog).not.toHaveClass("edge", "rounded-card", "bg-white/[0.018]");
@@ -382,12 +388,11 @@ describe("InlineStatus", () => {
 
     const status = screen.getByText("Waiting for config");
     expect(status).toHaveClass(
-      "rounded-[10px]",
+      "rounded-panel",
       "border",
-      "border-dashed",
-      "p-4",
-      "border-faint",
-      "bg-white/[0.018]",
+      "p-region",
+      "border-line",
+      "bg-panel-2/70",
       "text-ink-faint",
     );
   });
@@ -396,8 +401,8 @@ describe("InlineStatus", () => {
     render(<InlineStatus compact>Compact status</InlineStatus>);
 
     const status = screen.getByText("Compact status");
-    expect(status).toHaveClass("p-3");
-    expect(status).not.toHaveClass("p-4");
+    expect(status).toHaveClass("p-panel");
+    expect(status).not.toHaveClass("p-region");
   });
 
   it("applies tone classes", () => {
@@ -407,6 +412,7 @@ describe("InlineStatus", () => {
       "bg-danger-soft",
       "text-danger-text",
     );
+    expect(screen.getByRole("alert")).toHaveTextContent("Danger");
 
     rerender(<InlineStatus tone="warning">Warning</InlineStatus>);
     expect(screen.getByText("Warning")).toHaveClass(
@@ -433,6 +439,7 @@ describe("InlineStatus", () => {
     render(<InlineStatus busy>Loading status</InlineStatus>);
 
     const status = screen.getByRole("status");
+    expect(status).toHaveAttribute("aria-live", "polite");
     expect(status).toHaveTextContent("Loading status");
     const spinner = status.querySelector("svg");
     expect(spinner).toHaveClass("h-4", "w-4", "animate-spin", "text-violet");
@@ -462,12 +469,12 @@ describe("SectionHeading", () => {
     const heading = screen.getByRole("heading", { name: "Metrics" });
     expect(heading).toHaveClass(
       "flex",
+      "min-w-0",
       "items-center",
       "gap-2",
-      "text-xs",
+      "type-label",
       "font-bold",
       "uppercase",
-      "tracking-[0.09em]",
       "text-ink",
       "custom-heading",
     );
@@ -494,13 +501,14 @@ describe("StatChip", () => {
     render(<StatChip>8 / 10</StatChip>);
 
     expect(screen.getByText("8 / 10")).toHaveClass(
-      "rounded-[7px]",
+      "rounded-chip",
       "border",
       "border-line",
-      "bg-white/[0.04]",
+      "bg-control",
       "px-2",
       "py-1",
       "font-mono",
+      "tabular-nums",
       "text-xs",
       "text-ink-dim",
     );
@@ -515,8 +523,8 @@ describe("StatChip", () => {
 
     expect(screen.getByText("Soft")).toHaveClass(
       "border-line-soft",
-      "bg-black/20",
-      "text-[11px]",
+      "bg-control-field",
+      "type-meta",
       "font-semibold",
       "leading-none",
       "custom-chip",
@@ -533,7 +541,7 @@ describe("StatChip", () => {
       "text-violet",
       "px-1.5",
       "py-0.5",
-      "text-[11px]",
+      "type-meta",
     );
 
     rerender(<StatChip tone="success">Success</StatChip>);
@@ -573,13 +581,14 @@ describe("SurfacePanel", () => {
     const panel = screen.getByText("Surface body").closest(".custom-surface");
     expect(panel).toHaveClass(
       "grid",
+      "min-w-0",
       "content-start",
-      "gap-1.5",
-      "rounded-[10px]",
+      "gap-2",
+      "rounded-panel",
       "border",
       "border-line",
-      "bg-white/[0.018]",
-      "px-2.5",
+      "bg-panel-2/70",
+      "px-panel",
       "py-3",
     );
     expect(panel).not.toHaveClass("py-2");
@@ -604,17 +613,17 @@ describe("SurfacePanel", () => {
     expect(region.tagName).toBe("SECTION");
     expect(region).toHaveAttribute("aria-labelledby", "surface-title");
     expect(region).toHaveClass(
-      "rounded-[10px]",
+      "rounded-panel",
       "border",
       "border-line",
-      "bg-white/[0.018]",
+      "bg-panel-2/70",
     );
   });
 
   it.each([
-    ["compact", "gap-1.5", "px-2.5", "py-2"],
-    ["roomy", "gap-3", "p-3"],
-    ["spacious", "gap-4", "p-4"],
+    ["compact", "gap-2", "px-panel", "py-2"],
+    ["roomy", "gap-panel", "p-panel"],
+    ["spacious", "gap-region", "p-region"],
     ["none", "gap-0", "p-0"],
   ] as const)("applies %s padding classes", (padding, ...classes) => {
     render(
@@ -646,34 +655,33 @@ describe("MetricCard", () => {
     const card = screen.getByText("Runs").closest(".custom-card");
     expect(screen.getByTestId("metric-icon")).toBeInTheDocument();
     expect(card).toHaveClass(
-      "rounded-[10px]",
+      "rounded-panel",
       "border",
       "border-line",
-      "bg-white/[0.018]",
-      "px-2.5",
+      "bg-panel-2/70",
+      "px-panel",
       "py-2.5",
       "custom-card",
     );
     expect(card).not.toHaveClass("edge", "rounded-[12px]", "py-2");
     expect(screen.getByText("Runs")).toHaveClass(
       "flex",
+      "min-w-0",
       "items-center",
       "gap-2",
-      "text-xs",
+      "type-label",
       "font-bold",
       "uppercase",
-      "tracking-[0.08em]",
       "text-ink-dim",
     );
     expect(screen.getByText("42")).toHaveClass(
-      "mt-1",
       "font-mono",
-      "font-extrabold",
+      "font-bold",
       "text-sm",
       "text-violet",
     );
     expect(screen.getByTitle("42 runs")).toHaveTextContent("42");
-    expect(screen.getByText("complete")).toHaveClass("mt-1", "text-ok");
+    expect(screen.getByText("complete")).toHaveClass("text-ok");
   });
 });
 
@@ -692,10 +700,10 @@ describe("KeyValueRow", () => {
     expect(row).toHaveClass(
       "grid",
       "grid-cols-[104px_minmax(0,1fr)]",
-      "gap-3",
+      "gap-panel",
       "border-b",
       "border-line-soft",
-      "py-3",
+      "py-panel",
       "text-xs",
       "custom-row",
       "last:border-b-0",
@@ -705,6 +713,7 @@ describe("KeyValueRow", () => {
       "text-right",
       "font-mono",
       "font-semibold",
+      "tabular-nums",
       "text-violet-text",
     );
   });
@@ -716,10 +725,10 @@ describe("KeyValueRow", () => {
     expect(row).toHaveClass(
       "grid-cols-[minmax(0,1fr)_auto]",
       "items-center",
-      "rounded-[9px]",
+      "rounded-control-md",
       "border-line-soft",
-      "bg-black/20",
-      "px-3",
+      "bg-control-field",
+      "px-panel",
       "py-2",
     );
     expect(screen.getByText("present")).toHaveClass(

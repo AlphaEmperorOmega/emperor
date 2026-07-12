@@ -18,7 +18,7 @@ const SelectedNodeDetails = dynamic(
   {
     ssr: false,
     loading: () => (
-      <InlineStatus className="rounded-[16px]">Loading node details</InlineStatus>
+      <InlineStatus busy className="rounded-card">Loading node details…</InlineStatus>
     ),
   },
 );
@@ -51,7 +51,7 @@ export function NodeDetailsPanel() {
               label="Params"
               value={formatCompactCount(graph.parameterCount)}
               valueTitle={`${formatExactCount(graph.parameterCount)} parameters`}
-              valueClassName="gradient-text mt-1.5 truncate font-mono text-[22px] font-extrabold leading-tight tracking-[-0.02em]"
+              valueClassName="gradient-text mt-1.5 truncate font-mono type-display font-extrabold leading-tight tracking-display"
             />
           </div>
         ) : undefined
@@ -71,7 +71,7 @@ export function NodeDetailsPanel() {
           historicalRunTagsLoading={historicalRunTagsLoading}
         />
       ) : (
-        <InlineStatus className="rounded-[16px]">No node selected</InlineStatus>
+        <InlineStatus className="rounded-dialog">No node selected</InlineStatus>
       )}
     </SidePanel>
   );

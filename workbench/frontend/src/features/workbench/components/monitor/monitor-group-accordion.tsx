@@ -36,7 +36,7 @@ export function MonitorGroupAccordion({
           aria-expanded={isOpen}
           aria-controls={panelId}
           onClick={onToggle}
-          className="flex w-full items-center justify-between gap-3 p-3 text-left transition hover:bg-white/[0.035] focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          className="flex min-h-touch w-full items-center justify-between gap-panel p-panel text-left transition-colors duration-150 hover:bg-control-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus"
         >
           <span className="flex min-w-0 items-center gap-2">
             <ChevronDown
@@ -46,7 +46,7 @@ export function MonitorGroupAccordion({
               )}
               aria-hidden
             />
-            <span className="truncate text-xs font-bold uppercase tracking-[0.09em] text-ink-dim">
+            <span className="truncate type-label font-bold uppercase text-ink-dim">
               {group}
             </span>
           </span>
@@ -54,7 +54,7 @@ export function MonitorGroupAccordion({
         </button>
       </h3>
       {isOpen && (
-        <div id={panelId} className="border-t border-line-soft p-3">
+        <div id={panelId} className="border-t border-line-soft p-panel">
           {children}
         </div>
       )}

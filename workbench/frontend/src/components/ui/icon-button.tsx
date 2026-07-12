@@ -20,15 +20,15 @@ export type IconButtonProps = Omit<
 };
 
 const sizes: Record<IconButtonSize, string> = {
-  sm: "h-8 w-8 rounded-control-md",
-  md: "h-9 w-9 rounded-control",
+  sm: "h-touch w-touch rounded-control-md md:h-control-sm md:w-control-sm",
+  md: "h-touch w-touch rounded-control md:h-control md:w-control",
 };
 
 const variants: Record<IconButtonVariant, string> = {
   ghost:
     "border-transparent text-ink-faint hover:bg-control-active hover:text-ink disabled:hover:bg-transparent disabled:hover:text-ink-faint",
   edge:
-    "border-line bg-control text-ink-faint hover:bg-control-hover hover:text-ink disabled:hover:border-line disabled:hover:bg-control disabled:hover:text-ink-faint",
+    "border-line bg-panel-2/90 text-ink-faint shadow-control hover:border-line-hover hover:bg-control-hover hover:text-ink disabled:hover:border-line disabled:hover:bg-panel-2 disabled:hover:text-ink-faint",
   danger:
     "border-transparent text-ink-faint hover:border-danger-line hover:bg-danger-soft hover:text-danger-text disabled:hover:border-transparent disabled:hover:bg-transparent disabled:hover:text-ink-faint",
 };

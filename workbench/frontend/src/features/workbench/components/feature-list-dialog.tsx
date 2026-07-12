@@ -40,7 +40,9 @@ export function FeatureListDialog({ onClose }: { onClose: () => void }) {
               </p>
             </div>
             <div className="flex shrink-0 items-center justify-end gap-2">
-              <Badge>{IMPLEMENTED_FEATURES.length} features</Badge>
+              <Badge className="hidden sm:inline-flex">
+                {IMPLEMENTED_FEATURES.length} features
+              </Badge>
               <IconButton
                 label="Close implemented features"
                 onClick={onClose}
@@ -61,13 +63,13 @@ export function FeatureListDialog({ onClose }: { onClose: () => void }) {
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                   <h3
                     id={categoryId}
-                    className="text-xs font-bold uppercase tracking-[0.09em] text-ink-faint"
+                    className="text-xs font-bold uppercase tracking-label text-ink-faint"
                   >
                     {group.category}
                   </h3>
                   <Badge>{group.features.length}</Badge>
                 </div>
-                <ul className="overflow-hidden rounded-[10px] border border-line bg-white/[0.02]">
+                <ul className="overflow-hidden rounded-control border border-line bg-white/[0.02]">
                   {group.features.map((feature) => (
                     <li
                       key={feature.id}

@@ -1,3 +1,4 @@
+import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DialogShell } from "@/features/workbench/components/shared/dialog-shell";
 import { type ConfigSnapshot } from "@/lib/config-snapshots";
@@ -31,7 +32,7 @@ export function SnapshotRestoreDialog({
           Load Snapshot
         </h2>
         <p className="text-sm leading-6 text-ink-dim">
-          Loading &quot;{snapshot.name}&quot; replaces the current draft overrides.
+          Loading “{snapshot.name}” replaces the current draft overrides.
         </p>
       </div>
       <div className="flex justify-end gap-2">
@@ -39,7 +40,8 @@ export function SnapshotRestoreDialog({
           Cancel
         </Button>
         <Button variant="primary" onClick={onConfirm} disabled={busy}>
-          Load
+          {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
+          {busy ? "Loading…" : "Load Snapshot"}
         </Button>
       </div>
     </DialogShell>

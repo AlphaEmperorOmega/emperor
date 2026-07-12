@@ -5,14 +5,7 @@
 
 :root {
   color-scheme: dark;
-  --grad-edge: linear-gradient(
-    150deg,
-    rgba(169, 139, 255, 0.45),
-    rgba(255, 255, 255, 0.03) 42%,
-    rgba(255, 255, 255, 0.02) 64%,
-    rgba(111, 195, 255, 0.34)
-  );
-  background: var(--bg);
+  background: var(--color-bg);
 }
 
 * {
@@ -26,14 +19,21 @@ body {
   overflow: hidden;
 }
 
+html {
+  color-scheme: dark;
+  background: var(--color-bg);
+}
+
 body {
   position: relative;
-  color: var(--ink);
-  background: var(--bg);
-  font-family:
-    var(--font-sans), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: var(--color-ink);
+  background:
+    var(--gradient-body),
+    var(--color-bg);
+  font-family: var(--font-sans), var(--font-fallback-sans);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  -webkit-tap-highlight-color: var(--color-accent-soft);
 }
 
 body::before {
@@ -42,10 +42,10 @@ body::before {
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background:
-    radial-gradient(820px 620px at 88% -8%, rgba(124, 92, 255, 0.18), transparent 60%),
-    radial-gradient(720px 560px at 6% 108%, rgba(58, 122, 255, 0.16), transparent 58%),
-    radial-gradient(900px 700px at 50% 120%, rgba(120, 60, 200, 0.1), transparent 60%);
+  background: var(--gradient-ambient);
+  background-size: 48px 48px, 48px 48px, auto;
+  -webkit-mask-image: linear-gradient(to bottom, black, transparent 68%);
+  mask-image: linear-gradient(to bottom, black, transparent 68%);
 }
 
 body > * {
@@ -61,15 +61,133 @@ textarea {
   touch-action: manipulation;
 }
 
+button,
+[role="button"],
+a {
+  -webkit-tap-highlight-color: var(--color-accent-soft);
+}
+
 select,
 input,
 textarea {
   color-scheme: dark;
 }
 
+select option {
+  color: var(--color-ink);
+  background-color: var(--color-panel);
+}
+
+::selection {
+  color: var(--color-white);
+  background: var(--color-focus);
+}
+
+[data-numeric],
+.tabular-nums {
+  font-variant-numeric: tabular-nums slashed-zero;
+}
+
+:where(h1, h2, h3, h4, h5, h6) {
+  scroll-margin-top: 5rem;
+  text-wrap: balance;
+}
+
+:where(p) {
+  text-wrap: pretty;
+}
+
+/* Typography roles intentionally avoid Tailwind's text-* namespace so the
+   runtime class merger cannot confuse font-size aliases with color tokens. */
+.type-meta {
+  font-size: var(--type-meta-size);
+  line-height: var(--type-meta-leading);
+  letter-spacing: var(--type-meta-tracking);
+}
+
+.type-label {
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-leading);
+  letter-spacing: var(--type-label-tracking);
+}
+
+.type-body {
+  font-size: var(--type-body-size);
+  line-height: var(--type-body-leading);
+  letter-spacing: var(--type-body-tracking);
+}
+
+.type-title {
+  font-size: var(--type-title-size);
+  line-height: var(--type-title-leading);
+  letter-spacing: var(--type-title-tracking);
+}
+
+.type-display {
+  font-size: var(--type-display-size);
+  line-height: var(--type-display-leading);
+  letter-spacing: var(--type-display-tracking);
+}
+
+.type-micro {
+  font-size: var(--type-micro-size);
+  line-height: var(--type-micro-leading);
+  letter-spacing: var(--type-micro-tracking);
+}
+
+.type-caption {
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-leading);
+  letter-spacing: var(--type-caption-tracking);
+}
+
+.type-compact {
+  font-size: var(--type-compact-size);
+  line-height: var(--type-compact-leading);
+  letter-spacing: var(--type-compact-tracking);
+}
+
+.type-heading {
+  font-size: var(--type-heading-size);
+  line-height: var(--type-heading-leading);
+  letter-spacing: var(--type-heading-tracking);
+}
+
+.safe-dialog-inset {
+  --dialog-gutter: var(--space-panel);
+  padding-top: max(var(--dialog-gutter), env(safe-area-inset-top));
+  padding-right: max(var(--dialog-gutter), env(safe-area-inset-right));
+  padding-bottom: max(var(--dialog-gutter), env(safe-area-inset-bottom));
+  padding-left: max(var(--dialog-gutter), env(safe-area-inset-left));
+}
+
+@media (min-width: 640px) {
+  .safe-dialog-inset {
+    --dialog-gutter: var(--space-shell-wide);
+  }
+}
+
+.safe-header-inset {
+  --header-gutter: var(--space-compact);
+  padding-right: max(var(--header-gutter), env(safe-area-inset-right));
+  padding-left: max(var(--header-gutter), env(safe-area-inset-left));
+}
+
+@media (min-width: 640px) {
+  .safe-header-inset {
+    --header-gutter: var(--space-region);
+  }
+}
+
+@media (min-width: 1024px) {
+  .safe-header-inset {
+    --header-gutter: var(--space-shell);
+  }
+}
+
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
@@ -77,14 +195,14 @@ textarea {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--color-faint);
   background-clip: padding-box;
-  border: 2px solid transparent;
-  border-radius: 20px;
+  border: var(--border-hairline) solid transparent;
+  border-radius: var(--radius-round);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.16);
+  background: var(--color-line-hover);
   background-clip: padding-box;
 }
 
@@ -92,25 +210,23 @@ textarea {
   position: relative;
   isolation: isolate;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0) 38%),
-    linear-gradient(155deg, var(--card-a), var(--card-b));
-  border-radius: 16px;
+    var(--gradient-panel-sheen),
+    var(--color-panel-2);
+  border: var(--border-hairline) solid var(--color-line);
+  border-radius: var(--radius-card);
+  box-shadow: var(--elevation-panel);
 }
 
 .edge::before {
   content: "";
   position: absolute;
-  inset: 0;
+  inset: -1px;
   z-index: 2;
-  padding: 1px;
+  padding: 0;
   border-radius: inherit;
-  background: var(--grad-edge);
+  border: 1px solid transparent;
+  background: none;
   pointer-events: none;
-  -webkit-mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
 }
 
 .full-config-dialog-shell::before {
@@ -119,10 +235,8 @@ textarea {
 
 .full-config-dialog-chrome {
   position: relative;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.018) 42%),
-    linear-gradient(155deg, rgba(22, 22, 34, 0.92), rgba(14, 14, 24, 0.9));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  background: var(--gradient-dialog-chrome);
+  box-shadow: var(--elevation-control);
 }
 
 .full-config-dialog-header::after,
@@ -133,13 +247,7 @@ textarea {
   left: 1px;
   height: 1px;
   pointer-events: none;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(255, 255, 255, 0.075),
-    rgba(169, 139, 255, 0.11),
-    transparent
-  );
+  background: var(--color-line);
 }
 
 .full-config-dialog-header::after {
@@ -151,33 +259,21 @@ textarea {
 }
 
 .full-config-dialog-body {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.012), transparent 18%),
-    rgba(255, 255, 255, 0.008);
+  background: var(--gradient-dialog-body);
 }
 
 .edge-sel {
-  background:
-    linear-gradient(180deg, rgba(168, 139, 255, 0.08), rgba(255, 255, 255, 0) 40%),
-    linear-gradient(155deg, #1a1730, #110f1f);
-  box-shadow:
-    0 0 0 1px rgba(146, 113, 255, 0.18),
-    0 18px 50px -20px rgba(124, 92, 255, 0.7),
-    0 0 60px -12px rgba(124, 92, 255, 0.35);
+  background: var(--gradient-selected);
+  border-color: var(--color-accent-line);
+  box-shadow: var(--elevation-node);
 }
 
 .edge-sel::before {
-  padding: 1.4px;
-  background: linear-gradient(
-    150deg,
-    rgba(169, 139, 255, 0.9),
-    rgba(124, 141, 255, 0.35) 45%,
-    rgba(111, 195, 255, 0.6)
-  );
+  border-color: var(--color-accent-edge);
 }
 
 .gradient-text {
-  background: var(--grad);
+  background: var(--gradient-primary);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -185,11 +281,10 @@ textarea {
 
 .react-flow {
   background:
-    radial-gradient(620px 480px at 28% 38%, rgba(124, 92, 255, 0.07), transparent 60%),
-    radial-gradient(560px 460px at 78% 72%, rgba(58, 122, 255, 0.06), transparent 60%),
-    radial-gradient(var(--graph-grid) 1px, transparent 1px);
+    var(--gradient-graph),
+    radial-gradient(var(--color-graph-grid) 1px, transparent 1px);
   background-color: transparent;
-  background-size: auto, auto, 26px 26px;
+  background-size: auto, 24px 24px;
 }
 
 .react-flow__background {
@@ -207,8 +302,8 @@ textarea {
 .react-flow__handle {
   width: 9px;
   height: 9px;
-  border: 1.6px solid rgba(146, 113, 255, 0.7);
-  background: #0b0b14;
+  border: var(--border-strong) solid var(--color-flow-handle);
+  background: var(--color-flow-handle-fill);
 }
 
 .react-flow__edge-path {
@@ -218,44 +313,39 @@ textarea {
 .react-flow__controls {
   position: absolute;
   overflow: hidden;
-  border: 0;
-  border-radius: 11px;
+  border: var(--border-hairline) solid var(--color-line);
+  border-radius: var(--radius-control);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0) 38%),
-    linear-gradient(155deg, var(--card-a), var(--card-b));
-  box-shadow: 0 18px 40px -24px rgba(0, 0, 0, 0.95);
+    var(--gradient-panel-sheen),
+    var(--color-panel);
+  box-shadow: var(--elevation-panel);
 }
 
 .react-flow__controls::before {
   content: "";
   position: absolute;
   inset: 0;
-  padding: 1px;
+  padding: 0;
   border-radius: inherit;
-  background: var(--grad-edge);
+  background: none;
   pointer-events: none;
-  -webkit-mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
 }
 
 .react-flow__controls-button {
-  width: 38px;
-  height: 38px;
+  width: var(--control-default);
+  height: var(--control-default);
   border: 0;
-  border-bottom: 1px solid var(--line-soft);
+  border-bottom: var(--border-hairline) solid var(--color-line-soft);
   background: transparent;
-  color: var(--ink-dim);
+  color: var(--color-ink-dim);
   transition:
-    background 0.14s,
-    color 0.14s;
+    background-color var(--motion-duration) var(--motion-ease-out),
+    color var(--motion-duration) var(--motion-ease-out);
 }
 
 .react-flow__controls-button:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: #fff;
+  background: var(--color-control-hover);
+  color: var(--color-white);
 }
 
 .react-flow__controls-button svg {
@@ -264,6 +354,13 @@ textarea {
 
 .react-flow__attribution {
   display: none;
+}
+
+@media (max-width: 767px) {
+  .react-flow__controls-button {
+    width: var(--control-touch);
+    height: var(--control-touch);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

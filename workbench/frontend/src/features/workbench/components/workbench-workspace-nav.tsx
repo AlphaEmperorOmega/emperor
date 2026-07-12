@@ -27,8 +27,8 @@ export function WorkbenchWorkspaceNav({
   trainingStatus?: WorkbenchWorkspaceTrainingStatus;
 }) {
   return (
-    <nav aria-label="Workspace" className="min-w-0">
-      <ul className="m-0 flex h-9 min-w-0 list-none items-center gap-1 p-0">
+    <nav aria-label="Workspace" className="min-w-0 overflow-hidden">
+      <ul className="m-0 flex h-touch min-w-0 list-none items-center gap-0.5 p-0 md:h-control md:gap-1">
         {workspaceItems.map((item) => {
           const active = activeWorkspace === item.value;
           const Icon = item.icon;
@@ -37,9 +37,9 @@ export function WorkbenchWorkspaceNav({
               <button
                 type="button"
                 className={cn(
-                  "relative inline-flex h-9 items-center justify-center gap-1.5 whitespace-nowrap rounded-control-sm px-2.5 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-focus sm:px-3",
+                  "relative inline-flex h-touch items-center justify-center gap-1.5 whitespace-nowrap rounded-control-sm px-2 type-body font-semibold transition-[color,background-color,border-color,box-shadow] duration-150 ease-out focus:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-1 focus-visible:ring-offset-bg sm:px-2.5 md:h-control lg:px-3",
                   active
-                    ? "bg-control-active text-ink"
+                    ? "bg-accent-soft text-ink shadow-control-selected"
                     : "text-ink-dim hover:bg-control-hover hover:text-ink",
                 )}
                 aria-current={active ? "page" : undefined}
@@ -47,7 +47,7 @@ export function WorkbenchWorkspaceNav({
               >
                 <Icon
                   className={cn(
-                    "h-[15px] w-[15px] shrink-0",
+                    "hidden h-4 w-4 shrink-0 sm:block",
                     active ? "text-accent" : "text-ink-faint",
                   )}
                   aria-hidden
@@ -56,7 +56,7 @@ export function WorkbenchWorkspaceNav({
                 {item.value === "training" && trainingStatus && (
                   <span
                     className={cn(
-                      "ml-0.5 hidden max-w-[6rem] truncate rounded-[6px] border px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase leading-none sm:inline",
+                      "ml-0.5 hidden max-w-[6rem] truncate rounded-chip border px-1.5 py-0.5 font-mono type-caption font-bold uppercase leading-none xl:inline",
                       trainingStatus.tone === "good" &&
                         "border-ok/30 bg-ok/10 text-ok",
                       trainingStatus.tone === "warn" &&

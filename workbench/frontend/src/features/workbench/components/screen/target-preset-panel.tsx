@@ -344,7 +344,7 @@ export function TargetPresetPanel({
               className="min-w-[11rem] justify-between px-3"
               title={
                 targetMonitorsLoading
-                  ? "Loading monitors"
+                  ? "Loading monitors…"
                   : targetMonitorNames.length > 0
                     ? `${targetMonitorNames.length} optional monitors`
                     : "No optional monitors"
@@ -352,7 +352,7 @@ export function TargetPresetPanel({
             >
               <Activity className="h-4 w-4" aria-hidden />
               <span>Monitors</span>
-              <span className="rounded-full border border-current/25 px-1.5 py-0.5 text-[0.65rem] font-bold uppercase leading-none opacity-90">
+              <span className="rounded-full border border-current/25 px-1.5 py-0.5 type-caption font-bold uppercase leading-none opacity-90">
                 {includeAllMonitors ? "On" : "Off"}
               </span>
             </Button>

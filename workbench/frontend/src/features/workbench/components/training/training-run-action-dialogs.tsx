@@ -69,7 +69,7 @@ export function TrainingRunActionDialogs({
           }
         >
           <div className="min-h-0 overflow-auto p-4 sm:p-5">
-            <pre className="min-h-[18rem] whitespace-pre-wrap rounded-[10px] border border-danger-line bg-black/35 p-3 font-mono text-xs leading-5 text-danger-text">
+            <pre className="min-h-[18rem] whitespace-pre-wrap rounded-control border border-danger-line bg-black/35 p-3 font-mono text-xs leading-5 text-danger-text">
               {fullErrorText}
             </pre>
           </div>

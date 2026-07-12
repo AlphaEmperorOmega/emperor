@@ -19,7 +19,7 @@ function region(name: string) {
 }
 
 describe("Workbench workspace layout", () => {
-  it("owns narrow stacking and wide three-column region occupancy", () => {
+  it("stacks through tablet widths and owns desktop three-column occupancy", () => {
     render(
       <WorkbenchWorkspaceFrame>
         <WorkbenchThreeRegionLayout
@@ -37,16 +37,23 @@ describe("Workbench workspace layout", () => {
 
     expect(frame).toHaveAttribute("data-workbench-layout", "workspace-frame");
     expect(frame).toHaveClass(
-      "grid-cols-1",
-      "overflow-auto",
-      "lg:grid-cols-[344px_minmax(0,1fr)_332px]",
-      "lg:overflow-hidden",
+      "block",
+      "overflow-x-hidden",
+      "overflow-y-auto",
+      "xl:grid",
+      "xl:grid-cols-[320px_minmax(0,1fr)_320px]",
+      "xl:overflow-hidden",
+      "2xl:grid-cols-[344px_minmax(0,1fr)_332px]",
     );
     expect(sidebar.tagName).toBe("ASIDE");
-    expect(sidebar).toHaveClass("border-b", "lg:border-b-0", "lg:border-r");
-    expect(primary).toHaveClass("min-h-[560px]", "lg:min-h-0");
+    expect(sidebar).toHaveClass("border-b", "xl:border-b-0", "xl:border-r");
+    expect(primary).toHaveClass(
+      "min-h-[520px]",
+      "sm:min-h-[640px]",
+      "xl:min-h-0",
+    );
     expect(details.tagName).toBe("ASIDE");
-    expect(details).toHaveClass("border-t", "lg:border-l", "lg:border-t-0");
+    expect(details).toHaveClass("border-t", "xl:border-l", "xl:border-t-0");
     expect(
       sidebar.compareDocumentPosition(primary) &
         Node.DOCUMENT_POSITION_FOLLOWING,
@@ -70,16 +77,21 @@ describe("Workbench workspace layout", () => {
     const status = screen.getByRole("status", { name: "Loading workspace" });
 
     expect(wide).toHaveClass(
-      "min-h-[560px]",
+      "min-h-[520px]",
+      "sm:min-h-[640px]",
       "overflow-hidden",
-      "lg:col-span-3",
-      "lg:min-h-0",
+      "xl:col-span-3",
+      "xl:min-h-0",
     );
     expect(wide).toContainElement(status);
+    expect(status).toHaveAttribute("aria-busy", "true");
+    expect(status).toHaveAttribute("aria-live", "polite");
+    expect(within(status).getByText("Preparing this workspace…")).toBeInTheDocument();
+    expect(status.querySelector(".animate-spin")).toBeInTheDocument();
     expect(document.querySelectorAll("[data-workbench-region]")).toHaveLength(1);
   });
 
-  it("owns the horizontally scrollable wide three-region protocol", () => {
+  it("stacks wide regions without workspace-wide horizontal scrolling", () => {
     render(
       <WorkbenchWideThreeRegionLayout
         notices={<span>Notice</span>}
@@ -100,18 +112,31 @@ describe("Workbench workspace layout", () => {
     const trailing = region("wide-trailing");
     const columns = leading.parentElement;
 
-    expect(layout).toHaveClass("overflow-x-auto", "overflow-y-hidden");
+    expect(layout).toHaveClass(
+      "block",
+      "overflow-x-hidden",
+      "overflow-y-auto",
+      "xl:grid",
+      "xl:overflow-y-hidden",
+    );
     expect(columns).toHaveClass(
-      "min-w-[920px]",
-      "grid-cols-[minmax(300px,340px)_minmax(22rem,1fr)_minmax(280px,360px)]",
+      "block",
+      "min-w-0",
+      "space-y-panel",
+      "xl:grid",
+      "xl:space-y-0",
+      "xl:grid-cols-[minmax(280px,320px)_minmax(0,1fr)_minmax(280px,340px)]",
     );
     expect(leading.tagName).toBe("ASIDE");
     expect(leading).toHaveAttribute("aria-label", "Setup region");
-    expect(primary.tagName).toBe("MAIN");
+    expect(primary.tagName).toBe("SECTION");
     expect(primary).toHaveAttribute("aria-label", "Runs region");
+    expect(primary).toHaveClass("min-h-[600px]", "xl:min-h-0");
     expect(trailing.tagName).toBe("ASIDE");
     expect(trailing).toHaveAttribute("aria-label", "Status region");
     expect(trailing).toHaveAttribute("aria-live", "polite");
+    expect(leading).toHaveClass("overflow-visible", "xl:overflow-y-auto");
+    expect(trailing).toHaveClass("overflow-visible", "xl:overflow-y-auto");
     expect(within(leading).getByText("Setup")).toBeInTheDocument();
     expect(within(primary).getByText("Runs")).toBeInTheDocument();
     expect(within(trailing).getByText("Status")).toBeInTheDocument();

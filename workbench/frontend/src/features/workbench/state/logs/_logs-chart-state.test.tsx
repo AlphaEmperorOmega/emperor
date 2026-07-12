@@ -723,7 +723,7 @@ describe("logs chart view model", () => {
         tagsRefreshing: true,
         visibleRunCount: 1,
       }),
-    ).toMatchObject({ title: "Refreshing TensorBoard tags", busy: true });
+    ).toMatchObject({ title: "Refreshing TensorBoard tags…", busy: true });
 
     expect(
       deriveLogsChartEmptyState({

@@ -55,7 +55,10 @@ export function LogValidationExamplesPanel({
     return (
       <section
         ref={sectionRef}
-        className="grid min-h-40 place-items-center rounded-[8px] border border-line-soft bg-white/[0.018] p-4"
+        role={isLoading ? "status" : undefined}
+        aria-label={isLoading ? "Loading validation examples…" : undefined}
+        aria-busy={isLoading || undefined}
+        className="grid min-h-40 place-items-center rounded-control-md border border-line-soft bg-white/[0.018] p-4"
       >
         {isLoading && (
           <Loader2 className="h-5 w-5 animate-spin text-violet" aria-hidden />
@@ -81,18 +84,18 @@ export function LogValidationExamplesPanel({
           return (
             <div
               key={`${image.runId}:${image.tag}`}
-              className="grid gap-3 rounded-[8px] border border-line bg-white/[0.018] p-3"
+              className="grid gap-3 rounded-control-md border border-line bg-white/[0.018] p-3"
             >
               <div className="min-w-0">
                 <div className="truncate text-sm font-semibold text-ink">
                   {run?.runName ?? image.runId}
                 </div>
-                <div className="truncate font-mono text-[11px] text-ink-faint">
+                <div className="truncate font-mono type-meta text-ink-faint">
                   step {image.step} · {image.tag}
                 </div>
               </div>
               {image.truncated || !image.dataUrl ? (
-                <div className="grid min-h-44 place-items-center rounded-[6px] border border-line-soft bg-black/20 p-4 text-center">
+                <div className="grid min-h-44 place-items-center rounded-chip border border-line-soft bg-black/20 p-4 text-center">
                   <div className="grid gap-1">
                     <div className="text-sm font-semibold text-ink">Payload omitted</div>
                     <div className="max-w-sm text-xs leading-5 text-ink-faint">
@@ -109,21 +112,21 @@ export function LogValidationExamplesPanel({
                   height={540}
                   sizes="(min-width: 1280px) 50vw, 100vw"
                   unoptimized
-                  className="w-full rounded-[6px] border border-line-soft bg-black/20 object-contain"
+                  className="w-full rounded-chip border border-line-soft bg-black/20 object-contain"
                 />
               )}
               {text && (
                 <pre
                   className={cn(
-                    "max-h-36 overflow-auto rounded-[6px] border border-line-soft",
-                    "bg-black/25 p-2 font-mono text-[11px] leading-5 text-ink-faint",
+                    "max-h-36 overflow-auto rounded-chip border border-line-soft",
+                    "bg-black/25 p-2 font-mono type-meta leading-5 text-ink-faint",
                   )}
                 >
                   {text}
                 </pre>
               )}
               {image.textSummary?.truncated && (
-                <div className="rounded-[6px] border border-line-soft bg-white/[0.018] px-2 py-1 text-xs text-ink-faint">
+                <div className="rounded-chip border border-line-soft bg-white/[0.018] px-2 py-1 text-xs text-ink-faint">
                   {image.textSummary.truncationReason ??
                     "Text summary truncated for display."}
                 </div>

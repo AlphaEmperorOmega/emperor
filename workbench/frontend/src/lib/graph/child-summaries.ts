@@ -118,7 +118,7 @@ function collapseLayerStackSummaries(childSummaries: ChildSummary[]) {
     insertedOverflow = true;
     return [
       {
-        label: "...",
+        label: "…",
         kind: "overflow" as const,
         title: `${hiddenLayerCount} more layer${hiddenLayerCount === 1 ? "" : "s"}`,
       },

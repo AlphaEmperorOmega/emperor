@@ -7,19 +7,34 @@ type FullPageStatusProps = {
   detail?: string;
   icon: ReactNode;
   action?: ReactNode;
+  busy?: boolean;
 };
 
-export function FullPageStatus({ title, detail, icon, action }: FullPageStatusProps) {
+export function FullPageStatus({
+  title,
+  detail,
+  icon,
+  action,
+  busy = false,
+}: FullPageStatusProps) {
   return (
-    <StatusCard title={title} detail={detail} icon={icon} layout="page" actions={action} />
+    <StatusCard
+      title={title}
+      detail={detail}
+      icon={icon}
+      busy={busy}
+      layout="page"
+      actions={action}
+    />
   );
 }
 
 export function FullPageLoading() {
   return (
     <FullPageStatus
-      title="Loading workbench"
+      title="Loading Workbench…"
       icon={<Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
+      busy
     />
   );
 }

@@ -20,7 +20,7 @@ export type DropdownShellProps = {
 };
 
 const dropdownShellClassName =
-  "absolute left-0 right-0 top-full mt-2 rounded-[12px] border border-line bg-panel/95 shadow-[0_22px_50px_-30px_rgba(0,0,0,0.98)] backdrop-blur";
+  "absolute left-0 right-0 top-full mt-2 overflow-hidden rounded-panel border border-line-hover bg-panel/95 shadow-popover backdrop-blur-xl";
 
 export const DropdownShell = forwardRef<HTMLDivElement, DropdownShellProps>(
   (

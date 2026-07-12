@@ -103,7 +103,7 @@ function LogFilterSection({
   }
 
   return (
-    <section className={cn("grid gap-2", divided && "border-t border-line-soft pt-3")}>
+    <section className={cn("grid gap-2", divided && "border-t border-line-soft pt-panel")}>
       <div className="flex min-h-[28px] flex-wrap items-center justify-between gap-2">
         <SectionHeading icon={icon} title={title} />
         <StatChip>
@@ -121,12 +121,12 @@ function LogFilterSection({
         noResultsMessage="No options"
       />
       <div className="grid grid-cols-2 gap-2">
-        <Button variant="secondary" className="h-8 text-xs" onClick={onAll}>
+        <Button variant="secondary" className="h-touch text-xs md:h-control-sm" onClick={onAll}>
           All
         </Button>
         <Button
           variant="ghost"
-          className="h-8 border border-line bg-white/[0.025] text-xs"
+          className="h-touch border border-line bg-panel-2/80 text-xs md:h-control-sm"
           onClick={onNone}
         >
           None
@@ -146,7 +146,7 @@ function SidebarStatus({
   busy?: boolean;
 }) {
   return (
-    <div className="rounded-[13px] border border-line-soft bg-white/[0.018] px-3 py-4 text-center">
+    <div className="rounded-panel border border-line bg-panel-2/70 px-panel py-region text-center shadow-control">
       <div className="grid justify-items-center gap-2">
         {busy && <Loader2 className="h-5 w-5 animate-spin text-violet" aria-hidden />}
         <div className="text-sm font-semibold text-ink">{title}</div>
@@ -230,7 +230,7 @@ export function LogsSidebar({ browser, deletion }: LogsSidebarProps) {
     : undefined;
 
   return (
-    <div className="grid gap-3">
+    <div className="grid gap-panel">
       <section className="grid gap-2">
         <div className="flex items-center justify-between gap-3">
           <SectionHeading
@@ -241,7 +241,7 @@ export function LogsSidebar({ browser, deletion }: LogsSidebarProps) {
             label="Refresh log runs"
             size="sm"
             variant="ghost"
-            className="rounded-[10px] active:translate-y-px"
+            className="rounded-control active:translate-y-px"
             onClick={() => {
               void actions.refresh();
             }}
@@ -273,7 +273,7 @@ export function LogsSidebar({ browser, deletion }: LogsSidebarProps) {
 
       {isScanning ? (
         <SidebarStatus
-          title="Scanning logs"
+          title="Scanning logs…"
           detail="Reading historical version folders from logs/."
           busy
         />
@@ -294,14 +294,14 @@ export function LogsSidebar({ browser, deletion }: LogsSidebarProps) {
             onNone={selectNoExperiments}
             beforeDropdown={
               <div
-                className="grid grid-cols-2 gap-2 rounded-[12px] border border-line-soft bg-white/[0.018] p-2"
+                className="grid grid-cols-2 gap-2 rounded-panel border border-line-soft bg-panel-2/70 p-2"
                 role="group"
                 aria-label="Log scope"
               >
                 <Button
                   type="button"
                   variant={scope.mode === "target" ? "secondary" : "ghost"}
-                  className="h-8 text-xs"
+                  className="h-touch text-xs md:h-control-sm"
                   aria-pressed={scope.mode === "target"}
                   onClick={scope.useCurrentTarget}
                   disabled={!scope.canUseCurrentTarget}
@@ -311,7 +311,7 @@ export function LogsSidebar({ browser, deletion }: LogsSidebarProps) {
                 <Button
                   type="button"
                   variant={scope.allRunsSelected ? "secondary" : "ghost"}
-                  className="h-8 text-xs"
+                  className="h-touch text-xs md:h-control-sm"
                   aria-pressed={scope.allRunsSelected}
                   onClick={scope.showAllRuns}
                 >
@@ -344,14 +344,14 @@ export function LogsSidebar({ browser, deletion }: LogsSidebarProps) {
           ) : (
             <>
               {pagination.runs.canLoadMore && (
-                <div className="grid gap-2 rounded-[12px] border border-line-soft bg-white/[0.018] p-3">
+                <div className="grid gap-2 rounded-panel border border-line-soft bg-panel-2/70 p-panel">
                   <div className="text-xs text-ink-faint">
                     Loaded {pagination.runs.loaded} of {pagination.runs.total} matching runs
                   </div>
                   <Button
                     type="button"
                     variant="ghost"
-                    className="h-8 border border-line bg-white/[0.025] text-xs"
+                    className="h-touch border border-line bg-panel-2/80 text-xs md:h-control-sm"
                     onClick={actions.loadMoreRuns}
                     disabled={pagination.runs.isLoadingMore}
                   >
@@ -361,7 +361,7 @@ export function LogsSidebar({ browser, deletion }: LogsSidebarProps) {
                         aria-hidden
                       />
                     )}
-                    Load more runs
+                Load More Runs
                   </Button>
                 </div>
               )}
@@ -409,7 +409,7 @@ export function LogsSidebar({ browser, deletion }: LogsSidebarProps) {
                 onNone={selectNoTags}
                 beforeDropdown={
                   pagination.scalarTags.canLoadMore ? (
-                    <div className="grid gap-2 rounded-[12px] border border-line-soft bg-white/[0.018] p-3">
+                    <div className="grid gap-2 rounded-panel border border-line-soft bg-panel-2/70 p-panel">
                       <div className="text-xs text-ink-faint">
                         Scalar tags scanned for {pagination.scalarTags.loadedRuns} of{" "}
                         {pagination.scalarTags.totalRuns} visible runs
@@ -417,7 +417,7 @@ export function LogsSidebar({ browser, deletion }: LogsSidebarProps) {
                       <Button
                         type="button"
                         variant="ghost"
-                        className="h-8 border border-line bg-white/[0.025] text-xs"
+                        className="h-touch border border-line bg-panel-2/80 text-xs md:h-control-sm"
                         onClick={actions.loadMoreScalarTags}
                         disabled={pagination.scalarTags.isLoadingMore}
                       >
@@ -427,7 +427,7 @@ export function LogsSidebar({ browser, deletion }: LogsSidebarProps) {
                             aria-hidden
                           />
                         )}
-                        Load more scalar tags
+                Load More Scalar Tags
                       </Button>
                     </div>
                   ) : undefined

@@ -275,7 +275,7 @@ export function LazyLogScalarChartFrame({
         className="flex items-center gap-2 text-xs text-ink-faint"
       >
         {isWaiting && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
-        {isWaiting ? `Loading ${loadingLabel}` : `No scalar points for ${visibilityKey}`}
+        {isWaiting ? `Loading ${loadingLabel}…` : `No scalar points for ${visibilityKey}`}
       </div>
     </SurfacePanel>
   );
@@ -399,7 +399,7 @@ export function LogScalarChartCard({
             variant="ghost"
             aria-haspopup="dialog"
             aria-expanded={isInfoOpen ? true : undefined}
-            className="h-6 w-6 rounded-[7px] border border-line-soft bg-white/[0.025] text-ink-faint hover:border-violet/40 hover:bg-violet/10 hover:text-violet focus-visible:ring-2 focus-visible:ring-focus"
+            className="h-touch w-touch rounded-control-sm border border-line-soft bg-control text-ink-faint hover:border-violet/40 hover:bg-violet/10 hover:text-violet focus-visible:ring-2 focus-visible:ring-focus md:h-control-sm md:w-control-sm"
             icon={<Info className="h-3.5 w-3.5" aria-hidden />}
             onClick={() => setIsInfoOpen(true)}
           />
@@ -420,7 +420,7 @@ export function LogScalarChartCard({
               key={entry.id}
               type="button"
               className={cn(
-                "grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-[9px] border border-line-soft bg-black/20 px-2 py-1.5 text-left text-xs transition hover:border-line hover:bg-white/[0.035] focus:outline-none focus-visible:ring-2 focus-visible:ring-focus",
+                "grid min-h-touch min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-control border border-line-soft bg-black/20 px-2 py-1.5 text-left text-xs transition hover:border-line hover:bg-white/[0.035] focus:outline-none focus-visible:ring-2 focus-visible:ring-focus md:min-h-control-sm",
                 hasHighlightedRun && !isHighlightedRun
                   ? "opacity-30"
                   : "opacity-100",

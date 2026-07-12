@@ -165,7 +165,7 @@ export function TrainingMetricInfoDialog({
       header={
         <header className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-xs font-bold uppercase tracking-[0.09em] text-ink-faint">
+            <p className="text-xs font-bold uppercase tracking-label text-ink-faint">
               Metric info
             </p>
             <h2
@@ -198,8 +198,8 @@ export function TrainingMetricInfoDialog({
       }
     >
       <div className="grid gap-3 text-sm leading-6 text-ink-dim">
-        <div className="grid gap-1 rounded-[8px] border border-line-soft bg-white/[0.018] px-3 py-2.5">
-          <span className="text-xs font-bold uppercase tracking-[0.09em] text-ink-faint">
+        <div className="grid gap-1 rounded-control-md border border-line-soft bg-white/[0.018] px-3 py-2.5">
+          <span className="text-xs font-bold uppercase tracking-label text-ink-faint">
             {valueTitle}
           </span>
           <span className="font-mono text-base font-semibold text-ink">
@@ -207,19 +207,19 @@ export function TrainingMetricInfoDialog({
           </span>
         </div>
         <section className="grid gap-1">
-          <h3 className="text-xs font-bold uppercase tracking-[0.09em] text-ink-faint">
+          <h3 className="text-xs font-bold uppercase tracking-label text-ink-faint">
             What it tracks
           </h3>
           <p>{info.tracks}</p>
         </section>
         <section className="grid gap-1">
-          <h3 className="text-xs font-bold uppercase tracking-[0.09em] text-ink-faint">
+          <h3 className="text-xs font-bold uppercase tracking-label text-ink-faint">
             Why it matters
           </h3>
           <p>{info.matters}</p>
         </section>
         <section className="grid gap-1">
-          <h3 className="text-xs font-bold uppercase tracking-[0.09em] text-ink-faint">
+          <h3 className="text-xs font-bold uppercase tracking-label text-ink-faint">
             Interpretation
           </h3>
           <p>{info.interpretation}</p>

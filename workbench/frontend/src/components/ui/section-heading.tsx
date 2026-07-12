@@ -23,7 +23,7 @@ export function SectionHeading({
   return (
     <Component
       className={cn(
-        "flex items-center gap-2 text-xs font-bold uppercase tracking-[0.09em] text-ink-dim",
+        "flex min-w-0 items-center gap-2 type-label font-bold uppercase text-ink-dim",
         className,
       )}
     >

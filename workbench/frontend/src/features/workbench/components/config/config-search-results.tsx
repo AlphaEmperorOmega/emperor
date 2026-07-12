@@ -55,7 +55,7 @@ function ConfigSearchResultItem({
           onClick={() => onSelect(option)}
           data-config-field-label=""
           className={cn(
-            "flex min-w-0 items-center gap-1.5 rounded-[6px] text-left text-sm font-semibold underline-offset-4 transition hover:text-violet hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-focus",
+            "flex min-h-touch min-w-0 items-center gap-1.5 rounded-chip text-left text-sm font-semibold underline-offset-4 transition hover:text-violet hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-focus md:min-h-control",
             isOverridden ? "text-violet" : "text-ink",
           )}
         >
@@ -147,11 +147,11 @@ export function ConfigSearchResults({
       {isLoadingMore && (
         <div
           role="status"
-          aria-label="Loading more config matches"
+          aria-label="Loading more config matches…"
           className="flex items-center justify-center gap-2 px-3 py-3 text-xs font-semibold text-ink-dim"
         >
           <Loader2 className="h-3.5 w-3.5 animate-spin text-violet" aria-hidden />
-          Loading more matches
+          Loading more matches…
         </div>
       )}
     </>

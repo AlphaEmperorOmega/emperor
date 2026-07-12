@@ -102,10 +102,14 @@ export function PreviewPanel() {
         isMonitorIneligible ||
         showActivityLoading ||
         isParameterStatusPathMismatch) && (
-        <div className="absolute left-4 top-4 z-10 flex flex-wrap gap-2">
+        <div
+          role="status"
+          aria-live="polite"
+          className="absolute left-4 top-4 z-10 flex max-w-[calc(100%-2rem)] flex-wrap gap-2"
+        >
           {isPreviewBuilding && (
             <StatusPill
-              icon={<RefreshCw className="h-4 w-4 motion-safe:animate-spin" />}
+              icon={<RefreshCw className="h-4 w-4 motion-safe:animate-spin" aria-hidden />}
               label="preview"
               value="building"
               tone="warn"
@@ -113,7 +117,7 @@ export function PreviewPanel() {
           )}
           {isHistoricalRunSelectionPending && (
             <StatusPill
-              icon={<Clock3 className="h-4 w-4" />}
+              icon={<Clock3 className="h-4 w-4" aria-hidden />}
               label="experiment"
               value="pending"
               tone="warn"
@@ -121,7 +125,7 @@ export function PreviewPanel() {
           )}
           {isMonitorEligibilityChecking && (
             <StatusPill
-              icon={<Activity className="h-4 w-4 motion-safe:animate-pulse" />}
+              icon={<Activity className="h-4 w-4 motion-safe:animate-pulse" aria-hidden />}
               label="monitor"
               value="checking"
               tone="warn"
@@ -129,7 +133,7 @@ export function PreviewPanel() {
           )}
           {isMonitorIneligible && (
             <StatusPill
-              icon={<Activity className="h-4 w-4" />}
+              icon={<Activity className="h-4 w-4" aria-hidden />}
               label="monitor"
               value="No monitor data for graph activity"
               tone="warn"
@@ -138,7 +142,7 @@ export function PreviewPanel() {
           )}
           {showActivityLoading && (
             <StatusPill
-              icon={<Activity className="h-4 w-4 motion-safe:animate-pulse" />}
+              icon={<Activity className="h-4 w-4 motion-safe:animate-pulse" aria-hidden />}
               label="activity"
               value="loading"
               tone="warn"
@@ -146,7 +150,7 @@ export function PreviewPanel() {
           )}
           {isParameterStatusPathMismatch && (
             <StatusPill
-              icon={<Activity className="h-4 w-4" />}
+              icon={<Activity className="h-4 w-4" aria-hidden />}
               label="monitor"
               value="path mismatch"
               tone="warn"

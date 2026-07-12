@@ -390,11 +390,11 @@ describe("TrainingRunPlanCard", () => {
   it("renders the planning state as busy", () => {
     renderCard({ isPlanning: true });
 
-    const status = screen.getByText("Building run plan...").closest("div");
+    const status = screen.getByText("Building run plan…").closest("div");
     if (!(status instanceof HTMLElement)) {
       throw new Error("Expected planning status container");
     }
-    expect(within(status).getByText("Building run plan...")).toBeInTheDocument();
+    expect(within(status).getByText("Building run plan…")).toBeInTheDocument();
     expect(status.querySelector("svg")).toHaveClass("animate-spin");
   });
 });

@@ -313,7 +313,7 @@ export function deriveLogsChartEmptyState({
     title = "Reading TensorBoard tags";
     detail = "Collecting scalar tags from the selected runs.";
   } else if (tagsRefreshing && selectedSeriesCount === 0) {
-    title = "Refreshing TensorBoard tags";
+    title = "Refreshing TensorBoard tags…";
     detail = "Collecting scalar tags from the selected runs.";
   } else if (tagOptionCount === 0 && !hasConfusionMatrixTags) {
     title = "No TensorBoard scalars";

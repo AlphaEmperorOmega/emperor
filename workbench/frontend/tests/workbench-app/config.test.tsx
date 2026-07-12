@@ -107,12 +107,12 @@ function expectNoModifiedFieldInset(row: HTMLElement) {
 }
 
 function expectModifiedFieldControl(control: HTMLElement) {
-  expect(control).toHaveClass("border-violet/55", "bg-[#100719]");
+  expect(control).toHaveClass("border-violet/55", "bg-modified-field");
   expect(control).not.toHaveClass("border-line-hover", "border-violet/40");
 }
 
 function expectUnmodifiedFieldControl(control: HTMLElement) {
-  expect(control).not.toHaveClass("border-violet/55", "bg-[#100719]");
+  expect(control).not.toHaveClass("border-violet/55", "bg-modified-field");
 }
 
 function expectHeaderControlBeforeMetric(
@@ -1391,9 +1391,9 @@ describe("WorkbenchApp Full Config", () => {
 
     expect(dialog).toHaveClass(
       "full-config-dialog-shell",
-      "rounded-[10px]",
+      "rounded-dialog",
       "border",
-      "border-line",
+      "border-line-hover",
       "bg-panel",
     );
     expect(dialog).not.toHaveClass("edge", "rounded-card", "bg-white/[0.018]");
@@ -1430,34 +1430,36 @@ describe("WorkbenchApp Full Config", () => {
     expect(gateAccordion).toHaveClass("overflow-hidden", "bg-white/[0.025]");
     expect(layerSection).toHaveClass(
       "grid",
+      "min-w-0",
       "content-start",
-      "gap-1.5",
+      "gap-2",
       "relative",
       "overflow-visible",
-      "rounded-[10px]",
+      "rounded-panel",
       "border",
       "border-line",
-      "bg-white/[0.018]",
+      "bg-panel-2/70",
       "px-0",
       "py-0",
-      "shadow-[0_16px_40px_-30px_rgba(0,0,0,0.95)]",
+      "shadow-card",
       "focus-within:z-30",
     );
     expect(layerSection).not.toHaveClass("overflow-hidden");
     expect(layerSection).not.toHaveClass("rounded-[12px]", "bg-panel/80");
     expect(gateSection).toHaveClass(
       "grid",
+      "min-w-0",
       "content-start",
-      "gap-1.5",
+      "gap-2",
       "relative",
       "overflow-visible",
-      "rounded-[10px]",
+      "rounded-panel",
       "border",
       "border-line-soft",
       "bg-white/[0.012]",
       "px-0",
       "py-0",
-      "shadow-[0_10px_28px_-26px_rgba(0,0,0,0.9)]",
+      "shadow-card-subtle",
       "focus-within:z-30",
     );
     expect(gateSection).not.toHaveClass("overflow-hidden");
@@ -2014,8 +2016,8 @@ describe("WorkbenchApp Full Config", () => {
     expect(enabledWeightGroup).toHaveAttribute("aria-expanded", "true");
     expect(inputWeightSwitch).toHaveAttribute("aria-checked", "true");
     expect(inputWeightOption).toHaveTextContent("DualModelDynamicWeightConfig");
-    expect(warmupBatchesInput).toHaveAttribute("placeholder", "int");
-    expect(decayRateInput).toHaveAttribute("placeholder", "float");
+    expect(warmupBatchesInput).toHaveAttribute("placeholder", "e.g. 128…");
+    expect(decayRateInput).toHaveAttribute("placeholder", "e.g. 0.1…");
 
     await user.click(inputWeightOption);
 
@@ -3559,7 +3561,7 @@ describe("WorkbenchApp Full Config", () => {
     expect(layerPanel).toHaveAttribute("hidden");
     expect(layerPanel).not.toHaveClass("grid", "px-3", "py-3");
     expect(layerAccordion.closest("section")).toHaveClass(
-      "rounded-[10px]",
+      "rounded-panel",
       "border-line-soft",
       "bg-white/[0.012]",
     );
@@ -3714,14 +3716,14 @@ describe("WorkbenchApp Full Config", () => {
     const layerSection = fullConfigSectionFor(layerAccordion);
 
     expect(layerAccordion).toHaveClass(
-      "bg-[linear-gradient(90deg,rgba(255,209,102,0.12),rgba(167,139,250,0.13))]",
-      "hover:bg-[linear-gradient(90deg,rgba(255,209,102,0.16),rgba(167,139,250,0.17))]",
+      "bg-config-preset-header",
+      "hover:bg-config-preset-header-hover",
     );
     expect(within(layerSection).getByLabelText("1 override")).toHaveClass("text-violet");
     expect(within(layerSection).getByText("1 preset")).toHaveClass("text-amber");
     expect(layerSection).toHaveClass(
       "border-amber/35",
-      "bg-[linear-gradient(135deg,rgba(255,209,102,0.075),rgba(167,139,250,0.105))]",
+      "bg-config-preset",
       "ring-violet/25",
     );
     expect(layerSection).not.toHaveClass("bg-amber/[0.045]", "bg-violet/[0.06]");

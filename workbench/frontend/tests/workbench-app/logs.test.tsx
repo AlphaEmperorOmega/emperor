@@ -1575,7 +1575,7 @@ describe("WorkbenchApp Logs Workspace", () => {
     expect(screen.queryByText(/^Loading scalar points$/i)).not.toBeInTheDocument();
     const trainBody = document.getElementById("logs-metric-group-train");
     expect(trainBody).toBeInstanceOf(HTMLElement);
-    expect(within(trainBody as HTMLElement).getByText("Loading train/loss_epoch scalar points"))
+    expect(within(trainBody as HTMLElement).getByText("Loading train/loss_epoch scalar points…"))
       .toBeInTheDocument();
 
     trainScalarResponse.resolve({
@@ -1753,13 +1753,13 @@ describe("WorkbenchApp Logs Workspace", () => {
         name: /validation\/accuracy_epoch scalar chart/i,
       }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Refreshing TensorBoard tags")).toBeInTheDocument();
+    expect(screen.getByText("Refreshing TensorBoard tags…")).toBeInTheDocument();
     expect(screen.queryByText("Reading TensorBoard tags")).not.toBeInTheDocument();
 
     delayedTagChunk.resolve(null);
 
     await waitFor(() => {
-      expect(screen.queryByText("Refreshing TensorBoard tags")).not.toBeInTheDocument();
+      expect(screen.queryByText("Refreshing TensorBoard tags…")).not.toBeInTheDocument();
     });
   });
 

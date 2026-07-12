@@ -32,7 +32,7 @@ export function ComponentInfoDialog({
       size="md"
       panelVariant="surface"
       onClose={onClose}
-      panelClassName="bg-[linear-gradient(180deg,rgba(20,23,33,0.98),rgba(12,14,21,0.98))]"
+      panelClassName="bg-component-info"
       header={
         <div className="flex min-w-0 items-start justify-between gap-3 border-b border-line px-4 py-3">
           <div className="min-w-0">
@@ -41,12 +41,15 @@ export function ComponentInfoDialog({
               className="flex min-w-0 items-center gap-2 text-base font-semibold text-ink"
             >
               <Info className="h-4 w-4 shrink-0 text-violet" aria-hidden />
-              <span className="truncate">Component info</span>
+              <span className="truncate">Component Info</span>
             </h2>
             <div className="mt-2 truncate text-sm font-semibold text-ink">
               {node.typeName}
             </div>
-            <div className="mt-1 break-words font-mono text-xs text-ink-faint">
+            <div
+              className="mt-1 break-words font-mono text-xs text-ink-faint"
+              translate="no"
+            >
               {node.path}
             </div>
           </div>
@@ -62,7 +65,7 @@ export function ComponentInfoDialog({
     >
       <div className="grid min-h-0 gap-4 overflow-y-auto p-4">
         <SurfacePanel padding="roomy" className="min-w-0">
-          <div className="text-xs font-semibold uppercase tracking-[0.08em] text-ink-dim">
+          <div className="text-xs font-semibold uppercase tracking-label text-ink-dim">
             Role
           </div>
           <p className="mt-2 text-sm leading-6 text-ink">{description}</p>
@@ -70,10 +73,10 @@ export function ComponentInfoDialog({
 
         <SurfacePanel padding="none" className="min-w-0 overflow-hidden">
           <div className="border-b border-line-soft px-4 py-3">
-            <div className="text-xs font-semibold uppercase tracking-[0.08em] text-ink-dim">
+            <div className="text-xs font-semibold uppercase tracking-label text-ink-dim">
               Config
             </div>
-            <div className="mt-1 font-mono text-xs text-ink-faint">
+            <div className="mt-1 font-mono text-xs text-ink-faint" translate="no">
               {node.config?.typeName ?? "No config"}
             </div>
           </div>
@@ -85,7 +88,10 @@ export function ComponentInfoDialog({
                   className="px-4 py-3"
                   data-testid={`component-info-config-field-${field.key}`}
                 >
-                  <div className="whitespace-normal break-words font-mono text-xs font-semibold leading-5 text-ink">
+                  <div
+                    className="whitespace-normal break-words font-mono text-xs font-semibold leading-5 text-ink"
+                    translate="no"
+                  >
                     <span>{field.key}</span>
                     <span className="text-ink-dim"> - </span>
                     <span className="text-violet-text">{configDetailText(field.value)}</span>

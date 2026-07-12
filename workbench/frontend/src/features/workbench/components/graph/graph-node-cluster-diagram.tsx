@@ -63,11 +63,11 @@ export function ClusterDiagramView({
       data-testid={`cluster-diagram-${nodeId}`}
       aria-label={`Neuron cluster map for ${nodeId}`}
     >
-      <div className="mb-3 flex h-10 items-center justify-between gap-2 rounded-[10px] border border-line-soft bg-black/20 px-2.5">
+      <div className="mb-panel flex h-control-lg items-center justify-between gap-2 rounded-panel border border-line-soft bg-control-field px-2.5">
         <div className="min-w-0">
-          <div className="truncate text-[12px] font-bold leading-4 text-ink">Cluster map</div>
+          <div className="truncate type-label font-bold leading-4 text-ink">Cluster map</div>
           <div
-            className="mt-0.5 truncate font-mono text-[11px] leading-3 text-ink-faint"
+            className="mt-0.5 truncate font-mono type-meta leading-3 text-ink-faint"
             data-testid={`cluster-diagram-summary-${nodeId}`}
           >
             {summaryText}
@@ -100,7 +100,7 @@ export function ClusterDiagramView({
             style={{ width: planeWidth }}
             title={`Z plane ${plane.z}`}
           >
-            <span className="pointer-events-none absolute left-1 top-1 z-10 rounded-[6px] border border-line-soft bg-black/60 px-1.5 py-0.5 font-mono text-[10px] font-bold leading-none text-ink-dim">
+            <span className="pointer-events-none absolute left-1 top-1 z-10 rounded-chip border border-line-soft bg-black/60 px-1.5 py-0.5 font-mono type-caption font-bold leading-none text-ink-dim">
               z{plane.z}
             </span>
             <div
@@ -134,17 +134,17 @@ export function ClusterDiagramView({
                       }
                     }}
                     className={cn(
-                      "rounded-[5px] border shadow-[inset_0_-1px_0_rgba(255,255,255,0.06)] transition duration-100",
+                      "rounded-chip border shadow-divider transition duration-100",
                       cell.filled
-                        ? "border-violet/45 bg-[linear-gradient(135deg,rgba(146,113,255,0.88),rgba(111,168,255,0.58))]"
+                        ? "border-violet/45 bg-cluster-active"
                         : "border-line-soft bg-white/[0.035]",
                       cell.filled && cell.reach ? "cursor-crosshair" : "cursor-default",
                       isSource &&
                         "border-violet-text ring-2 ring-violet-text/80 ring-offset-1 ring-offset-bg",
                       isReachableActive &&
-                        "border-cyan/90 ring-1 ring-cyan/60 shadow-[0_0_14px_-5px_rgba(127,208,255,0.95)]",
+                        "border-cyan/90 ring-1 ring-cyan/60 shadow-cyan-selection",
                       isReachableEmpty &&
-                        "border-cyan/55 bg-cyan/15 shadow-[inset_0_0_0_1px_rgba(127,208,255,0.28)]",
+                        "border-cyan/55 bg-cyan/15 shadow-cyan-inset",
                       isDimmed && "opacity-35",
                     )}
                     style={{

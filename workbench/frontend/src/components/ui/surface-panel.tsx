@@ -10,12 +10,12 @@ import { cn } from "@/lib/utils";
 export type SurfacePanelPadding = "compact" | "roomy" | "spacious" | "none";
 
 export const surfacePanelBaseClassName =
-  "grid content-start rounded-[10px] border border-line bg-white/[0.018]";
+  "grid min-w-0 content-start rounded-panel border border-line bg-panel-2/70 shadow-control";
 
 export const surfacePanelPaddingClassNames: Record<SurfacePanelPadding, string> = {
-  compact: "gap-1.5 px-2.5 py-2",
-  roomy: "gap-3 p-3",
-  spacious: "gap-4 p-4",
+  compact: "gap-2 px-panel py-2",
+  roomy: "gap-panel p-panel",
+  spacious: "gap-region p-region",
   none: "gap-0 p-0",
 };
 
@@ -25,7 +25,7 @@ export const surfacePanelClassName = cn(
 );
 
 export const surfacePanelHeaderClassName =
-  "flex min-h-[38px] flex-wrap items-center justify-between gap-2";
+  "flex min-h-control flex-wrap items-center justify-between gap-2";
 
 export type SurfacePanelProps = Omit<HTMLAttributes<HTMLElement>, "title"> & {
   as?: "div" | "section" | "article" | "aside";

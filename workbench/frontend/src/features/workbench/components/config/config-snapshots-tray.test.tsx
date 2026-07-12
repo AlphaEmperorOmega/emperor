@@ -215,7 +215,7 @@ describe("Config Snapshot mutation rendering", () => {
     expect(screen.getByLabelText("Snapshot name")).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("Rename rejected.");
 
-    await user.click(screen.getByRole("button", { name: "Retry change" }));
+    await user.click(screen.getByRole("button", { name: "Retry Change" }));
     await act(async () => {
       retryAttempt.resolve({
         ok: true,
@@ -297,7 +297,7 @@ describe("Config Snapshot mutation rendering", () => {
     expect(screen.getByText("Snapshot one")).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("Removal rejected.");
 
-    await user.click(screen.getByRole("button", { name: "Retry change" }));
+    await user.click(screen.getByRole("button", { name: "Retry Change" }));
     await act(async () => {
       retryAttempt.resolve({
         ok: true,

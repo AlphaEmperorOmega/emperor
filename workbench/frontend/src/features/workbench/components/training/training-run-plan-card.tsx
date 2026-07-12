@@ -184,7 +184,7 @@ function SummaryChips({
 
 function RunRow({ run, job }: { run: TrainingRun; job?: TrainingJob }) {
   return (
-    <div className="grid gap-1 rounded-[8px] border border-line-soft bg-black/15 px-2.5 py-2 text-xs">
+    <div className="grid gap-1 rounded-control-md border border-line-soft bg-black/15 px-2.5 py-2 text-xs">
       <div className="flex min-w-0 flex-wrap items-center gap-1.5">
         <span className="font-semibold text-ink-dim">
           {trainingRunDisplayLabel(run, job)}
@@ -206,7 +206,7 @@ function RunRow({ run, job }: { run: TrainingRun; job?: TrainingJob }) {
       {run.error && (
         <div
           role="alert"
-          className="rounded-[7px] border border-danger-line bg-danger-soft px-2 py-1 text-danger-text"
+          className="rounded-control-md border border-danger-line bg-danger-soft px-2 py-1 text-danger-text"
           title={run.errorTraceback ?? run.error}
         >
           {run.error}
@@ -224,7 +224,7 @@ function MetricSummary({ job, run }: { job?: TrainingJob; run?: TrainingRun }) {
   const entries = latestMetricEntries(job, run);
   if (entries.length === 0) {
     return (
-      <div className="rounded-[8px] border border-line-soft bg-white/[0.018] px-2.5 py-2 text-xs text-ink-faint">
+      <div className="rounded-control-md border border-line-soft bg-white/[0.018] px-2.5 py-2 text-xs text-ink-faint">
         No metrics yet
       </div>
     );
@@ -234,7 +234,7 @@ function MetricSummary({ job, run }: { job?: TrainingJob; run?: TrainingRun }) {
 
   return (
     <>
-      <div className="grid gap-1 rounded-[8px] border border-line-soft bg-white/[0.018] px-2.5 py-2 text-xs">
+      <div className="grid gap-1 rounded-control-md border border-line-soft bg-white/[0.018] px-2.5 py-2 text-xs">
         <span className="font-semibold text-ink-dim">Latest metrics</span>
         <div className="flex min-w-0 flex-wrap gap-1.5" title={text}>
           {visibleEntries.map(([key, value]) => (
@@ -254,7 +254,7 @@ function MetricSummary({ job, run }: { job?: TrainingJob; run?: TrainingRun }) {
                 variant="ghost"
                 aria-haspopup="dialog"
                 aria-expanded={selectedMetric?.key === key ? true : undefined}
-                className="h-5 w-5 shrink-0 rounded-[6px] border border-line-soft bg-white/[0.018] text-ink-faint hover:border-violet/40 hover:bg-violet/10 hover:text-violet focus-visible:ring-2 focus-visible:ring-focus"
+                className="h-touch w-touch shrink-0 rounded-chip border border-line-soft bg-white/[0.018] text-ink-faint hover:border-violet/40 hover:bg-violet/10 hover:text-violet focus-visible:ring-2 focus-visible:ring-focus md:h-control-sm md:w-control-sm"
                 icon={<Info className="h-3.5 w-3.5" aria-hidden />}
                 onClick={() => setSelectedMetric({ key, value })}
               />
@@ -278,7 +278,7 @@ function LogDirectory({ value }: { value: string }) {
     return null;
   }
   return (
-    <div className="truncate rounded-[8px] border border-ok/30 bg-ok/10 px-2.5 py-2 font-mono text-xs text-ok" title={value}>
+    <div className="truncate rounded-control-md border border-ok/30 bg-ok/10 px-2.5 py-2 font-mono text-xs text-ok" title={value}>
       {value}
     </div>
   );
@@ -407,7 +407,7 @@ export function TrainingRunPlanCard({
         ) : (
           <InlineStatus busy={isPlanning} compact className="px-2.5 py-2 text-xs">
             {isPlanning
-              ? "Building run plan..."
+              ? "Building run plan…"
               : "No run plan yet. Select a trainable target to preview runs."}
           </InlineStatus>
         )}

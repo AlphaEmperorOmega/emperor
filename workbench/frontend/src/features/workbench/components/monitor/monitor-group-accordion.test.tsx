@@ -39,10 +39,10 @@ describe("MonitorGroupAccordion", () => {
       throw new Error("Expected monitor accordion to render inside a section");
     }
     expect(surface).toHaveClass(
-      "rounded-[10px]",
+      "rounded-panel",
       "border",
       "border-line",
-      "bg-white/[0.018]",
+      "bg-panel-2/70",
       "p-0",
     );
     expect(surface).not.toHaveClass("edge", "rounded-card");

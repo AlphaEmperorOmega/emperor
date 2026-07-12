@@ -79,7 +79,7 @@ export function TrainingAllCommandsButton({
       <Button
         variant="secondary"
         onClick={() => setIsAllCommandsOpen(true)}
-        className={cn("h-10 px-3 text-[13px]", className)}
+        className={cn("h-10 px-3 type-compact", className)}
         title="Review training commands"
       >
         <Copy className="h-4 w-4" aria-hidden />
@@ -120,7 +120,7 @@ function AllTrainingCommandsDialog({
       copyButtonLabel="Copy Commands"
       copiedMessage="Commands copied"
       commandAriaLabel="Training commands"
-      closeButtonLabel="Close training commands"
+      closeButtonLabel="Close Training Commands"
       rows={Math.min(12, Math.max(5, trainingCommand.split("\n").length))}
       onCopy={copy}
       onClose={onClose}
@@ -162,7 +162,7 @@ function RunStatus({ run }: { run: TrainingRun }) {
   return (
     <span
       className={cn(
-        "inline-flex h-7 items-center gap-1.5 rounded-[7px] border px-2 font-mono text-xs font-bold",
+        "inline-flex h-7 items-center gap-1.5 rounded-control-md border px-2 font-mono text-xs font-bold",
         meta.className,
       )}
       title={meta.tooltip}
@@ -204,7 +204,7 @@ function RunActions({
           icon={<FolderOpen className="h-3.5 w-3.5" aria-hidden />}
           size="sm"
           variant="edge"
-          className="h-8 w-8 rounded-[7px] border-ok/30 bg-ok/10 text-ok hover:bg-ok/15"
+          className="h-touch w-touch rounded-control-sm border-ok/30 bg-ok/10 text-ok hover:bg-ok/15 md:h-control-sm md:w-control-sm"
           onClick={() => {
             void navigator.clipboard?.writeText(run.logDir ?? "");
           }}
@@ -216,7 +216,7 @@ function RunActions({
           icon={<AlertTriangle className="h-3.5 w-3.5" aria-hidden />}
           size="sm"
           variant="danger"
-          className="h-8 w-8 rounded-[7px]"
+          className="h-touch w-touch rounded-control-sm md:h-control-sm md:w-control-sm"
           onClick={() => onFullError(run)}
         />
       )}
@@ -225,7 +225,7 @@ function RunActions({
         icon={<Terminal className="h-3.5 w-3.5" aria-hidden />}
         size="sm"
         variant="edge"
-        className="h-8 w-8 rounded-[7px]"
+        className="h-touch w-touch rounded-control-sm md:h-control-sm md:w-control-sm"
         onClick={() => onCommand(run)}
       />
       {draftRemoval && (
@@ -234,7 +234,7 @@ function RunActions({
           icon={<X className="h-3.5 w-3.5" aria-hidden />}
           size="sm"
           variant="ghost"
-          className="h-8 w-8 rounded-[7px] text-ink-faint hover:border-danger-line hover:bg-danger-soft hover:text-danger-text"
+          className="h-touch w-touch rounded-control-sm text-ink-faint hover:border-danger-line hover:bg-danger-soft hover:text-danger-text md:h-control-sm md:w-control-sm"
           onClick={draftRemoval.remove}
         />
       )}
@@ -261,7 +261,7 @@ function TrainingCompactRunRow({
   const snapshotLabel = run.snapshotName ?? run.snapshotId ?? "";
 
   return (
-    <article className="grid min-w-0 gap-2 border-b border-line-soft px-3 py-2.5 last:border-b-0">
+    <article className="grid min-w-0 gap-2 border-b border-line-soft px-3 py-2.5 [content-visibility:auto] [contain-intrinsic-size:112px] last:border-b-0">
       <div className="grid min-w-0 gap-2 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-start">
         <div className="flex min-w-0 items-center gap-2">
           <Badge className="shrink-0">#{run.index}</Badge>
@@ -278,7 +278,7 @@ function TrainingCompactRunRow({
           </div>
           {snapshotLabel && (
             <span
-              className="truncate font-mono text-[11px] text-violet-muted"
+              className="truncate font-mono type-meta text-violet-muted"
               title={snapshotLabel}
             >
               {snapshotLabel}
@@ -309,7 +309,7 @@ function TrainingCompactRunRow({
         <button
           type="button"
           onClick={() => onFullError(run)}
-          className="min-w-0 truncate rounded-[7px] border border-danger-line bg-danger-soft px-2 py-1 text-left text-xs font-semibold text-danger-text transition hover:bg-danger-hover/40 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          className="min-h-touch min-w-0 truncate rounded-control-md border border-danger-line bg-danger-soft px-2 py-1 text-left text-xs font-semibold text-danger-text transition hover:bg-danger-hover/40 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-focus md:min-h-control-sm"
           title={run.errorTraceback ?? run.error}
         >
           {run.error}
@@ -340,7 +340,7 @@ export function TrainingCompactRunList({
   const hiddenRunCount = Math.max(0, (plan?.runs.length ?? 0) - runs.length);
 
   return (
-    <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)] overflow-hidden rounded-[10px] border border-line bg-black/10">
+    <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)] overflow-hidden rounded-control border border-line bg-black/10">
       <div className="min-h-0 overflow-y-auto">
         {error ? (
           <InlineStatus tone="danger" compact role="alert" className="m-3">
@@ -348,7 +348,7 @@ export function TrainingCompactRunList({
           </InlineStatus>
         ) : isLoading ? (
           <InlineStatus busy compact className="m-3">
-            Planning training runs
+            Planning training runs…
           </InlineStatus>
         ) : !plan || plan.runs.length === 0 ? (
           <InlineStatus compact className="m-3">

@@ -112,7 +112,7 @@ function createStackDiagramCells(
   return [
     ...layerCells,
     {
-      label: "...",
+      label: "…",
       title: `${hiddenLayerCount} more layer${hiddenLayerCount === 1 ? "" : "s"}`,
       kind: "overflow" as const,
     },

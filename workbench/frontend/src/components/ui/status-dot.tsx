@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 
-// Small glowing status indicator dot (online = green, offline = red).
+// Crisp status indicator with a low-key state ring (online = green, offline = red).
 export function StatusDot({
   online,
   className,
@@ -10,8 +10,9 @@ export function StatusDot({
 }) {
   return (
     <span
+      aria-hidden="true"
       className={cn(
-        "block h-[7px] w-[7px] rounded-full",
+        "block h-2 w-2 rounded-full",
         online
           ? "bg-ok shadow-status-ok"
           : "bg-danger shadow-status-danger",

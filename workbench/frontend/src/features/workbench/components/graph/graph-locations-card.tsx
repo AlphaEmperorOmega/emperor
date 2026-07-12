@@ -40,7 +40,7 @@ function CoordinateChip({
       aria-label={label}
       title={label}
       onClick={onClick}
-      className="min-h-7 rounded-[8px] border border-violet/25 bg-violet/10 px-2 font-mono text-[11.5px] font-semibold leading-none text-violet-text transition hover:border-violet/45 hover:bg-violet/20 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+      className="min-h-touch rounded-control-md border border-violet/25 bg-violet/10 px-2 font-mono type-meta font-semibold leading-none text-violet-text transition-colors hover:border-violet/45 hover:bg-violet/20 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-focus md:min-h-control-sm"
     >
       {text}
     </button>
@@ -63,8 +63,8 @@ function LocationSummarySection({
       aria-label={`${summary.nodePath} locations`}
       data-testid={`location-summary-${summary.nodeId}`}
       className={cn(
-        "rounded-[10px] border border-line-soft bg-white/[0.018] p-2.5",
-        "border-violet/35 bg-violet/10 shadow-[inset_0_0_0_1px_rgba(146,113,255,0.22)]",
+        "rounded-panel border border-line-soft bg-panel-2/70 p-2.5",
+        "border-violet/35 bg-violet/10 shadow-control-selected",
       )}
     >
       <button
@@ -72,17 +72,17 @@ function LocationSummarySection({
         aria-label={`Reveal ${summary.nodePath} locations`}
         aria-current="true"
         onClick={revealNode}
-        className="flex w-full min-w-0 items-start justify-between gap-2 rounded-[8px] p-1 text-left transition hover:bg-white/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        className="flex w-full min-w-0 items-start justify-between gap-2 rounded-control-md p-1 text-left transition hover:bg-white/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
       >
         <span className="min-w-0">
-          <span className="block truncate text-[13px] font-bold leading-4 text-ink">
+          <span className="block truncate type-compact font-bold leading-4 text-ink">
             {title}
           </span>
-          <span className="mt-1 block truncate font-mono text-[11px] leading-4 text-ink-faint">
+          <span className="mt-1 block truncate font-mono type-meta leading-4 text-ink-faint">
             {summary.nodePath}
           </span>
         </span>
-        <GraphChip compact className="shrink-0 bg-black/20 font-bold uppercase tracking-[0.08em]">
+        <GraphChip compact className="shrink-0 bg-black/20 font-bold uppercase tracking-label">
           Cluster
         </GraphChip>
       </button>
@@ -128,9 +128,11 @@ function SelectedGraphLocationsCard({
   if (!isExpanded) {
     return (
       <div
-        className={cn("nodrag nopan h-10 w-10", className)}
+        className={cn(
+          "nodrag nopan h-touch w-touch md:h-control-lg md:w-control-lg",
+          className,
+        )}
         data-testid="graph-locations-card"
-        onClick={(event) => event.stopPropagation()}
         onPointerDown={(event) => event.stopPropagation()}
         {...props}
       >
@@ -138,8 +140,11 @@ function SelectedGraphLocationsCard({
           type="button"
           aria-label="Show cluster locations"
           title="Show cluster locations"
-          onClick={() => setIsExpanded(true)}
-          className="grid h-10 w-10 place-items-center rounded-[10px] border border-violet/35 bg-black/45 text-violet shadow-[0_18px_40px_-24px_rgba(0,0,0,0.95)] backdrop-blur-md transition hover:border-violet/55 hover:bg-violet/15 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          onClick={(event) => {
+            event.stopPropagation();
+            setIsExpanded(true);
+          }}
+          className="grid h-touch w-touch place-items-center rounded-control border border-violet/35 bg-panel/90 text-violet shadow-panel backdrop-blur-md transition-colors hover:border-violet/55 hover:bg-violet/15 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-focus md:h-control-lg md:w-control-lg"
         >
           <MapPin className="h-[17px] w-[17px]" aria-hidden />
         </button>
@@ -151,7 +156,7 @@ function SelectedGraphLocationsCard({
     <EdgeCard
       aria-label="Locations"
       className={cn(
-        "nodrag nopan flex min-h-0 w-[312px] flex-col overflow-hidden rounded-card p-3.5 shadow-[0_20px_50px_-30px_rgba(0,0,0,0.95)] backdrop-blur-md",
+        "nodrag nopan flex min-h-0 w-[312px] flex-col overflow-hidden rounded-card p-3.5 shadow-panel backdrop-blur-md",
         className,
       )}
       data-testid="graph-locations-card"
@@ -170,7 +175,7 @@ function SelectedGraphLocationsCard({
             aria-label="Hide cluster locations"
             title="Hide cluster locations"
             onClick={() => setIsExpanded(false)}
-            className="ml-auto grid h-7 w-7 place-items-center rounded-[8px] border border-line bg-white/[0.035] text-ink-dim transition hover:border-violet/45 hover:bg-violet/15 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+            className="ml-auto grid h-touch w-touch place-items-center rounded-control-md border border-line bg-control text-ink-dim transition-colors hover:border-violet/45 hover:bg-violet/15 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-focus md:h-control-sm md:w-control-sm"
           >
             <ChevronDown className="h-4 w-4" aria-hidden />
           </button>

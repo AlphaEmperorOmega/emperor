@@ -2,15 +2,15 @@ import { Badge } from "@/components/ui/badge";
 import { formatCompactCount, formatExactCount } from "@/lib/graph";
 
 const SIMPLE_PARAMETER_BADGE_CLASS =
-  "shrink-0 whitespace-nowrap border-violet/25 bg-violet/15 px-1.5 py-0.5 font-mono text-[11px] leading-none text-violet-muted [overflow-wrap:normal]";
+  "shrink-0 whitespace-nowrap border-violet/25 bg-violet/15 px-1.5 py-0.5 font-mono type-meta leading-none text-violet-muted [overflow-wrap:normal]";
 const SIMPLE_DIMS_BADGE_CLASS =
-  "shrink-0 whitespace-nowrap border-line bg-white/[0.04] px-1.5 py-0.5 font-mono text-[11px] leading-none text-ink-dim [overflow-wrap:normal]";
+  "shrink-0 whitespace-nowrap border-line bg-white/[0.04] px-1.5 py-0.5 font-mono type-meta leading-none text-ink-dim [overflow-wrap:normal]";
 const SIMPLE_MODEL_SIZE_BADGE_CLASS =
-  "shrink-0 whitespace-nowrap border-cyan-300/25 bg-cyan-300/10 px-1.5 py-0.5 font-mono text-[11px] leading-none text-cyan-100 [overflow-wrap:normal]";
+  "shrink-0 whitespace-nowrap border-cyan/25 bg-cyan/10 px-1.5 py-0.5 font-mono type-meta leading-none text-cyan [overflow-wrap:normal]";
 const PARAMETER_BADGE_CLASS =
   "h-6 shrink-0 items-center whitespace-nowrap border-violet/25 bg-violet/15 px-2 py-0 font-mono text-xs leading-none text-violet-muted [overflow-wrap:normal]";
 const MODEL_SIZE_BADGE_CLASS =
-  "h-6 shrink-0 items-center whitespace-nowrap border-cyan-300/25 bg-cyan-300/10 px-2 py-0 font-mono text-xs leading-none text-cyan-100 [overflow-wrap:normal]";
+  "h-6 shrink-0 items-center whitespace-nowrap border-cyan/25 bg-cyan/10 px-2 py-0 font-mono text-xs leading-none text-cyan [overflow-wrap:normal]";
 const CHILD_BADGE_CLASS =
   "h-6 shrink-0 items-center whitespace-nowrap border-line bg-white/[0.04] px-2 py-0 font-sans text-xs font-medium leading-none text-ink-dim [overflow-wrap:normal]";
 

@@ -1,5 +1,6 @@
 import { type ConfigField, type TrainingJob } from "@/lib/api";
 import { type OverrideValues } from "@/lib/config";
+import { formatDecimal } from "@/lib/format";
 
 /** Picks the most informative metric from a job (accuracy/f1 > loss > first). */
 export function metricLabel(job?: TrainingJob) {
@@ -13,7 +14,7 @@ export function metricLabel(job?: TrainingJob) {
     return "No metrics";
   }
   const [key, value] = preferred;
-  const numberValue = typeof value === "number" ? value.toFixed(4).replace(/0+$/, "") : value;
+  const numberValue = typeof value === "number" ? formatDecimal(value, 4, 0) : value;
   return `${key}: ${numberValue}`;
 }
 

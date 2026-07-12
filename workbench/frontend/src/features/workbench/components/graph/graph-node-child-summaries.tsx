@@ -73,13 +73,13 @@ function GraphNodeChildSummaryRow({
       data-testid={`child-summary-${nodeId}-${index}`}
       title={summaryTitle}
       className={cn(
-        "relative flex items-center gap-2 overflow-hidden rounded-[10px] px-3 text-[13px] font-medium",
+        "relative flex items-center gap-2 overflow-hidden px-3 type-compact font-medium",
         summary.kind === "overflow" ? "bg-white/[0.035]" : undefined,
       )}
       style={{ height: graphCardGeometry.childSummary.rowHeight }}
     >
       {summary.kind === "overflow" ? (
-        <span className="w-full text-center tracking-[0.18em]">
+        <span className="w-full text-center tracking-wordmark">
           {summary.label}
         </span>
       ) : (
@@ -99,7 +99,7 @@ function GraphNodeChildSummaryRow({
             </span>
           )}
           {summary.dims && (
-            <span className="shrink-0 whitespace-nowrap text-right font-mono text-[12px] font-semibold text-ink">
+            <span className="shrink-0 whitespace-nowrap text-right font-mono type-label font-semibold text-ink">
               {summary.dims}
             </span>
           )}

@@ -10,13 +10,13 @@ export type KeyValueRowProps = Omit<HTMLAttributes<HTMLDivElement>, "children"> 
 };
 
 const rowClasses: Record<NonNullable<KeyValueRowProps["variant"]>, string> = {
-  line: "grid grid-cols-[104px_minmax(0,1fr)] gap-3 border-b border-line-soft py-3 text-xs",
-  card: "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-[9px] border border-line-soft bg-black/20 px-3 py-2 text-xs",
+  line: "grid grid-cols-[104px_minmax(0,1fr)] gap-panel border-b border-line-soft py-panel text-xs",
+  card: "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-control-md border border-line-soft bg-control-field px-panel py-2 text-xs",
 };
 
 const valueClasses: Record<NonNullable<KeyValueRowProps["variant"]>, string> = {
-  line: "break-words text-right font-mono font-semibold text-ink",
-  card: "font-mono font-semibold text-ink",
+  line: "break-words text-right font-mono font-semibold tabular-nums text-ink",
+  card: "font-mono font-semibold tabular-nums text-ink",
 };
 
 export function KeyValueRow({

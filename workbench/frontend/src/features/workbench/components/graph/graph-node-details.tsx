@@ -31,7 +31,7 @@ export function GraphNodeDetails({
       {entries.map((entry) => (
         <div
           key={entry.key}
-          className="grid grid-cols-[96px_minmax(0,1fr)] items-center gap-2 rounded-[8px] border border-line-soft bg-black/20 px-2.5 text-[12.5px]"
+          className="grid grid-cols-[96px_minmax(0,1fr)] items-center gap-2 rounded-control-md border border-line-soft bg-black/20 px-2.5 type-compact"
           style={{ height: graphCardGeometry.details.rowHeight }}
         >
           <span className="truncate font-medium text-ink-dim">{entry.key}</span>
@@ -66,7 +66,7 @@ export function GraphNodeDetailsToggle({
       aria-controls={detailsId}
       aria-expanded={isExpanded}
       active={isExpanded}
-      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] border border-line bg-white/[0.03] text-ink-dim transition hover:border-white/20 hover:bg-white/[0.07] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+      className="flex h-touch w-touch shrink-0 items-center justify-center rounded-control-md border border-line bg-control text-ink-dim transition-colors hover:border-line-hover hover:bg-control-hover hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-focus md:h-control-sm md:w-control-sm"
       label={`${toggleLabel} for ${path}`}
       onClick={onToggleDetails}
       icon={<Icon className="h-3.5 w-3.5" aria-hidden />}

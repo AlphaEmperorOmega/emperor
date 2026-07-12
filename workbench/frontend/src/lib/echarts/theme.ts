@@ -1,11 +1,13 @@
 import { echarts } from "@/lib/echarts/register";
 import { scalarSeriesColors } from "@/lib/charts";
-import { workbenchVisualTokens } from "@/lib/visual-tokens";
+import {
+  workbenchFontTokens,
+  workbenchVisualTokens,
+} from "@/lib/visual-tokens";
 
 export const EMPEROR_THEME_NAME = "emperor";
 
-const MONO_FALLBACK =
-  "ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace";
+const MONO_FALLBACK = workbenchFontTokens.mono;
 
 function resolveMonoFontFamily(): string {
   if (typeof document === "undefined") {

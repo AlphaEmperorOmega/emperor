@@ -15,7 +15,7 @@ export function TrainingCommandDialog({
   copyButtonLabel = "Copy Command",
   copiedMessage = "Command copied",
   commandAriaLabel = "Training command",
-  closeButtonLabel = "Close training command",
+  closeButtonLabel = "Close Training Command",
   rows = 3,
   controls,
   footerStart,
@@ -42,15 +42,18 @@ export function TrainingCommandDialog({
       titleId="training-command-title"
       panelVariant="surface"
       onClose={onClose}
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/55 p-3 backdrop-blur-sm sm:p-6"
-      panelClassName="grid max-h-none w-full max-w-3xl gap-4 overflow-visible p-4 sm:max-h-none sm:p-5"
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-region backdrop-blur-md sm:p-shell-wide"
+      panelClassName="grid max-h-none w-full max-w-3xl gap-region overflow-visible p-region sm:max-h-none sm:p-shell"
       header={
         <header className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 id="training-command-title" className="text-base font-semibold text-ink">
+            <h2 id="training-command-title" className="type-title text-balance font-semibold text-ink">
               {title}
             </h2>
-            <div className="mt-1 truncate font-mono text-xs text-ink-faint">
+            <div
+              className="mt-1 truncate font-mono text-xs text-ink-faint"
+              translate="no"
+            >
               {model || "No model"} {preset ? `/ ${preset}` : ""}
             </div>
           </div>
@@ -83,15 +86,18 @@ export function TrainingCommandDialog({
     >
       {controls}
       <label className="grid gap-2">
-        <span className="text-xs font-bold uppercase tracking-[0.09em] text-ink-faint">
+        <span className="text-xs font-bold uppercase tracking-label text-ink-faint">
           Command
         </span>
         <textarea
+          name="training-command-readout"
           readOnly
           aria-label={commandAriaLabel}
           value={trainingCommand}
           rows={rows}
-          className="min-h-24 w-full resize-none rounded-[10px] border border-line bg-black/25 px-3 py-2.5 font-mono text-sm leading-6 text-ink outline-none focus-visible:border-violet/60 focus-visible:ring-2 focus-visible:ring-focus"
+          spellCheck={false}
+          translate="no"
+          className="min-h-24 w-full resize-none rounded-control border border-line bg-control-field px-3 py-2.5 font-mono type-body leading-6 text-ink outline-none focus-visible:border-violet/70 focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-1 focus-visible:ring-offset-bg"
         />
       </label>
     </DialogShell>

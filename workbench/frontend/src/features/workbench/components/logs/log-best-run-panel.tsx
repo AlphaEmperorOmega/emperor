@@ -59,7 +59,7 @@ function BestRunRowsTable({
         className="w-full min-w-[980px] border-separate border-spacing-0 text-left text-xs"
         aria-label={`${metricTag} best run leaderboard`}
       >
-        <thead className="sticky top-0 z-10 bg-bg-2/95 text-[11px] uppercase tracking-[0.08em] text-ink-faint">
+        <thead className="sticky top-0 z-10 bg-bg-2/95 type-meta uppercase tracking-label text-ink-faint">
           <tr>
             {[
               "Dataset",
@@ -96,7 +96,7 @@ function BestRunRowsTable({
                   <span className="block truncate font-semibold" title={row.dataset}>
                     {row.dataset}
                   </span>
-                  <span className="font-mono text-[11px] text-ink-faint">
+                  <span className="font-mono type-meta text-ink-faint">
                     {countLabel(row.runCount, "run")}
                   </span>
                 </td>
@@ -118,7 +118,7 @@ function BestRunRowsTable({
                 <td className="border-b border-line-soft px-3 py-2.5">
                   <Button
                     variant="ghost"
-                    className="h-7 rounded-[8px] px-2 text-[11px]"
+                    className="h-touch rounded-control-md px-2 type-meta md:h-control-sm"
                     aria-label={
                       best
                         ? `Open details for ${runLabel}`
@@ -190,7 +190,7 @@ export function LogBestRunPanel({
       </div>
 
       {bestRun.hasMoreRuns && (
-        <div className="flex items-start gap-2 rounded-[10px] border border-amber-400/25 bg-amber-400/10 px-3 py-2 text-xs leading-5 text-amber-100">
+        <div className="flex items-start gap-2 rounded-control border border-amber/25 bg-amber/10 px-3 py-2 text-xs leading-5 text-amber">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
           <span>
             Results exclude unloaded runs because the current log query has more pages.
@@ -200,7 +200,7 @@ export function LogBestRunPanel({
 
       <div className="grid gap-3 md:grid-cols-[minmax(240px,1fr)_auto_auto]">
         <div className="grid min-w-0 gap-1.5">
-          <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-ink-faint">
+          <span className="type-meta font-bold uppercase tracking-label text-ink-faint">
             Metric
           </span>
           <SelectOnlyDropdown
@@ -213,7 +213,7 @@ export function LogBestRunPanel({
           />
         </div>
         <div className="grid gap-1.5">
-          <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-ink-faint">
+          <span className="type-meta font-bold uppercase tracking-label text-ink-faint">
             Point
           </span>
           <SegmentedControl aria-label="Best run point policy" className="h-9">
@@ -234,7 +234,7 @@ export function LogBestRunPanel({
           </SegmentedControl>
         </div>
         <div className="grid gap-1.5">
-          <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-ink-faint">
+          <span className="type-meta font-bold uppercase tracking-label text-ink-faint">
             Direction
           </span>
           <SegmentedControl aria-label="Best run direction" className="h-9">
@@ -267,7 +267,7 @@ export function LogBestRunPanel({
         />
       ) : bestRun.isLoading && !hasAnyBestRun ? (
         <InlineStatus busy compact role="status">
-          Loading best run scalar points
+          Loading best run scalar points…
         </InlineStatus>
       ) : hasAnyBestRun ? (
         <BestRunRowsTable

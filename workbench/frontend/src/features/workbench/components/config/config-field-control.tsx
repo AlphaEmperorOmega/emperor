@@ -17,10 +17,10 @@ const booleanOptions = [
 ] as const;
 
 const modifiedControlClassName =
-  "border-violet/55 bg-[#100719] hover:border-violet/70";
+  "border-violet/55 bg-modified-field hover:border-violet/70";
 
 const descriptionTooltipClassName =
-  "bottom-[calc(100%+6px)] left-0 top-auto z-50 whitespace-normal px-2.5 py-2 text-left text-[12px] font-medium leading-4";
+  "bottom-[calc(100%+6px)] left-0 top-auto z-50 whitespace-normal px-2.5 py-2 text-left type-label font-medium leading-4";
 
 const descriptionTooltipStyle = {
   width: "min(22rem, calc(100vw - 2rem))",
@@ -30,7 +30,7 @@ const descriptionTooltipStyle = {
 } satisfies CSSProperties;
 
 const descriptionButtonClassName =
-  "flex h-5 w-5 shrink-0 items-center justify-center rounded-[7px] border border-line-soft bg-white/[0.035] text-ink-faint transition hover:border-line hover:bg-white/[0.07] hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-focus";
+  "flex h-touch w-touch shrink-0 items-center justify-center rounded-control-md border border-line-soft bg-white/[0.035] text-ink-faint transition hover:border-line hover:bg-white/[0.07] hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-focus md:h-control-sm md:w-control-sm";
 
 export function ConfigFieldOverrideIcon({ className }: { className?: string }) {
   return (
@@ -69,8 +69,10 @@ function BooleanSegmentedControl({
       aria-labelledby={labelledBy}
       aria-disabled={disabled || undefined}
       className={cn(
-        "grid w-full min-w-0 grid-cols-2 overflow-hidden rounded-control border border-line bg-control-chrome p-0 font-sans font-semibold text-ink transition",
-        isCompact ? "h-10 text-[12.5px]" : "h-10 text-[13px]",
+        "grid w-full min-w-0 grid-cols-2 overflow-hidden rounded-control border border-line bg-panel-2/90 p-0 font-sans font-semibold text-ink transition-colors",
+        isCompact
+          ? "h-touch type-compact md:h-control-lg"
+          : "h-touch type-compact md:h-control-lg",
         disabled && "opacity-60",
         className,
       )}
@@ -89,7 +91,7 @@ function BooleanSegmentedControl({
             className={cn(
               "min-w-0 border-r border-line-soft px-2 text-center transition last:border-r-0 focus:outline-none focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed",
               isSelected
-                ? "bg-control-selected text-violet"
+                ? "bg-accent-soft text-violet"
                 : "bg-transparent text-ink-faint hover:bg-control-active hover:text-ink",
             )}
           >
@@ -126,7 +128,7 @@ function ConfigFieldLabelContent({
         <span
           data-config-field-label=""
           className={cn(
-            "flex min-w-0 items-start gap-1.5 text-[13px] font-semibold leading-5 [overflow-wrap:anywhere]",
+            "flex min-w-0 items-start gap-1.5 type-compact font-semibold leading-5 [overflow-wrap:anywhere]",
             isModified ? "text-violet" : "text-ink",
           )}
         >
@@ -216,13 +218,13 @@ export function ConfigFieldValueEditor({
   const resetPaddingClassName = showResetButton ? "pr-11" : undefined;
   const selectTriggerClassName = isCompact
     ? cn(
-        "h-10 px-3 py-2 text-[13.5px]",
+        "h-10 px-3 py-2 type-compact",
         isModified && modifiedControlClassName,
         resetPaddingClassName,
       )
     : cn(isModified && modifiedControlClassName, resetPaddingClassName);
   const inputClassName = cn(
-    isCompact ? "h-10 px-3 py-2 text-[13.5px]" : undefined,
+    isCompact ? "h-10 px-3 py-2 type-compact" : undefined,
     isModified && modifiedControlClassName,
     resetPaddingClassName,
   );
@@ -266,7 +268,7 @@ export function ConfigFieldValueEditor({
           type="text"
           inputMode={field.type === "float" ? "decimal" : "numeric"}
           autoComplete="off"
-          placeholder={field.type}
+          placeholder={field.type === "float" ? "e.g. 0.1…" : "e.g. 128…"}
           value={value}
           disabled={isControlDisabled}
           onChange={(event) => onChange(field.key, event.target.value)}
@@ -295,7 +297,7 @@ export function ConfigFieldValueEditor({
           onClick={() => onReset(field.key)}
           icon={<RotateCcw className="h-3.5 w-3.5" aria-hidden />}
           className={cn(
-            "absolute top-1/2 z-40 -translate-y-1/2 rounded-[8px] border-line bg-white/[0.055] text-ink-faint shadow-[0_8px_18px_-14px_rgba(0,0,0,0.95)] hover:bg-white/[0.09] hover:text-ink",
+            "absolute top-1/2 z-40 -translate-y-1/2 rounded-control-md border-line bg-white/[0.055] text-ink-faint shadow-card-subtle hover:bg-white/[0.09] hover:text-ink",
             resetInsetClassName,
           )}
         />
@@ -336,9 +338,9 @@ export function ConfigFieldControl({
         "grid w-full transition",
         isCompact ? "gap-1.5 py-1.5" : "gap-2 py-1.5",
         isLocked &&
-          "rounded-[10px] border-l-2 border-amber/55 bg-amber/[0.055] pl-2 pr-2 shadow-[inset_0_0_0_1px_rgba(255,209,102,0.04)]",
+          "rounded-control border-l-2 border-amber/55 bg-amber/[0.055] pl-2 pr-2 shadow-control-warning",
         isControlDisabled &&
-          "rounded-[10px] border-l-2 border-line bg-white/[0.025] pl-2 pr-2 opacity-65",
+          "rounded-control border-l-2 border-line bg-white/[0.025] pl-2 pr-2 opacity-65",
       )}
     >
       <div className={cn("grid", isCompact ? "gap-1" : "gap-1.5")}>

@@ -1,120 +1,197 @@
 import type { Config } from "tailwindcss";
 import plugin from "tailwindcss/plugin";
-import { workbenchVisualTokens } from "./src/lib/visual-tokens";
+import {
+  workbenchCssVariables,
+  workbenchElevationTokens,
+  workbenchTailwindColor,
+  workbenchTrackingTokens,
+  workbenchTypographyTokens,
+  type WorkbenchVisualTokenName,
+} from "./src/lib/visual-tokens";
 
-export const workbenchCssVariables = Object.freeze({
-  "--amber": workbenchVisualTokens.amber,
-  "--bg": workbenchVisualTokens.bg,
-  "--bg-2": workbenchVisualTokens.bg2,
-  "--blue": workbenchVisualTokens.blue,
-  "--card-a": workbenchVisualTokens.cardA,
-  "--card-b": workbenchVisualTokens.cardB,
-  "--cyan": workbenchVisualTokens.cyan,
-  "--grad": `linear-gradient(135deg, ${workbenchVisualTokens.gradientStart} 0%, ${workbenchVisualTokens.gradientMiddle} 48%, ${workbenchVisualTokens.gradientEnd} 100%)`,
-  "--graph-grid": workbenchVisualTokens.graphGrid,
-  "--ink": workbenchVisualTokens.ink,
-  "--ink-dim": workbenchVisualTokens.inkDim,
-  "--ink-faint": workbenchVisualTokens.inkFaint,
-  "--line": workbenchVisualTokens.line,
-  "--line-soft": workbenchVisualTokens.lineSoft,
-  "--ok": workbenchVisualTokens.ok,
-  "--panel": workbenchVisualTokens.panel,
-  "--panel-2": workbenchVisualTokens.panel2,
-  "--violet": workbenchVisualTokens.violet,
-  "--violet-deep": workbenchVisualTokens.violetDeep,
-});
+export { workbenchCssVariables } from "./src/lib/visual-tokens";
+
+export const workbenchTailwindColorAliases = {
+  white: "white",
+  black: "black",
+  bg: "bg",
+  "bg-2": "bg2",
+  panel: "panel",
+  "panel-2": "panel2",
+  "card-a": "cardA",
+  "card-b": "cardB",
+  ink: "ink",
+  "ink-dim": "inkDim",
+  "ink-faint": "inkFaint",
+  violet: "violet",
+  "violet-deep": "violetDeep",
+  "violet-text": "violetText",
+  "violet-muted": "violetMuted",
+  blue: "blue",
+  cyan: "cyan",
+  ok: "ok",
+  amber: "amber",
+  line: "line",
+  "line-soft": "lineSoft",
+  "line-hover": "lineHover",
+  "modified-field": "modifiedField",
+  border: "line",
+  surface: "bg2",
+  control: "control",
+  "control-muted": "controlMuted",
+  "control-subtle": "controlSubtle",
+  "control-active": "controlActive",
+  "control-hover": "controlHover",
+  "control-field": "controlField",
+  "control-track": "controlTrack",
+  muted: "inkDim",
+  accent: "violet",
+  amberline: "amber",
+  danger: "danger",
+  "danger-text": "dangerText",
+  "danger-detail": "dangerDetail",
+  "danger-hover": "dangerHover",
+  focus: "focus",
+  subtle: "lineSoft",
+  faint: "faint",
+  "accent-soft": "accentSoft",
+  "accent-line": "accentLine",
+  "accent-edge": "accentEdge",
+  "danger-soft": "dangerSoft",
+  "danger-line": "dangerLine",
+  "structure-overlay": "structureOverlay",
+} as const satisfies Record<string, WorkbenchVisualTokenName>;
+
+const colors = Object.fromEntries(
+  Object.entries(workbenchTailwindColorAliases).map(([name, token]) => [
+    name,
+    workbenchTailwindColor(token),
+  ]),
+) as unknown as Record<string, string>;
+
+function typographyRole(
+  name: keyof typeof workbenchTypographyTokens,
+): [
+  string,
+  { lineHeight: string; letterSpacing: string },
+] {
+  return [
+    `var(--type-${name}-size)`,
+    {
+      lineHeight: `var(--type-${name}-leading)`,
+      letterSpacing: `var(--type-${name}-tracking)`,
+    },
+  ];
+}
 
 const config: Config = {
-  // Production CSS is generated only from app/source files. Vitest component
-  // tests import those components directly, so scanning tests would only keep
-  // test-only class strings in the shipped stylesheet.
+  // Tests import production components, so test-only class strings are not
+  // retained in the shipped stylesheet.
   content: ["./app/**/*.{ts,tsx}", "./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
-      colors: {
-        bg: workbenchVisualTokens.bg,
-        "bg-2": workbenchVisualTokens.bg2,
-        panel: workbenchVisualTokens.panel,
-        "panel-2": workbenchVisualTokens.panel2,
-        "card-a": workbenchVisualTokens.cardA,
-        "card-b": workbenchVisualTokens.cardB,
-        ink: workbenchVisualTokens.ink,
-        "ink-dim": workbenchVisualTokens.inkDim,
-        "ink-faint": workbenchVisualTokens.inkFaint,
-        violet: workbenchVisualTokens.violet,
-        "violet-deep": workbenchVisualTokens.violetDeep,
-        blue: workbenchVisualTokens.blue,
-        cyan: workbenchVisualTokens.cyan,
-        ok: workbenchVisualTokens.ok,
-        amber: workbenchVisualTokens.amber,
-        "violet-text": workbenchVisualTokens.violetText,
-        "violet-muted": workbenchVisualTokens.violetMuted,
-        line: workbenchVisualTokens.line,
-        "line-soft": workbenchVisualTokens.lineSoft,
-        "line-hover": workbenchVisualTokens.lineHover,
-        border: workbenchVisualTokens.line,
-        surface: workbenchVisualTokens.bg2,
-        control: workbenchVisualTokens.control,
-        "control-muted": workbenchVisualTokens.controlMuted,
-        "control-subtle": workbenchVisualTokens.controlSubtle,
-        "control-active": workbenchVisualTokens.controlActive,
-        "control-hover": workbenchVisualTokens.controlHover,
-        "control-field": workbenchVisualTokens.controlField,
-        "control-track": workbenchVisualTokens.controlTrack,
-        muted: workbenchVisualTokens.inkDim,
-        accent: workbenchVisualTokens.violet,
-        amberline: workbenchVisualTokens.amber,
-        danger: workbenchVisualTokens.danger,
-        "danger-text": workbenchVisualTokens.dangerText,
-        "danger-detail": workbenchVisualTokens.dangerDetail,
-        "danger-hover": workbenchVisualTokens.dangerHover,
-        focus: workbenchVisualTokens.focus,
-        subtle: workbenchVisualTokens.lineSoft,
-        faint: workbenchVisualTokens.faint,
-        "accent-soft": workbenchVisualTokens.accentSoft,
-        "accent-line": workbenchVisualTokens.accentLine,
-        "accent-edge": workbenchVisualTokens.accentEdge,
-        "danger-soft": workbenchVisualTokens.dangerSoft,
-        "danger-line": workbenchVisualTokens.dangerLine,
-      },
+      colors,
       borderColor: {
-        line: workbenchVisualTokens.line,
-        "line-soft": workbenchVisualTokens.lineSoft,
+        line: colors.line,
+        "line-soft": colors["line-soft"],
       },
       borderRadius: {
-        card: "16px",
-        ctl: "11px",
-        control: "10px",
-        "control-sm": "7px",
-        "control-md": "8px",
-        "control-group": "13px",
-        chip: "8px",
+        indicator: "var(--radius-indicator)",
+        chip: "var(--radius-chip)",
+        "control-sm": "var(--radius-control-sm)",
+        "control-md": "var(--radius-control-md)",
+        control: "var(--radius-control)",
+        ctl: "var(--radius-control)",
+        panel: "var(--radius-panel)",
+        "control-group": "var(--radius-panel)",
+        card: "var(--radius-card)",
+        dialog: "var(--radius-dialog)",
+        full: "var(--radius-round)",
       },
+      spacing: {
+        "control-sm": "var(--control-compact)",
+        control: "var(--control-default)",
+        "control-lg": "var(--control-comfortable)",
+        touch: "var(--control-touch)",
+        panel: "var(--space-panel)",
+        region: "var(--space-region)",
+        shell: "var(--space-shell)",
+        "shell-wide": "var(--space-shell-wide)",
+      },
+      fontSize: {
+        xs: typographyRole("label"),
+        sm: typographyRole("body"),
+        base: typographyRole("title"),
+        micro: typographyRole("micro"),
+        caption: typographyRole("caption"),
+        meta: typographyRole("meta"),
+        label: typographyRole("label"),
+        compact: typographyRole("compact"),
+        body: typographyRole("body"),
+        title: typographyRole("title"),
+        heading: typographyRole("heading"),
+        display: typographyRole("display"),
+      },
+      letterSpacing: Object.fromEntries(
+        Object.keys(workbenchTrackingTokens).map((name) => [
+          name,
+          `var(--tracking-${name})`,
+        ]),
+      ),
       fontFamily: {
-        sans: ["var(--font-sans)", "system-ui", "sans-serif"],
-        mono: ["var(--font-mono)", "ui-monospace", "monospace"],
+        sans: ["var(--font-sans)", "var(--font-fallback-sans)"],
+        mono: ["var(--font-mono)", "var(--font-fallback-mono)"],
       },
       backgroundImage: {
-        grad: `linear-gradient(135deg,${workbenchVisualTokens.gradientStart} 0%,${workbenchVisualTokens.gradientMiddle} 48%,${workbenchVisualTokens.gradientEnd} 100%)`,
-        "control-chrome": `linear-gradient(155deg,${workbenchVisualTokens.cardA},${workbenchVisualTokens.cardB})`,
-        "control-selected":
-          "linear-gradient(135deg,rgba(146,113,255,0.1),rgba(111,168,255,0.05))",
-        "grad-soft":
-          "linear-gradient(135deg, rgba(169,139,255,0.55), rgba(124,141,255,0.18) 45%, rgba(255,255,255,0.05) 68%, rgba(111,195,255,0.42))",
-        "edge-grad":
-          `linear-gradient(155deg, var(--tw-gradient-from, ${workbenchVisualTokens.cardA}), var(--tw-gradient-to, ${workbenchVisualTokens.cardB}))`,
+        grad: "var(--gradient-primary)",
+        "config-preset": "var(--gradient-config-preset)",
+        "config-preset-header": "var(--gradient-config-preset-header)",
+        "config-preset-header-hover":
+          "var(--gradient-config-preset-header-hover)",
+        "config-navigation": "var(--gradient-config-navigation)",
+        "config-navigation-hover": "var(--gradient-config-navigation-hover)",
+        "cluster-active": "var(--gradient-cluster-active)",
+        minimap: "var(--gradient-minimap)",
+        "cluster-panel": "var(--gradient-cluster-panel)",
+        "component-info": "var(--gradient-component-info)",
       },
-      boxShadow: {
-        panel: "0 12px 34px -24px rgba(0,0,0,0.85)",
-        primary:
-          "0 6px 22px -6px rgba(124,109,255,0.6), inset 0 1px 0 rgba(255,255,255,0.28)",
-        "control-active": "0 4px 12px -4px rgba(124,109,255,0.7)",
-        "control-checked": "0 3px 10px -3px rgba(124,109,255,0.8)",
-        "switch-checked": "0 4px 14px -6px rgba(124,109,255,0.85)",
-        "node-sel":
-          "0 0 0 1px rgba(146,113,255,0.18), 0 18px 50px -20px rgba(124,92,255,0.7), 0 0 60px -12px rgba(124,92,255,0.35)",
-        "status-ok": "0 0 10px 1px rgba(86,214,160,0.8)",
-        "status-danger": "0 0 10px 1px rgba(251,113,133,0.55)",
+      boxShadow: Object.fromEntries(
+        Object.keys(workbenchElevationTokens).map((name) => [
+          name.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase(),
+          `var(--elevation-${name
+            .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
+            .toLowerCase()})`,
+        ]),
+      ),
+      opacity: {
+        0: "var(--opacity-hidden)",
+        30: "var(--opacity-faint)",
+        35: "var(--opacity-low)",
+        45: "var(--opacity-restrained)",
+        50: "var(--opacity-disabled)",
+        60: "var(--opacity-soft)",
+        65: "var(--opacity-muted)",
+        70: "var(--opacity-quiet)",
+        75: "var(--opacity-subdued)",
+        82: "var(--opacity-resting)",
+        90: "var(--opacity-strong)",
+        100: "var(--opacity-visible)",
+      },
+      transitionDuration: {
+        100: "var(--motion-duration-fast)",
+        150: "var(--motion-duration)",
+        fast: "var(--motion-duration-fast)",
+        DEFAULT: "var(--motion-duration)",
+        slow: "var(--motion-duration-slow)",
+      },
+      transitionTimingFunction: {
+        out: "var(--motion-ease-out)",
+        precision: "var(--motion-ease-out)",
+      },
+      animation: {
+        spin: "spin var(--motion-duration-spin) linear infinite",
+        pulse:
+          "pulse var(--motion-duration-pulse) var(--motion-ease-standard) infinite",
       },
     },
   },

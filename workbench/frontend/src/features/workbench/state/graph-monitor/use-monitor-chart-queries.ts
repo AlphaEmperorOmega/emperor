@@ -385,7 +385,7 @@ export function useMonitorChartQueries({
     }
     if (isLoading) {
       return {
-        title: "Loading monitor data",
+        title: "Loading monitor data…",
         detail: "Reading TensorBoard event files for the selected node.",
       };
     }

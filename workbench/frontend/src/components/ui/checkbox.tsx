@@ -11,6 +11,7 @@ type CheckboxProps = Omit<
   InputHTMLAttributes<HTMLInputElement>,
   "type" | "checked" | "onChange"
 > & {
+  name: string;
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
 };
@@ -41,7 +42,10 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
         )}
         aria-hidden
       >
-        <Check className={cn("h-3 w-3 text-white transition", !checked && "opacity-0")} />
+        <Check
+          className={cn("h-3 w-3 text-white transition", !checked && "opacity-0")}
+          aria-hidden
+        />
       </span>
     </>
   ),

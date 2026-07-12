@@ -233,7 +233,7 @@ export function TargetSelectorSection({
               icon={<Terminal className="h-4 w-4" aria-hidden />}
               size="md"
               variant="edge"
-              className="h-10 w-10"
+              className="h-touch w-touch md:h-control-lg md:w-control-lg"
               aria-haspopup="dialog"
               disabled={presetTrainingCommandDisabled}
               onClick={onOpenPresetTrainingCommand}
@@ -243,7 +243,7 @@ export function TargetSelectorSection({
             variant="secondary"
             onClick={onCreateSnapshot}
             disabled={source.preset.createSnapshotDisabled}
-            className="h-9 justify-center text-xs"
+            className="h-touch justify-center text-xs md:h-control"
           >
             <FilePlus2 className="h-3.5 w-3.5" aria-hidden />
             Create Snapshot
@@ -266,7 +266,7 @@ export function TargetSelectorSection({
               icon={<Terminal className="h-4 w-4" aria-hidden />}
               size="md"
               variant="edge"
-              className="h-10 w-10"
+              className="h-touch w-touch md:h-control-lg md:w-control-lg"
               aria-haspopup="dialog"
               disabled={snapshotTrainingCommandDisabled || !snapshotValue}
               onClick={onOpenSnapshotTrainingCommand}
@@ -277,7 +277,7 @@ export function TargetSelectorSection({
               variant="secondary"
               onClick={onEditSnapshot}
               disabled={snapshotActionsDisabled || !snapshotValue}
-              className="h-9 justify-center text-xs"
+              className="h-touch justify-center text-xs md:h-control"
               title={selectedSnapshotName ? `Edit ${selectedSnapshotName}` : undefined}
             >
               <Pencil className="h-3.5 w-3.5" aria-hidden />
@@ -287,7 +287,7 @@ export function TargetSelectorSection({
               variant="secondary"
               onClick={onDuplicateSnapshot}
               disabled={snapshotActionsDisabled || !snapshotValue}
-              className="h-9 justify-center text-xs"
+              className="h-touch justify-center text-xs md:h-control"
               title={
                 selectedSnapshotName
                   ? `Duplicate ${selectedSnapshotName}`
@@ -304,7 +304,7 @@ export function TargetSelectorSection({
           <div className="grid gap-1.5">
             <label
               htmlFor={experimentSelectId}
-              className="text-xs font-semibold tracking-[0.02em] text-ink-dim"
+              className="text-xs font-semibold tracking-meta text-ink-dim"
             >
               Experiment
             </label>
@@ -321,7 +321,7 @@ export function TargetSelectorSection({
           <div className="grid gap-1.5">
             <label
               htmlFor={experimentDatasetSelectId}
-              className="text-xs font-semibold tracking-[0.02em] text-ink-dim"
+              className="text-xs font-semibold tracking-meta text-ink-dim"
             >
               Dataset
             </label>
@@ -339,7 +339,7 @@ export function TargetSelectorSection({
           <div className="grid gap-1.5">
             <label
               htmlFor={experimentPresetSelectId}
-              className="text-xs font-semibold tracking-[0.02em] text-ink-dim"
+              className="text-xs font-semibold tracking-meta text-ink-dim"
             >
               Preset
             </label>

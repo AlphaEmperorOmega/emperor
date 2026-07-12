@@ -1,4 +1,6 @@
 import { type ReactNode } from "react";
+import { Loader2 } from "lucide-react";
+import { StatusCard } from "@/components/ui/status-card";
 
 export type WorkbenchWorkspaceBoundary = (
   content: ReactNode,
@@ -18,7 +20,7 @@ export function WorkbenchWorkspaceFrame({
       id="workbench-workspace-content"
       tabIndex={-1}
       data-workbench-layout="workspace-frame"
-      className="grid min-h-0 grid-cols-1 overflow-auto lg:grid-cols-[344px_minmax(0,1fr)_332px] lg:overflow-hidden"
+      className="block min-h-0 overflow-x-hidden overflow-y-auto xl:grid xl:grid-cols-[320px_minmax(0,1fr)_320px] xl:overflow-hidden 2xl:grid-cols-[344px_minmax(0,1fr)_332px]"
     >
       {content}
     </section>
@@ -38,19 +40,19 @@ export function WorkbenchThreeRegionLayout({
     <>
       <aside
         data-workbench-region="sidebar"
-        className="min-h-0 overflow-y-auto border-b border-line bg-[linear-gradient(180deg,rgba(13,12,22,0.6),rgba(8,8,13,0.4))] px-4 pb-7 pt-[18px] backdrop-blur lg:border-b-0 lg:border-r"
+        className="min-h-0 overflow-visible border-b border-line bg-panel/55 px-region pb-shell-wide pt-region backdrop-blur-sm xl:overflow-y-auto xl:border-b-0 xl:border-r"
       >
-        <div className="grid gap-[22px]">{sidebar}</div>
+        <div className="grid gap-shell">{sidebar}</div>
       </aside>
       <div
         data-workbench-region="primary"
-        className="grid min-h-[560px] min-w-0 lg:min-h-0"
+        className="grid min-h-[520px] min-w-0 sm:min-h-[640px] xl:min-h-0"
       >
         {primary}
       </div>
       <aside
         data-workbench-region="details"
-        className="min-h-0 min-w-0 overflow-x-hidden overflow-y-auto border-t border-line bg-[linear-gradient(180deg,rgba(13,12,22,0.6),rgba(8,8,13,0.4))] px-[18px] pb-8 pt-5 backdrop-blur lg:border-l lg:border-t-0"
+        className="min-h-0 min-w-0 overflow-x-hidden overflow-y-visible border-t border-line bg-panel/55 px-region pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-region backdrop-blur-sm xl:overflow-y-auto xl:border-l xl:border-t-0 xl:px-shell"
       >
         {details}
       </aside>
@@ -66,7 +68,7 @@ export function WorkbenchWideWorkspaceRegion({
   return (
     <div
       data-workbench-region="wide"
-      className="grid h-full min-h-[560px] min-w-0 grid-rows-[minmax(0,1fr)] overflow-hidden lg:col-span-3 lg:min-h-0"
+      className="grid h-full min-h-[520px] min-w-0 grid-rows-[minmax(0,1fr)] overflow-hidden sm:min-h-[640px] xl:col-span-3 xl:min-h-0"
     >
       {children}
     </div>
@@ -80,11 +82,18 @@ export function WorkbenchWorkspaceLoadingStatus({
 }) {
   return (
     <div
-      className="grid h-full place-items-center"
+      className="h-full min-h-0"
       role="status"
       aria-label={label}
+      aria-busy="true"
+      aria-live="polite"
     >
-      <span className="text-xs text-ink-faint">{label}</span>
+      <StatusCard
+        layout="chart"
+        title={label}
+        detail="Preparing this workspace…"
+        icon={<Loader2 className="h-5 w-5 animate-spin" aria-hidden />}
+      />
     </div>
   );
 }

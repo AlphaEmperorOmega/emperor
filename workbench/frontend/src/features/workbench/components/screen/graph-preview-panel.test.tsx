@@ -144,7 +144,8 @@ describe("GraphPreviewPanel", () => {
       '[data-testid^="child-summary-"]',
     );
 
-    expect(activityTrigger).toHaveAttribute("role", "button");
+    expect(activityTrigger.tagName).toBe("BUTTON");
+    expect(activityTrigger).not.toHaveAttribute("role");
     expect(activityTrigger).toHaveAttribute(
       "aria-label",
       expect.stringMatching(

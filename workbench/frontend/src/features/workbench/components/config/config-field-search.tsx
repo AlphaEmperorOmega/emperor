@@ -69,17 +69,19 @@ export function ConfigFieldSearch({
         <Input
           ref={search.ref}
           id={ids.control}
+          name="config-field-search"
           role="combobox"
           aria-label="Search config fields"
           aria-haspopup="dialog"
           aria-expanded={isOpen}
           aria-controls={ids.popup}
           autoComplete="off"
-          placeholder="Search fields, keys, or sections"
+          placeholder="Search fields, keys, or sections…"
+          spellCheck={false}
           value={query}
           onChange={search.onChange}
           onKeyDown={search.onKeyDown}
-          className="h-10 rounded-[12px] border-line bg-black/25 pl-9 pr-10 text-sm shadow-[0_14px_34px_-32px_rgba(0,0,0,0.95)] focus-visible:ring-focus"
+          className="h-touch rounded-panel border-line bg-control-field pl-9 pr-12 type-body shadow-panel focus-visible:ring-focus md:h-control-lg md:pr-10"
         />
         {query.length > 0 && (
           <Button
@@ -88,7 +90,7 @@ export function ConfigFieldSearch({
             aria-label="Clear config search"
             onMouseDown={(event) => event.preventDefault()}
             onClick={search.clear}
-            className="absolute right-1.5 top-1/2 h-7 w-7 -translate-y-1/2 rounded-[8px] p-0 text-ink-faint hover:text-ink"
+            className="absolute right-0 top-1/2 h-touch w-touch -translate-y-1/2 rounded-control-md p-0 text-ink-faint hover:text-ink md:right-1.5 md:h-control-sm md:w-control-sm"
           >
             <X className="h-3.5 w-3.5" aria-hidden />
           </Button>

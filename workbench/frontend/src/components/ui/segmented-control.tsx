@@ -63,7 +63,7 @@ export function SegmentedControl({
       role={variant}
       onKeyDown={handleKeyDown}
       className={cn(
-        "inline-flex rounded-control border border-line bg-control-subtle p-[3px]",
+        "inline-flex min-w-0 rounded-control border border-line bg-control-field p-1 shadow-control",
         className,
       )}
       {...props}

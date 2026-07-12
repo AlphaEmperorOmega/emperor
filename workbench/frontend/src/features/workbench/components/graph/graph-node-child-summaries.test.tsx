@@ -35,12 +35,12 @@ const activity: GraphParameterActivity = {
 };
 
 const neutralSummaryRowClasses = [
-  "rounded-[10px]",
+  "rounded-control-md",
   "border",
   "border-line-soft",
-  "bg-white/[0.02]",
+  "bg-control",
   "px-3",
-  "text-[13px]",
+  "type-compact",
   "text-ink-dim",
   "leading-none",
 ];
@@ -49,7 +49,7 @@ const mechanismHighlightClasses = [
   "border-violet/30",
   "bg-violet/15",
   "text-violet-text",
-  "shadow-[inset_0_-1px_0_rgba(146,113,255,0.24)]",
+  "shadow-control-selected",
 ];
 
 function expectNeutralSummaryRow(row: HTMLElement) {
@@ -112,7 +112,7 @@ describe("GraphNodeChildSummaries", () => {
       "graph-parameter-indicator-bias",
     );
 
-    expect(row).toHaveClass("rounded-[10px]", "gap-2", "overflow-hidden");
+    expect(row).toHaveClass("rounded-control-md", "gap-2", "overflow-hidden");
     expect(row).toHaveStyle({
       height: `${graphCardGeometry.childSummary.rowHeight}px`,
     });
@@ -174,7 +174,7 @@ describe("GraphNodeChildSummaries", () => {
       "Historical runs have mixed or incomplete update evidence for this parameter.",
     );
     expect(popup).toHaveTextContent("2 historical runs");
-    expect(popup).toHaveTextContent("step: 8 - samples: 3");
+    expect(popup).toHaveTextContent("step: 8 · samples: 3");
     expect(popup).toHaveTextContent(
       "1 updated / 1 unchanged / 0 missing / 0 unknown",
     );
@@ -189,7 +189,7 @@ describe("GraphNodeChildSummaries", () => {
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
 
     fireEvent.keyDown(indicators, { key: "Enter" });
-    expect(screen.getByRole("tooltip")).toHaveTextContent("Parameter activity");
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Parameter Activity");
 
     fireEvent.blur(indicators);
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();

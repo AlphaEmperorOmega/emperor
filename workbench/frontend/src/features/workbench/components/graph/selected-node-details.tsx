@@ -33,7 +33,7 @@ export function SelectedNodeDetails({
 
   if (!node) {
     return (
-      <InlineStatus className="rounded-[16px]">
+      <InlineStatus className="rounded-dialog">
         No node selected
       </InlineStatus>
     );

@@ -25,7 +25,7 @@ function TerminalReachView({ grid }: { grid: TerminalReachGrid }) {
       <div className="mt-3 flex items-start gap-3 overflow-x-auto">
         {grid.planes.map((plane) => (
           <div key={plane.z} className="flex shrink-0 flex-col items-center gap-1">
-            <span className="font-mono text-[11px] leading-none text-ink-dim">z={plane.z}</span>
+            <span className="font-mono type-meta leading-none text-ink-dim">z={plane.z}</span>
             <div
               className="grid"
               style={{ gridTemplateColumns: `repeat(${grid.columns}, 18px)`, gap: 3 }}
@@ -36,7 +36,7 @@ function TerminalReachView({ grid }: { grid: TerminalReachGrid }) {
                   title={cell.title}
                   style={{ height: 18, width: 18 }}
                   className={cn(
-                    "rounded-[4px] border",
+                    "rounded-indicator border",
                     cell.kind === "self"
                       ? "border-violet-text bg-violet-text"
                       : cell.kind === "reach"
@@ -49,17 +49,17 @@ function TerminalReachView({ grid }: { grid: TerminalReachGrid }) {
           </div>
         ))}
       </div>
-      <div className="mt-3 flex flex-wrap gap-3 text-[11px] text-ink-dim">
+      <div className="mt-3 flex flex-wrap gap-3 type-meta text-ink-dim">
         <span className="flex items-center gap-1">
-          <span className="inline-block h-2.5 w-2.5 rounded-[3px] bg-violet-text" /> this neuron
+          <span className="inline-block h-2.5 w-2.5 rounded-indicator bg-violet-text" /> this neuron
         </span>
         <span className="flex items-center gap-1">
-          <span className="inline-block h-2.5 w-2.5 rounded-[3px] border border-violet/40 bg-violet/30" />{" "}
+          <span className="inline-block h-2.5 w-2.5 rounded-indicator border border-violet/40 bg-violet/30" />{" "}
           reachable
         </span>
       </div>
       {grid.hasOverflow && (
-        <div className="mt-2 text-[11px] text-ink-dim">reach truncated for display</div>
+        <div className="mt-2 type-meta text-ink-dim">reach truncated for display</div>
       )}
     </SurfacePanel>
   );
@@ -88,14 +88,14 @@ export function SelectedNodeDetailsView({
       <SurfacePanel>
         <div className="grid min-w-0 gap-2">
           <div className="min-w-0">
-            <div className="truncate text-[18px] font-bold text-ink">{node.typeName}</div>
+            <div className="truncate type-heading font-bold text-ink">{node.typeName}</div>
             <div className="mt-1 break-words font-mono text-xs text-ink-dim">{node.path}</div>
           </div>
           <div
-            className="grid min-w-0 grid-cols-[24px_minmax(0,1fr)] items-center gap-2 rounded-[9px] border border-line bg-black/25 px-3 py-2 text-xs"
+            className="grid min-w-0 grid-cols-[24px_minmax(0,1fr)] items-center gap-2 rounded-control border border-line bg-black/25 px-3 py-2 text-xs"
             title={node.id}
           >
-            <span className="font-bold uppercase tracking-[0.08em] text-ink-dim">ID</span>
+            <span className="font-bold uppercase tracking-label text-ink-dim">ID</span>
             <span className="min-w-0 truncate font-mono text-ink">{node.id}</span>
           </div>
         </div>
@@ -121,7 +121,7 @@ export function SelectedNodeDetailsView({
           onClick={onOpenMonitors}
         >
           <LineChart className="h-4 w-4" aria-hidden />
-          Monitor charts
+        Monitor Charts
         </Button>
       </SurfacePanel>
       {reachGrid && <TerminalReachView grid={reachGrid} />}

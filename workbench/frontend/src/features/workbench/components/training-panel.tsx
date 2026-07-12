@@ -140,7 +140,7 @@ export function TrainingPanel() {
     <section
       id="training-workspace"
       aria-label="Training workspace"
-      className="h-full min-w-0 overflow-hidden bg-[linear-gradient(180deg,rgba(13,12,22,0.72),rgba(8,8,14,0.88))]"
+      className="h-full min-w-0 overflow-hidden bg-bg-2/80"
     >
       <WorkbenchWideThreeRegionLayout
         leadingLabel="Training Setup Sidebar"
@@ -168,7 +168,7 @@ export function TrainingPanel() {
                 </InlineStatus>
               )}
 
-              <section className="grid gap-2 border-b border-line-soft pb-3">
+              <section className="grid gap-2 border-b border-line-soft pb-panel">
                 <div className="flex min-h-[28px] flex-wrap items-center justify-between gap-2">
                   <SectionHeading
                     icon={
@@ -182,10 +182,10 @@ export function TrainingPanel() {
                   />
                   {logFolderModeControl}
                 </div>
-                <div className="grid min-h-[4rem] grid-rows-[2.5rem_1rem] gap-2">
+                <div className="grid min-h-[4.25rem] grid-rows-[2.75rem_1rem] gap-2 md:min-h-[4rem] md:grid-rows-[2.5rem_1rem]">
                   {logFolderMode === "existing" ? (
                     <>
-                      <div className="h-10 min-h-10">
+                      <div className="h-touch min-h-touch md:h-control-lg md:min-h-control-lg">
                         <SelectOnlyDropdown
                           label="Log experiment folder"
                           value={selectedExistingLogFolder}
@@ -197,8 +197,8 @@ export function TrainingPanel() {
                             logFolderDropdownOptions.length === 0
                           }
                           placeholder="Select folder"
-                          className="h-10 min-h-10"
-                          triggerClassName="h-10"
+                          className="h-touch min-h-touch md:h-control-lg md:min-h-control-lg"
+                          triggerClassName="h-touch md:h-control-lg"
                         />
                       </div>
                       <span className="min-h-4 text-xs leading-4 text-ink-faint">
@@ -208,16 +208,17 @@ export function TrainingPanel() {
                   ) : (
                     <>
                       <Input
+                        name="training-log-folder"
                         value={newLogFolder}
                         onChange={(event) => setNewLogFolder(event.target.value)}
-                        placeholder="my_experiment"
+                        placeholder="e.g. my_experiment…"
                         aria-label="New log folder"
                         aria-invalid={
                           newLogFolder.length > 0 && !newLogFolderValid
                         }
                         autoComplete="off"
                         disabled={planChangingControlsDisabled}
-                        className="h-10"
+                        className="h-touch md:h-control-lg"
                       />
                       <span
                         className={
@@ -243,20 +244,20 @@ export function TrainingPanel() {
                 disabled={planChangingControlsDisabled}
               />
 
-              <section className="grid gap-2 border-t border-line-soft pt-3">
+              <section className="grid gap-2 border-t border-line-soft pt-panel">
                 <TrainingSearchSetup search={plan.search} />
               </section>
           </>
         }
         primary={
           <>
-              <header className="grid gap-3 border-b border-line px-4 py-3 backdrop-blur-xl sm:px-[22px] xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+              <header className="grid gap-panel border-b border-line bg-panel/55 px-region py-panel shadow-divider backdrop-blur-xl sm:px-shell 2xl:grid-cols-[minmax(0,1fr)_auto] 2xl:items-center">
                 <div className="grid min-w-0 gap-1.5">
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
-                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[9px] border border-violet/35 bg-[linear-gradient(135deg,#2a2740,#16142a)] text-violet">
+                    <span className="grid h-control w-control shrink-0 place-items-center rounded-control-md border border-accent-line bg-accent-soft text-violet shadow-control-accent">
                       <Activity className="h-4 w-4" aria-hidden />
                     </span>
-                    <h1 className="text-base font-bold text-ink">Training</h1>
+                    <h1 className="type-title text-balance font-bold text-ink">Training</h1>
                     <Badge
                       className={
                         jobStatus === "failed" || jobStatus === "cancelled"
@@ -265,14 +266,14 @@ export function TrainingPanel() {
                             ? "border-ok/30 bg-ok/10 text-ok"
                             : jobStatus === "running" || jobStatus === "queued"
                               ? "border-amber/40 bg-amber/[0.12] text-amber"
-                              : "border-line bg-white/[0.05] text-ink-faint"
+                              : "border-line bg-control text-ink-faint"
                       }
                     >
                       {jobStatus}
                     </Badge>
                   </div>
                 </div>
-                <div className="flex min-w-0 flex-wrap items-center gap-2 xl:justify-end">
+                <div className="flex min-w-0 flex-wrap items-center gap-2 2xl:justify-end">
                   {isRunning && (
                     <Button
                       variant="danger"
@@ -295,7 +296,7 @@ export function TrainingPanel() {
                     <Button
                       variant="secondary"
                       onClick={retryRunPlan}
-                      className="h-10 px-3 text-[13px]"
+                      className="h-touch px-3 type-body md:h-control-lg"
                     >
                       <RefreshCw className="h-4 w-4" aria-hidden />
                       Retry Plan
@@ -305,7 +306,7 @@ export function TrainingPanel() {
                     variant="secondary"
                     onClick={onOpenFullConfig}
                     disabled={planChangingControlsDisabled || !canOpenFullConfig}
-                    className="h-10 px-3 text-[13px]"
+                    className="h-touch px-3 type-body md:h-control-lg"
                   >
                     <Maximize2 className="h-4 w-4" aria-hidden />
                     Open Full Config
@@ -315,7 +316,7 @@ export function TrainingPanel() {
                       variant="secondary"
                       onClick={resampleRunPlan}
                       disabled={isResampling}
-                      className="h-10 px-3 text-[13px]"
+                      className="h-touch px-3 type-body md:h-control-lg"
                     >
                       <RefreshCw
                         className={
@@ -331,7 +332,7 @@ export function TrainingPanel() {
                       variant="secondary"
                       onClick={resetTraining}
                       disabled={!trainingEnabled}
-                      className="h-10 px-3 text-[13px]"
+                      className="h-touch px-3 type-body md:h-control-lg"
                     >
                       <RotateCcw className="h-4 w-4" aria-hidden />
                       Reset Training
@@ -341,7 +342,7 @@ export function TrainingPanel() {
                     variant="primary"
                     onClick={startTraining}
                     disabled={!trainingEnabled || !canStart}
-                    className="h-10 px-[22px] text-sm"
+                    className="h-touch px-shell type-body md:h-control-lg"
                   >
                     {isStarting ? (
                       <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
@@ -390,7 +391,7 @@ export function TrainingPanel() {
                     {clusterGrowth.map((summary) => (
                       <div
                         key={summary.node}
-                        className="grid gap-1.5 rounded-[10px] border border-line bg-white/[0.018] px-2.5 py-2 text-xs"
+                        className="grid gap-2 rounded-panel border border-line bg-panel-2/70 px-panel py-2 text-xs"
                       >
                         <div className="flex min-w-0 items-center justify-between gap-2">
                           <span className="truncate font-mono text-ink">
@@ -419,7 +420,7 @@ export function TrainingPanel() {
                                       ? `step ${addition.step}`
                                       : "unknown step"
                                   }`}
-                                  className="rounded-[6px] border border-violet/30 bg-violet/10 px-1.5 py-0.5 font-mono text-[11px] text-violet"
+                                  className="rounded-chip border border-violet/30 bg-violet/10 px-1.5 py-0.5 font-mono type-meta text-violet"
                                 >
                                   ({addition.coord.join(", ")})
                                   {addition.step !== null
@@ -446,7 +447,7 @@ export function TrainingPanel() {
           onClose={cancelLargeGridSearch}
           closeOnEscape={!isStarting}
           className="grid place-items-center bg-black/65 p-4 sm:p-4"
-          panelClassName="grid max-h-none max-w-md gap-4 overflow-visible p-4 shadow-[0_24px_80px_-30px_rgba(0,0,0,0.9)] sm:max-h-none"
+          panelClassName="grid max-h-none max-w-md gap-4 overflow-visible p-4 shadow-dialog-compact sm:max-h-none"
           header={
             <div className="grid gap-1">
               <h2

@@ -262,19 +262,21 @@ export function MultiSelectDropdown({
           searchSlot={
             <label
               htmlFor={ids.search}
-              className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2 border-b border-line-soft px-3 py-2"
+              className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2 border-b border-line-soft px-3 py-2 transition-colors focus-within:bg-control-active focus-within:ring-2 focus-within:ring-inset focus-within:ring-focus"
             >
               <Search className="h-4 w-4 text-ink-faint" aria-hidden />
               <input
                 ref={search.ref}
                 id={ids.search}
+                name={`${ids.control}-search`}
                 type="search"
                 value={query}
                 onChange={search.onChange}
                 onKeyDown={search.onKeyDown}
-                placeholder={searchPlaceholder ?? `Search ${label.toLowerCase()}`}
+                placeholder={searchPlaceholder ?? `Search ${label.toLowerCase()}…`}
                 aria-label={`Search ${label}`}
                 autoComplete="off"
+                spellCheck={false}
                 className="h-8 min-w-0 bg-transparent font-sans text-sm font-semibold text-ink outline-none placeholder:text-ink-faint"
               />
             </label>
@@ -323,7 +325,7 @@ export function MultiSelectDropdown({
                     aria-selected={isSelected}
                     aria-disabled={isDisabled || undefined}
                     className={cn(
-                      "grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-[7px] focus:outline-none focus-visible:ring-2 focus-visible:ring-focus",
+                      "grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-control-md focus:outline-none focus-visible:ring-2 focus-visible:ring-focus",
                       isDisabled ? "cursor-default" : "cursor-pointer",
                     )}
                   >
@@ -341,6 +343,7 @@ export function MultiSelectDropdown({
                           "h-3 w-3 text-white transition",
                           !isSelected && "opacity-0",
                         )}
+                        aria-hidden
                       />
                     </span>
                     <span className="grid min-w-0 gap-0.5">
@@ -368,7 +371,7 @@ export function MultiSelectDropdown({
                     </span>
                     <span className="flex shrink-0 items-center gap-1.5">
                       {isPrimary && (
-                        <span className="rounded-[7px] border border-violet/35 bg-violet/12 px-2 py-0.5 font-mono text-[11px] uppercase tracking-[0.06em] text-violet">
+                        <span className="rounded-control-md border border-violet/35 bg-violet/[0.12] px-2 py-0.5 font-mono type-meta uppercase tracking-label text-violet">
                           primary
                         </span>
                       )}
@@ -383,7 +386,7 @@ export function MultiSelectDropdown({
                     <span
                       id={`${ids.popup}-option-${index}-meta`}
                       role="tooltip"
-                      className="pointer-events-none absolute right-10 top-1/2 z-30 -translate-y-1/2 whitespace-nowrap rounded-[7px] border border-line-soft bg-panel px-2 py-1 font-sans text-[11px] font-bold leading-none text-ink opacity-0 shadow-panel transition-opacity group-focus-within:opacity-100 group-hover:opacity-100"
+                      className="pointer-events-none absolute right-10 top-1/2 z-30 -translate-y-1/2 whitespace-nowrap rounded-control-md border border-line-soft bg-panel px-2 py-1 font-sans type-meta font-bold leading-none text-ink opacity-0 shadow-panel transition-opacity group-focus-within:opacity-100 group-hover:opacity-100"
                     >
                       {option.metaTooltip}
                     </span>
@@ -407,7 +410,7 @@ export function MultiSelectDropdown({
                                 handleOptionActionClick(event, option, action)
                               }
                               onKeyDown={handleOptionActionKeyDown}
-                              className="h-7 w-7 rounded-[7px] text-ink-faint hover:text-violet focus-visible:text-violet"
+                              className="h-touch w-touch rounded-control-sm text-ink-faint hover:text-violet focus-visible:text-violet md:h-control-sm md:w-control-sm"
                               {...triggerProps}
                             />
                           )}
@@ -426,11 +429,11 @@ export function MultiSelectDropdown({
             {isLoadingMore && (
               <div
                 role="status"
-                aria-label={`Loading more ${label.toLowerCase()}`}
+                aria-label={`Loading more ${label.toLowerCase()}…`}
                 className="flex items-center justify-center gap-2 px-3 py-3 text-xs font-semibold text-ink-dim"
               >
                 <Loader2 className="h-3.5 w-3.5 animate-spin text-violet" aria-hidden />
-                Loading more
+                Loading more…
               </div>
             )}
           </div>
@@ -438,7 +441,7 @@ export function MultiSelectDropdown({
             <div className="border-t border-line-soft bg-black/15 px-3 py-2">
               <button
                 type="button"
-                aria-label={`Make ${activeOption.label} primary`}
+                aria-label={`Make ${activeOption.label} Primary`}
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={(event) => handlePrimaryAction(event, activeOption.value)}
                 onKeyDown={(event) => {
@@ -447,9 +450,9 @@ export function MultiSelectDropdown({
                     close(true);
                   }
                 }}
-                className="inline-flex h-8 max-w-full items-center rounded-control-sm border border-line bg-control px-2.5 font-sans text-[11.5px] font-bold text-ink-dim transition hover:border-violet/35 hover:bg-violet/10 hover:text-violet focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                className="inline-flex h-touch max-w-full items-center rounded-control-sm border border-line bg-control px-2.5 font-sans type-meta font-bold text-ink-dim transition hover:border-violet/35 hover:bg-violet/10 hover:text-violet focus:outline-none focus-visible:ring-2 focus-visible:ring-focus md:h-control-sm"
               >
-                <span className="truncate">Make {activeOption.label} primary</span>
+                <span className="truncate">Make {activeOption.label} Primary</span>
               </button>
             </div>
           )}

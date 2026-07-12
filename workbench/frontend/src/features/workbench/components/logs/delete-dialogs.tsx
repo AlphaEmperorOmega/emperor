@@ -71,16 +71,17 @@ export function DeleteExperimentDialog({
           experiment and removes the whole experiment folder from disk.
         </p>
         <label className="grid gap-2">
-          <span className="text-xs font-bold uppercase tracking-[0.09em] text-ink-faint">
+          <span className="text-xs font-bold uppercase tracking-label text-ink-faint">
             Type experiment name
           </span>
           <Input
+            name="delete-experiment-confirmation"
             value={confirmation}
             onChange={(event) => setConfirmation(event.target.value)}
             aria-label="Type experiment name"
             autoComplete="off"
             disabled={isDeleting}
-            placeholder={option.value}
+            placeholder={`${option.value}…`}
           />
         </label>
       </div>
@@ -115,7 +116,7 @@ function AffectedValueGroup({
 }) {
   return (
     <div className="grid gap-1.5">
-      <div className="text-[11px] font-bold uppercase tracking-[0.09em] text-ink-faint">
+      <div className="type-meta font-bold uppercase tracking-label text-ink-faint">
         {label}
       </div>
       <div className="flex flex-wrap gap-1.5">
@@ -148,7 +149,7 @@ function DialogStatus({
   busy?: boolean;
 }) {
   return (
-    <div className="rounded-[13px] border border-line-soft bg-white/[0.018] px-3 py-4 text-center">
+    <div className="rounded-card border border-line-soft bg-white/[0.018] px-3 py-4 text-center">
       <div className="grid justify-items-center gap-2">
         {busy && <Loader2 className="h-5 w-5 animate-spin text-violet" aria-hidden />}
         <div className="text-sm font-semibold text-ink">{title}</div>
@@ -232,9 +233,9 @@ export function DeleteSubsetRunsDialog({
                 This permanently removes only the matched <code>version_*</code> run
                 folders. Other runs and non-empty parent folders are left on disk.
               </p>
-              <div className="grid gap-2 rounded-[12px] border border-danger-line/70 bg-danger-soft p-3 sm:grid-cols-3">
+              <div className="grid gap-2 rounded-panel border border-danger-line/70 bg-danger-soft p-3 sm:grid-cols-3">
                 <div className="min-w-0">
-                  <div className="text-[11px] font-bold uppercase tracking-[0.09em] text-danger-text">
+                  <div className="type-meta font-bold uppercase tracking-label text-danger-text">
                     Experiment
                   </div>
                   <div className="mt-1 truncate font-mono text-xs text-ink">
@@ -242,7 +243,7 @@ export function DeleteSubsetRunsDialog({
                   </div>
                 </div>
                 <div className="min-w-0">
-                  <div className="text-[11px] font-bold uppercase tracking-[0.09em] text-danger-text">
+                  <div className="type-meta font-bold uppercase tracking-label text-danger-text">
                     {targetLabel}
                   </div>
                   <div className="mt-1 truncate font-mono text-xs text-ink">
@@ -250,21 +251,21 @@ export function DeleteSubsetRunsDialog({
                   </div>
                 </div>
                 <div className="min-w-0">
-                  <div className="text-[11px] font-bold uppercase tracking-[0.09em] text-danger-text">
+                  <div className="type-meta font-bold uppercase tracking-label text-danger-text">
                     Matched Runs
                   </div>
                   <div className="mt-1 font-mono text-xs text-ink">{runCount}</div>
                 </div>
               </div>
               {plan.truncated && (
-                <div className="rounded-[10px] border border-line-soft bg-white/[0.018] px-3 py-2 text-xs text-ink-faint">
+                <div className="rounded-control border border-line-soft bg-white/[0.018] px-3 py-2 text-xs text-ink-faint">
                   {plan.truncationReason ??
                     `Showing ${plan.returnedItemCount ?? plan.candidates.length} of ${
                       plan.sourceItemCount ?? plan.candidateCount
                     } matched runs.`}
                 </div>
               )}
-              <div className="grid gap-3 rounded-[12px] border border-line-soft bg-black/20 p-3 sm:grid-cols-2">
+              <div className="grid gap-3 rounded-panel border border-line-soft bg-black/20 p-3 sm:grid-cols-2">
                 <AffectedValueGroup label="Experiments" values={plan.affected.experiments} />
                 <AffectedValueGroup label="Datasets" values={plan.affected.datasets} />
                 <AffectedValueGroup
@@ -276,7 +277,7 @@ export function DeleteSubsetRunsDialog({
             </div>
 
             {blockers.length > 0 && (
-              <div className="grid gap-2 rounded-[12px] border border-danger-line bg-danger-soft p-3 text-sm text-danger-detail">
+              <div className="grid gap-2 rounded-panel border border-danger-line bg-danger-soft p-3 text-sm text-danger-detail">
                 <div className="flex items-start gap-2 font-semibold text-danger-text">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
                   <span>A training job is still writing to this log folder.</span>
@@ -285,7 +286,7 @@ export function DeleteSubsetRunsDialog({
                   {blockers.map((blocker) => (
                     <div
                       key={`${blocker.id}-${blocker.logFolder}`}
-                      className="grid gap-1 rounded-[9px] border border-danger-line/70 bg-black/20 px-2.5 py-2 font-mono text-xs sm:grid-cols-[minmax(0,1fr)_auto]"
+                      className="grid gap-1 rounded-control border border-danger-line/70 bg-black/20 px-2.5 py-2 font-mono text-xs sm:grid-cols-[minmax(0,1fr)_auto]"
                     >
                       <span className="min-w-0 truncate">
                         {blocker.id} · logs/{blocker.logFolder}
@@ -298,10 +299,10 @@ export function DeleteSubsetRunsDialog({
             )}
 
             <div className="grid gap-2">
-              <div className="text-xs font-bold uppercase tracking-[0.09em] text-ink-faint">
+              <div className="text-xs font-bold uppercase tracking-label text-ink-faint">
                 Path Preview
               </div>
-              <div className="grid max-h-56 gap-1.5 overflow-y-auto rounded-[12px] border border-line-soft bg-black/20 p-2">
+              <div className="grid max-h-56 gap-1.5 overflow-y-auto rounded-panel border border-line-soft bg-black/20 p-2">
                 {previewCandidates.length === 0 ? (
                   <div className="px-2 py-4 text-center text-sm text-ink-faint">
                     No matched run folders
@@ -310,7 +311,7 @@ export function DeleteSubsetRunsDialog({
                   previewCandidates.map((candidate) => (
                     <div
                       key={candidate.id}
-                      className="truncate rounded-[8px] border border-line-soft bg-white/[0.025] px-2.5 py-1.5 font-mono text-xs text-ink-dim"
+                      className="truncate rounded-control-md border border-line-soft bg-white/[0.025] px-2.5 py-1.5 font-mono text-xs text-ink-dim"
                       title={candidate.relativePath}
                     >
                       {candidate.relativePath}

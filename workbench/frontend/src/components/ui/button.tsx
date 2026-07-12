@@ -10,13 +10,13 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 
 const variants: Record<ButtonVariant, string> = {
   primary:
-    "border-0 bg-grad text-white shadow-primary hover:brightness-110 active:translate-y-px",
+    "border border-violet/70 bg-violet-deep text-white shadow-primary hover:border-violet hover:bg-violet active:translate-y-px",
   secondary:
-    "border border-line bg-control text-ink-dim shadow-none hover:border-line-hover hover:bg-control-hover hover:text-ink active:translate-y-px",
+    "border border-line bg-panel-2/90 text-ink-dim shadow-none hover:border-line-hover hover:bg-control-hover hover:text-ink active:translate-y-px",
   ghost:
-    "border border-transparent text-ink-faint hover:bg-control-active hover:text-ink active:translate-y-px",
+    "border border-transparent bg-transparent text-ink-faint hover:border-line-soft hover:bg-control-active hover:text-ink active:translate-y-px",
   danger:
-    "border border-danger-line bg-danger-soft text-danger-text hover:border-danger/60 hover:bg-danger-hover/40 hover:text-white active:translate-y-px",
+    "border border-danger-line bg-danger-soft text-danger-text hover:border-danger/70 hover:bg-danger-hover/45 hover:text-white active:translate-y-px",
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(

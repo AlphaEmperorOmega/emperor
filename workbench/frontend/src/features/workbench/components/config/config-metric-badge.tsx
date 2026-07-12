@@ -46,7 +46,7 @@ export function ConfigMetricBadge({
       onMouseEnter={() => setIsTooltipVisible(true)}
       onMouseLeave={() => setIsTooltipVisible(false)}
       className={cn(
-        "relative inline-flex h-[23px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[7px] border border-line bg-white/[0.04] px-2 font-mono text-xs font-semibold leading-none text-ink-dim transition focus:outline-none focus-visible:ring-2 focus-visible:ring-focus",
+        "relative inline-flex h-touch shrink-0 items-center gap-1.5 whitespace-nowrap rounded-chip border border-line bg-control px-2 font-mono text-xs font-semibold leading-none text-ink-dim transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-focus md:h-[23px]",
         badgeVariantClassNames[variant],
       )}
     >
@@ -57,7 +57,7 @@ export function ConfigMetricBadge({
           id={tooltipId}
           role="tooltip"
           className={cn(
-            "pointer-events-none absolute left-1/2 z-30 -translate-x-1/2 rounded-[7px] border border-line-soft bg-panel px-2 py-1 font-sans text-[11px] font-bold leading-none text-ink shadow-panel",
+            "pointer-events-none absolute left-1/2 z-30 -translate-x-1/2 rounded-chip border border-line-hover bg-panel px-2 py-1.5 font-sans type-meta font-semibold leading-none text-ink shadow-panel",
             tooltipPosition === "top" ? "bottom-[calc(100%+6px)]" : "top-[calc(100%+6px)]",
           )}
         >

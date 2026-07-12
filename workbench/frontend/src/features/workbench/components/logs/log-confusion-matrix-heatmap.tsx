@@ -11,6 +11,11 @@ import {
 import { formatNumber } from "@/lib/format";
 import { type ConfusionMatrixHeatmap } from "@/features/workbench/state/logs/log-diagnostics";
 import { cn } from "@/lib/utils";
+import {
+  workbenchColorWithAlpha,
+  workbenchFontTokens,
+  workbenchVisualTokens,
+} from "@/lib/visual-tokens";
 
 const LABEL_SLOT_SIZE = 30;
 const CELL_SLOT_SIZE = 30;
@@ -19,8 +24,7 @@ const CELL_GAP = 4;
 const CELL_RADIUS = 4;
 const INTERSECTION_ROOT_MARGIN = "640px 0px";
 
-const MONO_FONT =
-  "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace";
+const MONO_FONT = workbenchFontTokens.mono;
 
 type MatrixDimensions = {
   width: number;
@@ -45,9 +49,9 @@ type HoveredCell = {
 function heatmapColor(value: number, trueClass: number, predictedClass: number) {
   const alpha = Math.max(0.08, Math.min(0.92, value));
   if (trueClass === predictedClass) {
-    return `rgba(64, 201, 127, ${alpha})`;
+    return workbenchColorWithAlpha("heatmapCorrect", alpha);
   }
-  return `rgba(239, 86, 86, ${alpha})`;
+  return workbenchColorWithAlpha("heatmapIncorrect", alpha);
 }
 
 function matrixIndex(trueClass: number, predictedClass: number, classCount: number) {
@@ -131,7 +135,7 @@ function drawConfusionMatrix(
   context.textBaseline = "middle";
 
   context.font = `600 10px ${MONO_FONT}`;
-  context.fillStyle = "rgba(210, 219, 235, 0.58)";
+  context.fillStyle = workbenchVisualTokens.heatmapLabel;
   for (const classIndex of renderData.classes) {
     const offset =
       LABEL_SLOT_SIZE +
@@ -165,7 +169,7 @@ function drawConfusionMatrix(
       context.fill();
 
       if (value >= 0.01) {
-        context.fillStyle = "rgba(255, 255, 255, 0.94)";
+        context.fillStyle = workbenchVisualTokens.heatmapValue;
         context.fillText(
           String(Math.round(value * 100)),
           x + CELL_DRAW_SIZE / 2,
@@ -415,12 +419,12 @@ const LogConfusionMatrixCard = memo(function LogConfusionMatrixCard({
     <div
       ref={cardRef}
       className={cn(
-        "grid min-w-0 gap-3 rounded-[8px] border border-line bg-white/[0.018] p-3",
+        "grid min-w-0 gap-3 rounded-control-md border border-line bg-white/[0.018] p-3",
         "[contain:layout_paint_style] [content-visibility:auto] [contain-intrinsic-size:480px_520px]",
       )}
     >
       <div className="min-w-0">
-        <div className="text-xs font-bold uppercase tracking-[0.08em] text-ink-dim">
+        <div className="text-xs font-bold uppercase tracking-label text-ink-dim">
           {heatmap.split}
         </div>
         <div className="truncate text-sm font-semibold text-ink">
@@ -432,7 +436,7 @@ const LogConfusionMatrixCard = memo(function LogConfusionMatrixCard({
           <canvas
             ref={canvasRef}
             aria-hidden="true"
-            className="block max-w-none rounded-[4px]"
+            className="block max-w-none rounded-indicator"
             style={{
               height: renderData.dimensions.height,
               width: renderData.dimensions.width,
@@ -443,7 +447,7 @@ const LogConfusionMatrixCard = memo(function LogConfusionMatrixCard({
         ) : (
           <div
             aria-hidden
-            className="rounded-[4px] border border-line-soft bg-white/[0.012]"
+            className="rounded-indicator border border-line-soft bg-white/[0.012]"
             style={{
               height: renderData.dimensions.height,
               width: renderData.dimensions.width,
@@ -454,7 +458,7 @@ const LogConfusionMatrixCard = memo(function LogConfusionMatrixCard({
       {hoveredCell && (
         <div
           aria-hidden="true"
-          className="pointer-events-none fixed z-50 rounded-[8px] border border-line bg-panel/95 px-2 py-1 font-mono text-[11px] leading-5 text-ink shadow-panel"
+          className="pointer-events-none fixed z-50 rounded-control-md border border-line bg-panel/95 px-2 py-1 font-mono type-meta leading-5 text-ink shadow-panel"
           style={{
             left: hoveredCell.clientX + 12,
             top: hoveredCell.clientY + 12,
@@ -470,9 +474,9 @@ const LogConfusionMatrixCard = memo(function LogConfusionMatrixCard({
         aria-controls={matrixDataId}
         aria-label={`${isDataTableOpen ? "Hide" : "View"} ${ariaLabel} data`}
         onClick={() => setIsDataTableOpen((current) => !current)}
-        className="justify-self-start rounded-control-sm border border-line bg-white/[0.025] px-2.5 py-1.5 text-xs font-semibold text-ink-dim transition hover:border-violet/35 hover:bg-violet/10 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        className="min-h-touch justify-self-start rounded-control-sm border border-line bg-white/[0.025] px-2.5 py-1.5 text-xs font-semibold text-ink-dim transition hover:border-violet/35 hover:bg-violet/10 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-focus md:min-h-control-sm"
       >
-        {isDataTableOpen ? "Hide matrix data" : "View matrix data"}
+        {isDataTableOpen ? "Hide Matrix Data" : "View Matrix Data"}
       </button>
       {isDataTableOpen && (
         <ConfusionMatrixDataTable

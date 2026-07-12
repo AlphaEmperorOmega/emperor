@@ -18,16 +18,16 @@ export function PreviewToolbar() {
   const activeGraphLabel =
     graph ? `${graph.model} / ${graph.preset}` : "Waiting for preview data";
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-line bg-[rgba(8,8,14,0.35)] px-[22px] backdrop-blur">
-      <div className="hidden min-w-0 sm:block">
-        <div className="text-xs font-bold uppercase tracking-[0.1em] text-ink-dim">
+    <div className="flex min-w-0 items-center justify-between gap-panel overflow-hidden border-b border-line bg-panel/55 px-region shadow-divider backdrop-blur-sm sm:px-shell">
+      <div className="min-w-0">
+        <h1 className="sr-only type-label font-bold uppercase text-ink-dim sm:not-sr-only">
           Preview
-        </div>
-        <div className="mt-0.5 truncate font-mono text-xs text-ink-dim">
+        </h1>
+        <div className="mt-0.5 hidden truncate font-mono text-xs text-ink-dim sm:block">
           {activeGraphLabel}
         </div>
       </div>
-      <div className="flex min-w-0 flex-nowrap items-center justify-end gap-2 overflow-x-auto">
+      <div className="flex min-w-0 flex-nowrap items-center justify-end gap-2 overflow-x-auto overscroll-x-contain [scrollbar-width:none]">
         <SegmentedControl aria-label="Graph detail">
           <ViewModeButton
             active={graphDetailMode === "simple"}
@@ -68,7 +68,7 @@ export function PreviewToolbar() {
           title="Collapse all graph nodes"
           onClick={onCollapseGraphNodes}
           disabled={!activeGraphAvailable || expandedGraphNodeIds.size === 0}
-          className="h-[34px] w-[34px] shrink-0 px-0 text-[13px] sm:w-auto sm:px-3"
+          className="h-touch w-touch shrink-0 px-0 text-xs sm:w-auto sm:px-3 md:h-control"
         >
           <RotateCcw className="h-3.5 w-3.5" aria-hidden />
           <span className="hidden sm:inline">Collapse All</span>

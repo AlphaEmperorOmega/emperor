@@ -219,7 +219,7 @@ describe("WorkbenchApp Graph Workspace", () => {
     expect(within(modelNode).getByLabelText("Layer 0 LinearLayer")).toBeInTheDocument();
     expect(within(modelNode).getByLabelText("Layer 1 LinearLayer")).toBeInTheDocument();
     expect(within(modelNode).queryByLabelText("Layer 2 LinearLayer")).not.toBeInTheDocument();
-    expect(within(modelNode).getByTitle("6 more layers")).toHaveTextContent("...");
+    expect(within(modelNode).getByTitle("6 more layers")).toHaveTextContent("…");
     expect(within(modelNode).getByLabelText("Layer 8 LinearLayer")).toBeInTheDocument();
     expect(within(modelNode).queryByText("9 layers")).not.toBeInTheDocument();
   });

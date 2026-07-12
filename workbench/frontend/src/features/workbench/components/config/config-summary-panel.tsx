@@ -51,7 +51,7 @@ export function ConfigSummaryPanel({
           variant="primary"
           onClick={onOpenFullConfig}
           disabled={!canOpenFullConfig}
-          className="h-11 w-full text-[13.5px]"
+          className="h-11 w-full type-compact"
         >
           <Maximize2 className="h-4 w-4" aria-hidden />
           Open Full Config
@@ -59,7 +59,7 @@ export function ConfigSummaryPanel({
       )}
 
       {isSchemaLoading ? (
-        <InlineStatus compact>
+        <InlineStatus busy compact>
           {workbenchStatusCopy.loading.configSchema}
         </InlineStatus>
       ) : fieldCount === 0 && (

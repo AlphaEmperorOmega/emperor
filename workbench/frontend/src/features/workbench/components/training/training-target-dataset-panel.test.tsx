@@ -146,7 +146,7 @@ describe("Training setup Adapter", () => {
 
     await user.click(screen.getByRole("tab", { name: "Snapshots" }));
     expect(screen.getByRole("alert")).toHaveTextContent("Removal rejected.");
-    await user.click(screen.getByRole("button", { name: "Retry change" }));
+    await user.click(screen.getByRole("button", { name: "Retry Change" }));
     expect(value.variants.retrySnapshotMutation).toHaveBeenCalledTimes(1);
   });
 });

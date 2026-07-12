@@ -23,10 +23,10 @@ export function WorkbenchScreen({
     importLogsDialog,
   } = shell;
   return (
-    <main className="grid h-dvh min-h-0 grid-rows-[60px_minmax(0,1fr)] overflow-hidden bg-bg text-ink">
+    <main className="grid h-dvh min-h-0 grid-rows-[calc(60px+env(safe-area-inset-top))_minmax(0,1fr)] overflow-hidden bg-bg text-ink">
       <a
         href="#workbench-workspace-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-[100] focus:rounded-[9px] focus:border focus:border-focus focus:bg-panel focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-ink focus:outline-none"
+        className="sr-only focus-visible:not-sr-only focus-visible:absolute focus-visible:left-3 focus-visible:top-3 focus-visible:z-[100] focus-visible:rounded-control focus-visible:border focus-visible:border-violet/70 focus-visible:bg-panel focus-visible:px-3 focus-visible:py-2 focus-visible:text-sm focus-visible:font-semibold focus-visible:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
       >
         Skip to workspace
       </a>

@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { formatNumber, formatRunDisplayName, formatRunTimestamp } from "@/lib/format";
+import {
+  formatBytes,
+  formatDateTime,
+  formatDecimal,
+  formatNumber,
+  formatRunDisplayName,
+  formatRunTimestamp,
+  formatSignificantNumber,
+} from "@/lib/format";
 
 describe("formatNumber", () => {
   it("formats normal finite values with up to four fraction digits", () => {
@@ -30,6 +38,48 @@ describe("formatRunTimestamp", () => {
   it("falls back to unknown when the timestamp is missing", () => {
     expect(formatRunTimestamp()).toBe("unknown");
     expect(formatRunTimestamp(null)).toBe("unknown");
+  });
+});
+
+describe("locale-aware presentation formatting", () => {
+  it("formats fixed decimals through Intl", () => {
+    const expected = new Intl.NumberFormat(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(0.5);
+    expect(formatDecimal(0.5, 2)).toBe(expected);
+  });
+
+  it("formats metric values with 4 significant digits", () => {
+    expect(formatSignificantNumber(12.3456)).toBe(
+      new Intl.NumberFormat(undefined, { maximumSignificantDigits: 4 }).format(
+        12.3456,
+      ),
+    );
+  });
+
+  it("formats byte units with a non-breaking separator", () => {
+    expect(formatBytes(1536)).toBe(
+      `${new Intl.NumberFormat(undefined, {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 1,
+      }).format(1.5)}\u00a0KB`,
+    );
+    expect(formatBytes(Number.NaN)).toBe("0\u00a0B");
+  });
+
+  it("uses Intl for valid dates and preserves invalid source values", () => {
+    const value = "2026-06-01T12:30:00.000Z";
+    expect(formatDateTime(value)).toBe(
+      new Intl.DateTimeFormat(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(new Date(value)),
+    );
+    expect(formatDateTime("not-a-date")).toBe("not-a-date");
   });
 });
 

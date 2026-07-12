@@ -103,12 +103,12 @@ describe("GraphLocationsCard", () => {
     expect(within(cluster).getByText("6 capacity")).toBeInTheDocument();
     expect(kindBadge).toHaveClass(
       "shrink-0",
-      "rounded-[7px]",
+      "rounded-chip",
       "border-line-soft",
       "bg-black/20",
       "px-1.5",
       "py-1",
-      "text-[10px]",
+      "type-caption",
       "leading-none",
     );
     expect(

@@ -72,7 +72,7 @@ function createExpertDiagramCells(totalExperts: number): ExpertDiagramCell[] {
       }),
     ),
     {
-      label: "...",
+      label: "…",
       title: `${
         totalExperts - graphDiagramLimits.expert.visibleBeforeOverflow
       } more experts`,

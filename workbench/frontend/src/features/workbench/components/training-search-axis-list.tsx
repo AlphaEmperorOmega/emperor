@@ -49,7 +49,7 @@ export function TrainingSearchAxisList({
           <div
             key={axis.key}
             className={cn(
-              "grid min-w-0 content-start gap-2 rounded-[10px] border px-2.5 py-2 transition",
+              "grid min-w-0 content-start gap-2 rounded-control border px-2.5 py-2 transition",
               axis.locked
                 ? "border-amber/35 bg-amber/[0.045] opacity-75"
                 : axisSelected
@@ -64,6 +64,7 @@ export function TrainingSearchAxisList({
               )}
             >
               <Checkbox
+                name={`training-search-axis-${axis.key}`}
                 checked={axisSelected}
                 disabled={axis.locked}
                 onCheckedChange={() => onToggleAxis(axis)}
@@ -110,7 +111,7 @@ export function TrainingSearchAxisList({
                     key={`${axis.key}-${configValueKey(value)}`}
                     title={label}
                     className={cn(
-                      "inline-flex min-h-8 min-w-0 max-w-full cursor-pointer items-center gap-1.5 overflow-hidden rounded-[8px] border px-2 py-1 text-xs transition",
+                      "inline-flex min-h-touch min-w-0 max-w-full cursor-pointer items-center gap-1.5 overflow-hidden rounded-control-md border px-2 py-1 text-xs transition md:min-h-control-sm",
                       checked
                         ? "border-violet/35 bg-violet/15 text-violet"
                         : "border-line bg-black/10 text-ink-dim hover:border-violet/25 hover:text-ink",
@@ -118,11 +119,12 @@ export function TrainingSearchAxisList({
                     )}
                   >
                     <Checkbox
+                      name={`training-search-value-${axis.key}-${value}`}
                       checked={checked}
                       disabled={axis.locked}
                       onCheckedChange={() => onToggleValue(axis, value)}
                       aria-label={`search value ${axis.key} ${label}`}
-                      className="h-4 w-4 rounded-[5px]"
+                      className="h-4 w-4 rounded-chip"
                     />
                     <span className="min-w-0 truncate font-mono">{label}</span>
                   </label>
@@ -138,7 +140,7 @@ export function TrainingSearchAxisList({
         </InlineStatus>
       )}
       {isLoading && (
-        <InlineStatus compact>
+        <InlineStatus busy compact>
           {workbenchStatusCopy.loading.searchAxes}
         </InlineStatus>
       )}

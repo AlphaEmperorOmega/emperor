@@ -141,8 +141,9 @@ export function LogTestScoresPanel({
           {queryState.isFetching && !queryState.isInitialLoading && (
             <Loader2 className="h-4 w-4 animate-spin text-violet" aria-hidden />
           )}
-          <label className="inline-flex h-8 cursor-pointer items-center gap-2 rounded-control-sm border border-line bg-white/[0.025] px-2.5 text-xs font-semibold text-ink-dim transition hover:border-white/15 hover:bg-white/[0.055] hover:text-ink">
+          <label className="inline-flex h-touch cursor-pointer items-center gap-2 rounded-control-sm border border-line bg-control px-2.5 text-xs font-semibold text-ink-dim transition-colors hover:border-line-hover hover:bg-control-hover hover:text-ink md:h-control-sm">
             <Checkbox
+              name="split-test-scores-by-experiment"
               checked={splitByExperiment}
               onCheckedChange={setSplitByExperiment}
             />
@@ -159,7 +160,7 @@ export function LogTestScoresPanel({
         />
       ) : queryState.isInitialLoading && metrics.length === 0 ? (
         <InlineStatus busy compact role="status">
-          Loading Test scalar points
+          Loading Test scalar points…
         </InlineStatus>
       ) : metrics.length === 0 ? (
         <InlineStatus compact>
@@ -200,7 +201,7 @@ export function LogTestScoresPanel({
       )}
 
       {hiddenMetricCount > 0 && (
-        <div className="rounded-[10px] border border-line-soft bg-white/[0.018] px-3 py-3 text-center text-xs text-ink-faint">
+        <div className="rounded-control border border-line-soft bg-white/[0.018] px-3 py-3 text-center text-xs text-ink-faint">
           Showing {visibleMetrics.length} of {metrics.length} test score leaderboards.
           Narrow selected tags to inspect the rest.
         </div>

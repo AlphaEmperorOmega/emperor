@@ -73,7 +73,7 @@ export function ExpertDiagramView({
               title={cell.title}
               tone={cell.kind === "expert" ? "violet" : "default"}
               className={cn(
-                "flex h-8 min-w-0 items-center justify-center rounded-[8px] px-1.5 text-center text-[12px] font-semibold",
+                "flex h-8 min-w-0 items-center justify-center px-1.5 text-center type-label font-semibold",
                 cell.kind === "expert"
                   ? "font-mono"
                   : cell.kind === "overflow"
@@ -87,7 +87,7 @@ export function ExpertDiagramView({
         </div>
         <GraphChip
           title={diagram.samplerTitle}
-          className="absolute bottom-0 left-1/2 flex h-8 -translate-x-1/2 items-center justify-center rounded-[8px] border-line bg-black/25 px-2 text-[12px] font-semibold text-ink shadow-[inset_0_-1px_0_rgba(255,255,255,0.05)]"
+          className="absolute bottom-0 left-1/2 flex h-8 -translate-x-1/2 items-center justify-center border-line bg-control-field px-2 type-label font-semibold text-ink"
           style={{ width: EXPERT_DIAGRAM_SAMPLER_WIDTH }}
         >
           <span className="truncate">{diagram.samplerLabel}</span>

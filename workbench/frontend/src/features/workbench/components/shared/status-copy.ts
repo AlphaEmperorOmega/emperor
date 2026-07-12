@@ -1,14 +1,14 @@
 export const workbenchStatusCopy = {
   loading: {
-    workbench: "Loading workbench",
-    modelCatalog: "Loading model catalog",
-    targetData: "Loading target data",
-    configSchema: "Loading config schema",
-    monitorOptions: "Loading monitor options",
-    searchAxes: "Loading search axes",
-    runs: "Loading runs",
-    comparisonData: "Loading comparison data",
-    logFolders: "Loading folders",
+    workbench: "Loading Workbench…",
+    modelCatalog: "Loading model catalog…",
+    targetData: "Loading target data…",
+    configSchema: "Loading config schema…",
+    monitorOptions: "Loading monitor options…",
+    searchAxes: "Loading search axes…",
+    runs: "Loading runs…",
+    comparisonData: "Loading comparison data…",
+    logFolders: "Loading folders…",
   },
   empty: {
     configFields: "No config fields",

@@ -28,7 +28,7 @@ export function GraphNodeHeader({
     return (
       <div className="shrink-0">
         <div
-          className="min-w-0 truncate text-[18px] font-bold leading-6 text-ink"
+          className="min-w-0 truncate type-heading font-bold leading-6 text-ink"
           data-testid={`graph-node-title-row-${nodeId}`}
         >
           {label}
@@ -58,14 +58,14 @@ export function GraphNodeHeader({
         data-testid={`graph-node-title-row-${nodeId}`}
       >
         <div
-          className="min-w-0 flex-1 truncate text-[18px] font-bold text-ink"
+          className="min-w-0 flex-1 truncate type-heading font-bold text-ink"
           style={{ lineHeight: `${graphCardGeometry.titleLineHeight}px` }}
         >
           {label}
         </div>
       </div>
       <div
-        className="truncate font-mono text-[13px] text-ink-dim"
+        className="truncate font-mono type-compact text-ink-dim"
         style={{
           height: graphCardGeometry.subtitle.height,
           lineHeight: `${graphCardGeometry.subtitle.height}px`,

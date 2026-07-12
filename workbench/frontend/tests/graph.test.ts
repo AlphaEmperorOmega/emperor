@@ -1231,7 +1231,7 @@ describe("buildChildSummaries", () => {
         sourceNodeId: "main_model.1",
       },
       {
-        label: "...",
+        label: "…",
         kind: "overflow",
         title: "6 more layers",
       },
@@ -1486,7 +1486,7 @@ describe("buildExpertDiagrams", () => {
       "E2",
       "E3",
       "E4",
-      "...",
+      "…",
       "16 experts",
     ]);
   });
@@ -1582,7 +1582,7 @@ describe("buildStackDiagrams", () => {
     expect(diagram?.cells.map((cell) => cell.label)).toEqual([
       "Layer 0 · LinearLayer",
       "Layer 1 · LinearLayer",
-      "...",
+      "…",
       "Layer 4 · LinearLayer",
     ]);
     expect(diagram?.cells[2].title).toBe("2 more layers");
@@ -1767,7 +1767,7 @@ describe("buildStackDiagrams", () => {
     expect(diagram?.cells.map((cell) => cell.label)).toEqual([
       "Layer 0 · LinearLayer",
       "Layer 1 · LinearLayer",
-      "...",
+      "…",
       "Layer 15 · LinearLayer",
     ]);
     expect(diagram?.cells[2].title).toBe("13 more layers");
@@ -2841,7 +2841,7 @@ describe("graph display projection and layout", () => {
     expect(nodes[0].data.stackDiagram?.cells.map((cell) => cell.label)).toEqual([
       "Layer 0 · Layer",
       "Layer 1 · Layer",
-      "...",
+      "…",
       "Layer 4 · Layer",
     ]);
     expect(nodes[0].data.typeName).toBe("LayerStack");

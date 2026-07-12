@@ -38,7 +38,7 @@ export function ChartFrame({
     <div className={cn("grid min-w-0 gap-2 p-3", className)}>
       <div className="flex min-w-0 items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="truncate text-sm font-semibold text-ink">{title}</div>
+          <h3 className="truncate text-sm font-semibold text-ink">{title}</h3>
           {subtitle !== undefined && (
             <div className="truncate font-mono text-xs text-ink-dim">{subtitle}</div>
           )}

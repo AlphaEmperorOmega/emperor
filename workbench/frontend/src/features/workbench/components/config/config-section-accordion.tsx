@@ -40,7 +40,7 @@ function SectionHeaderControl({
   return (
     <span
       data-config-section-header-control={presentation.key}
-      className="inline-flex min-w-0 items-center gap-2 rounded-[9px] border border-line bg-black/25 px-2.5 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.025)]"
+      className="inline-flex min-w-0 items-center gap-2 rounded-control border border-line bg-black/25 px-2.5 py-1.5 shadow-control"
     >
       <Switch
         id={controlId}
@@ -61,7 +61,7 @@ function SectionHeaderControl({
           title={`Reset ${presentation.label}`}
           disabled={isResetDisabled}
           onClick={() => onReset(presentation.key)}
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] border border-line bg-white/[0.035] text-ink-faint transition hover:bg-white/[0.07] hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-white/[0.035] disabled:hover:text-ink-faint"
+          className="flex h-touch w-touch shrink-0 items-center justify-center rounded-control-md border border-line bg-control text-ink-faint transition-colors hover:bg-control-hover hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-control disabled:hover:text-ink-faint md:h-control-sm md:w-control-sm"
         >
           <RotateCcw className="h-3.5 w-3.5" aria-hidden />
         </button>
@@ -88,12 +88,12 @@ function InheritedConfigFieldRow({
 }) {
   return (
     <div
-      className="grid gap-1.5 rounded-[10px] border-l-2 border-line bg-white/[0.025] px-2.5 py-2"
+      className="grid gap-1.5 rounded-control border-l-2 border-line bg-white/[0.025] px-2.5 py-2"
       data-config-inherited-field={presentation.field.key}
       title={presentation.title}
     >
       <div className="flex min-w-0 items-start justify-between gap-2">
-        <span className="min-w-0 text-[13px] font-semibold leading-5 text-ink">
+        <span className="min-w-0 type-compact font-semibold leading-5 text-ink">
           {presentation.label}
         </span>
         <span className="flex shrink-0 items-center gap-1.5">
@@ -111,7 +111,7 @@ function InheritedConfigFieldRow({
           </Badge>
         </span>
       </div>
-      <div className="flex h-10 min-w-0 items-center rounded-control border border-line-soft bg-black/25 px-3 text-[13.5px] font-medium text-ink-dim">
+      <div className="flex h-10 min-w-0 items-center rounded-control border border-line-soft bg-black/25 px-3 type-compact font-medium text-ink-dim">
         <span className="min-w-0 truncate">{presentation.field.value}</span>
       </div>
     </div>
@@ -140,16 +140,16 @@ function BoundaryModelGroupAccordion({
   return (
     <section
       className={cn(
-        "overflow-visible rounded-[10px] border border-line-soft bg-black/[0.12] transition",
+        "overflow-visible rounded-control border border-line-soft bg-black/[0.12] transition",
         group.isEnabled
-          ? "shadow-[0_16px_34px_-30px_rgba(0,0,0,0.95)]"
+          ? "shadow-card"
           : "opacity-82",
         overrideCount > 0 && "border-violet/35 bg-violet/[0.045]",
         hasPreset && "border-amber/35 bg-amber/[0.035]",
       )}
       data-config-field-group={group.title}
     >
-      <div className="grid min-h-12 grid-cols-[minmax(0,1fr)_auto] items-stretch overflow-hidden rounded-t-[9px]">
+      <div className="grid min-h-12 grid-cols-[minmax(0,1fr)_auto] items-stretch overflow-hidden rounded-t-control">
         <h4 className="h-full min-w-0">
           <button
             type="button"
@@ -295,14 +295,14 @@ export function ConfigSectionAccordion({
   const panelId = `${id}-fields`;
   const controlFieldId = controlField ? `${id}-control-${controlField.key}` : undefined;
   const stateContainerClass = hasBoth
-    ? "border-amber/35 bg-[linear-gradient(135deg,rgba(255,209,102,0.075),rgba(167,139,250,0.105))] shadow-[0_20px_46px_-32px_rgba(167,139,250,0.35)] ring-1 ring-violet/25 hover:border-violet/45"
+    ? "border-amber/35 bg-config-preset shadow-card-accent ring-1 ring-violet/25 hover:border-violet/45"
     : sectionHasOverride
-      ? "border-violet/35 bg-violet/[0.06] shadow-[0_18px_42px_-32px_rgba(167,139,250,0.35)] hover:border-violet/45"
+      ? "border-violet/35 bg-violet/[0.06] shadow-card-accent hover:border-violet/45"
       : hasPreset
-        ? "border-amber/35 bg-amber/[0.045] shadow-[0_18px_42px_-32px_rgba(255,209,102,0.25)] hover:border-amber/45"
+        ? "border-amber/35 bg-amber/[0.045] shadow-card-warning hover:border-amber/45"
         : "";
   const stateHeaderClass = hasBoth
-    ? "bg-[linear-gradient(90deg,rgba(255,209,102,0.12),rgba(167,139,250,0.13))] hover:bg-[linear-gradient(90deg,rgba(255,209,102,0.16),rgba(167,139,250,0.17))]"
+    ? "bg-config-preset-header hover:bg-config-preset-header-hover"
     : sectionHasOverride
       ? "bg-violet/[0.08] hover:bg-violet/[0.12]"
       : hasPreset
@@ -389,9 +389,9 @@ export function ConfigSectionAccordion({
       ref={refCallback}
       className={cn(
         surfacePanelClassName,
-        "relative overflow-visible px-0 py-0 shadow-[0_16px_40px_-30px_rgba(0,0,0,0.95)] transition duration-150 hover:-translate-y-px hover:border-line hover:shadow-[0_20px_44px_-32px_rgba(0,0,0,0.95)] focus-within:z-30 focus-within:-translate-y-px focus-within:ring-2 focus-within:ring-focus motion-reduce:transform-none",
+        "relative overflow-visible px-0 py-0 shadow-card transition duration-150 hover:-translate-y-px hover:border-line hover:shadow-card-hover focus-within:z-30 focus-within:-translate-y-px focus-within:ring-2 focus-within:ring-focus motion-reduce:transform-none",
         !isOpen &&
-          "border-line-soft bg-white/[0.012] shadow-[0_10px_28px_-26px_rgba(0,0,0,0.9)]",
+          "border-line-soft bg-white/[0.012] shadow-card-subtle",
         isDisabled && "hover:translate-y-0",
         stateContainerClass,
       )}

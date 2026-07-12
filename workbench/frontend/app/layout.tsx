@@ -1,5 +1,6 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { JetBrains_Mono, Plus_Jakarta_Sans } from "next/font/google";
+import { workbenchVisualTokens } from "@/lib/visual-tokens";
 import "./globals.css";
 
 const sans = Plus_Jakarta_Sans({
@@ -17,6 +18,11 @@ const mono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "Emperor Model Workbench",
   description: "Local model preset inspector for Emperor",
+};
+
+export const viewport: Viewport = {
+  colorScheme: "dark",
+  themeColor: workbenchVisualTokens.bg,
 };
 
 export default function RootLayout({

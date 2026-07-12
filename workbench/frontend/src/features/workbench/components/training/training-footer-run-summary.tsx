@@ -39,7 +39,7 @@ function summaryLabel({
     run: TrainingRun | undefined;
   }) {
   if (isLoading) {
-    return "Training run summary: planning training runs";
+    return "Training run summary: planning training runs…";
   }
   if (error) {
     return `Training run summary: plan error: ${error}`;
@@ -79,14 +79,14 @@ export function TrainingRunSummaryBadge({
     >
       {isLoading ? (
         <StatusPill
-          icon={<Loader2 className="h-4 w-4 animate-spin" />}
+          icon={<Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
           label="runs"
-          value="planning"
+          value="planning…"
           tone="warn"
         />
       ) : error ? (
         <StatusPill
-          icon={<AlertTriangle className="h-4 w-4" />}
+          icon={<AlertTriangle className="h-4 w-4" aria-hidden />}
           label="plan"
           value="error"
           tone="danger"
@@ -94,7 +94,7 @@ export function TrainingRunSummaryBadge({
       ) : plan ? (
         <>
           <StatusPill
-            icon={<ListChecks className="h-4 w-4" />}
+            icon={<ListChecks className="h-4 w-4" aria-hidden />}
             label="runs"
             value={`${plan.summary.completedRuns} / ${plan.summary.totalRuns}`}
             tone={
@@ -102,7 +102,7 @@ export function TrainingRunSummaryBadge({
             }
           />
           <StatusPill
-            icon={<Timer className="h-4 w-4" />}
+            icon={<Timer className="h-4 w-4" aria-hidden />}
             label="epochs"
             value={`${plan.summary.completedEpochs} / ${plan.summary.totalEpochs}`}
             tone={
@@ -113,7 +113,7 @@ export function TrainingRunSummaryBadge({
           />
           {run && (
             <StatusPill
-              icon={<Play className="h-4 w-4" />}
+              icon={<Play className="h-4 w-4" aria-hidden />}
               label={trainingRunDisplayLabel(run, job).toLowerCase()}
               value={`#${run.index} ${run.currentEpoch} / ${
                 run.totalEpochs || "-"
@@ -125,7 +125,7 @@ export function TrainingRunSummaryBadge({
         </>
       ) : (
         <StatusPill
-          icon={<ListChecks className="h-4 w-4" />}
+          icon={<ListChecks className="h-4 w-4" aria-hidden />}
           label="runs"
           value="no plan"
         />

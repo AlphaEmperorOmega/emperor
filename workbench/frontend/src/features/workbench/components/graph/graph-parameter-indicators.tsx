@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
 export const graphParameterActivityStatusClassNames: Readonly<
   Record<GraphParameterActivityStatus, string>
 > = {
-  loading: "border-cyan-200/40 bg-cyan-300/[0.11] text-cyan-100",
+  loading: "border-cyan/40 bg-cyan/[0.11] text-cyan",
   updated: "border-ok/35 bg-ok/10 text-ok",
   unchanged: "border-danger-line bg-danger-soft text-danger-text",
   mixed: "border-amber/40 bg-amber/[0.12] text-amber",
@@ -30,7 +30,7 @@ export const graphParameterActivityStatusClassNames: Readonly<
 const graphParameterActivityTextClassNames: Readonly<
   Record<GraphParameterActivityStatus, string>
 > = {
-  loading: "text-cyan-100",
+  loading: "text-cyan",
   updated: "text-ok",
   unchanged: "text-danger-text",
   mixed: "text-amber",
@@ -118,7 +118,7 @@ function GraphParameterActivityIcons({
           aria-hidden="true"
           data-testid={`graph-parameter-indicator-${key}`}
           className={cn(
-            "inline-flex h-5 min-w-3 shrink-0 items-center justify-center font-mono text-[11px] font-bold leading-none",
+            "inline-flex h-5 min-w-3 shrink-0 items-center justify-center font-mono type-meta font-bold leading-none",
             graphParameterActivityTextClassNames[channel.status],
           )}
         >
@@ -212,10 +212,10 @@ function GraphParameterActivityPopover({
         top: popupPosition?.top ?? 0,
         visibility: popupPosition ? "visible" : "hidden",
       }}
-      className="pointer-events-none fixed z-[90] grid w-[19.5rem] max-w-[calc(100vw-1rem)] gap-2 rounded-[8px] border border-line-soft bg-panel px-2.5 py-2 text-left font-sans text-[11px] font-semibold leading-4 text-ink shadow-panel"
+      className="pointer-events-none fixed z-[90] grid w-[19.5rem] max-w-[calc(100vw-1rem)] gap-2 rounded-control-md border border-line-soft bg-panel px-2.5 py-2 text-left font-sans type-meta font-semibold leading-4 text-ink shadow-panel"
       data-testid="graph-parameter-activity-popover"
     >
-      <span className="text-ink">Parameter activity</span>
+      <span className="text-ink">Parameter Activity</span>
       {activityChannels(activity).map(({ key, label, shortLabel, channel }) => {
         const counts = runCounts(channel);
 
@@ -224,7 +224,7 @@ function GraphParameterActivityPopover({
             <span className="flex min-w-0 items-center gap-1.5">
               <span
                 className={cn(
-                  "inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-[6px] border px-1.5 font-mono text-[10px] font-bold leading-none",
+                  "inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-chip border px-1.5 font-mono type-caption font-bold leading-none",
                   graphParameterActivityStatusClassNames[channel.status],
                 )}
               >
@@ -236,7 +236,7 @@ function GraphParameterActivityPopover({
             <span className="text-ink-dim">{statusCopy[channel.status]}</span>
             <span className="font-mono text-ink-faint">{channel.sourceLabel}</span>
             <span className="font-mono text-ink-faint">
-              step: {formatStep(channel.lastStep)} - samples:{" "}
+              step: {formatStep(channel.lastStep)} · samples:{" "}
               {channel.observedPoints}
             </span>
             {counts && <span className="font-mono text-ink-faint">{counts}</span>}
@@ -253,7 +253,7 @@ export function GraphParameterIndicators({
 }: {
   activity?: GraphParameterActivity;
 }) {
-  const triggerRef = useRef<HTMLSpanElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const popupId = useId();
   const [isPopupOpen, setIsPopupOpen] = useState(false);
 
@@ -263,31 +263,31 @@ export function GraphParameterIndicators({
 
   const stopActivityPropagation = (
     event:
-      | FocusEvent<HTMLSpanElement>
-      | KeyboardEvent<HTMLSpanElement>
-      | MouseEvent<HTMLSpanElement>,
+      | FocusEvent<HTMLButtonElement>
+      | KeyboardEvent<HTMLButtonElement>
+      | MouseEvent<HTMLButtonElement>,
   ) => {
     event.stopPropagation();
   };
   const openPopup = () => setIsPopupOpen(true);
   const closePopup = () => setIsPopupOpen(false);
-  const handleClick = (event: MouseEvent<HTMLSpanElement>) => {
+  const handleClick = (event: MouseEvent<HTMLButtonElement>) => {
     stopActivityPropagation(event);
     openPopup();
   };
-  const handleFocus = (event: FocusEvent<HTMLSpanElement>) => {
+  const handleFocus = (event: FocusEvent<HTMLButtonElement>) => {
     stopActivityPropagation(event);
     openPopup();
   };
-  const handleBlur = (event: FocusEvent<HTMLSpanElement>) => {
+  const handleBlur = (event: FocusEvent<HTMLButtonElement>) => {
     stopActivityPropagation(event);
     closePopup();
   };
-  const handleMouseLeave = (event: MouseEvent<HTMLSpanElement>) => {
+  const handleMouseLeave = (event: MouseEvent<HTMLButtonElement>) => {
     stopActivityPropagation(event);
     closePopup();
   };
-  const handleKeyDown = (event: KeyboardEvent<HTMLSpanElement>) => {
+  const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
     stopActivityPropagation(event);
 
     if (event.key === "Escape") {
@@ -304,12 +304,11 @@ export function GraphParameterIndicators({
 
   return (
     <>
-      <span
+      <button
+        type="button"
         ref={triggerRef}
-        role="button"
         aria-describedby={isPopupOpen ? popupId : undefined}
         aria-label={`Parameter activity: ${parameterActivityLabel(activity)}`}
-        tabIndex={0}
         data-testid="graph-parameter-indicators"
         onBlur={handleBlur}
         onClick={handleClick}
@@ -320,7 +319,7 @@ export function GraphParameterIndicators({
         className="nodrag nopan inline-flex shrink-0 cursor-help items-center gap-1 whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
       >
         <GraphParameterActivityIcons activity={activity} />
-      </span>
+      </button>
       <GraphParameterActivityPopover
         activity={activity}
         anchorRef={triggerRef}

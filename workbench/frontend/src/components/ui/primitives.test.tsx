@@ -53,7 +53,12 @@ describe("Button", () => {
     render(<Button>go</Button>);
     const button = screen.getByRole("button", { name: "go" });
     expect(button).toHaveAttribute("type", "button");
-    expect(button.className).toContain("bg-control");
+    expect(button).toHaveClass(
+      "h-touch",
+      "md:h-control",
+      "bg-panel-2/90",
+      "focus-visible:ring-focus",
+    );
   });
 
   it("applies the primary variant and fires onClick", () => {
@@ -64,7 +69,14 @@ describe("Button", () => {
       </Button>,
     );
     const button = screen.getByRole("button", { name: "run" });
-    expect(button.className).toContain("bg-grad");
+    expect(button).toHaveClass(
+      "bg-violet-deep",
+      "border-violet/70",
+      "shadow-primary",
+      "focus-visible:ring-focus",
+      "focus-visible:ring-offset-2",
+    );
+    expect(button).not.toHaveClass("bg-grad");
     fireEvent.click(button);
     expect(onClick).toHaveBeenCalledTimes(1);
   });
@@ -128,8 +140,10 @@ describe("IconButton", () => {
     const button = screen.getByRole("button", { name: "Custom action" });
     expect(button).toHaveClass(
       "inline-flex",
-      "h-8",
-      "w-8",
+      "h-touch",
+      "w-touch",
+      "md:h-control-sm",
+      "md:w-control-sm",
       "rounded-control-md",
       "border-line",
       "text-ink-faint",
@@ -150,8 +164,10 @@ describe("IconButton", () => {
     );
     const button = screen.getByRole("button", { name: "Ghost action" });
     expect(button).toHaveClass(
-      "h-9",
-      "w-9",
+      "h-touch",
+      "w-touch",
+      "md:h-control",
+      "md:w-control",
       "rounded-control",
       "border-transparent",
       "hover:bg-control-active",
@@ -184,9 +200,16 @@ describe("Input", () => {
 describe("Switch", () => {
   it("exposes role=switch with aria-checked and toggles via onCheckedChange", () => {
     const onCheckedChange = vi.fn();
-    render(<Switch checked={false} onCheckedChange={onCheckedChange} />);
-    const toggle = screen.getByRole("switch");
+    render(
+      <Switch
+        aria-label="Demo setting"
+        checked={false}
+        onCheckedChange={onCheckedChange}
+      />,
+    );
+    const toggle = screen.getByRole("switch", { name: "Demo setting" });
     expect(toggle).toHaveAttribute("aria-checked", "false");
+    expect(toggle).toHaveClass("h-touch", "w-touch", "md:h-control-sm");
     fireEvent.click(toggle);
     expect(onCheckedChange).toHaveBeenCalledWith(true);
   });
@@ -196,7 +219,12 @@ describe("Checkbox", () => {
   it("exposes a role=checkbox reflecting checked and toggles via onCheckedChange", () => {
     const onCheckedChange = vi.fn();
     render(
-      <Checkbox checked={false} onCheckedChange={onCheckedChange} aria-label="pick" />,
+      <Checkbox
+        name="pick"
+        checked={false}
+        onCheckedChange={onCheckedChange}
+        aria-label="pick"
+      />,
     );
     const box = screen.getByRole("checkbox", { name: "pick" });
     expect(box).not.toBeChecked();
@@ -206,7 +234,7 @@ describe("Checkbox", () => {
 
   it("reflects the checked state on the native input", () => {
     render(
-      <Checkbox checked onCheckedChange={() => {}} aria-label="on" />,
+      <Checkbox name="on" checked onCheckedChange={() => {}} aria-label="on" />,
     );
     expect(screen.getByRole("checkbox", { name: "on" })).toBeChecked();
   });
@@ -216,6 +244,7 @@ describe("Checkbox", () => {
     const onCheckedChange = vi.fn();
     render(
       <Checkbox
+        name="focus-target"
         checked={false}
         onCheckedChange={onCheckedChange}
         aria-label="focus target"
@@ -334,13 +363,14 @@ describe("SurfacePanel", () => {
 
     expect(screen.getByText("Surface body")).toHaveClass(
       "grid",
+      "min-w-0",
       "content-start",
-      "rounded-[10px]",
+      "rounded-panel",
       "border",
       "border-line",
-      "bg-white/[0.018]",
-      "gap-1.5",
-      "px-2.5",
+      "bg-panel-2/70",
+      "gap-2",
+      "px-panel",
       "py-2",
     );
   });
@@ -372,8 +402,8 @@ describe("SurfacePanel", () => {
   });
 
   it.each([
-    ["roomy", "gap-3", "p-3"],
-    ["spacious", "gap-4", "p-4"],
+    ["roomy", "gap-panel", "p-panel"],
+    ["spacious", "gap-region", "p-region"],
     ["none", "gap-0", "p-0"],
   ] as const)("applies the %s padding variant", (padding, ...classes) => {
     render(<SurfacePanel padding={padding}>{padding}</SurfacePanel>);
@@ -391,10 +421,10 @@ describe("MetricCard", () => {
       throw new Error("Expected metric value to render inside a card");
     }
     expect(card).toHaveClass(
-      "rounded-[10px]",
+      "rounded-panel",
       "border-line",
-      "bg-white/[0.018]",
-      "px-2.5",
+      "bg-panel-2/70",
+      "px-panel",
       "py-2",
     );
     expect(card).not.toHaveClass("edge", "rounded-card");

@@ -154,7 +154,7 @@ export function TrainingTargetDatasetPanel({
           variant="secondary"
           onClick={variants.selectAllPresets}
           disabled={disabled || presetOptions.length === 0}
-          className="h-9 text-[13px]"
+          className="h-touch type-compact md:h-control"
         >
           All
         </Button>
@@ -162,9 +162,9 @@ export function TrainingTargetDatasetPanel({
           variant="ghost"
           onClick={variants.selectOnlyPrimaryPreset}
           disabled={disabled || !variants.primaryPreset}
-          className="h-9 border border-line bg-white/[0.025] text-[13px]"
+          className="h-touch border border-line bg-panel-2/80 type-compact md:h-control"
         >
-          Primary only
+          Primary Only
         </Button>
       </div>
     </>
@@ -199,15 +199,15 @@ export function TrainingTargetDatasetPanel({
                 <Button
                   variant="secondary"
                   onClick={() => void variants.retrySnapshotMutation()}
-                  className="h-8 text-xs"
+                  className="h-touch text-xs md:h-control-sm"
                 >
-                  Retry change
+              Retry Change
                 </Button>
               )}
               <Button
                 variant="ghost"
                 onClick={variants.dismissSnapshotMutation}
-                className="h-8 text-xs"
+                className="h-touch text-xs md:h-control-sm"
               >
                 Dismiss
               </Button>
@@ -360,7 +360,7 @@ export function TrainingTargetDatasetPanel({
             variant="secondary"
             onClick={datasets.selectAll}
             disabled={disabled || datasets.options.length === 0}
-            className="h-9 text-[13px]"
+            className="h-touch type-compact md:h-control"
           >
             All
           </Button>
@@ -368,7 +368,7 @@ export function TrainingTargetDatasetPanel({
             variant="ghost"
             onClick={datasets.selectFirst}
             disabled={disabled || datasets.options.length === 0}
-            className="h-9 border border-line bg-white/[0.025] text-[13px]"
+            className="h-touch border border-line bg-panel-2/80 type-compact md:h-control"
           >
             First
           </Button>
@@ -395,7 +395,7 @@ export function TrainingTargetDatasetPanel({
           emptyMessage={workbenchStatusCopy.empty.optionalMonitors}
         />
         {monitors.isLoading && (
-          <InlineStatus compact>
+          <InlineStatus busy compact>
             {workbenchStatusCopy.loading.monitorOptions}
           </InlineStatus>
         )}
@@ -409,7 +409,7 @@ export function TrainingTargetDatasetPanel({
             variant="secondary"
             onClick={monitors.selectAll}
             disabled={disabled || monitors.options.length === 0}
-            className="h-9 text-[13px]"
+            className="h-touch type-compact md:h-control"
           >
             All
           </Button>
@@ -417,7 +417,7 @@ export function TrainingTargetDatasetPanel({
             variant="ghost"
             onClick={monitors.clear}
             disabled={disabled || monitors.selected.length === 0}
-            className="h-9 border border-line bg-white/[0.025] text-[13px]"
+            className="h-touch border border-line bg-panel-2/80 type-compact md:h-control"
           >
             None
           </Button>

@@ -39,7 +39,7 @@ export function LabeledField({
   return (
     <div
       className={cn(
-        "grid gap-1 text-[11px] font-bold uppercase text-ink-dim",
+        "grid gap-1.5 type-meta font-bold uppercase tracking-label text-ink-dim",
         className,
       )}
     >
