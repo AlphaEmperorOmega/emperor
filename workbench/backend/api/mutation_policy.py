@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import Awaitable, Callable, Iterator, Sequence
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from functools import wraps
 from inspect import signature
 from typing import ParamSpec, TypeVar
@@ -25,12 +25,22 @@ P = ParamSpec("P")
 R = TypeVar("R")
 
 
-class HttpOperationPolicy(str, Enum):
+class HttpOperationPolicy(StrEnum):
     """Operational classification for an explicitly declared HTTP operation."""
 
     READ_ONLY = "read-only"
     LOCAL_MUTATION = "local-mutation"
     LOG_IMPORT = "log-import"
+
+    def __str__(self) -> str:
+        """Preserve the legacy ``str, Enum`` representation."""
+
+        return f"{type(self).__name__}.{self.name}"
+
+    def __format__(self, format_spec: str) -> str:
+        """Apply formatting to the compatibility string representation."""
+
+        return format(str(self), format_spec)
 
     @property
     def is_mutation(self) -> bool:

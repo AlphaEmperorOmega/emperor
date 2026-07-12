@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -11,6 +12,19 @@ from fastapi.routing import APIRoute
 
 
 class HttpMutationPolicyTests(unittest.TestCase):
+    def test_policy_preserves_string_and_json_compatibility(self) -> None:
+        from workbench.backend.api.mutation_policy import HttpOperationPolicy
+
+        policy = HttpOperationPolicy.READ_ONLY
+
+        self.assertEqual(policy, "read-only")
+        self.assertEqual(str(policy), "HttpOperationPolicy.READ_ONLY")
+        self.assertEqual(f"{policy:>30}", " HttpOperationPolicy.READ_ONLY")
+        self.assertEqual(
+            json.loads(json.dumps({"policy": policy})),
+            {"policy": "read-only"},
+        )
+
     def test_configured_app_classifies_every_non_safe_operation(self) -> None:
         from workbench.backend.api import create_app
         from workbench.backend.api.mutation_policy import (
