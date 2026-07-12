@@ -1,6 +1,6 @@
 from torch import Tensor
 from emperor.base.layer.state import LayerState
-from emperor.base.utils import Module
+from emperor.base.module import Module
 from emperor.experts.config import MixtureOfExpertsModelConfig
 from emperor.experts.core.options import RoutingInitializationMode
 from emperor.experts.core.state import MixtureOfExpertsLayerState

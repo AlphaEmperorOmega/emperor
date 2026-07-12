@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 from emperor.base.layer import LayerConfig
-from emperor.base.utils import ConfigBase, optional_field
+from emperor.base.config import ConfigBase, optional_field
 from emperor.experts.core.options import (
     DroppedTokenOptions,
     ExpertWeightingPositionOptions,

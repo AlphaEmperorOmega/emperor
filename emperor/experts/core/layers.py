@@ -4,7 +4,7 @@ import torch.nn as nn
 from torch import Tensor
 from dataclasses import dataclass
 from emperor.base.layer import Layer, LayerStackConfig, RecurrentLayerConfig
-from emperor.base.utils import Module
+from emperor.base.module import Module
 from emperor.experts.core.config import MixtureOfExpertsConfig
 from emperor.experts.core._expert_capacity import ExpertCapacityHandler
 from emperor.experts.core._expert_weighting import ExpertWeightingHandler
