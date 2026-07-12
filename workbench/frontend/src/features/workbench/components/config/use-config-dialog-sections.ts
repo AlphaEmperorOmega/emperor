@@ -79,7 +79,13 @@ export function useConfigDialogSections(
         return next;
       });
     });
-    sectionRefs.current[title]?.scrollIntoView({ block: "start", behavior: "smooth" });
+    const reduceMotion = window.matchMedia?.(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    sectionRefs.current[title]?.scrollIntoView({
+      block: "start",
+      behavior: reduceMotion ? "auto" : "smooth",
+    });
   }
 
   return {
