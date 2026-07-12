@@ -2,7 +2,7 @@ from torch import Tensor
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Generic, TypeVar
-from emperor.base.utils import Module
+from emperor.base.module import Module
 
 
 StateT = TypeVar("StateT")

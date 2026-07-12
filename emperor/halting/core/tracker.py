@@ -2,7 +2,7 @@ import torch
 
 from dataclasses import dataclass
 from torch import Tensor
-from emperor.base.utils import Module
+from emperor.base.module import Module
 
 from typing import TYPE_CHECKING
 
