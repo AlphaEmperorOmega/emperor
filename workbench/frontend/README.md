@@ -109,6 +109,21 @@ npm run performance:browser
 It starts temporary loopback services and headless Chromium; it does not use the
 configured user logs or snapshots.
 
+## Browser Scenario Harness
+
+Workbench browser scenarios consume one of six capability Interfaces: Config,
+graph, Logs, Experiment Monitors, overview, or Training. Each harness exposes a
+narrow setup contract plus semantic fixture, driver, and observation groups.
+The shared routing Implementation, mutation records, app reset, and raw fixture
+declarations stay private, so a scenario cannot couple itself to another
+capability's setup surface.
+
+The private React Flow test Adapter verifies the immutable-canvas options,
+preserves projected node and edge facts, and invokes the production graph
+`nodeTypes`. Graph cards, accessibility text, formatting, expansion, detail
+mode, and activity presentation therefore remain owned by production graph
+Modules rather than a parallel test presenter.
+
 ## Connection and Browser Session
 
 The Workbench Connection module owns the active API base URL, hosted-origin
@@ -146,6 +161,116 @@ Token replacement and logout use the same ordering for protected state while
 retaining public health/capability data. Late responses cannot repopulate the
 new identity even when a transport ignores `AbortSignal`; active imports are
 also aborted and their late completion is ignored.
+
+## Config Snapshot Lifecycles
+
+The Config Snapshot records Module is the authoritative persistence Interface.
+It serializes create, rename, update, and removal commands; publishes pending,
+success, and actionable failure state; retains the exact failed command for
+retry; and completes only after persistence and record invalidation settle.
+Connection changes clear that lifecycle generation so a late result cannot
+publish status or invalidate records for the new connection.
+
+The editor session, Model Package Inspection target, and Training draft remain
+separate lifecycle owners at this seam. The editor owns its isolated Runtime
+Defaults draft and keeps save confirmation open until the records Module
+reports authoritative success. Inspection changes an active Config Snapshot
+target back to its preset only after removal succeeds. Training removes a
+Config Snapshot from its Run Plan selection only after the same authoritative
+outcome. Persistence and retry retain Locality in the records Module while
+those post-success transitions stay with the owner whose state they change.
+
+## Training Run Plans
+
+The private Training Run Plan Module owns effective Runtime Defaults, Search
+Metadata lock and conflict rules, request identity, backend planning, exact
+retry, random resampling identity, start readiness, and large-grid
+confirmation. Rendering consumes its grouped search and plan projections and
+does not recalculate combinations, conflicts, unlocked axes, or estimated Runs.
+
+Backend Run Plans remain authoritative for normal, grid, and random Runs. The
+only browser-materialized exception is a Run Plan containing selected Config
+Snapshots, because those Workbench-owned records do not exist in generic Runs.
+That exception is normalized and summarized in the same private Module before
+it becomes an immutable launch request.
+
+The Training Job Module receives that exact launch request and owns only process
+lifecycle: launch, observation, cancellation, terminal reset, and mutation
+failure. It does not repeat Search Metadata selection or reconstruct Run Plan
+identity.
+
+## Training Job Lifecycle
+
+One app-scoped Training Job Implementation owns active identity, launch and
+cancellation mutations, polling, terminal-state protection, Logs refresh,
+started-folder notification, semantic reset, and connection-generation
+quarantine. It stays mounted when the Training workspace is hidden, so polling
+and terminal refresh do not depend on rendering.
+
+Header, graph, and Logs callers receive only the read-only active Training Job
+projection. Training composition receives semantic launch, cancel, and reset
+commands; no raw identity setter or polling callback crosses the ownership seam.
+Training draft and Run Plan reset remain separate and register directly with the
+Workbench Connection transition registry.
+
+## Logs Workspace State
+
+The Logs Workspace Module owns experiment, Run, and scalar-tag loading;
+selection normalization; started-Run seeding; detail choice; pagination;
+deletion tombstones; and authoritative-refresh reconciliation in one private
+Implementation. Its public seam exposes four focused projections: browser,
+chart source, detail, and deletion. The provider wires those projections and
+private semantic reset commands without receiving the raw internal state shape.
+
+Experiment changes retain a manual scalar-tag selection while Run facets and
+tag options are still refreshing. Once fresh tags are authoritative, the owner
+preserves a matching selection, replaces a stale selection with preferred
+defaults, or falls back to available non-standard tags. The deletion
+Implementation derives and freezes its own subset filters, while the workspace
+owner reconciles deleted Runs, detail choice, and started experiments only
+after the relevant refresh succeeds.
+
+The Logs Charts owner keeps viewport activation, ten-Run/six-tag progressive
+planning, tag-refresh gating, compatible stale-series retention, group status,
+and refresh behavior behind the chart projection. Collapsed or not-yet-visible
+charts stay cold; newly visible charts request only their selected scalar tags.
+Replacement windows preserve series that still match the current Run and tag
+scope and remove incompatible series immediately.
+
+Scalar chart rendering uses one private card Implementation for lazy entry,
+loading and failure, summary, checkpoints, options, information, legend,
+selection, and linked highlighting. Ordinary metrics adapt one line per Run;
+train-validation comparisons adapt phase-labelled solid and dashed lines. The
+shared ECharts option builder remains the single owner of axes, smoothing,
+zoom, checkpoint markers, and emphasis.
+
+## Full Config Sessions
+
+The internal Full Config coordination Module adapts the active shell token into
+exactly one editing session: Model Runtime Defaults, Training Runtime Defaults,
+Config Snapshot draft, or Config Snapshot edit. It selects identity, schema,
+Runtime Defaults, loading state, record library, mutation lifecycle, command
+projection, and semantic edit/reset/close/save actions before rendering.
+
+Model Package Inspection, Training, Config Snapshot records, and the Config
+Snapshot editor retain separate state ownership. The coordination Module only
+arbitrates which Interface is active. A Model Full Config snapshot save opens a
+transient editor session and clears it after save or cancellation; snapshot
+draft and edit sessions remain open until their owning dialog closes them.
+
+## Runtime Defaults Schema Presentation
+
+One pure schema-presentation Module derives the visible Runtime Defaults tree
+from schema fields, current overrides, and search selection. Its Interface
+contains contextual field labels and values, section nesting and identifiers,
+direct and descendant metrics, controlled disablement, inheritance hints,
+grouped model fields, navigation defaults, and searchable field projections.
+
+Full Config navigation, section, field, and search Adapters consume that shared
+presentation. They retain only interaction and visual state; they do not
+reconstruct schema relationships or edit semantics. Runtime Defaults commands
+remain owned by the active Full Config session, so presentation derivation is a
+behavior-preserving read model rather than another editing owner.
 
 ## Deployment
 
