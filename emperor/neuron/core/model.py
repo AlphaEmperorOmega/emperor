@@ -62,17 +62,13 @@ class NeuronCluster(NeuronClusterModuleBase, NeuronClusterPlasticityMixin):
             self.z_axis_total_neurons,
         )
         self.max_steps: int = self.cfg.max_steps
-        self.beam_width: int = (
-            1 if self.cfg.beam_width is None else self.cfg.beam_width
-        )
+        self.beam_width: int = 1 if self.cfg.beam_width is None else self.cfg.beam_width
         self.growth_threshold: int | None = self.cfg.growth_threshold
         self.growth_cooldown_steps: int | None = self.cfg.growth_cooldown_steps
         self.max_total_growths: int | None = self.cfg.max_total_growths
         self.growth_warmup_steps: int | None = self.cfg.growth_warmup_steps
         self.pruning_threshold: int | None = self.cfg.pruning_threshold
-        self.escape_driven_growth_flag: bool = bool(
-            self.cfg.escape_driven_growth_flag
-        )
+        self.escape_driven_growth_flag: bool = bool(self.cfg.escape_driven_growth_flag)
         self.mitosis_initialization_flag: bool = bool(
             self.cfg.mitosis_initialization_flag
         )
@@ -117,9 +113,7 @@ class NeuronCluster(NeuronClusterModuleBase, NeuronClusterPlasticityMixin):
         self.cluster = self.__initialize_cluster()
         self.entry_sampler = self.__build_entry_sampler()
         self.halting_model = self.__build_halting_model()
-        self.register_load_state_dict_pre_hook(
-            self._reconcile_cluster_with_state_dict
-        )
+        self.register_load_state_dict_pre_hook(self._reconcile_cluster_with_state_dict)
 
     def __resolve_initial_dimension(
         self,
@@ -186,11 +180,7 @@ class NeuronCluster(NeuronClusterModuleBase, NeuronClusterPlasticityMixin):
             return None
         declared_fields = {field.name for field in fields(config)}
         overrides = type(config)(
-            **{
-                name: value
-                for name, value in kwargs.items()
-                if name in declared_fields
-            }
+            **{name: value for name, value in kwargs.items() if name in declared_fields}
         )
         return config.build(overrides=overrides)
 
@@ -356,7 +346,9 @@ class NeuronCluster(NeuronClusterModuleBase, NeuronClusterPlasticityMixin):
         batch_indices = torch.arange(input.shape[0], device=input.device)
 
         hidden = input.clone()
-        positions = torch.zeros(input.shape[0], 3, dtype=torch.long, device=input.device)
+        positions = torch.zeros(
+            input.shape[0], 3, dtype=torch.long, device=input.device
+        )
         active_mask = chosen_valid_mask.clone()
         escaped_mask = ~chosen_valid_mask
         final_mask = escaped_mask.clone()
@@ -826,12 +818,8 @@ class NeuronCluster(NeuronClusterModuleBase, NeuronClusterPlasticityMixin):
         parent_active = route_state.active_mask.index_select(0, parent_rows)
         parent_escaped = route_state.escaped_mask.index_select(0, parent_rows)
         parent_final = route_state.final_mask.index_select(0, parent_rows)
-        kept_escaping = (
-            escaping_mask.index_select(0, parent_rows) & ~flat_is_expansion
-        )
-        kept_missing = (
-            missing_mask.index_select(0, parent_rows) & ~flat_is_expansion
-        )
+        kept_escaping = escaping_mask.index_select(0, parent_rows) & ~flat_is_expansion
+        kept_missing = missing_mask.index_select(0, parent_rows) & ~flat_is_expansion
 
         next_active = (
             flat_is_expansion | (parent_active & ~kept_escaping & ~kept_missing)
@@ -942,11 +930,9 @@ class NeuronCluster(NeuronClusterModuleBase, NeuronClusterPlasticityMixin):
         selected_coords: Tensor,
         call_mask: Tensor,
     ) -> tuple[Tensor, Tensor, Tensor]:
-        branch_outputs = source_hidden.unsqueeze(1).expand(
-            -1,
-            selected_coords.shape[1],
-            -1,
-        ).clone()
+        branch_outputs = (
+            source_hidden.unsqueeze(1).expand(-1, selected_coords.shape[1], -1).clone()
+        )
         target_groups, valid_target_mask, escape_mask = (
             self.__group_valid_process_calls(selected_coords, call_mask)
         )

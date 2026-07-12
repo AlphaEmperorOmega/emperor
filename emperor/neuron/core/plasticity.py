@@ -13,12 +13,8 @@ class NeuronClusterPlasticityMixin:
         if self.__is_within_growth_cooldown_after_counting_forward():
             return
 
-        synchronized_batch_counters = (
-            self.__synchronize_batch_counters_across_ranks()
-        )
-        synchronized_escape_counts = (
-            self.__synchronize_escape_counts_across_ranks()
-        )
+        synchronized_batch_counters = self.__synchronize_batch_counters_across_ranks()
+        synchronized_escape_counts = self.__synchronize_escape_counts_across_ranks()
 
         for name, neuron in self.__saturated_neurons_by_descending_counter(
             synchronized_batch_counters
@@ -103,9 +99,7 @@ class NeuronClusterPlasticityMixin:
         )
 
     def __is_distributed_training_initialized(self) -> bool:
-        return (
-            torch.distributed.is_available() and torch.distributed.is_initialized()
-        )
+        return torch.distributed.is_available() and torch.distributed.is_initialized()
 
     def __synchronize_batch_counters_across_ranks(self) -> dict[str, int]:
         sorted_neuron_names = sorted(self.cluster.keys())
@@ -228,9 +222,7 @@ class NeuronClusterPlasticityMixin:
 
         shared_seed = self.__broadcast_growth_seed_from_first_rank()
         fork_devices = (
-            list(range(torch.cuda.device_count()))
-            if torch.cuda.is_available()
-            else []
+            list(range(torch.cuda.device_count())) if torch.cuda.is_available() else []
         )
         with torch.random.fork_rng(devices=fork_devices):
             torch.manual_seed(shared_seed)
@@ -382,7 +374,7 @@ class NeuronClusterPlasticityMixin:
         for key in state_dict:
             if not key.startswith(cluster_prefix):
                 continue
-            neuron_name = key[len(cluster_prefix):].split(".", 1)[0]
+            neuron_name = key[len(cluster_prefix) :].split(".", 1)[0]
             if self._is_neuron_name(neuron_name):
                 incoming_neuron_names.add(neuron_name)
         return incoming_neuron_names
@@ -435,7 +427,7 @@ class NeuronClusterPlasticityMixin:
         for key in list(state_dict.keys()):
             if not key.startswith(cluster_prefix) or not key.endswith(buffer_suffix):
                 continue
-            neuron_name = key[len(cluster_prefix):].split(".", 1)[0]
+            neuron_name = key[len(cluster_prefix) :].split(".", 1)[0]
             if neuron_name not in self.cluster:
                 continue
             neuron = self.cluster[neuron_name]

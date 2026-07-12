@@ -13,7 +13,6 @@ if TYPE_CHECKING:
 
 
 class NeuronClusterOptimizerSyncCallback(Callback):
-
     def __init__(self) -> None:
         super().__init__()
         self._clusters: list[nn.Module] = []
@@ -58,8 +57,7 @@ class NeuronClusterOptimizerSyncCallback(Callback):
     ) -> bool:
         clusters = self._clusters or self.__find_neuron_clusters(pl_module)
         return any(
-            self._synced_neuron_names.get(id(cluster))
-            != set(cluster.cluster.keys())
+            self._synced_neuron_names.get(id(cluster)) != set(cluster.cluster.keys())
             for cluster in clusters
         )
 
@@ -198,8 +196,6 @@ class NeuronClusterOptimizerSyncCallback(Callback):
     def __reference_param_group(self, optimizer: Optimizer, cluster: nn.Module):
         cluster_param_ids = {id(parameter) for parameter in cluster.parameters()}
         for group in optimizer.param_groups:
-            if any(
-                id(parameter) in cluster_param_ids for parameter in group["params"]
-            ):
+            if any(id(parameter) in cluster_param_ids for parameter in group["params"]):
                 return group
         return None

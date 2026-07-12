@@ -173,8 +173,7 @@ class NeuronClusterMonitorCallback(Callback):
                 f"{name}/cluster/growth/cooldown_remaining",
                 float(
                     max(
-                        cluster.growth_cooldown_steps
-                        - int(forwards_since_last_growth),
+                        cluster.growth_cooldown_steps - int(forwards_since_last_growth),
                         0,
                     )
                 ),
@@ -227,9 +226,7 @@ class NeuronClusterMonitorCallback(Callback):
         depth = self.__compute_route_depth(trace)
         module.log(f"{name}/cluster/route/depth_mean", depth.mean())
         module.log(f"{name}/cluster/route/depth_max", depth.max())
-        module.log(
-            f"{name}/cluster/route/recurrent_steps", float(len(trace.steps))
-        )
+        module.log(f"{name}/cluster/route/recurrent_steps", float(len(trace.steps)))
         module.log(
             f"{name}/cluster/route/escape_fraction",
             self.__average_mask_fraction(
@@ -303,9 +300,7 @@ class NeuronClusterMonitorCallback(Callback):
         coefficient_of_variation = marginal.std() / marginal.mean().clamp_min(1e-6)
 
         module.log(f"{name}/cluster/entry/routing_entropy", per_sample_entropy.mean())
-        module.log(
-            f"{name}/cluster/entry/routing_entropy_marginal", marginal_entropy
-        )
+        module.log(f"{name}/cluster/entry/routing_entropy_marginal", marginal_entropy)
         module.log(
             f"{name}/cluster/entry/routing_coefficient_of_variation",
             coefficient_of_variation,
@@ -360,9 +355,7 @@ class NeuronClusterMonitorCallback(Callback):
         trace: "NeuronClusterTrace",
         step: int,
     ) -> None:
-        grid = torch.zeros(
-            cluster.x_axis_total_neurons, cluster.y_axis_total_neurons
-        )
+        grid = torch.zeros(cluster.x_axis_total_neurons, cluster.y_axis_total_neurons)
         for coords, valid in self.__iter_valid_coordinates(trace):
             self.__accumulate_coordinate_counts(grid, coords, valid)
         grid = grid / grid.max().clamp_min(1e-6)
