@@ -3,6 +3,7 @@ import {
   Camera,
   Check,
   FilePlus2,
+  Loader2,
   Pencil,
   Play,
   SlidersHorizontal,
@@ -16,6 +17,7 @@ import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
 import { SnapshotRestoreDialog } from "@/features/workbench/components/config/config-snapshot-dialogs";
 import { DialogShell } from "@/features/workbench/components/shared/dialog-shell";
+import { InlineStatus } from "@/features/workbench/components/shared/inline-status";
 import { SectionHeading } from "@/components/ui/section-heading";
 import {
   SurfacePanel,
@@ -35,6 +37,27 @@ import {
 import { type ConfigField } from "@/lib/api";
 import { type OverrideValues } from "@/lib/config";
 import { cn } from "@/lib/utils";
+import {
+  type ConfigSnapshotMutationOutcome,
+  type ConfigSnapshotMutationStatus,
+} from "@/features/workbench/state/config-snapshots/use-config-snapshot-records";
+
+type ConfigSnapshotActionResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
+type ConfigSnapshotActionHandlerResult =
+  | ConfigSnapshotActionResult
+  | void
+  | Promise<ConfigSnapshotActionResult | void>;
+
+const idleConfigSnapshotMutation: ConfigSnapshotMutationStatus = {
+  phase: "idle",
+  kind: null,
+  snapshotId: null,
+  error: "",
+  canRetry: false,
+};
 
 function SnapshotOverrideSummary({ overrides }: { overrides: OverrideValues }) {
   const entries = Object.entries(overrides);
@@ -68,7 +91,10 @@ export function AddConfigSnapshotDialog({
   actionLabel = "Add Snapshot",
   initialName,
   excludeSnapshotId,
+  mutation = idleConfigSnapshotMutation,
   onAdd,
+  onRetry,
+  onDismissMutation,
   onClose,
 }: {
   modelType: string;
@@ -81,7 +107,10 @@ export function AddConfigSnapshotDialog({
   actionLabel?: string;
   initialName?: string;
   excludeSnapshotId?: string;
-  onAdd: (name: string) => ConfigSnapshotCreateResult;
+  mutation?: ConfigSnapshotMutationStatus;
+  onAdd: (name: string) => Promise<ConfigSnapshotCreateResult>;
+  onRetry?: () => Promise<ConfigSnapshotCreateResult>;
+  onDismissMutation?: () => void;
   onClose: () => void;
 }) {
   const defaultName = useMemo(() => initialName ?? "", [initialName]);
@@ -118,6 +147,7 @@ export function AddConfigSnapshotDialog({
   );
   const error =
     submittedError ||
+    (mutation.phase === "failed" ? mutation.error : "") ||
     (!nameValidation.ok
       ? nameValidation.error
       : !candidate.ok
@@ -129,12 +159,29 @@ export function AddConfigSnapshotDialog({
     setSubmittedError("");
   }, [defaultName]);
 
-  function confirm() {
-    const result = onAdd(name);
+  const isPending = mutation.phase === "pending";
+  const canRetry =
+    mutation.phase === "failed" && mutation.canRetry && Boolean(onRetry);
+
+  async function confirm() {
+    if (isPending) {
+      return;
+    }
+    setSubmittedError("");
+    const result = canRetry && onRetry ? await onRetry() : await onAdd(name);
     if (!result.ok) {
       setSubmittedError(result.error);
       return;
     }
+    onDismissMutation?.();
+    onClose();
+  }
+
+  function close() {
+    if (isPending) {
+      return;
+    }
+    onDismissMutation?.();
     onClose();
   }
 
@@ -143,7 +190,8 @@ export function AddConfigSnapshotDialog({
       titleId="add-config-snapshot-title"
       size="sm"
       panelVariant="surface"
-      onClose={onClose}
+      onClose={close}
+      closeOnEscape={!isPending}
       className="z-[60] grid place-items-center bg-black/65 p-4 sm:p-4"
       panelClassName="grid max-h-none max-w-lg gap-4 overflow-visible p-4 sm:max-h-none"
     >
@@ -163,7 +211,8 @@ export function AddConfigSnapshotDialog({
         </div>
         <IconButton
           label="Close add config snapshot"
-          onClick={onClose}
+          onClick={close}
+          disabled={isPending}
           size="sm"
           variant="edge"
           className="rounded-[9px] border-line-soft bg-white/[0.025] hover:bg-white/[0.055]"
@@ -181,7 +230,9 @@ export function AddConfigSnapshotDialog({
           onChange={(event) => {
             setName(event.target.value);
             setSubmittedError("");
+            onDismissMutation?.();
           }}
+          disabled={isPending}
           autoFocus
         />
       </label>
@@ -228,16 +279,20 @@ export function AddConfigSnapshotDialog({
       )}
 
       <div className="flex justify-end gap-2">
-        <Button variant="secondary" onClick={onClose}>
+        <Button variant="secondary" onClick={close} disabled={isPending}>
           Cancel
         </Button>
         <Button
           variant="primary"
-          onClick={confirm}
-          disabled={!nameValidation.ok || !candidate.ok}
+          onClick={() => void confirm()}
+          disabled={isPending || !nameValidation.ok || !candidate.ok}
         >
-          <FilePlus2 className="h-4 w-4" aria-hidden />
-          {actionLabel}
+          {isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+          ) : (
+            <FilePlus2 className="h-4 w-4" aria-hidden />
+          )}
+          {isPending ? "Saving…" : canRetry ? "Retry Save" : actionLabel}
         </Button>
       </div>
     </DialogShell>
@@ -246,10 +301,12 @@ export function AddConfigSnapshotDialog({
 
 function SnapshotNameEditor({
   initialName,
+  pending,
   onCancel,
   onSave,
 }: {
   initialName: string;
+  pending: boolean;
   onCancel: () => void;
   onSave: (name: string) => void;
 }) {
@@ -277,12 +334,14 @@ function SnapshotNameEditor({
         aria-label="Snapshot name"
         onChange={(event) => setValue(event.target.value)}
         onKeyDown={keyDown}
+        disabled={pending}
         className="h-8 text-xs"
         autoFocus
       />
       <IconButton
         label="Save snapshot name"
         onClick={save}
+        disabled={pending}
         size="sm"
         variant="edge"
         className="border-ok/30 bg-ok/10 text-ok hover:bg-ok/15 hover:text-ok"
@@ -291,6 +350,7 @@ function SnapshotNameEditor({
       <IconButton
         label="Cancel snapshot rename"
         onClick={onCancel}
+        disabled={pending}
         size="sm"
         variant="edge"
         className="bg-white/[0.025] hover:bg-white/[0.055]"
@@ -306,9 +366,12 @@ export function ConfigSnapshotsTray({
   selectedTrainingSnapshotIds,
   overrides,
   canManage,
+  mutation = idleConfigSnapshotMutation,
   onLoad,
   onRename,
   onRemove,
+  onRetryMutation = async () => null,
+  onDismissMutation = () => undefined,
   onToggleSelection,
 }: {
   groups: ConfigSnapshotGroup[];
@@ -316,12 +379,19 @@ export function ConfigSnapshotsTray({
   selectedTrainingSnapshotIds: string[];
   overrides: OverrideValues;
   canManage: boolean;
+  mutation?: ConfigSnapshotMutationStatus;
   onLoad: (snapshotId: string) => void;
-  onRename: (snapshotId: string, name: string) => void;
-  onRemove: (snapshotId: string) => void;
+  onRename: (
+    snapshotId: string,
+    name: string,
+  ) => ConfigSnapshotActionHandlerResult;
+  onRemove: (snapshotId: string) => ConfigSnapshotActionHandlerResult;
+  onRetryMutation?: () => Promise<ConfigSnapshotMutationOutcome | null>;
+  onDismissMutation?: () => void;
   onToggleSelection: (snapshotId: string) => void;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [submittedError, setSubmittedError] = useState("");
   const [pendingLoadSnapshot, setPendingLoadSnapshot] =
     useState<ConfigSnapshot | null>(null);
 
@@ -346,6 +416,49 @@ export function ConfigSnapshotsTray({
     setPendingLoadSnapshot(null);
   }
 
+  function dismissMutation() {
+    setSubmittedError("");
+    onDismissMutation();
+  }
+
+  async function renameSnapshot(snapshotId: string, name: string) {
+    setSubmittedError("");
+    const result = await onRename(snapshotId, name);
+    if (!result || result.ok) {
+      setEditingId(null);
+      return;
+    }
+    setSubmittedError(result.error);
+  }
+
+  async function removeSnapshot(snapshotId: string) {
+    setSubmittedError("");
+    const result = await onRemove(snapshotId);
+    if (result && !result.ok) {
+      setSubmittedError(result.error);
+    }
+  }
+
+  async function retryMutation() {
+    setSubmittedError("");
+    const result = await onRetryMutation();
+    if (!result) {
+      setSubmittedError("There is no failed Config Snapshot change to retry.");
+      return;
+    }
+    if (!result.ok) {
+      setSubmittedError(result.error);
+      return;
+    }
+    if (result.kind === "rename" && result.snapshotId === editingId) {
+      setEditingId(null);
+    }
+  }
+
+  const isMutationPending = mutation.phase === "pending";
+  const mutationError =
+    submittedError || (mutation.phase === "failed" ? mutation.error : "");
+
   if (groups.length === 0) {
     return null;
   }
@@ -365,6 +478,43 @@ export function ConfigSnapshotsTray({
             {groups.reduce((count, group) => count + group.snapshots.length, 0)} saved
           </Badge>
         </div>
+
+        {isMutationPending && (
+          <InlineStatus busy compact>
+            {mutation.kind === "rename"
+              ? "Renaming Config Snapshot…"
+              : mutation.kind === "remove"
+                ? "Removing Config Snapshot…"
+                : "Updating Config Snapshot…"}
+          </InlineStatus>
+        )}
+        {mutationError && (
+          <InlineStatus tone="danger" role="alert" compact>
+            <div className="grid gap-2">
+              <span>{mutationError}</span>
+              <div className="flex flex-wrap gap-2">
+                {mutation.phase === "failed" && mutation.canRetry && (
+                  <Button
+                    variant="secondary"
+                    onClick={() => void retryMutation()}
+                    disabled={isMutationPending}
+                    className="h-8 text-xs"
+                  >
+                    Retry change
+                  </Button>
+                )}
+                <Button
+                  variant="ghost"
+                  onClick={dismissMutation}
+                  disabled={isMutationPending}
+                  className="h-8 text-xs"
+                >
+                  Dismiss
+                </Button>
+              </div>
+            </div>
+          </InlineStatus>
+        )}
 
         <div className="grid gap-2">
           {groups.map((group) => {
@@ -414,11 +564,18 @@ export function ConfigSnapshotsTray({
                         {isEditing ? (
                           <SnapshotNameEditor
                             initialName={snapshot.name}
-                            onCancel={() => setEditingId(null)}
-                            onSave={(name) => {
-                              onRename(snapshot.id, name);
+                            pending={
+                              isMutationPending &&
+                              mutation.kind === "rename" &&
+                              mutation.snapshotId === snapshot.id
+                            }
+                            onCancel={() => {
+                              dismissMutation();
                               setEditingId(null);
                             }}
+                            onSave={(name) =>
+                              void renameSnapshot(snapshot.id, name)
+                            }
                           />
                         ) : (
                           <div className="flex min-w-0 items-start justify-between gap-2">
@@ -445,7 +602,11 @@ export function ConfigSnapshotsTray({
                               <div className="flex shrink-0 items-center gap-1">
                                 <IconButton
                                   label={`Rename snapshot ${snapshot.name}`}
-                                  onClick={() => setEditingId(snapshot.id)}
+                                  onClick={() => {
+                                    dismissMutation();
+                                    setEditingId(snapshot.id);
+                                  }}
+                                  disabled={isMutationPending}
                                   size="sm"
                                   variant="edge"
                                   className="bg-white/[0.025] hover:bg-white/[0.055]"
@@ -453,7 +614,8 @@ export function ConfigSnapshotsTray({
                                 />
                                 <IconButton
                                   label={`Remove snapshot ${snapshot.name}`}
-                                  onClick={() => onRemove(snapshot.id)}
+                                  onClick={() => void removeSnapshot(snapshot.id)}
+                                  disabled={isMutationPending}
                                   size="sm"
                                   variant="danger"
                                   className="border-danger-line bg-danger-soft text-danger-text hover:bg-danger-hover/40 hover:text-white"

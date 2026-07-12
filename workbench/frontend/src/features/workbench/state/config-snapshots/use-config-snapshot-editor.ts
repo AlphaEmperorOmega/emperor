@@ -1,16 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  configKeyToken,
   configSectionsFields,
   groupConfigFieldsBySectionPath,
-  normalizeAdaptiveOptionOverrides,
-  normalizeConfigOverrides,
+  runtimeDefaultsEditor,
   type OverrideValues,
 } from "@/lib/config";
 import {
   createConfigSnapshot,
   groupConfigSnapshotsByPreset,
-  type ConfigSnapshot,
   type ConfigSnapshotCreateResult,
   validateConfigSnapshotCandidate,
   validateConfigSnapshotName,
@@ -21,51 +18,13 @@ import {
 import {
   useConfigSnapshotRecords,
 } from "@/features/workbench/state/config-snapshots/use-config-snapshot-records";
-
-type SnapshotEditorSession =
-  | {
-      kind: "draft";
-      modelType: string;
-      model: string;
-      preset: string;
-      sourceSnapshot?: ConfigSnapshot;
-    }
-  | {
-      kind: "edit";
-      modelType: string;
-      model: string;
-      preset: string;
-      sourceSnapshot: ConfigSnapshot;
-    };
-
-type BeginSnapshotDraft = {
-  modelType: string;
-  model: string;
-  preset: string;
-  overrides?: OverrideValues;
-  sourceSnapshot?: ConfigSnapshot;
-};
+import {
+  type ConfigSnapshotEditorSessionState,
+  useConfigSnapshotEditorSessionState,
+} from "@/features/workbench/state/config-snapshots/use-config-snapshot-editor-session";
 
 function createSnapshotId() {
   return globalThis.crypto?.randomUUID?.() ?? `snapshot-${Date.now()}`;
-}
-
-function overrideValuesEqual(left: OverrideValues, right: OverrideValues) {
-  const leftEntries = Object.entries(left);
-  const rightEntries = Object.entries(right);
-  return (
-    leftEntries.length === rightEntries.length &&
-    leftEntries.every(([key, value]) => right[key] === value)
-  );
-}
-
-function withoutOverride(overrides: OverrideValues, key: string) {
-  const token = configKeyToken(key);
-  return Object.fromEntries(
-    Object.entries(overrides).filter(
-      ([overrideKey]) => configKeyToken(overrideKey) !== token,
-    ),
-  ) as OverrideValues;
 }
 
 /**
@@ -74,12 +33,18 @@ function withoutOverride(overrides: OverrideValues, key: string) {
  * Inspection target merely to materialize editor state.
  */
 export function useConfigSnapshotEditorState({
+  sessionState: providedSessionState,
   protectedReadsEnabled = true,
 }: {
+  sessionState?: ConfigSnapshotEditorSessionState;
   protectedReadsEnabled?: boolean;
-} = {}) {
-  const [session, setSession] = useState<SnapshotEditorSession | null>(null);
-  const [draft, setDraft] = useState<OverrideValues>({});
+}) {
+  const fallbackSessionState = useConfigSnapshotEditorSessionState();
+  const sessionState = providedSessionState ?? fallbackSessionState;
+  const { session, actions: sessionActions } = sessionState;
+  const [draft, setDraft] = useState<OverrideValues>(
+    () => ({ ...(session?.overrides ?? {}) }),
+  );
   const modelType = session?.modelType ?? "";
   const model = session?.model ?? "";
   const preset = session?.preset ?? "";
@@ -116,76 +81,22 @@ export function useConfigSnapshotEditorState({
   );
 
   useEffect(() => {
+    setDraft({ ...(session?.overrides ?? {}) });
+  }, [session?.overrides]);
+
+  useEffect(() => {
     if (configFields.length === 0) {
       return;
     }
-    setDraft((current) => {
-      const normalized = normalizeAdaptiveOptionOverrides(
-        configFields,
-        normalizeConfigOverrides(configFields, current),
-      );
-      return overrideValuesEqual(current, normalized) ? current : normalized;
-    });
+    setDraft((current) =>
+      runtimeDefaultsEditor.normalize(configFields, current),
+    );
   }, [configFields, model, modelType, preset, session?.kind]);
-
-  const beginDraft = useCallback(
-    ({
-      modelType: nextModelType,
-      model: nextModel,
-      preset: nextPreset,
-      overrides = {},
-      sourceSnapshot,
-    }: BeginSnapshotDraft) => {
-      if (!nextModelType || !nextModel || !nextPreset) {
-        return false;
-      }
-      setSession({
-        kind: "draft",
-        modelType: nextModelType,
-        model: nextModel,
-        preset: nextPreset,
-        sourceSnapshot,
-      });
-      setDraft({ ...overrides });
-      return true;
-    },
-    [],
-  );
-
-  const beginEdit = useCallback((snapshot: ConfigSnapshot) => {
-    setSession({
-      kind: "edit",
-      modelType: snapshot.modelType,
-      model: snapshot.model,
-      preset: snapshot.preset,
-      sourceSnapshot: snapshot,
-    });
-    setDraft({ ...snapshot.overrides });
-    return true;
-  }, []);
-
-  const beginDuplicate = useCallback(
-    (snapshot: ConfigSnapshot) =>
-      beginDraft({
-        modelType: snapshot.modelType,
-        model: snapshot.model,
-        preset: snapshot.preset,
-        overrides: snapshot.overrides,
-        sourceSnapshot: snapshot,
-      }),
-    [beginDraft],
-  );
 
   const updateOverride = useCallback(
     (key: string, value: string) => {
       setDraft((current) =>
-        normalizeAdaptiveOptionOverrides(
-          configFields,
-          normalizeConfigOverrides(configFields, {
-            ...current,
-            [key]: value,
-          }),
-        ),
+        runtimeDefaultsEditor.edit(configFields, current, key, value),
       );
     },
     [configFields],
@@ -193,22 +104,30 @@ export function useConfigSnapshotEditorState({
   const clearOverride = useCallback(
     (key: string) => {
       setDraft((current) =>
-        normalizeAdaptiveOptionOverrides(
-          configFields,
-          normalizeConfigOverrides(
-            configFields,
-            withoutOverride(current, key),
-          ),
-        ),
+        runtimeDefaultsEditor.clear(configFields, current, key),
       );
     },
     [configFields],
   );
   const reset = useCallback(() => setDraft({}), []);
   const close = useCallback(() => {
-    setSession(null);
+    if (snapshotRecords.status.mutation.phase === "pending") {
+      return false;
+    }
+    snapshotRecords.actions.dismissMutation();
+    sessionActions.close();
     setDraft({});
-  }, []);
+    return true;
+  }, [
+    sessionActions,
+    snapshotRecords.actions,
+    snapshotRecords.status.mutation.phase,
+  ]);
+  const clearForConnectionChange = useCallback(() => {
+    snapshotRecords.actions.clearForConnectionChange();
+    sessionActions.close();
+    setDraft({});
+  }, [sessionActions, snapshotRecords.actions]);
   const load = useCallback(
     (snapshotId: string) => {
       const snapshot = snapshotRecords.records.find(
@@ -218,18 +137,21 @@ export function useConfigSnapshotEditorState({
         return false;
       }
       return session?.kind === "edit"
-        ? beginEdit(snapshot)
-        : beginDuplicate(snapshot);
+        ? sessionActions.beginEdit(snapshot)
+        : sessionActions.beginDuplicate(snapshot);
     },
-    [beginDuplicate, beginEdit, session?.kind, snapshotRecords.records],
+    [session?.kind, sessionActions, snapshotRecords.records],
   );
   const rename = useCallback(
-    (snapshotId: string, name: string) => {
+    async (snapshotId: string, name: string) => {
       const snapshot = snapshotRecords.records.find(
         (candidate) => candidate.id === snapshotId,
       );
       if (!snapshot) {
-        return false;
+        return {
+          ok: false as const,
+          error: "The selected Config Snapshot is unavailable.",
+        };
       }
       const validation = validateConfigSnapshotName({
         modelType: snapshot.modelType,
@@ -240,10 +162,12 @@ export function useConfigSnapshotEditorState({
         excludeSnapshotId: snapshot.id,
       });
       if (!validation.ok) {
-        return false;
+        return validation;
       }
-      snapshotRecords.actions.rename({ id: snapshot.id, name: validation.name });
-      return true;
+      return snapshotRecords.actions.rename({
+        id: snapshot.id,
+        name: validation.name,
+      });
     },
     [snapshotRecords.actions, snapshotRecords.records],
   );
@@ -253,13 +177,19 @@ export function useConfigSnapshotEditorState({
   );
 
   const save = useCallback(
-    (name: string): ConfigSnapshotCreateResult => {
+    async (name: string): Promise<ConfigSnapshotCreateResult> => {
       if (!session || !snapshotRecords.status.isReady) {
         return { ok: false, error: "Config Snapshot records are still loading." };
       }
-      const normalizedDraft = normalizeAdaptiveOptionOverrides(
+      if (snapshotRecords.status.mutation.phase === "pending") {
+        return {
+          ok: false,
+          error: "Another Config Snapshot change is still pending.",
+        };
+      }
+      const normalizedDraft = runtimeDefaultsEditor.normalize(
         configFields,
-        normalizeConfigOverrides(configFields, draft),
+        draft,
       );
       if (session.kind === "draft") {
         const result = createConfigSnapshot({
@@ -273,16 +203,26 @@ export function useConfigSnapshotEditorState({
           snapshots: snapshotRecords.records,
           createdAt: new Date().toISOString(),
         });
-        if (result.ok) {
-          snapshotRecords.actions.create({
-            modelType: result.snapshot.modelType,
-            model: result.snapshot.model,
-            preset: result.snapshot.preset,
-            name: result.snapshot.name,
-            overrides: result.snapshot.overrides,
-          });
+        if (!result.ok) {
+          return result;
         }
-        return result;
+        const outcome = await snapshotRecords.actions.create({
+          modelType: result.snapshot.modelType,
+          model: result.snapshot.model,
+          preset: result.snapshot.preset,
+          name: result.snapshot.name,
+          overrides: result.snapshot.overrides,
+        });
+        if (!outcome.ok) {
+          return { ok: false, error: outcome.error };
+        }
+        if (!outcome.record) {
+          return {
+            ok: false,
+            error: "The backend did not return the created Config Snapshot.",
+          };
+        }
+        return { ok: true, snapshot: outcome.record };
       }
       if (!selectedSnapshot) {
         return { ok: false, error: "The selected Config Snapshot is unavailable." };
@@ -310,19 +250,23 @@ export function useConfigSnapshotEditorState({
       if (!validation.ok) {
         return validation;
       }
-      const snapshot = {
-        ...selectedSnapshot,
-        name: nameValidation.name,
-        overrides: validation.overrides,
-      };
-      snapshotRecords.actions.update({
+      const outcome = await snapshotRecords.actions.update({
         id: selectedSnapshot.id,
         input: {
           name: nameValidation.name,
           overrides: validation.overrides,
         },
       });
-      return { ok: true, snapshot };
+      if (!outcome.ok) {
+        return { ok: false, error: outcome.error };
+      }
+      if (!outcome.record) {
+        return {
+          ok: false,
+          error: "The backend did not return the updated Config Snapshot.",
+        };
+      }
+      return { ok: true, snapshot: outcome.record };
     },
     [
       configFields,
@@ -332,8 +276,25 @@ export function useConfigSnapshotEditorState({
       snapshotRecords.actions,
       snapshotRecords.records,
       snapshotRecords.status.isReady,
+      snapshotRecords.status.mutation.phase,
     ],
   );
+  const retrySave = useCallback(async (): Promise<ConfigSnapshotCreateResult> => {
+    const outcome = await snapshotRecords.actions.retry();
+    if (!outcome) {
+      return { ok: false, error: "There is no failed Config Snapshot save to retry." };
+    }
+    if (!outcome.ok) {
+      return { ok: false, error: outcome.error };
+    }
+    if (
+      (outcome.kind !== "create" && outcome.kind !== "update") ||
+      !outcome.record
+    ) {
+      return { ok: false, error: "The failed change was not a Config Snapshot save." };
+    }
+    return { ok: true, snapshot: outcome.record };
+  }, [snapshotRecords.actions]);
 
   const value = useMemo(
     () => ({
@@ -349,12 +310,13 @@ export function useConfigSnapshotEditorState({
         draft,
         status: {
           isLoading: schemaQuery.isLoading || snapshotRecords.status.isLoading,
+          mutation: snapshotRecords.status.mutation,
         },
       },
       actions: {
-        beginDraft,
-        beginEdit,
-        beginDuplicate,
+        beginDraft: sessionActions.beginDraft,
+        beginEdit: sessionActions.beginEdit,
+        beginDuplicate: sessionActions.beginDuplicate,
         updateOverride,
         clearOverride,
         reset,
@@ -362,14 +324,16 @@ export function useConfigSnapshotEditorState({
         rename,
         remove,
         save,
+        retryMutation: snapshotRecords.actions.retry,
+        retrySave,
+        dismissMutation: snapshotRecords.actions.dismissMutation,
         close,
+        clearForConnectionChange,
       },
     }),
     [
-      beginDraft,
-      beginDuplicate,
-      beginEdit,
       clearOverride,
+      clearForConnectionChange,
       close,
       configFields.length,
       configSections,
@@ -381,10 +345,14 @@ export function useConfigSnapshotEditorState({
       load,
       remove,
       rename,
+      retrySave,
       save,
       schemaQuery.isLoading,
       selectedSnapshot,
+      sessionActions,
       snapshotRecords.status.isLoading,
+      snapshotRecords.status.mutation,
+      snapshotRecords.actions,
       snapshotRecords.records,
       snapshotGroups,
       updateOverride,

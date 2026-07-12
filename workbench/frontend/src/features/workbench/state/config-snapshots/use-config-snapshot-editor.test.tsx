@@ -8,6 +8,9 @@ const mocks = vi.hoisted(() => ({
   rename: vi.fn(),
   update: vi.fn(),
   remove: vi.fn(),
+  retry: vi.fn(),
+  dismissMutation: vi.fn(),
+  clearForConnectionChange: vi.fn(),
 }));
 
 vi.mock("@/features/workbench/state/use-workbench-queries", () => ({
@@ -26,9 +29,15 @@ import { type ConfigSnapshot } from "@/lib/config-snapshots";
 import {
   useConfigSnapshotEditorState,
 } from "@/features/workbench/state/config-snapshots/use-config-snapshot-editor";
+import { useConfigSnapshotEditorSessionState } from "@/features/workbench/state/config-snapshots/use-config-snapshot-editor-session";
 
 let fields: ConfigField[] = [];
 let records: ConfigSnapshot[] = [];
+
+function useEditorHarness() {
+  const sessionState = useConfigSnapshotEditorSessionState();
+  return useConfigSnapshotEditorState({ sessionState });
+}
 
 function field(
   overrides: Partial<ConfigField> & Pick<ConfigField, "key">,
@@ -69,6 +78,43 @@ beforeEach(() => {
   mocks.rename.mockReset();
   mocks.update.mockReset();
   mocks.remove.mockReset();
+  mocks.retry.mockReset();
+  mocks.dismissMutation.mockReset();
+  mocks.clearForConnectionChange.mockReset();
+  mocks.create.mockImplementation(async (input) => ({
+    ok: true,
+    kind: "create",
+    snapshotId: "created-snapshot",
+    record: {
+      ...snapshot({ id: "created-snapshot", ...input }),
+      updatedAt: "2026-06-01T00:00:00.000Z",
+    },
+  }));
+  mocks.update.mockImplementation(async ({ id, input }) => ({
+    ok: true,
+    kind: "update",
+    snapshotId: id,
+    record: {
+      ...snapshot({
+        id,
+        ...(records.find((candidate) => candidate.id === id) ?? {}),
+        ...input,
+      }),
+      updatedAt: "2026-06-01T00:00:00.000Z",
+    },
+  }));
+  mocks.rename.mockResolvedValue({
+    ok: true,
+    kind: "rename",
+    snapshotId: "snapshot-1",
+    record: null,
+  });
+  mocks.remove.mockResolvedValue({
+    ok: true,
+    kind: "remove",
+    snapshotId: "snapshot-1",
+    record: null,
+  });
   mocks.useConfigSchemaQuery.mockReset().mockImplementation(
     (modelType: string, model: string, preset: string) => ({
       data: { modelType, model, preset, fields },
@@ -85,19 +131,50 @@ beforeEach(() => {
       isReady: true,
       isError: false,
       error: null,
+      mutation: {
+        phase: "idle",
+        kind: null,
+        snapshotId: null,
+        error: "",
+        canRetry: false,
+      },
     },
     actions: {
       create: mocks.create,
       rename: mocks.rename,
       update: mocks.update,
       remove: mocks.remove,
+      retry: mocks.retry,
+      dismissMutation: mocks.dismissMutation,
+      clearForConnectionChange: mocks.clearForConnectionChange,
     },
   }));
 });
 
 describe("Config Snapshot editor session", () => {
+  it("suppresses a draft edit returned to its Runtime Default", async () => {
+    const { result } = renderHook(useEditorHarness);
+
+    act(() => {
+      result.current.actions.beginDraft({
+        modelType: "linears",
+        model: "linear",
+        preset: "baseline",
+      });
+    });
+    act(() => {
+      result.current.actions.updateOverride("hidden_size", "128");
+    });
+    expect(result.current.session.draft).toEqual({ hidden_size: "128" });
+
+    act(() => {
+      result.current.actions.updateOverride("HIDDEN-SIZE", "64");
+    });
+    expect(result.current.session.draft).toEqual({});
+  });
+
   it("opens an explicit cross-model draft without changing an Inspection target", async () => {
-    const { result } = renderHook(() => useConfigSnapshotEditorState());
+    const { result } = renderHook(useEditorHarness);
 
     act(() => {
       expect(
@@ -107,7 +184,6 @@ describe("Config Snapshot editor session", () => {
           preset: "expert-baseline",
         }),
       ).toBe(true);
-      result.current.actions.updateOverride("hidden_size", "128");
     });
 
     await waitFor(() => {
@@ -115,6 +191,13 @@ describe("Config Snapshot editor session", () => {
         modelType: "experts",
         model: "linear",
         preset: "expert-baseline",
+      });
+    });
+    act(() => {
+      result.current.actions.updateOverride("hidden_size", "128");
+    });
+    await waitFor(() => {
+      expect(result.current.session).toMatchObject({
         draft: { hidden_size: "128" },
       });
     });
@@ -125,8 +208,8 @@ describe("Config Snapshot editor session", () => {
       { enabled: true },
     );
 
-    act(() => {
-      expect(result.current.actions.save("Expert tuned").ok).toBe(true);
+    await act(async () => {
+      expect((await result.current.actions.save("Expert tuned")).ok).toBe(true);
     });
     expect(mocks.create).toHaveBeenCalledWith({
       modelType: "experts",
@@ -158,7 +241,7 @@ describe("Config Snapshot editor session", () => {
       overrides: { weight_option_flag: "true" },
     });
     records = [record];
-    const { result } = renderHook(() => useConfigSnapshotEditorState());
+    const { result } = renderHook(useEditorHarness);
 
     act(() => {
       result.current.actions.beginEdit(record);
@@ -170,8 +253,8 @@ describe("Config Snapshot editor session", () => {
       });
     });
 
-    act(() => {
-      expect(result.current.actions.save("Adaptive edited").ok).toBe(true);
+    await act(async () => {
+      expect((await result.current.actions.save("Adaptive edited")).ok).toBe(true);
     });
     expect(mocks.update).toHaveBeenCalledWith({
       id: "adaptive",
@@ -193,7 +276,7 @@ describe("Config Snapshot editor session", () => {
       overrides: { hidden_size: "256" },
     });
     records = [record];
-    const { result } = renderHook(() => useConfigSnapshotEditorState());
+    const { result } = renderHook(useEditorHarness);
 
     act(() => {
       result.current.actions.beginDuplicate(record);
@@ -204,8 +287,8 @@ describe("Config Snapshot editor session", () => {
     act(() => {
       result.current.actions.updateOverride("hidden_size", "512");
     });
-    act(() => {
-      expect(result.current.actions.save("Source copy").ok).toBe(true);
+    await act(async () => {
+      expect((await result.current.actions.save("Source copy")).ok).toBe(true);
     });
 
     expect(mocks.create).toHaveBeenCalledWith(
@@ -215,5 +298,55 @@ describe("Config Snapshot editor session", () => {
       }),
     );
     expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it("retains a failed save session and retries the exact records mutation", async () => {
+    const persisted = {
+      ...snapshot({ id: "snapshot-retried", name: "Retried" }),
+      updatedAt: "2026-06-01T00:00:00.000Z",
+    };
+    mocks.create.mockResolvedValueOnce({
+      ok: false,
+      kind: "create",
+      snapshotId: null,
+      error: "Snapshot persistence failed.",
+      retryable: true,
+    });
+    mocks.retry.mockResolvedValueOnce({
+      ok: true,
+      kind: "create",
+      snapshotId: persisted.id,
+      record: persisted,
+    });
+    const { result } = renderHook(useEditorHarness);
+
+    act(() => {
+      result.current.actions.beginDraft({
+        modelType: "linears",
+        model: "linear",
+        preset: "baseline",
+        overrides: { hidden_size: "128" },
+      });
+    });
+
+    await act(async () => {
+      await expect(result.current.actions.save("Retried")).resolves.toEqual({
+        ok: false,
+        error: "Snapshot persistence failed.",
+      });
+    });
+    expect(result.current.session).toMatchObject({
+      model: "linear",
+      preset: "baseline",
+      draft: { hidden_size: "128" },
+    });
+
+    await act(async () => {
+      await expect(result.current.actions.retrySave()).resolves.toEqual({
+        ok: true,
+        snapshot: persisted,
+      });
+    });
+    expect(mocks.retry).toHaveBeenCalledTimes(1);
   });
 });
