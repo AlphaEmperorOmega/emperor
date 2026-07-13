@@ -19,8 +19,11 @@ class ConfigBase:
             f"or override `build`"
         )
 
+    def registry_owner(self) -> type:
+        return self._registry_owner()
+
     def build(self, overrides: ConfigBase | None = None) -> Module:
-        owner = self._registry_owner()
+        owner = self.registry_owner()
         if hasattr(self, "model_type"):
             return owner.build_from_config(self, overrides)
         return owner(self, overrides)
