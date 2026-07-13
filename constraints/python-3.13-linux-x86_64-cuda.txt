@@ -1,0 +1,8 @@
+# Emperor Python 3.13 CUDA lock: Linux x86-64 opt-in profile.
+-c python-3.13-linux-x86_64.txt
+
+torch==2.12.0
+torchvision==0.27.0
+torchtext==0.6.0
+filelock==3.29.0
+psutil==7.2.2
