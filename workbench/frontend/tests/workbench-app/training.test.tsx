@@ -1492,13 +1492,38 @@ describe("WorkbenchApp Training And Preview", () => {
     }
     expect(within(details).queryAllByRole("complementary")).toHaveLength(0);
     const trainingHeading = within(runList).getByRole("heading", {
-      name: /^training$/i,
+      name: /^run plan$/i,
     });
     const firstRunIndex = await within(runList).findByText("#1");
     const trainingBar = runList.firstElementChild;
     if (!(trainingBar instanceof HTMLElement)) {
       throw new Error("Expected Training bar to render inside the run list");
     }
+    const trainingToolbarActions = trainingBar.lastElementChild;
+    if (!(trainingToolbarActions instanceof HTMLElement)) {
+      throw new Error("Expected Training bar actions");
+    }
+    expect(runList).toHaveClass("grid-rows-[56px_minmax(0,1fr)]");
+    expect(runList).not.toHaveClass("gap-panel");
+    expect(trainingBar).toHaveClass(
+      "flex",
+      "h-14",
+      "items-center",
+      "justify-between",
+      "overflow-hidden",
+      "px-region",
+      "sm:px-shell",
+    );
+    expect(trainingBar).not.toHaveClass("grid", "py-panel");
+    expect(trainingToolbarActions).toHaveClass(
+      "flex-nowrap",
+      "justify-start",
+      "overflow-x-auto",
+      "overscroll-x-contain",
+      "2xl:justify-end",
+    );
+    expect(within(trainingBar).getByText("linear / baseline"))
+      .toBeInTheDocument();
     expect(trainingBar.contains(trainingHeading)).toBe(true);
     expect(trainingBar).not.toHaveTextContent(/\/\s*Mnist/i);
     expect(trainingBar).not.toHaveTextContent(/No metrics/i);

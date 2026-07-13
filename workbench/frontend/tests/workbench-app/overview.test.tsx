@@ -1015,9 +1015,9 @@ describe("WorkbenchApp Overview", () => {
     expect(snapshotsTab).toHaveAttribute("aria-checked", "false");
     expect(snapshotsTab).toBeDisabled();
     expect(experimentsTab).toHaveAttribute("aria-checked", "false");
-    expect(presetsTab.querySelector("svg")).toBeNull();
-    expect(snapshotsTab.querySelector("svg")).toBeNull();
-    expect(experimentsTab.querySelector("svg")).toBeNull();
+    for (const tab of [presetsTab, snapshotsTab, experimentsTab]) {
+      expect(tab.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
+    }
     expect(screen.getByRole("combobox", { name: /^preset$/i }))
       .toHaveTextContent("baseline");
     expect(screen.queryByRole("combobox", { name: /^snapshot$/i }))

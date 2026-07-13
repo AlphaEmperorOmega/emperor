@@ -1,6 +1,7 @@
 import { type ReactNode } from "react";
 import { Loader2 } from "lucide-react";
 import { StatusCard } from "@/components/ui/status-card";
+import { WorkbenchSidebarStack } from "@/features/workbench/components/shared/workbench-sidebar";
 
 export function WorkbenchWorkspaceFrame({
   children,
@@ -12,7 +13,7 @@ export function WorkbenchWorkspaceFrame({
       id="workbench-workspace-content"
       tabIndex={-1}
       data-workbench-layout="workspace-frame"
-      className="block min-h-0 overflow-x-hidden overflow-y-auto xl:grid xl:grid-cols-[320px_minmax(0,1fr)_320px] xl:overflow-hidden 2xl:grid-cols-[344px_minmax(0,1fr)_332px]"
+      className="block min-h-0 overflow-x-hidden overflow-y-auto xl:grid xl:grid-cols-[336px_minmax(0,1fr)_320px] xl:overflow-hidden 2xl:grid-cols-[356px_minmax(0,1fr)_332px]"
     >
       {children}
     </div>
@@ -40,9 +41,9 @@ export function WorkbenchThreeRegionLayout({
         role="region"
         aria-label={sidebarLabel}
         data-workbench-region="sidebar"
-        className="min-h-0 overflow-visible border-b border-line bg-panel/55 px-region pb-shell-wide pt-region backdrop-blur-sm xl:overflow-y-auto xl:border-b-0 xl:border-r"
+        className="min-h-0 overflow-visible border-b border-line bg-bg-2/80 pb-shell-wide pl-region pr-1 pt-panel xl:overflow-y-auto xl:border-b-0 xl:border-r"
       >
-        <div className="grid gap-shell">{sidebar}</div>
+        <WorkbenchSidebarStack>{sidebar}</WorkbenchSidebarStack>
       </div>
       <div
         role="region"

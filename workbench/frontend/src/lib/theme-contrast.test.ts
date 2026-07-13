@@ -442,8 +442,8 @@ describe("Workbench design-system adapters", () => {
     }
   });
 
-  it("audits all 123 production component and visual-support files", () => {
-    expect(new Set(productionAuditSources.map(({ path }) => path)).size).toBe(123);
+  it("audits all 125 production component and visual-support files", () => {
+    expect(new Set(productionAuditSources.map(({ path }) => path)).size).toBe(125);
   });
 
   it("keeps raw UI colors, arbitrary shadows, and arbitrary type out of production", () => {

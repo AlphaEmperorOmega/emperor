@@ -1,6 +1,8 @@
+import { Activity } from "lucide-react";
 import { ErrorPanel } from "@/features/workbench/components/error-panel";
 import { ConfigSummaryPanel } from "@/features/workbench/components/config/config-summary-panel";
 import { TargetPresetPanel } from "@/features/workbench/components/screen/target-preset-panel";
+import { WorkbenchSidebarHeader } from "@/features/workbench/components/shared/workbench-sidebar";
 import {
   useModelPackageCatalog,
   useModelPackageInspection,
@@ -36,6 +38,7 @@ export function WorkbenchModelSidebar({
 
   return (
     <>
+      <WorkbenchSidebarHeader icon={<Activity aria-hidden />} title="Setup" />
       {authenticationRequired && (
         <ErrorPanel
           title="Authentication required"

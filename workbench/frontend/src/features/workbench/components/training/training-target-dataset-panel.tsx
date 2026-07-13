@@ -13,11 +13,11 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
-import { SectionHeading } from "@/components/ui/section-heading";
 import { MultiSelectDropdown } from "@/features/workbench/components/screen/multi-select-dropdown";
 import { SelectOnlyDropdown } from "@/features/workbench/components/screen/select-only-dropdown";
 import { InlineStatus } from "@/features/workbench/components/shared/inline-status";
 import { StatChip } from "@/features/workbench/components/shared/stat-chip";
+import { WorkbenchSidebarSection } from "@/features/workbench/components/shared/workbench-sidebar";
 import { ViewModeButton } from "@/features/workbench/components/view-mode-button";
 import { workbenchStatusCopy } from "@/features/workbench/components/shared/status-copy";
 import { type TrainingWorkspace } from "@/features/workbench/state/training/use-training-workspace-state";
@@ -28,8 +28,6 @@ import {
 
 type TrainingSetup = TrainingWorkspace["draft"]["setup"];
 type TrainingConfigTab = "presets" | "snapshots";
-
-const setupIconClass = "h-[15px] w-[15px] text-violet";
 
 /** Setup-only rendering Adapter for the grouped Training draft Interface. */
 export function TrainingTargetDatasetPanel({
@@ -249,13 +247,10 @@ export function TrainingTargetDatasetPanel({
   return (
     <div className="grid min-w-0 gap-3">
       {experimentTask.options.length > 0 && (
-        <div className="grid min-w-0 gap-2">
-          <div className="flex min-h-[28px] flex-wrap items-center justify-between gap-2">
-            <SectionHeading
-              icon={<Activity className={setupIconClass} aria-hidden />}
-              title="Experiment Task"
-            />
-          </div>
+        <WorkbenchSidebarSection
+          title="Experiment Task"
+          icon={<Activity aria-hidden />}
+        >
           <SelectOnlyDropdown
             label="Experiment task"
             value={experimentTask.selected}
@@ -264,28 +259,22 @@ export function TrainingTargetDatasetPanel({
             placeholder="Select task"
             disabled={disabled}
           />
-        </div>
+        </WorkbenchSidebarSection>
       )}
 
       <div className="grid min-w-0 gap-2">
         {modelTypeControl && (
-          <div className="grid min-w-0 gap-2">
-            <div className="flex min-h-[28px] flex-wrap items-center justify-between gap-2">
-              <SectionHeading
-                icon={<Layers className={setupIconClass} aria-hidden />}
-                title="Model Type"
-              />
-            </div>
+          <WorkbenchSidebarSection
+            title="Model Type"
+            icon={<Layers aria-hidden />}
+          >
             {modelTypeControl}
-          </div>
+          </WorkbenchSidebarSection>
         )}
-        <div className="grid min-w-0 gap-2">
-          <div className="flex min-h-[28px] flex-wrap items-center justify-between gap-2">
-            <SectionHeading
-              icon={<Cpu className={setupIconClass} aria-hidden />}
-              title={modelTypeControl ? "Model Name" : "Model"}
-            />
-          </div>
+        <WorkbenchSidebarSection
+          title={modelTypeControl ? "Model Name" : "Model"}
+          icon={<Cpu aria-hidden />}
+        >
           <SelectOnlyDropdown
             label="training model"
             value={model.selected}
@@ -294,21 +283,20 @@ export function TrainingTargetDatasetPanel({
             placeholder="Select model"
             disabled={disabled}
           />
-        </div>
+        </WorkbenchSidebarSection>
       </div>
 
-      <div className="grid min-w-0 gap-2">
-        <div className="flex min-h-[28px] flex-wrap items-center justify-between gap-2">
-          <SectionHeading
-            icon={<SlidersHorizontal className={setupIconClass} aria-hidden />}
-            title="Variants"
-          />
+      <WorkbenchSidebarSection
+        title="Variants"
+        icon={<SlidersHorizontal aria-hidden />}
+        aside={
           <StatChip>
             {activeConfigTab === "snapshots"
               ? `${variants.selectedSnapshotIds.length} / ${variants.snapshots.length}`
               : `${variants.selectedPresets.length} / ${variants.presetOptions.length}`}
           </StatChip>
-        </div>
+        }
+      >
         {configTabs}
         <div
           id={presetsPanelId}
@@ -330,18 +318,17 @@ export function TrainingTargetDatasetPanel({
         >
           {activeConfigTab === "snapshots" ? snapshotControls : null}
         </div>
-      </div>
+      </WorkbenchSidebarSection>
 
-      <div className="grid min-w-0 gap-2">
-        <div className="flex min-h-[28px] flex-wrap items-center justify-between gap-2">
-          <SectionHeading
-            icon={<Database className={setupIconClass} aria-hidden />}
-            title="Datasets"
-          />
+      <WorkbenchSidebarSection
+        title="Datasets"
+        icon={<Database aria-hidden />}
+        aside={
           <StatChip>
             {datasets.selected.length} / {datasets.options.length}
           </StatChip>
-        </div>
+        }
+      >
         <MultiSelectDropdown
           label="Training datasets"
           values={datasets.selected}
@@ -373,18 +360,17 @@ export function TrainingTargetDatasetPanel({
             First
           </Button>
         </div>
-      </div>
+      </WorkbenchSidebarSection>
 
-      <div className="grid min-w-0 gap-2">
-        <div className="flex min-h-[28px] flex-wrap items-center justify-between gap-2">
-          <SectionHeading
-            icon={<Activity className={setupIconClass} aria-hidden />}
-            title="Signals"
-          />
+      <WorkbenchSidebarSection
+        title="Signals"
+        icon={<Activity aria-hidden />}
+        aside={
           <StatChip>
             {monitors.selected.length} / {monitors.options.length}
           </StatChip>
-        </div>
+        }
+      >
         <MultiSelectDropdown
           label="Training monitors"
           values={monitors.selected}
@@ -422,7 +408,7 @@ export function TrainingTargetDatasetPanel({
             None
           </Button>
         </div>
-      </div>
+      </WorkbenchSidebarSection>
     </div>
   );
 }

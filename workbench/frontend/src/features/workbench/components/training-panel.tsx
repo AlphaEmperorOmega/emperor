@@ -9,16 +9,21 @@ import {
   RefreshCw,
   RotateCcw,
 } from "lucide-react";
-import { Badge, type BadgeVariant } from "@/components/ui/badge";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SegmentedControl } from "@/components/ui/segmented-control";
+import { SectionHeading } from "@/components/ui/section-heading";
 import { TrainingSearchSetup } from "@/features/workbench/components/training-search-setup";
 import { ViewModeButton } from "@/features/workbench/components/view-mode-button";
 import { SelectOnlyDropdown } from "@/features/workbench/components/screen/select-only-dropdown";
 import { DialogShell } from "@/features/workbench/components/shared/dialog-shell";
 import { InlineStatus } from "@/features/workbench/components/shared/inline-status";
-import { SectionHeading } from "@/components/ui/section-heading";
+import { WorkbenchPrimaryToolbar } from "@/features/workbench/components/shared/workbench-primary-toolbar";
+import {
+  WorkbenchSidebarHeader,
+  WorkbenchSidebarSection,
+} from "@/features/workbench/components/shared/workbench-sidebar";
 import { SurfacePanel } from "@/components/ui/surface-panel";
 import { TrainingTargetDatasetPanel } from "@/features/workbench/components/training/training-target-dataset-panel";
 import {
@@ -30,21 +35,6 @@ import { TrainingLogTailCard } from "@/features/workbench/components/training/tr
 import { TrainingRunPlanCard } from "@/features/workbench/components/training/training-run-plan-card";
 import { WorkbenchWideThreeRegionLayout } from "@/features/workbench/components/_workbench-wide-three-region-layout";
 import { useTrainingWorkspace } from "@/features/workbench/providers/training-execution-context";
-
-const trainingIconClass = "h-[15px] w-[15px] text-violet";
-
-function trainingJobBadgeVariant(status: string): BadgeVariant {
-  if (status === "completed") {
-    return "success";
-  }
-  if (status === "failed" || status === "cancelled") {
-    return "danger";
-  }
-  if (status === "running" || status === "queued") {
-    return "warning";
-  }
-  return "default";
-}
 
 export function TrainingPanel() {
   const { draft, plan, job: activeJob, dialogs, actions } =
@@ -78,7 +68,6 @@ export function TrainingPanel() {
   } = plan;
   const {
     value: job,
-    status: jobStatus,
     isRunning,
     canReset: canResetTraining,
     isStarting,
@@ -123,6 +112,9 @@ export function TrainingPanel() {
   const setupLockMessage = planChangingControlsDisabled
     ? "Training setup is locked while the active job is running or queued."
     : "";
+  const runPlanLabel = progressRunPlan
+    ? `${progressRunPlan.model} / ${progressRunPlan.preset}`
+    : "Waiting for run plan";
 
   const logFolderModeControl = (
     <SegmentedControl aria-label="Log folder mode">
@@ -175,35 +167,33 @@ export function TrainingPanel() {
         }
         leading={
           <>
-              <div className="flex min-h-control items-center justify-between gap-2 border-b border-line-soft pb-panel">
-                <SectionHeading
-                  icon={<Activity className={trainingIconClass} aria-hidden />}
-                  title="Setup"
-                />
-                <Badge variant="violet" aria-label="Stage 1">
+              <WorkbenchSidebarHeader
+                icon={<Activity aria-hidden />}
+                title="Setup"
+                actions={
+                  <Badge variant="violet" aria-label="Stage 1">
                   01
-                </Badge>
-              </div>
+                  </Badge>
+                }
+              />
               {setupLockMessage && (
                 <InlineStatus tone="warning" compact>
                   {setupLockMessage}
                 </InlineStatus>
               )}
 
-              <section className="grid gap-2 border-b border-line-soft pb-panel">
-                <div className="flex min-h-[28px] flex-wrap items-center justify-between gap-2">
-                  <SectionHeading
-                    icon={
-                      logFolderMode === "existing" ? (
-                        <FolderOpen className={trainingIconClass} aria-hidden />
-                      ) : (
-                        <FolderPlus className={trainingIconClass} aria-hidden />
-                      )
-                    }
-                    title="Log Folder"
-                  />
-                  {logFolderModeControl}
-                </div>
+              <WorkbenchSidebarSection
+                title="Log Folder"
+                icon={
+                  logFolderMode === "existing" ? (
+                    <FolderOpen aria-hidden />
+                  ) : (
+                    <FolderPlus aria-hidden />
+                  )
+                }
+                aside={logFolderModeControl}
+                divider="after"
+              >
                 <div className="grid min-h-[4.25rem] grid-rows-[2.75rem_1rem] gap-2 md:min-h-[4rem] md:grid-rows-[2.5rem_1rem]">
                   {logFolderMode === "existing" ? (
                     <>
@@ -259,7 +249,7 @@ export function TrainingPanel() {
                     </>
                   )}
                 </div>
-              </section>
+              </WorkbenchSidebarSection>
 
               <TrainingTargetDatasetPanel
                 setup={setup}
@@ -273,112 +263,103 @@ export function TrainingPanel() {
         }
         primary={
           <>
-              <header className="grid gap-panel border-b border-line bg-panel/55 px-region py-panel shadow-divider backdrop-blur-xl sm:px-shell 2xl:grid-cols-[minmax(0,1fr)_auto] 2xl:items-center">
-                <div className="grid min-w-0 gap-1.5">
-                  <div className="flex min-w-0 flex-wrap items-center gap-2">
-                    <span className="grid h-control w-control shrink-0 place-items-center rounded-control-md border border-accent-line bg-accent-soft text-violet shadow-control-accent">
-                      <Activity className="h-4 w-4" aria-hidden />
-                    </span>
-                    <Badge variant="violet" aria-label="Stage 2">
-                      02
-                    </Badge>
-                    <h1 className="sr-only">Training</h1>
-                    <h2 className="type-title text-balance font-bold text-ink">
-                      Run Plan
-                    </h2>
-                    <Badge variant={trainingJobBadgeVariant(jobStatus)}>
-                      {jobStatus}
-                    </Badge>
-                  </div>
-                </div>
-                <div className="flex min-w-0 flex-wrap items-center gap-2 2xl:justify-end">
-                  {isRunning && (
-                    <Button
-                      variant="danger"
-                      onClick={cancelTraining}
-                      disabled={isCancelling || !trainingEnabled}
-                    >
-                      <CircleStop className="h-4 w-4" aria-hidden />
-                      Cancel
-                    </Button>
-                  )}
-                  <TrainingRunSummaryBadge
-                    plan={progressRunPlan}
-                    job={job}
-                    isLoading={isProgressPlanning}
-                    error={progressPlanError}
-                    className="min-w-0"
-                  />
-                  <TrainingAllCommandsButton plan={progressRunPlan} />
-                  {canRetryRunPlan && (
-                    <Button
-                      variant="secondary"
-                      onClick={retryRunPlan}
-                      className="h-touch px-3 type-body md:h-control-lg"
-                    >
-                      <RefreshCw className="h-4 w-4" aria-hidden />
-                      Retry Plan
-                    </Button>
-                  )}
-                  <Button
-                    variant="secondary"
-                    onClick={onOpenFullConfig}
-                    disabled={planChangingControlsDisabled || !canOpenFullConfig}
-                    className="h-touch px-3 type-body md:h-control-lg"
-                  >
-                    <Maximize2 className="h-4 w-4" aria-hidden />
-                    Open Full Config
-                  </Button>
-                  {canResampleRunPlan && (
-                    <Button
-                      variant="secondary"
-                      onClick={resampleRunPlan}
-                      disabled={isResampling}
-                      className="h-touch px-3 type-body md:h-control-lg"
-                    >
-                      <RefreshCw
-                        className={
-                          isResampling ? "h-4 w-4 animate-spin" : "h-4 w-4"
-                        }
-                        aria-hidden
-                      />
-                      Resample
-                    </Button>
-                  )}
-                  {canResetTraining && (
-                    <Button
-                      variant="secondary"
-                      onClick={resetTraining}
-                      disabled={!trainingEnabled}
-                      className="h-touch px-3 type-body md:h-control-lg"
-                    >
-                      <RotateCcw className="h-4 w-4" aria-hidden />
-                      Reset Training
-                    </Button>
-                  )}
-                  <Button
-                    variant="primary"
-                    onClick={startTraining}
-                    disabled={!trainingEnabled || !canStart}
-                    className="h-touch px-shell type-body md:h-control-lg"
-                  >
-                    {isStarting ? (
-                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                    ) : (
-                      <Play className="h-4 w-4" aria-hidden />
-                    )}
-                    Start Training
-                  </Button>
-                </div>
-              </header>
-              <TrainingCompactRunList
+            <WorkbenchPrimaryToolbar
+              title="Run Plan"
+              titleAs="h2"
+              workspaceTitle="Training"
+              detail={runPlanLabel}
+              className="border-l border-r"
+            >
+              {isRunning && (
+                <Button
+                  variant="danger"
+                  onClick={cancelTraining}
+                  disabled={isCancelling || !trainingEnabled}
+                  className="shrink-0 whitespace-nowrap"
+                >
+                  <CircleStop className="h-4 w-4" aria-hidden />
+                  Cancel
+                </Button>
+              )}
+              <TrainingRunSummaryBadge
                 plan={progressRunPlan}
+                job={job}
                 isLoading={isProgressPlanning}
                 error={progressPlanError}
-                canManageDraftRuns={!job}
-                onExcludePreset={onExcludeDraftTrainingPreset}
-                onExcludeSnapshot={onExcludeConfigSnapshot}
+                className="shrink-0"
               />
+              <TrainingAllCommandsButton
+                plan={progressRunPlan}
+                className="shrink-0 whitespace-nowrap"
+              />
+              {canRetryRunPlan && (
+                <Button
+                  variant="secondary"
+                  onClick={retryRunPlan}
+                  className="shrink-0 whitespace-nowrap"
+                >
+                  <RefreshCw className="h-4 w-4" aria-hidden />
+                  Retry Plan
+                </Button>
+              )}
+              <Button
+                variant="secondary"
+                onClick={onOpenFullConfig}
+                disabled={planChangingControlsDisabled || !canOpenFullConfig}
+                className="shrink-0 whitespace-nowrap"
+              >
+                <Maximize2 className="h-4 w-4" aria-hidden />
+                Open Full Config
+              </Button>
+              {canResampleRunPlan && (
+                <Button
+                  variant="secondary"
+                  onClick={resampleRunPlan}
+                  disabled={isResampling}
+                  className="shrink-0 whitespace-nowrap"
+                >
+                  <RefreshCw
+                    className={
+                      isResampling ? "h-4 w-4 animate-spin" : "h-4 w-4"
+                    }
+                    aria-hidden
+                  />
+                  Resample
+                </Button>
+              )}
+              {canResetTraining && (
+                <Button
+                  variant="secondary"
+                  onClick={resetTraining}
+                  disabled={!trainingEnabled}
+                  className="shrink-0 whitespace-nowrap"
+                >
+                  <RotateCcw className="h-4 w-4" aria-hidden />
+                  Reset Training
+                </Button>
+              )}
+              <Button
+                variant="primary"
+                onClick={startTraining}
+                disabled={!trainingEnabled || !canStart}
+                className="shrink-0 whitespace-nowrap px-shell"
+              >
+                {isStarting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                ) : (
+                  <Play className="h-4 w-4" aria-hidden />
+                )}
+                Start Training
+              </Button>
+            </WorkbenchPrimaryToolbar>
+            <TrainingCompactRunList
+              plan={progressRunPlan}
+              isLoading={isProgressPlanning}
+              error={progressPlanError}
+              canManageDraftRuns={!job}
+              onExcludePreset={onExcludeDraftTrainingPreset}
+              onExcludeSnapshot={onExcludeConfigSnapshot}
+            />
           </>
         }
         trailing={

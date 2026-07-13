@@ -19,8 +19,11 @@ import {
   type SubsetDeleteKind,
 } from "@/features/workbench/components/logs/delete-dialogs";
 import { InlineStatus } from "@/features/workbench/components/shared/inline-status";
-import { SectionHeading } from "@/components/ui/section-heading";
 import { StatChip } from "@/features/workbench/components/shared/stat-chip";
+import {
+  WorkbenchSidebarHeader,
+  WorkbenchSidebarSection,
+} from "@/features/workbench/components/shared/workbench-sidebar";
 import {
   MultiSelectDropdown,
   type MultiSelectDropdownOption,
@@ -103,13 +106,16 @@ function LogFilterSection({
   }
 
   return (
-    <section className={cn("grid gap-2", divided && "border-t border-line-soft pt-panel")}>
-      <div className="flex min-h-[28px] flex-wrap items-center justify-between gap-2">
-        <SectionHeading icon={icon} title={title} />
+    <WorkbenchSidebarSection
+      title={title}
+      icon={icon}
+      divider={divided ? "before" : "none"}
+      aside={
         <StatChip>
           {selectedValues.length} / {options.length}
         </StatChip>
-      </div>
+      }
+    >
       {beforeDropdown}
       <MultiSelectDropdown
         label={title}
@@ -121,18 +127,22 @@ function LogFilterSection({
         noResultsMessage="No options"
       />
       <div className="grid grid-cols-2 gap-2">
-        <Button variant="secondary" className="h-touch text-xs md:h-control-sm" onClick={onAll}>
+        <Button
+          variant="secondary"
+          className="h-touch type-compact md:h-control"
+          onClick={onAll}
+        >
           All
         </Button>
         <Button
           variant="ghost"
-          className="h-touch border border-line bg-panel-2/80 text-xs md:h-control-sm"
+          className="h-touch border border-line bg-panel-2/80 type-compact md:h-control"
           onClick={onNone}
         >
           None
         </Button>
       </div>
-    </section>
+    </WorkbenchSidebarSection>
   );
 }
 
@@ -230,13 +240,11 @@ export function LogsSidebar({ browser, deletion }: LogsSidebarProps) {
     : undefined;
 
   return (
-    <div className="grid gap-panel">
-      <section className="grid gap-2">
-        <div className="flex items-center justify-between gap-3">
-          <SectionHeading
-            icon={<LineChart className="h-[15px] w-[15px] text-violet" aria-hidden />}
-            title="Logs"
-          />
+    <div className="grid min-w-0 content-start gap-region">
+      <WorkbenchSidebarHeader
+        icon={<LineChart aria-hidden />}
+        title="Logs"
+        actions={
           <IconButton
             label="Refresh log runs"
             size="sm"
@@ -253,8 +261,8 @@ export function LogsSidebar({ browser, deletion }: LogsSidebarProps) {
               />
             }
           />
-        </div>
-      </section>
+        }
+      />
 
       {Boolean(status.runsError) && (
         <ErrorPanel title="Log scan failed" message={errorMessage(status.runsError)} />
@@ -301,7 +309,7 @@ export function LogsSidebar({ browser, deletion }: LogsSidebarProps) {
                 <Button
                   type="button"
                   variant={scope.mode === "target" ? "secondary" : "ghost"}
-                  className="h-touch text-xs md:h-control-sm"
+                  className="h-touch type-compact md:h-control"
                   aria-pressed={scope.mode === "target"}
                   onClick={scope.useCurrentTarget}
                   disabled={!scope.canUseCurrentTarget}
@@ -311,7 +319,7 @@ export function LogsSidebar({ browser, deletion }: LogsSidebarProps) {
                 <Button
                   type="button"
                   variant={scope.allRunsSelected ? "secondary" : "ghost"}
-                  className="h-touch text-xs md:h-control-sm"
+                  className="h-touch type-compact md:h-control"
                   aria-pressed={scope.allRunsSelected}
                   onClick={scope.showAllRuns}
                 >
@@ -351,7 +359,7 @@ export function LogsSidebar({ browser, deletion }: LogsSidebarProps) {
                   <Button
                     type="button"
                     variant="ghost"
-                    className="h-touch border border-line bg-panel-2/80 text-xs md:h-control-sm"
+                    className="h-touch border border-line bg-panel-2/80 type-compact md:h-control"
                     onClick={actions.loadMoreRuns}
                     disabled={pagination.runs.isLoadingMore}
                   >
@@ -417,7 +425,7 @@ export function LogsSidebar({ browser, deletion }: LogsSidebarProps) {
                       <Button
                         type="button"
                         variant="ghost"
-                        className="h-touch border border-line bg-panel-2/80 text-xs md:h-control-sm"
+                        className="h-touch border border-line bg-panel-2/80 type-compact md:h-control"
                         onClick={actions.loadMoreScalarTags}
                         disabled={pagination.scalarTags.isLoadingMore}
                       >

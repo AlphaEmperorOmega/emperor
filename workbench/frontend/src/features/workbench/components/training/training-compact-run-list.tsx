@@ -368,7 +368,7 @@ export function TrainingCompactRunList({
   const hiddenRunCount = Math.max(0, (plan?.runs.length ?? 0) - runs.length);
 
   return (
-    <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)] overflow-hidden rounded-control border border-line bg-black/10">
+    <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)] overflow-hidden rounded-b-control border border-line bg-black/10">
       <div className="min-h-0 overflow-y-auto">
         {error ? (
           <InlineStatus tone="danger" compact role="alert" className="m-3">

@@ -41,12 +41,27 @@ describe("Workbench workspace layout", () => {
       "overflow-x-hidden",
       "overflow-y-auto",
       "xl:grid",
-      "xl:grid-cols-[320px_minmax(0,1fr)_320px]",
+      "xl:grid-cols-[336px_minmax(0,1fr)_320px]",
       "xl:overflow-hidden",
-      "2xl:grid-cols-[344px_minmax(0,1fr)_332px]",
+      "2xl:grid-cols-[356px_minmax(0,1fr)_332px]",
     );
     expect(sidebar.tagName).toBe("DIV");
-    expect(sidebar).toHaveClass("border-b", "xl:border-b-0", "xl:border-r");
+    expect(sidebar).toHaveClass(
+      "border-b",
+      "bg-bg-2/80",
+      "pb-shell-wide",
+      "pl-region",
+      "pr-1",
+      "pt-panel",
+      "xl:border-b-0",
+      "xl:border-r",
+    );
+    expect(sidebar.querySelector("[data-workbench-sidebar]")).toHaveClass(
+      "grid",
+      "min-w-0",
+      "content-start",
+      "gap-region",
+    );
     expect(primary).toHaveClass(
       "min-h-[520px]",
       "sm:min-h-[640px]",
@@ -118,9 +133,13 @@ describe("Workbench workspace layout", () => {
       "block",
       "overflow-x-hidden",
       "overflow-y-auto",
+      "px-region",
+      "pb-panel",
       "xl:grid",
       "xl:overflow-y-hidden",
     );
+    expect(layout).not.toHaveClass("py-panel");
+    expect(layout).not.toHaveClass("pt-panel");
     expect(columns).toHaveClass(
       "block",
       "min-w-0",
@@ -131,6 +150,12 @@ describe("Workbench workspace layout", () => {
     );
     expect(leading.tagName).toBe("DIV");
     expect(leading).toHaveAttribute("data-region-label", "Setup region");
+    expect(leading.querySelector("[data-workbench-sidebar]")).toHaveClass(
+      "grid",
+      "min-w-0",
+      "content-start",
+      "gap-region",
+    );
     expect(primary.tagName).toBe("DIV");
     expect(primary).toHaveAttribute("data-region-label", "Runs region");
     expect(primary).toHaveClass("min-h-[600px]", "xl:min-h-0");
