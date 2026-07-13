@@ -6,6 +6,7 @@ import {
   type RefCallback,
   useCallback,
   useEffect,
+  useEffectEvent,
   useId,
   useMemo,
   useRef,
@@ -365,6 +366,14 @@ export function useSearchablePopupInteraction<
     }
   }
 
+  const resetMatchingActiveIndex = useEffectEvent(() => {
+    if (isOpen) {
+      setActiveIndex(matchingInitialIndex);
+    }
+  });
+
+  const loadMoreEffectEvent = useEffectEvent(() => loadMore());
+
   useEffect(() => {
     if (singleSelect) {
       dismiss();
@@ -373,11 +382,8 @@ export function useSearchablePopupInteraction<
   }, [dismiss, selectedKey, singleSelect, sourceInitialIndex, sourceRevisionKey]);
 
   useEffect(() => {
-    if (isOpen) {
-      setActiveIndex(matchingInitialIndex);
-    }
+    resetMatchingActiveIndex();
     // Matching identity is the lifecycle reset signal; opening is handled by open().
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [matchingKey]);
 
   useEffect(() => {
@@ -443,12 +449,10 @@ export function useSearchablePopupInteraction<
     }
     const autoFillTimer = setTimeout(() => {
       if (scrollContainer.scrollHeight <= scrollContainer.clientHeight) {
-        loadMore();
+        loadMoreEffectEvent();
       }
     }, 0);
     return () => clearTimeout(autoFillTimer);
-    // The listed values fully describe the paging closure used by loadMore().
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasMore, isLoadingMore, matchingOptions.length, pageSize, visibleCount]);
 
   return {

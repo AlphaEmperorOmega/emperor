@@ -22,10 +22,12 @@ function ListboxHarness({
   mode,
   onActivate,
   initialVisibleCount = testOptions.length,
+  options = testOptions,
 }: {
   mode: "single-select" | "multi-select";
   onActivate: (option: TestOption) => void;
   initialVisibleCount?: number;
+  options?: TestOption[];
 }) {
   const interaction = useSearchablePopupInteraction<
     TestOption,
@@ -34,7 +36,7 @@ function ListboxHarness({
     mode,
     id: `${mode}-test`,
     idSuffix: "unused",
-    options: testOptions,
+    options,
     optionKey: (option) => option.value,
     optionSearchText: (option) => `${option.label} ${option.value}`,
     selectedKey: mode === "single-select" ? "alpha" : undefined,
@@ -248,6 +250,42 @@ describe("useSearchablePopupInteraction", () => {
     await user.keyboard("{ArrowDown}");
     await waitFor(() => {
       expect(within(listbox).getByRole("option", { name: "Gamma" })).toHaveFocus();
+    });
+  });
+
+  it("resets active identity when the matching option lifecycle changes", async () => {
+    const user = userEvent.setup();
+    const rendered = render(
+      <ListboxHarness mode="multi-select" onActivate={() => {}} />,
+    );
+
+    const trigger = screen.getByRole("combobox", { name: "Test choices" });
+    await user.click(trigger);
+    await user.keyboard("{ArrowDown}");
+    await waitFor(() => {
+      expect(screen.getByRole("option", { name: "Alpha" })).toHaveFocus();
+    });
+    await user.keyboard("{End}");
+    await waitFor(() => {
+      expect(screen.getByRole("option", { name: "Delta" })).toHaveFocus();
+      expect(trigger).toHaveAttribute(
+        "aria-activedescendant",
+        screen.getByRole("option", { name: "Delta" }).id,
+      );
+    });
+
+    rendered.rerender(
+      <ListboxHarness
+        mode="multi-select"
+        onActivate={() => {}}
+        options={[testOptions[2], testOptions[0]]}
+      />,
+    );
+    await waitFor(() => {
+      expect(trigger).toHaveAttribute(
+        "aria-activedescendant",
+        screen.getByRole("option", { name: "Gamma" }).id,
+      );
     });
   });
 
