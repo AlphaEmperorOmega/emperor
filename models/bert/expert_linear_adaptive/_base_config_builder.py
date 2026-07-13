@@ -47,7 +47,7 @@ from models.bert.expert_linear_adaptive.runtime_options import (
 )
 
 if TYPE_CHECKING:
-    from emperor.base.utils import ConfigBase
+    from emperor.base.config import ConfigBase
     from emperor.config import ModelConfig
 
 

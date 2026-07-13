@@ -1,7 +1,7 @@
 import copy
 from dataclasses import dataclass
 
-from emperor.base.utils import ConfigBase
+from emperor.base.config import ConfigBase
 from emperor.halting.config import StickBreakingConfig
 from emperor.neuron.core.config import (
     AxonsConfig,

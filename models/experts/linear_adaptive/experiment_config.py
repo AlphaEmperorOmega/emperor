@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 from emperor.base.layer.config import LayerConfig, RecurrentLayerConfig
-from emperor.base.utils import ConfigBase, optional_field
+from emperor.base.config import ConfigBase, optional_field
 from emperor.experts.config import MixtureOfExpertsModelConfig
 
 

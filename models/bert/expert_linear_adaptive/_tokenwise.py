@@ -1,7 +1,8 @@
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from emperor.base.utils import ConfigBase, Module, optional_field
+from emperor.base.config import ConfigBase, optional_field
+from emperor.base.module import Module
 from torch import Tensor, nn
 
 if TYPE_CHECKING:

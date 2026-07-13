@@ -1,6 +1,7 @@
 import torch
 from emperor.base.layer.layer import Layer
-from emperor.base.utils import ConfigBase, Module
+from emperor.base.config import ConfigBase
+from emperor.base.module import Module
 from emperor.experiments.classifier import ClassifierExperiment
 from torch import Tensor
 

@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 from emperor.base.layer import LayerStackConfig, RecurrentLayerConfig
-from emperor.base.utils import ConfigBase, optional_field
+from emperor.base.config import ConfigBase, optional_field
 from emperor.embedding.absolute.core.config import AbsolutePositionalEmbeddingConfig
 
 from models.gpt.expert_linear._boundary_config_factory import GptBoundaryConfig

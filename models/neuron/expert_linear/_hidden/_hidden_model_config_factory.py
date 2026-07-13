@@ -9,7 +9,7 @@ from emperor.base.layer.config import (
 from emperor.base.layer.gate import GateConfig
 from emperor.base.layer.residual import ResidualConnectionOptions
 from emperor.base.options import LastLayerBiasOptions
-from emperor.base.utils import ConfigBase
+from emperor.base.config import ConfigBase
 from emperor.experts.config import MixtureOfExpertsModelConfig
 from emperor.experts.core.config import (
     MixtureOfExpertsConfig,
