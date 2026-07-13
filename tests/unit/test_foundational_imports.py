@@ -2,6 +2,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -14,7 +15,10 @@ class TestFoundationalImports(unittest.TestCase):
             [sys.executable, "-c", source],
             cwd=REPO_ROOT,
             capture_output=True,
-            env={**os.environ, "MPLCONFIGDIR": "/tmp"},
+            env={
+                **os.environ,
+                "MPLCONFIGDIR": str(Path(tempfile.gettempdir()) / "matplotlib"),
+            },
             text=True,
             check=False,
         )

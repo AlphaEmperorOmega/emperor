@@ -1,5 +1,6 @@
 import itertools
 import os
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -118,7 +119,7 @@ class TestTransformerTranslationIntegration(unittest.TestCase):
         root = Path(
             os.environ.get(
                 "EMPEROR_MULTI30K_ROOT",
-                "/tmp/emperor-multi30k-integration",
+                str(Path(tempfile.gettempdir()) / "emperor-multi30k-integration"),
             )
         )
         data = Multi30kDeEn(
@@ -177,7 +178,7 @@ class TestTransformerTranslationIntegration(unittest.TestCase):
         root = Path(
             os.environ.get(
                 "EMPEROR_MULTI30K_ROOT",
-                "/tmp/emperor-multi30k-integration",
+                str(Path(tempfile.gettempdir()) / "emperor-multi30k-integration"),
             )
         )
         data = Multi30kDeEn(root=root, num_workers=0, seed=0)
