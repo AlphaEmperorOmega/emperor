@@ -1,0 +1,500 @@
+# ruff: noqa: E501
+
+import importlib
+import os
+import runpy
+import sys
+import unittest
+from unittest.mock import patch
+
+import models.parametric.parametric_matrix.dataset_options as dataset_options
+import models.parametric.parametric_matrix.search_space as search_space
+
+os.environ.setdefault("MPLCONFIGDIR", "/tmp")
+
+import torch
+from emperor.base.layer import LayerConfig, LayerStackConfig
+from emperor.base.layer.residual import ResidualConnectionOptions
+from emperor.base.options import (
+    ActivationOptions,
+    LastLayerBiasOptions,
+    LayerNormPositionOptions,
+)
+from emperor.linears.core.config import LinearLayerConfig
+from emperor.parametric import (
+    AdaptiveRouterOptions,
+    ClipParameterOptions,
+    MatrixBiasMixtureConfig,
+    MatrixWeightsMixtureConfig,
+    ParametricLayerConfig,
+    ParametricLayerHandlerConfig,
+)
+from models.parametric.parametric_matrix.config_builder import (
+    ParametricMatrixConfigBuilder,
+)
+from models.parametric.parametric_matrix.experiment_config import ExperimentConfig
+from models.parametric.parametric_matrix.model import Model
+from models.parametric.parametric_matrix.presets import (
+    Experiment,
+    ExperimentPreset,
+    ExperimentPresets,
+)
+from models.parametric.parametric_matrix.runtime_options import (
+    ParametricMixtureOptions,
+    ParametricRouterOptions,
+    ParametricSamplerOptions,
+    ParametricStackOptions,
+)
+from models.training_test_utils import (
+    RandomImageClassificationDataModule,
+    tiny_cpu_trainer,
+)
+
+from model_runtime.packages import GridSearch, RandomSearch
+
+
+class TestParametricMatrixModel(unittest.TestCase):
+    def test_public_imports_remain_available(self):
+        for module_name in (
+            "models.parametric.parametric_matrix.config",
+            "models.parametric.parametric_matrix.presets",
+            "models.parametric.parametric_matrix.model",
+            "models.parametric.parametric_matrix.config_builder",
+            "models.parametric.parametric_matrix.experiment_config",
+        ):
+            with self.subTest(module_name=module_name):
+                module = importlib.import_module(module_name)
+
+                self.assertEqual(module.__name__, module_name)
+
+    def test_experiment_public_model_id_remains_catalog_id(self):
+        self.assertEqual(
+            Experiment()._public_model_id(),
+            "parametric/parametric_matrix",
+        )
+
+    def test_module_entrypoint_resolves_cli_without_training(self):
+        with (
+            patch.object(sys, "argv", ["parametric_matrix", "--preset", "preset"]),
+            patch(
+                "models.package_cli.execute_runs",
+                return_value=(),
+            ) as execute_runs,
+        ):
+            runpy.run_module(
+                "models.parametric.parametric_matrix.__main__",
+                run_name="__main__",
+            )
+
+        execute_runs.assert_called_once()
+        package, plan = execute_runs.call_args.args
+
+        self.assertEqual(package.catalog_key, "parametric/parametric_matrix")
+        self.assertEqual(plan.presets, ("preset",))
+        self.assertIsNone(plan.search)
+        self.assertEqual(dict(plan.overrides), {})
+        self.assertEqual(
+            plan.datasets,
+            tuple(
+                dataset.__name__
+                for dataset in dataset_options.DATASET_OPTIONS_BY_TASK[
+                    dataset_options.DEFAULT_EXPERIMENT_TASK
+                ]
+            ),
+        )
+
+    def test_modern_preset_contract_is_exposed(self):
+        presets = ExperimentPresets()
+
+        self.assertEqual(
+            {
+                preset: presets.overrides_for_preset(preset)
+                for preset in ExperimentPreset
+            },
+            {
+                ExperimentPreset.PRESET: {},
+                ExperimentPreset.CONFIG: {},
+            },
+        )
+        self.assertEqual(
+            presets.locked_fields(ExperimentPreset.PRESET),
+            {},
+        )
+
+    def test_empty_overrides_generate_empty_locks(self):
+        presets = ExperimentPresets()
+
+        for preset in ExperimentPreset:
+            with self.subTest(preset=preset.name):
+                self.assertEqual(presets.locks_for_preset(preset), {})
+                self.assertEqual(presets.locked_fields(preset), {})
+
+    def test_builder_returns_boundary_style_experiment_config(self):
+        cfg = ParametricMatrixConfigBuilder(
+            input_dim=8,
+            hidden_dim=4,
+            output_dim=3,
+        ).build()
+
+        self.assertIsInstance(cfg.experiment_config, ExperimentConfig)
+        self.assertIsNotNone(cfg.experiment_config.input_model_config)
+        self.assertIsNotNone(cfg.experiment_config.model_config)
+        self.assertIsNotNone(cfg.experiment_config.output_model_config)
+        self.assertIsInstance(cfg.experiment_config.input_model_config, LayerConfig)
+        self.assertIsInstance(cfg.experiment_config.model_config, LayerStackConfig)
+        self.assertIsInstance(cfg.experiment_config.output_model_config, LayerConfig)
+
+        model = Model(cfg)
+        self.assertEqual(model.input_model.input_dim, 8)
+        self.assertEqual(model.input_model.output_dim, 4)
+        self.assertEqual(model.model.input_dim, 4)
+        self.assertEqual(model.model.hidden_dim, 4)
+        self.assertEqual(model.model.output_dim, 4)
+        self.assertEqual(model.output_model.input_dim, 4)
+        self.assertEqual(model.output_model.output_dim, 3)
+
+    def test_option_group_build_matches_flat_kwargs(self):
+        stack_options = ParametricStackOptions(
+            hidden_dim=7,
+            num_layers=2,
+            activation=ActivationOptions.MISH,
+            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            dropout_probability=0.15,
+        )
+        mixture_options = ParametricMixtureOptions(
+            top_k=2,
+            num_experts=4,
+            weighted_parameters_flag=True,
+            clip_parameter_option=ClipParameterOptions.AFTER,
+            clip_range=0.7,
+        )
+        sampler_options = ParametricSamplerOptions(
+            threshold=0.2,
+            filter_above_threshold=True,
+            num_topk_samples=3,
+            normalize_probabilities_flag=False,
+            noisy_topk_flag=True,
+            coefficient_of_variation_loss_weight=0.01,
+            switch_loss_weight=0.02,
+            zero_centred_loss_weight=0.03,
+            mutual_information_loss_weight=0.04,
+        )
+        router_options = ParametricRouterOptions(
+            activation=stack_options.activation,
+        )
+
+        flat_cfg = ParametricMatrixConfigBuilder(
+            batch_size=3,
+            learning_rate=0.02,
+            input_dim=8,
+            hidden_dim=stack_options.hidden_dim,
+            output_dim=5,
+            stack_num_layers=stack_options.num_layers,
+            stack_activation=stack_options.activation,
+            stack_residual_connection_option=(stack_options.residual_connection_option),
+            stack_dropout_probability=stack_options.dropout_probability,
+            adaptive_mixture_top_k=mixture_options.top_k,
+            adaptive_mixture_num_experts=mixture_options.num_experts,
+            adaptive_mixture_weighted_parameters_flag=(
+                mixture_options.weighted_parameters_flag
+            ),
+            adaptive_mixture_clip_parameter_option=(
+                mixture_options.clip_parameter_option
+            ),
+            adaptive_mixture_clip_range=mixture_options.clip_range,
+            sampler_threshold=sampler_options.threshold,
+            sampler_filter_above_threshold=(sampler_options.filter_above_threshold),
+            sampler_num_topk_samples=sampler_options.num_topk_samples,
+            sampler_normalize_probabilities_flag=(
+                sampler_options.normalize_probabilities_flag
+            ),
+            sampler_noisy_topk_flag=sampler_options.noisy_topk_flag,
+            sampler_coefficient_of_variation_loss_weight=(
+                sampler_options.coefficient_of_variation_loss_weight
+            ),
+            sampler_switch_loss_weight=sampler_options.switch_loss_weight,
+            sampler_zero_centred_loss_weight=(sampler_options.zero_centred_loss_weight),
+            sampler_mutual_information_loss_weight=(
+                sampler_options.mutual_information_loss_weight
+            ),
+        ).build()
+        grouped_cfg = ParametricMatrixConfigBuilder(
+            batch_size=3,
+            learning_rate=0.02,
+            input_dim=8,
+            output_dim=5,
+            stack_options=stack_options,
+            mixture_options=mixture_options,
+            sampler_options=sampler_options,
+            router_options=router_options,
+        ).build()
+
+        self.assertEqual(flat_cfg, grouped_cfg)
+
+    def test_router_and_sampler_defaults_match_expected_structure(self):
+        cfg = ParametricMatrixConfigBuilder(
+            input_dim=8,
+            hidden_dim=9,
+            output_dim=3,
+        ).build()
+        parametric_config = (
+            cfg.experiment_config.model_config.layer_config.layer_model_config
+        )
+        router_config = parametric_config.router_config
+        router_stack = router_config.model_config
+        router_layer = router_stack.layer_config
+        router_linear = router_layer.layer_model_config
+        sampler_config = parametric_config.sampler_config
+
+        self.assertEqual(router_config.input_dim, 9)
+        self.assertEqual(router_config.num_experts, 2)
+        self.assertFalse(router_config.noisy_topk_flag)
+        self.assertEqual(router_stack.input_dim, 9)
+        self.assertEqual(router_stack.hidden_dim, 9)
+        self.assertEqual(router_stack.output_dim, 2)
+        self.assertEqual(router_stack.num_layers, 1)
+        self.assertEqual(
+            router_stack.last_layer_bias_option,
+            LastLayerBiasOptions.DEFAULT,
+        )
+        self.assertFalse(router_stack.apply_output_pipeline_flag)
+        self.assertEqual(router_layer.activation, ActivationOptions.GELU)
+        self.assertEqual(
+            router_layer.residual_connection_option,
+            ResidualConnectionOptions.DISABLED,
+        )
+        self.assertEqual(router_layer.dropout_probability, 0.0)
+        self.assertEqual(
+            router_layer.layer_norm_position,
+            LayerNormPositionOptions.DISABLED,
+        )
+        self.assertEqual(router_linear.input_dim, 9)
+        self.assertEqual(router_linear.output_dim, 2)
+        self.assertTrue(router_linear.bias_flag)
+        self.assertEqual(sampler_config.top_k, 1)
+        self.assertEqual(sampler_config.threshold, 0.0)
+        self.assertFalse(sampler_config.filter_above_threshold)
+        self.assertEqual(sampler_config.num_topk_samples, 0)
+        self.assertFalse(sampler_config.normalize_probabilities_flag)
+        self.assertFalse(sampler_config.noisy_topk_flag)
+        self.assertEqual(sampler_config.num_experts, 2)
+        self.assertEqual(sampler_config.coefficient_of_variation_loss_weight, 0.0)
+        self.assertEqual(sampler_config.switch_loss_weight, 0.0)
+        self.assertEqual(sampler_config.zero_centred_loss_weight, 0.0)
+        self.assertEqual(sampler_config.mutual_information_loss_weight, 0.0)
+        self.assertIsNone(sampler_config.router_config)
+
+    def test_preset_builds_current_parametric_config(self):
+        hidden_dim = 5
+        cfg = ExperimentPresets()._preset(
+            input_dim=8,
+            hidden_dim=hidden_dim,
+            output_dim=3,
+        )
+        stack_config = cfg.experiment_config.model_config
+        handler_config = stack_config.layer_config
+        layer_model_config = handler_config.layer_model_config
+
+        self.assertIsInstance(
+            cfg.experiment_config.input_model_config.layer_model_config,
+            LinearLayerConfig,
+        )
+        self.assertIsInstance(
+            cfg.experiment_config.output_model_config.layer_model_config,
+            LinearLayerConfig,
+        )
+        self.assertIsInstance(handler_config, ParametricLayerHandlerConfig)
+        self.assertIsInstance(layer_model_config, ParametricLayerConfig)
+        self.assertIsInstance(
+            layer_model_config.weight_mixture_config,
+            MatrixWeightsMixtureConfig,
+        )
+        self.assertIsNone(layer_model_config.bias_mixture_config)
+        self.assertEqual(
+            layer_model_config.routing_initialization_mode,
+            AdaptiveRouterOptions.SHARED_ROUTER,
+        )
+        self.assertEqual(stack_config.input_dim, hidden_dim)
+        self.assertEqual(stack_config.hidden_dim, hidden_dim)
+        self.assertEqual(stack_config.output_dim, hidden_dim)
+        self.assertTrue(stack_config.apply_output_pipeline_flag)
+        self.assertEqual(layer_model_config.input_dim, hidden_dim)
+        self.assertEqual(layer_model_config.output_dim, hidden_dim)
+        self.assertEqual(layer_model_config.weight_mixture_config.input_dim, hidden_dim)
+        self.assertEqual(
+            layer_model_config.weight_mixture_config.output_dim,
+            hidden_dim,
+        )
+
+    def test_bias_option_maps_to_disabled_or_matrix_bias_config(self):
+        disabled = ExperimentPresets()._preset(
+            input_dim=8,
+            hidden_dim=5,
+            output_dim=3,
+            adaptive_bias_option=None,
+        )
+        enabled = ExperimentPresets()._preset(
+            input_dim=8,
+            hidden_dim=5,
+            output_dim=3,
+            adaptive_bias_option=MatrixBiasMixtureConfig,
+        )
+
+        disabled_parametric_config = (
+            disabled.experiment_config.model_config.layer_config.layer_model_config
+        )
+        enabled_parametric_config = (
+            enabled.experiment_config.model_config.layer_config.layer_model_config
+        )
+
+        self.assertIsNone(disabled_parametric_config.bias_mixture_config)
+        self.assertIsInstance(
+            enabled_parametric_config.bias_mixture_config,
+            MatrixBiasMixtureConfig,
+        )
+
+    def test_forward_one_batch_per_dataset(self):
+        batch_size = 2
+        presets = ExperimentPresets()
+
+        for dataset in dataset_options.DATASET_OPTIONS_BY_TASK[
+            dataset_options.DEFAULT_EXPERIMENT_TASK
+        ]:
+            with self.subTest(dataset=dataset.__name__):
+                cfg = presets.get_config(ExperimentPreset.PRESET, dataset)[0]
+                model = Model(cfg)
+                model.eval()
+                X = self._fake_batch(dataset, batch_size)
+
+                with torch.no_grad():
+                    logits, auxiliary_loss = model(X)
+
+                self.assertEqual(logits.shape, (batch_size, dataset.num_classes))
+                self.assertEqual(auxiliary_loss.shape, torch.Size([]))
+
+    def test_all_presets_train_one_epoch(self):
+        presets = ExperimentPresets()
+        dataset = dataset_options.DATASET_OPTIONS_BY_TASK[
+            dataset_options.DEFAULT_EXPERIMENT_TASK
+        ][0]
+
+        for preset in ExperimentPreset:
+            with self.subTest(preset=preset.name):
+                search_mode = (
+                    RandomSearch(num_samples=1)
+                    if preset == ExperimentPreset.CONFIG
+                    else None
+                )
+                cfg = presets.get_config(preset, dataset, search_mode)[0]
+                model = Model(cfg)
+                datamodule = RandomImageClassificationDataModule(dataset)
+
+                tiny_cpu_trainer().fit(model, datamodule=datamodule)
+
+    def test_config_search_space_builds_configs(self):
+        configs = ExperimentPresets().get_config(
+            ExperimentPreset.CONFIG,
+            dataset_options.DATASET_OPTIONS_BY_TASK[
+                dataset_options.DEFAULT_EXPERIMENT_TASK
+            ][0],
+            RandomSearch(num_samples=2),
+        )
+
+        self.assertEqual(len(configs), 2)
+        for cfg in configs:
+            with self.subTest(hidden_dim=cfg.hidden_dim):
+                layer_model_config = (
+                    cfg.experiment_config.model_config.layer_config.layer_model_config
+                )
+                self.assertIsInstance(layer_model_config, ParametricLayerConfig)
+                self.assertIsInstance(
+                    layer_model_config.weight_mixture_config,
+                    MatrixWeightsMixtureConfig,
+                )
+                self.assertTrue(
+                    layer_model_config.bias_mixture_config is None
+                    or isinstance(
+                        layer_model_config.bias_mixture_config,
+                        MatrixBiasMixtureConfig,
+                    )
+                )
+
+    def test_search_keys_unknown_axis_raises(self):
+        with self.assertRaises(ValueError) as ctx:
+            ExperimentPresets().get_config(
+                ExperimentPreset.CONFIG,
+                dataset_options.DATASET_OPTIONS_BY_TASK[
+                    dataset_options.DEFAULT_EXPERIMENT_TASK
+                ][0],
+                RandomSearch(num_samples=2),
+                search_keys=["bogus_axis"],
+            )
+
+        self.assertIn("Unknown", str(ctx.exception))
+
+    def test_preset_accepts_grid_search_over_unlocked_axis(self):
+        configs = ExperimentPresets().get_config(
+            ExperimentPreset.PRESET,
+            dataset_options.DATASET_OPTIONS_BY_TASK[
+                dataset_options.DEFAULT_EXPERIMENT_TASK
+            ][0],
+            GridSearch(),
+            search_keys=["learning_rate"],
+        )
+
+        self.assertEqual(len(configs), len(search_space.SEARCH_SPACE_LEARNING_RATE))
+        self.assertEqual(
+            {cfg.learning_rate for cfg in configs},
+            set(search_space.SEARCH_SPACE_LEARNING_RATE),
+        )
+
+    def test_config_search_applies_matrix_specific_axes(self):
+        configs = ExperimentPresets().get_config(
+            ExperimentPreset.CONFIG,
+            dataset_options.DATASET_OPTIONS_BY_TASK[
+                dataset_options.DEFAULT_EXPERIMENT_TASK
+            ][0],
+            GridSearch(),
+            search_keys=["adaptive_bias_option"],
+        )
+
+        self.assertEqual(
+            len(configs), len(search_space.SEARCH_SPACE_ADAPTIVE_BIAS_OPTION)
+        )
+        self.assertEqual(
+            {
+                type(
+                    cfg.experiment_config.model_config.layer_config.layer_model_config.bias_mixture_config
+                )
+                if cfg.experiment_config.model_config.layer_config.layer_model_config.bias_mixture_config
+                is not None
+                else None
+                for cfg in configs
+            },
+            {None, MatrixBiasMixtureConfig},
+        )
+
+    def test_model_step_accepts_tuple_output(self):
+        batch_size = 2
+        cfg = ExperimentPresets()._preset(input_dim=8, hidden_dim=4, output_dim=3)
+        model = Model(cfg)
+        X = torch.randn(batch_size, 1, 2, 4)
+        y = torch.tensor([0, 2])
+
+        loss, logits, labels = model._model_step((X, y))
+
+        self.assertEqual(loss.shape, torch.Size([]))
+        self.assertEqual(logits.shape, (batch_size, 3))
+        self.assertEqual(labels.shape, (batch_size,))
+
+    def _fake_batch(self, dataset: type, batch_size: int) -> torch.Tensor:
+        return torch.randn(
+            batch_size,
+            dataset.num_channels,
+            dataset.default_height,
+            dataset.default_width,
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
