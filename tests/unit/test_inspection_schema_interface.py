@@ -5,7 +5,9 @@ import unittest
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
-from emperor.inspection import (
+from models.catalog import model_package
+
+from model_runtime.inspection import (
     ConfigurationSchema,
     InspectionError,
     InspectionRequest,
@@ -19,7 +21,7 @@ from emperor.inspection import (
     supported_config_keys,
     validate_configuration,
 )
-from emperor.model_packages import ModelPackage, model_package
+from model_runtime.packages import ModelPackage
 
 
 class InspectionSchemaInterfaceTests(unittest.TestCase):
@@ -73,6 +75,14 @@ class InspectionSchemaInterfaceTests(unittest.TestCase):
         self.assertEqual(fields["HIDDEN_DIM"].value_type, "int")
         self.assertEqual(fields["HIDDEN_DIM"].default, 32)
         self.assertEqual(fields["HIDDEN_DIM"].section_path, ("Global",))
+        self.assertEqual(
+            fields["HIDDEN_DIM"].maximum,
+            package.inspection_construction_limits.maximum_dimension,
+        )
+        self.assertEqual(
+            fields["STACK_NUM_LAYERS"].maximum,
+            package.inspection_construction_limits.maximum_layer_count,
+        )
         self.assertTrue(fields["GATE_FLAG"].locked)
         self.assertEqual(fields["GATE_FLAG"].locked_value, True)
 

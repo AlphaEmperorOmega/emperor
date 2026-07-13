@@ -3,18 +3,21 @@ from __future__ import annotations
 import os
 import unittest
 from dataclasses import FrozenInstanceError
+from unittest.mock import PropertyMock, patch
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
-from emperor.inspection import (
+from models.catalog import model_package
+from torch import nn
+
+from model_runtime.inspection import (
     InspectionError,
     InspectionRequest,
     InspectionResult,
     inspect_model,
     inspect_model_graph,
 )
-from emperor.model_packages import ModelPackage, model_package
-from torch import nn
+from model_runtime.packages import ModelPackage
 
 
 class InspectionGraphInterfaceTests(unittest.TestCase):
@@ -112,6 +115,59 @@ class InspectionGraphInterfaceTests(unittest.TestCase):
                     overrides={"gate_flag": "false"},
                 ),
             )
+
+    def test_oversized_structure_is_rejected_before_model_constructor_lookup(
+        self,
+    ) -> None:
+        package = model_package("linears/linear")
+        assert package is not None
+        limits = package.inspection_construction_limits
+
+        with patch.object(
+            ModelPackage,
+            "model_class",
+            new_callable=PropertyMock,
+            side_effect=AssertionError("model constructor was observed"),
+        ):
+            with self.assertRaisesRegex(
+                InspectionError,
+                "HIDDEN_DIM.*exceeds.*maximum",
+            ):
+                inspect_model(
+                    package,
+                    InspectionRequest(
+                        preset="baseline",
+                        overrides={
+                            "hidden_dim": limits.maximum_dimension + 1,
+                        },
+                    ),
+                )
+
+    def test_obvious_parameter_growth_is_rejected_before_construction(self) -> None:
+        package = model_package("linears/linear")
+        assert package is not None
+        limits = package.inspection_construction_limits
+
+        with patch.object(
+            ModelPackage,
+            "model_class",
+            new_callable=PropertyMock,
+            side_effect=AssertionError("model constructor was observed"),
+        ):
+            with self.assertRaisesRegex(
+                InspectionError,
+                "estimated parameter count.*exceeds",
+            ):
+                inspect_model(
+                    package,
+                    InspectionRequest(
+                        preset="baseline",
+                        overrides={
+                            "hidden_dim": limits.maximum_dimension,
+                            "stack_num_layers": limits.maximum_layer_count,
+                        },
+                    ),
+                )
 
 
 if __name__ == "__main__":
