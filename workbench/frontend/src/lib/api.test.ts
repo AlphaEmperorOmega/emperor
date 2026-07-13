@@ -1409,24 +1409,43 @@ describe("requestJson success", () => {
     const fetchMock = stubFetch(
       fakeResponse({ json: () => Promise.resolve({ status: "ok" }) }),
     );
-    window.localStorage.setItem(
-      WORKBENCH_API_BASE_URL_STORAGE_KEY,
-      "https://stored-api.example.test",
-    );
-    vi.spyOn(window.localStorage, "setItem").mockImplementation(() => {
-      throw new Error("storage locked");
+    const originalStorage = Object.getOwnPropertyDescriptor(window, "localStorage");
+    const storedValues = new Map<string, string>([
+      [WORKBENCH_API_BASE_URL_STORAGE_KEY, "https://stored-api.example.test"],
+    ]);
+    const lockedStorage = {
+      get length() {
+        return storedValues.size;
+      },
+      clear: vi.fn(() => storedValues.clear()),
+      getItem: vi.fn((key: string) => storedValues.get(key) ?? null),
+      key: vi.fn((index: number) => Array.from(storedValues.keys())[index] ?? null),
+      removeItem: vi.fn((key: string) => storedValues.delete(key)),
+      setItem: vi.fn(() => {
+        throw new Error("storage locked");
+      }),
+    } as unknown as Storage;
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      value: lockedStorage,
     });
 
-    expect(getWorkbenchApiBaseUrl()).toBe("https://stored-api.example.test");
-    await expect(
-      setWorkbenchApiBaseUrl("https://runtime-api.example.test"),
-    ).rejects.toThrow(/could not persist/i);
+    try {
+      expect(getWorkbenchApiBaseUrl()).toBe("https://stored-api.example.test");
+      await expect(
+        setWorkbenchApiBaseUrl("https://runtime-api.example.test"),
+      ).rejects.toThrow(/could not persist/i);
 
-    expect(getWorkbenchApiBaseUrl()).toBe("https://stored-api.example.test");
-    await fetchHealth();
-    expect(fetchMock.mock.calls[0][0]).toBe(
-      "https://stored-api.example.test/health",
-    );
+      expect(getWorkbenchApiBaseUrl()).toBe("https://stored-api.example.test");
+      await fetchHealth();
+      expect(fetchMock.mock.calls[0][0]).toBe(
+        "https://stored-api.example.test/health",
+      );
+    } finally {
+      if (originalStorage) {
+        Object.defineProperty(window, "localStorage", originalStorage);
+      }
+    }
   });
 
   it("prefers a runtime API URL reset when storage clearing throws", async () => {
