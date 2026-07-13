@@ -6,7 +6,8 @@ browser.
 
 ## Requirements
 
-- Node.js `^18.18.0 || ^19.8.0 || >=20.0.0`
+- Node.js `>=20.9.0`. The repository-managed development and CI runtime remains
+  Node 24.
 - npm
 - A running Emperor workbench API. Local development defaults to
   `http://127.0.0.1:9999`.
@@ -59,9 +60,11 @@ Open `http://localhost:9000` unless you selected a different port.
 
 ## Available Commands
 
-- `npm run dev`: start Next.js locally on `${PORT:-9000}`.
-- `npm run build`: create a production Next.js build.
-- `npm run lint`: run ESLint with zero warnings allowed.
+- `npm run dev`: start Next.js 16 with Turbopack on `${PORT:-9000}`.
+- `npm run build`: create the production Next.js 16 Turbopack build.
+- `npm run lint`: run the direct Next.js flat ESLint configuration with zero
+  warnings allowed. This remains a separate gate because Next.js 16 does not
+  run lint during `next build`.
 - `npm run typecheck`: generate Next.js route/app types, then run TypeScript
   without emitting files.
 - `npm run test`: run the Vitest unit and component test suite.
@@ -73,6 +76,38 @@ Open `http://localhost:9000` unless you selected a different port.
 `npm run typecheck` writes generated Next.js types under `.next/types`. Run it
 sequentially with `npm run build`; running both against the same `.next`
 directory at the same time can race while those generated files are refreshed.
+
+## Next.js 16 Build Configuration
+
+The package pins stable Next.js 16.2.10 with React and React DOM 19.2.7. Normal
+development and production commands use Turbopack; there is no Webpack fallback.
+Stable React Compiler and typed-route support are enabled.
+
+The React View Transition experiment was evaluated and then disabled. In the
+production browser harness, its 220 ms workspace crossfade serialized rapid
+Model/Training/Logs navigation: the long-session p95 rose from 549.51 ms to
+1,492.90 ms. A reduced-motion isolation still measured 1,115.63 ms because
+React and Chromium retained snapshot/effect coordination overhead. This was a
+repeatable failure above the migration's 20% limit, so workspace URL changes
+continue to use React `startTransition` without the experimental visual
+transition.
+
+The experimental Turbopack filesystem cache for production builds was evaluated
+and then disabled: repeated cached builds reproducibly passed a TypeScript module
+to the PostCSS pipeline instead of `app/globals.css`. The normal uncached
+Turbopack build is the supported path until that experiment is reliable here.
+No `optimizePackageImports` override is retained. Next.js already optimizes
+`lucide-react`, and measured builds with both `@xyflow/react` and
+`@tanstack/react-query` listed produced byte-identical route chunks.
+
+Cache Components, Route Handlers, Server Actions, proxy middleware, and server
+data caching remain intentionally disabled. API-origin selection, bearer session
+state, protected-read gating, and TanStack Query ownership all live in the
+browser; introducing a server data layer would duplicate those contracts. Logs
+and Training implementation code still loads only after first activation. The
+Model workspace regions share one immediately requested dynamic boundary, which
+avoids serial reveal commits while retaining a separate chunk; its measured
+bundle still fits the existing gzip budget under the React Compiler.
 
 ## Testing
 
