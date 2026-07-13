@@ -237,9 +237,12 @@ mount lifecycle remain in the Workbench shell. Training's wide-layout
 Implementation is a private deferred leaf so layout ownership does not pull it
 into the initial browser bundle.
 
-The frontend Logs Workspace Module owns target-scoped and custom Run browsing,
-progressive tag and chart-query coordination, selected Run details, and the
-capability-guarded deletion lifecycle. Rendering consumes four focused
+The frontend Logs Workspace Module owns paginated browsing across the full Run
+catalog through explicit experiment, Dataset, Model Package, preset, and tag
+filters; progressive tag and chart-query coordination; selected Run details;
+and the capability-guarded deletion lifecycle. No experiments are selected on
+first activation, so Run metadata is available for browsing while tag and chart
+reads stay cold until an experiment is chosen. Rendering consumes four focused
 projections: `useLogsBrowser()`, `useLogsCharts()`, `useLogRunDetail()`, and
 `useLogsDeletion()`. Nullable selections, query keys and chunking, stale-data
 reconciliation, delete filters, mutations, and cache invalidation remain private

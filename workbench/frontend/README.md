@@ -296,6 +296,11 @@ projection. Raw query results, setters, and low-level toggles do not cross that
 seam. Run Artifact detail loading remains in the Logs Workspace Implementation,
 so the detail hook only reads context.
 
+Logs begins with a paginated view of the full Run catalog and no selected
+experiments. Experiment, Dataset, Model Package, preset, and tag controls are
+the explicit browsing filters; tag, Run Artifact, and scalar reads stay cold
+until those selections produce visible Runs.
+
 Experiment changes retain a manual scalar-tag selection while Run facets and
 tag options are still refreshing. Once fresh tags are authoritative, the owner
 preserves a matching selection, replaces a stale selection with preferred

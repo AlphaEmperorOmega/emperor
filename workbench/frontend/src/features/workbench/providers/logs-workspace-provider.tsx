@@ -1,6 +1,5 @@
 import { type ReactNode, useCallback, useEffect, useRef } from "react";
 import { createWorkbenchContext } from "@/features/workbench/providers/create-context";
-import { useModelPackageInspection } from "@/features/workbench/providers/workbench-providers";
 import {
   isWorkbenchProtectedAccessReady,
   useRegisterWorkbenchConnectionReset,
@@ -74,23 +73,11 @@ export function LogsWorkspaceProvider({
   const protectedAccessReady = isWorkbenchProtectedAccessReady(
     workbenchConnection,
   );
-  const { target, options } = useModelPackageInspection();
   const { activeTrainingJob } = useActiveTrainingJob();
-  const targetPreset =
-    target.kind === "historical-run"
-      ? target.preset
-      : options.presets.find((preset) => preset.name === target.preset)?.label ??
-        target.preset;
   const workspace = useLogsWorkspaceState({
     enabled: enabled && protectedAccessReady,
     logDeletionEnabled:
       capabilities.logDeletionEnabled && protectedAccessReady,
-    targetScope: {
-      modelType: target.modelPackage.modelType,
-      model: target.modelPackage.model,
-      preset: targetPreset,
-      datasets: target.datasets,
-    },
   });
   const includeStartedExperiment =
     workspace.commands.includeStartedExperiment;

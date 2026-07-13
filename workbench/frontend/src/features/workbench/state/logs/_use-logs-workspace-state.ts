@@ -20,7 +20,6 @@ import {
   useLogExperimentsQuery,
   useLogRunArtifactsQuery,
   useLogTagQueries,
-  useLogRunsQuery,
 } from "@/features/workbench/state/logs/use-log-queries";
 import { useLogQueryCache } from "@/features/workbench/state/logs/use-log-query-cache";
 import { logQueryKeys } from "@/lib/query-keys";
@@ -48,9 +47,8 @@ import {
   setNoValues,
 } from "@/features/workbench/state/logs/logs-selectors";
 
-const TARGET_LOG_RUN_LIMIT = 5;
-const CUSTOM_LOG_RUN_LIMIT = 100;
-const MAX_CUSTOM_LOG_RUN_LIMIT = 2000;
+const LOG_RUN_PAGE_SIZE = 100;
+const MAX_LOG_RUN_LIMIT = 2000;
 const SCALAR_TAG_RUN_WINDOW_SIZE = 100;
 const LOG_SELECT_ALL_TAG_LIMIT = 100;
 const DEFAULT_COLLAPSED_METRIC_GROUPS = new Set<LogMetricGroupKey>(["other"]);
@@ -534,15 +532,6 @@ function removeStartedExperiment(
   return next;
 }
 
-export type LogsScopeMode = "target" | "custom";
-
-export type LogsTargetScope = {
-  modelType: string;
-  model: string;
-  preset: string;
-  datasets: string[];
-};
-
 export type LogsBrowserFilterKey =
   | "experiments"
   | "datasets"
@@ -556,14 +545,6 @@ export type LogsBrowserFilter = {
 };
 
 export type LogsBrowser = {
-  scope: {
-    mode: LogsScopeMode;
-    target: LogsTargetScope;
-    canUseCurrentTarget: boolean;
-    allRunsSelected: boolean;
-    useCurrentTarget: () => void;
-    showAllRuns: () => void;
-  };
   filters: Record<LogsBrowserFilterKey, LogsBrowserFilter>;
   status: {
     isScanning: boolean;
@@ -609,31 +590,11 @@ export type LogsBrowser = {
 function useLogsWorkspaceImplementation({
   enabled,
   logDeletionEnabled = true,
-  targetScope,
 }: {
   enabled: boolean;
   logDeletionEnabled?: boolean;
-  targetScope: LogsTargetScope;
 }) {
   const { refreshAfterMutation, refreshLogs } = useLogQueryCache();
-  const [scopeMode, setScopeMode] = useState<LogsScopeMode>("target");
-  const targetScopeKey = useMemo(
-    () =>
-      JSON.stringify({
-        modelType: targetScope.modelType,
-        model: targetScope.model,
-        preset: targetScope.preset,
-        datasets: [...targetScope.datasets].sort(),
-      }),
-    [
-      targetScope.datasets,
-      targetScope.model,
-      targetScope.modelType,
-      targetScope.preset,
-    ],
-  );
-  const [appliedTargetScopeKey, setAppliedTargetScopeKey] =
-    useState(targetScopeKey);
   const [startedExperiments, setStartedExperiments] = useState<Set<string>>(new Set());
   const [selectedExperiments, setSelectedExperiments] = useState<Set<string> | null>(
     emptySelection,
@@ -669,59 +630,26 @@ function useLogsWorkspaceImplementation({
     Set<LogMetricGroupKey>
   >(new Set(DEFAULT_COLLAPSED_METRIC_GROUPS));
 
-  const hasTargetScope = Boolean(
-    targetScope.modelType &&
-      targetScope.model &&
-      targetScope.preset &&
-      targetScope.datasets.length > 0,
-  );
-  const targetRunFilters = useMemo(
-    () =>
-      hasTargetScope
-        ? {
-            models: [{ modelType: targetScope.modelType, model: targetScope.model }],
-            preset: [targetScope.preset],
-            dataset: targetScope.datasets,
-            hasEventFiles: true,
-          }
-        : { hasEventFiles: true },
-    [
-      hasTargetScope,
-      targetScope.datasets,
-      targetScope.model,
-      targetScope.modelType,
-      targetScope.preset,
-    ],
-  );
-  const isTargetScopeMode = scopeMode === "target";
   const selectedExperimentQueryValues = useMemo(
     () => (selectedExperiments ? sortedSelectionValues(selectedExperiments) : []),
     [selectedExperiments],
   );
   const hasSelectedExperimentFilters = selectedExperimentQueryValues.length > 0;
-  const customRunFilters = useMemo(
+  const runFilters = useMemo(
     () =>
       hasSelectedExperimentFilters
         ? { experiment: selectedExperimentQueryValues }
         : undefined,
     [hasSelectedExperimentFilters, selectedExperimentQueryValues],
   );
-  const canQueryRuns = enabled && (!isTargetScopeMode || hasTargetScope);
-  const targetRunsQuery = useLogRunsQuery({
-    enabled: canQueryRuns && isTargetScopeMode,
-    filters: targetRunFilters,
-    pagination: {
-      limit: TARGET_LOG_RUN_LIMIT,
-      offset: 0,
-    },
+  const runPagesQuery = useInfiniteLogRunsQuery({
+    enabled,
+    filters: runFilters,
+    pageSize: LOG_RUN_PAGE_SIZE,
+    keepPreviousData: false,
   });
-  const customRunPagesQuery = useInfiniteLogRunsQuery({
-    enabled: canQueryRuns && !isTargetScopeMode,
-    filters: customRunFilters,
-    pageSize: CUSTOM_LOG_RUN_LIMIT,
-  });
-  const customRunsData = useMemo(() => {
-    const pages = customRunPagesQuery.data?.pages;
+  const paginatedRunsData = useMemo(() => {
+    const pages = runPagesQuery.data?.pages;
     if (!pages?.length) {
       return undefined;
     }
@@ -731,16 +659,15 @@ function useLogsWorkspaceImplementation({
       ...firstPage,
       runs: pages.flatMap((page) => page.runs),
       total: firstPage.total,
-      limit: CUSTOM_LOG_RUN_LIMIT,
+      limit: LOG_RUN_PAGE_SIZE,
       offset: 0,
       hasMore: Boolean(lastPage.hasMore),
     };
-  }, [customRunPagesQuery.data?.pages]);
-  const customRunsQuery = {
-    ...customRunPagesQuery,
-    data: customRunsData,
+  }, [runPagesQuery.data?.pages]);
+  const runsQuery = {
+    ...runPagesQuery,
+    data: paginatedRunsData,
   };
-  const runsQuery = isTargetScopeMode ? targetRunsQuery : customRunsQuery;
   const experimentsQuery = useLogExperimentsQuery({ enabled });
 
   useEffect(() => {
@@ -776,7 +703,6 @@ function useLogsWorkspaceImplementation({
   );
 
   const includeStartedExperiment = useCallback((logFolder: string) => {
-    setScopeMode("custom");
     setStartedExperiments((previous) => {
       if (previous.has(logFolder)) {
         return previous;
@@ -805,40 +731,6 @@ function useLogsWorkspaceImplementation({
     setSelectedDetailRunId(null);
     setCollapsedMetricGroups(new Set(DEFAULT_COLLAPSED_METRIC_GROUPS));
   }, []);
-
-  const useCurrentTargetScope = useCallback(() => {
-    setScopeMode("target");
-    setAppliedTargetScopeKey(targetScopeKey);
-    resetLogSelections();
-  }, [resetLogSelections, targetScopeKey]);
-
-  const showAllRuns = useCallback(() => {
-    setScopeMode("custom");
-    resetLogSelections();
-    const experimentValues = new Set([
-      ...experimentOptions.map((option) => option.value),
-      ...startedExperiments,
-    ]);
-    setSelectedExperiments(experimentValues);
-    setPendingExperimentTagSeeds(new Set(experimentValues));
-  }, [experimentOptions, resetLogSelections, startedExperiments]);
-
-  const markCustomScope = useCallback(() => {
-    setScopeMode("custom");
-  }, []);
-
-  useEffect(() => {
-    if (scopeMode !== "target" || appliedTargetScopeKey === targetScopeKey) {
-      return;
-    }
-    setAppliedTargetScopeKey(targetScopeKey);
-    resetLogSelections();
-  }, [
-    appliedTargetScopeKey,
-    resetLogSelections,
-    scopeMode,
-    targetScopeKey,
-  ]);
 
   useEffect(() => {
     if (startedExperiments.size === 0 || runs.length === 0) {
@@ -1265,8 +1157,6 @@ function useLogsWorkspaceImplementation({
   });
   const clearDeletionForConnectionChange = deletion.clearForConnectionChange;
   const clearForConnectionChange = useCallback(() => {
-    setScopeMode("target");
-    setAppliedTargetScopeKey(targetScopeKey);
     setStartedExperiments(new Set());
     resetLogSelections();
     setScalarTagRunWindowState({
@@ -1282,7 +1172,7 @@ function useLogsWorkspaceImplementation({
       isFetching: false,
     };
     clearDeletionForConnectionChange();
-  }, [clearDeletionForConnectionChange, resetLogSelections, targetScopeKey]);
+  }, [clearDeletionForConnectionChange, resetLogSelections]);
 
   useEffect(() => {
     if (
@@ -1370,22 +1260,19 @@ function useLogsWorkspaceImplementation({
     totalRunCount: runsQuery.data?.total ?? runs.length,
     canLoadMoreRuns:
       enabled &&
-      !isTargetScopeMode &&
-      Boolean(customRunPagesQuery.hasNextPage) &&
-      runs.length < MAX_CUSTOM_LOG_RUN_LIMIT,
-    isLoadingMoreRuns:
-      !isTargetScopeMode && customRunPagesQuery.isFetchingNextPage,
+      Boolean(runPagesQuery.hasNextPage) &&
+      runs.length < MAX_LOG_RUN_LIMIT,
+    isLoadingMoreRuns: runPagesQuery.isFetchingNextPage,
     loadMoreRuns: () => {
       if (
         !enabled ||
-        isTargetScopeMode ||
-        customRunPagesQuery.isFetchingNextPage ||
-        !customRunPagesQuery.hasNextPage ||
-        runs.length >= MAX_CUSTOM_LOG_RUN_LIMIT
+        runPagesQuery.isFetchingNextPage ||
+        !runPagesQuery.hasNextPage ||
+        runs.length >= MAX_LOG_RUN_LIMIT
       ) {
         return;
       }
-      void customRunPagesQuery.fetchNextPage();
+      void runPagesQuery.fetchNextPage();
     },
     loadedScalarTagRunCount: scalarTagRunIds.length,
     totalScalarTagRunCount: visibleRunIds.length,
@@ -1420,12 +1307,7 @@ function useLogsWorkspaceImplementation({
     },
     refreshLogLists: refreshLogs,
     includeStartedExperiment,
-    scopeMode,
-    targetScope,
-    useCurrentTargetScope,
-    showAllRuns,
     toggleExperiment: (value: string) => {
-      markCustomScope();
       const experimentFallbackValues = experimentOptions.map((option) => option.value);
       const currentSelection = selectedExperiments ?? new Set(experimentFallbackValues);
       const isSelectingExperiment = !currentSelection.has(value);
@@ -1442,7 +1324,6 @@ function useLogsWorkspaceImplementation({
       );
     },
     toggleDataset: (value: string) => {
-      markCustomScope();
       toggleSetValueWithFallback(
         setSelectedDatasets,
         datasetOptions.map((option) => option.value),
@@ -1450,7 +1331,6 @@ function useLogsWorkspaceImplementation({
       );
     },
     toggleModel: (value: string) => {
-      markCustomScope();
       toggleSetValueWithFallback(
         setSelectedModels,
         modelOptions.map((option) => option.value),
@@ -1458,7 +1338,6 @@ function useLogsWorkspaceImplementation({
       );
     },
     togglePreset: (value: string) => {
-      markCustomScope();
       toggleSetValueWithFallback(
         setSelectedPresets,
         presetOptions.map((option) => option.value),
@@ -1474,7 +1353,6 @@ function useLogsWorkspaceImplementation({
       );
     },
     selectAllExperiments: () => {
-      markCustomScope();
       const experimentValues = experimentOptions.map((option) => option.value);
       const currentSelection = selectedExperiments ?? new Set(experimentValues);
       if (!selectionMatchesValues(currentSelection, experimentValues)) {
@@ -1493,7 +1371,6 @@ function useLogsWorkspaceImplementation({
       );
     },
     selectNoExperiments: () => {
-      markCustomScope();
       const currentSelection =
         selectedExperiments ??
         new Set(experimentOptions.map((option) => option.value));
@@ -1504,27 +1381,21 @@ function useLogsWorkspaceImplementation({
       setNoValues(setSelectedExperiments);
     },
     selectAllDatasets: () => {
-      markCustomScope();
       setAllValues(setSelectedDatasets, datasetOptions.map((option) => option.value));
     },
     selectNoDatasets: () => {
-      markCustomScope();
       setNoValues(setSelectedDatasets);
     },
     selectAllModels: () => {
-      markCustomScope();
       setAllValues(setSelectedModels, modelOptions.map((option) => option.value));
     },
     selectNoModels: () => {
-      markCustomScope();
       setNoValues(setSelectedModels);
     },
     selectAllPresets: () => {
-      markCustomScope();
       setAllValues(setSelectedPresets, presetOptions.map((option) => option.value));
     },
     selectNoPresets: () => {
-      markCustomScope();
       setNoValues(setSelectedPresets);
     },
     selectAllTags: () => {
@@ -1608,15 +1479,6 @@ function selectedBrowserValues(
     .map((option) => option.value);
 }
 
-function hasCompleteTarget(target: LogsTargetScope) {
-  return Boolean(
-    target.modelType &&
-      target.model &&
-      target.preset &&
-      target.datasets.length > 0,
-  );
-}
-
 function logsBrowserProjection(state: LogsWorkspaceImplementation): LogsBrowser {
   const filters: LogsBrowser["filters"] = {
     experiments: {
@@ -1679,24 +1541,7 @@ function logsBrowserProjection(state: LogsWorkspaceImplementation): LogsBrowser 
     presets: state.selectNoPresets,
     tags: state.selectNoTags,
   };
-  const allExperimentValues = filters.experiments.options.map(
-    (option) => option.value,
-  );
-
   return {
-    scope: {
-      mode: state.scopeMode,
-      target: state.targetScope,
-      canUseCurrentTarget: hasCompleteTarget(state.targetScope),
-      allRunsSelected:
-        state.scopeMode === "custom" &&
-        filters.experiments.selectedValues.length === allExperimentValues.length &&
-        allExperimentValues.every((value) =>
-          filters.experiments.selectedValues.includes(value),
-        ),
-      useCurrentTarget: state.useCurrentTargetScope,
-      showAllRuns: state.showAllRuns,
-    },
     filters,
     status: {
       isScanning: state.runsQuery.isLoading || state.experimentsQuery.isLoading,
@@ -1787,7 +1632,6 @@ function logsDeletionProjection(
 export function useLogsWorkspaceState(input: {
   enabled: boolean;
   logDeletionEnabled?: boolean;
-  targetScope: LogsTargetScope;
 }): LogsWorkspaceState {
   const state = useLogsWorkspaceImplementation(input);
   const artifactsQuery = useLogRunArtifactsQuery({

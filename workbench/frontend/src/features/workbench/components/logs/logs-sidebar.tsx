@@ -167,7 +167,7 @@ function SidebarStatus({
 }
 
 export function LogsSidebar({ browser, deletion }: LogsSidebarProps) {
-  const { actions, filters, pagination, results, scope, status } = browser;
+  const { actions, filters, pagination, results, status } = browser;
   const experimentOptions = filters.experiments.options;
   const datasetOptions = filters.datasets.options;
   const modelOptions = filters.models.options;
@@ -300,33 +300,6 @@ export function LogsSidebar({ browser, deletion }: LogsSidebarProps) {
             onToggle={toggleExperiment}
             onAll={selectAllExperiments}
             onNone={selectNoExperiments}
-            beforeDropdown={
-              <div
-                className="grid grid-cols-2 gap-2 rounded-panel border border-line-soft bg-panel-2/70 p-2"
-                role="group"
-                aria-label="Log scope"
-              >
-                <Button
-                  type="button"
-                  variant={scope.mode === "target" ? "secondary" : "ghost"}
-                  className="h-touch type-compact md:h-control"
-                  aria-pressed={scope.mode === "target"}
-                  onClick={scope.useCurrentTarget}
-                  disabled={!scope.canUseCurrentTarget}
-                >
-                  Current Target
-                </Button>
-                <Button
-                  type="button"
-                  variant={scope.allRunsSelected ? "secondary" : "ghost"}
-                  className="h-touch type-compact md:h-control"
-                  aria-pressed={scope.allRunsSelected}
-                  onClick={scope.showAllRuns}
-                >
-                  All Runs
-                </Button>
-              </div>
-            }
             optionCountDisplay="hover"
             optionActions={
               logDeletionEnabled

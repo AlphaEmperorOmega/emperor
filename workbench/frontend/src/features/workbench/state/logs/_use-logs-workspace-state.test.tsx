@@ -37,10 +37,7 @@ vi.mock("@/lib/api", () => ({
   fetchLogTags: mocks.fetchLogTags,
 }));
 
-import {
-  useLogsWorkspaceState,
-  type LogsTargetScope,
-} from "@/features/workbench/state/logs/_use-logs-workspace-state";
+import { useLogsWorkspaceState } from "@/features/workbench/state/logs/_use-logs-workspace-state";
 import { type LogRun, type LogRunTags } from "@/lib/api";
 
 function logRun(overrides: Partial<LogRun> & Pick<LogRun, "id">): LogRun {
@@ -94,18 +91,8 @@ function deferred<T>() {
   return { promise, reject, resolve };
 }
 
-const targetScope: LogsTargetScope = {
-  modelType: "linears",
-  model: "linear",
-  preset: "baseline",
-  datasets: ["Cifar10"],
-};
-
 function renderLogsWorkspaceState(
-  initialProps: {
-    enabled: boolean;
-    targetScope: LogsTargetScope;
-  } = { enabled: true, targetScope },
+  initialProps: { enabled: boolean } = { enabled: true },
 ) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -115,7 +102,6 @@ function renderLogsWorkspaceState(
     (props) =>
       useLogsWorkspaceState({
         enabled: props.enabled,
-        targetScope: props.targetScope,
       }),
     {
       initialProps,
@@ -199,7 +185,7 @@ describe("Logs workspace state", () => {
   });
 
   it("waits for fresh experiment runs before selecting first dataset, model, and preset", async () => {
-    const customRuns = [
+    const selectedExperimentRuns = [
       logRun({ id: "a-cifar" }),
       logRun({
         id: "a-mnist",
@@ -237,7 +223,7 @@ describe("Logs workspace state", () => {
     });
 
     act(() => {
-      experimentRuns.resolve({ runs: customRuns });
+      experimentRuns.resolve({ runs: selectedExperimentRuns });
     });
 
     await waitFor(() => {
@@ -405,7 +391,7 @@ describe("Logs workspace state", () => {
     );
   });
 
-  it("uses complete custom run metadata while scalar tags load by visible-run window", async () => {
+  it("uses complete paginated Run metadata while scalar tags load by visible-run window", async () => {
     const runs = Array.from({ length: 105 }, (_, index) => {
       const lateRun = index >= 100;
       return logRun({
@@ -572,32 +558,27 @@ describe("Logs workspace state", () => {
       .toEqual(presetOptionsBefore);
   });
 
-  it("keeps an incomplete current target cold until a custom experiment is selected", async () => {
-    const { result } = renderLogsWorkspaceState({
-      enabled: true,
-      targetScope: { ...targetScope, datasets: [] },
-    });
-
-    await waitFor(() => {
-      expect(result.current.browser.filters.experiments.options.map((option) => option.value))
-        .toEqual(["exp_a", "exp_b"]);
-    });
-    expect(mocks.fetchLogRuns).not.toHaveBeenCalled();
-    expect(mocks.fetchLogTags).not.toHaveBeenCalled();
-
-    act(() => {
-      result.current.browser.actions.toggleFilter("experiments", "exp_a");
-    });
+  it("loads paginated all-Run metadata while selections, tags, and charts stay empty", async () => {
+    const { result } = renderLogsWorkspaceState();
 
     await waitFor(() => {
       expect(mocks.fetchLogRuns).toHaveBeenCalledWith(
-        expect.objectContaining({ filters: { experiment: ["exp_a"] } }),
+        expect.objectContaining({
+          filters: undefined,
+          pagination: { limit: 100, offset: 0 },
+        }),
         expect.any(Object),
       );
+      expect(result.current.browser.pagination.runs.loaded).toBe(3);
     });
+    expect(result.current.browser.filters.experiments.selectedValues).toEqual([]);
+    expect(result.current.charts.visibleRuns).toEqual([]);
+    expect(result.current.charts.visibleRunIds).toEqual([]);
+    expect(result.current.charts.tagRecords).toEqual([]);
+    expect(mocks.fetchLogTags).not.toHaveBeenCalled();
   });
 
-  it("retains custom selections across target changes and returns explicitly", async () => {
+  it("retains explicit selections while Logs is hidden and reactivated", async () => {
     const rendered = renderLogsWorkspaceState();
 
     await waitFor(() => {
@@ -607,44 +588,17 @@ describe("Logs workspace state", () => {
       rendered.result.current.browser.actions.toggleFilter("experiments", "exp_a");
     });
     await waitFor(() => {
-      expect(rendered.result.current.browser.scope.mode).toBe("custom");
       expect(values(rendered.result.current.browser.filters.experiments.selectedValues)).toEqual(["exp_a"]);
     });
 
-    rendered.rerender({
-      enabled: true,
-      targetScope: {
-        modelType: "bert",
-        model: "linear",
-        preset: "pre-norm",
-        datasets: ["PennTreebank"],
-      },
-    });
-
-    expect(rendered.result.current.browser.scope.mode).toBe("custom");
+    rendered.rerender({ enabled: false });
     expect(values(rendered.result.current.browser.filters.experiments.selectedValues)).toEqual(["exp_a"]);
 
-    act(() => {
-      rendered.result.current.browser.scope.useCurrentTarget();
-    });
-
-    await waitFor(() => {
-      expect(rendered.result.current.browser.scope.mode).toBe("target");
-      expect(values(rendered.result.current.browser.filters.experiments.selectedValues)).toEqual([]);
-      expect(mocks.fetchLogRuns).toHaveBeenCalledWith(
-        expect.objectContaining({
-          filters: expect.objectContaining({
-            models: [{ modelType: "bert", model: "linear" }],
-            preset: ["pre-norm"],
-            dataset: ["PennTreebank"],
-          }),
-        }),
-        expect.any(Object),
-      );
-    });
+    rendered.rerender({ enabled: true });
+    expect(values(rendered.result.current.browser.filters.experiments.selectedValues)).toEqual(["exp_a"]);
   });
 
-  it("enters custom scope for a Training-created experiment and all-runs browsing", async () => {
+  it("selects a Training-created experiment for paginated Run browsing", async () => {
     const { result } = renderLogsWorkspaceState();
 
     await waitFor(() => {
@@ -655,25 +609,11 @@ describe("Logs workspace state", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.browser.scope.mode).toBe("custom");
       expect(result.current.browser.filters.experiments.selectedValues).toEqual([]);
       expect(mocks.fetchLogRuns).toHaveBeenCalledWith(
         expect.objectContaining({ filters: { experiment: ["fresh_run"] } }),
         expect.any(Object),
       );
-    });
-
-    act(() => {
-      result.current.browser.scope.useCurrentTarget();
-      result.current.browser.scope.showAllRuns();
-    });
-
-    await waitFor(() => {
-      expect(result.current.browser.scope.mode).toBe("custom");
-      expect(values(result.current.browser.filters.experiments.selectedValues)).toEqual([
-        "exp_a",
-        "exp_b",
-      ]);
     });
   });
 
@@ -691,7 +631,6 @@ describe("Logs workspace state", () => {
       });
     });
     await waitFor(() => {
-      expect(result.current.browser.scope.mode).toBe("custom");
       expect(result.current.browser.filters.experiments.selectedValues).toEqual([]);
       expect(mocks.fetchLogRuns).toHaveBeenCalledWith(
         expect.objectContaining({ filters: { experiment: ["fresh_run"] } }),
@@ -701,11 +640,10 @@ describe("Logs workspace state", () => {
 
     act(() => result.current.commands.clearForConnectionChange());
 
-    expect(result.current.browser.scope.mode).toBe("target");
     expect(values(result.current.browser.filters.experiments.selectedValues)).toEqual([]);
     expect(result.current.detail.run).toBeUndefined();
     expect(result.current.deletion.operation).toBeNull();
-    act(() => result.current.browser.scope.showAllRuns());
+    act(() => result.current.browser.actions.selectAll("experiments"));
     expect(values(result.current.browser.filters.experiments.selectedValues)).toEqual(["exp_a", "exp_b"]);
   });
 
@@ -1033,7 +971,7 @@ describe("Logs workspace state", () => {
       expect(rendered.result.current.deletion.operation?.phase).toBe("mutating");
     });
 
-    rendered.rerender({ enabled: false, targetScope });
+    rendered.rerender({ enabled: false });
     await waitFor(() => {
       expect(rendered.result.current.deletion.operation).toBeNull();
     });
@@ -1048,7 +986,7 @@ describe("Logs workspace state", () => {
       "fresh_run",
     ]);
 
-    rendered.rerender({ enabled: true, targetScope });
+    rendered.rerender({ enabled: true });
     await waitFor(() => {
       expect(rendered.result.current.browser.filters.experiments.options).toEqual([]);
       expect(values(rendered.result.current.browser.filters.experiments.selectedValues)).toEqual([]);

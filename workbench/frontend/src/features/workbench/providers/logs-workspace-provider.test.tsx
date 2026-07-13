@@ -4,49 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   chartViewModel: vi.fn(),
   includeStartedExperiment: vi.fn(),
-  inspection: {
-    target: {
-      kind: "preset" as const,
-      modelPackage: { modelType: "linears", model: "linear" },
-      preset: "baseline",
-      experimentTask: "image-classification",
-      datasets: ["Mnist"],
-    } as {
-      kind: "preset" | "historical-run";
-      modelPackage: { modelType: string; model: string };
-      preset: string;
-      experimentTask: string;
-      datasets: string[];
-      run?: {
-        runId: string;
-        experiment: string;
-        preset: string;
-        dataset: string;
-        experimentTask: string;
-      };
-    },
-    browser: {
-      selectedModelType: "linears",
-      selectedModel: "linear",
-      selectedPreset: "baseline",
-      selectedDatasets: ["Mnist"],
-    },
-    presets: [
-      { name: "baseline", label: "BASELINE" },
-    ],
-  },
   workspaceInput: vi.fn(),
   protectedAccessReady: true,
-}));
-
-vi.mock("@/features/workbench/providers/workbench-providers", () => ({
-  useModelPackageInspection: () => ({
-    target: mocks.inspection.target,
-    browser: mocks.inspection.browser,
-    options: {
-      presets: mocks.inspection.presets,
-    },
-  }),
 }));
 
 vi.mock("@/features/workbench/providers/workbench-connection-provider", () => ({
@@ -67,24 +26,14 @@ vi.mock("@/features/workbench/state/logs/_logs-chart-state", () => ({
 }));
 
 vi.mock("@/features/workbench/state/logs/_use-logs-workspace-state", () => ({
-  useLogsWorkspaceState: (input: { enabled: boolean }) => {
+  useLogsWorkspaceState: (input: {
+    enabled: boolean;
+    logDeletionEnabled?: boolean;
+  }) => {
     mocks.workspaceInput(input);
     const noop = vi.fn();
     return {
       browser: {
-        scope: {
-          mode: "target",
-          target: {
-            modelType: "linears",
-            model: "linear",
-            preset: "BASELINE",
-            datasets: ["Mnist"],
-          },
-          canUseCurrentTarget: true,
-          allRunsSelected: false,
-          useCurrentTarget: noop,
-          showAllRuns: noop,
-        },
         filters: Object.fromEntries(
           ["experiments", "datasets", "models", "presets", "tags"].map(
             (key) => [key, { options: [], selectedValues: [] }],
@@ -186,20 +135,6 @@ beforeEach(() => {
   mocks.includeStartedExperiment.mockReset();
   mocks.workspaceInput.mockReset();
   mocks.protectedAccessReady = true;
-  mocks.inspection.target = {
-    kind: "preset",
-    modelPackage: { modelType: "linears", model: "linear" },
-    preset: "baseline",
-    experimentTask: "image-classification",
-    datasets: ["Mnist"],
-  };
-  mocks.inspection.browser = {
-    selectedModelType: "linears",
-    selectedModel: "linear",
-    selectedPreset: "baseline",
-    selectedDatasets: ["Mnist"],
-  };
-  mocks.inspection.presets = [{ name: "baseline", label: "BASELINE" }];
 });
 
 describe("LogsWorkspaceProvider", () => {
@@ -297,7 +232,6 @@ describe("LogsWorkspaceProvider", () => {
       "filters",
       "pagination",
       "results",
-      "scope",
       "status",
     ]);
     expect(filterKeys).toEqual([
@@ -376,28 +310,7 @@ describe("LogsWorkspaceProvider", () => {
     });
   });
 
-  it("composes target scope from the complete historical target instead of browser task browsing", () => {
-    mocks.inspection.target = {
-      kind: "historical-run",
-      modelPackage: { modelType: "linears", model: "linear" },
-      preset: "HistoricalPreset",
-      experimentTask: "image-classification",
-      datasets: ["FashionMnist"],
-      run: {
-        runId: "historical-run",
-        experiment: "historical",
-        preset: "HistoricalPreset",
-        dataset: "FashionMnist",
-        experimentTask: "image-classification",
-      },
-    };
-    mocks.inspection.browser = {
-      selectedModelType: "bert",
-      selectedModel: "linear",
-      selectedPreset: "pre-norm",
-      selectedDatasets: ["PennTreebank"],
-    };
-
+  it("passes only Logs activity and deletion capability to workspace state", () => {
     render(
       <LogsWorkspaceProvider enabled>
         <span>Logs child</span>
@@ -405,38 +318,7 @@ describe("LogsWorkspaceProvider", () => {
     );
 
     expect(mocks.workspaceInput).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        targetScope: {
-          modelType: "linears",
-          model: "linear",
-          preset: "HistoricalPreset",
-          datasets: ["FashionMnist"],
-        },
-      }),
-    );
-  });
-
-  it("maps a preset target through its catalog label without using a divergent browser preset", () => {
-    mocks.inspection.browser = {
-      ...mocks.inspection.browser,
-      selectedPreset: "other-browser-preset",
-    };
-
-    render(
-      <LogsWorkspaceProvider enabled>
-        <span>Logs child</span>
-      </LogsWorkspaceProvider>,
-    );
-
-    expect(mocks.workspaceInput).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        targetScope: {
-          modelType: "linears",
-          model: "linear",
-          preset: "BASELINE",
-          datasets: ["Mnist"],
-        },
-      }),
+      { enabled: true, logDeletionEnabled: true },
     );
   });
 });

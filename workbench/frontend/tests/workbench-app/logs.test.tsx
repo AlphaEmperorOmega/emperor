@@ -337,7 +337,7 @@ describe("WorkbenchApp Logs Workspace", () => {
   beforeEach(resetWorkbenchAppTestState);
 
   it("opens logs without selecting runs or loading TensorBoard data", async () => {
-    const { logScalarRequests, logTagRequests } = setupLogsScenario();
+    const { logRunRequests, logScalarRequests, logTagRequests } = setupLogsScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -350,12 +350,26 @@ describe("WorkbenchApp Logs Workspace", () => {
     expect(screen.queryByRole("combobox", { name: /^Runs\b/i })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Datasets Mnist")).not.toBeInTheDocument();
     expect(await screen.findByText("No runs selected")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(logRunRequests).toContainEqual({
+        experiments: [],
+        modelTypes: [],
+        models: [],
+        presets: [],
+        datasets: [],
+        experimentTask: null,
+        hasEventFiles: null,
+        limit: 100,
+        offset: 0,
+        projection: null,
+      });
+    });
     expect(logTagRequests).toHaveLength(0);
     expect(logScalarRequests).toHaveLength(0);
   });
 
-  it("moves explicitly between the current target and all-runs scope", async () => {
-    const { logRunRequests } = setupLogsScenario();
+  it("removes the scope control while retaining explicit experiment filters", async () => {
+    setupLogsScenario();
     renderWorkbench();
     const user = userEvent.setup();
 
@@ -363,60 +377,20 @@ describe("WorkbenchApp Logs Workspace", () => {
     await screen.findByRole("combobox", { name: /^Experiments\b/i });
 
     const experimentSection = logFilterSection("Experiments");
-    const currentTarget = within(experimentSection).getByRole("button", {
-      name: /current target/i,
-    });
-    const allRuns = within(experimentSection).getByRole("button", {
-      name: /all runs/i,
-    });
-    expect(currentTarget).toHaveAttribute("aria-pressed", "true");
-    expect(allRuns).toHaveAttribute("aria-pressed", "false");
-
-    await user.click(allRuns);
-
-    await waitFor(() => {
-      expect(logRunRequests).toContainEqual(
-        expect.objectContaining({
-          experiments: ["test_model", "test_model_2"],
-          limit: 100,
-          offset: 0,
-        }),
-      );
-      const updatedSection = logFilterSection("Experiments");
-      expect(
-        within(updatedSection).getByRole("button", { name: /current target/i }),
-      ).toHaveAttribute("aria-pressed", "false");
-      expect(
-        within(updatedSection).getByRole("button", { name: /all runs/i }),
-      ).toHaveAttribute("aria-pressed", "true");
-    });
-
-    await user.click(
-      within(logFilterSection("Experiments")).getByRole("button", {
-        name: /current target/i,
-      }),
-    );
-
-    await waitFor(() => {
-      const updatedSection = logFilterSection("Experiments");
-      expect(
-        within(updatedSection).getByRole("button", { name: /current target/i }),
-      ).toHaveAttribute("aria-pressed", "true");
-      expect(
-        within(updatedSection).getByRole("button", { name: /all runs/i }),
-      ).toHaveAttribute("aria-pressed", "false");
-    });
-    const finalExperimentSection = logFilterSection("Experiments");
-    expect(within(finalExperimentSection).getByRole("button", { name: /^all$/i }))
+    expect(within(experimentSection).queryByRole("button", { name: /current target/i }))
+      .not.toBeInTheDocument();
+    expect(within(experimentSection).queryByRole("button", { name: /all runs/i }))
+      .not.toBeInTheDocument();
+    expect(within(experimentSection).getByRole("button", { name: /^all$/i }))
       .toBeInTheDocument();
-    expect(within(finalExperimentSection).getByRole("button", { name: /^none$/i }))
+    expect(within(experimentSection).getByRole("button", { name: /^none$/i }))
       .toBeInTheDocument();
     expect(screen.queryByText(/^Runs$/)).not.toBeInTheDocument();
     expect(screen.queryByText(/^Tags$/)).not.toBeInTheDocument();
     expect(screen.queryByText(/^linear · BASELINE · Mnist$/)).not.toBeInTheDocument();
   });
 
-  it("opens logs scoped to the current target dataset and applies common filters from experiment selection", async () => {
+  it("filters all-Run browsing and applies common facets from experiment selection", async () => {
     const { logRunRequests, logScalarRequests } = setupLogsScenario();
     renderWorkbench();
     const user = userEvent.setup();
@@ -429,25 +403,30 @@ describe("WorkbenchApp Logs Workspace", () => {
         expect.arrayContaining([
           {
             experiments: [],
-            modelTypes: ["linears"],
-            models: ["linear"],
-            presets: ["BASELINE"],
-            datasets: ["Mnist"],
+            modelTypes: [],
+            models: [],
+            presets: [],
+            datasets: [],
             experimentTask: null,
-            hasEventFiles: "true",
-            limit: 5,
+            hasEventFiles: null,
+            limit: 100,
             offset: 0,
             projection: null,
           },
         ]),
       );
     });
-    expect(screen.getByRole("button", { name: /current target/i }))
-      .toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: /all runs/i }))
-      .toHaveAttribute("aria-pressed", "false");
     await expectLogFilterSelection(user, "Experiments", "test_model", false);
     await selectLogExperiments(user, ["test_model"]);
+    await waitFor(() => {
+      expect(logRunRequests).toContainEqual(
+        expect.objectContaining({
+          experiments: ["test_model"],
+          limit: 100,
+          offset: 0,
+        }),
+      );
+    });
     expect(await screen.findByRole("img", { name: /validation\/accuracy_epoch scalar chart/i }))
       .toBeInTheDocument();
     expect(logMetricGroupToggle("Train")).toHaveAttribute("aria-expanded", "true");
@@ -3069,7 +3048,7 @@ describe("WorkbenchApp Logs Workspace", () => {
     );
   });
 
-  it("shows complete server facets before loading the next custom run page", async () => {
+  it("shows complete server facets before loading the next Run page", async () => {
     const runs = Array.from({ length: 105 }, (_, index) => {
       const number = String(index + 1).padStart(3, "0");
       const lateRun = index >= 100;
