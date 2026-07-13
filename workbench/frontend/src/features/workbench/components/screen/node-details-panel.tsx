@@ -45,7 +45,7 @@ export function NodeDetailsPanel() {
       title="Node Details"
       subtitle={
         graph ? (
-          <div className="grid gap-[9px]">
+          <div className="grid gap-2">
             <MetricCard
               icon={<Hash className="h-[15px] w-[15px] text-violet" aria-hidden />}
               label="Params"

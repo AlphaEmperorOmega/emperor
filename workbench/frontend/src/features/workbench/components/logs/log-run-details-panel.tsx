@@ -101,14 +101,14 @@ export function LogRunDetailsPanel({
   return (
     <SidePanel
       className="min-w-0 overflow-x-hidden"
-      title="Run Details"
+      title="Run Artifacts"
       actions={
         run ? <Badge>{run.hasResult ? "result.json" : "No result.json"}</Badge> : undefined
       }
     >
       {!run ? (
         <SurfacePanel padding="roomy" className="text-sm text-ink-faint">
-          Select a visible run to inspect its metadata.
+          Select a visible Log Run to inspect its Run Artifacts.
         </SurfacePanel>
       ) : (
         <div className="grid gap-4">
@@ -129,7 +129,7 @@ export function LogRunDetailsPanel({
             </div>
           </SurfacePanel>
 
-          <div className="grid w-full min-w-0 grid-cols-1 gap-[9px]">
+          <div className="grid w-full min-w-0 grid-cols-1 gap-2">
             <MetricCard
               label="Experiment"
               value={run.experiment}

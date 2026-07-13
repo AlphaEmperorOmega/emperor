@@ -432,7 +432,7 @@ describe("WorkbenchApp Overview", () => {
     ).toBe(false);
   });
 
-  it("renders flat header action buttons in order in the top nav", async () => {
+  it("renders primitive-backed header actions in order in the top nav", async () => {
     setupOverviewScenario();
     renderWorkbench();
 
@@ -461,7 +461,7 @@ describe("WorkbenchApp Overview", () => {
         "md:h-control",
         "md:min-w-0",
         "gap-1.5",
-        "rounded-control-sm",
+        "rounded-control",
         "border",
         "border-transparent",
         "bg-transparent",
@@ -472,21 +472,26 @@ describe("WorkbenchApp Overview", () => {
         "hover:text-ink",
         "focus-visible:ring-focus",
       );
-      for (const legacyClassName of [
-        "rounded-control",
-        "border-line",
-        "bg-control",
-        "hover:border-line-hover",
-        "hover:bg-control-active",
-      ]) {
+      for (const legacyClassName of ["border-line", "bg-control"]) {
         expect(button).not.toHaveClass(legacyClassName);
       }
     }
     expect(actionButtons[3]).toHaveClass(
-      "disabled:text-ink-faint",
+      "disabled:cursor-not-allowed",
+      "disabled:opacity-50",
       "disabled:hover:bg-transparent",
       "disabled:hover:text-ink-faint",
     );
+    expect(actionButtons[0]).toHaveAttribute(
+      "aria-describedby",
+      "app-header-api-status",
+    );
+    const compactApiStatus = document.getElementById("app-header-api-status");
+    expect(compactApiStatus).toHaveClass("sr-only");
+    await waitFor(() =>
+      expect(compactApiStatus).toHaveTextContent("API status: online"),
+    );
+    expect(within(header).getByText("Emperor Workbench")).toHaveClass("sr-only");
   });
 
   it("opens the native file picker from the visible choose button", async () => {

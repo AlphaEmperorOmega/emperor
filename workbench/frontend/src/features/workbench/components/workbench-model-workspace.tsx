@@ -12,6 +12,9 @@ export function WorkbenchModelWorkspace({
 }) {
   return (
     <WorkbenchThreeRegionLayout
+      sidebarLabel="Model Package and Runtime Defaults"
+      primaryLabel="Model graph"
+      detailsLabel="Selected node details"
       sidebar={<WorkbenchModelSidebar onOpenFullConfig={onOpenFullConfig} />}
       primary={
         <div className="grid h-full min-h-0 grid-rows-[56px_minmax(0,1fr)] bg-transparent">

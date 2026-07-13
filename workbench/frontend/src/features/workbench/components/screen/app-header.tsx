@@ -6,10 +6,7 @@ import {
   SlidersHorizontal,
   Upload,
 } from "lucide-react";
-import {
-  controlDisabledClassName,
-  controlFocusClassName,
-} from "@/components/ui/control-styles";
+import { Button } from "@/components/ui/button";
 import { StatusDot } from "@/components/ui/status-dot";
 import { StatusPill } from "@/features/workbench/components/status-pill";
 import { WorkbenchWorkspaceNav } from "@/features/workbench/components/workbench-workspace-nav";
@@ -18,16 +15,10 @@ import {
 } from "@/features/workbench/providers/workbench-providers";
 import { useWorkbenchConnection } from "@/features/workbench/providers/workbench-connection-provider";
 import { useActiveTrainingJob } from "@/features/workbench/providers/training-provider";
-import { cn } from "@/lib/utils";
 import { type WorkbenchWorkspace } from "@/types/workbench";
 
-const headerActionButtonClassName = [
-  "inline-flex h-touch min-w-touch items-center justify-center gap-1.5 rounded-control-sm px-2.5 md:h-control md:min-w-0",
-  "border border-transparent bg-transparent type-body font-semibold text-ink-dim transition-[color,background-color,border-color,transform] duration-150 ease-out hover:border-line-soft hover:bg-control-hover hover:text-ink",
-  "active:translate-y-px disabled:text-ink-faint disabled:hover:border-transparent disabled:hover:bg-transparent disabled:hover:text-ink-faint md:px-3",
-  controlFocusClassName,
-  controlDisabledClassName,
-].join(" ");
+const headerActionButtonClassName =
+  "min-w-touch gap-1.5 px-2.5 text-ink-dim hover:bg-control-hover disabled:hover:border-transparent disabled:hover:bg-transparent disabled:hover:text-ink-faint md:min-w-0 md:px-3";
 
 function trainingStatusTone(status: string) {
   if (status === "completed") {
@@ -73,14 +64,15 @@ export function AppHeader({
   return (
     <header className="safe-header-inset flex h-full min-h-0 items-center justify-between gap-2 border-b border-line bg-panel/80 pt-[env(safe-area-inset-top)] shadow-divider backdrop-blur-xl lg:gap-region">
       <div className="flex min-w-0 items-center gap-region">
-        <div className="hidden shrink-0 items-center gap-2.5 2xl:flex" aria-label="Emperor Workbench">
+        <div className="flex shrink-0 items-center gap-2.5">
+          <span className="sr-only">Emperor Workbench</span>
           <span
-            className="grid h-control w-control place-items-center rounded-control-md border border-accent-line bg-accent-soft font-mono text-xs font-bold text-violet"
+            className="grid h-control-sm w-control-sm place-items-center rounded-control-md border border-accent-line bg-accent-soft font-mono type-caption font-bold text-violet shadow-control-accent md:h-control md:w-control"
             aria-hidden
           >
             E/
           </span>
-          <span className="grid leading-none">
+          <span className="hidden leading-none 2xl:grid" aria-hidden>
             <span className="type-meta font-extrabold uppercase tracking-wordmark text-ink">
               Emperor
             </span>
@@ -88,7 +80,7 @@ export function AppHeader({
               Workbench
             </span>
           </span>
-          <span className="ml-1 h-6 w-px bg-line" aria-hidden />
+          <span className="ml-1 hidden h-6 w-px bg-line 2xl:block" aria-hidden />
         </div>
         <WorkbenchWorkspaceNav
           activeWorkspace={activeWorkspace}
@@ -120,42 +112,50 @@ export function AppHeader({
           tone={presetOwnedFieldCount > 0 ? "warn" : "neutral"}
         />
         <div className="mx-1 hidden h-6 w-px bg-line 2xl:block" />
-        <button
-          type="button"
+        <Button
+          variant="ghost"
           aria-label="API connection settings"
+          aria-describedby="app-header-api-status"
           onClick={onOpenApiConnection}
-          className={headerActionButtonClassName}
+          className={`${headerActionButtonClassName} relative`}
         >
           <Plug className="h-[15px] w-[15px]" aria-hidden />
+          <StatusDot
+            online={apiOnline}
+            className="absolute right-1.5 top-1.5 sm:hidden"
+          />
+          <span id="app-header-api-status" className="sr-only">
+            API status: {apiOnline ? "online" : "offline"}
+          </span>
           <span className="hidden lg:inline">Connection</span>
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="ghost"
           aria-label="Import logs"
           onClick={onOpenImportLogs}
           className={headerActionButtonClassName}
         >
           <Upload className="h-[15px] w-[15px]" aria-hidden />
           <span className="hidden lg:inline">Import Logs</span>
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="ghost"
           aria-label="Features"
           onClick={onOpenFeatureList}
           className={headerActionButtonClassName}
         >
           <ListChecks className="h-[15px] w-[15px]" aria-hidden />
           <span className="hidden lg:inline">Features</span>
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="ghost"
           onClick={onResetOverrides}
           disabled={!canResetOverrides}
-          className={cn(headerActionButtonClassName, "hidden 2xl:inline-flex")}
+          className={`${headerActionButtonClassName} hidden 2xl:inline-flex`}
         >
           <RotateCcw className="h-[15px] w-[15px]" aria-hidden />
           Reset Overrides
-        </button>
+        </Button>
       </div>
     </header>
   );

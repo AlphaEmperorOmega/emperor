@@ -60,7 +60,7 @@ export function SectionNavigation({
       <div
         className={cn(
           "flex gap-2 overflow-auto pb-1",
-          !isInline && "lg:grid lg:max-h-[calc(100vh-16rem)] lg:gap-0 lg:pb-0",
+          !isInline && "lg:grid lg:max-h-[calc(100dvh-16rem)] lg:gap-0 lg:pb-0",
         )}
       >
         {sections.length === 0 && (

@@ -28,6 +28,8 @@ export function WorkbenchWideThreeRegionLayout({
       <div className="mb-panel grid gap-2 empty:hidden">{notices}</div>
       <div className="row-start-2 block h-auto min-h-0 min-w-0 space-y-panel pb-[env(safe-area-inset-bottom)] xl:grid xl:h-full xl:grid-cols-[minmax(280px,320px)_minmax(0,1fr)_minmax(280px,340px)] xl:items-stretch xl:gap-panel xl:space-y-0 xl:overflow-y-hidden xl:pb-0 2xl:grid-cols-[minmax(300px,340px)_minmax(0,1fr)_minmax(300px,360px)]">
         <div
+          role="region"
+          aria-label={leadingLabel}
           data-region-label={leadingLabel}
           data-workbench-region="wide-leading"
           className="grid h-auto min-h-0 content-start gap-region overflow-visible xl:h-full xl:overflow-y-auto xl:pr-1"
@@ -35,6 +37,8 @@ export function WorkbenchWideThreeRegionLayout({
           {leading}
         </div>
         <div
+          role="region"
+          aria-label={primaryLabel}
           data-region-label={primaryLabel}
           data-workbench-region="wide-primary"
           className="grid min-h-[600px] grid-rows-[auto_minmax(0,1fr)] gap-panel overflow-hidden xl:h-full xl:min-h-0"
@@ -42,6 +46,8 @@ export function WorkbenchWideThreeRegionLayout({
           {primary}
         </div>
         <div
+          role="region"
+          aria-label={trailingLabel}
           data-region-label={trailingLabel}
           aria-live="polite"
           data-workbench-region="wide-trailing"

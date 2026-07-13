@@ -151,7 +151,7 @@ describe("TrainingRunPlanCard", () => {
       ]),
     });
 
-    expect(screen.getByText("Run Plan")).toBeInTheDocument();
+    expect(screen.getByText("Training Job")).toBeInTheDocument();
     expect(screen.getAllByText("2 planned runs").length).toBeGreaterThan(0);
     expect(screen.getByText("2 pending")).toBeInTheDocument();
     expect(screen.getByText("60 epochs")).toBeInTheDocument();
@@ -192,7 +192,7 @@ describe("TrainingRunPlanCard", () => {
       }),
     });
 
-    expect(screen.getByText("Active Run")).toBeInTheDocument();
+    expect(screen.getByText("Active Training Job")).toBeInTheDocument();
     expect(screen.getByText("Active run")).toBeInTheDocument();
     expect(screen.getByText("#2")).toBeInTheDocument();
     expect(screen.getByText("recurrent-gating-halting")).toBeInTheDocument();
@@ -341,7 +341,7 @@ describe("TrainingRunPlanCard", () => {
       job: job(runPlan, { status: "failed", exitCode: 1 }),
     });
 
-    expect(screen.getByText("Results")).toBeInTheDocument();
+    expect(screen.getByText("Training Job Results")).toBeInTheDocument();
     expect(screen.getByText("1 completed")).toBeInTheDocument();
     expect(screen.getByText("1 failed")).toBeInTheDocument();
     expect(screen.getByText("training exploded")).toHaveClass("text-danger-text");
@@ -380,7 +380,7 @@ describe("TrainingRunPlanCard", () => {
   it("keeps the empty state readable while planning has not produced a plan", () => {
     renderCard({ selectedMonitorCount: 0 });
 
-    expect(screen.getByText("Run Plan")).toBeInTheDocument();
+    expect(screen.getByText("Training Job")).toBeInTheDocument();
     expect(screen.getByText("No plan")).toBeInTheDocument();
     expect(
       screen.getByText("No run plan yet. Select a trainable target to preview runs."),

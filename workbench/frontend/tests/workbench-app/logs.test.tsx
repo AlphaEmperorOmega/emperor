@@ -725,7 +725,7 @@ describe("WorkbenchApp Logs Workspace", () => {
       })[0],
     );
 
-    const detailsPanel = screen.getByRole("heading", { name: "Run Details" })
+    const detailsPanel = screen.getByRole("heading", { name: "Run Artifacts" })
       .closest('[data-workbench-region="details"]');
     expect(detailsPanel).not.toBeNull();
     expect(within(detailsPanel as HTMLElement).getByText("Cifar10"))
@@ -995,7 +995,7 @@ describe("WorkbenchApp Logs Workspace", () => {
     expect(screen.getAllByText(/multi_dataset · Cifar10 · linear · linears · BASELINE/).length)
       .toBeGreaterThan(0);
 
-    const detailsPanel = screen.getByRole("heading", { name: "Run Details" })
+    const detailsPanel = screen.getByRole("heading", { name: "Run Artifacts" })
       .closest('[data-workbench-region="details"]');
     expect(detailsPanel).not.toBeNull();
     expect(within(detailsPanel as HTMLElement).getByTitle("multi_cifar_20260601_020304"))
@@ -1741,7 +1741,7 @@ describe("WorkbenchApp Logs Workspace", () => {
     await user.type(await screen.findByLabelText(/^search experiments$/i), "test_model");
     await selectLogExperiments(user, ["test_model"]);
     expect(await screen.findByText("Historical Scalars")).toBeInTheDocument();
-    expect(await screen.findByText("Run Details")).toBeInTheDocument();
+    expect(await screen.findByText("Run Artifacts")).toBeInTheDocument();
     const loadedChart = await screen.findByRole("img", {
       name: /validation\/accuracy_epoch scalar chart/i,
     });
@@ -1784,7 +1784,7 @@ describe("WorkbenchApp Logs Workspace", () => {
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
     await selectLogExperiments(user, ["test_model"]);
 
-    const detailsPanel = screen.getByRole("heading", { name: "Run Details" })
+    const detailsPanel = screen.getByRole("heading", { name: "Run Artifacts" })
       .closest('[data-workbench-region="details"]');
     expect(detailsPanel).not.toBeNull();
     await waitFor(() => {
@@ -1892,7 +1892,7 @@ describe("WorkbenchApp Logs Workspace", () => {
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
     await selectAllLogExperiments(user);
 
-    const detailsPanel = screen.getByRole("heading", { name: "Run Details" })
+    const detailsPanel = screen.getByRole("heading", { name: "Run Artifacts" })
       .closest('[data-workbench-region="details"]');
     expect(detailsPanel).not.toBeNull();
     const panel = detailsPanel as HTMLElement;
@@ -2103,7 +2103,7 @@ describe("WorkbenchApp Logs Workspace", () => {
         name: /open details for test_model_2 · Mnist/i,
       }),
     );
-    const detailsPanel = screen.getByRole("heading", { name: "Run Details" })
+    const detailsPanel = screen.getByRole("heading", { name: "Run Artifacts" })
       .closest('[data-workbench-region="details"]');
     expect(detailsPanel).toBeInstanceOf(HTMLElement);
     expect(within(detailsPanel as HTMLElement).getByText("test_model_2"))

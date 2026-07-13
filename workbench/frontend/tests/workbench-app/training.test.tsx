@@ -1612,7 +1612,7 @@ describe("WorkbenchApp Training And Preview", () => {
     expect(
       within(runList).getByRole("button", { name: /command for run 1/i }),
     ).toBeInTheDocument();
-    expect(within(statusSidebar).getByText("Run Plan")).toBeInTheDocument();
+    expect(within(statusSidebar).getByText("Training Job")).toBeInTheDocument();
     expect(await within(statusSidebar).findByText("1 planned run"))
       .toBeInTheDocument();
     expect(within(statusSidebar).getByText("30 epochs")).toBeInTheDocument();
@@ -2243,7 +2243,7 @@ describe("WorkbenchApp Training And Preview", () => {
       '[data-workbench-region="wide-trailing"]',
     );
     if (!statusSidebar) throw new Error("Expected the Training status region");
-    expect(within(statusSidebar).getByText("Active Run")).toBeInTheDocument();
+    expect(within(statusSidebar).getByText("Active Training Job")).toBeInTheDocument();
     expect(within(statusSidebar).getByText("running")).toBeInTheDocument();
     expect(within(statusSidebar).getByText("Active run")).toBeInTheDocument();
     expect(within(statusSidebar).getByText("epoch 1 / step 4")).toBeInTheDocument();
@@ -2859,7 +2859,7 @@ describe("WorkbenchApp Training And Preview", () => {
       ).toBeInTheDocument();
     });
     await waitFor(() => {
-      expect(within(details).getByText("Results")).toBeInTheDocument();
+      expect(within(details).getByText("Training Job Results")).toBeInTheDocument();
       expect(within(details).getByText("done")).toBeInTheDocument();
       expect(within(details).getByText("1 line")).toBeInTheDocument();
       expect(within(details).getByTitle("logs/completed_plan")).toBeInTheDocument();

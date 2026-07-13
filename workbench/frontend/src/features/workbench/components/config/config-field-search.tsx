@@ -122,7 +122,7 @@ export function ConfigFieldSearch({
           ariaLabel="Matching config fields"
           onKeyDown={popup.onKeyDown}
           onScroll={collection.onScroll}
-          className="max-h-[min(34rem,calc(100vh-14rem))] overflow-y-auto p-2"
+          className="max-h-[min(34rem,calc(100dvh-14rem))] overflow-y-auto p-2"
         >
           <ConfigSearchResults
             popupId={ids.popup}

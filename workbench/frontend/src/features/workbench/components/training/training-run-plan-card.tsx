@@ -43,15 +43,15 @@ const footerIconClass = "h-[15px] w-[15px] text-violet";
 
 function cardTitle(job?: TrainingJob) {
   if (!job) {
-    return "Run Plan";
+    return "Training Job";
   }
   if (job.status === "running" || job.status === "queued") {
-    return "Active Run";
+    return "Active Training Job";
   }
   if (isTerminalTrainingJob(job)) {
-    return "Results";
+    return "Training Job Results";
   }
-  return "Run Plan";
+  return "Training Job";
 }
 
 function jobTone(status?: string): StatChipTone {
@@ -381,7 +381,14 @@ export function TrainingRunPlanCard({
     <SurfacePanel
       icon={<ListChecks className={footerIconClass} aria-hidden />}
       title={cardTitle(job)}
-      detail={headerDetail({ isPlanning, job, plan })}
+      detail={
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Badge variant="violet" aria-label="Stage 3">
+            03
+          </Badge>
+          {headerDetail({ isPlanning, job, plan })}
+        </div>
+      }
     >
       <div className={cn("grid gap-2", isPlanning && "opacity-90")}>
         {plan ? (

@@ -335,7 +335,7 @@ export function ConfigFieldControl({
   return (
     <div
       className={cn(
-        "grid w-full transition",
+        "grid w-full transition [content-visibility:auto] [contain-intrinsic-size:80px]",
         isCompact ? "gap-1.5 py-1.5" : "gap-2 py-1.5",
         isLocked &&
           "rounded-control border-l-2 border-amber/55 bg-amber/[0.055] pl-2 pr-2 shadow-control-warning",

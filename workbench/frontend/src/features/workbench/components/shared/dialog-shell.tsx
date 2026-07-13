@@ -22,11 +22,11 @@ const dialogOverlayClassName =
   "safe-dialog-inset fixed inset-0 z-50 flex items-center justify-center overscroll-contain bg-black/80 backdrop-blur-md";
 
 const dialogPanelClassNames: Record<NonNullable<DialogShellProps["size"]>, string> = {
-  sm: "flex min-w-0 max-h-[calc(100vh-1.5rem)] w-full max-w-full flex-col overflow-hidden sm:max-h-[calc(100vh-3rem)] sm:max-w-lg",
-  md: "flex min-w-0 max-h-[calc(100vh-1.5rem)] w-full max-w-full flex-col overflow-hidden sm:max-h-[calc(100vh-3rem)] sm:max-w-3xl",
-  lg: "flex min-w-0 max-h-[calc(100vh-1.5rem)] w-full max-w-full flex-col overflow-hidden sm:max-h-[calc(100vh-3rem)] sm:max-w-4xl",
+  sm: "flex min-w-0 max-h-[calc(100dvh-1.5rem)] w-full max-w-full flex-col overflow-hidden sm:max-h-[calc(100dvh-3rem)] sm:max-w-lg",
+  md: "flex min-w-0 max-h-[calc(100dvh-1.5rem)] w-full max-w-full flex-col overflow-hidden sm:max-h-[calc(100dvh-3rem)] sm:max-w-3xl",
+  lg: "flex min-w-0 max-h-[calc(100dvh-1.5rem)] w-full max-w-full flex-col overflow-hidden sm:max-h-[calc(100dvh-3rem)] sm:max-w-4xl",
   fullscreen:
-    "flex min-w-0 max-h-[calc(100vh-1.5rem)] w-full max-w-full flex-col overflow-hidden sm:max-h-[calc(100vh-3rem)] sm:max-w-[92rem]",
+    "flex min-w-0 max-h-[calc(100dvh-1.5rem)] w-full max-w-full flex-col overflow-hidden sm:max-h-[calc(100dvh-3rem)] sm:max-w-[92rem]",
 };
 
 const dialogPanelVariantClassNames: Record<
@@ -245,6 +245,7 @@ export function DialogShell({
           dialogPanelClassNames[size],
           dialogPanelVariantClassNames[panelVariant],
           panelClassName,
+          "dialog-shell-panel",
         )}
       >
         {header}

@@ -170,6 +170,9 @@ export function WorkbenchWorkspaceRegions({
       startedExperiments={startedLogFolders}
     >
       <WorkbenchThreeRegionLayout
+        sidebarLabel="Log filters"
+        primaryLabel="Log visualizations"
+        detailsLabel="Run Artifacts"
         sidebar={<ConnectedLogsSidebarPanel />}
         primary={<ConnectedLogsGraphPreviewPanel />}
         details={<ConnectedLogRunDetailsPanel />}

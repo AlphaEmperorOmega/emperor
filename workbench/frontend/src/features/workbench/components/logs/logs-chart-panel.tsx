@@ -875,7 +875,7 @@ export function LogsChartPanel({ charts }: { charts: LogsCharts }) {
             {visibleRunCount} runs · {selectedTagCount} selected tags
           </div>
         </div>
-        <div className="flex min-w-0 items-center justify-end gap-2 overflow-x-auto overscroll-x-contain [scrollbar-width:none]">
+        <div className="flex min-w-0 items-center justify-start gap-2 overflow-x-auto overscroll-x-contain [scrollbar-width:none] 2xl:justify-end">
           <label className="flex shrink-0 items-center gap-2 text-xs text-ink-faint">
             <span>Smooth</span>
             <input

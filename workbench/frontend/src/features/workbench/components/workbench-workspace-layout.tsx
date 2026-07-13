@@ -23,26 +23,38 @@ export function WorkbenchThreeRegionLayout({
   sidebar,
   primary,
   details,
+  sidebarLabel = "Workspace setup",
+  primaryLabel = "Workspace primary content",
+  detailsLabel = "Workspace details",
 }: {
   sidebar: ReactNode;
   primary: ReactNode;
   details: ReactNode;
+  sidebarLabel?: string;
+  primaryLabel?: string;
+  detailsLabel?: string;
 }) {
   return (
     <>
       <div
+        role="region"
+        aria-label={sidebarLabel}
         data-workbench-region="sidebar"
         className="min-h-0 overflow-visible border-b border-line bg-panel/55 px-region pb-shell-wide pt-region backdrop-blur-sm xl:overflow-y-auto xl:border-b-0 xl:border-r"
       >
         <div className="grid gap-shell">{sidebar}</div>
       </div>
       <div
+        role="region"
+        aria-label={primaryLabel}
         data-workbench-region="primary"
         className="grid min-h-[520px] min-w-0 sm:min-h-[640px] xl:min-h-0"
       >
         {primary}
       </div>
       <div
+        role="region"
+        aria-label={detailsLabel}
         data-workbench-region="details"
         tabIndex={0}
         className="min-h-0 min-w-0 overflow-x-hidden overflow-y-visible border-t border-line bg-panel/55 px-region pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-region backdrop-blur-sm xl:overflow-y-auto xl:border-l xl:border-t-0 xl:px-shell"

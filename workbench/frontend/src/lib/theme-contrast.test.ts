@@ -442,8 +442,8 @@ describe("Workbench design-system adapters", () => {
     }
   });
 
-  it("audits all 122 production component and visual-support files", () => {
-    expect(new Set(productionAuditSources.map(({ path }) => path)).size).toBe(122);
+  it("audits all 123 production component and visual-support files", () => {
+    expect(new Set(productionAuditSources.map(({ path }) => path)).size).toBe(123);
   });
 
   it("keeps raw UI colors, arbitrary shadows, and arbitrary type out of production", () => {
@@ -501,6 +501,9 @@ describe("Workbench design-system adapters", () => {
     expect(globalsCss).toContain("@media (prefers-reduced-motion: reduce)");
     expect(globalsCss).toContain("scroll-behavior: auto !important");
     expect(globalsCss).toContain(".safe-dialog-inset");
+    expect(globalsCss).toContain(".dialog-shell-panel");
+    expect(globalsCss).toContain("@media (max-width: 639px)");
+    expect(globalsCss).toContain("border-radius: 0");
     expect(globalsCss).toContain(".safe-header-inset");
     for (const edge of ["top", "right", "bottom", "left"]) {
       expect(globalsCss).toContain(`env(safe-area-inset-${edge})`);

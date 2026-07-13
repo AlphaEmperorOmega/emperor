@@ -371,6 +371,7 @@ describe("DialogShell", () => {
       "overscroll-contain",
     );
     expect(dialog).toHaveClass(
+      "dialog-shell-panel",
       "min-w-0",
       "max-w-full",
       "rounded-dialog",

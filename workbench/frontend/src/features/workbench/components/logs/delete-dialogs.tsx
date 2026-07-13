@@ -197,7 +197,7 @@ export function DeleteSubsetRunsDialog({
       size="md"
       onClose={onClose}
       closeOnEscape={!isDeleting}
-      panelClassName="grid max-h-[min(760px,calc(100vh-32px))] max-w-2xl gap-4 overflow-y-auto p-4 sm:p-5"
+      panelClassName="grid max-h-[min(760px,calc(100dvh-32px))] max-w-2xl gap-4 overflow-y-auto p-4 sm:p-5"
     >
       <header className="flex items-start justify-between gap-3">
           <div className="min-w-0">

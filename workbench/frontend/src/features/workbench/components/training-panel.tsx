@@ -9,7 +9,7 @@ import {
   RefreshCw,
   RotateCcw,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Badge, type BadgeVariant } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SegmentedControl } from "@/components/ui/segmented-control";
@@ -32,6 +32,19 @@ import { WorkbenchWideThreeRegionLayout } from "@/features/workbench/components/
 import { useTrainingWorkspace } from "@/features/workbench/providers/training-execution-context";
 
 const trainingIconClass = "h-[15px] w-[15px] text-violet";
+
+function trainingJobBadgeVariant(status: string): BadgeVariant {
+  if (status === "completed") {
+    return "success";
+  }
+  if (status === "failed" || status === "cancelled") {
+    return "danger";
+  }
+  if (status === "running" || status === "queued") {
+    return "warning";
+  }
+  return "default";
+}
 
 export function TrainingPanel() {
   const { draft, plan, job: activeJob, dialogs, actions } =
@@ -143,9 +156,9 @@ export function TrainingPanel() {
       className="h-full min-w-0 overflow-hidden bg-bg-2/80"
     >
       <WorkbenchWideThreeRegionLayout
-        leadingLabel="Training Setup Sidebar"
-        primaryLabel="Training Run List"
-        trailingLabel="Training Status Sidebar"
+        leadingLabel="Training setup"
+        primaryLabel="Run Plan"
+        trailingLabel="Training Job"
         notices={
           <>
           {trainingError && (
@@ -162,6 +175,15 @@ export function TrainingPanel() {
         }
         leading={
           <>
+              <div className="flex min-h-control items-center justify-between gap-2 border-b border-line-soft pb-panel">
+                <SectionHeading
+                  icon={<Activity className={trainingIconClass} aria-hidden />}
+                  title="Setup"
+                />
+                <Badge variant="violet" aria-label="Stage 1">
+                  01
+                </Badge>
+              </div>
               {setupLockMessage && (
                 <InlineStatus tone="warning" compact>
                   {setupLockMessage}
@@ -257,18 +279,14 @@ export function TrainingPanel() {
                     <span className="grid h-control w-control shrink-0 place-items-center rounded-control-md border border-accent-line bg-accent-soft text-violet shadow-control-accent">
                       <Activity className="h-4 w-4" aria-hidden />
                     </span>
-                    <h1 className="type-title text-balance font-bold text-ink">Training</h1>
-                    <Badge
-                      className={
-                        jobStatus === "failed" || jobStatus === "cancelled"
-                          ? "border-danger-line bg-danger-soft text-danger-text"
-                          : jobStatus === "completed"
-                            ? "border-ok/30 bg-ok/10 text-ok"
-                            : jobStatus === "running" || jobStatus === "queued"
-                              ? "border-amber/40 bg-amber/[0.12] text-amber"
-                              : "border-line bg-control text-ink-faint"
-                      }
-                    >
+                    <Badge variant="violet" aria-label="Stage 2">
+                      02
+                    </Badge>
+                    <h1 className="sr-only">Training</h1>
+                    <h2 className="type-title text-balance font-bold text-ink">
+                      Run Plan
+                    </h2>
+                    <Badge variant={trainingJobBadgeVariant(jobStatus)}>
                       {jobStatus}
                     </Badge>
                   </div>
