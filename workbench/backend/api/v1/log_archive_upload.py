@@ -1,5 +1,3 @@
-"""Bounded multipart adaptation for the Log History HTTP Interface."""
-
 from __future__ import annotations
 
 import io

@@ -1,5 +1,3 @@
-"""Application error types that can be translated at the API seam."""
-
 from __future__ import annotations
 
 

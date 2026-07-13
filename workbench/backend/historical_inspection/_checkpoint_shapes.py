@@ -1,5 +1,3 @@
-"""Private checkpoint shape interpretation for historical Inspection."""
-
 from __future__ import annotations
 
 import os

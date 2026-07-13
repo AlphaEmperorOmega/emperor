@@ -1,5 +1,3 @@
-"""Log Experiment capability failures."""
-
 from workbench.backend.failures import DomainFailure
 
 

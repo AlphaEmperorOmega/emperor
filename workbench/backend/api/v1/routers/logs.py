@@ -1,5 +1,3 @@
-"""TensorBoard archive and historical log-run endpoints."""
-
 from __future__ import annotations
 
 import asyncio

@@ -1,5 +1,3 @@
-"""Temporary live backend for the browser long-session performance benchmark."""
-
 from __future__ import annotations
 
 import argparse

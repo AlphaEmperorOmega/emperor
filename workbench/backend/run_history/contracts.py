@@ -1,5 +1,3 @@
-"""Caller-facing Run History contracts."""
-
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping

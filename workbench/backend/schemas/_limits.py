@@ -1,5 +1,3 @@
-"""Shared request limits for the Workbench API contract."""
-
 from __future__ import annotations
 
 MAX_LOG_REQUEST_RUN_IDS = 50

@@ -1,5 +1,3 @@
-"""Deep Workbench Training Jobs capability Interface."""
-
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any

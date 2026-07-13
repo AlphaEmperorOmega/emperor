@@ -1,5 +1,3 @@
-"""Stable executable shim for Training Job cgroup wrapper commands."""
-
 from workbench.backend.training_jobs.cgroup_worker import main
 
 __all__ = ["main"]

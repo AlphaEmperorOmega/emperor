@@ -1,5 +1,3 @@
-"""Training Job request limits protecting process and memory resources."""
-
 from __future__ import annotations
 
 MAX_TRAINING_DATASETS = 50

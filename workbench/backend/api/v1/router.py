@@ -1,9 +1,3 @@
-"""Aggregate router for the root-mounted Workbench API routes.
-
-The ``api.v1`` package is an internal organization namespace. The public HTTP
-contract is currently mounted at root paths such as ``/health`` and ``/models``.
-"""
-
 from __future__ import annotations
 
 from fastapi import APIRouter

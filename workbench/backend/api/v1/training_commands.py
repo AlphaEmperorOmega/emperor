@@ -1,5 +1,3 @@
-"""Translate public Training HTTP schemas into capability commands."""
-
 from __future__ import annotations
 
 from workbench.backend.model_identity import require_model_id

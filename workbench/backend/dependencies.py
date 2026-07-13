@@ -1,5 +1,3 @@
-"""FastAPI dependencies for app-scoped Workbench services."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass

@@ -1,5 +1,3 @@
-"""Training Job capability failures."""
-
 from workbench.backend.failures import DomainFailure
 
 

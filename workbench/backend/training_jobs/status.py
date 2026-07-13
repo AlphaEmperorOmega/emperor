@@ -1,5 +1,3 @@
-"""Training Job lifecycle status definitions."""
-
 from __future__ import annotations
 
 LIVE_PROCESS_JOB_STATUSES: frozenset[str] = frozenset({"queued", "running"})

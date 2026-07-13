@@ -1,5 +1,3 @@
-"""Workbench-owned historical Log Run capability."""
-
 from workbench.backend.run_history.contracts import (
     ActiveLogWriter,
     ActiveLogWriterSource,

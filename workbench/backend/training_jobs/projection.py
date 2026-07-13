@@ -1,5 +1,3 @@
-"""Authoritative event reduction for live and replayed Training Jobs."""
-
 from __future__ import annotations
 
 from collections import OrderedDict

@@ -1,9 +1,3 @@
-"""Stable compatibility exports for the public Workbench API ASGI target.
-
-The application factory lives in :mod:`workbench.backend.main`, but existing
-commands use ``workbench.backend.api:app``. Keep that import stable.
-"""
-
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any

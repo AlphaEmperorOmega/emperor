@@ -1,5 +1,3 @@
-"""Transport-neutral failure contract shared by Workbench capabilities."""
-
 from __future__ import annotations
 
 from enum import StrEnum

@@ -1,5 +1,3 @@
-"""FastAPI application factory for the Emperor Model Workbench API."""
-
 from __future__ import annotations
 
 from pathlib import Path

@@ -1,9 +1,3 @@
-"""Pydantic request/response schemas that define the workbench HTTP contract.
-
-These shapes are validated on the frontend by the Zod schemas in
-``workbench/frontend/src/lib/api.ts``; keep the two in sync.
-"""
-
 from __future__ import annotations
 
 from workbench.backend.schemas._base import (

@@ -1,5 +1,3 @@
-"""Bounded async seam for blocking Workbench backend work."""
-
 from __future__ import annotations
 
 import asyncio

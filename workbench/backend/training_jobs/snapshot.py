@@ -1,5 +1,3 @@
-"""Project reduced state into typed Training Job snapshots."""
-
 from __future__ import annotations
 
 import os

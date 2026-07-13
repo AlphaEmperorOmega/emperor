@@ -1,5 +1,3 @@
-"""Shared Log Experiment identity and mutation coordination Interface."""
-
 from workbench.backend.log_experiments.coordination import (
     DEFAULT_LOG_EXPERIMENT_MUTATION_TIMEOUT_SECONDS,
     LOG_EXPERIMENT_MUTATION_TIMEOUT_MESSAGE,

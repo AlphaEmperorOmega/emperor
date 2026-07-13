@@ -1,5 +1,3 @@
-"""Temporary live backend used by the frontend/backend contract E2E test."""
-
 from __future__ import annotations
 
 import argparse

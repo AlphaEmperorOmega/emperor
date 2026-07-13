@@ -1,5 +1,3 @@
-"""Log Experiment naming rules."""
-
 from __future__ import annotations
 
 import re

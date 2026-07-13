@@ -1,5 +1,3 @@
-"""FastAPI middleware registration for the Workbench backend."""
-
 from __future__ import annotations
 
 from fastapi import FastAPI

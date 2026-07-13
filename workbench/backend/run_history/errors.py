@@ -1,5 +1,3 @@
-"""Run History capability failures."""
-
 from workbench.backend.failures import DomainFailure
 
 

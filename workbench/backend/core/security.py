@@ -1,5 +1,3 @@
-"""Security dependencies for the Workbench API."""
-
 from __future__ import annotations
 
 import secrets

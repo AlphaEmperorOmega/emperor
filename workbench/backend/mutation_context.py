@@ -1,5 +1,3 @@
-"""Transport-neutral identity context for restart-safe mutation resources."""
-
 from __future__ import annotations
 
 import contextvars

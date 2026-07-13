@@ -1,5 +1,3 @@
-"""Reproducible synthetic benchmark for paginated log-run projections."""
-
 from __future__ import annotations
 
 import json

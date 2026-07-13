@@ -1,5 +1,3 @@
-"""Authoritative HTTP operation policy declarations for the Workbench API."""
-
 from __future__ import annotations
 
 from collections import Counter
