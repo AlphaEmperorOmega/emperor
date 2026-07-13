@@ -14,10 +14,6 @@ from workbench.backend.training_jobs.contracts import (
 )
 from workbench.backend.training_jobs.monitoring import TrainingMonitorLocator
 from workbench.backend.training_jobs.projection import TrainingJobLiveProjection
-from workbench.backend.training_jobs.run_plan_adapter import (
-    training_run_plan_from_payload,
-    training_search_from_payload,
-)
 from workbench.backend.training_jobs.store import TrainingJobRecord
 
 TRAINING_JOB_LOG_TAIL_CHUNK_BYTES = 8192
@@ -53,9 +49,9 @@ class TrainingJobProjector:
             experiment_task=job.experiment_task,
             datasets=list(job.datasets),
             overrides=dict(job.overrides),
-            search=training_search_from_payload(job.search),
+            search=job.search,
             planned_run_count=job.planned_run_count,
-            run_plan=training_run_plan_from_payload(projection.run_plan),
+            run_plan=projection.run_plan,
             monitors=list(job.monitors),
             log_folder=job.log_folder,
             created_at=job.created_at,

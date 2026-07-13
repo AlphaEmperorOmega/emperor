@@ -25,10 +25,13 @@ from workbench.backend.services.inspection import InspectionService
 from workbench.backend.training_jobs.contracts import (
     ConfigSnapshotRevision,
     CreateTrainingJobCommand,
+    SubmittedTrainingRunPlan,
+    TrainingRunPlanView,
     TrainingSearch,
 )
 from workbench.backend.training_jobs.run_plan_adapter import (
     submitted_run_plan_from_payload,
+    training_run_plan_to_payload,
     training_search_from_payload,
 )
 from workbench.backend.training_jobs.runtime import _TrainingJobRuntime
@@ -60,7 +63,7 @@ class TrainingJobServiceHarness:
     def runner(self):
         return self.runtime.worker_launcher.runner
 
-    def create_run_plan(self, **kwargs: Any) -> dict[str, Any]:
+    def create_run_plan(self, **kwargs: Any) -> TrainingRunPlanView:
         return self.runtime.run_plan_adapter.create_for_request(
             model=kwargs["model"],
             preset=kwargs["preset"],
@@ -79,7 +82,14 @@ class TrainingJobServiceHarness:
         if search is not None and not isinstance(search, TrainingSearch):
             search = training_search_from_payload(search)
         run_plan = kwargs.get("run_plan")
-        if run_plan is not None and not hasattr(run_plan, "runs"):
+        if isinstance(run_plan, TrainingRunPlanView):
+            run_plan = submitted_run_plan_from_payload(
+                training_run_plan_to_payload(run_plan)
+            )
+        elif run_plan is not None and not isinstance(
+            run_plan,
+            SubmittedTrainingRunPlan,
+        ):
             run_plan = submitted_run_plan_from_payload(run_plan)
         return training_job_to_payload(
             self.service.create_job(

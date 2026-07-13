@@ -5,7 +5,7 @@ from __future__ import annotations
 import copy
 import random
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Literal, cast
 
 from emperor.inspection import (
@@ -55,7 +55,6 @@ from workbench.backend.training_jobs.contracts import (
     SubmittedTrainingRunPlan,
     TrainingRunChangeSource,
     TrainingRunChangeView,
-    TrainingRunPlanDocument,
     TrainingRunPlanSummaryView,
     TrainingRunPlanView,
     TrainingRunStatus,
@@ -72,8 +71,8 @@ from workbench.backend.training_jobs.limits import (
 )
 
 
-def decode_persisted_run_plan(payload: object) -> TrainingRunPlanDocument:
-    """Decode the canonical mutable document used by job persistence/projection."""
+def decode_persisted_run_plan(payload: object) -> TrainingRunPlanView:
+    """Decode the existing persisted JSON shape into the canonical Run Plan value."""
 
     if not isinstance(payload, Mapping):
         raise ValueError("Persisted Run Plan must be an object.")
@@ -83,15 +82,15 @@ def decode_persisted_run_plan(payload: object) -> TrainingRunPlanDocument:
         raise ValueError("Persisted Run Plan rows must be a list of objects.")
     if not isinstance(summary, Mapping):
         raise ValueError("Persisted Run Plan summary must be an object.")
-    return copy.deepcopy(dict(payload))
+    return training_run_plan_from_payload(payload)
 
 
 def encode_persisted_run_plan(
-    document: Mapping[str, Any],
-) -> TrainingRunPlanDocument:
+    plan: TrainingRunPlanView,
+) -> dict[str, Any]:
     """Return an isolated JSON-ready persistence/worker representation."""
 
-    return decode_persisted_run_plan(document)
+    return copy.deepcopy(training_run_plan_to_payload(plan))
 
 
 def _mapping_items(value: object) -> list[Mapping[str, Any]]:
@@ -677,17 +676,19 @@ def _validate_worker_authoritative_metadata(
                 )
 
 
-def summarize_training_runs(runs: list[dict[str, Any]]) -> dict[str, int]:
+def summarize_training_runs(
+    runs: list[TrainingRunView],
+) -> TrainingRunPlanSummaryView:
     """Derive the complete Run Plan summary from exact projected rows."""
 
-    statuses = [str(run.get("status", "Pending")) for run in runs]
+    statuses = [run.status for run in runs]
     completed_epochs = 0
     remaining_epochs = 0
     total_epochs = 0
     for run in runs:
-        row_total = int(run.get("totalEpochs") or 0)
-        row_current = int(run.get("currentEpoch") or 0)
-        row_status = str(run.get("status", "Pending"))
+        row_total = run.total_epochs
+        row_current = run.current_epoch
+        row_status = run.status
         total_epochs += row_total
         if row_status == "Completed":
             row_done = row_total
@@ -699,48 +700,51 @@ def summarize_training_runs(runs: list[dict[str, Any]]) -> dict[str, int]:
         if row_status in {"Pending", "Running"}:
             remaining_epochs += max(0, row_total - row_done)
 
-    return {
-        "totalRuns": len(runs),
-        "completedRuns": statuses.count("Completed"),
-        "runningRuns": statuses.count("Running"),
-        "pendingRuns": statuses.count("Pending"),
-        "failedRuns": statuses.count("Failed"),
-        "cancelledRuns": statuses.count("Cancelled"),
-        "skippedRuns": statuses.count("Skipped"),
-        "totalEpochs": total_epochs,
-        "completedEpochs": completed_epochs,
-        "remainingEpochs": remaining_epochs,
-    }
+    return TrainingRunPlanSummaryView(
+        total_runs=len(runs),
+        completed_runs=statuses.count("Completed"),
+        running_runs=statuses.count("Running"),
+        pending_runs=statuses.count("Pending"),
+        failed_runs=statuses.count("Failed"),
+        cancelled_runs=statuses.count("Cancelled"),
+        skipped_runs=statuses.count("Skipped"),
+        total_epochs=total_epochs,
+        completed_epochs=completed_epochs,
+        remaining_epochs=remaining_epochs,
+    )
 
 
-def run_lookup_by_id(runs: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    return {str(run.get("id")): run for run in runs if run.get("id") is not None}
+def run_lookup_by_id(runs: list[TrainingRunView]) -> dict[str, int]:
+    return {run.id: index for index, run in enumerate(runs)}
 
 
 def apply_training_run_progress_event(
     *,
-    runs: list[dict[str, Any]],
-    run_by_id: dict[str, dict[str, Any]],
+    plan: TrainingRunPlanView,
+    run_by_id: dict[str, int],
     event: dict[str, Any],
-) -> None:
-    row = _run_for_progress_event(
+) -> TrainingRunPlanView:
+    row_index = _run_for_progress_event(
         event=event,
-        runs=runs,
+        runs=plan.runs,
         run_by_id=run_by_id,
     )
-    if row is None:
-        return
+    if row_index is None:
+        return plan
 
+    runs = list(plan.runs)
+    row = runs[row_index]
     event_type = event.get("type")
-    total_epochs = int(row.get("totalEpochs") or 0)
+    total_epochs = row.total_epochs
+    changes: dict[str, Any] = {}
     if event.get("logDir"):
-        row["logDir"] = event.get("logDir")
+        changes["log_dir"] = str(event["logDir"])
     if isinstance(event.get("metrics"), dict):
-        row["metrics"] = event["metrics"]
+        changes["metrics"] = dict(event["metrics"])
 
     if event_type == "dataset_started":
-        row["status"] = "Running"
-        row["currentEpoch"] = max(0, int(row.get("currentEpoch") or 0))
+        changes["status"] = "Running"
+        changes["current_epoch"] = max(0, row.current_epoch)
     elif event_type in {
         "epoch_started",
         "step",
@@ -748,73 +752,79 @@ def apply_training_run_progress_event(
         "fit_completed",
         "test_completed",
     }:
-        row["status"] = "Running"
-        row["currentEpoch"] = max(
-            int(row.get("currentEpoch") or 0),
+        changes["status"] = "Running"
+        changes["current_epoch"] = max(
+            row.current_epoch,
             _progress_event_epoch(event, total_epochs),
         )
     elif event_type == "dataset_completed":
-        row["status"] = "Completed"
-        row["currentEpoch"] = total_epochs
+        changes["status"] = "Completed"
+        changes["current_epoch"] = total_epochs
     elif event_type == "error":
-        row["status"] = "Failed"
-        row["currentEpoch"] = max(
-            int(row.get("currentEpoch") or 0),
+        changes["status"] = "Failed"
+        changes["current_epoch"] = max(
+            row.current_epoch,
             _progress_event_epoch(event, total_epochs),
         )
-        row["error"] = str(event.get("error") or "Training failed")
+        changes["error"] = str(event.get("error") or "Training failed")
         if event.get("traceback"):
-            row["errorTraceback"] = str(event.get("traceback"))
+            changes["error_traceback"] = str(event.get("traceback"))
+
+    if not changes:
+        return plan
+    runs[row_index] = replace(row, **changes)
+    return replace(plan, runs=runs)
 
 
 def finalize_training_run_progress(
-    plan: dict[str, Any],
+    plan: TrainingRunPlanView,
     *,
     job_status: str,
     latest_failed_event: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    plan = copy.deepcopy(plan)
-    runs = plan.get("runs") or []
+) -> TrainingRunPlanView:
+    runs = list(plan.runs)
     latest_failed_event = latest_failed_event or {}
     if job_status == "cancelled":
-        for row in runs:
-            if row.get("status") == "Running":
-                row["status"] = "Cancelled"
-            elif row.get("status") == "Pending":
-                row["status"] = "Skipped"
+        for index, row in enumerate(runs):
+            if row.status == "Running":
+                runs[index] = replace(row, status="Cancelled")
+            elif row.status == "Pending":
+                runs[index] = replace(row, status="Skipped")
     elif job_status == "failed":
-        failed_seen = any(row.get("status") == "Failed" for row in runs)
-        for row in runs:
-            if row.get("status") == "Running":
-                row["status"] = "Failed"
+        failed_seen = any(row.status == "Failed" for row in runs)
+        for index, row in enumerate(runs):
+            if row.status == "Running":
+                runs[index] = replace(row, status="Failed")
                 failed_seen = True
-            elif row.get("status") == "Pending":
+            elif row.status == "Pending":
                 if not failed_seen:
-                    row["status"] = "Failed"
-                    row["error"] = "Training failed"
+                    changes = {"status": "Failed", "error": "Training failed"}
                     if latest_failed_event.get("traceback"):
-                        row["errorTraceback"] = str(
+                        changes["error_traceback"] = str(
                             latest_failed_event.get("traceback")
                         )
+                    runs[index] = replace(row, **changes)
                     failed_seen = True
                 else:
-                    row["status"] = "Skipped"
+                    runs[index] = replace(row, status="Skipped")
     elif job_status == "completed":
-        for row in runs:
-            if row.get("status") == "Running":
-                row["status"] = "Completed"
-                row["currentEpoch"] = int(row.get("totalEpochs") or 0)
+        for index, row in enumerate(runs):
+            if row.status == "Running":
+                runs[index] = replace(
+                    row,
+                    status="Completed",
+                    current_epoch=row.total_epochs,
+                )
 
-    plan["summary"] = summarize_training_runs(runs)
-    return plan
+    return replace(plan, runs=runs, summary=summarize_training_runs(runs))
 
 
 def _run_for_progress_event(
     *,
     event: dict[str, Any],
-    runs: list[dict[str, Any]],
-    run_by_id: dict[str, dict[str, Any]],
-) -> dict[str, Any] | None:
+    runs: list[TrainingRunView],
+    run_by_id: dict[str, int],
+) -> int | None:
     run_id = event.get("runId")
     if isinstance(run_id, str) and run_id in run_by_id:
         return run_by_id[run_id]
@@ -822,29 +832,29 @@ def _run_for_progress_event(
     run_index = event.get("runIndex")
     if isinstance(run_index, int):
         if 1 <= run_index <= len(runs):
-            return runs[run_index - 1]
+            return run_index - 1
         if 0 <= run_index < len(runs):
-            return runs[run_index]
+            return run_index
 
     dataset = event.get("dataset")
     preset = normalize_preset_token(event.get("preset"))
     if dataset is None:
         return None
     candidates = [
-        run
-        for run in runs
-        if run.get("dataset") == dataset
+        index
+        for index, run in enumerate(runs)
+        if run.dataset == dataset
         and (
             preset is None
-            or normalize_preset_token(str(run.get("preset")))
+            or normalize_preset_token(run.preset)
             == normalize_preset_token(preset)
         )
     ]
     return next(
         (
-            run
-            for run in candidates
-            if run.get("status") not in {"Completed", "Failed", "Cancelled"}
+            index
+            for index in candidates
+            if runs[index].status not in {"Completed", "Failed", "Cancelled"}
         ),
         candidates[0] if candidates else None,
     )
@@ -1091,7 +1101,7 @@ class SelectedTrainingInputs:
 
 @dataclass(frozen=True, slots=True)
 class MaterializedTrainingRunPlan:
-    document: TrainingRunPlanDocument
+    plan: TrainingRunPlanView
     monitors: tuple[str, ...]
 
 
@@ -1362,7 +1372,7 @@ class WorkbenchRunPlanAdapter:
         monitors: list[str] | None,
         search: dict[str, Any] | None,
         snapshot_ids: list[str],
-    ) -> dict[str, Any]:
+    ) -> TrainingRunPlanView:
         if search is not None:
             raise TrainingJobFailure(
                 "Config Snapshot Run Plans cannot be combined with a search."
@@ -1439,7 +1449,7 @@ class WorkbenchRunPlanAdapter:
         monitors: list[str] | None,
         search: dict[str, Any] | None,
         snapshot_ids: list[str] | None = None,
-    ) -> dict[str, Any]:
+    ) -> TrainingRunPlanView:
         if snapshot_ids:
             return self._create_snapshot_plan_for_request(
                 model=model,
@@ -1470,7 +1480,10 @@ class WorkbenchRunPlanAdapter:
             monitors=monitor_names,
         )
 
-    def summarize(self, runs: list[dict[str, Any]]) -> dict[str, int]:
+    def summarize(
+        self,
+        runs: list[TrainingRunView],
+    ) -> TrainingRunPlanSummaryView:
         return summarize_training_runs(runs)
 
     def create(
@@ -1480,7 +1493,7 @@ class WorkbenchRunPlanAdapter:
         selected: SelectedTrainingInputs,
         log_folder: str,
         monitors: list[str] | None = None,
-    ) -> dict[str, Any]:
+    ) -> TrainingRunPlanView:
         monitor_names = monitors or []
         try:
             semantic_plan = plan_runs(
@@ -1529,7 +1542,7 @@ class WorkbenchRunPlanAdapter:
         log_folder: str,
         monitors: list[str],
         search: SearchSpec | None = None,
-    ) -> dict[str, Any]:
+    ) -> TrainingRunView:
         _fields, by_key = self._field_maps(model, run.preset)
         search_keys = (
             {normalize_key(axis.key) for axis in (search.axes or ())}
@@ -1556,26 +1569,26 @@ class WorkbenchRunPlanAdapter:
                 key=lambda parameter: search_positions[normalize_key(parameter.key)],
             )
             parameters = fixed_parameters + searched_parameters
-        changes = []
+        changes: list[TrainingRunChangeView] = []
         overrides: dict[str, Any] = {}
         for parameter in parameters:
             field = by_key.get(normalize_key(parameter.key))
             field_key = field.key if field is not None else parameter.key
             overrides[field_key] = parameter.value
             changes.append(
-                {
-                    "key": field_key,
-                    "label": _field_label(field) if field is not None else field_key,
-                    "value": parameter.value,
-                    "source": (
+                TrainingRunChangeView(
+                    key=field_key,
+                    label=_field_label(field) if field is not None else field_key,
+                    value=parameter.value,
+                    source=(
                         "search"
                         if parameter.source == "search"
                         or normalize_key(parameter.key) in search_keys
                         else "override"
                     ),
-                }
+                )
             )
-        payload = self._pending_run(
+        pending_run = self._pending_run(
             model=model,
             index=index,
             preset=run.preset,
@@ -1587,8 +1600,7 @@ class WorkbenchRunPlanAdapter:
             monitors=monitors,
             total_epochs=self._run_total_epochs(parts, run),
         )
-        payload["id"] = run.id
-        return payload
+        return replace(pending_run, id=run.id)
 
     def from_submitted(
         self,
@@ -1600,7 +1612,7 @@ class WorkbenchRunPlanAdapter:
         monitors: list[str] | None = None,
         envelope_snapshot_ids: list[str] | None = None,
         snapshot_overlay_overrides: Mapping[str, Any] | None = None,
-    ) -> dict[str, Any]:
+    ) -> TrainingRunPlanView:
         monitor_names = monitors or []
         submitted_plan = (
             run_plan
@@ -1617,7 +1629,7 @@ class WorkbenchRunPlanAdapter:
                 else selected.request.overrides
             ),
         )
-        submitted_runs = submitted_run_plan_to_payload(submitted_plan)["runs"]
+        submitted_runs = submitted_plan.runs
         if len(submitted_runs) > MAX_TRAINING_PLANNED_RUNS:
             raise TrainingJobFailure(
                 "Submitted run plan is too large: "
@@ -1630,10 +1642,10 @@ class WorkbenchRunPlanAdapter:
                 selected.request,
                 tuple(
                     SubmittedRun(
-                        id=(str(row.get("id")) if row.get("id") else None),
-                        preset=str(row.get("preset") or ""),
-                        dataset=str(row.get("dataset") or ""),
-                        overrides=dict(row.get("overrides") or {}),
+                        id=row.id or None,
+                        preset=row.preset,
+                        dataset=row.dataset,
+                        overrides=dict(row.overrides),
                     )
                     for row in submitted_runs
                 ),
@@ -1651,8 +1663,6 @@ class WorkbenchRunPlanAdapter:
             zip(submitted_runs, semantic_plan.runs, strict=True),
             start=1,
         ):
-            snapshot_id = row.get("snapshotId")
-            snapshot_name = row.get("snapshotName")
             projected_row = self._pending_semantic_run(
                 model=model,
                 parts=selected.parts,
@@ -1663,13 +1673,13 @@ class WorkbenchRunPlanAdapter:
                 search=semantic_plan.search,
             )
             runs.append(
-                {
-                    **projected_row,
-                    "snapshotId": str(snapshot_id) if snapshot_id is not None else None,
-                    "snapshotName": str(snapshot_name)
-                    if snapshot_name is not None
-                    else None,
-                }
+                replace(
+                    projected_row,
+                    snapshot_id=row.snapshot_id,
+                    snapshot_name=row.snapshot_name,
+                    snapshot_id_present=True,
+                    snapshot_name_present=True,
+                )
             )
 
         return self._plan_payload(
@@ -1792,22 +1802,22 @@ class WorkbenchRunPlanAdapter:
         preset: str,
         experiment_task: str,
         dataset: str,
-        changes: list[dict[str, Any]],
+        changes: list[TrainingRunChangeView],
         overrides: dict[str, Any],
         log_folder: str,
         monitors: list[str],
         total_epochs: int,
-    ) -> dict[str, Any]:
-        return {
-            "id": f"run-{index:04d}",
-            "index": index,
-            "status": "Pending",
-            "preset": preset,
-            "experimentTask": experiment_task,
-            "dataset": dataset,
-            "changes": changes,
-            "overrides": overrides,
-            "command": self._training_command(
+    ) -> TrainingRunView:
+        return TrainingRunView(
+            id=f"run-{index:04d}",
+            index=index,
+            status="Pending",
+            preset=preset,
+            experiment_task=experiment_task,
+            dataset=dataset,
+            changes=changes,
+            overrides=overrides,
+            command=self._training_command(
                 model=model,
                 preset=preset,
                 experiment_task=experiment_task,
@@ -1816,13 +1826,8 @@ class WorkbenchRunPlanAdapter:
                 log_folder=log_folder,
                 monitors=monitors,
             ),
-            "totalEpochs": total_epochs,
-            "currentEpoch": 0,
-            "metrics": {},
-            "logDir": None,
-            "error": None,
-            "errorTraceback": None,
-        }
+            total_epochs=total_epochs,
+        )
 
     def _plan_payload(
         self,
@@ -1830,31 +1835,33 @@ class WorkbenchRunPlanAdapter:
         model: str,
         semantic_plan: RunPlan,
         log_folder: str,
-        runs: list[dict[str, Any]],
+        runs: list[TrainingRunView],
         snapshot_revisions: tuple[ConfigSnapshotRevision, ...] = (),
-    ) -> dict[str, Any]:
-        return {
-            **model_identity_payload_from_id(model),
-            "preset": semantic_plan.presets[0],
-            "presets": list(semantic_plan.presets),
-            "experimentTask": semantic_plan.experiment_task,
-            "datasets": list(semantic_plan.datasets),
-            "overrides": dict(semantic_plan.overrides),
-            "search": _workbench_search_payload(semantic_plan.search),
-            "logFolder": log_folder,
-            "isRandomSearch": bool(
+    ) -> TrainingRunPlanView:
+        return TrainingRunPlanView(
+            model=model,
+            preset=semantic_plan.presets[0],
+            presets=list(semantic_plan.presets),
+            experiment_task=semantic_plan.experiment_task,
+            datasets=list(semantic_plan.datasets),
+            overrides=dict(semantic_plan.overrides),
+            search=training_search_from_payload(
+                _workbench_search_payload(semantic_plan.search)
+            ),
+            log_folder=log_folder,
+            is_random_search=bool(
                 semantic_plan.search and semantic_plan.search.mode == "random"
             ),
-            "runs": runs,
-            "summary": self.summarize(runs),
-            "snapshotRevisions": _snapshot_revisions_to_payload(snapshot_revisions),
-        }
+            runs=runs,
+            summary=self.summarize(runs),
+            snapshot_revisions=snapshot_revisions,
+        )
 
     def create_run_plan(
         self,
         command: CreateTrainingRunPlanCommand,
     ) -> TrainingRunPlanView:
-        payload = self.create_for_request(
+        return self.create_for_request(
             model=command.model,
             preset=command.preset,
             presets=command.presets,
@@ -1870,7 +1877,6 @@ class WorkbenchRunPlanAdapter:
             ),
             snapshot_ids=command.snapshot_ids,
         )
-        return training_run_plan_from_payload(payload)
 
     def materialize_training_job(
         self,
@@ -1909,7 +1915,7 @@ class WorkbenchRunPlanAdapter:
                         "Refresh the Run Plan before starting Training.",
                         kind=FailureKind.CONFLICT,
                     )
-            document = self._create_snapshot_plan_for_request(
+            plan = self._create_snapshot_plan_for_request(
                 model=command.model,
                 preset=command.preset,
                 presets=command.presets,
@@ -1928,7 +1934,7 @@ class WorkbenchRunPlanAdapter:
             package = _require_package(command.model)
             monitor_names = self.resolve_monitor_names(package, command.monitors)
             return MaterializedTrainingRunPlan(
-                document=encode_persisted_run_plan(document),
+                plan=plan,
                 monitors=tuple(monitor_names),
             )
 
@@ -1969,7 +1975,7 @@ class WorkbenchRunPlanAdapter:
             selected.parts,
             command.monitors,
         )
-        document = (
+        plan = (
             self.from_submitted(
                 model=command.model,
                 selected=selected,
@@ -1987,7 +1993,7 @@ class WorkbenchRunPlanAdapter:
             )
         )
         return MaterializedTrainingRunPlan(
-            document=encode_persisted_run_plan(document),
+            plan=plan,
             monitors=tuple(monitor_names),
         )
 
@@ -2027,14 +2033,16 @@ class WorkbenchRunPlanAdapter:
             start=1,
         ):
             assert isinstance(raw_row, Mapping)
-            expected_row = self._pending_semantic_run(
-                model=package.catalog_key,
-                parts=package,
-                run=semantic_run,
-                index=index,
-                log_folder=str(persisted_plan["logFolder"]),
-                monitors=monitors,
-                search=semantic_plan.search,
+            expected_row = training_run_to_payload(
+                self._pending_semantic_run(
+                    model=package.catalog_key,
+                    parts=package,
+                    run=semantic_run,
+                    index=index,
+                    log_folder=str(persisted_plan["logFolder"]),
+                    monitors=monitors,
+                    search=semantic_plan.search,
+                )
             )
             for field_name in ("snapshotId", "snapshotName"):
                 if field_name in raw_row:
@@ -2073,14 +2081,16 @@ class WorkbenchRunPlanAdapter:
                 )
             expected_rows.append(expected_row)
 
-        expected_plan = self._plan_payload(
-            model=package.catalog_key,
-            semantic_plan=semantic_plan,
-            log_folder=str(persisted_plan["logFolder"]),
-            runs=expected_rows,
-            snapshot_revisions=_snapshot_revisions_from_payload(
-                persisted_plan.get("snapshotRevisions")
-            ),
+        expected_plan = training_run_plan_to_payload(
+            self._plan_payload(
+                model=package.catalog_key,
+                semantic_plan=semantic_plan,
+                log_folder=str(persisted_plan["logFolder"]),
+                runs=[training_run_from_payload(row) for row in expected_rows],
+                snapshot_revisions=_snapshot_revisions_from_payload(
+                    persisted_plan.get("snapshotRevisions")
+                ),
+            )
         )
         if "snapshotRevisions" not in persisted_plan:
             expected_plan.pop("snapshotRevisions", None)

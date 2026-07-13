@@ -23,6 +23,9 @@ from workbench.backend.training_jobs.progress import (
     TrainingProgressStore,
 )
 from workbench.backend.training_jobs.projection import TrainingLiveProjectionCache
+from workbench.backend.training_jobs.run_plan_adapter import (
+    training_run_plan_from_payload,
+)
 from workbench.backend.training_jobs.snapshot import TrainingJobProjector
 from workbench.backend.training_jobs.store import TrainingJobRecord
 
@@ -71,7 +74,7 @@ def make_job(root: Path) -> TrainingJobRecord:
         overrides={},
         search=None,
         planned_run_count=1,
-        run_plan={
+        run_plan=training_run_plan_from_payload({
             "model": "linears/linear",
             "preset": "baseline",
             "presets": ["baseline"],
@@ -104,7 +107,7 @@ def make_job(root: Path) -> TrainingJobRecord:
                 "totalEpochs": 2,
                 "remainingEpochs": 2,
             },
-        },
+        }),
         monitors=["linear"],
         log_folder="collaborator_test",
         command=["train"],

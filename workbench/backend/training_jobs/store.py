@@ -20,7 +20,10 @@ from workbench.backend.storage.local_files import (
     resolve_under_root,
     write_json_atomic,
 )
-from workbench.backend.training_jobs.contracts import TrainingRunPlanDocument
+from workbench.backend.training_jobs.contracts import (
+    TrainingRunPlanView,
+    TrainingSearch,
+)
 from workbench.backend.training_jobs.launcher import (
     PRIVATE_FILE_MODE,
     ensure_private_directory,
@@ -28,6 +31,8 @@ from workbench.backend.training_jobs.launcher import (
 from workbench.backend.training_jobs.run_plan_adapter import (
     decode_persisted_run_plan,
     encode_persisted_run_plan,
+    training_search_from_payload,
+    training_search_to_payload,
 )
 
 METADATA_FILENAME = "metadata.json"
@@ -45,9 +50,9 @@ class TrainingJobRecord:
     presets: list[str]
     datasets: list[str]
     overrides: dict[str, Any]
-    search: dict[str, Any] | None
+    search: TrainingSearch | None
     planned_run_count: int
-    run_plan: TrainingRunPlanDocument
+    run_plan: TrainingRunPlanView
     monitors: list[str]
     log_folder: str
     command: list[str]
@@ -248,7 +253,9 @@ def _record_to_metadata(job: TrainingJobRecord) -> dict[str, Any]:
         "experiment_task": job.experiment_task,
         "datasets": job.datasets,
         "overrides": job.overrides,
-        "search": job.search,
+        "search": (
+            training_search_to_payload(job.search) if job.search is not None else None
+        ),
         "planned_run_count": job.planned_run_count,
         "run_plan": encode_persisted_run_plan(job.run_plan),
         "monitors": job.monitors,
@@ -288,7 +295,9 @@ def _record_from_metadata(
         ),
         datasets=[str(item) for item in payload["datasets"]],
         overrides=dict(payload["overrides"]),
-        search=(dict(payload["search"]) if payload.get("search") is not None else None),
+        search=training_search_from_payload(
+            dict(payload["search"]) if payload.get("search") is not None else None
+        ),
         planned_run_count=int(payload["planned_run_count"]),
         run_plan=decode_persisted_run_plan(payload["run_plan"]),
         monitors=[str(item) for item in payload["monitors"]],

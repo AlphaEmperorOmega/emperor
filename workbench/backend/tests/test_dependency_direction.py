@@ -24,6 +24,12 @@ WORKBENCH_RUN_PLAN_ADAPTER = (
 WORKBENCH_TRAINING_JOB_CONTRACTS = (
     WORKBENCH_BACKEND_DIR / "training_jobs" / "contracts.py"
 )
+TYPED_RUN_PLAN_RUNTIME_MODULES = (
+    WORKBENCH_BACKEND_DIR / "training_jobs" / "runtime.py",
+    WORKBENCH_BACKEND_DIR / "training_jobs" / "store.py",
+    WORKBENCH_BACKEND_DIR / "training_jobs" / "projection.py",
+    WORKBENCH_BACKEND_DIR / "training_jobs" / "lifecycle.py",
+)
 RUN_PLAN_ADAPTATION_IMPORTS = frozenset(
     {
         "PlanningBudget",
@@ -198,6 +204,13 @@ def _config_imports(path: Path) -> Iterator[ConfigImport]:
 def _config_imports_under(roots: Iterable[Path]) -> Iterator[ConfigImport]:
     for path in _python_files(roots):
         yield from _config_imports(path)
+
+
+def _mentions_run_plan(node: ast.AST) -> bool:
+    return any(
+        isinstance(child, ast.Name) and "run_plan" in child.id
+        for child in ast.walk(node)
+    )
 
 
 class DependencyDirectionTests(unittest.TestCase):
@@ -422,6 +435,42 @@ class DependencyDirectionTests(unittest.TestCase):
                     relative_path = path.relative_to(REPO_ROOT)
                     violations.append(
                         f"{relative_path}:{node.lineno}: {', '.join(duplicated)}"
+                    )
+
+        self.assertEqual([], violations)
+
+    def test_training_job_runtime_modules_keep_run_plans_typed(self) -> None:
+        contracts_source = WORKBENCH_TRAINING_JOB_CONTRACTS.read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("TrainingRunPlanDocument", contracts_source)
+
+        violations: list[str] = []
+        for path in TYPED_RUN_PLAN_RUNTIME_MODULES:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(tree):
+                serialized_field: str | None = None
+                if (
+                    isinstance(node, ast.Subscript)
+                    and _mentions_run_plan(node.value)
+                    and isinstance(node.slice, ast.Constant)
+                    and isinstance(node.slice.value, str)
+                ):
+                    serialized_field = node.slice.value
+                elif (
+                    isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Attribute)
+                    and node.func.attr == "get"
+                    and _mentions_run_plan(node.func.value)
+                    and node.args
+                    and isinstance(node.args[0], ast.Constant)
+                    and isinstance(node.args[0].value, str)
+                ):
+                    serialized_field = node.args[0].value
+                if serialized_field is not None:
+                    relative_path = path.relative_to(REPO_ROOT)
+                    violations.append(
+                        f"{relative_path}:{node.lineno}: {serialized_field}"
                     )
 
         self.assertEqual([], violations)

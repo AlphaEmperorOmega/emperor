@@ -23,6 +23,7 @@ from models.package_cli import run_model_package_cli
 from workbench.backend.training_jobs import worker as training_worker
 from workbench.backend.training_jobs.run_plan_adapter import (
     WorkbenchRunPlanAdapter,
+    encode_persisted_run_plan,
 )
 
 
@@ -99,12 +100,13 @@ class RunsCliEquivalenceTests(unittest.TestCase):
                 },
             },
         )
-        serialized_plan = builder.create(
+        plan = builder.create(
             model="linears/linear",
             selected=selected,
             log_folder="runs_equivalence",
             monitors=["linear"],
         )
+        serialized_plan = encode_persisted_run_plan(plan)
         worker_payload = {
             "id": "equivalence-job",
             "monitors": ["linear"],

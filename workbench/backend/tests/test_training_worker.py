@@ -27,6 +27,7 @@ from workbench.backend.training_jobs.limits import (
 )
 from workbench.backend.training_jobs.run_plan_adapter import (
     WorkbenchRunPlanAdapter,
+    encode_persisted_run_plan,
 )
 
 COMMON_PROGRESS_EVENT_KEYS = {
@@ -74,11 +75,12 @@ def worker_payload(
         log_folder="unit_logs",
         monitors=monitors or [],
     )
+    serialized_plan = encode_persisted_run_plan(plan)
     return {
         "id": "job-123",
         "monitors": monitors or [],
-        "plannedRunCount": len(plan["runs"]),
-        "runPlan": plan,
+        "plannedRunCount": len(plan.runs),
+        "runPlan": serialized_plan,
     }
 
 

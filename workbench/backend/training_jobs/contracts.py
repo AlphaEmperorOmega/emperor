@@ -111,9 +111,6 @@ class SubmittedTrainingRunPlan:
     snapshot_revisions: tuple[ConfigSnapshotRevision, ...] = ()
 
 
-TrainingRunPlanDocument = dict[str, Any]
-
-
 @dataclass(frozen=True, slots=True)
 class TrainingResultLinkView:
     preset: str | None = None
@@ -206,7 +203,6 @@ __all__ = [
     "TrainingProgressEventsPage",
     "TrainingRunChangeSource",
     "TrainingRunChangeView",
-    "TrainingRunPlanDocument",
     "TrainingRunPlanSummaryView",
     "TrainingRunPlanView",
     "TrainingRunStatus",

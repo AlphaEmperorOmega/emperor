@@ -8,6 +8,10 @@ from tempfile import TemporaryDirectory
 from typing import Any
 
 from workbench.backend.api.v1.training_mapping import training_job_to_payload
+from workbench.backend.training_jobs.contracts import (
+    TrainingRunPlanView,
+    TrainingRunView,
+)
 from workbench.backend.training_jobs.progress import (
     TrainingProgressSnapshot,
     TrainingProgressStore,
@@ -20,24 +24,19 @@ from workbench.backend.training_jobs.snapshot import TrainingJobProjector
 from workbench.backend.training_jobs.store import TrainingJobRecord
 
 
-def _run(run_id: str, index: int, dataset: str) -> dict[str, Any]:
-    return {
-        "id": run_id,
-        "index": index,
-        "status": "Pending",
-        "preset": "baseline",
-        "dataset": dataset,
-        "experimentTask": "classification",
-        "changes": [],
-        "overrides": {},
-        "command": "train",
-        "totalEpochs": 2,
-        "currentEpoch": 0,
-        "metrics": {},
-        "logDir": None,
-        "error": None,
-        "errorTraceback": None,
-    }
+def _run(run_id: str, index: int, dataset: str) -> TrainingRunView:
+    return TrainingRunView(
+        id=run_id,
+        index=index,
+        status="Pending",
+        preset="baseline",
+        dataset=dataset,
+        experiment_task="classification",
+        changes=[],
+        overrides={},
+        command="train",
+        total_epochs=2,
+    )
 
 
 def _job(root: Path) -> TrainingJobRecord:
@@ -52,20 +51,19 @@ def _job(root: Path) -> TrainingJobRecord:
         overrides={},
         search=None,
         planned_run_count=2,
-        run_plan={
-            "modelType": "linears",
-            "model": "linear",
-            "preset": "baseline",
-            "presets": ["baseline"],
-            "experimentTask": "classification",
-            "datasets": ["Mnist", "Cifar10"],
-            "overrides": {},
-            "search": None,
-            "logFolder": "projection-test",
-            "isRandomSearch": False,
-            "runs": runs,
-            "summary": summarize_training_runs(runs),
-        },
+        run_plan=TrainingRunPlanView(
+            model="linears/linear",
+            preset="baseline",
+            presets=["baseline"],
+            experiment_task="classification",
+            datasets=["Mnist", "Cifar10"],
+            overrides={},
+            search=None,
+            log_folder="projection-test",
+            is_random_search=False,
+            runs=runs,
+            summary=summarize_training_runs(runs),
+        ),
         monitors=["linear"],
         log_folder="projection-test",
         command=["train"],
@@ -424,7 +422,7 @@ class TrainingProjectionParityTests(unittest.TestCase):
             projection.event_counts,
             {"job_started": 1, "dataset_started": 1},
         )
-        self.assertEqual(projection.run_plan["runs"][0]["status"], "Running")
+        self.assertEqual(projection.run_plan.runs[0].status, "Running")
 
 
 if __name__ == "__main__":

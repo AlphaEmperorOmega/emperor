@@ -18,6 +18,9 @@ from workbench.backend.training_jobs.progress import (
     TrainingProgressSnapshot,
     TrainingProgressStore,
 )
+from workbench.backend.training_jobs.run_plan_adapter import (
+    training_run_plan_from_payload,
+)
 from workbench.backend.training_jobs.store import (
     FileSystemTrainingJobStore,
     InMemoryTrainingJobStore,
@@ -35,7 +38,17 @@ def training_job_record(job_id: str, root: Path) -> TrainingJobRecord:
         overrides={},
         search=None,
         planned_run_count=1,
-        run_plan={
+        run_plan=training_run_plan_from_payload({
+            "modelType": "linears",
+            "model": "linear",
+            "preset": "baseline",
+            "presets": ["baseline"],
+            "experimentTask": "classification",
+            "datasets": ["mnist"],
+            "overrides": {},
+            "search": None,
+            "logFolder": "logs",
+            "isRandomSearch": False,
             "runs": [
                 {
                     "id": "run-1",
@@ -46,8 +59,8 @@ def training_job_record(job_id: str, root: Path) -> TrainingJobRecord:
                     "totalEpochs": 2,
                 }
             ],
-            "summary": {"pending": 1},
-        },
+            "summary": {"totalRuns": 1, "pendingRuns": 1},
+        }),
         monitors=[],
         log_folder="logs",
         command=["python", "-m", "worker"],

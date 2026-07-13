@@ -39,6 +39,7 @@ from workbench.backend.training_jobs.contracts import (
     CreateTrainingJobCommand,
     TrainingJobView,
     TrainingProgressEventsPage,
+    TrainingRunPlanView,
 )
 from workbench.backend.training_jobs.errors import TrainingJobFailure
 from workbench.backend.training_jobs.launcher import (
@@ -202,9 +203,9 @@ class _TrainingJobRuntime:
             command,
             validated_log_folder=validated_log_folder,
         )
-        materialized_run_plan = materialized.document
+        materialized_run_plan = materialized.plan
         selected_monitors = list(materialized.monitors)
-        planned_run_count = materialized_run_plan["summary"]["totalRuns"]
+        planned_run_count = materialized_run_plan.summary.total_runs
 
         self._ensure_job_log_folder(validated_log_folder)
 
@@ -227,8 +228,9 @@ class _TrainingJobRuntime:
             job = self._register_job(
                 job_id=job_id,
                 model=command.model,
-                payload=payload,
                 materialized_run_plan=materialized_run_plan,
+                selected_monitors=selected_monitors,
+                planned_run_count=planned_run_count,
                 validated_log_folder=validated_log_folder,
                 command=launch.command,
                 job_root=job_root,
@@ -276,7 +278,7 @@ class _TrainingJobRuntime:
         job_id: str,
         selected_monitors: list[str],
         planned_run_count: int,
-        materialized_run_plan: dict[str, Any],
+        materialized_run_plan: TrainingRunPlanView,
     ) -> dict[str, Any]:
         return {
             "id": job_id,
@@ -290,8 +292,9 @@ class _TrainingJobRuntime:
         *,
         job_id: str,
         model: str,
-        payload: dict[str, Any],
-        materialized_run_plan: dict[str, Any],
+        materialized_run_plan: TrainingRunPlanView,
+        selected_monitors: list[str],
+        planned_run_count: int,
         validated_log_folder: str,
         command: list[str],
         job_root: Path,
@@ -301,15 +304,15 @@ class _TrainingJobRuntime:
         job = TrainingJobRecord(
             id=job_id,
             model=model,
-            preset=materialized_run_plan["preset"],
-            presets=materialized_run_plan["presets"],
-            experiment_task=materialized_run_plan["experimentTask"],
-            datasets=materialized_run_plan["datasets"],
-            overrides=materialized_run_plan["overrides"],
-            search=materialized_run_plan["search"],
-            planned_run_count=payload["plannedRunCount"],
+            preset=materialized_run_plan.preset,
+            presets=list(materialized_run_plan.presets),
+            experiment_task=materialized_run_plan.experiment_task,
+            datasets=list(materialized_run_plan.datasets),
+            overrides=dict(materialized_run_plan.overrides),
+            search=materialized_run_plan.search,
+            planned_run_count=planned_run_count,
             run_plan=materialized_run_plan,
-            monitors=payload["monitors"],
+            monitors=selected_monitors,
             log_folder=validated_log_folder,
             command=command,
             root=job_root,

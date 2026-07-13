@@ -5,6 +5,13 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from workbench.backend.training_jobs.contracts import (
+    TrainingRunPlanSummaryView,
+    TrainingRunPlanView,
+)
+from workbench.backend.training_jobs.run_plan_adapter import (
+    training_run_plan_to_payload,
+)
 from workbench.backend.training_jobs.store import (
     FileSystemTrainingJobStore,
     InMemoryTrainingJobStore,
@@ -22,7 +29,19 @@ def make_record(job_id: str = "job-1") -> TrainingJobRecord:
         overrides={},
         search=None,
         planned_run_count=1,
-        run_plan={"runs": [], "summary": {"totalRuns": 0}},
+        run_plan=TrainingRunPlanView(
+            model="linears/linear",
+            preset="baseline",
+            presets=["baseline"],
+            experiment_task="",
+            datasets=["Mnist"],
+            overrides={},
+            search=None,
+            log_folder="test_model",
+            is_random_search=False,
+            runs=[],
+            summary=TrainingRunPlanSummaryView(),
+        ),
         monitors=[],
         log_folder="test_model",
         command=["python", "-m", "workbench.backend.training_worker"],
@@ -56,6 +75,26 @@ class InMemoryTrainingJobStoreTests(unittest.TestCase):
 
 
 class FileSystemTrainingJobStoreTests(unittest.TestCase):
+    def test_run_plan_codec_round_trips_the_existing_json_shape(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            record = make_record("job-1")
+            record.root = root / record.id
+
+            FileSystemTrainingJobStore(root).save(record)
+            persisted = json.loads(
+                (record.root / "metadata.json").read_text(encoding="utf-8")
+            )
+            recovered = FileSystemTrainingJobStore(root).get(record.id)
+
+        self.assertEqual(
+            persisted["run_plan"],
+            training_run_plan_to_payload(record.run_plan),
+        )
+        self.assertIsNotNone(recovered)
+        assert recovered is not None
+        self.assertEqual(recovered.run_plan, record.run_plan)
+
     def test_metadata_codec_preserves_exact_persisted_key_set(self) -> None:
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -170,7 +209,8 @@ class FileSystemTrainingJobStoreTests(unittest.TestCase):
         self.assertEqual(recovered.overrides, {})
         self.assertIsNone(recovered.search)
         self.assertEqual(recovered.planned_run_count, 1)
-        self.assertEqual(recovered.run_plan, {"runs": [], "summary": {"totalRuns": 0}})
+        self.assertEqual(recovered.run_plan.runs, [])
+        self.assertEqual(recovered.run_plan.summary.total_runs, 0)
         self.assertEqual(recovered.monitors, [])
         self.assertEqual(recovered.log_folder, "test_model")
         self.assertEqual(

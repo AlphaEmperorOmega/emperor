@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import copy
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from threading import RLock
 from typing import Any
 
+from workbench.backend.training_jobs.contracts import TrainingRunPlanView
 from workbench.backend.training_jobs.limits import MAX_TRAINING_PLANNED_RUNS
 from workbench.backend.training_jobs.progress import (
     TRAINING_PROGRESS_CACHE_JOB_LIMIT,
@@ -27,7 +27,7 @@ TRAINING_JOB_EVENT_TAIL_LIMIT = 100
 
 @dataclass(frozen=True)
 class TrainingJobLiveProjection:
-    run_plan: dict[str, Any]
+    run_plan: TrainingRunPlanView
     latest_event: dict[str, Any] = field(default_factory=dict)
     metrics_event: dict[str, Any] = field(default_factory=dict)
     result_events: list[dict[str, Any]] = field(default_factory=list)
@@ -58,8 +58,8 @@ class _ClusterGrowthState:
 
 @dataclass
 class _TrainingEventReducer:
-    run_plan_base: dict[str, Any]
-    run_by_id: dict[str, dict[str, Any]]
+    run_plan_base: TrainingRunPlanView
+    run_by_id: dict[str, int]
     event_count: int = 0
     event_counts: dict[str, int] = field(default_factory=dict)
     events_tail: list[dict[str, Any]] = field(default_factory=list)
@@ -72,10 +72,9 @@ class _TrainingEventReducer:
 
     @classmethod
     def from_job(cls, job: TrainingJobRecord) -> _TrainingEventReducer:
-        run_plan_base = copy.deepcopy(job.run_plan)
         return cls(
-            run_plan_base=run_plan_base,
-            run_by_id=run_lookup_by_id(run_plan_base.get("runs") or []),
+            run_plan_base=job.run_plan,
+            run_by_id=run_lookup_by_id(job.run_plan.runs),
         )
 
     def apply(self, event: dict[str, Any]) -> None:
@@ -92,8 +91,8 @@ class _TrainingEventReducer:
         if event_type == "dataset_completed":
             self.result_events.append(event)
             self.result_events = self.result_events[-MAX_TRAINING_PLANNED_RUNS:]
-        apply_training_run_progress_event(
-            runs=self.run_plan_base.get("runs") or [],
+        self.run_plan_base = apply_training_run_progress_event(
+            plan=self.run_plan_base,
             run_by_id=self.run_by_id,
             event=event,
         )
@@ -253,7 +252,6 @@ class TrainingLiveProjectionCache:
                 reducer is None
                 or snapshot.reset
                 or snapshot.total_count < reducer.event_count
-                or reducer.run_plan_base.get("runs") is None
             ):
                 reducer = _TrainingEventReducer.from_job(job)
                 self._cache[job.id] = reducer
