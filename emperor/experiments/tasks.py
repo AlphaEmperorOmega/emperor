@@ -1,4 +1,4 @@
-from emperor.base.options import BaseOptions
+from emperor.base.option import BaseOptions
 
 
 class ExperimentTask(BaseOptions):

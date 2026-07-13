@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
-from lightning.pytorch.callbacks import Callback
+if TYPE_CHECKING:
+    from lightning.pytorch.callbacks import Callback
 
 MonitorKind = str
 
