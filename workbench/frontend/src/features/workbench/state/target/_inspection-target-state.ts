@@ -41,6 +41,12 @@ export type InspectionTargetLifecycleState = Readonly<{
 }>;
 
 export type InspectionTargetLifecycleEvent =
+  | Readonly<{
+      type: "browser-target-restored";
+      modelPackage: ModelIdentity;
+      preset: string;
+      requestedSnapshotId: string;
+    }>
   | Readonly<{ type: "model-package-selected"; modelPackage: ModelIdentity }>
   | Readonly<{ type: "preset-selected"; preset: string }>
   | Readonly<{ type: "preset-metadata-selected"; preset: string }>
@@ -190,6 +196,21 @@ export function inspectionTargetLifecycleReducer(
   current: InspectionTargetLifecycleState,
   event: InspectionTargetLifecycleEvent,
 ): InspectionTargetLifecycleState {
+  if (event.type === "browser-target-restored") {
+    return changed(current, {
+      ...current,
+      modelPackage: event.modelPackage,
+      selectedPreset: event.preset,
+      target: { kind: "preset", preset: event.preset },
+      experimentTask: "",
+      datasets: [],
+      runtimeDefaults: { preset: {}, active: {} },
+      restoration: {
+        phase: "restoring-browser",
+        requestedSnapshotId: event.requestedSnapshotId,
+      },
+    });
+  }
   if (event.type === "inspection-refreshed") {
     return {
       ...current,

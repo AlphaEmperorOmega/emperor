@@ -85,22 +85,14 @@ export function useModelPackageInspectionState({
   const refreshPreview = inspectionPreview.refresh;
   const clearPreviewForConnectionChange =
     inspectionPreview.clearForConnectionChange;
-  const initialTargetSelection = useMemo(readPersistedTargetSelection, []);
   const initialLifecycleState = useMemo(
     () =>
       createInspectionTargetLifecycleState({
-        modelPackage: {
-          modelType: initialTargetSelection?.selectedModelType ?? "",
-          model: initialTargetSelection?.selectedModel ?? "",
-        },
-        preset: initialTargetSelection?.selectedPreset ?? "",
-        restoreSnapshotId:
-          initialTargetSelection?.selectedTargetMode === "snapshot"
-            ? initialTargetSelection.selectedSnapshotId
-            : "",
-        restorePersistedTarget: Boolean(initialTargetSelection),
+        modelPackage: { modelType: "", model: "" },
+        preset: "",
+        restorePersistedTarget: true,
       }),
-    [initialTargetSelection],
+    [],
   );
   const { state: targetLifecycle, send: sendTargetEvent } =
     useInspectionTargetLifecycle(initialLifecycleState);
@@ -114,7 +106,30 @@ export function useModelPackageInspectionState({
       ? "experiment"
       : targetSelection.kind;
   const [selectedTargetBrowserMode, setSelectedTargetBrowserMode] =
-    useState<TargetMode>(initialTargetSelection?.selectedTargetMode ?? "preset");
+    useState<TargetMode>("preset");
+  const [hasReadPersistedTargetSelection, setHasReadPersistedTargetSelection] =
+    useState(false);
+  useEffect(() => {
+    const selection = readPersistedTargetSelection();
+    if (selection) {
+      setSelectedTargetBrowserMode(selection.selectedTargetMode);
+      sendTargetEvent({
+        type: "browser-target-restored",
+        modelPackage: {
+          modelType: selection.selectedModelType,
+          model: selection.selectedModel,
+        },
+        preset: selection.selectedPreset,
+        requestedSnapshotId:
+          selection.selectedTargetMode === "snapshot"
+            ? selection.selectedSnapshotId
+            : "",
+      });
+    } else {
+      sendTargetEvent({ type: "restoration-settled" });
+    }
+    setHasReadPersistedTargetSelection(true);
+  }, [sendTargetEvent]);
   const selectedSnapshotId =
     targetSelection.kind === "snapshot" ? targetSelection.snapshotId : "";
   const selectedExperimentTarget =
@@ -539,7 +554,7 @@ export function useModelPackageInspectionState({
   // Query results enter the lifecycle as events. Effects never repair an
   // independently-owned target field.
   useEffect(() => {
-    if (catalogModels.length === 0) {
+    if (!hasReadPersistedTargetSelection || catalogModels.length === 0) {
       return;
     }
 
@@ -566,6 +581,7 @@ export function useModelPackageInspectionState({
   }, [
     availableModelTypeOptions,
     catalogModels,
+    hasReadPersistedTargetSelection,
     selectModel,
     selectedModel,
     selectedModelType,

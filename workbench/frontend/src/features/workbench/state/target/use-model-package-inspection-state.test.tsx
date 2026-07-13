@@ -529,6 +529,44 @@ beforeEach(() => {
 });
 
 describe("useModelPackageInspectionState", () => {
+  it("keeps the first client render storage-neutral before restoring a target", async () => {
+    writePersistedTargetSelection({
+      selectedModelType: "linears",
+      selectedModel: "linear",
+      selectedPreset: "fast",
+      selectedTargetMode: "preset",
+      selectedSnapshotId: "",
+    });
+    const renderedSelections: Array<{
+      modelType: string;
+      model: string;
+      preset: string;
+    }> = [];
+
+    const { result } = renderHook(() => {
+      const state = useModelPackageInspectionState({});
+      renderedSelections.push({
+        modelType: state.contexts.model.browser.selectedModelType,
+        model: state.contexts.model.browser.selectedModel,
+        preset: state.contexts.model.browser.selectedPreset,
+      });
+      return state;
+    });
+
+    expect(renderedSelections[0]).toEqual({
+      modelType: "",
+      model: "",
+      preset: "",
+    });
+    await waitFor(() => {
+      expect(result.current.contexts.model.browser).toMatchObject({
+        selectedModelType: "linears",
+        selectedModel: "linear",
+        selectedPreset: "fast",
+      });
+    });
+  });
+
   it("restores a valid persisted preset target before requesting Inspection", async () => {
     writePersistedTargetSelection({
       selectedModelType: "linears",
