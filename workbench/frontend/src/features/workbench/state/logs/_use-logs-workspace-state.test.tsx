@@ -128,6 +128,15 @@ function renderLogsWorkspaceState(
 describe("Logs workspace state", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.fetchLogRunArtifacts.mockImplementation((runId: string) =>
+      Promise.resolve({
+        runId,
+        params: {},
+        metrics: {},
+        artifacts: [],
+        checkpoints: [],
+      }),
+    );
     mocks.createMutationRequestOptions.mockReturnValue({
       idempotencyKey: "logs-workspace-command",
     });
@@ -674,7 +683,7 @@ describe("Logs workspace state", () => {
     await waitFor(() => expect(result.current.browser.filters.experiments.options).toHaveLength(2));
     act(() => {
       result.current.commands.includeStartedExperiment("fresh_run");
-      result.current.charts.setSelectedDetailRunId("a-cifar");
+      result.current.charts.commands.openRunDetail("a-cifar");
       result.current.deletion.actions.openExperiment({
         value: "fresh_run",
         label: "fresh_run",
@@ -694,10 +703,45 @@ describe("Logs workspace state", () => {
 
     expect(result.current.browser.scope.mode).toBe("target");
     expect(values(result.current.browser.filters.experiments.selectedValues)).toEqual([]);
-    expect(result.current.detail.selectedRun).toBeUndefined();
+    expect(result.current.detail.run).toBeUndefined();
     expect(result.current.deletion.operation).toBeNull();
     act(() => result.current.browser.scope.showAllRuns());
     expect(values(result.current.browser.filters.experiments.selectedValues)).toEqual(["exp_a", "exp_b"]);
+  });
+
+  it("owns selected Run Artifact loading behind the read-only detail projection", async () => {
+    const artifacts = {
+      runId: "a-cifar",
+      params: { learning_rate: 0.001 },
+      metrics: { validation_accuracy: 0.95 },
+      artifacts: [],
+      checkpoints: [],
+    };
+    mocks.fetchLogRunArtifacts.mockResolvedValue(artifacts);
+    const { result } = renderLogsWorkspaceState();
+
+    await waitFor(() => {
+      expect(result.current.browser.filters.experiments.options).toHaveLength(2);
+    });
+    act(() => {
+      result.current.browser.actions.toggleFilter("experiments", "exp_a");
+    });
+    await waitFor(() =>
+      expect(result.current.charts.visibleRunIds).toContain("a-cifar"),
+    );
+    act(() => result.current.charts.commands.openRunDetail("a-cifar"));
+
+    await waitFor(() => {
+      expect(mocks.fetchLogRunArtifacts).toHaveBeenCalledWith(
+        "a-cifar",
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
+      expect(result.current.detail).toEqual({
+        run: expect.objectContaining({ id: "a-cifar" }),
+        artifacts,
+        status: { isLoading: false, error: null },
+      });
+    });
   });
 
   it("owns all, none, and toggle transitions for every caller-facing filter", async () => {
@@ -843,7 +887,7 @@ describe("Logs workspace state", () => {
       expect(result.current.browser.filters.experiments.options).toEqual([]);
       expect(values(result.current.browser.filters.experiments.selectedValues)).toEqual([]);
       expect(result.current.charts.visibleRunIds).toEqual([]);
-      expect(result.current.detail.selectedRun).toBeUndefined();
+      expect(result.current.detail.run).toBeUndefined();
     });
   });
 
@@ -891,7 +935,7 @@ describe("Logs workspace state", () => {
 
     act(() => result.current.commands.includeStartedExperiment("fresh_run"));
     await waitFor(() => {
-      expect(result.current.detail.selectedRun?.id).toBe(freshRun.id);
+      expect(result.current.detail.run?.id).toBe(freshRun.id);
     });
     act(() => {
       result.current.deletion.actions.openPreset({
@@ -911,13 +955,13 @@ describe("Logs workspace state", () => {
         runRequestCountBeforeDeletion,
       );
       expect(result.current.charts.visibleRunIds).toEqual([]);
-      expect(result.current.detail.selectedRun).toBeUndefined();
+      expect(result.current.detail.run).toBeUndefined();
     });
 
     act(() => runsRefresh.resolve({ runs: [] }));
     await waitFor(() => {
       expect(result.current.charts.visibleRunIds).toEqual([]);
-      expect(result.current.detail.selectedRun).toBeUndefined();
+      expect(result.current.detail.run).toBeUndefined();
     });
   });
 

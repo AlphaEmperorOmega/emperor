@@ -22,7 +22,7 @@ import {
   useLogScalarsQuery,
 } from "@/features/workbench/state/logs/use-log-queries";
 import { logQueryKeys } from "@/lib/query-keys";
-import { type LogsChartSource } from "@/features/workbench/state/logs/_use-logs-workspace-state";
+import { type LogsChartsInput } from "@/features/workbench/state/logs/_use-logs-workspace-state";
 import {
   LOG_METRIC_GROUPS,
   type ChecklistOption,
@@ -456,7 +456,7 @@ function mergeLogScalarTagQueryState(
   });
 }
 
-export function useLogsChartViewModel(state: LogsChartSource) {
+export function useLogsChartViewModel(state: LogsChartsInput) {
   const [accordionGridMode, setAccordionGridMode] =
     useState<ScalarChartGridMode>("two");
   const [trainValidationComparisonGridMode, setTrainValidationComparisonGridMode] =
@@ -626,7 +626,7 @@ export function useLogsChartViewModel(state: LogsChartSource) {
     : DEFAULT_LOG_METRIC_DIRECTION;
   const effectiveBestRunDirection =
     selectedBestRunDirection ?? inferredBestRunDirection;
-  const tagsAreRefreshing = Boolean(state.tagsQuery.isPlaceholderData);
+  const tagsAreRefreshing = Boolean(state.tagsRefreshing);
   const effectiveBestRunMetricGroup = effectiveBestRunMetricTag
     ? metricGroupForTag(effectiveBestRunMetricTag)
     : null;
@@ -870,14 +870,14 @@ export function useLogsChartViewModel(state: LogsChartSource) {
     ),
   );
   const tagDataRunIds = new Set(
-    state.tagsQuery.data?.runs.map((run) => run.runId) ?? [],
+    state.tagRecords.map((run) => run.runId),
   );
   const tagDataDoesNotCoverCurrentWindow = state.visibleRunIds
     .slice(0, state.loadedScalarTagRunCount)
     .some((runId) => !tagDataRunIds.has(runId));
   const tagDataReplacementPending =
-    state.tagsQuery.isFetching ||
-    Boolean(state.tagsQuery.isPlaceholderData) ||
+    state.tagsFetching ||
+    Boolean(state.tagsRefreshing) ||
     tagDataDoesNotCoverCurrentWindow;
   const queryIsReplacing = (query: {
     isFetching: boolean;
@@ -901,8 +901,8 @@ export function useLogsChartViewModel(state: LogsChartSource) {
     (confusionMatrixScalarQueryActive &&
       queryIsReplacing(confusionMatrixScalarQuery));
   const mediaTags = useMemo(
-    () => selectValidationExampleMediaTags(state.tagsQuery.data),
-    [state.tagsQuery.data],
+    () => selectValidationExampleMediaTags({ runs: state.tagRecords }),
+    [state.tagRecords],
   );
   const hasValidationExampleMedia =
     mediaTags.imageTags.length > 0 || mediaTags.textTags.length > 0;
@@ -1299,7 +1299,7 @@ export function useLogsChartViewModel(state: LogsChartSource) {
       selectedPointPolicy: selectedBestRunPointPolicy,
       rows: bestRunRows,
       visibleRunCount: state.visibleRuns.length,
-      hasMoreRuns: Boolean(state.runsQuery.data?.hasMore),
+      hasMoreRuns: state.hasMoreRuns,
       isLoading: bestRunIsLoading,
       isFetching: bestRunIsFetching,
       isError: bestRunIsError,
@@ -1320,7 +1320,7 @@ export function useLogsChartViewModel(state: LogsChartSource) {
       effectiveBestRunDirection,
       effectiveBestRunMetricTag,
       selectedBestRunPointPolicy,
-      state.runsQuery.data?.hasMore,
+      state.hasMoreRuns,
       state.tagOptions,
       state.visibleRuns.length,
     ],
@@ -1374,11 +1374,11 @@ export function useLogsChartViewModel(state: LogsChartSource) {
         const isSelected = currentSelectedTagSet.has(tag);
         const shouldBeSelected = selectedValueSet.has(tag);
         if (isSelected !== shouldBeSelected) {
-          state.toggleTag(tag);
+          state.commands.setTagSelected(tag, shouldBeSelected);
         }
       }
     },
-    [availableMetricTagsByGroup, state],
+    [availableMetricTagsByGroup, state.commands, state.selectedTagList],
   );
   const confusionHeatmaps = useMemo(
     () =>
@@ -1407,7 +1407,7 @@ export function useLogsChartViewModel(state: LogsChartSource) {
     expandedSelectedTagCount,
     confusionMatrixTagCount: state.confusionMatrixRateTags.length,
     hasEventFiles: state.visibleRuns.some((run) => run.eventFileCount > 0),
-    runsLoading: state.runsQuery.isLoading,
+    runsLoading: state.runsLoading,
     scalarLoading: activeScalarQueries.some(
       (query) => query.isLoading || query.isPlaceholderData,
     ),
@@ -1415,7 +1415,7 @@ export function useLogsChartViewModel(state: LogsChartSource) {
     selectedTagCount: state.selectedTagList.length,
     tagOptionCount: state.tagOptions.length,
     tagsLoading:
-      state.tagsQuery.isLoading &&
+      state.tagsLoading &&
       state.tagOptions.length === 0 &&
       state.confusionMatrixRateTags.length === 0,
     tagsRefreshing: tagsAreRefreshing,
@@ -1483,7 +1483,7 @@ export function useLogsChartViewModel(state: LogsChartSource) {
       isConfusionMatrixError: confusionMatrixQueryState.isError,
       confusionMatrixError: confusionMatrixQueryState.error,
       isTagRefreshLoading:
-        state.tagsQuery.isFetching &&
+        state.tagsFetching &&
         (state.tagOptions.length > 0 ||
           state.confusionMatrixRateTags.length > 0) &&
         state.visibleRunIds.length > 0,
@@ -1505,18 +1505,20 @@ export function useLogsChartViewModel(state: LogsChartSource) {
         markTrainValidationComparisonChartVisible,
       onScalarChartVisible: markScalarChartVisible,
       onToggleConfusionMatrix: toggleConfusionMatrix,
-      onToggleMetricGroup: state.toggleMetricGroup,
+      onToggleMetricGroup: (group: LogMetricGroupKey) =>
+        state.commands.setMetricGroupExpanded(
+          group,
+          state.collapsedMetricGroups.has(group),
+        ),
       onAccordionGridModeChange: setAccordionGridMode,
       onMetricGridModeChange: handleMetricGridModeChange,
       onSmoothingChange: setSmoothing,
       onXModeChange: setXMode,
       onYScaleChange: setYScale,
-      onRefresh: () => {
-        void state.refreshLogLists();
-      },
+      onRefresh: state.commands.refresh,
       onToggleValidationExamples: toggleValidationExamples,
       onValidationExamplesVisible: markValidationExamplesVisible,
-      onSelectRun: state.setSelectedDetailRunId,
+      onSelectRun: state.commands.openRunDetail,
     },
   };
 }

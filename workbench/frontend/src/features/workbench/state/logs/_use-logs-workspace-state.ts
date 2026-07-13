@@ -10,6 +10,7 @@ import {
 import {
   type LogExperimentDeleteResponse,
   type LogRun,
+  type LogRunArtifacts,
   type LogRunDeleteResponse,
   type LogRunFacets,
   type LogRunTags,
@@ -17,6 +18,7 @@ import {
 import {
   useInfiniteLogRunsQuery,
   useLogExperimentsQuery,
+  useLogRunArtifactsQuery,
   useLogTagQueries,
   useLogRunsQuery,
 } from "@/features/workbench/state/logs/use-log-queries";
@@ -1546,28 +1548,40 @@ type LogsWorkspaceImplementation = ReturnType<
   typeof useLogsWorkspaceImplementation
 >;
 
-export type LogsChartSource = Pick<
-  LogsWorkspaceImplementation,
-  | "collapsedMetricGroups"
-  | "confusionMatrixRateTags"
-  | "enabled"
-  | "loadedScalarTagRunCount"
-  | "refreshLogLists"
-  | "runsQuery"
-  | "selectedTagList"
-  | "setSelectedDetailRunId"
-  | "tagOptions"
-  | "tagsQuery"
-  | "toggleMetricGroup"
-  | "toggleTag"
-  | "visibleRunIds"
-  | "visibleRuns"
->;
+export type LogsChartsInput = Readonly<{
+  enabled: boolean;
+  visibleRuns: LogRun[];
+  visibleRunIds: string[];
+  runsLoading: boolean;
+  hasMoreRuns: boolean;
+  tagRecords: LogRunTags[];
+  tagsLoading: boolean;
+  tagsFetching: boolean;
+  tagsRefreshing: boolean;
+  tagOptions: ChecklistOption[];
+  selectedTagList: string[];
+  confusionMatrixRateTags: string[];
+  collapsedMetricGroups: Set<LogMetricGroupKey>;
+  loadedScalarTagRunCount: number;
+  commands: Readonly<{
+    refresh: () => void;
+    openRunDetail: (runId: string) => void;
+    setMetricGroupExpanded: (
+      group: LogMetricGroupKey,
+      expanded: boolean,
+    ) => void;
+    setTagSelected: (tag: string, selected: boolean) => void;
+  }>;
+}>;
 
-export type LogsDetailSource = Pick<
-  LogsWorkspaceImplementation,
-  "enabled" | "selectedRun"
->;
+export type LogsRunDetail = Readonly<{
+  run: LogRun | undefined;
+  artifacts: LogRunArtifacts | undefined;
+  status: Readonly<{
+    isLoading: boolean;
+    error: Error | null;
+  }>;
+}>;
 
 export type LogsDeletion = Pick<
   LogsDeletionProjection,
@@ -1576,8 +1590,8 @@ export type LogsDeletion = Pick<
 
 export type LogsWorkspaceState = {
   browser: LogsBrowser;
-  charts: LogsChartSource;
-  detail: LogsDetailSource;
+  charts: LogsChartsInput;
+  detail: LogsRunDetail;
   deletion: LogsDeletion;
   commands: {
     includeStartedExperiment: (experiment: string) => void;
@@ -1723,22 +1737,39 @@ function logsBrowserProjection(state: LogsWorkspaceImplementation): LogsBrowser 
 
 function logsChartProjection(
   state: LogsWorkspaceImplementation,
-): LogsChartSource {
+): LogsChartsInput {
   return {
     collapsedMetricGroups: state.collapsedMetricGroups,
     confusionMatrixRateTags: state.confusionMatrixRateTags,
     enabled: state.enabled,
+    hasMoreRuns: Boolean(state.runsQuery.data?.hasMore),
     loadedScalarTagRunCount: state.loadedScalarTagRunCount,
-    refreshLogLists: state.refreshLogLists,
-    runsQuery: state.runsQuery,
+    runsLoading: state.runsQuery.isLoading,
     selectedTagList: state.selectedTagList,
-    setSelectedDetailRunId: state.setSelectedDetailRunId,
     tagOptions: state.tagOptions,
-    tagsQuery: state.tagsQuery,
-    toggleMetricGroup: state.toggleMetricGroup,
-    toggleTag: state.toggleTag,
+    tagRecords: state.tagsQuery.data?.runs ?? [],
+    tagsFetching: state.tagsQuery.isFetching,
+    tagsLoading: state.tagsQuery.isLoading,
+    tagsRefreshing: Boolean(state.tagsQuery.isPlaceholderData),
     visibleRunIds: state.visibleRunIds,
     visibleRuns: state.visibleRuns,
+    commands: {
+      refresh: () => {
+        void state.refreshLogLists();
+      },
+      openRunDetail: (runId) => state.setSelectedDetailRunId(runId),
+      setMetricGroupExpanded: (group, expanded) => {
+        const isExpanded = !state.collapsedMetricGroups.has(group);
+        if (isExpanded !== expanded) {
+          state.toggleMetricGroup(group);
+        }
+      },
+      setTagSelected: (tag, selected) => {
+        if (state.selectedTagList.includes(tag) !== selected) {
+          state.toggleTag(tag);
+        }
+      },
+    },
   };
 }
 
@@ -1759,10 +1790,21 @@ export function useLogsWorkspaceState(input: {
   targetScope: LogsTargetScope;
 }): LogsWorkspaceState {
   const state = useLogsWorkspaceImplementation(input);
+  const artifactsQuery = useLogRunArtifactsQuery({
+    runId: state.selectedRun?.id,
+    enabled: state.enabled,
+  });
   return {
     browser: logsBrowserProjection(state),
     charts: logsChartProjection(state),
-    detail: { enabled: state.enabled, selectedRun: state.selectedRun },
+    detail: {
+      run: state.selectedRun,
+      artifacts: artifactsQuery.data,
+      status: {
+        isLoading: artifactsQuery.isLoading,
+        error: artifactsQuery.error,
+      },
+    },
     deletion: logsDeletionProjection(state),
     commands: {
       includeStartedExperiment: state.includeStartedExperiment,

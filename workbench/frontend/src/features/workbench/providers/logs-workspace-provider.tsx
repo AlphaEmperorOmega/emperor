@@ -11,12 +11,11 @@ import { useActiveTrainingJob } from "@/features/workbench/providers/training-pr
 import {
   useLogsWorkspaceState,
   type LogsBrowser,
-  type LogsChartSource,
+  type LogsChartsInput,
   type LogsDeletion,
-  type LogsDetailSource,
+  type LogsRunDetail,
 } from "@/features/workbench/state/logs/_use-logs-workspace-state";
 import { useLogsChartViewModel } from "@/features/workbench/state/logs/_logs-chart-state";
-import { useLogRunArtifactsQuery } from "@/features/workbench/state/logs/use-log-queries";
 
 export type {
   LogsBrowser,
@@ -35,35 +34,30 @@ export type {
 
 const [LogsBrowserProvider, useLogsBrowser] =
   createWorkbenchContext<LogsBrowser>("LogsBrowserContext");
-const [LogsChartSourceProvider, useLogsChartSource] =
-  createWorkbenchContext<LogsChartSource>("LogsChartSourceContext");
-const [LogsDetailSourceProvider, useLogsDetailSource] =
-  createWorkbenchContext<LogsDetailSource>("LogsDetailSourceContext");
+const [LogsChartsContextProvider, useLogsCharts] =
+  createWorkbenchContext<LogsCharts>("LogsChartsContext");
+const [LogsRunDetailProvider, useLogRunDetail] =
+  createWorkbenchContext<LogsRunDetail>("LogsRunDetailContext");
 const [LogsDeletionProvider, useLogsDeletion] =
   createWorkbenchContext<LogsDeletion>("LogsDeletionContext");
 
-export { useLogsBrowser, useLogsDeletion };
+export { useLogRunDetail, useLogsBrowser, useLogsCharts, useLogsDeletion };
 
 const noStartedExperiments: readonly string[] = [];
 
-export function useLogsCharts() {
-  return useLogsChartViewModel(useLogsChartSource());
-}
-
-export function useLogRunDetail() {
-  const source = useLogsDetailSource();
-  const artifactsQuery = useLogRunArtifactsQuery({
-    runId: source.selectedRun?.id,
-    enabled: source.enabled,
-  });
-  return {
-    run: source.selectedRun,
-    artifacts: artifactsQuery.data,
-    status: {
-      isLoading: artifactsQuery.isLoading,
-      error: artifactsQuery.error,
-    },
-  };
+export function LogsChartsProvider({
+  input,
+  children,
+}: {
+  input: LogsChartsInput;
+  children: ReactNode;
+}) {
+  const charts = useLogsChartViewModel(input);
+  return (
+    <LogsChartsContextProvider value={charts}>
+      {children}
+    </LogsChartsContextProvider>
+  );
 }
 
 export function LogsWorkspaceProvider({
@@ -126,15 +120,22 @@ export function LogsWorkspaceProvider({
     startedExperiments,
   ]);
 
+  const workspaceContent = (
+    <LogsRunDetailProvider value={workspace.detail}>
+      <LogsDeletionProvider value={workspace.deletion}>
+        {children}
+      </LogsDeletionProvider>
+    </LogsRunDetailProvider>
+  );
   return (
     <LogsBrowserProvider value={workspace.browser}>
-      <LogsChartSourceProvider value={workspace.charts}>
-        <LogsDetailSourceProvider value={workspace.detail}>
-          <LogsDeletionProvider value={workspace.deletion}>
-            {children}
-          </LogsDeletionProvider>
-        </LogsDetailSourceProvider>
-      </LogsChartSourceProvider>
+      {enabled ? (
+        <LogsChartsProvider input={workspace.charts}>
+          {workspaceContent}
+        </LogsChartsProvider>
+      ) : (
+        workspaceContent
+      )}
     </LogsBrowserProvider>
   );
 }

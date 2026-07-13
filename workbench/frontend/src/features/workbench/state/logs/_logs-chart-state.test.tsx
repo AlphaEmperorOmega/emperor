@@ -105,57 +105,47 @@ function chartSource({
     { value: "validation/accuracy", label: "validation/accuracy", count: 1 },
     { value: "train/loss", label: "train/loss", count: 1 },
   ],
-  tagsQuery = {},
+  tagRecords,
+  tagsFetching = false,
+  tagsRefreshing = false,
 }: {
   collapsedMetricGroups?: Set<string>;
   refreshLogLists?: () => Promise<void>;
   runs?: LogRun[];
   selectedTagList?: string[];
   tagOptions?: Array<{ value: string; label: string; count?: number }>;
-  tagsQuery?: Partial<{
-    data: { runs: LogRunTags[] } | undefined;
-    error: unknown;
-    isError: boolean;
-    isFetching: boolean;
-    isLoading: boolean;
-    isPlaceholderData: boolean;
-  }>;
+  tagRecords?: LogRunTags[];
+  tagsFetching?: boolean;
+  tagsRefreshing?: boolean;
 } = {}): ChartSource {
-  const idleQuery = {
-    error: null,
-    isError: false,
-    isFetching: false,
-    isLoading: false,
-    isPlaceholderData: false,
-    isSuccess: true,
-  };
   return {
     enabled: true,
     collapsedMetricGroups,
     confusionMatrixRateTags: [],
+    hasMoreRuns: false,
     loadedScalarTagRunCount: runs.length,
-    refreshLogLists,
-    runsQuery: {
-      ...idleQuery,
-      data: { runs, total: runs.length, hasMore: false },
-    },
+    runsLoading: false,
     selectedTagList,
-    setSelectedDetailRunId: vi.fn(),
     tagOptions,
-    tagsQuery: {
-      ...idleQuery,
-      data: {
-        runs: runs.map((run) =>
+    tagRecords:
+      tagRecords ??
+      runs.map((run) =>
           logRunTags(
             run.id,
             tagOptions.map((option) => option.value),
           ),
         ),
+    tagsFetching,
+    tagsLoading: false,
+    tagsRefreshing,
+    commands: {
+      refresh: () => {
+        void refreshLogLists();
       },
-      ...tagsQuery,
+      openRunDetail: vi.fn(),
+      setMetricGroupExpanded: vi.fn(),
+      setTagSelected: vi.fn(),
     },
-    toggleMetricGroup: vi.fn(),
-    toggleTag: vi.fn(),
     visibleRunIds: runs.map((run) => run.id),
     visibleRuns: runs,
   } as unknown as ChartSource;
@@ -401,11 +391,9 @@ describe("logs chart view model", () => {
     rendered.rerender({
       currentSource: chartSource({
         runs: [run1, run2],
-        tagsQuery: {
-          data: { runs: [logRunTags("run-1", ["train/loss"])] },
-          isFetching: true,
-          isPlaceholderData: true,
-        },
+        tagRecords: [logRunTags("run-1", ["train/loss"])],
+        tagsFetching: true,
+        tagsRefreshing: true,
       }),
     });
     expect(scalarRequestsFor("train/loss")).toHaveLength(1);
@@ -448,16 +436,12 @@ describe("logs chart view model", () => {
     rendered.rerender({
       currentSource: chartSource({
         runs: [run2],
-        tagsQuery: {
-          data: {
-            runs: [
-              logRunTags("run-1", ["train/loss"]),
-              logRunTags("run-2", ["train/loss"]),
-            ],
-          },
-          isFetching: true,
-          isPlaceholderData: true,
-        },
+        tagRecords: [
+          logRunTags("run-1", ["train/loss"]),
+          logRunTags("run-2", ["train/loss"]),
+        ],
+        tagsFetching: true,
+        tagsRefreshing: true,
       }),
     });
     await waitFor(() =>

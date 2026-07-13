@@ -2,6 +2,7 @@ import { render, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  chartViewModel: vi.fn(),
   includeStartedExperiment: vi.fn(),
   inspection: {
     target: {
@@ -62,31 +63,12 @@ vi.mock("@/features/workbench/providers/training-provider", () => ({
 }));
 
 vi.mock("@/features/workbench/state/logs/_logs-chart-state", () => ({
-  useLogsChartViewModel: () => ({
-    content: {},
-    settings: {},
-    status: {},
-    actions: {},
-  }),
-}));
-
-vi.mock("@/features/workbench/state/logs/use-log-queries", () => ({
-  useLogRunArtifactsQuery: () => ({
-    data: undefined,
-    error: null,
-    isLoading: false,
-  }),
+  useLogsChartViewModel: mocks.chartViewModel,
 }));
 
 vi.mock("@/features/workbench/state/logs/_use-logs-workspace-state", () => ({
   useLogsWorkspaceState: (input: unknown) => {
     mocks.workspaceInput(input);
-    const idleQuery = {
-      data: undefined,
-      error: null,
-      isLoading: false,
-      isFetching: false,
-    };
     const noop = vi.fn();
     return {
       browser: {
@@ -141,21 +123,31 @@ vi.mock("@/features/workbench/state/logs/_use-logs-workspace-state", () => ({
       },
       charts: {
         enabled: true,
-        runsQuery: idleQuery,
-        tagsQuery: idleQuery,
         visibleRuns: [],
         visibleRunIds: [],
+        runsLoading: false,
+        hasMoreRuns: false,
+        tagRecords: [],
+        tagsLoading: false,
+        tagsFetching: false,
+        tagsRefreshing: false,
         tagOptions: [],
         selectedTagList: [],
         confusionMatrixRateTags: [],
         collapsedMetricGroups: new Set<string>(),
         loadedScalarTagRunCount: 0,
-        refreshLogLists: () => Promise.resolve(),
-        setSelectedDetailRunId: noop,
-        toggleMetricGroup: noop,
-        toggleTag: noop,
+        commands: {
+          refresh: noop,
+          openRunDetail: noop,
+          setMetricGroupExpanded: noop,
+          setTagSelected: noop,
+        },
       },
-      detail: { enabled: true, selectedRun: undefined },
+      detail: {
+        run: undefined,
+        artifacts: undefined,
+        status: { isLoading: false, error: null },
+      },
       deletion: {
         enabled: true,
         presetTargetExperiment: null,
@@ -185,6 +177,12 @@ import {
 } from "@/features/workbench/providers/logs-workspace-provider";
 
 beforeEach(() => {
+  mocks.chartViewModel.mockReset().mockReturnValue({
+    content: {},
+    settings: {},
+    status: {},
+    actions: {},
+  });
   mocks.includeStartedExperiment.mockReset();
   mocks.workspaceInput.mockReset();
   mocks.protectedAccessReady = true;
@@ -205,6 +203,36 @@ beforeEach(() => {
 });
 
 describe("LogsWorkspaceProvider", () => {
+  it("mounts a fresh charts lifecycle only while Logs is active", () => {
+    const rendered = render(
+      <LogsWorkspaceProvider enabled={false}>
+        <span>Logs child</span>
+      </LogsWorkspaceProvider>,
+    );
+    expect(mocks.chartViewModel).not.toHaveBeenCalled();
+
+    rendered.rerender(
+      <LogsWorkspaceProvider enabled>
+        <span>Logs child</span>
+      </LogsWorkspaceProvider>,
+    );
+    expect(mocks.chartViewModel).toHaveBeenCalledTimes(1);
+
+    rendered.rerender(
+      <LogsWorkspaceProvider enabled={false}>
+        <span>Logs child</span>
+      </LogsWorkspaceProvider>,
+    );
+    expect(mocks.chartViewModel).toHaveBeenCalledTimes(1);
+
+    rendered.rerender(
+      <LogsWorkspaceProvider enabled>
+        <span>Logs child</span>
+      </LogsWorkspaceProvider>,
+    );
+    expect(mocks.chartViewModel).toHaveBeenCalledTimes(2);
+  });
+
   it("keeps Logs reads and deletion disabled until protected access is ready", () => {
     mocks.protectedAccessReady = false;
 
