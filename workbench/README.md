@@ -582,7 +582,7 @@ Backend:
 
 ```bash
 python -m unittest discover -s workbench/backend/tests
-python -P tools/check_python_quality.py
+python -m ruff check workbench/backend
 ```
 
 Frontend:
