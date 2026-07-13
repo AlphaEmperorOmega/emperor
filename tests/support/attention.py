@@ -1,12 +1,3 @@
-"""Shared builders for the attention unit tests.
-
-Replaces the deleted ``MultiHeadAttentionPresets``. ``build_attention_config``
-dispatches on the leaf config class to assemble the projection / experts /
-positional-embedding sub-configs from the current core APIs (mirroring
-``test_linears`` and ``test_experts``). The runtime variant is selected by the
-config subclass itself; there is no longer an ``AttentionOptions`` enum.
-"""
-
 from emperor.attention.core.config import MultiHeadAttentionConfig
 from emperor.attention.core.variants.independent_attention.config import (
     IndependentAttentionConfig,
