@@ -20,7 +20,11 @@ export default defineConfig({
           name: "node",
           environment: "node",
           include: ["**/*.test.ts", "**/*.test.mjs"],
-          exclude: [...configDefaults.exclude, ...jsdomTypeScriptTests],
+          exclude: [
+            ...configDefaults.exclude,
+            ...jsdomTypeScriptTests,
+            "scripts/runtime-paths.test.mjs",
+          ],
         },
       },
       {

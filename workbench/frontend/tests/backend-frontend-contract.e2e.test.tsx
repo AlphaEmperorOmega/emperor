@@ -1,5 +1,4 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
-import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -31,6 +30,10 @@ import {
   createTrainingJob,
   fetchTrainingJob,
 } from "@/lib/api/training-jobs";
+import {
+  matplotlibConfigDirectory,
+  resolveRepositoryPython,
+} from "../scripts/runtime-paths.mjs";
 
 const RUN_CONTRACT_E2E = process.env.WORKBENCH_RUN_CONTRACT_E2E === "1";
 const TOKEN = "contract-e2e-token";
@@ -39,7 +42,6 @@ const SERVER_SCRIPT = join(
   REPOSITORY_ROOT,
   "workbench/backend/tests/contract_e2e_server.py",
 );
-const REPOSITORY_PYTHON = join(REPOSITORY_ROOT, "torchenv/bin/python");
 
 type RunningBackend = {
   baseUrl: string;
@@ -131,9 +133,7 @@ async function waitForHealth(backend: RunningBackend) {
 async function startBackend(name: string) {
   const port = await unusedLoopbackPort();
   const root = await mkdtemp(join(tmpdir(), `emperor-contract-${name}-`));
-  const python =
-    process.env.WORKBENCH_E2E_PYTHON ??
-    (existsSync(REPOSITORY_PYTHON) ? REPOSITORY_PYTHON : "python");
+  const python = resolveRepositoryPython(REPOSITORY_ROOT);
   const child = spawn(
     python,
     [
@@ -152,7 +152,7 @@ async function startBackend(name: string) {
       cwd: REPOSITORY_ROOT,
       env: {
         ...process.env,
-        MPLCONFIGDIR: "/tmp/matplotlib",
+        MPLCONFIGDIR: matplotlibConfigDirectory(),
         PYTHONPATH: REPOSITORY_ROOT,
         PYTHONSAFEPATH: "1",
       },

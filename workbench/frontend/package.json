@@ -6,7 +6,7 @@
     "node": ">=20.9.0"
   },
   "scripts": {
-    "dev": "next dev -p ${PORT:-9000}",
+    "dev": "node scripts/start-next.mjs dev",
     "build": "next build",
     "performance:budget": "node scripts/check-performance-budgets.mjs",
     "performance:browser": "node scripts/benchmark-browser-long-session.mjs",
@@ -15,11 +15,11 @@
     "performance:locations": "vite-node --config vitest.config.ts scripts/benchmark-graph-locations.ts",
     "performance:grouping": "vite-node --config vitest.config.ts scripts/benchmark-log-grouping.ts",
     "performance:logs": "vite-node --config vitest.config.ts scripts/benchmark-log-scalar-plan.ts",
-    "start": "next start -p ${PORT:-9000}",
+    "start": "node scripts/start-next.mjs start",
     "lint": "eslint . --max-warnings 0",
-    "test:contract:e2e": "WORKBENCH_RUN_CONTRACT_E2E=1 VITE_CJS_IGNORE_WARNING=true vitest run tests/backend-frontend-contract.e2e.test.tsx",
+    "test:contract:e2e": "cross-env WORKBENCH_RUN_CONTRACT_E2E=1 VITE_CJS_IGNORE_WARNING=true vitest run tests/backend-frontend-contract.e2e.test.tsx",
     "typecheck": "next typegen && tsc --noEmit",
-    "test": "VITE_CJS_IGNORE_WARNING=true vitest run"
+    "test": "cross-env VITE_CJS_IGNORE_WARNING=true vitest run"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.7",
@@ -48,6 +48,7 @@
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "^4.7.0",
     "babel-plugin-react-compiler": "1.0.0",
+    "cross-env": "7.0.3",
     "eslint": "9.39.5",
     "eslint-config-next": "16.2.10",
     "jsdom": "^25.0.0",

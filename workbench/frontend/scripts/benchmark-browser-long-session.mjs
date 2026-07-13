@@ -11,16 +11,21 @@ import {
   createBrowserPerformanceThresholds,
   deterministicPerformanceFailures,
 } from "./performance-evidence.mjs";
+import {
+  matplotlibConfigDirectory,
+  nextCli,
+  resolveRepositoryPython,
+} from "./runtime-paths.mjs";
 
 const SCRIPT_DIRECTORY = dirname(fileURLToPath(import.meta.url));
 const FRONTEND_ROOT = resolve(SCRIPT_DIRECTORY, "..");
 const REPOSITORY_ROOT = resolve(FRONTEND_ROOT, "../..");
-const PYTHON = resolve(REPOSITORY_ROOT, "torchenv/bin/python");
+const PYTHON = resolveRepositoryPython(REPOSITORY_ROOT);
 const BACKEND_SCRIPT = resolve(
   REPOSITORY_ROOT,
   "workbench/backend/tests/browser_performance_server.py",
 );
-const NEXT_BINARY = resolve(FRONTEND_ROOT, "node_modules/.bin/next");
+const NEXT_BINARY = nextCli(FRONTEND_ROOT);
 const DEFAULTS = {
   initialWarmup: 2,
   initialRepetitions: 7,
@@ -1198,8 +1203,8 @@ async function runBenchmark(options) {
   if (!existsSync(resolve(FRONTEND_ROOT, ".next/BUILD_ID"))) {
     throw new Error("Production build not found. Run npm run build first.");
   }
-  if (!existsSync(PYTHON) || !existsSync(NEXT_BINARY)) {
-    throw new Error("Existing Python and frontend environments are required.");
+  if (!existsSync(NEXT_BINARY)) {
+    throw new Error("Existing frontend environment is required.");
   }
 
   const temporaryRoot = await mkdtemp(join(os.tmpdir(), "emperor-browser-performance-"));
@@ -1231,7 +1236,7 @@ async function runBenchmark(options) {
         cwd: REPOSITORY_ROOT,
         env: {
           ...process.env,
-          MPLCONFIGDIR: "/tmp/matplotlib",
+          MPLCONFIGDIR: matplotlibConfigDirectory(),
           PYTHONPATH: REPOSITORY_ROOT,
           PYTHONSAFEPATH: "1",
         },
@@ -1240,8 +1245,8 @@ async function runBenchmark(options) {
     await waitForUrl(`${backendUrl}/health`, backend, "Browser benchmark backend");
 
     frontend = managedProcess(
-      NEXT_BINARY,
-      ["start", "-H", "127.0.0.1", "-p", String(frontendPort)],
+      process.execPath,
+      [NEXT_BINARY, "start", "-H", "127.0.0.1", "-p", String(frontendPort)],
       { cwd: FRONTEND_ROOT, env: process.env },
     );
     await waitForUrl(frontendUrl, frontend, "Production frontend");
