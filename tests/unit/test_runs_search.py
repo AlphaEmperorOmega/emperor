@@ -5,8 +5,8 @@ import unittest
 from collections.abc import Sequence
 from typing import Any
 
-from emperor.runs.errors import InvalidRunRequest
-from emperor.runs.search import (
+from model_runtime.runs.errors import InvalidRunRequest
+from model_runtime.runs.search import (
     PreparedSearch,
     _sample_unique_combination_indices,
 )

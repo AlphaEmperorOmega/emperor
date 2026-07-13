@@ -19,7 +19,6 @@ from emperor.augmentations.adaptive_parameters.core.weight import (
 from emperor.base.layer.gate import LayerGateOptions
 from emperor.base.options import ActivationOptions
 from emperor.datasets.image.classification.mnist import Mnist
-from emperor.experiments.base import GridSearch
 from emperor.halting.core.monitor import HaltingMonitorCallback
 from emperor.linears.core.monitor import LinearMonitorCallback
 from lightning.pytorch.callbacks import EarlyStopping
@@ -42,6 +41,8 @@ from models.parser import (
     resolve_experiment_mode,
     resolve_monitor_callbacks,
 )
+
+from model_runtime.packages import GridSearch
 
 
 class ExperimentConfigOverrideTestCase:

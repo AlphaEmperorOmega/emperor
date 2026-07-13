@@ -7,8 +7,10 @@ from dataclasses import FrozenInstanceError
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
-from emperor.model_packages import config_key_to_model_param, model_package
-from emperor.runs import (
+from models.catalog import model_package
+
+from model_runtime.packages import config_key_to_model_param
+from model_runtime.runs import (
     InvalidRunRequest,
     PlanningBudget,
     PlanTooLarge,

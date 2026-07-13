@@ -5,8 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from emperor.runs import JsonlTrainingProgressCallback
-from emperor.runs.progress import (
+from model_runtime.runs import JsonlTrainingProgressCallback
+from model_runtime.runs.progress import (
     sanitize_metric_payload,
 )
 

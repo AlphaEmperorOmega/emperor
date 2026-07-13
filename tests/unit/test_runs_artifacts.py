@@ -7,8 +7,9 @@ from datetime import datetime
 from pathlib import Path
 
 from emperor.experiments.tasks import ExperimentTask
-from emperor.model_packages.identity import ModelIdentity
-from emperor.runs.artifacts import (
+
+from model_runtime.packages.identity import ModelIdentity
+from model_runtime.runs.artifacts import (
     FilesystemRunArtifacts,
     result_metrics_payload,
     write_run_result,

@@ -5,8 +5,9 @@ import unittest
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
-from emperor.model_packages import model_package
-from emperor.runs import (
+from models.catalog import model_package
+
+from model_runtime.runs import (
     InvalidRunPlan,
     PlanningBudget,
     RunRequest,
