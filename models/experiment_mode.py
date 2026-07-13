@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from types import ModuleType
 
 from emperor.base.options import BaseOptions
-from emperor.experiments.base import GridSearch, RandomSearch, SearchMode
+from model_runtime.packages import GridSearch, RandomSearch, SearchMode
 from emperor.experiments.monitors import MonitorOption, MonitorSettings
 from emperor.experiments.tasks import ExperimentTask, resolve_experiment_task
 
@@ -182,6 +182,8 @@ def resolve_experiment_mode(
     args: argparse.Namespace,
     preset_enum: type[BaseOptions],
     no_search_presets: list[str] | None = None,
+    *,
+    build_monitor_callbacks: bool = True,
 ) -> ExperimentMode:
     if getattr(args, "list_config", False):
         print_config_options(getattr(args, "_config_experiment", ""))
@@ -273,7 +275,9 @@ def resolve_experiment_mode(
         config_overrides=config_overrides,
         search_overrides=search_overrides,
         monitor_names=[option.name for option in monitor_options],
-        monitor_callbacks=[
-            option.build_callback(monitor_settings) for option in monitor_options
-        ],
+        monitor_callbacks=(
+            [option.build_callback(monitor_settings) for option in monitor_options]
+            if build_monitor_callbacks
+            else []
+        ),
     )

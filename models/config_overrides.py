@@ -1,9 +1,27 @@
 import argparse
+import importlib
 import inspect
 from enum import Enum
 from pathlib import Path
 from types import ModuleType
 from typing import Any
+
+from model_runtime.packages.configuration import (
+    MODEL_PARAM_ALIASES as MODEL_PARAM_ALIASES,
+)
+from model_runtime.packages.configuration import (
+    canonical_config_key as canonical_config_key,
+)
+from model_runtime.packages.configuration import (
+    canonical_config_key_for_module,
+    config_key_to_flag,
+    config_key_to_model_param,
+    normalize_key,
+    search_key_to_config_key,
+)
+from model_runtime.packages.configuration import (
+    config_key_to_param as config_key_to_param,
+)
 
 from models.catalog import model_identity_payload_from_id, module_path_for_model_id
 from models.config_ast_listing import (
@@ -16,58 +34,21 @@ from models.config_value_parser import parse_config_value
 from models.model_metadata import load_model_metadata_for_config_module
 
 SKIP_CONFIG_KEYS = {
+    "CONFIG_SCHEMA_SKIP_KEYS",
     "CONFIG_OVERRIDE_SKIP_KEYS",
     "DEFAULT_EXPERIMENT_TASK",
     "DATASET_OPTIONS_BY_TASK",
     "MONITOR_OPTIONS",
 }
 
-MODEL_PARAM_ALIASES = {
-    "expert_capacity_factor": "capacity_factor",
-    "expert_compute_expert_mixture_flag": "compute_expert_mixture_flag",
-    "expert_dropped_token_behavior": "dropped_token_behavior",
-    "expert_num_experts": "num_experts",
-    "expert_routing_initialization_mode": "routing_initialization_mode",
-    "expert_top_k": "top_k",
-    "expert_weighted_parameters_flag": "weighted_parameters_flag",
-    "expert_weighting_position_option": "weighting_position_option",
-    "gate_flag": "stack_gate_flag",
-    "halting_flag": "stack_halting_flag",
-    "stack_layer_norm_position": "layer_norm_position",
-    "weight_generator_depth": "generator_depth",
-}
-
-def normalize_key(key: str) -> str:
-    return key.strip().replace("-", "_").lower()
-
-
-def config_key_to_flag(key: str) -> str:
-    return "--" + key.lower().replace("_", "-")
-
-
-def config_key_to_param(key: str) -> str:
-    return key.lower()
-
-
-def config_key_to_model_param(key: str) -> str:
-    param = config_key_to_param(key)
-    return MODEL_PARAM_ALIASES.get(param, param)
-
-
-def search_key_to_config_key(key: str) -> str:
-    return "SEARCH_SPACE_" + normalize_key(key).upper()
-
-
-def canonical_config_key(key: str) -> str:
-    stripped_key = key.strip().replace("-", "_")
-    if stripped_key.isupper():
-        return stripped_key
-    return normalize_key(key).upper()
-
-
-def canonical_config_key_for_module(config_module: ModuleType, key: str) -> str:
-    config_key = canonical_config_key(key)
-    return config_key
+def _display_config_default(value: Any) -> str:
+    if isinstance(value, Enum):
+        return f"{type(value).__name__}.{value.name}"
+    if inspect.isclass(value):
+        return value.__name__
+    if isinstance(value, str):
+        return repr(value)
+    return str(value)
 
 
 def _is_supported_constant(value: Any) -> bool:
@@ -140,7 +121,9 @@ def parse_search_set(
         if hasattr(search_space_module, search_config_key)
         else value_config_key
     )
-    parse_module = search_space_module if parse_key == search_config_key else config_module
+    parse_module = (
+        search_space_module if parse_key == search_config_key else config_module
+    )
     return config_key_to_model_param(value_config_key), [
         parse_config_value(parse_module, parse_key, value) for value in values
     ]
@@ -177,7 +160,10 @@ def add_config_override_arguments(
             config_key_to_model_param(key): key for key in supported_keys
         }
         for search_key, value in vars(search_space_module).items():
-            if not search_key.startswith("SEARCH_SPACE_") or not isinstance(value, list):
+            if not search_key.startswith("SEARCH_SPACE_") or not isinstance(
+                value,
+                list,
+            ):
                 continue
             alias_key = search_key[len("SEARCH_SPACE_") :]
             if alias_key in supported_key_set:
@@ -273,10 +259,18 @@ def print_config_options(experiment: str, models_dir: str = "models") -> None:
     config_options, search_options = iter_config_assignments(
         config_path,
         search_space_path=search_space_path,
-        shared_config_path=Path(__file__).with_name("trainer_config.py"),
         base_skip_keys=SKIP_CONFIG_KEYS,
         models_dir=Path(models_dir),
     )
+    module_path = module_path_for_model_id(experiment)
+    if module_path is not None:
+        config_module = importlib.import_module(f"{module_path}.config")
+        supported_keys = set(iter_supported_config_keys(config_module))
+        config_options = [
+            (key, _display_config_default(getattr(config_module, key)))
+            for key, _default in config_options
+            if key in supported_keys
+        ]
 
     print(f"Config options for {_display_model_selector(experiment)}:")
     for key, default in config_options:

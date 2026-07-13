@@ -40,12 +40,12 @@ from emperor.base.options import BaseOptions, LayerNormPositionOptions
 from emperor.embedding.absolute.core.config import (
     ImageSinusoidalPositionalEmbeddingConfig,
 )
-from emperor.experiments.base import (
+from model_runtime.packages import (
     BuilderBackedExperimentPresetsBase,
-    ExperimentBase,
     ExperimentPresetsBase,
     PresetDefinition,
 )
+from model_runtime.runs import ExperimentBase
 
 import models.vit.linear_adaptive.config as config
 import models.vit.linear_adaptive.dataset_options as dataset_options
@@ -927,8 +927,16 @@ class Experiment(ExperimentBase):
         self,
         experiment_preset: ExperimentPreset | None = None,
         experiment_task=None,
+        *,
+        model_package=None,
+        run_artifacts=None,
     ) -> None:
-        super().__init__(experiment_preset, experiment_task=experiment_task)
+        super().__init__(
+            experiment_preset,
+            experiment_task=experiment_task,
+            model_package=model_package,
+            run_artifacts=run_artifacts,
+        )
 
     def _num_epochs(self) -> int:
         return config.NUM_EPOCHS

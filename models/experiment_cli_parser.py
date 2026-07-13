@@ -1,9 +1,11 @@
 import argparse
 
+from emperor.base.option import BaseOptions
+from emperor.experiments.tasks import experiment_task_name
+
 from models.catalog import public_id_for_module
 from models.config_overrides import add_config_override_arguments
 from models.model_metadata import load_model_metadata_from_module_path
-from emperor.experiments.tasks import experiment_task_name
 
 
 class _ExperimentParser(argparse.ArgumentParser):
@@ -11,7 +13,7 @@ class _ExperimentParser(argparse.ArgumentParser):
 
 
 def preset_name_to_cli(name: str) -> str:
-    return name.lower().replace("_", "-")
+    return BaseOptions.cli_name(name)
 
 
 def get_experiment_parser(
@@ -114,6 +116,14 @@ def get_experiment_parser(
             "Restrict training to one or more lowercase dataset names, "
             "e.g. mnist cifar10."
         ),
+    )
+
+    parser.add_argument(
+        "--resume-checkpoint",
+        type=str,
+        default=None,
+        metavar="PATH",
+        help="Resume one training Run from a trusted Lightning checkpoint.",
     )
 
     parser.add_argument(

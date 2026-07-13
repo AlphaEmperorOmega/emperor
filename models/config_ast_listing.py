@@ -63,29 +63,16 @@ def _config_assignment_rows_from_source(
     return config_options, search_options
 
 
-def _imports_shared_trainer_config(tree: ast.Module) -> bool:
-    for node in tree.body:
-        if not isinstance(node, ast.ImportFrom):
-            continue
-        if node.module != "models.trainer_config":
-            continue
-        if any(alias.name == "*" for alias in node.names):
-            return True
-    return False
-
-
 def iter_config_assignments(
     config_path: Path,
     *,
     search_space_path: Path,
-    shared_config_path: Path,
     base_skip_keys: set[str],
     models_dir: Path = Path("models"),
 ) -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
     config_options = dict(
         iter_config_assignments_from_path(
             config_path,
-            shared_config_path=shared_config_path,
             base_skip_keys=base_skip_keys,
             models_dir=models_dir,
         )
@@ -104,7 +91,6 @@ def iter_config_assignments(
 def iter_config_assignments_from_path(
     config_path: Path,
     *,
-    shared_config_path: Path,
     base_skip_keys: set[str],
     models_dir: Path = Path("models"),
     visited: set[Path] | None = None,
@@ -116,15 +102,7 @@ def iter_config_assignments_from_path(
     visited.add(resolved_path)
 
     source = config_path.read_text()
-    tree = ast.parse(source)
     config_options: dict[str, str] = {}
-
-    if _imports_shared_trainer_config(tree):
-        shared_source = shared_config_path.read_text()
-        shared_config_options, _shared_search_options = (
-            _config_assignment_rows_from_source(shared_source, base_skip_keys)
-        )
-        config_options.update(shared_config_options)
 
     for import_path in _star_import_paths(
         source,
@@ -134,7 +112,6 @@ def iter_config_assignments_from_path(
         config_options.update(
             iter_config_assignments_from_path(
                 import_path,
-                shared_config_path=shared_config_path,
                 base_skip_keys=base_skip_keys,
                 models_dir=models_dir,
                 visited=visited,
