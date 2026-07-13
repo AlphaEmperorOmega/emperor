@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import fcntl
 import gzip
 import hashlib
 import json
@@ -21,6 +20,7 @@ from tokenizers.normalizers import BertNormalizer
 from tokenizers.pre_tokenizers import BertPreTokenizer
 
 from emperor.base.data import DataModule
+from emperor.base.locking import exclusive_file_lock
 
 SOURCE_COMMIT = "a3d2e0d26b56f3846f66a952536ffed4e401d05a"
 SOURCE_BASE_URL = (
@@ -218,14 +218,10 @@ class _Multi30k(DataModule):
     def prepare_data(self) -> None:
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         lock_path = self.cache_dir / ".prepare.lock"
-        with lock_path.open("a", encoding="utf-8") as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX)
-            try:
-                for file_spec in FILES:
-                    self._prepare_file(file_spec)
-                self._prepare_tokenizer()
-            finally:
-                fcntl.flock(lock, fcntl.LOCK_UN)
+        with exclusive_file_lock(lock_path):
+            for file_spec in FILES:
+                self._prepare_file(file_spec)
+            self._prepare_tokenizer()
 
     def _prepare_file(self, file_spec: Multi30kFile) -> None:
         self.archive_dir.mkdir(parents=True, exist_ok=True)
