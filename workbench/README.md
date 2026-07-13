@@ -13,30 +13,40 @@ then validates and canonicalizes the submitted plan.
 
 ## Architecture
 
-- `emperor/model_packages` owns Model Package discovery and the public Model Package Interface used by generic tooling.
-- `emperor/inspection` owns transport-neutral Runtime Defaults schemas, override and preset-lock validation, selected-package construction, semantic graph facts, and Inspection errors.
-- `emperor/runs` owns transport-neutral Run requests and plans, deterministic
+- `models/catalog.py` owns concrete Model Package registration and the project
+  Adapter composes that catalog with runtime services.
+- `model_runtime.packages` owns the public Model Package Interface used by
+  generic tooling.
+- `model_runtime.inspection` owns transport-neutral Runtime Defaults schemas,
+  override and preset-lock validation, selected-package construction, semantic
+  graph facts, and Inspection errors.
+- `model_runtime.runs` owns transport-neutral Run requests and plans, deterministic
   search expansion, synchronous execution, portable progress semantics,
   results, and relative artifact formats.
-- `workbench/backend` owns camel-case HTTP serialization, historical Log Run and checkpoint enrichment, blocking and error mapping, subprocess training jobs, monitor data extraction, the FastAPI app, and the compatibility inspection CLI.
+- `workbench/backend` owns camel-case HTTP serialization, historical Log Run
+  and checkpoint enrichment, blocking and error mapping, subprocess Training
+  Jobs, monitor data extraction, the FastAPI app, and project Adapter process
+  policy.
 - `workbench/frontend` owns the browser UI, React Flow graph layout, config controls, training controls, monitor charts, and API error states.
-- Workbench imports only the public `emperor.inspection`,
-  `emperor.model_packages`, and `emperor.runs` Interfaces.
-- `emperor/` and `models/` must not import `workbench/`.
-- This dependency direction is enforced by `workbench/backend/tests/test_dependency_direction.py`; add shared contracts in `emperor/` or `models/` instead of importing workbench APIs into core packages.
+- Workbench imports only public `model_runtime` Interfaces and communicates
+  with the concrete model project through the versioned JSON project Adapter.
+- Workbench production code imports neither `emperor` nor `models`; those
+  packages do not import `workbench`.
+- This dependency direction is enforced by
+  `workbench/backend/tests/test_dependency_direction.py`.
 
-`workbench.backend.inspector` and `workbench.backend.cli` remain one-way
-compatibility paths. New generic Inspection behavior belongs behind
-`emperor.inspection`; remove a compatibility path only after production-import
-audits and serialized/error equivalence tests prove that no caller needs it.
-`workbench.backend.inspector.checkpoint_shapes` is specifically a re-exporting
-Adapter: live checkpoint ranking and shape interpretation belong to private
-Implementation Modules under `workbench.backend.historical_inspection`.
+The request envelopes, operations, error kinds, and file-root responsibilities
+are documented in `docs/architecture/project-adapter-protocol.md`.
+
 `workbench.backend.inspection_adapter.WorkbenchInspectionAdapter` is the
 canonical Workbench Inspection Adapter for selected Model Package resolution,
 Workbench error mapping, and transport serialization. Generic Workbench callers
-consume its transport-neutral Inspection records; only HTTP and compatibility
-Adapters request serialized Workbench representations.
+consume its transport-neutral Inspection records; only HTTP Adapters request
+serialized Workbench representations. The former
+`workbench.backend.inspector` forwarding package and Workbench CLI forwarding
+path have been removed. Project inspection commands enter through
+`emperor inspect` and `models.project_cli`; historical checkpoint ranking and
+shape interpretation remain owned by `workbench.backend.historical_inspection`.
 
 `workbench.backend.training_jobs.run_plan_adapter.WorkbenchRunPlanAdapter` is
 the canonical Workbench Run Plan Module. It owns preview materialization,
@@ -45,13 +55,13 @@ and progress projection, and defensive worker decoding. Ordinary Training Job
 submission contains only exact row identity, preset, dataset, and Runtime
 Defaults overrides. Snapshot Training Job submission instead carries Snapshot
 identities plus backend-issued semantic revisions; the backend re-resolves and
-materializes those Runs. Status, command text, epoch totals, metrics, errors,
+materializes those Runs. Status, command projections, epoch totals, metrics, errors,
 and summaries are response-only state derived by the Adapter.
 The worker payload embeds one canonical persisted Run Plan rather than repeating
 its envelope alongside it. The worker revalidates exact rows through
-`emperor.runs.accept_run_plan` and executes them through
-`emperor.runs.execute_runs`; it never repeats grid or random Search Metadata
-selection.
+the project Adapter's `accept_run_plan` operation and executes them through its
+`execute_run_plan` operation; it never imports a concrete Model Package or
+repeats grid or random Search Metadata selection.
 `TrainingRunPlanView` is the canonical frozen Run Plan value across
 materialization, Training Job records, progress reduction, live projection, and
 snapshot projection. Runtime Modules update exact typed Runs with immutable
@@ -78,11 +88,15 @@ jobs reuse a bounded checkpoint instead of replaying their whole file on every
 read. Blank lines, invalid JSON, and valid non-object JSON values are ignored;
 an incomplete final line is retried after the writer completes it, while invalid
 UTF-8 and filesystem read errors remain explicit failures. The app-scoped
-`TrainingJobService` reports the same configured cancellation capability used
-by its launcher. Process-group mode never constructs or probes cgroup state.
+`TrainingJobService` reports the same resolved cancellation capability used by
+its launcher. `auto` resolves to cgroup v2 when writable on Linux, POSIX process
+groups for the Linux fallback and macOS, and named Windows Job Objects on
+Windows. Process-group mode never constructs or probes cgroup state.
 Strict-cgroup probing is lazy and total for capability reads, but each launch
-still requires a writable per-job cgroup immediately before starting the worker;
-that cgroup receives configured memory, CPU, and process limits. Training Job
+still requires a writable per-job cgroup immediately before starting the worker.
+Cgroups and Windows Job Objects receive configured memory, CPU, and process
+limits; the capabilities response reports whether those limits are enforced.
+Training Job
 admission is capped, worker environments are allowlisted, and private job state
 is created with restrictive modes even under hostile umasks. Persisted strict
 jobs recover their canonical cgroup through that same Adapter.
@@ -312,13 +326,23 @@ a repository import audit. Internal router imports use
 
 ## Setup
 
-```bash
-source env.sh
+```text
+mise run setup --profile cpu
+mise run dev
 ```
 
-Setup installs the Python and Node versions from `mise.toml`, installs the editable Python package, installs frontend dependencies, and starts both workbench servers in the background. It writes backend and frontend logs plus PID files under `workbench/.runtime/`. By default, the backend uses port `9999` and the frontend uses port `9000`.
+Mise provisions Python 3.13 and Node 24. Setup creates the native virtualenv,
+installs the Emperor model distribution and the separately declared
+`emperor-workbench` application, then installs the frontend dependencies. `dev`
+starts both Workbench services without injecting the checkout into
+`PYTHONPATH`. Logs and validated JSON process metadata live under
+`workbench/.runtime/`. Metadata includes PID, process creation time, command
+identity, argv, and port, so stale or reused PIDs are never trusted.
+Startup waits for the backend health endpoint and a frontend HTTP response.
+By default, the backend uses port `9999` and the frontend uses port `9000`.
 
-Running `source env.sh` again is safe: it reuses live PID files and also checks whether ports `9999` or `9000` are already listening before starting another server.
+Running setup or `dev` again is safe: setup hashes its inputs and service reuse
+requires every persisted identity field plus a healthy HTTP response.
 
 Config snapshots created from the workbench are stored under `workbench/snapshots/`
 by default. Override `WORKBENCH_API_SNAPSHOTS_ROOT` only when you intentionally
@@ -326,20 +350,26 @@ want a different local snapshot library.
 
 Stop or inspect the workbench:
 
-```bash
-source env.sh --workbench-stop
-source env.sh --workbench-status
+```text
+mise run workbench:stop
+mise run workbench:status
 ```
+
+The historical Unix `source env.sh` interface remains a compatibility wrapper.
+Native PowerShell users can use `. .\env.ps1`, `-WorkbenchStatus`, and
+`-WorkbenchStop`.
 
 ## Run
 
 Backend:
 
 ```bash
-python -m uvicorn workbench.backend.api:app --reload --reset-contextvars --host 127.0.0.1 --port 9999
-# or, from the repository root without activating the venv:
-torchenv/bin/python -m uvicorn workbench.backend.api:app --reload --reset-contextvars --host 127.0.0.1 --port 9999
+python -m workbench.backend.launch --reload --host 127.0.0.1 --port 9999
 ```
+
+An installed environment may use the equivalent `emperor-workbench` command.
+Set `EMPEROR_PROJECT_ADAPTER_COMMAND` when the model project's
+`emperor-project-adapter` executable is not on `PATH`.
 
 Frontend:
 
@@ -449,7 +479,7 @@ when that filesystem mutation is intended:
 export WORKBENCH_API_ALLOW_LOG_IMPORTS=true
 ```
 
-The normal `source env.sh` launcher explicitly enables both local mutations and
+The normal `mise run dev` launcher explicitly enables both local mutations and
 log imports for its loopback development backend. A manually started backend
 retains the read-only defaults.
 
@@ -470,12 +500,21 @@ Run and Config Snapshot catalogs.
 The default aggregate budgets are a 1 MiB JSON request body, 64 MiB of
 TensorBoard event work per request, a 128 MiB byte-weighted TensorBoard cache,
 and 1 MiB per progress JSONL record. Inspection defaults to 4 GiB, 4 CPUs, and
-60 seconds. Training defaults to two active jobs and, in strict cgroup mode,
-16 GiB, 8 CPUs, and 512 processes per job. Override these through the matching
+60 seconds. Training defaults to two active jobs and, when its containment mode
+enforces limits, 16 GiB, 8 CPUs, and 512 processes per job. Override these
+through the matching
 `WORKBENCH_API_MAX_JSON_BODY_BYTES`, `WORKBENCH_API_TENSORBOARD_*`,
 `WORKBENCH_API_MAX_PROGRESS_RECORD_BYTES`, `WORKBENCH_API_INSPECTION_*`, and
 `WORKBENCH_API_MAX_ACTIVE_TRAINING_JOBS`/`WORKBENCH_API_TRAINING_JOB_*`
 settings only after sizing the host.
+
+`WORKBENCH_API_TRAINING_CANCELLATION_MODE` defaults to `auto`. Its accepted
+values are `auto`, `strict-cgroup`, `process-group`, and
+`windows-job-object`. Use an explicit concrete value only to require that
+mechanism; unsupported combinations fail with an actionable error. The public
+capabilities response exposes the resolved concrete mode as
+`trainingCancellationMode` and reports strict resource-limit enforcement as
+`trainingResourceLimitsEnforced`.
 
 Backend contributors must classify every non-safe HTTP operation beside its
 route registration with `@declare_http_operation(...)` from
@@ -490,8 +529,8 @@ check. Do not add a separate method/path mutation list.
 
 ## Import Logs
 
-Use `download_logs.sh` from a project directory to create a log archive, then
-open the Workbench and choose **Import Logs** in the top navigation. The backend
+Use `mise run logs:archive` from a project directory to create a log archive,
+then open the Workbench and choose **Import Logs** in the top navigation. The backend
 validates archive metadata, decompresses each member once into a private staged
 directory, then commits through descriptor-relative no-follow operations. It
 overwrites only an unchanged regular file at the same archive path and fails
@@ -543,26 +582,26 @@ Backend:
 
 ```bash
 python -m unittest discover -s workbench/backend/tests
-python -m ruff check workbench/backend
+python -P tools/check_python_quality.py
 ```
 
 Frontend:
 
 ```bash
 cd workbench/frontend
+npm ci
+npm run lint
+npm run typecheck
 npm test
 npm run test:contract:e2e
-npm run lint
 npm run build
-npm run typecheck
-```
-
-After `npm run build`, capture the production browser and long-session evidence
-with:
-
-```bash
+npm run performance:budget
 npm run performance:browser
 ```
+
+The frontend supports Node `>=20.9.0`; repository development and CI use Node
+24. Next.js 16 uses Turbopack for both normal development and production builds,
+and lint remains an explicit gate rather than part of `next build`.
 
 The harness starts temporary loopback backend and production frontend servers,
 drives headless Chromium through repeated Model, Training, Logs, chart-dialog,
@@ -580,26 +619,32 @@ and are removed after the test. The contract covers capability loading,
 authentication, protected mutations, API-origin switching, normalized errors,
 and logout without starting a real training process.
 
-CLI inspection is still available through the root experiment script:
+CLI inspection is available through the canonical Emperor task:
 
 ```bash
-source experiment.sh --model-type linears --model linear --preset baseline --print-model
-python -m workbench.backend.cli --model-type linears --model linear --preset baseline --format json
+mise run experiment -- --model-type linears --model linear --preset baseline --print-model
+mise run experiment -- --model-type linears --model linear --preset baseline --print-model --format json
 ```
 
 Monitor discovery is available for terminal training runs:
 
 ```bash
-source experiment.sh --model-type linears --model linear --list-monitors
-source experiment.sh --model-type linears --model linear --preset baseline --datasets mnist --monitors linear halting
+mise run experiment -- --model-type linears --model linear --list-monitors
+mise run experiment -- --model-type linears --model linear --preset baseline --datasets mnist --monitors linear halting
 ```
 
 `--monitors` applies to training runs and cannot be combined with `--print-model`.
 
+Every Run Plan exposes canonical `commandArgv` plus `commands.posix` and
+`commands.powershell`. The historical POSIX `command` field remains for
+compatibility. The command dialog suggests PowerShell in Windows browsers and
+POSIX elsewhere; its shell selector persists an explicit override for WSL and
+remote-browser use.
+
 Training from the CLI can also run selected preset batches:
 
 ```bash
-source experiment.sh --model-type linears --model linear --presets baseline gating --grid-search
+mise run experiment -- --model-type linears --model linear --presets baseline gating --grid-search
 ```
 
 ## Troubleshooting
