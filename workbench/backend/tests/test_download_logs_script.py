@@ -14,7 +14,7 @@ SCRIPT_PATH = REPO_ROOT / "download_logs.sh"
 def create_minimal_project(root: Path) -> None:
     (root / "experiment.sh").write_text("#!/usr/bin/env bash\n", encoding="utf-8")
     (root / "pyproject.toml").write_text("[project]\nname = 'test'\n", encoding="utf-8")
-    (root / "emperor").mkdir()
+    (root / "models").mkdir()
 
 
 @unittest.skipUnless(os.name == "posix", "download_logs.sh is a Unix wrapper")

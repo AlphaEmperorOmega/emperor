@@ -172,9 +172,9 @@ class PortableLauncherTests(unittest.TestCase):
     def test_unix_entry_points_are_thin_compatibility_wrappers(self) -> None:
         cases = {
             "env.sh": "mise run",
-            "experiment.sh": "-m emperor",
-            "run_test.sh": "-m emperor test",
-            "download_logs.sh": "-m emperor logs:archive",
+            "experiment.sh": "-m models.project_cli",
+            "run_test.sh": "-m models.project_cli test",
+            "download_logs.sh": "-m models.project_cli logs:archive",
         }
         forbidden = ("/dev/tcp", "lsof", "fuser", "nohup", "setsid", "cksum")
         for name, delegation in cases.items():

@@ -258,7 +258,7 @@ class InspectionContractFreezeTests(unittest.TestCase):
     @staticmethod
     def _run_cli(*arguments: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            [sys.executable, "-m", "emperor", "inspect", *arguments],
+            [sys.executable, "-m", "models.project_cli", "inspect", *arguments],
             cwd=Path(__file__).resolve().parents[3],
             env={
                 **os.environ,
