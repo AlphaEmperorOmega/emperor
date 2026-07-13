@@ -5,7 +5,7 @@ const jsdomTypeScriptTests = [
   "src/features/workbench/state/graph-monitor/use-graph-view-state.test.ts",
   "src/features/workbench/state/target/_inspection-preview-races.test.ts",
   "src/features/workbench/state/logs/use-log-query-cache.test.ts",
-  "src/features/workbench/state/use-workbench-queries.test.ts",
+  "src/features/workbench/state/model-package/use-model-package-metadata.test.ts",
   "src/lib/api-origin-lock.test.ts",
   "src/lib/api.test.ts",
 ];

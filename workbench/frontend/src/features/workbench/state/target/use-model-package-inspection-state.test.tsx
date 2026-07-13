@@ -2,7 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  useWorkbenchQueries: vi.fn(),
+  useModelPackageMetadata: vi.fn(),
   useConfigSnapshotRecords: vi.fn(),
   useInspectionPreviewState: vi.fn(),
   useInfiniteLogRunsQuery: vi.fn(),
@@ -18,21 +18,10 @@ const mocks = vi.hoisted(() => ({
   clearSnapshotRecordsForConnectionChange: vi.fn(),
 }));
 
-vi.mock("@/features/workbench/state/use-workbench-queries", () => ({
-  LOCAL_DEFAULT_CAPABILITIES: {
-    authMode: "none",
-    trainingEnabled: true,
-    trainingCancellationCapability: "unsupported",
-    logDeletionEnabled: true,
-    configSnapshotsEnabled: true,
-    historicalLogsEnabled: true,
-    liveMonitorDataEnabled: true,
-    historicalMonitorDataEnabled: true,
-    uploadsEnabled: false,
-    maxUploadSize: null,
-  },
-  useWorkbenchQueries: mocks.useWorkbenchQueries,
-}));
+vi.mock(
+  "@/features/workbench/state/model-package/use-model-package-metadata",
+  () => ({ useModelPackageMetadata: mocks.useModelPackageMetadata }),
+);
 
 vi.mock(
   "@/features/workbench/state/config-snapshots/use-config-snapshot-records",
@@ -92,19 +81,8 @@ import {
 import {
   useModelPackageInspectionState,
 } from "@/features/workbench/state/target/use-model-package-inspection-state";
+import { type ModelPackageMetadataSelection } from "@/features/workbench/state/model-package/use-model-package-metadata";
 
-const capabilities = {
-  authMode: "none",
-  trainingEnabled: true,
-  trainingCancellationCapability: "unsupported",
-  logDeletionEnabled: true,
-  configSnapshotsEnabled: true,
-  historicalLogsEnabled: true,
-  liveMonitorDataEnabled: true,
-  historicalMonitorDataEnabled: true,
-  uploadsEnabled: false,
-  maxUploadSize: null,
-};
 let snapshots: ConfigSnapshotRecord[] = [];
 let monitorOptions: MonitorOption[] = [];
 let configSnapshotsLoading = false;
@@ -114,16 +92,6 @@ let schemaQueryError = false;
 let datasetGroupsOverride: DatasetGroup[] | undefined;
 let historicalRuns: LogRun[] = [];
 let historicalRunTags: LogRunTags[] = [];
-
-function query<TData>(data: TData) {
-  return {
-    data,
-    isLoading: false,
-    isSuccess: true,
-    isError: false,
-    error: null,
-  };
-}
 
 function logRun(overrides: Partial<LogRun> & Pick<LogRun, "id">): LogRun {
   return {
@@ -397,12 +365,14 @@ beforeEach(() => {
     ensure: mocks.requestPreview,
     refresh: mocks.requestPreview,
   }));
-  mocks.useWorkbenchQueries.mockReset().mockImplementation(
-    (
-      selectedModelType: string,
-      selectedModel: string,
-      selectedPreset: string,
-    ) => {
+  mocks.useModelPackageMetadata.mockReset().mockImplementation(
+    ({
+      modelPackage: {
+        modelType: selectedModelType,
+        model: selectedModel,
+      },
+      preset: selectedPreset,
+    }: ModelPackageMetadataSelection) => {
       const presets =
         selectedModelType === "experts" && selectedModel === "linear"
           ? [{ name: "expert-baseline", label: "Expert baseline", description: "" }]
@@ -424,25 +394,27 @@ beforeEach(() => {
             ];
 
       return {
-        healthQuery: query({ status: "ok" }),
-        capabilitiesQuery: query(capabilities),
-        modelsQuery: query({
-          models: [
+        modelPackages: {
+          records: [
             { modelType: "linears", model: "linear" },
             { modelType: "linears", model: "linear_adaptive" },
             { modelType: "experts", model: "linear" },
           ],
-        }),
-        presetsQuery: query({
-          modelType: selectedModelType,
-          model: selectedModel,
-          presets: selectedModel ? presets : [],
-        }),
-        datasetsQuery: query({
-          modelType: selectedModelType,
-          model: selectedModel,
+          isLoading: false,
+          isReady: true,
+          isError: false,
+          error: null,
+        },
+        presets: {
+          records: selectedModel ? presets : [],
+          isLoading: false,
+          isReady: true,
+          isError: false,
+          error: null,
+        },
+        datasetMetadata: {
           defaultExperimentTask: "image-classification",
-          datasetGroups:
+          groups:
             datasetGroupsOverride ??
             (selectedModel
               ? [
@@ -464,31 +436,40 @@ beforeEach(() => {
                   : []),
                 ]
               : []),
-        }),
-        monitorsQuery: query({
-          modelType: selectedModelType,
-          model: selectedModel,
-          monitors: selectedModel ? monitorOptions : [],
-        }),
-        schemaQuery: schemaQueryError
+          isLoading: false,
+          isReady: true,
+          isError: false,
+          error: null,
+        },
+        monitorMetadata: {
+          records: selectedModel ? monitorOptions : [],
+          isLoading: false,
+          isReady: true,
+          isError: false,
+          error: null,
+        },
+        runtimeDefaults: schemaQueryError
           ? {
-              data: undefined,
+              fields: [],
               isLoading: false,
-              isSuccess: false,
+              isReady: false,
               isError: true,
               error: new Error("schema read failed"),
             }
-          : query({
-              modelType: selectedModelType,
-              model: selectedModel,
+          : {
               fields: schemaFieldsByPreset[selectedPreset] ?? [],
-            }),
-        searchSpaceQuery: query({
-          modelType: selectedModelType,
-          model: selectedModel,
-          preset: selectedPreset,
+              isLoading: false,
+              isReady: true,
+              isError: false,
+              error: null,
+            },
+        searchMetadata: {
           axes: [],
-        }),
+          isLoading: false,
+          isReady: true,
+          isError: false,
+          error: null,
+        },
       };
     },
   );

@@ -17,7 +17,7 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/api", () => mocks);
 
-import { useWorkbenchQueries } from "@/features/workbench/state/use-workbench-queries";
+import { useModelPackageMetadata } from "@/features/workbench/state/model-package/use-model-package-metadata";
 import { type ModelIdentity } from "@/lib/api";
 
 function renderQueries(
@@ -25,7 +25,7 @@ function renderQueries(
   preset: string,
   trainingPresets: string[] = [],
   options: {
-    includeSearchSpace?: boolean;
+    includeSearchMetadata?: boolean;
     protectedReadsEnabled?: boolean;
   } = {},
 ) {
@@ -41,7 +41,15 @@ function renderQueries(
       m: string;
       p: string;
       presets: string[];
-    }) => useWorkbenchQueries("linears", m, p, presets, options),
+    }) =>
+      useModelPackageMetadata(
+        {
+          modelPackage: { modelType: "linears", model: m },
+          preset: p,
+          searchPresets: presets,
+        },
+        options,
+      ),
     {
       initialProps: { m: model, p: preset, presets: trainingPresets },
       wrapper: ({ children }: { children: ReactNode }) =>
@@ -95,7 +103,7 @@ beforeEach(() => {
   );
 });
 
-describe("useWorkbenchQueries enabled gating", () => {
+describe("useModelPackageMetadata", () => {
   it("fires only the protected Model Package root query when no model is selected", async () => {
     renderQueries("", "");
 
@@ -169,7 +177,7 @@ describe("useWorkbenchQueries enabled gating", () => {
   });
 
   it("can skip search-space when callers only need schema metadata", async () => {
-    renderQueries("linear", "base", [], { includeSearchSpace: false });
+    renderQueries("linear", "base", [], { includeSearchMetadata: false });
 
     await waitFor(() =>
       expect(mocks.fetchConfigSchema).toHaveBeenCalledWith(
@@ -192,5 +200,32 @@ describe("useWorkbenchQueries enabled gating", () => {
         { signal: expect.any(AbortSignal) },
       ),
     );
+  });
+
+  it("publishes semantic projections without exposing query machinery", async () => {
+    const { result } = renderQueries("linear", "base");
+
+    await waitFor(() => expect(result.current.runtimeDefaults.isReady).toBe(true));
+
+    expect(result.current).toEqual({
+      modelPackages: expect.objectContaining({
+        records: [{ modelType: "linears", model: "linear" }],
+        isReady: true,
+      }),
+      presets: expect.objectContaining({ records: [], isReady: true }),
+      datasetMetadata: expect.objectContaining({
+        defaultExperimentTask: "image-classification",
+        isReady: true,
+      }),
+      monitorMetadata: expect.objectContaining({ records: [], isReady: true }),
+      runtimeDefaults: expect.objectContaining({ fields: [], isReady: true }),
+      searchMetadata: expect.objectContaining({ axes: [], isReady: true }),
+    });
+    for (const projection of Object.values(result.current)) {
+      expect(projection).not.toHaveProperty("data");
+      expect(projection).not.toHaveProperty("queryKey");
+      expect(projection).not.toHaveProperty("refetch");
+      expect(projection).not.toHaveProperty("status");
+    }
   });
 });

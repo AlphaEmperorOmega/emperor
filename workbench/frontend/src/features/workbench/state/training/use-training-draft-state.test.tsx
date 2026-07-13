@@ -2,13 +2,14 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  useWorkbenchQueries: vi.fn(),
+  useModelPackageMetadata: vi.fn(),
   useConfigSnapshotRecords: vi.fn(),
 }));
 
-vi.mock("@/features/workbench/state/use-workbench-queries", () => ({
-  useWorkbenchQueries: mocks.useWorkbenchQueries,
-}));
+vi.mock(
+  "@/features/workbench/state/model-package/use-model-package-metadata",
+  () => ({ useModelPackageMetadata: mocks.useModelPackageMetadata }),
+);
 
 vi.mock(
   "@/features/workbench/state/config-snapshots/use-config-snapshot-records",
@@ -16,18 +17,11 @@ vi.mock(
 );
 
 import { type ConfigField } from "@/lib/api";
+import { type ModelPackageMetadataSelection } from "@/features/workbench/state/model-package/use-model-package-metadata";
 import { useTrainingDraftState } from "@/features/workbench/state/training/use-training-draft-state";
 import { type WorkbenchWorkspace } from "@/types/workbench";
 
-function query<TData>(data: TData) {
-  return {
-    data,
-    isLoading: false,
-    isSuccess: true,
-    isError: false,
-    error: null,
-  };
-}
+const ready = { isLoading: false, isReady: true, isError: false, error: null };
 
 const hiddenDim: ConfigField = {
   key: "hidden_dim",
@@ -43,19 +37,17 @@ const hiddenDim: ConfigField = {
   locked: false,
 };
 
-function installWorkbenchQueries() {
-  mocks.useWorkbenchQueries.mockImplementation(
-    (modelType: string, model: string, preset: string) => ({
-      presetsQuery: query({
-        modelType,
-        model,
-        presets: [{ name: "baseline", label: "Baseline", description: "" }],
-      }),
-      datasetsQuery: query({
-        modelType,
-        model,
+function installModelPackageMetadata() {
+  mocks.useModelPackageMetadata.mockImplementation(
+    ({ modelPackage }: ModelPackageMetadataSelection) => ({
+      modelPackages: { records: [modelPackage], ...ready },
+      presets: {
+        records: [{ name: "baseline", label: "Baseline", description: "" }],
+        ...ready,
+      },
+      datasetMetadata: {
         defaultExperimentTask: "image-classification",
-        datasetGroups: [
+        groups: [
           {
             experimentTask: "image-classification",
             label: "Image classification",
@@ -64,11 +56,10 @@ function installWorkbenchQueries() {
             ],
           },
         ],
-      }),
-      monitorsQuery: query({
-        modelType,
-        model,
-        monitors: [
+        ...ready,
+      },
+      monitorMetadata: {
+        records: [
           {
             name: "loss",
             label: "Loss",
@@ -77,9 +68,10 @@ function installWorkbenchQueries() {
             defaultEnabled: false,
           },
         ],
-      }),
-      schemaQuery: query({ modelType, model, preset, fields: [hiddenDim] }),
-      searchSpaceQuery: query({ modelType, model, preset, axes: [] }),
+        ...ready,
+      },
+      runtimeDefaults: { fields: [hiddenDim], ...ready },
+      searchMetadata: { axes: [], ...ready },
     }),
   );
 }
@@ -116,7 +108,7 @@ function installSnapshotRecords(records: Array<Record<string, unknown>> = []) {
 
 describe("useTrainingDraftState Runtime Defaults", () => {
   it("seeds on first Training open and keeps the established draft independent", async () => {
-    installWorkbenchQueries();
+    installModelPackageMetadata();
     installSnapshotRecords();
     const { result, rerender } = renderHook(
       ({ activeWorkspace, seed }) =>
@@ -168,7 +160,7 @@ describe("useTrainingDraftState Runtime Defaults", () => {
   });
 
   it("resets model-owned selections before reconciling the next package defaults", async () => {
-    installWorkbenchQueries();
+    installModelPackageMetadata();
     installSnapshotRecords([
       {
         id: "snapshot-1",
@@ -226,7 +218,7 @@ describe("useTrainingDraftState Runtime Defaults", () => {
   });
 
   it("canonicalizes edits and suppresses a value returned to its Runtime Default", async () => {
-    installWorkbenchQueries();
+    installModelPackageMetadata();
     installSnapshotRecords();
 
     const { result } = renderHook(() =>
@@ -254,7 +246,7 @@ describe("useTrainingDraftState Runtime Defaults", () => {
   });
 
   it("retains Training selection after failed removal and reconciles it after retry", async () => {
-    installWorkbenchQueries();
+    installModelPackageMetadata();
     const remove = vi.fn().mockResolvedValue({
       ok: false,
       kind: "remove",

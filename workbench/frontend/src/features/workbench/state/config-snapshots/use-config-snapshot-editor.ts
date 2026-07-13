@@ -12,9 +12,7 @@ import {
   validateConfigSnapshotCandidate,
   validateConfigSnapshotName,
 } from "@/lib/config-snapshots";
-import {
-  useConfigSchemaQuery,
-} from "@/features/workbench/state/use-workbench-queries";
+import { useRuntimeDefaultsSchema } from "@/features/workbench/state/model-package/use-model-package-metadata";
 import {
   useConfigSnapshotRecords,
 } from "@/features/workbench/state/config-snapshots/use-config-snapshot-records";
@@ -45,7 +43,11 @@ export function useConfigSnapshotEditorState({
   const modelType = session?.modelType ?? "";
   const model = session?.model ?? "";
   const preset = session?.preset ?? "";
-  const schemaQuery = useConfigSchemaQuery(modelType, model, preset, {
+  const schemaSelection = useMemo(
+    () => ({ modelPackage: { modelType, model }, preset }),
+    [model, modelType, preset],
+  );
+  const runtimeDefaultsSchema = useRuntimeDefaultsSchema(schemaSelection, {
     enabled: protectedReadsEnabled,
   });
   const snapshotRecords = useConfigSnapshotRecords(
@@ -53,8 +55,8 @@ export function useConfigSnapshotEditorState({
     { enabled: protectedReadsEnabled },
   );
   const configSections = useMemo(
-    () => groupConfigFieldsBySectionPath(schemaQuery.data?.fields ?? []),
-    [schemaQuery.data?.fields],
+    () => groupConfigFieldsBySectionPath(runtimeDefaultsSchema.fields),
+    [runtimeDefaultsSchema.fields],
   );
   const configFields = useMemo(
     () => configSectionsFields(configSections),
@@ -306,7 +308,8 @@ export function useConfigSnapshotEditorState({
         fieldCount: configFields.length,
         draft,
         status: {
-          isLoading: schemaQuery.isLoading || snapshotRecords.status.isLoading,
+          isLoading:
+            runtimeDefaultsSchema.isLoading || snapshotRecords.status.isLoading,
           mutation: snapshotRecords.status.mutation,
         },
       },
@@ -344,7 +347,7 @@ export function useConfigSnapshotEditorState({
       rename,
       retrySave,
       save,
-      schemaQuery.isLoading,
+      runtimeDefaultsSchema.isLoading,
       selectedSnapshot,
       sessionActions,
       snapshotRecords.status.isLoading,

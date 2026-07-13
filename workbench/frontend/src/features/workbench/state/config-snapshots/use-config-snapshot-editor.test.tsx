@@ -2,7 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  useConfigSchemaQuery: vi.fn(),
+  useRuntimeDefaultsSchema: vi.fn(),
   useConfigSnapshotRecords: vi.fn(),
   create: vi.fn(),
   rename: vi.fn(),
@@ -13,9 +13,10 @@ const mocks = vi.hoisted(() => ({
   clearForConnectionChange: vi.fn(),
 }));
 
-vi.mock("@/features/workbench/state/use-workbench-queries", () => ({
-  useConfigSchemaQuery: mocks.useConfigSchemaQuery,
-}));
+vi.mock(
+  "@/features/workbench/state/model-package/use-model-package-metadata",
+  () => ({ useRuntimeDefaultsSchema: mocks.useRuntimeDefaultsSchema }),
+);
 
 vi.mock(
   "@/features/workbench/state/config-snapshots/use-config-snapshot-records",
@@ -26,6 +27,7 @@ vi.mock(
 
 import { type ConfigField } from "@/lib/api";
 import { type ConfigSnapshot } from "@/lib/config-snapshots";
+import { type ModelPackageMetadataSelection } from "@/features/workbench/state/model-package/use-model-package-metadata";
 import {
   useConfigSnapshotEditorState,
 } from "@/features/workbench/state/config-snapshots/use-config-snapshot-editor";
@@ -115,11 +117,11 @@ beforeEach(() => {
     snapshotId: "snapshot-1",
     record: null,
   });
-  mocks.useConfigSchemaQuery.mockReset().mockImplementation(
-    (modelType: string, model: string, preset: string) => ({
-      data: { modelType, model, preset, fields },
+  mocks.useRuntimeDefaultsSchema.mockReset().mockImplementation(
+    ({ modelPackage, preset }: ModelPackageMetadataSelection) => ({
+      fields,
       isLoading: false,
-      isSuccess: Boolean(modelType && model && preset),
+      isReady: Boolean(modelPackage.modelType && modelPackage.model && preset),
       isError: false,
       error: null,
     }),
@@ -201,10 +203,11 @@ describe("Config Snapshot editor session", () => {
         draft: { hidden_size: "128" },
       });
     });
-    expect(mocks.useConfigSchemaQuery).toHaveBeenLastCalledWith(
-      "experts",
-      "linear",
-      "expert-baseline",
+    expect(mocks.useRuntimeDefaultsSchema).toHaveBeenLastCalledWith(
+      {
+        modelPackage: { modelType: "experts", model: "linear" },
+        preset: "expert-baseline",
+      },
       { enabled: true },
     );
 

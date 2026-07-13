@@ -1,10 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  type DatasetGroup,
   type ModelIdentity,
-  type MonitorOption,
-  type Preset,
-  type SearchAxis,
 } from "@/lib/api";
 import {
   effectivePresetOverrides,
@@ -35,13 +31,8 @@ import {
   experimentTaskOptions,
   normalizeExperimentTask,
 } from "@/features/workbench/state/model-package/model-package-selection";
-import { useWorkbenchQueries } from "@/features/workbench/state/use-workbench-queries";
+import { useModelPackageMetadata } from "@/features/workbench/state/model-package/use-model-package-metadata";
 import { type WorkbenchWorkspace } from "@/types/workbench";
-
-const EMPTY_PRESETS: Preset[] = [];
-const EMPTY_DATASET_GROUPS: DatasetGroup[] = [];
-const EMPTY_MONITORS: MonitorOption[] = [];
-const EMPTY_SEARCH_AXES: SearchAxis[] = [];
 
 export type TrainingDraftSeed = {
   modelType: string;
@@ -98,22 +89,18 @@ export function useTrainingDraftState({
     () => ({ modelType: selectedModelType, model: selectedModel }),
     [selectedModel, selectedModelType],
   );
-  const {
-    presetsQuery,
-    datasetsQuery,
-    monitorsQuery,
-    schemaQuery,
-    searchSpaceQuery,
-  } = useWorkbenchQueries(
-    selectedModelType,
-    selectedModel,
-    selectedPrimaryPreset,
-    selectedPresets,
-    {
-      includeSearchSpace: activeWorkspace === "training",
-      protectedReadsEnabled,
-    },
+  const metadataSelection = useMemo(
+    () => ({
+      modelPackage: selectedIdentity,
+      preset: selectedPrimaryPreset,
+      searchPresets: selectedPresets,
+    }),
+    [selectedIdentity, selectedPresets, selectedPrimaryPreset],
   );
+  const metadata = useModelPackageMetadata(metadataSelection, {
+    includeSearchMetadata: activeWorkspace === "training",
+    protectedReadsEnabled,
+  });
   const {
     records: configSnapshots,
     status: configSnapshotsStatus,
@@ -127,11 +114,9 @@ export function useTrainingDraftState({
   const clearSnapshotRecordsForConnectionChange =
     configSnapshotActions.clearForConnectionChange;
 
-  const presets = presetsQuery.data?.presets ?? EMPTY_PRESETS;
-  const datasetGroups =
-    datasetsQuery.data?.datasetGroups ?? EMPTY_DATASET_GROUPS;
-  const defaultExperimentTask =
-    datasetsQuery.data?.defaultExperimentTask ?? "";
+  const presets = metadata.presets.records;
+  const datasetGroups = metadata.datasetMetadata.groups;
+  const defaultExperimentTask = metadata.datasetMetadata.defaultExperimentTask;
   const activeExperimentTask = normalizeExperimentTask(
     selectedExperimentTask,
     defaultExperimentTask,
@@ -145,15 +130,15 @@ export function useTrainingDraftState({
     datasetGroups,
     activeExperimentTask,
   );
-  const monitors = monitorsQuery.data?.monitors ?? EMPTY_MONITORS;
-  const searchAxes = searchSpaceQuery.data?.axes ?? EMPTY_SEARCH_AXES;
+  const monitors = metadata.monitorMetadata.records;
+  const searchAxes = metadata.searchMetadata.axes;
 
   const selectionState = useMemo(
     () =>
       deriveModelPackageSelection({
         datasets,
         presets,
-        schemaFields: schemaQuery.data?.fields,
+        schemaFields: metadata.runtimeDefaults.fields,
         configSnapshots,
         selectedModelType,
         selectedModel,
@@ -163,7 +148,7 @@ export function useTrainingDraftState({
       configSnapshots,
       datasets,
       presets,
-      schemaQuery.data?.fields,
+      metadata.runtimeDefaults.fields,
       selectedModel,
       selectedModelType,
       selectedPrimaryPreset,
@@ -657,7 +642,7 @@ export function useTrainingDraftState({
       monitors: {
         selected: selectedMonitors,
         options: monitors,
-        isLoading: monitorsQuery.isLoading,
+        isLoading: metadata.monitorMetadata.isLoading,
         select: setMonitorSelection,
         selectAll: selectAllMonitors,
         clear: clearMonitors,
@@ -678,7 +663,7 @@ export function useTrainingDraftState({
       modelOptionList,
       modelTypeOptionList,
       monitors,
-      monitorsQuery.isLoading,
+      metadata.monitorMetadata.isLoading,
       presetOptionList,
       removeSnapshot,
       retrySnapshotMutation,
@@ -730,17 +715,17 @@ export function useTrainingDraftState({
     () => ({
       value: search,
       axes: searchAxes,
-      isLoading: searchSpaceQuery.isLoading,
+      isLoading: metadata.searchMetadata.isLoading,
       update: updateSearch,
     }),
-    [search, searchAxes, searchSpaceQuery.isLoading, updateSearch],
+    [search, searchAxes, metadata.searchMetadata.isLoading, updateSearch],
   );
   const status = useMemo(
     () => ({
-      schemaLoading: schemaQuery.isLoading,
-      isSchemaReady: schemaQuery.isSuccess,
+      schemaLoading: metadata.runtimeDefaults.isLoading,
+      isSchemaReady: metadata.runtimeDefaults.isReady,
     }),
-    [schemaQuery.isLoading, schemaQuery.isSuccess],
+    [metadata.runtimeDefaults.isLoading, metadata.runtimeDefaults.isReady],
   );
 
   return useMemo(
