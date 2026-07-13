@@ -174,17 +174,17 @@ async def logs_runs(
     projection: Annotated[Literal["full", "summary"], Query()] = "full",
 ) -> LogRunsResponse:
     page = await run_blocking_io(
-            service.list_runs,
-            limit=limit,
-            offset=offset,
-            experiment=experiment,
-            model=_model_query_ids(modelType, model),
-            preset=preset,
-            dataset=dataset,
-            experiment_task=experimentTask,
-            has_event_files=has_event_files,
-            projection=projection,
-        )
+        service.list_runs,
+        limit=limit,
+        offset=offset,
+        experiment=experiment,
+        model=_model_query_ids(modelType, model),
+        preset=preset,
+        dataset=dataset,
+        experiment_task=experimentTask,
+        has_event_files=has_event_files,
+        projection=projection,
+    )
     return LogRunsResponse.model_validate(log_run_page_to_payload(page))
 
 
@@ -200,9 +200,7 @@ async def logs_experiments(
     offset: int = Query(0, ge=0),
 ) -> LogExperimentsResponse:
     page = await run_blocking_io(service.list_experiments, limit=limit, offset=offset)
-    return LogExperimentsResponse.model_validate(
-        log_experiment_page_to_payload(page)
-    )
+    return LogExperimentsResponse.model_validate(log_experiment_page_to_payload(page))
 
 
 @router.post(
@@ -458,11 +456,7 @@ async def logs_scalars(
         sampling=request.sampling,
     )
     return LogScalarsResponse.model_validate(
-        {
-            "series": [
-                log_scalar_series_to_payload(series) for series in scalar_series
-            ]
-        }
+        {"series": [log_scalar_series_to_payload(series) for series in scalar_series]}
     )
 
 
@@ -502,10 +496,7 @@ async def logs_parameter_status(
         request.runIds,
     )
     return LogParameterStatusResponse(
-        runs=[
-            log_parameter_status_to_payload(status)
-            for status in statuses
-        ]
+        runs=[log_parameter_status_to_payload(status) for status in statuses]
     )
 
 
@@ -520,9 +511,7 @@ async def log_run_artifacts(
     service: Annotated[RunHistoryService, Depends(get_run_history_service)],
 ) -> LogRunArtifactsResponse:
     details = await run_blocking_io(service.artifacts_for_run, run_id)
-    return LogRunArtifactsResponse.model_validate(
-        log_run_artifacts_to_payload(details)
-    )
+    return LogRunArtifactsResponse.model_validate(log_run_artifacts_to_payload(details))
 
 
 @router.get(
@@ -537,8 +526,8 @@ async def log_run_monitor_data(
     node_path: str = Query(..., alias="nodePath"),
 ) -> MonitorDataResponse:
     data = await run_blocking_io(
-            service.monitor_data_for_run,
-            run_id,
-            node_path=node_path,
-        )
+        service.monitor_data_for_run,
+        run_id,
+        node_path=node_path,
+    )
     return MonitorDataResponse.model_validate(log_monitor_data_to_payload(data))
