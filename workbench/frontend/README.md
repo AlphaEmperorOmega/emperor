@@ -60,7 +60,8 @@ Open `http://localhost:9000` unless you selected a different port.
 
 ## Available Commands
 
-- `npm run dev`: start Next.js 16 with Turbopack on `${PORT:-9000}`.
+- `npm run dev`: start Next.js 16 with Turbopack on `PORT`, defaulting to
+  `9000` through the platform-neutral Node launcher.
 - `npm run build`: create the production Next.js 16 Turbopack build.
 - `npm run lint`: run the direct Next.js flat ESLint configuration with zero
   warnings allowed. This remains a separate gate because Next.js 16 does not
@@ -119,7 +120,8 @@ npm run test
 ```
 
 The live backend/frontend contract uses the repository Python environment when
-`torchenv/bin/python` exists, or `WORKBENCH_E2E_PYTHON`/`python` otherwise. It
+the native `torchenv/bin/python` or `torchenv/Scripts/python.exe` exists, or
+`WORKBENCH_E2E_PYTHON`/the platform Python launcher otherwise. It
 requires the Workbench backend dependencies, permission to bind temporary
 loopback ports, and permission to create temporary directories. Run it from
 this package with:
@@ -133,6 +135,11 @@ logs, snapshots, and fake Training Job state. It covers capability loading,
 authentication, protected mutations, API-origin switching, normalized errors,
 and logout without starting a real training process, then removes its temporary
 state.
+
+Training command dialogs render backend-provided argument arrays for either
+POSIX shells or PowerShell. Windows browsers initially suggest PowerShell;
+other browsers suggest POSIX. The selector persists an explicit override so a
+WSL or remote-browser session can choose the shell it actually uses.
 
 After a successful production build, the browser performance harness can be run
 with:
