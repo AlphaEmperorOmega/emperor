@@ -336,9 +336,9 @@ source env.sh --workbench-status
 Backend:
 
 ```bash
-python -m uvicorn workbench.backend.api:app --reload --host 127.0.0.1 --port 9999
+python -m uvicorn workbench.backend.api:app --reload --reset-contextvars --host 127.0.0.1 --port 9999
 # or, from the repository root without activating the venv:
-torchenv/bin/python -m uvicorn workbench.backend.api:app --reload --host 127.0.0.1 --port 9999
+torchenv/bin/python -m uvicorn workbench.backend.api:app --reload --reset-contextvars --host 127.0.0.1 --port 9999
 ```
 
 Frontend:
@@ -604,7 +604,7 @@ source experiment.sh --model-type linears --model linear --presets baseline gati
 
 ## Troubleshooting
 
-- Backend unavailable: start `python -m uvicorn` on `127.0.0.1:9999`, or set `NEXT_PUBLIC_WORKBENCH_API_URL` before starting Next.js.
+- Backend unavailable: start `python -m uvicorn workbench.backend.api:app --reset-contextvars --host 127.0.0.1 --port 9999`, or set `NEXT_PUBLIC_WORKBENCH_API_URL` before starting Next.js.
 - Model import failed: check stale imports in that model package's `config.py`, `presets.py`, or `model.py`.
 - Invalid override value: use enum names such as `GELU`, booleans such as `true`, and class names that are imported by the model config module.
 - Empty graph: verify the selected preset can instantiate `Model(cfg)` without training.

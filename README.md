@@ -42,6 +42,24 @@ virtualenv, and starts the Workbench backend and frontend in the background.
 On later runs, it reuses the virtualenv and already-running Workbench servers when
 possible. Runtime logs and PID files are written under `workbench/.runtime/`.
 
+The Linux x86-64 Python 3.13 development/runtime environment is resolved through
+`constraints/python-3.13-linux-x86_64.txt`. `env.sh` pins pip and supplies that
+constraints file when installing `.[dev]`; changes to either `pyproject.toml` or
+the constraints file invalidate its dependency marker. The equivalent manual
+install is:
+
+```bash
+python -m pip install --upgrade pip==26.1.2
+python -m pip install \
+  --constraint constraints/python-3.13-linux-x86_64.txt \
+  --build-constraint constraints/python-3.13-linux-x86_64.txt \
+  -e ".[dev]"
+```
+
+The constraints snapshot records the complete environment used for the tested
+migration. Regenerate it only after intentionally changing dependencies and
+verifying the resulting clean resolution and full test suite.
+
 After `source env.sh`, the Workbench is available at:
 
 ```text
