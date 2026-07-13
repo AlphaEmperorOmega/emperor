@@ -39,6 +39,30 @@ class RunCatalogIndexTests(unittest.TestCase):
                 cache_ttl_seconds=3600,
             )
             self.assertEqual(len(first.list_runs(result_projection="none")), 1)
+            catalog_payload = json.loads(
+                (state_root / "catalogs" / "run-history.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertEqual(
+                set(catalog_payload["entries"][0]),
+                {
+                    "id",
+                    "group",
+                    "experiment",
+                    "model",
+                    "preset",
+                    "dataset",
+                    "runName",
+                    "timestamp",
+                    "version",
+                    "relativePath",
+                    "hasResult",
+                    "eventFileCount",
+                    "checkpointCount",
+                    "hasHparams",
+                },
+            )
 
             restarted = LogRunScanner(
                 logs_root=logs_root,

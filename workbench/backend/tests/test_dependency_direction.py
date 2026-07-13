@@ -100,6 +100,8 @@ REMOVED_RUN_HISTORY_IMPLEMENTATION_PATHS = (
     WORKBENCH_BACKEND_DIR / "services" / "logs.py",
 )
 RUN_HISTORY_DIR = WORKBENCH_BACKEND_DIR / "run_history"
+RUN_HISTORY_RECORDS = RUN_HISTORY_DIR / "records.py"
+LOGS_HTTP_MAPPING = WORKBENCH_BACKEND_DIR / "api" / "v1" / "logs_mapping.py"
 SHARED_TENSORBOARD_DIR = WORKBENCH_BACKEND_DIR / "tensorboard"
 EMPEROR_DIR = REPO_ROOT / "emperor"
 MODELS_DIR = REPO_ROOT / "models"
@@ -249,6 +251,26 @@ class DependencyDirectionTests(unittest.TestCase):
         ]
 
         self.assertEqual([], violations)
+
+    def test_run_history_records_are_transport_neutral(self) -> None:
+        source = RUN_HISTORY_RECORDS.read_text(encoding="utf-8")
+        self.assertNotIn("def to_response", source)
+        self.assertNotIn("model_identity_payload_from_id", source)
+
+        tree = ast.parse(source, filename=str(RUN_HISTORY_RECORDS))
+        transport_named_fields = [
+            node.target.id
+            for node in ast.walk(tree)
+            if isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and any(character.isupper() for character in node.target.id)
+        ]
+        self.assertEqual([], transport_named_fields)
+
+        mapping_source = LOGS_HTTP_MAPPING.read_text(encoding="utf-8")
+        self.assertIn("model_identity_payload_from_id", mapping_source)
+        self.assertIn("LOG_METADATA_RESPONSE_LIMIT", mapping_source)
+        self.assertIn('"relativePath"', mapping_source)
 
     def test_shared_tensorboard_does_not_import_capability_implementations(
         self,

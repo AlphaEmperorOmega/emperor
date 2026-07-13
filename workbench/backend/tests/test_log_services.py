@@ -4,15 +4,12 @@ import tempfile
 import unittest
 from dataclasses import dataclass
 from pathlib import Path
-from unittest.mock import patch
 
 from workbench.backend.log_experiments import (
     LogExperimentMutationCoordinator,
 )
 from workbench.backend.run_history import RunHistoryService
 from workbench.backend.run_history.errors import RunHistoryFailure
-from workbench.backend.run_history.records import LogRun
-from workbench.backend.schemas import LogExperimentsResponse, LogRunsResponse
 from workbench.backend.tests.helpers import write_tensorboard_run
 
 
@@ -95,12 +92,11 @@ class RunHistoryServiceListResponseTests(unittest.TestCase):
                 has_event_files=True,
             )
 
-        response = LogRunsResponse.model_validate(result)
-        self.assertEqual(result["total"], 1)
-        self.assertEqual(result["limit"], 1)
-        self.assertEqual(result["offset"], 0)
-        self.assertFalse(result["hasMore"])
-        self.assertEqual(response.runs[0].dataset, "Mnist")
+        self.assertEqual(result.total, 1)
+        self.assertEqual(result.limit, 1)
+        self.assertEqual(result.offset, 0)
+        self.assertFalse(result.has_more)
+        self.assertEqual(result.runs[0].dataset, "Mnist")
 
     def test_summary_page_keeps_complete_facets_and_omits_expensive_fields(
         self,
@@ -124,16 +120,15 @@ class RunHistoryServiceListResponseTests(unittest.TestCase):
                 projection="summary",
             )
 
-        response = LogRunsResponse.model_validate(result)
-        self.assertEqual(response.runs[0].metrics, {})
-        self.assertIsNone(response.runs[0].hasLayerMonitorData)
-        self.assertEqual(response.total, 2)
+        self.assertEqual(result.runs[0].metrics, {})
+        self.assertIsNone(result.runs[0].has_layer_monitor_data)
+        self.assertEqual(result.total, 2)
         self.assertEqual(
-            [facet.value for facet in response.facets.experiments[0].datasets],
+            [facet.value for facet in result.facets.experiments[0].datasets],
             ["Cifar10", "Mnist"],
         )
 
-    def test_list_runs_serializes_only_requested_page(self) -> None:
+    def test_list_runs_projects_only_requested_page(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             logs_root = Path(tmp) / "logs"
             for index in range(5):
@@ -145,18 +140,10 @@ class RunHistoryServiceListResponseTests(unittest.TestCase):
                     run_name=f"run_20260711_0{index}0101",
                 )
             service = _service(logs_root)
-            serialized: list[str] = []
-            original_to_response = LogRun.to_response
+            result = service.list_runs(limit=2, offset=1)
 
-            def recording_to_response(run: LogRun):
-                serialized.append(run.id)
-                return original_to_response(run)
-
-            with patch.object(LogRun, "to_response", recording_to_response):
-                result = service.list_runs(limit=2, offset=1)
-
-        self.assertEqual(len(result["runs"]), 2)
-        self.assertEqual(len(serialized), 2)
+        self.assertEqual(len(result.runs), 2)
+        self.assertEqual(result.total, 5)
 
     def test_list_experiments_returns_response_ready_page(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -177,11 +164,10 @@ class RunHistoryServiceListResponseTests(unittest.TestCase):
             )
             result = _service(logs_root).list_experiments(limit=1, offset=0)
 
-        response = LogExperimentsResponse.model_validate(result)
-        self.assertEqual(result["total"], 2)
-        self.assertTrue(result["hasMore"])
+        self.assertEqual(result.total, 2)
+        self.assertTrue(result.has_more)
         self.assertEqual(
-            [experiment.experiment for experiment in response.experiments],
+            [experiment.experiment for experiment in result.experiments],
             ["exp_a"],
         )
 
@@ -217,7 +203,7 @@ class RunHistoryServiceDeleteExperimentTests(unittest.TestCase):
 
             result = service.delete_experiment("test_model")
 
-            self.assertEqual(result["experiment"], "test_model")
+            self.assertEqual(result.experiment, "test_model")
             self.assertFalse(experiment.exists())
 
     def test_empty_experiment_delete_payload_is_stable(self) -> None:
@@ -227,15 +213,10 @@ class RunHistoryServiceDeleteExperimentTests(unittest.TestCase):
 
             result = _service(logs_root).delete_experiment("new_empty")
 
-        self.assertEqual(
-            result,
-            {
-                "experiment": "new_empty",
-                "deletedRunIds": [],
-                "deletedRunCount": 0,
-                "deletedRelativePath": "new_empty",
-            },
-        )
+        self.assertEqual(result.experiment, "new_empty")
+        self.assertEqual(result.deleted_run_ids, ())
+        self.assertEqual(result.deleted_run_count, 0)
+        self.assertEqual(result.deleted_relative_path, "new_empty")
 
 
 if __name__ == "__main__":

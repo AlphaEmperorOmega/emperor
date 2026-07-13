@@ -4,12 +4,11 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from collections.abc import Mapping
+from dataclasses import replace
 from pathlib import Path
 from threading import RLock
 from types import MappingProxyType
 from typing import Any, BinaryIO, Literal
-
-from emperor.model_packages import model_identity_payload_from_id
 
 from workbench.backend.core.limits import (
     DEFAULT_MAX_LOG_ARCHIVE_MEMBER_COUNT,
@@ -37,7 +36,36 @@ from workbench.backend.run_history.query import (
     LOG_SCALAR_ACCUMULATOR_CACHE_MAX_ENTRIES,
     LogRunQueryService,
 )
-from workbench.backend.run_history.records import LogRun, LogRunDeleteFilters
+from workbench.backend.run_history.records import (
+    LogArchiveImportResult,
+    LogCheckpoint,
+    LogExperimentDeleteResult,
+    LogExperimentPage,
+    LogHistogram,
+    LogHistogramBucket,
+    LogImageSummary,
+    LogMedia,
+    LogMonitorData,
+    LogMonitorImage,
+    LogMonitorScalarSeries,
+    LogParameterChannelStatus,
+    LogParameterNodeStatus,
+    LogParameterStatus,
+    LogRun,
+    LogRunArtifacts,
+    LogRunDeleteFilters,
+    LogRunDeletePlan,
+    LogRunDeleteResult,
+    LogRunExperimentFacets,
+    LogRunFacets,
+    LogRunFacetValue,
+    LogRunModelFacet,
+    LogRunPage,
+    LogRunTags,
+    LogScalarPoint,
+    LogScalarSeries,
+    LogTextSummary,
+)
 from workbench.backend.run_history.scanner import LogRunScanner
 from workbench.backend.tensorboard.events import TensorBoardEventCache
 from workbench.backend.tensorboard.readers import (
@@ -58,39 +86,7 @@ RunListingCacheKey = tuple[
     str | None,
     bool | None,
 ]
-CachedRunListing = tuple[list[LogRun], dict[str, Any]]
-
-
-def _paginate(
-    items: list[dict[str, Any]],
-    *,
-    limit: int,
-    offset: int,
-) -> dict[str, Any]:
-    return {
-        "items": items[offset : offset + limit],
-        "total": len(items),
-        "limit": limit,
-        "offset": offset,
-        "hasMore": offset + limit < len(items),
-    }
-
-
-def _paginated_response(
-    items: list[dict[str, Any]],
-    *,
-    collection_key: str,
-    limit: int,
-    offset: int,
-) -> dict[str, Any]:
-    page = _paginate(items, limit=limit, offset=offset)
-    return {
-        collection_key: page["items"],
-        "total": page["total"],
-        "limit": page["limit"],
-        "offset": page["offset"],
-        "hasMore": page["hasMore"],
-    }
+CachedRunListing = tuple[list[LogRun], LogRunFacets]
 
 
 def _selected_values(values: list[str] | None) -> set[str]:
@@ -115,51 +111,191 @@ def _delete_filters_from_fields(
     run_ids: list[str],
 ) -> LogRunDeleteFilters:
     return LogRunDeleteFilters(
-        experiments=experiments,
-        datasets=datasets,
-        models=models,
-        presets=presets,
-        runIds=run_ids,
+        run_ids=tuple(run_ids),
+        experiments=tuple(experiments),
+        datasets=tuple(datasets),
+        models=tuple(models),
+        presets=tuple(presets),
     )
 
 
-def _value_facets(values: list[str]) -> list[dict[str, Any]]:
-    return [
-        {"value": value, "count": count}
+def _value_facets(values: list[str]) -> tuple[LogRunFacetValue, ...]:
+    return tuple(
+        LogRunFacetValue(value=value, count=count)
         for value, count in sorted(Counter(values).items())
-    ]
+    )
 
 
-def _run_facets(runs: list[LogRun]) -> dict[str, Any]:
+def _run_facets(runs: list[LogRun]) -> LogRunFacets:
     runs_by_experiment: dict[str, list[LogRun]] = defaultdict(list)
     for run in runs:
         runs_by_experiment[run.experiment].append(run)
 
-    experiments = []
+    experiments: list[LogRunExperimentFacets] = []
     for experiment, experiment_runs in sorted(runs_by_experiment.items()):
-        model_counts: Counter[tuple[str, str]] = Counter()
-        for run in experiment_runs:
-            try:
-                identity = model_identity_payload_from_id(run.model)
-            except ValueError:
-                identity = {
-                    "modelType": str(getattr(run, "modelType", "models")),
-                    "model": str(run.model),
-                }
-            model_counts[(identity["modelType"], identity["model"])] += 1
+        model_counts = Counter(run.model for run in experiment_runs)
         experiments.append(
-            {
-                "experiment": experiment,
-                "runCount": len(experiment_runs),
-                "datasets": _value_facets([run.dataset for run in experiment_runs]),
-                "models": [
-                    {"modelType": model_type, "model": model, "count": count}
-                    for (model_type, model), count in sorted(model_counts.items())
-                ],
-                "presets": _value_facets([run.preset for run in experiment_runs]),
-            }
+            LogRunExperimentFacets(
+                experiment=experiment,
+                run_count=len(experiment_runs),
+                datasets=_value_facets([run.dataset for run in experiment_runs]),
+                models=tuple(
+                    LogRunModelFacet(model=model, count=count)
+                    for model, count in sorted(model_counts.items())
+                ),
+                presets=_value_facets([run.preset for run in experiment_runs]),
+            )
         )
-    return {"experiments": experiments}
+    return LogRunFacets(experiments=tuple(experiments))
+
+
+def _optional_int(value: object) -> int | None:
+    return int(value) if isinstance(value, int) else None
+
+
+def _optional_bool(value: object) -> bool | None:
+    return bool(value) if isinstance(value, bool) else None
+
+
+def _optional_str(value: object) -> str | None:
+    return str(value) if isinstance(value, str) else None
+
+
+def _scalar_point(value: Mapping[str, Any]) -> LogScalarPoint:
+    return LogScalarPoint(
+        step=int(value["step"]),
+        wall_time=float(value["wallTime"]),
+        value=float(value["value"]),
+    )
+
+
+def _image_summary(value: Mapping[str, Any]) -> LogImageSummary:
+    return LogImageSummary(
+        run_id=str(value["runId"]),
+        tag=str(value["tag"]),
+        step=int(value["step"]),
+        wall_time=float(value["wallTime"]),
+        mime_type=str(value["mimeType"]),
+        data_url=str(value["dataUrl"]),
+        event_bytes=_optional_int(value.get("eventBytes")),
+        source_item_count=_optional_int(value.get("sourceItemCount")),
+        returned_item_count=_optional_int(value.get("returnedItemCount")),
+        truncated=_optional_bool(value.get("truncated")),
+        truncation_reason=_optional_str(value.get("truncationReason")),
+    )
+
+
+def _text_summary(value: Mapping[str, Any]) -> LogTextSummary:
+    return LogTextSummary(
+        run_id=str(value["runId"]),
+        tag=str(value["tag"]),
+        step=int(value["step"]),
+        wall_time=float(value["wallTime"]),
+        text=str(value["text"]),
+        event_bytes=_optional_int(value.get("eventBytes")),
+        source_item_count=_optional_int(value.get("sourceItemCount")),
+        returned_item_count=_optional_int(value.get("returnedItemCount")),
+        truncated=_optional_bool(value.get("truncated")),
+        truncation_reason=_optional_str(value.get("truncationReason")),
+    )
+
+
+def _monitor_data(value: Mapping[str, Any]) -> LogMonitorData:
+    scalar_series = tuple(
+        LogMonitorScalarSeries(
+            tag=str(series["tag"]),
+            label=str(series["label"]),
+            points=tuple(_scalar_point(point) for point in series["points"]),
+            source_item_count=_optional_int(series.get("sourceItemCount")),
+            returned_item_count=_optional_int(series.get("returnedItemCount")),
+            truncated=_optional_bool(series.get("truncated")),
+            truncation_reason=_optional_str(series.get("truncationReason")),
+        )
+        for series in value["scalarSeries"]
+    )
+    histograms = tuple(
+        LogHistogram(
+            tag=str(histogram["tag"]),
+            step=int(histogram["step"]),
+            wall_time=float(histogram["wallTime"]),
+            buckets=tuple(
+                LogHistogramBucket(
+                    left=float(bucket["left"]),
+                    right=float(bucket["right"]),
+                    count=float(bucket["count"]),
+                )
+                for bucket in histogram["buckets"]
+            ),
+            source_item_count=_optional_int(histogram.get("sourceItemCount")),
+            returned_item_count=_optional_int(histogram.get("returnedItemCount")),
+            truncated=_optional_bool(histogram.get("truncated")),
+            truncation_reason=_optional_str(histogram.get("truncationReason")),
+        )
+        for histogram in value["histograms"]
+    )
+    images = tuple(
+        LogMonitorImage(
+            tag=str(image["tag"]),
+            step=int(image["step"]),
+            wall_time=float(image["wallTime"]),
+            mime_type=str(image["mimeType"]),
+            data_url=str(image["dataUrl"]),
+            event_bytes=_optional_int(image.get("eventBytes")),
+            source_item_count=_optional_int(image.get("sourceItemCount")),
+            returned_item_count=_optional_int(image.get("returnedItemCount")),
+            truncated=_optional_bool(image.get("truncated")),
+            truncation_reason=_optional_str(image.get("truncationReason")),
+        )
+        for image in value["images"]
+    )
+    return LogMonitorData(
+        job_id=str(value["jobId"]),
+        node_path=str(value["nodePath"]),
+        preset=_optional_str(value.get("preset")),
+        dataset=_optional_str(value.get("dataset")),
+        log_dir=_optional_str(value.get("logDir")),
+        scalar_series=scalar_series,
+        histograms=histograms,
+        images=images,
+        event_bytes=_optional_int(value.get("eventBytes")),
+        skipped_event_files=_optional_int(value.get("skippedEventFiles")),
+        truncated=_optional_bool(value.get("truncated")),
+        truncation_reason=_optional_str(value.get("truncationReason")),
+        source_item_count=_optional_int(value.get("sourceItemCount")),
+        returned_item_count=_optional_int(value.get("returnedItemCount")),
+    )
+
+
+def _parameter_channel(value: Mapping[str, Any]) -> LogParameterChannelStatus:
+    return LogParameterChannelStatus(
+        status=str(value["status"]),
+        metric=_optional_str(value.get("metric")),
+        last_step=_optional_int(value.get("lastStep")),
+        observed_points=int(value["observedPoints"]),
+    )
+
+
+def _parameter_status(value: Mapping[str, Any]) -> LogParameterStatus:
+    return LogParameterStatus(
+        source_id=str(value["sourceId"]),
+        preset=_optional_str(value.get("preset")),
+        dataset=_optional_str(value.get("dataset")),
+        log_dir=_optional_str(value.get("logDir")),
+        nodes=tuple(
+            LogParameterNodeStatus(
+                node_path=str(node["nodePath"]),
+                weights=_parameter_channel(node["weights"]),
+                bias=_parameter_channel(node["bias"]),
+            )
+            for node in value["nodes"]
+        ),
+        event_bytes=_optional_int(value.get("eventBytes")),
+        skipped_event_files=_optional_int(value.get("skippedEventFiles")),
+        truncated=_optional_bool(value.get("truncated")),
+        truncation_reason=_optional_str(value.get("truncationReason")),
+        source_item_count=_optional_int(value.get("sourceItemCount")),
+        returned_item_count=_optional_int(value.get("returnedItemCount")),
+    )
 
 
 class RunHistoryService:
@@ -251,7 +387,7 @@ class RunHistoryService:
         dataset_set: set[str],
         experiment_task: str | None,
         has_event_files: bool | None,
-    ) -> tuple[list[LogRun], dict[str, Any]]:
+    ) -> tuple[list[LogRun], LogRunFacets]:
         with self._run_listing_lock:
             generation = self._run_listing_generation
         catalog = self._scanner.list_runs(result_projection="none")
@@ -287,11 +423,11 @@ class RunHistoryService:
                 continue
             if experiment_task is not None:
                 projected = self._scanner.project_run(run, include_metrics=False)
-                if projected.experimentTask != experiment_task:
+                if projected.experiment_task != experiment_task:
                     continue
             if (
                 has_event_files is not None
-                and (run.eventFileCount > 0) != has_event_files
+                and (run.event_file_count > 0) != has_event_files
             ):
                 continue
             filtered_runs.append(run)
@@ -320,7 +456,7 @@ class RunHistoryService:
         experiment_task: str | None = None,
         has_event_files: bool | None = None,
         projection: Literal["full", "summary"] = "full",
-    ) -> dict[str, Any]:
+    ) -> LogRunPage:
         filtered_runs, facets = self._filtered_run_listing(
             experiment_set=_selected_values(experiment),
             model_set=_selected_values(model),
@@ -329,42 +465,46 @@ class RunHistoryService:
             experiment_task=experiment_task,
             has_event_files=has_event_files,
         )
-        runs = []
+        runs: list[LogRun] = []
         for run in filtered_runs[offset : offset + limit]:
             projected = self._scanner.project_run(
                 run,
                 include_metrics=projection == "full",
             )
-            response = projected.to_response()
             if projection == "summary":
-                response["metrics"] = {}
-                response["hasLayerMonitorData"] = None
-            else:
-                response["hasLayerMonitorData"] = (
-                    self._query.cached_layer_monitor_data_for_run(run)
+                projected = replace(
+                    projected,
+                    metrics={},
+                    has_layer_monitor_data=None,
                 )
-            runs.append(response)
-        return {
-            "runs": runs,
-            "total": len(filtered_runs),
-            "limit": limit,
-            "offset": offset,
-            "hasMore": offset + limit < len(filtered_runs),
-            "facets": facets,
-        }
-
-    def list_experiments(self, *, limit: int, offset: int) -> dict[str, Any]:
-        experiments = [
-            experiment.to_response() for experiment in self._scanner.list_experiments()
-        ]
-        return _paginated_response(
-            experiments,
-            collection_key="experiments",
+            else:
+                projected = replace(
+                    projected,
+                    has_layer_monitor_data=(
+                        self._query.cached_layer_monitor_data_for_run(run)
+                    ),
+                )
+            runs.append(projected)
+        return LogRunPage(
+            runs=tuple(runs),
+            total=len(filtered_runs),
             limit=limit,
             offset=offset,
+            has_more=offset + limit < len(filtered_runs),
+            facets=facets,
         )
 
-    def delete_experiment(self, experiment: str) -> dict[str, Any]:
+    def list_experiments(self, *, limit: int, offset: int) -> LogExperimentPage:
+        experiments = self._scanner.list_experiments()
+        return LogExperimentPage(
+            experiments=tuple(experiments[offset : offset + limit]),
+            total=len(experiments),
+            limit=limit,
+            offset=offset,
+            has_more=offset + limit < len(experiments),
+        )
+
+    def delete_experiment(self, experiment: str) -> LogExperimentDeleteResult:
         with self._mutation_coordinator.coordinate([experiment]):
             self._scanner.reconcile_catalog()
             if any(
@@ -372,9 +512,7 @@ class RunHistoryService:
             ):
                 raise RunHistoryFailure(ACTIVE_LOG_EXPERIMENT_DELETE_MESSAGE)
             try:
-                return self._deletion_executor.delete_experiment(
-                    experiment
-                ).to_response()
+                return self._deletion_executor.delete_experiment(experiment)
             finally:
                 self._invalidate_all()
 
@@ -386,7 +524,7 @@ class RunHistoryService:
         models: list[str],
         presets: list[str],
         run_ids: list[str],
-    ) -> dict[str, Any]:
+    ) -> LogRunDeletePlan:
         self._scanner.reconcile_catalog()
         filters = _delete_filters_from_fields(
             experiments=experiments,
@@ -398,7 +536,7 @@ class RunHistoryService:
         return self._deletion_planner.create_delete_plan(
             filters,
             active_writers=self._active_log_writers(),
-        ).to_response()
+        )
 
     def delete_runs(
         self,
@@ -408,7 +546,7 @@ class RunHistoryService:
         models: list[str],
         presets: list[str],
         run_ids: list[str],
-    ) -> dict[str, Any]:
+    ) -> LogRunDeleteResult:
         filters = _delete_filters_from_fields(
             experiments=experiments,
             datasets=datasets,
@@ -424,7 +562,7 @@ class RunHistoryService:
             )
             affected_run_paths = [candidate.path for candidate in plan.candidates]
             try:
-                return self._deletion_executor.delete_runs(plan).to_response()
+                return self._deletion_executor.delete_runs(plan)
             finally:
                 self._invalidate_runs(affected_run_paths)
 
@@ -433,21 +571,21 @@ class RunHistoryService:
         *,
         experiment: str,
         preset: str,
-    ) -> dict[str, Any]:
+    ) -> LogRunDeletePlan:
         with self._mutation_coordinator.coordinate([experiment]):
             self._scanner.reconcile_catalog()
             return self._deletion_planner.create_preset_delete_plan(
                 experiment=experiment,
                 preset=preset,
                 active_writers=self._active_log_writers(),
-            ).to_response()
+            )
 
     def delete_preset(
         self,
         *,
         experiment: str,
         preset: str,
-    ) -> dict[str, Any]:
+    ) -> LogRunDeleteResult:
         with self._mutation_coordinator.coordinate([experiment]):
             self._scanner.reconcile_catalog()
             plan = self._deletion_planner.create_preset_delete_plan(
@@ -457,7 +595,7 @@ class RunHistoryService:
             )
             affected_run_paths = [candidate.path for candidate in plan.candidates]
             try:
-                return self._deletion_executor.delete_runs(plan).to_response()
+                return self._deletion_executor.delete_runs(plan)
             finally:
                 self._invalidate_runs(affected_run_paths)
 
@@ -470,7 +608,7 @@ class RunHistoryService:
         max_extracted_size: int | None,
         max_member_count: int = DEFAULT_MAX_LOG_ARCHIVE_MEMBER_COUNT,
         max_path_bytes: int = DEFAULT_MAX_LOG_ARCHIVE_PATH_BYTES,
-    ) -> dict[str, object]:
+    ) -> LogArchiveImportResult:
         experiments = inspect_log_archive_experiments(
             archive=archive,
             filename=filename,
@@ -498,8 +636,26 @@ class RunHistoryService:
             finally:
                 self._invalidate_all()
 
-    def tags_for_runs(self, run_ids: list[str]) -> list[dict[str, Any]]:
-        return self._query.tags_for_runs(run_ids)
+    def tags_for_runs(self, run_ids: list[str]) -> list[LogRunTags]:
+        return [
+            LogRunTags(
+                run_id=str(value["runId"]),
+                has_layer_monitor_data=_optional_bool(
+                    value.get("hasLayerMonitorData")
+                ),
+                scalar_tags=tuple(str(item) for item in value["scalarTags"]),
+                histogram_tags=tuple(str(item) for item in value["histogramTags"]),
+                image_tags=tuple(str(item) for item in value["imageTags"]),
+                text_tags=tuple(str(item) for item in value["textTags"]),
+                event_bytes=_optional_int(value.get("eventBytes")),
+                skipped_event_files=_optional_int(value.get("skippedEventFiles")),
+                truncated=_optional_bool(value.get("truncated")),
+                truncation_reason=_optional_str(value.get("truncationReason")),
+                source_item_count=_optional_int(value.get("sourceItemCount")),
+                returned_item_count=_optional_int(value.get("returnedItemCount")),
+            )
+            for value in self._query.tags_for_runs(run_ids)
+        ]
 
     def scalars_for_runs(
         self,
@@ -508,13 +664,23 @@ class RunHistoryService:
         tags: list[str],
         max_points: int,
         sampling: str,
-    ) -> list[dict[str, Any]]:
-        return self._query.scalars_for_runs(
+    ) -> list[LogScalarSeries]:
+        values = self._query.scalars_for_runs(
             run_ids=run_ids,
             tags=tags,
             max_points=max_points,
             sampling=sampling,
         )
+        return [
+            LogScalarSeries(
+                run_id=str(value["runId"]),
+                tag=str(value["tag"]),
+                points=tuple(_scalar_point(point) for point in value["points"]),
+                source_point_count=_optional_int(value.get("sourcePointCount")),
+                truncated=_optional_bool(value.get("truncated")),
+            )
+            for value in values
+        ]
 
     def media_for_runs(
         self,
@@ -522,23 +688,41 @@ class RunHistoryService:
         run_ids: list[str],
         image_tags: list[str],
         text_tags: list[str],
-    ) -> dict[str, Any]:
-        return self._query.media_for_runs(
+    ) -> LogMedia:
+        value = self._query.media_for_runs(
             run_ids=run_ids,
             image_tags=image_tags,
             text_tags=text_tags,
         )
+        return LogMedia(
+            images=tuple(_image_summary(item) for item in value["images"]),
+            texts=tuple(_text_summary(item) for item in value["texts"]),
+            event_bytes=_optional_int(value.get("eventBytes")),
+            skipped_event_files=_optional_int(value.get("skippedEventFiles")),
+            source_item_count=_optional_int(value.get("sourceItemCount")),
+            returned_item_count=_optional_int(value.get("returnedItemCount")),
+            truncated=_optional_bool(value.get("truncated")),
+            truncation_reason=_optional_str(value.get("truncationReason")),
+        )
 
-    def monitor_data_for_run(self, run_id: str, node_path: str) -> dict[str, Any]:
-        return self._query.monitor_data_for_run(run_id, node_path=node_path)
+    def monitor_data_for_run(self, run_id: str, node_path: str) -> LogMonitorData:
+        return _monitor_data(
+            self._query.monitor_data_for_run(run_id, node_path=node_path)
+        )
 
-    def parameter_status_for_runs(self, run_ids: list[str]) -> list[dict[str, Any]]:
-        return self._query.parameter_status_for_runs(run_ids)
+    def parameter_status_for_runs(
+        self,
+        run_ids: list[str],
+    ) -> list[LogParameterStatus]:
+        return [
+            _parameter_status(value)
+            for value in self._query.parameter_status_for_runs(run_ids)
+        ]
 
-    def checkpoints_for_runs(self, run_ids: list[str]) -> list[dict[str, Any]]:
+    def checkpoints_for_runs(self, run_ids: list[str]) -> list[LogCheckpoint]:
         return self._query.checkpoints_for_runs(run_ids)
 
-    def artifacts_for_run(self, run_id: str) -> dict[str, Any]:
+    def artifacts_for_run(self, run_id: str) -> LogRunArtifacts:
         return self._query.artifacts_for_run(run_id)
 
     def inspection_context(self, run_id: str) -> HistoricalInspectionContext:

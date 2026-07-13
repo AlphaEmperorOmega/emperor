@@ -371,14 +371,20 @@ class RouteAuthIntegrationTests(unittest.TestCase):
                 limit: int,
                 offset: int,
                 **_filters: object,
-            ) -> dict[str, object]:
-                return {
-                    "total": 0,
-                    "limit": limit,
-                    "offset": offset,
-                    "hasMore": False,
-                    "runs": [],
-                }
+            ):
+                from workbench.backend.run_history.records import (
+                    LogRunFacets,
+                    LogRunPage,
+                )
+
+                return LogRunPage(
+                    total=0,
+                    limit=limit,
+                    offset=offset,
+                    has_more=False,
+                    runs=(),
+                    facets=LogRunFacets(experiments=()),
+                )
 
         logs_root = root / "logs"
         logs_root.mkdir()

@@ -21,6 +21,7 @@ from workbench.backend.core.limits import (
 )
 from workbench.backend.failures import FailureKind
 from workbench.backend.run_history.errors import RunHistoryFailure
+from workbench.backend.run_history.records import LogArchiveImportResult
 from workbench.backend.storage.local_files import resolve_root, resolve_under_root
 
 ZIP_CHUNK_SIZE = 1024 * 1024
@@ -540,7 +541,7 @@ def import_log_archive(
     max_extracted_size: int | None,
     max_member_count: int = DEFAULT_MAX_LOG_ARCHIVE_MEMBER_COUNT,
     max_path_bytes: int = DEFAULT_MAX_LOG_ARCHIVE_PATH_BYTES,
-) -> dict[str, object]:
+) -> LogArchiveImportResult:
     archive_stream, archive_size = _seekable_archive(archive)
     if max_upload_size is not None and archive_size > max_upload_size:
         raise _too_large_error(max_upload_size)
@@ -574,11 +575,11 @@ def import_log_archive(
     except zipfile.BadZipFile as exc:
         raise _zip_error() from exc
 
-    return {
-        "extractedFileCount": extracted_count,
-        "skippedFileCount": skipped_count,
-        "destinationRoot": root.as_posix(),
-    }
+    return LogArchiveImportResult(
+        extracted_file_count=extracted_count,
+        skipped_file_count=skipped_count,
+        destination_root=root.as_posix(),
+    )
 
 
 def inspect_log_archive_experiments(

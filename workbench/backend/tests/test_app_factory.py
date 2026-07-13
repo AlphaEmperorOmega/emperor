@@ -240,19 +240,20 @@ class AppFactoryTests(unittest.TestCase):
         from workbench.backend.dependencies import (
             get_run_history_service,
         )
+        from workbench.backend.run_history.records import LogExperimentDeleteResult
 
         class FakeRunHistoryService:
             def delete_experiment(
                 self,
                 experiment: str,
-            ) -> dict[str, object]:
+            ) -> LogExperimentDeleteResult:
                 time.sleep(0.2)
-                return {
-                    "experiment": experiment,
-                    "deletedRunIds": [],
-                    "deletedRunCount": 0,
-                    "deletedRelativePath": experiment,
-                }
+                return LogExperimentDeleteResult(
+                    experiment=experiment,
+                    deleted_run_ids=(),
+                    deleted_run_count=0,
+                    deleted_relative_path=experiment,
+                )
 
         async def call_api() -> tuple[httpx.Response, httpx.Response, float]:
             with tempfile.TemporaryDirectory() as tmp:

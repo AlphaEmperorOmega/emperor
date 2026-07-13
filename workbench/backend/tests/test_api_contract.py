@@ -2192,16 +2192,18 @@ class ApiIntegrationContractTests(unittest.TestCase):
 
         from workbench.backend.api import create_app
         from workbench.backend.dependencies import get_run_history_service
+        from workbench.backend.run_history.records import LogRunFacets, LogRunPage
 
         class FakeRunHistoryService:
-            def list_runs(self, **kwargs: object) -> dict[str, object]:
-                return {
-                    "total": 0,
-                    "limit": kwargs["limit"],
-                    "offset": kwargs["offset"],
-                    "hasMore": False,
-                    "runs": [],
-                }
+            def list_runs(self, **kwargs: object) -> LogRunPage:
+                return LogRunPage(
+                    total=0,
+                    limit=int(kwargs["limit"]),
+                    offset=int(kwargs["offset"]),
+                    has_more=False,
+                    runs=(),
+                    facets=LogRunFacets(experiments=()),
+                )
 
         async def override_run_history_service() -> FakeRunHistoryService:
             return FakeRunHistoryService()
@@ -2229,7 +2231,7 @@ class ApiIntegrationContractTests(unittest.TestCase):
                 "limit": 500,
                 "offset": 0,
                 "hasMore": False,
-                "facets": None,
+                "facets": {"experiments": []},
                 "runs": [],
             },
         )

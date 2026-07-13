@@ -1298,9 +1298,9 @@ class LogArchiveImportApiTests(unittest.TestCase):
                 active_log_writers=lambda: (),
             )
             before = service.list_runs(limit=10, offset=0)
-            run_id = str(before["runs"][0]["id"])
+            run_id = before.runs[0].id
             self.assertEqual(
-                service.artifacts_for_run(run_id)["params"],
+                service.artifacts_for_run(run_id).params,
                 {"batch_size": 4},
             )
             archive = io.BytesIO(
@@ -1343,9 +1343,9 @@ class LogArchiveImportApiTests(unittest.TestCase):
             self.assertFalse((run_dir / "second.json").exists())
             self.assertEqual(list(run_dir.glob(".*.tmp")), [])
             after = service.list_runs(limit=10, offset=0)
-            self.assertEqual(after["runs"][0]["metrics"], {"score": 2})
+            self.assertEqual(after.runs[0].metrics, {"score": 2})
             self.assertEqual(
-                service.artifacts_for_run(run_id)["params"],
+                service.artifacts_for_run(run_id).params,
                 {"batch_size": 8},
             )
 
@@ -1371,8 +1371,8 @@ class LogArchiveImportApiTests(unittest.TestCase):
                     max_extracted_size=None,
                 )
 
-            self.assertEqual(result["extractedFileCount"], 0)
-            self.assertEqual(result["skippedFileCount"], 1)
+            self.assertEqual(result.extracted_file_count, 0)
+            self.assertEqual(result.skipped_file_count, 1)
             self.assertFalse((logs_root / "new_exp/nested/result.json").exists())
             self.assertEqual(list(logs_root.rglob("*.tmp")), [])
 
@@ -1406,8 +1406,8 @@ class LogArchiveImportApiTests(unittest.TestCase):
 
             runs = service.list_runs(limit=10, offset=0)
             experiments = service.list_experiments(limit=10, offset=0)
-            self.assertEqual(runs["runs"][0]["experiment"], "legacy-name")
-            self.assertEqual(experiments["experiments"], [])
+            self.assertEqual(runs.runs[0].experiment, "legacy-name")
+            self.assertEqual(experiments.experiments, ())
 
 
 if __name__ == "__main__":

@@ -184,7 +184,7 @@ class LogRunScanner:
                 run.model,
                 run.preset,
                 run.dataset,
-                run.runName,
+                run.run_name,
                 run.version,
             ),
             reverse=True,
@@ -241,7 +241,7 @@ class LogRunScanner:
             return run
         return replace(
             run,
-            experimentTask=artifacts.experiment_task(),
+            experiment_task=artifacts.experiment_task(),
             metrics=(artifacts.metrics() if result_projection == "full" else {}),
         )
 
@@ -363,14 +363,14 @@ class LogRunScanner:
             "model": run.model,
             "preset": run.preset,
             "dataset": run.dataset,
-            "runName": run.runName,
+            "runName": run.run_name,
             "timestamp": run.timestamp,
             "version": run.version,
-            "relativePath": run.relativePath,
-            "hasResult": run.hasResult,
-            "eventFileCount": run.eventFileCount,
-            "checkpointCount": run.checkpointCount,
-            "hasHparams": run.hasHparams,
+            "relativePath": run.relative_path,
+            "hasResult": run.has_result,
+            "eventFileCount": run.event_file_count,
+            "checkpointCount": run.checkpoint_count,
+            "hasHparams": run.has_hparams,
         }
 
     def _run_from_catalog_entry(
@@ -397,14 +397,14 @@ class LogRunScanner:
                 model=str(entry["model"]),
                 preset=str(entry["preset"]),
                 dataset=str(entry["dataset"]),
-                runName=str(entry["runName"]),
+                run_name=str(entry["runName"]),
                 timestamp=timestamp,
                 version=str(entry["version"]),
-                relativePath=relative_path,
-                hasResult=bool(entry["hasResult"]),
-                eventFileCount=int(entry["eventFileCount"]),
-                checkpointCount=int(entry["checkpointCount"]),
-                hasHparams=bool(entry["hasHparams"]),
+                relative_path=relative_path,
+                has_result=bool(entry["hasResult"]),
+                event_file_count=int(entry["eventFileCount"]),
+                checkpoint_count=int(entry["checkpointCount"]),
+                has_hparams=bool(entry["hasHparams"]),
                 path=resolved,
             )
         except (KeyError, TypeError, ValueError):
@@ -458,8 +458,8 @@ class LogRunScanner:
             experiments.append(
                 LogExperiment(
                     experiment=child.name,
-                    runCount=run_counts[child.name],
-                    relativePath=child.name,
+                    run_count=run_counts[child.name],
+                    relative_path=child.name,
                 )
             )
         return experiments
@@ -506,16 +506,16 @@ class LogRunScanner:
             experiment=experiment,
             model=model,
             preset=preset,
-            experimentTask=None,
+            experiment_task=None,
             dataset=dataset,
-            runName=run_name,
+            run_name=run_name,
             timestamp=_display_timestamp(run_name),
             version=version,
-            relativePath=relative_path,
-            hasResult=artifacts.result is not None,
-            eventFileCount=len(artifacts.event_artifacts),
-            checkpointCount=len(artifacts.checkpoints),
-            hasHparams=artifacts.hparams is not None,
+            relative_path=relative_path,
+            has_result=artifacts.result is not None,
+            event_file_count=len(artifacts.event_artifacts),
+            checkpoint_count=len(artifacts.checkpoints),
+            has_hparams=artifacts.hparams is not None,
             metrics={},
             path=version_dir,
             artifacts=artifacts,

@@ -16,10 +16,6 @@ from typing import Any
 
 from emperor.runs import NonFiniteJsonValue, replace_non_finite_json
 
-from workbench.backend.run_history.checkpoint_ranking import (
-    parse_checkpoint_epoch,
-    parse_checkpoint_step,
-)
 from workbench.backend.run_history.paths import (
     read_regular_file_beneath,
     resolved_under_root,
@@ -36,6 +32,8 @@ DEFAULT_RUN_ARTIFACT_MAX_FILES = 10_000
 DEFAULT_RUN_ARTIFACT_MAX_DEPTH = 16
 DEFAULT_RUN_METADATA_FILE_MAX_BYTES = 4 * 1024 * 1024
 LOGGER = logging.getLogger(__name__)
+_CHECKPOINT_EPOCH_RE = re.compile(r"(?:^|[-_])epoch=(?P<value>\d+)(?:[-_]|$)")
+_CHECKPOINT_STEP_RE = re.compile(r"(?:^|[-_])step=(?P<value>\d+)(?:[-_]|$)")
 
 
 @dataclass(frozen=True, slots=True)
@@ -479,11 +477,16 @@ def _file_id(run_id: str, relative_path: str) -> str:
 
 
 def _parse_checkpoint_epoch(filename: str) -> int | None:
-    return parse_checkpoint_epoch(filename)
+    return _parse_checkpoint_field(_CHECKPOINT_EPOCH_RE, filename)
 
 
 def _parse_checkpoint_step(filename: str) -> int | None:
-    return parse_checkpoint_step(filename)
+    return _parse_checkpoint_field(_CHECKPOINT_STEP_RE, filename)
+
+
+def _parse_checkpoint_field(pattern: re.Pattern[str], filename: str) -> int | None:
+    match = pattern.search(Path(filename).stem)
+    return int(match.group("value")) if match is not None else None
 
 
 __all__ = [

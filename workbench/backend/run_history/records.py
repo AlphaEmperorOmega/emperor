@@ -1,4 +1,4 @@
-"""Log Run response and deletion value objects."""
+"""Frozen transport-neutral Run History values."""
 
 from __future__ import annotations
 
@@ -6,12 +6,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from emperor.model_packages import model_identity_payload_from_id
-
 if TYPE_CHECKING:
     from workbench.backend.run_history.artifacts import RunArtifactObservation
-
-LOG_RESPONSE_ITEM_LIMIT = 500
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,15 +18,16 @@ class LogRun:
     model: str
     preset: str
     dataset: str
-    runName: str
+    run_name: str
     timestamp: str | None
     version: str
-    relativePath: str
-    hasResult: bool
-    eventFileCount: int
-    checkpointCount: int
-    hasHparams: bool
-    experimentTask: str | None = None
+    relative_path: str
+    has_result: bool
+    event_file_count: int
+    checkpoint_count: int
+    has_hparams: bool
+    experiment_task: str | None = None
+    has_layer_monitor_data: bool | None = None
     metrics: dict[str, Any] = field(default_factory=dict)
     path: Path = field(repr=False, compare=False, default=Path())
     artifacts: RunArtifactObservation | None = field(
@@ -39,49 +36,53 @@ class LogRun:
         default=None,
     )
 
-    def to_response(self) -> dict[str, Any]:
-        return {
-            "id": self.id,
-            "group": self.group,
-            "experiment": self.experiment,
-            **model_identity_payload_from_id(self.model),
-            "preset": self.preset,
-            "experimentTask": self.experimentTask,
-            "dataset": self.dataset,
-            "runName": self.runName,
-            "timestamp": self.timestamp,
-            "version": self.version,
-            "relativePath": self.relativePath,
-            "hasResult": self.hasResult,
-            "eventFileCount": self.eventFileCount,
-            "checkpointCount": self.checkpointCount,
-            "hasHparams": self.hasHparams,
-            "metrics": self.metrics,
-        }
+
+@dataclass(frozen=True, slots=True)
+class LogRunFacetValue:
+    value: str
+    count: int
+
+
+@dataclass(frozen=True, slots=True)
+class LogRunModelFacet:
+    model: str
+    count: int
+
+
+@dataclass(frozen=True, slots=True)
+class LogRunExperimentFacets:
+    experiment: str
+    run_count: int
+    datasets: tuple[LogRunFacetValue, ...]
+    models: tuple[LogRunModelFacet, ...]
+    presets: tuple[LogRunFacetValue, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class LogRunFacets:
+    experiments: tuple[LogRunExperimentFacets, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class LogRunPage:
+    runs: tuple[LogRun, ...]
+    total: int
+    limit: int
+    offset: int
+    has_more: bool
+    facets: LogRunFacets
 
 
 @dataclass(frozen=True, slots=True)
 class LogCheckpoint:
     id: str
-    runId: str
+    run_id: str
     filename: str
-    relativePath: str
+    relative_path: str
     epoch: int | None
     step: int | None
-    sizeBytes: int
-    modifiedAt: str
-
-    def to_response(self) -> dict[str, Any]:
-        return {
-            "id": self.id,
-            "runId": self.runId,
-            "filename": self.filename,
-            "relativePath": self.relativePath,
-            "epoch": self.epoch,
-            "step": self.step,
-            "sizeBytes": self.sizeBytes,
-            "modifiedAt": self.modifiedAt,
-        }
+    size_bytes: int
+    modified_at: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,64 +90,36 @@ class LogRunArtifact:
     id: str
     kind: str
     label: str
-    relativePath: str
-    sizeBytes: int
-    modifiedAt: str
-
-    def to_response(self) -> dict[str, Any]:
-        return {
-            "id": self.id,
-            "kind": self.kind,
-            "label": self.label,
-            "relativePath": self.relativePath,
-            "sizeBytes": self.sizeBytes,
-            "modifiedAt": self.modifiedAt,
-        }
+    relative_path: str
+    size_bytes: int
+    modified_at: str
 
 
 @dataclass(frozen=True, slots=True)
 class LogRunArtifacts:
-    runId: str
+    run_id: str
     params: dict[str, Any]
     metrics: dict[str, Any]
-    artifacts: list[LogRunArtifact]
-    checkpoints: list[LogCheckpoint]
-
-    def to_response(self) -> dict[str, Any]:
-        return {
-            "runId": self.runId,
-            "params": self.params,
-            "metrics": self.metrics,
-            "artifacts": [artifact.to_response() for artifact in self.artifacts],
-            "checkpoints": [
-                checkpoint.to_response() for checkpoint in self.checkpoints
-            ],
-        }
+    artifacts: tuple[LogRunArtifact, ...]
+    checkpoints: tuple[LogCheckpoint, ...]
+    truncation_reasons: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
 class LogExperimentDeleteResult:
     experiment: str
-    deletedRunIds: list[str]
-    deletedRunCount: int
-    deletedRelativePath: str
-
-    def to_response(self) -> dict[str, Any]:
-        return {
-            "experiment": self.experiment,
-            "deletedRunIds": self.deletedRunIds,
-            "deletedRunCount": self.deletedRunCount,
-            "deletedRelativePath": self.deletedRelativePath,
-        }
+    deleted_run_ids: tuple[str, ...]
+    deleted_run_count: int
+    deleted_relative_path: str
 
 
 @dataclass(frozen=True, slots=True)
 class LogRunDeleteFilters:
-    experiments: list[str]
-    datasets: list[str]
-    models: list[str]
-    presets: list[str]
-    runIds: list[str]
+    experiments: tuple[str, ...]
+    datasets: tuple[str, ...]
+    models: tuple[str, ...]
+    presets: tuple[str, ...]
+    run_ids: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,9 +129,9 @@ class LogRunDeleteCandidate:
     model: str
     preset: str
     dataset: str
-    runName: str
+    run_name: str
     version: str
-    relativePath: str
+    relative_path: str
     path: Path = field(repr=False, compare=False, default=Path())
 
     @classmethod
@@ -169,143 +142,242 @@ class LogRunDeleteCandidate:
             model=run.model,
             preset=run.preset,
             dataset=run.dataset,
-            runName=run.runName,
+            run_name=run.run_name,
             version=run.version,
-            relativePath=run.relativePath,
+            relative_path=run.relative_path,
             path=run.path,
         )
-
-    def to_response(self) -> dict[str, Any]:
-        return {
-            "id": self.id,
-            "experiment": self.experiment,
-            **model_identity_payload_from_id(self.model),
-            "preset": self.preset,
-            "dataset": self.dataset,
-            "runName": self.runName,
-            "version": self.version,
-            "relativePath": self.relativePath,
-        }
 
 
 @dataclass(frozen=True, slots=True)
 class ActiveLogRunDeleteBlocker:
     id: str
-    logFolder: str
+    log_folder: str
     status: str
-
-    def to_response(self) -> dict[str, Any]:
-        return {
-            "id": self.id,
-            "logFolder": self.logFolder,
-            "status": self.status,
-        }
 
 
 @dataclass(frozen=True, slots=True)
 class LogRunDeletePlan:
-    candidates: list[LogRunDeleteCandidate]
-    blockedByActiveJobs: list[ActiveLogRunDeleteBlocker] = field(default_factory=list)
+    candidates: tuple[LogRunDeleteCandidate, ...]
+    blocked_by_active_jobs: tuple[ActiveLogRunDeleteBlocker, ...] = ()
 
     @property
-    def canDelete(self) -> bool:
-        return bool(self.candidates) and not self.blockedByActiveJobs
-
-    def to_response(self) -> dict[str, Any]:
-        return _delete_plan_response_fields(
-            self.candidates,
-            blocked_by_active_jobs=self.blockedByActiveJobs,
-            can_delete=self.canDelete,
-        )
+    def can_delete(self) -> bool:
+        return bool(self.candidates) and not self.blocked_by_active_jobs
 
 
 @dataclass(frozen=True, slots=True)
 class LogRunDeleteResult:
-    candidates: list[LogRunDeleteCandidate]
-    deletedRunIds: list[str]
-    deletedRelativePaths: list[str]
-
-    def to_response(self) -> dict[str, Any]:
-        return {
-            "deletedRunIds": self.deletedRunIds,
-            "deletedRunCount": len(self.deletedRunIds),
-            "deletedRelativePaths": self.deletedRelativePaths,
-            **_delete_plan_response_fields(
-                self.candidates,
-                blocked_by_active_jobs=[],
-                can_delete=True,
-            ),
-        }
+    candidates: tuple[LogRunDeleteCandidate, ...]
+    deleted_run_ids: tuple[str, ...]
+    deleted_relative_paths: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
 class LogExperiment:
     experiment: str
-    runCount: int
-    relativePath: str
-
-    def to_response(self) -> dict[str, Any]:
-        return {
-            "experiment": self.experiment,
-            "runCount": self.runCount,
-            "relativePath": self.relativePath,
-        }
+    run_count: int
+    relative_path: str
 
 
-def _delete_plan_response_fields(
-    candidates: list[LogRunDeleteCandidate],
-    *,
-    blocked_by_active_jobs: list[ActiveLogRunDeleteBlocker],
-    can_delete: bool,
-) -> dict[str, Any]:
-    affected = _affected_values(candidates)
-    returned_candidates = candidates[:LOG_RESPONSE_ITEM_LIMIT]
-    truncated = len(candidates) > len(returned_candidates)
-    return {
-        "candidateCount": len(candidates),
-        "sourceItemCount": len(candidates),
-        "returnedItemCount": len(returned_candidates),
-        "truncated": truncated,
-        "truncationReason": (
-            f"delete candidates capped at {LOG_RESPONSE_ITEM_LIMIT} rows"
-            if truncated
-            else None
-        ),
-        "counts": {
-            "runs": len(candidates),
-            "experiments": len(affected["experiments"]),
-            "datasets": len(affected["datasets"]),
-            "models": len(affected["models"]),
-            "presets": len(affected["presets"]),
-        },
-        "affected": affected,
-        "candidates": [candidate.to_response() for candidate in returned_candidates],
-        "blockedByActiveJobs": [
-            blocker.to_response() for blocker in blocked_by_active_jobs
-        ],
-        "canDelete": can_delete,
-    }
+@dataclass(frozen=True, slots=True)
+class LogExperimentPage:
+    experiments: tuple[LogExperiment, ...]
+    total: int
+    limit: int
+    offset: int
+    has_more: bool
 
 
-def _affected_values(
-    candidates: list[LogRunDeleteCandidate],
-) -> dict[str, Any]:
-    model_ids = sorted({candidate.model for candidate in candidates})
-    return {
-        "experiments": sorted({candidate.experiment for candidate in candidates}),
-        "datasets": sorted({candidate.dataset for candidate in candidates}),
-        "models": [model_identity_payload_from_id(model_id) for model_id in model_ids],
-        "presets": sorted({candidate.preset for candidate in candidates}),
-        "runIds": sorted({candidate.id for candidate in candidates}),
-    }
+@dataclass(frozen=True, slots=True)
+class LogArchiveImportResult:
+    extracted_file_count: int
+    skipped_file_count: int
+    destination_root: str
+
+
+@dataclass(frozen=True, slots=True)
+class LogRunTags:
+    run_id: str
+    has_layer_monitor_data: bool | None
+    scalar_tags: tuple[str, ...]
+    histogram_tags: tuple[str, ...]
+    image_tags: tuple[str, ...]
+    text_tags: tuple[str, ...]
+    event_bytes: int | None = None
+    skipped_event_files: int | None = None
+    truncated: bool | None = None
+    truncation_reason: str | None = None
+    source_item_count: int | None = None
+    returned_item_count: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class LogScalarPoint:
+    step: int
+    wall_time: float
+    value: float
+
+
+@dataclass(frozen=True, slots=True)
+class LogScalarSeries:
+    run_id: str
+    tag: str
+    points: tuple[LogScalarPoint, ...]
+    source_point_count: int | None = None
+    truncated: bool | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class LogImageSummary:
+    run_id: str
+    tag: str
+    step: int
+    wall_time: float
+    mime_type: str
+    data_url: str
+    event_bytes: int | None = None
+    source_item_count: int | None = None
+    returned_item_count: int | None = None
+    truncated: bool | None = None
+    truncation_reason: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class LogTextSummary:
+    run_id: str
+    tag: str
+    step: int
+    wall_time: float
+    text: str
+    event_bytes: int | None = None
+    source_item_count: int | None = None
+    returned_item_count: int | None = None
+    truncated: bool | None = None
+    truncation_reason: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class LogMedia:
+    images: tuple[LogImageSummary, ...]
+    texts: tuple[LogTextSummary, ...]
+    event_bytes: int | None = None
+    skipped_event_files: int | None = None
+    source_item_count: int | None = None
+    returned_item_count: int | None = None
+    truncated: bool | None = None
+    truncation_reason: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class LogMonitorScalarSeries:
+    tag: str
+    label: str
+    points: tuple[LogScalarPoint, ...]
+    source_item_count: int | None = None
+    returned_item_count: int | None = None
+    truncated: bool | None = None
+    truncation_reason: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class LogHistogramBucket:
+    left: float
+    right: float
+    count: float
+
+
+@dataclass(frozen=True, slots=True)
+class LogHistogram:
+    tag: str
+    step: int
+    wall_time: float
+    buckets: tuple[LogHistogramBucket, ...]
+    source_item_count: int | None = None
+    returned_item_count: int | None = None
+    truncated: bool | None = None
+    truncation_reason: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class LogMonitorImage:
+    tag: str
+    step: int
+    wall_time: float
+    mime_type: str
+    data_url: str
+    event_bytes: int | None = None
+    source_item_count: int | None = None
+    returned_item_count: int | None = None
+    truncated: bool | None = None
+    truncation_reason: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class LogMonitorData:
+    job_id: str
+    node_path: str
+    preset: str | None
+    dataset: str | None
+    log_dir: str | None
+    scalar_series: tuple[LogMonitorScalarSeries, ...]
+    histograms: tuple[LogHistogram, ...]
+    images: tuple[LogMonitorImage, ...]
+    event_bytes: int | None = None
+    skipped_event_files: int | None = None
+    truncated: bool | None = None
+    truncation_reason: str | None = None
+    source_item_count: int | None = None
+    returned_item_count: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class LogParameterChannelStatus:
+    status: str
+    metric: str | None
+    last_step: int | None
+    observed_points: int
+
+
+@dataclass(frozen=True, slots=True)
+class LogParameterNodeStatus:
+    node_path: str
+    weights: LogParameterChannelStatus
+    bias: LogParameterChannelStatus
+
+
+@dataclass(frozen=True, slots=True)
+class LogParameterStatus:
+    source_id: str
+    preset: str | None
+    dataset: str | None
+    log_dir: str | None
+    nodes: tuple[LogParameterNodeStatus, ...]
+    event_bytes: int | None = None
+    skipped_event_files: int | None = None
+    truncated: bool | None = None
+    truncation_reason: str | None = None
+    source_item_count: int | None = None
+    returned_item_count: int | None = None
 
 
 __all__ = [
-    "LOG_RESPONSE_ITEM_LIMIT",
     "ActiveLogRunDeleteBlocker",
+    "LogArchiveImportResult",
     "LogCheckpoint",
     "LogExperiment",
     "LogExperimentDeleteResult",
+    "LogExperimentPage",
+    "LogImageSummary",
+    "LogHistogram",
+    "LogHistogramBucket",
+    "LogMedia",
+    "LogMonitorData",
+    "LogMonitorImage",
+    "LogMonitorScalarSeries",
+    "LogParameterChannelStatus",
+    "LogParameterNodeStatus",
+    "LogParameterStatus",
     "LogRun",
     "LogRunArtifact",
     "LogRunArtifacts",
@@ -313,4 +385,13 @@ __all__ = [
     "LogRunDeleteFilters",
     "LogRunDeletePlan",
     "LogRunDeleteResult",
+    "LogRunExperimentFacets",
+    "LogRunFacetValue",
+    "LogRunFacets",
+    "LogRunModelFacet",
+    "LogRunPage",
+    "LogRunTags",
+    "LogScalarPoint",
+    "LogScalarSeries",
+    "LogTextSummary",
 ]

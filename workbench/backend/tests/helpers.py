@@ -300,18 +300,30 @@ def delete_filters_for_runs(
 ) -> LogRunDeleteFilters:
     return LogRunDeleteFilters(
         experiments=(
-            experiments
+            tuple(experiments)
             if experiments is not None
-            else sorted({run.experiment for run in runs})
+            else tuple(sorted({run.experiment for run in runs}))
         ),
         datasets=(
-            datasets if datasets is not None else sorted({run.dataset for run in runs})
+            tuple(datasets)
+            if datasets is not None
+            else tuple(sorted({run.dataset for run in runs}))
         ),
-        models=models if models is not None else sorted({run.model for run in runs}),
+        models=(
+            tuple(models)
+            if models is not None
+            else tuple(sorted({run.model for run in runs}))
+        ),
         presets=(
-            presets if presets is not None else sorted({run.preset for run in runs})
+            tuple(presets)
+            if presets is not None
+            else tuple(sorted({run.preset for run in runs}))
         ),
-        runIds=run_ids if run_ids is not None else sorted({run.id for run in runs}),
+        run_ids=(
+            tuple(run_ids)
+            if run_ids is not None
+            else tuple(sorted({run.id for run in runs}))
+        ),
     )
 
 

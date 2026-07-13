@@ -12,6 +12,12 @@ from unittest.mock import patch
 
 from emperor.model_packages import model_identity_payload_from_id
 
+from workbench.backend.api.v1.logs_mapping import (
+    LOG_METADATA_RESPONSE_LIMIT,
+    log_run_artifacts_to_payload,
+    log_run_delete_plan_to_payload,
+    log_run_delete_result_to_payload,
+)
 from workbench.backend.failures import FailureKind
 from workbench.backend.log_experiments import (
     LOG_EXPERIMENT_NAME_RE,
@@ -30,7 +36,6 @@ from workbench.backend.run_history.deletion import LogRunDeletionExecutor
 from workbench.backend.run_history.errors import RunHistoryFailure
 from workbench.backend.run_history.query import LogRunQueryService
 from workbench.backend.run_history.records import (
-    LOG_RESPONSE_ITEM_LIMIT,
     ActiveLogRunDeleteBlocker,
     LogRunDeleteCandidate,
     LogRunDeleteFilters,
@@ -71,26 +76,26 @@ def _run_history(
 def _delete_plan(
     service: RunHistoryService,
     filters: LogRunDeleteFilters,
-) -> dict[str, object]:
+) -> LogRunDeletePlan:
     return service.create_delete_plan(
-        experiments=filters.experiments,
-        datasets=filters.datasets,
-        models=filters.models,
-        presets=filters.presets,
-        run_ids=filters.runIds,
+        experiments=list(filters.experiments),
+        datasets=list(filters.datasets),
+        models=list(filters.models),
+        presets=list(filters.presets),
+        run_ids=list(filters.run_ids),
     )
 
 
 def _delete_runs(
     service: RunHistoryService,
     filters: LogRunDeleteFilters,
-) -> dict[str, object]:
+) -> LogRunDeleteResult:
     return service.delete_runs(
-        experiments=filters.experiments,
-        datasets=filters.datasets,
-        models=filters.models,
-        presets=filters.presets,
-        run_ids=filters.runIds,
+        experiments=list(filters.experiments),
+        datasets=list(filters.datasets),
+        models=list(filters.models),
+        presets=list(filters.presets),
+        run_ids=list(filters.run_ids),
     )
 
 
@@ -188,7 +193,7 @@ class LogExperimentNameTests(unittest.TestCase):
                     validate_log_experiment_name(name)
 
 
-class LogRunDeleteResponseTests(unittest.TestCase):
+class LogRunDeleteHttpMappingTests(unittest.TestCase):
     def test_delete_plan_and_result_response_payloads_are_stable(self) -> None:
         candidate = LogRunDeleteCandidate(
             id="run-1",
@@ -196,15 +201,15 @@ class LogRunDeleteResponseTests(unittest.TestCase):
             model="linears/linear",
             preset="BASELINE",
             dataset="Mnist",
-            runName="aaa_20260601_010203",
+            run_name="aaa_20260601_010203",
             version="version_0",
-            relativePath=(
+            relative_path=(
                 "test_model/linear/BASELINE/Mnist/aaa_20260601_010203/version_0"
             ),
         )
         blocker = ActiveLogRunDeleteBlocker(
             id="job-1",
-            logFolder="test_model",
+            log_folder="test_model",
             status="running",
         )
         expected_common = {
@@ -244,15 +249,19 @@ class LogRunDeleteResponseTests(unittest.TestCase):
             ],
         }
 
-        plan_payload = LogRunDeletePlan(
-            candidates=[candidate],
-            blockedByActiveJobs=[blocker],
-        ).to_response()
-        result_payload = LogRunDeleteResult(
-            candidates=[candidate],
-            deletedRunIds=["run-1"],
-            deletedRelativePaths=[candidate.relativePath],
-        ).to_response()
+        plan_payload = log_run_delete_plan_to_payload(
+            LogRunDeletePlan(
+                candidates=(candidate,),
+                blocked_by_active_jobs=(blocker,),
+            )
+        )
+        result_payload = log_run_delete_result_to_payload(
+            LogRunDeleteResult(
+                candidates=(candidate,),
+                deleted_run_ids=("run-1",),
+                deleted_relative_paths=(candidate.relative_path,),
+            )
+        )
 
         self.assertEqual(
             plan_payload,
@@ -273,7 +282,7 @@ class LogRunDeleteResponseTests(unittest.TestCase):
             {
                 "deletedRunIds": ["run-1"],
                 "deletedRunCount": 1,
-                "deletedRelativePaths": [candidate.relativePath],
+                "deletedRelativePaths": [candidate.relative_path],
                 **expected_common,
                 "blockedByActiveJobs": [],
                 "canDelete": True,
@@ -288,22 +297,24 @@ class LogRunDeleteResponseTests(unittest.TestCase):
                 model="linears/linear",
                 preset="BASELINE",
                 dataset="Mnist",
-                runName=f"run_{index:06d}_20260601_010203",
+                run_name=f"run_{index:06d}_20260601_010203",
                 version="version_0",
-                relativePath=(
+                relative_path=(
                     "test_model/linear/BASELINE/Mnist/"
                     f"run_{index:06d}_20260601_010203/version_0"
                 ),
             )
-            for index in range(LOG_RESPONSE_ITEM_LIMIT + 3)
+            for index in range(LOG_METADATA_RESPONSE_LIMIT + 3)
         ]
 
-        payload = LogRunDeletePlan(candidates=candidates).to_response()
+        payload = log_run_delete_plan_to_payload(
+            LogRunDeletePlan(candidates=tuple(candidates))
+        )
 
-        self.assertEqual(payload["candidateCount"], LOG_RESPONSE_ITEM_LIMIT + 3)
-        self.assertEqual(payload["sourceItemCount"], LOG_RESPONSE_ITEM_LIMIT + 3)
-        self.assertEqual(payload["returnedItemCount"], LOG_RESPONSE_ITEM_LIMIT)
-        self.assertEqual(len(payload["candidates"]), LOG_RESPONSE_ITEM_LIMIT)
+        self.assertEqual(payload["candidateCount"], LOG_METADATA_RESPONSE_LIMIT + 3)
+        self.assertEqual(payload["sourceItemCount"], LOG_METADATA_RESPONSE_LIMIT + 3)
+        self.assertEqual(payload["returnedItemCount"], LOG_METADATA_RESPONSE_LIMIT)
+        self.assertEqual(len(payload["candidates"]), LOG_METADATA_RESPONSE_LIMIT)
         self.assertTrue(payload["truncated"])
         self.assertIn("capped", payload["truncationReason"])
 
@@ -326,16 +337,16 @@ class RunHistoryAndApiTests(unittest.TestCase):
             model=model,
             preset=preset,
             dataset=dataset,
-            runName=run_name,
+            run_name=run_name,
             version=Path(relative_path).name,
-            relativePath=relative_path,
+            relative_path=relative_path,
         )
 
     def test_catalog_generation_exposes_external_run_before_cache_ttl(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             logs_root = Path(tmp) / "logs"
             service = _run_history(logs_root)
-            self.assertEqual(service.list_runs(limit=10, offset=0)["total"], 0)
+            self.assertEqual(service.list_runs(limit=10, offset=0).total, 0)
 
             write_tensorboard_run(
                 logs_root,
@@ -352,8 +363,8 @@ class RunHistoryAndApiTests(unittest.TestCase):
 
             refreshed = service.list_runs(limit=10, offset=0)
 
-        self.assertEqual(refreshed["total"], 1)
-        self.assertEqual(refreshed["runs"][0]["experiment"], "experiment")
+        self.assertEqual(refreshed.total, 1)
+        self.assertEqual(refreshed.runs[0].experiment, "experiment")
 
     def test_run_history_parses_supported_log_shapes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -448,7 +459,7 @@ class RunHistoryAndApiTests(unittest.TestCase):
 
             runs = LogRunScanner(logs_root=logs_root).list_runs()
 
-        by_path = {run.relativePath: run for run in runs}
+        by_path = {run.relative_path: run for run in runs}
         default_summary = by_path[default_run.relative_to(logs_root).as_posix()]
         categorized_summary = by_path[categorized_run.relative_to(logs_root).as_posix()]
         custom_summary = by_path[custom_run.relative_to(logs_root).as_posix()]
@@ -464,10 +475,10 @@ class RunHistoryAndApiTests(unittest.TestCase):
         self.assertEqual(default_summary.preset, "BASELINE")
         self.assertEqual(default_summary.dataset, "Mnist")
         self.assertEqual(default_summary.timestamp, "2026-06-01 01:02:03")
-        self.assertTrue(default_summary.hasResult)
-        self.assertGreater(default_summary.eventFileCount, 0)
-        self.assertEqual(default_summary.checkpointCount, 1)
-        self.assertTrue(default_summary.hasHparams)
+        self.assertTrue(default_summary.has_result)
+        self.assertGreater(default_summary.event_file_count, 0)
+        self.assertEqual(default_summary.checkpoint_count, 1)
+        self.assertTrue(default_summary.has_hparams)
         self.assertEqual(default_summary.metrics["test/accuracy"], 0.9)
 
         self.assertIsNone(categorized_summary.group)
@@ -480,23 +491,23 @@ class RunHistoryAndApiTests(unittest.TestCase):
         self.assertEqual(custom_summary.group, "test_model")
         self.assertEqual(custom_summary.experiment, "test_model")
         self.assertEqual(custom_summary.model, "linears/linear_adaptive")
-        self.assertFalse(custom_summary.hasResult)
-        self.assertFalse(custom_summary.hasHparams)
-        self.assertEqual(custom_summary.checkpointCount, 0)
+        self.assertFalse(custom_summary.has_result)
+        self.assertFalse(custom_summary.has_hparams)
+        self.assertEqual(custom_summary.checkpoint_count, 0)
 
         self.assertEqual(workbench_summary.group, "workbench-training/job-123")
         self.assertEqual(workbench_summary.experiment, "workbench-training")
         self.assertEqual(workbench_summary.model, "linears/linear")
         self.assertEqual(workbench_summary.dataset, "FashionMNIST")
 
-        self.assertFalse(no_event_summary.hasResult)
-        self.assertEqual(no_event_summary.eventFileCount, 0)
-        self.assertEqual(no_event_summary.checkpointCount, 0)
-        self.assertFalse(no_event_summary.hasHparams)
+        self.assertFalse(no_event_summary.has_result)
+        self.assertEqual(no_event_summary.event_file_count, 0)
+        self.assertEqual(no_event_summary.checkpoint_count, 0)
+        self.assertFalse(no_event_summary.has_hparams)
         self.assertEqual(no_event_summary.metrics, {})
 
-        self.assertTrue(malformed_result_summary.hasResult)
-        self.assertGreater(malformed_result_summary.eventFileCount, 0)
+        self.assertTrue(malformed_result_summary.has_result)
+        self.assertGreater(malformed_result_summary.event_file_count, 0)
         self.assertEqual(malformed_result_summary.metrics, {})
         self.assertNotIn(
             "linear/BASELINE/Mnist/escaped_20260601_070809/version_99",
@@ -569,10 +580,10 @@ class RunHistoryAndApiTests(unittest.TestCase):
             nested.joinpath("epoch=1-step=2.ckpt").write_bytes(b"checkpoint")
             changed = scanner.list_runs()[0]
 
-        self.assertEqual(initial.eventFileCount, 0)
-        self.assertEqual(initial.checkpointCount, 0)
-        self.assertEqual(changed.eventFileCount, 1)
-        self.assertEqual(changed.checkpointCount, 1)
+        self.assertEqual(initial.event_file_count, 0)
+        self.assertEqual(initial.checkpoint_count, 0)
+        self.assertEqual(changed.event_file_count, 1)
+        self.assertEqual(changed.checkpoint_count, 1)
 
     def test_summary_listing_parses_result_once_without_projecting_metrics(
         self,
@@ -608,14 +619,14 @@ class RunHistoryAndApiTests(unittest.TestCase):
                     ),
                 ) as project_metrics,
             ):
-                payload = service.list_runs(
+                run = service.list_runs(
                     limit=10,
                     offset=0,
                     projection="summary",
-                )["runs"][0]
+                ).runs[0]
 
-        self.assertEqual(payload["experimentTask"], "image_classification")
-        self.assertEqual(payload["metrics"], {})
+        self.assertEqual(run.experiment_task, "image_classification")
+        self.assertEqual(run.metrics, {})
         self.assertEqual(read_result.call_count, 1)
         project_metrics.assert_not_called()
 
@@ -935,7 +946,7 @@ class RunHistoryAndApiTests(unittest.TestCase):
 
             scanner = LogRunScanner(logs_root=logs_root)
             query = LogRunQueryService(scanner=scanner)
-            runs_by_path = {run.relativePath: run for run in scanner.list_runs()}
+            runs_by_path = {run.relative_path: run for run in scanner.list_runs()}
             run = runs_by_path["linear/BASELINE/Mnist/aaa_20260601_010203/version_0"]
             malformed = runs_by_path[
                 "linear/BASELINE/Mnist/malformed_20260601_050607/version_0"
@@ -952,9 +963,9 @@ class RunHistoryAndApiTests(unittest.TestCase):
         self.assertEqual(
             [
                 (
-                    checkpoint["filename"],
-                    checkpoint["epoch"],
-                    checkpoint["step"],
+                    checkpoint.filename,
+                    checkpoint.epoch,
+                    checkpoint.step,
                 )
                 for checkpoint in checkpoints
             ],
@@ -965,16 +976,16 @@ class RunHistoryAndApiTests(unittest.TestCase):
             ],
         )
         self.assertTrue(
-            checkpoints[0]["relativePath"].endswith(
+            checkpoints[0].relative_path.endswith(
                 "linear/BASELINE/Mnist/aaa_20260601_010203/version_0/"
                 "checkpoints/epoch=0-step=1.ckpt"
             )
         )
-        self.assertGreater(checkpoints[0]["sizeBytes"], 0)
-        self.assertTrue(checkpoints[0]["modifiedAt"].endswith("Z"))
-        self.assertEqual(artifacts["runId"], run.id)
+        self.assertGreater(checkpoints[0].size_bytes, 0)
+        self.assertTrue(checkpoints[0].modified_at.endswith("Z"))
+        self.assertEqual(artifacts.run_id, run.id)
         self.assertEqual(
-            artifacts["params"],
+            artifacts.params,
             {
                 "batch_size": 4,
                 "use_bias": True,
@@ -983,23 +994,23 @@ class RunHistoryAndApiTests(unittest.TestCase):
                 "optimizer": "adam",
             },
         )
-        self.assertEqual(artifacts["metrics"], {"test/accuracy": 0.9})
+        self.assertEqual(artifacts.metrics, {"test/accuracy": 0.9})
         self.assertEqual(
-            sorted({artifact["kind"] for artifact in artifacts["artifacts"]}),
+            sorted({artifact.kind for artifact in artifacts.artifacts}),
             ["checkpoint", "event_file", "hparams", "result"],
         )
         self.assertEqual(
             len(
                 [
                     artifact
-                    for artifact in artifacts["artifacts"]
-                    if artifact["kind"] == "checkpoint"
+                    for artifact in artifacts.artifacts
+                    if artifact.kind == "checkpoint"
                 ]
             ),
             3,
         )
-        self.assertEqual(malformed_artifacts["params"], {})
-        self.assertEqual(malformed_artifacts["metrics"], {})
+        self.assertEqual(malformed_artifacts.params, {})
+        self.assertEqual(malformed_artifacts.metrics, {})
 
     def test_run_history_caps_artifact_metadata_rows(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1010,7 +1021,7 @@ class RunHistoryAndApiTests(unittest.TestCase):
             )
             checkpoint_dir = run_dir / "checkpoints"
             checkpoint_dir.mkdir(exist_ok=True)
-            for index in range(LOG_RESPONSE_ITEM_LIMIT + 10):
+            for index in range(LOG_METADATA_RESPONSE_LIMIT + 10):
                 (checkpoint_dir / f"epoch=0-step={index}.ckpt").write_text(
                     "checkpoint",
                     encoding="utf-8",
@@ -1019,12 +1030,12 @@ class RunHistoryAndApiTests(unittest.TestCase):
             scanner = LogRunScanner(logs_root=logs_root)
             query = LogRunQueryService(scanner=scanner)
             run = scanner.list_runs()[0]
-            payload = query.artifacts_for_run(run.id)
+            payload = log_run_artifacts_to_payload(query.artifacts_for_run(run.id))
 
         returned_count = len(payload["artifacts"]) + len(payload["checkpoints"])
-        self.assertEqual(returned_count, LOG_RESPONSE_ITEM_LIMIT)
+        self.assertEqual(returned_count, LOG_METADATA_RESPONSE_LIMIT)
         self.assertGreater(payload["sourceItemCount"], payload["returnedItemCount"])
-        self.assertEqual(payload["returnedItemCount"], LOG_RESPONSE_ITEM_LIMIT)
+        self.assertEqual(payload["returnedItemCount"], LOG_METADATA_RESPONSE_LIMIT)
         self.assertTrue(payload["truncated"])
         self.assertIn("capped", payload["truncationReason"])
 
@@ -1070,19 +1081,19 @@ class RunHistoryAndApiTests(unittest.TestCase):
             logs_root.joinpath("test_model", "outside-link").symlink_to(outside_target)
 
             scanner = LogRunScanner(logs_root=logs_root)
-            run_ids_by_path = {run.relativePath: run.id for run in scanner.list_runs()}
+            run_ids_by_path = {run.relative_path: run.id for run in scanner.list_runs()}
             service = _run_history(logs_root)
             result = service.delete_experiment("test_model")
             remaining_paths = {
-                run.relativePath
+                run.relative_path
                 for run in LogRunScanner(logs_root=logs_root).list_runs()
             }
 
-            self.assertEqual(result["experiment"], "test_model")
-            self.assertEqual(result["deletedRunCount"], 2)
-            self.assertEqual(result["deletedRelativePath"], "test_model")
+            self.assertEqual(result.experiment, "test_model")
+            self.assertEqual(result.deleted_run_count, 2)
+            self.assertEqual(result.deleted_relative_path, "test_model")
             self.assertEqual(
-                set(result["deletedRunIds"]),
+                set(result.deleted_run_ids),
                 {
                     run_ids_by_path[deleted_run.relative_to(logs_root).as_posix()],
                     run_ids_by_path[
@@ -1172,8 +1183,8 @@ class RunHistoryAndApiTests(unittest.TestCase):
             result = _delete_runs(_run_history(logs_root), filters)
 
             self.assertEqual(
-                result["deletedRelativePaths"],
-                ["test_model/linear/BASELINE/Mnist/aaa_20260601_010203/version_0"],
+                result.deleted_relative_paths,
+                ("test_model/linear/BASELINE/Mnist/aaa_20260601_010203/version_0",),
             )
             self.assertFalse(run_dir.exists())
 
@@ -1277,16 +1288,16 @@ class RunHistoryAndApiTests(unittest.TestCase):
             plan = _delete_plan(service, filters)
             result = _delete_runs(service, filters)
             remaining_paths = {
-                run.relativePath
+                run.relative_path
                 for run in LogRunScanner(logs_root=logs_root).list_runs()
             }
 
-            self.assertTrue(plan["canDelete"])
-            self.assertEqual(plan["candidateCount"], 1)
-            self.assertEqual(len(result["deletedRunIds"]), 1)
+            self.assertTrue(plan.can_delete)
+            self.assertEqual(len(plan.candidates), 1)
+            self.assertEqual(len(result.deleted_run_ids), 1)
             self.assertEqual(
-                result["deletedRelativePaths"],
-                [mnist_run.relative_to(logs_root).as_posix()],
+                result.deleted_relative_paths,
+                (mnist_run.relative_to(logs_root).as_posix(),),
             )
             self.assertFalse(mnist_run.exists())
             self.assertFalse(mnist_run.parent.exists())
@@ -1350,12 +1361,12 @@ class RunHistoryAndApiTests(unittest.TestCase):
             first_run_id = next(
                 run.id
                 for run in runs
-                if run.relativePath == first_run.relative_to(logs_root).as_posix()
+                if run.relative_path == first_run.relative_to(logs_root).as_posix()
             )
             filters = delete_filters_for_runs(runs, run_ids=[first_run_id])
             result = _delete_runs(_run_history(logs_root), filters)
 
-            self.assertEqual(result["deletedRunIds"], [first_run_id])
+            self.assertEqual(result.deleted_run_ids, (first_run_id,))
             self.assertFalse(first_run.exists())
             self.assertTrue(second_run.exists())
 
@@ -1398,10 +1409,10 @@ class RunHistoryAndApiTests(unittest.TestCase):
                 preset="BASELINE",
             )
 
-            self.assertEqual(preview["candidateCount"], 55)
-            self.assertEqual(result["deletedRunCount"], 55)
-            remaining = service.list_runs(limit=100, offset=0)["runs"]
-            self.assertEqual([run["preset"] for run in remaining], ["GATING"])
+            self.assertEqual(len(preview.candidates), 55)
+            self.assertEqual(len(result.deleted_run_ids), 55)
+            remaining = service.list_runs(limit=100, offset=0).runs
+            self.assertEqual([run.preset for run in remaining], ["GATING"])
 
     def test_preset_delete_recomputes_stale_preview_and_blocks_active_writer(
         self,
@@ -1420,10 +1431,12 @@ class RunHistoryAndApiTests(unittest.TestCase):
             )
             service = _run_history(logs_root)
             self.assertEqual(
-                service.create_preset_delete_plan(
-                    experiment="test_model",
-                    preset="BASELINE",
-                )["candidateCount"],
+                len(
+                    service.create_preset_delete_plan(
+                        experiment="test_model",
+                        preset="BASELINE",
+                    ).candidates
+                ),
                 1,
             )
             write_tensorboard_run(
@@ -1431,10 +1444,12 @@ class RunHistoryAndApiTests(unittest.TestCase):
                 [*base_parts, "second_20260711_020202", "version_0"],
             )
             self.assertEqual(
-                service.delete_preset(
-                    experiment="test_model",
-                    preset="BASELINE",
-                )["deletedRunCount"],
+                len(
+                    service.delete_preset(
+                        experiment="test_model",
+                        preset="BASELINE",
+                    ).deleted_run_ids
+                ),
                 2,
             )
 
@@ -1456,8 +1471,8 @@ class RunHistoryAndApiTests(unittest.TestCase):
                 experiment="test_model",
                 preset="BASELINE",
             )
-            self.assertFalse(blocked_plan["canDelete"])
-            self.assertEqual(blocked_plan["blockedByActiveJobs"][0]["id"], "job-1")
+            self.assertFalse(blocked_plan.can_delete)
+            self.assertEqual(blocked_plan.blocked_by_active_jobs[0].id, "job-1")
             with self.assertRaisesRegex(RunHistoryFailure, "still writing"):
                 blocked.delete_preset(
                     experiment="test_model",
@@ -1496,10 +1511,10 @@ class RunHistoryAndApiTests(unittest.TestCase):
                 projection="summary",
             )
 
-            self.assertEqual(payload["total"], 1)
-            self.assertEqual(payload["runs"][0]["experiment"], "image_exp")
+            self.assertEqual(payload.total, 1)
+            self.assertEqual(payload.runs[0].experiment, "image_exp")
             self.assertEqual(
-                [facet["experiment"] for facet in payload["facets"]["experiments"]],
+                [facet.experiment for facet in payload.facets.experiments],
                 ["image_exp"],
             )
 
@@ -1525,8 +1540,8 @@ class RunHistoryAndApiTests(unittest.TestCase):
 
             result = _delete_runs(_run_history(logs_root), filters)
 
-            self.assertEqual(result["deletedRunCount"], 2)
-            self.assertEqual(set(result["deletedRunIds"]), {run.id for run in runs})
+            self.assertEqual(len(result.deleted_run_ids), 2)
+            self.assertEqual(set(result.deleted_run_ids), {run.id for run in runs})
             self.assertTrue(all(not run_dir.exists() for run_dir in run_dirs))
 
     def test_delete_recomputes_stale_preview_without_a_plan_token(self) -> None:
@@ -1545,7 +1560,7 @@ class RunHistoryAndApiTests(unittest.TestCase):
             run = LogRunScanner(logs_root=logs_root).list_runs()[0]
             filters = delete_filters_for_runs([run])
             preview = _delete_plan(service, filters)
-            self.assertEqual(preview["candidateCount"], 1)
+            self.assertEqual(len(preview.candidates), 1)
 
             service.delete_experiment("test_model")
             with self.assertRaisesRegex(
@@ -1556,9 +1571,9 @@ class RunHistoryAndApiTests(unittest.TestCase):
 
             recreated = write_tensorboard_run(logs_root, relative_parts)
             recreated_preview = _delete_plan(service, filters)
-            self.assertEqual(recreated_preview["candidateCount"], 1)
+            self.assertEqual(len(recreated_preview.candidates), 1)
             result = _delete_runs(service, filters)
-            self.assertEqual(result["deletedRunIds"], [run.id])
+            self.assertEqual(result.deleted_run_ids, (run.id,))
             self.assertFalse(recreated.exists())
 
     def test_partial_filtered_delete_failure_invalidates_public_listing(self) -> None:
@@ -1582,7 +1597,7 @@ class RunHistoryAndApiTests(unittest.TestCase):
             service = _run_history(logs_root)
             runs = LogRunScanner(logs_root=logs_root).list_runs()
             filters = delete_filters_for_runs(runs)
-            self.assertEqual(service.list_runs(limit=10, offset=0)["total"], 2)
+            self.assertEqual(service.list_runs(limit=10, offset=0).total, 2)
             original_rmtree = shutil.rmtree
             delete_count = 0
 
@@ -1602,7 +1617,7 @@ class RunHistoryAndApiTests(unittest.TestCase):
             ):
                 _delete_runs(service, filters)
 
-            self.assertEqual(service.list_runs(limit=10, offset=0)["total"], 1)
+            self.assertEqual(service.list_runs(limit=10, offset=0).total, 1)
 
     def test_log_run_delete_partial_filters_match_nothing_and_preserve_runs(
         self,
@@ -1627,14 +1642,14 @@ class RunHistoryAndApiTests(unittest.TestCase):
                 "datasets": [run.dataset],
                 "models": [run.model],
                 "presets": [run.preset],
-                "runIds": [run.id],
+                "run_ids": [run.id],
             }
             cases = (
                 ("missing_experiments", {**full_filter_fields, "experiments": []}),
                 ("missing_datasets", {**full_filter_fields, "datasets": []}),
                 ("missing_models", {**full_filter_fields, "models": []}),
                 ("missing_presets", {**full_filter_fields, "presets": []}),
-                ("missing_run_ids", {**full_filter_fields, "runIds": []}),
+                ("missing_run_ids", {**full_filter_fields, "run_ids": []}),
                 (
                     "mismatched_dataset",
                     {**full_filter_fields, "datasets": ["Cifar10"]},
@@ -1645,7 +1660,7 @@ class RunHistoryAndApiTests(unittest.TestCase):
                 ),
                 ("mismatched_model", {**full_filter_fields, "models": ["convnet"]}),
                 ("mismatched_preset", {**full_filter_fields, "presets": ["GATING"]}),
-                ("mismatched_run_id", {**full_filter_fields, "runIds": ["missing"]}),
+                ("mismatched_run_id", {**full_filter_fields, "run_ids": ["missing"]}),
             )
 
             for label, fields in cases:
@@ -1653,8 +1668,8 @@ class RunHistoryAndApiTests(unittest.TestCase):
                     filters = LogRunDeleteFilters(**fields)
                     plan = _delete_plan(service, filters)
 
-                    self.assertFalse(plan["canDelete"])
-                    self.assertEqual(plan["candidates"], [])
+                    self.assertFalse(plan.can_delete)
+                    self.assertEqual(plan.candidates, ())
                     with self.assertRaisesRegex(
                         RunHistoryFailure,
                         "No log runs match",
@@ -1679,16 +1694,16 @@ class RunHistoryAndApiTests(unittest.TestCase):
 
             service = _run_history(logs_root)
             filters = LogRunDeleteFilters(
-                experiments=["test_model"],
-                datasets=[],
-                models=["linears/linear"],
-                presets=["BASELINE"],
-                runIds=[LogRunScanner(logs_root=logs_root).list_runs()[0].id],
+                experiments=("test_model",),
+                datasets=(),
+                models=("linears/linear",),
+                presets=("BASELINE",),
+                run_ids=(LogRunScanner(logs_root=logs_root).list_runs()[0].id,),
             )
             plan = _delete_plan(service, filters)
 
-            self.assertFalse(plan["canDelete"])
-            self.assertEqual(plan["candidates"], [])
+            self.assertFalse(plan.can_delete)
+            self.assertEqual(plan.candidates, ())
             with self.assertRaisesRegex(
                 RunHistoryFailure,
                 "No log runs match",
@@ -1772,10 +1787,10 @@ class RunHistoryAndApiTests(unittest.TestCase):
 
             plan = _delete_plan(service, filters)
 
-            self.assertFalse(plan["canDelete"])
-            self.assertEqual(len(plan["blockedByActiveJobs"]), 1)
+            self.assertFalse(plan.can_delete)
+            self.assertEqual(len(plan.blocked_by_active_jobs), 1)
             self.assertEqual(
-                plan["blockedByActiveJobs"][0]["logFolder"],
+                plan.blocked_by_active_jobs[0].log_folder,
                 "test_model",
             )
             with self.assertRaisesRegex(
@@ -1830,9 +1845,9 @@ class RunHistoryAndApiTests(unittest.TestCase):
             ["empty_experiment", "test_model"],
         )
         by_name = {experiment.experiment: experiment for experiment in experiments}
-        self.assertEqual(by_name["empty_experiment"].runCount, 0)
-        self.assertEqual(by_name["test_model"].runCount, 1)
-        self.assertEqual(by_name["test_model"].relativePath, "test_model")
+        self.assertEqual(by_name["empty_experiment"].run_count, 0)
+        self.assertEqual(by_name["test_model"].run_count, 1)
+        self.assertEqual(by_name["test_model"].relative_path, "test_model")
 
     def test_run_history_rejects_invalid_delete_experiments(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -3088,7 +3103,7 @@ class RunHistoryAndApiTests(unittest.TestCase):
                 b"3333",
             )
             scanner = LogRunScanner(logs_root=logs_root)
-            run_ids = {run.runName: run.id for run in scanner.list_runs()}
+            run_ids = {run.run_name: run.id for run in scanner.list_runs()}
             service = LogRunQueryService(
                 scanner=scanner,
                 max_tag_event_bytes=100,
@@ -3141,7 +3156,7 @@ class RunHistoryAndApiTests(unittest.TestCase):
                 b"3333",
             )
             scanner = LogRunScanner(logs_root=logs_root)
-            run_ids = {run.runName: run.id for run in scanner.list_runs()}
+            run_ids = {run.run_name: run.id for run in scanner.list_runs()}
             service = LogRunQueryService(
                 scanner=scanner,
                 max_tag_event_bytes=100,
@@ -3184,7 +3199,7 @@ class RunHistoryAndApiTests(unittest.TestCase):
                 b"2222",
             )
             scanner = LogRunScanner(logs_root=logs_root)
-            run_ids = {run.runName: run.id for run in scanner.list_runs()}
+            run_ids = {run.run_name: run.id for run in scanner.list_runs()}
             service = LogRunQueryService(
                 scanner=scanner,
                 max_tag_event_bytes=100,
@@ -3335,9 +3350,9 @@ class RunHistoryAndApiTests(unittest.TestCase):
                 model=["linear"],
             )
 
-        self.assertEqual(qualified["total"], 1)
-        self.assertEqual(qualified["runs"][0]["modelType"], "linears")
-        self.assertEqual(legacy["total"], 2)
+        self.assertEqual(qualified.total, 1)
+        self.assertEqual(qualified.runs[0].model, "linears/linear")
+        self.assertEqual(legacy.total, 2)
 
     def test_log_api_reports_layer_monitor_eligibility_from_tag_cache(
         self,

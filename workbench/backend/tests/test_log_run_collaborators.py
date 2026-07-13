@@ -33,17 +33,17 @@ def _log_run(
         model="linears/linear",
         preset=preset,
         dataset=dataset,
-        runName="aaa_20260601_010203",
+        run_name="aaa_20260601_010203",
         timestamp="2026-06-01 01:02:03",
         version="version_0",
-        relativePath=(
+        relative_path=(
             f"test_model/linears/linear/{preset}/{dataset}/"
             "aaa_20260601_010203/version_0"
         ),
-        hasResult=False,
-        eventFileCount=0,
-        checkpointCount=0,
-        hasHparams=False,
+        has_result=False,
+        event_file_count=0,
+        checkpoint_count=0,
+        has_hparams=False,
         path=path,
     )
 
@@ -55,9 +55,9 @@ def _delete_candidate(relative_path: str) -> LogRunDeleteCandidate:
         model="linears/linear",
         preset="BASELINE",
         dataset="Mnist",
-        runName="aaa_20260601_010203",
+        run_name="aaa_20260601_010203",
         version="version_0",
-        relativePath=relative_path,
+        relative_path=relative_path,
     )
 
 
@@ -433,7 +433,7 @@ class LogRunDeletionExecutorTests(unittest.TestCase):
                     ):
                         executor.delete_runs(
                             LogRunDeletePlan(
-                                candidates=[_delete_candidate(relative_path)]
+                                candidates=(_delete_candidate(relative_path),)
                             )
                         )
             self.assertTrue(valid_run.exists())
@@ -443,12 +443,12 @@ class LogRunDeletionExecutorTests(unittest.TestCase):
 
             result = executor.delete_runs(
                 LogRunDeletePlan(
-                    candidates=[
+                    candidates=(
                         _delete_candidate(valid_run.relative_to(logs_root).as_posix())
-                    ]
+                    ,)
                 )
             )
-            self.assertEqual(result.deletedRunIds, ["run-1"])
+            self.assertEqual(result.deleted_run_ids, ("run-1",))
             self.assertFalse(valid_run.exists())
 
 

@@ -17,7 +17,6 @@ from workbench.backend.run_history.artifacts import (
 )
 from workbench.backend.run_history.errors import RunHistoryFailure
 from workbench.backend.run_history.records import (
-    LOG_RESPONSE_ITEM_LIMIT,
     LogCheckpoint,
     LogRun,
     LogRunArtifact,
@@ -499,10 +498,10 @@ class LogRunQueryService:
             for run in runs
         ]
 
-    def checkpoints_for_runs(self, run_ids: list[str]) -> list[dict[str, Any]]:
+    def checkpoints_for_runs(self, run_ids: list[str]) -> list[LogCheckpoint]:
         runs = self.scanner.resolve_runs(run_ids)
         return [
-            checkpoint.to_response()
+            checkpoint
             for run in runs
             for checkpoint in self.read_checkpoints(run)
         ]
@@ -522,7 +521,7 @@ class LogRunQueryService:
         artifacts = artifacts or self.scanner.artifact_observation(run)
         return {**artifacts.hparams_values(), **artifacts.params()}
 
-    def artifacts_for_run(self, run_id: str) -> dict[str, Any]:
+    def artifacts_for_run(self, run_id: str) -> LogRunArtifacts:
         run = self.scanner.resolve_runs([run_id])[0]
         observation = self.scanner.artifact_observation(run)
         metrics = observation.metrics()
@@ -561,37 +560,14 @@ class LogRunQueryService:
             for artifact in observation.checkpoints
         )
 
-        source_item_count = len(artifacts) + len(checkpoints)
-        returned_artifacts = artifacts[:LOG_RESPONSE_ITEM_LIMIT]
-        remaining_budget = max(0, LOG_RESPONSE_ITEM_LIMIT - len(returned_artifacts))
-        returned_checkpoints = checkpoints[:remaining_budget]
-        returned_item_count = len(returned_artifacts) + len(returned_checkpoints)
-        response_truncated = source_item_count > returned_item_count
-        truncated = observation.truncated or response_truncated
-        response = LogRunArtifacts(
-            runId=run.id,
+        return LogRunArtifacts(
+            run_id=run.id,
             params=self.saved_params_for_run(run, artifacts=observation),
             metrics=metrics,
-            artifacts=returned_artifacts,
-            checkpoints=returned_checkpoints,
-        ).to_response()
-        response.update(
-            {
-                "sourceItemCount": source_item_count,
-                "returnedItemCount": returned_item_count,
-                "truncated": truncated,
-                "truncationReason": (
-                    observation.truncation_reasons[0]
-                    if observation.truncation_reasons
-                    else (
-                        f"artifact metadata capped at {LOG_RESPONSE_ITEM_LIMIT} rows"
-                        if response_truncated
-                        else None
-                    )
-                ),
-            }
+            artifacts=tuple(artifacts),
+            checkpoints=tuple(checkpoints),
+            truncation_reasons=observation.truncation_reasons,
         )
-        return response
 
     def read_checkpoints(
         self,
@@ -612,7 +588,7 @@ class LogRunQueryService:
                 checkpoint.epoch is None,
                 checkpoint.epoch if checkpoint.epoch is not None else -1,
                 checkpoint.filename,
-                checkpoint.relativePath,
+                checkpoint.relative_path,
             ),
         )
 
@@ -623,13 +599,13 @@ class LogRunQueryService:
     ) -> LogCheckpoint:
         return LogCheckpoint(
             id=_file_id(run.id, artifact.relative_path),
-            runId=run.id,
+            run_id=run.id,
             filename=artifact.path.name,
-            relativePath=artifact.relative_path,
+            relative_path=artifact.relative_path,
             epoch=_parse_checkpoint_epoch(artifact.path.name),
             step=_parse_checkpoint_step(artifact.path.name),
-            sizeBytes=artifact.size,
-            modifiedAt=artifact.modified_at,
+            size_bytes=artifact.size,
+            modified_at=artifact.modified_at,
         )
 
     def artifact_metadata(
@@ -644,9 +620,9 @@ class LogRunQueryService:
             id=_file_id(run.id, artifact.relative_path),
             kind=kind,
             label=label,
-            relativePath=artifact.relative_path,
-            sizeBytes=artifact.size,
-            modifiedAt=artifact.modified_at,
+            relative_path=artifact.relative_path,
+            size_bytes=artifact.size,
+            modified_at=artifact.modified_at,
         )
 
     def read_tags(

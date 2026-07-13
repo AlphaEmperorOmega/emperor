@@ -182,10 +182,10 @@ class RunHistorySecurityAndFreshnessTests(unittest.TestCase):
                 self.assertTrue(scan_captured.wait(timeout=5))
                 service.delete_experiment("test_model")
                 release_scan.set()
-                self.assertEqual(stale_reader.result(timeout=5)["total"], 1)
+                self.assertEqual(stale_reader.result(timeout=5).total, 1)
 
             self.assertEqual(
-                service.list_runs(limit=10, offset=0)["total"],
+                service.list_runs(limit=10, offset=0).total,
                 0,
             )
 
@@ -209,8 +209,8 @@ class RunHistorySecurityAndFreshnessTests(unittest.TestCase):
             outside_event.write_bytes(b"outside secret")
             (run_dir / "events.out.tfevents.escape").symlink_to(outside_event)
             service = _service(logs_root)
-            run = service.list_runs(limit=1, offset=0)["runs"][0]
-            run_id = str(run["id"])
+            run = service.list_runs(limit=1, offset=0).runs[0]
+            run_id = run.id
             loads: list[Path] = []
 
             def load_outside(event_dir: Path, **_kwargs: Any):
@@ -241,14 +241,14 @@ class RunHistorySecurityAndFreshnessTests(unittest.TestCase):
                 parameters = service.parameter_status_for_runs([run_id])
 
             self.assertEqual(loads, [])
-            self.assertEqual(tags[0]["scalarTags"], [])
-            self.assertEqual(tags[0]["imageTags"], [])
-            self.assertEqual(tags[0]["textTags"], [])
+            self.assertEqual(tags[0].scalar_tags, ())
+            self.assertEqual(tags[0].image_tags, ())
+            self.assertEqual(tags[0].text_tags, ())
             self.assertEqual(scalars, [])
-            self.assertEqual(media["images"], [])
-            self.assertEqual(media["texts"], [])
-            self.assertEqual(monitor["scalarSeries"], [])
-            self.assertEqual(parameters[0]["nodes"], [])
+            self.assertEqual(media.images, ())
+            self.assertEqual(media.texts, ())
+            self.assertEqual(monitor.scalar_series, ())
+            self.assertEqual(parameters[0].nodes, ())
 
     def test_archive_overwrite_invalidates_every_public_read_cache(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -261,7 +261,7 @@ class RunHistorySecurityAndFreshnessTests(unittest.TestCase):
             event_name = "events.out.tfevents.fixed"
             (run_dir / event_name).write_text("old", encoding="utf-8")
             service = _service(logs_root)
-            run_id = str(service.list_runs(limit=10, offset=0)["runs"][0]["id"])
+            run_id = service.list_runs(limit=10, offset=0).runs[0].id
             fixed_fingerprint = (("fixed", 1, 1),)
 
             def load_version(event_dir: Path, **_kwargs: Any):
@@ -356,28 +356,28 @@ class RunHistorySecurityAndFreshnessTests(unittest.TestCase):
                 )
                 after_parameters = service.parameter_status_for_runs([run_id])
 
-            self.assertIn("old/value", before_tags["scalarTags"])
-            self.assertEqual(before_scalars[0]["points"][0]["value"], 0.0)
-            self.assertIn("old", before_media["texts"][0]["text"])
+            self.assertIn("old/value", before_tags.scalar_tags)
+            self.assertEqual(before_scalars[0].points[0].value, 0.0)
+            self.assertIn("old", before_media.texts[0].text)
             self.assertEqual(
-                before_monitor["scalarSeries"][0]["points"][-1]["value"],
+                before_monitor.scalar_series[0].points[-1].value,
                 0.0,
             )
             self.assertEqual(
-                before_parameters[0]["nodes"][0]["weights"]["status"],
+                before_parameters[0].nodes[0].weights.status,
                 "unchanged",
             )
-            self.assertEqual(after_listing["total"], 1)
-            self.assertIn("new/value", after_tags["scalarTags"])
-            self.assertNotIn("old/value", after_tags["scalarTags"])
-            self.assertEqual(after_scalars[0]["points"][0]["value"], 2.0)
-            self.assertIn("new", after_media["texts"][0]["text"])
+            self.assertEqual(after_listing.total, 1)
+            self.assertIn("new/value", after_tags.scalar_tags)
+            self.assertNotIn("old/value", after_tags.scalar_tags)
+            self.assertEqual(after_scalars[0].points[0].value, 2.0)
+            self.assertIn("new", after_media.texts[0].text)
             self.assertEqual(
-                after_monitor["scalarSeries"][0]["points"][-1]["value"],
+                after_monitor.scalar_series[0].points[-1].value,
                 2.0,
             )
             self.assertEqual(
-                after_parameters[0]["nodes"][0]["weights"]["status"],
+                after_parameters[0].nodes[0].weights.status,
                 "updated",
             )
 

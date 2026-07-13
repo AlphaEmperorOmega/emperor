@@ -50,21 +50,23 @@ def _validated_log_run_delete_candidate_path(
     candidate: LogRunDeleteCandidate,
     root: Path,
 ) -> Path:
-    target = root / candidate.relativePath
+    target = root / candidate.relative_path
     if target.is_symlink():
         raise RunHistoryFailure(
-            f"Refusing to delete symlink log run: {candidate.relativePath}"
+            f"Refusing to delete symlink log run: {candidate.relative_path}"
         )
     if not target.name.startswith("version_"):
         raise RunHistoryFailure(
-            f"Refusing to delete non-version log folder: {candidate.relativePath}"
+            f"Refusing to delete non-version log folder: {candidate.relative_path}"
         )
     if not _is_log_path_under_root(target, root):
         raise RunHistoryFailure(
-            f"Invalid log run path: {candidate.relativePath}"
+            f"Invalid log run path: {candidate.relative_path}"
         ) from None
     if not target.is_dir():
-        raise RunHistoryFailure(f"Log run is not a directory: {candidate.relativePath}")
+        raise RunHistoryFailure(
+            f"Log run is not a directory: {candidate.relative_path}"
+        )
     return target
 
 
@@ -97,20 +99,20 @@ class LogRunDeletionPlanner:
         *,
         active_writers: Iterable[ActiveLogWriter],
     ) -> LogRunDeletePlan:
-        candidates = [
+        candidates = tuple(
             LogRunDeleteCandidate.from_run(run) for run in self.filtered_runs(filters)
-        ]
+        )
         candidate_experiments = {candidate.experiment for candidate in candidates}
-        blockers = [
+        blockers = tuple(
             ActiveLogRunDeleteBlocker(
                 id=writer.id,
-                logFolder=writer.log_folder,
+                log_folder=writer.log_folder,
                 status=writer.status,
             )
             for writer in active_writers
             if writer.log_folder in candidate_experiments
-        ]
-        return LogRunDeletePlan(candidates=candidates, blockedByActiveJobs=blockers)
+        )
+        return LogRunDeletePlan(candidates=candidates, blocked_by_active_jobs=blockers)
 
     def create_preset_delete_plan(
         self,
@@ -122,28 +124,28 @@ class LogRunDeletionPlanner:
         _validate_log_experiment_delete_name(experiment)
         if not preset:
             raise RunHistoryFailure("Log preset name is required")
-        candidates = [
+        candidates = tuple(
             LogRunDeleteCandidate.from_run(run)
             for run in self.scanner.list_runs(result_projection="none")
             if run.experiment == experiment and run.preset == preset
-        ]
-        blockers = [
+        )
+        blockers = tuple(
             ActiveLogRunDeleteBlocker(
                 id=writer.id,
-                logFolder=writer.log_folder,
+                log_folder=writer.log_folder,
                 status=writer.status,
             )
             for writer in active_writers
             if candidates and writer.log_folder == experiment
-        ]
-        return LogRunDeletePlan(candidates=candidates, blockedByActiveJobs=blockers)
+        )
+        return LogRunDeletePlan(candidates=candidates, blocked_by_active_jobs=blockers)
 
     def filtered_runs(self, filters: LogRunDeleteFilters) -> list[LogRun]:
         experiment_set = set(filters.experiments)
         dataset_set = set(filters.datasets)
         model_set = set(filters.models)
         preset_set = set(filters.presets)
-        run_id_set = set(filters.runIds)
+        run_id_set = set(filters.run_ids)
         if not all(
             (
                 experiment_set,
@@ -191,9 +193,9 @@ class LogRunDeletionExecutor:
         shutil.rmtree(target)
         return LogExperimentDeleteResult(
             experiment=experiment,
-            deletedRunIds=deleted_run_ids,
-            deletedRunCount=len(deleted_run_ids),
-            deletedRelativePath=experiment,
+            deleted_run_ids=tuple(deleted_run_ids),
+            deleted_run_count=len(deleted_run_ids),
+            deleted_relative_path=experiment,
         )
 
     def delete_runs(
@@ -202,7 +204,7 @@ class LogRunDeletionExecutor:
     ) -> LogRunDeleteResult:
         if not plan.candidates:
             raise RunHistoryFailure("No log runs match the selected filters.")
-        if plan.blockedByActiveJobs:
+        if plan.blocked_by_active_jobs:
             raise RunHistoryFailure(
                 "A training job is still writing to this log folder."
             )
@@ -214,7 +216,7 @@ class LogRunDeletionExecutor:
             delete_dir = _validated_log_run_delete_candidate_path(candidate, root)
             shutil.rmtree(delete_dir)
             deleted_run_ids.append(candidate.id)
-            deleted_relative_paths.append(candidate.relativePath)
+            deleted_relative_paths.append(candidate.relative_path)
             _prune_empty_log_run_parents(
                 start=delete_dir.parent,
                 experiment_dir=root / candidate.experiment,
@@ -223,8 +225,8 @@ class LogRunDeletionExecutor:
 
         return LogRunDeleteResult(
             candidates=plan.candidates,
-            deletedRunIds=deleted_run_ids,
-            deletedRelativePaths=deleted_relative_paths,
+            deleted_run_ids=tuple(deleted_run_ids),
+            deleted_relative_paths=tuple(deleted_relative_paths),
         )
 
 

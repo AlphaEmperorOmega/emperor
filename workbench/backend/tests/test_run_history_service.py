@@ -64,7 +64,7 @@ class RunHistoryServiceContractTests(unittest.TestCase):
             )
             service = _service(logs_root)
             source: HistoricalInspectionSource = service
-            run_id = service.list_runs(limit=1, offset=0)["runs"][0]["id"]
+            run_id = service.list_runs(limit=1, offset=0).runs[0].id
 
             context = source.inspection_context(str(run_id))
 
@@ -134,7 +134,7 @@ class RunHistoryServiceContractTests(unittest.TestCase):
                 ],
             )
             service = _service(logs_root)
-            run_id = str(service.list_runs(limit=1, offset=0)["runs"][0]["id"])
+            run_id = service.list_runs(limit=1, offset=0).runs[0].id
             checkpoint = run_dir / "checkpoints" / "epoch=0-step=1.ckpt"
             checkpoint.unlink()
             outside_checkpoint = root / "outside.ckpt"

@@ -16,6 +16,21 @@ from workbench.backend.api.mutation_policy import (
 from workbench.backend.api.v1.log_archive_upload import (
     parse_multipart_log_archive_upload,
 )
+from workbench.backend.api.v1.logs_mapping import (
+    log_archive_import_to_payload,
+    log_checkpoints_to_payload,
+    log_experiment_delete_to_payload,
+    log_experiment_page_to_payload,
+    log_media_to_payload,
+    log_monitor_data_to_payload,
+    log_parameter_status_to_payload,
+    log_run_artifacts_to_payload,
+    log_run_delete_plan_to_payload,
+    log_run_delete_result_to_payload,
+    log_run_page_to_payload,
+    log_run_tags_to_payload,
+    log_scalar_series_to_payload,
+)
 from workbench.backend.blocking import (
     BLOCKING_WORK_TIMEOUT_MESSAGE,
     DEFAULT_BLOCKING_WORK_TIMEOUT_SECONDS,
@@ -35,32 +50,25 @@ from workbench.backend.run_history import RunHistoryService
 from workbench.backend.run_history.errors import RunHistoryFailure
 from workbench.backend.schemas import (
     LogArchiveImportResponse,
-    LogCheckpointResponse,
     LogCheckpointsRequest,
     LogCheckpointsResponse,
     LogExperimentDeleteResponse,
     LogExperimentsResponse,
-    LogImageSummaryResponse,
     LogMediaRequest,
     LogMediaResponse,
     LogParameterStatusRequest,
     LogParameterStatusResponse,
     LogPresetDeleteRequest,
-    LogRunArtifactResponse,
     LogRunArtifactsResponse,
     LogRunDeleteFiltersRequest,
     LogRunDeletePlanResponse,
     LogRunDeleteResponse,
     LogRunsResponse,
-    LogRunTagsResponse,
-    LogScalarSeriesResponse,
     LogScalarsRequest,
     LogScalarsResponse,
     LogTagsRequest,
     LogTagsResponse,
-    LogTextSummaryResponse,
     MonitorDataResponse,
-    ParameterStatusResponse,
 )
 
 router = APIRouter(
@@ -73,7 +81,6 @@ router = APIRouter(
 # the app-scoped capability layer.
 DEFAULT_LOG_PAGE_LIMIT = 500
 MAX_LOG_PAGE_LIMIT = 2000
-LOG_METADATA_RESPONSE_LIMIT = 500
 LOG_ARCHIVE_UPLOAD_MEMORY_SPOOL_SIZE = 1024 * 1024
 LOG_ARCHIVE_UPLOAD_LIMITER_NAME = "log-archive-upload"
 
@@ -121,22 +128,6 @@ async def _read_upload_body_with_limit(
         executor.shutdown(wait=True, cancel_futures=False)
 
 
-def _bounded_metadata_response(items: list[object], *, label: str) -> dict[str, object]:
-    returned = items[:LOG_METADATA_RESPONSE_LIMIT]
-    truncated = len(items) > len(returned)
-    return {
-        "sourceItemCount": len(items),
-        "returnedItemCount": len(returned),
-        "truncated": truncated,
-        "truncationReason": (
-            f"{label} capped at {LOG_METADATA_RESPONSE_LIMIT} rows"
-            if truncated
-            else None
-        ),
-        "items": returned,
-    }
-
-
 def _model_query_ids(
     model_types: list[str] | None,
     models: list[str] | None,
@@ -182,8 +173,7 @@ async def logs_runs(
     ] = None,
     projection: Annotated[Literal["full", "summary"], Query()] = "full",
 ) -> LogRunsResponse:
-    return LogRunsResponse.model_validate(
-        await run_blocking_io(
+    page = await run_blocking_io(
             service.list_runs,
             limit=limit,
             offset=offset,
@@ -195,7 +185,7 @@ async def logs_runs(
             has_event_files=has_event_files,
             projection=projection,
         )
-    )
+    return LogRunsResponse.model_validate(log_run_page_to_payload(page))
 
 
 @router.get(
@@ -209,8 +199,9 @@ async def logs_experiments(
     limit: int = Query(DEFAULT_LOG_PAGE_LIMIT, ge=1, le=MAX_LOG_PAGE_LIMIT),
     offset: int = Query(0, ge=0),
 ) -> LogExperimentsResponse:
+    page = await run_blocking_io(service.list_experiments, limit=limit, offset=offset)
     return LogExperimentsResponse.model_validate(
-        await run_blocking_io(service.list_experiments, limit=limit, offset=offset)
+        log_experiment_page_to_payload(page)
     )
 
 
@@ -264,7 +255,7 @@ async def import_log_archive(
             max_upload_size=max_upload_size,
         )
 
-        def parse_and_extract_archive() -> dict[str, object]:
+        def parse_and_extract_archive():
             try:
                 upload = parse_multipart_log_archive_upload(
                     content_type=content_type,
@@ -288,7 +279,9 @@ async def import_log_archive(
             limiter=upload_limiter,
             limiter_already_acquired=True,
         )
-        return LogArchiveImportResponse.model_validate(result)
+        return LogArchiveImportResponse.model_validate(
+            log_archive_import_to_payload(result)
+        )
     finally:
         if not limiter_handed_to_worker:
             upload_limiter.release()
@@ -306,20 +299,8 @@ async def logs_checkpoints(
     service: Annotated[RunHistoryService, Depends(get_run_history_service)],
 ) -> LogCheckpointsResponse:
     checkpoints = await run_blocking_io(service.checkpoints_for_runs, request.runIds)
-    bounded = _bounded_metadata_response(checkpoints, label="checkpoint metadata")
-    return LogCheckpointsResponse(
-        sourceItemCount=int(bounded["sourceItemCount"]),
-        returnedItemCount=int(bounded["returnedItemCount"]),
-        truncated=bool(bounded["truncated"]),
-        truncationReason=(
-            str(bounded["truncationReason"])
-            if bounded["truncationReason"] is not None
-            else None
-        ),
-        checkpoints=[
-            LogCheckpointResponse.model_validate(checkpoint)
-            for checkpoint in bounded["items"]
-        ],
+    return LogCheckpointsResponse.model_validate(
+        log_checkpoints_to_payload(checkpoints)
     )
 
 
@@ -335,11 +316,11 @@ async def delete_log_experiment(
     service: Annotated[RunHistoryService, Depends(get_run_history_service)],
     settings: Annotated[WorkbenchApiSettings, Depends(get_workbench_settings)],
 ) -> LogExperimentDeleteResponse:
-    def delete_experiment() -> dict[str, object]:
+    def delete_experiment():
         return service.delete_experiment(experiment)
 
     return LogExperimentDeleteResponse.model_validate(
-        await run_mutation_io(delete_experiment)
+        log_experiment_delete_to_payload(await run_mutation_io(delete_experiment))
     )
 
 
@@ -354,7 +335,7 @@ async def log_run_delete_plan(
     request: LogRunDeleteFiltersRequest,
     service: Annotated[RunHistoryService, Depends(get_run_history_service)],
 ) -> LogRunDeletePlanResponse:
-    def create_delete_plan() -> dict[str, object]:
+    def create_delete_plan():
         return service.create_delete_plan(
             experiments=request.experiments,
             datasets=request.datasets,
@@ -364,7 +345,7 @@ async def log_run_delete_plan(
         )
 
     return LogRunDeletePlanResponse.model_validate(
-        await run_blocking_io(create_delete_plan)
+        log_run_delete_plan_to_payload(await run_blocking_io(create_delete_plan))
     )
 
 
@@ -380,7 +361,7 @@ async def delete_log_runs(
     service: Annotated[RunHistoryService, Depends(get_run_history_service)],
     settings: Annotated[WorkbenchApiSettings, Depends(get_workbench_settings)],
 ) -> LogRunDeleteResponse:
-    def delete_runs() -> dict[str, object]:
+    def delete_runs():
         return service.delete_runs(
             experiments=request.experiments,
             datasets=request.datasets,
@@ -389,7 +370,9 @@ async def delete_log_runs(
             run_ids=request.runIds,
         )
 
-    return LogRunDeleteResponse.model_validate(await run_mutation_io(delete_runs))
+    return LogRunDeleteResponse.model_validate(
+        log_run_delete_result_to_payload(await run_mutation_io(delete_runs))
+    )
 
 
 @router.post(
@@ -403,14 +386,14 @@ async def log_preset_delete_plan(
     request: LogPresetDeleteRequest,
     service: Annotated[RunHistoryService, Depends(get_run_history_service)],
 ) -> LogRunDeletePlanResponse:
-    def create_delete_plan() -> dict[str, object]:
+    def create_delete_plan():
         return service.create_preset_delete_plan(
             experiment=request.experiment,
             preset=request.preset,
         )
 
     return LogRunDeletePlanResponse.model_validate(
-        await run_blocking_io(create_delete_plan)
+        log_run_delete_plan_to_payload(await run_blocking_io(create_delete_plan))
     )
 
 
@@ -426,13 +409,15 @@ async def delete_log_preset(
     service: Annotated[RunHistoryService, Depends(get_run_history_service)],
     settings: Annotated[WorkbenchApiSettings, Depends(get_workbench_settings)],
 ) -> LogRunDeleteResponse:
-    def delete_preset() -> dict[str, object]:
+    def delete_preset():
         return service.delete_preset(
             experiment=request.experiment,
             preset=request.preset,
         )
 
-    return LogRunDeleteResponse.model_validate(await run_mutation_io(delete_preset))
+    return LogRunDeleteResponse.model_validate(
+        log_run_delete_result_to_payload(await run_mutation_io(delete_preset))
+    )
 
 
 @router.post(
@@ -449,8 +434,8 @@ async def logs_tags(
     service: Annotated[RunHistoryService, Depends(get_run_history_service)],
 ) -> LogTagsResponse:
     tags_for_runs = await run_blocking_io(service.tags_for_runs, request.runIds)
-    return LogTagsResponse(
-        runs=[LogRunTagsResponse.model_validate(tags) for tags in tags_for_runs]
+    return LogTagsResponse.model_validate(
+        {"runs": [log_run_tags_to_payload(tags) for tags in tags_for_runs]}
     )
 
 
@@ -472,10 +457,12 @@ async def logs_scalars(
         max_points=request.maxPoints,
         sampling=request.sampling,
     )
-    return LogScalarsResponse(
-        series=[
-            LogScalarSeriesResponse.model_validate(series) for series in scalar_series
-        ]
+    return LogScalarsResponse.model_validate(
+        {
+            "series": [
+                log_scalar_series_to_payload(series) for series in scalar_series
+            ]
+        }
     )
 
 
@@ -496,18 +483,7 @@ async def logs_media(
         image_tags=request.imageTags,
         text_tags=request.textTags,
     )
-    return LogMediaResponse(
-        eventBytes=media.get("eventBytes"),
-        skippedEventFiles=media.get("skippedEventFiles"),
-        sourceItemCount=media.get("sourceItemCount"),
-        returnedItemCount=media.get("returnedItemCount"),
-        truncated=media.get("truncated"),
-        truncationReason=media.get("truncationReason"),
-        images=[
-            LogImageSummaryResponse.model_validate(image) for image in media["images"]
-        ],
-        texts=[LogTextSummaryResponse.model_validate(text) for text in media["texts"]],
-    )
+    return LogMediaResponse.model_validate(log_media_to_payload(media))
 
 
 @router.post(
@@ -526,7 +502,10 @@ async def logs_parameter_status(
         request.runIds,
     )
     return LogParameterStatusResponse(
-        runs=[ParameterStatusResponse.model_validate(status) for status in statuses]
+        runs=[
+            log_parameter_status_to_payload(status)
+            for status in statuses
+        ]
     )
 
 
@@ -540,23 +519,9 @@ async def log_run_artifacts(
     run_id: str,
     service: Annotated[RunHistoryService, Depends(get_run_history_service)],
 ) -> LogRunArtifactsResponse:
-    payload = await run_blocking_io(service.artifacts_for_run, run_id)
-    return LogRunArtifactsResponse(
-        runId=str(payload["runId"]),
-        params=dict(payload["params"]),
-        metrics=dict(payload["metrics"]),
-        sourceItemCount=payload.get("sourceItemCount"),
-        returnedItemCount=payload.get("returnedItemCount"),
-        truncated=payload.get("truncated"),
-        truncationReason=payload.get("truncationReason"),
-        artifacts=[
-            LogRunArtifactResponse.model_validate(artifact)
-            for artifact in payload["artifacts"]
-        ],
-        checkpoints=[
-            LogCheckpointResponse.model_validate(checkpoint)
-            for checkpoint in payload["checkpoints"]
-        ],
+    details = await run_blocking_io(service.artifacts_for_run, run_id)
+    return LogRunArtifactsResponse.model_validate(
+        log_run_artifacts_to_payload(details)
     )
 
 
@@ -571,10 +536,9 @@ async def log_run_monitor_data(
     service: Annotated[RunHistoryService, Depends(get_run_history_service)],
     node_path: str = Query(..., alias="nodePath"),
 ) -> MonitorDataResponse:
-    return MonitorDataResponse.model_validate(
-        await run_blocking_io(
+    data = await run_blocking_io(
             service.monitor_data_for_run,
             run_id,
             node_path=node_path,
         )
-    )
+    return MonitorDataResponse.model_validate(log_monitor_data_to_payload(data))
