@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import os
 import random
+import sys
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -11,11 +13,18 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 from emperor.augmentations.adaptive_parameters.core.weight import (
     LowRankDynamicWeightConfig,
 )
-from emperor.experiments.base import GridSearch, RandomSearch
-from emperor.model_packages import model_package
-from emperor.runs import RunRequest, plan_runs
+from models.catalog import model_package
 from models.linears.linear_adaptive.presets import ExperimentPreset
 from models.package_cli import _search_spec, run_model_package_cli
+from models.parser import get_experiment_parser
+
+from model_runtime.packages import GridSearch, RandomSearch
+from model_runtime.runs import (
+    CheckpointContinuation,
+    InvalidCheckpointContinuation,
+    RunRequest,
+    plan_runs,
+)
 
 
 def _linears_linear():
@@ -33,6 +42,172 @@ def _linears_linear_adaptive():
 
 
 class PackageCliRunsTests(unittest.TestCase):
+    def test_parser_accepts_checkpoint_path(self) -> None:
+        args = get_experiment_parser(["baseline"]).parse_args(
+            ["--preset", "baseline", "--resume-checkpoint", "last.ckpt"]
+        )
+
+        self.assertEqual(args.resume_checkpoint, "last.ckpt")
+
+    def test_single_run_forwards_typed_checkpoint_continuation(self) -> None:
+        checkpoint = Path("relative/checkpoints/last.ckpt")
+        with (
+            patch.object(
+                sys,
+                "argv",
+                [
+                    "model-package",
+                    "--preset",
+                    "baseline",
+                    "--datasets",
+                    "mnist",
+                    "--resume-checkpoint",
+                    str(checkpoint),
+                ],
+            ),
+            patch("models.package_cli.execute_runs", return_value=()) as execute,
+        ):
+            run_model_package_cli(
+                experiment_type=object,
+                preset_type=ExperimentPreset,
+                module_path="models.linears.linear_adaptive",
+            )
+
+        self.assertEqual(
+            execute.call_args.kwargs["continuation"],
+            CheckpointContinuation(checkpoint),
+        )
+
+    def test_checkpoint_continuation_requires_explicit_dataset(self) -> None:
+        args = SimpleNamespace(
+            all_presets=False,
+            datasets=None,
+            grid_search=False,
+            logdir=None,
+            preset="baseline",
+            presets=None,
+            random_search=None,
+            resume_checkpoint="last.ckpt",
+            search_keys=None,
+            search_set=None,
+        )
+        parser = SimpleNamespace(parse_args=lambda: args)
+        with (
+            patch("models.package_cli.get_experiment_parser", return_value=parser),
+            patch("models.package_cli.resolve_experiment_mode") as resolve_mode,
+            self.assertRaisesRegex(
+                InvalidCheckpointContinuation,
+                "exactly one explicitly selected --dataset",
+            ),
+        ):
+            run_model_package_cli(
+                experiment_type=object,
+                preset_type=ExperimentPreset,
+                module_path="models.linears.linear_adaptive",
+            )
+
+        resolve_mode.assert_not_called()
+
+    def test_checkpoint_continuation_rejects_multiple_datasets(self) -> None:
+        args = SimpleNamespace(
+            all_presets=False,
+            datasets=["mnist", "cifar10"],
+            grid_search=False,
+            logdir=None,
+            preset="baseline",
+            presets=None,
+            random_search=None,
+            resume_checkpoint="last.ckpt",
+            search_keys=None,
+            search_set=None,
+        )
+        parser = SimpleNamespace(parse_args=lambda: args)
+        with (
+            patch("models.package_cli.get_experiment_parser", return_value=parser),
+            patch("models.package_cli.resolve_experiment_mode") as resolve_mode,
+            self.assertRaisesRegex(
+                InvalidCheckpointContinuation,
+                "exactly one explicitly selected --dataset",
+            ),
+        ):
+            run_model_package_cli(
+                experiment_type=object,
+                preset_type=ExperimentPreset,
+                module_path="models.linears.linear_adaptive",
+            )
+
+        resolve_mode.assert_not_called()
+
+    def test_checkpoint_continuation_requires_singular_preset_flag(self) -> None:
+        for selection in ("presets", "all_presets"):
+            with self.subTest(selection=selection):
+                args = SimpleNamespace(
+                    all_presets=selection == "all_presets",
+                    datasets=["mnist"],
+                    grid_search=False,
+                    logdir=None,
+                    preset=None,
+                    presets=["baseline"] if selection == "presets" else None,
+                    random_search=None,
+                    resume_checkpoint="last.ckpt",
+                    search_keys=None,
+                    search_set=None,
+                )
+                parser = SimpleNamespace(parse_args=lambda args=args: args)
+                with (
+                    patch(
+                        "models.package_cli.get_experiment_parser",
+                        return_value=parser,
+                    ),
+                    patch("models.package_cli.resolve_experiment_mode") as resolve_mode,
+                    self.assertRaisesRegex(
+                        InvalidCheckpointContinuation,
+                        "exactly one --preset",
+                    ),
+                ):
+                    run_model_package_cli(
+                        experiment_type=object,
+                        preset_type=ExperimentPreset,
+                        module_path="models.linears.linear_adaptive",
+                    )
+
+                resolve_mode.assert_not_called()
+
+    def test_checkpoint_continuation_rejects_search_modes(self) -> None:
+        for search_mode in ("grid", "random"):
+            with self.subTest(search_mode=search_mode):
+                args = SimpleNamespace(
+                    all_presets=False,
+                    datasets=["mnist"],
+                    grid_search=search_mode == "grid",
+                    logdir=None,
+                    preset="baseline",
+                    presets=None,
+                    random_search=2 if search_mode == "random" else None,
+                    resume_checkpoint="last.ckpt",
+                    search_keys=None,
+                    search_set=None,
+                )
+                parser = SimpleNamespace(parse_args=lambda args=args: args)
+                with (
+                    patch(
+                        "models.package_cli.get_experiment_parser",
+                        return_value=parser,
+                    ),
+                    patch("models.package_cli.resolve_experiment_mode") as resolve_mode,
+                    self.assertRaisesRegex(
+                        InvalidCheckpointContinuation,
+                        "does not support search flags",
+                    ),
+                ):
+                    run_model_package_cli(
+                        experiment_type=object,
+                        preset_type=ExperimentPreset,
+                        module_path="models.linears.linear_adaptive",
+                    )
+
+                resolve_mode.assert_not_called()
+
     def test_invalid_log_folder_rejects_before_plan_materialization(self) -> None:
         args = SimpleNamespace(datasets=["mnist"], logdir="../invalid")
         mode = SimpleNamespace(

@@ -1,10 +1,10 @@
+import os
 import shlex
 import subprocess
 import sys
 import unittest
 from pathlib import Path
 
-from emperor.model_packages.identity import is_safe_model_segment, split_model_id
 from models.catalog import (
     catalog_entry,
     discover_model_identities_for_type,
@@ -13,6 +13,8 @@ from models.catalog import (
     model_type_exists,
     public_id_for_flat_name,
 )
+
+from model_runtime.packages.identity import is_safe_model_segment, split_model_id
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -324,6 +326,7 @@ class TestConfigOverrideCli(unittest.TestCase):
         )
 
 
+@unittest.skipUnless(os.name == "posix", "experiment.sh is a Unix wrapper")
 class TestExperimentShellCatalogCli(unittest.TestCase):
     def run_experiment(self, *args):
         command = "source experiment.sh"
@@ -353,6 +356,14 @@ class TestExperimentShellCatalogCli(unittest.TestCase):
             text=True,
             check=False,
         )
+
+    def test_no_argument_help_describes_checkpoint_continuation(self):
+        completed = self.run_experiment()
+
+        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(completed.stderr, "")
+        self.assertIn("--resume-checkpoint <path>", completed.stdout)
+        self.assertIn("--datasets mnist --resume-checkpoint", completed.stdout)
 
     def test_list_model_types_prints_copyable_model_type_flags(self):
         completed = self.run_experiment("--list-model-types")
@@ -710,6 +721,32 @@ class TestExperimentShellCatalogCli(unittest.TestCase):
                 "--monitors",
                 "linear",
                 "halting",
+            ],
+        )
+
+    def test_training_command_forwards_checkpoint_continuation_path(self):
+        completed = self.run_model_command_with_python_stub(
+            "--preset",
+            "baseline",
+            "--datasets",
+            "mnist",
+            "--resume-checkpoint",
+            "logs/source/checkpoints/last.ckpt",
+        )
+
+        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(completed.stderr, "")
+        self.assertEqual(
+            completed.stdout.splitlines(),
+            [
+                "-m",
+                "models.fake",
+                "--preset",
+                "baseline",
+                "--datasets",
+                "mnist",
+                "--resume-checkpoint",
+                "logs/source/checkpoints/last.ckpt",
             ],
         )
 
