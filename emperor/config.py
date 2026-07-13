@@ -41,7 +41,10 @@ class ModelConfig(ConfigBase):
     gather_frequency_flag: bool = field(
         default=GATHER_FREQUENCY_FLAG,
         metadata={
-            "help": "Flag to control frequency of gathering operations for the purpose of visualization"
+            "help": (
+                "Flag to control frequency of gathering operations for the purpose "
+                "of visualization"
+            )
         },
     )
     experiment_config: ConfigBase | None = field(
