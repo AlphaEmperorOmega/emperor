@@ -29,7 +29,7 @@ import { TrainingRunSummaryBadge } from "@/features/workbench/components/trainin
 import { TrainingLogTailCard } from "@/features/workbench/components/training/training-log-tail-card";
 import { TrainingRunPlanCard } from "@/features/workbench/components/training/training-run-plan-card";
 import { WorkbenchWideThreeRegionLayout } from "@/features/workbench/components/_workbench-wide-three-region-layout";
-import { useTrainingWorkspace } from "@/features/workbench/providers/training-provider";
+import { useTrainingWorkspace } from "@/features/workbench/providers/training-execution-context";
 
 const trainingIconClass = "h-[15px] w-[15px] text-violet";
 

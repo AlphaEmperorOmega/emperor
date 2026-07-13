@@ -1,26 +1,62 @@
 import dynamic from "next/dynamic";
-import { NodeDetailsPanel } from "@/features/workbench/components/screen/node-details-panel";
-import { PreviewPanel } from "@/features/workbench/components/screen/preview-panel";
-import { PreviewToolbar } from "@/features/workbench/components/screen/preview-toolbar";
-import { WorkbenchModelSidebar } from "@/features/workbench/components/workbench-model-sidebar";
+import { Activity, type ReactNode } from "react";
 import {
   WorkbenchThreeRegionLayout,
   WorkbenchWideWorkspaceRegion,
   WorkbenchWorkspaceLoadingStatus,
 } from "@/features/workbench/components/workbench-workspace-layout";
 import {
-  useGraphMonitor,
-  useGraphView,
-} from "@/features/workbench/providers/workbench-providers";
-import {
+  type DeferredWorkbenchWorkspace,
   type FullConfigDialogControls,
-  type WorkbenchDialogControls,
 } from "@/features/workbench/state/use-workbench-workspace-shell";
 import { type WorkbenchWorkspace } from "@/types/workbench";
 
 function TrainingWorkspaceLoadingFallback() {
   return <WorkbenchWorkspaceLoadingStatus label="Loading training workspace…" />;
 }
+
+function LogsWorkspaceProviderLoadingFallback() {
+  return (
+    <WorkbenchWideWorkspaceRegion>
+      <WorkbenchWorkspaceLoadingStatus label="Loading logs workspace…" />
+    </WorkbenchWideWorkspaceRegion>
+  );
+}
+
+function ModelWorkspaceLoadingFallback() {
+  return (
+    <WorkbenchWideWorkspaceRegion>
+      <WorkbenchWorkspaceLoadingStatus label="Loading model workspace…" />
+    </WorkbenchWideWorkspaceRegion>
+  );
+}
+
+const WorkbenchModelWorkspace = dynamic(
+  () =>
+    import("@/features/workbench/components/workbench-model-workspace").then(
+      (module) => module.WorkbenchModelWorkspace,
+    ),
+  { ssr: false, loading: ModelWorkspaceLoadingFallback },
+);
+
+const DeferredTrainingExecutionProvider = dynamic(
+  () =>
+    import(
+      "@/features/workbench/providers/training-execution-provider"
+    ).then((module) => module.TrainingExecutionProvider),
+  { ssr: false },
+);
+
+const DeferredLogsWorkspaceProvider = dynamic(
+  () =>
+    import("@/features/workbench/providers/logs-workspace-provider").then(
+      (module) => module.LogsWorkspaceProvider,
+    ),
+  {
+    ssr: false,
+    loading: LogsWorkspaceProviderLoadingFallback,
+  },
+);
 
 const TrainingPanel = dynamic(
   () =>
@@ -36,28 +72,6 @@ const FullConfigDialog = dynamic(
   () =>
     import("@/features/workbench/components/config/full-config-dialog").then(
       (module) => module.FullConfigDialog,
-    ),
-  { ssr: false },
-);
-const ApiConnectionDialog = dynamic(
-  () =>
-    import(
-      "@/features/workbench/components/screen/api-connection-dialog"
-    ).then((module) => module.ApiConnectionDialog),
-  { ssr: false },
-);
-const ImportLogsDialog = dynamic(
-  () =>
-    import("@/features/workbench/components/screen/import-logs-dialog").then(
-      (module) => module.ImportLogsDialog,
-    ),
-  { ssr: false },
-);
-
-const FeatureListDialog = dynamic(
-  () =>
-    import("@/features/workbench/components/feature-list-dialog").then(
-      (module) => module.FeatureListDialog,
     ),
   { ssr: false },
 );
@@ -82,105 +96,117 @@ const ConnectedLogRunDetailsPanel = dynamic(
     ),
   { ssr: false },
 );
-const ConnectedMonitorChartsModal = dynamic(
-  () =>
-    import(
-      "@/features/workbench/components/monitor/connected-monitor-charts-modal"
-    ).then((module) => module.ConnectedMonitorChartsModal),
-  { ssr: false },
-);
-const ConnectedNeuronCluster3DPopup = dynamic(
-  () =>
-    import("@/features/workbench/components/graph/neuron-cluster-3d-popup").then(
-      (module) => module.ConnectedNeuronCluster3DPopup,
-    ),
-  { ssr: false },
-);
+
+export function WorkbenchWorkspaceActivities({
+  activeWorkspace,
+  deferredWorkspaceOrder,
+  model,
+  logs,
+  training,
+  trainingBoundary,
+}: {
+  activeWorkspace: WorkbenchWorkspace;
+  deferredWorkspaceOrder: readonly DeferredWorkbenchWorkspace[];
+  model: ReactNode;
+  logs: ReactNode;
+  training: ReactNode;
+  trainingBoundary?: (activity: ReactNode) => ReactNode;
+}) {
+  const logsActivity = deferredWorkspaceOrder.includes("logs") ? (
+    <Activity
+      name="Workbench logs workspace"
+      mode={activeWorkspace === "logs" ? "visible" : "hidden"}
+    >
+      {logs}
+    </Activity>
+  ) : null;
+  const trainingActivity = deferredWorkspaceOrder.includes("training") ? (
+    <Activity
+      name="Workbench training workspace"
+      mode={activeWorkspace === "training" ? "visible" : "hidden"}
+    >
+      {training}
+    </Activity>
+  ) : null;
+
+  return (
+    <>
+      <Activity
+        name="Workbench Model workspace"
+        mode={activeWorkspace === "model" ? "visible" : "hidden"}
+      >
+        {model}
+      </Activity>
+      {logsActivity}
+      {trainingBoundary
+        ? trainingBoundary(trainingActivity)
+        : trainingActivity}
+    </>
+  );
+}
 
 export function WorkbenchWorkspaceRegions({
   activeWorkspace,
+  deferredWorkspaceOrder =
+    activeWorkspace === "model" ? [] : [activeWorkspace],
+  fullConfigDialog,
   onOpenFullConfig,
+  startedLogFolders = [],
+  trainingRuntimeActivated = false,
 }: {
   activeWorkspace: WorkbenchWorkspace;
+  deferredWorkspaceOrder?: readonly DeferredWorkbenchWorkspace[];
+  fullConfigDialog?: FullConfigDialogControls;
   onOpenFullConfig: FullConfigDialogControls["open"];
+  startedLogFolders?: readonly string[];
+  trainingRuntimeActivated?: boolean;
 }) {
-  if (activeWorkspace === "model") {
-    return (
-      <WorkbenchThreeRegionLayout
-        sidebar={
-          <WorkbenchModelSidebar onOpenFullConfig={onOpenFullConfig} />
-        }
-        primary={
-          <div className="grid h-full min-h-0 grid-rows-[56px_minmax(0,1fr)] bg-transparent">
-            <PreviewToolbar />
-            <PreviewPanel />
-          </div>
-        }
-        details={<NodeDetailsPanel />}
-      />
-    );
-  }
-
-  if (activeWorkspace === "logs") {
-    return (
+  const model = (
+    <WorkbenchModelWorkspace onOpenFullConfig={onOpenFullConfig} />
+  );
+  const logs = (
+    <DeferredLogsWorkspaceProvider
+      enabled={activeWorkspace === "logs"}
+      startedExperiments={startedLogFolders}
+    >
       <WorkbenchThreeRegionLayout
         sidebar={<ConnectedLogsSidebarPanel />}
         primary={<ConnectedLogsGraphPreviewPanel />}
         details={<ConnectedLogRunDetailsPanel />}
       />
-    );
-  }
-
-  if (activeWorkspace === "training") {
-    return (
-      <WorkbenchWideWorkspaceRegion>
-        <TrainingPanel />
-      </WorkbenchWideWorkspaceRegion>
-    );
-  }
-
-  return null;
-}
-
-export function WorkbenchWorkspaceOverlays({
-  activeWorkspace,
-  fullConfigDialog,
-  featureListDialog,
-  apiConnectionDialog,
-  importLogsDialog,
-}: {
-  activeWorkspace: WorkbenchWorkspace;
-  fullConfigDialog: FullConfigDialogControls;
-  featureListDialog: WorkbenchDialogControls;
-  apiConnectionDialog: WorkbenchDialogControls;
-  importLogsDialog: WorkbenchDialogControls;
-}) {
-  const isModelWorkspace = activeWorkspace === "model";
-  const { cluster3dNodeId } = useGraphView();
-  const { graphMonitorNode, graphMonitorSource } = useGraphMonitor();
+    </DeferredLogsWorkspaceProvider>
+  );
+  const training = (
+    <WorkbenchWideWorkspaceRegion>
+      <TrainingPanel />
+    </WorkbenchWideWorkspaceRegion>
+  );
+  const trainingBoundary = trainingRuntimeActivated
+    ? (activity: ReactNode) => (
+        <DeferredTrainingExecutionProvider
+          activeWorkspace={activeWorkspace}
+          onOpenFullConfig={onOpenFullConfig}
+        >
+          {activity}
+          {fullConfigDialog?.isOpen && (
+            <FullConfigDialog
+              mode={fullConfigDialog.mode}
+              scope={fullConfigDialog.scope}
+              onClose={fullConfigDialog.close}
+            />
+          )}
+        </DeferredTrainingExecutionProvider>
+      )
+    : undefined;
 
   return (
-    <>
-      {fullConfigDialog.isOpen && (
-        <FullConfigDialog
-          mode={fullConfigDialog.mode}
-          scope={fullConfigDialog.scope}
-          onClose={fullConfigDialog.close}
-        />
-      )}
-      {featureListDialog.isOpen && (
-        <FeatureListDialog onClose={featureListDialog.close} />
-      )}
-      {apiConnectionDialog.isOpen && (
-        <ApiConnectionDialog onClose={apiConnectionDialog.close} />
-      )}
-      {importLogsDialog.isOpen && (
-        <ImportLogsDialog onClose={importLogsDialog.close} />
-      )}
-      {isModelWorkspace && graphMonitorNode && graphMonitorSource && (
-        <ConnectedMonitorChartsModal />
-      )}
-      {isModelWorkspace && cluster3dNodeId && <ConnectedNeuronCluster3DPopup />}
-    </>
+    <WorkbenchWorkspaceActivities
+      activeWorkspace={activeWorkspace}
+      deferredWorkspaceOrder={deferredWorkspaceOrder}
+      model={model}
+      logs={logs}
+      training={training}
+      trainingBoundary={trainingBoundary}
+    />
   );
 }

@@ -1,4 +1,4 @@
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
@@ -65,6 +65,46 @@ async function createBuildFixture() {
   ]);
 
   return { chunks, directory, loadableManifest };
+}
+
+async function createTurbopackBuildFixture() {
+  const directory = await mkdtemp(join(tmpdir(), "performance-evidence-next16-"));
+  temporaryDirectories.push(directory);
+  const chunks = new Map([
+    ["shared.js", "shared Turbopack runtime"],
+    ["route.js", "route implementation"],
+    ["deferred-a.js", "first deferred implementation"],
+    ["deferred-b.js", "second deferred implementation"],
+  ]);
+  const clientReferenceManifest = {
+    entryJSFiles: {
+      "[project]/app/layout": ["shared.js"],
+      "[project]/app/page": ["shared.js", "route.js", "route.js"],
+    },
+  };
+  const loadableManifest = {
+    1201: { files: ["deferred-a.js"] },
+    1202: { files: ["deferred-b.js"] },
+    1203: { files: ["deferred-a.js"] },
+  };
+  const manifestDirectory = join(directory, "server", "app");
+  const loadableDirectory = join(manifestDirectory, "page");
+  await mkdir(loadableDirectory, { recursive: true });
+  await Promise.all([
+    writeFile(
+      join(manifestDirectory, "page_client-reference-manifest.js"),
+      `globalThis.__RSC_MANIFEST = globalThis.__RSC_MANIFEST || {};\nglobalThis.__RSC_MANIFEST["/page"] = ${JSON.stringify(clientReferenceManifest)};\n`,
+    ),
+    writeFile(
+      join(loadableDirectory, "react-loadable-manifest.json"),
+      JSON.stringify(loadableManifest),
+    ),
+    ...[...chunks].map(([file, contents]) =>
+      writeFile(join(directory, file), contents),
+    ),
+  ]);
+
+  return { chunks, directory, loadableDirectory, loadableManifest };
 }
 
 function passingMetrics(buildBudgets) {
@@ -229,6 +269,7 @@ describe("performance evidence Module", () => {
 
     expect(evidence.pageFiles).toEqual(["shared.js", "route.js"]);
     expect(evidence.routeSpecificFiles).toEqual(["route.js"]);
+    expect(evidence.manifestKind).toBe("next15-webpack");
     expect(evidence.budgets).toEqual({
       first_load: {
         budget_bytes: PERFORMANCE_EVIDENCE_POLICY.budgets.firstLoadBytes,
@@ -263,6 +304,47 @@ describe("performance evidence Module", () => {
       PERFORMANCE_EVIDENCE_POLICY.deferredModules.length,
     );
     expect(() => assertBuildPerformanceBudgets(evidence)).not.toThrow();
+  });
+
+  it("collects Next 16 Turbopack route entries and grouped dynamic chunks", async () => {
+    const { chunks, directory } = await createTurbopackBuildFixture();
+    const evidence = collectBuildPerformanceEvidence(directory);
+
+    expect(evidence.manifestKind).toBe("next16-turbopack");
+    expect(evidence.pageFiles).toEqual(["shared.js", "route.js"]);
+    expect(evidence.routeSpecificFiles).toEqual(["route.js"]);
+    expect(evidence.budgets).toEqual({
+      first_load: {
+        budget_bytes: PERFORMANCE_EVIDENCE_POLICY.budgets.firstLoadBytes,
+        gzip_bytes:
+          gzipSync(chunks.get("shared.js")).byteLength +
+          gzipSync(chunks.get("route.js")).byteLength,
+      },
+      route_specific: {
+        budget_bytes: PERFORMANCE_EVIDENCE_POLICY.budgets.routeSpecificBytes,
+        gzip_bytes: gzipSync(chunks.get("route.js")).byteLength,
+      },
+    });
+    expect(evidence.deferred).toHaveLength(2);
+    expect(evidence.deferred[0]).toMatchObject({
+      files: ["deferred-a.js"],
+      label: "Turbopack dynamic chunk 1 (2 modules)",
+    });
+    expect(() => assertBuildPerformanceBudgets(evidence)).not.toThrow();
+  });
+
+  it("rejects a Next 16 Turbopack dynamic chunk in the initial route", async () => {
+    const { directory, loadableDirectory, loadableManifest } =
+      await createTurbopackBuildFixture();
+    loadableManifest[1201] = { files: ["route.js"] };
+    await writeFile(
+      join(loadableDirectory, "react-loadable-manifest.json"),
+      JSON.stringify(loadableManifest),
+    );
+
+    expect(() => collectBuildPerformanceEvidence(directory)).toThrow(
+      "leaked into the initial /page chunks",
+    );
   });
 
   it("requires measured bundle headroom without changing policy budgets", () => {

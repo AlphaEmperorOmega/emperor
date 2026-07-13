@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { startTransition, useCallback, useEffect, useState } from "react";
 import {
   parseWorkbenchWorkspace,
   type WorkbenchWorkspace,
@@ -70,10 +70,10 @@ export function useWorkbenchWorkspaceShell(
   const changeWorkspace = useCallback(
     (workspace: WorkbenchWorkspace) => {
       if (workspace === activeWorkspace) return;
-      applyWorkspace(workspace);
       const url = new URL(location.href);
       url.searchParams.set("workspace", workspace);
       history.pushState(history.state, "", url);
+      startTransition(() => applyWorkspace(workspace));
     },
     [activeWorkspace, applyWorkspace],
   );
@@ -82,7 +82,7 @@ export function useWorkbenchWorkspaceShell(
       const workspace = parseWorkbenchWorkspace(
         new URL(location.href).searchParams.get("workspace"),
       );
-      applyWorkspace(workspace);
+      startTransition(() => applyWorkspace(workspace));
     };
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);

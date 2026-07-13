@@ -67,7 +67,7 @@ vi.mock("@/features/workbench/state/logs/_logs-chart-state", () => ({
 }));
 
 vi.mock("@/features/workbench/state/logs/_use-logs-workspace-state", () => ({
-  useLogsWorkspaceState: (input: unknown) => {
+  useLogsWorkspaceState: (input: { enabled: boolean }) => {
     mocks.workspaceInput(input);
     const noop = vi.fn();
     return {
@@ -122,7 +122,7 @@ vi.mock("@/features/workbench/state/logs/_use-logs-workspace-state", () => ({
         },
       },
       charts: {
-        enabled: true,
+        enabled: input.enabled,
         visibleRuns: [],
         visibleRunIds: [],
         runsLoading: false,
@@ -203,27 +203,16 @@ beforeEach(() => {
 });
 
 describe("LogsWorkspaceProvider", () => {
-  it("mounts a fresh charts lifecycle only while Logs is active", () => {
+  it("retains the charts context while gating work to active Logs", () => {
     const rendered = render(
       <LogsWorkspaceProvider enabled={false}>
         <span>Logs child</span>
       </LogsWorkspaceProvider>,
     );
-    expect(mocks.chartViewModel).not.toHaveBeenCalled();
-
-    rendered.rerender(
-      <LogsWorkspaceProvider enabled>
-        <span>Logs child</span>
-      </LogsWorkspaceProvider>,
-    );
     expect(mocks.chartViewModel).toHaveBeenCalledTimes(1);
-
-    rendered.rerender(
-      <LogsWorkspaceProvider enabled={false}>
-        <span>Logs child</span>
-      </LogsWorkspaceProvider>,
+    expect(mocks.chartViewModel).toHaveBeenLastCalledWith(
+      expect.objectContaining({ enabled: false }),
     );
-    expect(mocks.chartViewModel).toHaveBeenCalledTimes(1);
 
     rendered.rerender(
       <LogsWorkspaceProvider enabled>
@@ -231,6 +220,29 @@ describe("LogsWorkspaceProvider", () => {
       </LogsWorkspaceProvider>,
     );
     expect(mocks.chartViewModel).toHaveBeenCalledTimes(2);
+    expect(mocks.chartViewModel).toHaveBeenLastCalledWith(
+      expect.objectContaining({ enabled: true }),
+    );
+
+    rendered.rerender(
+      <LogsWorkspaceProvider enabled={false}>
+        <span>Logs child</span>
+      </LogsWorkspaceProvider>,
+    );
+    expect(mocks.chartViewModel).toHaveBeenCalledTimes(3);
+    expect(mocks.chartViewModel).toHaveBeenLastCalledWith(
+      expect.objectContaining({ enabled: false }),
+    );
+
+    rendered.rerender(
+      <LogsWorkspaceProvider enabled>
+        <span>Logs child</span>
+      </LogsWorkspaceProvider>,
+    );
+    expect(mocks.chartViewModel).toHaveBeenCalledTimes(4);
+    expect(mocks.chartViewModel).toHaveBeenLastCalledWith(
+      expect.objectContaining({ enabled: true }),
+    );
   });
 
   it("keeps Logs reads and deletion disabled until protected access is ready", () => {

@@ -18,15 +18,13 @@ import {
 } from "@/features/workbench/providers/workbench-providers";
 import { useWorkbenchConnection } from "@/features/workbench/providers/workbench-connection-provider";
 import {
-  useActiveTrainingJob,
   useTrainingConfiguration,
   useTrainingWorkspace,
-} from "@/features/workbench/providers/training-provider";
+} from "@/features/workbench/providers/training-execution-context";
+import { useActiveTrainingJob } from "@/features/workbench/providers/training-provider";
 import { trainingQueryKeys } from "@/lib/query-keys";
-import {
-  WorkbenchWorkspaceRegions,
-  WorkbenchWorkspaceOverlays,
-} from "@/features/workbench/components/workbench-workspaces";
+import { WorkbenchWorkspaceRegions } from "@/features/workbench/components/workbench-workspaces";
+import { WorkbenchWorkspaceOverlays } from "@/features/workbench/components/workbench-overlays";
 import { type WorkbenchWorkspace } from "@/types/workbench";
 import { trainingHarness } from "./support";
 
@@ -509,7 +507,7 @@ describe("WorkbenchApp Training And Preview", () => {
     );
 
     await user.click(screen.getByRole("button", { name: /^model$/i }));
-    expect(screen.queryByLabelText("New log folder")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("New log folder")).not.toBeVisible();
 
     await user.click(
       within(screen.getByRole("navigation", { name: "Workspace" })).getByRole(

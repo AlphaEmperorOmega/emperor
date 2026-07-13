@@ -27,7 +27,7 @@ vi.mock(
   }),
 );
 
-vi.mock("@/features/workbench/providers/training-provider", () => ({
+vi.mock("@/features/workbench/providers/training-execution-context", () => ({
   useTrainingConfiguration: mocks.useTrainingConfiguration,
 }));
 

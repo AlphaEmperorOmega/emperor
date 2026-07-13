@@ -1,5 +1,6 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { runInNewContext } from "node:vm";
 import { gzipSync } from "node:zlib";
 
 const deferredModules = [
@@ -10,6 +11,26 @@ const deferredModules = [
   {
     label: "Training execution state",
     target: "@/features/workbench/providers/training-execution-provider",
+  },
+  {
+    label: "Model target controls",
+    target: "@/features/workbench/components/workbench-model-sidebar",
+  },
+  {
+    label: "Model preview shell",
+    target: "@/features/workbench/components/screen/preview-panel",
+  },
+  {
+    label: "Model node details shell",
+    target: "@/features/workbench/components/screen/node-details-panel",
+  },
+  {
+    label: "Model preview controls",
+    target: "@/features/workbench/components/screen/preview-toolbar",
+  },
+  {
+    label: "Workbench overlays",
+    target: "@/features/workbench/components/workbench-overlays",
   },
   {
     label: "ECharts scalar charts",
@@ -96,11 +117,163 @@ function sumGzipSize(nextDirectory, files) {
   );
 }
 
+function normalizeClientChunkPath(file) {
+  return file.replace(/^\/?_next\//, "").replace(/^\.next\//, "");
+}
+
+function createBuildBudgets(nextDirectory, pageFiles, routeSpecificFiles) {
+  return {
+    first_load: {
+      budget_bytes: PERFORMANCE_EVIDENCE_POLICY.budgets.firstLoadBytes,
+      gzip_bytes: sumGzipSize(nextDirectory, pageFiles),
+    },
+    route_specific: {
+      budget_bytes: PERFORMANCE_EVIDENCE_POLICY.budgets.routeSpecificBytes,
+      gzip_bytes: sumGzipSize(nextDirectory, routeSpecificFiles),
+    },
+  };
+}
+
+function readTurbopackClientReferenceManifest(nextDirectory) {
+  const relativePath = "server/app/page_client-reference-manifest.js";
+  const manifestPath = resolve(nextDirectory, relativePath);
+  if (!existsSync(manifestPath)) {
+    return null;
+  }
+
+  try {
+    const context = {};
+    runInNewContext(readFileSync(manifestPath, "utf8"), context, {
+      timeout: 1_000,
+    });
+    return context.__RSC_MANIFEST?.["/page"] ?? null;
+  } catch (error) {
+    throw new Error(
+      `Unable to read .next/${relativePath}. Run npm run build first.`,
+      { cause: error },
+    );
+  }
+}
+
+function collectTurbopackBuildPerformanceEvidence(
+  nextDirectory,
+  clientReferenceManifest,
+) {
+  const entryJSFiles = clientReferenceManifest?.entryJSFiles;
+  invariant(
+    entryJSFiles &&
+      typeof entryJSFiles === "object" &&
+      !Array.isArray(entryJSFiles),
+    "The production /page client reference manifest has no JavaScript entries.",
+  );
+  const entries = Object.entries(entryJSFiles);
+  const pageEntryKeys = new Set(
+    entries
+      .filter(([entry]) => /(?:^|\/)app\/page$/.test(entry))
+      .map(([entry]) => entry),
+  );
+  invariant(
+    pageEntryKeys.size > 0,
+    "The production /page JavaScript entry was not found.",
+  );
+
+  const pageFiles = [
+    ...new Set(
+      entries
+        .flatMap(([, files]) => (Array.isArray(files) ? files : []))
+        .filter((file) => typeof file === "string" && file.endsWith(".js"))
+        .map(normalizeClientChunkPath),
+    ),
+  ];
+  invariant(pageFiles.length > 0, "The production /page JavaScript entry is empty.");
+  const otherEntryFiles = new Set(
+    entries
+      .filter(([entry]) => !pageEntryKeys.has(entry))
+      .flatMap(([, files]) => (Array.isArray(files) ? files : []))
+      .filter((file) => typeof file === "string" && file.endsWith(".js"))
+      .map(normalizeClientChunkPath),
+  );
+  const routeSpecificFiles = pageFiles.filter(
+    (file) => !otherEntryFiles.has(file),
+  );
+
+  const loadableManifest = readManifest(
+    nextDirectory,
+    "server/app/page/react-loadable-manifest.json",
+  );
+  invariant(
+    loadableManifest &&
+      typeof loadableManifest === "object" &&
+      !Array.isArray(loadableManifest),
+    "The production /page loadable manifest is not an object.",
+  );
+  const loadableEntries = Object.entries(loadableManifest);
+  invariant(
+    loadableEntries.length > 0,
+    "The production /page loadable manifest has no dynamic imports.",
+  );
+  const initialFiles = new Set(pageFiles);
+  const deferredByFiles = new Map();
+  for (const [moduleId, value] of loadableEntries) {
+    const files = Array.isArray(value?.files)
+      ? [
+          ...new Set(
+            value.files
+              .filter(
+                (file) => typeof file === "string" && file.endsWith(".js"),
+              )
+              .map(normalizeClientChunkPath),
+          ),
+        ]
+      : [];
+    invariant(
+      files.length > 0,
+      `Turbopack dynamic module ${moduleId} has no emitted JavaScript chunk.`,
+    );
+    const initialOverlap = files.filter((file) => initialFiles.has(file));
+    invariant(
+      initialOverlap.length === 0,
+      `Turbopack dynamic module ${moduleId} leaked into the initial /page chunks: ${initialOverlap.join(", ")}.`,
+    );
+    const key = files.slice().sort().join("\0");
+    const group = deferredByFiles.get(key);
+    if (group) {
+      group.moduleIds.push(moduleId);
+    } else {
+      deferredByFiles.set(key, { files, moduleIds: [moduleId] });
+    }
+  }
+  const deferred = [...deferredByFiles.values()].map(
+    ({ files, moduleIds }, index) => ({
+      bytes: sumGzipSize(nextDirectory, files),
+      files,
+      label: `Turbopack dynamic chunk ${index + 1} (${moduleIds.length} module${moduleIds.length === 1 ? "" : "s"})`,
+    }),
+  );
+
+  return {
+    budgets: createBuildBudgets(nextDirectory, pageFiles, routeSpecificFiles),
+    deferred,
+    manifestKind: "next16-turbopack",
+    pageFiles,
+    routeSpecificFiles,
+  };
+}
+
 export function formatPerformanceKilobytes(bytes) {
   return `${(bytes / 1_000).toFixed(1)} kB`;
 }
 
 export function collectBuildPerformanceEvidence(nextDirectory) {
+  const turbopackManifest =
+    readTurbopackClientReferenceManifest(nextDirectory);
+  if (turbopackManifest) {
+    return collectTurbopackBuildPerformanceEvidence(
+      nextDirectory,
+      turbopackManifest,
+    );
+  }
+
   const appBuildManifest = readManifest(nextDirectory, "app-build-manifest.json");
   const loadableManifest = readManifest(
     nextDirectory,
@@ -126,16 +299,11 @@ export function collectBuildPerformanceEvidence(nextDirectory) {
   const routeSpecificFiles = pageFiles.filter(
     (file) => !otherEntryFiles.has(file),
   );
-  const budgets = {
-    first_load: {
-      budget_bytes: PERFORMANCE_EVIDENCE_POLICY.budgets.firstLoadBytes,
-      gzip_bytes: sumGzipSize(nextDirectory, pageFiles),
-    },
-    route_specific: {
-      budget_bytes: PERFORMANCE_EVIDENCE_POLICY.budgets.routeSpecificBytes,
-      gzip_bytes: sumGzipSize(nextDirectory, routeSpecificFiles),
-    },
-  };
+  const budgets = createBuildBudgets(
+    nextDirectory,
+    pageFiles,
+    routeSpecificFiles,
+  );
 
   invariant(
     loadableManifest &&
@@ -197,6 +365,7 @@ export function collectBuildPerformanceEvidence(nextDirectory) {
   return {
     budgets,
     deferred,
+    manifestKind: "next15-webpack",
     pageFiles: [...new Set(pageFiles)],
     routeSpecificFiles: [...new Set(routeSpecificFiles)],
   };

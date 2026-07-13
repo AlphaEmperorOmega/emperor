@@ -10,7 +10,7 @@ import {
   useWorkbenchCapabilities,
   useWorkbenchConnection,
 } from "@/features/workbench/providers/workbench-connection-provider";
-import { useTrainingConfiguration } from "@/features/workbench/providers/training-provider";
+import { useTrainingConfiguration } from "@/features/workbench/providers/training-execution-context";
 import { useConfigSnapshotEditorState } from "@/features/workbench/state/config-snapshots/use-config-snapshot-editor";
 import {
   type FullConfigDialogMode,

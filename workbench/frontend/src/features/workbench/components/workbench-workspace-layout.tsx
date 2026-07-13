@@ -2,19 +2,11 @@ import { type ReactNode } from "react";
 import { Loader2 } from "lucide-react";
 import { StatusCard } from "@/components/ui/status-card";
 
-export type WorkbenchWorkspaceBoundary = (
-  content: ReactNode,
-) => ReactNode;
-
 export function WorkbenchWorkspaceFrame({
   children,
-  workspaceBoundary,
 }: {
   children: ReactNode;
-  workspaceBoundary?: WorkbenchWorkspaceBoundary;
 }) {
-  const content = workspaceBoundary ? workspaceBoundary(children) : children;
-
   return (
     <div
       id="workbench-workspace-content"
@@ -22,7 +14,7 @@ export function WorkbenchWorkspaceFrame({
       data-workbench-layout="workspace-frame"
       className="block min-h-0 overflow-x-hidden overflow-y-auto xl:grid xl:grid-cols-[320px_minmax(0,1fr)_320px] xl:overflow-hidden 2xl:grid-cols-[344px_minmax(0,1fr)_332px]"
     >
-      {content}
+      {children}
     </div>
   );
 }

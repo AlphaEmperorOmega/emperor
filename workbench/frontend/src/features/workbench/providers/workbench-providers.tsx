@@ -15,12 +15,9 @@ import {
 import { createWorkbenchContext } from "@/features/workbench/providers/create-context";
 import {
   TrainingLifecycleProvider,
-  TrainingConfigurationContextProvider,
-  TrainingDraftContextProvider,
   useActiveTrainingJob,
 } from "@/features/workbench/providers/training-provider";
 import type { useModelPackageInspectionState } from "@/features/workbench/state/target/use-model-package-inspection-state";
-import { useTrainingConfigurationState } from "@/features/workbench/state/training/use-training-configuration-state";
 import {
   type ConfigSnapshotEditorSessionState,
   useConfigSnapshotEditorSessionState,
@@ -70,41 +67,6 @@ export {
   useWorkbenchConnection,
 };
 
-function TrainingConfigurationController({
-  activeWorkspace,
-  children,
-}: {
-  activeWorkspace?: WorkbenchWorkspace;
-  children: ReactNode;
-}) {
-  const catalog = useModelPackageCatalog();
-  const workbenchConnection = useWorkbenchConnection();
-  const modelTarget = useModelPackageInspection();
-  const protectedReadsEnabled =
-    activeWorkspace === "training" &&
-    isWorkbenchProtectedAccessReady(workbenchConnection);
-  const training = useTrainingConfigurationState({
-    activeWorkspace: activeWorkspace ?? "model",
-    models: catalog.modelPackages.records,
-    seed: {
-      modelType: modelTarget.browser.selectedModelType,
-      model: modelTarget.browser.selectedModel,
-      preset: modelTarget.browser.selectedPreset,
-    },
-    protectedReadsEnabled,
-  });
-  const clearForConnectionChange = training.clearForConnectionChange;
-  useRegisterWorkbenchConnectionReset(clearForConnectionChange);
-
-  return (
-    <TrainingConfigurationContextProvider value={training.configuration}>
-      <TrainingDraftContextProvider value={training.draft}>
-        {children}
-      </TrainingDraftContextProvider>
-    </TrainingConfigurationContextProvider>
-  );
-}
-
 export type WorkbenchProvidersProps = {
   /** Wired to the logs workspace so a new job's folder appears in its run list. */
   onJobStarted?: (logFolder: string) => void;
@@ -145,13 +107,9 @@ function WorkbenchCompositionProviders({
           <ConfigSnapshotRecordsProvider value={targetContexts.snapshots}>
             <GraphViewProvider value={graph}>
               <HistoricalRunsProvider value={history}>
-                <TrainingConfigurationController
-                  activeWorkspace={activeWorkspace}
-                >
-                  <GraphMonitorProvider value={graphMonitor}>
-                    {children}
-                  </GraphMonitorProvider>
-                </TrainingConfigurationController>
+                <GraphMonitorProvider value={graphMonitor}>
+                  {children}
+                </GraphMonitorProvider>
               </HistoricalRunsProvider>
             </GraphViewProvider>
           </ConfigSnapshotRecordsProvider>

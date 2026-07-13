@@ -4100,17 +4100,23 @@ function fullConfigSectionNavRowFor(sectionNav: HTMLElement, name: RegExp) {
 
 async function openTrainingWorkspace(user: ReturnType<typeof userEvent.setup>) {
   const existingWorkspace = document.getElementById("training-workspace");
-  if (existingWorkspace instanceof HTMLElement) {
+  let workspaceNav = screen.queryByRole("navigation", { name: "Workspace" });
+  if (!workspaceNav && existingWorkspace instanceof HTMLElement) {
     return existingWorkspace;
   }
-
-  const workspaceNav = await screen.findByRole("navigation", {
+  workspaceNav ??= await screen.findByRole("navigation", {
     name: "Workspace",
   });
   const trainingWorkspaceButton = await within(workspaceNav).findByRole("button", {
     name: /^training\b/i,
   });
-  await user.click(trainingWorkspaceButton);
+  if (trainingWorkspaceButton.getAttribute("aria-current") !== "page") {
+    await user.click(trainingWorkspaceButton);
+  }
+  if (existingWorkspace instanceof HTMLElement) {
+    await waitFor(() => expect(existingWorkspace).toBeVisible());
+    return existingWorkspace;
+  }
   const workspace = await screen.findByRole("region", {
     name: "Training workspace",
   });
@@ -4147,9 +4153,12 @@ async function setTargetHiddenDimOverride(
   user: ReturnType<typeof userEvent.setup>,
   value: string,
 ) {
-  const restoreTrainingWorkspace = Boolean(
-    document.getElementById("training-workspace"),
-  );
+  const workspaceNav = screen.queryByRole("navigation", { name: "Workspace" });
+  const trainingWorkspaceButton = workspaceNav
+    ? within(workspaceNav).queryByRole("button", { name: /^training\b/i })
+    : null;
+  const restoreTrainingWorkspace =
+    trainingWorkspaceButton?.getAttribute("aria-current") === "page";
   const dialog = await openFullConfig(user);
   await typeConfigFieldValue(user, dialog, /hidden dim/i, value);
   await user.click(within(dialog).getByRole("button", { name: /^close$/i }));

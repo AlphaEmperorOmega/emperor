@@ -47,9 +47,12 @@ describe("Logs Charts and Run detail architecture", () => {
     expect(chartsSource).not.toContain("state.tagsQuery");
   });
 
-  it("makes chart and Run Artifact hooks private active provider work", () => {
+  it("keeps chart and Run Artifact hooks private behind Activity-safe providers", () => {
     expect(providerSource).toContain("function LogsChartsProvider");
-    expect(providerSource).toContain("enabled ? (");
+    expect(providerSource).toContain(
+      "<LogsChartsProvider input={workspace.charts}>",
+    );
+    expect(providerSource).not.toContain("enabled ? (");
     expect(providerSource).not.toContain("LogsChartSourceProvider");
     expect(providerSource).not.toContain("useLogRunArtifactsQuery");
     expect(providerSource).toContain(

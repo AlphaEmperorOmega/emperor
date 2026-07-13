@@ -2,17 +2,24 @@
 
 import { useCallback, type ReactNode } from "react";
 import {
+  TrainingConfigurationContextProvider,
+  TrainingDraftContextProvider,
   TrainingWorkspaceContextProvider,
   useTrainingDraft,
-  useTrainingPolling,
-} from "@/features/workbench/providers/training-provider";
+} from "@/features/workbench/providers/training-execution-context";
+import { useTrainingPolling } from "@/features/workbench/providers/training-provider";
 import {
   isWorkbenchProtectedAccessReady,
   useRegisterWorkbenchConnectionReset,
   useWorkbenchCapabilities,
   useWorkbenchConnection,
 } from "@/features/workbench/providers/workbench-connection-provider";
-import { useConfigSnapshotEditor } from "@/features/workbench/providers/workbench-providers";
+import {
+  useConfigSnapshotEditor,
+  useModelPackageCatalog,
+  useModelPackageInspection,
+} from "@/features/workbench/providers/workbench-providers";
+import { useTrainingConfigurationState } from "@/features/workbench/state/training/use-training-configuration-state";
 import { useTrainingWorkspaceState } from "@/features/workbench/state/training/use-training-workspace-state";
 import { useTrainingJobExecution } from "@/features/workbench/state/training/use-training-job-execution";
 import { type TrainingDraftSeed } from "@/features/workbench/state/training/use-training-draft-state";
@@ -20,7 +27,7 @@ import { type FullConfigDialogControls } from "@/features/workbench/state/use-wo
 import { type ConfigSnapshot } from "@/lib/config-snapshots";
 import { type WorkbenchWorkspace } from "@/types/workbench";
 
-export function TrainingExecutionProvider({
+function TrainingExecutionController({
   activeWorkspace,
   onOpenFullConfig,
   children,
@@ -86,5 +93,46 @@ export function TrainingExecutionProvider({
     <TrainingWorkspaceContextProvider value={training.workspace}>
       {children}
     </TrainingWorkspaceContextProvider>
+  );
+}
+
+export function TrainingExecutionProvider({
+  activeWorkspace,
+  onOpenFullConfig,
+  children,
+}: {
+  activeWorkspace: WorkbenchWorkspace;
+  onOpenFullConfig: FullConfigDialogControls["open"];
+  children: ReactNode;
+}) {
+  const catalog = useModelPackageCatalog();
+  const workbenchConnection = useWorkbenchConnection();
+  const modelTarget = useModelPackageInspection();
+  const protectedReadsEnabled =
+    activeWorkspace === "training" &&
+    isWorkbenchProtectedAccessReady(workbenchConnection);
+  const training = useTrainingConfigurationState({
+    activeWorkspace,
+    models: catalog.modelPackages.records,
+    seed: {
+      modelType: modelTarget.browser.selectedModelType,
+      model: modelTarget.browser.selectedModel,
+      preset: modelTarget.browser.selectedPreset,
+    },
+    protectedReadsEnabled,
+  });
+  useRegisterWorkbenchConnectionReset(training.clearForConnectionChange);
+
+  return (
+    <TrainingConfigurationContextProvider value={training.configuration}>
+      <TrainingDraftContextProvider value={training.draft}>
+        <TrainingExecutionController
+          activeWorkspace={activeWorkspace}
+          onOpenFullConfig={onOpenFullConfig}
+        >
+          {children}
+        </TrainingExecutionController>
+      </TrainingDraftContextProvider>
+    </TrainingConfigurationContextProvider>
   );
 }

@@ -2,11 +2,7 @@ import { Providers } from "./providers";
 import { WorkbenchApp } from "@/features/workbench/components/workbench-app";
 import { parseWorkbenchWorkspace } from "@/types/workbench";
 
-export default async function Page({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-}) {
+export default async function Page({ searchParams }: PageProps<"/">) {
   const params = await searchParams;
   const workspaceValue = Array.isArray(params.workspace)
     ? params.workspace[0]

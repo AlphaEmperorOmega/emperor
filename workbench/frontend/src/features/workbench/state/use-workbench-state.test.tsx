@@ -72,7 +72,7 @@ import {
 import {
   useTrainingConfiguration,
   useTrainingWorkspace,
-} from "@/features/workbench/providers/training-provider";
+} from "@/features/workbench/providers/training-execution-context";
 import { TrainingExecutionProvider } from "@/features/workbench/providers/training-execution-provider";
 import { TargetPresetPanel } from "@/features/workbench/components/screen/target-preset-panel";
 import { readPersistedTargetSelection } from "@/features/workbench/state/target/target-selection-storage";

@@ -467,6 +467,9 @@ function installPageInstrumentation(apiBaseUrl) {
           : "") ||
         element.textContent,
     );
+  const isVisible = (element) =>
+    element.getClientRects().length > 0 &&
+    getComputedStyle(element).visibility !== "hidden";
   const scope = (selector) => (selector ? document.querySelector(selector) : document);
   state.clickButton = (name, scopeSelector = null, contains = false) => {
     const root = scope(scopeSelector);
@@ -477,7 +480,7 @@ function installPageInstrumentation(apiBaseUrl) {
       const nameMatches = contains
         ? candidateName.includes(expected)
         : candidateName === expected;
-      return nameMatches && !candidate.disabled;
+      return nameMatches && !candidate.disabled && isVisible(candidate);
     });
     if (!button) {
       return { ok: false, candidates: buttons.map(accessibleName).slice(0, 80) };
@@ -501,7 +504,9 @@ function installPageInstrumentation(apiBaseUrl) {
     const expected = normalize(label).toLowerCase();
     const controls = [...document.querySelectorAll("button[role='combobox']")];
     const control = controls.find(
-      (candidate) => accessibleName(candidate).toLowerCase() === expected,
+      (candidate) =>
+        accessibleName(candidate).toLowerCase() === expected &&
+        isVisible(candidate),
     );
     if (!control) {
       return { ok: false, candidates: controls.map(accessibleName) };
@@ -514,7 +519,10 @@ function installPageInstrumentation(apiBaseUrl) {
     const options = [...document.querySelectorAll("[role='option']")];
     const option = options.find((candidate) => {
       const candidateName = accessibleName(candidate).toLowerCase();
-      return contains ? candidateName.includes(expected) : candidateName === expected;
+      const nameMatches = contains
+        ? candidateName.includes(expected)
+        : candidateName === expected;
+      return nameMatches && isVisible(candidate);
     });
     if (!option) {
       return { ok: false, candidates: options.map(accessibleName) };
@@ -523,12 +531,16 @@ function installPageInstrumentation(apiBaseUrl) {
     return { ok: true, name: accessibleName(option) };
   };
   state.options = () =>
-    [...document.querySelectorAll("[role='option']")].map(accessibleName);
+    [...document.querySelectorAll("[role='option']")]
+      .filter(isVisible)
+      .map(accessibleName);
   state.setInput = (label, value) => {
     const expected = normalize(label).toLowerCase();
     const inputs = [...document.querySelectorAll("input, textarea")];
     const input = inputs.find(
-      (candidate) => accessibleName(candidate).toLowerCase() === expected,
+      (candidate) =>
+        accessibleName(candidate).toLowerCase() === expected &&
+        isVisible(candidate),
     );
     if (!input) {
       return { ok: false, candidates: inputs.map(accessibleName) };
@@ -597,9 +609,19 @@ async function clickWorkspace(client, workspace) {
     [workspace],
     `${workspace} workspace control`,
   );
+  await waitForExpression(
+    client,
+    `[...document.querySelectorAll("nav[aria-label='Workspace'] button")].some(
+      (button) => button.textContent.trim() === ${JSON.stringify(workspace)} &&
+        button.getAttribute("aria-current") === "page"
+    )`,
+    `${workspace} workspace selection`,
+  );
   const readiness = {
-    Model: "document.querySelector('.react-flow')",
-    Training: "document.querySelector('#training-workspace')",
+    Model:
+      "document.querySelector('.react-flow')?.getClientRects().length > 0",
+    Training:
+      "document.querySelector('#training-workspace')?.getClientRects().length > 0",
     Logs: "document.body.innerText.includes('Historical Scalars')",
   }[workspace];
   await waitForExpression(client, readiness, `${workspace} workspace`);
@@ -609,7 +631,7 @@ async function selectDropdown(client, label, option, contains = false) {
   await requirePageMethod(client, "clickCombobox", [label], `${label} combobox`);
   await waitForExpression(
     client,
-    "document.querySelectorAll('[role=option]').length > 0",
+    "window.__EMPEROR_BROWSER_PERFORMANCE__.options().length > 0",
     `${label} options`,
   );
   await requirePageMethod(
@@ -1311,7 +1333,7 @@ async function runBenchmark(options) {
     await requirePageMethod(pageClient, "clickCombobox", ["preset"], "preset combobox");
     await waitForExpression(
       pageClient,
-      "document.querySelectorAll('[role=option]').length > 0",
+      "window.__EMPEROR_BROWSER_PERFORMANCE__.options().length > 0",
       "preset option inventory",
     );
     const presetOptions = await pageMethod(pageClient, "options");

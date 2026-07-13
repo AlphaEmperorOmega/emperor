@@ -9,10 +9,17 @@ import {
 
 const baselinePath = resolve(
   process.cwd(),
-  "../../docs/architecture/browser-performance-baseline-2026-07-10.json",
+  "../../docs/architecture/browser-performance-baseline-2026-07-13.json",
 );
 const baseline = validateBrowserPerformanceEvidence(
   JSON.parse(readFileSync(baselinePath, "utf8")) as unknown,
+);
+const previousBaselinePath = resolve(
+  process.cwd(),
+  "../../docs/architecture/browser-performance-baseline-2026-07-10.json",
+);
+const previousBaseline = validateBrowserPerformanceEvidence(
+  JSON.parse(readFileSync(previousBaselinePath, "utf8")) as unknown,
 );
 
 function expectDistribution(distribution: Distribution) {
@@ -66,9 +73,22 @@ describe("browser performance baseline evidence", () => {
         release: expect.any(String),
       },
     });
+    expect(baseline.environment.node).toMatch(/^v24\./);
     expect(baseline.environment.memory_bytes).toBeGreaterThan(0);
     expect(baseline.environment.gpu.devices[0]?.deviceString).toContain(
       "SwiftShader",
+    );
+  });
+
+  it("stays within the migration's 20% regression limit", () => {
+    expect(baseline.initial_load.summary.workspace_ready_ms.p95).toBeLessThanOrEqual(
+      previousBaseline.initial_load.summary.workspace_ready_ms.p95 * 1.2,
+    );
+    expect(baseline.long_session.summary.duration_ms.p95).toBeLessThanOrEqual(
+      previousBaseline.long_session.summary.duration_ms.p95 * 1.2,
+    );
+    expect(baseline.long_session.heap.steady_state_growth_bytes).toBeLessThanOrEqual(
+      previousBaseline.long_session.heap.steady_state_growth_bytes * 1.2,
     );
   });
 

@@ -1,18 +1,30 @@
+import dynamic from "next/dynamic";
 import { AppHeader } from "@/features/workbench/components/screen/app-header";
-import {
-  WorkbenchWorkspaceRegions,
-  WorkbenchWorkspaceOverlays,
-} from "@/features/workbench/components/workbench-workspaces";
+import { WorkbenchWorkspaceRegions } from "@/features/workbench/components/workbench-workspaces";
 import { WorkbenchWorkspaceFrame } from "@/features/workbench/components/workbench-workspace-layout";
-import { type WorkbenchScreenShell } from "@/features/workbench/state/use-workbench-workspace-shell";
-import { type ReactNode } from "react";
+import {
+  type DeferredWorkbenchWorkspace,
+  type WorkbenchScreenShell,
+} from "@/features/workbench/state/use-workbench-workspace-shell";
+
+const WorkbenchWorkspaceOverlays = dynamic(
+  () =>
+    import("@/features/workbench/components/workbench-overlays").then(
+      (module) => module.WorkbenchWorkspaceOverlays,
+    ),
+  { ssr: false },
+);
 
 export function WorkbenchScreen({
+  deferredWorkspaceOrder,
   shell,
-  workspaceBoundary,
+  startedLogFolders,
+  trainingRuntimeActivated,
 }: {
+  deferredWorkspaceOrder: readonly DeferredWorkbenchWorkspace[];
   shell: WorkbenchScreenShell;
-  workspaceBoundary?: (content: ReactNode) => ReactNode;
+  startedLogFolders: readonly string[];
+  trainingRuntimeActivated: boolean;
 }) {
   const {
     activeWorkspace,
@@ -38,10 +50,14 @@ export function WorkbenchScreen({
         onOpenImportLogs={importLogsDialog.open}
       />
 
-      <WorkbenchWorkspaceFrame workspaceBoundary={workspaceBoundary}>
+      <WorkbenchWorkspaceFrame>
         <WorkbenchWorkspaceRegions
           activeWorkspace={activeWorkspace}
+          deferredWorkspaceOrder={deferredWorkspaceOrder}
+          fullConfigDialog={fullConfigDialog}
           onOpenFullConfig={fullConfigDialog.open}
+          startedLogFolders={startedLogFolders}
+          trainingRuntimeActivated={trainingRuntimeActivated}
         />
       </WorkbenchWorkspaceFrame>
 
@@ -51,6 +67,7 @@ export function WorkbenchScreen({
         featureListDialog={featureListDialog}
         apiConnectionDialog={apiConnectionDialog}
         importLogsDialog={importLogsDialog}
+        fullConfigManagedByTrainingRuntime
       />
     </main>
   );

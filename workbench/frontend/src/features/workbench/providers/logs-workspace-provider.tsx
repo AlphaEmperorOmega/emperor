@@ -129,13 +129,9 @@ export function LogsWorkspaceProvider({
   );
   return (
     <LogsBrowserProvider value={workspace.browser}>
-      {enabled ? (
-        <LogsChartsProvider input={workspace.charts}>
-          {workspaceContent}
-        </LogsChartsProvider>
-      ) : (
-        workspaceContent
-      )}
+      <LogsChartsProvider input={workspace.charts}>
+        {workspaceContent}
+      </LogsChartsProvider>
     </LogsBrowserProvider>
   );
 }
