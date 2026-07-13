@@ -119,7 +119,7 @@ export function MultiSelectDropdown({
   );
   const interaction = useSearchablePopupInteraction<
     MultiSelectDropdownOption,
-    HTMLDivElement
+    HTMLButtonElement
   >({
     mode: "multi-select",
     id,
@@ -294,13 +294,19 @@ export function MultiSelectDropdown({
               const isDisabled = disabledValueSet.has(option.value);
               const isPrimary = isSelected && primaryValue === option.value;
               const isActive = index === activeIndex;
+              const optionInteraction = collection.option(index, option);
               return (
-                <div
-                  {...collection.option(index, option)}
+                <button
                   key={option.value}
+                  ref={optionInteraction.ref}
                   id={`${ids.popup}-option-${index}`}
+                  type="button"
                   role="option"
                   tabIndex={-1}
+                  onMouseDown={optionInteraction.onMouseDown}
+                  onMouseEnter={optionInteraction.onMouseEnter}
+                  onClick={optionInteraction.onClick}
+                  onKeyDown={optionInteraction.onKeyDown}
                   aria-label={optionAccessibleName(option)}
                   aria-describedby={
                     option.metaTooltip
@@ -381,7 +387,7 @@ export function MultiSelectDropdown({
                       {option.metaTooltip}
                     </span>
                   )}
-                </div>
+                </button>
               );
             })}
             {visibleOptions.length === 0 && (
