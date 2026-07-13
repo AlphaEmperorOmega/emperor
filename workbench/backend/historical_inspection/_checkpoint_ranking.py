@@ -1,4 +1,4 @@
-"""Semantic checkpoint selection policy for historical Inspection."""
+"""Private semantic checkpoint selection policy for historical Inspection."""
 
 from __future__ import annotations
 

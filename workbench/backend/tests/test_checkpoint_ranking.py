@@ -7,11 +7,11 @@ from unittest.mock import patch
 
 import torch
 
+from workbench.backend.historical_inspection._checkpoint_ranking import (
+    rank_historical_checkpoints,
+)
 from workbench.backend.inspector.checkpoint_shapes import (
     load_checkpoint_graph_shapes,
-)
-from workbench.backend.run_history.checkpoint_ranking import (
-    rank_historical_checkpoints,
 )
 from workbench.backend.run_history.contracts import HistoricalCheckpointCandidate
 

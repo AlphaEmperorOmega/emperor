@@ -16,7 +16,15 @@ WORKBENCH_TESTS_DIR = WORKBENCH_BACKEND_DIR / "tests"
 WORKBENCH_TEST_HELPERS = WORKBENCH_TESTS_DIR / "helpers.py"
 TRAINING_JOB_SERVICE_TEST = WORKBENCH_TESTS_DIR / "test_training_job_service.py"
 WORKBENCH_INSPECTION_ADAPTER = WORKBENCH_BACKEND_DIR / "inspection_adapter.py"
-WORKBENCH_HISTORICAL_INSPECTION = WORKBENCH_BACKEND_DIR / "historical_inspection.py"
+WORKBENCH_HISTORICAL_INSPECTION_DIR = (
+    WORKBENCH_BACKEND_DIR / "historical_inspection"
+)
+WORKBENCH_HISTORICAL_INSPECTION = (
+    WORKBENCH_HISTORICAL_INSPECTION_DIR / "_inspection.py"
+)
+WORKBENCH_CHECKPOINT_COMPATIBILITY_ADAPTER = (
+    WORKBENCH_BACKEND_DIR / "inspector" / "checkpoint_shapes.py"
+)
 WORKBENCH_INSPECTION_SERVICE = WORKBENCH_BACKEND_DIR / "services" / "inspection.py"
 WORKBENCH_RUN_PLAN_ADAPTER = (
     WORKBENCH_BACKEND_DIR / "training_jobs" / "run_plan_adapter.py"
@@ -104,6 +112,7 @@ REMOVED_RUN_HISTORY_IMPLEMENTATION_PATHS = (
     WORKBENCH_BACKEND_DIR / "tensorboard_reader.py",
     WORKBENCH_BACKEND_DIR / "services" / "log_import.py",
     WORKBENCH_BACKEND_DIR / "services" / "logs.py",
+    WORKBENCH_BACKEND_DIR / "run_history" / "checkpoint_ranking.py",
 )
 RUN_HISTORY_DIR = WORKBENCH_BACKEND_DIR / "run_history"
 RUN_HISTORY_RECORDS = RUN_HISTORY_DIR / "records.py"
@@ -388,13 +397,42 @@ class DependencyDirectionTests(unittest.TestCase):
             "models.linears.linear.checkpoint_metadata",
         )
 
+    def test_historical_inspection_owns_checkpoint_policy_and_interpretation(
+        self,
+    ) -> None:
+        ranking_module = (
+            WORKBENCH_HISTORICAL_INSPECTION_DIR / "_checkpoint_ranking.py"
+        )
+        shape_module = WORKBENCH_HISTORICAL_INSPECTION_DIR / "_checkpoint_shapes.py"
+        self.assertTrue(ranking_module.is_file())
+        self.assertTrue(shape_module.is_file())
+
+        run_history_policy = [
+            str(path.relative_to(REPO_ROOT))
+            for path in _python_files([RUN_HISTORY_DIR])
+            if "rank_historical_checkpoints" in path.read_text(encoding="utf-8")
+            or "load_checkpoint_graph_shapes" in path.read_text(encoding="utf-8")
+        ]
+        self.assertEqual([], run_history_policy)
+
+        compatibility_tree = ast.parse(
+            WORKBENCH_CHECKPOINT_COMPATIBILITY_ADAPTER.read_text(encoding="utf-8"),
+            filename=str(WORKBENCH_CHECKPOINT_COMPATIBILITY_ADAPTER),
+        )
+        owned_implementation = [
+            node.name
+            for node in ast.walk(compatibility_tree)
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+        ]
+        self.assertEqual([], owned_implementation)
+
     def test_domain_implementations_do_not_import_http_error_types(self) -> None:
         implementation_roots = [
             WORKBENCH_BACKEND_DIR / "training_jobs",
             WORKBENCH_BACKEND_DIR / "run_history",
             WORKBENCH_BACKEND_DIR / "log_experiments",
             WORKBENCH_BACKEND_DIR / "config_snapshots.py",
-            WORKBENCH_BACKEND_DIR / "historical_inspection.py",
+            WORKBENCH_HISTORICAL_INSPECTION_DIR,
             WORKBENCH_BACKEND_DIR / "inspection_adapter.py",
             WORKBENCH_BACKEND_DIR / "inspection_errors.py",
             WORKBENCH_BACKEND_DIR / "inspection_worker.py",

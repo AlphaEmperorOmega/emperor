@@ -67,7 +67,7 @@ def _run_history(logs_root: Path) -> RunHistoryService:
 
 
 def _first_run_id(run_history: RunHistoryService) -> str:
-    return str(run_history.list_runs(limit=1, offset=0)["runs"][0]["id"])
+    return run_history.list_runs(limit=1, offset=0).runs[0].id
 
 
 GraphNodePayload: TypeAlias = dict[str, Any]

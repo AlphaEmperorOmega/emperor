@@ -10,19 +10,19 @@ from typing import TYPE_CHECKING, Any
 from emperor.inspection import GraphNode, InspectionRequest, InspectionResult
 from emperor.model_packages import ModelPackage, normalize_dataset_name
 
-from workbench.backend.inspection_adapter import WorkbenchInspectionAdapter
-from workbench.backend.inspection_errors import InspectionFailure
-from workbench.backend.inspector.checkpoint_shapes import (
+from workbench.backend.historical_inspection._checkpoint_ranking import (
+    rank_historical_checkpoints,
+)
+from workbench.backend.historical_inspection._checkpoint_shapes import (
     DEFAULT_CHECKPOINT_LOAD_BUDGETS,
     CheckpointGraphShapes,
     CheckpointLoadBudgets,
     load_checkpoint_graph_shapes,
 )
+from workbench.backend.inspection_adapter import WorkbenchInspectionAdapter
+from workbench.backend.inspection_errors import InspectionFailure
 from workbench.backend.model_identity import normalize_preset_token
 from workbench.backend.run_history import HistoricalInspectionContext
-from workbench.backend.run_history.checkpoint_ranking import (
-    rank_historical_checkpoints,
-)
 
 if TYPE_CHECKING:
     from workbench.backend.inspection_worker import InspectionExecutor
