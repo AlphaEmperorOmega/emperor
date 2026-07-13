@@ -1,5 +1,3 @@
-"""Package-local immutable construction options for adaptive experts."""
-
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any

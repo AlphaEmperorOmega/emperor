@@ -1,5 +1,3 @@
-"""Flat configuration adapter for the standalone expert-linear package."""
-
 from dataclasses import fields, replace
 from types import ModuleType
 from typing import Any, Final

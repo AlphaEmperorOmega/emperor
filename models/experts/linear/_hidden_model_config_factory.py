@@ -1,5 +1,3 @@
-"""Package-local hidden mixture, routing, and control construction."""
-
 from dataclasses import dataclass, replace
 from typing import Any
 

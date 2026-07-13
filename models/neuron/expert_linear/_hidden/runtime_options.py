@@ -1,5 +1,3 @@
-"""Package-local immutable construction options for the expert linear model."""
-
 from dataclasses import dataclass
 
 from emperor.base.layer.gate import GateConfig, LayerGateOptions

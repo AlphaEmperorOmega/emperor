@@ -1,5 +1,3 @@
-"""Local adaptive weight, bias, diagonal, and mask construction."""
-
 from emperor.augmentations.adaptive_parameters.core.bias import (
     DynamicBiasConfig,
     WeightedBankDynamicBiasConfig,

@@ -1,7 +1,5 @@
 # ruff: noqa: E501
 
-"""Runtime Default translation for the standalone adaptive-experts package."""
-
 from types import MappingProxyType, ModuleType
 from typing import Any, Final
 

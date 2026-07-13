@@ -1,5 +1,3 @@
-"""Compatibility imports for the public Runtime Options Interface."""
-
 from models.bert.linear.runtime_options import (
     BertEmbeddingOptions,
     BertMlmHeadOptions,

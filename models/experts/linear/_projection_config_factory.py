@@ -1,5 +1,3 @@
-"""Package-local input and output projection construction."""
-
 from dataclasses import dataclass
 
 from emperor.base.layer.config import LayerConfig

@@ -1,5 +1,3 @@
-"""Package-local stack, gate, halting, memory, and recurrence construction."""
-
 from dataclasses import replace
 from typing import Any
 

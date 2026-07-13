@@ -1,5 +1,3 @@
-"""Package-local immutable construction options for adaptive experts."""
-
 from dataclasses import dataclass
 
 from emperor.augmentations.adaptive_parameters.core.bias import DynamicBiasConfig

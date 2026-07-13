@@ -1,5 +1,3 @@
-"""Package-local adaptive input/output projection construction."""
-
 from dataclasses import dataclass
 
 from emperor.augmentations.adaptive_parameters.config import (
