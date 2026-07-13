@@ -42,6 +42,13 @@ export const trainingRunSchema = z.object({
   changes: z.array(trainingRunChangeSchema),
   overrides: configOverridesSchema,
   command: z.string(),
+  commandArgv: z.array(z.string()).optional(),
+  commands: z
+    .object({
+      posix: z.string(),
+      powershell: z.string(),
+    })
+    .optional(),
   totalEpochs: z.number(),
   currentEpoch: z.number(),
   metrics: jsonObjectSchema,
@@ -302,7 +309,12 @@ export const trainingJobSchema = z.object({
   exitCode: z.number().nullable(),
   pid: z.number(),
   cancellationMode: z
-    .enum(["strict-cgroup", "process-group", "unsupported"])
+    .enum([
+      "strict-cgroup",
+      "process-group",
+      "windows-job-object",
+      "unsupported",
+    ])
     .optional(),
   currentPreset: z.string().nullable().optional(),
   currentDataset: z.string().nullable(),

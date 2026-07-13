@@ -125,6 +125,7 @@ const capabilitiesResponse = {
   authMode: "none",
   trainingEnabled: true,
   trainingCancellationCapability: "strict-cgroup",
+  trainingResourceLimitsEnforced: true,
   logDeletionEnabled: true,
   configSnapshotsEnabled: true,
   historicalLogsEnabled: true,
@@ -1958,6 +1959,7 @@ describe("URL and query construction", () => {
     expect(result).toEqual({
       ...capabilitiesResponse,
       trainingCancellationCapability: "unsupported",
+      trainingResourceLimitsEnforced: false,
     });
   });
 

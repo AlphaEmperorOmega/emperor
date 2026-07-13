@@ -13,6 +13,12 @@ import { TrainingCommandDialog } from "@/features/workbench/components/config/tr
 import { InlineStatus } from "@/features/workbench/components/shared/inline-status";
 import { TrainingRunActionDialogs } from "@/features/workbench/components/training/training-run-action-dialogs";
 import {
+  commandForShell,
+  TrainingShellSelector,
+  type TrainingShell,
+  useTrainingShell,
+} from "@/features/workbench/components/training/training-shell-selector";
+import {
   formatTrainingMetricsText,
   getTrainingRunDraftRemoval,
   trainingRunStatusMeta,
@@ -42,14 +48,25 @@ function visibleRuns(runs: TrainingRun[]) {
   return runs.filter((run) => keep.has(run.id));
 }
 
-function runnableTrainingCommands(plan?: TrainingRunPlan) {
+function runnableTrainingCommands(
+  plan: TrainingRunPlan | undefined,
+  shell: TrainingShell,
+) {
   return (plan?.runs ?? []).flatMap((run) => {
-    const command = typeof run.command === "string" ? run.command : "";
+    const command = commandForShell(run, shell);
     return command.trim() ? [command] : [];
   });
 }
 
-function trainingCommandBlock(commands: string[]) {
+function trainingCommandBlock(commands: string[], shell: TrainingShell) {
+  if (shell === "powershell") {
+    return [
+      "$ErrorActionPreference = 'Stop'",
+      "& {",
+      ...commands.map((command) => `  ${command}`),
+      "}",
+    ].join("\n");
+  }
   return ["(", "  set -e", ...commands.map((command) => `  ${command}`), ")"].join(
     "\n",
   );
@@ -63,10 +80,14 @@ export function TrainingAllCommandsButton({
   plan?: TrainingRunPlan;
 }) {
   const [isAllCommandsOpen, setIsAllCommandsOpen] = useState(false);
-  const runnableCommands = useMemo(() => runnableTrainingCommands(plan), [plan]);
+  const { shell, setShell } = useTrainingShell();
+  const runnableCommands = useMemo(
+    () => runnableTrainingCommands(plan, shell),
+    [plan, shell],
+  );
   const allTrainingCommandsBlock = useMemo(
-    () => trainingCommandBlock(runnableCommands),
-    [runnableCommands],
+    () => trainingCommandBlock(runnableCommands, shell),
+    [runnableCommands, shell],
   );
   const canCopyAllCommands = runnableCommands.length > 0;
 
@@ -89,7 +110,9 @@ export function TrainingAllCommandsButton({
         <AllTrainingCommandsDialog
           model={plan?.model ?? ""}
           preset={plan?.preset ?? ""}
+          shell={shell}
           trainingCommand={allTrainingCommandsBlock}
+          onShellChange={setShell}
           onClose={() => setIsAllCommandsOpen(false)}
         />
       )}
@@ -100,12 +123,16 @@ export function TrainingAllCommandsButton({
 function AllTrainingCommandsDialog({
   model,
   preset,
+  shell,
   trainingCommand,
+  onShellChange,
   onClose,
 }: {
   model: string;
   preset: string;
+  shell: TrainingShell;
   trainingCommand: string;
+  onShellChange: (shell: TrainingShell) => void;
   onClose: () => void;
 }) {
   const { status, copy } = useCopyToClipboard(trainingCommand);
@@ -122,6 +149,7 @@ function AllTrainingCommandsDialog({
       commandAriaLabel="Training commands"
       closeButtonLabel="Close Training Commands"
       rows={Math.min(12, Math.max(5, trainingCommand.split("\n").length))}
+      controls={<TrainingShellSelector shell={shell} onChange={onShellChange} />}
       onCopy={copy}
       onClose={onClose}
     />

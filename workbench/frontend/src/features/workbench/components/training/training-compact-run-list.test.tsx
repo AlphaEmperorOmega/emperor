@@ -1,6 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   TrainingAllCommandsButton,
   TrainingCompactRunList,
@@ -87,6 +87,10 @@ function commandBlock(commands: string[]) {
 }
 
 describe("TrainingCompactRunList", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
   it("renders draft, running, completed, failed, and cancelled states", () => {
     render(
       <TrainingCompactRunList
@@ -172,6 +176,35 @@ describe("TrainingCompactRunList", () => {
     const errorDialog = screen.getByRole("dialog", { name: "Training Error" });
     expect(within(errorDialog).getByText(/RuntimeError: training failed/))
       .toBeInTheDocument();
+  });
+
+  it("switches a run command between POSIX and PowerShell projections", async () => {
+    const user = userEvent.setup();
+    render(
+      <TrainingCompactRunList
+        plan={plan([
+          run({
+            commands: {
+              posix: "mise run experiment -- --preset 'wide run'",
+              powershell: "mise run experiment -- --preset 'wide run'",
+            },
+          }),
+        ])}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Command for run 1" }));
+    const dialog = screen.getByRole("dialog", { name: "Training Command" });
+    await user.click(
+      within(dialog).getByRole("radio", { name: "PowerShell" }),
+    );
+
+    expect(
+      within(dialog).getByRole("radio", { name: "PowerShell" }),
+    ).toBeChecked();
+    expect(within(dialog).getByLabelText("Training command")).toHaveValue(
+      "mise run experiment -- --preset 'wide run'",
+    );
   });
 
   it("shows a visible button for all training commands", () => {

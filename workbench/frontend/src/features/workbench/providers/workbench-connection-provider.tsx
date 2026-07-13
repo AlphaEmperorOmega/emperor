@@ -34,6 +34,7 @@ export type WorkbenchFeatureCapabilities = Omit<Capabilities, "authMode">;
 export const DEFAULT_WORKBENCH_CAPABILITIES: WorkbenchFeatureCapabilities = {
   trainingEnabled: true,
   trainingCancellationCapability: "unsupported",
+  trainingResourceLimitsEnforced: false,
   logDeletionEnabled: true,
   configSnapshotsEnabled: true,
   historicalLogsEnabled: true,
@@ -94,6 +95,7 @@ export type WorkbenchCapabilities = Readonly<{
 function featureCapabilities({
   trainingEnabled,
   trainingCancellationCapability,
+  trainingResourceLimitsEnforced,
   logDeletionEnabled,
   configSnapshotsEnabled,
   historicalLogsEnabled,
@@ -109,6 +111,7 @@ function featureCapabilities({
   return {
     trainingEnabled,
     trainingCancellationCapability,
+    trainingResourceLimitsEnforced,
     logDeletionEnabled,
     configSnapshotsEnabled,
     historicalLogsEnabled,

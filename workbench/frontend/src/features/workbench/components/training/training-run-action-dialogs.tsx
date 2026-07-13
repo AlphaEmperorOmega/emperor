@@ -2,6 +2,11 @@ import { X } from "lucide-react";
 import { IconButton } from "@/components/ui/icon-button";
 import { TrainingCommandDialog } from "@/features/workbench/components/config/training-command-dialog";
 import { DialogShell } from "@/features/workbench/components/shared/dialog-shell";
+import {
+  commandForShell,
+  TrainingShellSelector,
+  useTrainingShell,
+} from "@/features/workbench/components/training/training-shell-selector";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { type TrainingRun, type TrainingRunPlan } from "@/lib/api";
 
@@ -18,7 +23,8 @@ export function TrainingRunActionDialogs({
   onCloseCommand: () => void;
   onCloseError: () => void;
 }) {
-  const command = commandRun?.command ?? "";
+  const { shell, setShell } = useTrainingShell();
+  const command = commandRun ? commandForShell(commandRun, shell) : "";
   const fullErrorText = errorRun?.errorTraceback || errorRun?.error || "";
   const { status: copyStatus, copy } = useCopyToClipboard(command);
 
@@ -30,6 +36,7 @@ export function TrainingRunActionDialogs({
           preset={`${commandRun.preset} / ${commandRun.dataset}`}
           trainingCommand={command}
           copyStatus={copyStatus}
+          controls={<TrainingShellSelector shell={shell} onChange={setShell} />}
           onCopy={copy}
           onClose={onCloseCommand}
         />

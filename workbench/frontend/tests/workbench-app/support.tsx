@@ -162,6 +162,7 @@ const capabilitiesResponse: Capabilities = {
   authMode: "none",
   trainingEnabled: true,
   trainingCancellationCapability: "strict-cgroup",
+  trainingResourceLimitsEnforced: true,
   logDeletionEnabled: true,
   configSnapshotsEnabled: true,
   historicalLogsEnabled: true,

@@ -8,8 +8,14 @@ const capabilitiesSchema = z.object({
   authMode: z.enum(["none", "bearer"]),
   trainingEnabled: z.boolean(),
   trainingCancellationCapability: z
-    .enum(["strict-cgroup", "process-group", "unsupported"])
+    .enum([
+      "strict-cgroup",
+      "process-group",
+      "windows-job-object",
+      "unsupported",
+    ])
     .default("unsupported"),
+  trainingResourceLimitsEnforced: z.boolean().default(false),
   logDeletionEnabled: z.boolean(),
   configSnapshotsEnabled: z.boolean().default(true),
   historicalLogsEnabled: z.boolean(),
