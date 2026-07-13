@@ -29,6 +29,9 @@ then validates and canonicalizes the submitted plan.
 compatibility paths. New generic Inspection behavior belongs behind
 `emperor.inspection`; remove a compatibility path only after production-import
 audits and serialized/error equivalence tests prove that no caller needs it.
+`workbench.backend.inspector.checkpoint_shapes` is specifically a re-exporting
+Adapter: live checkpoint ranking and shape interpretation belong to private
+Implementation Modules under `workbench.backend.historical_inspection`.
 `workbench.backend.inspection_adapter.WorkbenchInspectionAdapter` is the
 canonical Workbench Inspection Adapter for selected Model Package resolution,
 Workbench error mapping, and transport serialization. Generic Workbench callers
@@ -49,6 +52,14 @@ its envelope alongside it. The worker revalidates exact rows through
 `emperor.runs.accept_run_plan` and executes them through
 `emperor.runs.execute_runs`; it never repeats grid or random Search Metadata
 selection.
+`TrainingRunPlanView` is the canonical frozen Run Plan value across
+materialization, Training Job records, progress reduction, live projection, and
+snapshot projection. Runtime Modules update exact typed Runs with immutable
+copies and ask the Run Plan Module to recompute the typed summary. Camel-case
+dictionaries exist only while mapping HTTP, encoding or decoding the persisted
+JSON document, and defensively accepting the worker payload; runtime, store,
+projection, and lifecycle Implementations do not interpret those serialized
+field names.
 
 `workbench.backend.training_jobs.TrainingJobService` is the sole public
 Training Jobs Interface. The shared Run Plan Adapter serves preview, Training
@@ -101,6 +112,13 @@ truncation reason when a cap is reached. Summary listings parse result metadata
 only for returned Runs and do not project metrics, while full listings reuse
 that same one-time parse. Its event-file member is the shared `EventFileIndex`,
 so Run History does not implement a second TensorBoard containment policy.
+The Interface returns frozen snake-case semantic pages, facets, checkpoints,
+Run Artifact details, TensorBoard projections, archive-import results, and
+deletion values. It never returns HTTP-shaped records or owns response
+serialization. The Logs HTTP mapping Module beside the router and schemas owns
+camel case, Model Package identity expansion, response row caps, truncation
+metadata, and schema payload construction. The persistent catalog codec remains
+separate and retains its existing on-disk keys and compatibility decoding.
 Historical Inspection receives only one frozen context containing canonical Run
 identity, saved parameters, and contained checkpoint candidates; it does not
 receive the Run History implementation. Every candidate freezes its resolved
@@ -113,6 +131,9 @@ generic shape interpreter remains a compatibility fallback; package-specific
 state-dict knowledge is supplied through the selected Model Package's explicitly
 declared checkpoint-metadata capability and takes precedence without coupling
 Workbench to that package's Implementation.
+Run History owns neither checkpoint ranking nor checkpoint shape
+interpretation; it only freezes contained candidates and parses filename
+epoch/step facts needed by its own Run Artifact metadata.
 
 Request streaming, the bounded multipart spool, content metadata, admission,
 authentication, mutation proof, and response validation remain in the HTTP
@@ -149,6 +170,25 @@ replace the last complete Inspection. Callers consume the grouped
 cache reuse, forced refresh, cancellation, and stale-response suppression;
 graph state observes semantic transition revisions and owns selection and
 expansion resets.
+
+One pure Inspection target lifecycle reducer owns Model Package identity, the
+active preset, Config Snapshot, or historical Run, Experiment Task-compatible
+datasets, active Runtime Defaults, restoration phase, connection generation,
+and semantic transition revision and cause. Model Package, target, metadata,
+Runtime Defaults, restoration, missing-Snapshot, and connection-reset changes
+enter through explicit events. Effects are limited to delivering query results,
+publishing version-1 storage, coordinating private historical browsing, and
+executing the single request derived from the complete lifecycle; they do not
+repair separate target fields.
+
+The frontend Model Package Metadata Module accepts one structured Model Package,
+preset, and Search Metadata selection. It privately owns TanStack query keys,
+protected-read gating, cancellation, retry and stale-time policy, and caching.
+Inspection, Training, and the Config Snapshot editor keep independent
+selections and consume only focused Model Package, preset, Dataset Metadata,
+default Experiment Task, Monitor Metadata, Runtime Defaults schema, and Search
+Metadata projections with stable readiness facts; raw query results do not
+cross the Module Interface.
 
 Target-scoped historical browsing is a private collaborator of that frontend
 Inspection owner. It owns Run queries, Experiment/Dataset/preset filter
@@ -193,6 +233,13 @@ Implementation. Browsing state stays mounted after the first Logs activation;
 queries are disabled while hidden, render-session chart settings reset on
 unmount, and an already-issued deletion may finish and reconcile through the
 next authoritative refresh.
+
+An active `LogsChartsProvider` mounts only while Logs is visible, owns the chart
+lifecycle, and publishes the completed `useLogsCharts()` projection. Chart
+planning receives semantic Run/tag/loading facts and semantic commands; raw
+TanStack results, state setters, and low-level toggles do not cross its seam.
+The Logs Workspace Implementation also owns selected Run Artifact loading, so
+`useLogRunDetail()` is a read-only context projection with no query work.
 
 The Logs Charts Implementation owns visibility activation, progressive
 ten-Run/six-tag scalar planning, tag-refresh gating, compatible stale-series

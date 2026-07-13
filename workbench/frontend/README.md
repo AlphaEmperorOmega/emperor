@@ -162,6 +162,16 @@ retaining public health/capability data. Late responses cannot repopulate the
 new identity even when a transport ignores `AbortSignal`; active imports are
 also aborted and their late completion is ignored.
 
+The Model Package Inspection target is one reducer-owned lifecycle: Model
+Package identity, complete preset/Config Snapshot/historical Run target,
+Experiment Task and compatible datasets, active Runtime Defaults, restoration,
+connection generation, and semantic transition revision move through explicit
+events. Configuration Source tabs remain presentation state, and historical
+browsing submits only a complete Run choice. Effects publish version-1 storage,
+deliver metadata events, and execute the one request derived from the complete
+lifecycle, preserving cancellation, cache reuse, forced refresh, and stale
+response suppression in the private preview Implementation.
+
 ## Config Snapshot Lifecycles
 
 The Config Snapshot records Module is the authoritative persistence Interface.
@@ -179,6 +189,15 @@ target back to its preset only after removal succeeds. Training removes a
 Config Snapshot from its Run Plan selection only after the same authoritative
 outcome. Persistence and retry retain Locality in the records Module while
 those post-success transitions stay with the owner whose state they change.
+
+Model Package reads pass through one metadata Module driven by a structured
+Model Package, preset, and Search Metadata selection. TanStack query objects,
+keys, stale-time and retry policy, cancellation, protected-access gating, and
+caching remain private. Its Interface publishes focused domain records plus
+loading, readiness, and error facts for Model Packages, presets, Dataset
+Metadata and the default Experiment Task, Monitor Metadata, Runtime Defaults
+schema, and Search Metadata. Inspection, Training, and the Config Snapshot
+editor submit independent selections to that shared read-only behavior.
 
 ## Training Run Plans
 
@@ -227,8 +246,12 @@ The Logs Workspace Module owns experiment, Run, and scalar-tag loading;
 selection normalization; started-Run seeding; detail choice; pagination;
 deletion tombstones; and authoritative-refresh reconciliation in one private
 Implementation. Its public seam exposes four focused projections: browser,
-chart source, detail, and deletion. The provider wires those projections and
-private semantic reset commands without receiving the raw internal state shape.
+completed charts, read-only Run detail, and deletion. The active Charts provider
+mounts only while Logs is visible, consumes semantic Run/tag facts and commands,
+owns chart lifecycle and query planning, and publishes the completed charts
+projection. Raw query results, setters, and low-level toggles do not cross that
+seam. Run Artifact detail loading remains in the Logs Workspace Implementation,
+so the detail hook only reads context.
 
 Experiment changes retain a manual scalar-tag selection while Run facets and
 tag options are still refreshing. Once fresh tags are authoritative, the owner
