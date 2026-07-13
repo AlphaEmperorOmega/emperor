@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 
-from emperor.base.utils import ConfigBase
+from emperor.base.config import ConfigBase
 
 # MODEL WISE CONFIG
 BATCH_SIZE = 10
