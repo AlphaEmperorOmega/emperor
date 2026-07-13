@@ -1,5 +1,3 @@
-"""Safe extraction for uploaded Workbench log archives."""
-
 from __future__ import annotations
 
 import io
@@ -22,7 +20,12 @@ from workbench.backend.core.limits import (
 from workbench.backend.failures import FailureKind
 from workbench.backend.run_history.errors import RunHistoryFailure
 from workbench.backend.run_history.records import LogArchiveImportResult
-from workbench.backend.storage.local_files import resolve_root, resolve_under_root
+from workbench.backend.storage.local_files import (
+    apply_owner_only_permissions,
+    reject_link_like,
+    resolve_root,
+    resolve_under_root,
+)
 
 ZIP_CHUNK_SIZE = 1024 * 1024
 _DESCRIPTOR_RELATIVE_FILESYSTEM_SUPPORTED = os.name == "posix" and all(
@@ -116,10 +119,12 @@ def _validate_existing_ancestors(target: Path, root: Path, original_name: str) -
     current = root
     for part in relative_parent.parts:
         current = current / part
-        if current.is_symlink():
+        try:
+            reject_link_like(current, "archive destination ancestor")
+        except ValueError:
             raise RunHistoryFailure(
                 f"Unsafe archive path uses symlink destination: {original_name}"
-            )
+            ) from None
         if current.exists() and not current.is_dir():
             raise RunHistoryFailure(
                 f"Archive path parent is not a directory: {original_name}"
@@ -130,10 +135,12 @@ def _validate_existing_target(
     target: Path,
     original_name: str,
 ) -> tuple[int, int, int, int] | None:
-    if target.is_symlink():
+    try:
+        reject_link_like(target, "archive destination")
+    except ValueError:
         raise RunHistoryFailure(
             f"Unsafe archive path uses symlink destination: {original_name}"
-        )
+        ) from None
     if target.exists() and not target.is_file():
         raise RunHistoryFailure(
             f"Archive path target is not a regular file: {original_name}"
@@ -332,13 +339,15 @@ def _extract_archive_to_stage(
             staged_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
             extracted_size = 0
             with zip_file.open(entry.info) as source, staged_path.open("xb") as output:
-                os.fchmod(output.fileno(), 0o600)
+                if hasattr(os, "fchmod"):
+                    os.fchmod(output.fileno(), 0o600)
                 while True:
                     chunk = source.read(ZIP_CHUNK_SIZE)
                     if not chunk:
                         break
                     extracted_size += len(chunk)
                     output.write(chunk)
+            apply_owner_only_permissions(staged_path)
             if extracted_size != entry.info.file_size:
                 raise _zip_error(
                     f"Invalid zip archive member: {entry.info.filename}"
@@ -499,6 +508,12 @@ def _commit_staged_import(
     stage_root: Path,
     plan: list[LogArchiveImportPlanEntry],
 ) -> tuple[int, int]:
+    if os.name == "nt":
+        return _commit_staged_import_windows(
+            root=root,
+            stage_root=stage_root,
+            plan=plan,
+        )
     _require_descriptor_relative_filesystem()
     root_fd = os.open(root, _directory_flags())
     stage_fd = os.open(stage_root, _directory_flags())
@@ -517,6 +532,83 @@ def _commit_staged_import(
     finally:
         os.close(stage_fd)
         os.close(root_fd)
+    return extracted_count, skipped_count
+
+
+def _windows_destination_parent(root: Path, parts: tuple[str, ...]) -> Path:
+    current = root
+    for part in parts:
+        current = current / part
+        try:
+            if current.exists():
+                reject_link_like(current, "archive destination ancestor")
+                if not current.is_dir():
+                    raise RunHistoryFailure(
+                        "Archive path parent is not a directory: "
+                        + "/".join(parts)
+                    )
+            else:
+                current.mkdir()
+                apply_owner_only_permissions(current)
+            resolve_under_root(root, current)
+        except (OSError, ValueError) as exc:
+            raise RunHistoryFailure(
+                "Unsafe archive destination ancestor changed during import: "
+                + "/".join(parts)
+            ) from exc
+    return current
+
+
+def _commit_staged_import_windows(
+    *,
+    root: Path,
+    stage_root: Path,
+    plan: list[LogArchiveImportPlanEntry],
+) -> tuple[int, int]:
+    extracted_count = 0
+    skipped_count = 0
+    for entry in plan:
+        source = stage_root.joinpath(*entry.relative_parts)
+        try:
+            source = resolve_under_root(stage_root, source)
+            target_parent = _windows_destination_parent(
+                root,
+                entry.relative_parts[:-1],
+            )
+            target = resolve_under_root(root, target_parent / entry.relative_parts[-1])
+            observed_identity = _validate_existing_target(
+                target,
+                entry.info.filename,
+            )
+        except (OSError, ValueError) as exc:
+            raise RunHistoryFailure(
+                "Unsafe archive destination changed during import: "
+                f"{entry.info.filename}"
+            ) from exc
+        if entry.target_identity is None and observed_identity is not None:
+            skipped_count += 1
+            continue
+        if (
+            entry.target_identity is not None
+            and observed_identity != entry.target_identity
+        ):
+            raise RunHistoryFailure(
+                f"Archive destination changed during import: {entry.info.filename}"
+            )
+        try:
+            if observed_identity is None:
+                source.rename(target)
+            else:
+                source.replace(target)
+            apply_owner_only_permissions(target)
+        except FileExistsError:
+            skipped_count += 1
+            continue
+        except OSError as exc:
+            raise RunHistoryFailure(
+                f"Could not commit archive member: {entry.info.filename}"
+            ) from exc
+        extracted_count += 1
     return extracted_count, skipped_count
 
 
@@ -564,7 +656,7 @@ def import_log_archive(
                 dir=root,
             ) as stage_directory:
                 stage_root = Path(stage_directory)
-                stage_root.chmod(0o700)
+                apply_owner_only_permissions(stage_root)
                 _extract_archive_to_stage(zip_file, plan, stage_root)
                 extracted_count, commit_skipped_count = _commit_staged_import(
                     root=root,

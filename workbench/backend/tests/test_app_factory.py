@@ -20,7 +20,7 @@ from fastapi.routing import APIRoute, iter_route_contexts
 
 from workbench.backend.core.errors import ApiError
 from workbench.backend.exceptions import api_error_handler
-from workbench.backend.inspector.errors import InspectorError
+from workbench.backend.inspection_errors import InspectionFailure
 
 EXPECTED_ROOT_ROUTE_PAIRS = {
     ("GET", "/health"),
@@ -528,7 +528,7 @@ class AppFactoryTests(unittest.TestCase):
             api_error_handler,
         )
 
-    def test_inspector_error_response_shape_is_preserved(self) -> None:
+    def test_inspection_failure_response_shape_is_preserved(self) -> None:
         from workbench.backend.api import WorkbenchApiSettings, create_app
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -536,9 +536,9 @@ class AppFactoryTests(unittest.TestCase):
                 WorkbenchApiSettings(logs_root=str(Path(tmp) / "logs"))
             )
 
-            @test_app.get("/raises-inspector-error")
-            async def raises_inspector_error() -> None:
-                raise InspectorError("bad model input")
+            @test_app.get("/raises-inspection-failure")
+            async def raises_inspection_failure() -> None:
+                raise InspectionFailure("bad model input")
 
             async def call_api() -> httpx.Response:
                 transport = httpx.ASGITransport(app=test_app)
@@ -546,7 +546,7 @@ class AppFactoryTests(unittest.TestCase):
                     transport=transport,
                     base_url="http://localhost",
                 ) as client:
-                    return await client.get("/raises-inspector-error")
+                    return await client.get("/raises-inspection-failure")
 
             response = asyncio.run(call_api())
 

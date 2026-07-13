@@ -12,17 +12,18 @@ from unittest.mock import patch
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
-from emperor.experiments.base import GridSearch
-from emperor.model_packages import model_package
-from emperor.runs import RunRequest, plan_runs
+from models.catalog import model_package
 from models.package_cli import _search_spec
 
+from model_runtime.packages import GridSearch
+from model_runtime.runs import RunRequest, plan_runs
 from workbench.backend.config_snapshots import (
     ConfigSnapshotRecord,
     ConfigSnapshotService,
     InMemoryConfigSnapshotStore,
 )
 from workbench.backend.failures import FailureKind
+from workbench.backend.inspection_adapter import WorkbenchInspectionAdapter
 from workbench.backend.tests.helpers import (
     FakeRunner,
     TrainingJobServiceHarness,
@@ -74,11 +75,9 @@ class TrainingRunPlanTests(unittest.TestCase):
             ),
             validated_log_folder="adapter_round_trip",
         )
-        package = model_package("linears/linear")
-        if package is None:
-            self.fail("Expected the linears/linear Model Package.")
+        package = WorkbenchInspectionAdapter.select("linears/linear").package
 
-        with patch("emperor.runs.planning.plan_runs") as plan_runs:
+        with patch("model_runtime.runs.planning.plan_runs") as plan_runs:
             semantic_plan = accept_worker_run_plan(
                 package,
                 {
@@ -411,18 +410,20 @@ class TrainingRunPlanTests(unittest.TestCase):
     def test_training_run_plan_materializes_grid_rows_and_commands(self) -> None:
         manager = TrainingJobServiceHarness(runner=FakeRunner())
 
-        plan = training_run_plan_to_payload(manager.create_run_plan(
-            model="linears/linear",
-            preset="baseline",
-            presets=["baseline", "gating"],
-            datasets=["Mnist"],
-            overrides={"hidden_dim": "999", "stack_num_layers": "4"},
-            search={
-                "mode": "grid",
-                "values": {"hidden_dim": [64, 128]},
-            },
-            log_folder="",
-        ))
+        plan = training_run_plan_to_payload(
+            manager.create_run_plan(
+                model="linears/linear",
+                preset="baseline",
+                presets=["baseline", "gating"],
+                datasets=["Mnist"],
+                overrides={"hidden_dim": "999", "stack_num_layers": "4"},
+                search={
+                    "mode": "grid",
+                    "values": {"hidden_dim": [64, 128]},
+                },
+                log_folder="",
+            )
+        )
 
         self.assertEqual(plan["summary"]["totalRuns"], 4)
         self.assertEqual(plan["summary"]["remainingEpochs"], 120)
@@ -444,14 +445,16 @@ class TrainingRunPlanTests(unittest.TestCase):
     def test_training_run_plan_commands_include_selected_monitors(self) -> None:
         manager = TrainingJobServiceHarness(runner=FakeRunner())
 
-        plan = training_run_plan_to_payload(manager.create_run_plan(
-            model="linears/linear",
-            preset="baseline",
-            datasets=["Mnist"],
-            overrides={"hidden_dim": "128"},
-            log_folder="monitor_plan",
-            monitors=["linear"],
-        ))
+        plan = training_run_plan_to_payload(
+            manager.create_run_plan(
+                model="linears/linear",
+                preset="baseline",
+                datasets=["Mnist"],
+                overrides={"hidden_dim": "128"},
+                log_folder="monitor_plan",
+                monitors=["linear"],
+            )
+        )
 
         self.assertEqual(
             plan["runs"][0]["command"],
@@ -508,25 +511,27 @@ class TrainingRunPlanTests(unittest.TestCase):
     ) -> None:
         manager = TrainingJobServiceHarness(runner=FakeRunner())
 
-        plan = training_run_plan_to_payload(manager.create_run_plan(
-            model="linears/linear",
-            preset="baseline",
-            presets=["baseline", "gating"],
-            datasets=["Mnist", "Cifar10"],
-            overrides={
-                "hidden_dim": "999",
-                "stack_activation": "TANH",
-                "stack_num_layers": "4",
-            },
-            search={
-                "mode": "grid",
-                "values": {
-                    "hidden_dim": [64, 128],
-                    "stack_activation": ["RELU", "GELU"],
+        plan = training_run_plan_to_payload(
+            manager.create_run_plan(
+                model="linears/linear",
+                preset="baseline",
+                presets=["baseline", "gating"],
+                datasets=["Mnist", "Cifar10"],
+                overrides={
+                    "hidden_dim": "999",
+                    "stack_activation": "TANH",
+                    "stack_num_layers": "4",
                 },
-            },
-            log_folder="grid_plan",
-        ))
+                search={
+                    "mode": "grid",
+                    "values": {
+                        "hidden_dim": [64, 128],
+                        "stack_activation": ["RELU", "GELU"],
+                    },
+                },
+                log_folder="grid_plan",
+            )
+        )
 
         self.assertEqual(plan["preset"], "baseline")
         self.assertEqual(plan["presets"], ["baseline", "gating"])
@@ -608,6 +613,8 @@ class TrainingRunPlanTests(unittest.TestCase):
                 "changes",
                 "overrides",
                 "command",
+                "commandArgv",
+                "commands",
                 "totalEpochs",
                 "currentEpoch",
                 "metrics",
@@ -654,6 +661,18 @@ class TrainingRunPlanTests(unittest.TestCase):
             "--stack-num-layers 4 --stack-activation RELU",
         )
         self.assertEqual(
+            plan["runs"][0]["commandArgv"][:4],
+            ["mise", "run", "experiment", "--"],
+        )
+        self.assertEqual(
+            plan["runs"][0]["commands"]["posix"],
+            " ".join(plan["runs"][0]["commandArgv"]),
+        )
+        self.assertEqual(
+            plan["runs"][0]["commands"]["powershell"],
+            " ".join(plan["runs"][0]["commandArgv"]),
+        )
+        self.assertEqual(
             plan["runs"][-1]["command"],
             "source experiment.sh --model-type linears --model linear "
             "--preset gating --experiment-task image-classification --datasets Cifar10 "
@@ -666,21 +685,23 @@ class TrainingRunPlanTests(unittest.TestCase):
     ) -> None:
         manager = TrainingJobServiceHarness(runner=FakeRunner())
 
-        plan = training_run_plan_to_payload(manager.create_run_plan(
-            model="linears/linear_adaptive",
-            preset="baseline",
-            datasets=["Mnist"],
-            overrides={},
-            search={
-                "mode": "grid",
-                "values": {
-                    "hidden_dim": [64],
-                    "stack_activation": ["RELU"],
-                    "adaptive_generator_stack_num_layers": [1, 2],
+        plan = training_run_plan_to_payload(
+            manager.create_run_plan(
+                model="linears/linear_adaptive",
+                preset="baseline",
+                datasets=["Mnist"],
+                overrides={},
+                search={
+                    "mode": "grid",
+                    "values": {
+                        "hidden_dim": [64],
+                        "stack_activation": ["RELU"],
+                        "adaptive_generator_stack_num_layers": [1, 2],
+                    },
                 },
-            },
-            log_folder="serialization_plan",
-        ))
+                log_folder="serialization_plan",
+            )
+        )
 
         self.assertEqual(
             plan["search"],
@@ -762,21 +783,23 @@ class TrainingRunPlanTests(unittest.TestCase):
     def test_training_run_plan_materializes_random_search_before_start(self) -> None:
         manager = TrainingJobServiceHarness(runner=FakeRunner())
 
-        plan = training_run_plan_to_payload(manager.create_run_plan(
-            model="linears/linear",
-            preset="baseline",
-            datasets=["Mnist", "Cifar10"],
-            overrides={},
-            search={
-                "mode": "random",
-                "values": {
-                    "hidden_dim": [64, 128],
-                    "stack_activation": ["RELU", "GELU"],
+        plan = training_run_plan_to_payload(
+            manager.create_run_plan(
+                model="linears/linear",
+                preset="baseline",
+                datasets=["Mnist", "Cifar10"],
+                overrides={},
+                search={
+                    "mode": "random",
+                    "values": {
+                        "hidden_dim": [64, 128],
+                        "stack_activation": ["RELU", "GELU"],
+                    },
+                    "randomSamples": 3,
                 },
-                "randomSamples": 3,
-            },
-            log_folder="random_search",
-        ))
+                log_folder="random_search",
+            )
+        )
 
         self.assertTrue(plan["isRandomSearch"])
         self.assertEqual(plan["summary"]["totalRuns"], 6)
@@ -947,14 +970,16 @@ class TrainingRunPlanTests(unittest.TestCase):
                 logs_root=Path(tmp) / "logs",
                 runner=FakeRunner(),
             )
-            plan = training_run_plan_to_payload(manager.create_run_plan(
-                model="linears/linear",
-                preset="baseline",
-                presets=["baseline", "gating"],
-                datasets=["Mnist"],
-                overrides={"hidden_dim": "128"},
-                log_folder="draft_plan",
-            ))
+            plan = training_run_plan_to_payload(
+                manager.create_run_plan(
+                    model="linears/linear",
+                    preset="baseline",
+                    presets=["baseline", "gating"],
+                    datasets=["Mnist"],
+                    overrides={"hidden_dim": "128"},
+                    log_folder="draft_plan",
+                )
+            )
             self.assertEqual(len(plan["runs"]), 2)
             plan["runs"][0].update(
                 {
@@ -1033,13 +1058,15 @@ class TrainingRunPlanTests(unittest.TestCase):
                 logs_root=Path(tmp) / "logs",
                 runner=FakeRunner(),
             )
-            plan = training_run_plan_to_payload(manager.create_run_plan(
-                model="linears/linear",
-                preset="baseline",
-                datasets=["Mnist"],
-                overrides={},
-                log_folder="draft_plan",
-            ))
+            plan = training_run_plan_to_payload(
+                manager.create_run_plan(
+                    model="linears/linear",
+                    preset="baseline",
+                    datasets=["Mnist"],
+                    overrides={},
+                    log_folder="draft_plan",
+                )
+            )
             submitted_row = plan["runs"][0]
             submitted_row.update(
                 {
@@ -1145,13 +1172,15 @@ class TrainingRunPlanTests(unittest.TestCase):
             )
             for name, mutate, expected_message in invalid_cases:
                 with self.subTest(name=name):
-                    plan = training_run_plan_to_payload(manager.create_run_plan(
-                        model="linears/linear",
-                        preset="baseline",
-                        datasets=["Mnist"],
-                        overrides={},
-                        log_folder="",
-                    ))
+                    plan = training_run_plan_to_payload(
+                        manager.create_run_plan(
+                            model="linears/linear",
+                            preset="baseline",
+                            datasets=["Mnist"],
+                            overrides={},
+                            log_folder="",
+                        )
+                    )
                     mutate(plan)
 
                     with self.assertRaises(TrainingJobFailure) as context:
@@ -1205,14 +1234,16 @@ class TrainingRunPlanTests(unittest.TestCase):
                 logs_root=Path(tmp) / "logs",
                 runner=FakeRunner(),
             )
-            plan = training_run_plan_to_payload(manager.create_run_plan(
-                model="linears/linear",
-                preset="gating",
-                presets=["gating"],
-                datasets=["Mnist"],
-                overrides={},
-                log_folder="",
-            ))
+            plan = training_run_plan_to_payload(
+                manager.create_run_plan(
+                    model="linears/linear",
+                    preset="gating",
+                    presets=["gating"],
+                    datasets=["Mnist"],
+                    overrides={},
+                    log_folder="",
+                )
+            )
             plan["runs"][0]["overrides"]["gate_flag"] = "false"
 
             with self.assertRaises(TrainingJobFailure) as context:

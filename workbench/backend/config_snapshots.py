@@ -1,13 +1,3 @@
-"""Config snapshot record storage interfaces and local adapters.
-
-A config snapshot captures a named set of config overrides for a given
-``model + preset`` so it can be reused and trained later. The Workbench backend has
-no database, so persistence mirrors :mod:`workbench.backend.training_jobs.store`:
-records are
-serialized to JSON on disk, one file per snapshot under
-``<root>/<model>/<id>.json``.
-"""
-
 from __future__ import annotations
 
 import hashlib
@@ -23,20 +13,19 @@ from threading import Lock, RLock
 from types import MappingProxyType
 from typing import Any, Protocol
 
-from emperor.inspection import (
+from model_runtime.inspection import (
     ConfigurationField,
     ConfigurationSchema,
     InspectionRequest,
 )
-from emperor.model_packages import (
-    model_id_from_payload,
-    model_identity_payload_from_id,
-    normalize_key,
-)
-
+from model_runtime.packages import normalize_key
 from workbench.backend.catalogs import PersistentJsonCatalog
 from workbench.backend.failures import DomainFailure
 from workbench.backend.inspection_errors import InspectionFailure
+from workbench.backend.model_identity import (
+    model_id_from_payload,
+    model_identity_payload_from_id,
+)
 from workbench.backend.mutation_context import deterministic_mutation_resource_id
 from workbench.backend.storage.local_files import (
     read_json_object,
@@ -764,6 +753,11 @@ def _validate_snapshot_config(
 
 def _snapshot_config_error_detail(exc: Exception) -> str:
     message = str(exc)
+    remote_cause_detail = getattr(exc, "remote_cause_detail", None)
+    if message.startswith("Failed to build preset") and isinstance(
+        remote_cause_detail, str
+    ):
+        return remote_cause_detail
     cause = exc.__cause__
     if (
         message.startswith("Failed to build preset")

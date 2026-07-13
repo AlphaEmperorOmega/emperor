@@ -233,9 +233,8 @@ class RouteAuthIntegrationTests(unittest.TestCase):
         allow_unsafe_local_mutations: bool = True,
         allow_log_imports: bool | None = None,
     ):
-        from emperor.inspection import GraphNode, InspectionResult
-        from emperor.model_packages import ModelIdentity
-
+        from model_runtime.inspection import GraphNode, InspectionResult
+        from model_runtime.packages import ModelIdentity
         from workbench.backend.api import create_app
         from workbench.backend.dependencies import (
             get_inspection_service,

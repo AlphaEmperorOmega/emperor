@@ -1,16 +1,13 @@
-"""HTTP representation mapping for semantic Config Snapshot records."""
-
 from __future__ import annotations
 
 from typing import Any
-
-from emperor.model_packages import model_identity_payload_from_id
 
 from workbench.backend.config_snapshots import (
     ConfigSnapshotDeletion,
     ConfigSnapshotRecord,
     ConfigSnapshotService,
 )
+from workbench.backend.model_identity import model_identity_payload_from_id
 
 
 def config_snapshot_to_payload(

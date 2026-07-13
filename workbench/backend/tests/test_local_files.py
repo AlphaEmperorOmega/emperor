@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 from workbench.backend.storage.local_files import (
+    apply_owner_only_permissions,
     read_json_object,
     reject_symlink,
     require_safe_name,
@@ -68,6 +71,26 @@ class LocalFilePathTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 resolve_under_root(root, link / "file.txt")
 
+    @unittest.skipUnless(sys.platform == "win32", "junctions require Windows")
+    def test_resolve_under_root_rejects_junction_escape(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "root"
+            outside = Path(tmp) / "outside"
+            root.mkdir()
+            outside.mkdir()
+            junction = root / "junction"
+            completed = subprocess.run(
+                ["cmd.exe", "/d", "/c", "mklink", "/J", junction, outside],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            if completed.returncode != 0:
+                self.skipTest(f"junction creation unavailable: {completed.stderr}")
+
+            with self.assertRaises(ValueError):
+                resolve_under_root(root, junction / "escaped.txt")
+
     def test_reject_symlink_rejects_direct_symlink(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -81,6 +104,29 @@ class LocalFilePathTests(unittest.TestCase):
 
             with self.assertRaises(ValueError):
                 reject_symlink(link, "test path")
+
+    @unittest.skipUnless(sys.platform == "win32", "DACLs require Windows")
+    def test_owner_only_permissions_replace_inherited_windows_dacl(self) -> None:
+        import win32security
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "private.json"
+            path.write_text("{}", encoding="utf-8")
+
+            apply_owner_only_permissions(path)
+
+            security = win32security.GetFileSecurity(
+                str(path),
+                win32security.OWNER_SECURITY_INFORMATION
+                | win32security.DACL_SECURITY_INFORMATION,
+            )
+            owner = security.GetSecurityDescriptorOwner()
+            dacl = security.GetSecurityDescriptorDacl()
+            self.assertIsNotNone(dacl)
+            assert dacl is not None
+            self.assertEqual(dacl.GetAceCount(), 1)
+            ace = dacl.GetAce(0)
+            self.assertTrue(win32security.EqualSid(ace[2], owner))
 
     def test_require_safe_name_accepts_single_component(self) -> None:
         self.assertEqual(require_safe_name("linear", "model"), "linear")

@@ -1,5 +1,3 @@
-"""Training Job state records, metadata codec, and persistence Adapters."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -8,11 +6,10 @@ from pathlib import Path
 from threading import RLock
 from typing import Any, Protocol
 
-from emperor.model_packages import (
+from workbench.backend.model_identity import (
     model_id_from_payload,
     model_identity_payload_from_id,
 )
-
 from workbench.backend.storage.local_files import (
     read_json_object,
     require_safe_name,
@@ -63,6 +60,7 @@ class TrainingJobRecord:
     worker_pid: int | None = None
     process_group_id: int | None = None
     cgroup_path: str | None = None
+    windows_job_name: str | None = None
     status: str = "running"
     created_at: str = field(default_factory=_now)
     updated_at: str = field(default_factory=_now)
@@ -273,6 +271,7 @@ def _record_to_metadata(job: TrainingJobRecord) -> dict[str, Any]:
         "worker_pid": job.worker_pid,
         "process_group_id": job.process_group_id,
         "cgroup_path": job.cgroup_path,
+        "windows_job_name": job.windows_job_name,
         "exit_code": job.exit_code,
     }
 
@@ -319,6 +318,11 @@ def _record_from_metadata(
         cgroup_path=(
             str(payload["cgroup_path"])
             if payload.get("cgroup_path") is not None
+            else None
+        ),
+        windows_job_name=(
+            str(payload["windows_job_name"])
+            if payload.get("windows_job_name") is not None
             else None
         ),
         status=str(payload["status"]),

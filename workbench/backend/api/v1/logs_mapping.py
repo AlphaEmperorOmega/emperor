@@ -1,11 +1,8 @@
-"""Map transport-neutral Run History values to the stable Logs HTTP contract."""
-
 from __future__ import annotations
 
 from typing import Any
 
-from emperor.model_packages import model_identity_payload_from_id
-
+from workbench.backend.model_identity import model_identity_payload_from_id
 from workbench.backend.run_history.records import (
     ActiveLogRunDeleteBlocker,
     LogArchiveImportResult,

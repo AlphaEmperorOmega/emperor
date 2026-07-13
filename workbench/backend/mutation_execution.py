@@ -1,17 +1,9 @@
-"""Durable, idempotent execution for HTTP mutations.
-
-Read work keeps its bounded timeout in :mod:`workbench.backend.blocking`. Mutation
-work has a bounded admission wait, then runs to a definitive result so the API
-never reports a timeout while a side effect is still executing.
-"""
-
 from __future__ import annotations
 
 import asyncio
 import contextvars
 import hashlib
 import json
-import os
 import secrets
 import sqlite3
 import time
@@ -45,6 +37,7 @@ from workbench.backend.mutation_context import (
     current_mutation_identity,
     deterministic_mutation_resource_id,
 )
+from workbench.backend.storage.local_files import apply_owner_only_permissions
 
 ResultT = TypeVar("ResultT")
 
@@ -175,9 +168,9 @@ class MutationJournal:
 
     def _connect(self) -> sqlite3.Connection:
         self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
-        os.chmod(self.root, 0o700)
+        apply_owner_only_permissions(self.root)
         connection = sqlite3.connect(self.path, timeout=1.0)
-        os.chmod(self.path, 0o600)
+        apply_owner_only_permissions(self.path)
         connection.execute("PRAGMA synchronous=FULL")
         connection.execute(
             """

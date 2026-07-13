@@ -1,5 +1,3 @@
-"""Transport-neutral Training Job commands and frozen caller snapshots."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -39,6 +37,12 @@ class TrainingRunChangeView:
 
 
 @dataclass(frozen=True, slots=True)
+class TrainingCommandsView:
+    posix: str
+    powershell: str
+
+
+@dataclass(frozen=True, slots=True)
 class TrainingRunView:
     id: str
     index: int
@@ -50,6 +54,10 @@ class TrainingRunView:
     overrides: dict[str, Any]
     command: str
     total_epochs: int
+    command_argv: list[str] = field(default_factory=list)
+    commands: TrainingCommandsView = field(
+        default_factory=lambda: TrainingCommandsView(posix="", powershell="")
+    )
     snapshot_id: str | None = None
     snapshot_name: str | None = None
     snapshot_id_present: bool = False
@@ -200,6 +208,7 @@ __all__ = [
     "SubmittedTrainingRun",
     "SubmittedTrainingRunPlan",
     "TrainingJobView",
+    "TrainingCommandsView",
     "TrainingProgressEventsPage",
     "TrainingRunChangeSource",
     "TrainingRunChangeView",

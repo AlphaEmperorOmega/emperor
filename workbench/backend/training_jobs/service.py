@@ -1,5 +1,3 @@
-"""Training-job API use cases."""
-
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -152,6 +150,9 @@ class TrainingJobService:
 
     def cancellation_capability(self) -> TrainingCancellationCapability:
         return self._runtime.cancellation_capability()
+
+    def training_resource_limits_enforced(self) -> bool:
+        return self._runtime.training_resource_limits_enforced()
 
     def active_jobs(self) -> list[ActiveTrainingJob]:
         return self._runtime.active_job_views()

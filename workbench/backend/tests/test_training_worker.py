@@ -13,11 +13,7 @@ from unittest.mock import patch
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
-from emperor.runs.progress import (
-    JsonlTrainingProgressCallback,
-    NeuronClusterGrowthCallback,
-)
-
+from model_runtime.runs.progress import NeuronClusterGrowthCallback
 from workbench.backend.training_jobs import run_plan_adapter
 from workbench.backend.training_jobs import worker as training_worker
 from workbench.backend.training_jobs.launcher import TRAINING_LOGS_ROOT_ENV
@@ -95,7 +91,7 @@ class TrainingWorkerPlanAcceptanceTests(unittest.TestCase):
         )
         package = training_worker.load_model_parts("linears/linear")
 
-        with patch("emperor.runs.planning.plan_runs") as plan_runs:
+        with patch("model_runtime.runs.planning.plan_runs") as plan_runs:
             plan = run_plan_adapter.accept_worker_run_plan(package, payload)
 
         plan_runs.assert_not_called()
@@ -299,7 +295,7 @@ class TrainingWorkerProgressTests(unittest.TestCase):
                 ],
             ),
             patch(
-                "workbench.backend.training_jobs.worker.execute_runs",
+                "workbench.backend.training_jobs.worker.execute_project_run_plan",
                 side_effect=execute_side_effect,
                 return_value=(),
             ) as execute,
@@ -323,10 +319,7 @@ class TrainingWorkerProgressTests(unittest.TestCase):
             self.assertEqual(plan.presets, ("baseline", "gating"))
             self.assertEqual(plan.datasets, ("Mnist", "Cifar10"))
             self.assertEqual(len(plan.runs), 4)
-            self.assertIsInstance(
-                execute.call_args.kwargs["progress"],
-                JsonlTrainingProgressCallback,
-            )
+            self.assertEqual(execute.call_args.kwargs["progress_path"], progress_path)
             events = read_jsonl(progress_path)
 
         self.assertEqual([event["type"] for event in events], ["started", "completed"])
@@ -349,8 +342,7 @@ class TrainingWorkerProgressTests(unittest.TestCase):
             ):
                 execute = self.run_worker(worker_payload(), progress_path)
 
-        artifacts = execute.call_args.kwargs["artifacts"]
-        self.assertEqual(artifacts.root, logs_root)
+        self.assertEqual(execute.call_args.kwargs["logs_root"], logs_root)
 
     def test_worker_rejects_oversized_collections_before_started_event(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -378,7 +370,9 @@ class TrainingWorkerProgressTests(unittest.TestCase):
             with (
                 contextlib.redirect_stderr(stderr),
                 self.assertRaises(SystemExit) as raised,
-                patch("workbench.backend.training_jobs.worker.execute_runs") as execute,
+                patch(
+                    "workbench.backend.training_jobs.worker.execute_project_run_plan"
+                ) as execute,
             ):
                 self.run_worker(payload, progress_path)
 

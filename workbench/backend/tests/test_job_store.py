@@ -140,6 +140,7 @@ class FileSystemTrainingJobStoreTests(unittest.TestCase):
                 "worker_pid",
                 "process_group_id",
                 "cgroup_path",
+                "windows_job_name",
                 "exit_code",
             },
         )

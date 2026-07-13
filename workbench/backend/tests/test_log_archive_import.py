@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import os
 import stat
 import tempfile
 import threading
@@ -1278,6 +1279,7 @@ class LogArchiveImportApiTests(unittest.TestCase):
             self.assertEqual(after.json()["total"], 1)
             self.assertEqual(after.json()["runs"][0]["experiment"], "imported_exp")
 
+    @unittest.skipUnless(os.name == "posix", "descriptor commits require POSIX")
     def test_partial_write_failure_keeps_prior_replacement_cleans_temp_and_invalidates(
         self,
     ) -> None:
@@ -1349,6 +1351,7 @@ class LogArchiveImportApiTests(unittest.TestCase):
                 {"batch_size": 8},
             )
 
+    @unittest.skipUnless(os.name == "posix", "descriptor commits require POSIX")
     def test_file_exists_during_atomic_replace_removes_temporary_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             logs_root = Path(tmp) / "logs"
@@ -1375,6 +1378,33 @@ class LogArchiveImportApiTests(unittest.TestCase):
             self.assertEqual(result.skipped_file_count, 1)
             self.assertFalse((logs_root / "new_exp/nested/result.json").exists())
             self.assertEqual(list(logs_root.rglob("*.tmp")), [])
+
+    @unittest.skipUnless(os.name == "nt", "Windows commit race requires Windows")
+    def test_windows_file_exists_during_commit_is_counted_as_skipped(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = Path(tmp) / "logs"
+            service = RunHistoryService(
+                logs_root=logs_root,
+                mutation_coordinator=LogExperimentMutationCoordinator(),
+                active_log_writers=lambda: (),
+            )
+            archive = io.BytesIO(zip_bytes({"new_exp/nested/result.json": "{}"}))
+
+            with patch.object(
+                Path,
+                "rename",
+                side_effect=FileExistsError("forced replacement race"),
+            ):
+                result = service.import_archive(
+                    archive=archive,
+                    filename="logs.zip",
+                    max_upload_size=None,
+                    max_extracted_size=None,
+                )
+
+            self.assertEqual(result.extracted_file_count, 0)
+            self.assertEqual(result.skipped_file_count, 1)
+            self.assertFalse((logs_root / "new_exp/nested/result.json").exists())
 
     def test_import_preserves_safe_legacy_experiment_names_outside_ui_grammar(
         self,

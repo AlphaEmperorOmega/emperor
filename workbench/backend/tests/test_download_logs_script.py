@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 import tempfile
 import unittest
@@ -16,6 +17,7 @@ def create_minimal_project(root: Path) -> None:
     (root / "emperor").mkdir()
 
 
+@unittest.skipUnless(os.name == "posix", "download_logs.sh is a Unix wrapper")
 class DownloadLogsScriptTests(unittest.TestCase):
     def test_selected_log_folder_archive_preserves_folder_prefix(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -1,5 +1,3 @@
-"""Linux cgroup-v2 Adapter for strict Training Job containment."""
-
 from __future__ import annotations
 
 import os
@@ -15,9 +13,20 @@ from workbench.backend.storage.local_files import require_safe_name
 TrainingCancellationCapability = Literal[
     "strict-cgroup",
     "process-group",
+    "windows-job-object",
     "unsupported",
 ]
-TrainingCancellationMode = Literal["strict-cgroup", "process-group"]
+TrainingCancellationMode = Literal[
+    "auto",
+    "strict-cgroup",
+    "process-group",
+    "windows-job-object",
+]
+ResolvedTrainingCancellationMode = Literal[
+    "strict-cgroup",
+    "process-group",
+    "windows-job-object",
+]
 
 CGROUP_V2_MOUNT = Path("/sys/fs/cgroup")
 CGROUP_NAMESPACE = "emperor-workbench-training"
@@ -184,12 +193,49 @@ class CgroupV2Manager:
             return False
         try:
             base_path = self.base_path
-            return base_path.is_dir() and os.access(
-                base_path,
-                os.W_OK | os.X_OK,
-            )
+            if not base_path.is_dir() or not os.access(
+                base_path, os.W_OK | os.X_OK
+            ):
+                return False
+            self._probe_resource_controls()
+            return True
         except (OSError, StrictCancellationUnavailable):
             return False
+
+    def _probe_resource_controls(self) -> None:
+        namespace_path = self.base_path / self.namespace
+        if namespace_path.is_symlink():
+            raise StrictCancellationUnavailable(
+                "Strict training cancellation refuses a symlink cgroup namespace."
+            )
+        created_namespace = False
+        try:
+            namespace_path.mkdir()
+            created_namespace = True
+        except FileExistsError:
+            if not namespace_path.is_dir():
+                raise
+        probe_path = namespace_path / f".probe-{os.getpid()}-{time.time_ns()}"
+        try:
+            probe_path.mkdir()
+            self._write_resource_limits(probe_path)
+        finally:
+            # Regular-filesystem tests create these files; real cgroup control
+            # files are virtual and reject unlinking before the cgroup is removed.
+            for filename in self._resource_limit_settings():
+                try:
+                    (probe_path / filename).unlink()
+                except OSError:
+                    pass
+            try:
+                probe_path.rmdir()
+            except OSError:
+                pass
+            if created_namespace:
+                try:
+                    namespace_path.rmdir()
+                except OSError:
+                    pass
 
     def require_available(self) -> None:
         if not _is_linux():
@@ -236,14 +282,16 @@ class CgroupV2Manager:
         return CgroupV2Job(job_path)
 
     def _write_resource_limits(self, job_path: Path) -> None:
+        for filename, value in self._resource_limit_settings().items():
+            (job_path / filename).write_text(value, encoding="ascii")
+
+    def _resource_limit_settings(self) -> dict[str, str]:
         period_us = 100_000
-        settings = {
+        return {
             "memory.max": str(self.resource_limits.memory_bytes),
             "cpu.max": f"{self.resource_limits.cpu_count * period_us} {period_us}",
             "pids.max": str(self.resource_limits.process_count),
         }
-        for filename, value in settings.items():
-            (job_path / filename).write_text(value, encoding="ascii")
 
     def from_job_id(self, job_id: str) -> CgroupV2Job | None:
         """Recover only the canonical cgroup owned by this manager and job."""
@@ -277,6 +325,7 @@ __all__ = [
     "DEFAULT_TRAINING_MEMORY_LIMIT_BYTES",
     "DEFAULT_TRAINING_PROCESS_LIMIT",
     "StrictCancellationUnavailable",
+    "ResolvedTrainingCancellationMode",
     "TrainingCancellationCapability",
     "TrainingCancellationMode",
     "TrainingResourceLimits",

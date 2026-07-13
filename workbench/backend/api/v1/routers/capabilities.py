@@ -1,5 +1,3 @@
-"""Feature capability endpoint."""
-
 from __future__ import annotations
 
 from typing import Annotated
@@ -44,10 +42,13 @@ async def capabilities(
         HttpOperationPolicy.LOG_IMPORT,
         settings,
     )
+    cancellation_capability = training_jobs.cancellation_capability()
     return CapabilitiesResponse(
         authMode=settings.auth_mode,
         trainingEnabled=local_mutations_enabled,
-        trainingCancellationCapability=training_jobs.cancellation_capability(),
+        trainingCancellationCapability=cancellation_capability,
+        trainingResourceLimitsEnforced=cancellation_capability
+        in {"strict-cgroup", "windows-job-object"},
         logDeletionEnabled=local_mutations_enabled,
         configSnapshotsEnabled=local_mutations_enabled,
         uploadsEnabled=log_imports_enabled,

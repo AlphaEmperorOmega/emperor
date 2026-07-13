@@ -1,10 +1,9 @@
-"""Private Training Job lifecycle runtime."""
-
 from __future__ import annotations
 
 import logging
 import os
 import subprocess
+import tempfile
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -12,15 +11,16 @@ from pathlib import Path
 from threading import Lock, RLock
 from typing import Any
 
-from emperor.model_packages import model_identity_payload_from_id
-
 from workbench.backend.config_snapshots import ConfigSnapshotService
 from workbench.backend.failures import FailureKind
 from workbench.backend.log_experiments import (
     LogExperimentFailure,
     validate_log_experiment_name,
 )
-from workbench.backend.model_identity import normalize_preset_token
+from workbench.backend.model_identity import (
+    model_identity_payload_from_id,
+    normalize_preset_token,
+)
 from workbench.backend.mutation_context import deterministic_mutation_resource_id
 from workbench.backend.tensorboard.events import TensorBoardEventCache
 from workbench.backend.tensorboard.readers import (
@@ -110,7 +110,7 @@ class _TrainingJobRuntime:
         training_resource_limits: TrainingResourceLimits | None = None,
     ) -> None:
         self.root = ensure_private_directory(
-            root or Path("/tmp/emperor-workbench-training")
+            root or Path(tempfile.gettempdir()) / "emperor-workbench-training"
         ).resolve()
         self.cwd = cwd or Path.cwd()
         self.logs_root = Path(logs_root).resolve()
@@ -171,6 +171,9 @@ class _TrainingJobRuntime:
 
     def cancellation_capability(self) -> TrainingCancellationCapability:
         return self.worker_launcher.cancellation_capability()
+
+    def training_resource_limits_enforced(self) -> bool:
+        return self.worker_launcher.training_resource_limits_enforced()
 
     def create_job_from_command(
         self,
@@ -321,6 +324,7 @@ class _TrainingJobRuntime:
             worker_pid=containment.worker_pid,
             process_group_id=containment.process_group_id,
             cgroup_path=containment.cgroup_path,
+            windows_job_name=containment.windows_job_name,
         )
         self.job_store.save(job)
         with self._state_lock:
@@ -642,31 +646,46 @@ class _TrainingJobRuntime:
         self,
         job: TrainingJobRecord,
     ) -> ProcessHandle | None:
-        if job.cancellation_mode != "strict-cgroup":
-            return None
-        cgroup = self.worker_launcher.recover_job_cgroup(
-            job.id,
-            persisted_mode=job.cancellation_mode,
-        )
-        if cgroup is None or not cgroup.has_processes():
-            return None
-        return PersistedCgroupProcessHandle(
-            pid=job.worker_pid or job.pid,
-            cgroup=cgroup,
-        )
+        if job.cancellation_mode == "strict-cgroup":
+            cgroup = self.worker_launcher.recover_job_cgroup(
+                job.id,
+                persisted_mode=job.cancellation_mode,
+            )
+            if cgroup is None or not cgroup.has_processes():
+                return None
+            return PersistedCgroupProcessHandle(
+                pid=job.worker_pid or job.pid,
+                cgroup=cgroup,
+            )
+        if job.cancellation_mode == "windows-job-object":
+            windows_job = self.worker_launcher.recover_windows_job(job.windows_job_name)
+            if windows_job is None or not windows_job.has_processes():
+                return None
+            from workbench.backend.windows_jobs import (
+                PersistedWindowsJobProcessHandle,
+            )
+
+            return PersistedWindowsJobProcessHandle(
+                pid=job.worker_pid or job.pid,
+                job=windows_job,
+            )
+        return None
 
     def _job_has_live_containment(self, job: TrainingJobRecord) -> bool:
-        if job.cancellation_mode != "strict-cgroup":
-            return False
         with self._state_lock:
             process = self._processes.get(job.id)
         if process is not None and process.poll() is None:
             return True
-        cgroup = self.worker_launcher.recover_job_cgroup(
-            job.id,
-            persisted_mode=job.cancellation_mode,
-        )
-        return bool(cgroup and cgroup.has_processes())
+        if job.cancellation_mode == "strict-cgroup":
+            cgroup = self.worker_launcher.recover_job_cgroup(
+                job.id,
+                persisted_mode=job.cancellation_mode,
+            )
+            return bool(cgroup and cgroup.has_processes())
+        if job.cancellation_mode == "windows-job-object":
+            windows_job = self.worker_launcher.recover_windows_job(job.windows_job_name)
+            return bool(windows_job and windows_job.has_processes())
+        return False
 
     @staticmethod
     def _process_identity_is_live(pid: int | None, *, group: bool = False) -> bool:
@@ -674,6 +693,8 @@ class _TrainingJobRuntime:
             return False
         try:
             if group:
+                if os.name != "posix":
+                    return False
                 os.killpg(pid, 0)
             else:
                 os.kill(pid, 0)
@@ -725,6 +746,11 @@ class _TrainingJobRuntime:
                 if cgroup.has_processes():
                     return
                 cgroup.cleanup_empty()
+            windows_job = self.worker_launcher.recover_windows_job(job.windows_job_name)
+            if windows_job is not None:
+                if windows_job.has_processes():
+                    return
+                windows_job.close()
             if self._processes.get(job.id) is process:
                 self._processes.pop(job.id, None)
             self._released_job_ids.add(job.id)

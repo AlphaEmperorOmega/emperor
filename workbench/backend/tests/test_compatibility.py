@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import importlib
 import os
-import sys
 import unittest
 from unittest.mock import patch
 
@@ -155,28 +154,20 @@ class SchemaCompatibilityImportTests(unittest.TestCase):
                 self.assertIsNotNone(getattr(schemas, name))
 
 
-class InspectorCompatibilityImportTests(unittest.TestCase):
-    def test_inspector_package_reexports_documented_symbols(self) -> None:
-        inspector = importlib.import_module("workbench.backend.inspector")
-        discovery = importlib.import_module("workbench.backend.inspector.discovery")
-        schema = importlib.import_module("workbench.backend.inspector.schema")
-        service = importlib.import_module("workbench.backend.inspector.service")
-        graph = importlib.import_module("workbench.backend.inspector.graph")
-
-        expected_exports = {
-            "ModelParts": discovery.ModelParts,
-            "config_schema": schema.config_schema,
-            "discover_models": discovery.discover_models,
-            "inspect_model": service.inspect_model,
-            "list_model_presets": discovery.list_model_presets,
-            "load_model_parts": discovery.load_model_parts,
-            "serialize_graph": graph.serialize_graph,
-        }
-
-        self.assertEqual(inspector.__all__, list(expected_exports))
-        for name, canonical_object in expected_exports.items():
-            with self.subTest(name=name):
-                self.assertIs(getattr(inspector, name), canonical_object)
+class InspectorCompatibilityRemovalTests(unittest.TestCase):
+    def test_obsolete_inspector_forwarders_stay_absent(self) -> None:
+        for module_name in (
+            "workbench.backend.inspector.checkpoint_shapes",
+            "workbench.backend.inspector.discovery",
+            "workbench.backend.inspector.errors",
+            "workbench.backend.inspector.graph",
+            "workbench.backend.inspector.schema",
+            "workbench.backend.inspector.service",
+        ):
+            with self.subTest(module=module_name), self.assertRaises(
+                ModuleNotFoundError
+            ):
+                importlib.import_module(module_name)
 
 
 class ExtensionPointImportTests(unittest.TestCase):
@@ -192,68 +183,28 @@ class ExtensionPointImportTests(unittest.TestCase):
             importlib.import_module("workbench.backend.db.session")
 
 
-class CliCompatibilityImportTests(unittest.TestCase):
-    def test_cli_maps_broken_package_parser_imports_to_clean_error(self) -> None:
-        from emperor.model_packages import ModelPackage
+class ProjectCliBoundaryTests(unittest.TestCase):
+    def test_workbench_cli_compatibility_module_is_removed(self) -> None:
+        with self.assertRaises(ModuleNotFoundError):
+            importlib.import_module("workbench.backend.cli")
 
-        from workbench.backend.inspection_errors import InspectionFailure
+    def test_project_inspection_cli_exposes_callable_entrypoint(self) -> None:
+        inspection_cli = importlib.import_module("models.inspection_cli")
 
-        cli = importlib.import_module("workbench.backend.cli")
-        package = ModelPackage(
-            "broken",
-            "missing",
-            "models.__inspection_missing__",
-        )
+        self.assertTrue(callable(inspection_cli.run_inspection))
 
-        with (
-            patch.object(
-                sys,
-                "argv",
-                [
-                    "cli",
-                    "--model-type",
-                    "broken",
-                    "--model",
-                    "missing",
-                    "--preset",
-                    "baseline",
-                ],
-            ),
-            patch.object(cli, "model_id_from_parts", return_value="broken/missing"),
-            patch.object(
-                cli.WorkbenchInspectionAdapter,
-                "select",
-                return_value=cli.WorkbenchInspectionAdapter.from_package(package),
-            ),
-            self.assertRaisesRegex(
-                InspectionFailure,
-                "Failed to import model package 'broken/missing'",
-            ),
-        ):
-            cli._parse_args()
+    def test_project_cli_dispatches_inspection_arguments(self) -> None:
+        project_cli = importlib.import_module("models.project_cli")
+        arguments = ["--model-type", "linears", "--model", "linear"]
 
-    def test_cli_module_exposes_callable_main(self) -> None:
-        cli = importlib.import_module("workbench.backend.cli")
+        with patch(
+            "models.inspection_cli.run_inspection",
+            return_value=0,
+        ) as run_inspection:
+            result = project_cli.main(["inspect", *arguments])
 
-        self.assertTrue(callable(cli.main))
-
-    def test_cli_main_reaches_parser_without_inspecting_model(self) -> None:
-        cli = importlib.import_module("workbench.backend.cli")
-        parser_exit = SystemExit("parser reached")
-
-        with (
-            patch.object(cli, "_parse_args", side_effect=parser_exit) as parse_args,
-            patch.object(
-                cli.WorkbenchInspectionAdapter,
-                "inspect_payload",
-            ) as inspect_payload,
-        ):
-            with self.assertRaises(SystemExit) as raised:
-                cli.main()
-
-        self.assertIs(raised.exception, parser_exit)
-        parse_args.assert_called_once_with()
-        inspect_payload.assert_not_called()
+        self.assertEqual(result, 0)
+        run_inspection.assert_called_once_with(arguments)
 
 
 class ModelPackageCompatibilityTests(unittest.TestCase):

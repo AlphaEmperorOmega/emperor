@@ -1,12 +1,14 @@
-"""Private generation-aware JSON catalog persistence."""
-
 from __future__ import annotations
 
 from pathlib import Path
 from threading import Lock, RLock
 from typing import Any
 
-from workbench.backend.storage.local_files import read_json_object, write_json_atomic
+from workbench.backend.storage.local_files import (
+    apply_owner_only_permissions,
+    read_json_object,
+    write_json_atomic,
+)
 
 CATALOG_SCHEMA_VERSION = 1
 CATALOG_DIRECTORY_MODE = 0o700
@@ -85,7 +87,7 @@ class PersistentJsonCatalog:
         path.mkdir(parents=True, exist_ok=True, mode=CATALOG_DIRECTORY_MODE)
         if path.is_symlink() or not path.is_dir():
             raise ValueError(f"Catalog directory is not canonical: {path}")
-        path.chmod(CATALOG_DIRECTORY_MODE)
+        apply_owner_only_permissions(path)
         return path.resolve()
 
 

@@ -2,13 +2,11 @@ from __future__ import annotations
 
 import os
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
-from emperor.inspection import InspectionRequest, InspectionResult
-from emperor.model_packages import ModelPackage
-
+from model_runtime.inspection import InspectionRequest, InspectionResult
 from workbench.backend.api.v1.routers.models import (
     _config_schema as http_config_schema,
 )
@@ -22,14 +20,21 @@ from workbench.backend.inspection_serialization import (
     inspection_result_payload,
     search_space_payload,
 )
-from workbench.backend.inspector.schema import (
+from workbench.backend.project_adapter import (
+    ModelPackageReference,
+    ProjectAdapterClient,
+    ProjectAdapterFailure,
+)
+from workbench.backend.services.inspection import InspectionService
+from workbench.backend.tests.inspection_support import (
     config_schema as legacy_config_schema,
 )
-from workbench.backend.inspector.schema import (
+from workbench.backend.tests.inspection_support import (
+    inspect_model as legacy_inspect_model,
+)
+from workbench.backend.tests.inspection_support import (
     search_space_schema as legacy_search_space_schema,
 )
-from workbench.backend.inspector.service import inspect_model as legacy_inspect_model
-from workbench.backend.services.inspection import InspectionService
 
 
 class InspectionAdapterEquivalenceTests(unittest.TestCase):
@@ -45,12 +50,16 @@ class InspectionAdapterEquivalenceTests(unittest.TestCase):
         self.assertIsInstance(result, InspectionResult)
 
     def test_broken_package_failures_map_to_stable_workbench_errors(self) -> None:
-        package = ModelPackage(
-            "broken",
-            "missing",
-            "models.__inspection_missing__",
+        client = Mock(spec=ProjectAdapterClient)
+        client.command = ("broken-adapter",)
+        failure = ProjectAdapterFailure(
+            "Failed to import model package 'broken/missing': missing module"
         )
-        adapter = WorkbenchInspectionAdapter.from_package(package)
+        client.configuration.side_effect = failure
+        client.call.side_effect = failure
+        adapter = WorkbenchInspectionAdapter(
+            ModelPackageReference("broken", "missing", client)
+        )
 
         calls = (
             adapter.configuration,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 import tempfile
 import time
@@ -7,9 +8,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from emperor.inspection import InspectionRequest, InspectionResult
-from emperor.model_packages import model_package
+import psutil
+from models.catalog import model_package
 
+from model_runtime.inspection import InspectionRequest, InspectionResult
 from workbench.backend.core.config import WorkbenchApiSettings
 from workbench.backend.inspection_errors import InspectionFailure
 from workbench.backend.inspection_worker import (
@@ -106,11 +108,11 @@ class InspectionWorkerTests(unittest.TestCase):
                 executor.inspect(self.package, self.request)
             self.assertLess(time.monotonic() - started_at, 2)
             child_pid = int(child_pid_path.read_text(encoding="utf-8"))
-            for _attempt in range(20):
-                if not Path(f"/proc/{child_pid}").exists():
+            for _attempt in range(40):
+                if not psutil.pid_exists(child_pid):
                     break
                 time.sleep(0.05)
-            self.assertFalse(Path(f"/proc/{child_pid}").exists())
+            self.assertFalse(psutil.pid_exists(child_pid))
 
         healthy_result = SubprocessInspectionExecutor(
             InspectionWorkerLimits(
@@ -122,11 +124,16 @@ class InspectionWorkerTests(unittest.TestCase):
         self.assertGreater(healthy_result.parameter_count, 0)
 
     def test_memory_breach_cannot_take_down_the_backend_process(self) -> None:
+        resource_setup = (
+            "import resource; resource.setrlimit(resource.RLIMIT_AS, (limit, limit)); "
+            if os.name == "posix"
+            else ""
+        )
         worker_code = (
-            "import json, resource, sys; "
+            "import json, sys; "
             "payload=json.loads(sys.stdin.read()); "
             "limit=payload['limits']['memoryBytes']; "
-            "resource.setrlimit(resource.RLIMIT_AS, (limit, limit)); "
+            f"{resource_setup}"
             "bytearray(limit * 2)"
         )
         executor = SubprocessInspectionExecutor(

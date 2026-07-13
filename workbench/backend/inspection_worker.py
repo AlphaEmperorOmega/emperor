@@ -1,14 +1,12 @@
-"""Killable process boundary for model construction during Inspection."""
-
 from __future__ import annotations
 
 import contextlib
 import json
 import os
-import resource
 import signal
 import subprocess
 import sys
+import tempfile
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,9 +15,14 @@ from typing import TYPE_CHECKING, Any, Protocol
 from workbench.backend.failures import FailureKind
 from workbench.backend.inspection_errors import InspectionFailure
 
+try:
+    import resource
+except ImportError:  # pragma: no cover - Windows standard library
+    resource = None  # type: ignore[assignment]
+
 if TYPE_CHECKING:
-    from emperor.inspection import InspectionRequest, InspectionResult
-    from emperor.model_packages import ModelPackage
+    from model_runtime.inspection import InspectionRequest, InspectionResult
+    from model_runtime.packages import ModelPackage
 
 _DEFAULT_WORKER_COMMAND = (
     sys.executable,
@@ -28,7 +31,6 @@ _DEFAULT_WORKER_COMMAND = (
     "workbench.backend.inspection_worker",
 )
 _MAX_WORKER_RESULT_BYTES = 16 * 1024 * 1024
-_WORKER_IMPORT_ROOT = str(Path(__file__).resolve().parents[2])
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,8 +88,7 @@ class SubprocessInspectionExecutor:
         package: ModelPackage,
         request: InspectionRequest,
     ) -> InspectionResult:
-        from emperor.inspection import ParsedOverrides
-
+        from model_runtime.inspection import ParsedOverrides
         from workbench.backend.inspection_adapter import (
             WorkbenchInspectionAdapter,
         )
@@ -115,29 +116,9 @@ class SubprocessInspectionExecutor:
             allow_nan=False,
             separators=(",", ":"),
         ).encode("utf-8")
-        process = subprocess.Popen(  # noqa: S603 - fixed or injected test command
-            self._command,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            env={**os.environ, "PYTHONPATH": _WORKER_IMPORT_ROOT},
-            start_new_session=True,
-        )
-        try:
-            stdout, _stderr = process.communicate(
-                encoded_request,
-                timeout=self._limits.timeout_seconds,
-            )
-        except subprocess.TimeoutExpired as exc:
-            _terminate_process_group(process)
-            process.communicate()
-            raise InspectionFailure(
-                "Inspection construction exceeded the "
-                f"{self._limits.timeout_seconds:g} second limit.",
-                kind=FailureKind.TIMEOUT,
-            ) from exc
+        process, stdout, return_code = self._execute_worker(encoded_request)
 
-        if process.returncode != 0:
+        if return_code != 0:
             _terminate_process_group(process)
             raise InspectionFailure(
                 "Inspection worker crashed.",
@@ -198,8 +179,93 @@ class SubprocessInspectionExecutor:
                 kind=FailureKind.UNAVAILABLE,
             ) from exc
 
+    def _execute_worker(self, encoded_request: bytes):
+        environment = dict(os.environ)
+        if os.name == "nt":
+            return self._execute_windows_worker(encoded_request, environment)
+        process = subprocess.Popen(  # noqa: S603 - fixed or injected test command
+            self._command,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=environment,
+            start_new_session=True,
+        )
+        try:
+            stdout, _stderr = process.communicate(
+                encoded_request,
+                timeout=self._limits.timeout_seconds,
+            )
+        except subprocess.TimeoutExpired as exc:
+            _terminate_process_group(process)
+            process.communicate()
+            raise InspectionFailure(
+                "Inspection construction exceeded the "
+                f"{self._limits.timeout_seconds:g} second limit.",
+                kind=FailureKind.TIMEOUT,
+            ) from exc
+        return process, stdout, int(process.returncode or 0)
 
-def _terminate_process_group(process: subprocess.Popen[bytes]) -> None:
+    def _execute_windows_worker(
+        self,
+        encoded_request: bytes,
+        environment: dict[str, str],
+    ):
+        from workbench.backend.windows_jobs import WindowsJob, WindowsJobLimits
+
+        with tempfile.TemporaryDirectory(prefix="emperor-inspection-") as directory:
+            root = Path(directory)
+            request_path = root / "request.json"
+            output_path = root / "result.json"
+            error_path = root / "error.log"
+            request_path.write_bytes(encoded_request)
+            job = WindowsJob.create(
+                name=None,
+                inheritable=False,
+                limits=WindowsJobLimits(
+                    memory_bytes=self._limits.memory_bytes,
+                    cpu_count=self._limits.cpu_count,
+                    process_count=max(8, self._limits.cpu_count * 4),
+                ),
+            )
+            with (
+                request_path.open("rb") as request_file,
+                output_path.open("wb") as output_file,
+                error_path.open("wb") as error_file,
+            ):
+                process = job.start_suspended(
+                    list(self._command),
+                    cwd=Path.cwd(),
+                    env=environment,
+                    stdin=request_file,
+                    stdout=output_file,
+                    stderr=error_file,
+                )
+                try:
+                    return_code = process.wait(self._limits.timeout_seconds)
+                except subprocess.TimeoutExpired as exc:
+                    process.kill()
+                    try:
+                        process.wait(5.0)
+                    except subprocess.TimeoutExpired:
+                        pass
+                    job.close()
+                    raise InspectionFailure(
+                        "Inspection construction exceeded the "
+                        f"{self._limits.timeout_seconds:g} second limit.",
+                        kind=FailureKind.TIMEOUT,
+                    ) from exc
+            stdout = output_path.read_bytes()
+            return process, stdout, return_code
+
+
+def _terminate_process_group(process) -> None:
+    if os.name != "posix":
+        try:
+            process.kill()
+        except OSError:
+            pass
+        return
     try:
         os.killpg(process.pid, signal.SIGKILL)
     except ProcessLookupError:
@@ -216,7 +282,8 @@ def _apply_worker_limits(payload: Mapping[str, Any]) -> None:
         raise ValueError("Invalid Inspection worker memory limit.")
     if not isinstance(cpu_count, int) or cpu_count < 1:
         raise ValueError("Invalid Inspection worker CPU limit.")
-    resource.setrlimit(resource.RLIMIT_AS, (memory_bytes, memory_bytes))
+    if resource is not None:
+        resource.setrlimit(resource.RLIMIT_AS, (memory_bytes, memory_bytes))
     if hasattr(os, "sched_getaffinity") and hasattr(os, "sched_setaffinity"):
         available_cpus = sorted(os.sched_getaffinity(0))
         selected_cpus = available_cpus[: min(cpu_count, len(available_cpus))]
@@ -226,8 +293,7 @@ def _apply_worker_limits(payload: Mapping[str, Any]) -> None:
 
 def _run_worker(payload: Mapping[str, Any]) -> dict[str, Any]:
     _apply_worker_limits(payload)
-    from emperor.inspection import InspectionRequest
-
+    from model_runtime.inspection import InspectionRequest
     from workbench.backend.inspection_adapter import WorkbenchInspectionAdapter
 
     model_type = payload.get("modelType")
@@ -302,8 +368,8 @@ def _inspection_result_to_wire(result: InspectionResult) -> dict[str, Any]:
 
 
 def _inspection_result_from_wire(payload: object) -> InspectionResult:
-    from emperor.inspection import GraphEdge, InspectionResult
-    from emperor.model_packages import ModelIdentity
+    from model_runtime.inspection import GraphEdge, InspectionResult
+    from model_runtime.packages import ModelIdentity
 
     if not isinstance(payload, Mapping):
         raise TypeError("Inspection result must be a mapping.")
@@ -336,7 +402,7 @@ def _inspection_result_from_wire(payload: object) -> InspectionResult:
 
 
 def _node_from_wire(payload: object):
-    from emperor.inspection import (
+    from model_runtime.inspection import (
         GraphConfiguration,
         GraphConfigurationField,
         GraphNode,

@@ -1,5 +1,3 @@
-"""Join a Training Job cgroup before executing the real worker command."""
-
 from __future__ import annotations
 
 import argparse
@@ -9,7 +7,11 @@ from pathlib import Path
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description=(
+            "Join a Training Job cgroup before executing the real worker command."
+        )
+    )
     parser.add_argument("--cgroup", required=True)
     parser.add_argument("--ready", required=True)
     parser.add_argument("command", nargs=argparse.REMAINDER)

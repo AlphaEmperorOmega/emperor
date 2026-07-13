@@ -9,9 +9,9 @@ from typing import Any
 from unittest import mock
 
 import httpx
-from emperor.inspection import ConfigurationField, ConfigurationSchema
-from emperor.model_packages import ModelIdentity
 
+from model_runtime.inspection import ConfigurationField, ConfigurationSchema
+from model_runtime.packages import ModelIdentity
 from workbench.backend.api import create_app
 from workbench.backend.settings import WorkbenchApiSettings
 

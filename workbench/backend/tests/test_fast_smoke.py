@@ -4,7 +4,9 @@ import importlib
 import os
 import subprocess
 import sys
+import tempfile
 import unittest
+from pathlib import Path
 
 FAST_SMOKE_MODULES = (
     "workbench.backend.storage.local_files",
@@ -49,8 +51,8 @@ class FastSmokeSuiteTests(unittest.TestCase):
     def test_inspection_facade_import_is_lazy(self) -> None:
         script = """
 import sys
-import emperor.inspection
-from emperor.model_packages import discover_model_packages
+import model_runtime.inspection
+from models.catalog import discover_model_packages
 
 loaded = [
     package.module_path
@@ -68,7 +70,10 @@ if 'torch' in sys.modules:
         completed = subprocess.run(
             [sys.executable, "-c", script],
             cwd=".",
-            env={**os.environ, "MPLCONFIGDIR": "/tmp/matplotlib"},
+            env={
+                **os.environ,
+                "MPLCONFIGDIR": str(Path(tempfile.gettempdir()) / "matplotlib"),
+            },
             check=False,
             capture_output=True,
             text=True,
@@ -80,7 +85,7 @@ if 'torch' in sys.modules:
         script = """
 import sys
 from workbench.backend.main import create_app
-from emperor.model_packages import discover_model_packages
+from models.catalog import discover_model_packages
 
 create_app()
 loaded = [
@@ -99,7 +104,10 @@ if 'torch' in sys.modules:
         completed = subprocess.run(
             [sys.executable, "-c", script],
             cwd=".",
-            env={**os.environ, "MPLCONFIGDIR": "/tmp/matplotlib"},
+            env={
+                **os.environ,
+                "MPLCONFIGDIR": str(Path(tempfile.gettempdir()) / "matplotlib"),
+            },
             check=False,
             capture_output=True,
             text=True,

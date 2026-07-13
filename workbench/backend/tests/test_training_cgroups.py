@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from workbench.backend.api import WorkbenchApiSettings, create_app
 from workbench.backend.training_jobs.cgroups import (
@@ -15,6 +15,32 @@ from workbench.backend.training_jobs.launcher import TrainingWorkerLauncher
 
 
 class TrainingCancellationCapabilityTests(unittest.TestCase):
+    def test_auto_uses_process_groups_when_linux_cgroups_are_unavailable(
+        self,
+    ) -> None:
+        manager = Mock(spec=CgroupV2Manager)
+        manager.is_available.return_value = False
+
+        launcher = TrainingWorkerLauncher(
+            cwd=Path.cwd(),
+            cancellation_mode="auto",
+            cgroup_manager=manager,
+        )
+
+        self.assertEqual(launcher.cancellation_mode, "process-group")
+        self.assertEqual(launcher.cancellation_capability(), "process-group")
+        self.assertFalse(launcher.training_resource_limits_enforced())
+
+    def test_auto_selects_windows_job_objects_on_windows(self) -> None:
+        cwd = Path.cwd()
+        with patch("workbench.backend.training_jobs.launcher.os.name", "nt"):
+            launcher = TrainingWorkerLauncher(
+                cwd=cwd,
+                cancellation_mode="auto",
+            )
+
+        self.assertEqual(launcher.cancellation_mode, "windows-job-object")
+
     def test_process_group_app_construction_does_not_construct_cgroups(
         self,
     ) -> None:
@@ -130,6 +156,66 @@ class TrainingCancellationCapabilityTests(unittest.TestCase):
             capability = manager.is_available()
 
         self.assertFalse(capability)
+
+    def test_strict_capability_rejects_unusable_resource_control_files(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as tmp:
+            mount = Path(tmp) / "cgroup"
+            base = mount / "delegated"
+            base.mkdir(parents=True)
+            mount.joinpath("cgroup.controllers").write_text(
+                "cpu memory pids",
+                encoding="utf-8",
+            )
+            with (
+                patch(
+                    "workbench.backend.training_jobs.cgroups.CGROUP_V2_MOUNT",
+                    mount,
+                ),
+                patch(
+                    "workbench.backend.training_jobs.cgroups._is_linux",
+                    return_value=True,
+                ),
+                patch.object(
+                    CgroupV2Manager,
+                    "_write_resource_limits",
+                    side_effect=PermissionError("resource controller denied write"),
+                ) as write_limits,
+            ):
+                manager = CgroupV2Manager(base_path=base, namespace="training")
+
+                capability = manager.is_available()
+
+            self.assertFalse(capability)
+            write_limits.assert_called_once()
+            self.assertFalse((base / "training").exists())
+
+    def test_strict_capability_cleans_its_successful_probe(self) -> None:
+        with TemporaryDirectory() as tmp:
+            mount = Path(tmp) / "cgroup"
+            base = mount / "delegated"
+            base.mkdir(parents=True)
+            mount.joinpath("cgroup.controllers").write_text(
+                "cpu memory pids",
+                encoding="utf-8",
+            )
+            with (
+                patch(
+                    "workbench.backend.training_jobs.cgroups.CGROUP_V2_MOUNT",
+                    mount,
+                ),
+                patch(
+                    "workbench.backend.training_jobs.cgroups._is_linux",
+                    return_value=True,
+                ),
+            ):
+                manager = CgroupV2Manager(base_path=base, namespace="training")
+
+                capability = manager.is_available()
+
+            self.assertTrue(capability)
+            self.assertFalse((base / "training").exists())
 
 
 class TrainingCgroupRecoveryTests(unittest.TestCase):

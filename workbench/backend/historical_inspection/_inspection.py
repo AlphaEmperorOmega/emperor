@@ -1,5 +1,3 @@
-"""Deep Workbench Interface for historical checkpoint Inspection."""
-
 from __future__ import annotations
 
 import re
@@ -7,9 +5,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
-from emperor.inspection import GraphNode, InspectionRequest, InspectionResult
-from emperor.model_packages import ModelPackage, normalize_dataset_name
-
+from model_runtime.inspection import GraphNode, InspectionRequest, InspectionResult
+from model_runtime.packages import ModelPackage, normalize_dataset_name
 from workbench.backend.historical_inspection._checkpoint_ranking import (
     rank_historical_checkpoints,
 )
@@ -90,7 +87,7 @@ class WorkbenchHistoricalInspection:
         context: HistoricalInspectionContext,
         request: HistoricalInspectionRequest,
     ) -> InspectionResult:
-        from emperor.inspection import InspectionRequest, ParsedOverrides
+        from model_runtime.inspection import InspectionRequest, ParsedOverrides
 
         request_overrides = dict(request.request_overrides)
         saved_run_overrides = self._adapter.parse_overrides(

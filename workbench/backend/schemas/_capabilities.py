@@ -1,5 +1,3 @@
-"""Feature capability schemas."""
-
 from __future__ import annotations
 
 from typing import Literal
@@ -15,8 +13,10 @@ class CapabilitiesResponse(ApiResponseModel):
     trainingCancellationCapability: Literal[
         "strict-cgroup",
         "process-group",
+        "windows-job-object",
         "unsupported",
     ] = "unsupported"
+    trainingResourceLimitsEnforced: bool = False
     logDeletionEnabled: bool
     configSnapshotsEnabled: bool = True
     historicalLogsEnabled: bool = True

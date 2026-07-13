@@ -5,20 +5,24 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import unittest
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from workbench.backend.inspector.discovery import (
+from workbench.backend.failures import FailureKind
+from workbench.backend.inspection_errors import InspectionFailure
+from workbench.backend.schemas import InspectResponse
+from workbench.backend.tests.inspection_support import (
+    config_schema,
     discover_models,
+    inspect_model,
     list_model_datasets,
     list_model_monitors,
     list_model_presets,
+    search_space_schema,
 )
-from workbench.backend.inspector.schema import config_schema, search_space_schema
-from workbench.backend.inspector.service import inspect_model
-from workbench.backend.schemas import InspectResponse
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "inspection_contract_v1.json"
 
@@ -112,7 +116,7 @@ class InspectionContractFreezeTests(unittest.TestCase):
                 self.assertEqual(len(payload["datasets"]["datasetGroups"]), groups)
                 self.assertEqual(len(payload["monitors"]), monitors)
 
-    def test_inspection_failures_match_class_detail_and_status_goldens(self) -> None:
+    def test_inspection_failures_preserve_detail_and_http_status_goldens(self) -> None:
         cases: dict[str, Callable[[], Any]] = {
             "unknown-model": lambda: inspect_model("unknown/model", "baseline"),
             "unknown-override": lambda: inspect_model(
@@ -152,12 +156,15 @@ class InspectionContractFreezeTests(unittest.TestCase):
                 with self.assertRaises(Exception) as raised:
                     call()
                 error = raised.exception
-                actual = [
-                    f"{type(error).__module__}.{type(error).__qualname__}",
-                    getattr(error, "detail", str(error)),
-                    getattr(error, "status_code", None),
-                ]
-                self.assertEqual(actual, self.fixture["errors"][name])
+                legacy_type, detail, http_status = self.fixture["errors"][name]
+                self.assertEqual(
+                    legacy_type,
+                    "workbench.backend.inspector.errors.InspectorError",
+                )
+                self.assertIsInstance(error, InspectionFailure)
+                self.assertEqual(error.detail, detail)
+                self.assertEqual(error.kind, FailureKind.INVALID)
+                self.assertEqual(http_status, 400)
 
     def test_cli_json_and_workbench_graph_are_equivalent(self) -> None:
         completed = self._run_cli(
@@ -251,9 +258,12 @@ class InspectionContractFreezeTests(unittest.TestCase):
     @staticmethod
     def _run_cli(*arguments: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            [sys.executable, "-m", "workbench.backend.cli", *arguments],
+            [sys.executable, "-m", "emperor", "inspect", *arguments],
             cwd=Path(__file__).resolve().parents[3],
-            env={**os.environ, "MPLCONFIGDIR": "/tmp/matplotlib"},
+            env={
+                **os.environ,
+                "MPLCONFIGDIR": str(Path(tempfile.gettempdir()) / "matplotlib"),
+            },
             check=False,
             capture_output=True,
             text=True,

@@ -10,7 +10,7 @@ import torch
 from workbench.backend.historical_inspection._checkpoint_ranking import (
     rank_historical_checkpoints,
 )
-from workbench.backend.inspector.checkpoint_shapes import (
+from workbench.backend.historical_inspection._checkpoint_shapes import (
     load_checkpoint_graph_shapes,
 )
 from workbench.backend.run_history.contracts import HistoricalCheckpointCandidate
@@ -69,7 +69,7 @@ class HistoricalCheckpointRankingTests(unittest.TestCase):
                 return {"state_dict": {"model.weight": torch.zeros((2, 3))}}
 
             with patch(
-                "workbench.backend.inspector.checkpoint_shapes.torch.load",
+                "workbench.backend.historical_inspection._checkpoint_shapes.torch.load",
                 side_effect=load,
             ) as torch_load:
                 shapes = load_checkpoint_graph_shapes(ranked)

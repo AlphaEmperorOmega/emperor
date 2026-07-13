@@ -1,11 +1,8 @@
-"""Map typed Training Job values to the stable HTTP payload."""
-
 from __future__ import annotations
 
 from typing import Any
 
-from emperor.model_packages import model_identity_payload_from_id
-
+from workbench.backend.model_identity import model_identity_payload_from_id
 from workbench.backend.training_jobs.contracts import (
     ActiveTrainingJob,
     TrainingJobView,

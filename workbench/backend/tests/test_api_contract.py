@@ -308,6 +308,7 @@ CAPABILITIES_FIELDS = (
     "authMode",
     "trainingEnabled",
     "trainingCancellationCapability",
+    "trainingResourceLimitsEnforced",
     "logDeletionEnabled",
     "configSnapshotsEnabled",
     "historicalLogsEnabled",
@@ -349,6 +350,10 @@ CAPABILITIES_FRONTEND_DEFAULT_FIELDS = {
     "trainingCancellationCapability": (
         "capabilitiesSchema defaults strict cancellation support to unsupported "
         "when omitted."
+    ),
+    "trainingResourceLimitsEnforced": (
+        "capabilitiesSchema defaults strict resource-limit enforcement off for "
+        "older APIs."
     ),
 }
 
@@ -451,6 +456,8 @@ TRAINING_RUN_FIELDS = (
     "changes",
     "overrides",
     "command",
+    "commandArgv",
+    "commands",
     "totalEpochs",
     "currentEpoch",
     "metrics",
@@ -1820,6 +1827,7 @@ class ApiSchemaContractTests(unittest.TestCase):
         )
 
         self.assertEqual(capabilities.trainingCancellationCapability, "unsupported")
+        self.assertFalse(capabilities.trainingResourceLimitsEnforced)
         self.assertEqual(capabilities.uploadsEnabled, False)
         self.assertIsNone(capabilities.maxUploadSize)
 
@@ -1850,6 +1858,10 @@ class ApiIntegrationContractTests(unittest.TestCase):
                 "trainingEnabled": False,
                 "trainingCancellationCapability": (
                     app.state.workbench_services.training_jobs.cancellation_capability()
+                ),
+                "trainingResourceLimitsEnforced": (
+                    app.state.workbench_services.training_jobs.cancellation_capability()
+                    in {"strict-cgroup", "windows-job-object"}
                 ),
                 "logDeletionEnabled": False,
                 "configSnapshotsEnabled": False,
@@ -2266,10 +2278,9 @@ class ApiIntegrationContractTests(unittest.TestCase):
         from unittest.mock import patch
 
         import httpx
-        from emperor.model_packages import ModelPackage
-        from emperor.model_packages.catalog import MODEL_CATALOG
 
         from workbench.backend.api import app
+        from workbench.backend.project_adapter import ProjectAdapterFailure
 
         async def call_api(path: str) -> httpx.Response:
             transport = httpx.ASGITransport(app=app)
@@ -2279,11 +2290,6 @@ class ApiIntegrationContractTests(unittest.TestCase):
             ) as client:
                 return await client.get(path)
 
-        package = ModelPackage(
-            "broken",
-            "missing",
-            "models.__inspection_missing__",
-        )
         paths = (
             "/models/broken/missing/presets",
             "/models/broken/missing/datasets",
@@ -2291,10 +2297,12 @@ class ApiIntegrationContractTests(unittest.TestCase):
             "/models/broken/missing/config-schema",
             "/models/broken/missing/search-space",
         )
-        with patch.dict(
-            MODEL_CATALOG,
-            {"broken/missing": package},
-        ):
+        with patch(
+            "workbench.backend.inspection_adapter.project_adapter"
+        ) as adapter:
+            adapter.return_value.package.side_effect = ProjectAdapterFailure(
+                "Failed to import model package 'broken/missing': missing module"
+            )
             for path in paths:
                 with self.subTest(path=path):
                     response = asyncio.run(call_api(path))

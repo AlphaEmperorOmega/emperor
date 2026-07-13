@@ -1,5 +1,3 @@
-"""Log Run catalog scanning and run parsing."""
-
 from __future__ import annotations
 
 import hashlib
@@ -7,14 +5,15 @@ import re
 import time
 from collections import Counter
 from dataclasses import replace
+from functools import lru_cache
 from pathlib import Path
 from threading import RLock
 from typing import Any, Literal
 
-from emperor.model_packages import MODEL_CATALOG, model_id_from_payload
-
 from workbench.backend.catalogs import PersistentJsonCatalog
 from workbench.backend.log_experiments import is_valid_log_experiment_name
+from workbench.backend.model_identity import model_id_from_payload
+from workbench.backend.project_adapter import project_adapter
 from workbench.backend.run_history.artifacts import (
     RunArtifactObservation,
     observe_run_artifacts,
@@ -27,6 +26,11 @@ RUN_TIMESTAMP_RE = re.compile(r"(?P<timestamp>\d{8}_\d{6})$")
 LogRunCatalogFingerprint = tuple[tuple[Any, ...], ...]
 LogRunCatalogGeneration = tuple[tuple[str, int, int, int], ...]
 RunResultProjection = Literal["full", "summary", "none"]
+
+
+@lru_cache(maxsize=1)
+def _model_catalog_ids() -> frozenset[str]:
+    return frozenset(package.catalog_key for package in project_adapter().catalog())
 
 
 def _resolved_logs_root(logs_root: Path) -> Path:
@@ -53,7 +57,7 @@ def _split_log_model_prefix(
 ) -> tuple[tuple[str, ...], str] | None:
     for index in range(len(prefix_parts)):
         candidate = "/".join(prefix_parts[index:])
-        if candidate in MODEL_CATALOG:
+        if candidate in _model_catalog_ids():
             return prefix_parts[:index], candidate
         if "/" not in candidate:
             public_id = model_id_from_payload({"model": candidate})

@@ -1,5 +1,3 @@
-"""Log Run artifact, result, and checkpoint helpers."""
-
 from __future__ import annotations
 
 import copy
@@ -14,8 +12,7 @@ from pathlib import Path
 from threading import RLock
 from typing import Any
 
-from emperor.runs import NonFiniteJsonValue, replace_non_finite_json
-
+from model_runtime.runs import NonFiniteJsonValue, replace_non_finite_json
 from workbench.backend.run_history.paths import (
     read_regular_file_beneath,
     resolved_under_root,

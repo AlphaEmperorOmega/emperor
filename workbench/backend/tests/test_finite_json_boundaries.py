@@ -9,9 +9,9 @@ import uuid
 from pathlib import Path
 
 import httpx
-from emperor.runs.artifacts import write_run_result
-from emperor.runs.progress import JsonlTrainingProgressCallback
 
+from model_runtime.runs.artifacts import write_run_result
+from model_runtime.runs.progress import JsonlTrainingProgressCallback
 from workbench.backend.core.config import WorkbenchApiSettings
 from workbench.backend.main import create_app
 from workbench.backend.run_history.artifacts import observe_run_artifacts

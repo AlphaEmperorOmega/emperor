@@ -1,5 +1,3 @@
-"""Training job and run-plan schemas."""
-
 from __future__ import annotations
 
 from typing import Annotated, Literal, Self, TypeAlias
@@ -136,6 +134,11 @@ class TrainingRunChangeResponse(ApiResponseModel):
     source: Literal["override", "search"]
 
 
+class TrainingCommandsResponse(ApiResponseModel):
+    posix: str = ""
+    powershell: str = ""
+
+
 class TrainingRunResponse(ApiResponseModel):
     id: str
     index: int
@@ -155,6 +158,8 @@ class TrainingRunResponse(ApiResponseModel):
     changes: list[TrainingRunChangeResponse] = Field(default_factory=list)
     overrides: ConfigOverrides = Field(default_factory=dict)
     command: str
+    commandArgv: list[str] = Field(default_factory=list)
+    commands: TrainingCommandsResponse = Field(default_factory=TrainingCommandsResponse)
     totalEpochs: int
     currentEpoch: int = 0
     metrics: JsonObject = Field(default_factory=dict)

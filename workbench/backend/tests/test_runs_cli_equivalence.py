@@ -15,11 +15,10 @@ from unittest.mock import patch
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
 from emperor.base.options import ActivationOptions
-from emperor.experiments.base import RandomSearch
-from emperor.runs import JsonlTrainingProgressCallback
 from models.linears.linear.presets import ExperimentPreset
 from models.package_cli import run_model_package_cli
 
+from model_runtime.packages import RandomSearch
 from workbench.backend.training_jobs import worker as training_worker
 from workbench.backend.training_jobs.run_plan_adapter import (
     WorkbenchRunPlanAdapter,
@@ -130,7 +129,7 @@ class RunsCliEquivalenceTests(unittest.TestCase):
                     ],
                 ),
                 patch(
-                    "workbench.backend.training_jobs.worker.execute_runs",
+                    "workbench.backend.training_jobs.worker.execute_project_run_plan",
                     return_value=(),
                 ) as worker_execute,
                 contextlib.redirect_stderr(io.StringIO()),
@@ -148,17 +147,21 @@ class RunsCliEquivalenceTests(unittest.TestCase):
         self.assertEqual(cli_plan.search, worker_plan.search)
         self.assertEqual(_semantic_rows(cli_plan), _semantic_rows(worker_plan))
         self.assertEqual(
-            cli_execute.call_args.kwargs["artifacts"],
-            worker_execute.call_args.kwargs["artifacts"],
+            cli_execute.call_args.kwargs["artifacts"].root,
+            worker_execute.call_args.kwargs["logs_root"],
+        )
+        self.assertEqual(
+            cli_execute.call_args.kwargs["artifacts"].namespace,
+            worker_execute.call_args.kwargs["log_folder"],
         )
         self.assertEqual(
             cli_execute.call_args.kwargs["monitors"],
-            worker_execute.call_args.kwargs["monitors"],
+            tuple(worker_execute.call_args.kwargs["monitors"]),
         )
         self.assertNotIn("progress", cli_execute.call_args.kwargs)
-        self.assertIsInstance(
-            worker_execute.call_args.kwargs["progress"],
-            JsonlTrainingProgressCallback,
+        self.assertEqual(
+            worker_execute.call_args.kwargs["progress_path"],
+            progress_path,
         )
 
 

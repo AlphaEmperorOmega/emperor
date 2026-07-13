@@ -11,12 +11,12 @@ import models.neuron.linear.config as neuron_config
 import models.vit.linear.config as vit_config
 from emperor.base.layer.gate import LayerGateOptions
 from emperor.base.options import LayerNormPositionOptions
-from emperor.inspection import InspectionError as SemanticInspectionError
-from emperor.inspection import parse_overrides
-from emperor.model_packages import model_package_for_module
+from models.catalog import model_package_for_module
 
-from workbench.backend.inspector.errors import InspectorError
-from workbench.backend.inspector.service import inspect_model
+from model_runtime.inspection import InspectionError as SemanticInspectionError
+from model_runtime.inspection import parse_overrides
+from workbench.backend.inspection_errors import InspectionFailure
+from workbench.backend.tests.inspection_support import inspect_model
 
 
 def parse_override_mapping(config_module, overrides):
@@ -92,7 +92,7 @@ class InspectorServiceTests(unittest.TestCase):
         )
 
     def test_inspect_rejects_path_like_dataset_input(self) -> None:
-        with self.assertRaises(InspectorError) as context:
+        with self.assertRaises(InspectionFailure) as context:
             inspect_model("linears/linear", "baseline", dataset="./Mnist")
 
         message = str(context.exception)
@@ -101,7 +101,7 @@ class InspectorServiceTests(unittest.TestCase):
         self.assertIn("server-known dataset name", message)
 
     def test_locked_preset_override_is_rejected_for_inspect(self) -> None:
-        with self.assertRaises(InspectorError) as context:
+        with self.assertRaises(InspectionFailure) as context:
             inspect_model("linears/linear", "gating", {"gate_flag": "false"})
 
         self.assertIn("locked fields", str(context.exception))
@@ -274,7 +274,7 @@ class InspectorServiceTests(unittest.TestCase):
     def test_abstract_config_override_is_rejected_before_model_instantiation(
         self,
     ) -> None:
-        with self.assertRaises(InspectorError) as context:
+        with self.assertRaises(InspectionFailure) as context:
             inspect_model(
                 "linears/linear_adaptive",
                 "baseline",

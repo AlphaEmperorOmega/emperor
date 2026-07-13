@@ -1,14 +1,12 @@
-"""Shared FastAPI exception handlers."""
-
 from __future__ import annotations
 
-from emperor.runs import replace_non_finite_json
 from fastapi import HTTPException, Request, Response
 from fastapi.encoders import jsonable_encoder
 from fastapi.exception_handlers import http_exception_handler
 from fastapi.exceptions import RequestValidationError
 from starlette.responses import JSONResponse
 
+from model_runtime.runs import replace_non_finite_json
 from workbench.backend.core.errors import ApiError
 from workbench.backend.failures import DomainFailure, FailureKind
 

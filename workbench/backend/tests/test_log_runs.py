@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from unittest.mock import patch
 
-from emperor.model_packages import model_identity_payload_from_id
+from models.catalog import model_identity_payload_from_id
 
 from workbench.backend.api.v1.logs_mapping import (
     LOG_METADATA_RESPONSE_LIMIT,

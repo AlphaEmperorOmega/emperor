@@ -1,43 +1,33 @@
-"""Canonical Workbench adaptation for authoritative Emperor Run Plans."""
-
 from __future__ import annotations
 
 import copy
 import random
+import shlex
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from typing import Any, Literal, cast
 
-from emperor.inspection import (
+from model_runtime.inspection import (
     ConfigurationField,
     SearchAxis,
     resolve_override_key,
 )
-from emperor.model_packages import (
-    ModelPackage,
-    abstract_config_class_error,
+from model_runtime.packages import (
     config_key_to_model_param,
     dataset_name,
     iter_supported_config_keys,
-    model_id_from_payload,
-    model_identity_payload_from_id,
     normalize_key,
-    parse_config_value,
     serialize_config_value,
 )
-from emperor.runs import (
+from model_runtime.runs import (
     PlanningBudget,
     RunPlan,
     RunRequest,
-    RunsError,
     RunSpec,
     SearchAxisSelection,
     SearchSpec,
     SubmittedRun,
-    accept_run_plan,
-    plan_runs,
 )
-
 from workbench.backend.config_snapshots import (
     ConfigSnapshotRecord,
     ConfigSnapshotService,
@@ -46,13 +36,22 @@ from workbench.backend.failures import FailureKind
 from workbench.backend.inspection_adapter import WorkbenchInspectionAdapter
 from workbench.backend.inspection_errors import InspectionFailure
 from workbench.backend.log_experiments import is_valid_log_experiment_name
-from workbench.backend.model_identity import normalize_preset_token
+from workbench.backend.model_identity import (
+    model_id_from_payload,
+    model_identity_payload_from_id,
+    normalize_preset_token,
+)
+from workbench.backend.project_adapter import (
+    ModelPackageReference,
+    ProjectAdapterFailure,
+)
 from workbench.backend.training_jobs.contracts import (
     ConfigSnapshotRevision,
     CreateTrainingJobCommand,
     CreateTrainingRunPlanCommand,
     SubmittedTrainingRun,
     SubmittedTrainingRunPlan,
+    TrainingCommandsView,
     TrainingRunChangeSource,
     TrainingRunChangeView,
     TrainingRunPlanSummaryView,
@@ -165,6 +164,10 @@ def training_run_from_payload(payload: Mapping[str, Any]) -> TrainingRunView:
     log_dir = payload.get("logDir")
     error = payload.get("error")
     error_traceback = payload.get("errorTraceback")
+    command = str(payload.get("command") or "")
+    raw_commands = payload.get("commands")
+    commands = raw_commands if isinstance(raw_commands, Mapping) else {}
+    raw_command_argv = payload.get("commandArgv")
     return TrainingRunView(
         id=str(payload.get("id") or ""),
         index=int(payload.get("index") or 0),
@@ -177,7 +180,16 @@ def training_run_from_payload(payload: Mapping[str, Any]) -> TrainingRunView:
             for item in _mapping_items(payload.get("changes"))
         ],
         overrides=dict(payload.get("overrides") or {}),
-        command=str(payload.get("command") or ""),
+        command=command,
+        command_argv=(
+            [str(value) for value in raw_command_argv]
+            if isinstance(raw_command_argv, list)
+            else []
+        ),
+        commands=TrainingCommandsView(
+            posix=str(commands.get("posix") or command),
+            powershell=str(commands.get("powershell") or command),
+        ),
         total_epochs=int(payload.get("totalEpochs") or 0),
         snapshot_id=str(snapshot_id) if snapshot_id is not None else None,
         snapshot_name=str(snapshot_name) if snapshot_name is not None else None,
@@ -202,6 +214,11 @@ def training_run_to_payload(run: TrainingRunView) -> dict[str, Any]:
         "changes": [training_run_change_to_payload(change) for change in run.changes],
         "overrides": run.overrides,
         "command": run.command,
+        "commandArgv": run.command_argv,
+        "commands": {
+            "posix": run.commands.posix,
+            "powershell": run.commands.powershell,
+        },
         "totalEpochs": run.total_epochs,
         "currentEpoch": run.current_epoch,
         "metrics": run.metrics,
@@ -846,8 +863,7 @@ def _run_for_progress_event(
         if run.dataset == dataset
         and (
             preset is None
-            or normalize_preset_token(run.preset)
-            == normalize_preset_token(preset)
+            or normalize_preset_token(run.preset) == normalize_preset_token(preset)
         )
     ]
     return next(
@@ -867,7 +883,7 @@ def _progress_event_epoch(event: dict[str, Any], total_epochs: int) -> int:
     return min(total_epochs, max(0, raw_epoch + 1))
 
 
-def _require_package(model: str) -> ModelPackage:
+def _require_package(model: str) -> ModelPackageReference:
     try:
         return WorkbenchInspectionAdapter.select(model).package
     except InspectionFailure as exc:
@@ -875,23 +891,21 @@ def _require_package(model: str) -> ModelPackage:
 
 
 def _parse_workbench_search_value(
-    package: ModelPackage,
+    package: ModelPackageReference,
     axis: SearchAxis,
     raw_value: Any,
 ) -> Any:
     if raw_value is None:
         return None
     try:
-        parsed_value = parse_config_value(
-            package.metadata.search_space_module,
-            axis.search_key,
-            str(raw_value),
+        return package.client.call(
+            "parse_search_value",
+            {
+                "model_id": package.catalog_key,
+                "search_key": axis.search_key,
+                "value": raw_value,
+            },
         )
-        if isinstance(parsed_value, type):
-            abstract_error = abstract_config_class_error(parsed_value)
-            if abstract_error is not None:
-                raise ValueError(abstract_error)
-        return serialize_config_value(parsed_value)
     except Exception as exc:
         raise TrainingJobFailure(
             f"Invalid search value for axis '{axis.key}': {raw_value!r}. {exc}"
@@ -910,7 +924,7 @@ def _deduplicate_workbench_search_values(values: list[Any]) -> tuple[Any, ...]:
 
 
 def _adapt_workbench_search(
-    package: ModelPackage,
+    package: ModelPackageReference,
     preset_name: str,
     search: dict[str, Any] | None,
 ) -> tuple[SearchSpec | None, set[str]]:
@@ -1024,6 +1038,24 @@ def _shell_quote(value: str) -> str:
     return "'" + value.replace("'", "'\"'\"'") + "'"
 
 
+def _powershell_quote(value: str) -> str:
+    if value and all(
+        character
+        in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_@%+=:,./-"
+        for character in value
+    ):
+        return value
+    return "'" + value.replace("'", "''") + "'"
+
+
+def _render_posix_command(argv: list[str]) -> str:
+    return " ".join(shlex.quote(value) for value in argv)
+
+
+def _render_powershell_command(argv: list[str]) -> str:
+    return " ".join(_powershell_quote(value) for value in argv)
+
+
 def _command_value(value: Any) -> str:
     serialized = serialize_config_value(value)
     if serialized is None:
@@ -1037,7 +1069,7 @@ def _field_label(field: ConfigurationField) -> str:
     return field.key.lower().replace("_", " ")
 
 
-def _build_training_command(
+def _build_training_command_projection(
     *,
     fields: tuple[ConfigurationField, ...],
     by_key: dict[str, ConfigurationField],
@@ -1048,7 +1080,7 @@ def _build_training_command(
     overrides: dict[str, Any],
     log_folder: str,
     monitors: list[str],
-) -> str:
+) -> tuple[str, list[str], TrainingCommandsView]:
     values_by_field_key: dict[str, Any] = {}
     for raw_key, raw_value in overrides.items():
         field = by_key.get(normalize_key(str(raw_key)))
@@ -1056,25 +1088,23 @@ def _build_training_command(
             values_by_field_key[field.key] = raw_value
 
     identity = model_identity_payload_from_id(model)
-    parts = [
-        "source",
-        "experiment.sh",
+    arguments = [
         "--model-type",
-        _shell_quote(identity["modelType"]),
+        identity["modelType"],
         "--model",
-        _shell_quote(identity["model"]),
+        identity["model"],
         "--preset",
-        _shell_quote(preset),
+        preset,
         "--experiment-task",
-        _shell_quote(experiment_task),
+        experiment_task,
         "--datasets",
-        _shell_quote(dataset),
+        dataset,
     ]
     if log_folder:
-        parts.extend(["--logdir", _shell_quote(log_folder)])
+        arguments.extend(["--logdir", log_folder])
     if monitors:
-        parts.append("--monitors")
-        parts.extend(_shell_quote(monitor) for monitor in monitors)
+        arguments.append("--monitors")
+        arguments.extend(monitors)
 
     config_parts: list[str] = []
     for field in fields:
@@ -1084,18 +1114,35 @@ def _build_training_command(
         config_parts.extend(
             [
                 field.flag,
-                _shell_quote(_command_value(values_by_field_key[field_key])),
+                _command_value(values_by_field_key[field_key]),
             ]
         )
     if config_parts:
-        parts.append("--config")
-        parts.extend(config_parts)
-    return " ".join(parts)
+        arguments.append("--config")
+        arguments.extend(config_parts)
+    canonical_argv = ["mise", "run", "experiment", "--", *arguments]
+    compatibility = " ".join(
+        ["source", "experiment.sh", *(_shell_quote(value) for value in arguments)]
+    )
+    return (
+        compatibility,
+        canonical_argv,
+        TrainingCommandsView(
+            posix=_render_posix_command(canonical_argv),
+            powershell=_render_powershell_command(canonical_argv),
+        ),
+    )
+
+
+def _build_training_command(**kwargs: Any) -> str:
+    """Return the historical POSIX projection for compatibility callers."""
+
+    return _build_training_command_projection(**kwargs)[0]
 
 
 @dataclass(frozen=True)
 class SelectedTrainingInputs:
-    parts: ModelPackage
+    parts: ModelPackageReference
     request: RunRequest
 
 
@@ -1136,6 +1183,8 @@ class WorkbenchRunPlanAdapter:
                 datasets,
                 selected_experiment_task,
             )
+        except ProjectAdapterFailure as exc:
+            raise TrainingJobFailure(exc.detail, kind=exc.kind) from exc
         except ValueError as exc:
             raise TrainingJobFailure(str(exc)) from exc
         selected_experiment_task_name = parts.task_name(selected_experiment_task)
@@ -1228,11 +1277,13 @@ class WorkbenchRunPlanAdapter:
 
     def resolve_monitor_names(
         self,
-        package: ModelPackage,
+        package: ModelPackageReference,
         monitor_names: list[str] | None,
     ) -> list[str]:
         try:
             return [monitor.name for monitor in package.resolve_monitors(monitor_names)]
+        except ProjectAdapterFailure as exc:
+            raise TrainingJobFailure(exc.detail, kind=exc.kind) from exc
         except ValueError as exc:
             raise TrainingJobFailure(str(exc)) from exc
 
@@ -1496,8 +1547,8 @@ class WorkbenchRunPlanAdapter:
     ) -> TrainingRunPlanView:
         monitor_names = monitors or []
         try:
-            semantic_plan = plan_runs(
-                selected.parts,
+            semantic_plan = selected.parts.client.plan_runs(
+                selected.parts.catalog_key,
                 selected.request,
                 random_source=(
                     self._random
@@ -1511,8 +1562,8 @@ class WorkbenchRunPlanAdapter:
                     max_materialized_runs=MAX_TRAINING_PLANNED_RUNS,
                 ),
             )
-        except RunsError as exc:
-            raise TrainingJobFailure(str(exc)) from exc
+        except ProjectAdapterFailure as exc:
+            raise TrainingJobFailure(exc.detail, kind=exc.kind) from exc
         runs = [
             self._pending_semantic_run(
                 model=model,
@@ -1536,7 +1587,7 @@ class WorkbenchRunPlanAdapter:
         self,
         *,
         model: str,
-        parts: ModelPackage,
+        parts: ModelPackageReference,
         run: RunSpec,
         index: int,
         log_folder: str,
@@ -1637,8 +1688,8 @@ class WorkbenchRunPlanAdapter:
                 f"{MAX_TRAINING_PLANNED_RUNS}."
             )
         try:
-            semantic_plan = accept_run_plan(
-                selected.parts,
+            semantic_plan = selected.parts.client.accept_run_plan(
+                selected.parts.catalog_key,
                 selected.request,
                 tuple(
                     SubmittedRun(
@@ -1655,8 +1706,8 @@ class WorkbenchRunPlanAdapter:
                     max_materialized_runs=MAX_TRAINING_PLANNED_RUNS,
                 ),
             )
-        except RunsError as exc:
-            raise TrainingJobFailure(str(exc)) from exc
+        except ProjectAdapterFailure as exc:
+            raise TrainingJobFailure(exc.detail, kind=exc.kind) from exc
 
         runs = []
         for index, (row, semantic_run) in enumerate(
@@ -1706,7 +1757,7 @@ class WorkbenchRunPlanAdapter:
                 continue
             try:
                 preset_member = parts.resolve_preset(raw_preset)
-            except ValueError:
+            except (ProjectAdapterFailure, ValueError):
                 unknown.append(raw_preset)
                 continue
             if preset_member.name in seen:
@@ -1749,7 +1800,7 @@ class WorkbenchRunPlanAdapter:
             )
         return fields, by_key
 
-    def _training_command(
+    def _training_commands(
         self,
         *,
         model: str,
@@ -1759,9 +1810,9 @@ class WorkbenchRunPlanAdapter:
         overrides: dict[str, Any],
         log_folder: str,
         monitors: list[str],
-    ) -> str:
+    ) -> tuple[str, list[str], TrainingCommandsView]:
         fields, by_key = self._field_maps(model, preset)
-        return _build_training_command(
+        return _build_training_command_projection(
             fields=fields,
             by_key=by_key,
             model=model,
@@ -1783,7 +1834,7 @@ class WorkbenchRunPlanAdapter:
         except (TypeError, ValueError):
             return 0
 
-    def _run_total_epochs(self, parts: ModelPackage, run: RunSpec) -> int:
+    def _run_total_epochs(self, parts: ModelPackageReference, run: RunSpec) -> int:
         try:
             parsed_overrides = (
                 WorkbenchInspectionAdapter.from_package(parts)
@@ -1808,6 +1859,15 @@ class WorkbenchRunPlanAdapter:
         monitors: list[str],
         total_epochs: int,
     ) -> TrainingRunView:
+        command, command_argv, commands = self._training_commands(
+            model=model,
+            preset=preset,
+            experiment_task=experiment_task,
+            dataset=dataset,
+            overrides=overrides,
+            log_folder=log_folder,
+            monitors=monitors,
+        )
         return TrainingRunView(
             id=f"run-{index:04d}",
             index=index,
@@ -1817,15 +1877,9 @@ class WorkbenchRunPlanAdapter:
             dataset=dataset,
             changes=changes,
             overrides=overrides,
-            command=self._training_command(
-                model=model,
-                preset=preset,
-                experiment_task=experiment_task,
-                dataset=dataset,
-                overrides=overrides,
-                log_folder=log_folder,
-                monitors=monitors,
-            ),
+            command=command,
+            command_argv=command_argv,
+            commands=commands,
             total_epochs=total_epochs,
         )
 
@@ -1999,7 +2053,7 @@ class WorkbenchRunPlanAdapter:
 
     def accept_worker_payload(
         self,
-        package: ModelPackage,
+        package: ModelPackageReference,
         payload: Mapping[str, Any],
     ) -> RunPlan:
         """Defensively reconstruct and validate one persisted exact Run Plan."""
@@ -2014,8 +2068,8 @@ class WorkbenchRunPlanAdapter:
         _validate_worker_authoritative_metadata(persisted_plan, rows)
         submitted_runs = _worker_submitted_runs(persisted_plan, rows)
         try:
-            semantic_plan = accept_run_plan(
-                package,
+            semantic_plan = package.client.accept_run_plan(
+                package.catalog_key,
                 request,
                 submitted_runs,
                 budget=PlanningBudget(
@@ -2024,8 +2078,8 @@ class WorkbenchRunPlanAdapter:
                     max_materialized_runs=MAX_TRAINING_PLANNED_RUNS,
                 ),
             )
-        except RunsError as exc:
-            raise ValueError(str(exc)) from exc
+        except ProjectAdapterFailure as exc:
+            raise ValueError(exc.detail) from exc
 
         expected_rows: list[dict[str, Any]] = []
         for index, (raw_row, semantic_run) in enumerate(
@@ -2070,7 +2124,12 @@ class WorkbenchRunPlanAdapter:
                     if raw_row.get(field_name) != expected_row.get(field_name)
                     or (field_name in raw_row) != (field_name in expected_row)
                 )
-                if differing_fields == ["command"]:
+                command_projection_fields = {
+                    "command",
+                    "commandArgv",
+                    "commands",
+                }
+                if set(differing_fields).issubset(command_projection_fields):
                     raise ValueError(
                         "Run plan log folder or monitors do not match its "
                         f"row {index} command."
@@ -2113,7 +2172,7 @@ class WorkbenchRunPlanAdapter:
 
 
 def accept_worker_run_plan(
-    package: ModelPackage,
+    package: ModelPackageReference,
     payload: Mapping[str, Any],
 ) -> RunPlan:
     return WorkbenchRunPlanAdapter().accept_worker_payload(package, payload)

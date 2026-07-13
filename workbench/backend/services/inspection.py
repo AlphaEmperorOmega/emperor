@@ -1,11 +1,8 @@
-"""Model inspection use cases."""
-
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from emperor.inspection import InspectionResult
-
+from model_runtime.inspection import InspectionResult
 from workbench.backend.inspection_adapter import WorkbenchInspectionAdapter
 from workbench.backend.inspection_errors import InspectionFailure
 from workbench.backend.inspection_worker import (
@@ -15,7 +12,7 @@ from workbench.backend.inspection_worker import (
 from workbench.backend.run_history import HistoricalInspectionSource
 
 if TYPE_CHECKING:
-    from workbench.backend.inspector.checkpoint_shapes import CheckpointLoadBudgets
+    from workbench.backend.historical_inspection import CheckpointLoadBudgets
 
 
 class InspectionService:
@@ -45,7 +42,7 @@ class InspectionService:
         experiment_task: str | None = None,
         log_run_id: str | None = None,
     ) -> InspectionResult:
-        from emperor.inspection import InspectionRequest
+        from model_runtime.inspection import InspectionRequest
 
         adapter = WorkbenchInspectionAdapter.select_parts(model_type, model)
         parsed_request_overrides = adapter.parse_overrides(overrides)

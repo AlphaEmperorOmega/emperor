@@ -10,20 +10,29 @@ from models.catalog import MODEL_CATALOG
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 CORE_PACKAGE_DIRS = ("emperor", "models")
-CORE_PACKAGE_ROOTS = frozenset(CORE_PACKAGE_DIRS)
 WORKBENCH_BACKEND_DIR = REPO_ROOT / "workbench" / "backend"
 WORKBENCH_TESTS_DIR = WORKBENCH_BACKEND_DIR / "tests"
 WORKBENCH_TEST_HELPERS = WORKBENCH_TESTS_DIR / "helpers.py"
 TRAINING_JOB_SERVICE_TEST = WORKBENCH_TESTS_DIR / "test_training_job_service.py"
 WORKBENCH_INSPECTION_ADAPTER = WORKBENCH_BACKEND_DIR / "inspection_adapter.py"
+WORKBENCH_PROJECT_ADAPTER = WORKBENCH_BACKEND_DIR / "project_adapter.py"
 WORKBENCH_HISTORICAL_INSPECTION_DIR = (
     WORKBENCH_BACKEND_DIR / "historical_inspection"
 )
 WORKBENCH_HISTORICAL_INSPECTION = (
     WORKBENCH_HISTORICAL_INSPECTION_DIR / "_inspection.py"
 )
-WORKBENCH_CHECKPOINT_COMPATIBILITY_ADAPTER = (
-    WORKBENCH_BACKEND_DIR / "inspector" / "checkpoint_shapes.py"
+OBSOLETE_WORKBENCH_INSPECTOR_ADAPTERS = tuple(
+    WORKBENCH_BACKEND_DIR / "inspector" / filename
+    for filename in (
+        "__init__.py",
+        "checkpoint_shapes.py",
+        "discovery.py",
+        "errors.py",
+        "graph.py",
+        "schema.py",
+        "service.py",
+    )
 )
 WORKBENCH_INSPECTION_SERVICE = WORKBENCH_BACKEND_DIR / "services" / "inspection.py"
 WORKBENCH_RUN_PLAN_ADAPTER = (
@@ -62,8 +71,14 @@ WORKBENCH_INSPECTION_ADAPTER_PATHS = frozenset(
         WORKBENCH_BACKEND_DIR / "api" / "v1" / "routers" / "inspection.py",
     }
 )
-LEGACY_WORKBENCH_MODELS_IMPORTS = frozenset(
-    {(WORKBENCH_BACKEND_DIR / "cli.py", "models.parser")}
+PUBLIC_MODEL_RUNTIME_MODULES = frozenset(
+    {
+        "model_runtime",
+        "model_runtime.cli",
+        "model_runtime.inspection",
+        "model_runtime.packages",
+        "model_runtime.runs",
+    }
 )
 REMOVED_SHALLOW_INSPECTION_PATHS = (
     WORKBENCH_BACKEND_DIR / "services" / "models.py",
@@ -330,41 +345,23 @@ class DependencyDirectionTests(unittest.TestCase):
 
         self.assertEqual([], violations)
 
-    def test_workbench_backend_may_import_core_packages(self) -> None:
-        imported_core_roots = {
-            source_import.root
-            for source_import in _absolute_imports_under([WORKBENCH_BACKEND_DIR])
-            if source_import.root in CORE_PACKAGE_ROOTS
-        }
-
-        self.assertEqual(CORE_PACKAGE_ROOTS, imported_core_roots)
-
-    def test_workbench_imports_only_allowlisted_public_emperor_interfaces(
-        self,
-    ) -> None:
-        allowed = {
-            "emperor.inspection",
-            "emperor.model_packages",
-            "emperor.runs",
-        }
+    def test_workbench_production_does_not_import_project_packages(self) -> None:
         violations = [
             source_import.format_for_failure()
             for source_import in _absolute_imports_under([WORKBENCH_BACKEND_DIR])
             if not source_import.path.is_relative_to(WORKBENCH_TESTS_DIR)
-            and source_import.root == "emperor"
-            and source_import.module not in allowed
+            and source_import.root in {"emperor", "models"}
         ]
 
         self.assertEqual([], violations)
 
-    def test_workbench_uses_public_model_package_interface_except_cli(self) -> None:
+    def test_workbench_imports_only_public_model_runtime_interfaces(self) -> None:
         violations = [
             source_import.format_for_failure()
             for source_import in _absolute_imports_under([WORKBENCH_BACKEND_DIR])
             if not source_import.path.is_relative_to(WORKBENCH_TESTS_DIR)
-            and source_import.root == "models"
-            and (source_import.path, source_import.module)
-            not in LEGACY_WORKBENCH_MODELS_IMPORTS
+            and source_import.root == "model_runtime"
+            and source_import.module not in PUBLIC_MODEL_RUNTIME_MODULES
         ]
 
         self.assertEqual([], violations)
@@ -415,16 +412,9 @@ class DependencyDirectionTests(unittest.TestCase):
         ]
         self.assertEqual([], run_history_policy)
 
-        compatibility_tree = ast.parse(
-            WORKBENCH_CHECKPOINT_COMPATIBILITY_ADAPTER.read_text(encoding="utf-8"),
-            filename=str(WORKBENCH_CHECKPOINT_COMPATIBILITY_ADAPTER),
+        self.assertTrue(
+            all(not path.exists() for path in OBSOLETE_WORKBENCH_INSPECTOR_ADAPTERS)
         )
-        owned_implementation = [
-            node.name
-            for node in ast.walk(compatibility_tree)
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
-        ]
-        self.assertEqual([], owned_implementation)
 
     def test_domain_implementations_do_not_import_http_error_types(self) -> None:
         implementation_roots = [
@@ -454,15 +444,16 @@ class DependencyDirectionTests(unittest.TestCase):
     def test_workbench_run_plan_adaptation_has_one_implementation(self) -> None:
         violations: list[str] = []
         for path in _python_files([WORKBENCH_BACKEND_DIR]):
-            if path == WORKBENCH_RUN_PLAN_ADAPTER or path.is_relative_to(
-                WORKBENCH_TESTS_DIR
-            ):
+            if path in {
+                WORKBENCH_PROJECT_ADAPTER,
+                WORKBENCH_RUN_PLAN_ADAPTER,
+            } or path.is_relative_to(WORKBENCH_TESTS_DIR):
                 continue
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
             for node in ast.walk(tree):
                 if not isinstance(node, ast.ImportFrom):
                     continue
-                if node.level != 0 or node.module != "emperor.runs":
+                if node.level != 0 or node.module != "model_runtime.runs":
                     continue
                 duplicated = sorted(
                     alias.name

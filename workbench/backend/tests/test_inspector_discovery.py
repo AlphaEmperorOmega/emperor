@@ -6,13 +6,13 @@ import unittest
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
 from workbench.backend.inspection_errors import InspectionFailure
-from workbench.backend.inspector.discovery import (
+from workbench.backend.tests.inspection_support import (
     discover_models,
+    inspect_model,
     list_model_datasets,
     list_model_monitors,
     list_model_presets,
 )
-from workbench.backend.inspector.service import inspect_model
 
 
 class InspectorDiscoveryTests(unittest.TestCase):

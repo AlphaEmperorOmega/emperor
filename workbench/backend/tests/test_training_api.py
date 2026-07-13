@@ -101,6 +101,8 @@ EXPECTED_TRAINING_RUN_RESPONSE_FIELDS = (
     "changes",
     "overrides",
     "command",
+    "commandArgv",
+    "commands",
     "totalEpochs",
     "currentEpoch",
     "metrics",

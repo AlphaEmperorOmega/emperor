@@ -1,5 +1,3 @@
-"""Runtime configuration for the Workbench backend."""
-
 from __future__ import annotations
 
 from functools import lru_cache
@@ -63,9 +61,12 @@ class WorkbenchApiSettings(BaseSettings):
         default=DEFAULT_LOG_ARCHIVE_UPLOAD_CONCURRENCY,
         ge=1,
     )
-    training_cancellation_mode: Literal["strict-cgroup", "process-group"] = (
-        "strict-cgroup"
-    )
+    training_cancellation_mode: Literal[
+        "auto",
+        "strict-cgroup",
+        "process-group",
+        "windows-job-object",
+    ] = "auto"
     inspection_memory_limit_bytes: int = Field(default=4 * 1024**3, ge=1)
     inspection_cpu_limit: int = Field(default=4, ge=1)
     inspection_timeout_seconds: float = Field(default=60.0, gt=0)

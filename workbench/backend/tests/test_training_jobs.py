@@ -94,6 +94,16 @@ class TrainingJobTests(unittest.TestCase):
             time.sleep(0.05)
         raise AssertionError(f"Timed out waiting for pid file: {path}")
 
+    def _wait_for_pid_list(self, path: Path, *, timeout: float = 5.0) -> list[int]:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if path.is_file():
+                text = path.read_text(encoding="utf-8").strip()
+                if text:
+                    return [int(pid) for pid in json.loads(text)]
+            time.sleep(0.05)
+        raise AssertionError(f"Timed out waiting for pid list: {path}")
+
     def _process_is_alive(self, pid: int) -> bool:
         try:
             os.kill(pid, 0)
@@ -1000,15 +1010,18 @@ class TrainingJobTests(unittest.TestCase):
         self.assertEqual(recovered["exitCode"], 0)
 
     @unittest.skipIf(os.name != "posix", "process-group cancellation is POSIX-only")
-    def test_cancel_job_terminates_real_worker_child_processes(self) -> None:
+    def test_cancel_job_terminates_real_worker_child_and_grandchild(self) -> None:
         parent_script = """
 import subprocess
 import sys
-import time
-from pathlib import Path
 
 child_command = (
-    "import signal, time\\n"
+    "import json, os, pathlib, signal, subprocess, sys, time\\n"
+    "grandchild = subprocess.Popen([sys.executable, '-c', "
+    "'import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+    "time.sleep(60)'])\\n"
+    "pathlib.Path(sys.argv[1]).write_text("
+    "json.dumps([os.getpid(), grandchild.pid]), encoding='utf-8')\\n"
     "signal.signal(signal.SIGTERM, signal.SIG_IGN)\\n"
     "while True: time.sleep(1)"
 )
@@ -1016,8 +1029,8 @@ child = subprocess.Popen([
     sys.executable,
     "-c",
     child_command,
+    sys.argv[1],
 ])
-Path(sys.argv[1]).write_text(str(child.pid), encoding="utf-8")
 """
 
         class ChildSpawningLauncher(TrainingWorkerLauncher):
@@ -1029,7 +1042,7 @@ Path(sys.argv[1]).write_text(str(child.pid), encoding="utf-8")
                 child_pid_path = payload_path.parent / "child.pid"
                 return [sys.executable, "-c", parent_script, str(child_pid_path)]
 
-        child_pid: int | None = None
+        descendant_pids: list[int] = []
         with tempfile.TemporaryDirectory() as tmp:
             try:
                 root = Path(tmp)
@@ -1051,7 +1064,8 @@ Path(sys.argv[1]).write_text(str(child.pid), encoding="utf-8")
                     monitors=[],
                 )
                 child_pid_path = root / "jobs" / str(payload["id"]) / "child.pid"
-                child_pid = self._wait_for_pid_file(child_pid_path)
+                descendant_pids = self._wait_for_pid_list(child_pid_path)
+                self.assertEqual(len(descendant_pids), 2)
                 raw_process = getattr(
                     manager.runtime._processes[str(payload["id"])],
                     "process",
@@ -1060,16 +1074,21 @@ Path(sys.argv[1]).write_text(str(child.pid), encoding="utf-8")
                 self.assertIsNotNone(raw_process)
                 self.assertEqual(raw_process.wait(timeout=1), 0)
 
-                self.assertTrue(self._process_is_alive(child_pid))
+                self.assertTrue(
+                    all(self._process_is_alive(pid) for pid in descendant_pids)
+                )
                 cancelled = manager.cancel_job_payload(str(payload["id"]))
                 self.assertEqual(cancelled["status"], "cancelled")
                 self.assertTrue(
-                    self._wait_for_process_exit(child_pid),
-                    f"child process {child_pid} survived cancellation",
+                    all(
+                        self._wait_for_process_exit(pid)
+                        for pid in descendant_pids
+                    ),
+                    f"descendant processes survived cancellation: {descendant_pids}",
                 )
             finally:
-                if child_pid is not None:
-                    self._kill_leftover_process(child_pid)
+                for pid in descendant_pids:
+                    self._kill_leftover_process(pid)
 
     @unittest.skipIf(os.name != "posix", "cgroup cancellation is POSIX-only")
     def test_cancel_job_terminates_escaped_session_child_with_cgroup(self) -> None:

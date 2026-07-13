@@ -1,13 +1,10 @@
-"""Explicit mapping from Emperor Inspection failures to Workbench failures."""
-
 from __future__ import annotations
 
 from collections.abc import Callable
 from typing import ParamSpec, TypeVar
 
-from emperor.inspection import InspectionError
-from emperor.model_packages import ModelPackage
-
+from model_runtime.inspection import InspectionError
+from model_runtime.packages import ModelPackage
 from workbench.backend.failures import DomainFailure
 
 

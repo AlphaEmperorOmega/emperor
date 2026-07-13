@@ -1,5 +1,3 @@
-"""Bounded Training Job progress persistence and cursor-based access."""
-
 from __future__ import annotations
 
 import json
@@ -13,8 +11,7 @@ from pathlib import Path
 from threading import RLock
 from typing import Any
 
-from emperor.runs import replace_non_finite_json, require_finite_json
-
+from model_runtime.runs import replace_non_finite_json, require_finite_json
 from workbench.backend.failures import FailureKind
 from workbench.backend.training_jobs.errors import TrainingJobFailure
 from workbench.backend.training_jobs.launcher import (
@@ -539,7 +536,8 @@ class TrainingProgressStore:
         with self._lock:
             descriptor = os.open(job.progress_path, flags)
             try:
-                os.fchmod(descriptor, 0o600)
+                if hasattr(os, "fchmod"):
+                    os.fchmod(descriptor, 0o600)
                 remaining = memoryview(encoded + b"\n")
                 while remaining:
                     written = os.write(descriptor, remaining)

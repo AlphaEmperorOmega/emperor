@@ -16,13 +16,16 @@ import models.linears.linear.config as linear_config
 from emperor.base.layer.gate import LayerGateOptions
 from emperor.base.options import ActivationOptions
 from emperor.memory.config import WeightedDynamicMemoryConfig
-from emperor.model_packages.configuration_metadata import (
+from model_runtime.packages.configuration_metadata import (
     configuration_field_metadata,
 )
 from models.catalog import discover_model_ids
 from models.config_overrides import parse_config_value
 
-from workbench.backend.inspector.schema import config_schema, search_space_schema
+from workbench.backend.tests.inspection_support import (
+    config_schema,
+    search_space_schema,
+)
 
 
 def _fields_by_key(payload: dict) -> dict[str, dict]:

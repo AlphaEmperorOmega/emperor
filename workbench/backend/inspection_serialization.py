@@ -1,11 +1,9 @@
-"""Workbench representation mapping for Emperor Inspection records."""
-
 from __future__ import annotations
 
 from collections.abc import Mapping
 from typing import Any
 
-from emperor.inspection import (
+from model_runtime.inspection import (
     ConfigurationSchema,
     GraphConfiguration,
     GraphEdge,
@@ -14,7 +12,7 @@ from emperor.inspection import (
     ModelGraph,
     SearchSpace,
 )
-from emperor.model_packages import (
+from model_runtime.packages import (
     ModelPackage,
     dataset_label,
     dataset_name,

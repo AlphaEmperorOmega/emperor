@@ -1,29 +1,25 @@
-"""Execute one persisted Training Job worker payload."""
-
 from __future__ import annotations
 
 import argparse
 import json
 import os
+import tempfile
 import traceback
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
+os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "matplotlib"))
 
-from emperor.model_packages import (
-    ModelPackage,
+from model_runtime.runs import JsonlTrainingProgressCallback, RunPlan
+from workbench.backend.model_identity import (
     model_id_from_payload,
     model_identity_payload_from_id,
-    model_package,
 )
-from emperor.runs import (
-    FilesystemRunArtifacts,
-    JsonlTrainingProgressCallback,
-    execute_runs,
+from workbench.backend.project_adapter import (
+    ModelPackageReference,
+    ProjectAdapterClient,
 )
-
 from workbench.backend.training_jobs.launcher import TRAINING_LOGS_ROOT_ENV
 from workbench.backend.training_jobs.run_plan_adapter import (
     accept_worker_run_plan,
@@ -33,11 +29,28 @@ from workbench.backend.training_jobs.run_plan_adapter import (
 WORKBENCH_PROGRESS_STEP_INTERVAL = 25
 
 
-def load_model_parts(model_id: str) -> ModelPackage:
-    package = model_package(model_id)
-    if package is None:
-        raise ValueError(f"Unknown model: {model_id}")
-    return package
+def load_model_parts(model_id: str) -> ModelPackageReference:
+    return ProjectAdapterClient(timeout_seconds=None).package(model_id)
+
+
+def execute_project_run_plan(
+    package: ModelPackageReference,
+    plan: RunPlan,
+    *,
+    logs_root: Path,
+    log_folder: str | None,
+    progress_path: Path,
+    monitors: list[str],
+) -> Any:
+    return package.client.execute_run_plan(
+        package.catalog_key,
+        plan,
+        logs_root=str(logs_root),
+        log_folder=log_folder,
+        progress_path=str(progress_path),
+        progress_step_interval=WORKBENCH_PROGRESS_STEP_INTERVAL,
+        monitors=monitors,
+    )
 
 
 def _payload_model_id(payload: Mapping[str, Any]) -> str:
@@ -101,15 +114,13 @@ def main() -> None:
             )
         package = load_model_parts(model_id)
         plan = accept_worker_run_plan(package, payload)
-        execute_runs(
+        execute_project_run_plan(
             package,
             plan,
-            artifacts=FilesystemRunArtifacts(
-                root=Path(os.environ.get(TRAINING_LOGS_ROOT_ENV, "logs")),
-                namespace=raw_plan.get("logFolder") or None,
-            ),
-            progress=progress,
-            monitors=tuple(monitors),
+            logs_root=Path(os.environ.get(TRAINING_LOGS_ROOT_ENV, "logs")),
+            log_folder=raw_plan.get("logFolder") or None,
+            progress_path=progress_path,
+            monitors=monitors,
         )
         completed_event = {
             "type": "completed",

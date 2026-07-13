@@ -1,10 +1,3 @@
-"""Low-level TensorBoard event-file access shared by the monitor readers.
-
-Both :class:`~workbench.backend.tensorboard.readers.TensorBoardMonitorReader` and the
-Run History query implementation read the same event files; these
-helpers are the single implementation of that access so the two stay in step.
-"""
-
 from __future__ import annotations
 
 import base64
@@ -437,6 +430,31 @@ def _copy_observed_event_file(
         relative = path.relative_to(trusted_root)
     except ValueError:
         return False
+    if sys.platform == "win32":
+        from workbench.backend.storage.local_files import (
+            windows_regular_file_descriptor,
+        )
+
+        try:
+            with windows_regular_file_descriptor(
+                path,
+                trusted_root=trusted_root,
+            ) as source_fd:
+                observed = os.fstat(source_fd)
+                if (
+                    not stat.S_ISREG(observed.st_mode)
+                    or int(observed.st_size) != expected_size
+                    or int(observed.st_mtime_ns) != expected_modified_at
+                ):
+                    return False
+                with (
+                    os.fdopen(os.dup(source_fd), "rb") as source,
+                    destination.open("xb") as out,
+                ):
+                    shutil.copyfileobj(source, out, length=1024 * 1024)
+                return True
+        except (OSError, ValueError):
+            return False
     directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
     file_flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC
     opened: list[int] = []

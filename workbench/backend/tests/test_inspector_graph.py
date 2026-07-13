@@ -33,29 +33,33 @@ from emperor.base.options import (
     LastLayerBiasOptions,
     LayerNormPositionOptions,
 )
-from emperor.inspection import InspectionResult
 from emperor.linears.core.config import AdaptiveLinearLayerConfig, LinearLayerConfig
-from emperor.model_packages import model_package
+from models.catalog import model_package
 from torch import nn
 
+from model_runtime.inspection import (
+    InspectionResult,
+)
 from workbench.backend.failures import FailureKind
-from workbench.backend.inspection_errors import InspectionFailure
-from workbench.backend.inspection_serialization import inspection_result_payload
-from workbench.backend.inspector.checkpoint_shapes import (
+from workbench.backend.historical_inspection._checkpoint_shapes import (
     MAX_CHECKPOINT_GRAPH_SHAPE_BYTES,
     CheckpointLoadBudgets,
     checkpoint_graph_shapes_from_state_dict,
 )
-from workbench.backend.inspector.discovery import discover_models, list_model_presets
-from workbench.backend.inspector.errors import InspectorError
-from workbench.backend.inspector.graph import serialize_graph
-from workbench.backend.inspector.service import inspect_model
+from workbench.backend.inspection_errors import InspectionFailure
+from workbench.backend.inspection_serialization import inspection_result_payload
 from workbench.backend.log_experiments import (
     LogExperimentMutationCoordinator,
 )
 from workbench.backend.run_history import RunHistoryService
 from workbench.backend.services.inspection import InspectionService
 from workbench.backend.tests.helpers import write_tensorboard_run
+from workbench.backend.tests.inspection_support import (
+    discover_models,
+    inspect_model,
+    list_model_presets,
+    serialize_graph,
+)
 
 
 def _run_history(logs_root: Path) -> RunHistoryService:
@@ -338,7 +342,7 @@ class InspectorGraphTests(unittest.TestCase):
         )
 
     def test_inspector_rejects_unknown_memory_linear_graph(self) -> None:
-        with self.assertRaises(InspectorError) as raised:
+        with self.assertRaises(InspectionFailure) as raised:
             inspect_model("memory/memory_linear", "gated-residual")
 
         self.assertIn("Unknown model", raised.exception.detail)
@@ -1335,7 +1339,7 @@ class InspectorGraphTests(unittest.TestCase):
             service = InspectionService(run_history)
 
             with mock.patch(
-                "workbench.backend.inspector.checkpoint_shapes.torch.load",
+                "workbench.backend.historical_inspection._checkpoint_shapes.torch.load",
                 side_effect=AssertionError("oversized checkpoint was loaded"),
             ) as torch_load:
                 historical_result = service.inspect_payload(
@@ -1399,7 +1403,7 @@ class InspectorGraphTests(unittest.TestCase):
             run_id = _first_run_id(run_history)
 
             with mock.patch(
-                "workbench.backend.inspector.checkpoint_shapes.torch.load",
+                "workbench.backend.historical_inspection._checkpoint_shapes.torch.load",
                 side_effect=RuntimeError("malformed checkpoint"),
             ) as torch_load:
                 result = InspectionService(run_history).inspect_payload(
@@ -1445,7 +1449,7 @@ class InspectorGraphTests(unittest.TestCase):
             run_id = _first_run_id(run_history)
 
             with mock.patch(
-                "workbench.backend.inspector.checkpoint_shapes.torch.load",
+                "workbench.backend.historical_inspection._checkpoint_shapes.torch.load",
                 side_effect=RuntimeError("malformed checkpoint"),
             ) as torch_load:
                 result = InspectionService(
@@ -1499,7 +1503,7 @@ class InspectorGraphTests(unittest.TestCase):
             frozen_source.inspection_context.return_value = context
 
             with mock.patch(
-                "workbench.backend.inspector.checkpoint_shapes.torch.load",
+                "workbench.backend.historical_inspection._checkpoint_shapes.torch.load",
                 side_effect=AssertionError("changed checkpoint was loaded"),
             ) as torch_load:
                 result = InspectionService(frozen_source).inspect_payload(
@@ -1553,7 +1557,8 @@ class InspectorGraphTests(unittest.TestCase):
             run_id = _first_run_id(run_history)
 
             with mock.patch(
-                "models.linears.linear.checkpoint_metadata.checkpoint_config_overrides",
+                "workbench.backend.project_adapter.ModelPackageReference."
+                "checkpoint_config_overrides",
                 return_value={"hidden_dim": 40},
             ) as interpret_checkpoint:
                 result = InspectionService(run_history).inspect_payload(
@@ -1565,7 +1570,8 @@ class InspectorGraphTests(unittest.TestCase):
                     log_run_id=run_id,
                 )
             with mock.patch(
-                "models.linears.linear.checkpoint_metadata.checkpoint_config_overrides",
+                "workbench.backend.project_adapter.ModelPackageReference."
+                "checkpoint_config_overrides",
                 side_effect=RuntimeError("invalid package metadata"),
             ):
                 fallback_result = InspectionService(run_history).inspect_payload(

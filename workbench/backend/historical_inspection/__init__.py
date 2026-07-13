@@ -1,5 +1,6 @@
-"""Historical Inspection Interface with private checkpoint policy."""
-
+from workbench.backend.historical_inspection._checkpoint_shapes import (
+    CheckpointLoadBudgets,
+)
 from workbench.backend.historical_inspection._inspection import (
     HistoricalInspectionRequest,
     WorkbenchHistoricalInspection,
@@ -7,5 +8,6 @@ from workbench.backend.historical_inspection._inspection import (
 
 __all__ = [
     "HistoricalInspectionRequest",
+    "CheckpointLoadBudgets",
     "WorkbenchHistoricalInspection",
 ]

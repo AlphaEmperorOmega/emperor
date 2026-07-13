@@ -1,10 +1,14 @@
-"""Contained path primitive shared by Run History read and mutation policies."""
-
 from __future__ import annotations
 
 import os
 import stat
+import sys
 from pathlib import Path
+
+from workbench.backend.storage.local_files import (
+    resolve_under_root,
+    windows_regular_file_descriptor,
+)
 
 
 def resolved_under_root(path: Path, root: Path) -> Path | None:
@@ -41,7 +45,32 @@ def read_regular_file_beneath(
     ):
         return None
 
-    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+    if sys.platform == "win32":
+        try:
+            resolve_under_root(anchor, boundary)
+            with windows_regular_file_descriptor(
+                path,
+                trusted_root=boundary,
+            ) as file_descriptor:
+                metadata = os.fstat(file_descriptor)
+                if not stat.S_ISREG(metadata.st_mode) or metadata.st_size > max_bytes:
+                    return None
+                chunks: list[bytes] = []
+                remaining = max_bytes + 1
+                while remaining > 0:
+                    chunk = os.read(file_descriptor, min(remaining, 64 * 1024))
+                    if not chunk:
+                        break
+                    chunks.append(chunk)
+                    remaining -= len(chunk)
+                payload = b"".join(chunks)
+                return payload if len(payload) <= max_bytes else None
+        except (OSError, ValueError):
+            return None
+
+    directory_flags = (
+        os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+    )
     file_flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC
     opened: list[int] = []
     file_descriptor: int | None = None
