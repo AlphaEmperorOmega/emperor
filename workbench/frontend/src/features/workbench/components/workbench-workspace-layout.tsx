@@ -41,7 +41,7 @@ export function WorkbenchThreeRegionLayout({
         role="region"
         aria-label={sidebarLabel}
         data-workbench-region="sidebar"
-        className="min-h-0 overflow-visible border-b border-line bg-bg-2/80 pb-shell-wide pl-region pr-1 pt-panel xl:overflow-y-auto xl:border-b-0 xl:border-r"
+        className="min-h-0 overflow-visible border-b border-line bg-bg-2/80 px-region pb-shell-wide pt-panel xl:overflow-y-auto xl:border-b-0 xl:border-r"
       >
         <WorkbenchSidebarStack>{sidebar}</WorkbenchSidebarStack>
       </div>

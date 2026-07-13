@@ -24,7 +24,7 @@ export function WorkbenchWideThreeRegionLayout({
   return (
     <div
       data-workbench-layout="wide-three-region"
-      className="block h-full min-h-0 overflow-x-hidden overflow-y-auto bg-bg-2/80 px-region pb-panel sm:px-shell xl:grid xl:grid-rows-[auto_minmax(0,1fr)] xl:overflow-y-hidden"
+      className="block h-full min-h-0 overflow-x-hidden overflow-y-auto bg-bg-2/80 px-region py-panel sm:px-shell xl:grid xl:grid-rows-[auto_minmax(0,1fr)] xl:overflow-y-hidden"
     >
       <div className="mb-panel grid gap-2 empty:hidden">{notices}</div>
       <div className="row-start-2 block h-auto min-h-0 min-w-0 space-y-panel pb-[env(safe-area-inset-bottom)] xl:grid xl:h-full xl:grid-cols-[minmax(280px,320px)_minmax(0,1fr)_minmax(280px,340px)] xl:items-stretch xl:gap-panel xl:space-y-0 xl:overflow-y-hidden xl:pb-0 2xl:grid-cols-[minmax(300px,340px)_minmax(0,1fr)_minmax(300px,360px)]">
@@ -33,7 +33,7 @@ export function WorkbenchWideThreeRegionLayout({
           aria-label={leadingLabel}
           data-region-label={leadingLabel}
           data-workbench-region="wide-leading"
-          className="h-auto min-h-0 overflow-visible xl:h-full xl:overflow-y-auto xl:pr-1"
+          className="h-auto min-h-0 overflow-visible xl:h-full xl:overflow-y-auto xl:pr-region"
         >
           <WorkbenchSidebarStack>{leading}</WorkbenchSidebarStack>
         </div>

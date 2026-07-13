@@ -50,12 +50,12 @@ describe("Workbench workspace layout", () => {
       "border-b",
       "bg-bg-2/80",
       "pb-shell-wide",
-      "pl-region",
-      "pr-1",
+      "px-region",
       "pt-panel",
       "xl:border-b-0",
       "xl:border-r",
     );
+    expect(sidebar).not.toHaveClass("pl-region", "pr-1");
     expect(sidebar.querySelector("[data-workbench-sidebar]")).toHaveClass(
       "grid",
       "min-w-0",
@@ -134,12 +134,11 @@ describe("Workbench workspace layout", () => {
       "overflow-x-hidden",
       "overflow-y-auto",
       "px-region",
-      "pb-panel",
+      "py-panel",
       "xl:grid",
       "xl:overflow-y-hidden",
     );
-    expect(layout).not.toHaveClass("py-panel");
-    expect(layout).not.toHaveClass("pt-panel");
+    expect(layout).not.toHaveClass("pb-panel", "pt-panel");
     expect(columns).toHaveClass(
       "block",
       "min-w-0",
@@ -162,7 +161,12 @@ describe("Workbench workspace layout", () => {
     expect(trailing.tagName).toBe("DIV");
     expect(trailing).toHaveAttribute("data-region-label", "Status region");
     expect(trailing).toHaveAttribute("aria-live", "polite");
-    expect(leading).toHaveClass("overflow-visible", "xl:overflow-y-auto");
+    expect(leading).toHaveClass(
+      "overflow-visible",
+      "xl:overflow-y-auto",
+      "xl:pr-region",
+    );
+    expect(leading).not.toHaveClass("xl:pr-1");
     expect(trailing).toHaveClass("overflow-visible", "xl:overflow-y-auto");
     expect(within(leading).getByText("Setup")).toBeInTheDocument();
     expect(within(primary).getByText("Runs")).toBeInTheDocument();
