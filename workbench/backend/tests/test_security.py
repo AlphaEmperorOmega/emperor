@@ -430,12 +430,12 @@ class RouteAuthIntegrationTests(unittest.TestCase):
         return app
 
     def route_runs_on_event_loop(self, app, method: str, path: str) -> bool:
-        from fastapi.routing import APIRoute
+        from fastapi.routing import APIRoute, iter_route_contexts
 
         route_path = path.split("?")[0]
-        for route in app.routes:
+        for route in iter_route_contexts(app.routes):
             if (
-                isinstance(route, APIRoute)
+                isinstance(route.original_route, APIRoute)
                 and route.path == route_path
                 and method.upper() in (route.methods or ())
             ):

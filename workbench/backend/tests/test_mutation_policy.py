@@ -8,8 +8,9 @@ import uuid
 from pathlib import Path
 
 import httpx
-from fastapi import Depends, FastAPI
-from fastapi.routing import APIRoute
+from fastapi import APIRouter, Depends, FastAPI
+from fastapi.routing import APIRoute, iter_route_contexts
+from starlette.routing import Match
 
 
 class HttpMutationPolicyTests(unittest.TestCase):
@@ -41,8 +42,8 @@ class HttpMutationPolicyTests(unittest.TestCase):
         )
         registered_non_safe_operations = {
             (method, route.path)
-            for route in app.routes
-            if isinstance(route, APIRoute)
+            for route in iter_route_contexts(app.routes)
+            if isinstance(route.original_route, APIRoute) and route.path is not None
             for method in route.methods or ()
             if method not in {"GET", "HEAD", "OPTIONS", "TRACE"}
         }
@@ -59,6 +60,72 @@ class HttpMutationPolicyTests(unittest.TestCase):
                 HttpOperationPolicy.LOG_IMPORT,
             },
         )
+        self.assertEqual(len(catalog), 19)
+
+    def test_catalog_discovers_effective_nested_prefixed_route_context(self) -> None:
+        from workbench.backend.api.mutation_policy import (
+            HttpOperationPolicy,
+            build_http_operation_catalog,
+            declare_http_operation,
+        )
+        from workbench.backend.settings import WorkbenchApiSettings
+
+        async def outer_dependency() -> None:
+            pass
+
+        async def inner_dependency() -> None:
+            pass
+
+        async def get_settings() -> WorkbenchApiSettings:
+            return WorkbenchApiSettings(allow_unsafe_local_mutations=True)
+
+        settings_dependency = Depends(get_settings)
+        child = APIRouter()
+
+        @child.post("/operation")
+        @declare_http_operation(HttpOperationPolicy.LOCAL_MUTATION)
+        async def operation(settings=settings_dependency) -> dict[str, bool]:
+            return {"called": True}
+
+        parent = APIRouter()
+        parent.include_router(
+            child,
+            prefix="/child",
+            dependencies=[Depends(inner_dependency)],
+        )
+        app = FastAPI()
+        app.include_router(
+            parent,
+            prefix="/api",
+            dependencies=[Depends(outer_dependency)],
+        )
+
+        catalog = build_http_operation_catalog(
+            app.routes,
+            declared_routes=parent.routes,
+        )
+
+        self.assertEqual(len(catalog), 1)
+        operation_context = catalog[0]
+        self.assertEqual(operation_context.method, "POST")
+        self.assertEqual(operation_context.route.path, "/api/child/operation")
+        self.assertIsInstance(operation_context.route.original_route, APIRoute)
+        self.assertEqual(
+            {
+                dependency.dependency
+                for dependency in operation_context.route.dependencies
+            },
+            {outer_dependency, inner_dependency},
+        )
+        match, _child_scope = operation_context.route.matches(
+            {
+                "type": "http",
+                "method": "POST",
+                "path": "/api/child/operation",
+                "root_path": "",
+            }
+        )
+        self.assertIs(match, Match.FULL)
 
     def test_mounted_mutation_requires_proof_and_cannot_write(self) -> None:
         from workbench.backend.api import WorkbenchApiSettings, create_app

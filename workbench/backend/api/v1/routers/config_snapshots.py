@@ -49,8 +49,8 @@ router = APIRouter(
 )
 async def list_config_snapshots(
     service: Annotated[ConfigSnapshotService, Depends(get_config_snapshot_service)],
-    modelType: str = Query(...),
-    model: str = Query(...),
+    modelType: Annotated[str, Query()],
+    model: Annotated[str, Query()],
 ) -> ConfigSnapshotsResponse:
     model_id = require_model_id(modelType, model)
     snapshots = await run_blocking_io(service.list_snapshots, model_id)

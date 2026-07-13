@@ -6,10 +6,11 @@ import tempfile
 import unittest
 import uuid
 from pathlib import Path
+from typing import get_type_hints
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
-from fastapi.routing import APIRoute
+from fastapi.routing import APIRoute, iter_route_contexts
 from pydantic import ValidationError
 
 from workbench.backend.api import WorkbenchApiSettings
@@ -137,8 +138,9 @@ class TrainingApiLifecycleTests(unittest.TestCase):
             app, _manager = self._create_test_app(Path(tmp))
             routes = {
                 (tuple(sorted(route.methods or ())), route.path): route
-                for route in app.routes
-                if isinstance(route, APIRoute)
+                for route in iter_route_contexts(app.routes)
+                if isinstance(route.original_route, APIRoute)
+                and route.path is not None
                 and route.path.startswith(("/training", "/v1/training"))
             }
 
@@ -182,9 +184,14 @@ class TrainingApiLifecycleTests(unittest.TestCase):
         for key, (response_model, body_models) in expected.items():
             with self.subTest(route=key):
                 route = routes[key]
+                endpoint = route.endpoint
+                self.assertIsNotNone(endpoint)
                 self.assertIs(route.response_model, response_model)
                 self.assertEqual(
-                    tuple(param.type_ for param in route.dependant.body_params),
+                    tuple(
+                        get_type_hints(endpoint)[param.name]
+                        for param in route.dependant.body_params
+                    ),
                     body_models,
                 )
 

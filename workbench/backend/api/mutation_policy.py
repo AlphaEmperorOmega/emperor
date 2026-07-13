@@ -11,7 +11,7 @@ from inspect import signature
 from typing import ParamSpec, TypeVar
 
 from fastapi import HTTPException
-from fastapi.routing import APIRoute
+from fastapi.routing import APIRoute, RouteContext, iter_route_contexts
 from starlette.routing import BaseRoute, Match, Mount
 from starlette.types import Scope
 
@@ -56,7 +56,7 @@ class HttpOperation:
     """One mounted non-safe-method operation and its declared policy."""
 
     method: str
-    route: APIRoute
+    route: RouteContext
     policy: HttpOperationPolicy
 
 
@@ -161,7 +161,7 @@ def enforce_operation_policy(
     raise HTTPException(status_code=403, detail=LOCAL_MUTATION_DISABLED_DETAIL)
 
 
-def _non_safe_methods(route: APIRoute) -> tuple[str, ...]:
+def _non_safe_methods(route: RouteContext) -> tuple[str, ...]:
     return tuple(
         sorted(
             method for method in route.methods or () if method not in _SAFE_HTTP_METHODS
@@ -170,23 +170,23 @@ def _non_safe_methods(route: APIRoute) -> tuple[str, ...]:
 
 
 def _declared_route_counts(
-    routes: Sequence[BaseRoute],
+    routes: Sequence[BaseRoute | RouteContext],
 ) -> Counter[tuple[int, tuple[str, ...]]]:
     return Counter(
         (id(route.endpoint), methods)
-        for route in routes
-        if isinstance(route, APIRoute)
+        for route in iter_route_contexts(routes)
+        if isinstance(route.original_route, APIRoute)
         if (methods := _non_safe_methods(route))
     )
 
 
 def _opaque_non_safe_route(
-    routes: Sequence[BaseRoute],
-) -> BaseRoute | None:
-    for route in routes:
-        methods = getattr(route, "methods", None)
+    routes: Sequence[BaseRoute | RouteContext],
+) -> RouteContext | None:
+    for route in iter_route_contexts(routes):
+        methods = route.methods
         if (
-            not isinstance(route, APIRoute)
+            not isinstance(route.original_route, APIRoute)
             and methods
             and any(method not in _SAFE_HTTP_METHODS for method in methods)
         ):
@@ -195,15 +195,20 @@ def _opaque_non_safe_route(
 
 
 def build_http_operation_catalog(
-    routes: Sequence[BaseRoute],
+    routes: Sequence[BaseRoute | RouteContext],
     *,
-    declared_routes: Sequence[BaseRoute] | None = None,
+    declared_routes: Sequence[BaseRoute | RouteContext] | None = None,
 ) -> HttpOperationCatalog:
     """Build a total non-safe-method catalog from final mounted routes."""
 
-    if any(isinstance(route, Mount) for route in routes) or (
+    if any(
+        isinstance(route.original_route, Mount) for route in iter_route_contexts(routes)
+    ) or (
         declared_routes is not None
-        and any(isinstance(route, Mount) for route in declared_routes)
+        and any(
+            isinstance(route.original_route, Mount)
+            for route in iter_route_contexts(declared_routes)
+        )
     ):
         raise MutationPolicyConfigurationError(
             "Opaque child mounts are not supported by HTTP operation policy discovery."
@@ -227,39 +232,39 @@ def build_http_operation_catalog(
 
     operations: list[HttpOperation] = []
     seen_operation_keys: set[tuple[str, str]] = set()
-    for route in routes:
-        if not isinstance(route, APIRoute):
+    for route in iter_route_contexts(routes):
+        if not isinstance(route.original_route, APIRoute):
             continue
         methods = _non_safe_methods(route)
         if not methods:
             continue
-        declarations = tuple(
-            getattr(route.endpoint, _POLICY_DECLARATIONS_ATTRIBUTE, ())
-        )
+        endpoint = route.endpoint
+        path = route.path
+        if endpoint is None or path is None:
+            raise MutationPolicyConfigurationError(
+                "FastAPI HTTP operations must expose an endpoint and path."
+            )
+        declarations = tuple(getattr(endpoint, _POLICY_DECLARATIONS_ATTRIBUTE, ()))
         if len(declarations) != 1:
             raise MutationPolicyConfigurationError(
-                f"{','.join(methods)} {route.path} must declare exactly one "
+                f"{','.join(methods)} {path} must declare exactly one "
                 "HTTP operation policy."
             )
         policy = declarations[0]
         if not isinstance(policy, HttpOperationPolicy):
             raise MutationPolicyConfigurationError(
-                f"{','.join(methods)} {route.path} declares an unknown "
-                "HTTP operation policy."
+                f"{','.join(methods)} {path} declares an unknown HTTP operation policy."
             )
-        if (
-            policy.is_mutation
-            and "settings" not in signature(route.endpoint).parameters
-        ):
+        if policy.is_mutation and "settings" not in signature(endpoint).parameters:
             raise MutationPolicyConfigurationError(
-                f"{','.join(methods)} {route.path} must receive Workbench API "
+                f"{','.join(methods)} {path} must receive Workbench API "
                 "settings for operational enforcement."
             )
         for method in methods:
-            operation_key = (method, route.path)
+            operation_key = (method, path)
             if operation_key in seen_operation_keys:
                 raise MutationPolicyConfigurationError(
-                    f"{method} {route.path} is registered more than once."
+                    f"{method} {path} is registered more than once."
                 )
             seen_operation_keys.add(operation_key)
             operations.append(HttpOperation(method=method, route=route, policy=policy))

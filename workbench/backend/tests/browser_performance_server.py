@@ -123,6 +123,7 @@ def main() -> None:
         port=args.port,
         access_log=False,
         log_level="warning",
+        reset_contextvars=True,
     )
 
 

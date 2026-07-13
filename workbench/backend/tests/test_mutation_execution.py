@@ -27,10 +27,14 @@ def _counter_app(
     state_root: Path,
     calls: list[str],
     *,
+    identities: list[str | None] | None = None,
     started: threading.Event | None = None,
     release: threading.Event | None = None,
 ) -> FastAPI:
-    from workbench.backend.mutation_execution import run_mutation_io
+    from workbench.backend.mutation_execution import (
+        current_mutation_identity,
+        run_mutation_io,
+    )
 
     settings = WorkbenchApiSettings(
         allow_unsafe_local_mutations=True,
@@ -52,6 +56,8 @@ def _counter_app(
     ) -> dict[str, object]:
         def mutate() -> dict[str, object]:
             calls.append(item_id)
+            if identities is not None:
+                identities.append(current_mutation_identity())
             if started is not None:
                 started.set()
             if release is not None:
@@ -99,6 +105,25 @@ class MutationExecutionTests(unittest.TestCase):
         self.assertEqual(missing.status_code, 428)
         self.assertEqual(empty.status_code, 428)
         self.assertEqual(too_long.status_code, 422)
+
+    def test_mutation_identity_is_unique_propagated_and_request_scoped(self) -> None:
+        from workbench.backend.mutation_context import current_mutation_identity
+
+        with tempfile.TemporaryDirectory() as tmp:
+            identities: list[str | None] = []
+            app = _counter_app(Path(tmp), [], identities=identities)
+
+            self.assertIsNone(current_mutation_identity())
+            first = asyncio.run(self._post(app, "one", {}, key="first-key"))
+            self.assertIsNone(current_mutation_identity())
+            second = asyncio.run(self._post(app, "two", {}, key="second-key"))
+            self.assertIsNone(current_mutation_identity())
+
+        self.assertEqual(first.status_code, 200, first.text)
+        self.assertEqual(second.status_code, 200, second.text)
+        self.assertEqual(len(identities), 2)
+        self.assertTrue(all(identity is not None for identity in identities))
+        self.assertNotEqual(identities[0], identities[1])
 
     def test_same_key_and_request_replays_persisted_result_after_restart(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

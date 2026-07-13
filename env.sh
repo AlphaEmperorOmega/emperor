@@ -3,6 +3,8 @@
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_PATH="$PROJECT_ROOT/torchenv"
 FRONTEND_PATH="$PROJECT_ROOT/workbench/frontend"
+PYTHON_CONSTRAINTS="$PROJECT_ROOT/constraints/python-3.13-linux-x86_64.txt"
+PINNED_PIP_VERSION="26.1.2"
 WORKBENCH_RUNTIME_PATH="$PROJECT_ROOT/workbench/.runtime"
 WORKBENCH_BACKEND_PID="$WORKBENCH_RUNTIME_PATH/backend.pid"
 WORKBENCH_FRONTEND_PID="$WORKBENCH_RUNTIME_PATH/frontend.pid"
@@ -95,6 +97,7 @@ install_frontend_dependencies() {
 
 pyproject_dependency_signature() {
   cksum < "$PROJECT_ROOT/pyproject.toml"
+  cksum < "$PYTHON_CONSTRAINTS"
 }
 
 backend_python_dependencies_available() {
@@ -136,13 +139,17 @@ project_dependencies_current() {
 }
 
 install_project_dependencies() {
-  echo "Upgrading pip..."
-  "$VENV_PATH/bin/python" -m pip install --upgrade pip || return 1
+  echo "Installing the verified pip version..."
+  "$VENV_PATH/bin/python" -m pip install --upgrade \
+    "pip==$PINNED_PIP_VERSION" || return 1
 
-  echo "Installing project dependencies from pyproject.toml..."
+  echo "Installing constrained project dependencies from pyproject.toml..."
   (
     cd "$PROJECT_ROOT" || exit 1
-    "$VENV_PATH/bin/python" -m pip install -e ".[dev]"
+    "$VENV_PATH/bin/python" -m pip install \
+      --constraint "$PYTHON_CONSTRAINTS" \
+      --build-constraint "$PYTHON_CONSTRAINTS" \
+      -e ".[dev]"
   ) || return 1
 
   pyproject_dependency_signature > "$WORKBENCH_DEPENDENCY_MARKER" || return 1
@@ -462,13 +469,15 @@ start_workbench_backend() {
       MPLCONFIGDIR="${MPLCONFIGDIR:-/tmp/matplotlib}" \
         WORKBENCH_API_ALLOW_UNSAFE_LOCAL_MUTATIONS="${WORKBENCH_API_ALLOW_UNSAFE_LOCAL_MUTATIONS:-true}" \
         setsid nohup "$VENV_PATH/bin/python" -m uvicorn workbench.backend.api:app \
-          "${reload_args[@]}" --host 127.0.0.1 --port "$WORKBENCH_BACKEND_PORT" \
+          "${reload_args[@]}" --reset-contextvars \
+          --host 127.0.0.1 --port "$WORKBENCH_BACKEND_PORT" \
           </dev/null > "$WORKBENCH_BACKEND_LOG" 2>&1 &
     else
       MPLCONFIGDIR="${MPLCONFIGDIR:-/tmp/matplotlib}" \
         WORKBENCH_API_ALLOW_UNSAFE_LOCAL_MUTATIONS="${WORKBENCH_API_ALLOW_UNSAFE_LOCAL_MUTATIONS:-true}" \
         nohup "$VENV_PATH/bin/python" -m uvicorn workbench.backend.api:app \
-          "${reload_args[@]}" --host 127.0.0.1 --port "$WORKBENCH_BACKEND_PORT" \
+          "${reload_args[@]}" --reset-contextvars \
+          --host 127.0.0.1 --port "$WORKBENCH_BACKEND_PORT" \
           </dev/null > "$WORKBENCH_BACKEND_LOG" 2>&1 &
     fi
     echo "$!" > "$WORKBENCH_BACKEND_PID"

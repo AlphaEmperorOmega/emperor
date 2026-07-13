@@ -21,11 +21,6 @@ _DOMAIN_FAILURE_STATUS = {
 }
 
 
-class FiniteJSONResponse(JSONResponse):
-    def render(self, content: object) -> bytes:
-        return super().render(replace_non_finite_json(content))
-
-
 async def api_error_handler(request: Request, exc: ApiError) -> Response:
     http_error = HTTPException(status_code=exc.status_code, detail=exc.detail)
     return await http_exception_handler(request, http_error)

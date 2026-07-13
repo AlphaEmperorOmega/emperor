@@ -25,7 +25,6 @@ from workbench.backend.core.config import (
 from workbench.backend.core.errors import ApiError
 from workbench.backend.dependencies import WorkbenchServices
 from workbench.backend.exceptions import (
-    FiniteJSONResponse,
     api_error_handler,
     domain_failure_handler,
     request_validation_error_handler,
@@ -89,7 +88,7 @@ def create_app(
     api = FastAPI(
         title="Emperor Model Workbench API",
         version="1.0.0",
-        default_response_class=FiniteJSONResponse,
+        strict_content_type=True,
     )
     api.add_exception_handler(ApiError, api_error_handler)
     api.add_exception_handler(DomainFailure, domain_failure_handler)

@@ -196,8 +196,10 @@ async def logs_runs(
 )
 async def logs_experiments(
     service: Annotated[RunHistoryService, Depends(get_run_history_service)],
-    limit: int = Query(DEFAULT_LOG_PAGE_LIMIT, ge=1, le=MAX_LOG_PAGE_LIMIT),
-    offset: int = Query(0, ge=0),
+    limit: Annotated[int, Query(ge=1, le=MAX_LOG_PAGE_LIMIT)] = (
+        DEFAULT_LOG_PAGE_LIMIT
+    ),
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> LogExperimentsResponse:
     page = await run_blocking_io(service.list_experiments, limit=limit, offset=offset)
     return LogExperimentsResponse.model_validate(log_experiment_page_to_payload(page))
@@ -523,7 +525,7 @@ async def log_run_artifacts(
 async def log_run_monitor_data(
     run_id: str,
     service: Annotated[RunHistoryService, Depends(get_run_history_service)],
-    node_path: str = Query(..., alias="nodePath"),
+    node_path: Annotated[str, Query(alias="nodePath")],
 ) -> MonitorDataResponse:
     data = await run_blocking_io(
         service.monitor_data_for_run,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import tempfile
 import unittest
@@ -121,6 +122,57 @@ REQUEST_BODY_ENDPOINT_CASES = (
 
 
 class RequestStrictnessTests(unittest.TestCase):
+    def test_json_body_requires_json_content_type_and_accepts_json_media_types(
+        self,
+    ) -> None:
+        payload = {
+            "experiments": [],
+            "datasets": [],
+            "models": [],
+            "presets": [],
+            "runIds": [],
+        }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            test_app = create_app(
+                WorkbenchApiSettings(logs_root=str(Path(tmp) / "logs"))
+            )
+
+            async def call_api() -> tuple[
+                httpx.Response,
+                httpx.Response,
+                httpx.Response,
+            ]:
+                transport = httpx.ASGITransport(app=test_app)
+                encoded = json.dumps(payload).encode()
+                async with httpx.AsyncClient(
+                    transport=transport,
+                    base_url="http://localhost",
+                ) as client:
+                    missing_content_type = await client.post(
+                        "/logs/runs/delete-plan",
+                        content=encoded,
+                    )
+                    application_json = await client.post(
+                        "/logs/runs/delete-plan",
+                        json=payload,
+                    )
+                    vendor_json = await client.post(
+                        "/logs/runs/delete-plan",
+                        content=encoded,
+                        headers={"Content-Type": "application/vnd.emperor+json"},
+                    )
+                    return missing_content_type, application_json, vendor_json
+
+            missing_content_type, application_json, vendor_json = asyncio.run(
+                call_api()
+            )
+
+        self.assertIs(test_app.router.strict_content_type, True)
+        self.assertEqual(missing_content_type.status_code, 422)
+        self.assertEqual(application_json.status_code, 200, application_json.text)
+        self.assertEqual(vendor_json.status_code, 200, vendor_json.text)
+
     def test_body_endpoints_reject_extra_request_fields(self) -> None:
         unexpected_field = "unexpectedField"
 

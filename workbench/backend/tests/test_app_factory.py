@@ -15,7 +15,8 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
 import httpx
 from fastapi import FastAPI
-from fastapi.routing import APIRoute
+from fastapi.datastructures import DefaultPlaceholder
+from fastapi.routing import APIRoute, iter_route_contexts
 
 from workbench.backend.core.errors import ApiError
 from workbench.backend.exceptions import api_error_handler
@@ -80,8 +81,8 @@ EXPECTED_ASYNC_BOUNDARY_ROUTE_PAIRS = {
 def business_route_pairs(api: FastAPI) -> set[tuple[str, str]]:
     return {
         (method, route.path)
-        for route in api.routes
-        if isinstance(route, APIRoute)
+        for route in iter_route_contexts(api.routes)
+        if isinstance(route.original_route, APIRoute) and route.path is not None
         for method in route.methods or ()
     }
 
@@ -112,6 +113,27 @@ def header_values(value: str) -> set[str]:
 
 
 class AppFactoryTests(unittest.TestCase):
+    def test_response_models_use_fastapi_native_pydantic_json_serializer(self) -> None:
+        from workbench.backend.main import create_app
+
+        api = create_app()
+        business_routes = [
+            route
+            for route in iter_route_contexts(api.routes)
+            if isinstance(route.original_route, APIRoute)
+        ]
+
+        self.assertTrue(business_routes)
+        self.assertTrue(
+            all(route.response_model is not None for route in business_routes)
+        )
+        self.assertTrue(
+            all(
+                isinstance(route.response_class, DefaultPlaceholder)
+                for route in business_routes
+            )
+        )
+
     def test_large_json_responses_are_compressed_without_compressing_small_ones(
         self,
     ) -> None:
@@ -160,8 +182,9 @@ class AppFactoryTests(unittest.TestCase):
         test_app = create_app()
         async_route_pairs = {
             (method, route.path)
-            for route in test_app.routes
-            if isinstance(route, APIRoute)
+            for route in iter_route_contexts(test_app.routes)
+            if isinstance(route.original_route, APIRoute)
+            and route.path is not None
             and asyncio.iscoroutinefunction(route.endpoint)
             for method in route.methods or ()
         }

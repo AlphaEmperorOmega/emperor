@@ -22,4 +22,5 @@ ConfigOverrides = Annotated[dict[ConfigKey, ConfigValue], Field(max_length=512)]
 
 
 class ApiResponseModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    # Keep FastAPI's native Pydantic-core JSON-byte path while preserving strict JSON.
+    model_config = ConfigDict(extra="forbid", ser_json_inf_nan="null")

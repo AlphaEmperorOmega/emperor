@@ -4,10 +4,12 @@ import importlib
 import os
 import shlex
 import subprocess
+import sys
 import tempfile
 import textwrap
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
@@ -47,6 +49,63 @@ class BackendTestEnvironmentTests(unittest.TestCase):
             "with `python -m pip install -e .` or run tests from an environment "
             f"where these modules are available: {', '.join(missing)}",
         )
+
+    def test_programmatic_uvicorn_servers_enable_contextvar_isolation(self) -> None:
+        server_cases = (
+            (
+                "workbench.backend.tests.contract_e2e_server",
+                [
+                    "contract_e2e_server",
+                    "--root",
+                    "{root}",
+                    "--port",
+                    "54321",
+                    "--token",
+                    "test-token",
+                    "--frontend-origin",
+                    "http://127.0.0.1:9000",
+                ],
+                (),
+            ),
+            (
+                "workbench.backend.tests.browser_performance_server",
+                [
+                    "browser_performance_server",
+                    "--root",
+                    "{root}",
+                    "--port",
+                    "54322",
+                    "--frontend-origin",
+                    "http://127.0.0.1:9000",
+                ],
+                ("_seed_log_runs", "_write_import_fixture"),
+            ),
+        )
+
+        for module_name, arguments, setup_names in server_cases:
+            with self.subTest(module=module_name), tempfile.TemporaryDirectory() as tmp:
+                module = importlib.import_module(module_name)
+                argv = [argument.format(root=tmp) for argument in arguments]
+                setup_patchers = [patch.object(module, name) for name in setup_names]
+                for patcher in setup_patchers:
+                    patcher.start()
+                try:
+                    with (
+                        patch.object(sys, "argv", argv),
+                        patch.object(
+                            module,
+                            "create_app_with_training_service",
+                            return_value=object(),
+                        ),
+                        patch.object(module.uvicorn, "run") as run,
+                    ):
+                        module.main()
+                finally:
+                    for patcher in reversed(setup_patchers):
+                        patcher.stop()
+
+                run.assert_called_once()
+                self.assertIs(run.call_args.kwargs["reset_contextvars"], True)
 
 
 class EnvScriptTests(unittest.TestCase):
@@ -495,6 +554,7 @@ class EnvScriptTests(unittest.TestCase):
             args[index + 1] for index, arg in enumerate(args) if arg == "--reload-dir"
         ]
         self.assertIn("--reload", args)
+        self.assertIn("--reset-contextvars", args)
         self.assertEqual(
             reload_dirs,
             [

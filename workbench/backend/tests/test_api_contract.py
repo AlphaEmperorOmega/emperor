@@ -4,11 +4,11 @@ import asyncio
 import os
 import unittest
 from dataclasses import dataclass, field
-from typing import NamedTuple
+from typing import NamedTuple, get_type_hints
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
-from fastapi.routing import APIRoute
+from fastapi.routing import APIRoute, RouteContext, iter_route_contexts
 
 from workbench.backend import schemas
 from workbench.backend.api import app
@@ -1511,7 +1511,7 @@ PATH_LIKE_DATASET_FIELDS = {
 }
 
 
-def _business_routes_by_key() -> dict[RouteKey, APIRoute]:
+def _business_routes_by_key() -> dict[RouteKey, RouteContext]:
     business_prefixes = (
         "/capabilities",
         "/config-snapshots",
@@ -1523,16 +1523,22 @@ def _business_routes_by_key() -> dict[RouteKey, APIRoute]:
     )
     return {
         (tuple(sorted(route.methods or ())), route.path): route
-        for route in app.routes
-        if isinstance(route, APIRoute) and route.path.startswith(business_prefixes)
+        for route in iter_route_contexts(app.routes)
+        if isinstance(route.original_route, APIRoute)
+        and route.path is not None
+        and route.path.startswith(business_prefixes)
     }
 
 
 def _body_request_schemas(
-    route: APIRoute,
+    route: RouteContext,
 ) -> tuple[type[schemas.ApiResponseModel], ...]:
+    endpoint = route.endpoint
+    if endpoint is None:
+        return ()
+    annotations = get_type_hints(endpoint)
     return tuple(
-        getattr(body_param, "type_", None) for body_param in route.dependant.body_params
+        annotations[body_param.name] for body_param in route.dependant.body_params
     )
 
 
@@ -1550,8 +1556,9 @@ class ApiRouteContractTests(unittest.TestCase):
     def test_api_routes_declare_response_models(self) -> None:
         missing = [
             f"{sorted(route.methods)} {route.path}"
-            for route in app.routes
-            if isinstance(route, APIRoute) and route.response_model is None
+            for route in iter_route_contexts(app.routes)
+            if isinstance(route.original_route, APIRoute)
+            and route.response_model is None
         ]
 
         self.assertEqual(missing, [])
@@ -1568,8 +1575,10 @@ class ApiRouteContractTests(unittest.TestCase):
         )
         routes = sorted(
             (tuple(sorted(route.methods or ())), route.path)
-            for route in app.routes
-            if isinstance(route, APIRoute) and route.path.startswith(business_prefixes)
+            for route in iter_route_contexts(app.routes)
+            if isinstance(route.original_route, APIRoute)
+            and route.path is not None
+            and route.path.startswith(business_prefixes)
         )
 
         self.assertEqual(routes, EXPECTED_BUSINESS_ROUTES)

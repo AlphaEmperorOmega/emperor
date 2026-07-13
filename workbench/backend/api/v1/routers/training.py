@@ -144,7 +144,7 @@ async def training_job_events(
 async def training_job_monitor_data(
     job_id: str,
     service: Annotated[TrainingJobService, Depends(get_training_job_service)],
-    node_path: str = Query(..., alias="nodePath"),
+    node_path: Annotated[str, Query(alias="nodePath")],
     dataset: str | None = None,
     preset: str | None = None,
 ) -> MonitorDataResponse:

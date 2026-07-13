@@ -18,6 +18,19 @@ from workbench.backend.schemas import (
 
 
 class JsonApiSchemaTests(unittest.TestCase):
+    def test_response_models_serialize_non_finite_floats_as_strict_json(self) -> None:
+        from workbench.backend.schemas._base import ApiResponseModel
+
+        class FloatResponse(ApiResponseModel):
+            value: float
+
+        for value in (math.nan, math.inf, -math.inf):
+            with self.subTest(value=value):
+                self.assertEqual(
+                    FloatResponse(value=value).model_dump_json(),
+                    '{"value":null}',
+                )
+
     def test_json_value_accepts_nested_json_payloads(self) -> None:
         value = {
             "nested": [1, "two", True, None, {"score": 0.75}],
