@@ -6,6 +6,8 @@ data
 data/
 nul
 torchenv/
+/build/
+/dist/
 CONTEXT.md
 conventions/
 logs
@@ -20,12 +22,18 @@ logs
 lightning_logs/
 node_modules/
 emperor.egg-info
+*.egg-info/
 .agents/
+AGENTS.md
+.scratch/
 .claude/
 .codex/
 skills-lock.json
 .pytest_cache/
+.ruff_cache/
 workbench/frontend/.next/
 workbench/frontend/node_modules/
 workbench/frontend/tsconfig.tsbuildinfo
 workbench/.runtime/
+/docs/agents/
+/docs/architecture/
