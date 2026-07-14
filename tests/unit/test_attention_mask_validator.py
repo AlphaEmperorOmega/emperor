@@ -1,9 +1,10 @@
-import torch
 import unittest
-
 from dataclasses import asdict
-from emperor.attention.core.config import MultiHeadAttentionConfig
+
+import torch
 from emperor.attention.core._validator import AttentionValidatorBase
+from emperor.attention.core.config import MultiHeadAttentionConfig
+
 from support.attention import build_attention_config
 
 
@@ -52,7 +53,7 @@ class Test_ensure_mask_is_float_or_bool(TestMaskValidator):
         integer_mask = torch.randint(0, 20, mask_shape)
         maks_name = "test_mask"
 
-        with self.assertRaises(RuntimeError) as context:
+        with self.assertRaises(RuntimeError):
             self.model.validate_mask_is_float_or_bool(integer_mask, maks_name)
 
     def test_ensure_no_error_is_thrown_when_float_mask_is_given(self):
@@ -81,9 +82,7 @@ class Test_ensure_mask_is_float_or_bool(TestMaskValidator):
 
 
 class Test_ensure_mask_is_correct_dtype(TestMaskValidator):
-    def test_ensure_errror_is_thrown_when_incorrect_dtype_is_given_and_check_other_flag_is_set_to_True(
-        self,
-    ):
+    def test_incorrect_dtype_with_other_check_raises(self):
         mask_shape = (
             self.batch_size * self.num_heads,
             self.source_sequence_length,
@@ -95,14 +94,12 @@ class Test_ensure_mask_is_correct_dtype(TestMaskValidator):
         other_name = "real_maks_dtype"
         check_other = True
 
-        with self.assertRaises(RuntimeError) as context:
+        with self.assertRaises(RuntimeError):
             self.model.validate_mask_dtype_matches(
                 mask, maks_name, other_type, other_name, check_other
             )
 
-    def test_ensure_nothing_happends_when_incorrect_dtype_is_given_and_check_other_flag_is_set_to_False(
-        self,
-    ):
+    def test_incorrect_dtype_without_other_check_is_accepted(self):
         mask_shape = (
             self.batch_size * self.num_heads,
             self.source_sequence_length,
@@ -138,9 +135,7 @@ class Test_ensure_mask_is_correct_dtype(TestMaskValidator):
         )
         self.assertIsNone(output)
 
-    def test_ensure_no_error_is_thrown_when_no_dtype_is_given_but_check_other_flag_is_set_to_True(
-        self,
-    ):
+    def test_missing_other_dtype_with_other_check_is_accepted(self):
         mask_shape = (
             self.batch_size * self.num_heads,
             self.source_sequence_length,
@@ -163,7 +158,7 @@ class Test_ensure_attention_mask_for_required_causal_mask(TestMaskValidator):
     def test_no_input_with_causal_mask_flag_set_to_True(self):
         attention_mask = None
         causal_attention_mask_flag = True
-        with self.assertRaises(RuntimeError) as context:
+        with self.assertRaises(RuntimeError):
             self.model.validate_attention_mask_for_required_causal_mask(
                 attention_mask, causal_attention_mask_flag
             )
