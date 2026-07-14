@@ -51,12 +51,8 @@ class SamplerSparse(SamplerBase):
         sampled_probabilities = sampled_probabilities.view(-1, self.top_k)
         indices = indices.view(-1, self.top_k)
         input_dim = sampled_probabilities.shape[0]
-        gates_buffer = torch.zeros(input_dim, self.num_experts).to(self.device)
-        gates = gates_buffer.scatter(
-            1,
-            indices,
-            sampled_probabilities,
-        ).to(self.device)
+        gates_buffer = sampled_probabilities.new_zeros(input_dim, self.num_experts)
+        gates = gates_buffer.scatter(1, indices, sampled_probabilities)
 
         return gates
 
