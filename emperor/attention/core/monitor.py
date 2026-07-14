@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-import torch
-import torch.nn.functional as F
-
-from lightning.pytorch.callbacks import Callback
-from emperor.experiments.monitor_policy import MonitorEmissionPolicy
-
 from typing import TYPE_CHECKING, Any
 
+import torch
+import torch.nn.functional as F
+from lightning.pytorch.callbacks import Callback
+
+from emperor.experiments.monitor_policy import MonitorEmissionPolicy
+
 if TYPE_CHECKING:
-    from torch import Tensor
     from lightning import LightningModule, Trainer
+    from torch import Tensor
     from torch.nn import Module
 
 
@@ -37,7 +37,7 @@ class AttentionMonitorCallback(Callback):
         self._max_probability_history = {}
         self._emission_policy = MonitorEmissionPolicy()
 
-    def on_fit_start(self, trainer: "Trainer", pl_module: "LightningModule") -> None:
+    def on_fit_start(self, trainer: Trainer, pl_module: LightningModule) -> None:
         from emperor.attention.core.layers import MultiHeadAttentionAbstract
 
         self._emission_policy.clear()
@@ -61,13 +61,13 @@ class AttentionMonitorCallback(Callback):
             self.__wrap_projector(module)
             self.__wrap_processor(name, module, pl_module)
 
-    def __make_forward_pre_hook(self, name: str, module: "Module"):
-        def hook(layer: "Module", inputs: tuple) -> None:
+    def __make_forward_pre_hook(self, name: str, module: Module):
+        def hook(layer: Module, inputs: tuple) -> None:
             self._traces[id(module)] = {"name": name}
 
         return hook
 
-    def __wrap_projector(self, module: "Module") -> None:
+    def __wrap_projector(self, module: Module) -> None:
         projector = getattr(module, "projector", None)
         if projector is None or not hasattr(projector, "compute_qkv_projections"):
             return
@@ -87,8 +87,8 @@ class AttentionMonitorCallback(Callback):
     def __wrap_processor(
         self,
         name: str,
-        module: "Module",
-        pl_module: "LightningModule",
+        module: Module,
+        pl_module: LightningModule,
     ) -> None:
         processor = getattr(module, "processor", None)
         if processor is None or not hasattr(processor, "compute_attention"):
@@ -159,7 +159,7 @@ class AttentionMonitorCallback(Callback):
         setattr(target, method_name, wrapped)
         self._wrapped_methods.append((target, method_name, original))
 
-    def __should_sample(self, module: "LightningModule") -> bool:
+    def __should_sample(self, module: LightningModule) -> bool:
         step = getattr(module, "global_step", 0)
         return step % self.log_every_n_steps == 0
 
@@ -168,7 +168,7 @@ class AttentionMonitorCallback(Callback):
         query: object,
         key: object,
         attention_mask: object,
-    ) -> "Tensor | None":
+    ) -> Tensor | None:
         if not torch.is_tensor(query) or not torch.is_tensor(key):
             return None
         if query.dim() not in (3, 4) or key.dim() not in (3, 4):
@@ -190,10 +190,10 @@ class AttentionMonitorCallback(Callback):
     def __make_forward_hook(
         self,
         name: str,
-        module: "Module",
-        pl_module: "LightningModule",
+        module: Module,
+        pl_module: LightningModule,
     ):
-        def hook(layer: "Module", inputs: tuple, output: object) -> None:
+        def hook(layer: Module, inputs: tuple, output: object) -> None:
             if not self.__should_sample(pl_module):
                 return
             trace = self._traces.setdefault(id(module), {"name": name})
@@ -213,7 +213,7 @@ class AttentionMonitorCallback(Callback):
     def __parse_forward_output(
         self,
         output: object,
-    ) -> tuple["Tensor | None", "Tensor | None", "Tensor | None"]:
+    ) -> tuple[Tensor | None, Tensor | None, Tensor | None]:
         if not isinstance(output, tuple):
             return (
                 output.detach() if torch.is_tensor(output) else None,
@@ -231,16 +231,17 @@ class AttentionMonitorCallback(Callback):
 
     def __log_trace(
         self,
-        pl_module: "LightningModule",
+        pl_module: LightningModule,
         name: str,
-        module: "Module",
+        module: Module,
         trace: dict[str, Any],
     ) -> None:
         prefix = f"{name}/attention"
         qkv = trace.get("qkv")
         if isinstance(qkv, tuple) and len(qkv) == 3:
-            for label, tensor in zip(("q", "k", "v"), qkv):
-                self.__log_tensor_norm_mean(pl_module, prefix, label, tensor)
+            self.__log_tensor_norm_mean(pl_module, prefix, "q", qkv[0])
+            self.__log_tensor_norm_mean(pl_module, prefix, "k", qkv[1])
+            self.__log_tensor_norm_mean(pl_module, prefix, "v", qkv[2])
 
         output = trace.get("output")
         if torch.is_tensor(output):
@@ -286,15 +287,15 @@ class AttentionMonitorCallback(Callback):
 
     def __log_tensor_norm_mean(
         self,
-        module: "LightningModule",
+        module: LightningModule,
         prefix: str,
         label: str,
-        tensor: "Tensor",
+        tensor: Tensor,
     ) -> None:
         values = tensor.detach().float()
         module.log(f"{prefix}/{label}_norm_mean", values.norm(dim=-1).mean())
 
-    def __mask_coverage(self, mask: object) -> "Tensor":
+    def __mask_coverage(self, mask: object) -> Tensor:
         if not torch.is_tensor(mask) or mask.numel() == 0:
             return torch.zeros(())
         if mask.dtype == torch.bool:
@@ -303,10 +304,10 @@ class AttentionMonitorCallback(Callback):
 
     def __log_weight_stats(
         self,
-        pl_module: "LightningModule",
+        pl_module: LightningModule,
         name: str,
-        module: "Module",
-        weights: "Tensor",
+        module: Module,
+        weights: Tensor,
         *,
         approximate: bool,
     ) -> None:
@@ -361,9 +362,9 @@ class AttentionMonitorCallback(Callback):
 
     def __per_head_stats(
         self,
-        module: "Module",
-        weights: "Tensor",
-    ) -> tuple["Tensor", "Tensor"]:
+        module: Module,
+        weights: Tensor,
+    ) -> tuple[Tensor, Tensor]:
         weights = self.__reshape_weights_by_head(module, weights)
         if weights is None or weights.numel() == 0:
             empty = torch.empty(0)
@@ -376,9 +377,9 @@ class AttentionMonitorCallback(Callback):
 
     def __reshape_weights_by_head(
         self,
-        module: "Module",
-        weights: "Tensor",
-    ) -> "Tensor | None":
+        module: Module,
+        weights: Tensor,
+    ) -> Tensor | None:
         num_heads = int(getattr(module, "num_heads", 0) or 0)
         if num_heads <= 0:
             return None
@@ -395,16 +396,16 @@ class AttentionMonitorCallback(Callback):
             return values.view(-1, num_heads, values.size(-2), values.size(-1))
         return None
 
-    def __append_history(self, history: list["Tensor"], values: "Tensor") -> None:
+    def __append_history(self, history: list[Tensor], values: Tensor) -> None:
         history.append(values.detach().float().cpu())
         del history[: -self.history_size]
 
     def __log_visual_summaries(
         self,
-        module: "LightningModule",
+        module: LightningModule,
         name: str,
-        entropy_by_head: "Tensor",
-        max_probability_by_head: "Tensor",
+        entropy_by_head: Tensor,
+        max_probability_by_head: Tensor,
     ) -> None:
         experiment = getattr(getattr(module, "logger", None), "experiment", None)
         if experiment is None:
@@ -436,7 +437,7 @@ class AttentionMonitorCallback(Callback):
         )
 
     def __log_histogram(
-        self, experiment, tag: str, values: "Tensor", step: int
+        self, experiment, tag: str, values: Tensor, step: int
     ) -> None:
         self._emission_policy.emit_histogram(experiment, tag, values, step)
 
@@ -444,7 +445,7 @@ class AttentionMonitorCallback(Callback):
         self,
         experiment,
         tag: str,
-        history: list["Tensor"],
+        history: list[Tensor],
         step: int,
     ) -> None:
         if not hasattr(experiment, "add_image") or not history:
@@ -453,13 +454,13 @@ class AttentionMonitorCallback(Callback):
         if max_heads == 0:
             return
         padded = [F.pad(vector, (0, max_heads - vector.numel())) for vector in history]
-        heatmap = torch.stack(padded, dim=0).T
+        heatmap = torch.stack(padded).T
         heatmap = heatmap / heatmap.max().clamp_min(1e-6)
         self._emission_policy.emit_image(
             experiment, tag, heatmap.unsqueeze(0), step, dataformats="CHW"
         )
 
-    def on_fit_end(self, trainer: "Trainer", pl_module: "LightningModule") -> None:
+    def on_fit_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
         for hook in self._hooks:
             hook.remove()
         self._hooks.clear()
