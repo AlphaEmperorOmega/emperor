@@ -19,48 +19,104 @@ which ideas are worth exploring next.
 
 ## Environment Setup
 
-**Requirements:** the recommended setup uses `mise.toml`, which pins Python
-3.13 and Node 24. You do not need to pre-install Python 3.13 yourself when using
-`env.sh`; the script installs `mise` if needed and lets `mise` provision the
-pinned Python and Node versions. `pyproject.toml` accepts manual Python installs
-from 3.11 through 3.13 (`>=3.11,<3.14`), but the bootstrap/dev environment is
-pinned to 3.13.
+**System requirements:** Git and [mise](https://mise.jdx.dev/). Mise provisions
+the pinned Python 3.13 and Node 24 toolchains; Visual Studio, Xcode, and a
+system Python or Node installation are not setup prerequisites.
 
-**Windows:** run the setup scripts from WSL.
+The guaranteed CPU baseline covers Ubuntu 24.04 x64, WSL2 Ubuntu 24.04 x64,
+Windows 11 x64 with PowerShell, and macOS 15+ Apple Silicon. Intel macOS is not
+part of the baseline because PyTorch 2.12 has no Intel macOS wheel for the
+required Python 3.13 runtime. MPS execution and CUDA on platforms other than
+Linux x86-64 remain outside the guaranteed baseline.
 
-Set up the repository:
+Set up the repository and start the Workbench with the same commands everywhere:
 
-```bash
-source env.sh
+```text
+mise run setup --profile cpu
+mise run dev
 ```
 
-On first run, `env.sh` installs `mise` if needed, provisions the pinned Python
-and Node versions, creates `./torchenv`, installs the project from
-`pyproject.toml`, installs Workbench frontend dependencies, activates the
-virtualenv, and starts the Workbench backend and frontend in the background.
+Setup creates `./torchenv` with the native `bin` or `Scripts` layout, installs
+binary Python dependencies from the matching platform lock, runs `npm ci`, and
+records a hash of every setup input. Repeating setup is idempotent. Switching
+profiles recreates the launcher-owned virtualenv. CUDA profiles are available
+only on Linux x86-64. The current profile uses PyTorch 2.12.0's CUDA 13.0
+wheels:
 
-On later runs, it reuses the virtualenv and already-running Workbench servers when
-possible. Runtime logs and PID files are written under `workbench/.runtime/`.
-
-The Linux x86-64 Python 3.13 development/runtime environment is resolved through
-`constraints/python-3.13-linux-x86_64.txt`. `env.sh` pins pip and supplies that
-constraints file when installing `.[dev]`; changes to either `pyproject.toml` or
-the constraints file invalidate its dependency marker. The equivalent manual
-install is:
-
-```bash
-python -m pip install --upgrade pip==26.1.2
-python -m pip install \
-  --constraint constraints/python-3.13-linux-x86_64.txt \
-  --build-constraint constraints/python-3.13-linux-x86_64.txt \
-  -e ".[dev]"
+```text
+mise run setup --profile cuda
+mise run dev --profile cuda
 ```
 
-The constraints snapshot records the complete environment used for the tested
-migration. Regenerate it only after intentionally changing dependencies and
-verifying the resulting clean resolution and full test suite.
+The `cuda-legacy` profile uses the official CUDA 12.6 wheels and guarantees the
+GTX 1080 Ti (`sm_61`) target:
 
-After `source env.sh`, the Workbench is available at:
+```text
+mise run setup --profile cuda-legacy
+mise run dev --profile cuda-legacy
+```
+
+Always pass the selected non-CPU profile to `dev`; its default remains `cpu`.
+Other GPUs supported by the CUDA 12.6 wheel are best-effort. The wheels supply
+the CUDA runtime, so a system CUDA toolkit is not required. The host NVIDIA
+driver remains external: CUDA 12.x minor compatibility requires Linux driver
+[525.60.13 or newer](https://docs.nvidia.com/deploy/cuda-compatibility/minor-version-compatibility.html),
+while driver
+[560.35.05 or newer](https://docs.nvidia.com/cuda/archive/12.6.3/cuda-toolkit-release-notes/index.html)
+avoids minor-compatibility feature limits for the pinned CUDA 12.6 Update 3
+runtime. The CUDA 13 profile requires an R580-or-newer driver.
+
+The native locks live under
+`constraints/python-3.13-<platform>-<arch>-<profile>.txt`. The legacy lock is
+standalone; it does not inherit any CUDA 13 pins.
+
+### GTX 1080 Ti hardware gate
+
+Setup verifies the Torch version, CUDA runtime, and compatible compiled Pascal
+code without requiring an attached GPU. PyTorch 2.12's CUDA 12.6 Linux wheel
+reports an `sm_60` cubin; NVIDIA's same-major forward binary compatibility
+[makes that cubin valid](https://docs.nvidia.com/cuda/cuda-programming-guide/01-introduction/cuda-platform.html#binary-compatibility)
+on the GTX 1080 Ti's `sm_61` capability. Run this manual gate on the target
+machine before treating the hardware path as validated.
+
+First confirm that the driver sees the card:
+
+```bash
+nvidia-smi
+```
+
+Then verify the exact build and physical device capability:
+
+```bash
+mise exec -- python tools/emperor_dev.py python -- -c \
+  "import torch; assert torch.__version__ == '2.12.0+cu126'; assert torch.version.cuda == '12.6'; assert torch.cuda.get_device_capability(0) == (6, 1)"
+```
+
+Allocate and compute a CUDA tensor:
+
+```bash
+mise exec -- python tools/emperor_dev.py python -- -c \
+  "import torch; x = torch.arange(1024, device='cuda'); print((x * x).sum().item())"
+```
+
+Finally run one explicit-GPU training epoch:
+
+```bash
+mise run experiment -- \
+  --model-type linears \
+  --model linear \
+  --preset baseline \
+  --datasets mnist \
+  --config \
+  --num-epochs 1 \
+  --trainer-accelerator gpu \
+  --trainer-devices 1
+```
+
+Emperor does not automatically select a GPU or change training precision for
+this profile.
+
+The Workbench is available at:
 
 ```text
 http://localhost:9000
@@ -72,12 +128,20 @@ The local Workbench API defaults to:
 http://127.0.0.1:9999
 ```
 
-Stop or inspect Workbench servers:
+Start, inspect, or stop validated Workbench process trees:
 
-```bash
-source env.sh --workbench-stop
-source env.sh --workbench-status
+```text
+mise run workbench:start
+mise run workbench:status
+mise run workbench:stop
 ```
+
+Unix compatibility wrappers remain available as `source env.sh`,
+`source experiment.sh`, `bash run_test.sh`, and `bash download_logs.sh`. Start
+the Workbench with the CUDA 12.6 legacy profile using
+`source env.sh --legacy-profile`.
+PowerShell users can run `. .\env.ps1`, `. .\env.ps1 -WorkbenchStatus`, or
+`. .\env.ps1 -WorkbenchStop` to activate the virtualenv and manage Workbench.
 
 Default ports can be overridden with:
 
@@ -92,7 +156,7 @@ export NEXT_PUBLIC_WORKBENCH_API_URL=http://127.0.0.1:9999
 Use this command to validate the full local setup:
 
 ```bash
-source experiment.sh \
+mise run experiment -- \
   --model-type linears \
   --model linear \
   --preset baseline
@@ -117,39 +181,39 @@ The Workbench has grown into a local experiment workbench with three workspaces:
 
 ## Quick Start
 
-After `source env.sh`, use this path to inspect the stable model and run one
+After `mise run dev`, use this path to inspect the stable model and run one
 short training job.
 
 ```bash
 # 1. Confirm the model categories.
-source experiment.sh --list-model-types
+mise run experiment -- --list-model-types
 
 # 2. Confirm the available linear models.
-source experiment.sh \
+mise run experiment -- \
   --model-type linears \
   --list-models
 
 # 3. Confirm the available linear presets.
-source experiment.sh \
+mise run experiment -- \
   --model-type linears \
   --model linear \
   --list-presets
 
 # 4. Inspect the baseline model without training.
-source experiment.sh \
+mise run experiment -- \
   --model-type linears \
   --model linear \
   --preset baseline \
   --print-model
 
 # 5. Check optional monitor callbacks for training runs.
-source experiment.sh \
+mise run experiment -- \
   --model-type linears \
   --model linear \
   --list-monitors
 
 # 6. Run a one-epoch smoke training job.
-source experiment.sh \
+mise run experiment -- \
   --model-type linears \
   --model linear \
   --preset baseline \
@@ -164,6 +228,21 @@ tensorboard --logdir logs/quickstart
 The smoke run builds the `baseline` preset, trains it on `mnist` for one epoch,
 and may download the dataset on first use.
 
+To train the decoder-only GPT baseline from scratch for one WikiText-2 epoch:
+
+```bash
+mise run experiment -- \
+  --model-type gpt \
+  --model linear \
+  --preset baseline \
+  --datasets wiki-text2 \
+  --logdir gpt-wikitext2 \
+  --config --num-epochs 1
+```
+
+The GPT packages use causal next-token loss and return token IDs from greedy
+generation. `penn-treebank` is available as the alternative dataset name.
+
 Each training run writes a Lightning/TensorBoard run directory under:
 
 ```text
@@ -174,6 +253,39 @@ That `version_*` folder contains TensorBoard event files such as
 `events.out.tfevents.*`, Lightning metadata such as `hparams.yaml`, and
 Emperor's `result.json` with the final parameters and metrics. Checkpoint files
 appear there only when checkpointing is enabled.
+
+### Continuing from a checkpoint
+
+Continue a single Run with `--resume-checkpoint`:
+
+```bash
+mise run experiment -- \
+  --model-type linears \
+  --model linear \
+  --preset baseline \
+  --datasets mnist \
+  --resume-checkpoint logs/quickstart/linears/linear/BASELINE/Mnist/<run>/version_0/checkpoints/last.ckpt \
+  --config --num-epochs 30
+```
+
+`NUM_EPOCHS` is the total target, not the number of additional epochs. A
+checkpoint saved at epoch 25 has completed 26 epochs, so the new target must be
+greater than 26. Continuation requires exactly one `--preset`, exactly one
+explicitly selected dataset, and no `--presets`, `--all-presets`, grid search,
+or random search.
+
+Only continue from a trusted local Lightning checkpoint. Use the same Model
+Package, preset, dataset, compatible Runtime Defaults, and code-compatible
+model structure that created it. Emperor validates the complete checkpoint and
+exact model state keys and tensor shapes; Lightning then restores optimizer,
+scheduler, precision, loop, and compatible callback state.
+
+When checkpointing is requested, `last.ckpt` records the most recently
+completed epoch while the other retained checkpoint is the best monitored
+epoch; these can be different. Continuation writes a new Run Artifact and
+records only the source filename, epoch, and global step as lineage in progress
+events and `result.json`. It never appends to or modifies the source Run
+Artifact or checkpoint.
 
 Important scaling rules:
 
@@ -187,7 +299,7 @@ Important scaling rules:
 For example:
 
 ```bash
-source experiment.sh \
+mise run experiment -- \
   --model-type linears \
   --model linear \
   --presets baseline gating \
@@ -203,7 +315,7 @@ Before choosing overrides, print every overridable field and its default value
 for the selected model:
 
 ```bash
-source experiment.sh \
+mise run experiment -- \
   --model-type linears \
   --model linear \
   --list-config
@@ -213,7 +325,7 @@ Common `config` override examples:
 
 ```bash
 # Smaller/faster hidden stack.
-source experiment.sh \
+mise run experiment -- \
   --model-type linears \
   --model linear \
   --preset baseline \
@@ -221,7 +333,7 @@ source experiment.sh \
   --config --hidden-dim 64 --stack-num-layers 2 --stack-dropout-probability 0.0
 
 # Training hyperparameters.
-source experiment.sh \
+mise run experiment -- \
   --model-type linears \
   --model linear \
   --preset baseline \
@@ -234,7 +346,7 @@ source experiment.sh \
 Use `experiment.sh` from the repository root:
 
 ```bash
-source experiment.sh \
+mise run experiment -- \
   --model-type <type> \
   --model <name> \
   [options]
@@ -243,19 +355,19 @@ source experiment.sh \
 Run with no arguments to print the full flag list:
 
 ```bash
-source experiment.sh
+mise run experiment --
 ```
 
 List available model types:
 
 ```bash
-source experiment.sh --list-model-types
+mise run experiment -- --list-model-types
 ```
 
 List models within a type:
 
 ```bash
-source experiment.sh \
+mise run experiment -- \
   --model-type linears \
   --list-models
 ```
@@ -265,7 +377,7 @@ source experiment.sh \
 List a model's presets:
 
 ```bash
-source experiment.sh \
+mise run experiment -- \
   --model-type linears \
   --model linear \
   --list-presets
@@ -274,7 +386,7 @@ source experiment.sh \
 List a model's monitor callbacks:
 
 ```bash
-source experiment.sh \
+mise run experiment -- \
   --model-type linears \
   --model linear \
   --list-monitors
@@ -283,7 +395,7 @@ source experiment.sh \
 Run one preset:
 
 ```bash
-source experiment.sh \
+mise run experiment -- \
   --model-type linears \
   --model linear \
   --preset baseline
@@ -292,7 +404,7 @@ source experiment.sh \
 Run selected presets sequentially:
 
 ```bash
-source experiment.sh \
+mise run experiment -- \
   --model-type linears \
   --model linear \
   --presets baseline gating memory \
@@ -303,7 +415,7 @@ source experiment.sh \
 Run every preset for a model:
 
 ```bash
-source experiment.sh \
+mise run experiment -- \
   --model-type linears \
   --model linear \
   --all-presets
@@ -312,7 +424,7 @@ source experiment.sh \
 Print a model structure instead of training:
 
 ```bash
-source experiment.sh \
+mise run experiment -- \
   --model-type linears \
   --model linear \
   --preset baseline \
@@ -324,7 +436,7 @@ Monitor callbacks apply to training runs, not `--print-model`.
 Run one preset with selected monitors:
 
 ```bash
-source experiment.sh \
+mise run experiment -- \
   --model-type linears \
   --model linear \
   --preset baseline \
@@ -335,7 +447,7 @@ source experiment.sh \
 Use a custom log folder:
 
 ```bash
-source experiment.sh \
+mise run experiment -- \
   --model-type linears \
   --model linear \
   --preset baseline \
@@ -346,17 +458,45 @@ Use the same `--logdir` across runs to group TensorBoard logs for comparison.
 
 ### Datasets
 
-Each model package defines a `DATASET_OPTIONS` list in `dataset_options.py`.
-For `linears/linear`, the default image-classification datasets are:
+Each Model Package groups its Dataset Metadata by Experiment Task in
+`dataset_options.py`. For `linears/linear`, the image-classification Dataset
+Metadata is:
 
 ```python
-DATASET_OPTIONS: list = [Mnist, FashionMNIST, Cifar10, Cifar100]
+DATASET_OPTIONS_BY_TASK = {
+    ExperimentTask.IMAGE_CLASSIFICATION: [
+        Mnist,
+        FashionMNIST,
+        Cifar10,
+        Cifar100,
+    ],
+}
+```
+
+BERT-pretraining Dataset Metadata uses the task-specific
+`PennTreebankBertPretraining` and `WikiText2BertPretraining` adapters. Their raw
+text source Interface accepts both TorchText's legacy `.splits(...)` datasets
+and its later `root=..., split=...` factories, while always yielding one text
+unit per source line for next-sentence construction. The verified constraints
+currently select TorchText 0.6.0. Contract tests use deterministic offline
+source fixtures and do not download corpora. They discover every declared
+Dataset Metadata class and verify its task compatibility, one-batch shape,
+dtype, collation semantics, and seed ownership through the public DataModule
+Interface.
+
+Real downloads remain explicit integration work performed by `prepare_data()`.
+Run that network-dependent suite only when the required sources are available:
+
+```bash
+EMPEROR_RUN_DATASET_DOWNLOAD_TESTS=1 \
+  PYTHONSAFEPATH=1 PYTHONPATH=tests \
+  python -P -m unittest integration.datasets.test_dataset_downloads
 ```
 
 List available datasets for a model:
 
 ```bash
-source experiment.sh \
+mise run experiment -- \
   --model-type linears \
   --model linear \
   --list-datasets
@@ -365,7 +505,7 @@ source experiment.sh \
 Restrict a run to one or more datasets:
 
 ```bash
-source experiment.sh \
+mise run experiment -- \
   --model-type linears \
   --model linear \
   --preset baseline \
@@ -377,7 +517,7 @@ source experiment.sh \
 Use `--config` to override model config values without editing `config.py`:
 
 ```bash
-source experiment.sh \
+mise run experiment -- \
   --model-type linears \
   --model linear \
   --preset baseline \
@@ -388,7 +528,7 @@ More examples:
 
 ```bash
 # Change optimization and batch size.
-source experiment.sh \
+mise run experiment -- \
   --model-type linears \
   --model linear \
   --preset baseline \
@@ -396,7 +536,7 @@ source experiment.sh \
   --config --batch-size 64 --learning-rate 0.0003
 
 # Make the hidden stack smaller for fast iteration.
-source experiment.sh \
+mise run experiment -- \
   --model-type linears \
   --model linear \
   --preset baseline \
@@ -404,7 +544,7 @@ source experiment.sh \
   --config --hidden-dim 64 --stack-num-layers 2
 
 # Try a different activation and dropout value.
-source experiment.sh \
+mise run experiment -- \
   --model-type linears \
   --model linear \
   --preset baseline \
@@ -412,7 +552,7 @@ source experiment.sh \
   --config --stack-activation RELU --stack-dropout-probability 0.1
 
 # Override controller settings when the selected preset enables that controller.
-source experiment.sh \
+mise run experiment -- \
   --model-type linears \
   --model linear \
   --preset recurrent-halting \
@@ -423,7 +563,7 @@ source experiment.sh \
 List overridable fields:
 
 ```bash
-source experiment.sh \
+mise run experiment -- \
   --model-type linears \
   --model linear \
   --list-config
@@ -434,7 +574,7 @@ source experiment.sh \
 Run a grid search:
 
 ```bash
-source experiment.sh \
+mise run experiment -- \
   --model-type linears \
   --model linear \
   --preset baseline \
@@ -444,7 +584,7 @@ source experiment.sh \
 Run a random search:
 
 ```bash
-source experiment.sh \
+mise run experiment -- \
   --model-type linears \
   --model linear \
   --preset baseline \
@@ -454,7 +594,7 @@ source experiment.sh \
 Restrict a sweep to selected axes:
 
 ```bash
-source experiment.sh \
+mise run experiment -- \
   --model-type linears \
   --model linear \
   --preset baseline \
@@ -465,7 +605,7 @@ source experiment.sh \
 Supply command-line search values:
 
 ```bash
-source experiment.sh \
+mise run experiment -- \
   --model-type linears \
   --model linear \
   --preset baseline \
@@ -539,13 +679,13 @@ Training metrics are logged under `logs/`. Launch TensorBoard with:
 tensorboard --logdir logs/
 ```
 
-Run the download script from the project directory to archive the contents of
+Run the archive task from the project directory to archive the contents of
 `./logs` directly from the filesystem:
 
-```bash
-bash download_logs.sh
-bash download_logs.sh my_experiment
-bash download_logs.sh logs/my_experiment
+```text
+mise run logs:archive
+mise run logs:archive -- my_experiment
+mise run logs:archive -- logs/my_experiment
 ```
 
 When a specific experiment folder is selected, the archive keeps that folder
@@ -554,46 +694,125 @@ prefix so importing it restores files under the same `logs/<experiment>/` path.
 By default, the archive is written in the current directory. Pass an explicit
 second argument to choose the zip path:
 
-```bash
-bash download_logs.sh logs emperor_logs.zip
-bash download_logs.sh logs /tmp/emperor_logs.zip
+```text
+mise run logs:archive -- logs emperor_logs.zip
+mise run logs:archive -- logs path/to/emperor_logs.zip
 ```
 
 To restore that archive into another local project, start the Workbench backend,
 open the Workbench, choose **Import Logs** in the top navigation, and select the
-produced `.zip` file. Local unauthenticated backends allow log imports by
-default; hosted or read-only bearer-mode backends require
-`WORKBENCH_API_ALLOW_LOG_IMPORTS=true`. The import extracts into that project's
-server-side `logs/` directory and overwrites files that already exist at the
-same archive paths. Compressed archive uploads and extracted archive contents
-are uncapped by default. Set `WORKBENCH_API_MAX_UPLOAD_SIZE=<bytes>` or
-`WORKBENCH_API_MAX_LOG_ARCHIVE_EXTRACTED_SIZE=<bytes>` only when a deployment
-needs to reject large imports.
+produced `.zip` file. Backend defaults keep log imports disabled in every
+authentication mode; enable them explicitly with
+`WORKBENCH_API_ALLOW_LOG_IMPORTS=true`. The normal `mise run dev` launcher sets
+that opt-in for its loopback development backend. The import extracts into that
+project's server-side `logs/` directory and overwrites files that already exist
+at the same archive paths. Enabled imports default to a 512 MiB compressed limit
+and a 2 GiB extracted limit, at most 32,000 archive members, a 4 MiB cumulative
+UTF-8 member-path budget, and one active archive import at a time. Override them
+with
+`WORKBENCH_API_MAX_UPLOAD_SIZE=<bytes>` or
+`WORKBENCH_API_MAX_LOG_ARCHIVE_EXTRACTED_SIZE=<bytes>`,
+`WORKBENCH_API_MAX_LOG_ARCHIVE_MEMBER_COUNT=<count>`,
+`WORKBENCH_API_MAX_LOG_ARCHIVE_PATH_BYTES=<bytes>`, or
+`WORKBENCH_API_LOG_ARCHIVE_UPLOAD_CONCURRENCY=<count>`. Size limits always have
+finite defaults and cannot be disabled with null configuration values.
 
 ## Test and Quality Commands
 
-Use `run_test.sh` from the repository root for the normal unit-test workflow.
-It runs the docs unittest suite with fail-fast enabled, which is the quickest
-way to see whether the core unit tests pass while fixing failures.
+Use the canonical task from the repository root for the normal unit-test workflow.
+It discovers the external `tests/` tree with fail-fast enabled. The script adds
+only that test tree to `PYTHONPATH`; Emperor and its first-party Model Packages
+must come from the active environment's editable or regular installation. Run
+`python -m pip install --no-deps -e .` first when using an environment that was
+not created by `env.sh`.
 
-```bash
-bash run_test.sh
+```text
+mise run test
 ```
 
-Target a specific docs test module, class, or test method when iterating on a
+Target a specific unit-test module, class, or test method when iterating on a
 failure:
 
-```bash
-bash run_test.sh layer
-bash run_test.sh layer TestLayer
-bash run_test.sh layer TestLayer test_forward_shape
+```text
+mise run test -- layer
+mise run test -- layer TestLayer
+mise run test -- layer TestLayer test_forward_output_shape
 ```
 
-The script maps the first argument to `docs/test_<name>.py` and then passes any
-class or method name through to `python3 -m unittest -f`.
+The task maps the first argument to `tests/unit/test_<name>.py` and then passes
+any class or method name through to `python -P -m unittest -f`. The historical
+`bash run_test.sh` entry point delegates to the same implementation.
+
+Verify the wheel/source-distribution manifests and compare clean editable and
+regular installs from outside the checkout with:
+
+```bash
+python -P tools/verify_distribution.py
+```
+
+The verification uses the dependencies already available in the active
+environment and never downloads or upgrades them.
+
+Run strict Python type checking with:
+
+```bash
+pyright --project pyrightconfig.json
+```
+
+The strict Pyright include list covers stable capability areas and may only
+grow. CI supplies the pinned Pyright executable; local Pyright use requires the
+command to already be available.
+
+Capture the informational PyTorch hot-path baseline with the platform-aware
+project Python:
+
+```text
+mise exec -- python tools/emperor_dev.py python -- \
+  -P tools/benchmark_pytorch_hotspots.py \
+  --device all --warmup 5 --repetitions 30 --threads 1
+```
+
+The harness measures DataLoader behavior, placement and scalar synchronization
+candidates, routing and halting presets, and MEMORY test-time-training inner
+loops. It records timing variance, memory, environment, and exact model/input
+identity. CUDA is synchronized for every sample when the installed PyTorch
+build can execute on the available GPU; otherwise the hardware compatibility
+reason is recorded as a skip. See
+[`docs/architecture/pytorch-performance-baseline.md`](docs/architecture/pytorch-performance-baseline.md)
+for the canonical conditions and interpretation. Runtime results remain
+informational rather than hard CI thresholds.
+
+Capture the production Workbench browser and long-session baseline after a
+frontend build with:
+
+```bash
+cd workbench/frontend
+npm run build
+npm run performance:budget
+npm run performance:browser
+```
+
+The browser harness uses temporary backend data and a fake process only at the
+Training Job runner boundary. It measures hydration, main-thread and React
+work, repeated workspace/graph/chart cycles, API timings, heap growth, completed
+Training and log-import flows, WebGL frames and disposal, and the existing
+bundle budgets. See
+[`docs/architecture/browser-performance-baseline.md`](docs/architecture/browser-performance-baseline.md)
+for the canonical conditions and interpretation. Machine-sensitive results are
+informational; stable workflow, disposal, error, and bundle checks fail the
+harness.
 
 For Workbench-specific changes, run the relevant backend or frontend checks from
 the package being changed after the unit suite is green.
+
+The live backend/frontend contract E2E uses two loopback FastAPI servers,
+temporary filesystem roots, and fake Training Jobs. It requires the verified
+Python environment and existing frontend dependencies, but downloads nothing:
+
+```bash
+cd workbench/frontend
+npm run test:contract:e2e
+```
 
 ## License
 
