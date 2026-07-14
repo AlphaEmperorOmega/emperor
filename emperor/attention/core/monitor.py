@@ -190,9 +190,12 @@ class AttentionMonitorCallback(Callback):
             key_values.transpose(-2, -1),
         )
         if torch.is_tensor(attention_mask):
-            mask = attention_mask.detach().float()
+            mask = attention_mask.detach()
             try:
-                raw_weights = raw_weights + mask
+                if mask.dtype == torch.bool:
+                    raw_weights = raw_weights.masked_fill(mask, -torch.inf)
+                else:
+                    raw_weights = raw_weights + mask.float()
             except RuntimeError:
                 return None
         return F.softmax(raw_weights, dim=-1)
