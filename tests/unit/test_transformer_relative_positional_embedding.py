@@ -91,6 +91,20 @@ class TestDynamicPositionalBias(unittest.TestCase):
 
         self.assertEqual(output.shape, (3, cfg.num_heads, 1, 5))
 
+    def test_forward_supports_rectangular_target_and_source_lengths(self):
+        cfg = self.preset(num_heads=1, embedding_dim=1, max_positions=4)
+        model = DynamicPositionalBias(cfg)
+        with torch.no_grad():
+            model.relative_positional_embeddings.copy_(
+                torch.arange(9, dtype=torch.float32).view(1, 1, 9)
+            )
+        query = torch.ones(1, 1, 2, 1)
+
+        output = model(query, sequence_length=3)
+
+        expected = torch.tensor([[[[4.0, 5.0, 6.0], [3.0, 4.0, 5.0]]]])
+        torch.testing.assert_close(output, expected)
+
     def test_output_matches_constant_embedding_projection(self):
         cfg = self.preset(num_heads=2, embedding_dim=8, max_positions=4)
         model = DynamicPositionalBias(cfg)
