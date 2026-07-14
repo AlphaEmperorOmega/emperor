@@ -43,6 +43,7 @@ class AttentionMonitorCallback(Callback):
     def on_fit_start(self, trainer: Trainer, pl_module: LightningModule) -> None:
         from emperor.attention.core.layers import MultiHeadAttentionAbstract
 
+        self.__cleanup()
         self._emission_policy.clear()
         self._attention_modules.clear()
         for name, module in pl_module.named_modules():
@@ -470,6 +471,9 @@ class AttentionMonitorCallback(Callback):
         )
 
     def on_fit_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
+        self.__cleanup()
+
+    def __cleanup(self) -> None:
         for hook in self._hooks:
             hook.remove()
         self._hooks.clear()
