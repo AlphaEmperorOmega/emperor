@@ -2,6 +2,21 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
+from torch import Tensor
+
+
+@dataclass(frozen=True, eq=False, kw_only=True)
+class QKV:
+    query: Tensor
+    key: Tensor
+    value: Tensor
+
+
+@dataclass(frozen=True, eq=False, kw_only=True)
+class AttentionMasks:
+    key_padding_mask: Tensor | None = None
+    attention_mask: Tensor | None = None
+
 
 @dataclass(frozen=True)
 class AttentionRuntimeShape:
@@ -21,4 +36,8 @@ class AttentionRuntimeShape:
         )
 
 
-__all__ = ["AttentionRuntimeShape"]
+__all__ = [
+    "AttentionRuntimeShape",
+    "AttentionMasks",
+    "QKV",
+]
