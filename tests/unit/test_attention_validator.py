@@ -1,5 +1,6 @@
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import torch
 from emperor.attention import (
@@ -8,7 +9,15 @@ from emperor.attention import (
     SelfAttentionConfig,
     SelfAttentionProjectionStrategy,
 )
-from emperor.attention.core._validator import AttentionValidatorBase
+from emperor.attention.core._validator import (
+    AttentionValidatorBase,
+    MultiHeadAttentionValidator,
+)
+from emperor.attention.core.runtime import (
+    QKV,
+    AttentionMasks,
+    AttentionRuntimeShape,
+)
 from emperor.attention.core.variants.independent_attention.validator import (
     IndependentAttentionValidator,
 )
@@ -129,7 +138,12 @@ class TestValidateKeyValueProjectionShapes(unittest.TestCase):
 class TestValidateStaticProjectionShapes(unittest.TestCase):
     def setUp(self):
         self.model = SimpleNamespace(
-            batch_size=BATCH_SIZE, num_heads=NUM_HEADS, head_dim=HEAD_DIM
+            batch_size=BATCH_SIZE,
+            num_heads=NUM_HEADS,
+            head_dim=HEAD_DIM,
+            embedding_dim=EMBEDDING_DIM,
+            query_key_projection_dim=0,
+            value_projection_dim=0,
         )
 
     def test_none_inputs(self):
@@ -149,9 +163,22 @@ class TestValidateStaticProjectionShapes(unittest.TestCase):
 
     def test_wrong_static_first_dim(self):
         wrong = torch.randn(BATCH_SIZE, SOURCE_SEQUENCE_LENGTH, HEAD_DIM)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(RuntimeError):
             AttentionValidatorBase.validate_static_projection_shapes(
                 self.model, wrong, None
+            )
+
+    def test_wrong_static_head_width(self):
+        wrong = torch.randn(
+            BATCH_SIZE * NUM_HEADS,
+            SOURCE_SEQUENCE_LENGTH,
+            HEAD_DIM + 1,
+        )
+        with self.assertRaisesRegex(RuntimeError, r"static_values.size\(2\)"):
+            AttentionValidatorBase.validate_static_projection_shapes(
+                self.model,
+                None,
+                wrong,
             )
 
 
@@ -184,6 +211,45 @@ class TestValidateHeadDivisibility(unittest.TestCase):
         )
         with self.assertRaises(ValueError):
             AttentionValidatorBase.validate_head_divisibility(model)
+
+    def test_raises_when_value_projection_not_divisible(self):
+        model = SimpleNamespace(
+            embedding_dim=12,
+            num_heads=4,
+            query_key_projection_dim=8,
+            value_projection_dim=10,
+        )
+
+        with self.assertRaisesRegex(ValueError, "value_projection_dim"):
+            AttentionValidatorBase.validate_head_divisibility(model)
+
+
+class TestRuntimeDeviceValidation(unittest.TestCase):
+    def test_runtime_qkv_devices_must_match(self):
+        model = SimpleNamespace(embedding_dim=4)
+        query = torch.empty(2, 1, 4)
+        key = torch.empty(2, 1, 4, device="meta")
+        value = torch.empty(2, 1, 4, device="meta")
+
+        with self.assertRaisesRegex(RuntimeError, "devices must match"):
+            MultiHeadAttentionValidator.validate_runtime_tensors(
+                model,
+                QKV(query=query, key=key, value=value),
+            )
+
+    def test_static_projection_device_must_match_query(self):
+        query = torch.empty(2, 1, 4)
+        qkv = QKV(query=query, key=query, value=query)
+        static_key = torch.empty(1, 2, 4, device="meta")
+        runtime_shape = AttentionRuntimeShape(1, 2, 2)
+
+        with self.assertRaisesRegex(RuntimeError, "device must match query device"):
+            MultiHeadAttentionValidator.resolve_source_runtime_shape(
+                qkv,
+                static_key,
+                None,
+                runtime_shape,
+            )
 
 
 class TestAttentionWeightsForSelfAttentionOnly(unittest.TestCase):
@@ -223,18 +289,28 @@ class TestSelfAttentionValidator(unittest.TestCase):
             self_attention_projection_strategy=(SelfAttentionProjectionStrategy.FUSED),
         )
 
-        with self.assertRaisesRegex(
-            ValueError,
-            "requires projection_strategy=.*SEPARATE",
-        ):
+        with self.assertRaises(ValueError) as caught:
             cfg.build()
+        self.assertEqual(
+            str(caught.exception),
+            "Self-attention with RecurrentLayerConfig requires "
+            "projection_strategy=SelfAttentionProjectionStrategy.SEPARATE; "
+            "the FUSED strategy changes embedding_dim to 3 * embedding_dim.",
+        )
 
     def test_dimensions_equal_raises_for_unequal(self):
         model = SimpleNamespace(
             embedding_dim=12, query_key_projection_dim=16, value_projection_dim=12
         )
-        with self.assertRaises(RuntimeError):
+        with self.assertRaises(RuntimeError) as caught:
             SelfAttentionValidator.validate_self_attention_dimensions_equal(model)
+        self.assertEqual(
+            str(caught.exception),
+            "Self attention requires query_key_projection_dim, "
+            "value_projection_dim, and embedding_dim to be equal, but got "
+            "query_key_projection_dim=16, value_projection_dim=12, "
+            "embedding_dim=12.",
+        )
 
     def test_query_key_value_same_tensor_passes(self):
         tensor = torch.randn(TARGET_SEQUENCE_LENGTH, BATCH_SIZE, EMBEDDING_DIM)
@@ -247,10 +323,38 @@ class TestSelfAttentionValidator(unittest.TestCase):
     def test_query_key_value_distinct_raises(self):
         query = torch.randn(TARGET_SEQUENCE_LENGTH, BATCH_SIZE, EMBEDDING_DIM)
         key = torch.randn(TARGET_SEQUENCE_LENGTH, BATCH_SIZE, EMBEDDING_DIM)
-        with self.assertRaises(RuntimeError):
+        with self.assertRaises(RuntimeError) as caught:
             SelfAttentionValidator.validate_query_key_value_are_same_tensor(
                 query, key, key
             )
+        self.assertEqual(
+            str(caught.exception),
+            "Self attention can only be computed when the query, key, and value "
+            "are the same tensor.",
+        )
+
+    def test_forward_inputs_delegate_exact_arguments(self):
+        model = object()
+        query = object()
+        key = object()
+        value = object()
+        qkv = SimpleNamespace(query=query, key=key, value=value)
+        masks = object()
+
+        with (
+            patch.object(
+                MultiHeadAttentionValidator,
+                "validate_forward_inputs",
+            ) as validate_base,
+            patch.object(
+                SelfAttentionValidator,
+                "validate_query_key_value_are_same_tensor",
+            ) as validate_same_tensor,
+        ):
+            SelfAttentionValidator.validate_forward_inputs(model, qkv, masks)
+
+        validate_base.assert_called_once_with(model, qkv, masks)
+        validate_same_tensor.assert_called_once_with(query, key, value)
 
 
 class TestIndependentAttentionValidator(unittest.TestCase):
@@ -264,11 +368,48 @@ class TestIndependentAttentionValidator(unittest.TestCase):
         value = torch.randn(SOURCE_SEQUENCE_LENGTH, BATCH_SIZE, EMBEDDING_DIM)
         with self.assertRaises(RuntimeError):
             IndependentAttentionValidator.validate_forward_inputs(
-                model, query, key, value
+                model,
+                QKV(query=query, key=key, value=value),
+                AttentionMasks(),
             )
+
+    def test_forward_inputs_delegate_exact_arguments(self):
+        model = object()
+        key = object()
+        value = object()
+        qkv = SimpleNamespace(query=object(), key=key, value=value)
+        masks = object()
+
+        with (
+            patch.object(
+                MultiHeadAttentionValidator,
+                "validate_forward_inputs",
+            ) as validate_base,
+            patch.object(
+                AttentionValidatorBase,
+                "validate_attention_weights_returned_for_self_attention_only",
+            ) as validate_weights,
+            patch.object(
+                AttentionValidatorBase,
+                "validate_key_value_projection_shapes",
+            ) as validate_key_value,
+        ):
+            IndependentAttentionValidator.validate_forward_inputs(model, qkv, masks)
+
+        validate_base.assert_called_once_with(model, qkv, masks)
+        validate_weights.assert_called_once_with(model)
+        validate_key_value.assert_called_once_with(key, value)
 
 
 class TestMixtureOfAttentionHeadsValidator(unittest.TestCase):
+    def config(self):
+        return build_attention_config(
+            MixtureOfAttentionHeadsConfig,
+            embedding_dim=EMBEDDING_DIM,
+            query_key_projection_dim=EMBEDDING_DIM,
+            value_projection_dim=EMBEDDING_DIM,
+        )
+
     def test_validate_passes_with_experts_config(self):
         model = build_attention_config(
             MixtureOfAttentionHeadsConfig,
@@ -282,5 +423,252 @@ class TestMixtureOfAttentionHeadsValidator(unittest.TestCase):
         model = SimpleNamespace(
             cfg=SimpleNamespace(experts_config=None, use_kv_expert_models_flag=False)
         )
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ValueError) as caught:
             MixtureOfAttentionHeadsValidator.validate_experts_configuration(model)
+        self.assertEqual(
+            str(caught.exception),
+            "experts_config is required for mixture of attention heads.",
+        )
+
+    def test_validate_experts_configuration_rejects_wrong_nested_types(self):
+        cases = (
+            (
+                "experts_config",
+                lambda cfg: setattr(cfg, "experts_config", object()),
+                TypeError,
+                "experts_config must be a MixtureOfExpertsConfig, received object.",
+            ),
+            (
+                "missing_kv_flag",
+                lambda cfg: setattr(cfg, "use_kv_expert_models_flag", None),
+                ValueError,
+                "use_kv_expert_models_flag is required for mixture of attention heads.",
+            ),
+            (
+                "wrong_kv_flag",
+                lambda cfg: setattr(cfg, "use_kv_expert_models_flag", "yes"),
+                TypeError,
+                "use_kv_expert_models_flag must be a bool, received str.",
+            ),
+            (
+                "sampler_config",
+                lambda cfg: setattr(cfg.experts_config, "sampler_config", object()),
+                TypeError,
+                "experts_config.sampler_config must be a SamplerConfig, received "
+                "object.",
+            ),
+            (
+                "router_config",
+                lambda cfg: setattr(
+                    cfg.experts_config.sampler_config,
+                    "router_config",
+                    object(),
+                ),
+                TypeError,
+                "experts_config.sampler_config.router_config must be a RouterConfig, "
+                "received object.",
+            ),
+        )
+
+        for name, mutate, error_type, message in cases:
+            with self.subTest(name=name):
+                cfg = self.config()
+                mutate(cfg)
+                with self.assertRaises(error_type) as caught:
+                    MixtureOfAttentionHeadsValidator.validate_experts_configuration(
+                        SimpleNamespace(cfg=cfg)
+                    )
+                self.assertEqual(str(caught.exception), message)
+
+    def test_validate_experts_configuration_rejects_exact_dimension_mismatches(self):
+        cases = (
+            (
+                "top_k",
+                lambda cfg: setattr(cfg.experts_config.sampler_config, "top_k", 2),
+                "experts_config.top_k must match "
+                "experts_config.sampler_config.top_k, got 3 and 2.",
+            ),
+            (
+                "sampler_num_experts",
+                lambda cfg: setattr(
+                    cfg.experts_config.sampler_config,
+                    "num_experts",
+                    5,
+                ),
+                "experts_config.num_experts must match "
+                "experts_config.sampler_config.num_experts, got 6 and 5.",
+            ),
+            (
+                "router_num_experts",
+                lambda cfg: setattr(
+                    cfg.experts_config.sampler_config.router_config,
+                    "num_experts",
+                    5,
+                ),
+                "experts_config.num_experts must match experts_config.sampler_config."
+                "router_config.num_experts, got 6 and 5.",
+            ),
+        )
+
+        for name, mutate, message in cases:
+            with self.subTest(name=name):
+                cfg = self.config()
+                mutate(cfg)
+                with self.assertRaises(ValueError) as caught:
+                    MixtureOfAttentionHeadsValidator.validate_experts_configuration(
+                        SimpleNamespace(cfg=cfg)
+                    )
+                self.assertEqual(str(caught.exception), message)
+
+    def test_validate_experts_configuration_rejects_dense_routing_exactly(self):
+        cfg = build_attention_config(
+            MixtureOfAttentionHeadsConfig,
+            experts_top_k=6,
+            experts_num_experts=6,
+        )
+
+        with self.assertRaises(ValueError) as caught:
+            MixtureOfAttentionHeadsValidator.validate_experts_configuration(
+                SimpleNamespace(cfg=cfg)
+            )
+
+        self.assertEqual(
+            str(caught.exception),
+            "MixtureOfAttentionHeads requires sparse indexed routing, so "
+            "experts_config.top_k must be less than "
+            "experts_config.num_experts; dense routing is not supported.",
+        )
+
+    def test_expert_sequence_length_error_is_exact(self):
+        model = SimpleNamespace(
+            cfg=SimpleNamespace(use_kv_expert_models_flag=True),
+            target_sequence_length=3,
+            source_sequence_length=4,
+        )
+
+        with self.assertRaises(ValueError) as caught:
+            MixtureOfAttentionHeadsValidator.validate_expert_key_value_sequence_lengths(
+                model
+            )
+
+        self.assertEqual(
+            str(caught.exception),
+            "target_sequence_length and source_sequence_length must be equal "
+            "when use_kv_expert_models_flag is True, got "
+            "target_sequence_length=3 and source_sequence_length=4.",
+        )
+
+    def test_attention_weights_error_is_exact(self):
+        model = SimpleNamespace(return_attention_weights_flag=True)
+
+        with self.assertRaises(RuntimeError) as caught:
+            MixtureOfAttentionHeadsValidator.validate_attention_weights_are_not_requested(
+                model
+            )
+
+        self.assertEqual(
+            str(caught.exception),
+            "MixtureOfAttentionHeads does not support returning attention_weights; "
+            "set return_attention_weights_flag to False.",
+        )
+
+    def test_expert_key_value_inputs_require_each_identity_relation(self):
+        model = SimpleNamespace(cfg=SimpleNamespace(use_kv_expert_models_flag=True))
+        shared = torch.empty(1)
+        distinct = torch.empty(1)
+
+        for name, query, key, value in (
+            ("value", shared, shared, distinct),
+            ("query", distinct, shared, shared),
+        ):
+            with self.subTest(name=name):
+                with self.assertRaises(ValueError) as caught:
+                    MixtureOfAttentionHeadsValidator.validate_expert_key_value_inputs(
+                        model,
+                        query,
+                        key,
+                        value,
+                    )
+                self.assertEqual(
+                    str(caught.exception),
+                    "query, key, and value must be the same tensor when "
+                    "use_kv_expert_models_flag is True.",
+                )
+
+    def test_static_inputs_are_independently_rejected_for_expert_key_values(self):
+        model = SimpleNamespace(cfg=SimpleNamespace(use_kv_expert_models_flag=True))
+        static = torch.empty(1, 1, 1)
+
+        for name, static_keys, static_values in (
+            ("keys", static, None),
+            ("values", None, static),
+        ):
+            with self.subTest(name=name):
+                with self.assertRaises(ValueError) as caught:
+                    MixtureOfAttentionHeadsValidator.validate_static_key_value_inputs(
+                        model,
+                        static_keys,
+                        static_values,
+                    )
+                self.assertEqual(
+                    str(caught.exception),
+                    "static key/value projections are not supported when "
+                    "use_kv_expert_models_flag is True.",
+                )
+
+    def test_forward_inputs_delegate_exact_arguments(self):
+        model = object()
+        query = object()
+        key = object()
+        value = object()
+        qkv = SimpleNamespace(query=query, key=key, value=value)
+        masks = object()
+
+        with (
+            patch.object(
+                MultiHeadAttentionValidator,
+                "validate_forward_inputs",
+            ) as validate_base,
+            patch.object(
+                MixtureOfAttentionHeadsValidator,
+                "validate_expert_key_value_inputs",
+            ) as validate_expert_inputs,
+            patch.object(
+                MixtureOfAttentionHeadsValidator,
+                "validate_attention_weights_are_not_requested",
+            ) as validate_weights,
+            patch.object(
+                AttentionValidatorBase,
+                "validate_key_value_projection_shapes",
+            ) as validate_key_value,
+        ):
+            MixtureOfAttentionHeadsValidator.validate_forward_inputs(model, qkv, masks)
+
+        validate_base.assert_called_once_with(model, qkv, masks)
+        validate_expert_inputs.assert_called_once_with(model, query, key, value)
+        validate_weights.assert_called_once_with(model)
+        validate_key_value.assert_called_once_with(key, value)
+
+    def test_static_inputs_delegate_exact_arguments_without_expert_key_values(self):
+        model = SimpleNamespace(cfg=SimpleNamespace(use_kv_expert_models_flag=False))
+        static_keys = object()
+        static_values = object()
+        runtime_shape = object()
+
+        with patch.object(
+            MultiHeadAttentionValidator,
+            "validate_static_key_value_inputs",
+        ) as validate_base:
+            MixtureOfAttentionHeadsValidator.validate_static_key_value_inputs(
+                model,
+                static_keys,
+                static_values,
+                runtime_shape,
+            )
+
+        validate_base.assert_called_once_with(
+            model,
+            static_keys,
+            static_values,
+            runtime_shape,
+        )
