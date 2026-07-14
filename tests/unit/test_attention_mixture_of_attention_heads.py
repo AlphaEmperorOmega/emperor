@@ -2,8 +2,12 @@ import unittest
 
 import torch
 from emperor.attention import MixtureOfAttentionHeadsConfig
+from emperor.attention.core.runtime import QKV, AttentionMasks
 from emperor.attention.core.variants.mixture_of_attention_heads.bias import (
     MixtureOfAttentionHeadsKeyValueBias,
+)
+from emperor.attention.core.variants.mixture_of_attention_heads.reshaper import (
+    MixtureOfAttentionHeadsReshaper,
 )
 from emperor.attention.core.variants.mixture_of_attention_heads.zero_attention import (
     MixtureOfAttentionHeadsZeroAttention,
@@ -98,38 +102,61 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
                     use_kv_expert_models_flag=use_kv_expert_models_flag,
                 )
                 model = MixtureOfAttentionHeadsKeyValueBias(cfg)
+                key_head_dim = cfg.query_key_projection_dim // cfg.num_heads
+                value_head_dim = cfg.value_projection_dim // cfg.num_heads
+                branch_multiplier = (
+                    cfg.experts_config.top_k if use_kv_expert_models_flag else 1
+                )
+                branch_count = cfg.batch_size * branch_multiplier * cfg.num_heads
                 if use_kv_expert_models_flag:
-                    key = torch.randn(4, 2, 2, 8)
-                    value = torch.randn(4, 2, 2, 12)
-                    expected_key_bias = model.key_bias_vector.unsqueeze(2).expand(
-                        1, 2, 2, 8
-                    )
-                    expected_value_bias = model.value_bias_vector.unsqueeze(2).expand(
-                        1, 2, 2, 12
-                    )
+                    key = torch.randn(branch_count, 4, key_head_dim)
+                    value = torch.randn(branch_count, 4, value_head_dim)
                 else:
-                    key = torch.randn(4, 2, 8)
-                    value = torch.randn(4, 2, 12)
-                    expected_key_bias = model.key_bias_vector.expand(1, 2, 8)
-                    expected_value_bias = model.value_bias_vector.expand(1, 2, 12)
+                    key = torch.randn(branch_count, 4, key_head_dim)
+                    value = torch.randn(branch_count, 4, value_head_dim)
+                expected_key_bias = (
+                    model.key_bias_vector.view(1, 1, cfg.num_heads, key_head_dim)
+                    .expand(
+                        cfg.batch_size,
+                        branch_multiplier,
+                        -1,
+                        -1,
+                    )
+                    .reshape(branch_count, key_head_dim)
+                )
+                expected_value_bias = (
+                    model.value_bias_vector.view(1, 1, cfg.num_heads, value_head_dim)
+                    .expand(
+                        cfg.batch_size,
+                        branch_multiplier,
+                        -1,
+                        -1,
+                    )
+                    .reshape(branch_count, value_head_dim)
+                )
                 key_padding_mask = torch.zeros(2, 4, dtype=torch.bool)
                 attention_mask = torch.zeros(8, 4, 4, dtype=torch.bool)
 
-                output_key, output_value, output_padding_mask, output_attention_mask = (
-                    model.add_kv_learnable_bias_vectors(
-                        key,
-                        value,
-                        key_padding_mask,
-                        attention_mask,
-                    )
+                output_qkv, output_masks = model.add_kv_learnable_bias_vectors(
+                    QKV(query=key, key=key, value=value),
+                    AttentionMasks(
+                        key_padding_mask=key_padding_mask,
+                        attention_mask=attention_mask,
+                    ),
                 )
 
-                self.assertEqual(output_key.shape, (5, *key.shape[1:]))
-                self.assertEqual(output_value.shape, (5, *value.shape[1:]))
-                self.assertEqual(output_padding_mask.shape, (2, 5))
-                self.assertEqual(output_attention_mask.shape, (8, 4, 5))
-                torch.testing.assert_close(output_key[-1], expected_key_bias[0])
-                torch.testing.assert_close(output_value[-1], expected_value_bias[0])
+                self.assertEqual(output_qkv.key.shape, (branch_count, 5, key_head_dim))
+                self.assertEqual(
+                    output_qkv.value.shape,
+                    (branch_count, 5, value_head_dim),
+                )
+                self.assertEqual(output_masks.key_padding_mask.shape, (2, 5))
+                self.assertEqual(output_masks.attention_mask.shape, (8, 4, 5))
+                torch.testing.assert_close(output_qkv.key[:, -1], expected_key_bias)
+                torch.testing.assert_close(
+                    output_qkv.value[:, -1],
+                    expected_value_bias,
+                )
 
     def test_zero_attention_supports_shared_and_expert_projection_branches(self):
         for use_kv_expert_models_flag in (False, True):
@@ -158,28 +185,27 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
                     dtype=torch.bool,
                 )
 
-                output_key, output_value, output_padding_mask, output_attention_mask = (
-                    model.add_zero_attention(
-                        key,
-                        value,
-                        key_padding_mask,
-                        attention_mask,
-                    )
+                output_qkv, output_masks = model.add_zero_attention(
+                    QKV(query=key, key=key, value=value),
+                    AttentionMasks(
+                        key_padding_mask=key_padding_mask,
+                        attention_mask=attention_mask,
+                    ),
                 )
 
-                self.assertEqual(output_key.shape, (branch_count, 5, 4))
-                self.assertEqual(output_value.shape, (branch_count, 5, 6))
-                self.assertEqual(output_padding_mask.shape, (2, 5))
+                self.assertEqual(output_qkv.key.shape, (branch_count, 5, 4))
+                self.assertEqual(output_qkv.value.shape, (branch_count, 5, 6))
+                self.assertEqual(output_masks.key_padding_mask.shape, (2, 5))
                 self.assertEqual(
-                    output_attention_mask.shape,
+                    output_masks.attention_mask.shape,
                     (attention_branch_count, 4, 5),
                 )
                 torch.testing.assert_close(
-                    output_key[:, -1],
+                    output_qkv.key[:, -1],
                     torch.zeros_like(key[:, 0]),
                 )
                 torch.testing.assert_close(
-                    output_value[:, -1],
+                    output_qkv.value[:, -1],
                     torch.zeros_like(value[:, 0]),
                 )
 
@@ -280,7 +306,7 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
         ).view(sequence_shape)
         normalized_2d = model.masks.merge_padding_and_attention_mask(
             key,
-            attention_mask=mask_2d,
+            AttentionMasks(attention_mask=mask_2d),
         )
         expected_2d = mask_2d.view(1, *sequence_shape).expand(
             branch_count,
@@ -298,7 +324,9 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
         ).view(cfg.batch_size, cfg.num_heads, *sequence_shape)
         normalized_standard = model.masks.merge_padding_and_attention_mask(
             key,
-            attention_mask=standard_mask.reshape(-1, *sequence_shape),
+            AttentionMasks(
+                attention_mask=standard_mask.reshape(-1, *sequence_shape),
+            ),
         )
         expected_standard = (
             standard_mask.unsqueeze(1)
@@ -324,11 +352,157 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
         )
         normalized_expanded = model.masks.merge_padding_and_attention_mask(
             key,
-            attention_mask=expanded_mask.reshape(-1, *sequence_shape),
+            AttentionMasks(
+                attention_mask=expanded_mask.reshape(-1, *sequence_shape),
+            ),
         )
         torch.testing.assert_close(
             normalized_expanded,
             expanded_mask.reshape(branch_count, *sequence_shape),
+        )
+
+    def test_direct_mask_normalization_rejects_every_invalid_contract(self):
+        cfg = self.preset()
+        masks = cfg.build().masks
+        branch_count = cfg.batch_size * cfg.experts_config.top_k * cfg.num_heads
+        key = torch.randn(branch_count, cfg.source_sequence_length, 4)
+        invalid_cases = (
+            (
+                "sequence_dimensions",
+                AttentionMasks(
+                    attention_mask=torch.zeros(
+                        1,
+                        cfg.target_sequence_length + 1,
+                        cfg.source_sequence_length,
+                    )
+                ),
+                "attention_mask must have target/source dimensions (4, 4), got (5, 4).",
+            ),
+            (
+                "rank",
+                AttentionMasks(
+                    attention_mask=torch.zeros(
+                        1,
+                        1,
+                        cfg.target_sequence_length,
+                        cfg.source_sequence_length,
+                    )
+                ),
+                "attention_mask must be 2-D or 3-D for mixture of attention heads, "
+                "got 4-D.",
+            ),
+            (
+                "leading_dimension",
+                AttentionMasks(
+                    attention_mask=torch.zeros(
+                        3,
+                        cfg.target_sequence_length,
+                        cfg.source_sequence_length,
+                    )
+                ),
+                "3-D attention_mask leading dimension must be batch_size * num_heads "
+                "or batch_size * top_k * num_heads (4 or 8), got 3.",
+            ),
+            (
+                "key_padding_mask",
+                AttentionMasks(
+                    key_padding_mask=torch.zeros(
+                        cfg.batch_size,
+                        cfg.source_sequence_length + 1,
+                    )
+                ),
+                "key_padding_mask must have shape (2, 4), got (2, 5).",
+            ),
+        )
+
+        for name, invalid_masks, message in invalid_cases:
+            with self.subTest(name=name):
+                with self.assertRaises(RuntimeError) as caught:
+                    masks.merge_padding_and_attention_mask(key, invalid_masks)
+                self.assertEqual(str(caught.exception), message)
+
+    def test_mask_shape_validation_has_exact_rank_and_leading_contracts(self):
+        cfg = self.preset()
+        masks = cfg.build().masks
+        sequence_shape = (
+            cfg.target_sequence_length,
+            cfg.source_sequence_length,
+        )
+        standard_branches = cfg.batch_size * cfg.num_heads
+        expert_branches = standard_branches * cfg.experts_config.top_k
+
+        for leading_dimension in (1, standard_branches, expert_branches):
+            with self.subTest(leading_dimension=leading_dimension):
+                self.assertIsNone(
+                    masks._validate_mask_shapes(
+                        None,
+                        torch.zeros(leading_dimension, *sequence_shape),
+                        None,
+                    )
+                )
+
+        invalid_cases = (
+            (
+                "sequence_dimensions",
+                torch.zeros(
+                    1,
+                    cfg.target_sequence_length + 1,
+                    cfg.source_sequence_length,
+                ),
+                "attention_mask must have target/source dimensions (4, 4), got (5, 4).",
+            ),
+            (
+                "leading_dimension",
+                torch.zeros(3, *sequence_shape),
+                "3-D attention_mask leading dimension must be 1, batch_size * "
+                "num_heads, or batch_size * top_k * num_heads (1, 4, or 8), got 3.",
+            ),
+            (
+                "rank",
+                torch.zeros(1, 1, *sequence_shape),
+                "attention_mask must be 2-D or 3-D for mixture of attention heads, "
+                "got 4-D.",
+            ),
+        )
+
+        for name, attention_mask, message in invalid_cases:
+            with self.subTest(name=name):
+                with self.assertRaises(RuntimeError) as caught:
+                    masks._validate_mask_shapes(None, attention_mask, None)
+                self.assertEqual(str(caught.exception), message)
+
+    def test_singleton_leading_attention_mask_expands_to_every_branch(self):
+        cfg = self.preset()
+        masks = cfg.build().masks
+        branch_count = cfg.batch_size * cfg.experts_config.top_k * cfg.num_heads
+        key = torch.randn(branch_count, cfg.source_sequence_length, 4)
+        attention_mask = torch.arange(
+            cfg.target_sequence_length * cfg.source_sequence_length,
+            dtype=cfg.target_dtype,
+        ).view(1, cfg.target_sequence_length, cfg.source_sequence_length)
+
+        normalized = masks.merge_padding_and_attention_mask(
+            key,
+            AttentionMasks(attention_mask=attention_mask),
+        )
+
+        expected = attention_mask.expand(branch_count, -1, -1)
+        torch.testing.assert_close(normalized, expected)
+
+    def test_reshaper_directly_rejects_static_expert_key_value(self):
+        cfg = self.preset(use_kv_expert_models_flag=True)
+        reshaper = MixtureOfAttentionHeadsReshaper(cfg)
+        tensor = torch.randn(1, 1, cfg.embedding_dim)
+
+        with self.assertRaises(ValueError) as caught:
+            reshaper.reshape_qkv_for_attention(
+                QKV(query=tensor, key=tensor, value=tensor),
+                static_keys=tensor,
+            )
+        self.assertEqual(
+            str(caught.exception),
+            "static key/value projections are not supported when "
+            "use_kv_expert_models_flag is True.",
         )
 
     def test_standard_and_equivalent_expanded_masks_produce_same_output(self):
@@ -399,7 +573,7 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
 
         normalized = model.masks.merge_padding_and_attention_mask(
             key,
-            key_padding_mask=padding_mask,
+            AttentionMasks(key_padding_mask=padding_mask),
         )
 
         expected = (
@@ -481,12 +655,12 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
         cfg = self.preset(
             use_kv_expert_models_flag=False,
             target_sequence_length=3,
-            source_sequence_length=4,
+            source_sequence_length=5,
         )
         model = cfg.build()
         query = self.input_tensor(cfg)
         key = value = torch.randn(
-            cfg.source_sequence_length,
+            4,
             cfg.batch_size,
             cfg.embedding_dim,
         )
@@ -660,27 +834,17 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
             cfg.batch_size,
             cfg.embedding_dim,
         )
-        query, key, value = model.projector.compute_qkv_projections(
-            inputs,
-            inputs,
-            inputs,
+        projections = model.projector.compute_qkv_projections(
+            QKV(query=inputs, key=inputs, value=inputs),
         )
 
-        query, key, value = model.reshaper.reshape_qkv_for_attention(
-            query,
-            key,
-            value,
-        )
-        query, key, value = model.reshaper.reshape_before_attention(
-            query,
-            key,
-            value,
-        )
+        projections = model.reshaper.reshape_qkv_for_attention(projections)
+        projections = model.reshaper.reshape_before_attention(projections)
 
         head_dim = cfg.query_key_projection_dim // cfg.num_heads
         value_head_dim = cfg.value_projection_dim // cfg.num_heads
         self.assertEqual(
-            query.shape,
+            projections.query.shape,
             (
                 cfg.batch_size,
                 cfg.experts_config.top_k,
@@ -690,7 +854,7 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
             ),
         )
         self.assertEqual(
-            key.shape,
+            projections.key.shape,
             (
                 cfg.batch_size,
                 cfg.experts_config.top_k,
@@ -700,7 +864,7 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
             ),
         )
         self.assertEqual(
-            value.shape,
+            projections.value.shape,
             (
                 cfg.batch_size,
                 cfg.experts_config.top_k,
