@@ -309,7 +309,9 @@ def build_attention_config(
     from torch import float32
 
     relative_positional_embedding_config = make_relative_positional_embedding_config(
-        relative_positional_embedding_config_cls, num_heads, embedding_dim
+        relative_positional_embedding_config_cls,
+        num_heads,
+        query_key_projection_dim or embedding_dim,
     )
     shared_kwargs = dict(
         batch_size=batch_size,
