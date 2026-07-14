@@ -1,7 +1,8 @@
-import torch
 import unittest
 
+import torch
 from emperor.attention.core.handlers.bias import KeyValueBias
+
 from support.attention import build_attention_config
 
 

@@ -1,9 +1,10 @@
 import unittest
 
 import torch
-from support.attention import build_attention_config
 from emperor.attention.core.config import MultiHeadAttentionConfig
 from emperor.attention.core.handlers.mask import Mask
+
+from support.attention import build_attention_config
 
 
 class TestMask(unittest.TestCase):
@@ -190,8 +191,8 @@ class TestProcessAttentionMasks(TestMask):
         model = Mask(cfg)
         key_padding_mask = self.bool_key_padding_mask(cfg)
 
-        output_key_padding_mask, output_attention_mask = (
-            model.process_attention_masks(key_padding_mask, None)
+        output_key_padding_mask, output_attention_mask = model.process_attention_masks(
+            key_padding_mask, None
         )
 
         torch.testing.assert_close(
@@ -205,8 +206,8 @@ class TestProcessAttentionMasks(TestMask):
         model = Mask(cfg)
         attention_mask = self.bool_attention_mask(cfg)
 
-        output_key_padding_mask, output_attention_mask = (
-            model.process_attention_masks(None, attention_mask)
+        output_key_padding_mask, output_attention_mask = model.process_attention_masks(
+            None, attention_mask
         )
 
         self.assertIsNone(output_key_padding_mask)
@@ -222,8 +223,8 @@ class TestProcessAttentionMasks(TestMask):
         key_padding_mask = self.bool_key_padding_mask(cfg)
         attention_mask = self.bool_attention_mask(cfg)
 
-        output_key_padding_mask, output_attention_mask = (
-            model.process_attention_masks(key_padding_mask, attention_mask)
+        output_key_padding_mask, output_attention_mask = model.process_attention_masks(
+            key_padding_mask, attention_mask
         )
 
         torch.testing.assert_close(
@@ -244,8 +245,8 @@ class TestProcessAttentionMasks(TestMask):
         key_padding_mask = self.bool_key_padding_mask(cfg)
         attention_mask = self.bool_attention_mask(cfg)
 
-        output_key_padding_mask, output_attention_mask = (
-            model.process_attention_masks(key_padding_mask, attention_mask)
+        output_key_padding_mask, output_attention_mask = model.process_attention_masks(
+            key_padding_mask, attention_mask
         )
 
         self.assertTrue(model.causal_attention_mask_flag)
@@ -303,8 +304,8 @@ class TestProcessAttentionMasks(TestMask):
         )
         attention_mask = self.float_attention_mask(cfg)
 
-        output_key_padding_mask, output_attention_mask = (
-            model.process_attention_masks(key_padding_mask, attention_mask)
+        output_key_padding_mask, output_attention_mask = model.process_attention_masks(
+            key_padding_mask, attention_mask
         )
 
         self.assertIs(output_key_padding_mask, key_padding_mask)
@@ -397,6 +398,7 @@ class TestMergePaddingAndAttentionMask(TestMask):
             ),
         )
         torch.testing.assert_close(output, expected)
+
     def test_adds_key_padding_mask_to_attention_mask(self):
         cfg = self.preset()
         model = Mask(cfg)

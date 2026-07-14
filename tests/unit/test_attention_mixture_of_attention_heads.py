@@ -1,7 +1,6 @@
 import unittest
 
 import torch
-from support.attention import build_attention_config
 from emperor.attention import MixtureOfAttentionHeadsConfig
 from emperor.attention.core.variants.mixture_of_attention_heads.bias import (
     MixtureOfAttentionHeadsKeyValueBias,
@@ -10,6 +9,8 @@ from emperor.attention.core.variants.mixture_of_attention_heads.zero_attention i
     MixtureOfAttentionHeadsZeroAttention,
 )
 from emperor.embedding.relative.core.config import DynamicPositionalBiasConfig
+
+from support.attention import build_attention_config
 
 
 class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
@@ -262,9 +263,7 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
     def test_mask_formats_normalize_in_batch_expert_head_order(self):
         cfg = self.preset()
         model = cfg.build()
-        branch_count = (
-            cfg.batch_size * cfg.experts_config.top_k * cfg.num_heads
-        )
+        branch_count = cfg.batch_size * cfg.experts_config.top_k * cfg.num_heads
         key = torch.randn(
             branch_count,
             cfg.source_sequence_length,
@@ -301,19 +300,21 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
             key,
             attention_mask=standard_mask.reshape(-1, *sequence_shape),
         )
-        expected_standard = standard_mask.unsqueeze(1).expand(
-            -1,
-            cfg.experts_config.top_k,
-            -1,
-            -1,
-            -1,
-        ).reshape(branch_count, *sequence_shape)
+        expected_standard = (
+            standard_mask.unsqueeze(1)
+            .expand(
+                -1,
+                cfg.experts_config.top_k,
+                -1,
+                -1,
+                -1,
+            )
+            .reshape(branch_count, *sequence_shape)
+        )
         torch.testing.assert_close(normalized_standard, expected_standard)
 
         expanded_mask = torch.arange(
-            branch_count
-            * cfg.target_sequence_length
-            * cfg.source_sequence_length,
+            branch_count * cfg.target_sequence_length * cfg.source_sequence_length,
             dtype=cfg.target_dtype,
         ).view(
             cfg.batch_size,
@@ -356,8 +357,8 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
                         source_index = (
                             batch_index * cfg.num_heads + head_index
                         ) % cfg.source_sequence_length
-                        standard_mask[batch_index, head_index, :, source_index] = (
-                            float("-inf")
+                        standard_mask[batch_index, head_index, :, source_index] = float(
+                            "-inf"
                         )
                 expanded_mask = standard_mask.unsqueeze(1).expand(
                     -1,
@@ -385,9 +386,7 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
     def test_padding_mask_expands_across_experts_and_heads(self):
         cfg = self.preset()
         model = cfg.build()
-        branch_count = (
-            cfg.batch_size * cfg.experts_config.top_k * cfg.num_heads
-        )
+        branch_count = cfg.batch_size * cfg.experts_config.top_k * cfg.num_heads
         key = torch.randn(
             branch_count,
             cfg.source_sequence_length,
@@ -403,19 +402,23 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
             key_padding_mask=padding_mask,
         )
 
-        expected = padding_mask.view(
-            cfg.batch_size,
-            1,
-            1,
-            1,
-            cfg.source_sequence_length,
-        ).expand(
-            -1,
-            cfg.experts_config.top_k,
-            cfg.num_heads,
-            -1,
-            -1,
-        ).reshape(branch_count, 1, cfg.source_sequence_length)
+        expected = (
+            padding_mask.view(
+                cfg.batch_size,
+                1,
+                1,
+                1,
+                cfg.source_sequence_length,
+            )
+            .expand(
+                -1,
+                cfg.experts_config.top_k,
+                cfg.num_heads,
+                -1,
+                -1,
+            )
+            .reshape(branch_count, 1, cfg.source_sequence_length)
+        )
         torch.testing.assert_close(normalized, expected)
 
     def test_invalid_mask_dimensions_raise_clear_errors_and_allow_retry(self):
@@ -618,12 +621,10 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
                     self.assertEqual(auxiliary_loss.item(), expected_loss)
                     self.assertIsNone(model.projector.auxiliary_loss)
                     routed_probabilities = [
-                        records[forward_index][0]
-                        for records in routing_inputs.values()
+                        records[forward_index][0] for records in routing_inputs.values()
                     ]
                     routed_indices = [
-                        records[forward_index][1]
-                        for records in routing_inputs.values()
+                        records[forward_index][1] for records in routing_inputs.values()
                     ]
                     self.assertTrue(
                         all(
@@ -798,9 +799,7 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
                         ]
                     )
                     total_batch_size = (
-                        cfg.batch_size
-                        * cfg.experts_config.top_k
-                        * cfg.num_heads
+                        cfg.batch_size * cfg.experts_config.top_k * cfg.num_heads
                     )
                     attention_mask = torch.zeros(
                         total_batch_size,

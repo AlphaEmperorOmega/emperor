@@ -1,6 +1,8 @@
 import unittest
 
 import torch
+from emperor.attention.core.monitor import AttentionMonitorCallback
+from emperor.attention.core.variants.self_attention.config import SelfAttentionConfig
 
 from support.attention import build_attention_config
 from support.monitor import (
@@ -9,8 +11,6 @@ from support.monitor import (
     TrainerStub,
     same_bound_method,
 )
-from emperor.attention.core.monitor import AttentionMonitorCallback
-from emperor.attention.core.variants.self_attention.config import SelfAttentionConfig
 
 
 class TestAttentionMonitorCallback(unittest.TestCase):
@@ -37,7 +37,9 @@ class TestAttentionMonitorCallback(unittest.TestCase):
                     AttentionMonitorCallback(log_every_n_steps=bad)
 
     def test_discovers_only_attention_modules(self):
-        module = CaptureLightningModule(attn=self.attention(), other=torch.nn.Linear(4, 4))
+        module = CaptureLightningModule(
+            attn=self.attention(), other=torch.nn.Linear(4, 4)
+        )
         callback = AttentionMonitorCallback(log_every_n_steps=1)
 
         callback.on_fit_start(TrainerStub(), module)
@@ -96,10 +98,16 @@ class TestAttentionMonitorCallback(unittest.TestCase):
 
         experiment = module.logger.experiment
         self.assertTrue(
-            any(tag == "attn/attention/histogram/entropy_by_head" for tag, _, _ in experiment.histograms)
+            any(
+                tag == "attn/attention/histogram/entropy_by_head"
+                for tag, _, _ in experiment.histograms
+            )
         )
         self.assertTrue(
-            any(tag == "attn/attention/heatmap/entropy_by_head" for tag, _, _, _ in experiment.images)
+            any(
+                tag == "attn/attention/heatmap/entropy_by_head"
+                for tag, _, _, _ in experiment.images
+            )
         )
         callback.on_fit_end(TrainerStub(), module)
 
@@ -122,7 +130,9 @@ class TestAttentionMonitorCallback(unittest.TestCase):
         callback = AttentionMonitorCallback(log_every_n_steps=1)
 
         callback.on_fit_start(TrainerStub(), module)
-        self.assertIsNot(attention.projector.compute_qkv_projections, original_projection)
+        self.assertIsNot(
+            attention.projector.compute_qkv_projections, original_projection
+        )
         self.assertIsNot(attention.processor.compute_attention, original_processor)
 
         callback.on_fit_end(TrainerStub(), module)

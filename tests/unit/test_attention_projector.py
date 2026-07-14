@@ -1,16 +1,11 @@
-import torch
 import unittest
 
-from emperor.base.layer import Layer, LayerStack, RecurrentLayer
-from emperor.experts.core.layers import MixtureOfExperts
+import torch
 from emperor.attention import (
-    SelfAttentionConfig,
-    SelfAttentionProjectionStrategy,
     IndependentAttentionConfig,
     MixtureOfAttentionHeadsConfig,
-)
-from emperor.attention.core.variants.self_attention.projector import (
-    SelfAttentionProjector,
+    SelfAttentionConfig,
+    SelfAttentionProjectionStrategy,
 )
 from emperor.attention.core.variants.independent_attention.projector import (
     IndependentProjector,
@@ -18,6 +13,12 @@ from emperor.attention.core.variants.independent_attention.projector import (
 from emperor.attention.core.variants.mixture_of_attention_heads.projector import (
     MixtureOfAttentionHeadsProjector,
 )
+from emperor.attention.core.variants.self_attention.projector import (
+    SelfAttentionProjector,
+)
+from emperor.base.layer import Layer, LayerStack, RecurrentLayer
+from emperor.experts.core.layers import MixtureOfExperts
+
 from support.attention import build_attention_config
 
 PROJECTION_KINDS = ["base", "adaptive"]
@@ -187,8 +188,8 @@ class TestSelfAttentionProjector(unittest.TestCase):
                     c.target_sequence_length, c.batch_size, c.embedding_dim
                 )
 
-                q_projections, k_projections, v_projections = (
-                    m.compute_qkv_projections(tensor, tensor, tensor)
+                q_projections, k_projections, v_projections = m.compute_qkv_projections(
+                    tensor, tensor, tensor
                 )
 
                 expected_shape = (
@@ -283,8 +284,8 @@ class TestIndependentProjector(unittest.TestCase):
                     c.target_sequence_length, c.batch_size, c.embedding_dim
                 )
 
-                q_projections, k_projections, v_projections = (
-                    m.compute_qkv_projections(tensor, tensor, tensor)
+                q_projections, k_projections, v_projections = m.compute_qkv_projections(
+                    tensor, tensor, tensor
                 )
 
                 expected_shape = (
@@ -367,8 +368,8 @@ class TestMixtureOfAttentionHeadsProjector(unittest.TestCase):
                     c.target_sequence_length, c.batch_size, c.embedding_dim
                 )
 
-                q_projections, k_projections, v_projections = (
-                    m.compute_qkv_projections(tensor, tensor, tensor)
+                q_projections, k_projections, v_projections = m.compute_qkv_projections(
+                    tensor, tensor, tensor
                 )
 
                 expected_top_k_shape = (
@@ -425,9 +426,7 @@ class TestProjectorDispatch(unittest.TestCase):
         expected_map = {
             SelfAttentionConfig: SelfAttentionProjector,
             IndependentAttentionConfig: IndependentProjector,
-            MixtureOfAttentionHeadsConfig: (
-                MixtureOfAttentionHeadsProjector
-            ),
+            MixtureOfAttentionHeadsConfig: (MixtureOfAttentionHeadsProjector),
         }
         for config_class, expected_cls in expected_map.items():
             for projection_kind in PROJECTION_KINDS:
@@ -435,11 +434,7 @@ class TestProjectorDispatch(unittest.TestCase):
                     config_class=config_class,
                     projection_kind=projection_kind,
                 ):
-                    qkv_dim = (
-                        12
-                        if config_class == SelfAttentionConfig
-                        else 12
-                    )
+                    qkv_dim = 12 if config_class == SelfAttentionConfig else 12
                     c = build_attention_config(
                         config_class=config_class,
                         projection_kind=projection_kind,

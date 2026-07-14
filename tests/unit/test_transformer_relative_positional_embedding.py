@@ -1,6 +1,6 @@
-import torch
 import unittest
 
+import torch
 from emperor.embedding.relative import (
     DynamicPositionalBias,
     DynamicPositionalBiasConfig,
@@ -153,15 +153,18 @@ class TestDynamicPositionalBias(unittest.TestCase):
 
     def test_init_raises_on_missing_or_invalid_fields(self):
         invalid_cases = [
-            ("missing_num_heads", DynamicPositionalBiasConfig(
-                text_processing_flag=False,
-                num_embeddings=16,
-                embedding_dim=8,
-                init_size=16,
-                padding_idx=0,
-                auto_expand_flag=False,
-                max_positions=8,
-            )),
+            (
+                "missing_num_heads",
+                DynamicPositionalBiasConfig(
+                    text_processing_flag=False,
+                    num_embeddings=16,
+                    embedding_dim=8,
+                    init_size=16,
+                    padding_idx=0,
+                    auto_expand_flag=False,
+                    max_positions=8,
+                ),
+            ),
             ("zero_max_positions", self.preset(max_positions=0)),
             ("non_divisible_heads", self.preset(num_heads=3, embedding_dim=8)),
             ("negative_padding_idx", self.preset(padding_idx=-1)),

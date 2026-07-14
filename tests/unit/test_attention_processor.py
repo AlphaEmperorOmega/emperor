@@ -1,28 +1,37 @@
 import math
-import torch
 import unittest
 
-from torch.types import Tensor
+import torch
 from emperor.attention import (
-    SelfAttentionConfig,
     IndependentAttentionConfig,
     MixtureOfAttentionHeadsConfig,
+    SelfAttentionConfig,
 )
 from emperor.attention.core.config import MultiHeadAttentionConfig
 from emperor.attention.core.handlers.reshaper import AttentionReshaper
-from emperor.attention.core.variants.mixture_of_attention_heads.reshaper import (
-    MixtureOfAttentionHeadsReshaper,
+from emperor.attention.core.variants.independent_attention.processor import (
+    IndependentProcessor,
 )
-from emperor.attention.core.variants.self_attention.projector import SelfAttentionProjector
-from emperor.attention.core.variants.independent_attention.projector import IndependentProjector
-from emperor.attention.core.variants.mixture_of_attention_heads.projector import (
-    MixtureOfAttentionHeadsProjector,
+from emperor.attention.core.variants.independent_attention.projector import (
+    IndependentProjector,
 )
-from emperor.attention.core.variants.self_attention.processor import SelfAttentionProcessor
-from emperor.attention.core.variants.independent_attention.processor import IndependentProcessor
 from emperor.attention.core.variants.mixture_of_attention_heads.processor import (
     MixtureOfAttentionHeadsProcessor,
 )
+from emperor.attention.core.variants.mixture_of_attention_heads.projector import (
+    MixtureOfAttentionHeadsProjector,
+)
+from emperor.attention.core.variants.mixture_of_attention_heads.reshaper import (
+    MixtureOfAttentionHeadsReshaper,
+)
+from emperor.attention.core.variants.self_attention.processor import (
+    SelfAttentionProcessor,
+)
+from emperor.attention.core.variants.self_attention.projector import (
+    SelfAttentionProjector,
+)
+from torch.types import Tensor
+
 from support.attention import (
     RELATIVE_POSITIONAL_EMBEDDING_CASES,
     build_attention_config,
@@ -705,7 +714,9 @@ class TestMixtureOfAttentionHeadsProcessor(unittest.TestCase):
                         target_sequence_length=12,
                     )
                     projector = MixtureOfAttentionHeadsProjector(c)
-                    m = MixtureOfAttentionHeadsProcessor(c, projector, MixtureOfAttentionHeadsReshaper(c))
+                    m = MixtureOfAttentionHeadsProcessor(
+                        c, projector, MixtureOfAttentionHeadsReshaper(c)
+                    )
                     self.assertIsInstance(m, MixtureOfAttentionHeadsProcessor)
                     self.assertIsInstance(m.projector, MixtureOfAttentionHeadsProjector)
                     self.assertIsNone(m.relative_positional_embedding)
@@ -725,7 +736,9 @@ class TestMixtureOfAttentionHeadsProcessor(unittest.TestCase):
         )
 
         projector = MixtureOfAttentionHeadsProjector(c)
-        m = MixtureOfAttentionHeadsProcessor(c, projector, MixtureOfAttentionHeadsReshaper(c))
+        m = MixtureOfAttentionHeadsProcessor(
+            c, projector, MixtureOfAttentionHeadsReshaper(c)
+        )
         scaled_query_tensor = m._MixtureOfAttentionHeadsProcessor__scale_query(query)
 
         expected_result = query * math.sqrt(1.0 / float(head_dim))
@@ -803,7 +816,9 @@ class TestMixtureOfAttentionHeadsProcessor(unittest.TestCase):
                         key = torch.randn(key_shape)
 
                         projector = MixtureOfAttentionHeadsProjector(c)
-                        m = MixtureOfAttentionHeadsProcessor(c, projector, MixtureOfAttentionHeadsReshaper(c))
+                        m = MixtureOfAttentionHeadsProcessor(
+                            c, projector, MixtureOfAttentionHeadsReshaper(c)
+                        )
                         raw_masked_weights = m._MixtureOfAttentionHeadsProcessor__compute_raw_masked_attention_weights(
                             query, key, attention_mask_option
                         )
@@ -828,7 +843,9 @@ class TestMixtureOfAttentionHeadsProcessor(unittest.TestCase):
             experts_top_k=top_k,
         )
         projector = MixtureOfAttentionHeadsProjector(c)
-        m = MixtureOfAttentionHeadsProcessor(c, projector, MixtureOfAttentionHeadsReshaper(c))
+        m = MixtureOfAttentionHeadsProcessor(
+            c, projector, MixtureOfAttentionHeadsReshaper(c)
+        )
         head_dim = c.embedding_dim // c.num_heads
 
         query = torch.randn(
@@ -843,7 +860,9 @@ class TestMixtureOfAttentionHeadsProcessor(unittest.TestCase):
                 with self.subTest(i=message):
                     c.use_kv_expert_models_flag = use_kv_expert_models_flag
                     projector = MixtureOfAttentionHeadsProjector(c)
-                    m = MixtureOfAttentionHeadsProcessor(c, projector, MixtureOfAttentionHeadsReshaper(c))
+                    m = MixtureOfAttentionHeadsProcessor(
+                        c, projector, MixtureOfAttentionHeadsReshaper(c)
+                    )
                     key_shape = (
                         c.batch_size,
                         c.num_heads,
@@ -889,7 +908,9 @@ class TestMixtureOfAttentionHeadsProcessor(unittest.TestCase):
                 )
 
                 projector = MixtureOfAttentionHeadsProjector(c)
-                m = MixtureOfAttentionHeadsProcessor(c, projector, MixtureOfAttentionHeadsReshaper(c))
+                m = MixtureOfAttentionHeadsProcessor(
+                    c, projector, MixtureOfAttentionHeadsReshaper(c)
+                )
 
                 head_dim = c.embedding_dim // c.num_heads
                 attention_weights = torch.randn(
@@ -942,7 +963,9 @@ class TestMixtureOfAttentionHeadsProcessor(unittest.TestCase):
         )
         projector = MixtureOfAttentionHeadsProjector(c)
         reshaper = MixtureOfAttentionHeadsReshaper(c)
-        m = MixtureOfAttentionHeadsProcessor(c, projector, MixtureOfAttentionHeadsReshaper(c))
+        m = MixtureOfAttentionHeadsProcessor(
+            c, projector, MixtureOfAttentionHeadsReshaper(c)
+        )
 
         tensor = torch.randn(
             c.target_sequence_length,
@@ -972,9 +995,7 @@ class TestProcessorDispatch(unittest.TestCase):
         expected_map = {
             SelfAttentionConfig: SelfAttentionProcessor,
             IndependentAttentionConfig: IndependentProcessor,
-            MixtureOfAttentionHeadsConfig: (
-                MixtureOfAttentionHeadsProcessor
-            ),
+            MixtureOfAttentionHeadsConfig: (MixtureOfAttentionHeadsProcessor),
         }
         for config_class, processor_cls in expected_map.items():
             with self.subTest(config_class=config_class):
@@ -1082,7 +1103,9 @@ class TestProcessorDispatch(unittest.TestCase):
             experts_top_k=top_k,
         )
         projector = MixtureOfAttentionHeadsProjector(c)
-        m = MixtureOfAttentionHeadsProcessor(c, projector, MixtureOfAttentionHeadsReshaper(c))
+        m = MixtureOfAttentionHeadsProcessor(
+            c, projector, MixtureOfAttentionHeadsReshaper(c)
+        )
 
         tensor = torch.randn(
             c.target_sequence_length,

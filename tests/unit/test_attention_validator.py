@@ -1,21 +1,24 @@
-import torch
 import unittest
-
 from types import SimpleNamespace
+
+import torch
 from emperor.attention import (
-    SelfAttentionConfig,
-    SelfAttentionProjectionStrategy,
     IndependentAttentionConfig,
     MixtureOfAttentionHeadsConfig,
+    SelfAttentionConfig,
+    SelfAttentionProjectionStrategy,
 )
 from emperor.attention.core._validator import AttentionValidatorBase
-from emperor.attention.core.variants.self_attention.validator import SelfAttentionValidator
 from emperor.attention.core.variants.independent_attention.validator import (
     IndependentAttentionValidator,
 )
 from emperor.attention.core.variants.mixture_of_attention_heads.validator import (
     MixtureOfAttentionHeadsValidator,
 )
+from emperor.attention.core.variants.self_attention.validator import (
+    SelfAttentionValidator,
+)
+
 from support.attention import build_attention_config
 
 BATCH_SIZE = 4
@@ -99,9 +102,7 @@ class TestValidateInputShapes(unittest.TestCase):
             BATCH_SIZE * NUM_HEADS, TARGET_SEQUENCE_LENGTH, SOURCE_SEQUENCE_LENGTH
         )
         self.assertIsNone(
-            AttentionValidatorBase.validate_input_shapes(
-                query, key, value, None, two_d
-            )
+            AttentionValidatorBase.validate_input_shapes(query, key, value, None, two_d)
         )
         self.assertIsNone(
             AttentionValidatorBase.validate_input_shapes(
@@ -162,9 +163,7 @@ class TestValidateHeadDivisibility(unittest.TestCase):
             query_key_projection_dim=0,
             value_projection_dim=0,
         )
-        self.assertIsNone(
-            AttentionValidatorBase.validate_head_divisibility(model)
-        )
+        self.assertIsNone(AttentionValidatorBase.validate_head_divisibility(model))
 
     def test_raises_when_embedding_not_divisible(self):
         model = SimpleNamespace(
@@ -221,9 +220,7 @@ class TestSelfAttentionValidator(unittest.TestCase):
             query_key_projection_dim=EMBEDDING_DIM,
             value_projection_dim=EMBEDDING_DIM,
             projection_kind="recurrent",
-            self_attention_projection_strategy=(
-                SelfAttentionProjectionStrategy.FUSED
-            ),
+            self_attention_projection_strategy=(SelfAttentionProjectionStrategy.FUSED),
         )
 
         with self.assertRaisesRegex(
@@ -283,9 +280,7 @@ class TestMixtureOfAttentionHeadsValidator(unittest.TestCase):
 
     def test_validate_experts_configuration_raises_when_missing(self):
         model = SimpleNamespace(
-            cfg=SimpleNamespace(
-                experts_config=None, use_kv_expert_models_flag=False
-            )
+            cfg=SimpleNamespace(experts_config=None, use_kv_expert_models_flag=False)
         )
         with self.assertRaises(ValueError):
             MixtureOfAttentionHeadsValidator.validate_experts_configuration(model)
