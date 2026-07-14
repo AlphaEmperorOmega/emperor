@@ -324,6 +324,8 @@ class AttentionMonitorCallback(Callback):
         *,
         approximate: bool,
     ) -> None:
+        if type(approximate) is not bool:
+            raise TypeError("approximate must be a bool.")
         prefix = f"{name}/attention"
         metric_prefix = "approximate_" if approximate else ""
         per_head_entropy, per_head_max_probability = self.__per_head_stats(
