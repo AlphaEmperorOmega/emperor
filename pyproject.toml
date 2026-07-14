@@ -64,7 +64,26 @@ namespaces = false
 [tool.ruff]
 target-version = "py311"
 line-length = 88
-src = ["workbench/backend"]
+src = ["emperor", "models", "tests", "workbench/backend"]
+exclude = [
+  ".git",
+  ".next",
+  ".pytest_cache",
+  ".ruff_cache",
+  "__pycache__",
+  "build",
+  "data",
+  "dist",
+  "logs",
+  "node_modules",
+  "torchenv",
+  "workbench/.runtime",
+  "workbench/frontend/.next",
+  "workbench/frontend/node_modules",
+]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["model_runtime"]
