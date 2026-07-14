@@ -25,6 +25,7 @@ class AttentionRuntimeShape:
     source_sequence_length: int
     input_was_batched: bool = True
     input_was_batch_first: bool = False
+    source_extension_count: int = 0
 
     def branch_count(self, num_heads: int, multiplier: int = 1) -> int:
         return self.batch_size * num_heads * multiplier
@@ -33,7 +34,12 @@ class AttentionRuntimeShape:
         return replace(
             self,
             source_sequence_length=self.source_sequence_length + count,
+            source_extension_count=self.source_extension_count + count,
         )
+
+    @property
+    def real_source_sequence_length(self) -> int:
+        return self.source_sequence_length - self.source_extension_count
 
 
 __all__ = [
