@@ -27,6 +27,8 @@ class AttentionMonitorCallback(Callback):
         super().__init__()
         if log_every_n_steps <= 0:
             raise ValueError("log_every_n_steps must be greater than 0.")
+        if history_size <= 0:
+            raise ValueError("history_size must be greater than 0.")
         self.log_every_n_steps = log_every_n_steps
         self.history_size = history_size
         self.log_per_head_scalars = log_per_head_scalars
