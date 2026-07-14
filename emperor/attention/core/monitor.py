@@ -403,7 +403,7 @@ class AttentionMonitorCallback(Callback):
             if values.size(1) == num_heads:
                 return values
             if values.size(0) == num_heads:
-                return values.unsqueeze(0).transpose(1, 0)
+                return values.permute(1, 0, 2, 3)
         if values.dim() == 5 and values.size(2) == num_heads:
             batch, top_k, heads, target, source = values.shape
             return values.view(batch * top_k, heads, target, source)
