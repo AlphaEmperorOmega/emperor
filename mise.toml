@@ -1,3 +1,50 @@
+min_version = "2025.7.12"
+
 [tools]
 python = "3.13"
 node = "24"
+
+[tasks.setup]
+description = "Create the verified Emperor Python and Node environment"
+usage = '''
+flag "--profile <profile>" default="cpu" {
+  choices "cpu" "cuda" "cuda-legacy"
+}
+'''
+run = "python tools/emperor_dev.py setup --profile {{ usage.profile }}"
+
+[tasks.dev]
+description = "Set up and start the Workbench"
+usage = '''
+flag "--profile <profile>" default="cpu" {
+  choices "cpu" "cuda" "cuda-legacy"
+}
+'''
+run = "python tools/emperor_dev.py dev --profile {{ usage.profile }}"
+
+[tasks."workbench:start"]
+description = "Start the Workbench backend and frontend"
+run = "python tools/emperor_dev.py workbench start"
+
+[tasks."workbench:status"]
+description = "Show validated Workbench service status"
+run = "python tools/emperor_dev.py workbench status"
+
+[tasks."workbench:stop"]
+description = "Stop validated Workbench service process trees"
+run = "python tools/emperor_dev.py workbench stop"
+
+[tasks.experiment]
+description = "List, inspect, or train a Model Package"
+raw = true
+run = "python tools/emperor_dev.py experiment"
+
+[tasks.test]
+description = "Run Emperor's unittest suite"
+raw = true
+run = "python tools/emperor_dev.py test"
+
+[tasks."logs:archive"]
+description = "Create a portable Workbench log archive"
+raw = true
+run = "python tools/emperor_dev.py logs-archive"
