@@ -1,11 +1,11 @@
-import torch
+from typing import TYPE_CHECKING
 
+import torch
 from torch import Tensor
+
+from emperor.sampler.core._validator import SamplerSparseValidator
 from emperor.sampler.core.base import SamplerBase
 from emperor.sampler.core.config import SamplerConfig
-from emperor.sampler.core._validator import SamplerSparseValidator
-
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
