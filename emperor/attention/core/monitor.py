@@ -6,6 +6,7 @@ import torch
 import torch.nn.functional as F
 from lightning.pytorch.callbacks import Callback
 
+from emperor.attention.core.runtime import QKV
 from emperor.experiments.monitor_policy import MonitorEmissionPolicy
 
 if TYPE_CHECKING:
@@ -59,7 +60,7 @@ class AttentionMonitorCallback(Callback):
                 )
             )
             self.__wrap_projector(module)
-            self.__wrap_processor(name, module, pl_module)
+            self.__wrap_processor(module, pl_module)
 
     def __make_forward_pre_hook(self, name: str, module: Module):
         def hook(layer: Module, inputs: tuple) -> None:
@@ -76,9 +77,11 @@ class AttentionMonitorCallback(Callback):
         def wrapped(*args, **kwargs):
             output = original(*args, **kwargs)
             trace = self._traces.setdefault(id(module), {})
-            if isinstance(output, tuple) and len(output) == 3:
-                trace["qkv"] = tuple(
-                    item.detach() for item in output if torch.is_tensor(item)
+            if isinstance(output, QKV):
+                trace["qkv"] = (
+                    output.query.detach(),
+                    output.key.detach(),
+                    output.value.detach(),
                 )
             return output
 
@@ -86,7 +89,6 @@ class AttentionMonitorCallback(Callback):
 
     def __wrap_processor(
         self,
-        name: str,
         module: Module,
         pl_module: LightningModule,
     ) -> None:
@@ -99,9 +101,14 @@ class AttentionMonitorCallback(Callback):
         def wrapped_compute_attention(*args, **kwargs):
             output = original_compute_attention(*args, **kwargs)
             trace = self._traces.setdefault(id(module), {})
-            query = args[0] if len(args) > 0 else kwargs.get("query")
-            key = args[1] if len(args) > 1 else kwargs.get("key")
-            attention_mask = args[3] if len(args) > 3 else kwargs.get("attention_mask")
+            qkv = args[0] if len(args) > 0 else kwargs.get("qkv")
+            attention_mask = (
+                args[1]
+                if len(args) > 1
+                else kwargs.get("merged_attention_mask")
+            )
+            query = qkv.query if isinstance(qkv, QKV) else None
+            key = qkv.key if isinstance(qkv, QKV) else None
             trace["attention_inputs"] = (
                 query.detach() if torch.is_tensor(query) else None,
                 key.detach() if torch.is_tensor(key) else None,
@@ -380,7 +387,7 @@ class AttentionMonitorCallback(Callback):
         module: Module,
         weights: Tensor,
     ) -> Tensor | None:
-        num_heads = int(getattr(module, "num_heads", 0) or 0)
+        num_heads = int(module.num_heads or 0)
         if num_heads <= 0:
             return None
         values = weights.detach().float()
