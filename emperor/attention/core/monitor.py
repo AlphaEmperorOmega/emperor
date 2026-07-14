@@ -101,9 +101,7 @@ class AttentionMonitorCallback(Callback):
             trace = self._traces.setdefault(id(module), {})
             query = args[0] if len(args) > 0 else kwargs.get("query")
             key = args[1] if len(args) > 1 else kwargs.get("key")
-            attention_mask = (
-                args[3] if len(args) > 3 else kwargs.get("attention_mask")
-            )
+            attention_mask = args[3] if len(args) > 3 else kwargs.get("attention_mask")
             trace["attention_inputs"] = (
                 query.detach() if torch.is_tensor(query) else None,
                 key.detach() if torch.is_tensor(key) else None,
@@ -199,8 +197,8 @@ class AttentionMonitorCallback(Callback):
             if not self.__should_sample(pl_module):
                 return
             trace = self._traces.setdefault(id(module), {"name": name})
-            output_tensor, returned_weights, auxiliary_loss = self.__parse_forward_output(
-                output
+            output_tensor, returned_weights, auxiliary_loss = (
+                self.__parse_forward_output(output)
             )
             if output_tensor is not None:
                 trace["output"] = output_tensor
@@ -371,9 +369,7 @@ class AttentionMonitorCallback(Callback):
             empty = torch.empty(0)
             return empty, empty
         normalized = weights / weights.sum(dim=-1, keepdim=True).clamp_min(1e-12)
-        entropy = -(
-            normalized.clamp_min(1e-12).log() * normalized
-        ).sum(dim=-1)
+        entropy = -(normalized.clamp_min(1e-12).log() * normalized).sum(dim=-1)
         max_probability = normalized.max(dim=-1).values
         reduce_dims = tuple(index for index in range(entropy.dim()) if index != 1)
         return entropy.mean(dim=reduce_dims), max_probability.mean(dim=reduce_dims)
@@ -401,7 +397,7 @@ class AttentionMonitorCallback(Callback):
 
     def __append_history(self, history: list["Tensor"], values: "Tensor") -> None:
         history.append(values.detach().float().cpu())
-        del history[:-self.history_size]
+        del history[: -self.history_size]
 
     def __log_visual_summaries(
         self,
@@ -439,7 +435,9 @@ class AttentionMonitorCallback(Callback):
             step,
         )
 
-    def __log_histogram(self, experiment, tag: str, values: "Tensor", step: int) -> None:
+    def __log_histogram(
+        self, experiment, tag: str, values: "Tensor", step: int
+    ) -> None:
         self._emission_policy.emit_histogram(experiment, tag, values, step)
 
     def __log_heatmap(
@@ -454,10 +452,7 @@ class AttentionMonitorCallback(Callback):
         max_heads = max(vector.numel() for vector in history)
         if max_heads == 0:
             return
-        padded = [
-            F.pad(vector, (0, max_heads - vector.numel()))
-            for vector in history
-        ]
+        padded = [F.pad(vector, (0, max_heads - vector.numel())) for vector in history]
         heatmap = torch.stack(padded, dim=0).T
         heatmap = heatmap / heatmap.max().clamp_min(1e-6)
         self._emission_policy.emit_image(
