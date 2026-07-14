@@ -1,12 +1,12 @@
-import torch
+from typing import TYPE_CHECKING
 
+import torch
 from torch import Tensor
+
 from emperor.base.module import Module
 from emperor.embedding.relative.core._validator import (
     RelativePositionalEmbeddingValidator,
 )
-
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.embedding.relative.core.config import DynamicPositionalBiasConfig
@@ -20,9 +20,7 @@ class DynamicPositionalBias(Module):
     ):
         super().__init__()
         config = getattr(cfg, "relative_positional_embedding_config", cfg)
-        self.cfg: "DynamicPositionalBiasConfig" = self._override_config(
-            config, overrides
-        )
+        self.cfg: DynamicPositionalBiasConfig = self._override_config(config, overrides)
         RelativePositionalEmbeddingValidator.validate_config(self.cfg)
 
         self.text_processing_flag: bool = self.cfg.text_processing_flag
@@ -36,9 +34,7 @@ class DynamicPositionalBias(Module):
         self.head_dim: int = self.embedding_dim // self.num_heads
 
         embedding_shape = (self.num_heads, self.head_dim, self.max_positions * 2 + 1)
-        self.relative_positional_embeddings = self._init_parameter_bank(
-            embedding_shape
-        )
+        self.relative_positional_embeddings = self._init_parameter_bank(embedding_shape)
 
     def __get_num_embeddings(self) -> int:
         if self.padding_idx is None:
