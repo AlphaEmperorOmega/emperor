@@ -15,8 +15,6 @@ if TYPE_CHECKING:
 
 
 class AttentionMonitorCallback(Callback):
-    """Logs aggregate attention dynamics for multi-head attention modules."""
-
     DEAD_HEAD_ENTROPY_FLOOR = 1e-6
 
     def __init__(
