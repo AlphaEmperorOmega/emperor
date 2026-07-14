@@ -54,18 +54,27 @@ class DynamicPositionalBias(Module):
             "nhid,hdj->nhij", query, self.relative_positional_embeddings
         )
         embedding_grid = self.__compute_embedding_grid(
-            sequence_length, last, query.device
+            query.size(-2), sequence_length, last, query.device
         )
         relative_offsets = self.__compute_relative_offsets(embedding_grid, logits)
         return logits.gather(-1, relative_offsets)
 
     def __compute_embedding_grid(
-        self, sequence_length: int, last: bool, device: torch.device
+        self,
+        target_sequence_length: int,
+        source_sequence_length: int,
+        last: bool,
+        device: torch.device,
     ) -> Tensor:
-        indices = torch.arange(sequence_length, dtype=torch.long, device=device)
-        if not last:
-            return indices[None, :] - indices[:, None]
-        return indices[None, :] - (sequence_length - 1)
+        source_indices = torch.arange(
+            source_sequence_length, dtype=torch.long, device=device
+        )
+        if last:
+            return source_indices[None, :] - (source_sequence_length - 1)
+        target_indices = torch.arange(
+            target_sequence_length, dtype=torch.long, device=device
+        )
+        return source_indices[None, :] - target_indices[:, None]
 
     def __compute_relative_offsets(
         self, embedding_grid: Tensor, logits: Tensor
