@@ -1,32 +1,30 @@
+from typing import TYPE_CHECKING
+
 from torch import Tensor
 
 from emperor.base.validator import ValidatorBase
 
-from typing import TYPE_CHECKING
-
 if TYPE_CHECKING:
-    from emperor.sampler.model import SamplerModel
-    from emperor.sampler.core.routers import RouterModel
     from emperor.sampler.core.base import SamplerBase
+    from emperor.sampler.core.routers import RouterModel
     from emperor.sampler.core.variants import SamplerFull, SamplerSparse, SamplerTopk
+    from emperor.sampler.model import SamplerModel
 
 
 class SamplerModelValidator(ValidatorBase):
     OPTIONAL_FIELDS = {"router_config"}
 
-    @staticmethod
-    def validate(model: "SamplerModel") -> None:
-        SamplerModelValidator.validate_required_fields(model.sampler_config)
-        SamplerModelValidator.validate_field_types(model.sampler_config)
-        SamplerModelValidator.validate_sampler_dimensions(model)
-        SamplerModelValidator.validate_router_config(model)
+    @classmethod
+    def validate(cls, model: "SamplerModel") -> None:
+        cls.validate_required_fields(model.sampler_config)
+        cls.validate_field_types(model.sampler_config)
+        cls._validate_sampler_dimensions(model)
+        cls._validate_router_config(model)
 
-    @staticmethod
-    def validate_sampler_dimensions(model: "SamplerModel") -> None:
-        SamplerBaseValidator.validate_positive_integer(
-            "top_k", model.sampler_config.top_k
-        )
-        SamplerBaseValidator.validate_positive_integer("num_experts", model.num_experts)
+    @classmethod
+    def _validate_sampler_dimensions(cls, model: "SamplerModel") -> None:
+        cls._validate_positive_integer("top_k", model.sampler_config.top_k)
+        cls._validate_positive_integer("num_experts", model.num_experts)
         if model.sampler_config.top_k > model.num_experts:
             raise ValueError(
                 "top_k cannot exceed num_experts for SamplerModel, "
@@ -35,7 +33,12 @@ class SamplerModelValidator(ValidatorBase):
             )
 
     @staticmethod
-    def validate_router_config(model: "SamplerModel") -> None:
+    def _validate_positive_integer(name: str, value: int) -> None:
+        if isinstance(value, bool) or value <= 0:
+            raise ValueError(f"{name} must be a positive integer, received {value!r}.")
+
+    @staticmethod
+    def _validate_router_config(model: "SamplerModel") -> None:
         router_config = model.router_config
         if router_config is None:
             return
@@ -62,7 +65,7 @@ class SamplerModelValidator(ValidatorBase):
             )
 
     @staticmethod
-    def validate_input_matrix(input_matrix) -> None:
+    def validate_forward_inputs(input_matrix) -> None:
         if not isinstance(input_matrix, Tensor):
             raise TypeError(
                 "input_matrix must be a Tensor, "
@@ -77,25 +80,25 @@ class SamplerModelValidator(ValidatorBase):
 
 
 class RouterModelValidator(ValidatorBase):
-    @staticmethod
-    def validate(model: "RouterModel") -> None:
-        RouterModelValidator.validate_required_fields(model.cfg)
-        RouterModelValidator.validate_field_types(model.cfg)
-        RouterModelValidator.validate_dimensions(
+    @classmethod
+    def validate(cls, model: "RouterModel") -> None:
+        cls.validate_required_fields(model.cfg)
+        cls.validate_field_types(model.cfg)
+        cls.validate_dimensions(
             input_dim=model.input_dim,
             num_experts=model.num_experts,
         )
-        RouterModelValidator.validate_positive_integer("input_dim", model.input_dim)
-        RouterModelValidator.validate_positive_integer("num_experts", model.num_experts)
-        RouterModelValidator.validate_model_config(model.cfg.model_config)
+        cls._validate_positive_integer("input_dim", model.input_dim)
+        cls._validate_positive_integer("num_experts", model.num_experts)
+        cls._validate_model_config(model.cfg.model_config)
 
     @staticmethod
-    def validate_positive_integer(name: str, value: int) -> None:
+    def _validate_positive_integer(name: str, value: int) -> None:
         if isinstance(value, bool) or value <= 0:
             raise ValueError(f"{name} must be a positive integer, received {value!r}.")
 
     @staticmethod
-    def validate_model_config(model_config: object) -> None:
+    def _validate_model_config(model_config: object) -> None:
         from emperor.base.config import ConfigBase
 
         if not isinstance(model_config, ConfigBase):
@@ -105,7 +108,7 @@ class RouterModelValidator(ValidatorBase):
             )
 
     @staticmethod
-    def validate_input_batch(model: "RouterModel", input_batch) -> None:
+    def validate_forward_inputs(model: "RouterModel", input_batch) -> None:
         if not isinstance(input_batch, Tensor):
             raise TypeError(
                 "RouterModel input_batch must be a Tensor, "
@@ -128,31 +131,32 @@ class RouterModelValidator(ValidatorBase):
 class SamplerBaseValidator(ValidatorBase):
     OPTIONAL_FIELDS = {"router_config"}
 
-    @staticmethod
-    def validate(model: "SamplerBase") -> None:
-        SamplerBaseValidator.validate_required_fields(model.cfg)
-        SamplerBaseValidator.validate_field_types(model.cfg)
-        SamplerBaseValidator.validate_positive_integer("top_k", model.top_k)
-        SamplerBaseValidator.validate_positive_integer("num_experts", model.num_experts)
-        SamplerBaseValidator.validate_non_negative_integer(
-            "num_topk_samples", model.num_topk_samples
+    @classmethod
+    def validate(cls, model: "SamplerBase") -> None:
+        cfg = model.cfg
+        cls.validate_required_fields(cfg)
+        cls.validate_field_types(cfg)
+        cls.validate_positive_integer("top_k", cfg.top_k)
+        cls.validate_positive_integer("num_experts", cfg.num_experts)
+        cls.validate_non_negative_integer(
+            "num_topk_samples", cfg.num_topk_samples
         )
-        SamplerBaseValidator.validate_probability("threshold", model.threshold)
-        SamplerBaseValidator.validate_non_negative_float(
+        cls.validate_probability("threshold", cfg.threshold)
+        cls.validate_non_negative_float(
             "coefficient_of_variation_loss_weight",
-            model.coefficient_of_variation_loss_weight,
+            cfg.coefficient_of_variation_loss_weight,
         )
-        SamplerBaseValidator.validate_non_negative_float(
-            "switch_loss_weight", model.switch_loss_weight
+        cls.validate_non_negative_float(
+            "switch_loss_weight", cfg.switch_loss_weight
         )
-        SamplerBaseValidator.validate_non_negative_float(
-            "zero_centred_loss_weight", model.zero_centred_loss_weight
+        cls.validate_non_negative_float(
+            "zero_centred_loss_weight", cfg.zero_centred_loss_weight
         )
-        SamplerBaseValidator.validate_non_negative_float(
+        cls.validate_non_negative_float(
             "mutual_information_loss_weight",
-            model.mutual_information_loss_weight,
+            cfg.mutual_information_loss_weight,
         )
-        SamplerBaseValidator.validate_num_topk_samples(model)
+        cls._validate_num_topk_samples(cfg.num_topk_samples, cfg.top_k)
 
     @staticmethod
     def validate_positive_integer(name: str, value: int) -> None:
@@ -179,16 +183,28 @@ class SamplerBaseValidator(ValidatorBase):
             raise ValueError(f"{name} must be >= 0.0, received {value!r}.")
 
     @staticmethod
-    def validate_num_topk_samples(model: "SamplerBase") -> None:
-        if model.num_topk_samples > model.top_k:
+    def _validate_num_topk_samples(num_topk_samples: int, top_k: int) -> None:
+        if num_topk_samples > top_k:
             raise ValueError(
                 "num_topk_samples cannot exceed top_k, "
-                f"received num_topk_samples={model.num_topk_samples}, "
-                f"top_k={model.top_k}."
+                f"received num_topk_samples={num_topk_samples}, "
+                f"top_k={top_k}."
             )
 
+    @classmethod
+    def validate_forward_inputs(
+        cls,
+        model: "SamplerBase",
+        router_logit_scores,
+        skip_mask,
+    ) -> None:
+        cls._validate_router_logit_scores(model, router_logit_scores)
+        cls._validate_skip_mask(model, router_logit_scores, skip_mask)
+
     @staticmethod
-    def validate_router_logit_scores(model: "SamplerBase", router_logit_scores) -> None:
+    def _validate_router_logit_scores(
+        model: "SamplerBase", router_logit_scores
+    ) -> None:
         if not isinstance(router_logit_scores, Tensor):
             raise TypeError(
                 "router_logit_scores must be a Tensor, "
@@ -212,7 +228,7 @@ class SamplerBaseValidator(ValidatorBase):
             )
 
     @staticmethod
-    def validate_skip_mask(
+    def _validate_skip_mask(
         model: "SamplerBase",
         router_logit_scores: Tensor,
         skip_mask,
@@ -245,8 +261,13 @@ class SamplerBaseValidator(ValidatorBase):
 
 
 class SamplerSparseValidator(SamplerBaseValidator):
+    @classmethod
+    def validate(cls, model: "SamplerSparse") -> None:
+        super().validate(model)
+        cls._validate_sparse_configuration(model)
+
     @staticmethod
-    def validate(model: "SamplerSparse") -> None:
+    def _validate_sparse_configuration(model: "SamplerSparse") -> None:
         if model.top_k != 1:
             raise ValueError(
                 f"top_k must be 1 when using SamplerSparse, received {model.top_k}."
@@ -269,8 +290,13 @@ class SamplerSparseValidator(SamplerBaseValidator):
 
 
 class SamplerTopkValidator(SamplerBaseValidator):
+    @classmethod
+    def validate(cls, model: "SamplerTopk") -> None:
+        super().validate(model)
+        cls._validate_topk_configuration(model)
+
     @staticmethod
-    def validate(model: "SamplerTopk") -> None:
+    def _validate_topk_configuration(model: "SamplerTopk") -> None:
         if not (0 < model.top_k < model.num_experts):
             raise ValueError(
                 "top_k must be greater than 0 and less than num_experts when using "
@@ -280,8 +306,13 @@ class SamplerTopkValidator(SamplerBaseValidator):
 
 
 class SamplerFullValidator(SamplerBaseValidator):
+    @classmethod
+    def validate(cls, model: "SamplerFull") -> None:
+        super().validate(model)
+        cls._validate_full_configuration(model)
+
     @staticmethod
-    def validate(model: "SamplerFull") -> None:
+    def _validate_full_configuration(model: "SamplerFull") -> None:
         if model.num_topk_samples != 0:
             raise ValueError(
                 "num_topk_samples must be 0 when using SamplerFull, "

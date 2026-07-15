@@ -1,24 +1,25 @@
-import torch
+from typing import TYPE_CHECKING
 
+import torch
 from torch import Tensor
+
+from emperor.sampler.core._validator import SamplerFullValidator
 from emperor.sampler.core.base import SamplerBase
 from emperor.sampler.core.config import SamplerConfig
-from emperor.sampler.core._validator import SamplerFullValidator
-
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
 
 
 class SamplerFull(SamplerBase):
+    VALIDATOR = SamplerFullValidator
+
     def __init__(
         self,
         cfg: "SamplerConfig | ModelConfig",
         overrides: "SamplerConfig | None" = None,
     ) -> None:
         super().__init__(cfg, overrides)
-        SamplerFullValidator.validate(self)
 
     def _sample_probabilities_and_indices(
         self, probability_matrix: Tensor

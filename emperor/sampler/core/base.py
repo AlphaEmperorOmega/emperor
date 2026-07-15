@@ -1,18 +1,20 @@
-import torch
+from typing import TYPE_CHECKING
 
+import torch
 from torch import Tensor
+
 from emperor.base.module import Module
+from emperor.sampler.core._validator import SamplerBaseValidator
 from emperor.sampler.core.config import SamplerConfig
 from emperor.sampler.core.losses import SamplerAuxiliaryLosses
-from emperor.sampler.core._validator import SamplerBaseValidator
-
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
 
 
 class SamplerBase(Module):
+    VALIDATOR = SamplerBaseValidator
+
     def __init__(
         self,
         cfg: "SamplerConfig | ModelConfig",
@@ -21,7 +23,7 @@ class SamplerBase(Module):
         super().__init__()
 
         config = getattr(cfg, "sampler_model_config", cfg)
-        self.cfg: "SamplerConfig" = self._override_config(config, overrides)
+        self.cfg: SamplerConfig = self._override_config(config, overrides)
 
         self.top_k = self.cfg.top_k
         self.threshold = self.cfg.threshold
@@ -36,7 +38,8 @@ class SamplerBase(Module):
         self.switch_loss_weight = self.cfg.switch_loss_weight
         self.zero_centred_loss_weight = self.cfg.zero_centred_loss_weight
         self.mutual_information_loss_weight = self.cfg.mutual_information_loss_weight
-        SamplerBaseValidator.validate(self)
+        self._prepare_for_validation()
+        self.VALIDATOR.validate(self)
 
         self.noise_epsilon = 1e-2
         self.auxiliary_loss_model = SamplerAuxiliaryLosses(self.cfg)
@@ -49,8 +52,9 @@ class SamplerBase(Module):
         router_logit_scores: Tensor,
         skip_mask: Tensor | None = None,
     ) -> tuple[Tensor, Tensor | None, Tensor | None, Tensor]:
-        SamplerBaseValidator.validate_router_logit_scores(self, router_logit_scores)
-        SamplerBaseValidator.validate_skip_mask(self, router_logit_scores, skip_mask)
+        self.VALIDATOR.validate_forward_inputs(
+            self, router_logit_scores, skip_mask
+        )
         full_probabilities, logits = self.__compute_masked_probabilities(
             router_logit_scores, skip_mask
         )
@@ -67,6 +71,9 @@ class SamplerBase(Module):
         self.set_updated_skip_mask(skip_mask)
 
         return probabilities, selected_indices, skip_mask, loss
+
+    def _prepare_for_validation(self) -> None:
+        pass
 
     def set_updated_skip_mask(self, updated_skip_mask: Tensor | None) -> None:
         self.updated_skip_mask = updated_skip_mask
@@ -128,7 +135,7 @@ class SamplerBase(Module):
             return skip_mask
         threshold_mask = probabilities < self.threshold
         if self.filter_above_threshold:
-            mask_update = (threshold_mask.all(dim=-1) == False).unsqueeze(-1)
+            mask_update = (~threshold_mask.all(dim=-1)).unsqueeze(-1)
             return torch.masked_fill(skip_mask, mask_update, 0)
         mask_update = threshold_mask.all(dim=-1).unsqueeze(-1)
         return torch.masked_fill(skip_mask, mask_update, 0)
@@ -147,7 +154,8 @@ class SamplerBase(Module):
         self, *args, **kwargs
     ) -> tuple[Tensor, Tensor | None]:
         raise NotImplementedError(
-            "`_sample_probabilities_and_indices` has to be implemented in classes that inherit `SamplerBase`."
+            "`_sample_probabilities_and_indices` has to be implemented in "
+            "classes that inherit `SamplerBase`."
         )
 
     def _normalize_probabilities(self, probabilities: Tensor) -> Tensor:

@@ -1,13 +1,14 @@
+from typing import TYPE_CHECKING
+
 from torch import Tensor
+
 from emperor.base.module import Module
-from emperor.sampler.core.routers import RouterModel
-from emperor.sampler.core.config import RouterConfig, SamplerConfig
-from emperor.sampler.core.tracker import SamplerUsageTrackerManager
 from emperor.sampler.core._validator import SamplerModelValidator
 from emperor.sampler.core.base import SamplerBase
+from emperor.sampler.core.config import RouterConfig, SamplerConfig
+from emperor.sampler.core.routers import RouterModel
+from emperor.sampler.core.tracker import SamplerUsageTrackerManager
 from emperor.sampler.core.variants import SamplerFull, SamplerSparse, SamplerTopk
-
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
@@ -15,6 +16,8 @@ if TYPE_CHECKING:
 
 
 class SamplerModel(Module):
+    VALIDATOR = SamplerModelValidator
+
     def __init__(
         self,
         cfg: "SamplerConfig | ModelConfig",
@@ -25,11 +28,11 @@ class SamplerModel(Module):
         self.overrides = overrides
 
         config = getattr(cfg, "sampler_model_config", cfg)
-        self.sampler_config: "SamplerConfig" = self._override_config(config, overrides)
+        self.sampler_config: SamplerConfig = self._override_config(config, overrides)
 
         self.num_experts: int = self.sampler_config.num_experts
-        self.router_config: "RouterConfig" = self.sampler_config.router_config
-        SamplerModelValidator.validate(self)
+        self.router_config: RouterConfig = self.sampler_config.router_config
+        self.VALIDATOR.validate(self)
         self.sampler_model = self.__init_sampler_model()
         self.router = self.__maybe_init_router()
 
@@ -55,7 +58,7 @@ class SamplerModel(Module):
         input_matrix: Tensor,
         skip_mask: Tensor | None = None,
     ) -> tuple[Tensor, Tensor | None, Tensor | None, Tensor]:
-        SamplerModelValidator.validate_input_matrix(input_matrix)
+        self.VALIDATOR.validate_forward_inputs(input_matrix)
         logits = self.__maybe_compute_routing(input_matrix)
         output = self.sampler_model.get_probabilities_and_indices(logits, skip_mask)
         SamplerUsageTrackerManager.maybe_record_sampler_output(self, output)

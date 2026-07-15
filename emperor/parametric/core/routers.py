@@ -1,14 +1,12 @@
-import torch
-
-from torch import Tensor
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+import torch
+from torch import Tensor
 from torch.nn.parameter import Parameter
+
 from emperor.sampler.core.config import RouterConfig
 from emperor.sampler.core.routers import RouterModel
-from emperor.sampler.core._validator import RouterModelValidator
-
-
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
@@ -42,5 +40,5 @@ class VectorRouterModel(RouterModel):
         self,
         input_batch: Tensor,
     ) -> Tensor:
-        RouterModelValidator.validate_input_batch(self, input_batch)
+        self.VALIDATOR.validate_forward_inputs(self, input_batch)
         return torch.einsum("bi,ijn->bjn", input_batch, self.parameter_bank)

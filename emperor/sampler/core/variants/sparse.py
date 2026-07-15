@@ -12,14 +12,17 @@ if TYPE_CHECKING:
 
 
 class SamplerSparse(SamplerBase):
+    VALIDATOR = SamplerSparseValidator
+
     def __init__(
         self,
         cfg: "SamplerConfig | ModelConfig",
         overrides: "SamplerConfig | None" = None,
     ) -> None:
         super().__init__(cfg, overrides)
+
+    def _prepare_for_validation(self) -> None:
         self.top_k = 1
-        SamplerSparseValidator.validate(self)
 
     def _sample_probabilities_and_indices(
         self, probabilities: Tensor

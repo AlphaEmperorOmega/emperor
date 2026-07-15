@@ -12,13 +12,14 @@ if TYPE_CHECKING:
 
 
 class SamplerTopk(SamplerBase):
+    VALIDATOR = SamplerTopkValidator
+
     def __init__(
         self,
         cfg: "SamplerConfig | ModelConfig",
         overrides: "SamplerConfig | None" = None,
     ) -> None:
         super().__init__(cfg, overrides)
-        SamplerTopkValidator.validate(self)
 
     def _sample_probabilities_and_indices(
         self, probabilities: Tensor

@@ -1,11 +1,14 @@
 from torch import Tensor
+
 from emperor.base.layer import Layer, LayerStackConfig
 from emperor.base.module import Module
-from emperor.sampler.core.config import RouterConfig
 from emperor.sampler.core._validator import RouterModelValidator
+from emperor.sampler.core.config import RouterConfig
 
 
 class RouterModel(Module):
+    VALIDATOR = RouterModelValidator
+
     def __init__(
         self,
         cfg: "RouterConfig",
@@ -13,14 +16,14 @@ class RouterModel(Module):
     ) -> None:
         super().__init__()
         config = getattr(cfg, "router_model_config", cfg)
-        self.cfg: "RouterConfig" = self._override_config(config, overrides)
+        self.cfg: RouterConfig = self._override_config(config, overrides)
 
         self.input_dim = self.cfg.input_dim or getattr(cfg, "input_dim", None)
         self.num_experts = self.cfg.num_experts
         self.noisy_topk_flag = self.cfg.noisy_topk_flag
         self.model_config = self.cfg.model_config
 
-        RouterModelValidator.validate(self)
+        self.VALIDATOR.validate(self)
         self.router_output_dim = self.__resolve_router_output_dim()
         self.model = self._init_model()
 
@@ -34,5 +37,5 @@ class RouterModel(Module):
         return 2 * self.num_experts if self.noisy_topk_flag else self.num_experts
 
     def compute_logit_scores(self, input_batch: Tensor) -> Tensor:
-        RouterModelValidator.validate_input_batch(self, input_batch)
+        self.VALIDATOR.validate_forward_inputs(self, input_batch)
         return Layer.run_model_returning_hidden(self.model, input_batch)
