@@ -30,6 +30,8 @@ class DepthMappingLayerConfig(LinearLayerConfig):
 
 
 class DepthMappingLayer(Module):
+    VALIDATOR = DepthMappingValidator
+
     def __init__(
         self,
         cfg: "DepthMappingLayerConfig",
@@ -37,7 +39,7 @@ class DepthMappingLayer(Module):
     ):
         super().__init__()
         self.cfg = self._override_config(cfg, overrides)
-        DepthMappingValidator.validate(self)
+        self.VALIDATOR.validate(self)
         self.input_dim: int = self.cfg.input_dim
         self.output_dim: int = self.cfg.output_dim
         self.bias_flag: bool = self.cfg.bias_flag
@@ -86,6 +88,8 @@ class DepthMappingHandlerConfig(LinearLayerConfig):
 
 
 class DepthMappingLayerStack(Module):
+    VALIDATOR = DepthMappingValidator
+
     def __init__(
         self,
         cfg: "DepthMappingHandlerConfig",
@@ -107,8 +111,8 @@ class DepthMappingLayerStack(Module):
             DepthMappingLayerConfig,
         ):
             return self.cfg.model_config
-        DepthMappingValidator.validate_inner_model_is_linear_layer_config(source)
-        DepthMappingValidator.validate_layer_config_has_no_gate_or_halting(source)
+        self.VALIDATOR.validate_inner_model_is_linear_layer_config(source)
+        self.VALIDATOR.validate_layer_config_has_no_gate_or_halting(source)
         layer_stack_config = deepcopy(source)
         layer_stack_config.input_dim = self.input_dim
         layer_stack_config.output_dim = self.output_dim
@@ -122,7 +126,7 @@ class DepthMappingLayerStack(Module):
         return layer_stack_config
 
     def forward(self, X: Tensor) -> Tensor:
-        DepthMappingValidator.validate_input_is_2d(X, self.input_dim)
+        self.VALIDATOR.validate_input_is_2d(X, self.input_dim)
 
         X = X.unsqueeze(1)
         X = X.repeat(1, self.depth_value, 1)

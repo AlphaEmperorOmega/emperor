@@ -22,6 +22,8 @@ from emperor.base.module import Module
 
 
 class DynamicWeightAbstract(Module):
+    VALIDATOR = DynamicWeightValidator
+
     def __init__(
         self,
         cfg: "DynamicWeightConfig",
@@ -29,7 +31,7 @@ class DynamicWeightAbstract(Module):
     ):
         super().__init__()
         self.cfg: DynamicWeightConfig = self._override_config(cfg, overrides)
-        DynamicWeightValidator.validate(self)
+        self.VALIDATOR.validate(self)
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
         self.generator_depth = self.cfg.generator_depth

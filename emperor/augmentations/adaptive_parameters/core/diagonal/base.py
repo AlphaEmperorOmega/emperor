@@ -13,6 +13,8 @@ from emperor.base.module import Module
 
 
 class DynamicDiagonalAbstract(Module):
+    VALIDATOR = DynamicDiagonalValidator
+
     def __init__(
         self,
         cfg: DynamicDiagonalConfig,
@@ -20,7 +22,7 @@ class DynamicDiagonalAbstract(Module):
     ):
         super().__init__()
         self.cfg: DynamicDiagonalConfig = self._override_config(cfg, overrides)
-        DynamicDiagonalValidator.validate(self)
+        self.VALIDATOR.validate(self)
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
         self.padding_shape = self.__get_diagonal_padding_shape()
@@ -41,7 +43,7 @@ class DynamicDiagonalAbstract(Module):
         output_dim = min(self.input_dim, self.output_dim)
         overrides = LayerStackConfig(input_dim=self.input_dim, output_dim=output_dim)
         generator_model = self.model_config.build(overrides)
-        DynamicDiagonalValidator.validate_generator_model(generator_model)
+        self.VALIDATOR.validate_generator_model(generator_model)
         return generator_model
 
     def forward(self, weight_params: Tensor, logits: Tensor) -> Tensor:

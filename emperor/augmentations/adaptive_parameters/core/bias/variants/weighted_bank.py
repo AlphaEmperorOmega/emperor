@@ -1,9 +1,6 @@
 import torch
 from torch import Tensor
 
-from emperor.augmentations.adaptive_parameters.core._validator import (
-    DynamicBiasValidator,
-)
 from emperor.augmentations.adaptive_parameters.core.bias.base import DynamicBiasAbstract
 from emperor.augmentations.adaptive_parameters.core.bias.config import (
     WeightedBankDynamicBiasConfig,
@@ -18,7 +15,7 @@ class WeightedBankDynamicBias(DynamicBiasAbstract):
         overrides: WeightedBankDynamicBiasConfig | None = None,
     ):
         super().__init__(cfg, overrides)
-        DynamicBiasValidator.validate_bank_expansion_factor(self)
+        self.VALIDATOR.validate_bank_expansion_factor(self)
         self.bank_expansion_factor = self.cfg.bank_expansion_factor.value
         self.weight_bank = self._init_parameter_bank(
             (self.bank_expansion_factor, self.output_dim)

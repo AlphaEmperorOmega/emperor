@@ -28,25 +28,25 @@ if TYPE_CHECKING:
 
 
 class AdaptiveGeneratorValidatorBase:
-    @staticmethod
-    def validate_generator_model(generator_model) -> None:
+    @classmethod
+    def validate_generator_model(cls, generator_model) -> None:
         from torch.nn import Sequential
 
         from emperor.base.layer import Layer, LayerStack
 
         if isinstance(generator_model, Layer):
-            AdaptiveGeneratorValidatorBase._validate_generator_layer(generator_model)
+            cls._validate_generator_layer(generator_model)
             return
         if isinstance(generator_model, (Sequential, LayerStack)):
-            AdaptiveGeneratorValidatorBase._validate_generator_sequence(generator_model)
+            cls._validate_generator_sequence(generator_model)
             return
         raise TypeError(
             "Expected model_config.build(...) to return a Layer, Sequential, or "
             f"LayerStack, received {type(generator_model).__name__}."
         )
 
-    @staticmethod
-    def _validate_generator_sequence(generator_sequence) -> None:
+    @classmethod
+    def _validate_generator_sequence(cls, generator_sequence) -> None:
         from emperor.base.layer import Layer
 
         for generator_layer in generator_sequence:
@@ -55,7 +55,7 @@ class AdaptiveGeneratorValidatorBase:
                     "Expected each generator sequence item to be a Layer, "
                     f"received {type(generator_layer).__name__}."
                 )
-            AdaptiveGeneratorValidatorBase._validate_generator_layer(generator_layer)
+            cls._validate_generator_layer(generator_layer)
 
     @staticmethod
     def _validate_generator_layer(generator_layer) -> None:
@@ -141,9 +141,11 @@ class AdaptiveGeneratorValidatorBase:
                 f"{tuple(weight_params.shape)}."
             )
 
-    @staticmethod
-    def validate_batched_weight_params(model, weight_params, input_batch) -> None:
-        AdaptiveGeneratorValidatorBase.validate_weight_params(model, weight_params)
+    @classmethod
+    def validate_batched_weight_params(
+        cls, model, weight_params, input_batch
+    ) -> None:
+        cls.validate_weight_params(model, weight_params)
         if weight_params.dim() == 3 and weight_params.shape[0] != input_batch.shape[0]:
             raise ValueError(
                 "weight_params batch dimension must match input batch dimension, "
@@ -187,14 +189,14 @@ class AdaptiveGeneratorValidatorBase:
 class DynamicWeightValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
     OPTIONAL_FIELDS = {"bank_expansion_factor"}
 
-    @staticmethod
-    def validate(model: "DynamicWeightAbstract") -> None:
-        DynamicWeightValidator.validate_required_fields(model.cfg)
-        DynamicWeightValidator.validate_field_types(model.cfg)
-        DynamicWeightValidator.validate_dimensions(
+    @classmethod
+    def validate(cls, model: "DynamicWeightAbstract") -> None:
+        cls.validate_required_fields(model.cfg)
+        cls.validate_field_types(model.cfg)
+        cls.validate_dimensions(
             input_dim=model.cfg.input_dim, output_dim=model.cfg.output_dim
         )
-        AdaptiveGeneratorValidatorBase.validate_decay_parameters(model.cfg)
+        cls.validate_decay_parameters(model.cfg)
 
     @staticmethod
     def validate_bank_expansion_factor(model: "DynamicWeightAbstract") -> None:
@@ -227,14 +229,14 @@ class DynamicWeightValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
 class DynamicBiasValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
     OPTIONAL_FIELDS = {"bank_expansion_factor"}
 
-    @staticmethod
-    def validate(model: "DynamicBiasAbstract") -> None:
-        DynamicBiasValidator.validate_required_fields(model.cfg)
-        DynamicBiasValidator.validate_field_types(model.cfg)
-        DynamicBiasValidator.validate_dimensions(
+    @classmethod
+    def validate(cls, model: "DynamicBiasAbstract") -> None:
+        cls.validate_required_fields(model.cfg)
+        cls.validate_field_types(model.cfg)
+        cls.validate_dimensions(
             input_dim=model.cfg.input_dim, output_dim=model.cfg.output_dim
         )
-        AdaptiveGeneratorValidatorBase.validate_decay_parameters(model.cfg)
+        cls.validate_decay_parameters(model.cfg)
 
     @staticmethod
     def validate_bank_expansion_factor(model: "DynamicBiasAbstract") -> None:
@@ -266,11 +268,11 @@ class DynamicBiasValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
 
 
 class DynamicDiagonalValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
-    @staticmethod
-    def validate(model: "DynamicDiagonalAbstract") -> None:
-        DynamicDiagonalValidator.validate_required_fields(model.cfg)
-        DynamicDiagonalValidator.validate_field_types(model.cfg)
-        DynamicDiagonalValidator.validate_dimensions(
+    @classmethod
+    def validate(cls, model: "DynamicDiagonalAbstract") -> None:
+        cls.validate_required_fields(model.cfg)
+        cls.validate_field_types(model.cfg)
+        cls.validate_dimensions(
             input_dim=model.cfg.input_dim, output_dim=model.cfg.output_dim
         )
 
@@ -278,22 +280,22 @@ class DynamicDiagonalValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
 class AxisMaskValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
     OPTIONAL_FIELDS = {"mask_transition_width"}
 
-    @staticmethod
-    def validate(model: "AxisMaskAbstract") -> None:
-        AxisMaskValidator.validate_required_fields(model.cfg)
-        AxisMaskValidator.validate_field_types(model.cfg)
-        AxisMaskValidator.validate_dimensions(
+    @classmethod
+    def validate(cls, model: "AxisMaskAbstract") -> None:
+        cls.validate_required_fields(model.cfg)
+        cls.validate_field_types(model.cfg)
+        cls.validate_dimensions(
             input_dim=model.cfg.input_dim, output_dim=model.cfg.output_dim
         )
-        AxisMaskValidator.validate_mask_threshold(model.cfg.mask_threshold)
-        AxisMaskValidator.validate_mask_surrogate_scale(model.cfg.mask_surrogate_scale)
-        AxisMaskValidator.validate_mask_floor(model.cfg.mask_floor)
+        cls._validate_mask_threshold(model.cfg.mask_threshold)
+        cls._validate_mask_surrogate_scale(model.cfg.mask_surrogate_scale)
+        cls._validate_mask_floor(model.cfg.mask_floor)
         mask_transition_width = getattr(model.cfg, "mask_transition_width", None)
         if mask_transition_width is not None:
-            AxisMaskValidator.validate_mask_transition_width(mask_transition_width)
+            cls._validate_mask_transition_width(mask_transition_width)
 
     @staticmethod
-    def validate_mask_threshold(mask_threshold: float) -> None:
+    def _validate_mask_threshold(mask_threshold: float) -> None:
         if not 0.0 <= mask_threshold <= 1.0:
             raise ValueError(
                 "mask_threshold must be between 0.0 and 1.0 inclusive, "
@@ -301,7 +303,7 @@ class AxisMaskValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
             )
 
     @staticmethod
-    def validate_mask_surrogate_scale(mask_surrogate_scale: float) -> None:
+    def _validate_mask_surrogate_scale(mask_surrogate_scale: float) -> None:
         if mask_surrogate_scale < 0.0:
             raise ValueError(
                 "mask_surrogate_scale must be greater than or equal to 0.0, "
@@ -309,7 +311,7 @@ class AxisMaskValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
             )
 
     @staticmethod
-    def validate_mask_floor(mask_floor: float) -> None:
+    def _validate_mask_floor(mask_floor: float) -> None:
         if not 0.0 <= mask_floor < 1.0:
             raise ValueError(
                 "mask_floor must be between 0.0 inclusive and 1.0 exclusive, "
@@ -317,7 +319,7 @@ class AxisMaskValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
             )
 
     @staticmethod
-    def validate_mask_transition_width(mask_transition_width: float) -> None:
+    def _validate_mask_transition_width(mask_transition_width: float) -> None:
         if mask_transition_width <= 0.0:
             raise ValueError(
                 "mask_transition_width must be greater than 0.0, "
@@ -328,17 +330,17 @@ class AxisMaskValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
 class DepthMappingValidator(ValidatorBase):
     OPTIONAL_FIELDS: set[str] = set()
 
-    @staticmethod
-    def validate(model: "DepthMappingLayer") -> None:
-        DepthMappingValidator.validate_required_fields(model.cfg)
-        DepthMappingValidator.validate_field_types(model.cfg)
-        DepthMappingValidator.validate_dimensions(
+    @classmethod
+    def validate(cls, model: "DepthMappingLayer") -> None:
+        cls.validate_required_fields(model.cfg)
+        cls.validate_field_types(model.cfg)
+        cls.validate_dimensions(
             input_dim=model.cfg.input_dim, output_dim=model.cfg.output_dim
         )
-        DepthMappingValidator.validate_generator_depth(model.cfg)
+        cls._validate_generator_depth(model.cfg)
 
     @staticmethod
-    def validate_generator_depth(cfg: "DepthMappingLayerConfig") -> None:
+    def _validate_generator_depth(cfg: "DepthMappingLayerConfig") -> None:
         if cfg.generator_depth is None or cfg.generator_depth.value == 0:
             raise ValueError(
                 f"generator_depth must be greater than 0 for DepthMappingLayer, "
@@ -418,7 +420,9 @@ class DepthMappingValidator(ValidatorBase):
             )
 
 
-class AdaptiveParameterAugmentationValidator(ValidatorBase):
+class AdaptiveParameterAugmentationValidator(
+    AdaptiveGeneratorValidatorBase, ValidatorBase
+):
     OPTIONAL_FIELDS = {
         "diagonal_config",
         "weight_config",
@@ -427,18 +431,16 @@ class AdaptiveParameterAugmentationValidator(ValidatorBase):
         "model_config",
     }
 
-    @staticmethod
-    def validate(model: "AdaptiveParameterAugmentation") -> None:
-        AdaptiveParameterAugmentationValidator.validate_required_fields(model.cfg)
-        AdaptiveParameterAugmentationValidator.validate_field_types(model.cfg)
-        AdaptiveParameterAugmentationValidator.validate_dimensions(model)
-        AdaptiveParameterAugmentationValidator.validate_model_config(
-            "model_config", model.model_config
-        )
-        AdaptiveParameterAugmentationValidator.validate_sub_configs(model)
+    @classmethod
+    def validate(cls, model: "AdaptiveParameterAugmentation") -> None:
+        cls.validate_required_fields(model.cfg)
+        cls.validate_field_types(model.cfg)
+        cls._validate_dimensions(model)
+        cls._validate_model_config("model_config", model.model_config)
+        cls._validate_sub_configs(model)
 
     @staticmethod
-    def validate_dimensions(model: "AdaptiveParameterAugmentation") -> None:
+    def _validate_dimensions(model: "AdaptiveParameterAugmentation") -> None:
         if (
             model.input_dim is None
             or not isinstance(model.input_dim, int)
@@ -456,8 +458,8 @@ class AdaptiveParameterAugmentationValidator(ValidatorBase):
                 f"output_dim must be a positive integer, received {model.output_dim!r}."
             )
 
-    @staticmethod
-    def validate_sub_configs(model: "AdaptiveParameterAugmentation") -> None:
+    @classmethod
+    def _validate_sub_configs(cls, model: "AdaptiveParameterAugmentation") -> None:
         from emperor.augmentations.adaptive_parameters.core.bias.config import (
             DynamicBiasConfig,
         )
@@ -485,9 +487,7 @@ class AdaptiveParameterAugmentationValidator(ValidatorBase):
                     f"{name} must be a {expected_type.__name__} instance, "
                     f"got {type(config).__name__}."
                 )
-            AdaptiveParameterAugmentationValidator.validate_model_config(
-                f"{name}.model_config", config.model_config
-            )
+            cls._validate_model_config(f"{name}.model_config", config.model_config)
             if config.model_config is None and model.model_config is None:
                 raise ValueError(
                     f"{type(config).__name__} requires a model_config but none "
@@ -496,7 +496,7 @@ class AdaptiveParameterAugmentationValidator(ValidatorBase):
                 )
 
     @staticmethod
-    def validate_model_config(name: str, model_config) -> None:
+    def _validate_model_config(name: str, model_config) -> None:
         if model_config is None:
             return
         from emperor.base.layer.config import LayerStackConfig
@@ -507,8 +507,9 @@ class AdaptiveParameterAugmentationValidator(ValidatorBase):
                 f"got {type(model_config).__name__}."
             )
 
-    @staticmethod
+    @classmethod
     def validate_forward_inputs(
+        cls,
         model: "AdaptiveParameterAugmentation",
         affine_transform_callback,
         weight_params,
@@ -520,10 +521,6 @@ class AdaptiveParameterAugmentationValidator(ValidatorBase):
                 "affine_transform_callback must be callable, "
                 f"received {type(affine_transform_callback).__name__}."
             )
-        AdaptiveGeneratorValidatorBase.validate_input_batch(model, input_batch)
-        AdaptiveGeneratorValidatorBase.validate_batched_weight_params(
-            model, weight_params, input_batch
-        )
-        AdaptiveGeneratorValidatorBase.validate_bias_params(
-            model, bias_params, input_batch
-        )
+        cls.validate_input_batch(model, input_batch)
+        cls.validate_batched_weight_params(model, weight_params, input_batch)
+        cls.validate_bias_params(model, bias_params, input_batch)

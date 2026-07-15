@@ -9,10 +9,12 @@ from emperor.base.module import Module
 
 
 class AxisMaskAbstract(Module):
+    VALIDATOR = AxisMaskValidator
+
     def __init__(self, cfg: AxisMaskConfig, overrides: AxisMaskConfig | None = None):
         super().__init__()
         self.cfg: AxisMaskConfig = self._override_config(cfg, overrides)
-        AxisMaskValidator.validate(self)
+        self.VALIDATOR.validate(self)
         self.input_dim: int = self.cfg.input_dim
         self.output_dim: int = self.cfg.output_dim
         self.mask_threshold: float = self.cfg.mask_threshold
@@ -26,7 +28,7 @@ class AxisMaskAbstract(Module):
             output_dim=output_dim,
         )
         generator_model = self.model_config.build(overrides)
-        AxisMaskValidator.validate_generator_model(generator_model)
+        self.VALIDATOR.validate_generator_model(generator_model)
         return generator_model
 
     @property

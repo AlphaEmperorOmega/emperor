@@ -13,6 +13,8 @@ from emperor.base.module import Module
 
 
 class DynamicBiasAbstract(Module):
+    VALIDATOR = DynamicBiasValidator
+
     def __init__(
         self,
         cfg: "DynamicBiasConfig",
@@ -20,7 +22,7 @@ class DynamicBiasAbstract(Module):
     ):
         super().__init__()
         self.cfg: DynamicBiasConfig = self._override_config(cfg, overrides)
-        DynamicBiasValidator.validate(self)
+        self.VALIDATOR.validate(self)
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
         self.decay_schedule_option = self.cfg.decay_schedule
@@ -36,7 +38,7 @@ class DynamicBiasAbstract(Module):
             output_dim=output_dim,
         )
         generator_model = self.model_config.build(overrides)
-        DynamicBiasValidator.validate_generator_model(generator_model)
+        self.VALIDATOR.validate_generator_model(generator_model)
         return generator_model
 
     def _maybe_apply_bias_decay(self, bias_params: Tensor) -> Tensor:

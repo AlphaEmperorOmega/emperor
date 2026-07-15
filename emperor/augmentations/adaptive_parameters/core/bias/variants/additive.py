@@ -1,8 +1,5 @@
 from torch import Tensor
 
-from emperor.augmentations.adaptive_parameters.core._validator import (
-    DynamicBiasValidator,
-)
 from emperor.augmentations.adaptive_parameters.core.bias.base import DynamicBiasAbstract
 from emperor.augmentations.adaptive_parameters.core.bias.config import (
     AdditiveDynamicBiasConfig,
@@ -20,7 +17,7 @@ class AdditiveDynamicBias(DynamicBiasAbstract):
         self.model = self._init_model(self.output_dim)
 
     def forward(self, bias_params: Tensor, logits: Tensor) -> Tensor:
-        DynamicBiasValidator.ensure_parameters_exist(bias_params)
+        self.VALIDATOR.ensure_parameters_exist(bias_params)
         bias_params = self._maybe_apply_bias_decay(bias_params)
         generated_bias_offset = Layer.run_model_returning_hidden(self.model, logits)
         return bias_params + generated_bias_offset

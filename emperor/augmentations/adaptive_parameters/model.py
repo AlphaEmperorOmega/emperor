@@ -17,6 +17,8 @@ if TYPE_CHECKING:
 
 
 class AdaptiveParameterAugmentation(Module):
+    VALIDATOR = AdaptiveParameterAugmentationValidator
+
     def __init__(
         self,
         cfg: "AdaptiveParameterAugmentationConfig",
@@ -33,7 +35,7 @@ class AdaptiveParameterAugmentation(Module):
         self.bias_config = self.cfg.bias_config
         self.mask_config = self.cfg.mask_config
         self.model_config = self.cfg.model_config
-        AdaptiveParameterAugmentationValidator.validate(self)
+        self.VALIDATOR.validate(self)
         self.weight_model = self.__build_from_config(self.weight_config)
         self.diagonal_model = self.__build_from_config(self.diagonal_config)
         self.bias_model = self.__build_from_config(self.bias_config)
@@ -58,7 +60,7 @@ class AdaptiveParameterAugmentation(Module):
         bias_params: Tensor | None,
         input: Tensor,
     ) -> Tensor:
-        AdaptiveParameterAugmentationValidator.validate_forward_inputs(
+        self.VALIDATOR.validate_forward_inputs(
             self, affine_transform_callback, weight_params, bias_params, input
         )
         weights, bias = self.__apply_adaptive_adjustments(

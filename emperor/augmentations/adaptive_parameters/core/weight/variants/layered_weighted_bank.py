@@ -1,9 +1,6 @@
 import torch
 from torch import Tensor
 
-from emperor.augmentations.adaptive_parameters.core._validator import (
-    DynamicWeightValidator,
-)
 from emperor.augmentations.adaptive_parameters.core.weight.base import (
     DynamicWeightAbstract,
 )
@@ -23,7 +20,7 @@ class LayeredWeightedBankDynamicWeight(DynamicWeightAbstract):
         overrides: LayeredWeightedBankDynamicWeightConfig | None = None,
     ):
         super().__init__(cfg, overrides)
-        DynamicWeightValidator.validate_bank_expansion_factor(self)
+        self.VALIDATOR.validate_bank_expansion_factor(self)
         self.bank_expansion_factor = self.cfg.bank_expansion_factor.value
         self.depth_value = self.generator_depth.value
         broadcast_batch = 1
