@@ -1,20 +1,10 @@
-from emperor.base.layer.residual import ResidualConnectionOptions
-from dataclasses import fields
-import torch
 import unittest
+from dataclasses import fields
 
-from emperor.base.layer.gate import GateConfig, LayerGateOptions
-from emperor.halting.config import StickBreakingConfig
-from emperor.halting.options import HaltingHiddenStateModeOptions
-from emperor.linears.core.config import LinearLayerConfig
-from emperor.memory.config import GatedResidualDynamicMemoryConfig
-from emperor.memory.options import MemoryPositionOptions
-from emperor.base.layer.config import LayerConfig, LayerStackConfig
+import torch
 from emperor.augmentations.adaptive_parameters import DynamicDepthOptions
-from emperor.base.options import (
-    ActivationOptions,
-    LastLayerBiasOptions,
-    LayerNormPositionOptions,
+from emperor.augmentations.adaptive_parameters.core._validator import (
+    DepthMappingValidator,
 )
 from emperor.augmentations.adaptive_parameters.core.weight.depth_mapper import (
     DepthMappingHandlerConfig,
@@ -22,9 +12,19 @@ from emperor.augmentations.adaptive_parameters.core.weight.depth_mapper import (
     DepthMappingLayerConfig,
     DepthMappingLayerStack,
 )
-from emperor.augmentations.adaptive_parameters.core._validator import (
-    DepthMappingValidator,
+from emperor.base.layer.config import LayerConfig, LayerStackConfig
+from emperor.base.layer.gate import GateConfig, LayerGateOptions
+from emperor.base.layer.residual import ResidualConnectionOptions
+from emperor.base.options import (
+    ActivationOptions,
+    LastLayerBiasOptions,
+    LayerNormPositionOptions,
 )
+from emperor.halting.config import StickBreakingConfig
+from emperor.halting.options import HaltingHiddenStateModeOptions
+from emperor.linears.core.config import LinearLayerConfig
+from emperor.memory.config import GatedResidualDynamicMemoryConfig
+from emperor.memory.options import MemoryPositionOptions
 
 
 class TestDepthMappingAugmentation(unittest.TestCase):
@@ -136,7 +136,9 @@ class TestDepthMappingLayerStack(unittest.TestCase):
         hidden_dim: int = 24,
         output_dim: int = 6,
         bias_flag: bool = True,
-        layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.DISABLED,
+        layer_norm_position: LayerNormPositionOptions = (
+            LayerNormPositionOptions.DISABLED
+        ),
         stack_num_layers: int = 2,
         stack_activation: ActivationOptions = ActivationOptions.RELU,
         stack_residual_connection_option: ResidualConnectionOptions = (
