@@ -1,8 +1,9 @@
 import torch
 import torch.nn as nn
-
 from emperor.neuron import NeuronClusterConfig
 from emperor.neuron.core.monitor import NeuronClusterMonitorCallback
+
+from support.monitor import orchestration_calls
 from unit.test_neuron import NeuronTestCase
 
 
@@ -37,6 +38,45 @@ class FakeLightningModule(nn.Module):
 
 class TestNeuronClusterMonitorCallback(NeuronTestCase):
     CLUSTER_PATH = "neuron_cluster"
+
+    def test_tracking_orchestration_lists_each_tracked_fact(self):
+        cls = NeuronClusterMonitorCallback
+        orchestration = (
+            cls._NeuronClusterMonitorCallback__track_neuron_cluster_diagnostics
+        )
+
+        self.assertEqual(
+            orchestration_calls(orchestration),
+            (
+                "__track_neuron_count",
+                "__track_cluster_capacity",
+                "__track_cluster_fill_fraction",
+                "__track_growth_events",
+                "__track_pruning_events",
+                "__track_growth_pressure_mean",
+                "__track_growth_pressure_maximum",
+                "__track_total_growths",
+                "__track_growth_budget_remaining",
+                "__track_growth_cooldown_remaining",
+                "__track_pruning_pressure_mean",
+                "__track_pruning_pressure_maximum",
+                "__track_auxiliary_loss",
+                "__track_route_depth_mean",
+                "__track_route_depth_maximum",
+                "__track_recurrent_steps",
+                "__track_escape_fraction",
+                "__track_valid_fraction",
+                "__track_halted_fraction",
+                "__track_active_neuron_count",
+                "__track_entry_routing_entropy",
+                "__track_marginal_entry_routing_entropy",
+                "__track_routing_coefficient_of_variation",
+                "__track_survival_history",
+                "__track_route_depth_histogram",
+                "__track_survival_heatmap",
+                "__track_neuron_utilization_heatmap",
+            ),
+        )
 
     def build_cluster(
         self,
@@ -98,6 +138,10 @@ class TestNeuronClusterMonitorCallback(NeuronTestCase):
         with self.assertRaises(ValueError):
             NeuronClusterMonitorCallback(log_every_n_steps=0)
 
+    def test_rejects_non_positive_history_size(self):
+        with self.assertRaises(ValueError):
+            NeuronClusterMonitorCallback(history_size=0)
+
     def test_on_fit_start_discovers_and_wraps_clusters(self):
         cluster = self.build_cluster()
         module = self.build_module(cluster)
@@ -110,6 +154,46 @@ class TestNeuronClusterMonitorCallback(NeuronTestCase):
         self.assertIs(attached_cluster, cluster)
         self.assertIn("forward", cluster.__dict__)
         self.assertIn(self.CLUSTER_PATH, callback._survival_history)
+
+    def test_repeated_fit_start_replaces_existing_forward_wrapper(self):
+        cluster = self.build_cluster()
+        original_forward = cluster.forward
+        module = self.build_module(cluster)
+        callback = self.primed_callback(module, log_every_n_steps=1)
+
+        callback.on_fit_start(trainer=None, pl_module=module)
+        self.feed_cluster(module)
+        callback.on_train_batch_end(
+            trainer=None,
+            pl_module=module,
+            outputs=None,
+            batch=None,
+            batch_idx=0,
+        )
+
+        self.assertEqual(len(callback._forward_replacements), 1)
+        depth_tag = f"{self.CLUSTER_PATH}/cluster/route/depth_mean"
+        self.assertEqual(
+            [name for name, _ in module.logged_scalars].count(depth_tag),
+            1,
+        )
+        callback.on_fit_end(trainer=None, pl_module=module)
+        self.assertEqual(cluster.forward, original_forward)
+
+    def test_cleanup_restores_preexisting_instance_forward(self):
+        cluster = self.build_cluster()
+        class_forward = cluster.forward
+
+        def instance_forward(input_tensor, return_trace=False):
+            return class_forward(input_tensor, return_trace=return_trace)
+
+        cluster.forward = instance_forward
+        module = self.build_module(cluster)
+        callback = self.primed_callback(module)
+
+        callback.on_fit_end(trainer=None, pl_module=module)
+
+        self.assertIs(cluster.__dict__["forward"], instance_forward)
 
     def test_beam_cluster_is_not_wrapped_and_logs_only_structural_scalars(self):
         cluster = self.build_cluster(beam_width=2)
@@ -159,7 +243,7 @@ class TestNeuronClusterMonitorCallback(NeuronTestCase):
         with torch.no_grad():
             self.feed_cluster(module)
 
-        self.assertIsNone(callback._latest_trace[self.CLUSTER_PATH])
+        self.assertNotIn(self.CLUSTER_PATH, callback._latest_observations)
 
     def test_on_train_batch_end_skips_when_not_at_logging_interval(self):
         cluster = self.build_cluster()
@@ -238,12 +322,8 @@ class TestNeuronClusterMonitorCallback(NeuronTestCase):
 
         names = self.scalar_names(module)
         self.assertIn(f"{self.CLUSTER_PATH}/cluster/growth/total_growths", names)
-        self.assertIn(
-            f"{self.CLUSTER_PATH}/cluster/growth/budget_remaining", names
-        )
-        self.assertIn(
-            f"{self.CLUSTER_PATH}/cluster/growth/cooldown_remaining", names
-        )
+        self.assertIn(f"{self.CLUSTER_PATH}/cluster/growth/budget_remaining", names)
+        self.assertIn(f"{self.CLUSTER_PATH}/cluster/growth/cooldown_remaining", names)
 
     def test_growth_budget_skipped_when_options_disabled(self):
         cluster = self.build_cluster(growth_threshold=2)
@@ -318,7 +398,7 @@ class TestNeuronClusterMonitorCallback(NeuronTestCase):
             trainer=None, pl_module=module, outputs=None, batch=None, batch_idx=0
         )
 
-        self.assertEqual(callback._survival_history[self.CLUSTER_PATH], [])
+        self.assertEqual(len(callback._survival_history[self.CLUSTER_PATH]), 0)
 
     def test_survival_history_bounded_by_history_size(self):
         experiment = FakeExperiment()
@@ -332,7 +412,32 @@ class TestNeuronClusterMonitorCallback(NeuronTestCase):
                 trainer=None, pl_module=module, outputs=None, batch=None, batch_idx=0
             )
 
-        self.assertEqual(len(callback._survival_history[self.CLUSTER_PATH]), 3)
+        history = callback._survival_history[self.CLUSTER_PATH]
+        self.assertEqual(len(history), 3)
+        for tensor in history.tensors:
+            self.assertEqual(tensor.device.type, "cpu")
+            self.assertFalse(tensor.requires_grad)
+
+    def test_route_observation_is_consumed_once(self):
+        cluster = self.build_cluster()
+        module = self.build_module(cluster)
+        callback = self.primed_callback(module, log_every_n_steps=1)
+        self.feed_cluster(module)
+
+        for _ in range(2):
+            callback.on_train_batch_end(
+                trainer=None,
+                pl_module=module,
+                outputs=None,
+                batch=None,
+                batch_idx=0,
+            )
+
+        depth_tag = f"{self.CLUSTER_PATH}/cluster/route/depth_mean"
+        self.assertEqual(
+            [name for name, _ in module.logged_scalars].count(depth_tag),
+            1,
+        )
 
     def test_on_fit_end_restores_forward_and_clears_state(self):
         cluster = self.build_cluster()
@@ -344,7 +449,7 @@ class TestNeuronClusterMonitorCallback(NeuronTestCase):
         self.assertNotIn("forward", cluster.__dict__)
         self.assertEqual(callback._clusters, [])
         self.assertEqual(callback._survival_history, {})
-        self.assertEqual(callback._latest_trace, {})
+        self.assertEqual(callback._latest_observations, {})
         self.assertEqual(callback._previous_neuron_names, {})
 
 
