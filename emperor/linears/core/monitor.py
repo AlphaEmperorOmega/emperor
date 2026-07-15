@@ -1,182 +1,518 @@
-import torch
+from __future__ import annotations
 
-from lightning.pytorch.callbacks import Callback
-from emperor.linears.core.layers import LinearAbstract
-
+from collections.abc import Callable
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+import torch
+from lightning.pytorch.callbacks import Callback
+
+from emperor.linears.core.layers import LinearAbstract
+
 if TYPE_CHECKING:
+    from lightning import LightningModule, Trainer
     from torch import Tensor
-    from lightning import Trainer, LightningModule
+    from torch.nn import Module, Parameter
+    from torch.utils.hooks import RemovableHandle
 
 
-class LinearMonitorCallback(Callback):
-    DEAD_FEATURE_RELATIVE_FLOOR = 1e-3
+@dataclass(frozen=True)
+class _TensorSummary:
+    mean: Tensor
+    variance: Tensor
+    norm: Tensor
 
-    def __init__(
-        self,
-        log_every_n_steps: int = 100,
-        log_weight_conditioning: bool = True,
-    ):
-        super().__init__()
-        if log_every_n_steps <= 0:
-            raise ValueError("log_every_n_steps must be greater than 0.")
-        self.log_every_n_steps = log_every_n_steps
-        self.log_weight_conditioning = log_weight_conditioning
-        self._hooks = []
-        self._linear_modules = []
-        self._parameter_snapshots = {}
 
-    def on_fit_start(self, trainer: "Trainer", pl_module: "LightningModule") -> None:
-        self.__remove_hooks()
-        self._linear_modules.clear()
-        self._parameter_snapshots.clear()
-        for name, module in pl_module.named_modules():
-            if isinstance(module, LinearAbstract):
-                self._linear_modules.append((name, module))
-                hook = module.register_forward_hook(
-                    self.__make_forward_stats_hook(name, pl_module)
-                )
-                self._hooks.append(hook)
+@dataclass(frozen=True)
+class _WeightConditioningMetrics:
+    spectral_norm: Tensor
+    condition_number: Tensor
+    effective_rank: Tensor
 
-    def __make_forward_stats_hook(self, name: str, module: "LightningModule"):
-        log_every_n_steps = self.log_every_n_steps
 
-        def hook(layer, input, output):
-            step = module.global_step
-            if step % log_every_n_steps != 0:
-                return
-            inp = input[0].detach().float()
-            out = output.detach().float()
-            module.log(f"{name}/input/mean", inp.mean())
-            module.log(f"{name}/input/var", inp.var(unbiased=False))
-            module.log(f"{name}/output/mean", out.mean())
-            module.log(f"{name}/output/var", out.var(unbiased=False))
+@dataclass(frozen=True)
+class _ParameterChangeMetrics:
+    delta_norm: Tensor
+    relative_delta_norm: Tensor
 
-        return hook
 
-    def on_fit_end(self, trainer: "Trainer", pl_module: "LightningModule") -> None:
-        self.__remove_hooks()
-        self._linear_modules.clear()
-        self._parameter_snapshots.clear()
+@dataclass(frozen=True)
+class _LinearParameterChannelMetrics:
+    values: Tensor
+    summary: _TensorSummary
+    change: _ParameterChangeMetrics | None
+    gradient_summary: _TensorSummary | None
+    update_ratio: Tensor | None
 
-    def __remove_hooks(self) -> None:
-        for hook in self._hooks:
-            hook.remove()
-        self._hooks.clear()
 
-    def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx) -> None:
-        if trainer.global_step % self.log_every_n_steps != 0:
-            return
+@dataclass(frozen=True)
+class _LinearTrackingContext:
+    pl_module: LightningModule
+    module_name: str
+    weights: _LinearParameterChannelMetrics
+    bias: _LinearParameterChannelMetrics | None
+    input_feature_norms: Tensor
+    output_feature_norms: Tensor
+    weight_conditioning: _WeightConditioningMetrics | None
 
-        self.__log_weight_bias_parameter_stats(pl_module)
-        self.__log_weight_bias_gradient_stats(pl_module)
-        self.__log_weight_matrix_health(pl_module)
 
-    def __log_weight_bias_parameter_stats(self, module: "LightningModule") -> None:
-        for name, layer in self._linear_modules:
-            w = layer.weight_params.detach().float()
-            module.log(f"{name}/weights/mean", w.mean())
-            module.log(f"{name}/weights/var", w.var(unbiased=False))
-            module.log(f"{name}/weights/l2_norm", w.norm())
-            self.__log_parameter_delta(
-                module,
-                name=name,
-                channel="weights",
-                current=w,
-            )
-
-            if layer.bias_params is not None:
-                b = layer.bias_params.detach().float()
-                module.log(f"{name}/bias/mean", b.mean())
-                module.log(f"{name}/bias/var", b.var(unbiased=False))
-                module.log(f"{name}/bias/l2_norm", b.norm())
-                self.__log_parameter_delta(
-                    module,
-                    name=name,
-                    channel="bias",
-                    current=b,
-                )
-            else:
-                self._parameter_snapshots.pop((name, "bias"), None)
-
-    def __log_parameter_delta(
-        self,
-        module: "LightningModule",
-        *,
-        name: str,
-        channel: str,
-        current,
-    ) -> None:
-        snapshot_key = (name, channel)
-        previous = self._parameter_snapshots.get(snapshot_key)
-        if previous is not None and previous.shape == current.shape:
-            delta_norm = (current - previous).norm()
-            relative_delta_norm = delta_norm / previous.norm().clamp_min(1e-12)
-            module.log(f"{name}/{channel}/delta_norm", delta_norm)
-            module.log(f"{name}/{channel}/relative_delta_norm", relative_delta_norm)
-        self._parameter_snapshots[snapshot_key] = current.detach().clone()
-
-    def __log_weight_bias_gradient_stats(self, module: "LightningModule") -> None:
-        for name, layer in self._linear_modules:
-            w = layer.weight_params
-            if w.grad is not None:
-                g = w.grad.detach().float()
-                module.log(f"{name}/weights/grad_mean", g.mean())
-                module.log(f"{name}/weights/grad_var", g.var(unbiased=False))
-                module.log(f"{name}/weights/grad_norm", g.norm())
-                module.log(
-                    f"{name}/weights/update_ratio",
-                    g.norm() / w.detach().float().norm().clamp_min(1e-6),
-                )
-
-            if layer.bias_params is not None and layer.bias_params.grad is not None:
-                bg = layer.bias_params.grad.detach().float()
-                module.log(f"{name}/bias/grad_mean", bg.mean())
-                module.log(f"{name}/bias/grad_var", bg.var(unbiased=False))
-                module.log(f"{name}/bias/grad_norm", bg.norm())
-
-    def __log_weight_matrix_health(self, module: "LightningModule") -> None:
-        for name, layer in self._linear_modules:
-            weight = layer.weight_params.detach().float()
-            self.__log_dead_feature_fractions(module, name, weight)
-            if self.log_weight_conditioning:
-                self.__log_weight_conditioning(module, name, weight)
-
-    def __log_dead_feature_fractions(
-        self,
-        module: "LightningModule",
-        name: str,
-        weight: "Tensor",
-    ) -> None:
-        input_feature_norms = weight.norm(dim=1)
-        output_feature_norms = weight.norm(dim=0)
-        module.log(
-            f"{name}/weights/dead_input_fraction",
-            self.__dead_feature_fraction(input_feature_norms),
-        )
-        module.log(
-            f"{name}/weights/dead_output_fraction",
-            self.__dead_feature_fraction(output_feature_norms),
+class _LinearDiagnostics:
+    @staticmethod
+    def summarize(values: Tensor) -> _TensorSummary:
+        detached_values = values.detach().float()
+        return _TensorSummary(
+            mean=detached_values.mean(),
+            variance=detached_values.var(unbiased=False),
+            norm=detached_values.norm(),
         )
 
-    def __dead_feature_fraction(self, feature_norms: "Tensor") -> "Tensor":
-        dead_threshold = self.DEAD_FEATURE_RELATIVE_FLOOR * feature_norms.mean()
-        return (feature_norms <= dead_threshold).float().mean()
-
-    def __log_weight_conditioning(
-        self,
-        module: "LightningModule",
-        name: str,
-        weight: "Tensor",
-    ) -> None:
-        singular_values = torch.linalg.svdvals(weight)
+    @staticmethod
+    def weight_conditioning(weight: Tensor) -> _WeightConditioningMetrics:
+        singular_values = torch.linalg.svdvals(weight.detach().float())
         spectral_norm = singular_values.max()
         condition_number = spectral_norm / singular_values.min().clamp_min(1e-12)
         normalized_spectrum = singular_values / singular_values.sum().clamp_min(1e-12)
         spectral_entropy = -(
             normalized_spectrum.clamp_min(1e-12).log() * normalized_spectrum
         ).sum()
-        module.log(f"{name}/weights/spectral_norm", spectral_norm)
-        module.log(f"{name}/weights/condition_number", condition_number)
-        module.log(f"{name}/weights/effective_rank", spectral_entropy.exp())
+        return _WeightConditioningMetrics(
+            spectral_norm=spectral_norm,
+            condition_number=condition_number,
+            effective_rank=spectral_entropy.exp(),
+        )
+
+
+class LinearMonitorCallback(Callback):
+    """Log activations, parameters, gradients, and matrix health for linear layers."""
+
+    DEAD_FEATURE_RELATIVE_FLOOR = 1e-3
+
+    def __init__(
+        self,
+        log_every_n_steps: int = 100,
+        log_weight_conditioning: bool = True,
+    ) -> None:
+        super().__init__()
+        if log_every_n_steps <= 0:
+            raise ValueError("log_every_n_steps must be greater than 0.")
+        self.log_every_n_steps = log_every_n_steps
+        self.log_weight_conditioning = log_weight_conditioning
+        self._hooks: list[RemovableHandle] = []
+        self._linear_modules: list[tuple[str, LinearAbstract]] = []
+        self._parameter_snapshots: dict[tuple[str, str], Tensor] = {}
+
+    def on_fit_start(self, trainer: Trainer, pl_module: LightningModule) -> None:
+        self.__cleanup()
+        for module_name, linear_layer in pl_module.named_modules():
+            if not isinstance(linear_layer, LinearAbstract):
+                continue
+            self._linear_modules.append((module_name, linear_layer))
+            self._hooks.append(
+                linear_layer.register_forward_hook(
+                    self.__make_forward_stats_hook(module_name, pl_module)
+                )
+            )
+
+    def __make_forward_stats_hook(
+        self,
+        module_name: str,
+        pl_module: LightningModule,
+    ) -> Callable[[Module, tuple[object, ...], object], None]:
+        def log_forward_stats(
+            _linear_layer: Module,
+            inputs: tuple[object, ...],
+            output: object,
+        ) -> None:
+            if pl_module.global_step % self.log_every_n_steps != 0:
+                return
+            if (
+                not inputs
+                or not torch.is_tensor(inputs[0])
+                or not torch.is_tensor(output)
+            ):
+                return
+            input_summary = _LinearDiagnostics.summarize(inputs[0])
+            output_summary = _LinearDiagnostics.summarize(output)
+            self.__track_forward_diagnostics(
+                pl_module,
+                module_name,
+                input_summary,
+                output_summary,
+            )
+
+        return log_forward_stats
+
+    def __track_forward_diagnostics(
+        self,
+        pl_module: LightningModule,
+        module_name: str,
+        input_summary: _TensorSummary,
+        output_summary: _TensorSummary,
+    ) -> None:
+        self.__track_input_mean(pl_module, module_name, input_summary)
+        self.__track_input_variance(pl_module, module_name, input_summary)
+        self.__track_output_mean(pl_module, module_name, output_summary)
+        self.__track_output_variance(pl_module, module_name, output_summary)
+
+    @staticmethod
+    def __track_input_mean(
+        pl_module: LightningModule,
+        module_name: str,
+        input_summary: _TensorSummary,
+    ) -> None:
+        pl_module.log(f"{module_name}/input/mean", input_summary.mean)
+
+    @staticmethod
+    def __track_input_variance(
+        pl_module: LightningModule,
+        module_name: str,
+        input_summary: _TensorSummary,
+    ) -> None:
+        pl_module.log(f"{module_name}/input/var", input_summary.variance)
+
+    @staticmethod
+    def __track_output_mean(
+        pl_module: LightningModule,
+        module_name: str,
+        output_summary: _TensorSummary,
+    ) -> None:
+        pl_module.log(f"{module_name}/output/mean", output_summary.mean)
+
+    @staticmethod
+    def __track_output_variance(
+        pl_module: LightningModule,
+        module_name: str,
+        output_summary: _TensorSummary,
+    ) -> None:
+        pl_module.log(f"{module_name}/output/var", output_summary.variance)
+
+    def on_train_batch_end(
+        self,
+        trainer: Trainer,
+        pl_module: LightningModule,
+        outputs: object,
+        batch: object,
+        batch_idx: int,
+    ) -> None:
+        if trainer.global_step % self.log_every_n_steps != 0:
+            return
+        contexts = self.__build_tracking_contexts(pl_module)
+        self.__track_linear_training_diagnostics(contexts)
+
+    def __build_tracking_contexts(
+        self,
+        pl_module: LightningModule,
+    ) -> tuple[_LinearTrackingContext, ...]:
+        contexts = []
+        for module_name, linear_layer in self._linear_modules:
+            weight_values = linear_layer.weight_params.detach().float()
+            weights = self.__build_parameter_channel_metrics(
+                module_name,
+                "weights",
+                linear_layer.weight_params,
+                include_update_ratio=True,
+            )
+            bias = None
+            if linear_layer.bias_params is None:
+                self._parameter_snapshots.pop((module_name, "bias"), None)
+            else:
+                bias = self.__build_parameter_channel_metrics(
+                    module_name,
+                    "bias",
+                    linear_layer.bias_params,
+                    include_update_ratio=False,
+                )
+            contexts.append(
+                _LinearTrackingContext(
+                    pl_module=pl_module,
+                    module_name=module_name,
+                    weights=weights,
+                    bias=bias,
+                    input_feature_norms=weight_values.norm(dim=1),
+                    output_feature_norms=weight_values.norm(dim=0),
+                    weight_conditioning=(
+                        _LinearDiagnostics.weight_conditioning(weight_values)
+                        if self.log_weight_conditioning
+                        else None
+                    ),
+                )
+            )
+        return tuple(contexts)
+
+    def __build_parameter_channel_metrics(
+        self,
+        module_name: str,
+        parameter_channel: str,
+        parameter: Parameter,
+        *,
+        include_update_ratio: bool,
+    ) -> _LinearParameterChannelMetrics:
+        current_values = parameter.detach().float()
+        snapshot_key = (module_name, parameter_channel)
+        previous_values = self._parameter_snapshots.get(snapshot_key)
+        change = None
+        if (
+            previous_values is not None
+            and previous_values.shape == current_values.shape
+        ):
+            delta_norm = (current_values - previous_values).norm()
+            change = _ParameterChangeMetrics(
+                delta_norm=delta_norm,
+                relative_delta_norm=(
+                    delta_norm / previous_values.norm().clamp_min(1e-12)
+                ),
+            )
+        gradient_summary = (
+            _LinearDiagnostics.summarize(parameter.grad)
+            if parameter.grad is not None
+            else None
+        )
+        return _LinearParameterChannelMetrics(
+            values=current_values,
+            summary=_LinearDiagnostics.summarize(current_values),
+            change=change,
+            gradient_summary=gradient_summary,
+            update_ratio=(
+                gradient_summary.norm / current_values.norm().clamp_min(1e-6)
+                if include_update_ratio and gradient_summary is not None
+                else None
+            ),
+        )
+
+    def __track_linear_training_diagnostics(
+        self,
+        contexts: tuple[_LinearTrackingContext, ...],
+    ) -> None:
+        self.__track_parameter_mean(contexts, "weights")
+        self.__track_parameter_variance(contexts, "weights")
+        self.__track_parameter_l2_norm(contexts, "weights")
+        self.__track_parameter_delta_norm(contexts, "weights")
+        self.__track_relative_parameter_delta_norm(contexts, "weights")
+        self.__track_parameter_mean(contexts, "bias")
+        self.__track_parameter_variance(contexts, "bias")
+        self.__track_parameter_l2_norm(contexts, "bias")
+        self.__track_parameter_delta_norm(contexts, "bias")
+        self.__track_relative_parameter_delta_norm(contexts, "bias")
+        self.__record_parameter_snapshots(contexts)
+        self.__track_gradient_mean(contexts, "weights")
+        self.__track_gradient_variance(contexts, "weights")
+        self.__track_gradient_norm(contexts, "weights")
+        self.__track_update_ratio(contexts)
+        self.__track_gradient_mean(contexts, "bias")
+        self.__track_gradient_variance(contexts, "bias")
+        self.__track_gradient_norm(contexts, "bias")
+        self.__track_dead_input_fraction(contexts)
+        self.__track_dead_output_fraction(contexts)
+        self.__track_spectral_norm(contexts)
+        self.__track_condition_number(contexts)
+        self.__track_effective_rank(contexts)
+
+    @staticmethod
+    def __channel_metrics(
+        context: _LinearTrackingContext,
+        parameter_channel: str,
+    ) -> _LinearParameterChannelMetrics | None:
+        return context.weights if parameter_channel == "weights" else context.bias
+
+    def __track_parameter_mean(
+        self,
+        contexts: tuple[_LinearTrackingContext, ...],
+        parameter_channel: str,
+    ) -> None:
+        for context in contexts:
+            metrics = self.__channel_metrics(context, parameter_channel)
+            if metrics is not None:
+                context.pl_module.log(
+                    f"{context.module_name}/{parameter_channel}/mean",
+                    metrics.summary.mean,
+                )
+
+    def __track_parameter_variance(
+        self,
+        contexts: tuple[_LinearTrackingContext, ...],
+        parameter_channel: str,
+    ) -> None:
+        for context in contexts:
+            metrics = self.__channel_metrics(context, parameter_channel)
+            if metrics is not None:
+                context.pl_module.log(
+                    f"{context.module_name}/{parameter_channel}/var",
+                    metrics.summary.variance,
+                )
+
+    def __track_parameter_l2_norm(
+        self,
+        contexts: tuple[_LinearTrackingContext, ...],
+        parameter_channel: str,
+    ) -> None:
+        for context in contexts:
+            metrics = self.__channel_metrics(context, parameter_channel)
+            if metrics is not None:
+                context.pl_module.log(
+                    f"{context.module_name}/{parameter_channel}/l2_norm",
+                    metrics.summary.norm,
+                )
+
+    def __track_parameter_delta_norm(
+        self,
+        contexts: tuple[_LinearTrackingContext, ...],
+        parameter_channel: str,
+    ) -> None:
+        for context in contexts:
+            metrics = self.__channel_metrics(context, parameter_channel)
+            if metrics is not None and metrics.change is not None:
+                context.pl_module.log(
+                    f"{context.module_name}/{parameter_channel}/delta_norm",
+                    metrics.change.delta_norm,
+                )
+
+    def __track_relative_parameter_delta_norm(
+        self,
+        contexts: tuple[_LinearTrackingContext, ...],
+        parameter_channel: str,
+    ) -> None:
+        for context in contexts:
+            metrics = self.__channel_metrics(context, parameter_channel)
+            if metrics is not None and metrics.change is not None:
+                context.pl_module.log(
+                    f"{context.module_name}/{parameter_channel}/relative_delta_norm",
+                    metrics.change.relative_delta_norm,
+                )
+
+    def __record_parameter_snapshots(
+        self,
+        contexts: tuple[_LinearTrackingContext, ...],
+    ) -> None:
+        for context in contexts:
+            self._parameter_snapshots[(context.module_name, "weights")] = (
+                context.weights.values.detach().clone()
+            )
+            if context.bias is not None:
+                self._parameter_snapshots[(context.module_name, "bias")] = (
+                    context.bias.values.detach().clone()
+                )
+
+    def __track_gradient_mean(
+        self,
+        contexts: tuple[_LinearTrackingContext, ...],
+        parameter_channel: str,
+    ) -> None:
+        for context in contexts:
+            metrics = self.__channel_metrics(context, parameter_channel)
+            if metrics is not None and metrics.gradient_summary is not None:
+                context.pl_module.log(
+                    f"{context.module_name}/{parameter_channel}/grad_mean",
+                    metrics.gradient_summary.mean,
+                )
+
+    def __track_gradient_variance(
+        self,
+        contexts: tuple[_LinearTrackingContext, ...],
+        parameter_channel: str,
+    ) -> None:
+        for context in contexts:
+            metrics = self.__channel_metrics(context, parameter_channel)
+            if metrics is not None and metrics.gradient_summary is not None:
+                context.pl_module.log(
+                    f"{context.module_name}/{parameter_channel}/grad_var",
+                    metrics.gradient_summary.variance,
+                )
+
+    def __track_gradient_norm(
+        self,
+        contexts: tuple[_LinearTrackingContext, ...],
+        parameter_channel: str,
+    ) -> None:
+        for context in contexts:
+            metrics = self.__channel_metrics(context, parameter_channel)
+            if metrics is not None and metrics.gradient_summary is not None:
+                context.pl_module.log(
+                    f"{context.module_name}/{parameter_channel}/grad_norm",
+                    metrics.gradient_summary.norm,
+                )
+
+    @staticmethod
+    def __track_update_ratio(
+        contexts: tuple[_LinearTrackingContext, ...],
+    ) -> None:
+        for context in contexts:
+            if context.weights.update_ratio is not None:
+                context.pl_module.log(
+                    f"{context.module_name}/weights/update_ratio",
+                    context.weights.update_ratio,
+                )
+
+    def __track_dead_input_fraction(
+        self,
+        contexts: tuple[_LinearTrackingContext, ...],
+    ) -> None:
+        for context in contexts:
+            context.pl_module.log(
+                f"{context.module_name}/weights/dead_input_fraction",
+                self.__dead_feature_fraction(context.input_feature_norms),
+            )
+
+    def __track_dead_output_fraction(
+        self,
+        contexts: tuple[_LinearTrackingContext, ...],
+    ) -> None:
+        for context in contexts:
+            context.pl_module.log(
+                f"{context.module_name}/weights/dead_output_fraction",
+                self.__dead_feature_fraction(context.output_feature_norms),
+            )
+
+    def __dead_feature_fraction(self, feature_norms: Tensor) -> Tensor:
+        dead_threshold = self.DEAD_FEATURE_RELATIVE_FLOOR * feature_norms.mean()
+        return (feature_norms <= dead_threshold).float().mean()
+
+    @staticmethod
+    def __track_spectral_norm(
+        contexts: tuple[_LinearTrackingContext, ...],
+    ) -> None:
+        for context in contexts:
+            if context.weight_conditioning is not None:
+                context.pl_module.log(
+                    f"{context.module_name}/weights/spectral_norm",
+                    context.weight_conditioning.spectral_norm,
+                )
+
+    @staticmethod
+    def __track_condition_number(
+        contexts: tuple[_LinearTrackingContext, ...],
+    ) -> None:
+        for context in contexts:
+            if context.weight_conditioning is not None:
+                context.pl_module.log(
+                    f"{context.module_name}/weights/condition_number",
+                    context.weight_conditioning.condition_number,
+                )
+
+    @staticmethod
+    def __track_effective_rank(
+        contexts: tuple[_LinearTrackingContext, ...],
+    ) -> None:
+        for context in contexts:
+            if context.weight_conditioning is not None:
+                context.pl_module.log(
+                    f"{context.module_name}/weights/effective_rank",
+                    context.weight_conditioning.effective_rank,
+                )
+
+    def on_fit_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
+        self.__cleanup()
+
+    def on_exception(
+        self,
+        trainer: Trainer,
+        pl_module: LightningModule,
+        exception: BaseException,
+    ) -> None:
+        self.__cleanup()
+
+    def __cleanup(self) -> None:
+        for hook_handle in self._hooks:
+            hook_handle.remove()
+        self._hooks.clear()
+        self._linear_modules.clear()
+        self._parameter_snapshots.clear()

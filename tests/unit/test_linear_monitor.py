@@ -1,11 +1,12 @@
-import torch
 import unittest
 
-from torch import nn
-
+import torch
 from emperor.linears.core.config import LinearLayerConfig
 from emperor.linears.core.layers import LinearLayer
 from emperor.linears.core.monitor import LinearMonitorCallback
+from torch import nn
+
+from support.monitor import orchestration_calls
 
 
 class FakeTrainer:
@@ -41,6 +42,53 @@ def build_module(
 
 
 class TestLinearMonitorCallback(unittest.TestCase):
+    def test_forward_tracking_orchestration_lists_each_tracked_fact(self):
+        orchestration = (
+            LinearMonitorCallback._LinearMonitorCallback__track_forward_diagnostics
+        )
+
+        self.assertEqual(
+            orchestration_calls(orchestration),
+            (
+                "__track_input_mean",
+                "__track_input_variance",
+                "__track_output_mean",
+                "__track_output_variance",
+            ),
+        )
+
+    def test_training_tracking_orchestration_lists_each_tracked_fact(self):
+        cls = LinearMonitorCallback
+        orchestration = cls._LinearMonitorCallback__track_linear_training_diagnostics
+        parameter_calls = (
+            "__track_parameter_mean",
+            "__track_parameter_variance",
+            "__track_parameter_l2_norm",
+            "__track_parameter_delta_norm",
+            "__track_relative_parameter_delta_norm",
+        )
+
+        self.assertEqual(
+            orchestration_calls(orchestration),
+            (
+                *parameter_calls,
+                *parameter_calls,
+                "__record_parameter_snapshots",
+                "__track_gradient_mean",
+                "__track_gradient_variance",
+                "__track_gradient_norm",
+                "__track_update_ratio",
+                "__track_gradient_mean",
+                "__track_gradient_variance",
+                "__track_gradient_norm",
+                "__track_dead_input_fraction",
+                "__track_dead_output_fraction",
+                "__track_spectral_norm",
+                "__track_condition_number",
+                "__track_effective_rank",
+            ),
+        )
+
     def test_init_rejects_non_positive_log_interval(self):
         for bad in (0, -1):
             with self.assertRaises(ValueError):
@@ -58,9 +106,7 @@ class TestLinearMonitorCallback(unittest.TestCase):
 
         self.assertTrue(module.logged_scalars)
         for name, value in module.logged_scalars:
-            self.assertTrue(
-                torch.isfinite(value).all(), f"{name} not finite: {value}"
-            )
+            self.assertTrue(torch.isfinite(value).all(), f"{name} not finite: {value}")
         update_ratios = [
             value
             for name, value in module.logged_scalars
@@ -79,9 +125,7 @@ class TestLinearMonitorCallback(unittest.TestCase):
         callback.on_train_batch_end(trainer, module, None, None, batch_idx=0)
 
         bias_vars = [
-            value
-            for name, value in module.logged_scalars
-            if name.endswith("bias/var")
+            value for name, value in module.logged_scalars if name.endswith("bias/var")
         ]
         self.assertTrue(bias_vars)
         self.assertTrue(torch.isfinite(bias_vars[0]).all())
@@ -206,7 +250,6 @@ class TestLinearMonitorCallback(unittest.TestCase):
             self.assertEqual(scalars[name].item(), 0.0)
         callback.on_fit_end(trainer, module)
 
-
     def test_logs_weight_conditioning_metrics(self):
         module = build_module(input_dim=2, output_dim=2, global_step=0)
         with torch.no_grad():
@@ -305,9 +348,7 @@ class TestLinearMonitorCallback(unittest.TestCase):
         self.assertAlmostEqual(
             scalars["linear/weights/dead_output_fraction"].item(), 0.25, places=5
         )
-        self.assertEqual(
-            scalars["linear/weights/dead_input_fraction"].item(), 0.0
-        )
+        self.assertEqual(scalars["linear/weights/dead_input_fraction"].item(), 0.0)
         callback.on_fit_end(trainer, module)
 
     def test_weight_conditioning_can_be_disabled(self):
