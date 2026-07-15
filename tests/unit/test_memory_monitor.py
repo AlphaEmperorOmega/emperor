@@ -10,6 +10,7 @@ from emperor.memory.core.base import DynamicMemoryAbstract
 from emperor.memory.core.monitor import MemoryMonitorCallback
 from torch import nn
 
+from support.monitor import orchestration_calls
 from unit.test_memory import (
     MEMORY_CASES,
     ConstantLastDimModule,
@@ -66,6 +67,27 @@ def build_memory(config_cls=GatedResidualDynamicMemoryConfig) -> DynamicMemoryAb
 
 
 class TestMemoryMonitorCallback(unittest.TestCase):
+    def test_tracking_orchestration_lists_each_tracked_fact(self):
+        orchestration = (
+            MemoryMonitorCallback._MemoryMonitorCallback__track_memory_diagnostics
+        )
+
+        self.assertEqual(
+            orchestration_calls(orchestration),
+            (
+                "__track_output_mean",
+                "__track_output_variance",
+                "__track_output_l2_norm",
+                "__track_contribution_delta_mean",
+                "__track_contribution_delta_variance",
+                "__track_contribution_delta_norm",
+                "__track_contribution_relative_delta_norm",
+                "__track_gate_open_mean",
+                "__track_gate_open_fraction",
+                "__track_gate_saturation_fraction",
+            ),
+        )
+
     def assert_logged_close(
         self,
         scalars: dict[str, torch.Tensor],
@@ -143,12 +165,10 @@ class TestMemoryMonitorCallback(unittest.TestCase):
 
         callback.on_fit_start(trainer, module)
         self.assertTrue(callback._hooks)
-        self.assertTrue(callback._memory_modules)
 
         callback.on_fit_end(trainer, module)
 
         self.assertEqual(callback._hooks, [])
-        self.assertEqual(callback._memory_modules, [])
         self.assertEqual(callback._latest_gate_logits, {})
         module.logged_scalars.clear()
         module.memory(torch.randn(2, 4))
@@ -236,6 +256,7 @@ class TestMemoryMonitorCallback(unittest.TestCase):
             f"{prefix}/saturation_fraction",
             ((gate < 0.01) | (gate > 0.99)).float().mean(),
         )
+        self.assertEqual(callback._latest_gate_logits, {})
         callback.on_fit_end(trainer, module)
 
     def test_logs_exact_weighted_memory_share_metrics(self):
