@@ -66,6 +66,7 @@ class MultiHeadAttentionAbstract(Module):
         static_k: Tensor | None = None,
         static_v: Tensor | None = None,
     ) -> tuple[Tensor, Tensor | None, Tensor | None]:
+        self.projector.get_auxiliary_loss_and_clear()
         q, k, v = self.batch_manager.enforce_batch_as_second_dim(q, k, v)
         self.VALIDATOR.validate_forward_inputs(
             self, q, k, v, k_padding_mask, attention_mask
