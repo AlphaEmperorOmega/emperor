@@ -17,10 +17,12 @@ class WeightedBankDynamicBias(DynamicBiasAbstract):
         super().__init__(cfg, overrides)
         self.VALIDATOR.validate_bank_expansion_factor(self)
         self.bank_expansion_factor = self.cfg.bank_expansion_factor.value
-        self.weight_bank = self._init_parameter_bank(
-            (self.bank_expansion_factor, self.output_dim)
-        )
+        weight_bank_shape = self.__get_weight_bank_shape()
+        self.weight_bank = self._init_parameter_bank(weight_bank_shape)
         self.model = self._init_model(self.bank_expansion_factor)
+
+    def __get_weight_bank_shape(self) -> tuple[int, int]:
+        return self.bank_expansion_factor, self.output_dim
 
     def forward(self, _bias_params: Tensor, logits: Tensor) -> Tensor:
         bank_logits = Layer.run_model_returning_hidden(self.model, logits)

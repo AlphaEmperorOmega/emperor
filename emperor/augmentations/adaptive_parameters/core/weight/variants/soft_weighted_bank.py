@@ -23,16 +23,18 @@ class SoftWeightedBankDynamicWeight(DynamicWeightAbstract):
         self.VALIDATOR.validate_bank_expansion_factor(self)
         self.depth_value = self.generator_depth.value
         self.bank_expansion_factor = self.cfg.bank_expansion_factor.value
-        self.weight_bank = self._init_parameter_bank(
-            (
-                self.depth_value,
-                self.input_dim,
-                self.bank_expansion_factor,
-                self.output_dim,
-            )
-        )
+        weight_bank_shape = self.__get_weight_bank_shape()
+        self.weight_bank = self._init_parameter_bank(weight_bank_shape)
 
         self.model = self._init_model()
+
+    def __get_weight_bank_shape(self) -> tuple[int, int, int, int]:
+        return (
+            self.depth_value,
+            self.input_dim,
+            self.bank_expansion_factor,
+            self.output_dim,
+        )
 
     def _init_model(self) -> DepthMappingLayerStack:
         overrides = DepthMappingHandlerConfig(
