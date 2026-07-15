@@ -1,10 +1,11 @@
-from torch import Tensor
-from emperor.attention.core.handlers.projector import ProjectorBase
-
+from dataclasses import replace
 from typing import TYPE_CHECKING
+
+from emperor.attention.core.handlers.projector import ProjectorBase
 
 if TYPE_CHECKING:
     from emperor.attention.core.config import MultiHeadAttentionConfig
+    from emperor.attention.core.runtime import QKV
 
 
 class IndependentProjector(ProjectorBase):
@@ -19,11 +20,12 @@ class IndependentProjector(ProjectorBase):
 
     def compute_qkv_projections(
         self,
-        query: Tensor,
-        key: Tensor,
-        value: Tensor,
-    ) -> tuple[Tensor, Tensor, Tensor]:
-        query_projections = self._compute_projection(query, self.query_model)
-        key_projections = self._compute_projection(key, self.key_model)
-        value_projections = self._compute_projection(value, self.value_model)
-        return query_projections, key_projections, value_projections
+        qkv: "QKV",
+    ) -> "QKV":
+        query_projections = self._compute_projection(qkv.query, self.query_model)
+        key_projections = self._compute_projection(qkv.key, self.key_model)
+        value_projections = self._compute_projection(qkv.value, self.value_model)
+        projected_qkv = replace(
+            qkv, query=query_projections, key=key_projections, value=value_projections
+        )
+        return projected_qkv
