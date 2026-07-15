@@ -6,7 +6,7 @@ from emperor.attention.core._validator import MultiHeadAttentionValidator
 from emperor.attention.core.handlers.batch import BatchDimensionManager
 from emperor.attention.core.handlers.bias import KeyValueBias
 from emperor.attention.core.handlers.zero_attention import ZeroAttention
-from emperor.base.utils import Module
+from emperor.base.module import Module
 
 if TYPE_CHECKING:
     from emperor.attention.core.config import MultiHeadAttentionConfig
