@@ -1,25 +1,25 @@
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
 import torch
 import torch.nn as nn
-
 from torch import Tensor
-from dataclasses import dataclass
+
 from emperor.base.layer import Layer, LayerStackConfig, RecurrentLayerConfig
 from emperor.base.module import Module
-from emperor.experts.core.config import MixtureOfExpertsConfig
 from emperor.experts.core._expert_capacity import ExpertCapacityHandler
 from emperor.experts.core._expert_weighting import ExpertWeightingHandler
 from emperor.experts.core._validator import MixtureOfExpertsValidator
-from emperor.experts.core.state import MixtureOfExpertsLayerState
+from emperor.experts.core.config import MixtureOfExpertsConfig
 from emperor.experts.core.options import (
     DroppedTokenOptions,
     ExpertWeightingPositionOptions,
     RoutingInitializationMode,
 )
-
-from typing import TYPE_CHECKING
+from emperor.experts.core.state import MixtureOfExpertsLayerState
 
 if TYPE_CHECKING:
-    from emperor.sampler.core.config import RouterConfig, SamplerConfig
+    from emperor.sampler.core.config import SamplerConfig
     from emperor.sampler.model import SamplerModel
 
 
@@ -40,14 +40,14 @@ class MixtureOfExperts(Module):
         overrides: "MixtureOfExpertsConfig | None" = None,
     ):
         super().__init__()
-        self.cfg: "MixtureOfExpertsConfig" = self._override_config(cfg, overrides)
-        self.main_cfg: "LayerStackConfig | RecurrentLayerConfig" = (
+        self.cfg: MixtureOfExpertsConfig = self._override_config(cfg, overrides)
+        self.main_cfg: LayerStackConfig | RecurrentLayerConfig = (
             self.cfg.expert_model_config
         )
 
         self.input_dim: int = self.cfg.input_dim
         self.output_dim: int = self.cfg.output_dim
-        self.expert_model_config: "LayerStackConfig | RecurrentLayerConfig" = (
+        self.expert_model_config: LayerStackConfig | RecurrentLayerConfig = (
             self.cfg.expert_model_config
         )
         self.top_k: int = self.cfg.top_k
@@ -58,13 +58,13 @@ class MixtureOfExperts(Module):
         )
         self.compute_expert_mixture_flag: bool = self.cfg.compute_expert_mixture_flag
         self.weighted_parameters_flag: bool = self.cfg.weighted_parameters_flag
-        self.routing_initialization_mode: "RoutingInitializationMode" = (
+        self.routing_initialization_mode: RoutingInitializationMode = (
             self.cfg.routing_initialization_mode
         )
-        self.weighting_position_option: "ExpertWeightingPositionOptions" = (
+        self.weighting_position_option: ExpertWeightingPositionOptions = (
             self.cfg.weighting_position_option
         )
-        self.sampler_config: "SamplerConfig" = self.cfg.sampler_config
+        self.sampler_config: SamplerConfig = self.cfg.sampler_config
 
         MixtureOfExpertsValidator.validate(self)
         self.capacity_handler = ExpertCapacityHandler(self.cfg)

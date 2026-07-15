@@ -1,16 +1,14 @@
-import torch
+from typing import TYPE_CHECKING
 
+import torch
 from torch import Tensor
 
 from emperor.base.validator import ValidatorBase
-
 from emperor.experts.core.options import (
     DroppedTokenOptions,
     ExpertWeightingPositionOptions,
     RoutingInitializationMode,
 )
-
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.experts.core.layers import MixtureOfExperts
@@ -265,7 +263,8 @@ class MixtureOfExpertsValidator(ValidatorBase):
             raise ValueError(
                 "Input Error: input feature dimension must match 'input_dim' for "
                 "MixtureOfExperts, received "
-                f"input_dim={model.input_dim} and input shape {tuple(input_batch.shape)}."
+                f"input_dim={model.input_dim} and input shape "
+                f"{tuple(input_batch.shape)}."
             )
 
     @staticmethod
@@ -404,9 +403,7 @@ class MixtureOfExpertsModelValidator(ValidatorBase):
     def validate(model: "MixtureOfExpertsModel") -> None:
         MixtureOfExpertsModelValidator.validate_cfg_type(model)
         MixtureOfExpertsModelValidator.validate_stack_config_type(model)
-        MixtureOfExpertsModelValidator.validate_shared_routing_config_when_shared(
-            model
-        )
+        MixtureOfExpertsModelValidator.validate_shared_routing_config_when_shared(model)
 
     @staticmethod
     def validate_cfg_type(model: "MixtureOfExpertsModel") -> None:

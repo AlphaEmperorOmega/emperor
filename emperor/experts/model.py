@@ -1,12 +1,13 @@
+from typing import TYPE_CHECKING
+
 from torch import Tensor
+
 from emperor.base.layer.state import LayerState
 from emperor.base.module import Module
 from emperor.experts.config import MixtureOfExpertsModelConfig
+from emperor.experts.core._validator import MixtureOfExpertsModelValidator
 from emperor.experts.core.options import RoutingInitializationMode
 from emperor.experts.core.state import MixtureOfExpertsLayerState
-from emperor.experts.core._validator import MixtureOfExpertsModelValidator
-
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.sampler.model import SamplerModel
@@ -41,12 +42,10 @@ class MixtureOfExpertsModel(Module):
         return self.stack_config.build()
 
     def forward(self, state: LayerState) -> MixtureOfExpertsLayerState:
-        probabilities, indices, shared_sampler_loss = (
-            self.__maybe_apply_shared_routing(
-                state.hidden,
-                getattr(state, "probabilities", None),
-                getattr(state, "indices", None),
-            )
+        probabilities, indices, shared_sampler_loss = self.__maybe_apply_shared_routing(
+            state.hidden,
+            getattr(state, "probabilities", None),
+            getattr(state, "indices", None),
         )
         mixture_of_experts_state = MixtureOfExpertsLayerState(
             hidden=state.hidden,
