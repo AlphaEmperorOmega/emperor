@@ -41,6 +41,7 @@ class MultiHeadAttentionAbstract(Module):
         self.causal_attention_mask_flag = self.cfg.causal_attention_mask_flag
         self.average_attention_weights_flag = self.cfg.average_attention_weights_flag
         self.return_attention_weights_flag = self.cfg.return_attention_weights_flag
+        self.batch_first_flag = self.cfg.batch_first_flag
         self.head_dim = self.embedding_dim // self.num_heads
 
         self.VALIDATOR.validate(self)
