@@ -48,6 +48,14 @@ run = "python tools/emperor_dev.py test"
 description = "Run the attention unittest suite"
 run = "PYTHONPATH=tests python -m unittest discover -s tests -p 'test_attention*.py'"
 
+[tasks."test:attention-coverage"]
+description = "Require complete statement and branch coverage for emperor.attention"
+run = """
+python -m coverage erase
+PYTHONPATH=tests python -m coverage run -m unittest discover -s tests -p 'test_attention*.py'
+python -m coverage report
+"""
+
 [tasks."test:attention-mutation"]
 description = "Run attention mutation testing (Linux or WSL only)"
 run = """

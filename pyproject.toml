@@ -37,6 +37,7 @@ emperor-project-adapter = "models.adapter_cli:main"
 
 [project.optional-dependencies]
 dev = [
+  "coverage[toml]>=7.15,<8",
   "mutmut>=3.6,<4",
   "ruff>=0.8,<0.14",
 ]
@@ -88,6 +89,17 @@ select = ["E", "F", "I", "B", "UP"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["model_runtime"]
+
+[tool.coverage.run]
+branch = true
+source = ["emperor.attention"]
+
+[tool.coverage.report]
+exclude_lines = ["if TYPE_CHECKING:"]
+fail_under = 100
+precision = 2
+show_missing = true
+skip_covered = false
 
 [tool.mutmut]
 source_paths = ["emperor/"]
