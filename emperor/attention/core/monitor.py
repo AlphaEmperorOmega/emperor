@@ -879,6 +879,14 @@ class AttentionMonitorCallback(Callback):
     def on_fit_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
         self.__cleanup()
 
+    def on_exception(
+        self,
+        trainer: Trainer,
+        pl_module: LightningModule,
+        exception: BaseException,
+    ) -> None:
+        self.__cleanup()
+
     def __cleanup(self) -> None:
         self._tracker_manager.detach()
         self._entropy_history.clear()
