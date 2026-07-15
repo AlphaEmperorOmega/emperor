@@ -238,13 +238,20 @@ class TestRuntimeDeviceValidation(unittest.TestCase):
             )
 
     def test_static_projection_device_must_match_query(self):
+        model = SimpleNamespace(
+            embedding_dim=4,
+            num_heads=1,
+            query_key_projection_dim=4,
+            value_projection_dim=4,
+        )
         query = torch.empty(2, 1, 4)
         qkv = QKV(query=query, key=query, value=query)
         static_key = torch.empty(1, 2, 4, device="meta")
         runtime_shape = AttentionRuntimeShape(1, 2, 2)
 
         with self.assertRaisesRegex(RuntimeError, "device must match query device"):
-            MultiHeadAttentionValidator.resolve_source_runtime_shape(
+            MultiHeadAttentionValidator.validate_static_key_value_inputs(
+                model,
                 qkv,
                 static_key,
                 None,
@@ -607,6 +614,7 @@ class TestMixtureOfAttentionHeadsValidator(unittest.TestCase):
                 with self.assertRaises(ValueError) as caught:
                     MixtureOfAttentionHeadsValidator.validate_static_key_value_inputs(
                         model,
+                        object(),
                         static_keys,
                         static_values,
                     )
@@ -654,6 +662,7 @@ class TestMixtureOfAttentionHeadsValidator(unittest.TestCase):
         static_keys = object()
         static_values = object()
         runtime_shape = object()
+        qkv = object()
 
         with patch.object(
             MultiHeadAttentionValidator,
@@ -661,6 +670,7 @@ class TestMixtureOfAttentionHeadsValidator(unittest.TestCase):
         ) as validate_base:
             MixtureOfAttentionHeadsValidator.validate_static_key_value_inputs(
                 model,
+                qkv,
                 static_keys,
                 static_values,
                 runtime_shape,
@@ -668,6 +678,7 @@ class TestMixtureOfAttentionHeadsValidator(unittest.TestCase):
 
         validate_base.assert_called_once_with(
             model,
+            qkv,
             static_keys,
             static_values,
             runtime_shape,

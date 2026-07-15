@@ -346,6 +346,7 @@ class TestMultiHeadAttentionValidatorMutationContracts(
         ) as validate_static_projection_shapes:
             MultiHeadAttentionValidator.validate_static_key_value_inputs(
                 model,
+                qkv,
                 static_keys,
                 static_values,
                 runtime_shape,
@@ -625,18 +626,25 @@ class TestMultiHeadAttentionValidatorMutationContracts(
                     qkv,
                 )
 
-    def test_selected_source_resolution_validates_each_static_operand(self):
+    def test_static_input_validation_checks_each_selected_source(self):
         qkv = QKV(
             query=torch.empty(2, 1, 4),
             key=torch.empty(3, 1, 4),
             value=torch.empty(3, 1, 4),
+        )
+        model = SimpleNamespace(
+            embedding_dim=4,
+            num_heads=1,
+            query_key_projection_dim=4,
+            value_projection_dim=4,
         )
         runtime_shape = AttentionRuntimeShape(1, 2, 3)
         self.assert_exact_error(
             RuntimeError,
             "static_values dtype must match query dtype, got torch.float64 and "
             "torch.float32.",
-            MultiHeadAttentionValidator.resolve_source_runtime_shape,
+            MultiHeadAttentionValidator.validate_static_key_value_inputs,
+            model,
             qkv,
             None,
             torch.empty(1, 3, 4, dtype=torch.float64),
@@ -645,7 +653,8 @@ class TestMultiHeadAttentionValidatorMutationContracts(
         self.assert_exact_error(
             RuntimeError,
             "static_keys device must match query device, got meta and cpu.",
-            MultiHeadAttentionValidator.resolve_source_runtime_shape,
+            MultiHeadAttentionValidator.validate_static_key_value_inputs,
+            model,
             qkv,
             torch.empty(1, 3, 4, device="meta"),
             None,
@@ -655,12 +664,53 @@ class TestMultiHeadAttentionValidatorMutationContracts(
             RuntimeError,
             "Selected key and value sources must have equal sequence lengths, got "
             "2 and 4.",
-            MultiHeadAttentionValidator.resolve_source_runtime_shape,
+            MultiHeadAttentionValidator.validate_static_key_value_inputs,
+            model,
             qkv,
             torch.empty(1, 2, 4),
             torch.empty(1, 4, 4),
             runtime_shape,
         )
+
+    def test_static_input_validation_is_read_only(self):
+        model = SimpleNamespace(
+            embedding_dim=4,
+            num_heads=1,
+            query_key_projection_dim=4,
+            value_projection_dim=4,
+        )
+        qkv = QKV(
+            query=torch.randn(2, 1, 4),
+            key=torch.randn(3, 1, 4),
+            value=torch.randn(3, 1, 4),
+        )
+        static_keys = torch.randn(1, 3, 4)
+        static_values = torch.randn(1, 3, 4)
+        runtime_shape = AttentionRuntimeShape(1, 2, 3)
+        original_tensors = (
+            qkv.query.clone(),
+            qkv.key.clone(),
+            qkv.value.clone(),
+            static_keys.clone(),
+            static_values.clone(),
+        )
+
+        result = MultiHeadAttentionValidator.validate_static_key_value_inputs(
+            model,
+            qkv,
+            static_keys,
+            static_values,
+            runtime_shape,
+        )
+
+        self.assertIsNone(result)
+        self.assertEqual(runtime_shape.source_sequence_length, 3)
+        for actual, expected in zip(
+            (qkv.query, qkv.key, qkv.value, static_keys, static_values),
+            original_tensors,
+            strict=True,
+        ):
+            torch.testing.assert_close(actual, expected)
 
 
 if __name__ == "__main__":
