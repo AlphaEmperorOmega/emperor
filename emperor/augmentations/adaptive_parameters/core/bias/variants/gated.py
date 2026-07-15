@@ -1,7 +1,6 @@
 import torch
-
 from torch import Tensor
-from emperor.base.layer import Layer
+
 from emperor.augmentations.adaptive_parameters.core._validator import (
     DynamicBiasValidator,
 )
@@ -10,6 +9,7 @@ from emperor.augmentations.adaptive_parameters.core.bias.config import (
     SigmoidGatedDynamicBiasConfig,
     TanhGatedDynamicBiasConfig,
 )
+from emperor.base.layer import Layer
 
 
 class SigmoidGatedDynamicBias(DynamicBiasAbstract):

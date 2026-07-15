@@ -1,24 +1,24 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
 from torch import Tensor
-from emperor.base.module import Module
-from emperor.augmentations.adaptive_parameters.options import (
-    WeightDecayScheduleOptions,
-    WeightNormalizationOptions,
-    WeightNormalizationPositionOptions,
-)
-from emperor.augmentations.adaptive_parameters.core.weight.depth_mapper import (
-    DepthMappingHandlerConfig,
-    DepthMappingLayerStack,
-)
+
 from emperor.augmentations.adaptive_parameters.core._validator import (
     DynamicWeightValidator,
 )
 from emperor.augmentations.adaptive_parameters.core.weight.config import (
     DynamicWeightConfig,
 )
+from emperor.augmentations.adaptive_parameters.core.weight.depth_mapper import (
+    DepthMappingHandlerConfig,
+    DepthMappingLayerStack,
+)
+from emperor.augmentations.adaptive_parameters.options import (
+    WeightDecayScheduleOptions,
+    WeightNormalizationOptions,
+    WeightNormalizationPositionOptions,
+)
+from emperor.base.module import Module
 
 
 class DynamicWeightAbstract(Module):
@@ -122,7 +122,8 @@ class DynamicWeightAbstract(Module):
                 return vectors
             case _:
                 raise ValueError(
-                    f"Unsupported normalization_option value: {self.normalization_option!r}."
+                    "Unsupported normalization_option value: "
+                    f"{self.normalization_option!r}."
                 )
 
     def _maybe_apply_weight_decay(self, weight_params: Tensor) -> Tensor:

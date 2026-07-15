@@ -1,15 +1,15 @@
 import torch
-
 from torch import Tensor
-from emperor.base.layer import Layer, LayerStack, LayerStackConfig
-from emperor.base.module import Module
-from emperor.augmentations.adaptive_parameters.options import (
-    WeightDecayScheduleOptions,
-)
+
 from emperor.augmentations.adaptive_parameters.core._validator import (
     DynamicBiasValidator,
 )
 from emperor.augmentations.adaptive_parameters.core.bias.config import DynamicBiasConfig
+from emperor.augmentations.adaptive_parameters.options import (
+    WeightDecayScheduleOptions,
+)
+from emperor.base.layer import Layer, LayerStack, LayerStackConfig
+from emperor.base.module import Module
 
 
 class DynamicBiasAbstract(Module):

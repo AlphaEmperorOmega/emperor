@@ -1,30 +1,28 @@
-import torch
-
-from torch import Tensor
 from copy import deepcopy
-from emperor.base.module import Module
-from emperor.base.layer.layer import Layer
-from dataclasses import dataclass, fields, field
-from emperor.linears.core.config import LinearLayerConfig
+from dataclasses import dataclass, field, fields
+from typing import TYPE_CHECKING
+
+import torch
+from torch import Tensor
+
 from emperor.augmentations.adaptive_parameters.core._validator import (
     DepthMappingValidator,
 )
 from emperor.base.layer import LayerStackConfig
-
-from typing import TYPE_CHECKING
+from emperor.base.layer.layer import Layer
+from emperor.base.module import Module
+from emperor.linears.core.config import LinearLayerConfig
 
 if TYPE_CHECKING:
-    from emperor.base.layer import LayerStackConfig
     from emperor.augmentations.adaptive_parameters.options import DynamicDepthOptions
+    from emperor.base.layer import LayerStackConfig
 
 
 @dataclass
 class DepthMappingLayerConfig(LinearLayerConfig):
     generator_depth: "DynamicDepthOptions | None" = field(
         default=None,
-        metadata={
-            "help": "Generator depth for adaptive parameters."
-        },
+        metadata={"help": "Generator depth for adaptive parameters."},
     )
 
     def _registry_owner(self) -> type:
@@ -43,7 +41,7 @@ class DepthMappingLayer(Module):
         self.input_dim: int = self.cfg.input_dim
         self.output_dim: int = self.cfg.output_dim
         self.bias_flag: bool = self.cfg.bias_flag
-        self.generator_depth: "DynamicDepthOptions" = self.cfg.generator_depth
+        self.generator_depth: DynamicDepthOptions = self.cfg.generator_depth
         self.depth_value: int = self.generator_depth.value
 
         self.__init_parameters()
@@ -76,9 +74,7 @@ class DepthMappingLayer(Module):
 class DepthMappingHandlerConfig(LinearLayerConfig):
     generator_depth: "DynamicDepthOptions | None" = field(
         default=None,
-        metadata={
-            "help": "Generator depth for adaptive parameters."
-        },
+        metadata={"help": "Generator depth for adaptive parameters."},
     )
     model_config: "LayerStackConfig | None" = field(
         default=None,
@@ -99,9 +95,9 @@ class DepthMappingLayerStack(Module):
         self.cfg = self._override_config(cfg, overrides)
         self.input_dim: int = self.cfg.input_dim
         self.output_dim: int = self.cfg.output_dim
-        self.generator_depth: "DynamicDepthOptions" = self.cfg.generator_depth
+        self.generator_depth: DynamicDepthOptions = self.cfg.generator_depth
         self.depth_value: int = self.generator_depth.value
-        self.model_config: "LayerStackConfig" = self.__update_layer_stack_config()
+        self.model_config: LayerStackConfig = self.__update_layer_stack_config()
         self.model = self.model_config.build()
 
     def __update_layer_stack_config(self) -> "LayerStackConfig":

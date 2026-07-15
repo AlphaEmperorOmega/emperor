@@ -1,13 +1,14 @@
-from copy import deepcopy
-from torch import Tensor
 from collections.abc import Callable
-from emperor.base.config import ConfigBase
-from emperor.base.module import Module
+from copy import deepcopy
+from typing import TYPE_CHECKING
+
+from torch import Tensor
+
 from emperor.augmentations.adaptive_parameters.core._validator import (
     AdaptiveParameterAugmentationValidator,
 )
-
-from typing import TYPE_CHECKING
+from emperor.base.config import ConfigBase
+from emperor.base.module import Module
 
 if TYPE_CHECKING:
     from emperor.augmentations.adaptive_parameters.config import (
@@ -22,7 +23,7 @@ class AdaptiveParameterAugmentation(Module):
         overrides: "AdaptiveParameterAugmentationConfig | None" = None,
     ):
         super().__init__()
-        self.cfg: "AdaptiveParameterAugmentationConfig" = self._override_config(
+        self.cfg: AdaptiveParameterAugmentationConfig = self._override_config(
             cfg, overrides
         )
         self.input_dim = self.cfg.input_dim

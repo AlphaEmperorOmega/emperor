@@ -1,27 +1,28 @@
-from torch.types import Tensor
-from emperor.base.validator import ValidatorBase
-
 from typing import TYPE_CHECKING
 
+from torch.types import Tensor
+
+from emperor.base.validator import ValidatorBase
+
 if TYPE_CHECKING:
+    from emperor.augmentations.adaptive_parameters.core.bias.base import (
+        DynamicBiasAbstract,
+    )
     from emperor.augmentations.adaptive_parameters.core.diagonal.base import (
         DynamicDiagonalAbstract,
     )
     from emperor.augmentations.adaptive_parameters.core.mask.base import (
         AxisMaskAbstract,
     )
-    from emperor.augmentations.adaptive_parameters.core.bias.base import (
-        DynamicBiasAbstract,
-    )
-    from emperor.augmentations.adaptive_parameters.model import (
-        AdaptiveParameterAugmentation,
+    from emperor.augmentations.adaptive_parameters.core.weight.base import (
+        DynamicWeightAbstract,
     )
     from emperor.augmentations.adaptive_parameters.core.weight.depth_mapper import (
         DepthMappingLayer,
         DepthMappingLayerConfig,
     )
-    from emperor.augmentations.adaptive_parameters.core.weight.base import (
-        DynamicWeightAbstract,
+    from emperor.augmentations.adaptive_parameters.model import (
+        AdaptiveParameterAugmentation,
     )
     from emperor.base.layer import LayerStackConfig
 
@@ -30,6 +31,7 @@ class AdaptiveGeneratorValidatorBase:
     @staticmethod
     def validate_generator_model(generator_model) -> None:
         from torch.nn import Sequential
+
         from emperor.base.layer import Layer, LayerStack
 
         if isinstance(generator_model, Layer):
@@ -258,7 +260,8 @@ class DynamicBiasValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
     def ensure_parameters_exist(bias_params: Tensor | None) -> None:
         if bias_params is None:
             raise ValueError(
-                "bias_params must not be None. Provide a valid bias tensor for this dynamic bias strategy."
+                "bias_params must not be None. Provide a valid bias tensor for "
+                "this dynamic bias strategy."
             )
 
 
@@ -287,9 +290,7 @@ class AxisMaskValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
         AxisMaskValidator.validate_mask_floor(model.cfg.mask_floor)
         mask_transition_width = getattr(model.cfg, "mask_transition_width", None)
         if mask_transition_width is not None:
-            AxisMaskValidator.validate_mask_transition_width(
-                mask_transition_width
-            )
+            AxisMaskValidator.validate_mask_transition_width(mask_transition_width)
 
     @staticmethod
     def validate_mask_threshold(mask_threshold: float) -> None:
@@ -354,8 +355,10 @@ class DepthMappingValidator(ValidatorBase):
             )
         if not input_batch.dim() == 2:
             raise ValueError(
-                f"DepthMappingLayerStack expects a 2D input tensor (batch_size, features), "
-                f"received a {input_batch.dim()}D tensor with shape {tuple(input_batch.shape)}."
+                "DepthMappingLayerStack expects a 2D input tensor "
+                "(batch_size, features), "
+                f"received a {input_batch.dim()}D tensor with shape "
+                f"{tuple(input_batch.shape)}."
             )
         if input_dim is not None and input_batch.shape[-1] != input_dim:
             raise ValueError(
@@ -373,7 +376,8 @@ class DepthMappingValidator(ValidatorBase):
         inner_config = model_config.layer_config.layer_model_config
         if not isinstance(inner_config, LinearLayerConfig):
             raise TypeError(
-                f"model_config.layer_config.layer_model_config must be a LinearLayerConfig, "
+                "model_config.layer_config.layer_model_config must be a "
+                "LinearLayerConfig, "
                 f"received {type(inner_config).__name__}."
             )
 
@@ -454,17 +458,17 @@ class AdaptiveParameterAugmentationValidator(ValidatorBase):
 
     @staticmethod
     def validate_sub_configs(model: "AdaptiveParameterAugmentation") -> None:
-        from emperor.augmentations.adaptive_parameters.core.weight.config import (
-            DynamicWeightConfig,
+        from emperor.augmentations.adaptive_parameters.core.bias.config import (
+            DynamicBiasConfig,
         )
         from emperor.augmentations.adaptive_parameters.core.diagonal.config import (
             DynamicDiagonalConfig,
         )
-        from emperor.augmentations.adaptive_parameters.core.bias.config import (
-            DynamicBiasConfig,
-        )
         from emperor.augmentations.adaptive_parameters.core.mask.config import (
             AxisMaskConfig,
+        )
+        from emperor.augmentations.adaptive_parameters.core.weight.config import (
+            DynamicWeightConfig,
         )
 
         sub_configs = [
@@ -486,8 +490,9 @@ class AdaptiveParameterAugmentationValidator(ValidatorBase):
             )
             if config.model_config is None and model.model_config is None:
                 raise ValueError(
-                    f"{type(config).__name__} requires a model_config but none was provided "
-                    f"on the sub-config or the parent AdaptiveParameterAugmentationConfig."
+                    f"{type(config).__name__} requires a model_config but none "
+                    "was provided on the sub-config or the parent "
+                    "AdaptiveParameterAugmentationConfig."
                 )
 
     @staticmethod

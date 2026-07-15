@@ -1,6 +1,6 @@
 import torch
-
 from torch import Tensor
+
 from emperor.augmentations.adaptive_parameters.core.mask.base import AxisMaskAbstract
 from emperor.augmentations.adaptive_parameters.core.mask.config import (
     DiagonalAxisMaskConfig,

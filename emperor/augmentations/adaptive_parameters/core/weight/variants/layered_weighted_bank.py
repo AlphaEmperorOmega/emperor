@@ -1,10 +1,6 @@
 import torch
-
 from torch import Tensor
-from emperor.augmentations.adaptive_parameters.core.weight.depth_mapper import (
-    DepthMappingHandlerConfig,
-    DepthMappingLayerStack,
-)
+
 from emperor.augmentations.adaptive_parameters.core._validator import (
     DynamicWeightValidator,
 )
@@ -13,6 +9,10 @@ from emperor.augmentations.adaptive_parameters.core.weight.base import (
 )
 from emperor.augmentations.adaptive_parameters.core.weight.config import (
     LayeredWeightedBankDynamicWeightConfig,
+)
+from emperor.augmentations.adaptive_parameters.core.weight.depth_mapper import (
+    DepthMappingHandlerConfig,
+    DepthMappingLayerStack,
 )
 
 

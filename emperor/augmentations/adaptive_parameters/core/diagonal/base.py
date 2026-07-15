@@ -1,15 +1,15 @@
 import torch
 import torch.nn.functional as F
-
 from torch import Tensor
-from emperor.base.layer import Layer, LayerStack, LayerStackConfig
-from emperor.base.module import Module
+
 from emperor.augmentations.adaptive_parameters.core._validator import (
     DynamicDiagonalValidator,
 )
 from emperor.augmentations.adaptive_parameters.core.diagonal.config import (
     DynamicDiagonalConfig,
 )
+from emperor.base.layer import Layer, LayerStack, LayerStackConfig
+from emperor.base.module import Module
 
 
 class DynamicDiagonalAbstract(Module):

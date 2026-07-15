@@ -1,7 +1,6 @@
 import torch
-
 from torch import Tensor
-from emperor.base.layer import Layer
+
 from emperor.augmentations.adaptive_parameters.core._validator import (
     DynamicBiasValidator,
 )
@@ -9,6 +8,7 @@ from emperor.augmentations.adaptive_parameters.core.bias.base import DynamicBias
 from emperor.augmentations.adaptive_parameters.core.bias.config import (
     WeightedBankDynamicBiasConfig,
 )
+from emperor.base.layer import Layer
 
 
 class WeightedBankDynamicBias(DynamicBiasAbstract):
