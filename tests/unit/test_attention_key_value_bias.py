@@ -28,10 +28,10 @@ class TestKeyValueBias(unittest.TestCase):
         self.assertEqual(
             str(caught.exception),
             "Attention-ready key/value projections must have a leading dimension "
-            "divisible by batch_size * num_heads.",
+            "equal to batch_size * num_heads (4), got 3.",
         )
 
-    def test_runtime_batch_and_branch_multiplier_preserve_head_order(self):
+    def test_rejects_clean_branch_multiples_beyond_runtime_batch_times_heads(self):
         cfg = build_attention_config(
             batch_size=7,
             num_heads=2,
@@ -49,8 +49,46 @@ class TestKeyValueBias(unittest.TestCase):
             target_sequence_length=3,
             source_sequence_length=5,
         )
-        branch_multiplier = 3
-        branch_count = runtime_shape.batch_size * branch_multiplier * cfg.num_heads
+        expected_branch_count = runtime_shape.batch_size * cfg.num_heads
+
+        for branch_count in (expected_branch_count * 2, expected_branch_count * 3):
+            with self.subTest(branch_count=branch_count):
+                projection = torch.zeros(branch_count, 5, 2)
+                value = torch.zeros(branch_count, 5, 3)
+
+                with self.assertRaises(RuntimeError) as caught:
+                    model.add_kv_learnable_bias_vectors(
+                        QKV(query=projection, key=projection, value=value),
+                        AttentionMasks(),
+                        runtime_shape,
+                    )
+
+                self.assertEqual(
+                    str(caught.exception),
+                    "Attention-ready key/value projections must have a leading "
+                    "dimension equal to batch_size * num_heads (4), got "
+                    f"{branch_count}.",
+                )
+
+    def test_runtime_batch_preserves_standard_batch_head_order(self):
+        cfg = build_attention_config(
+            batch_size=7,
+            num_heads=2,
+            embedding_dim=4,
+            query_key_projection_dim=4,
+            value_projection_dim=6,
+            add_key_value_bias_flag=True,
+        )
+        model = KeyValueBias(cfg)
+        with torch.no_grad():
+            model.key_bias_vector.copy_(torch.arange(4).view(1, 1, 4))
+            model.value_bias_vector.copy_(torch.arange(10, 16).view(1, 1, 6))
+        runtime_shape = AttentionRuntimeShape(
+            batch_size=2,
+            target_sequence_length=3,
+            source_sequence_length=5,
+        )
+        branch_count = runtime_shape.batch_size * cfg.num_heads
         qkv = QKV(
             query=torch.zeros(branch_count, 3, 2),
             key=torch.zeros(branch_count, 5, 2),
@@ -64,11 +102,11 @@ class TestKeyValueBias(unittest.TestCase):
         )
 
         expected_key = torch.tensor([[0.0, 1.0], [2.0, 3.0]]).repeat(
-            runtime_shape.batch_size * branch_multiplier,
+            runtime_shape.batch_size,
             1,
         )
         expected_value = torch.tensor([[10.0, 11.0, 12.0], [13.0, 14.0, 15.0]]).repeat(
-            runtime_shape.batch_size * branch_multiplier, 1
+            runtime_shape.batch_size, 1
         )
         torch.testing.assert_close(output.key[:, -1], expected_key)
         torch.testing.assert_close(output.value[:, -1], expected_value)

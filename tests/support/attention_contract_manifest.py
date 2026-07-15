@@ -25,7 +25,7 @@ ATTENTION_CONTRACT_MANIFEST = {
         ("configuration validation", "runtime errors", "static contracts"),
         "tests.unit.test_attention_validator",
         AttentionValidatorBase=class_contract(
-            ("shape", "mask", "divisibility", "static projection validation"),
+            ("shape", "mask", "exact branches", "static projection validation"),
             "tests.unit.test_attention_validator",
         ),
         MultiHeadAttentionValidator=class_contract(

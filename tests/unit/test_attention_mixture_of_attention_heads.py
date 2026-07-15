@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 
 import torch
 from emperor.attention import MixtureOfAttentionHeadsConfig
@@ -15,6 +16,21 @@ from emperor.attention.core.variants.mixture_of_attention_heads.zero_attention i
 from emperor.embedding.relative.core.config import DynamicPositionalBiasConfig
 
 from support.attention import build_attention_config
+
+
+class SummingRelativeEmbedding(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.received_query = None
+        self.received_source_length = None
+
+    def forward(self, query, sequence_length, last=False):
+        self.received_query = query
+        self.received_source_length = sequence_length
+        return query.sum(dim=-1, keepdim=True).expand(
+            *query.shape[:-1],
+            sequence_length,
+        )
 
 
 class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
@@ -59,6 +75,13 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
             requires_grad=requires_grad,
         )
 
+    def runtime_shape(self, cfg):
+        return AttentionRuntimeShape(
+            batch_size=cfg.batch_size,
+            target_sequence_length=cfg.target_sequence_length,
+            source_sequence_length=cfg.source_sequence_length,
+        )
+
     def test_self_attention_forward(self):
         torch.manual_seed(0)
         cfg = self.preset()
@@ -93,80 +116,172 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
 
     def test_key_value_bias_supports_shared_and_expert_projection_ranks(self):
         for use_kv_expert_models_flag in (False, True):
+            for top_k in (1, 2):
+                with self.subTest(
+                    use_kv_expert_models_flag=use_kv_expert_models_flag,
+                    top_k=top_k,
+                ):
+                    cfg = self.preset(
+                        batch_size=3,
+                        value_projection_dim=12,
+                        add_key_value_bias_flag=True,
+                        use_kv_expert_models_flag=use_kv_expert_models_flag,
+                        experts_top_k=top_k,
+                    )
+                    model = MixtureOfAttentionHeadsKeyValueBias(cfg)
+                    key_head_dim = cfg.query_key_projection_dim // cfg.num_heads
+                    value_head_dim = cfg.value_projection_dim // cfg.num_heads
+                    runtime_batch_size = 2
+                    branch_multiplier = top_k if use_kv_expert_models_flag else 1
+                    branch_count = (
+                        runtime_batch_size * branch_multiplier * cfg.num_heads
+                    )
+                    key = torch.randn(branch_count, 4, key_head_dim)
+                    value = torch.randn(branch_count, 4, value_head_dim)
+                    expected_key_bias = (
+                        model.key_bias_vector.view(
+                            1,
+                            1,
+                            cfg.num_heads,
+                            key_head_dim,
+                        )
+                        .expand(
+                            runtime_batch_size,
+                            branch_multiplier,
+                            -1,
+                            -1,
+                        )
+                        .reshape(branch_count, key_head_dim)
+                    )
+                    expected_value_bias = (
+                        model.value_bias_vector.view(
+                            1,
+                            1,
+                            cfg.num_heads,
+                            value_head_dim,
+                        )
+                        .expand(
+                            runtime_batch_size,
+                            branch_multiplier,
+                            -1,
+                            -1,
+                        )
+                        .reshape(branch_count, value_head_dim)
+                    )
+                    attention_branch_count = (
+                        runtime_batch_size * top_k * cfg.num_heads
+                    )
+                    key_padding_mask = torch.zeros(
+                        runtime_batch_size,
+                        4,
+                        dtype=torch.bool,
+                    )
+                    attention_mask = torch.zeros(
+                        attention_branch_count,
+                        4,
+                        4,
+                        dtype=torch.bool,
+                    )
+
+                    runtime_shape = AttentionRuntimeShape(
+                        batch_size=runtime_batch_size,
+                        target_sequence_length=4,
+                        source_sequence_length=4,
+                    )
+                    output_qkv, output_masks, output_runtime_shape = (
+                        model.add_kv_learnable_bias_vectors(
+                            QKV(query=key, key=key, value=value),
+                            AttentionMasks(
+                                key_padding_mask=key_padding_mask,
+                                attention_mask=attention_mask,
+                            ),
+                            runtime_shape,
+                        )
+                    )
+
+                    self.assertEqual(
+                        output_qkv.key.shape,
+                        (branch_count, 5, key_head_dim),
+                    )
+                    self.assertEqual(
+                        output_qkv.value.shape,
+                        (branch_count, 5, value_head_dim),
+                    )
+                    self.assertEqual(
+                        output_masks.key_padding_mask.shape,
+                        (runtime_batch_size, 5),
+                    )
+                    self.assertEqual(
+                        output_masks.attention_mask.shape,
+                        (attention_branch_count, 4, 5),
+                    )
+                    torch.testing.assert_close(
+                        output_qkv.key[:, -1],
+                        expected_key_bias,
+                    )
+                    torch.testing.assert_close(
+                        output_qkv.value[:, -1],
+                        expected_value_bias,
+                    )
+                    self.assertEqual(
+                        output_runtime_shape.source_sequence_length,
+                        5,
+                    )
+                    self.assertEqual(output_runtime_shape.source_extension_count, 1)
+
+                    bias_loss = (
+                        output_qkv.key[:, -1].sum()
+                        + output_qkv.value[:, -1].sum()
+                    )
+                    bias_loss.backward()
+                    self.assertTrue(torch.any(model.key_bias_vector.grad != 0))
+                    self.assertTrue(torch.any(model.value_bias_vector.grad != 0))
+
+    def test_key_value_bias_rejects_nonmatching_standard_and_expert_branches(self):
+        runtime_shape = AttentionRuntimeShape(
+            batch_size=2,
+            target_sequence_length=4,
+            source_sequence_length=4,
+        )
+        for use_kv_expert_models_flag, branch_count, expected_message in (
+            (
+                False,
+                8,
+                "Attention-ready key/value projections must have a leading "
+                "dimension equal to batch_size * num_heads (4), got 8.",
+            ),
+            (
+                True,
+                4,
+                "Mixture attention-ready key/value projections must have a leading "
+                "dimension equal to batch_size * top_k * num_heads (8), got 4.",
+            ),
+            (
+                True,
+                16,
+                "Mixture attention-ready key/value projections must have a leading "
+                "dimension equal to batch_size * top_k * num_heads (8), got 16.",
+            ),
+        ):
             with self.subTest(
                 use_kv_expert_models_flag=use_kv_expert_models_flag,
+                branch_count=branch_count,
             ):
                 cfg = self.preset(
-                    value_projection_dim=12,
                     add_key_value_bias_flag=True,
                     use_kv_expert_models_flag=use_kv_expert_models_flag,
                 )
                 model = MixtureOfAttentionHeadsKeyValueBias(cfg)
-                key_head_dim = cfg.query_key_projection_dim // cfg.num_heads
-                value_head_dim = cfg.value_projection_dim // cfg.num_heads
-                branch_multiplier = (
-                    cfg.experts_config.top_k if use_kv_expert_models_flag else 1
-                )
-                branch_count = cfg.batch_size * branch_multiplier * cfg.num_heads
-                if use_kv_expert_models_flag:
-                    key = torch.randn(branch_count, 4, key_head_dim)
-                    value = torch.randn(branch_count, 4, value_head_dim)
-                else:
-                    key = torch.randn(branch_count, 4, key_head_dim)
-                    value = torch.randn(branch_count, 4, value_head_dim)
-                expected_key_bias = (
-                    model.key_bias_vector.view(1, 1, cfg.num_heads, key_head_dim)
-                    .expand(
-                        cfg.batch_size,
-                        branch_multiplier,
-                        -1,
-                        -1,
-                    )
-                    .reshape(branch_count, key_head_dim)
-                )
-                expected_value_bias = (
-                    model.value_bias_vector.view(1, 1, cfg.num_heads, value_head_dim)
-                    .expand(
-                        cfg.batch_size,
-                        branch_multiplier,
-                        -1,
-                        -1,
-                    )
-                    .reshape(branch_count, value_head_dim)
-                )
-                key_padding_mask = torch.zeros(2, 4, dtype=torch.bool)
-                attention_mask = torch.zeros(8, 4, 4, dtype=torch.bool)
+                projection = torch.zeros(branch_count, 4, 4)
 
-                runtime_shape = AttentionRuntimeShape(
-                    batch_size=cfg.batch_size,
-                    target_sequence_length=4,
-                    source_sequence_length=4,
-                )
-                output_qkv, output_masks, output_runtime_shape = (
+                with self.assertRaises(RuntimeError) as caught:
                     model.add_kv_learnable_bias_vectors(
-                        QKV(query=key, key=key, value=value),
-                        AttentionMasks(
-                            key_padding_mask=key_padding_mask,
-                            attention_mask=attention_mask,
-                        ),
+                        QKV(query=projection, key=projection, value=projection),
+                        AttentionMasks(),
                         runtime_shape,
                     )
-                )
 
-                self.assertEqual(output_qkv.key.shape, (branch_count, 5, key_head_dim))
-                self.assertEqual(
-                    output_qkv.value.shape,
-                    (branch_count, 5, value_head_dim),
-                )
-                self.assertEqual(output_masks.key_padding_mask.shape, (2, 5))
-                self.assertEqual(output_masks.attention_mask.shape, (8, 4, 5))
-                torch.testing.assert_close(output_qkv.key[:, -1], expected_key_bias)
-                torch.testing.assert_close(
-                    output_qkv.value[:, -1],
-                    expected_value_bias,
-                )
-                self.assertEqual(output_runtime_shape.source_sequence_length, 5)
-                self.assertEqual(output_runtime_shape.source_extension_count, 1)
+                self.assertEqual(str(caught.exception), expected_message)
 
     def test_zero_attention_supports_shared_and_expert_projection_branches(self):
         for use_kv_expert_models_flag in (False, True):
@@ -288,6 +403,8 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
                 torch.manual_seed(200 + use_kv_expert_models_flag)
                 cfg = self.preset(
                     use_kv_expert_models_flag=use_kv_expert_models_flag,
+                    add_key_value_bias_flag=True,
+                    zero_attention_flag=True,
                     relative_positional_embedding_config_cls=(
                         DynamicPositionalBiasConfig
                     ),
@@ -306,9 +423,95 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
                     "relative_positional_embedding",
                 )
 
+    def test_relative_position_adapter_preserves_expert_order_padding_and_gradients(
+        self,
+    ):
+        cfg = self.preset(
+            batch_size=3,
+            target_sequence_length=6,
+            source_sequence_length=6,
+        )
+        processor = cfg.build().processor
+        relative = SummingRelativeEmbedding()
+        processor.relative_positional_embedding = relative
+        runtime_shape = AttentionRuntimeShape(
+            batch_size=2,
+            target_sequence_length=3,
+            source_sequence_length=6,
+            source_extension_count=2,
+        )
+        query = torch.arange(
+            2 * cfg.experts_config.top_k * cfg.num_heads * 3 * 4,
+            dtype=torch.float32,
+        ).view(2, cfg.experts_config.top_k, cfg.num_heads, 3, 4)
+        query.requires_grad_()
+
+        logits = processor._compute_relative_position_logits(
+            query,
+            runtime_shape.source_sequence_length,
+            runtime_shape,
+        )
+
+        expected_prepared_query = (query * (4**-0.5)).reshape(
+            2 * cfg.experts_config.top_k,
+            cfg.num_heads,
+            3,
+            4,
+        )
+        torch.testing.assert_close(relative.received_query, expected_prepared_query)
+        self.assertEqual(relative.received_source_length, 4)
+        expected_real_logits = expected_prepared_query.sum(
+            dim=-1,
+            keepdim=True,
+        ).expand(-1, -1, -1, 4)
+        expected_logits = torch.nn.functional.pad(
+            expected_real_logits.view(
+                2,
+                cfg.experts_config.top_k,
+                cfg.num_heads,
+                3,
+                4,
+            ),
+            (0, 2),
+        )
+        torch.testing.assert_close(logits, expected_logits)
+        self.assertEqual(
+            logits.shape,
+            (2, cfg.experts_config.top_k, cfg.num_heads, 3, 6),
+        )
+        torch.testing.assert_close(logits[..., -2:], torch.zeros_like(logits[..., -2:]))
+
+        logits.sum().backward()
+        self.assertIsNotNone(query.grad)
+        self.assertTrue(torch.all(query.grad != 0))
+
+    def test_relative_position_adapter_rejects_non_mixture_layouts(self):
+        cfg = self.preset()
+        processor = cfg.build().processor
+        processor.relative_positional_embedding = SummingRelativeEmbedding()
+        invalid_cases = (
+            (
+                torch.zeros(cfg.batch_size, cfg.num_heads, 4, 4),
+                "mixture relative-position query must be rank 5 with layout "
+                "[batch, selected_expert, head, target, head_width], got rank 4.",
+            ),
+            (
+                torch.zeros(1, cfg.experts_config.top_k, cfg.num_heads, 4, 4),
+                "mixture relative-position query must have leading dimensions "
+                "(batch_size, top_k, num_heads) (2, 2, 2), got (1, 2, 2).",
+            ),
+        )
+
+        for query, message in invalid_cases:
+            with self.subTest(shape=tuple(query.shape)):
+                with self.assertRaises(RuntimeError) as caught:
+                    processor._compute_relative_position_logits(query, 4)
+                self.assertEqual(str(caught.exception), message)
+
     def test_mask_formats_normalize_in_batch_expert_head_order(self):
         cfg = self.preset()
         model = cfg.build()
+        runtime_shape = self.runtime_shape(cfg)
         branch_count = cfg.batch_size * cfg.experts_config.top_k * cfg.num_heads
         key = torch.randn(
             branch_count,
@@ -327,6 +530,7 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
         normalized_2d = model.masks.merge_padding_and_attention_mask(
             key,
             AttentionMasks(attention_mask=mask_2d),
+            runtime_shape,
         )
         expected_2d = mask_2d.view(1, *sequence_shape).expand(
             branch_count,
@@ -347,6 +551,7 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
             AttentionMasks(
                 attention_mask=standard_mask.reshape(-1, *sequence_shape),
             ),
+            runtime_shape,
         )
         expected_standard = (
             standard_mask.unsqueeze(1)
@@ -375,15 +580,140 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
             AttentionMasks(
                 attention_mask=expanded_mask.reshape(-1, *sequence_shape),
             ),
+            runtime_shape,
         )
         torch.testing.assert_close(
             normalized_expanded,
             expanded_mask.reshape(branch_count, *sequence_shape),
         )
 
+    def test_mask_preparation_canonicalizes_boolean_and_preserves_floating_forms(self):
+        cfg = self.preset()
+        model = cfg.build()
+        runtime_shape = self.runtime_shape(cfg)
+        sequence_shape = (
+            cfg.target_sequence_length,
+            cfg.source_sequence_length,
+        )
+        standard_branch_count = cfg.batch_size * cfg.num_heads
+        expert_branch_count = standard_branch_count * cfg.experts_config.top_k
+
+        for leading_dimension in (1, standard_branch_count, expert_branch_count):
+            with self.subTest(leading_dimension=leading_dimension, dtype="bool"):
+                boolean_mask = torch.zeros(
+                    leading_dimension,
+                    *sequence_shape,
+                    dtype=torch.bool,
+                )
+                boolean_mask[:, 0, -1] = True
+                prepared = model.masks.prepare_attention_masks(
+                    self.input_tensor(cfg),
+                    AttentionMasks(attention_mask=boolean_mask),
+                    runtime_shape,
+                )
+                expected = torch.zeros_like(boolean_mask, dtype=cfg.target_dtype)
+                expected.masked_fill_(boolean_mask, -torch.inf)
+                torch.testing.assert_close(prepared.attention_mask, expected)
+
+            with self.subTest(leading_dimension=leading_dimension, dtype="float"):
+                floating_mask = torch.randn(
+                    leading_dimension,
+                    *sequence_shape,
+                    dtype=cfg.target_dtype,
+                )
+                prepared = model.masks.prepare_attention_masks(
+                    self.input_tensor(cfg),
+                    AttentionMasks(attention_mask=floating_mask),
+                    runtime_shape,
+                )
+                self.assertIs(prepared.attention_mask, floating_mask)
+
+    def test_causal_padding_bias_and_zero_masks_compose_in_mixture_branch_order(self):
+        for use_kv_expert_models_flag in (False, True):
+            with self.subTest(
+                use_kv_expert_models_flag=use_kv_expert_models_flag,
+            ):
+                cfg = self.preset(
+                    use_kv_expert_models_flag=use_kv_expert_models_flag,
+                    causal_attention_mask_flag=True,
+                    add_key_value_bias_flag=True,
+                    zero_attention_flag=True,
+                )
+                model = cfg.build()
+                runtime_shape = self.runtime_shape(cfg)
+                padding_mask = torch.tensor(
+                    [
+                        [False, True, False, False],
+                        [True, False, False, True],
+                    ]
+                )
+                masks = model.masks.prepare_attention_masks(
+                    self.input_tensor(cfg),
+                    AttentionMasks(key_padding_mask=padding_mask),
+                    runtime_shape,
+                )
+                key_value_branch_count = cfg.batch_size * cfg.num_heads
+                if use_kv_expert_models_flag:
+                    key_value_branch_count *= cfg.experts_config.top_k
+                key = torch.zeros(key_value_branch_count, 4, 4)
+                value = torch.zeros(key_value_branch_count, 4, 4)
+                qkv = QKV(query=key, key=key, value=value)
+                qkv, masks, runtime_shape = model.bias.add_kv_learnable_bias_vectors(
+                    qkv,
+                    masks,
+                    runtime_shape,
+                )
+                qkv, masks, runtime_shape = model.zero_attention.add_zero_attention(
+                    qkv,
+                    masks,
+                    runtime_shape,
+                )
+
+                merged = model.masks.merge_padding_and_attention_mask(
+                    qkv.key,
+                    masks,
+                    runtime_shape,
+                )
+
+                branch_count = (
+                    cfg.batch_size * cfg.experts_config.top_k * cfg.num_heads
+                )
+                causal = torch.triu(
+                    torch.full((4, 4), -torch.inf, dtype=cfg.target_dtype),
+                    diagonal=1,
+                )
+                causal = torch.nn.functional.pad(causal, (0, 2))
+                canonical_padding = torch.zeros_like(
+                    padding_mask,
+                    dtype=cfg.target_dtype,
+                ).masked_fill_(padding_mask, -torch.inf)
+                canonical_padding = torch.nn.functional.pad(
+                    canonical_padding,
+                    (0, 2),
+                )
+                expected = causal.view(1, 1, 1, 4, 6).expand(
+                    cfg.batch_size,
+                    cfg.experts_config.top_k,
+                    cfg.num_heads,
+                    -1,
+                    -1,
+                )
+                expected = expected + canonical_padding.view(
+                    cfg.batch_size,
+                    1,
+                    1,
+                    1,
+                    6,
+                )
+                torch.testing.assert_close(
+                    merged,
+                    expected.reshape(branch_count, 4, 6),
+                )
+
     def test_direct_mask_normalization_rejects_every_invalid_contract(self):
         cfg = self.preset()
         masks = cfg.build().masks
+        runtime_shape = self.runtime_shape(cfg)
         branch_count = cfg.batch_size * cfg.experts_config.top_k * cfg.num_heads
         key = torch.randn(branch_count, cfg.source_sequence_length, 4)
         invalid_cases = (
@@ -438,12 +768,17 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
         for name, invalid_masks, message in invalid_cases:
             with self.subTest(name=name):
                 with self.assertRaises(RuntimeError) as caught:
-                    masks.merge_padding_and_attention_mask(key, invalid_masks)
+                    masks.merge_padding_and_attention_mask(
+                        key,
+                        invalid_masks,
+                        runtime_shape,
+                    )
                 self.assertEqual(str(caught.exception), message)
 
     def test_mask_shape_validation_has_exact_rank_and_leading_contracts(self):
         cfg = self.preset()
         masks = cfg.build().masks
+        runtime_shape = self.runtime_shape(cfg)
         sequence_shape = (
             cfg.target_sequence_length,
             cfg.source_sequence_length,
@@ -453,13 +788,13 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
 
         for leading_dimension in (1, standard_branches, expert_branches):
             with self.subTest(leading_dimension=leading_dimension):
-                self.assertIsNone(
-                    masks._validate_mask_shapes(
-                        None,
-                        torch.zeros(leading_dimension, *sequence_shape),
-                        None,
-                    )
+                attention_mask = torch.zeros(leading_dimension, *sequence_shape)
+                prepared_masks = masks.prepare_attention_masks(
+                    self.input_tensor(cfg),
+                    AttentionMasks(attention_mask=attention_mask),
+                    runtime_shape,
                 )
+                self.assertIs(prepared_masks.attention_mask, attention_mask)
 
         invalid_cases = (
             (
@@ -488,12 +823,17 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
         for name, attention_mask, message in invalid_cases:
             with self.subTest(name=name):
                 with self.assertRaises(RuntimeError) as caught:
-                    masks._validate_mask_shapes(None, attention_mask, None)
+                    masks.prepare_attention_masks(
+                        self.input_tensor(cfg),
+                        AttentionMasks(attention_mask=attention_mask),
+                        runtime_shape,
+                    )
                 self.assertEqual(str(caught.exception), message)
 
     def test_singleton_leading_attention_mask_expands_to_every_branch(self):
         cfg = self.preset()
         masks = cfg.build().masks
+        runtime_shape = self.runtime_shape(cfg)
         branch_count = cfg.batch_size * cfg.experts_config.top_k * cfg.num_heads
         key = torch.randn(branch_count, cfg.source_sequence_length, 4)
         attention_mask = torch.arange(
@@ -504,6 +844,7 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
         normalized = masks.merge_padding_and_attention_mask(
             key,
             AttentionMasks(attention_mask=attention_mask),
+            runtime_shape,
         )
 
         expected = attention_mask.expand(branch_count, -1, -1)
@@ -580,6 +921,7 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
     def test_padding_mask_expands_across_experts_and_heads(self):
         cfg = self.preset()
         model = cfg.build()
+        runtime_shape = self.runtime_shape(cfg)
         branch_count = cfg.batch_size * cfg.experts_config.top_k * cfg.num_heads
         key = torch.randn(
             branch_count,
@@ -594,6 +936,7 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
         normalized = model.masks.merge_padding_and_attention_mask(
             key,
             AttentionMasks(key_padding_mask=padding_mask),
+            runtime_shape,
         )
 
         expected = (
@@ -1035,6 +1378,40 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
                     self.assertTrue(
                         torch.any(model.bias.value_bias_vector.grad.abs() > 0)
                     )
+
+
+class TestMixtureOfAttentionHeadsLocality(unittest.TestCase):
+    def test_shared_attention_modules_do_not_contain_mixture_layout_knowledge(self):
+        root = Path(__file__).parents[2]
+        shared_paths = (
+            *sorted((root / "emperor/attention/core/handlers").glob("*.py")),
+            root / "emperor/attention/core/_validator.py",
+            root / "emperor/attention/core/runtime.py",
+            root / "emperor/attention/core/monitor.py",
+        )
+        forbidden_tokens = (
+            "top_k",
+            "expert_branch_count",
+            "supports_expert_branches",
+            "MixtureOfAttentionHeads",
+            "Mixture attention",
+            "mixture of attention heads",
+            "selected_expert",
+            "multiplier",
+        )
+
+        for path in shared_paths:
+            source = path.read_text()
+            for token in forbidden_tokens:
+                with self.subTest(path=path.relative_to(root), token=token):
+                    self.assertNotIn(token, source)
+
+        shared_processor = (
+            root / "emperor/attention/core/handlers/processor.py"
+        ).read_text()
+        standard_monitor = (root / "emperor/attention/core/monitor.py").read_text()
+        self.assertNotIn("query.dim() == 5", shared_processor)
+        self.assertNotIn("detached_weights.dim() == 5", standard_monitor)
 
 
 if __name__ == "__main__":

@@ -3,7 +3,7 @@ import unittest
 import torch
 from emperor.attention.core.config import MultiHeadAttentionConfig
 from emperor.attention.core.handlers.mask import Mask
-from emperor.attention.core.runtime import AttentionMasks
+from emperor.attention.core.runtime import AttentionMasks, AttentionRuntimeShape
 
 from support.attention import build_attention_config
 
@@ -45,6 +45,13 @@ class TestMask(unittest.TestCase):
             cfg.target_sequence_length,
             cfg.batch_size,
             cfg.embedding_dim,
+        )
+
+    def runtime_shape(self, cfg: MultiHeadAttentionConfig) -> AttentionRuntimeShape:
+        return AttentionRuntimeShape(
+            batch_size=cfg.batch_size,
+            target_sequence_length=cfg.target_sequence_length,
+            source_sequence_length=cfg.source_sequence_length,
         )
 
     def bool_attention_mask(self, cfg: MultiHeadAttentionConfig) -> torch.Tensor:
@@ -120,7 +127,6 @@ class TestMaskInit(TestMask):
         model = Mask(cfg)
 
         self.assertEqual(model.cfg, cfg)
-        self.assertEqual(model.batch_size, cfg.batch_size)
         self.assertEqual(model.num_heads, cfg.num_heads)
         self.assertEqual(model.target_dtype, cfg.target_dtype)
         self.assertEqual(
@@ -131,8 +137,6 @@ class TestMaskInit(TestMask):
             model.return_attention_weights_flag,
             cfg.return_attention_weights_flag,
         )
-        self.assertEqual(model.source_sequence_length, cfg.source_sequence_length)
-        self.assertEqual(model.target_sequence_length, cfg.target_sequence_length)
 
 
 class TestMaskShapeValidation(TestMask):
@@ -170,10 +174,13 @@ class TestMaskShapeValidation(TestMask):
         for name, padding_mask, attention_mask, message in cases:
             with self.subTest(name=name):
                 with self.assertRaisesRegex(RuntimeError, message):
-                    model._validate_mask_shapes(
-                        padding_mask,
-                        attention_mask,
-                        None,
+                    model.prepare_attention_masks(
+                        self.query_tensor(cfg),
+                        AttentionMasks(
+                            key_padding_mask=padding_mask,
+                            attention_mask=attention_mask,
+                        ),
+                        self.runtime_shape(cfg),
                     )
 
     def test_prepare_rejects_each_invalid_mask_shape_with_exact_message(self):
@@ -230,8 +237,52 @@ class TestMaskShapeValidation(TestMask):
         for name, masks, message in cases:
             with self.subTest(name=name):
                 with self.assertRaises(RuntimeError) as caught:
-                    model.prepare_attention_masks(self.query_tensor(cfg), masks)
+                    model.prepare_attention_masks(
+                        self.query_tensor(cfg),
+                        masks,
+                        self.runtime_shape(cfg),
+                    )
                 self.assertEqual(str(caught.exception), message)
+
+    def test_prepare_accepts_only_standard_attention_mask_branches(self):
+        cfg = self.preset()
+        model = Mask(cfg)
+        runtime_shape = self.runtime_shape(cfg)
+        sequence_shape = (
+            cfg.target_sequence_length,
+            cfg.source_sequence_length,
+        )
+        standard_branch_count = cfg.batch_size * cfg.num_heads
+        accepted_masks = (
+            torch.zeros(*sequence_shape),
+            torch.zeros(1, *sequence_shape),
+            torch.zeros(standard_branch_count, *sequence_shape),
+        )
+
+        for attention_mask in accepted_masks:
+            with self.subTest(shape=tuple(attention_mask.shape)):
+                prepared = model.prepare_attention_masks(
+                    self.query_tensor(cfg),
+                    AttentionMasks(attention_mask=attention_mask),
+                    runtime_shape,
+                )
+                self.assertIs(prepared.attention_mask, attention_mask)
+
+        clean_multiple = torch.zeros(
+            standard_branch_count * 2,
+            *sequence_shape,
+        )
+        with self.assertRaises(RuntimeError) as caught:
+            model.prepare_attention_masks(
+                self.query_tensor(cfg),
+                AttentionMasks(attention_mask=clean_multiple),
+                runtime_shape,
+            )
+        self.assertEqual(
+            str(caught.exception),
+            "3-D attention_mask leading dimension must be 1 or batch_size * "
+            "num_heads (4), got 8.",
+        )
 
 
 class TestPrepareAttentionMasks(TestMask):
@@ -242,7 +293,11 @@ class TestPrepareAttentionMasks(TestMask):
         attention_mask = self.float_attention_mask(cfg)
 
         input_masks = AttentionMasks(attention_mask=attention_mask)
-        output = model.prepare_attention_masks(query, input_masks)
+        output = model.prepare_attention_masks(
+            query,
+            input_masks,
+            self.runtime_shape(cfg),
+        )
 
         self.assertIs(output, input_masks)
         self.assertIs(output.attention_mask, attention_mask)
@@ -253,7 +308,11 @@ class TestPrepareAttentionMasks(TestMask):
         query = self.query_tensor(cfg)
         input_masks = AttentionMasks()
 
-        output = model.prepare_attention_masks(query, input_masks)
+        output = model.prepare_attention_masks(
+            query,
+            input_masks,
+            self.runtime_shape(cfg),
+        )
 
         self.assertIs(output, input_masks)
         self.assertIsNone(output.key_padding_mask)
@@ -269,7 +328,11 @@ class TestPrepareAttentionMasks(TestMask):
         model = Mask(cfg)
         query = self.query_tensor(cfg)
 
-        output = model.prepare_attention_masks(query, AttentionMasks())
+        output = model.prepare_attention_masks(
+            query,
+            AttentionMasks(),
+            self.runtime_shape(cfg),
+        )
 
         self.assertIsInstance(output, AttentionMasks)
         self.assertEqual(output.attention_mask.shape, (4, 6))
@@ -290,7 +353,11 @@ class TestPrepareAttentionMasks(TestMask):
             device="meta",
         )
 
-        output = model.prepare_attention_masks(query, AttentionMasks())
+        output = model.prepare_attention_masks(
+            query,
+            AttentionMasks(),
+            self.runtime_shape(cfg),
+        )
 
         self.assertEqual(output.attention_mask.device, query.device)
         self.assertEqual(
@@ -310,6 +377,7 @@ class TestPrepareAttentionMaskCanonicalization(TestMask):
         output = model.prepare_attention_masks(
             self.query_tensor(cfg),
             AttentionMasks(),
+            self.runtime_shape(cfg),
         )
 
         self.assertIsNone(output.key_padding_mask)
@@ -323,6 +391,7 @@ class TestPrepareAttentionMaskCanonicalization(TestMask):
         output = model.prepare_attention_masks(
             self.query_tensor(cfg),
             AttentionMasks(key_padding_mask=key_padding_mask),
+            self.runtime_shape(cfg),
         )
 
         torch.testing.assert_close(
@@ -339,6 +408,7 @@ class TestPrepareAttentionMaskCanonicalization(TestMask):
         output = model.prepare_attention_masks(
             self.query_tensor(cfg),
             AttentionMasks(attention_mask=attention_mask),
+            self.runtime_shape(cfg),
         )
 
         self.assertIsNone(output.key_padding_mask)
@@ -360,6 +430,7 @@ class TestPrepareAttentionMaskCanonicalization(TestMask):
                 key_padding_mask=key_padding_mask,
                 attention_mask=attention_mask,
             ),
+            self.runtime_shape(cfg),
         )
 
         torch.testing.assert_close(
@@ -386,6 +457,7 @@ class TestPrepareAttentionMaskCanonicalization(TestMask):
                 key_padding_mask=key_padding_mask,
                 attention_mask=attention_mask,
             ),
+            self.runtime_shape(cfg),
         )
 
         self.assertTrue(model.causal_attention_mask_flag)
@@ -431,6 +503,7 @@ class TestPrepareAttentionMaskCanonicalization(TestMask):
                             key_padding_mask=key_padding_mask,
                             attention_mask=attention_mask,
                         ),
+                        self.runtime_shape(cfg),
                     )
                 self.assertEqual(
                     str(caught.exception),
@@ -457,6 +530,7 @@ class TestPrepareAttentionMaskCanonicalization(TestMask):
         output = model.prepare_attention_masks(
             self.query_tensor(cfg),
             input_masks,
+            self.runtime_shape(cfg),
         )
 
         self.assertIs(output, input_masks)
@@ -484,6 +558,7 @@ class TestPrepareAttentionMaskCanonicalization(TestMask):
                 output = model.prepare_attention_masks(
                     self.query_tensor(cfg),
                     AttentionMasks(key_padding_mask=key_padding_mask),
+                    self.runtime_shape(cfg),
                 )
 
                 torch.testing.assert_close(
@@ -499,6 +574,7 @@ class TestPrepareAttentionMaskCanonicalization(TestMask):
         output = model.prepare_attention_masks(
             query,
             AttentionMasks(),
+            self.runtime_shape(cfg),
         )
 
         self.assertIsNone(output.key_padding_mask)
@@ -506,21 +582,6 @@ class TestPrepareAttentionMaskCanonicalization(TestMask):
             output.attention_mask,
             self.expected_causal_mask(cfg),
         )
-
-    def test_process_requires_mask_when_causal_flag_is_set(self):
-        cfg = self.preset(causal_attention_mask_flag=True)
-        model = Mask(cfg)
-
-        with self.assertRaises(RuntimeError) as caught:
-            model._process_attention_masks(AttentionMasks())
-
-        self.assertEqual(
-            str(caught.exception),
-            "Need an attention_mask when the causal_attention_mask_flag is set. "
-            "Use the Transformer module method generate_square_subsequent_mask to "
-            "create this mask.",
-        )
-
 
 class TestMergePaddingAndAttentionMask(TestMask):
     def test_returns_none_when_masks_are_absent(self):
@@ -530,6 +591,7 @@ class TestMergePaddingAndAttentionMask(TestMask):
         output = model.merge_padding_and_attention_mask(
             self.key_tensor(cfg),
             AttentionMasks(),
+            self.runtime_shape(cfg),
         )
 
         self.assertIsNone(output)
@@ -542,6 +604,7 @@ class TestMergePaddingAndAttentionMask(TestMask):
         output = model.merge_padding_and_attention_mask(
             self.key_tensor(cfg),
             AttentionMasks(attention_mask=attention_mask),
+            self.runtime_shape(cfg),
         )
 
         self.assertIs(output, attention_mask)
@@ -558,6 +621,7 @@ class TestMergePaddingAndAttentionMask(TestMask):
         output = model.merge_padding_and_attention_mask(
             self.key_tensor(cfg),
             AttentionMasks(key_padding_mask=key_padding_mask),
+            self.runtime_shape(cfg),
         )
 
         expected = self.expanded_key_padding_mask(cfg, key_padding_mask)
@@ -586,6 +650,7 @@ class TestMergePaddingAndAttentionMask(TestMask):
                 key_padding_mask=key_padding_mask,
                 attention_mask=attention_mask,
             ),
+            self.runtime_shape(cfg),
         )
 
         expected = attention_mask + self.expanded_key_padding_mask(

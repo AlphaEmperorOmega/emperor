@@ -212,7 +212,6 @@ class TestAttentionBaseContracts(unittest.TestCase):
         )
 
         self.assertEqual(shape.branch_count(num_heads=4), 8)
-        self.assertEqual(shape.branch_count(num_heads=4, multiplier=3), 24)
         extended = shape.with_source_extension(2)
         self.assertEqual(extended.source_sequence_length, 7)
         self.assertEqual(extended.source_extension_count, 2)

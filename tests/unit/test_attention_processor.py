@@ -11,7 +11,7 @@ from emperor.attention import (
 from emperor.attention.core.config import MultiHeadAttentionConfig
 from emperor.attention.core.handlers.processor import ProcessorBase
 from emperor.attention.core.handlers.reshaper import AttentionReshaper
-from emperor.attention.core.runtime import QKV
+from emperor.attention.core.runtime import QKV, AttentionRuntimeShape
 from emperor.attention.core.variants.independent_attention.processor import (
     IndependentProcessor,
 )
@@ -158,6 +158,92 @@ class TestProcessorBase(unittest.TestCase):
         torch.testing.assert_close(relative.received_query, expected_scaled_query)
         self.assertEqual(relative.received_source_length, 5)
         self.assertEqual(logits.shape, (1, 3, 5))
+
+    def test_relative_logits_accept_independent_batch_head_layout(self):
+        cfg = build_attention_config(
+            config_class=IndependentAttentionConfig,
+            batch_size=3,
+            num_heads=2,
+            embedding_dim=4,
+            query_key_projection_dim=4,
+            value_projection_dim=4,
+            target_sequence_length=3,
+            source_sequence_length=4,
+        )
+        model = ProcessorBase(
+            cfg,
+            IdentityOutputProjector(),
+            AttentionReshaper(cfg),
+        )
+        relative = CapturingRelativeEmbedding()
+        model.relative_positional_embedding = relative
+        query = torch.arange(36.0).view(3, 2, 3, 2)
+
+        logits = model._compute_relative_position_logits(query, 4)
+
+        torch.testing.assert_close(relative.received_query, query * (2**-0.5))
+        self.assertEqual(relative.received_source_length, 4)
+        self.assertEqual(logits.shape, (3, 2, 3, 4))
+
+    def test_relative_logits_reject_flattened_clean_branch_multiples(self):
+        cfg = build_attention_config(
+            config_class=IndependentAttentionConfig,
+            batch_size=4,
+            num_heads=2,
+            embedding_dim=4,
+            query_key_projection_dim=4,
+            value_projection_dim=4,
+            target_sequence_length=3,
+            source_sequence_length=4,
+        )
+        model = ProcessorBase(
+            cfg,
+            IdentityOutputProjector(),
+            AttentionReshaper(cfg),
+        )
+        model.relative_positional_embedding = CapturingRelativeEmbedding()
+        runtime_shape = AttentionRuntimeShape(
+            batch_size=2,
+            target_sequence_length=3,
+            source_sequence_length=4,
+        )
+        query = torch.zeros(8, 3, 2)
+
+        with self.assertRaises(RuntimeError) as caught:
+            model._compute_relative_position_logits(query, 4, runtime_shape)
+
+        self.assertEqual(
+            str(caught.exception),
+            "relative-position rank-3 query leading dimension must equal "
+            "batch_size * num_heads (4), got 8.",
+        )
+
+    def test_relative_logits_reject_rank_five_layouts(self):
+        model = self.model()
+        model.relative_positional_embedding = CapturingRelativeEmbedding()
+        query = torch.zeros(1, 2, 2, 3, 2)
+
+        with self.assertRaises(RuntimeError) as caught:
+            model._compute_relative_position_logits(query, 4)
+
+        self.assertEqual(
+            str(caught.exception),
+            "relative-position query must be rank 3 or 4, got rank 5.",
+        )
+
+    def test_relative_logits_reject_rank_four_with_wrong_head_count(self):
+        model = self.model()
+        model.relative_positional_embedding = CapturingRelativeEmbedding()
+        query = torch.zeros(2, 3, 3, 2)
+
+        with self.assertRaises(RuntimeError) as caught:
+            model._compute_relative_position_logits(query, 4)
+
+        self.assertEqual(
+            str(caught.exception),
+            "relative-position rank-4 query head dimension must equal "
+            "num_heads (2), got 3.",
+        )
 
     def test_attention_output_uses_last_axis_as_embedding_width(self):
         cfg = build_attention_config(
