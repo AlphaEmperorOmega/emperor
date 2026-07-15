@@ -6,6 +6,9 @@ from emperor.attention.core.runtime import QKV, AttentionMasks
 from emperor.attention.core.variants.mixture_of_attention_heads.layer import (
     MixtureOfAttentionHeads,
 )
+from emperor.attention.core.variants.mixture_of_attention_heads.processor import (
+    MixtureOfAttentionHeadsProcessor,
+)
 from emperor.attention.core.variants.mixture_of_attention_heads.validator import (
     MixtureOfAttentionHeadsValidator,
 )
@@ -17,6 +20,10 @@ class TestMixtureOfAttentionHeadsValidatorAdapter(unittest.TestCase):
     def test_module_declares_its_variant_validator_adapter(self):
         self.assertIs(
             MixtureOfAttentionHeads.VALIDATOR,
+            MixtureOfAttentionHeadsValidator,
+        )
+        self.assertIs(
+            MixtureOfAttentionHeadsProcessor.VALIDATOR,
             MixtureOfAttentionHeadsValidator,
         )
 

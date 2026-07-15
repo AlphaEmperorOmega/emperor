@@ -5,18 +5,25 @@ import torch
 from emperor.attention.core._validator import AttentionValidatorBase
 from emperor.attention.core.handlers.bias import KeyValueBias
 from emperor.attention.core.handlers.mask import Mask
+from emperor.attention.core.handlers.processor import ProcessorBase
 from emperor.attention.core.handlers.reshaper import (
     AttentionReshaper,
     ReshaperBase,
 )
-from emperor.attention.core.runtime import QKV, AttentionMasks
+from emperor.attention.core.runtime import QKV, AttentionMasks, AttentionRuntimeShape
 
 from support.attention import build_attention_config
 
 
 class TestAttentionValidatorBaseAdapter(unittest.TestCase):
     def test_attention_handlers_expose_the_shared_validator_adapter(self):
-        handler_types = (ReshaperBase, AttentionReshaper, Mask, KeyValueBias)
+        handler_types = (
+            ReshaperBase,
+            AttentionReshaper,
+            Mask,
+            KeyValueBias,
+            ProcessorBase,
+        )
 
         for handler_type in handler_types:
             with self.subTest(handler_type=handler_type.__name__):
@@ -54,6 +61,36 @@ class TestAttentionValidatorBaseAdapter(unittest.TestCase):
                 (static_values, "static_values", runtime_shape),
             ],
         )
+
+    def test_mask_shape_validation_dispatches_through_substituted_validator(self):
+        class RejectingValidator(AttentionValidatorBase):
+            @staticmethod
+            def validate_mask_shapes(*args, **kwargs):
+                raise RuntimeError("substituted mask-shape validator was called")
+
+        class RejectingMask(Mask):
+            VALIDATOR = RejectingValidator
+
+        cfg = build_attention_config(
+            batch_size=1,
+            num_heads=1,
+            embedding_dim=2,
+            target_sequence_length=2,
+            source_sequence_length=2,
+        )
+        model = RejectingMask(cfg)
+        query = torch.zeros(2, 1, 2)
+        runtime_shape = AttentionRuntimeShape(
+            batch_size=1,
+            target_sequence_length=2,
+            source_sequence_length=2,
+        )
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "substituted mask-shape validator was called",
+        ):
+            model.prepare_attention_masks(query, AttentionMasks(), runtime_shape)
 
     def test_key_value_bias_dispatches_through_substituted_validator(self):
         class RejectingValidator(AttentionValidatorBase):
