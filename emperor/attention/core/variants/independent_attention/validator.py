@@ -1,29 +1,20 @@
-from torch import Tensor
-from emperor.attention.core._validator import (
-    AttentionValidatorBase,
-    MultiHeadAttentionValidator,
-)
-
 from typing import TYPE_CHECKING
+
+from emperor.attention.core._validator import MultiHeadAttentionValidator
 
 if TYPE_CHECKING:
     from emperor.attention.core.layers import MultiHeadAttentionAbstract
+    from emperor.attention.core.runtime import QKV, AttentionMasks
 
 
 class IndependentAttentionValidator(MultiHeadAttentionValidator):
-    @staticmethod
+    @classmethod
     def validate_forward_inputs(
+        cls,
         model: "MultiHeadAttentionAbstract",
-        query: Tensor,
-        key: Tensor,
-        value: Tensor,
-        key_padding_mask: Tensor | None = None,
-        attention_mask: Tensor | None = None,
+        qkv: "QKV",
+        masks: "AttentionMasks",
     ) -> None:
-        MultiHeadAttentionValidator.validate_forward_inputs(
-            model, query, key, value, key_padding_mask, attention_mask
-        )
-        AttentionValidatorBase.validate_attention_weights_returned_for_self_attention_only(
-            model
-        )
-        AttentionValidatorBase.validate_key_value_projection_shapes(key, value)
+        super().validate_forward_inputs(model, qkv, masks)
+        cls.validate_attention_weights_returned_for_self_attention_only(model)
+        cls.validate_key_value_projection_shapes(qkv.key, qkv.value)
