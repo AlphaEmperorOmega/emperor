@@ -1,3 +1,6 @@
+from emperor.attention.core.variants.mixture_of_attention_heads.bias import (
+    MixtureOfAttentionHeadsKeyValueBias,
+)
 from emperor.attention.core.variants.mixture_of_attention_heads.config import (
     MixtureOfAttentionHeadsConfig,
 )
@@ -19,13 +22,18 @@ from emperor.attention.core.variants.mixture_of_attention_heads.reshaper import 
 from emperor.attention.core.variants.mixture_of_attention_heads.validator import (
     MixtureOfAttentionHeadsValidator,
 )
+from emperor.attention.core.variants.mixture_of_attention_heads.zero_attention import (
+    MixtureOfAttentionHeadsZeroAttention,
+)
 
 __all__ = [
     "MixtureOfAttentionHeadsConfig",
+    "MixtureOfAttentionHeadsKeyValueBias",
     "MixtureOfAttentionHeads",
     "MixtureOfAttentionHeadsMask",
     "MixtureOfAttentionHeadsProcessor",
     "MixtureOfAttentionHeadsProjector",
     "MixtureOfAttentionHeadsReshaper",
     "MixtureOfAttentionHeadsValidator",
+    "MixtureOfAttentionHeadsZeroAttention",
 ]

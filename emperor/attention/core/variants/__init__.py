@@ -8,11 +8,13 @@ from emperor.attention.core.variants.independent_attention import (
 from emperor.attention.core.variants.mixture_of_attention_heads import (
     MixtureOfAttentionHeads,
     MixtureOfAttentionHeadsConfig,
+    MixtureOfAttentionHeadsKeyValueBias,
     MixtureOfAttentionHeadsMask,
     MixtureOfAttentionHeadsProcessor,
     MixtureOfAttentionHeadsProjector,
     MixtureOfAttentionHeadsReshaper,
     MixtureOfAttentionHeadsValidator,
+    MixtureOfAttentionHeadsZeroAttention,
 )
 from emperor.attention.core.variants.self_attention import (
     SelfAttention,
@@ -37,9 +39,11 @@ __all__ = [
     "IndependentAttentionValidator",
     "MixtureOfAttentionHeads",
     "MixtureOfAttentionHeadsConfig",
+    "MixtureOfAttentionHeadsKeyValueBias",
     "MixtureOfAttentionHeadsMask",
     "MixtureOfAttentionHeadsProcessor",
     "MixtureOfAttentionHeadsProjector",
     "MixtureOfAttentionHeadsReshaper",
     "MixtureOfAttentionHeadsValidator",
+    "MixtureOfAttentionHeadsZeroAttention",
 ]
