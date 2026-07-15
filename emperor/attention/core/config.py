@@ -6,7 +6,7 @@ from emperor.base.config import ConfigBase, optional_field
 if TYPE_CHECKING:
     from torch.types import _dtype as DType
 
-    from emperor.base.layer import LayerStackConfig
+    from emperor.base.layer import LayerStackConfig, RecurrentLayerConfig
     from emperor.embedding.relative.core.config import RelativePositionalEmbeddingConfig
 
 
@@ -61,9 +61,11 @@ class MultiHeadAttentionConfig(ConfigBase):
         "embedding], False selects [sequence, batch, embedding], and None preserves "
         "legacy configured-batch-size detection."
     )
-    projection_model_config: "LayerStackConfig | None" = optional_field(
-        "Layer-stack configuration used to build the query/key/value/output "
-        "projections."
+    projection_model_config: "LayerStackConfig | RecurrentLayerConfig | None" = (
+        optional_field(
+            "Projection-model configuration used to build the query/key/value/output "
+            "projections."
+        )
     )
     relative_positional_embedding_config: "RelativePositionalEmbeddingConfig | None" = (
         optional_field("Configuration for the relative positional embedding module.")
