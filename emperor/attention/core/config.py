@@ -1,10 +1,11 @@
 from dataclasses import dataclass
-from emperor.base.utils import ConfigBase, optional_field
-
 from typing import TYPE_CHECKING
+
+from emperor.base.utils import ConfigBase, optional_field
 
 if TYPE_CHECKING:
     from torch.types import _dtype as DType
+
     from emperor.base.layer import LayerStackConfig
     from emperor.embedding.relative.core.config import RelativePositionalEmbeddingConfig
 
@@ -21,13 +22,15 @@ class MultiHeadAttentionConfig(ConfigBase):
         "Dimension of the input embedding vector (input feature size)."
     )
     query_key_projection_dim: int | None = optional_field(
-        "Dimension of the query and key projected vectors (defaults to embedding_dim if 0)."
+        "Dimension of the query and key projected vectors "
+        "(defaults to embedding_dim if 0)."
     )
     value_projection_dim: int | None = optional_field(
         "Dimension of the value projected vectors (defaults to embedding_dim if 0)."
     )
     target_sequence_length: int | None = optional_field(
-        "Length of the target sequence for decoding or output (number of target tokens)."
+        "Length of the target sequence for decoding or output (number of target "
+        "tokens)."
     )
     source_sequence_length: int | None = optional_field(
         "Length of the source/input sequence (number of input tokens)."
@@ -39,7 +42,8 @@ class MultiHeadAttentionConfig(ConfigBase):
         "Dropout probability applied to attention weights (prevents overfitting)."
     )
     zero_attention_flag: bool | None = optional_field(
-        "If True, add zero vectors to attention keys/values to allow explicit non-attending positions."
+        "If True, add zero vectors to attention keys/values to allow explicit "
+        "non-attending positions."
     )
     causal_attention_mask_flag: bool | None = optional_field(
         "If True, use a causal mask to prevent attention to future positions."
@@ -54,7 +58,8 @@ class MultiHeadAttentionConfig(ConfigBase):
         "If True, return the attention weights alongside the attention output."
     )
     projection_model_config: "LayerStackConfig | None" = optional_field(
-        "Layer-stack configuration used to build the query/key/value/output projections."
+        "Layer-stack configuration used to build the query/key/value/output "
+        "projections."
     )
     relative_positional_embedding_config: "RelativePositionalEmbeddingConfig | None" = (
         optional_field("Configuration for the relative positional embedding module.")
