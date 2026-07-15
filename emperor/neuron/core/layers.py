@@ -291,6 +291,7 @@ class Neuron(Module):
             for axis_position, axis_channel_count in zip(
                 axis_positions,
                 axis_channel_counts,
+                strict=True,
             )
         ]
         return torch.cat(axis_encodings)
