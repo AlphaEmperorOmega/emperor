@@ -37,6 +37,7 @@ emperor-project-adapter = "models.adapter_cli:main"
 
 [project.optional-dependencies]
 dev = [
+  "mutmut>=3.6,<4",
   "ruff>=0.8,<0.14",
 ]
 
@@ -87,3 +88,42 @@ select = ["E", "F", "I", "B", "UP"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["model_runtime"]
+
+[tool.mutmut]
+source_paths = ["emperor/"]
+only_mutate = [
+  "emperor/attention/core/_validator.py",
+  "emperor/attention/core/layers.py",
+  "emperor/attention/core/monitor.py",
+  "emperor/attention/core/runtime.py",
+  "emperor/attention/core/handlers/*.py",
+  "emperor/attention/core/variants/*/layer.py",
+  "emperor/attention/core/variants/*/validator.py",
+  "emperor/attention/core/variants/*/processor.py",
+  "emperor/attention/core/variants/*/projector.py",
+  "emperor/attention/core/variants/*/mask.py",
+  "emperor/attention/core/variants/*/bias.py",
+  "emperor/attention/core/variants/*/reshaper.py",
+  "emperor/attention/core/variants/*/zero_attention.py",
+]
+do_not_mutate = ["*/__init__.py"]
+pytest_add_cli_args_test_selection = [
+  "tests/unit/test_attention.py",
+  "tests/unit/test_attention_batch_dimension_manager.py",
+  "tests/unit/test_attention_contracts.py",
+  "tests/unit/test_attention_correctness_regressions.py",
+  "tests/unit/test_attention_key_value_bias.py",
+  "tests/unit/test_attention_mask.py",
+  "tests/unit/test_attention_mask_validator.py",
+  "tests/unit/test_attention_mixture_of_attention_heads.py",
+  "tests/unit/test_attention_monitor.py",
+  "tests/unit/test_attention_mutation_contracts.py",
+  "tests/unit/test_attention_processor.py",
+  "tests/unit/test_attention_projector.py",
+  "tests/unit/test_attention_runtime_shape.py",
+  "tests/unit/test_attention_runtime_values.py",
+  "tests/unit/test_attention_validator.py",
+  "tests/unit/test_attention_zero_attention.py",
+  "tests/unit/test_transformer_relative_positional_embedding.py",
+]
+also_copy = ["model_runtime/", "models/", "tests/support/"]

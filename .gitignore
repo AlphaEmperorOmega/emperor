@@ -31,6 +31,7 @@ AGENTS.md
 skills-lock.json
 .pytest_cache/
 .ruff_cache/
+mutants/
 workbench/frontend/.next/
 workbench/frontend/node_modules/
 workbench/frontend/tsconfig.tsbuildinfo
