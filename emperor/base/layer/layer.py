@@ -1,20 +1,20 @@
-import torch.nn as nn
+from typing import TYPE_CHECKING
 
+import torch.nn as nn
 from torch import Tensor
+
 from emperor.base.config import ConfigBase
 from emperor.base.options import (
     ActivationOptions,
     LayerNormPositionOptions,
 )
 
-from .base import LayerModuleBase
-from .state import LayerState
-from .config import LayerConfig
 from ._validator import LayerValidator
-from .residual import ResidualConnection, ResidualConnectionOptions
+from .base import LayerModuleBase
+from .config import LayerConfig
 from .gate import GateConfig, LayerGate
-
-from typing import TYPE_CHECKING
+from .residual import ResidualConnection, ResidualConnectionOptions
+from .state import LayerState
 
 if TYPE_CHECKING:
     from emperor.base.module import Module
@@ -25,6 +25,8 @@ if TYPE_CHECKING:
 
 
 class Layer(LayerModuleBase):
+    VALIDATOR = LayerValidator
+
     def __init__(
         self,
         cfg: LayerConfig,
@@ -32,7 +34,7 @@ class Layer(LayerModuleBase):
     ):
         super().__init__()
         self.cfg: LayerConfig = self._override_config(cfg, overrides)
-        LayerValidator.validate(self.cfg)
+        self.VALIDATOR.validate(self)
 
         self.input_dim: int = self.cfg.input_dim
         self.output_dim: int = self.cfg.output_dim
@@ -45,10 +47,10 @@ class Layer(LayerModuleBase):
             self.cfg.residual_connection_option
         )
         self.dropout_probability: float = self.cfg.dropout_probability
-        self.gate_config: "GateConfig | None" = self.cfg.gate_config
-        self.halting_config: "HaltingConfig | None" = self.cfg.halting_config
-        self.memory_config: "DynamicMemoryConfig | None" = self.cfg.memory_config
-        self.layer_model_config: "ConfigBase" = self.cfg.layer_model_config
+        self.gate_config: GateConfig | None = self.cfg.gate_config
+        self.halting_config: HaltingConfig | None = self.cfg.halting_config
+        self.memory_config: DynamicMemoryConfig | None = self.cfg.memory_config
+        self.layer_model_config: ConfigBase = self.cfg.layer_model_config
 
         self.model = self.__build_model()
         self.gate_model: LayerGate | None = self.__build_gate()

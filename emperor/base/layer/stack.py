@@ -1,29 +1,32 @@
 from copy import deepcopy
+from typing import TYPE_CHECKING
 
 from torch.nn import ModuleList
+
 from emperor.base.options import (
     ActivationOptions,
     LastLayerBiasOptions,
     LayerNormPositionOptions,
 )
 
+from ._validator import LayerStackValidator
 from .base import LayerModuleBase
-from .residual import ResidualConnectionOptions
 from .config import LayerConfig, LayerStackConfig
 from .gate import GateConfig
 from .layer import Layer
-from ._validator import LayerStackValidator
-
-from typing import TYPE_CHECKING
+from .residual import ResidualConnectionOptions
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
     from emperor.halting.config import HaltingConfig
     from emperor.memory.config import DynamicMemoryConfig
+
     from .state import LayerState
 
 
 class LayerStack(LayerModuleBase):
+    VALIDATOR = LayerStackValidator
+
     SHARED_INPUT_OUTPUT_DIM = 1
     SEPARATE_INPUT_OUTPUT_DIM = 2
 
@@ -34,23 +37,23 @@ class LayerStack(LayerModuleBase):
     ):
         super().__init__()
         config = getattr(cfg, "layer_stack_config", cfg)
-        self.cfg: "LayerStackConfig" = self._override_config(config, overrides)
-        LayerStackValidator.validate(self.cfg)
+        self.cfg: LayerStackConfig = self._override_config(config, overrides)
+        self.VALIDATOR.validate(self)
 
         self.input_dim: int = self.cfg.input_dim
         self.hidden_dim: int = self.cfg.hidden_dim
         self.output_dim: int = self.cfg.output_dim
         self.num_layers: int = self.cfg.num_layers
         self.apply_output_pipeline_flag: bool = self.cfg.apply_output_pipeline_flag
-        self.last_layer_bias_option: "LastLayerBiasOptions" = (
+        self.last_layer_bias_option: LastLayerBiasOptions = (
             self.cfg.last_layer_bias_option
         )
         self.layer_config: LayerConfig = self.cfg.layer_config
-        self.shared_gate_config: "GateConfig | None" = self.cfg.shared_gate_config
-        self.shared_halting_config: "HaltingConfig | None" = (
+        self.shared_gate_config: GateConfig | None = self.cfg.shared_gate_config
+        self.shared_halting_config: HaltingConfig | None = (
             self.cfg.shared_halting_config
         )
-        self.shared_memory_config: "DynamicMemoryConfig | None" = (
+        self.shared_memory_config: DynamicMemoryConfig | None = (
             self.cfg.shared_memory_config
         )
         self.layers = self.__build_layer_stack()
@@ -96,7 +99,7 @@ class LayerStack(LayerModuleBase):
         layers.append(layer)
 
     def __resolve_output_layer_overrides(self) -> "LayerConfig | None":
-        overrides: "LayerConfig | None" = None
+        overrides: LayerConfig | None = None
         if not self.apply_output_pipeline_flag:
             overrides = LayerConfig(
                 activation=ActivationOptions.DISABLED,

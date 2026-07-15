@@ -1,19 +1,19 @@
-import torch.nn as nn
-
 from dataclasses import dataclass, replace
-from torch import Tensor
-from emperor.base.options import LayerNormPositionOptions
-from emperor.base.config import ConfigBase
-
-from .layer import Layer
-from .state import LayerState
-from .base import LayerModuleBase
-from ._validator import RecurrentLayerValidator
-from .gate import GateConfig, LayerGate
-from .config import RecurrentLayerConfig
-from .residual import ResidualConnection, ResidualConnectionOptions
-
 from typing import TYPE_CHECKING
+
+import torch.nn as nn
+from torch import Tensor
+
+from emperor.base.config import ConfigBase
+from emperor.base.options import LayerNormPositionOptions
+
+from ._validator import RecurrentLayerValidator
+from .base import LayerModuleBase
+from .config import RecurrentLayerConfig
+from .gate import GateConfig, LayerGate
+from .layer import Layer
+from .residual import ResidualConnection, ResidualConnectionOptions
+from .state import LayerState
 
 if TYPE_CHECKING:
     from emperor.base.module import Module
@@ -34,6 +34,8 @@ class _RecurrentState:
 
 
 class RecurrentLayer(LayerModuleBase):
+    VALIDATOR = RecurrentLayerValidator
+
     def __init__(
         self,
         cfg: RecurrentLayerConfig,
@@ -41,7 +43,7 @@ class RecurrentLayer(LayerModuleBase):
     ):
         super().__init__()
         self.cfg: RecurrentLayerConfig = self._override_config(cfg, overrides)
-        RecurrentLayerValidator.validate(self.cfg)
+        self.VALIDATOR.validate(self)
 
         self.input_dim: int = self.cfg.input_dim
         self.output_dim: int = self.cfg.output_dim
@@ -54,8 +56,8 @@ class RecurrentLayer(LayerModuleBase):
         self.residual_connection_option: ResidualConnectionOptions = (
             self.cfg.residual_connection_option
         )
-        self.halting_config: "HaltingConfig | None" = self.cfg.halting_config
-        self.memory_config: "DynamicMemoryConfig | None" = self.cfg.memory_config
+        self.halting_config: HaltingConfig | None = self.cfg.halting_config
+        self.memory_config: DynamicMemoryConfig | None = self.cfg.memory_config
 
         self.block_model = self.__build_block_model()
         self.recurrent_gate = self.__build_recurrent_gate()
@@ -101,7 +103,7 @@ class RecurrentLayer(LayerModuleBase):
         return nn.LayerNorm(self.output_dim)
 
     def forward(self, state: LayerState) -> LayerState:
-        RecurrentLayerValidator.validate_state(state, self.input_dim)
+        self.VALIDATOR.validate_state(state, self.input_dim)
 
         original_halting_state = state.halting_state
         recurrent_state = self.__run_recurrent_steps(state)
@@ -173,7 +175,7 @@ class RecurrentLayer(LayerModuleBase):
             halting_state=None,
         )
         block_output_state = self.block_model(block_state)
-        RecurrentLayerValidator.validate_candidate(
+        self.VALIDATOR.validate_candidate(
             block_output_state.hidden,
             recurrent_state.hidden,
             self.output_dim,
@@ -244,7 +246,7 @@ class RecurrentLayer(LayerModuleBase):
         halting_state, halting_hidden = self.halting_model.update_halting_state(
             halting_state, hidden
         )
-        RecurrentLayerValidator.validate_candidate(
+        self.VALIDATOR.validate_candidate(
             halting_hidden, previous_hidden, self.output_dim
         )
         return halting_state, halting_hidden

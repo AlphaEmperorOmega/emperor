@@ -1,30 +1,32 @@
+from typing import TYPE_CHECKING
+
 from torch import Tensor
 
-from emperor.base.options import ActivationOptions
 from emperor.base.module import Module
+from emperor.base.options import ActivationOptions
 
 from ._validator import LayerGateValidator
 from .options import LayerGateOptions
 
-from typing import TYPE_CHECKING
-
 if TYPE_CHECKING:
     from emperor.base.module import Module as EmperorModule
 
-    from .config import GateConfig
     from ..state import LayerState
+    from .config import GateConfig
 
 
 class LayerGate(Module):
+    VALIDATOR = LayerGateValidator
+
     def __init__(
         self,
         cfg: "GateConfig",
         overrides: "GateConfig | None" = None,
     ):
         super().__init__()
-        self.cfg: "GateConfig" = self._override_config(cfg, overrides)
+        self.cfg: GateConfig = self._override_config(cfg, overrides)
 
-        LayerGateValidator.validate(self.cfg)
+        self.VALIDATOR.validate(self)
         self.option: LayerGateOptions = self.cfg.option
         self.activation: ActivationOptions | None = self.cfg.activation
         self.gate_dim: int | None = self.cfg.gate_dim
@@ -47,7 +49,7 @@ class LayerGate(Module):
         current: Tensor,
     ) -> Tensor:
         gate_output = self.__run_gate_model(current)
-        LayerGateValidator.validate_gate_output(gate_output, current, self.option)
+        self.VALIDATOR.validate_gate_output(gate_output, current, self.option)
         gate = self.effective_values(gate_output)
         if self.option == LayerGateOptions.MULTIPLIER:
             return gate * current
@@ -59,7 +61,7 @@ class LayerGate(Module):
         self,
         current: Tensor,
     ) -> Tensor:
-        LayerGateValidator.validate_gate_model(self.model)
+        self.VALIDATOR.validate_gate_model(self.model)
         gate_state = self.__gate_state(current)
         output = self.model(gate_state)
         return output.hidden if hasattr(output, "hidden") else output

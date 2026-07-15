@@ -11,6 +11,8 @@ if TYPE_CHECKING:
 
     from emperor.base.layer.config import LayerStackConfig
 
+    from .model import LayerGate
+
 
 def _config_classes():
     from emperor.base.layer.config import LayerConfig, LayerStackConfig
@@ -30,7 +32,8 @@ class LayerGateValidator(ValidatorBase):
         return ", ".join(option.name for option in LayerGateOptions)
 
     @classmethod
-    def validate(cls, cfg: "GateConfig") -> None:
+    def validate(cls, model: "LayerGate") -> None:
+        cfg = model.cfg
         if not isinstance(cfg, GateConfig):
             raise TypeError(
                 f"LayerGate cfg must be a GateConfig, got {type(cfg).__name__}."
@@ -39,12 +42,12 @@ class LayerGateValidator(ValidatorBase):
         cls.validate_required_fields(cfg)
         cls.validate_field_types(cfg)
         cls.validate_activation(cfg.activation, owner_name="GateConfig.activation")
-        cls.__validate_dimensions(cfg)
+        cls._validate_dimensions(cfg)
 
-    @staticmethod
-    def __validate_dimensions(cfg: "GateConfig") -> None:
+    @classmethod
+    def _validate_dimensions(cls, cfg: "GateConfig") -> None:
         if cfg.gate_dim is not None:
-            LayerGateValidator.validate_dimensions(gate_dim=cfg.gate_dim)
+            cls.validate_dimensions(gate_dim=cfg.gate_dim)
 
     @classmethod
     def validate_option(
@@ -96,7 +99,9 @@ class LayerGateValidator(ValidatorBase):
                 f"got {type(gate_output).__name__}."
             )
         if gate_output.shape != current.shape:
-            option_name = option.name if isinstance(option, LayerGateOptions) else option
+            option_name = (
+                option.name if isinstance(option, LayerGateOptions) else option
+            )
             raise ValueError(
                 f"{option_name} requires gate output and current shapes to match, "
                 f"got gate output shape {tuple(gate_output.shape)} and current shape "
@@ -107,8 +112,9 @@ class LayerGateValidator(ValidatorBase):
     def is_gate_config_active(gate_config: "GateConfig | None") -> bool:
         return isinstance(gate_config, GateConfig)
 
-    @staticmethod
+    @classmethod
     def validate_gate_model_config(
+        cls,
         gate_model_config: "LayerStackConfig | None",
         owner_name: str | None = None,
     ) -> None:
@@ -138,36 +144,39 @@ class LayerGateValidator(ValidatorBase):
                 "not depend on caller LayerState fields."
             )
         if layer_config.gate_config is not None:
-            LayerGateValidator.validate_layer_gate_config(
+            cls.validate_layer_gate_config(
                 layer_config.gate_config,
                 owner_name=f"{field_path}.layer_config.gate_config",
             )
-        if LayerGateValidator.is_gate_config_active(layer_config.gate_config):
+        if cls.is_gate_config_active(layer_config.gate_config):
             raise ValueError(
-                f"{field_path}.layer_config.gate_config must be inactive, nested gates are not allowed"
+                f"{field_path}.layer_config.gate_config must be inactive, "
+                "nested gates are not allowed"
             )
         if gate_model_config.shared_gate_config is not None:
-            LayerGateValidator.validate_layer_gate_config(
+            cls.validate_layer_gate_config(
                 gate_model_config.shared_gate_config,
                 owner_name=f"{field_path}.shared_gate_config",
             )
-        if LayerGateValidator.is_gate_config_active(
-            gate_model_config.shared_gate_config
-        ):
+        if cls.is_gate_config_active(gate_model_config.shared_gate_config):
             raise ValueError(
-                f"{field_path}.shared_gate_config must be inactive, nested gates are not allowed"
+                f"{field_path}.shared_gate_config must be inactive, "
+                "nested gates are not allowed"
             )
         if layer_config.halting_config is not None:
             raise ValueError(
-                f"{field_path}.layer_config.halting_config must be None, halting is not allowed in gates"
+                f"{field_path}.layer_config.halting_config must be None, "
+                "halting is not allowed in gates"
             )
         if gate_model_config.shared_halting_config is not None:
             raise ValueError(
-                f"{field_path}.shared_halting_config must be None, halting is not allowed in gates"
+                f"{field_path}.shared_halting_config must be None, "
+                "halting is not allowed in gates"
             )
 
-    @staticmethod
+    @classmethod
     def validate_layer_gate_config(
+        cls,
         gate_config: "GateConfig | None",
         owner_name: str | None = None,
     ) -> None:
@@ -179,11 +188,11 @@ class LayerGateValidator(ValidatorBase):
                 f"gate_config must be an instance of GateConfig{owner_context}, "
                 f"got {type(gate_config).__name__}"
             )
-        LayerGateValidator.validate_option(
+        cls.validate_option(
             gate_config.option,
             owner_name=_gate_option_field_path(owner_name),
         )
-        LayerGateValidator.validate_activation(
+        cls.validate_activation(
             gate_config.activation,
             owner_name=(
                 f"{owner_name}.activation"
@@ -191,12 +200,13 @@ class LayerGateValidator(ValidatorBase):
                 else "gate_config.activation"
             ),
         )
-        LayerGateValidator.validate_gate_model_config(
+        cls.validate_gate_model_config(
             gate_config.model_config, owner_name=owner_name
         )
 
-    @staticmethod
+    @classmethod
     def validate_recurrent_gate_config(
+        cls,
         gate_config: "GateConfig | None",
         owner_name: str | None = None,
     ) -> None:
@@ -208,11 +218,11 @@ class LayerGateValidator(ValidatorBase):
                 "gate_config must be an instance of GateConfig"
                 f"{owner_context}, got {type(gate_config).__name__}"
             )
-        LayerGateValidator.validate_option(
+        cls.validate_option(
             gate_config.option,
             owner_name=_gate_option_field_path(owner_name),
         )
-        LayerGateValidator.validate_activation(
+        cls.validate_activation(
             gate_config.activation,
             owner_name=(
                 f"{owner_name}.activation"
@@ -220,7 +230,7 @@ class LayerGateValidator(ValidatorBase):
                 else "gate_config.activation"
             ),
         )
-        LayerGateValidator.validate_gate_model_config(
+        cls.validate_gate_model_config(
             gate_config.model_config, owner_name=owner_name
         )
 
