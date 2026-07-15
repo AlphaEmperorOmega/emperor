@@ -1,6 +1,6 @@
+import math
 from typing import TYPE_CHECKING
 
-import math
 import torch
 
 from emperor.base.layer import LayerStackConfig
@@ -25,9 +25,7 @@ class AdaptiveGeneratorValidatorBase:
             AdaptiveGeneratorValidatorBase.validate_generator_layer(generator_model)
             return
         if isinstance(generator_model, (Sequential, LayerStack)):
-            AdaptiveGeneratorValidatorBase.validate_generator_sequence(
-                generator_model
-            )
+            AdaptiveGeneratorValidatorBase.validate_generator_sequence(generator_model)
             return
         raise TypeError(
             "Expected model_config.build(...) to return a Layer, Sequential, or "
@@ -82,9 +80,7 @@ class DynamicMemoryValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
     def validate(model: "DynamicMemoryAbstract") -> None:
         from emperor.memory.config import DynamicMemoryConfig
 
-        if not hasattr(model, "cfg") or not isinstance(
-            model.cfg, DynamicMemoryConfig
-        ):
+        if not hasattr(model, "cfg") or not isinstance(model.cfg, DynamicMemoryConfig):
             raise TypeError(
                 "DynamicMemoryValidator.validate expected a DynamicMemoryAbstract "
                 f"with a DynamicMemoryConfig cfg, received {type(model).__name__}."
@@ -127,8 +123,7 @@ class DynamicMemoryValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
     def validate_model_config(cfg) -> None:
         if cfg.model_config is None:
             raise ValueError(
-                f"model_config is required for {cfg.__class__.__name__}, "
-                "received None."
+                f"model_config is required for {cfg.__class__.__name__}, received None."
             )
         if not isinstance(cfg.model_config, LayerStackConfig):
             raise TypeError(
@@ -191,9 +186,8 @@ class DynamicMemoryValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
         if not learning_rate_set:
             return
 
-        if (
-            not isinstance(learning_rate, (int, float))
-            or isinstance(learning_rate, bool)
+        if not isinstance(learning_rate, (int, float)) or isinstance(
+            learning_rate, bool
         ):
             raise TypeError(
                 "test_time_training_learning_rate must be a positive float for "
