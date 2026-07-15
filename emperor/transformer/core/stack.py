@@ -1,18 +1,18 @@
 import copy
+from typing import TYPE_CHECKING
+
 import torch
 import torch.nn as nn
-
 from torch import Tensor
 from torch.nn import ModuleList
+
 from emperor.base.module import Module
 from emperor.transformer.core._validator import TransformerValidator
 
-from typing import TYPE_CHECKING
-
 if TYPE_CHECKING:
     from emperor.transformer.core.config import (
-        TransformerEncoderStackConfig,
         TransformerDecoderStackConfig,
+        TransformerEncoderStackConfig,
     )
 
 
@@ -24,7 +24,7 @@ class TransformerEncoderStack(Module):
     ):
         super().__init__()
         config = getattr(cfg, "transformer_encoder_stack_config", cfg)
-        self.cfg: "TransformerEncoderStackConfig" = self._override_config(
+        self.cfg: TransformerEncoderStackConfig = self._override_config(
             config, overrides
         )
 
@@ -118,7 +118,7 @@ class TransformerDecoderStack(Module):
     ):
         super().__init__()
         config = getattr(cfg, "transformer_decoder_stack_config", cfg)
-        self.cfg: "TransformerDecoderStackConfig" = self._override_config(
+        self.cfg: TransformerDecoderStackConfig = self._override_config(
             config, overrides
         )
 

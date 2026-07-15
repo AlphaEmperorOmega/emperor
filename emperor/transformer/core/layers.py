@@ -8,8 +8,8 @@ from torch import Tensor
 from emperor.attention.core.state import AttentionLayerState
 from emperor.base.layer import Layer, LayerState
 from emperor.base.layer.residual import ResidualConnection, ResidualConnectionOptions
-from emperor.base.options import LayerNormPositionOptions
 from emperor.base.module import Module
+from emperor.base.options import LayerNormPositionOptions
 from emperor.transformer.core._validator import TransformerValidator
 
 if TYPE_CHECKING:
@@ -43,7 +43,7 @@ class TransformerEncoderLayer(Module):
     ):
         super().__init__()
         config = getattr(cfg, "transformer_encoder_layer_config", cfg)
-        self.cfg: "TransformerEncoderLayerConfig" = self._override_config(
+        self.cfg: TransformerEncoderLayerConfig = self._override_config(
             config, overrides
         )
 
@@ -255,7 +255,7 @@ class TransformerDecoderLayer(Module):
     ):
         super().__init__()
         config = getattr(cfg, "transformer_decoder_layer_config", cfg)
-        self.cfg: "TransformerDecoderLayerConfig" = self._override_config(
+        self.cfg: TransformerDecoderLayerConfig = self._override_config(
             config, overrides
         )
 

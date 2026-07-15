@@ -1,8 +1,9 @@
+from typing import TYPE_CHECKING
+
 from torch import Tensor
+
 from emperor.base.module import Module
 from emperor.transformer.core._validator import TransformerValidator
-
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.transformer.config import TransformerConfig
@@ -16,7 +17,7 @@ class Transformer(Module):
     ):
         super().__init__()
         config = getattr(cfg, "transformer_config", cfg)
-        self.cfg: "TransformerConfig" = self._override_config(config, overrides)
+        self.cfg: TransformerConfig = self._override_config(config, overrides)
 
         TransformerValidator.validate_transformer(self)
 
