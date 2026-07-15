@@ -48,7 +48,12 @@ ATTENTION_CONTRACT_MANIFEST = {
         ("layout inference", "identity preservation", "output restoration"),
         "tests.unit.test_attention_batch_dimension_manager",
         BatchDimensionManager=class_contract(
-            ("unbatched", "sequence-first", "batch-first", "legacy layout"),
+            (
+                "unbatched",
+                "sequence-first",
+                "batch-first",
+                "runtime-state restoration",
+            ),
             "tests.unit.test_attention_batch_dimension_manager",
         ),
     ),
