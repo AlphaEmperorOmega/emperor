@@ -143,11 +143,6 @@ class _AttentionDiagnosticsTracker:
 class _AttentionDiagnosticsTrackerManager:
     """Attach, restore, and own attention diagnostic instrumentation."""
 
-    _EXACT_WEIGHT_METHOD_NAMES = (
-        "_SelfAttentionProcessor__compute_masked_attention_weights",
-        "_MixtureOfAttentionHeadsProcessor__compute_masked_attention_weights",
-    )
-
     def __init__(self) -> None:
         self._trackers: dict[int, _AttentionDiagnosticsTracker] = {}
         self._hook_handles: list[RemovableHandle] = []
@@ -180,6 +175,7 @@ class _AttentionDiagnosticsTrackerManager:
     ) -> None:
         tracker = _AttentionDiagnosticsTracker(module_name)
         self._trackers[id(attention_module)] = tracker
+        monitor_adapter = _resolve_attention_monitor_adapter(attention_module)
         projector_attached = self.__attach_projector(
             attention_module,
             tracker,
@@ -189,6 +185,7 @@ class _AttentionDiagnosticsTrackerManager:
             attention_module,
             tracker,
             should_capture,
+            monitor_adapter,
             begin_observation=not projector_attached,
         )
         self._hook_handles.append(
@@ -250,6 +247,7 @@ class _AttentionDiagnosticsTrackerManager:
         attention_module: Module,
         tracker: _AttentionDiagnosticsTracker,
         should_capture: Callable[[], bool],
+        monitor_adapter: _AttentionMonitorAdapter,
         *,
         begin_observation: bool,
     ) -> bool:
@@ -275,7 +273,12 @@ class _AttentionDiagnosticsTrackerManager:
             original_attention,
             capture_processor_inputs,
         )
-        self.__attach_exact_weight_methods(processor, tracker, should_capture)
+        self.__attach_exact_weight_methods(
+            processor,
+            tracker,
+            should_capture,
+            monitor_adapter,
+        )
         return True
 
     def __attach_exact_weight_methods(
@@ -283,8 +286,9 @@ class _AttentionDiagnosticsTrackerManager:
         processor: object,
         tracker: _AttentionDiagnosticsTracker,
         should_capture: Callable[[], bool],
+        monitor_adapter: _AttentionMonitorAdapter,
     ) -> None:
-        for method_name in self._EXACT_WEIGHT_METHOD_NAMES:
+        for method_name in monitor_adapter.exact_weight_method_names:
             original_weight_method = getattr(processor, method_name, None)
             if not callable(original_weight_method):
                 continue
@@ -356,8 +360,12 @@ class _AttentionDiagnosticsTrackerManager:
         )
 
 
-class _AttentionWeightAdapter:
-    """Canonicalize supported attention-weight layouts to sample/head/T/S."""
+class _AttentionMonitorAdapter:
+    """Capture and canonicalize standard attention weights."""
+
+    @property
+    def exact_weight_method_names(self) -> tuple[str, ...]:
+        return ("_SelfAttentionProcessor__compute_masked_attention_weights",)
 
     @staticmethod
     def canonicalize(attention_weights: Tensor, num_heads: int) -> Tensor | None:
@@ -369,16 +377,6 @@ class _AttentionWeightAdapter:
                 return detached_weights
             if detached_weights.size(0) == num_heads:
                 return detached_weights.permute(1, 0, 2, 3)
-        if detached_weights.dim() == 5 and detached_weights.size(2) == num_heads:
-            batch_size, top_k, head_count, target_length, source_length = (
-                detached_weights.shape
-            )
-            return detached_weights.reshape(
-                batch_size * top_k,
-                head_count,
-                target_length,
-                source_length,
-            )
         if detached_weights.dim() == 3 and detached_weights.size(0) % num_heads == 0:
             return detached_weights.reshape(
                 -1,
@@ -389,13 +387,34 @@ class _AttentionWeightAdapter:
         return None
 
 
+_DEFAULT_ATTENTION_MONITOR_ADAPTER = _AttentionMonitorAdapter()
+
+
+def _resolve_attention_monitor_adapter(
+    attention_module: Module,
+) -> _AttentionMonitorAdapter:
+    monitor_adapter = getattr(
+        attention_module,
+        "_MONITOR_ADAPTER",
+        _DEFAULT_ATTENTION_MONITOR_ADAPTER,
+    )
+    if isinstance(monitor_adapter, _AttentionMonitorAdapter):
+        return monitor_adapter
+    return _DEFAULT_ATTENTION_MONITOR_ADAPTER
+
+
 class _AttentionDiagnostics:
     """Calculate attention diagnostics without Lightning or emission concerns."""
 
     DEAD_HEAD_ENTROPY_FLOOR = 1e-6
 
-    def __init__(self, weight_adapter: _AttentionWeightAdapter | None = None) -> None:
-        self._weight_adapter = weight_adapter or _AttentionWeightAdapter()
+    def __init__(
+        self,
+        monitor_adapter: _AttentionMonitorAdapter | None = None,
+    ) -> None:
+        self._monitor_adapter = (
+            monitor_adapter or _DEFAULT_ATTENTION_MONITOR_ADAPTER
+        )
 
     def calculate(
         self,
@@ -403,6 +422,7 @@ class _AttentionDiagnostics:
         *,
         num_heads: int,
         configured_dropout_probability: float,
+        monitor_adapter: _AttentionMonitorAdapter | None = None,
     ) -> _AttentionDiagnosticMetrics:
         projected_qkv = observation.projected_qkv
         exact_weights = observation.exact_attention_weights
@@ -420,6 +440,7 @@ class _AttentionDiagnostics:
         per_head_entropy, per_head_max_probability = self.per_head_statistics(
             selected_weights,
             num_heads,
+            monitor_adapter,
         )
         return _AttentionDiagnosticMetrics(
             query_norm_mean=self.__projection_norm(projected_qkv, "query"),
@@ -476,10 +497,12 @@ class _AttentionDiagnostics:
         self,
         attention_weights: Tensor | None,
         num_heads: int,
+        monitor_adapter: _AttentionMonitorAdapter | None = None,
     ) -> tuple[Tensor | None, Tensor | None]:
         if attention_weights is None:
             return None, None
-        weights_by_head = self._weight_adapter.canonicalize(
+        adapter = monitor_adapter or self._monitor_adapter
+        weights_by_head = adapter.canonicalize(
             attention_weights,
             num_heads,
         )
@@ -631,6 +654,7 @@ class AttentionMonitorCallback(Callback):
             configured_dropout_probability=float(
                 getattr(attention_module, "dropout_probability", 0.0)
             ),
+            monitor_adapter=_resolve_attention_monitor_adapter(attention_module),
         )
         experiment = getattr(getattr(pl_module, "logger", None), "experiment", None)
         return _AttentionTrackingContext(
