@@ -1,20 +1,30 @@
+from dataclasses import replace
+from typing import TYPE_CHECKING
+
 import torch
 import torch.nn.functional as F
-
 from torch import Tensor
-from emperor.base.utils import Module
 
-from typing import TYPE_CHECKING
+from emperor.attention.core._validator import AttentionValidatorBase
+from emperor.base.module import Module
 
 if TYPE_CHECKING:
     from emperor.attention.core.config import MultiHeadAttentionConfig
+    from emperor.attention.core.runtime import (
+        QKV,
+        AttentionMasks,
+        AttentionRuntimeShape,
+    )
 
 
 class KeyValueBias(Module):
+    VALIDATOR = AttentionValidatorBase
+
     def __init__(self, cfg: "MultiHeadAttentionConfig"):
         super().__init__()
         self.cfg = cfg
         self.batch_size = self.cfg.batch_size
+        self.num_heads = self.cfg.num_heads
         self.embedding_dim = self.cfg.embedding_dim
         self.query_key_projection_dim = self.cfg.query_key_projection_dim
         self.value_projection_dim = self.cfg.value_projection_dim
@@ -38,34 +48,99 @@ class KeyValueBias(Module):
 
     def add_kv_learnable_bias_vectors(
         self,
-        key_projections: Tensor,
-        value_projections: Tensor,
-        key_padding_mask: Tensor | None = None,
-        attention_mask: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor, Tensor | None, Tensor | None]:
+        qkv: "QKV",
+        masks: "AttentionMasks",
+        runtime_shape: "AttentionRuntimeShape | None" = None,
+    ) -> tuple["QKV", "AttentionMasks", "AttentionRuntimeShape | None"]:
         if not self.add_key_value_bias_flag:
-            return (
-                key_projections,
-                value_projections,
-                key_padding_mask,
-                attention_mask,
-            )
-        repeated_key_bias = self.key_bias_vector.repeat(1, self.batch_size, 1)
-        key_projections_with_bias_vector = torch.cat(
-            [key_projections, repeated_key_bias]
-        )
-        repeated_value_bias = self.value_bias_vector.repeat(1, self.batch_size, 1)
-        value_projections_with_bias_vector = torch.cat(
-            [value_projections, repeated_value_bias]
-        )
-        if key_padding_mask is not None:
-            key_padding_mask = F.pad(key_padding_mask, (0, 1))
-        if attention_mask is not None:
-            attention_mask = F.pad(attention_mask, (0, 1))
+            return qkv, masks, runtime_shape
+        updated_qkv = self.__append_bias_vectors(qkv, runtime_shape)
+        updated_masks = self.__pad_masks_for_bias_vector(masks)
+        updated_runtime_shape = self.__extend_runtime_shape(runtime_shape)
+        return updated_qkv, updated_masks, updated_runtime_shape
 
-        return (
-            key_projections_with_bias_vector,
-            value_projections_with_bias_vector,
-            key_padding_mask,
-            attention_mask,
+    def __append_bias_vectors(
+        self,
+        qkv: "QKV",
+        runtime_shape: "AttentionRuntimeShape | None",
+    ) -> "QKV":
+        key_with_bias_vector = self.__append_bias_vector(
+            self.key_bias_vector, qkv.key, runtime_shape
         )
+        value_with_bias_vector = self.__append_bias_vector(
+            self.value_bias_vector, qkv.value, runtime_shape
+        )
+        updated_qkv = replace(
+            qkv, key=key_with_bias_vector, value=value_with_bias_vector
+        )
+        return updated_qkv
+
+    def __append_bias_vector(
+        self,
+        bias_vector: Tensor,
+        projection: Tensor,
+        runtime_shape: "AttentionRuntimeShape | None",
+    ) -> Tensor:
+        expanded_bias = self.__expand_bias_vector(
+            bias_vector, projection, runtime_shape
+        )
+        projection_with_bias_vector = torch.cat([projection, expanded_bias], dim=1)
+        return projection_with_bias_vector
+
+    def __expand_bias_vector(
+        self,
+        bias_vector: Tensor,
+        projection: Tensor,
+        runtime_shape: "AttentionRuntimeShape | None" = None,
+    ) -> Tensor:
+        batch_size = self.__resolve_batch_size(runtime_shape)
+        branch_count = projection.size(0)
+        branch_multiplier = self.__compute_branch_multiplier(branch_count, batch_size)
+        head_dim = projection.size(-1)
+        bias_by_head = bias_vector.reshape(self.num_heads, head_dim)
+        repetition_count = batch_size * branch_multiplier
+        expanded_bias = bias_by_head.repeat(repetition_count, 1)
+        return expanded_bias.reshape(branch_count, 1, head_dim)
+
+    def __resolve_batch_size(
+        self,
+        runtime_shape: "AttentionRuntimeShape | None",
+    ) -> int:
+        if runtime_shape is not None:
+            return runtime_shape.batch_size
+        return self.batch_size
+
+    def __compute_branch_multiplier(
+        self,
+        branch_count: int,
+        batch_size: int,
+    ) -> int:
+        base_branch_count = batch_size * self.num_heads
+        self.VALIDATOR.validate_attention_ready_projection_branch_count(
+            branch_count, base_branch_count
+        )
+        return branch_count // base_branch_count
+
+    def __pad_masks_for_bias_vector(self, masks: "AttentionMasks") -> "AttentionMasks":
+        key_padding_mask = self.__pad_mask(masks.key_padding_mask)
+        attention_mask = self.__pad_mask(masks.attention_mask)
+        updated_masks = replace(
+            masks,
+            key_padding_mask=key_padding_mask,
+            attention_mask=attention_mask,
+        )
+        return updated_masks
+
+    @staticmethod
+    def __pad_mask(mask: Tensor | None) -> Tensor | None:
+        if mask is None:
+            return None
+        return F.pad(mask, (0, 1))
+
+    @staticmethod
+    def __extend_runtime_shape(
+        runtime_shape: "AttentionRuntimeShape | None",
+    ) -> "AttentionRuntimeShape | None":
+        if runtime_shape is not None:
+            return runtime_shape.with_source_extension()
+        return None
