@@ -1,12 +1,13 @@
-import torch
 import unittest
 
-from torch import nn
-
-from emperor.sampler.model import SamplerModel
+import torch
 from emperor.sampler.core.config import SamplerConfig
 from emperor.sampler.core.monitor import SamplerMonitorCallback
 from emperor.sampler.core.tracker import SamplerUsageTrackerManager
+from emperor.sampler.model import SamplerModel
+from torch import nn
+
+from support.monitor import orchestration_calls
 
 
 class FakeExperiment:
@@ -39,6 +40,39 @@ class FakeLightningModule(nn.Module):
 
 
 class TestSamplerMonitorCallback(unittest.TestCase):
+    def test_tracking_orchestration_lists_each_tracked_fact(self):
+        orchestration = (
+            SamplerMonitorCallback._SamplerMonitorCallback__track_sampler_diagnostics
+        )
+        scoped_usage_calls = (
+            "__track_active_experts",
+            "__track_usage_entropy",
+            "__track_usage_coefficient_of_variation",
+            "__track_maximum_usage_fraction",
+            "__track_minimum_usage_fraction",
+            "__track_maximum_probability_mass",
+            "__track_minimum_probability_mass",
+            "__track_per_expert_usage_fraction",
+            "__track_per_expert_probability_mass",
+        )
+
+        self.assertEqual(
+            orchestration_calls(orchestration),
+            (
+                "__track_retention_fraction",
+                "__track_drop_fraction",
+                "__track_auxiliary_loss",
+                *scoped_usage_calls,
+                *scoped_usage_calls,
+                "__track_usage_history",
+                "__track_probability_mass_history",
+                "__track_usage_histogram",
+                "__track_probability_mass_histogram",
+                "__track_usage_heatmap",
+                "__track_probability_mass_heatmap",
+            ),
+        )
+
     def sampler_config(self, **overrides) -> SamplerConfig:
         values = {
             "top_k": 2,
@@ -254,8 +288,8 @@ class TestSamplerMonitorCallback(unittest.TestCase):
             trainer=None, pl_module=module, outputs=None, batch=None, batch_idx=0
         )
 
-        self.assertEqual(callback._usage_history["sampler"], [])
-        self.assertEqual(callback._mass_history["sampler"], [])
+        self.assertEqual(len(callback._usage_history["sampler"]), 0)
+        self.assertEqual(len(callback._mass_history["sampler"]), 0)
 
     def test_visual_summaries_log_histogram_and_heatmap(self):
         experiment = FakeExperiment()
@@ -283,9 +317,7 @@ class TestSamplerMonitorCallback(unittest.TestCase):
     def test_visual_history_bounded_by_history_size(self):
         experiment = FakeExperiment()
         module, sampler = self.build_module_with_sampler(experiment=experiment)
-        callback = self.primed_callback(
-            module, log_every_n_steps=1, history_size=3
-        )
+        callback = self.primed_callback(module, log_every_n_steps=1, history_size=3)
 
         for batch_idx in range(5):
             self.feed_sampler(sampler)

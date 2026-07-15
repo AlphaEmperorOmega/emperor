@@ -1,228 +1,463 @@
-import torch
+from __future__ import annotations
 
-from lightning.pytorch.callbacks import Callback
-from emperor.experiments.monitor_policy import MonitorEmissionPolicy
-
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from lightning.pytorch.callbacks import Callback
+
+from emperor.experiments.monitor_policy import (
+    MonitorEmissionPolicy,
+    MonitorTensorHistory,
+)
+
 if TYPE_CHECKING:
-    from torch import Tensor
     from lightning import LightningModule, Trainer
+    from torch import Tensor
+
+    from emperor.sampler.core.tracker import SamplerUsageTrackerManager
     from emperor.sampler.model import SamplerModel
 
 
+@dataclass(frozen=True)
+class _SamplerUsageMetrics:
+    usage_counts: Tensor
+    usage_fraction: Tensor
+    mass_fraction: Tensor
+    active_experts: Tensor
+    entropy: Tensor
+    coefficient_of_variation: Tensor
+
+
+@dataclass(frozen=True)
+class _SamplerTrackingContext:
+    pl_module: LightningModule
+    module_name: str
+    batch_metrics: _SamplerUsageMetrics
+    cumulative_metrics: _SamplerUsageMetrics
+    retention_fraction: Tensor | None
+    auxiliary_loss: Tensor | None
+    experiment: object | None
+    global_step: int
+
+
+class _SamplerDiagnostics:
+    @staticmethod
+    def calculate_usage(
+        usage_counts: Tensor,
+        usage_mass: Tensor,
+    ) -> _SamplerUsageMetrics:
+        detached_counts = usage_counts.detach()
+        detached_mass = usage_mass.detach()
+        usage_fraction = detached_counts / detached_counts.sum().clamp_min(1.0)
+        mass_fraction = detached_mass / detached_mass.sum().clamp_min(1e-6)
+        entropy = -(usage_fraction.clamp_min(1e-6).log() * usage_fraction).sum()
+        coefficient_of_variation = (
+            detached_counts.std() / detached_counts.mean().clamp_min(1e-6)
+        )
+        return _SamplerUsageMetrics(
+            usage_counts=detached_counts,
+            usage_fraction=usage_fraction,
+            mass_fraction=mass_fraction,
+            active_experts=(detached_counts > 0).sum().float(),
+            entropy=entropy,
+            coefficient_of_variation=coefficient_of_variation,
+        )
+
+
 class SamplerMonitorCallback(Callback):
+    """Log capacity and expert-usage diagnostics for sampler modules."""
+
     def __init__(
         self,
         log_every_n_steps: int = 100,
         history_size: int = 128,
         log_per_expert_scalars: bool = False,
-    ):
+    ) -> None:
         super().__init__()
         self.__validate_positive_integer("log_every_n_steps", log_every_n_steps)
         self.__validate_positive_integer("history_size", history_size)
         self.log_every_n_steps = log_every_n_steps
         self.history_size = history_size
         self.log_per_expert_scalars = log_per_expert_scalars
-        self._sampler_modules = []
-        self._usage_history = {}
-        self._mass_history = {}
-        self._tracker_manager = None
+        self._sampler_modules: list[tuple[str, SamplerModel]] = []
+        self._usage_history: dict[str, MonitorTensorHistory] = {}
+        self._mass_history: dict[str, MonitorTensorHistory] = {}
+        self._tracker_manager: SamplerUsageTrackerManager | None = None
         self._emission_policy = MonitorEmissionPolicy()
 
     @staticmethod
-    def __validate_positive_integer(name: str, value: int) -> None:
+    def __validate_positive_integer(option_name: str, value: int) -> None:
         if not isinstance(value, int):
             raise TypeError(
-                f"{name} must be an integer, received {type(value).__name__}."
+                f"{option_name} must be an integer, received {type(value).__name__}."
             )
         if isinstance(value, bool) or value <= 0:
-            raise ValueError(f"{name} must be a positive integer, received {value!r}.")
+            raise ValueError(
+                f"{option_name} must be a positive integer, received {value!r}."
+            )
 
-    def on_fit_start(self, trainer: "Trainer", pl_module: "LightningModule") -> None:
-        from emperor.sampler.model import SamplerModel
+    def on_fit_start(self, trainer: Trainer, pl_module: LightningModule) -> None:
         from emperor.sampler.core.tracker import SamplerUsageTrackerManager
+        from emperor.sampler.model import SamplerModel
 
-        self.__clear_tracking_state()
-        self._emission_policy.clear()
+        self.__cleanup()
         self._tracker_manager = SamplerUsageTrackerManager()
-        for name, module in pl_module.named_modules():
-            if isinstance(module, SamplerModel):
-                self._tracker_manager.attach(module)
-                self._sampler_modules.append((name, module))
-                self._usage_history[name] = []
-                self._mass_history[name] = []
+        for module_name, sampler_module in pl_module.named_modules():
+            if not isinstance(sampler_module, SamplerModel):
+                continue
+            self._tracker_manager.attach(sampler_module)
+            self._sampler_modules.append((module_name, sampler_module))
+            self._usage_history[module_name] = MonitorTensorHistory(self.history_size)
+            self._mass_history[module_name] = MonitorTensorHistory(self.history_size)
 
-    def __clear_tracking_state(self) -> None:
+    def on_train_batch_end(
+        self,
+        trainer: Trainer,
+        pl_module: LightningModule,
+        outputs: object,
+        batch: object,
+        batch_idx: int,
+    ) -> None:
+        if batch_idx % self.log_every_n_steps != 0:
+            return
+        for module_name, sampler_module in self._sampler_modules:
+            usage_tracker = sampler_module.usage_tracker
+            if usage_tracker is None:
+                continue
+            batch_metrics = _SamplerDiagnostics.calculate_usage(
+                usage_tracker.last_expert_usage_counts,
+                usage_tracker.last_expert_usage_mass,
+            )
+            cumulative_metrics = _SamplerDiagnostics.calculate_usage(
+                usage_tracker.cumulative_expert_usage_counts,
+                usage_tracker.cumulative_expert_usage_mass,
+            )
+            context = self.__build_tracking_context(
+                pl_module,
+                module_name,
+                sampler_module,
+                batch_metrics,
+                cumulative_metrics,
+            )
+            self.__track_sampler_diagnostics(context)
+
+    @staticmethod
+    def __build_tracking_context(
+        pl_module: LightningModule,
+        module_name: str,
+        sampler_module: SamplerModel,
+        batch_metrics: _SamplerUsageMetrics,
+        cumulative_metrics: _SamplerUsageMetrics,
+    ) -> _SamplerTrackingContext:
+        skip_mask = sampler_module.get_updated_skip_mask()
+        auxiliary_loss = sampler_module.get_auxiliary_loss()
+        return _SamplerTrackingContext(
+            pl_module=pl_module,
+            module_name=module_name,
+            batch_metrics=batch_metrics,
+            cumulative_metrics=cumulative_metrics,
+            retention_fraction=(
+                skip_mask.detach().float().mean() if skip_mask is not None else None
+            ),
+            auxiliary_loss=(
+                auxiliary_loss.detach().float().mean()
+                if auxiliary_loss is not None
+                else None
+            ),
+            experiment=getattr(
+                getattr(pl_module, "logger", None),
+                "experiment",
+                None,
+            ),
+            global_step=getattr(pl_module, "global_step", 0),
+        )
+
+    def __track_sampler_diagnostics(
+        self,
+        context: _SamplerTrackingContext,
+    ) -> None:
+        self.__track_retention_fraction(context)
+        self.__track_drop_fraction(context)
+        self.__track_auxiliary_loss(context)
+        self.__track_active_experts(context, "batch", context.batch_metrics)
+        self.__track_usage_entropy(context, "batch", context.batch_metrics)
+        self.__track_usage_coefficient_of_variation(
+            context,
+            "batch",
+            context.batch_metrics,
+        )
+        self.__track_maximum_usage_fraction(context, "batch", context.batch_metrics)
+        self.__track_minimum_usage_fraction(context, "batch", context.batch_metrics)
+        self.__track_maximum_probability_mass(context, "batch", context.batch_metrics)
+        self.__track_minimum_probability_mass(context, "batch", context.batch_metrics)
+        self.__track_per_expert_usage_fraction(
+            context,
+            "batch",
+            context.batch_metrics,
+        )
+        self.__track_per_expert_probability_mass(
+            context,
+            "batch",
+            context.batch_metrics,
+        )
+        self.__track_active_experts(context, "cumulative", context.cumulative_metrics)
+        self.__track_usage_entropy(context, "cumulative", context.cumulative_metrics)
+        self.__track_usage_coefficient_of_variation(
+            context,
+            "cumulative",
+            context.cumulative_metrics,
+        )
+        self.__track_maximum_usage_fraction(
+            context,
+            "cumulative",
+            context.cumulative_metrics,
+        )
+        self.__track_minimum_usage_fraction(
+            context,
+            "cumulative",
+            context.cumulative_metrics,
+        )
+        self.__track_maximum_probability_mass(
+            context,
+            "cumulative",
+            context.cumulative_metrics,
+        )
+        self.__track_minimum_probability_mass(
+            context,
+            "cumulative",
+            context.cumulative_metrics,
+        )
+        self.__track_per_expert_usage_fraction(
+            context,
+            "cumulative",
+            context.cumulative_metrics,
+        )
+        self.__track_per_expert_probability_mass(
+            context,
+            "cumulative",
+            context.cumulative_metrics,
+        )
+        self.__track_usage_history(context)
+        self.__track_probability_mass_history(context)
+        self.__track_usage_histogram(context)
+        self.__track_probability_mass_histogram(context)
+        self.__track_usage_heatmap(context)
+        self.__track_probability_mass_heatmap(context)
+
+    @staticmethod
+    def __track_retention_fraction(context: _SamplerTrackingContext) -> None:
+        if context.retention_fraction is None:
+            return
+        context.pl_module.log(
+            f"{context.module_name}/capacity/retention_fraction",
+            context.retention_fraction,
+        )
+
+    @staticmethod
+    def __track_drop_fraction(context: _SamplerTrackingContext) -> None:
+        if context.retention_fraction is None:
+            return
+        context.pl_module.log(
+            f"{context.module_name}/capacity/drop_fraction",
+            1.0 - context.retention_fraction,
+        )
+
+    @staticmethod
+    def __track_auxiliary_loss(context: _SamplerTrackingContext) -> None:
+        if context.auxiliary_loss is None:
+            return
+        context.pl_module.log(
+            f"{context.module_name}/loss/auxiliary_loss",
+            context.auxiliary_loss,
+        )
+
+    @staticmethod
+    def __track_active_experts(
+        context: _SamplerTrackingContext,
+        metric_scope: str,
+        metrics: _SamplerUsageMetrics,
+    ) -> None:
+        context.pl_module.log(
+            f"{context.module_name}/{metric_scope}/active_experts",
+            metrics.active_experts,
+        )
+
+    @staticmethod
+    def __track_usage_entropy(
+        context: _SamplerTrackingContext,
+        metric_scope: str,
+        metrics: _SamplerUsageMetrics,
+    ) -> None:
+        context.pl_module.log(
+            f"{context.module_name}/{metric_scope}/usage_entropy",
+            metrics.entropy,
+        )
+
+    @staticmethod
+    def __track_usage_coefficient_of_variation(
+        context: _SamplerTrackingContext,
+        metric_scope: str,
+        metrics: _SamplerUsageMetrics,
+    ) -> None:
+        context.pl_module.log(
+            f"{context.module_name}/{metric_scope}/usage_coefficient_of_variation",
+            metrics.coefficient_of_variation,
+        )
+
+    @staticmethod
+    def __track_maximum_usage_fraction(
+        context: _SamplerTrackingContext,
+        metric_scope: str,
+        metrics: _SamplerUsageMetrics,
+    ) -> None:
+        context.pl_module.log(
+            f"{context.module_name}/{metric_scope}/max_usage_fraction",
+            metrics.usage_fraction.max(),
+        )
+
+    @staticmethod
+    def __track_minimum_usage_fraction(
+        context: _SamplerTrackingContext,
+        metric_scope: str,
+        metrics: _SamplerUsageMetrics,
+    ) -> None:
+        context.pl_module.log(
+            f"{context.module_name}/{metric_scope}/min_usage_fraction",
+            metrics.usage_fraction.min(),
+        )
+
+    @staticmethod
+    def __track_maximum_probability_mass(
+        context: _SamplerTrackingContext,
+        metric_scope: str,
+        metrics: _SamplerUsageMetrics,
+    ) -> None:
+        context.pl_module.log(
+            f"{context.module_name}/{metric_scope}/max_probability_mass",
+            metrics.mass_fraction.max(),
+        )
+
+    @staticmethod
+    def __track_minimum_probability_mass(
+        context: _SamplerTrackingContext,
+        metric_scope: str,
+        metrics: _SamplerUsageMetrics,
+    ) -> None:
+        context.pl_module.log(
+            f"{context.module_name}/{metric_scope}/min_probability_mass",
+            metrics.mass_fraction.min(),
+        )
+
+    def __track_per_expert_usage_fraction(
+        self,
+        context: _SamplerTrackingContext,
+        metric_scope: str,
+        metrics: _SamplerUsageMetrics,
+    ) -> None:
+        if not self.log_per_expert_scalars:
+            return
+        for expert_index, usage_fraction in enumerate(metrics.usage_fraction):
+            context.pl_module.log(
+                f"{context.module_name}/{metric_scope}/"
+                f"expert_{expert_index}/usage_fraction",
+                usage_fraction,
+            )
+
+    def __track_per_expert_probability_mass(
+        self,
+        context: _SamplerTrackingContext,
+        metric_scope: str,
+        metrics: _SamplerUsageMetrics,
+    ) -> None:
+        if not self.log_per_expert_scalars:
+            return
+        for expert_index, probability_mass in enumerate(metrics.mass_fraction):
+            context.pl_module.log(
+                f"{context.module_name}/{metric_scope}/"
+                f"expert_{expert_index}/probability_mass",
+                probability_mass,
+            )
+
+    def __track_usage_history(self, context: _SamplerTrackingContext) -> None:
+        if context.experiment is None:
+            return
+        self._usage_history[context.module_name].append(
+            context.batch_metrics.usage_fraction
+        )
+
+    def __track_probability_mass_history(
+        self,
+        context: _SamplerTrackingContext,
+    ) -> None:
+        if context.experiment is None:
+            return
+        self._mass_history[context.module_name].append(
+            context.batch_metrics.mass_fraction
+        )
+
+    def __track_usage_histogram(self, context: _SamplerTrackingContext) -> None:
+        if context.experiment is None:
+            return
+        self._emission_policy.emit_histogram(
+            context.experiment,
+            f"{context.module_name}/histogram/usage_fraction",
+            context.batch_metrics.usage_fraction,
+            context.global_step,
+        )
+
+    def __track_probability_mass_histogram(
+        self,
+        context: _SamplerTrackingContext,
+    ) -> None:
+        if context.experiment is None:
+            return
+        self._emission_policy.emit_histogram(
+            context.experiment,
+            f"{context.module_name}/histogram/probability_mass",
+            context.batch_metrics.mass_fraction,
+            context.global_step,
+        )
+
+    def __track_usage_heatmap(self, context: _SamplerTrackingContext) -> None:
+        if context.experiment is None:
+            return
+        self._emission_policy.emit_history_heatmap(
+            context.experiment,
+            f"{context.module_name}/heatmap/usage_fraction",
+            self._usage_history[context.module_name],
+            context.global_step,
+        )
+
+    def __track_probability_mass_heatmap(
+        self,
+        context: _SamplerTrackingContext,
+    ) -> None:
+        if context.experiment is None:
+            return
+        self._emission_policy.emit_history_heatmap(
+            context.experiment,
+            f"{context.module_name}/heatmap/probability_mass",
+            self._mass_history[context.module_name],
+            context.global_step,
+        )
+
+    def on_fit_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
+        self.__cleanup()
+
+    def on_exception(
+        self,
+        trainer: Trainer,
+        pl_module: LightningModule,
+        exception: BaseException,
+    ) -> None:
+        self.__cleanup()
+
+    def __cleanup(self) -> None:
         if self._tracker_manager is not None:
-            for _, sampler in self._sampler_modules:
-                self._tracker_manager.detach(sampler)
+            for _, sampler_module in self._sampler_modules:
+                self._tracker_manager.detach(sampler_module)
         self._tracker_manager = None
         self._sampler_modules.clear()
         self._usage_history.clear()
         self._mass_history.clear()
-
-    def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx) -> None:
-        if batch_idx % self.log_every_n_steps != 0:
-            return
-
-        for name, sampler in self._sampler_modules:
-            usage_tracker = sampler.usage_tracker
-            if usage_tracker is None:
-                continue
-            self.__log_capacity_metrics(pl_module, name, sampler)
-            self.__log_auxiliary_loss(pl_module, name, sampler)
-            self.__log_usage_stats(
-                pl_module,
-                name,
-                usage_tracker.last_expert_usage_counts.detach(),
-                usage_tracker.last_expert_usage_mass.detach(),
-                "batch",
-            )
-            self.__log_usage_stats(
-                pl_module,
-                name,
-                usage_tracker.cumulative_expert_usage_counts.detach(),
-                usage_tracker.cumulative_expert_usage_mass.detach(),
-                "cumulative",
-            )
-            self.__log_visual_summaries(
-                pl_module,
-                name,
-                usage_tracker.last_expert_usage_counts.detach(),
-                usage_tracker.last_expert_usage_mass.detach(),
-            )
-
-    def __log_capacity_metrics(
-        self,
-        module: "LightningModule",
-        name: str,
-        sampler: "SamplerModel",
-    ) -> None:
-        skip_mask = sampler.get_updated_skip_mask()
-        if skip_mask is None:
-            return
-        retention_fraction = skip_mask.detach().float().mean()
-        module.log(f"{name}/capacity/retention_fraction", retention_fraction)
-        module.log(f"{name}/capacity/drop_fraction", 1.0 - retention_fraction)
-
-    def __log_auxiliary_loss(
-        self,
-        module: "LightningModule",
-        name: str,
-        sampler: "SamplerModel",
-    ) -> None:
-        auxiliary_loss = sampler.get_auxiliary_loss()
-        if auxiliary_loss is None:
-            return
-        module.log(
-            f"{name}/loss/auxiliary_loss",
-            auxiliary_loss.detach().float().mean(),
-        )
-
-    def __log_usage_stats(
-        self,
-        module: "LightningModule",
-        name: str,
-        usage_counts: "Tensor",
-        usage_mass: "Tensor",
-        prefix: str,
-    ) -> None:
-        total_count = usage_counts.sum().clamp_min(1.0)
-        total_mass = usage_mass.sum().clamp_min(1e-6)
-        usage_fraction = usage_counts / total_count
-        mass_fraction = usage_mass / total_mass
-        active_experts = (usage_counts > 0).sum().float()
-        entropy = -(usage_fraction.clamp_min(1e-6).log() * usage_fraction).sum()
-        coefficient_of_variation = usage_counts.std() / usage_counts.mean().clamp_min(
-            1e-6
-        )
-
-        module.log(f"{name}/{prefix}/active_experts", active_experts)
-        module.log(f"{name}/{prefix}/usage_entropy", entropy)
-        module.log(
-            f"{name}/{prefix}/usage_coefficient_of_variation",
-            coefficient_of_variation,
-        )
-        module.log(f"{name}/{prefix}/max_usage_fraction", usage_fraction.max())
-        module.log(f"{name}/{prefix}/min_usage_fraction", usage_fraction.min())
-        module.log(f"{name}/{prefix}/max_probability_mass", mass_fraction.max())
-        module.log(f"{name}/{prefix}/min_probability_mass", mass_fraction.min())
-
-        if self.log_per_expert_scalars:
-            for expert_idx, value in enumerate(usage_fraction):
-                module.log(f"{name}/{prefix}/expert_{expert_idx}/usage_fraction", value)
-            for expert_idx, value in enumerate(mass_fraction):
-                module.log(
-                    f"{name}/{prefix}/expert_{expert_idx}/probability_mass", value
-                )
-
-    def __log_visual_summaries(
-        self,
-        module: "LightningModule",
-        name: str,
-        usage_counts: "Tensor",
-        usage_mass: "Tensor",
-    ) -> None:
-        experiment = getattr(getattr(module, "logger", None), "experiment", None)
-        if experiment is None:
-            return
-
-        step = getattr(module, "global_step", 0)
-        usage_fraction = usage_counts / usage_counts.sum().clamp_min(1.0)
-        mass_fraction = usage_mass / usage_mass.sum().clamp_min(1e-6)
-        self.__append_history(self._usage_history[name], usage_fraction)
-        self.__append_history(self._mass_history[name], mass_fraction)
-        self.__log_histogram(
-            experiment,
-            f"{name}/histogram/usage_fraction",
-            usage_fraction,
-            step,
-        )
-        self.__log_histogram(
-            experiment,
-            f"{name}/histogram/probability_mass",
-            mass_fraction,
-            step,
-        )
-        self.__log_heatmap(
-            experiment,
-            f"{name}/heatmap/usage_fraction",
-            self._usage_history[name],
-            step,
-        )
-        self.__log_heatmap(
-            experiment,
-            f"{name}/heatmap/probability_mass",
-            self._mass_history[name],
-            step,
-        )
-
-    def __append_history(self, history: list["Tensor"], values: "Tensor") -> None:
-        history.append(values.detach().float().cpu())
-        del history[: -self.history_size]
-
-    def __log_histogram(
-        self, experiment, tag: str, values: "Tensor", step: int
-    ) -> None:
-        self._emission_policy.emit_histogram(experiment, tag, values, step)
-
-    def __log_heatmap(
-        self,
-        experiment,
-        tag: str,
-        history: list["Tensor"],
-        step: int,
-    ) -> None:
-        if not hasattr(experiment, "add_image") or not history:
-            return
-        heatmap = torch.stack(history, dim=0).T
-        heatmap = heatmap / heatmap.max().clamp_min(1e-6)
-        image = heatmap.unsqueeze(0)
-        self._emission_policy.emit_image(
-            experiment, tag, image, step, dataformats="CHW"
-        )
-
-    def on_fit_end(self, trainer: "Trainer", pl_module: "LightningModule") -> None:
-        self.__clear_tracking_state()
         self._emission_policy.clear()
