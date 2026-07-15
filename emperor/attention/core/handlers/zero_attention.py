@@ -1,12 +1,17 @@
+from dataclasses import replace
+from typing import TYPE_CHECKING
+
 import torch
 import torch.nn.functional as F
-
 from torch import Tensor
-
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.attention.core.config import MultiHeadAttentionConfig
+    from emperor.attention.core.runtime import (
+        QKV,
+        AttentionMasks,
+        AttentionRuntimeShape,
+    )
 
 
 class ZeroAttention:
@@ -18,25 +23,49 @@ class ZeroAttention:
 
     def add_zero_attention(
         self,
-        key: Tensor,
-        value: Tensor,
-        key_padding_mask: Tensor | None = None,
-        attention_mask: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor, Tensor | None, Tensor | None]:
+        qkv: "QKV",
+        masks: "AttentionMasks",
+        runtime_shape: "AttentionRuntimeShape | None" = None,
+    ) -> tuple["QKV", "AttentionMasks", "AttentionRuntimeShape | None"]:
         if not self.zero_attention_flag:
-            return key, value, key_padding_mask, attention_mask
+            return qkv, masks, runtime_shape
 
-        padded_key = self.__concatenate_zeros_tensor(key)
-        padded_value = self.__concatenate_zeros_tensor(value)
+        padded_key = self._concatenate_zeros_tensor(qkv.key, runtime_shape)
+        padded_value = self._concatenate_zeros_tensor(qkv.value, runtime_shape)
+        key_padding_mask = masks.key_padding_mask
+        attention_mask = masks.attention_mask
         if key_padding_mask is not None:
             key_padding_mask = F.pad(key_padding_mask, (0, 1))
         if attention_mask is not None:
             attention_mask = F.pad(attention_mask, (0, 1))
 
-        return padded_key, padded_value, key_padding_mask, attention_mask
+        updated_runtime_shape = (
+            runtime_shape.with_source_extension() if runtime_shape is not None else None
+        )
+        return (
+            replace(qkv, key=padded_key, value=padded_value),
+            replace(
+                masks,
+                key_padding_mask=key_padding_mask,
+                attention_mask=attention_mask,
+            ),
+            updated_runtime_shape,
+        )
 
-    def __concatenate_zeros_tensor(self, tensor: Tensor) -> Tensor:
+    def _concatenate_zeros_tensor(
+        self,
+        tensor: Tensor,
+        runtime_shape: "AttentionRuntimeShape | None" = None,
+    ) -> Tensor:
         head_dim = tensor.size(-1)
-        zero_attention_shape = (self.batch_size * self.num_heads, 1, head_dim)
+        zero_attention_shape = (self._get_branch_count(runtime_shape), 1, head_dim)
         zeros_tensor = tensor.new_zeros(zero_attention_shape)
         return torch.cat([tensor, zeros_tensor], dim=1)
+
+    def _get_branch_count(
+        self, runtime_shape: "AttentionRuntimeShape | None" = None
+    ) -> int:
+        batch_size = (
+            runtime_shape.batch_size if runtime_shape is not None else self.batch_size
+        )
+        return batch_size * self.num_heads
