@@ -115,12 +115,44 @@ ATTENTION_CONTRACT_MANIFEST = {
     "emperor.attention.core.monitor": module_contract(
         ("instrumentation lifecycle", "metrics", "logging fallbacks", "history"),
         "tests.unit.test_attention_monitor",
+        _AttentionObservation=class_contract(
+            ("typed detached forward-pass values",),
+            "tests.unit.test_attention_monitor",
+        ),
+        _AttentionDiagnosticMetrics=class_contract(
+            ("typed calculator output",),
+            "tests.unit.test_attention_monitor",
+        ),
+        _AttentionTrackingContext=class_contract(
+            ("typed metric-emission context",),
+            "tests.unit.test_attention_monitor",
+        ),
+        _AttentionMethodReplacement=class_contract(
+            ("typed reversible method replacement",),
+            "tests.unit.test_attention_monitor",
+        ),
+        _AttentionDiagnosticsTracker=class_contract(
+            ("observation capture", "exact-weight priority", "detachment"),
+            "tests.unit.test_attention_monitor",
+        ),
+        _AttentionDiagnosticsTrackerManager=class_contract(
+            ("instrumentation attachment", "exact restoration", "cleanup"),
+            "tests.unit.test_attention_monitor",
+        ),
+        _AttentionWeightAdapter=class_contract(
+            ("legacy weight-layout compatibility",),
+            "tests.unit.test_attention_monitor",
+        ),
+        _AttentionDiagnostics=class_contract(
+            ("pure metric calculation", "approximate fallback", "mask handling"),
+            "tests.unit.test_attention_monitor",
+        ),
         AttentionMonitorCallback=class_contract(
             (
-                "exact capture",
-                "approximate fallback",
-                "weight normalization",
-                "cleanup",
+                "lifecycle",
+                "cadence",
+                "metric emission",
+                "bounded history",
             ),
             "tests.unit.test_attention_monitor",
         ),
