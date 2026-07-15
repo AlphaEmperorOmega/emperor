@@ -1,15 +1,13 @@
-import torch
+from typing import TYPE_CHECKING
 
+import torch
 from torch import Tensor
-from emperor.experts.core.options import RoutingInitializationMode
+
 from emperor.experts.core.config import MixtureOfExpertsConfig
-from emperor.parametric.core.mixtures.options import ClipParameterOptions
-from emperor.parametric.core.mixtures._validator import AdaptiveMixtureValidator
+from emperor.experts.core.options import RoutingInitializationMode
 from emperor.parametric.core.mixtures.base import AdaptiveMixtureBase
 from emperor.parametric.core.mixtures.config import AdaptiveMixtureConfig
-
-
-from typing import TYPE_CHECKING
+from emperor.parametric.core.mixtures.options import ClipParameterOptions
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
@@ -73,8 +71,8 @@ class GeneratorWeightsMixture(GeneratorMixtureBase):
         indices: Tensor | None,
         input_batch: Tensor,
     ) -> tuple[Tensor, Tensor]:
-        AdaptiveMixtureValidator.validate_input_batch_2d(input_batch)
-        AdaptiveMixtureValidator.validate_weighted_probabilities(
+        self.VALIDATOR.validate_input_batch_2d(input_batch)
+        self.VALIDATOR.validate_weighted_probabilities(
             self.cfg, probabilities
         )
         experts_inputs = (input_batch, probabilities, indices)
@@ -168,5 +166,5 @@ class GeneratorBiasMixture(GeneratorMixtureBase):
         indices: Tensor | None,
         input_batch: Tensor,
     ) -> tuple[Tensor, Tensor]:
-        AdaptiveMixtureValidator.validate_input_batch_2d(input_batch)
+        self.VALIDATOR.validate_input_batch_2d(input_batch)
         return self.bias_generator(input_batch, probabilities, indices)

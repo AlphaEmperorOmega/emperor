@@ -1,6 +1,9 @@
+from typing import TYPE_CHECKING
+
 from torch import Tensor
 
 from emperor.base.layer import LayerState
+from emperor.base.layer._validator import LayerValidator
 from emperor.base.validator import ValidatorBase
 from emperor.parametric.core.config import (
     AdaptiveRouterOptions,
@@ -16,41 +19,41 @@ from emperor.parametric.core.mixtures.config import (
     VectorWeightsMixtureConfig,
 )
 
-from typing import TYPE_CHECKING
-
 if TYPE_CHECKING:
-    from emperor.parametric.core.handlers import ParameterHandlerBase
+    from emperor.parametric.core.handlers import (
+        ParameterHandlerBase,
+        ParametricLayerHandler,
+    )
     from emperor.parametric.core.layers import ParametricLayer
-    from emperor.parametric.core.handlers import ParametricLayerHandler
 
 
 class ParametricLayerValidator(ValidatorBase):
     OPTIONAL_FIELDS = {"bias_mixture_config"}
 
-    @staticmethod
-    def validate(model: "ParametricLayer") -> None:
-        ParametricLayerValidator.validate_required_fields(model.cfg)
-        ParametricLayerValidator.validate_field_types(model.cfg)
-        ParametricLayerValidator.validate_dimensions(
+    @classmethod
+    def validate(cls, model: "ParametricLayer") -> None:
+        cls.validate_required_fields(model.cfg)
+        cls.validate_field_types(model.cfg)
+        cls.validate_dimensions(
             input_dim=model.input_dim,
             output_dim=model.output_dim,
         )
-        ParametricLayerValidator.__validate_positive_integer(
+        cls._validate_positive_integer(
             "input_dim", model.input_dim
         )
-        ParametricLayerValidator.__validate_positive_integer(
+        cls._validate_positive_integer(
             "output_dim", model.output_dim
         )
-        ParametricLayerValidator.__validate_weight_mixture_config(
+        cls._validate_weight_mixture_config(
             model.weight_mixture_config
         )
-        ParametricLayerValidator.__validate_bias_mixture_config(
+        cls._validate_bias_mixture_config(
             model.bias_mixture_config
         )
-        ParametricLayerValidator.__validate_router_and_sampler_configs(model)
-        ParametricLayerValidator.__validate_sampler_matches_mixtures(model)
-        ParametricLayerValidator.__validate_vector_shared_router(model)
-        ParametricLayerValidator.__validate_adaptive_augmentation_config(model)
+        cls._validate_router_and_sampler_configs(model)
+        cls._validate_sampler_matches_mixtures(model)
+        cls._validate_vector_shared_router(model)
+        cls._validate_adaptive_augmentation_config(model)
 
     @staticmethod
     def validate_forward_inputs(input_batch: Tensor, expected_input_dim: int) -> None:
@@ -73,12 +76,12 @@ class ParametricLayerValidator(ValidatorBase):
             )
 
     @staticmethod
-    def __validate_positive_integer(name: str, value: int) -> None:
+    def _validate_positive_integer(name: str, value: int) -> None:
         if isinstance(value, bool) or value <= 0:
             raise ValueError(f"{name} must be a positive integer, received {value!r}.")
 
     @staticmethod
-    def __validate_weight_mixture_config(config: AdaptiveMixtureConfig) -> None:
+    def _validate_weight_mixture_config(config: AdaptiveMixtureConfig) -> None:
         weight_configs = (
             VectorWeightsMixtureConfig,
             MatrixWeightsMixtureConfig,
@@ -91,7 +94,7 @@ class ParametricLayerValidator(ValidatorBase):
             )
 
     @staticmethod
-    def __validate_bias_mixture_config(
+    def _validate_bias_mixture_config(
         config: AdaptiveMixtureConfig | None,
     ) -> None:
         if config is None:
@@ -104,7 +107,7 @@ class ParametricLayerValidator(ValidatorBase):
             )
 
     @staticmethod
-    def __validate_router_and_sampler_configs(model: "ParametricLayer") -> None:
+    def _validate_router_and_sampler_configs(model: "ParametricLayer") -> None:
         from emperor.sampler.core.config import RouterConfig, SamplerConfig
 
         if not isinstance(model.router_config, RouterConfig):
@@ -118,16 +121,18 @@ class ParametricLayerValidator(ValidatorBase):
                 f"got {type(model.sampler_config).__name__}."
             )
 
-    @staticmethod
-    def __validate_sampler_matches_mixtures(model: "ParametricLayer") -> None:
+    @classmethod
+    def _validate_sampler_matches_mixtures(
+        cls, model: "ParametricLayer"
+    ) -> None:
         sampler_config = model.sampler_config
-        ParametricLayerValidator.__validate_count_match(
+        cls._validate_count_match(
             "sampler_config.top_k",
             sampler_config.top_k,
             "weight_mixture_config.top_k",
             model.weight_mixture_config.top_k,
         )
-        ParametricLayerValidator.__validate_count_match(
+        cls._validate_count_match(
             "sampler_config.num_experts",
             sampler_config.num_experts,
             "weight_mixture_config.num_experts",
@@ -135,13 +140,13 @@ class ParametricLayerValidator(ValidatorBase):
         )
         if model.bias_mixture_config is None:
             return
-        ParametricLayerValidator.__validate_count_match(
+        cls._validate_count_match(
             "sampler_config.top_k",
             sampler_config.top_k,
             "bias_mixture_config.top_k",
             model.bias_mixture_config.top_k,
         )
-        ParametricLayerValidator.__validate_count_match(
+        cls._validate_count_match(
             "sampler_config.num_experts",
             sampler_config.num_experts,
             "bias_mixture_config.num_experts",
@@ -149,7 +154,7 @@ class ParametricLayerValidator(ValidatorBase):
         )
 
     @staticmethod
-    def __validate_count_match(
+    def _validate_count_match(
         left_name: str,
         left_value: int,
         right_name: str,
@@ -162,7 +167,7 @@ class ParametricLayerValidator(ValidatorBase):
             )
 
     @staticmethod
-    def __validate_vector_shared_router(model: "ParametricLayer") -> None:
+    def _validate_vector_shared_router(model: "ParametricLayer") -> None:
         if not isinstance(model.weight_mixture_config, VectorWeightsMixtureConfig):
             return
         if model.routing_initialization_mode != AdaptiveRouterOptions.SHARED_ROUTER:
@@ -172,7 +177,7 @@ class ParametricLayerValidator(ValidatorBase):
         )
 
     @staticmethod
-    def __validate_adaptive_augmentation_config(model: "ParametricLayer") -> None:
+    def _validate_adaptive_augmentation_config(model: "ParametricLayer") -> None:
         from emperor.augmentations.adaptive_parameters.config import (
             AdaptiveParameterAugmentationConfig,
         )
@@ -194,13 +199,16 @@ class ParametricLayerValidator(ValidatorBase):
             )
 
 
-class ParametricHandlerValidator(ValidatorBase):
-    @staticmethod
-    def validate(model: "ParameterHandlerBase | ParametricLayerHandler") -> None:
+class ParametricHandlerValidator(LayerValidator):
+    @classmethod
+    def validate(
+        cls, model: "ParameterHandlerBase | ParametricLayerHandler"
+    ) -> None:
         if hasattr(model, "weight_mixture_config"):
-            ParametricHandlerValidator.__validate_parameter_handler(model)
+            cls._validate_parameter_handler(model)
             return
-        ParametricHandlerValidator.__validate_layer_handler(model)
+        super().validate(model)
+        cls._validate_layer_handler(model)
 
     @staticmethod
     def validate_state(state: LayerState) -> None:
@@ -216,7 +224,7 @@ class ParametricHandlerValidator(ValidatorBase):
             )
 
     @staticmethod
-    def __validate_parameter_handler(model: "ParameterHandlerBase") -> None:
+    def _validate_parameter_handler(model: "ParameterHandlerBase") -> None:
         if not isinstance(model.cfg, ParametricLayerConfig):
             raise TypeError(
                 "ParameterHandlerBase cfg must be ParametricLayerConfig, "
@@ -233,14 +241,17 @@ class ParametricHandlerValidator(ValidatorBase):
                 )
 
     @staticmethod
-    def __validate_layer_handler(model: "ParametricLayerHandler") -> None:
+    def _validate_layer_handler(model: "ParametricLayerHandler") -> None:
         if not isinstance(model.cfg, ParametricLayerHandlerConfig):
             raise TypeError(
                 "ParametricLayerHandler cfg must be ParametricLayerHandlerConfig, "
                 f"got {type(model.cfg).__name__}."
             )
-        if not isinstance(model.layer_model_config, ParametricLayerConfig):
+        layer_model_config = getattr(
+            model, "layer_model_config", model.cfg.layer_model_config
+        )
+        if not isinstance(layer_model_config, ParametricLayerConfig):
             raise TypeError(
                 "ParametricLayerHandler.layer_model_config must be "
-                f"ParametricLayerConfig, got {type(model.layer_model_config).__name__}."
+                f"ParametricLayerConfig, got {type(layer_model_config).__name__}."
             )

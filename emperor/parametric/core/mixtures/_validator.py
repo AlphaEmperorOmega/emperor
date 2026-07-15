@@ -1,3 +1,5 @@
+from typing import TYPE_CHECKING
+
 from torch import Tensor
 
 from emperor.base.validator import ValidatorBase
@@ -8,35 +10,33 @@ from emperor.parametric.core.mixtures.config import (
     VectorWeightsMixtureConfig,
 )
 
-from typing import TYPE_CHECKING
-
 if TYPE_CHECKING:
     from emperor.parametric.core.mixtures.base import AdaptiveMixtureBase
 
 
 class AdaptiveMixtureValidator(ValidatorBase):
-    @staticmethod
-    def validate(model: "AdaptiveMixtureBase") -> None:
-        AdaptiveMixtureValidator.validate_required_fields(model.cfg)
-        AdaptiveMixtureValidator.validate_field_types(model.cfg)
-        AdaptiveMixtureValidator.validate_dimensions(
+    @classmethod
+    def validate(cls, model: "AdaptiveMixtureBase") -> None:
+        cls.validate_required_fields(model.cfg)
+        cls.validate_field_types(model.cfg)
+        cls.validate_dimensions(
             input_dim=model.input_dim,
             output_dim=model.output_dim,
             top_k=model.top_k,
             num_experts=model.num_experts,
         )
-        AdaptiveMixtureValidator.__validate_positive_integer("input_dim", model.input_dim)
-        AdaptiveMixtureValidator.__validate_positive_integer(
+        cls._validate_positive_integer("input_dim", model.input_dim)
+        cls._validate_positive_integer(
             "output_dim", model.output_dim
         )
-        AdaptiveMixtureValidator.__validate_positive_integer("top_k", model.top_k)
-        AdaptiveMixtureValidator.__validate_positive_integer(
+        cls._validate_positive_integer("top_k", model.top_k)
+        cls._validate_positive_integer(
             "num_experts", model.num_experts
         )
-        AdaptiveMixtureValidator.__validate_top_k(model.cfg)
-        AdaptiveMixtureValidator.__validate_clip_range(model.cfg)
-        AdaptiveMixtureValidator.__validate_vector_dimensions(model.cfg)
-        AdaptiveMixtureValidator.__validate_generator_config(model.cfg)
+        cls._validate_top_k(model.cfg)
+        cls._validate_clip_range(model.cfg)
+        cls._validate_vector_dimensions(model.cfg)
+        cls._validate_generator_config(model.cfg)
 
     @staticmethod
     def validate_input_batch_2d(input_batch: Tensor) -> None:
@@ -62,12 +62,12 @@ class AdaptiveMixtureValidator(ValidatorBase):
             )
 
     @staticmethod
-    def __validate_positive_integer(name: str, value: int) -> None:
+    def _validate_positive_integer(name: str, value: int) -> None:
         if isinstance(value, bool) or value <= 0:
             raise ValueError(f"{name} must be a positive integer, received {value!r}.")
 
     @staticmethod
-    def __validate_top_k(cfg: AdaptiveMixtureConfig) -> None:
+    def _validate_top_k(cfg: AdaptiveMixtureConfig) -> None:
         if cfg.top_k > cfg.num_experts:
             raise ValueError(
                 "top_k cannot exceed num_experts for AdaptiveMixtureConfig, "
@@ -75,14 +75,14 @@ class AdaptiveMixtureValidator(ValidatorBase):
             )
 
     @staticmethod
-    def __validate_clip_range(cfg: AdaptiveMixtureConfig) -> None:
+    def _validate_clip_range(cfg: AdaptiveMixtureConfig) -> None:
         if cfg.clip_range < 0.0:
             raise ValueError(
                 f"clip_range must be non-negative, received {cfg.clip_range}."
             )
 
     @staticmethod
-    def __validate_vector_dimensions(cfg: AdaptiveMixtureConfig) -> None:
+    def _validate_vector_dimensions(cfg: AdaptiveMixtureConfig) -> None:
         if not isinstance(cfg, VectorWeightsMixtureConfig):
             return
         if cfg.input_dim != cfg.output_dim:
@@ -92,8 +92,11 @@ class AdaptiveMixtureValidator(ValidatorBase):
             )
 
     @staticmethod
-    def __validate_generator_config(cfg: AdaptiveMixtureConfig) -> None:
-        if not isinstance(cfg, (GeneratorWeightsMixtureConfig, GeneratorBiasMixtureConfig)):
+    def _validate_generator_config(cfg: AdaptiveMixtureConfig) -> None:
+        if not isinstance(
+            cfg,
+            (GeneratorWeightsMixtureConfig, GeneratorBiasMixtureConfig),
+        ):
             return
 
         from emperor.experts.core.config import MixtureOfExpertsConfig

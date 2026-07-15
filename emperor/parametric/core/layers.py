@@ -1,10 +1,12 @@
-import torch
+from typing import TYPE_CHECKING
 
+import torch
 from torch import Tensor
-from emperor.base.module import Module
+
 from emperor.augmentations.adaptive_parameters.config import (
     AdaptiveParameterAugmentationConfig,
 )
+from emperor.base.module import Module
 from emperor.parametric.core._validator import ParametricLayerValidator
 from emperor.parametric.core.config import AdaptiveRouterOptions, ParametricLayerConfig
 from emperor.parametric.core.handlers import (
@@ -20,14 +22,14 @@ from emperor.parametric.core.mixtures.config import (
     VectorWeightsMixtureConfig,
 )
 
-from typing import TYPE_CHECKING
-
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
     from emperor.parametric.core.mixtures.base import AdaptiveMixtureBase
 
 
 class ParametricLayer(Module):
+    VALIDATOR = ParametricLayerValidator
+
     def __init__(
         self,
         cfg: "ParametricLayerConfig | ModelConfig",
@@ -35,7 +37,7 @@ class ParametricLayer(Module):
     ):
         super().__init__()
         config = getattr(cfg, "parameter_generator_model_config", cfg)
-        self.cfg: "ParametricLayerConfig" = self._override_config(config, overrides)
+        self.cfg: ParametricLayerConfig = self._override_config(config, overrides)
 
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
@@ -46,7 +48,7 @@ class ParametricLayer(Module):
         self.sampler_config = self.cfg.sampler_config
         self.adaptive_augmentation_config = self.cfg.adaptive_augmentation_config
 
-        ParametricLayerValidator.validate(self)
+        self.VALIDATOR.validate(self)
         self.adaptive_augmentation_model = self.__init_adaptive_augmentation()
         self.weight_mixture_model = self.__init_weight_model()
         self.bias_mixture_model = self.__init_bias_model()
@@ -97,7 +99,7 @@ class ParametricLayer(Module):
         input: Tensor,
         skip_mask: Tensor | None = None,
     ) -> tuple[Tensor, Tensor | None, Tensor]:
-        ParametricLayerValidator.validate_forward_inputs(input, self.input_dim)
+        self.VALIDATOR.validate_forward_inputs(input, self.input_dim)
         return self._compute_layer_output(input, skip_mask)
 
     def _compute_layer_output(

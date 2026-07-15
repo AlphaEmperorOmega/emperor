@@ -1,7 +1,7 @@
+from typing import TYPE_CHECKING
+
 from emperor.base.module import Module
 from emperor.parametric.core.mixtures._validator import AdaptiveMixtureValidator
-
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
@@ -9,6 +9,8 @@ if TYPE_CHECKING:
 
 
 class AdaptiveMixtureBase(Module):
+    VALIDATOR = AdaptiveMixtureValidator
+
     def __init__(
         self,
         cfg: "AdaptiveMixtureConfig | ModelConfig",
@@ -16,7 +18,7 @@ class AdaptiveMixtureBase(Module):
     ):
         super().__init__()
         config = getattr(cfg, "mixture_model_config", cfg)
-        self.cfg: "AdaptiveMixtureConfig" = self._override_config(config, overrides)
+        self.cfg: AdaptiveMixtureConfig = self._override_config(config, overrides)
         self.main_cfg = self._resolve_main_config(self.cfg, cfg)
 
         self.input_dim = self.cfg.input_dim
@@ -27,4 +29,4 @@ class AdaptiveMixtureBase(Module):
         self.clip_parameter_option = self.cfg.clip_parameter_option
         self.clip_range = self.cfg.clip_range
 
-        AdaptiveMixtureValidator.validate(self)
+        self.VALIDATOR.validate(self)

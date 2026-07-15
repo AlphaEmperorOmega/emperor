@@ -1,3 +1,5 @@
+from typing import TYPE_CHECKING
+
 from torch import Tensor
 
 from emperor.base.layer import Layer, LayerState
@@ -7,13 +9,13 @@ from emperor.parametric.core.mixtures.config import (
     GeneratorBiasMixtureConfig,
 )
 
-from typing import TYPE_CHECKING
-
 if TYPE_CHECKING:
     from emperor.parametric.core.config import ParametricLayerConfig
 
 
 class ParameterHandlerBase(Module):
+    VALIDATOR = ParametricHandlerValidator
+
     def __init__(
         self,
         cfg: "ParametricLayerConfig",
@@ -27,7 +29,7 @@ class ParameterHandlerBase(Module):
         self.routing_initialization_mode = self.cfg.routing_initialization_mode
         self.router_config = self.cfg.router_config
         self.sampler_config = self.cfg.sampler_config
-        ParametricHandlerValidator.validate(self)
+        self.VALIDATOR.validate(self)
 
     def build_sampler_models(self) -> tuple:
         from emperor.parametric.core.config import AdaptiveRouterOptions
@@ -43,7 +45,8 @@ class ParameterHandlerBase(Module):
 
     def _init_independent_sampler(self) -> tuple:
         raise NotImplementedError(
-            "The method `_init_independent_sampler` must be implemented in the child class."
+            "The method `_init_independent_sampler` must be implemented in "
+            "the child class."
         )
 
     def _build_weight_router_model(self, vector_router: bool = False):
@@ -80,7 +83,7 @@ class ParameterHandlerBase(Module):
 
 class VectorParameterHandler(ParameterHandlerBase):
     def _init_shared_sampler(self) -> tuple:
-        ParametricHandlerValidator.validate(self)
+        self.VALIDATOR.validate(self)
         raise ValueError("VectorWeightsMixtureConfig does not support SHARED_ROUTER.")
 
     def _init_independent_sampler(self) -> tuple:
@@ -117,16 +120,17 @@ class GeneratorParameterHandler(ParameterHandlerBase):
 
 
 class ParametricLayerHandler(Layer):
+    VALIDATOR = ParametricHandlerValidator
+
     def __init__(self, cfg, overrides=None):
         super().__init__(cfg, overrides)
-        ParametricHandlerValidator.validate(self)
 
     def _handle_model_processing(
         self,
         main_model_input: Tensor,
         state: LayerState,
     ) -> Tensor:
-        ParametricHandlerValidator.validate_state(state)
+        self.VALIDATOR.validate_state(state)
         skip_mask = getattr(state, "skip_mask", None)
         output, skip_mask, loss = self.model(main_model_input, skip_mask)
         state.skip_mask = skip_mask
