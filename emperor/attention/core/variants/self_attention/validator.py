@@ -1,25 +1,44 @@
-from torch import Tensor
-from emperor.attention.core._validator import MultiHeadAttentionValidator
-
 from typing import TYPE_CHECKING
+
+from torch import Tensor
+
+from emperor.attention.core._validator import MultiHeadAttentionValidator
+from emperor.attention.core.variants.self_attention.config import (
+    SelfAttentionProjectionStrategy,
+)
+from emperor.base.layer import RecurrentLayerConfig
 
 if TYPE_CHECKING:
     from emperor.attention.core.layers import MultiHeadAttentionAbstract
+    from emperor.attention.core.runtime import QKV, AttentionMasks
 
 
 class SelfAttentionValidator(MultiHeadAttentionValidator):
+    @classmethod
+    def validate(cls, model: "MultiHeadAttentionAbstract") -> None:
+        super().validate(model)
+        cls.validate_self_attention_dimensions_equal(model)
+        cls.validate_projection_strategy(model)
+
     @staticmethod
-    def validate(model: "MultiHeadAttentionAbstract") -> None:
-        MultiHeadAttentionValidator.validate(model)
-        SelfAttentionValidator.validate_self_attention_dimensions_equal(model)
+    def validate_projection_strategy(
+        model: "MultiHeadAttentionAbstract",
+    ) -> None:
+        if (
+            model.cfg.projection_strategy == SelfAttentionProjectionStrategy.FUSED
+            and isinstance(model.cfg.projection_model_config, RecurrentLayerConfig)
+        ):
+            raise ValueError(
+                "Self-attention with RecurrentLayerConfig requires "
+                "projection_strategy=SelfAttentionProjectionStrategy.SEPARATE; "
+                "the FUSED strategy changes embedding_dim to 3 * embedding_dim."
+            )
 
     @staticmethod
     def validate_self_attention_dimensions_equal(
         model: "MultiHeadAttentionAbstract",
     ) -> None:
-        query_key_projection_dim = (
-            model.query_key_projection_dim or model.embedding_dim
-        )
+        query_key_projection_dim = model.query_key_projection_dim or model.embedding_dim
         value_projection_dim = model.value_projection_dim or model.embedding_dim
         if not (
             query_key_projection_dim == value_projection_dim == model.embedding_dim
@@ -32,20 +51,16 @@ class SelfAttentionValidator(MultiHeadAttentionValidator):
                 f"embedding_dim={model.embedding_dim}."
             )
 
-    @staticmethod
+    @classmethod
     def validate_forward_inputs(
+        cls,
         model: "MultiHeadAttentionAbstract",
-        query: Tensor,
-        key: Tensor,
-        value: Tensor,
-        key_padding_mask: Tensor | None = None,
-        attention_mask: Tensor | None = None,
+        qkv: "QKV",
+        masks: "AttentionMasks",
     ) -> None:
-        MultiHeadAttentionValidator.validate_forward_inputs(
-            model, query, key, value, key_padding_mask, attention_mask
-        )
-        SelfAttentionValidator.validate_query_key_value_are_same_tensor(
-            query, key, value
+        super().validate_forward_inputs(model, qkv, masks)
+        cls.validate_query_key_value_are_same_tensor(
+            qkv.query, qkv.key, qkv.value
         )
 
     @staticmethod
