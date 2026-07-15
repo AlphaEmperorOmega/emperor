@@ -15,6 +15,8 @@ if TYPE_CHECKING:
 
 class MultiHeadAttentionAbstract(Module):
     VALIDATOR = MultiHeadAttentionValidator
+    BIAS_HANDLER = KeyValueBias
+    ZERO_ATTENTION_HANDLER = ZeroAttention
 
     def __init__(
         self,
@@ -44,8 +46,8 @@ class MultiHeadAttentionAbstract(Module):
         self.VALIDATOR.validate(self)
 
         self.batch_manager = BatchDimensionManager(self.cfg)
-        self.bias = KeyValueBias(self.cfg)
-        self.zero_attention = ZeroAttention(self.cfg)
+        self.bias = self.BIAS_HANDLER(self.cfg)
+        self.zero_attention = self.ZERO_ATTENTION_HANDLER(self.cfg)
         self._build_attention_components()
 
     def _build_attention_components(self) -> None:
