@@ -416,22 +416,60 @@ class TestDepthMappingLayerStack(unittest.TestCase):
         self.assertIsInstance(layer_model_config, DepthMappingLayerConfig)
         self.assertEqual(layer_model_config.generator_depth, depth)
 
-    def test_preconfigured_depth_mapping_layer_config_passthrough(self):
-        depth = DynamicDepthOptions.DEPTH_OF_TWO
+    def test_preconfigured_depth_mapping_config_is_synchronized_without_mutation(self):
+        handler_depth = DynamicDepthOptions.DEPTH_OF_THREE
+        configured_depth = DynamicDepthOptions.DEPTH_OF_ONE
         input_dim = 12
         output_dim = 6
+        configured_input_dim = 8
+        configured_output_dim = 4
         depth_mapping_config = DepthMappingLayerConfig(
+            input_dim=configured_input_dim,
+            output_dim=configured_output_dim,
+            bias_flag=True,
+            generator_depth=configured_depth,
+        )
+        cfg = self.preset(
             input_dim=input_dim,
             output_dim=output_dim,
-            bias_flag=True,
-            generator_depth=depth,
+            generator_depth=handler_depth,
         )
-        cfg = self.preset(generator_depth=depth)
+        source_stack_config = cfg.model_config
+        source_stack_config.input_dim = configured_input_dim
+        source_stack_config.output_dim = configured_output_dim
         cfg.model_config.layer_config.layer_model_config = depth_mapping_config
+
         model = DepthMappingLayerStack(cfg)
-        self.assertIs(
-            model.model_config.layer_config.layer_model_config, depth_mapping_config
+
+        result_depth_mapping_config = (
+            model.model_config.layer_config.layer_model_config
         )
+        self.assertIsNot(model.model_config, source_stack_config)
+        self.assertIsNot(result_depth_mapping_config, depth_mapping_config)
+        self.assertEqual(model.model_config.input_dim, input_dim)
+        self.assertEqual(model.model_config.output_dim, output_dim)
+        self.assertEqual(result_depth_mapping_config.generator_depth, handler_depth)
+        self.assertEqual(source_stack_config.input_dim, configured_input_dim)
+        self.assertEqual(source_stack_config.output_dim, configured_output_dim)
+        self.assertEqual(depth_mapping_config.generator_depth, configured_depth)
+
+        output = model(torch.randn(2, input_dim))
+        self.assertEqual(output.shape, (2, handler_depth.value, output_dim))
+
+    def test_preconfigured_depth_mapping_config_does_not_skip_validation(self):
+        cfg = self.preset(
+            gate_config=self.gate_config(),
+            generator_depth=DynamicDepthOptions.DEPTH_OF_TWO,
+        )
+        cfg.model_config.layer_config.layer_model_config = DepthMappingLayerConfig(
+            input_dim=cfg.input_dim,
+            output_dim=cfg.output_dim,
+            bias_flag=True,
+            generator_depth=cfg.generator_depth,
+        )
+
+        with self.assertRaises(ValueError):
+            DepthMappingLayerStack(cfg)
 
     def test_handler_config_build_creates_depth_mapping_layer_stack(self):
         cfg = self.preset(input_dim=8, output_dim=4)
