@@ -1,26 +1,26 @@
-from emperor.base.layer.residual import ResidualConnectionOptions
-import torch
 import unittest
-
 from dataclasses import dataclass
-from torch import Tensor, nn
 
+import torch
 from emperor.base.layer import LayerState, RecurrentLayerConfig
 from emperor.base.layer.config import LayerConfig, LayerStackConfig
+from emperor.base.layer.residual import ResidualConnectionOptions
 from emperor.base.options import (
     ActivationOptions,
     LastLayerBiasOptions,
     LayerNormPositionOptions,
 )
 from emperor.halting.config import StickBreakingConfig
-from emperor.halting.options import HaltingHiddenStateModeOptions
 from emperor.halting.core.monitor import HaltingMonitorCallback
 from emperor.halting.core.tracker import (
     HaltingUsageTracker,
     HaltingUsageTrackerManager,
 )
+from emperor.halting.options import HaltingHiddenStateModeOptions
 from emperor.linears.core.config import LinearLayerConfig
+from torch import Tensor, nn
 
+from support.monitor import orchestration_calls
 
 SCALAR_SUFFIXES = [
     "depth/ponder_cost_mean",
@@ -82,6 +82,29 @@ class FakeLightningModule(nn.Module):
 
 
 class TestHaltingMonitorCallback(unittest.TestCase):
+    def test_tracking_orchestration_lists_each_tracked_fact(self):
+        orchestration = (
+            HaltingMonitorCallback._HaltingMonitorCallback__track_halting_diagnostics
+        )
+
+        self.assertEqual(
+            orchestration_calls(orchestration),
+            (
+                "__track_ponder_cost_mean",
+                "__track_ponder_cost_standard_deviation",
+                "__track_step_count",
+                "__track_halted_fraction",
+                "__track_accumulated_halt_probability_mean",
+                "__track_remaining_mass_mean",
+                "__track_saturation_fraction",
+                "__track_ponder_loss",
+                "__track_survival_history",
+                "__track_survival_histogram",
+                "__track_ponder_cost_histogram",
+                "__track_survival_heatmap",
+            ),
+        )
+
     def __layer_config(self, model_config) -> LayerConfig:
         return LayerConfig(
             activation=ActivationOptions.DISABLED,
@@ -115,9 +138,7 @@ class TestHaltingMonitorCallback(unittest.TestCase):
             output_dim=dim,
             max_steps=max_steps,
             recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
-            block_config=self.__stack(
-                dim, dim, True, LastLayerBiasOptions.DEFAULT
-            ),
+            block_config=self.__stack(dim, dim, True, LastLayerBiasOptions.DEFAULT),
             gate_config=None,
             residual_connection_option=ResidualConnectionOptions.DISABLED,
             halting_config=StickBreakingConfig(
@@ -141,7 +162,9 @@ class TestHaltingMonitorCallback(unittest.TestCase):
         **layer_kwargs,
     ) -> FakeLightningModule:
         layer = self.build_recurrent_halting_layer(**layer_kwargs)
-        return FakeLightningModule(layer, experiment=experiment, global_step=global_step)
+        return FakeLightningModule(
+            layer, experiment=experiment, global_step=global_step
+        )
 
     def primed_callback(self, module, **callback_kwargs) -> HaltingMonitorCallback:
         callback = HaltingMonitorCallback(**callback_kwargs)
@@ -156,6 +179,11 @@ class TestHaltingMonitorCallback(unittest.TestCase):
             with self.assertRaises(ValueError):
                 HaltingMonitorCallback(log_every_n_steps=bad)
 
+    def test_init_rejects_non_positive_history_size(self):
+        for bad in (0, -1):
+            with self.assertRaises(ValueError):
+                HaltingMonitorCallback(history_size=bad)
+
     def test_on_fit_start_discovers_and_wraps_halting_modules(self):
         module = self.build_module()
         callback = self.primed_callback(module, log_every_n_steps=1)
@@ -169,6 +197,20 @@ class TestHaltingMonitorCallback(unittest.TestCase):
         self.assertIn("finalize_weighted_accumulation", halting_model.__dict__)
         self.assertIsNotNone(getattr(halting_model, "_usage_tracker", None))
 
+    def test_repeated_fit_start_replaces_tracker_without_stacking_wrappers(self):
+        module = self.build_module()
+        callback = self.primed_callback(module, log_every_n_steps=1)
+        halting_model = module.recurrent.halting_model
+        first_tracker = halting_model._usage_tracker
+
+        callback.on_fit_start(trainer=None, pl_module=module)
+
+        self.assertEqual(len(callback._halting_layers), 1)
+        self.assertIsNot(halting_model._usage_tracker, first_tracker)
+        callback.on_fit_end(trainer=None, pl_module=module)
+        self.assertNotIn("update_halting_state", halting_model.__dict__)
+        self.assertNotIn("finalize_weighted_accumulation", halting_model.__dict__)
+
     def test_logs_expected_keys_all_finite(self):
         module = self.build_module(global_step=10)
         callback = self.primed_callback(module, log_every_n_steps=10)
@@ -180,9 +222,7 @@ class TestHaltingMonitorCallback(unittest.TestCase):
         for suffix in SCALAR_SUFFIXES:
             self.assertIn(f"recurrent.halting_model/{suffix}", logged_names)
         for name, value in module.logged_scalars:
-            self.assertTrue(
-                torch.isfinite(value).all(), f"{name} not finite: {value}"
-            )
+            self.assertTrue(torch.isfinite(value).all(), f"{name} not finite: {value}")
 
     def test_never_halt_survival_stays_full(self):
         module = self.build_module(global_step=0, max_steps=3, threshold=1.0)
@@ -264,6 +304,32 @@ class TestHaltingMonitorCallback(unittest.TestCase):
 
         self.assertEqual(experiment.histograms, [])
         self.assertEqual(experiment.images, [])
+
+    def test_survival_history_is_bounded(self):
+        experiment = FakeExperiment()
+        module = self.build_module(experiment=experiment)
+        callback = self.primed_callback(
+            module,
+            log_every_n_steps=1,
+            history_size=2,
+        )
+
+        for global_step in range(3):
+            module.global_step = global_step
+            self.drive_forward(module)
+            callback.on_train_batch_end(
+                FakeTrainer(global_step),
+                module,
+                None,
+                None,
+                batch_idx=global_step,
+            )
+
+        history = callback._survival_history["recurrent.halting_model"]
+        self.assertEqual(len(history), 2)
+        for tensor in history.tensors:
+            self.assertEqual(tensor.device.type, "cpu")
+            self.assertFalse(tensor.requires_grad)
 
     def test_on_fit_end_restores_methods_and_clears_state(self):
         module = self.build_module()
