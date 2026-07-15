@@ -1,8 +1,8 @@
 from dataclasses import dataclass
-from emperor.attention.core.config import MultiHeadAttentionConfig
-from emperor.base.utils import optional_field
-
 from typing import TYPE_CHECKING
+
+from emperor.attention.core.config import MultiHeadAttentionConfig
+from emperor.base.config import optional_field
 
 if TYPE_CHECKING:
     from emperor.experts.core.config import MixtureOfExpertsConfig
