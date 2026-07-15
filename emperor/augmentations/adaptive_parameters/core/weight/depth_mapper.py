@@ -1,5 +1,4 @@
-from copy import deepcopy
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
 import torch
@@ -104,29 +103,44 @@ class DepthMappingLayerStack(Module):
         self.output_dim: int = self.cfg.output_dim
         self.generator_depth: DynamicDepthOptions = self.cfg.generator_depth
         self.depth_value: int = self.generator_depth.value
-        self.model_config: LayerStackConfig = self.__update_layer_stack_config()
+        self.model_config: LayerStackConfig = (
+            self.__build_depth_mapping_stack_config()
+        )
         self.model = self.model_config.build()
 
-    def __update_layer_stack_config(self) -> "LayerStackConfig":
+    def __build_depth_mapping_stack_config(self) -> LayerStackConfig:
         source = self.cfg.model_config
-        if isinstance(
-            self.cfg.model_config.layer_config.layer_model_config,
-            DepthMappingLayerConfig,
-        ):
-            return self.cfg.model_config
+        self.__validate_source_stack_config(source)
+        depth_mapping_config = self.__build_depth_mapping_layer_config(
+            source.layer_config.layer_model_config
+        )
+        layer_config = replace(
+            source.layer_config,
+            layer_model_config=depth_mapping_config,
+        )
+        return replace(
+            source,
+            input_dim=self.input_dim,
+            output_dim=self.output_dim,
+            layer_config=layer_config,
+        )
+
+    def __validate_source_stack_config(self, source: LayerStackConfig) -> None:
         self.VALIDATOR.validate_inner_model_is_linear_layer_config(source)
         self.VALIDATOR.validate_layer_config_has_no_gate_or_halting(source)
-        layer_stack_config = deepcopy(source)
-        layer_stack_config.input_dim = self.input_dim
-        layer_stack_config.output_dim = self.output_dim
-        inner = layer_stack_config.layer_config.layer_model_config
-        linear_config = {f.name: getattr(inner, f.name) for f in fields(inner)}
-        depth_mapping_config = DepthMappingLayerConfig(
+
+    def __build_depth_mapping_layer_config(
+        self,
+        source: LinearLayerConfig,
+    ) -> DepthMappingLayerConfig:
+        if isinstance(source, DepthMappingLayerConfig):
+            return replace(source, generator_depth=self.generator_depth)
+        return DepthMappingLayerConfig(
+            input_dim=source.input_dim,
+            output_dim=source.output_dim,
+            bias_flag=source.bias_flag,
             generator_depth=self.generator_depth,
-            **linear_config,
         )
-        layer_stack_config.layer_config.layer_model_config = depth_mapping_config
-        return layer_stack_config
 
     def forward(self, X: Tensor) -> Tensor:
         self.VALIDATOR.validate_input_is_2d(X, self.input_dim)
