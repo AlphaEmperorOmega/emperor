@@ -7,6 +7,9 @@ from emperor.attention.core.runtime import QKV, AttentionMasks, AttentionRuntime
 from emperor.attention.core.variants.mixture_of_attention_heads.bias import (
     MixtureOfAttentionHeadsKeyValueBias,
 )
+from emperor.attention.core.variants.mixture_of_attention_heads.monitor import (
+    _MixtureOfAttentionHeadsMonitorAdapter,
+)
 from emperor.attention.core.variants.mixture_of_attention_heads.reshaper import (
     MixtureOfAttentionHeadsReshaper,
 )
@@ -112,6 +115,10 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
         self.assertIsInstance(
             model.zero_attention,
             MixtureOfAttentionHeadsZeroAttention,
+        )
+        self.assertIsInstance(
+            model._MONITOR_ADAPTER,
+            _MixtureOfAttentionHeadsMonitorAdapter,
         )
 
     def test_key_value_bias_supports_shared_and_expert_projection_ranks(self):

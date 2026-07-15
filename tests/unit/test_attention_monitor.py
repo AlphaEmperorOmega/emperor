@@ -8,12 +8,16 @@ from emperor.attention.core.monitor import (
     _AttentionDiagnostics,
     _AttentionDiagnosticsTracker,
     _AttentionDiagnosticsTrackerManager,
+    _AttentionMonitorAdapter,
     _AttentionObservation,
-    _AttentionWeightAdapter,
+    _resolve_attention_monitor_adapter,
 )
 from emperor.attention.core.runtime import QKV
 from emperor.attention.core.variants.independent_attention.config import (
     IndependentAttentionConfig,
+)
+from emperor.attention.core.variants.mixture_of_attention_heads.monitor import (
+    _MixtureOfAttentionHeadsMonitorAdapter,
 )
 from emperor.attention.core.variants.self_attention.config import SelfAttentionConfig
 
@@ -34,8 +38,11 @@ class InstrumentedAttention(torch.nn.Module):
         private_method_name: str | None = None,
         private_weights: torch.Tensor | None = None,
         returned_weights: torch.Tensor | None = None,
+        monitor_adapter: _AttentionMonitorAdapter | None = None,
     ) -> None:
         super().__init__()
+        if monitor_adapter is not None:
+            self._MONITOR_ADAPTER = monitor_adapter
         self.projector = SimpleNamespace(
             compute_qkv_projections=lambda *, projected: projected
         )
@@ -235,8 +242,8 @@ class TestAttentionDiagnostics(unittest.TestCase):
                     expected,
                 )
 
-    def test_weight_adapter_supports_legacy_layouts(self):
-        adapter = _AttentionWeightAdapter()
+    def test_standard_monitor_adapter_supports_rank_three_and_four_only(self):
+        adapter = _AttentionMonitorAdapter()
         batch_head_weights = torch.arange(24, dtype=torch.float32).view(3, 2, 2, 2)
         head_first_weights = batch_head_weights.permute(1, 0, 2, 3)
         expert_weights = torch.ones(1, 3, 2, 1, 2)
@@ -250,16 +257,53 @@ class TestAttentionDiagnostics(unittest.TestCase):
             adapter.canonicalize(head_first_weights, 2),
             batch_head_weights,
         )
-        self.assertEqual(
-            adapter.canonicalize(expert_weights, 2).shape,
-            (3, 2, 1, 2),
-        )
+        self.assertIsNone(adapter.canonicalize(expert_weights, 2))
         torch.testing.assert_close(
             adapter.canonicalize(flattened_weights, 2),
             flattened_weights.view(2, 2, 3, 5),
         )
         self.assertIsNone(adapter.canonicalize(torch.ones(3, 4, 1, 2), 2))
         self.assertIsNone(adapter.canonicalize(torch.ones(1, 1, 1), 0))
+
+    def test_mixture_monitor_adapter_owns_rank_five_canonicalization(self):
+        adapter = _MixtureOfAttentionHeadsMonitorAdapter()
+        weights = torch.arange(96, dtype=torch.float32).view(2, 3, 2, 2, 4)
+
+        canonical = adapter.canonicalize(weights, 2)
+
+        self.assertEqual(canonical.shape, (6, 2, 2, 4))
+        torch.testing.assert_close(canonical, weights.reshape(6, 2, 2, 4))
+        self.assertIsNone(adapter.canonicalize(weights, 0))
+
+        flattened = torch.arange(24, dtype=torch.float32).view(4, 2, 3)
+        torch.testing.assert_close(
+            adapter.canonicalize(flattened, 2),
+            flattened.view(2, 2, 2, 3),
+        )
+
+    def test_monitor_adapter_resolution_falls_back_for_invalid_layer_selection(self):
+        attention = InstrumentedAttention()
+        attention._MONITOR_ADAPTER = object()
+
+        adapter = _resolve_attention_monitor_adapter(attention)
+
+        self.assertIs(type(adapter), _AttentionMonitorAdapter)
+
+    def test_diagnostics_use_the_selected_mixture_adapter(self):
+        weights = torch.tensor(
+            [0.25, 0.75, 0.5, 0.5, 0.1, 0.9, 0.8, 0.2]
+        ).view(1, 2, 2, 1, 2)
+
+        metrics = self.diagnostics().calculate(
+            _AttentionObservation(exact_attention_weights=weights),
+            num_heads=2,
+            configured_dropout_probability=0.0,
+            monitor_adapter=_MixtureOfAttentionHeadsMonitorAdapter(),
+        )
+
+        self.assertEqual(metrics.weight_source, "exact")
+        self.assertEqual(metrics.per_head_entropy.shape, (2,))
+        self.assertEqual(metrics.per_head_max_probability.shape, (2,))
 
     def test_per_head_statistics_match_manual_probability_equations(self):
         weights = torch.tensor(
@@ -436,19 +480,29 @@ class TestAttentionDiagnosticsTrackerManager(unittest.TestCase):
         self.assertEqual(manager.hook_count, 0)
         self.assertEqual(manager.replacement_count, 0)
 
-    def test_manager_captures_both_supported_private_weight_methods(self):
-        method_names = (
-            "_SelfAttentionProcessor__compute_masked_attention_weights",
-            "_MixtureOfAttentionHeadsProcessor__compute_masked_attention_weights",
+    def test_manager_captures_exact_weights_through_selected_variant_adapter(self):
+        adapter_cases = (
+            (
+                "_SelfAttentionProcessor__compute_masked_attention_weights",
+                None,
+            ),
+            (
+                "_MixtureOfAttentionHeadsProcessor__compute_masked_attention_weights",
+                _MixtureOfAttentionHeadsMonitorAdapter(),
+            ),
         )
         private_weights = torch.tensor([[[0.2, 0.8]]])
 
-        for method_name in method_names:
-            with self.subTest(method_name=method_name):
+        for method_name, monitor_adapter in adapter_cases:
+            with self.subTest(
+                method_name=method_name,
+                monitor_adapter=type(monitor_adapter).__name__,
+            ):
                 attention = InstrumentedAttention(
                     private_method_name=method_name,
                     private_weights=private_weights,
                     returned_weights=torch.tensor([[[0.9, 0.1]]]),
+                    monitor_adapter=monitor_adapter,
                 )
                 original_private_method = getattr(attention.processor, method_name)
                 observations = []
@@ -473,6 +527,34 @@ class TestAttentionDiagnosticsTrackerManager(unittest.TestCase):
                     getattr(attention.processor, method_name),
                     original_private_method,
                 )
+
+    def test_standard_adapter_does_not_capture_mixture_private_method(self):
+        method_name = (
+            "_MixtureOfAttentionHeadsProcessor__compute_masked_attention_weights"
+        )
+        private_weights = torch.tensor([[[0.2, 0.8]]])
+        returned_weights = torch.tensor([[[0.9, 0.1]]])
+        attention = InstrumentedAttention(
+            private_method_name=method_name,
+            private_weights=private_weights,
+            returned_weights=returned_weights,
+        )
+        observations = []
+        manager = _AttentionDiagnosticsTrackerManager()
+
+        manager.attach(
+            "attention",
+            attention,
+            lambda: True,
+            lambda name, module, observation: observations.append(observation),
+        )
+        attention(self.qkv())
+
+        torch.testing.assert_close(
+            observations[0].exact_attention_weights,
+            returned_weights,
+        )
+        manager.detach()
 
     def test_manager_skips_capture_outside_cadence(self):
         attention = InstrumentedAttention(returned_weights=torch.ones(1, 1, 1))

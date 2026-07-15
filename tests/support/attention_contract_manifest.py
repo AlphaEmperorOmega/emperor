@@ -144,8 +144,8 @@ ATTENTION_CONTRACT_MANIFEST = {
             ("instrumentation attachment", "exact restoration", "cleanup"),
             "tests.unit.test_attention_monitor",
         ),
-        _AttentionWeightAdapter=class_contract(
-            ("legacy weight-layout compatibility",),
+        _AttentionMonitorAdapter=class_contract(
+            ("standard exact-weight capture", "rank-3/rank-4 canonicalization"),
             "tests.unit.test_attention_monitor",
         ),
         _AttentionDiagnostics=class_contract(
@@ -268,6 +268,16 @@ ATTENTION_CONTRACT_MANIFEST = {
             ("standard branches", "expert branches", "padding expansion"),
             "tests.unit.test_attention_mixture_of_attention_heads",
         ),
+    ),
+    "emperor.attention.core.variants.mixture_of_attention_heads.monitor": (
+        module_contract(
+            ("mixture exact-weight capture", "rank-5 canonicalization"),
+            "tests.unit.test_attention_monitor",
+            _MixtureOfAttentionHeadsMonitorAdapter=class_contract(
+                ("mixture capture method", "expert-axis flattening"),
+                "tests.unit.test_attention_monitor",
+            ),
+        )
     ),
     (
         "emperor.attention.core.variants.mixture_of_attention_heads.processor"
