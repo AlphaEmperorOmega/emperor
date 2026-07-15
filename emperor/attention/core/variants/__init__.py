@@ -18,6 +18,7 @@ from emperor.attention.core.variants.self_attention import (
     SelfAttention,
     SelfAttentionConfig,
     SelfAttentionProcessor,
+    SelfAttentionProjectionStrategy,
     SelfAttentionProjector,
     SelfAttentionValidator,
 )
@@ -25,6 +26,7 @@ from emperor.attention.core.variants.self_attention import (
 __all__ = [
     "SelfAttention",
     "SelfAttentionConfig",
+    "SelfAttentionProjectionStrategy",
     "SelfAttentionProcessor",
     "SelfAttentionProjector",
     "SelfAttentionValidator",
