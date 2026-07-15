@@ -1,17 +1,16 @@
-import torch
+from typing import TYPE_CHECKING
 
+import torch
 from torch import Tensor
 
 from emperor.base.module import Module
-from emperor.neuron.core.options import TerminalConnectionShapeOptions
 from emperor.neuron.core._validator import (
     AxonsValidator,
     NeuronValidator,
     NucleusValidator,
     TerminalValidator,
 )
-
-from typing import TYPE_CHECKING
+from emperor.neuron.core.options import TerminalConnectionShapeOptions
 
 if TYPE_CHECKING:
     from emperor.neuron.core.config import (
@@ -30,7 +29,7 @@ class Nucleus(Module):
     ):
         super().__init__()
         config = getattr(cfg, "nucleus_config", cfg)
-        self.cfg: "NucleusConfig" = self._override_config(config, overrides)
+        self.cfg: NucleusConfig = self._override_config(config, overrides)
         self.model_config = self.cfg.model_config
         NucleusValidator.validate(self)
         self.model = self.model_config.build()
@@ -48,7 +47,7 @@ class Axons(Module):
     ):
         super().__init__()
         config = getattr(cfg, "axons_config", cfg)
-        self.cfg: "AxonsConfig" = self._override_config(config, overrides)
+        self.cfg: AxonsConfig = self._override_config(config, overrides)
         self.memory_config = self.cfg.memory_config
         AxonsValidator.validate(self)
         self.memory_model = self.__maybe_build_memory_model()
@@ -77,7 +76,7 @@ class Terminal(Module):
     ):
         super().__init__()
         config = getattr(cfg, "terminal_config", cfg)
-        self.cfg: "TerminalConfig" = self._override_config(config, overrides)
+        self.cfg: TerminalConfig = self._override_config(config, overrides)
         TerminalValidator.validate_config_fields(self.cfg)
 
         self.input_dim: int = self.cfg.input_dim
@@ -224,7 +223,9 @@ class Terminal(Module):
             return probabilities.unsqueeze(-1)
         return probabilities
 
-    def __resolve_selected_indices(self, input: Tensor, indices: Tensor | None) -> Tensor:
+    def __resolve_selected_indices(
+        self, input: Tensor, indices: Tensor | None
+    ) -> Tensor:
         if indices is not None:
             return indices
         return torch.arange(
@@ -249,7 +250,7 @@ class Neuron(Module):
     ):
         super().__init__()
         config = getattr(cfg, "neuron_config", cfg)
-        self.cfg: "NeuronConfig" = self._override_config(config, overrides)
+        self.cfg: NeuronConfig = self._override_config(config, overrides)
         NeuronValidator.validate(self.cfg)
         self.coordinate_embedding_flag: bool = bool(
             self.cfg.coordinate_embedding_flag

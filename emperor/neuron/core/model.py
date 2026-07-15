@@ -1,24 +1,22 @@
 import copy
-
 from dataclasses import fields
-import torch
+from typing import TYPE_CHECKING
 
+import torch
 from torch import Tensor
 from torch.nn import ModuleDict
 
 from emperor.base.config import ConfigBase
 from emperor.base.module import Module
+from emperor.neuron.core._validator import NeuronClusterValidator
 from emperor.neuron.core.base import NeuronClusterModuleBase
 from emperor.neuron.core.config import NeuronClusterConfig, TerminalConfig
 from emperor.neuron.core.plasticity import NeuronClusterPlasticityMixin
-from emperor.neuron.core._validator import NeuronClusterValidator
 from emperor.neuron.core.state import (
     NeuronClusterRouteState,
     NeuronClusterTrace,
     NeuronClusterTraceStep,
 )
-
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.halting.core.base import HaltingBase, HaltingStateBase
