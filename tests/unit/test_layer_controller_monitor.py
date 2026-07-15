@@ -1,14 +1,6 @@
-from emperor.base.layer.residual import ResidualConnectionOptions
 import unittest
 
 import torch
-
-from support.monitor import (
-    CaptureLightningModule,
-    NoExperimentLightningModule,
-    TrainerStub,
-    same_bound_method,
-)
 from emperor.base.layer import (
     Layer,
     LayerConfig,
@@ -18,6 +10,7 @@ from emperor.base.layer import (
 )
 from emperor.base.layer.gate import GateConfig, LayerGateOptions
 from emperor.base.layer.monitor import LayerControllerMonitorCallback
+from emperor.base.layer.residual import ResidualConnectionOptions
 from emperor.base.options import (
     ActivationOptions,
     LastLayerBiasOptions,
@@ -25,8 +18,70 @@ from emperor.base.options import (
 )
 from emperor.linears.core.config import LinearLayerConfig
 
+from support.monitor import (
+    CaptureLightningModule,
+    NoExperimentLightningModule,
+    TrainerStub,
+    orchestration_calls,
+    same_bound_method,
+)
+
 
 class TestLayerControllerMonitorCallback(unittest.TestCase):
+    def test_tracking_orchestrations_list_each_tracked_fact(self):
+        cls = LayerControllerMonitorCallback
+        cases = (
+            (
+                cls._LayerControllerMonitorCallback__track_gate_diagnostics,
+                (
+                    "__track_raw_gate_mean",
+                    "__track_raw_gate_variance",
+                    "__track_raw_gate_positive_fraction",
+                    "__track_raw_gate_saturation_fraction",
+                    "__track_effective_gate_mean",
+                    "__track_effective_gate_variance",
+                    "__track_effective_gate_positive_fraction",
+                    "__track_effective_gate_saturation_fraction",
+                ),
+            ),
+            (
+                cls._LayerControllerMonitorCallback__track_dropout_diagnostics,
+                (
+                    "__track_dropout_zero_fraction",
+                    "__track_dropped_nonzero_fraction",
+                ),
+            ),
+            (
+                cls._LayerControllerMonitorCallback__track_layer_norm_diagnostics,
+                (
+                    "__track_layer_norm_output_mean",
+                    "__track_layer_norm_output_variance",
+                    "__track_layer_norm_relative_delta_norm",
+                ),
+            ),
+            (
+                cls._LayerControllerMonitorCallback__track_activation_diagnostics,
+                (
+                    "__track_activation_zero_fraction",
+                    "__track_activation_saturation_fraction",
+                ),
+            ),
+            (
+                cls._LayerControllerMonitorCallback__track_residual_diagnostics,
+                (
+                    "__track_residual_contribution_ratio",
+                    "__track_residual_input_ratio",
+                ),
+            ),
+        )
+
+        for orchestration, expected_calls in cases:
+            with self.subTest(orchestration=orchestration.__name__):
+                self.assertEqual(
+                    orchestration_calls(orchestration),
+                    expected_calls,
+                )
+
     def linear_stack_config(self, dim: int = 4) -> LayerStackConfig:
         return LayerStackConfig(
             input_dim=dim,
@@ -101,9 +156,8 @@ class TestLayerControllerMonitorCallback(unittest.TestCase):
 
         callback.on_fit_start(TrainerStub(), module)
 
-        names = [name for name, _ in callback._layer_modules]
-        self.assertIn("layer", names)
-        self.assertNotIn("other", names)
+        module.layer(self.state())
+        self.assertIn("layer/gate/output_mean", module.logged_tags)
         callback.on_fit_end(TrainerStub(), module)
 
     def test_respects_global_step_cadence(self):
@@ -120,6 +174,29 @@ class TestLayerControllerMonitorCallback(unittest.TestCase):
         layer(self.state())
         self.assertIn("layer/gate/output_mean", module.logged_tags)
         callback.on_fit_end(TrainerStub(), module)
+
+    def test_repeated_fit_start_replaces_existing_instrumentation(self):
+        layer = self.layer()
+        original_activation = layer._Layer__maybe_apply_activation
+        module = CaptureLightningModule(layer=layer)
+        callback = LayerControllerMonitorCallback(log_every_n_steps=1)
+
+        callback.on_fit_start(TrainerStub(), module)
+        first_hook_count = len(callback._hooks)
+        first_wrapper_count = len(callback._wrapped_methods)
+        callback.on_fit_start(TrainerStub(), module)
+        layer(self.state())
+
+        self.assertEqual(len(callback._hooks), first_hook_count)
+        self.assertEqual(len(callback._wrapped_methods), first_wrapper_count)
+        self.assertEqual(module.logged_tags.count("layer/gate/output_mean"), 1)
+        callback.on_fit_end(TrainerStub(), module)
+        self.assertTrue(
+            same_bound_method(
+                layer._Layer__maybe_apply_activation,
+                original_activation,
+            )
+        )
 
     def test_logs_expected_finite_scalar_tags(self):
         layer = self.layer()
@@ -148,7 +225,9 @@ class TestLayerControllerMonitorCallback(unittest.TestCase):
         }
         self.assertTrue(expected_tags.issubset(set(module.logged_tags)))
         for tag in expected_tags:
-            self.assertTrue(torch.isfinite(torch.as_tensor(module.logged_value(tag))).all(), tag)
+            self.assertTrue(
+                torch.isfinite(torch.as_tensor(module.logged_value(tag))).all(), tag
+            )
         callback.on_fit_end(TrainerStub(), module)
 
     def test_skips_missing_layer_gate_metrics(self):
@@ -160,7 +239,9 @@ class TestLayerControllerMonitorCallback(unittest.TestCase):
         layer(self.state())
 
         self.assertEqual(callback._hooked_gate_model_ids, set())
-        self.assertFalse(any(tag.startswith("layer/gate/") for tag in module.logged_tags))
+        self.assertFalse(
+            any(tag.startswith("layer/gate/") for tag in module.logged_tags)
+        )
         callback.on_fit_end(TrainerStub(), module)
 
     def test_skips_disabled_activation_metrics(self):
@@ -287,7 +368,6 @@ class TestLayerControllerMonitorCallback(unittest.TestCase):
                 original_residual,
             )
         )
-        self.assertEqual(callback._layer_modules, [])
         self.assertEqual(callback._wrapped_methods, [])
         self.assertEqual(callback._hooks, [])
         self.assertEqual(callback._hooked_gate_model_ids, set())

@@ -1,15 +1,7 @@
-from emperor.base.layer.residual import ResidualConnectionOptions
-from dataclasses import dataclass
 import unittest
+from dataclasses import dataclass
 
 import torch
-
-from support.monitor import (
-    CaptureLightningModule,
-    NoExperimentLightningModule,
-    TrainerStub,
-    same_bound_method,
-)
 from emperor.base.layer import (
     LayerConfig,
     LayerStackConfig,
@@ -19,6 +11,7 @@ from emperor.base.layer import (
 )
 from emperor.base.layer.gate import GateConfig, LayerGateOptions
 from emperor.base.layer.monitor import RecurrentLayerMonitorCallback
+from emperor.base.layer.residual import ResidualConnectionOptions
 from emperor.base.options import (
     ActivationOptions,
     LastLayerBiasOptions,
@@ -26,6 +19,14 @@ from emperor.base.options import (
 )
 from emperor.base.utils import ConfigBase, Module, optional_field
 from emperor.linears.core.config import LinearLayerConfig
+
+from support.monitor import (
+    CaptureLightningModule,
+    NoExperimentLightningModule,
+    TrainerStub,
+    orchestration_calls,
+    same_bound_method,
+)
 
 
 @dataclass
@@ -65,6 +66,29 @@ class ConstantGate(torch.nn.Module):
 
 
 class TestRecurrentLayerMonitorCallback(unittest.TestCase):
+    def test_tracking_orchestration_lists_each_tracked_fact(self):
+        cls = RecurrentLayerMonitorCallback
+        orchestration = cls._RecurrentLayerMonitorCallback__track_recurrent_diagnostics
+
+        self.assertEqual(
+            orchestration_calls(orchestration),
+            (
+                "__track_actual_steps",
+                "__track_hidden_delta_mean",
+                "__track_maximum_hidden_delta",
+                "__track_final_hidden_delta",
+                "__track_convergence_ratio",
+                "__track_maximum_step_fraction",
+                "__track_per_step_hidden_delta_mean",
+                "__track_gate_open_mean",
+                "__track_gate_open_fraction",
+                "__track_gate_saturation_fraction",
+                "__track_hidden_delta_history",
+                "__track_hidden_delta_histogram",
+                "__track_hidden_delta_heatmap",
+            ),
+        )
+
     def gate_config(self, dim: int = 4) -> LayerStackConfig:
         return LayerStackConfig(
             input_dim=dim,
@@ -130,13 +154,21 @@ class TestRecurrentLayerMonitorCallback(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     RecurrentLayerMonitorCallback(log_every_n_steps=bad)
 
+    def test_rejects_non_positive_history_size(self):
+        for bad in (0, -1):
+            with self.subTest(bad=bad):
+                with self.assertRaises(ValueError):
+                    RecurrentLayerMonitorCallback(history_size=bad)
+
     def test_discovers_only_recurrent_layers(self):
-        module = CaptureLightningModule(recurrent=self.recurrent(), other=torch.nn.Linear(4, 4))
+        module = CaptureLightningModule(
+            recurrent=self.recurrent(), other=torch.nn.Linear(4, 4)
+        )
         callback = RecurrentLayerMonitorCallback(log_every_n_steps=1)
 
         callback.on_fit_start(TrainerStub(), module)
 
-        self.assertEqual([name for name, _ in callback._recurrent_modules], ["recurrent"])
+        self.assertEqual(set(callback._delta_history), {"recurrent"})
         callback.on_fit_end(TrainerStub(), module)
 
     def test_respects_global_step_cadence(self):
@@ -153,6 +185,24 @@ class TestRecurrentLayerMonitorCallback(unittest.TestCase):
         recurrent(self.state())
         self.assertIn("recurrent/recurrent/actual_steps", module.logged_tags)
         callback.on_fit_end(TrainerStub(), module)
+
+    def test_repeated_fit_start_replaces_existing_instrumentation(self):
+        recurrent = self.recurrent()
+        original_forward = recurrent.forward
+        module = CaptureLightningModule(recurrent=recurrent)
+        callback = RecurrentLayerMonitorCallback(log_every_n_steps=1)
+
+        callback.on_fit_start(TrainerStub(), module)
+        callback.on_fit_start(TrainerStub(), module)
+        recurrent(self.state())
+
+        self.assertEqual(len(callback._wrapped_methods), 2)
+        self.assertEqual(
+            module.logged_tags.count("recurrent/recurrent/actual_steps"),
+            1,
+        )
+        callback.on_fit_end(TrainerStub(), module)
+        self.assertTrue(same_bound_method(recurrent.forward, original_forward))
 
     def test_logs_expected_finite_scalars(self):
         recurrent = self.recurrent()
@@ -179,7 +229,9 @@ class TestRecurrentLayerMonitorCallback(unittest.TestCase):
             module.logged_tags,
         )
         for tag in expected_tags:
-            self.assertTrue(torch.isfinite(torch.as_tensor(module.logged_value(tag))).all(), tag)
+            self.assertTrue(
+                torch.isfinite(torch.as_tensor(module.logged_value(tag))).all(), tag
+            )
         callback.on_fit_end(TrainerStub(), module)
 
     def test_logs_per_step_scalars_when_enabled(self):
@@ -203,11 +255,6 @@ class TestRecurrentLayerMonitorCallback(unittest.TestCase):
                 torch.isfinite(torch.as_tensor(module.logged_value(tag))).all(),
                 tag,
             )
-        candidate_deltas = callback._traces[id(recurrent)]["candidate_deltas"]
-        self.assertEqual(len(candidate_deltas), recurrent.max_steps)
-        for delta in candidate_deltas:
-            self.assertIsNotNone(delta)
-            self.assertTrue(torch.isfinite(torch.as_tensor(delta)).all())
         callback.on_fit_end(TrainerStub(), module)
 
     def test_recurrent_gate_monitor_uses_selected_gate_transform(self):
@@ -257,10 +304,16 @@ class TestRecurrentLayerMonitorCallback(unittest.TestCase):
 
         experiment = module.logger.experiment
         self.assertTrue(
-            any(tag == "recurrent/recurrent/histogram/hidden_delta" for tag, _, _ in experiment.histograms)
+            any(
+                tag == "recurrent/recurrent/histogram/hidden_delta"
+                for tag, _, _ in experiment.histograms
+            )
         )
         self.assertTrue(
-            any(tag == "recurrent/recurrent/heatmap/hidden_delta_by_step" for tag, _, _, _ in experiment.images)
+            any(
+                tag == "recurrent/recurrent/heatmap/hidden_delta_by_step"
+                for tag, _, _, _ in experiment.images
+            )
         )
         callback.on_fit_end(TrainerStub(), module)
 
@@ -273,6 +326,26 @@ class TestRecurrentLayerMonitorCallback(unittest.TestCase):
         recurrent(self.state())
 
         self.assertIn("recurrent/recurrent/actual_steps", module.logged_tags)
+        callback.on_fit_end(TrainerStub(), module)
+
+    def test_delta_history_is_bounded_and_detached(self):
+        recurrent = self.recurrent()
+        module = CaptureLightningModule(recurrent=recurrent)
+        callback = RecurrentLayerMonitorCallback(
+            log_every_n_steps=1,
+            history_size=2,
+        )
+        callback.on_fit_start(TrainerStub(), module)
+
+        for global_step in range(3):
+            module.global_step = global_step
+            recurrent(self.state())
+
+        history = callback._delta_history["recurrent"]
+        self.assertEqual(len(history), 2)
+        for tensor in history.tensors:
+            self.assertEqual(tensor.device.type, "cpu")
+            self.assertFalse(tensor.requires_grad)
         callback.on_fit_end(TrainerStub(), module)
 
     def test_restores_wrappers_and_clears_state_on_fit_end(self):
@@ -298,9 +371,8 @@ class TestRecurrentLayerMonitorCallback(unittest.TestCase):
                 original_controller,
             )
         )
-        self.assertEqual(callback._recurrent_modules, [])
         self.assertEqual(callback._wrapped_methods, [])
-        self.assertEqual(callback._traces, {})
+        self.assertEqual(callback._observations, {})
 
 
 if __name__ == "__main__":
