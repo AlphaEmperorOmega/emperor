@@ -149,15 +149,17 @@ class DynamicWeightAbstract(Module):
         self,
         schedule: WeightDecayScheduleOptions,
     ) -> Tensor:
-        step = self.decay_step
-        rate = self.decay_rate
         match schedule:
             case WeightDecayScheduleOptions.EXPONENTIAL:
-                return torch.exp(-rate * step)
+                return torch.exp(-self.decay_rate * self.decay_step)
             case WeightDecayScheduleOptions.LINEAR:
-                return torch.clamp(1.0 - rate * step, min=0.0)
+                linear_decay_factor = 1.0 - self.decay_rate * self.decay_step
+                return torch.clamp(
+                    linear_decay_factor,
+                    min=0.0,
+                )
             case WeightDecayScheduleOptions.MULTIPLICATIVE:
-                decay_base = step.new_tensor(1.0 - rate)
-                return torch.pow(decay_base, step)
+                decay_base = self.decay_step.new_tensor(1.0 - self.decay_rate)
+                return torch.pow(decay_base, self.decay_step)
             case _:
                 raise ValueError(f"Unsupported decay_schedule value: {schedule!r}.")
