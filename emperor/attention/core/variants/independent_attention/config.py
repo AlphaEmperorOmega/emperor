@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+
 from emperor.attention.core.config import MultiHeadAttentionConfig
 
 

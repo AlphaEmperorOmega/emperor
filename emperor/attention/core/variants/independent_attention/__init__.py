@@ -1,7 +1,9 @@
 from emperor.attention.core.variants.independent_attention.config import (
     IndependentAttentionConfig,
 )
-from emperor.attention.core.variants.independent_attention.layer import IndependentAttention
+from emperor.attention.core.variants.independent_attention.layer import (
+    IndependentAttention,
+)
 from emperor.attention.core.variants.independent_attention.processor import (
     IndependentProcessor,
 )
