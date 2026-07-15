@@ -1,9 +1,11 @@
-from torch import Tensor
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Generic, TypeVar
-from emperor.base.module import Module
 
+from torch import Tensor
+
+from emperor.base.module import Module
+from emperor.halting.core._validator import StickBreakingValidator
 
 StateT = TypeVar("StateT")
 
@@ -14,6 +16,8 @@ class HaltingStateBase:
 
 
 class HaltingBase(Module, Generic[StateT], ABC):
+    VALIDATOR = StickBreakingValidator
+
     @abstractmethod
     def update_halting_state(
         self,

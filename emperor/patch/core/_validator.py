@@ -1,8 +1,8 @@
+from typing import TYPE_CHECKING
+
 from torch import Tensor
 
 from emperor.base.validator import ValidatorBase
-
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.patch.core.layers import PatchBase
@@ -11,19 +11,19 @@ if TYPE_CHECKING:
 class PatchValidator(ValidatorBase):
     OPTIONAL_FIELDS = {"override_config"}
 
-    @staticmethod
-    def validate(model: "PatchBase") -> None:
-        PatchValidator.validate_required_fields(model.cfg)
-        PatchValidator.validate_field_types(model.cfg)
-        PatchValidator.validate_dimensions(
+    @classmethod
+    def validate(cls, model: "PatchBase") -> None:
+        cls.validate_required_fields(model.cfg)
+        cls.validate_field_types(model.cfg)
+        cls.validate_dimensions(
             embedding_dim=model.embedding_dim,
             num_input_channels=model.num_input_channels,
             patch_size=model.patch_size,
         )
-        PatchValidator.validate_dropout_probability(model.dropout_probability)
+        cls._validate_dropout_probability(model.dropout_probability)
 
     @staticmethod
-    def validate_dropout_probability(value: float) -> None:
+    def _validate_dropout_probability(value: float) -> None:
         if not 0.0 <= value <= 1.0:
             raise ValueError(
                 f"dropout_probability must be in [0.0, 1.0], received {value}"

@@ -1,8 +1,8 @@
+from typing import TYPE_CHECKING
+
 from torch import Tensor
 
 from emperor.base.validator import ValidatorBase
-
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.convs.core.layers import Conv2dLayer
@@ -11,17 +11,17 @@ if TYPE_CHECKING:
 class Conv2dLayerValidator(ValidatorBase):
     OPTIONAL_FIELDS = {"override_config"}
 
-    @staticmethod
-    def validate(model: "Conv2dLayer") -> None:
-        Conv2dLayerValidator.validate_required_fields(model.cfg)
-        Conv2dLayerValidator.validate_field_types(model.cfg)
-        Conv2dLayerValidator.validate_dimensions(
+    @classmethod
+    def validate(cls, model: "Conv2dLayer") -> None:
+        cls.validate_required_fields(model.cfg)
+        cls.validate_field_types(model.cfg)
+        cls.validate_dimensions(
             input_dim=model.input_dim, output_dim=model.output_dim
         )
-        Conv2dLayerValidator.validate_kernel_parameters(model)
+        cls._validate_kernel_parameters(model)
 
     @staticmethod
-    def validate_kernel_parameters(model: "Conv2dLayer") -> None:
+    def _validate_kernel_parameters(model: "Conv2dLayer") -> None:
         if model.kernel_size < 1:
             raise ValueError(
                 f"kernel_size must be >= 1, received {model.kernel_size}"

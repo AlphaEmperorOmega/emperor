@@ -7,7 +7,6 @@ import torch.nn.functional as F
 from torch import Tensor
 
 from emperor.base.layer import Layer, LayerStack, LayerStackConfig
-from emperor.halting.core._validator import StickBreakingValidator
 from emperor.halting.core.base import HaltingBase, HaltingStateBase
 from emperor.halting.options import HaltingHiddenStateModeOptions
 
@@ -69,7 +68,7 @@ class SoftHalting(HaltingBase[SoftHaltingState]):
         super().__init__()
         config = getattr(cfg, "halting_config", cfg)
         self.cfg: HaltingConfig = self._override_config(config, overrides)
-        StickBreakingValidator.validate(self.cfg)
+        self.VALIDATOR.validate(self)
 
         self.input_dim: int = self.cfg.input_dim
         self.threshold: float = self.cfg.threshold

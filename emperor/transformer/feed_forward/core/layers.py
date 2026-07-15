@@ -1,29 +1,32 @@
-from torch import Tensor
-from emperor.base.config import ConfigBase
-from emperor.base.module import Module
-from emperor.base.layer import Layer
-from emperor.transformer.feed_forward.core._validator import FeedForwardValidator
-
 from typing import TYPE_CHECKING
+
+from torch import Tensor
+
+from emperor.base.config import ConfigBase
+from emperor.base.layer import Layer
+from emperor.base.module import Module
+from emperor.transformer.feed_forward.core._validator import FeedForwardValidator
 
 if TYPE_CHECKING:
     from emperor.transformer.feed_forward.core.config import FeedForwardConfig
 
 
 class FeedForward(Module):
+    VALIDATOR = FeedForwardValidator
+
     def __init__(
         self,
         cfg: "FeedForwardConfig",
         overrides: "FeedForwardConfig | None" = None,
     ) -> None:
         super().__init__()
-        self.cfg: "FeedForwardConfig" = self._override_config(cfg, overrides)
+        self.cfg: FeedForwardConfig = self._override_config(cfg, overrides)
 
         self.input_dim: int = self.cfg.input_dim
         self.output_dim: int = self.cfg.output_dim
         self.stack_config: ConfigBase = self.cfg.stack_config
 
-        FeedForwardValidator.validate(self)
+        self.VALIDATOR.validate(self)
 
         self.model = self.__build_stack_model()
 

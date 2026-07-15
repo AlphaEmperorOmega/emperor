@@ -14,6 +14,8 @@ if TYPE_CHECKING:
 
 
 class LinearAbstract(Module):
+    VALIDATOR = LinearValidator
+
     def __init__(
         self,
         cfg: "LinearLayerConfig",
@@ -24,7 +26,7 @@ class LinearAbstract(Module):
         self.input_dim: int = self.cfg.input_dim
         self.output_dim: int = self.cfg.output_dim
         self.bias_flag: bool = self.cfg.bias_flag
-        LinearValidator.validate(self)
+        self.VALIDATOR.validate(self)
         self.__init_parameters()
 
     def __init_parameters(self) -> None:
@@ -51,7 +53,7 @@ class LinearLayer(LinearAbstract):
         super().__init__(cfg, overrides)
 
     def forward(self, X: Tensor) -> Tensor:
-        LinearValidator.validate_input_tensor(X, self.input_dim)
+        self.VALIDATOR.validate_input_tensor(X, self.input_dim)
         return F.linear(X, self.weight_params.T, self.bias_params)
 
 
@@ -93,7 +95,7 @@ class AdaptiveLinearLayer(LinearAbstract):
         return self.adaptive_augmentation_config.build(overrides)
 
     def forward(self, X: Tensor) -> Tensor:
-        LinearValidator.validate_input_is_2d(X)
+        self.VALIDATOR.validate_input_is_2d(X)
         if not self.has_adaptive_augmentation:
             return self._compute_affine_transformation_callback(
                 self.weight_params,

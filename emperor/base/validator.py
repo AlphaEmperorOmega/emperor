@@ -26,7 +26,7 @@ class ValidatorBase:
             value = getattr(cfg, field_name)
             if value is None:
                 continue
-            expected = cls.__extract_type(field_info.type)
+            expected = cls._extract_type(field_info.type)
             if expected and not isinstance(value, expected):
                 raise TypeError(
                     f"{field_name} must be {expected.__name__} for "
@@ -34,7 +34,7 @@ class ValidatorBase:
                 )
 
     @staticmethod
-    def __extract_type(annotation) -> type | None:
+    def _extract_type(annotation) -> type | None:
         if isinstance(annotation, type):
             return annotation
         if get_origin(annotation) is types.UnionType:

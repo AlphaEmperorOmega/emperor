@@ -1,11 +1,13 @@
+from typing import TYPE_CHECKING
+
 import torch
 import torch.nn as nn
-
 from torch import Tensor
 from torch.nn import Parameter
-from emperor.base.module import Module
+
 from emperor.base.layer import LayerStackConfig
 from emperor.base.layer.layer import Layer
+from emperor.base.module import Module
 from emperor.patch.core._validator import PatchValidator
 from emperor.patch.core.config import (
     ConvPatchEmbeddingConfig,
@@ -13,13 +15,13 @@ from emperor.patch.core.config import (
     PatchConfig,
 )
 
-from typing import TYPE_CHECKING
-
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
 
 
 class PatchBase(Module):
+    VALIDATOR = PatchValidator
+
     def __init__(
         self,
         cfg: "PatchConfig | ModelConfig",
@@ -27,12 +29,12 @@ class PatchBase(Module):
     ):
         super().__init__()
         config = getattr(cfg, "patch_config", cfg)
-        self.cfg: "PatchConfig" = self._override_config(config, overrides)
+        self.cfg: PatchConfig = self._override_config(config, overrides)
         self.embedding_dim = self.cfg.embedding_dim
         self.patch_size = self.cfg.patch_size
         self.dropout_probability = self.cfg.dropout_probability
         self.num_input_channels = self.cfg.num_input_channels
-        PatchValidator.validate(self)
+        self.VALIDATOR.validate(self)
 
         self.class_token = self._create_class_token()
         self.dropout = nn.Dropout(self.dropout_probability)
@@ -56,7 +58,7 @@ class PatchEmbeddingLinear(PatchBase):
         overrides: "LinearPatchEmbeddingConfig | None" = None,
     ):
         super().__init__(cfg, overrides)
-        self.cfg: "LinearPatchEmbeddingConfig" = self.cfg
+        self.cfg: LinearPatchEmbeddingConfig = self.cfg
         self.stride = self.cfg.stride
         self.padding = self.cfg.padding
 
@@ -78,7 +80,7 @@ class PatchEmbeddingLinear(PatchBase):
         )
 
     def forward(self, X: Tensor):
-        PatchValidator.validate_forward_inputs(self, X)
+        self.VALIDATOR.validate_forward_inputs(self, X)
         X = self.patch_model(X)
         X = X.transpose(1, 2)
         batch_size, sequence_length, patch_dim = X.shape
@@ -98,7 +100,7 @@ class PatchEmbeddingConv(PatchBase):
         overrides: "ConvPatchEmbeddingConfig | None" = None,
     ):
         super().__init__(cfg, overrides)
-        self.cfg: "ConvPatchEmbeddingConfig" = self.cfg
+        self.cfg: ConvPatchEmbeddingConfig = self.cfg
         self.patch_model = self.__create_patch_extraction_model()
 
     def __create_patch_extraction_model(self):
@@ -109,7 +111,7 @@ class PatchEmbeddingConv(PatchBase):
         return self.cfg.conv_stack_config.build(overrides)
 
     def forward(self, X: Tensor):
-        PatchValidator.validate_forward_inputs(self, X)
+        self.VALIDATOR.validate_forward_inputs(self, X)
         X = Layer.run_model_returning_hidden(self.patch_model, X)
         X = X.flatten(2)
         X = X.transpose(1, 2)

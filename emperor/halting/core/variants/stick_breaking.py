@@ -1,15 +1,14 @@
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
 from torch import Tensor
-from dataclasses import dataclass, field
-from emperor.base.layer import Layer, LayerStack, LayerStackConfig
-from emperor.halting.options import HaltingHiddenStateModeOptions
-from emperor.halting.core.base import HaltingBase, HaltingStateBase
-from emperor.halting.core._validator import StickBreakingValidator
 
-from typing import TYPE_CHECKING
+from emperor.base.layer import Layer, LayerStack, LayerStackConfig
+from emperor.halting.core.base import HaltingBase, HaltingStateBase
+from emperor.halting.options import HaltingHiddenStateModeOptions
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
@@ -20,37 +19,58 @@ if TYPE_CHECKING:
 class StickBreakingState(HaltingStateBase):
     halt_mask: Tensor = field(
         metadata={
-            "help": "Boolean mask indicating which tokens have accumulated enough halt probability to stop computing"
+            "help": (
+                "Boolean mask indicating which tokens have accumulated enough "
+                "halt probability to stop computing"
+            )
         },
     )
     log_continuation: Tensor = field(
         metadata={
-            "help": "Log of the remaining stick length after all breaks so far; the cumulative log probability of not yet having halted"
+            "help": (
+                "Log of the remaining stick length after all breaks so far; "
+                "the cumulative log probability of not yet having halted"
+            )
         },
     )
     accumulated_hidden: Tensor = field(
         metadata={
-            "help": "Weighted sum of hidden states accumulated so far, where each step contributes proportionally to its halt probability"
+            "help": (
+                "Weighted sum of hidden states accumulated so far, where each "
+                "step contributes proportionally to its halt probability"
+            )
         },
     )
     output_hidden: Tensor = field(
         metadata={
-            "help": "Hidden state returned by the halting mechanism after applying its hidden-state mode and halted-position masking"
+            "help": (
+                "Hidden state returned by the halting mechanism after applying "
+                "its hidden-state mode and halted-position masking"
+            )
         },
     )
     accumulated_halt_probabilities: Tensor = field(
         metadata={
-            "help": "Total halt probability spent across all steps so far; halting is triggered when this exceeds the threshold"
+            "help": (
+                "Total halt probability spent across all steps so far; halting "
+                "is triggered when this exceeds the threshold"
+            )
         },
     )
     step_count: int = field(
         metadata={
-            "help": "Current step index, used to compute the expected number of steps for regularisation"
+            "help": (
+                "Current step index, used to compute the expected number of "
+                "steps for regularisation"
+            )
         },
     )
     accumulated_ponder_cost: Tensor = field(
         metadata={
-            "help": "Running sum of halt_prob * step across all steps; used to compute the expected computation depth"
+            "help": (
+                "Running sum of halt_prob * step across all steps; used to "
+                "compute the expected computation depth"
+            )
         },
     )
 
@@ -63,8 +83,8 @@ class StickBreaking(HaltingBase[StickBreakingState]):
     ):
         super().__init__()
         config = getattr(cfg, "halting_config", cfg)
-        self.cfg: "HaltingConfig" = self._override_config(config, overrides)
-        StickBreakingValidator.validate(self.cfg)
+        self.cfg: HaltingConfig = self._override_config(config, overrides)
+        self.VALIDATOR.validate(self)
 
         self.input_dim: int = self.cfg.input_dim
         self.threshold: float = self.cfg.threshold

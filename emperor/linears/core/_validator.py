@@ -11,17 +11,17 @@ if TYPE_CHECKING:
 class LinearValidator(ValidatorBase):
     OPTIONAL_FIELDS = {"override_config"}
 
-    @staticmethod
-    def validate(model: "LinearAbstract") -> None:
-        LinearValidator.validate_required_fields(model.cfg)
-        LinearValidator.validate_field_types(model.cfg)
-        LinearValidator.validate_dimensions(
+    @classmethod
+    def validate(cls, model: "LinearAbstract") -> None:
+        cls.validate_required_fields(model.cfg)
+        cls.validate_field_types(model.cfg)
+        cls.validate_dimensions(
             input_dim=model.input_dim, output_dim=model.output_dim
         )
-        LinearValidator.validate_adaptive_bias_consistency(model)
+        cls._validate_adaptive_bias_consistency(model)
 
     @staticmethod
-    def validate_adaptive_bias_consistency(model: "LinearAbstract") -> None:
+    def _validate_adaptive_bias_consistency(model: "LinearAbstract") -> None:
         adaptive_augmentation_config = getattr(
             model.cfg, "adaptive_augmentation_config", None
         )

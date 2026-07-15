@@ -19,6 +19,8 @@ if TYPE_CHECKING:
 
 
 class AbsolutePositionalEmbeddingBase(Module):
+    VALIDATOR = AbsolutePositionalEmbeddingValidator
+
     def __init__(
         self,
         cfg: "AbsolutePositionalEmbeddingConfig",
@@ -30,7 +32,7 @@ class AbsolutePositionalEmbeddingBase(Module):
         self.cfg: AbsolutePositionalEmbeddingConfig = self._override_config(
             config, overrides
         )
-        AbsolutePositionalEmbeddingValidator.validate_config(self.cfg)
+        self.VALIDATOR.validate(self)
 
         self.embedding_dim: int = self.cfg.embedding_dim
         self.padding_idx: int | None = self.cfg.padding_idx
@@ -92,7 +94,7 @@ class TextLearnedPositionalEmbedding(LearnedPositionalEmbedding):
         incremental_state: dict[str, dict[str, Tensor | None]] | None = None,
         positions: Tensor | None = None,
     ) -> Tensor:
-        AbsolutePositionalEmbeddingValidator.validate_text_tokens(input_tokens)
+        self.VALIDATOR.validate_text_tokens(input_tokens)
         positions = self.__resolve_positions(input_tokens, incremental_state, positions)
         return self.embedding_model(positions)
 
@@ -127,7 +129,6 @@ class ImageLearnedPositionalEmbedding(LearnedPositionalEmbedding):
         config = getattr(cfg, "absolute_positional_embedding_config", cfg)
         config = getattr(config, "positional_embedding_config", config)
         config = self._override_config(config, overrides)
-        AbsolutePositionalEmbeddingValidator.validate_image_config(config)
         super().__init__(config)
         self.class_token_flag: bool = self.cfg.class_token_flag
 
@@ -137,7 +138,7 @@ class ImageLearnedPositionalEmbedding(LearnedPositionalEmbedding):
         return self.num_embeddings + 1
 
     def forward(self, patch_embeddings: Tensor) -> Tensor:
-        AbsolutePositionalEmbeddingValidator.validate_patch_embeddings(patch_embeddings)
+        self.VALIDATOR.validate_patch_embeddings(patch_embeddings)
         return self.embedding_model.weight + patch_embeddings
 
 
@@ -208,7 +209,7 @@ class TextSinusoidalPositionalEmbedding(SinusoidalPositionalEmbedding):
         incremental_state: Any = None,
         timestep: Tensor | None = None,
     ) -> Tensor:
-        AbsolutePositionalEmbeddingValidator.validate_text_tokens(input_tokens)
+        self.VALIDATOR.validate_text_tokens(input_tokens)
         batch_size, sequence_length = input_tokens.size()
         self.__maybe_expand_weights(input_tokens)
 
@@ -248,10 +249,9 @@ class ImageSinusoidalPositionalEmbedding(SinusoidalPositionalEmbedding):
         config = getattr(cfg, "absolute_positional_embedding_config", cfg)
         config = getattr(config, "positional_embedding_config", config)
         config = self._override_config(config, overrides)
-        AbsolutePositionalEmbeddingValidator.validate_image_config(config)
         super().__init__(config)
         self.class_token_flag: bool = self.cfg.class_token_flag
 
     def forward(self, patch_embeddings: Tensor) -> Tensor:
-        AbsolutePositionalEmbeddingValidator.validate_patch_embeddings(patch_embeddings)
+        self.VALIDATOR.validate_patch_embeddings(patch_embeddings)
         return patch_embeddings + self.weights

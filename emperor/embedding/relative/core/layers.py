@@ -13,6 +13,8 @@ if TYPE_CHECKING:
 
 
 class DynamicPositionalBias(Module):
+    VALIDATOR = RelativePositionalEmbeddingValidator
+
     def __init__(
         self,
         cfg: "DynamicPositionalBiasConfig",
@@ -21,7 +23,7 @@ class DynamicPositionalBias(Module):
         super().__init__()
         config = getattr(cfg, "relative_positional_embedding_config", cfg)
         self.cfg: DynamicPositionalBiasConfig = self._override_config(config, overrides)
-        RelativePositionalEmbeddingValidator.validate_config(self.cfg)
+        self.VALIDATOR.validate(self)
 
         self.text_processing_flag: bool = self.cfg.text_processing_flag
         self.embedding_dim: int = self.cfg.embedding_dim
@@ -47,9 +49,7 @@ class DynamicPositionalBias(Module):
         sequence_length: int,
         last: bool = False,
     ) -> Tensor:
-        RelativePositionalEmbeddingValidator.validate_forward_inputs(
-            query, sequence_length
-        )
+        self.VALIDATOR.validate_forward_inputs(query, sequence_length)
         logits = torch.einsum(
             "nhid,hdj->nhij", query, self.relative_positional_embeddings
         )

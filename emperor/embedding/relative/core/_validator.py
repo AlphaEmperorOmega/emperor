@@ -1,34 +1,44 @@
-from torch import Tensor
-from emperor.base.validator import ValidatorBase
-
 from typing import TYPE_CHECKING
 
+from torch import Tensor
+
+from emperor.base.validator import ValidatorBase
+
 if TYPE_CHECKING:
-    from emperor.embedding.relative.core.config import RelativePositionalEmbeddingConfig
+    from emperor.embedding.relative.core.layers import DynamicPositionalBias
 
 
 class RelativePositionalEmbeddingValidator(ValidatorBase):
     OPTIONAL_FIELDS = {"override_config", "padding_idx"}
 
-    @staticmethod
-    def validate_config(cfg: "RelativePositionalEmbeddingConfig") -> None:
-        RelativePositionalEmbeddingValidator.validate_required_fields(cfg)
-        RelativePositionalEmbeddingValidator.validate_field_types(cfg)
-        RelativePositionalEmbeddingValidator.validate_dimensions(
+    @classmethod
+    def validate(cls, model: "DynamicPositionalBias") -> None:
+        cfg = model.cfg
+        cls.validate_required_fields(cfg)
+        cls.validate_field_types(cfg)
+        cls.validate_dimensions(
             num_heads=cfg.num_heads,
             num_embeddings=cfg.num_embeddings,
             embedding_dim=cfg.embedding_dim,
             init_size=cfg.init_size,
             max_positions=cfg.max_positions,
         )
-        if cfg.padding_idx is not None and cfg.padding_idx < 0:
+        cls._validate_padding_idx(cfg.padding_idx)
+        cls._validate_head_dimensions(cfg.embedding_dim, cfg.num_heads)
+
+    @staticmethod
+    def _validate_padding_idx(padding_idx: int | None) -> None:
+        if padding_idx is not None and padding_idx < 0:
             raise ValueError(
-                f"padding_idx must be >= 0 when provided, received {cfg.padding_idx}"
+                f"padding_idx must be >= 0 when provided, received {padding_idx}"
             )
-        if cfg.embedding_dim % cfg.num_heads != 0:
+
+    @staticmethod
+    def _validate_head_dimensions(embedding_dim: int, num_heads: int) -> None:
+        if embedding_dim % num_heads != 0:
             raise ValueError(
                 f"embedding_dim must be divisible by num_heads, received "
-                f"embedding_dim={cfg.embedding_dim}, num_heads={cfg.num_heads}"
+                f"embedding_dim={embedding_dim}, num_heads={num_heads}"
             )
 
     @staticmethod
