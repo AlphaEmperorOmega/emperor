@@ -269,12 +269,8 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
         cls.validate_beam_width(model.cfg.beam_width)
         cls.validate_entry_sampler_config(model.cfg)
         cls.validate_derived_entry_sampler_config(model.cfg)
-        cls.validate_growth_threshold(
-            model.cfg.growth_threshold,
-        )
-        cls.validate_pruning_threshold(
-            model.cfg.pruning_threshold,
-        )
+        cls.validate_growth_threshold(model.cfg.growth_threshold)
+        cls.validate_pruning_threshold(model.cfg.pruning_threshold)
         cls.validate_growth_placement_options(model.cfg)
         cls.validate_growth_budget_options(model.cfg)
         cls.validate_growth_warmup_steps(model.cfg)
@@ -308,10 +304,7 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
         for initial_name, initial_value, max_name, max_value in axis_pairs:
             if initial_value is None:
                 continue
-            cls.validate_positive_integer(
-                initial_name,
-                initial_value,
-            )
+            cls.validate_positive_integer(initial_name, initial_value)
             if initial_value > max_value:
                 raise ValueError(
                     f"{initial_name} cannot exceed {max_name}, received "
@@ -414,19 +407,13 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
     def validate_growth_threshold(cls, growth_threshold: int | None) -> None:
         if growth_threshold is None:
             return
-        cls.validate_positive_integer(
-            "growth_threshold",
-            growth_threshold,
-        )
+        cls.validate_positive_integer("growth_threshold", growth_threshold)
 
     @classmethod
     def validate_pruning_threshold(cls, pruning_threshold: int | None) -> None:
         if pruning_threshold is None:
             return
-        cls.validate_positive_integer(
-            "pruning_threshold",
-            pruning_threshold,
-        )
+        cls.validate_positive_integer("pruning_threshold", pruning_threshold)
 
     @staticmethod
     def validate_growth_placement_options(cfg: "NeuronClusterConfig") -> None:
@@ -458,10 +445,7 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
         for budget_name, budget_value in budget_fields:
             if budget_value is None:
                 continue
-            cls.validate_positive_integer(
-                budget_name,
-                budget_value,
-            )
+            cls.validate_positive_integer(budget_name, budget_value)
             if cfg.growth_threshold is None:
                 raise ValueError(
                     f"{budget_name} requires growth_threshold to be set for "
@@ -473,10 +457,7 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
     def validate_growth_warmup_steps(cls, cfg: "NeuronClusterConfig") -> None:
         if cfg.growth_warmup_steps is None:
             return
-        cls.validate_positive_integer(
-            "growth_warmup_steps",
-            cfg.growth_warmup_steps,
-        )
+        cls.validate_positive_integer("growth_warmup_steps", cfg.growth_warmup_steps)
         if cfg.growth_threshold is None:
             raise ValueError(
                 "growth_warmup_steps requires growth_threshold to be set for "
