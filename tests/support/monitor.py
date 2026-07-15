@@ -1,4 +1,29 @@
+import ast
+import inspect
+import textwrap
+
 import torch
+
+
+def orchestration_calls(method):
+    """Return calls from an orchestration method and reject hidden logic."""
+    source = textwrap.dedent(inspect.getsource(method))
+    function = ast.parse(source).body[0]
+    calls = []
+    for statement in function.body:
+        if not isinstance(statement, ast.Expr) or not isinstance(
+            statement.value, ast.Call
+        ):
+            raise AssertionError("Orchestration methods may only contain calls.")
+        called_method = statement.value.func
+        if (
+            not isinstance(called_method, ast.Attribute)
+            or not isinstance(called_method.value, ast.Name)
+            or called_method.value.id != "self"
+        ):
+            raise AssertionError("Orchestration calls must target private methods.")
+        calls.append(called_method.attr)
+    return tuple(calls)
 
 
 def same_bound_method(left, right):
