@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 @dataclass
 class MultiHeadAttentionConfig(ConfigBase):
     batch_size: int | None = optional_field(
-        "Number of samples processed in parallel during training/inference."
+        "Maximum runtime batch size accepted by this attention layer."
     )
     num_heads: int | None = optional_field(
         "Number of attention heads to use for multi-head attention."
@@ -29,11 +29,10 @@ class MultiHeadAttentionConfig(ConfigBase):
         "Dimension of the value projected vectors (defaults to embedding_dim if 0)."
     )
     target_sequence_length: int | None = optional_field(
-        "Length of the target sequence for decoding or output (number of target "
-        "tokens)."
+        "Maximum runtime target/query sequence length."
     )
     source_sequence_length: int | None = optional_field(
-        "Length of the source/input sequence (number of input tokens)."
+        "Maximum runtime selected key/value source sequence length."
     )
     target_dtype: "DType | None" = optional_field(
         "Data type for the attention outputs (e.g. torch.float32)."
