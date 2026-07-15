@@ -1,15 +1,16 @@
+from typing import TYPE_CHECKING
+
 from torch import Tensor
-from emperor.base.utils import Module
+
 from emperor.attention.core._validator import MultiHeadAttentionValidator
 from emperor.attention.core.handlers.batch import BatchDimensionManager
 from emperor.attention.core.handlers.bias import KeyValueBias
 from emperor.attention.core.handlers.zero_attention import ZeroAttention
-
-from typing import TYPE_CHECKING
+from emperor.base.utils import Module
 
 if TYPE_CHECKING:
-    from emperor.config import ModelConfig
     from emperor.attention.core.config import MultiHeadAttentionConfig
+    from emperor.config import ModelConfig
 
 
 class MultiHeadAttentionAbstract(Module):
@@ -22,7 +23,7 @@ class MultiHeadAttentionAbstract(Module):
     ):
         super().__init__()
         config = getattr(cfg, "multi_head_attention_model_config", cfg)
-        self.cfg: "MultiHeadAttentionConfig" = self._override_config(config, overrides)
+        self.cfg: MultiHeadAttentionConfig = self._override_config(config, overrides)
 
         self.num_heads = self.cfg.num_heads
         self.batch_size = self.cfg.batch_size
