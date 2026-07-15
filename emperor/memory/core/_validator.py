@@ -15,26 +15,26 @@ if TYPE_CHECKING:
 
 
 class AdaptiveGeneratorValidatorBase:
-    @staticmethod
-    def validate_generator_model(generator_model) -> None:
+    @classmethod
+    def validate_generator_model(cls, generator_model) -> None:
         from torch.nn import Sequential
 
         from emperor.base.layer import Layer, LayerStack
 
         if isinstance(generator_model, Layer):
-            AdaptiveGeneratorValidatorBase._validate_generator_layer(generator_model)
+            cls._validate_generator_layer(generator_model)
             return
         if isinstance(generator_model, (Sequential, LayerStack)):
-            AdaptiveGeneratorValidatorBase._validate_generator_sequence(generator_model)
+            cls._validate_generator_sequence(generator_model)
             return
         raise TypeError(
             "Expected model_config.build(...) to return a Layer, Sequential, or "
             f"LayerStack, received {type(generator_model).__name__}."
         )
 
-    @staticmethod
-    def validate_test_time_training_generator_model(generator_model) -> None:
-        AdaptiveGeneratorValidatorBase.validate_generator_model(generator_model)
+    @classmethod
+    def validate_test_time_training_generator_model(cls, generator_model) -> None:
+        cls.validate_generator_model(generator_model)
         trainable_parameters = [
             parameter
             for parameter in generator_model.parameters()
@@ -46,8 +46,8 @@ class AdaptiveGeneratorValidatorBase:
                 "return a generator with at least one trainable parameter."
             )
 
-    @staticmethod
-    def _validate_generator_sequence(generator_sequence) -> None:
+    @classmethod
+    def _validate_generator_sequence(cls, generator_sequence) -> None:
         from emperor.base.layer import Layer
 
         for generator_layer in generator_sequence:
@@ -56,7 +56,7 @@ class AdaptiveGeneratorValidatorBase:
                     "Expected each generator sequence item to be a Layer, "
                     f"received {type(generator_layer).__name__}."
                 )
-            AdaptiveGeneratorValidatorBase._validate_generator_layer(generator_layer)
+            cls._validate_generator_layer(generator_layer)
 
     @staticmethod
     def _validate_generator_layer(generator_layer) -> None:
@@ -76,8 +76,8 @@ class DynamicMemoryValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
         "test_time_training_num_inner_steps",
     }
 
-    @staticmethod
-    def validate(model: "DynamicMemoryAbstract") -> None:
+    @classmethod
+    def validate(cls, model: "DynamicMemoryAbstract") -> None:
         from emperor.memory.config import DynamicMemoryConfig
 
         if not hasattr(model, "cfg") or not isinstance(model.cfg, DynamicMemoryConfig):
@@ -85,17 +85,13 @@ class DynamicMemoryValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
                 "DynamicMemoryValidator.validate expected a DynamicMemoryAbstract "
                 f"with a DynamicMemoryConfig cfg, received {type(model).__name__}."
             )
-        DynamicMemoryValidator.validate_required_fields(model.cfg)
-        DynamicMemoryValidator.validate_field_types(model.cfg)
-        DynamicMemoryValidator._validate_positive_int_field(
-            model.cfg, "input_dim", model.cfg.input_dim
-        )
-        DynamicMemoryValidator._validate_positive_int_field(
-            model.cfg, "output_dim", model.cfg.output_dim
-        )
-        DynamicMemoryValidator._validate_memory_position_option(model.cfg)
-        DynamicMemoryValidator._validate_model_config(model.cfg)
-        DynamicMemoryValidator._validate_test_time_training_config(model.cfg)
+        cls.validate_required_fields(model.cfg)
+        cls.validate_field_types(model.cfg)
+        cls._validate_positive_int_field(model.cfg, "input_dim", model.cfg.input_dim)
+        cls._validate_positive_int_field(model.cfg, "output_dim", model.cfg.output_dim)
+        cls._validate_memory_position_option(model.cfg)
+        cls._validate_model_config(model.cfg)
+        cls._validate_test_time_training_config(model.cfg)
 
     @staticmethod
     def _validate_positive_int_field(cfg, field_name: str, value: int) -> None:
@@ -119,8 +115,8 @@ class DynamicMemoryValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
                 f"{type(cfg.memory_position_option).__name__}."
             )
 
-    @staticmethod
-    def _validate_model_config(cfg) -> None:
+    @classmethod
+    def _validate_model_config(cls, cfg) -> None:
         if cfg.model_config is None:
             raise ValueError(
                 f"model_config is required for {cfg.__class__.__name__}, received None."
@@ -131,7 +127,7 @@ class DynamicMemoryValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
                 f"{cfg.__class__.__name__}, received "
                 f"{type(cfg.model_config).__name__}."
             )
-        DynamicMemoryValidator._validate_generator_config(cfg.model_config)
+        cls._validate_generator_config(cfg.model_config)
 
     @staticmethod
     def _validate_generator_config(model_config: LayerStackConfig) -> None:

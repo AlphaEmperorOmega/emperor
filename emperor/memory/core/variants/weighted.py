@@ -2,7 +2,6 @@ import torch
 from torch import Tensor
 
 from emperor.memory.config import WeightedDynamicMemoryConfig
-from emperor.memory.core._validator import DynamicMemoryValidator
 from emperor.memory.core.base import DynamicMemoryAbstract
 
 
@@ -39,7 +38,7 @@ class WeightedDynamicMemory(DynamicMemoryAbstract):
         )
 
     def forward(self, logits: Tensor) -> Tensor:
-        DynamicMemoryValidator.validate_forward_inputs(logits, self.memory_dim)
+        self.VALIDATOR.validate_forward_inputs(logits, self.memory_dim)
         if self.test_time_training_flag:
             memory = self._adapt_and_retrieve(
                 logits, self.memory_model, self.memory_decoder

@@ -2,7 +2,6 @@ import torch
 from torch import Tensor
 
 from emperor.memory.config import AttentionDynamicMemoryConfig
-from emperor.memory.core._validator import DynamicMemoryValidator
 from emperor.memory.core.base import DynamicMemoryAbstract
 
 
@@ -13,7 +12,7 @@ class AttentionDynamicMemory(DynamicMemoryAbstract):
         overrides: AttentionDynamicMemoryConfig | None = None,
     ):
         super().__init__(cfg, overrides)
-        DynamicMemoryValidator.validate_attention_num_memory_slots(self.cfg)
+        self.VALIDATOR.validate_attention_num_memory_slots(self.cfg)
         self.num_memory_slots = self.cfg.num_memory_slots
         memory_bank_dim = self.num_memory_slots * self.memory_dim
         self.memory_model = self.__build_memory_model(memory_bank_dim)
@@ -53,7 +52,7 @@ class AttentionDynamicMemory(DynamicMemoryAbstract):
         )
 
     def forward(self, logits: Tensor) -> Tensor:
-        DynamicMemoryValidator.validate_forward_inputs(logits, self.memory_dim)
+        self.VALIDATOR.validate_forward_inputs(logits, self.memory_dim)
         if self.test_time_training_flag:
             memory_bank_flat = self._adapt_and_retrieve(
                 logits, self.memory_model, self.memory_decoder

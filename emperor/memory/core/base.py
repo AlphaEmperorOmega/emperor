@@ -11,6 +11,8 @@ from emperor.memory.options import MemoryPositionOptions
 
 
 class DynamicMemoryAbstract(Module):
+    VALIDATOR = DynamicMemoryValidator
+
     def __init__(
         self,
         cfg: DynamicMemoryConfig,
@@ -19,7 +21,7 @@ class DynamicMemoryAbstract(Module):
         super().__init__()
         config = getattr(cfg, "memory_config", cfg)
         self.cfg: DynamicMemoryConfig = self._override_config(config, overrides)
-        DynamicMemoryValidator.validate(self)
+        self.VALIDATOR.validate(self)
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
         self.memory_position_option = self.cfg.memory_position_option
@@ -54,9 +56,7 @@ class DynamicMemoryAbstract(Module):
         )
         generator_model = self._build_generator_model(overrides)
         if validate_test_time_training_target:
-            DynamicMemoryValidator.validate_test_time_training_generator_model(
-                generator_model
-            )
+            self.VALIDATOR.validate_test_time_training_generator_model(generator_model)
         return generator_model
 
     def _build_generator_model(
@@ -64,7 +64,7 @@ class DynamicMemoryAbstract(Module):
         overrides: LayerStackConfig,
     ) -> "Layer | LayerStack | Sequential":
         generator_model = self.model_config.build(overrides)
-        DynamicMemoryValidator.validate_generator_model(generator_model)
+        self.VALIDATOR.validate_generator_model(generator_model)
         return generator_model
 
     def _run_model(
