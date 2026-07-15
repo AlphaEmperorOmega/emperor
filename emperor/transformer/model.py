@@ -10,6 +10,8 @@ if TYPE_CHECKING:
 
 
 class Transformer(Module):
+    VALIDATOR = TransformerValidator
+
     def __init__(
         self,
         cfg: "TransformerConfig",
@@ -19,7 +21,7 @@ class Transformer(Module):
         config = getattr(cfg, "transformer_config", cfg)
         self.cfg: TransformerConfig = self._override_config(config, overrides)
 
-        TransformerValidator.validate_transformer(self)
+        self.VALIDATOR.validate_transformer(self)
 
         self.encoder_model = self.__build_stack_if_configured(
             self.cfg.encoder_stack_config
@@ -44,7 +46,7 @@ class Transformer(Module):
         target_key_padding_mask: Tensor | None = None,
         encoder_key_padding_mask: Tensor | None = None,
     ) -> tuple[Tensor, Tensor]:
-        TransformerValidator.validate_transformer_forward_inputs(
+        self.VALIDATOR.validate_transformer_forward_inputs(
             self, source_token_embeddings, target_token_embeddings
         )
         encoder_output, encoder_loss = self.__run_encoder_if_present(

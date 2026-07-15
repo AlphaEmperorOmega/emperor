@@ -36,6 +36,8 @@ class TransformerDecoderLayerState(LayerState):
 
 
 class TransformerEncoderLayer(Module):
+    VALIDATOR = TransformerValidator
+
     def __init__(
         self,
         cfg: "TransformerEncoderLayerConfig",
@@ -56,7 +58,7 @@ class TransformerEncoderLayer(Module):
             self.cfg.residual_connection_option
         )
 
-        TransformerValidator.validate_encoder_layer(self)
+        self.VALIDATOR.validate_encoder_layer(self)
 
         self.self_attention_model = self.cfg.attention_config.build()
         self.feed_forward_model = self.cfg.feed_forward_config.build()
@@ -74,7 +76,7 @@ class TransformerEncoderLayer(Module):
         source_key_padding_mask: Tensor | None = None,
         attention_mask: Tensor | None = None,
     ) -> tuple[Tensor, Tensor]:
-        TransformerValidator.validate_encoder_layer_forward_inputs(
+        self.VALIDATOR.validate_encoder_layer_forward_inputs(
             self, source_token_embeddings
         )
         x = source_token_embeddings
@@ -248,6 +250,8 @@ class TransformerDecoderBlockLayer(Layer):
 
 
 class TransformerDecoderLayer(Module):
+    VALIDATOR = TransformerValidator
+
     def __init__(
         self,
         cfg: "TransformerDecoderLayerConfig",
@@ -268,7 +272,7 @@ class TransformerDecoderLayer(Module):
             self.cfg.residual_connection_option
         )
 
-        TransformerValidator.validate_decoder_layer(self)
+        self.VALIDATOR.validate_decoder_layer(self)
 
         self.self_attention_model = self.cfg.self_attention_config.build()
         self.cross_attention_model = self.__build_cross_attention_model()
@@ -304,7 +308,7 @@ class TransformerDecoderLayer(Module):
         attention_mask: Tensor | None = None,
         encoder_attention_mask: Tensor | None = None,
     ) -> tuple[Tensor, Tensor]:
-        TransformerValidator.validate_decoder_layer_forward_inputs(
+        self.VALIDATOR.validate_decoder_layer_forward_inputs(
             self, target_token_embeddings, encoder_output
         )
         x = target_token_embeddings

@@ -17,6 +17,8 @@ if TYPE_CHECKING:
 
 
 class TransformerEncoderStack(Module):
+    VALIDATOR = TransformerValidator
+
     def __init__(
         self,
         cfg: "TransformerEncoderStackConfig",
@@ -34,7 +36,7 @@ class TransformerEncoderStack(Module):
         self.target_sequence_length: int = self.cfg.target_sequence_length
         self.causal_attention_mask_flag: bool = self.cfg.causal_attention_mask_flag
 
-        TransformerValidator.validate_encoder_stack(self)
+        self.VALIDATOR.validate_encoder_stack(self)
 
         self.layers = self.__create_layers()
         self.layer_norm_module = nn.LayerNorm(self.embedding_dim)
@@ -88,7 +90,7 @@ class TransformerEncoderStack(Module):
         source_key_padding_mask: Tensor | None = None,
         attention_mask: Tensor | None = None,
     ) -> tuple[Tensor, Tensor]:
-        TransformerValidator.validate_encoder_stack_forward_inputs(
+        self.VALIDATOR.validate_encoder_stack_forward_inputs(
             self, source_token_embeddings
         )
         attention_mask = self.__resolve_causal_attention_mask(
@@ -111,6 +113,8 @@ class TransformerEncoderStack(Module):
 
 
 class TransformerDecoderStack(Module):
+    VALIDATOR = TransformerValidator
+
     def __init__(
         self,
         cfg: "TransformerDecoderStackConfig",
@@ -128,7 +132,7 @@ class TransformerDecoderStack(Module):
         self.target_sequence_length: int = self.cfg.target_sequence_length
         self.causal_attention_mask_flag: bool = self.cfg.causal_attention_mask_flag
 
-        TransformerValidator.validate_decoder_stack(self)
+        self.VALIDATOR.validate_decoder_stack(self)
 
         self.layers = self.__create_layers()
         self.layer_norm_module = nn.LayerNorm(self.embedding_dim)
@@ -185,7 +189,7 @@ class TransformerDecoderStack(Module):
         attention_mask: Tensor | None = None,
         encoder_attention_mask: Tensor | None = None,
     ) -> tuple[Tensor, Tensor]:
-        TransformerValidator.validate_decoder_stack_forward_inputs(
+        self.VALIDATOR.validate_decoder_stack_forward_inputs(
             self, target_token_embeddings, encoder_output
         )
         attention_mask = self.__resolve_causal_attention_mask(

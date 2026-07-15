@@ -25,8 +25,8 @@ class TransformerValidator(ValidatorBase):
 
     # --- build-time structural validation ---
 
-    @staticmethod
-    def validate_transformer(model: "Transformer") -> None:
+    @classmethod
+    def validate_transformer(cls, model: "Transformer") -> None:
         encoder_stack_config = model.cfg.encoder_stack_config
         decoder_stack_config = model.cfg.decoder_stack_config
         if encoder_stack_config is None and decoder_stack_config is None:
@@ -35,12 +35,12 @@ class TransformerValidator(ValidatorBase):
                 "encoder_stack_config or decoder_stack_config to be set; "
                 "both are None."
             )
-        TransformerValidator.__validate_decoder_cross_attention_has_encoder(
+        cls._validate_decoder_cross_attention_has_encoder(
             encoder_stack_config, decoder_stack_config
         )
 
     @staticmethod
-    def __validate_decoder_cross_attention_has_encoder(
+    def _validate_decoder_cross_attention_has_encoder(
         encoder_stack_config,
         decoder_stack_config,
     ) -> None:
@@ -54,22 +54,22 @@ class TransformerValidator(ValidatorBase):
                 "cross-attention requires encoder output."
             )
 
-    @staticmethod
-    def validate_encoder_layer(model: "TransformerEncoderLayer") -> None:
-        TransformerValidator.validate_required_fields(model.cfg)
-        TransformerValidator.validate_field_types(model.cfg)
-        TransformerValidator.validate_dimensions(embedding_dim=model.embedding_dim)
+    @classmethod
+    def validate_encoder_layer(cls, model: "TransformerEncoderLayer") -> None:
+        cls.validate_required_fields(model.cfg)
+        cls.validate_field_types(model.cfg)
+        cls.validate_dimensions(embedding_dim=model.embedding_dim)
 
-    @staticmethod
-    def validate_decoder_layer(model: "TransformerDecoderLayer") -> None:
-        TransformerValidator.validate_required_fields(model.cfg)
-        TransformerValidator.validate_field_types(model.cfg)
-        TransformerValidator.validate_dimensions(embedding_dim=model.embedding_dim)
+    @classmethod
+    def validate_decoder_layer(cls, model: "TransformerDecoderLayer") -> None:
+        cls.validate_required_fields(model.cfg)
+        cls.validate_field_types(model.cfg)
+        cls.validate_dimensions(embedding_dim=model.embedding_dim)
 
-    @staticmethod
-    def validate_encoder_stack(model: "TransformerEncoderStack") -> None:
-        TransformerValidator.validate_required_fields(model.cfg)
-        TransformerValidator.validate_dimensions(
+    @classmethod
+    def validate_encoder_stack(cls, model: "TransformerEncoderStack") -> None:
+        cls.validate_required_fields(model.cfg)
+        cls.validate_dimensions(
             num_layers=model.num_layers,
             embedding_dim=model.embedding_dim,
             source_sequence_length=model.source_sequence_length,
@@ -82,10 +82,10 @@ class TransformerValidator(ValidatorBase):
                 f"and {model.target_sequence_length}"
             )
 
-    @staticmethod
-    def validate_decoder_stack(model: "TransformerDecoderStack") -> None:
-        TransformerValidator.validate_required_fields(model.cfg)
-        TransformerValidator.validate_dimensions(
+    @classmethod
+    def validate_decoder_stack(cls, model: "TransformerDecoderStack") -> None:
+        cls.validate_required_fields(model.cfg)
+        cls.validate_dimensions(
             num_layers=model.num_layers,
             embedding_dim=model.embedding_dim,
             source_sequence_length=model.source_sequence_length,
@@ -94,22 +94,24 @@ class TransformerValidator(ValidatorBase):
 
     # --- forward-boundary validation ---
 
-    @staticmethod
+    @classmethod
     def validate_encoder_layer_forward_inputs(
+        cls,
         model: "TransformerEncoderLayer",
         source_token_embeddings: "Tensor",
     ) -> None:
-        TransformerValidator.__validate_last_dim(
+        cls._validate_last_dim(
             source_token_embeddings, model.embedding_dim, "source_token_embeddings"
         )
 
-    @staticmethod
+    @classmethod
     def validate_decoder_layer_forward_inputs(
+        cls,
         model: "TransformerDecoderLayer",
         target_token_embeddings: "Tensor",
         encoder_output: "Tensor | None",
     ) -> None:
-        TransformerValidator.__validate_last_dim(
+        cls._validate_last_dim(
             target_token_embeddings, model.embedding_dim, "target_token_embeddings"
         )
         if model.cross_attention_model is None:
@@ -119,26 +121,28 @@ class TransformerValidator(ValidatorBase):
                 "TransformerDecoderLayer with cross-attention requires "
                 "encoder_output, received None."
             )
-        TransformerValidator.__validate_last_dim(
+        cls._validate_last_dim(
             encoder_output, model.embedding_dim, "encoder_output"
         )
 
-    @staticmethod
+    @classmethod
     def validate_encoder_stack_forward_inputs(
+        cls,
         model: "TransformerEncoderStack",
         source_token_embeddings: "Tensor",
     ) -> None:
-        TransformerValidator.__validate_last_dim(
+        cls._validate_last_dim(
             source_token_embeddings, model.embedding_dim, "source_token_embeddings"
         )
 
-    @staticmethod
+    @classmethod
     def validate_decoder_stack_forward_inputs(
+        cls,
         model: "TransformerDecoderStack",
         target_token_embeddings: "Tensor",
         encoder_output: "Tensor | None",
     ) -> None:
-        TransformerValidator.__validate_last_dim(
+        cls._validate_last_dim(
             target_token_embeddings, model.embedding_dim, "target_token_embeddings"
         )
 
@@ -160,7 +164,7 @@ class TransformerValidator(ValidatorBase):
             )
 
     @staticmethod
-    def __validate_last_dim(
+    def _validate_last_dim(
         tensor: "Tensor | None",
         expected_dim: int,
         name: str,
