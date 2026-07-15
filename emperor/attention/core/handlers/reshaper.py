@@ -1,13 +1,18 @@
-from torch import Tensor
-from emperor.attention.core._validator import AttentionValidatorBase
-
+from dataclasses import replace
 from typing import TYPE_CHECKING
+
+from torch import Tensor
+
+from emperor.attention.core._validator import AttentionValidatorBase
 
 if TYPE_CHECKING:
     from emperor.attention.core.config import MultiHeadAttentionConfig
+    from emperor.attention.core.runtime import QKV, AttentionRuntimeShape
 
 
 class ReshaperBase:
+    VALIDATOR = AttentionValidatorBase
+
     def __init__(self, cfg: "MultiHeadAttentionConfig"):
         self.cfg = cfg
         self.batch_size: int = self.cfg.batch_size
@@ -34,90 +39,104 @@ class ReshaperBase:
 
     def reshape_qkv_for_attention(
         self,
-        query: Tensor,
-        key: Tensor,
-        value: Tensor,
+        qkv: "QKV",
         static_keys: Tensor | None = None,
         static_values: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor, Tensor]:
+        runtime_shape: "AttentionRuntimeShape | None" = None,
+    ) -> "QKV":
         raise NotImplementedError(
             "reshape_qkv_for_attention must be implemented by subclass."
         )
 
     def reshape_before_attention(
         self,
-        query: Tensor,
-        key: Tensor,
-        value: Tensor,
-    ) -> tuple[Tensor, Tensor, Tensor]:
-        return query, key, value
+        qkv: "QKV",
+        runtime_shape: "AttentionRuntimeShape | None" = None,
+    ) -> "QKV":
+        return qkv
 
-    def _reshape_query(self, query: Tensor) -> Tensor:
+    def _reshape_query(
+        self, query: Tensor, runtime_shape: "AttentionRuntimeShape | None" = None
+    ) -> Tensor:
+        batch_size = (
+            runtime_shape.batch_size if runtime_shape is not None else self.batch_size
+        )
+        target_sequence_length = (
+            runtime_shape.target_sequence_length
+            if runtime_shape is not None
+            else self.target_sequence_length
+        )
         q_shape = (
-            self.batch_size,
+            batch_size,
             self.num_heads,
-            self.target_sequence_length,
+            target_sequence_length,
             self.qk_head_dim,
         )
         return query.view(q_shape)
 
-    def _reshape_kv(self, key: Tensor, value: Tensor) -> tuple[Tensor, Tensor]:
+    def _reshape_kv(
+        self,
+        key: Tensor,
+        value: Tensor,
+        runtime_shape: "AttentionRuntimeShape | None" = None,
+    ) -> tuple[Tensor, Tensor]:
+        batch_size = (
+            runtime_shape.batch_size if runtime_shape is not None else self.batch_size
+        )
         source_sequence_length = key.size(1)
-        k_shape = (
-            self.batch_size,
-            self.num_heads,
-            source_sequence_length,
-            self.qk_head_dim,
-        )
-        v_shape = (
-            self.batch_size,
-            self.num_heads,
-            source_sequence_length,
-            self.v_head_dim,
-        )
+        k_shape = (batch_size, self.num_heads, source_sequence_length, self.qk_head_dim)
+        v_shape = (batch_size, self.num_heads, source_sequence_length, self.v_head_dim)
         return key.view(k_shape), value.view(v_shape)
 
 
 class AttentionReshaper(ReshaperBase):
     def reshape_qkv_for_attention(
         self,
-        query: Tensor,
-        key: Tensor,
-        value: Tensor,
+        qkv: "QKV",
         static_keys: Tensor | None = None,
         static_values: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor, Tensor]:
-        AttentionValidatorBase.validate_static_projection_shapes(
-            self, static_keys, static_values
+        runtime_shape: "AttentionRuntimeShape | None" = None,
+    ) -> "QKV":
+        self.VALIDATOR.validate_static_projection_shapes(
+            self, static_keys, static_values, runtime_shape
         )
 
-        query = self.__reshape_projection(query, None, self.qk_head_dim)
-        key = self.__reshape_projection(key, static_keys, self.qk_head_dim)
-        value = self.__reshape_projection(value, static_values, self.v_head_dim)
+        query = self.__reshape_projection(
+            qkv.query, None, self.qk_head_dim, runtime_shape
+        )
+        key = self.__reshape_projection(
+            qkv.key, static_keys, self.qk_head_dim, runtime_shape
+        )
+        value = self.__reshape_projection(
+            qkv.value, static_values, self.v_head_dim, runtime_shape
+        )
 
-        return query, key, value
+        return replace(qkv, query=query, key=key, value=value)
 
     def __reshape_projection(
         self,
         tensor: Tensor,
         static_tensor: Tensor | None = None,
         head_dim: int | None = None,
+        runtime_shape: "AttentionRuntimeShape | None" = None,
     ) -> Tensor:
         if static_tensor is not None:
             return static_tensor
 
         sequence_length = tensor.size(0)
         head_dim = head_dim or self.head_dim
-        shape = (sequence_length, self.batch_size * self.num_heads, head_dim)
-        reshaped_tensor = tensor.view(shape)
+        batch_size = (
+            runtime_shape.batch_size if runtime_shape is not None else self.batch_size
+        )
+        shape = (sequence_length, batch_size * self.num_heads, head_dim)
+        reshaped_tensor = tensor.reshape(shape)
         return reshaped_tensor.transpose(0, 1)
 
     def reshape_before_attention(
         self,
-        query: Tensor,
-        key: Tensor,
-        value: Tensor,
-    ) -> tuple[Tensor, Tensor, Tensor]:
-        query = self._reshape_query(query)
-        key, value = self._reshape_kv(key, value)
-        return query, key, value
+        qkv: "QKV",
+        runtime_shape: "AttentionRuntimeShape | None" = None,
+    ) -> "QKV":
+        query = self._reshape_query(qkv.query, runtime_shape)
+        key, value = self._reshape_kv(qkv.key, qkv.value, runtime_shape)
+        return replace(qkv, query=query, key=key, value=value)
