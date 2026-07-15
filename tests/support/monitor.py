@@ -27,10 +27,9 @@ def orchestration_calls(method):
 
 
 def same_bound_method(left, right):
-    return (
-        getattr(left, "__self__", None) is getattr(right, "__self__", None)
-        and getattr(left, "__func__", left) is getattr(right, "__func__", right)
-    )
+    return getattr(left, "__self__", None) is getattr(
+        right, "__self__", None
+    ) and getattr(left, "__func__", left) is getattr(right, "__func__", right)
 
 
 class CaptureExperiment:
