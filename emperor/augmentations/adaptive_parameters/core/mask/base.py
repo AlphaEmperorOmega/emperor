@@ -55,18 +55,6 @@ class AxisMaskAbstract(Module):
             else self.output_dim
         )
 
-    @property
-    def __target_broadcast_dim(self) -> int:
-        return -2 if self.mask_dimension_option == MaskDimensionOptions.COLUMN else -1
-
-    @property
-    def __source_broadcast_dim(self) -> int:
-        return -1 if self.mask_dimension_option == MaskDimensionOptions.COLUMN else -2
-
-    @property
-    def __score_dim(self) -> int:
-        return -2 if self.mask_dimension_option == MaskDimensionOptions.COLUMN else -1
-
     def _compute_generator_soft_values(self, logits: Tensor) -> Tensor:
         mask_logits = Layer.run_model_returning_hidden(self.model, logits)
         return torch.sigmoid(mask_logits)
@@ -80,6 +68,14 @@ class AxisMaskAbstract(Module):
             self.__source_broadcast_dim
         )
         return masked_weights.abs().mean(dim=self.__score_dim)
+
+    @property
+    def __source_broadcast_dim(self) -> int:
+        return -1 if self.mask_dimension_option == MaskDimensionOptions.COLUMN else -2
+
+    @property
+    def __score_dim(self) -> int:
+        return -2 if self.mask_dimension_option == MaskDimensionOptions.COLUMN else -1
 
     def _compute_hard_mask(self, scores: Tensor) -> Tensor:
         return (scores >= self.mask_threshold).to(dtype=scores.dtype)
@@ -105,3 +101,7 @@ class AxisMaskAbstract(Module):
         if final_mask.dim() == 3 and weight_params.dim() == 3:
             return weight_params * final_mask
         return weight_params * final_mask.unsqueeze(self.__target_broadcast_dim)
+
+    @property
+    def __target_broadcast_dim(self) -> int:
+        return -2 if self.mask_dimension_option == MaskDimensionOptions.COLUMN else -1
