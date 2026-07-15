@@ -1,16 +1,6 @@
-from emperor.base.layer.residual import ResidualConnectionOptions
-import torch
 import unittest
 
-from torch import nn
-
-from emperor.base.options import (
-    ActivationOptions,
-    LastLayerBiasOptions,
-    LayerNormPositionOptions,
-)
-from emperor.base.layer.config import LayerConfig, LayerStackConfig
-from emperor.linears.core.config import LinearLayerConfig
+import torch
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveParameterAugmentation,
     AdaptiveParameterAugmentationConfig,
@@ -23,6 +13,7 @@ from emperor.augmentations.adaptive_parameters import (
 )
 from emperor.augmentations.adaptive_parameters.core.bias import (
     AdditiveDynamicBiasConfig,
+    MultiplicativeDynamicBias,
 )
 from emperor.augmentations.adaptive_parameters.core.mask import (
     PerAxisScoreMaskConfig,
@@ -30,6 +21,17 @@ from emperor.augmentations.adaptive_parameters.core.mask import (
 from emperor.augmentations.adaptive_parameters.core.weight import (
     DualModelDynamicWeightConfig,
 )
+from emperor.base.layer.config import LayerConfig, LayerStackConfig
+from emperor.base.layer.residual import ResidualConnectionOptions
+from emperor.base.options import (
+    ActivationOptions,
+    LastLayerBiasOptions,
+    LayerNormPositionOptions,
+)
+from emperor.linears.core.config import LinearLayerConfig
+from torch import nn
+
+from support.monitor import orchestration_calls
 
 
 class FakeExperiment:
@@ -83,7 +85,10 @@ class MaskOption(nn.Module):
         return parameters * mask
 
 
-class MultiplicativeDynamicBias(nn.Module):
+class MultiplicativeBiasOption(MultiplicativeDynamicBias):
+    def __init__(self):
+        nn.Module.__init__(self)
+
     def forward(self, parameters, logits):
         return parameters * 2.0
 
@@ -111,9 +116,7 @@ class BatchedDiverseOption(nn.Module):
 
     def forward(self, parameters, logits):
         batch_size = logits.shape[0]
-        expanded = (
-            parameters.unsqueeze(0).expand(batch_size, *parameters.shape).clone()
-        )
+        expanded = parameters.unsqueeze(0).expand(batch_size, *parameters.shape).clone()
         per_sample_offsets = torch.zeros_like(expanded)
         flat_offsets = per_sample_offsets.view(batch_size, -1)
         for index in range(batch_size):
@@ -122,6 +125,47 @@ class BatchedDiverseOption(nn.Module):
 
 
 class TestAdaptiveParameterMonitorCallback(unittest.TestCase):
+    def test_tracking_orchestration_lists_each_tracked_fact(self):
+        cls = AdaptiveParameterMonitorCallback
+        orchestration = (
+            cls._AdaptiveParameterMonitorCallback__track_adaptive_parameter_diagnostics
+        )
+
+        self.assertEqual(
+            orchestration_calls(orchestration),
+            (
+                "__track_output_mean",
+                "__track_output_variance",
+                "__track_output_minimum",
+                "__track_output_maximum",
+                "__track_output_l2_norm",
+                "__track_output_maximum_absolute_value",
+                "__track_base_mean",
+                "__track_base_variance",
+                "__track_delta_mean",
+                "__track_delta_variance",
+                "__track_delta_l2_norm",
+                "__track_relative_delta_norm",
+                "__track_cross_sample_standard_deviation",
+                "__track_adaptivity_ratio",
+                "__track_centroid_cosine_mean",
+                "__track_decay_step",
+                "__track_warmup_step",
+                "__track_scale",
+                "__track_clamp_limit",
+                "__track_weight_bank_mean",
+                "__track_weight_bank_variance",
+                "__track_weight_bank_l2_norm",
+                "__track_effective_scale_mean",
+                "__track_effective_scale_variance",
+                "__track_mask_relative_output_norm",
+                "__track_mask_attenuated_fraction",
+                "__track_mask_near_zero_fraction",
+                "__track_output_histogram",
+                "__track_delta_histogram",
+            ),
+        )
+
     def build_adaptive(
         self,
         weight_model=None,
@@ -239,10 +283,9 @@ class TestAdaptiveParameterMonitorCallback(unittest.TestCase):
 
         callback = self.primed_callback(module)
 
-        self.assertEqual(len(callback._adaptive_modules), 1)
-        attached_name, attached_module = callback._adaptive_modules[0]
-        self.assertEqual(attached_name, "adaptive")
-        self.assertIs(attached_module, adaptive)
+        self.assertEqual(len(callback._hooks), 1)
+        self.feed_adaptive(adaptive)
+        self.assertIn("adaptive/weight/batch/output_mean", self.scalar_names(module))
 
     def test_hooks_attach_only_for_enabled_direct_option_slots(self):
         adaptive = self.build_adaptive(
@@ -254,8 +297,6 @@ class TestAdaptiveParameterMonitorCallback(unittest.TestCase):
 
         callback = self.primed_callback(module)
 
-        monitored_slots = [slot for _, slot, _ in callback._monitored_options]
-        self.assertEqual(monitored_slots, ["weight", "diagonal", "mask"])
         self.assertEqual(len(callback._hooks), 3)
 
         self.feed_adaptive(adaptive)
@@ -263,6 +304,22 @@ class TestAdaptiveParameterMonitorCallback(unittest.TestCase):
         names = self.scalar_names(module)
         self.assertIn("adaptive/diagonal/batch/output_mean", names)
         self.assertNotIn("adaptive/diagonal_model.child/batch/output_mean", names)
+
+    def test_repeated_fit_start_replaces_existing_hooks(self):
+        adaptive = self.build_adaptive(weight_model=AdditiveOption())
+        module = FakeLightningModule(adaptive)
+        callback = self.primed_callback(module, log_every_n_steps=1)
+
+        callback.on_fit_start(trainer=None, pl_module=module)
+        self.feed_adaptive(adaptive)
+
+        self.assertEqual(len(callback._hooks), 1)
+        output_mean_logs = [
+            name
+            for name, _ in module.logged_scalars
+            if name == "adaptive/weight/batch/output_mean"
+        ]
+        self.assertEqual(len(output_mean_logs), 1)
 
     def test_forward_hook_skips_when_not_at_logging_interval(self):
         adaptive = self.build_adaptive(weight_model=AdditiveOption())
@@ -311,8 +368,7 @@ class TestAdaptiveParameterMonitorCallback(unittest.TestCase):
 
         self.feed_adaptive(adaptive)
 
-        monitored_slots = [slot for _, slot, _ in callback._monitored_options]
-        self.assertEqual(monitored_slots, ["weight", "bias", "mask"])
+        self.assertEqual(len(callback._hooks), 3)
 
         names = self.scalar_names(module)
         for slot in ("weight", "bias", "mask"):
@@ -344,13 +400,11 @@ class TestAdaptiveParameterMonitorCallback(unittest.TestCase):
     def test_internal_stats_can_be_disabled(self):
         adaptive = self.build_adaptive(
             weight_model=BankOption(),
-            bias_model=MultiplicativeDynamicBias(),
+            bias_model=MultiplicativeBiasOption(),
             mask_model=MaskOption(),
         )
         module = FakeLightningModule(adaptive)
-        self.primed_callback(
-            module, log_every_n_steps=1, log_internal_stats=False
-        )
+        self.primed_callback(module, log_every_n_steps=1, log_internal_stats=False)
 
         self.feed_adaptive(adaptive)
 
@@ -361,7 +415,7 @@ class TestAdaptiveParameterMonitorCallback(unittest.TestCase):
         self.assertNotIn("adaptive/mask/batch/relative_output_norm", names)
 
     def test_effective_scale_logged_for_multiplicative_bias_options(self):
-        adaptive = self.build_adaptive(bias_model=MultiplicativeDynamicBias())
+        adaptive = self.build_adaptive(bias_model=MultiplicativeBiasOption())
         module = FakeLightningModule(adaptive)
         self.primed_callback(module, log_every_n_steps=1)
 
@@ -424,8 +478,6 @@ class TestAdaptiveParameterMonitorCallback(unittest.TestCase):
 
         self.assertEqual(module.logged_scalars, [])
         self.assertEqual(callback._hooks, [])
-        self.assertEqual(callback._adaptive_modules, [])
-        self.assertEqual(callback._monitored_options, [])
 
     def test_invalid_log_every_n_steps_raises(self):
         with self.assertRaises(ValueError):
@@ -463,12 +515,8 @@ class TestAdaptiveParameterMonitorCallback(unittest.TestCase):
         self.feed_adaptive(adaptive)
 
         scalars = dict(module.logged_scalars)
-        self.assertEqual(
-            scalars["adaptive/weight/batch/cross_sample_std"].item(), 0.0
-        )
-        self.assertEqual(
-            scalars["adaptive/weight/batch/adaptivity_ratio"].item(), 0.0
-        )
+        self.assertEqual(scalars["adaptive/weight/batch/cross_sample_std"].item(), 0.0)
+        self.assertEqual(scalars["adaptive/weight/batch/adaptivity_ratio"].item(), 0.0)
         self.assertAlmostEqual(
             scalars["adaptive/weight/batch/centroid_cosine_mean"].item(),
             1.0,

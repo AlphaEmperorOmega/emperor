@@ -1,20 +1,18 @@
-from emperor.base.layer.residual import ResidualConnectionOptions
-import torch
 import unittest
 
-from torch import nn
-
-from emperor.base.layer.config import LayerConfig, LayerStackConfig
-from emperor.base.options import (
-    ActivationOptions,
-    LastLayerBiasOptions,
-    LayerNormPositionOptions,
-)
-from emperor.linears.core.config import LinearLayerConfig
+import torch
 from emperor.augmentations.adaptive_parameters import (
     BankExpansionFactorOptions,
     DynamicDepthOptions,
     WeightDecayScheduleOptions,
+)
+from emperor.augmentations.adaptive_parameters.core.bank_monitor import (
+    WeightBankUtilizationMonitorCallback,
+    _WeightBankDiagnostics,
+)
+from emperor.augmentations.adaptive_parameters.core.bias import (
+    WeightedBankDynamicBias,
+    WeightedBankDynamicBiasConfig,
 )
 from emperor.augmentations.adaptive_parameters.core.weight import (
     LayeredWeightedBankDynamicWeight,
@@ -22,13 +20,17 @@ from emperor.augmentations.adaptive_parameters.core.weight import (
     SoftWeightedBankDynamicWeight,
     SoftWeightedBankDynamicWeightConfig,
 )
-from emperor.augmentations.adaptive_parameters.core.bias import (
-    WeightedBankDynamicBias,
-    WeightedBankDynamicBiasConfig,
+from emperor.base.layer.config import LayerConfig, LayerStackConfig
+from emperor.base.layer.residual import ResidualConnectionOptions
+from emperor.base.options import (
+    ActivationOptions,
+    LastLayerBiasOptions,
+    LayerNormPositionOptions,
 )
-from emperor.augmentations.adaptive_parameters.core.bank_monitor import (
-    WeightBankUtilizationMonitorCallback,
-)
+from emperor.linears.core.config import LinearLayerConfig
+from torch import nn
+
+from support.monitor import orchestration_calls
 
 
 class FakeExperiment:
@@ -62,6 +64,29 @@ class FakeLightningModule(nn.Module):
 
 class TestWeightBankUtilizationMonitorCallback(unittest.TestCase):
     BANK_MODULE_PATH = "dynamic_bank"
+
+    def test_tracking_orchestration_lists_each_tracked_fact(self):
+        cls = WeightBankUtilizationMonitorCallback
+        orchestration = (
+            cls._WeightBankUtilizationMonitorCallback__track_weight_bank_utilization
+        )
+
+        self.assertEqual(
+            orchestration_calls(orchestration),
+            (
+                "__track_marginal_selection_entropy",
+                "__track_mean_per_sample_selection_entropy",
+                "__track_utilization_coefficient_of_variation",
+                "__track_active_slots",
+                "__track_dead_slot_fraction",
+                "__track_maximum_utilization",
+                "__track_minimum_utilization",
+                "__track_per_slot_utilization",
+                "__track_utilization_history",
+                "__track_utilization_histogram",
+                "__track_utilization_heatmap",
+            ),
+        )
 
     def layer_stack_config(
         self,
@@ -200,6 +225,10 @@ class TestWeightBankUtilizationMonitorCallback(unittest.TestCase):
         with self.assertRaises(ValueError):
             WeightBankUtilizationMonitorCallback(log_every_n_steps=0)
 
+    def test_rejects_non_positive_history_size(self):
+        with self.assertRaises(ValueError):
+            WeightBankUtilizationMonitorCallback(history_size=0)
+
     def test_on_fit_start_registers_hook_on_bank_generator(self):
         bank = self.build_soft_weighted_bank_weight()
         module = self.build_module(bank)
@@ -213,6 +242,29 @@ class TestWeightBankUtilizationMonitorCallback(unittest.TestCase):
         self.assertEqual(len(callback._hooks), 1)
         self.assertIn(self.BANK_MODULE_PATH, callback._utilization_history)
 
+    def test_repeated_fit_start_replaces_generator_hook(self):
+        bank = self.build_soft_weighted_bank_weight()
+        module = self.build_module(bank)
+        callback = self.primed_callback(module, log_every_n_steps=1)
+
+        callback.on_fit_start(trainer=None, pl_module=module)
+        self.feed_bank(bank)
+        callback.on_train_batch_end(
+            trainer=None,
+            pl_module=module,
+            outputs=None,
+            batch=None,
+            batch_idx=0,
+        )
+
+        self.assertEqual(len(callback._hooks), 1)
+        selection_logs = [
+            name
+            for name, _ in module.logged_scalars
+            if name.endswith("/selection_entropy_marginal")
+        ]
+        self.assertEqual(len(selection_logs), 1)
+
     def test_on_train_batch_end_skips_when_not_at_logging_interval(self):
         bank = self.build_soft_weighted_bank_weight()
         module = self.build_module(bank)
@@ -221,6 +273,29 @@ class TestWeightBankUtilizationMonitorCallback(unittest.TestCase):
 
         callback.on_train_batch_end(
             trainer=None, pl_module=module, outputs=None, batch=None, batch_idx=3
+        )
+
+        self.assertEqual(module.logged_scalars, [])
+
+    def test_skipped_batch_logits_are_not_reused_by_a_later_batch(self):
+        bank = self.build_soft_weighted_bank_weight()
+        module = self.build_module(bank)
+        callback = self.primed_callback(module, log_every_n_steps=2)
+        self.feed_bank(bank)
+
+        callback.on_train_batch_end(
+            trainer=None,
+            pl_module=module,
+            outputs=None,
+            batch=None,
+            batch_idx=1,
+        )
+        callback.on_train_batch_end(
+            trainer=None,
+            pl_module=module,
+            outputs=None,
+            batch=None,
+            batch_idx=2,
         )
 
         self.assertEqual(module.logged_scalars, [])
@@ -248,9 +323,7 @@ class TestWeightBankUtilizationMonitorCallback(unittest.TestCase):
 
                 names = self.scalar_names(module)
                 for suffix in self.expected_scalar_suffixes():
-                    self.assertIn(
-                        f"{self.BANK_MODULE_PATH}/bank/{suffix}", names
-                    )
+                    self.assertIn(f"{self.BANK_MODULE_PATH}/bank/{suffix}", names)
 
     def test_logged_utilization_values_are_finite_and_in_range(self):
         bank = self.build_soft_weighted_bank_weight(
@@ -274,7 +347,6 @@ class TestWeightBankUtilizationMonitorCallback(unittest.TestCase):
         self.assertLessEqual(float(dead_fraction), 1.0)
 
     def test_distribution_summaries_match_exact_bank_reductions(self):
-        callback = WeightBankUtilizationMonitorCallback()
         batch_size = 2
         input_dim = 2
         bank_factor = BankExpansionFactorOptions.FACTOR_OF_TWO
@@ -306,11 +378,15 @@ class TestWeightBankUtilizationMonitorCallback(unittest.TestCase):
                 soft_bank,
                 weight_logits,
                 torch.softmax(
-                    weight_logits.view(batch_size, depth.value, input_dim, bank_factor.value),
+                    weight_logits.view(
+                        batch_size, depth.value, input_dim, bank_factor.value
+                    ),
                     dim=-1,
                 ),
                 torch.softmax(
-                    weight_logits.view(batch_size, depth.value, input_dim, bank_factor.value),
+                    weight_logits.view(
+                        batch_size, depth.value, input_dim, bank_factor.value
+                    ),
                     dim=-1,
                 ),
                 lambda distribution: distribution.mean(dim=(0, 1, 2)),
@@ -335,20 +411,21 @@ class TestWeightBankUtilizationMonitorCallback(unittest.TestCase):
 
         for bank, logits, distribution, entropy_distribution, utilization_fn in cases:
             with self.subTest(bank=type(bank).__name__):
-                per_slot_utilization, mean_entropy = (
-                    callback._WeightBankUtilizationMonitorCallback__compute_bank_distribution_summary(
-                        bank, logits
-                    )
-                )
+                summary = _WeightBankDiagnostics.summarize(bank, logits)
                 expected_utilization = utilization_fn(distribution)
-                expected_entropy = -(
-                    entropy_distribution.clamp_min(1e-9).log() * entropy_distribution
-                ).sum(dim=-1).mean()
+                expected_entropy = (
+                    -(entropy_distribution.clamp_min(1e-9).log() * entropy_distribution)
+                    .sum(dim=-1)
+                    .mean()
+                )
 
                 torch.testing.assert_close(
-                    per_slot_utilization, expected_utilization
+                    summary.per_slot_utilization, expected_utilization
                 )
-                torch.testing.assert_close(mean_entropy, expected_entropy)
+                torch.testing.assert_close(
+                    summary.mean_per_sample_entropy,
+                    expected_entropy,
+                )
 
     def test_per_slot_scalars_logged_when_enabled(self):
         bank = self.build_soft_weighted_bank_weight(
@@ -393,7 +470,10 @@ class TestWeightBankUtilizationMonitorCallback(unittest.TestCase):
             trainer=None, pl_module=module, outputs=None, batch=None, batch_idx=0
         )
 
-        self.assertEqual(callback._utilization_history[self.BANK_MODULE_PATH], [])
+        self.assertEqual(
+            len(callback._utilization_history[self.BANK_MODULE_PATH]),
+            0,
+        )
 
     def test_visual_summaries_log_histogram_and_heatmap(self):
         experiment = FakeExperiment()
@@ -411,9 +491,7 @@ class TestWeightBankUtilizationMonitorCallback(unittest.TestCase):
             f"{self.BANK_MODULE_PATH}/bank/histogram/utilization", histogram_tags
         )
         image_tags = {tag for tag, _, _, _ in experiment.images}
-        self.assertIn(
-            f"{self.BANK_MODULE_PATH}/bank/heatmap/utilization", image_tags
-        )
+        self.assertIn(f"{self.BANK_MODULE_PATH}/bank/heatmap/utilization", image_tags)
         for _, _, step in experiment.histograms:
             self.assertEqual(step, 11)
 
@@ -421,9 +499,7 @@ class TestWeightBankUtilizationMonitorCallback(unittest.TestCase):
         experiment = FakeExperiment()
         bank = self.build_soft_weighted_bank_weight()
         module = self.build_module(bank, experiment=experiment)
-        callback = self.primed_callback(
-            module, log_every_n_steps=1, history_size=3
-        )
+        callback = self.primed_callback(module, log_every_n_steps=1, history_size=3)
 
         for batch_idx in range(5):
             self.feed_bank(bank)
@@ -435,9 +511,7 @@ class TestWeightBankUtilizationMonitorCallback(unittest.TestCase):
                 batch_idx=batch_idx,
             )
 
-        self.assertEqual(
-            len(callback._utilization_history[self.BANK_MODULE_PATH]), 3
-        )
+        self.assertEqual(len(callback._utilization_history[self.BANK_MODULE_PATH]), 3)
 
     def test_skips_modules_without_captured_logits(self):
         bank = self.build_soft_weighted_bank_weight()
