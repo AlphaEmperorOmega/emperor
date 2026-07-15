@@ -18,16 +18,16 @@ if TYPE_CHECKING:
 class MixtureOfExpertsValidator(ValidatorBase):
     OPTIONAL_FIELDS = {"dropped_token_behavior", "sampler_config"}
 
-    @staticmethod
-    def validate(model: "MixtureOfExperts") -> None:
-        MixtureOfExpertsValidator.validate_required_fields(model.cfg)
-        MixtureOfExpertsValidator.validate_field_types(model.cfg)
-        MixtureOfExpertsValidator.validate_forward_reference_types(model)
-        MixtureOfExpertsValidator.validate_owned_routing_config_types(model)
-        MixtureOfExpertsValidator.validate_dimensions(model)
-        MixtureOfExpertsValidator.validate_capacity_factor_is_non_negative(model)
-        MixtureOfExpertsValidator.validate_capacity_factor_consistent_with_top_k(model)
-        MixtureOfExpertsValidator.validate_dims_match_when_capacity_enabled(model)
+    @classmethod
+    def validate(cls, model: "MixtureOfExperts") -> None:
+        cls.validate_required_fields(model.cfg)
+        cls.validate_field_types(model.cfg)
+        cls.validate_forward_reference_types(model)
+        cls.validate_owned_routing_config_types(model)
+        cls.validate_dimensions(model)
+        cls.validate_capacity_factor_is_non_negative(model)
+        cls.validate_capacity_factor_consistent_with_top_k(model)
+        cls.validate_dims_match_when_capacity_enabled(model)
 
     @staticmethod
     def validate_forward_reference_types(model: "MixtureOfExperts") -> None:
@@ -84,18 +84,12 @@ class MixtureOfExpertsValidator(ValidatorBase):
                 f"received type {type(model.sampler_config.router_config).__name__}"
             )
 
-    @staticmethod
-    def validate_dimensions(model: "MixtureOfExperts") -> None:
-        MixtureOfExpertsValidator.validate_positive_integer(
-            "input_dim", model.input_dim
-        )
-        MixtureOfExpertsValidator.validate_positive_integer(
-            "output_dim", model.output_dim
-        )
-        MixtureOfExpertsValidator.validate_positive_integer("top_k", model.top_k)
-        MixtureOfExpertsValidator.validate_positive_integer(
-            "num_experts", model.num_experts
-        )
+    @classmethod
+    def validate_dimensions(cls, model: "MixtureOfExperts") -> None:
+        cls.validate_positive_integer("input_dim", model.input_dim)
+        cls.validate_positive_integer("output_dim", model.output_dim)
+        cls.validate_positive_integer("top_k", model.top_k)
+        cls.validate_positive_integer("num_experts", model.num_experts)
         if model.top_k > model.num_experts:
             raise ValueError(
                 "Configuration Error: 'top_k' cannot exceed 'num_experts' for "
@@ -189,48 +183,36 @@ class MixtureOfExpertsValidator(ValidatorBase):
                 "of experts layer."
             )
 
-    @staticmethod
+    @classmethod
     def validate_forward_inputs(
+        cls,
         model: "MixtureOfExperts",
         input_batch: Tensor,
         probabilities: Tensor | None,
         indices: Tensor | None,
     ) -> None:
-        MixtureOfExpertsValidator.validate_input_batch(model, input_batch)
-        MixtureOfExpertsValidator.validate_probabilities(
-            model, input_batch, probabilities
-        )
-        MixtureOfExpertsValidator.validate_indices(model, input_batch, indices)
-        MixtureOfExpertsValidator.validate_external_routing_inputs(
-            model, probabilities, indices
-        )
+        cls.validate_input_batch(model, input_batch)
+        cls.validate_probabilities(model, input_batch, probabilities)
+        cls.validate_indices(model, input_batch, indices)
+        cls.validate_external_routing_inputs(model, probabilities, indices)
 
-    @staticmethod
+    @classmethod
     def validate_reduce_forward_inputs(
+        cls,
         model: "MixtureOfExperts",
         input_batch: Tensor,
         probabilities: Tensor | None,
         indices: Tensor | None,
     ) -> None:
-        MixtureOfExpertsValidator.validate_input_batch(model, input_batch)
+        cls.validate_input_batch(model, input_batch)
         if probabilities is not None:
-            MixtureOfExpertsValidator.validate_tensor_is_vector_or_matrix(
-                "probabilities", probabilities
-            )
-            MixtureOfExpertsValidator.validate_routing_width(
-                "probabilities", probabilities, model.top_k
-            )
+            cls.validate_tensor_is_vector_or_matrix("probabilities", probabilities)
+            cls.validate_routing_width("probabilities", probabilities, model.top_k)
         if indices is not None:
-            MixtureOfExpertsValidator.validate_tensor_is_vector_or_matrix(
-                "indices", indices
-            )
-            MixtureOfExpertsValidator.validate_routing_width(
-                "indices", indices, model.top_k
-            )
-            MixtureOfExpertsValidator.validate_indices_dtype_and_range(model, indices)
-        MixtureOfExpertsValidator.validate_external_routing_inputs(
-            model, probabilities, indices
-        )
+            cls.validate_tensor_is_vector_or_matrix("indices", indices)
+            cls.validate_routing_width("indices", indices, model.top_k)
+            cls.validate_indices_dtype_and_range(model, indices)
+        cls.validate_external_routing_inputs(model, probabilities, indices)
         if probabilities is not None and probabilities.numel() != input_batch.shape[0]:
             raise ValueError(
                 "Input Error: 'probabilities' must contain one routing weight per "
@@ -267,42 +249,32 @@ class MixtureOfExpertsValidator(ValidatorBase):
                 f"{tuple(input_batch.shape)}."
             )
 
-    @staticmethod
+    @classmethod
     def validate_probabilities(
+        cls,
         model: "MixtureOfExperts",
         input_batch: Tensor,
         probabilities,
     ) -> None:
         if probabilities is None:
             return
-        MixtureOfExpertsValidator.validate_tensor_is_vector_or_matrix(
-            "probabilities", probabilities
-        )
-        MixtureOfExpertsValidator.validate_batch_dimension(
-            "probabilities", probabilities, input_batch
-        )
-        MixtureOfExpertsValidator.validate_routing_width(
-            "probabilities", probabilities, model.top_k
-        )
+        cls.validate_tensor_is_vector_or_matrix("probabilities", probabilities)
+        cls.validate_batch_dimension("probabilities", probabilities, input_batch)
+        cls.validate_routing_width("probabilities", probabilities, model.top_k)
 
-    @staticmethod
+    @classmethod
     def validate_indices(
+        cls,
         model: "MixtureOfExperts",
         input_batch: Tensor,
         indices,
     ) -> None:
         if indices is None:
             return
-        MixtureOfExpertsValidator.validate_tensor_is_vector_or_matrix(
-            "indices", indices
-        )
-        MixtureOfExpertsValidator.validate_batch_dimension(
-            "indices", indices, input_batch
-        )
-        MixtureOfExpertsValidator.validate_routing_width(
-            "indices", indices, model.top_k
-        )
-        MixtureOfExpertsValidator.validate_indices_dtype_and_range(model, indices)
+        cls.validate_tensor_is_vector_or_matrix("indices", indices)
+        cls.validate_batch_dimension("indices", indices, input_batch)
+        cls.validate_routing_width("indices", indices, model.top_k)
+        cls.validate_indices_dtype_and_range(model, indices)
 
     @staticmethod
     def validate_indices_dtype_and_range(
@@ -330,16 +302,15 @@ class MixtureOfExpertsValidator(ValidatorBase):
                 f"[{indices.min().item()}, {indices.max().item()}]."
             )
 
-    @staticmethod
+    @classmethod
     def validate_external_routing_inputs(
+        cls,
         model: "MixtureOfExperts",
         probabilities: Tensor | None,
         indices: Tensor | None,
     ) -> None:
         if model.routing_initialization_mode == RoutingInitializationMode.LAYER:
-            MixtureOfExpertsValidator.validate_external_probabilities_are_not_given(
-                probabilities, indices
-            )
+            cls.validate_external_probabilities_are_not_given(probabilities, indices)
             return
         if probabilities is None:
             raise ValueError(
@@ -399,11 +370,11 @@ class MixtureOfExpertsValidator(ValidatorBase):
 
 
 class MixtureOfExpertsModelValidator(ValidatorBase):
-    @staticmethod
-    def validate(model: "MixtureOfExpertsModel") -> None:
-        MixtureOfExpertsModelValidator.validate_cfg_type(model)
-        MixtureOfExpertsModelValidator.validate_stack_config_type(model)
-        MixtureOfExpertsModelValidator.validate_shared_routing_config_when_shared(model)
+    @classmethod
+    def validate(cls, model: "MixtureOfExpertsModel") -> None:
+        cls.validate_cfg_type(model)
+        cls.validate_stack_config_type(model)
+        cls.validate_shared_routing_config_when_shared(model)
 
     @staticmethod
     def validate_cfg_type(model: "MixtureOfExpertsModel") -> None:

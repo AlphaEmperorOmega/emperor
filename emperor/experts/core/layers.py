@@ -34,6 +34,8 @@ class ExpertInputData:
 
 
 class MixtureOfExperts(Module):
+    VALIDATOR = MixtureOfExpertsValidator
+
     def __init__(
         self,
         cfg: "MixtureOfExpertsConfig",
@@ -66,7 +68,7 @@ class MixtureOfExperts(Module):
         )
         self.sampler_config: SamplerConfig = self.cfg.sampler_config
 
-        MixtureOfExpertsValidator.validate(self)
+        self.VALIDATOR.validate(self)
         self.capacity_handler = ExpertCapacityHandler(self.cfg)
         self.expert_weighting_handler = ExpertWeightingHandler(self.cfg)
         self.sampler = self.__maybe_create_sampler()
@@ -80,8 +82,8 @@ class MixtureOfExperts(Module):
     ) -> "SamplerModel | None":
         if self.routing_initialization_mode != RoutingInitializationMode.LAYER:
             return None
-        MixtureOfExpertsValidator.validate_sampler_config_exists(self)
-        MixtureOfExpertsValidator.validate_router_config_exists(self)
+        self.VALIDATOR.validate_sampler_config_exists(self)
+        self.VALIDATOR.validate_router_config_exists(self)
         return self.sampler_config.build_with_router_input_dim(self.input_dim)
 
     def __create_experts(self) -> nn.ModuleList:
@@ -109,7 +111,7 @@ class MixtureOfExperts(Module):
         probabilities: Tensor | None,
         indices: Tensor | None,
     ) -> tuple[Tensor, Tensor]:
-        MixtureOfExpertsValidator.validate_forward_inputs(
+        self.VALIDATOR.validate_forward_inputs(
             self, input_batch, probabilities, indices
         )
         probabilities, indices, sampler_loss = self._maybe_compute_expert_indices(
@@ -137,8 +139,8 @@ class MixtureOfExperts(Module):
             indices is not None or probabilities is not None
         ):
             return probabilities, indices, inputs.new_zeros(())
-        MixtureOfExpertsValidator.validate_sampler_is_initialized(self)
-        MixtureOfExpertsValidator.validate_external_probabilities_are_not_given(
+        self.VALIDATOR.validate_sampler_is_initialized(self)
+        self.VALIDATOR.validate_external_probabilities_are_not_given(
             probabilities, indices
         )
         # TODO: In the future see if `skip_mask` needs to be implemented
@@ -461,7 +463,7 @@ class MixtureOfExpertsReduce(MixtureOfExperts):
         probabilities: Tensor | None = None,
         indices: Tensor | None = None,
     ) -> tuple[Tensor, Tensor]:
-        MixtureOfExpertsValidator.validate_reduce_forward_inputs(
+        self.VALIDATOR.validate_reduce_forward_inputs(
             self, input_batch, probabilities, indices
         )
 

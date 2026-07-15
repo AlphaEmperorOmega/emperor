@@ -14,6 +14,8 @@ if TYPE_CHECKING:
 
 
 class MixtureOfExpertsModel(Module):
+    VALIDATOR = MixtureOfExpertsModelValidator
+
     def __init__(
         self,
         cfg: MixtureOfExpertsModelConfig,
@@ -29,7 +31,7 @@ class MixtureOfExpertsModel(Module):
         self.sampler_config = self.cfg.sampler_config
         self.stack_config = self.cfg.stack_config
 
-        MixtureOfExpertsModelValidator.validate(self)
+        self.VALIDATOR.validate(self)
         self.shared_sampler = self.__maybe_create_shared_sampler()
         self.expert_stack = self.__build_expert_stack()
 
