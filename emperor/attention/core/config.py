@@ -56,6 +56,11 @@ class MultiHeadAttentionConfig(ConfigBase):
     return_attention_weights_flag: bool | None = optional_field(
         "If True, return the attention weights alongside the attention output."
     )
+    batch_first_flag: bool | None = optional_field(
+        "Explicit input layout for batched tensors. True selects [batch, sequence, "
+        "embedding], False selects [sequence, batch, embedding], and None preserves "
+        "legacy configured-batch-size detection."
+    )
     projection_model_config: "LayerStackConfig | None" = optional_field(
         "Layer-stack configuration used to build the query/key/value/output "
         "projections."
