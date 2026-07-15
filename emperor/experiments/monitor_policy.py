@@ -1,15 +1,17 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Literal
 
 import torch
 import torch.nn.functional as F
 
-
 DEFAULT_HISTOGRAM_MAX_ELEMENTS = 100_000
 DEFAULT_IMAGE_MAX_RAW_BYTES = 1_000_000
 DEFAULT_IMAGE_MAX_SIDE = 1_024
+
+HistoryNormalization = Literal["maximum", "unit_interval"]
 
 
 def _step_value(step: int | None = None, global_step: int | None = None) -> int:
@@ -20,6 +22,60 @@ def _step_value(step: int | None = None, global_step: int | None = None) -> int:
 
 def _default_module_key(tag: str) -> str:
     return tag.split("/", 1)[0]
+
+
+class MonitorTensorHistory:
+    """Stores bounded diagnostic vectors and renders them as a CHW heatmap."""
+
+    def __init__(
+        self,
+        max_entries: int,
+        *,
+        normalization: HistoryNormalization = "maximum",
+    ) -> None:
+        if max_entries <= 0:
+            raise ValueError("max_entries must be greater than 0.")
+        if normalization not in ("maximum", "unit_interval"):
+            raise ValueError(
+                "normalization must be either 'maximum' or 'unit_interval'."
+            )
+        self._max_entries = max_entries
+        self._normalization = normalization
+        self._tensors: list[torch.Tensor] = []
+
+    @property
+    def tensors(self) -> tuple[torch.Tensor, ...]:
+        return tuple(self._tensors)
+
+    def __len__(self) -> int:
+        return len(self._tensors)
+
+    def __bool__(self) -> bool:
+        return bool(self._tensors)
+
+    def append(self, values: torch.Tensor) -> None:
+        self._tensors.append(values.detach().float().reshape(-1).cpu())
+        del self._tensors[: -self._max_entries]
+
+    def clear(self) -> None:
+        self._tensors.clear()
+
+    def render_heatmap(self) -> torch.Tensor | None:
+        if not self._tensors:
+            return None
+        vector_length = max(tensor.numel() for tensor in self._tensors)
+        if vector_length == 0:
+            return None
+        padded_tensors = [
+            F.pad(tensor, (0, vector_length - tensor.numel()))
+            for tensor in self._tensors
+        ]
+        heatmap = torch.stack(padded_tensors).T
+        if self._normalization == "maximum":
+            heatmap = heatmap / heatmap.max().clamp_min(1e-6)
+        else:
+            heatmap = heatmap.clamp(0.0, 1.0)
+        return heatmap.unsqueeze(0)
 
 
 @dataclass
@@ -34,13 +90,15 @@ class MonitorEmissionPolicy:
     def clear(self) -> None:
         self._emitted.clear()
 
-    def should_emit_media(self, step: int | None = None, global_step: int | None = None) -> bool:
+    def should_emit_media(
+        self, step: int | None = None, global_step: int | None = None
+    ) -> bool:
         cadence = max(1, int(self.media_every_n_steps))
         return _step_value(step, global_step) % cadence == 0
 
     def emit_histogram(
         self,
-        experiment: Any,
+        experiment: object,
         tag: str,
         values: torch.Tensor,
         step: int,
@@ -58,9 +116,9 @@ class MonitorEmissionPolicy:
         add_histogram(tag, self._bounded_histogram(values), int(step))
         return True
 
-    def emit_image(
+    def emit_image(  # noqa: PLR0913
         self,
-        experiment: Any,
+        experiment: object,
         tag: str,
         image: torch.Tensor,
         step: int | None = None,
@@ -83,6 +141,29 @@ class MonitorEmissionPolicy:
         else:
             add_image(tag, image, resolved_step, dataformats=dataformats)
         return True
+
+    def emit_history_heatmap(  # noqa: PLR0913
+        self,
+        experiment: object,
+        tag: str,
+        history: MonitorTensorHistory,
+        step: int | None = None,
+        *,
+        global_step: int | None = None,
+        module_key: str | None = None,
+    ) -> bool:
+        heatmap = history.render_heatmap()
+        if heatmap is None:
+            return False
+        return self.emit_image(
+            experiment,
+            tag,
+            heatmap,
+            step,
+            global_step=global_step,
+            dataformats="CHW",
+            module_key=module_key,
+        )
 
     def _claim_emission(
         self,
@@ -179,7 +260,11 @@ class MonitorEmissionPolicy:
         )
         return restore(scaled)
 
-    def _image_as_nchw(self, image: torch.Tensor, dataformats: str):
+    def _image_as_nchw(
+        self,
+        image: torch.Tensor,
+        dataformats: str,
+    ) -> tuple[torch.Tensor | None, Callable[[torch.Tensor], torch.Tensor]]:
         if dataformats.endswith("CHW") and image.dim() == 3:
             return image.unsqueeze(0), lambda scaled: scaled.squeeze(0)
         if dataformats.endswith("NCHW") and image.dim() == 4:
