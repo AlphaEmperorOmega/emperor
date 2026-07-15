@@ -2,7 +2,7 @@ import unittest
 
 import torch
 from emperor.attention import MixtureOfAttentionHeadsConfig
-from emperor.attention.core.runtime import QKV, AttentionMasks
+from emperor.attention.core.runtime import QKV, AttentionMasks, AttentionRuntimeShape
 from emperor.attention.core.variants.mixture_of_attention_heads.bias import (
     MixtureOfAttentionHeadsKeyValueBias,
 )
@@ -137,12 +137,20 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
                 key_padding_mask = torch.zeros(2, 4, dtype=torch.bool)
                 attention_mask = torch.zeros(8, 4, 4, dtype=torch.bool)
 
-                output_qkv, output_masks = model.add_kv_learnable_bias_vectors(
-                    QKV(query=key, key=key, value=value),
-                    AttentionMasks(
-                        key_padding_mask=key_padding_mask,
-                        attention_mask=attention_mask,
-                    ),
+                runtime_shape = AttentionRuntimeShape(
+                    batch_size=cfg.batch_size,
+                    target_sequence_length=4,
+                    source_sequence_length=4,
+                )
+                output_qkv, output_masks, output_runtime_shape = (
+                    model.add_kv_learnable_bias_vectors(
+                        QKV(query=key, key=key, value=value),
+                        AttentionMasks(
+                            key_padding_mask=key_padding_mask,
+                            attention_mask=attention_mask,
+                        ),
+                        runtime_shape,
+                    )
                 )
 
                 self.assertEqual(output_qkv.key.shape, (branch_count, 5, key_head_dim))
@@ -157,6 +165,8 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
                     output_qkv.value[:, -1],
                     expected_value_bias,
                 )
+                self.assertEqual(output_runtime_shape.source_sequence_length, 5)
+                self.assertEqual(output_runtime_shape.source_extension_count, 1)
 
     def test_zero_attention_supports_shared_and_expert_projection_branches(self):
         for use_kv_expert_models_flag in (False, True):
@@ -185,12 +195,20 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
                     dtype=torch.bool,
                 )
 
-                output_qkv, output_masks = model.add_zero_attention(
-                    QKV(query=key, key=key, value=value),
-                    AttentionMasks(
-                        key_padding_mask=key_padding_mask,
-                        attention_mask=attention_mask,
-                    ),
+                runtime_shape = AttentionRuntimeShape(
+                    batch_size=cfg.batch_size,
+                    target_sequence_length=4,
+                    source_sequence_length=4,
+                )
+                output_qkv, output_masks, output_runtime_shape = (
+                    model.add_zero_attention(
+                        QKV(query=key, key=key, value=value),
+                        AttentionMasks(
+                            key_padding_mask=key_padding_mask,
+                            attention_mask=attention_mask,
+                        ),
+                        runtime_shape,
+                    )
                 )
 
                 self.assertEqual(output_qkv.key.shape, (branch_count, 5, 4))
@@ -208,6 +226,8 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
                     output_qkv.value[:, -1],
                     torch.zeros_like(value[:, 0]),
                 )
+                self.assertEqual(output_runtime_shape.source_sequence_length, 5)
+                self.assertEqual(output_runtime_shape.source_extension_count, 1)
 
     def test_shared_and_expert_key_value_top_k_matrix_forward_backward(self):
         for use_kv_expert_models_flag in (False, True):

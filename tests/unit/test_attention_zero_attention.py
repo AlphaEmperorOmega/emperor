@@ -67,7 +67,7 @@ class Test_add_zero_attention(TestZeroAttention):
             value=torch.randn(4, 5, 3),
         )
 
-        output, _ = model.add_zero_attention(
+        output, _, output_runtime_shape = model.add_zero_attention(
             qkv,
             AttentionMasks(),
             runtime_shape,
@@ -77,6 +77,9 @@ class Test_add_zero_attention(TestZeroAttention):
         self.assertEqual(output.value.shape, (4, 6, 3))
         torch.testing.assert_close(output.key[:, -1], torch.zeros(4, 2))
         torch.testing.assert_close(output.value[:, -1], torch.zeros(4, 3))
+        self.assertEqual(output_runtime_shape.source_sequence_length, 6)
+        self.assertEqual(output_runtime_shape.source_extension_count, 1)
+        self.assertEqual(runtime_shape.source_sequence_length, 5)
 
     def test_mixture_shared_key_values_forward_runtime_batch_to_base_handler(self):
         cfg = build_attention_config(
@@ -98,7 +101,7 @@ class Test_add_zero_attention(TestZeroAttention):
             value=torch.randn(4, 5, 2),
         )
 
-        output, _ = model.add_zero_attention(
+        output, _, output_runtime_shape = model.add_zero_attention(
             qkv,
             AttentionMasks(),
             runtime_shape,
@@ -106,6 +109,7 @@ class Test_add_zero_attention(TestZeroAttention):
 
         self.assertEqual(output.key.shape, (4, 6, 2))
         self.assertEqual(output.value.shape, (4, 6, 2))
+        self.assertEqual(output_runtime_shape.source_sequence_length, 6)
 
     def test_flag_false_returns_inputs_unchanged(self):
         self.rebuild_presets(MultiHeadAttentionConfig(zero_attention_flag=False))
@@ -140,11 +144,19 @@ class Test_add_zero_attention(TestZeroAttention):
             key_padding_mask=key_padding_mask,
             attention_mask=attention_mask,
         )
+        runtime_shape = AttentionRuntimeShape(
+            batch_size=self.batch_size,
+            target_sequence_length=self.target_sequence_length,
+            source_sequence_length=self.source_sequence_length,
+        )
 
-        output_qkv, output_masks = self.model.add_zero_attention(qkv, masks)
+        output_qkv, output_masks, output_runtime_shape = self.model.add_zero_attention(
+            qkv, masks, runtime_shape
+        )
 
         self.assertIs(output_qkv, qkv)
         self.assertIs(output_masks, masks)
+        self.assertIs(output_runtime_shape, runtime_shape)
 
     def test_flag_true_kv_only_pads_sequence_and_returns_none_masks(self):
         self.rebuild_presets(MultiHeadAttentionConfig(zero_attention_flag=True))
@@ -166,7 +178,7 @@ class Test_add_zero_attention(TestZeroAttention):
         qkv = QKV(query=query, key=key, value=value)
         masks = AttentionMasks()
 
-        output_qkv, output_masks = self.model.add_zero_attention(qkv, masks)
+        output_qkv, output_masks, _ = self.model.add_zero_attention(qkv, masks)
 
         expected_sequence_length = self.source_sequence_length + 1
         expected_shape = (
@@ -204,7 +216,7 @@ class Test_add_zero_attention(TestZeroAttention):
             value=value,
         )
 
-        output_qkv, _ = self.model.add_zero_attention(qkv, AttentionMasks())
+        output_qkv, _, _ = self.model.add_zero_attention(qkv, AttentionMasks())
 
         self.assertTrue(
             torch.allclose(
@@ -252,7 +264,7 @@ class Test_add_zero_attention(TestZeroAttention):
             attention_mask=attention_mask,
         )
 
-        output_qkv, output_masks = self.model.add_zero_attention(qkv, masks)
+        output_qkv, output_masks, _ = self.model.add_zero_attention(qkv, masks)
 
         expected_sequence_length = self.source_sequence_length + 1
         expected_kv_shape = (

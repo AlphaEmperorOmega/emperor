@@ -343,10 +343,10 @@ class TestAttention(unittest.TestCase):
         self.assertEqual(output.shape, query.shape)
         static_args = validate_static.call_args.args
         self.assertIs(static_args[0], model)
-        self.assertIs(static_args[1], static_keys)
-        self.assertIs(static_args[2], static_values)
-        self.assertIsNotNone(static_args[3])
-        self.assertEqual(static_args[3].batch_size, 2)
+        self.assertIs(static_args[2], static_keys)
+        self.assertIs(static_args[3], static_values)
+        self.assertIsNotNone(static_args[4])
+        self.assertEqual(static_args[4].batch_size, 2)
 
         bias_runtime_shape = add_bias.call_args.args[2]
         zero_runtime_shape = add_zero.call_args.args[2]
