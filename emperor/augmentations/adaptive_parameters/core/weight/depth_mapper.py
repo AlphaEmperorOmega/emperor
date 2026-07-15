@@ -15,14 +15,15 @@ from emperor.linears.core.config import LinearLayerConfig
 
 if TYPE_CHECKING:
     from emperor.augmentations.adaptive_parameters.options import DynamicDepthOptions
-    from emperor.base.layer import LayerStackConfig
 
 
 @dataclass
 class DepthMappingLayerConfig(LinearLayerConfig):
     generator_depth: "DynamicDepthOptions | None" = field(
         default=None,
-        metadata={"help": "Generator depth for adaptive parameters."},
+        metadata={
+            "help": "Generator depth for adaptive parameters."
+        },
     )
 
     def _registry_owner(self) -> type:
@@ -76,7 +77,9 @@ class DepthMappingLayer(Module):
 class DepthMappingHandlerConfig(LinearLayerConfig):
     generator_depth: "DynamicDepthOptions | None" = field(
         default=None,
-        metadata={"help": "Generator depth for adaptive parameters."},
+        metadata={
+            "help": "Generator depth for adaptive parameters."
+        },
     )
     model_config: "LayerStackConfig | None" = field(
         default=None,
