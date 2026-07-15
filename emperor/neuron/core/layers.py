@@ -22,6 +22,8 @@ if TYPE_CHECKING:
 
 
 class Nucleus(Module):
+    VALIDATOR = NucleusValidator
+
     def __init__(
         self,
         cfg: "NucleusConfig",
@@ -31,15 +33,17 @@ class Nucleus(Module):
         config = getattr(cfg, "nucleus_config", cfg)
         self.cfg: NucleusConfig = self._override_config(config, overrides)
         self.model_config = self.cfg.model_config
-        NucleusValidator.validate(self)
+        self.VALIDATOR.validate(self)
         self.model = self.model_config.build()
 
     def forward(self, input: Tensor) -> Tensor:
-        NucleusValidator.validate_forward_input(input)
+        self.VALIDATOR.validate_forward_input(input)
         return self.model(input)
 
 
 class Axons(Module):
+    VALIDATOR = AxonsValidator
+
     def __init__(
         self,
         cfg: "AxonsConfig",
@@ -49,7 +53,7 @@ class Axons(Module):
         config = getattr(cfg, "axons_config", cfg)
         self.cfg: AxonsConfig = self._override_config(config, overrides)
         self.memory_config = self.cfg.memory_config
-        AxonsValidator.validate(self)
+        self.VALIDATOR.validate(self)
         self.memory_model = self.__maybe_build_memory_model()
 
     def __maybe_build_memory_model(self) -> Module | None:
@@ -62,13 +66,15 @@ class Axons(Module):
         )
 
     def forward(self, input: Tensor) -> Tensor:
-        AxonsValidator.validate_forward_input(input)
+        self.VALIDATOR.validate_forward_input(input)
         if self.memory_model is None:
             return input
         return self.memory_model(input)
 
 
 class Terminal(Module):
+    VALIDATOR = TerminalValidator
+
     def __init__(
         self,
         cfg: "TerminalConfig",
@@ -77,7 +83,7 @@ class Terminal(Module):
         super().__init__()
         config = getattr(cfg, "terminal_config", cfg)
         self.cfg: TerminalConfig = self._override_config(config, overrides)
-        TerminalValidator.validate_config_fields(self.cfg)
+        self.VALIDATOR.validate_config_fields(self.cfg)
 
         self.input_dim: int = self.cfg.input_dim
         self.x_axis_position: int = self.cfg.x_axis_position
@@ -95,7 +101,7 @@ class Terminal(Module):
         neuron_connections = self.__initialize_connections()
         self.total_neuron_connections = int(neuron_connections.shape[0])
 
-        TerminalValidator.validate(self)
+        self.VALIDATOR.validate(self)
         self.sampler = self.__build_sampler()
         self.register_buffer(
             "neuron_connections",
@@ -208,7 +214,7 @@ class Terminal(Module):
         return offsets
 
     def forward(self, input: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
-        TerminalValidator.validate_forward_input(self, input)
+        self.VALIDATOR.validate_forward_input(self, input)
         probabilities, indices, _, auxiliary_loss = (
             self.sampler.sample_probabilities_and_indices(input)
         )
@@ -242,6 +248,7 @@ class Terminal(Module):
 
 class Neuron(Module):
     COORDINATE_EMBEDDING_FREQUENCY_BASE = 10000.0
+    VALIDATOR = NeuronValidator
 
     def __init__(
         self,
@@ -251,7 +258,7 @@ class Neuron(Module):
         super().__init__()
         config = getattr(cfg, "neuron_config", cfg)
         self.cfg: NeuronConfig = self._override_config(config, overrides)
-        NeuronValidator.validate(self.cfg)
+        self.VALIDATOR.validate(self.cfg)
         self.coordinate_embedding_flag: bool = bool(
             self.cfg.coordinate_embedding_flag
         )
@@ -332,14 +339,14 @@ class Neuron(Module):
         )
 
     def process_signal(self, input: Tensor) -> Tensor:
-        NeuronValidator.validate_forward_input(input)
+        self.VALIDATOR.validate_forward_input(input)
         if self.training:
             self.batch_counter += 1
         processed_signal = self.nucleus(self.__inject_coordinate_embedding(input))
         return self.axons(processed_signal)
 
     def route_signal(self, processed_signal: Tensor) -> tuple[Tensor, Tensor, Tensor]:
-        NeuronValidator.validate_forward_input(processed_signal)
+        self.VALIDATOR.validate_forward_input(processed_signal)
         _, probabilities, selected_neurons, auxiliary_loss = self.terminal(
             self.__inject_coordinate_embedding(processed_signal)
         )

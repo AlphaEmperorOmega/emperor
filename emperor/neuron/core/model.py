@@ -23,6 +23,8 @@ if TYPE_CHECKING:
 
 
 class NeuronCluster(NeuronClusterModuleBase, NeuronClusterPlasticityMixin):
+    VALIDATOR = NeuronClusterValidator
+
     def __init__(
         self,
         cfg: NeuronClusterConfig,
@@ -30,7 +32,7 @@ class NeuronCluster(NeuronClusterModuleBase, NeuronClusterPlasticityMixin):
     ):
         super().__init__()
         self.cfg: NeuronClusterConfig = self._override_config(cfg, overrides)
-        NeuronClusterValidator.validate(self)
+        self.VALIDATOR.validate(self)
 
         self.x_axis_total_neurons: int = self.cfg.x_axis_total_neurons
         self.y_axis_total_neurons: int = self.cfg.y_axis_total_neurons
@@ -252,7 +254,7 @@ class NeuronCluster(NeuronClusterModuleBase, NeuronClusterPlasticityMixin):
         input: Tensor,
         return_trace: bool = False,
     ) -> tuple[Tensor, Tensor] | tuple[Tensor, Tensor, NeuronClusterTrace]:
-        NeuronClusterValidator.validate_forward_input(input)
+        self.VALIDATOR.validate_forward_input(input)
         self.__validate_feature_dimension(input)
         if return_trace and self.beam_width > 1:
             raise NotImplementedError(

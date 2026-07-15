@@ -27,9 +27,9 @@ class NeuronValidationMixin:
                 f"{name} must be an integer, received {type(value).__name__}."
             )
 
-    @staticmethod
-    def validate_positive_integer(name: str, value: int) -> None:
-        NeuronValidationMixin.validate_integer(name, value)
+    @classmethod
+    def validate_positive_integer(cls, name: str, value: int) -> None:
+        cls.validate_integer(name, value)
         if value <= 0:
             raise ValueError(f"{name} must be a positive integer, received {value!r}.")
 
@@ -47,25 +47,25 @@ class NeuronValidationMixin:
 
 
 class NucleusValidator(ValidatorBase, NeuronValidationMixin):
-    @staticmethod
-    def validate(model: "Nucleus") -> None:
-        NucleusValidator.validate_required_fields(model.cfg)
-        NucleusValidator.validate_field_types(model.cfg)
-        NucleusValidator.validate_config_base("model_config", model.cfg.model_config)
+    @classmethod
+    def validate(cls, model: "Nucleus") -> None:
+        cls.validate_required_fields(model.cfg)
+        cls.validate_field_types(model.cfg)
+        cls.validate_config_base("model_config", model.cfg.model_config)
 
-    @staticmethod
-    def validate_forward_input(input: Tensor) -> None:
-        NucleusValidator.validate_tensor_rank("Nucleus input", input, 2)
+    @classmethod
+    def validate_forward_input(cls, input: Tensor) -> None:
+        cls.validate_tensor_rank("Nucleus input", input, 2)
 
 
 class AxonsValidator(ValidatorBase, NeuronValidationMixin):
     OPTIONAL_FIELDS = {"memory_config"}
 
-    @staticmethod
-    def validate(model: "Axons") -> None:
-        AxonsValidator.validate_required_fields(model.cfg)
-        AxonsValidator.validate_field_types(model.cfg)
-        AxonsValidator.validate_memory_config(model.cfg.memory_config)
+    @classmethod
+    def validate(cls, model: "Axons") -> None:
+        cls.validate_required_fields(model.cfg)
+        cls.validate_field_types(model.cfg)
+        cls.validate_memory_config(model.cfg.memory_config)
 
     @staticmethod
     def validate_memory_config(memory_config: "DynamicMemoryConfig | None") -> None:
@@ -79,19 +79,19 @@ class AxonsValidator(ValidatorBase, NeuronValidationMixin):
                 f"AxonsConfig, got {type(memory_config).__name__}."
             )
 
-    @staticmethod
-    def validate_forward_input(input: Tensor) -> None:
-        AxonsValidator.validate_tensor_rank("Axons input", input, 2)
+    @classmethod
+    def validate_forward_input(cls, input: Tensor) -> None:
+        cls.validate_tensor_rank("Axons input", input, 2)
 
 
 class TerminalValidator(ValidatorBase, NeuronValidationMixin):
     OPTIONAL_FIELDS = {"connection_shape"}
 
-    @staticmethod
-    def validate_config_fields(cfg) -> None:
-        TerminalValidator.validate_required_fields(cfg)
-        TerminalValidator.validate_field_types(cfg)
-        TerminalValidator.validate_connection_shape(cfg)
+    @classmethod
+    def validate_config_fields(cls, cfg) -> None:
+        cls.validate_required_fields(cfg)
+        cls.validate_field_types(cfg)
+        cls.validate_connection_shape(cfg)
 
     @staticmethod
     def validate_connection_shape(cfg) -> None:
@@ -105,15 +105,15 @@ class TerminalValidator(ValidatorBase, NeuronValidationMixin):
                 f"for TerminalConfig, got {type(cfg.connection_shape).__name__}."
             )
 
-    @staticmethod
-    def validate(model: "Terminal") -> None:
-        TerminalValidator.validate_config_fields(model.cfg)
-        TerminalValidator.validate_positive_integer("input_dim", model.input_dim)
-        TerminalValidator.validate_integer("x_axis_position", model.x_axis_position)
-        TerminalValidator.validate_integer("y_axis_position", model.y_axis_position)
-        TerminalValidator.validate_integer("z_axis_position", model.z_axis_position)
-        TerminalValidator.validate_axis_ranges(model)
-        TerminalValidator.validate_sampler_config(model)
+    @classmethod
+    def validate(cls, model: "Terminal") -> None:
+        cls.validate_config_fields(model.cfg)
+        cls.validate_positive_integer("input_dim", model.input_dim)
+        cls.validate_integer("x_axis_position", model.x_axis_position)
+        cls.validate_integer("y_axis_position", model.y_axis_position)
+        cls.validate_integer("z_axis_position", model.z_axis_position)
+        cls.validate_axis_ranges(model)
+        cls.validate_sampler_config(model)
 
     @staticmethod
     def validate_axis_ranges(model: "Terminal") -> None:
@@ -124,8 +124,8 @@ class TerminalValidator(ValidatorBase, NeuronValidationMixin):
                 f"z_axis_range={model.z_axis_range}."
             )
 
-    @staticmethod
-    def validate_sampler_config(model: "Terminal") -> None:
+    @classmethod
+    def validate_sampler_config(cls, model: "Terminal") -> None:
         from emperor.sampler.core.config import RouterConfig, SamplerConfig
 
         sampler_config = model.sampler_config
@@ -134,7 +134,7 @@ class TerminalValidator(ValidatorBase, NeuronValidationMixin):
                 "sampler_config must be a SamplerConfig for Terminal, "
                 f"got {type(sampler_config).__name__}."
             )
-        TerminalValidator.validate_positive_integer(
+        cls.validate_positive_integer(
             "sampler_config.num_experts",
             sampler_config.num_experts,
         )
@@ -148,14 +148,14 @@ class TerminalValidator(ValidatorBase, NeuronValidationMixin):
 
         router_config = sampler_config.router_config
         if router_config is None:
-            TerminalValidator.validate_logits_only_input_dim(model)
+            cls.validate_logits_only_input_dim(model)
             return
         if not isinstance(router_config, RouterConfig):
             raise TypeError(
                 "sampler_config.router_config must be a RouterConfig for Terminal, "
                 f"got {type(router_config).__name__}."
             )
-        TerminalValidator.validate_positive_integer(
+        cls.validate_positive_integer(
             "sampler_config.router_config.num_experts",
             router_config.num_experts,
         )
@@ -178,9 +178,11 @@ class TerminalValidator(ValidatorBase, NeuronValidationMixin):
             f"total_neuron_connections={model.total_neuron_connections}."
         )
 
-    @staticmethod
-    def validate_forward_input(model: "Terminal", input: Tensor) -> None:
-        TerminalValidator.validate_tensor_rank("Terminal input", input, 2)
+    @classmethod
+    def validate_forward_input(
+        cls, model: "Terminal", input: Tensor
+    ) -> None:
+        cls.validate_tensor_rank("Terminal input", input, 2)
         if input.shape[-1] != model.input_dim:
             raise ValueError(
                 "Terminal input feature dimension must match input_dim, "
@@ -192,11 +194,11 @@ class TerminalValidator(ValidatorBase, NeuronValidationMixin):
 class NeuronValidator(ValidatorBase, NeuronValidationMixin):
     OPTIONAL_FIELDS = {"coordinate_embedding_flag"}
 
-    @staticmethod
-    def validate(cfg: "NeuronConfig") -> None:
-        NeuronValidator.validate_required_fields(cfg)
-        NeuronValidator.validate_field_types(cfg)
-        NeuronValidator.validate_coordinate_embedding_options(cfg)
+    @classmethod
+    def validate(cls, cfg: "NeuronConfig") -> None:
+        cls.validate_required_fields(cfg)
+        cls.validate_field_types(cfg)
+        cls.validate_coordinate_embedding_options(cfg)
 
     @staticmethod
     def validate_coordinate_embedding_options(cfg: "NeuronConfig") -> None:
@@ -218,12 +220,14 @@ class NeuronValidator(ValidatorBase, NeuronValidationMixin):
                 f"encoding channel, received input_dim={input_dim}."
             )
 
-    @staticmethod
-    def validate_forward_input(input: Tensor) -> None:
-        NeuronValidator.validate_tensor_rank("Neuron input", input, 2)
+    @classmethod
+    def validate_forward_input(cls, input: Tensor) -> None:
+        cls.validate_tensor_rank("Neuron input", input, 2)
 
 
 class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
+    NEURON_VALIDATOR = NeuronValidator
+
     OPTIONAL_FIELDS = {
         "beam_width",
         "entry_sampler_config",
@@ -240,45 +244,47 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
         "pruning_threshold",
     }
 
-    @staticmethod
-    def validate(model) -> None:
-        NeuronClusterValidator.validate_required_fields(model.cfg)
-        NeuronClusterValidator.validate_field_types(model.cfg)
-        NeuronValidator.validate(model.cfg.neuron_config)
-        NeuronClusterValidator.validate_positive_integer(
+    @classmethod
+    def validate(cls, model) -> None:
+        cls.validate_required_fields(model.cfg)
+        cls.validate_field_types(model.cfg)
+        cls.NEURON_VALIDATOR.validate(model.cfg.neuron_config)
+        cls.validate_positive_integer(
             "x_axis_total_neurons",
             model.cfg.x_axis_total_neurons,
         )
-        NeuronClusterValidator.validate_positive_integer(
+        cls.validate_positive_integer(
             "y_axis_total_neurons",
             model.cfg.y_axis_total_neurons,
         )
-        NeuronClusterValidator.validate_positive_integer(
+        cls.validate_positive_integer(
             "z_axis_total_neurons",
             model.cfg.z_axis_total_neurons,
         )
-        NeuronClusterValidator.validate_initial_grid_dimensions(model.cfg)
-        NeuronClusterValidator.validate_positive_integer(
+        cls.validate_initial_grid_dimensions(model.cfg)
+        cls.validate_positive_integer(
             "max_steps",
             model.cfg.max_steps,
         )
-        NeuronClusterValidator.validate_beam_width(model.cfg.beam_width)
-        NeuronClusterValidator.validate_entry_sampler_config(model.cfg)
-        NeuronClusterValidator.validate_derived_entry_sampler_config(model.cfg)
-        NeuronClusterValidator.validate_growth_threshold(
+        cls.validate_beam_width(model.cfg.beam_width)
+        cls.validate_entry_sampler_config(model.cfg)
+        cls.validate_derived_entry_sampler_config(model.cfg)
+        cls.validate_growth_threshold(
             model.cfg.growth_threshold,
         )
-        NeuronClusterValidator.validate_pruning_threshold(
+        cls.validate_pruning_threshold(
             model.cfg.pruning_threshold,
         )
-        NeuronClusterValidator.validate_growth_placement_options(model.cfg)
-        NeuronClusterValidator.validate_growth_budget_options(model.cfg)
-        NeuronClusterValidator.validate_growth_warmup_steps(model.cfg)
-        NeuronClusterValidator.validate_halting_config(model.cfg)
-        NeuronClusterValidator.validate_nucleus_model_dimensions(model.cfg)
+        cls.validate_growth_placement_options(model.cfg)
+        cls.validate_growth_budget_options(model.cfg)
+        cls.validate_growth_warmup_steps(model.cfg)
+        cls.validate_halting_config(model.cfg)
+        cls.validate_nucleus_model_dimensions(model.cfg)
 
-    @staticmethod
-    def validate_initial_grid_dimensions(cfg: "NeuronClusterConfig") -> None:
+    @classmethod
+    def validate_initial_grid_dimensions(
+        cls, cfg: "NeuronClusterConfig"
+    ) -> None:
         axis_pairs = (
             (
                 "initial_x_axis_total_neurons",
@@ -302,7 +308,7 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
         for initial_name, initial_value, max_name, max_value in axis_pairs:
             if initial_value is None:
                 continue
-            NeuronClusterValidator.validate_positive_integer(
+            cls.validate_positive_integer(
                 initial_name,
                 initial_value,
             )
@@ -312,8 +318,8 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
                     f"{initial_name}={initial_value} and {max_name}={max_value}."
                 )
 
-    @staticmethod
-    def validate_entry_sampler_config(cfg: "NeuronClusterConfig") -> None:
+    @classmethod
+    def validate_entry_sampler_config(cls, cfg: "NeuronClusterConfig") -> None:
         sampler_config = cfg.entry_sampler_config
         if sampler_config is None:
             return
@@ -331,7 +337,7 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
             (cfg.initial_x_axis_total_neurons or cfg.x_axis_total_neurons)
             * (cfg.initial_y_axis_total_neurons or cfg.y_axis_total_neurons)
         )
-        NeuronClusterValidator.validate_positive_integer(
+        cls.validate_positive_integer(
             "entry_sampler_config.num_experts",
             sampler_config.num_experts,
         )
@@ -342,7 +348,7 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
                 f"num_experts={sampler_config.num_experts} and "
                 f"entry_coordinate_count={entry_count}."
             )
-        NeuronClusterValidator.validate_positive_integer(
+        cls.validate_positive_integer(
             "entry_sampler_config.top_k",
             sampler_config.top_k,
         )
@@ -363,7 +369,7 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
                 "NeuronClusterConfig, got "
                 f"{type(router_config).__name__}."
             )
-        NeuronClusterValidator.validate_positive_integer(
+        cls.validate_positive_integer(
             "entry_sampler_config.router_config.num_experts",
             router_config.num_experts,
         )
@@ -398,26 +404,26 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
             f"entry_coordinate_count={entry_count}."
         )
 
-    @staticmethod
-    def validate_beam_width(beam_width: int | None) -> None:
+    @classmethod
+    def validate_beam_width(cls, beam_width: int | None) -> None:
         if beam_width is None:
             return
-        NeuronClusterValidator.validate_positive_integer("beam_width", beam_width)
+        cls.validate_positive_integer("beam_width", beam_width)
 
-    @staticmethod
-    def validate_growth_threshold(growth_threshold: int | None) -> None:
+    @classmethod
+    def validate_growth_threshold(cls, growth_threshold: int | None) -> None:
         if growth_threshold is None:
             return
-        NeuronClusterValidator.validate_positive_integer(
+        cls.validate_positive_integer(
             "growth_threshold",
             growth_threshold,
         )
 
-    @staticmethod
-    def validate_pruning_threshold(pruning_threshold: int | None) -> None:
+    @classmethod
+    def validate_pruning_threshold(cls, pruning_threshold: int | None) -> None:
         if pruning_threshold is None:
             return
-        NeuronClusterValidator.validate_positive_integer(
+        cls.validate_positive_integer(
             "pruning_threshold",
             pruning_threshold,
         )
@@ -443,8 +449,8 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
                     "growth is disabled."
                 )
 
-    @staticmethod
-    def validate_growth_budget_options(cfg: "NeuronClusterConfig") -> None:
+    @classmethod
+    def validate_growth_budget_options(cls, cfg: "NeuronClusterConfig") -> None:
         budget_fields = (
             ("growth_cooldown_steps", cfg.growth_cooldown_steps),
             ("max_total_growths", cfg.max_total_growths),
@@ -452,7 +458,7 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
         for budget_name, budget_value in budget_fields:
             if budget_value is None:
                 continue
-            NeuronClusterValidator.validate_positive_integer(
+            cls.validate_positive_integer(
                 budget_name,
                 budget_value,
             )
@@ -463,11 +469,11 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
                     "growth is disabled."
                 )
 
-    @staticmethod
-    def validate_growth_warmup_steps(cfg: "NeuronClusterConfig") -> None:
+    @classmethod
+    def validate_growth_warmup_steps(cls, cfg: "NeuronClusterConfig") -> None:
         if cfg.growth_warmup_steps is None:
             return
-        NeuronClusterValidator.validate_positive_integer(
+        cls.validate_positive_integer(
             "growth_warmup_steps",
             cfg.growth_warmup_steps,
         )
