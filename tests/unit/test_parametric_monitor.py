@@ -1,18 +1,11 @@
-from emperor.base.layer.residual import ResidualConnectionOptions
 import unittest
 
 import torch
-
-from support.monitor import (
-    CaptureLightningModule,
-    NoExperimentLightningModule,
-    TrainerStub,
-    same_bound_method,
-)
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveParameterAugmentationConfig,
 )
 from emperor.base.layer import LayerConfig, LayerStackConfig
+from emperor.base.layer.residual import ResidualConnectionOptions
 from emperor.base.options import (
     ActivationOptions,
     LastLayerBiasOptions,
@@ -30,8 +23,53 @@ from emperor.parametric import (
 from emperor.parametric.core.monitor import ParametricLayerMonitorCallback
 from emperor.sampler.core.config import RouterConfig, SamplerConfig
 
+from support.monitor import (
+    CaptureLightningModule,
+    NoExperimentLightningModule,
+    TrainerStub,
+    orchestration_calls,
+    same_bound_method,
+)
+
 
 class TestParametricLayerMonitorCallback(unittest.TestCase):
+    def test_tracking_orchestration_lists_each_tracked_fact(self):
+        cls = ParametricLayerMonitorCallback
+        orchestration = (
+            cls._ParametricLayerMonitorCallback__track_parametric_diagnostics
+        )
+        routed_slot_calls = (
+            "__track_router_auxiliary_loss",
+            "__track_router_entropy",
+            "__track_active_slots",
+            "__track_dead_slot_fraction",
+            "__track_maximum_utilization",
+            "__track_minimum_utilization",
+            "__track_per_slot_utilization",
+            "__track_utilization_history",
+            "__track_utilization_histogram",
+            "__track_utilization_heatmap",
+        )
+
+        self.assertEqual(
+            orchestration_calls(orchestration),
+            (
+                "__track_generated_parameter_norm",
+                "__track_generated_parameter_norm",
+                "__track_clip_saturation_fraction",
+                "__track_clip_saturation_fraction",
+                "__track_auxiliary_loss",
+                "__track_skip_fraction",
+                "__track_drop_fraction",
+                "__track_affine_output_norm",
+                "__track_affine_relative_output_norm",
+                "__track_affine_delta_norm",
+                "__track_affine_relative_delta_norm",
+                *routed_slot_calls,
+                *routed_slot_calls,
+            ),
+        )
+
     def layer_stack_config(self, input_dim: int = 4, output_dim: int = 3):
         hidden_dim = max(input_dim, output_dim)
         return LayerStackConfig(
@@ -126,13 +164,24 @@ class TestParametricLayerMonitorCallback(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     ParametricLayerMonitorCallback(log_every_n_steps=bad)
 
+    def test_rejects_non_positive_history_size(self):
+        for bad in (0, -1):
+            with self.subTest(bad=bad):
+                with self.assertRaises(ValueError):
+                    ParametricLayerMonitorCallback(history_size=bad)
+
     def test_discovers_only_parametric_layers(self):
-        module = CaptureLightningModule(parametric=self.layer(), other=torch.nn.Linear(4, 4))
+        module = CaptureLightningModule(
+            parametric=self.layer(), other=torch.nn.Linear(4, 4)
+        )
         callback = ParametricLayerMonitorCallback(log_every_n_steps=1)
 
         callback.on_fit_start(TrainerStub(), module)
 
-        self.assertEqual([name for name, _ in callback._parametric_modules], ["parametric"])
+        self.assertEqual(
+            set(callback._utilization_histories),
+            {("parametric", "weight"), ("parametric", "bias")},
+        )
         callback.on_fit_end(TrainerStub(), module)
 
     def test_respects_global_step_cadence(self):
@@ -149,6 +198,25 @@ class TestParametricLayerMonitorCallback(unittest.TestCase):
         layer(self.input())
         self.assertIn("parametric/parametric/generated_weight_norm", module.logged_tags)
         callback.on_fit_end(TrainerStub(), module)
+
+    def test_repeated_fit_start_replaces_existing_wrappers(self):
+        layer = self.layer()
+        original_forward = layer.forward
+        module = CaptureLightningModule(parametric=layer)
+        callback = ParametricLayerMonitorCallback(log_every_n_steps=1)
+
+        callback.on_fit_start(TrainerStub(), module)
+        first_wrapper_count = len(callback._wrapped_methods)
+        callback.on_fit_start(TrainerStub(), module)
+        layer(self.input())
+
+        self.assertEqual(len(callback._wrapped_methods), first_wrapper_count)
+        self.assertEqual(
+            module.logged_tags.count("parametric/parametric/generated_weight_norm"),
+            1,
+        )
+        callback.on_fit_end(TrainerStub(), module)
+        self.assertTrue(same_bound_method(layer.forward, original_forward))
 
     def test_logs_expected_finite_scalars(self):
         layer = self.layer()
@@ -173,7 +241,9 @@ class TestParametricLayerMonitorCallback(unittest.TestCase):
         }
         self.assertTrue(expected_tags.issubset(set(module.logged_tags)))
         for tag in expected_tags:
-            self.assertTrue(torch.isfinite(torch.as_tensor(module.logged_value(tag))).all(), tag)
+            self.assertTrue(
+                torch.isfinite(torch.as_tensor(module.logged_value(tag))).all(), tag
+            )
         callback.on_fit_end(TrainerStub(), module)
 
     def test_emits_histograms_and_images_when_experiment_supports_them(self):
@@ -186,10 +256,16 @@ class TestParametricLayerMonitorCallback(unittest.TestCase):
 
         experiment = module.logger.experiment
         self.assertTrue(
-            any(tag == "parametric/mixture/histogram/weight_utilization" for tag, _, _ in experiment.histograms)
+            any(
+                tag == "parametric/mixture/histogram/weight_utilization"
+                for tag, _, _ in experiment.histograms
+            )
         )
         self.assertTrue(
-            any(tag == "parametric/mixture/heatmap/weight_utilization" for tag, _, _, _ in experiment.images)
+            any(
+                tag == "parametric/mixture/heatmap/weight_utilization"
+                for tag, _, _, _ in experiment.images
+            )
         )
         callback.on_fit_end(TrainerStub(), module)
 
@@ -202,6 +278,26 @@ class TestParametricLayerMonitorCallback(unittest.TestCase):
         layer(self.input())
 
         self.assertIn("parametric/parametric/generated_weight_norm", module.logged_tags)
+        callback.on_fit_end(TrainerStub(), module)
+
+    def test_utilization_histories_are_bounded_and_detached(self):
+        layer = self.layer()
+        module = CaptureLightningModule(parametric=layer)
+        callback = ParametricLayerMonitorCallback(
+            log_every_n_steps=1,
+            history_size=2,
+        )
+        callback.on_fit_start(TrainerStub(), module)
+
+        for global_step in range(3):
+            module.global_step = global_step
+            layer(self.input())
+
+        for history in callback._utilization_histories.values():
+            self.assertEqual(len(history), 2)
+            for tensor in history.tensors:
+                self.assertEqual(tensor.device.type, "cpu")
+                self.assertFalse(tensor.requires_grad)
         callback.on_fit_end(TrainerStub(), module)
 
     def test_restores_wrappers_and_clears_state_on_fit_end(self):
@@ -229,9 +325,9 @@ class TestParametricLayerMonitorCallback(unittest.TestCase):
                 original_affine,
             )
         )
-        self.assertEqual(callback._parametric_modules, [])
         self.assertEqual(callback._wrapped_methods, [])
-        self.assertEqual(callback._traces, {})
+        self.assertEqual(callback._observations, {})
+        self.assertEqual(callback._utilization_histories, {})
 
 
 if __name__ == "__main__":
