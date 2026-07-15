@@ -1,18 +1,20 @@
-import torch.nn as nn
+from dataclasses import replace
+from typing import TYPE_CHECKING
 
+import torch.nn as nn
 from torch import Tensor
+
 from emperor.attention.core.handlers.projector import ProjectorBase
-from emperor.experts.core.options import RoutingInitializationMode
 from emperor.experts.core.config import MixtureOfExpertsConfig
 from emperor.experts.core.layers import (
     MixtureOfExperts,
     MixtureOfExpertsMap,
     MixtureOfExpertsReduce,
 )
-
-from typing import TYPE_CHECKING
+from emperor.experts.core.options import RoutingInitializationMode
 
 if TYPE_CHECKING:
+    from emperor.attention.core.runtime import QKV
     from emperor.attention.core.variants.mixture_of_attention_heads.config import (
         MixtureOfAttentionHeadsConfig,
     )
@@ -22,7 +24,7 @@ if TYPE_CHECKING:
 class MixtureOfAttentionHeadsProjector(ProjectorBase):
     def __init__(self, cfg: "MixtureOfAttentionHeadsConfig"):
         super().__init__(cfg)
-        self.experts_config: "MixtureOfExpertsConfig" = self.cfg.experts_config
+        self.experts_config: MixtureOfExpertsConfig = self.cfg.experts_config
         self.use_kv_expert_models_flag: bool = self.cfg.use_kv_expert_models_flag
 
         qk_dims = (self.embedding_dim, self.query_key_projection_dim)
@@ -64,28 +66,30 @@ class MixtureOfAttentionHeadsProjector(ProjectorBase):
 
     def compute_qkv_projections(
         self,
-        query: Tensor,
-        key: Tensor,
-        value: Tensor,
-    ) -> tuple[Tensor, Tensor, Tensor]:
-        self._compute_expert_indices(query)
-        query_projections = self._compute_q_projection(query, self.query_model)
-        key_projections = self._compute_kv_projection(key, self.key_model)
-        value_projections = self._compute_kv_projection(value, self.value_model)
-        return query_projections, key_projections, value_projections
+        qkv: "QKV",
+    ) -> "QKV":
+        self._compute_expert_indices(qkv.query)
+        query_projections = self._compute_q_projection(qkv.query, self.query_model)
+        key_projections = self._compute_kv_projection(qkv.key, self.key_model)
+        value_projections = self._compute_kv_projection(qkv.value, self.value_model)
+        return replace(
+            qkv,
+            query=query_projections,
+            key=key_projections,
+            value=value_projections,
+        )
 
     def _compute_expert_indices(self, X: Tensor) -> None:
         embedding_dim = X.size(-1)
         if not X.is_contiguous():
             X = X.contiguous()
         X_reshaped = X.view(-1, embedding_dim)
-        skip_mask = None
         (
             probabilities,
             indices,
             skip_mask,
             sampler_loss,
-        ) = self.sampler.sample_probabilities_and_indices(X_reshaped, skip_mask)
+        ) = self.sampler.sample_probabilities_and_indices(X_reshaped)
 
         self.probabilities = probabilities.view(-1, self.top_k)
         self.indices = indices.view(-1, self.top_k)
@@ -115,7 +119,9 @@ class MixtureOfAttentionHeadsProjector(ProjectorBase):
 
         X_reshaped = X.view(-1, embedding_dim)
         if isinstance(model, MixtureOfExperts):
-            projection, expert_loss = model(X_reshaped, self.probabilities, self.indices)
+            projection, expert_loss = model(
+                X_reshaped, self.probabilities, self.indices
+            )
             self._accumulate_auxiliary_loss(expert_loss)
         else:
             projection = self._forward_accumulating_loss(model, X_reshaped)

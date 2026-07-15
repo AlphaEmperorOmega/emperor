@@ -27,8 +27,8 @@ class AttentionRuntimeShape:
     input_was_batch_first: bool = False
     source_extension_count: int = 0
 
-    def branch_count(self, num_heads: int, multiplier: int = 1) -> int:
-        return self.batch_size * num_heads * multiplier
+    def branch_count(self, num_heads: int) -> int:
+        return self.batch_size * num_heads
 
     def with_source_extension(self, count: int = 1) -> AttentionRuntimeShape:
         return replace(

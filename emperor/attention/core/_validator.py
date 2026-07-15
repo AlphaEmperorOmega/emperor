@@ -16,6 +16,34 @@ if TYPE_CHECKING:
 
 class AttentionValidatorBase:
     @staticmethod
+    def validate_standard_relative_position_query_shape(
+        query: Tensor,
+        num_heads: int,
+    ) -> None:
+        if query.dim() not in (3, 4):
+            raise RuntimeError(
+                "relative-position query must be rank 3 or 4, got "
+                f"rank {query.dim()}."
+            )
+        if query.dim() == 4 and query.size(1) != num_heads:
+            raise RuntimeError(
+                "relative-position rank-4 query head dimension must equal "
+                f"num_heads ({num_heads}), got {query.size(1)}."
+            )
+
+    @staticmethod
+    def validate_relative_position_query_branch_count(
+        branch_count: int,
+        expected_branch_count: int,
+    ) -> None:
+        if branch_count != expected_branch_count:
+            raise RuntimeError(
+                "relative-position rank-3 query leading dimension must equal "
+                "batch_size * num_heads "
+                f"({expected_branch_count}), got {branch_count}."
+            )
+
+    @staticmethod
     def validate_head_divisibility(model: "MultiHeadAttentionAbstract") -> None:
         if model.embedding_dim % model.num_heads != 0:
             raise ValueError(
@@ -97,12 +125,13 @@ class AttentionValidatorBase:
     @staticmethod
     def validate_attention_ready_projection_branch_count(
         branch_count: int,
-        base_branch_count: int,
+        expected_branch_count: int,
     ) -> None:
-        if branch_count % base_branch_count != 0:
+        if branch_count != expected_branch_count:
             raise RuntimeError(
                 "Attention-ready key/value projections must have a leading "
-                "dimension divisible by batch_size * num_heads."
+                "dimension equal to batch_size * num_heads "
+                f"({expected_branch_count}), got {branch_count}."
             )
 
     @classmethod
@@ -165,7 +194,6 @@ class AttentionValidatorBase:
         expected_key_padding_shape: tuple[int, int],
         expected_attention_sequence_shape: tuple[int, int],
         standard_branch_count: int,
-        expert_branch_count: int | None = None,
     ) -> None:
         cls.validate_key_padding_mask_shape(
             key_padding_mask,
@@ -173,11 +201,7 @@ class AttentionValidatorBase:
         )
         if attention_mask is None:
             return
-        supports_expert_branches = expert_branch_count is not None
-        cls.validate_attention_mask_rank(
-            attention_mask,
-            supports_expert_branches=supports_expert_branches,
-        )
+        cls.validate_attention_mask_rank(attention_mask)
         cls.validate_attention_mask_sequence_shape(
             attention_mask,
             expected_attention_sequence_shape,
@@ -185,7 +209,6 @@ class AttentionValidatorBase:
         cls.validate_attention_mask_leading_dimension(
             attention_mask,
             standard_branch_count,
-            expert_branch_count,
         )
 
     @staticmethod
@@ -204,17 +227,11 @@ class AttentionValidatorBase:
     @staticmethod
     def validate_attention_mask_rank(
         attention_mask: Tensor,
-        *,
-        supports_expert_branches: bool = False,
     ) -> None:
         if attention_mask.dim() in (2, 3):
             return
-        variant_context = (
-            " for mixture of attention heads" if supports_expert_branches else ""
-        )
         raise RuntimeError(
-            f"attention_mask must be 2-D or 3-D{variant_context}, got "
-            f"{attention_mask.dim()}-D."
+            f"attention_mask must be 2-D or 3-D, got {attention_mask.dim()}-D."
         )
 
     @staticmethod
@@ -232,23 +249,13 @@ class AttentionValidatorBase:
     def validate_attention_mask_leading_dimension(
         attention_mask: Tensor,
         standard_branch_count: int,
-        expert_branch_count: int | None = None,
     ) -> None:
         if attention_mask.dim() != 3:
             return
         leading_dimension = attention_mask.size(0)
         allowed_dimensions = (1, standard_branch_count)
-        if expert_branch_count is not None:
-            allowed_dimensions += (expert_branch_count,)
         if leading_dimension in allowed_dimensions:
             return
-        if expert_branch_count is not None:
-            raise RuntimeError(
-                "3-D attention_mask leading dimension must be 1, "
-                "batch_size * num_heads, or batch_size * top_k * num_heads "
-                f"(1, {standard_branch_count}, or {expert_branch_count}), got "
-                f"{leading_dimension}."
-            )
         raise RuntimeError(
             "3-D attention_mask leading dimension must be 1 or "
             f"batch_size * num_heads ({standard_branch_count}), got "

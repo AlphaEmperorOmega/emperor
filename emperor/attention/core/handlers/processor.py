@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING
 import torch.nn.functional as F
 from torch import Tensor
 
+from emperor.attention.core._validator import AttentionValidatorBase
 from emperor.base.module import Module
 
 if TYPE_CHECKING:
@@ -13,6 +14,8 @@ if TYPE_CHECKING:
 
 
 class ProcessorBase(Module):
+    VALIDATOR = AttentionValidatorBase
+
     def __init__(
         self,
         cfg: "MultiHeadAttentionConfig",
@@ -92,12 +95,13 @@ class ProcessorBase(Module):
         real_source_sequence_length: int,
         runtime_shape: "AttentionRuntimeShape | None",
     ) -> tuple[Tensor, tuple[int, ...] | None]:
+        self.VALIDATOR.validate_standard_relative_position_query_shape(
+            query, self.num_heads
+        )
         if query.dim() == 3:
             return self.__reshape_flattened_head_query(
                 query, real_source_sequence_length, runtime_shape
             )
-        if query.dim() == 5:
-            return self.__reshape_expert_head_query(query, real_source_sequence_length)
         return query, None
 
     def __reshape_flattened_head_query(
@@ -111,12 +115,13 @@ class ProcessorBase(Module):
         )
         target_sequence_length = query.size(-2)
         branch_count = query.size(0)
-        base_branch_count = batch_size * self.num_heads
-        branch_multiplier = branch_count // base_branch_count
-        flattened_batch_size = batch_size * branch_multiplier
+        expected_branch_count = batch_size * self.num_heads
+        self.VALIDATOR.validate_relative_position_query_branch_count(
+            branch_count, expected_branch_count
+        )
         query_head_dimension = query.size(-1)
         prepared_query_shape = (
-            flattened_batch_size,
+            batch_size,
             self.num_heads,
             target_sequence_length,
             query_head_dimension,
@@ -125,29 +130,6 @@ class ProcessorBase(Module):
         restore_shape = (
             branch_count,
             target_sequence_length,
-            real_source_sequence_length,
-        )
-        return prepared_query, restore_shape
-
-    @staticmethod
-    def __reshape_expert_head_query(
-        query: Tensor,
-        real_source_sequence_length: int,
-    ) -> tuple[Tensor, tuple[int, ...]]:
-        batch_size, branch_multiplier, num_heads, target_length, head_dim = query.shape
-        flattened_batch_size = batch_size * branch_multiplier
-        prepared_query_shape = (
-            flattened_batch_size,
-            num_heads,
-            target_length,
-            head_dim,
-        )
-        prepared_query = query.contiguous().view(prepared_query_shape)
-        restore_shape = (
-            batch_size,
-            branch_multiplier,
-            num_heads,
-            target_length,
             real_source_sequence_length,
         )
         return prepared_query, restore_shape

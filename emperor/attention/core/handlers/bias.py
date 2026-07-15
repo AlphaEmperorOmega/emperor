@@ -81,13 +81,13 @@ class KeyValueBias(Module):
         projection: Tensor,
         runtime_shape: "AttentionRuntimeShape | None",
     ) -> Tensor:
-        expanded_bias = self.__expand_bias_vector(
+        expanded_bias = self._expand_bias_vector(
             bias_vector, projection, runtime_shape
         )
         projection_with_bias_vector = torch.cat([projection, expanded_bias], dim=1)
         return projection_with_bias_vector
 
-    def __expand_bias_vector(
+    def _expand_bias_vector(
         self,
         bias_vector: Tensor,
         projection: Tensor,
@@ -95,11 +95,14 @@ class KeyValueBias(Module):
     ) -> Tensor:
         batch_size = self.__resolve_batch_size(runtime_shape)
         branch_count = projection.size(0)
-        branch_multiplier = self.__compute_branch_multiplier(branch_count, batch_size)
+        expected_branch_count = batch_size * self.num_heads
+        self.VALIDATOR.validate_attention_ready_projection_branch_count(
+            branch_count,
+            expected_branch_count,
+        )
         head_dim = projection.size(-1)
         bias_by_head = bias_vector.reshape(self.num_heads, head_dim)
-        repetition_count = batch_size * branch_multiplier
-        expanded_bias = bias_by_head.repeat(repetition_count, 1)
+        expanded_bias = bias_by_head.repeat(batch_size, 1)
         return expanded_bias.reshape(branch_count, 1, head_dim)
 
     def __resolve_batch_size(
@@ -109,17 +112,6 @@ class KeyValueBias(Module):
         if runtime_shape is not None:
             return runtime_shape.batch_size
         return self.batch_size
-
-    def __compute_branch_multiplier(
-        self,
-        branch_count: int,
-        batch_size: int,
-    ) -> int:
-        base_branch_count = batch_size * self.num_heads
-        self.VALIDATOR.validate_attention_ready_projection_branch_count(
-            branch_count, base_branch_count
-        )
-        return branch_count // base_branch_count
 
     def __pad_masks_for_bias_vector(self, masks: "AttentionMasks") -> "AttentionMasks":
         key_padding_mask = self.__pad_mask(masks.key_padding_mask)

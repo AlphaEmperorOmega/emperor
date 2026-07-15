@@ -67,7 +67,7 @@ class Mask:
         masks: AttentionMasks,
         runtime_shape: AttentionRuntimeShape,
     ) -> AttentionMasks:
-        self.__validate_mask_shapes(
+        self._validate_mask_shapes(
             masks.key_padding_mask, masks.attention_mask, runtime_shape
         )
         key_padding_mask = self.__canonical_mask(
@@ -81,7 +81,7 @@ class Mask:
         )
         return updated_masks
 
-    def __validate_mask_shapes(
+    def _validate_mask_shapes(
         self,
         key_padding_mask: Tensor | None,
         attention_mask: Tensor | None,
@@ -90,9 +90,7 @@ class Mask:
         batch_size = runtime_shape.batch_size
         target_length = runtime_shape.target_sequence_length
         source_length = runtime_shape.source_sequence_length
-        standard_branch_count, expert_branch_count = (
-            self._resolve_attention_mask_branch_counts(batch_size)
-        )
+        standard_branch_count = runtime_shape.branch_count(self.num_heads)
         expected_key_padding_shape = (batch_size, source_length)
         expected_attention_sequence_shape = (target_length, source_length)
         self.VALIDATOR.validate_mask_shapes(
@@ -101,15 +99,7 @@ class Mask:
             expected_key_padding_shape=expected_key_padding_shape,
             expected_attention_sequence_shape=expected_attention_sequence_shape,
             standard_branch_count=standard_branch_count,
-            expert_branch_count=expert_branch_count,
         )
-
-    def _resolve_attention_mask_branch_counts(
-        self,
-        batch_size: int,
-    ) -> tuple[int, int | None]:
-        standard_branch_count = batch_size * self.num_heads
-        return standard_branch_count, None
 
     def __canonical_mask(
         self,
