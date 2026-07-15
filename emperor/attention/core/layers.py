@@ -6,6 +6,7 @@ from emperor.attention.core._validator import MultiHeadAttentionValidator
 from emperor.attention.core.handlers.batch import BatchDimensionManager
 from emperor.attention.core.handlers.bias import KeyValueBias
 from emperor.attention.core.handlers.zero_attention import ZeroAttention
+from emperor.attention.core.runtime import QKV, AttentionMasks
 from emperor.base.module import Module
 
 if TYPE_CHECKING:
@@ -67,35 +68,41 @@ class MultiHeadAttentionAbstract(Module):
         static_v: Tensor | None = None,
     ) -> tuple[Tensor, Tensor | None, Tensor | None]:
         self.projector.get_auxiliary_loss_and_clear()
-        q, k, v = self.batch_manager.enforce_batch_as_second_dim(q, k, v)
-        self.VALIDATOR.validate_forward_inputs(
-            self, q, k, v, k_padding_mask, attention_mask
+        qkv = QKV(query=q, key=k, value=v)
+        masks = AttentionMasks(
+            key_padding_mask=k_padding_mask,
+            attention_mask=attention_mask,
         )
-        q, k, v, k_padding_mask, attention_mask = (
-            self.batch_manager.add_batch_dimension_if_missing(
-                q, k, v, k_padding_mask, attention_mask
+        self.VALIDATOR.validate_forward_inputs(self, qkv, masks)
+        qkv, masks, runtime_shape = (
+            self.batch_manager.convert_inputs_to_internal_layout(
+                qkv, masks, static_keys=static_k
             )
         )
-        attention_mask = self.masks.resolve_causal_attention_mask(q, attention_mask)
-        k_padding_mask, attention_mask = self.masks.process_attention_masks(
-            k_padding_mask, attention_mask
+        self.VALIDATOR.validate_runtime_tensors(self, qkv)
+        self.VALIDATOR.validate_static_key_value_inputs(
+            self, qkv, static_k, static_v, runtime_shape
         )
-        q, k, v = self.projector.compute_qkv_projections(q, k, v)
-        k, v, k_padding_mask, attention_mask = self.bias.add_kv_learnable_bias_vectors(
-            k, v, k_padding_mask, attention_mask
+        self.VALIDATOR.validate_runtime_shape(self, runtime_shape)
+        masks = self.masks.prepare_attention_masks(qkv.query, masks, runtime_shape)
+        qkv = self.projector.compute_qkv_projections(qkv)
+        qkv = self.reshaper.reshape_qkv_for_attention(
+            qkv, static_k, static_v, runtime_shape
         )
-        q, k, v = self.reshaper.reshape_qkv_for_attention(q, k, v, static_k, static_v)
-        k, v, attention_mask, k_padding_mask = self.zero_attention.add_zero_attention(
-            k, v, attention_mask, k_padding_mask
+        qkv, masks, runtime_shape = self.bias.add_kv_learnable_bias_vectors(
+            qkv, masks, runtime_shape
         )
-        merged_masks = self.masks.merge_padding_and_attention_mask(
-            k, k_padding_mask, attention_mask
+        qkv, masks, runtime_shape = self.zero_attention.add_zero_attention(
+            qkv, masks, runtime_shape
+        )
+        merged_attention_mask = self.masks.merge_padding_and_attention_mask(
+            qkv.key, masks, runtime_shape
         )
         attention_output, attention_weights = self.processor.compute_attention(
-            q, k, v, merged_masks
+            qkv, merged_attention_mask, runtime_shape
         )
-        attention_output = self.batch_manager.reverse_enforced_batch_as_second_dim(
-            attention_output
+        attention_output = self.batch_manager.restore_output_layout(
+            attention_output, runtime_shape
         )
         auxiliary_loss = self.projector.get_auxiliary_loss_and_clear()
         return attention_output, attention_weights, auxiliary_loss
