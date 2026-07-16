@@ -1,0 +1,208 @@
+from __future__ import annotations
+
+from dataclasses import replace
+from typing import Any
+
+from emperor_workbench.model_packages import normalize_preset_token
+from emperor_workbench.run_plans._records import (
+    TrainingRunPlanSummaryView,
+    TrainingRunPlanView,
+    TrainingRunView,
+)
+
+
+def _summarize(runs: list[TrainingRunView]) -> TrainingRunPlanSummaryView:
+    statuses = [run.status for run in runs]
+    completed_epochs = 0
+    remaining_epochs = 0
+    total_epochs = 0
+    for run in runs:
+        row_total = run.total_epochs
+        row_current = run.current_epoch
+        row_status = run.status
+        total_epochs += row_total
+        if row_status == "Completed":
+            row_done = row_total
+        elif row_status in {"Running", "Failed", "Cancelled"}:
+            row_done = min(row_current, row_total)
+        else:
+            row_done = 0
+        completed_epochs += row_done
+        if row_status in {"Pending", "Running"}:
+            remaining_epochs += max(0, row_total - row_done)
+
+    return TrainingRunPlanSummaryView(
+        total_runs=len(runs),
+        completed_runs=statuses.count("Completed"),
+        running_runs=statuses.count("Running"),
+        pending_runs=statuses.count("Pending"),
+        failed_runs=statuses.count("Failed"),
+        cancelled_runs=statuses.count("Cancelled"),
+        skipped_runs=statuses.count("Skipped"),
+        total_epochs=total_epochs,
+        completed_epochs=completed_epochs,
+        remaining_epochs=remaining_epochs,
+    )
+
+
+def _run_for_progress_event(
+    *,
+    event: dict[str, Any],
+    runs: list[TrainingRunView],
+    run_by_id: dict[str, int],
+) -> int | None:
+    run_id = event.get("runId")
+    if isinstance(run_id, str) and run_id in run_by_id:
+        return run_by_id[run_id]
+
+    run_index = event.get("runIndex")
+    if isinstance(run_index, int):
+        if 1 <= run_index <= len(runs):
+            return run_index - 1
+        if 0 <= run_index < len(runs):
+            return run_index
+
+    dataset = event.get("dataset")
+    preset = normalize_preset_token(event.get("preset"))
+    if dataset is None:
+        return None
+    candidates = [
+        index
+        for index, run in enumerate(runs)
+        if run.dataset == dataset
+        and (
+            preset is None
+            or normalize_preset_token(run.preset) == normalize_preset_token(preset)
+        )
+    ]
+    return next(
+        (
+            index
+            for index in candidates
+            if runs[index].status not in {"Completed", "Failed", "Cancelled"}
+        ),
+        candidates[0] if candidates else None,
+    )
+
+
+def _progress_event_epoch(event: dict[str, Any], total_epochs: int) -> int:
+    raw_epoch = event.get("epoch")
+    if not isinstance(raw_epoch, int):
+        return 0
+    return min(total_epochs, max(0, raw_epoch + 1))
+
+
+class RunPlanProgressProjector:
+    """Pure projections from Training Job progress events into a typed Run Plan."""
+
+    @staticmethod
+    def summarize(runs: list[TrainingRunView]) -> TrainingRunPlanSummaryView:
+        return _summarize(runs)
+
+    @staticmethod
+    def index(runs: list[TrainingRunView]) -> dict[str, int]:
+        return {run.id: index for index, run in enumerate(runs)}
+
+    @staticmethod
+    def apply(
+        *,
+        plan: TrainingRunPlanView,
+        run_by_id: dict[str, int],
+        event: dict[str, Any],
+    ) -> TrainingRunPlanView:
+        row_index = _run_for_progress_event(
+            event=event,
+            runs=plan.runs,
+            run_by_id=run_by_id,
+        )
+        if row_index is None:
+            return plan
+
+        runs = list(plan.runs)
+        row = runs[row_index]
+        event_type = event.get("type")
+        total_epochs = row.total_epochs
+        changes: dict[str, Any] = {}
+        if event.get("logDir"):
+            changes["log_dir"] = str(event["logDir"])
+        if isinstance(event.get("metrics"), dict):
+            changes["metrics"] = dict(event["metrics"])
+
+        if event_type == "dataset_started":
+            changes["status"] = "Running"
+            changes["current_epoch"] = max(0, row.current_epoch)
+        elif event_type in {
+            "epoch_started",
+            "step",
+            "validation",
+            "fit_completed",
+            "test_completed",
+        }:
+            changes["status"] = "Running"
+            changes["current_epoch"] = max(
+                row.current_epoch,
+                _progress_event_epoch(event, total_epochs),
+            )
+        elif event_type == "dataset_completed":
+            changes["status"] = "Completed"
+            changes["current_epoch"] = total_epochs
+        elif event_type == "error":
+            changes["status"] = "Failed"
+            changes["current_epoch"] = max(
+                row.current_epoch,
+                _progress_event_epoch(event, total_epochs),
+            )
+            changes["error"] = str(event.get("error") or "Training failed")
+            if event.get("traceback"):
+                changes["error_traceback"] = str(event.get("traceback"))
+
+        if not changes:
+            return plan
+        runs[row_index] = replace(row, **changes)
+        return replace(plan, runs=runs)
+
+    @staticmethod
+    def finalize(
+        plan: TrainingRunPlanView,
+        *,
+        job_status: str,
+        latest_failed_event: dict[str, Any] | None = None,
+    ) -> TrainingRunPlanView:
+        runs = list(plan.runs)
+        latest_failed_event = latest_failed_event or {}
+        if job_status == "cancelled":
+            for index, row in enumerate(runs):
+                if row.status == "Running":
+                    runs[index] = replace(row, status="Cancelled")
+                elif row.status == "Pending":
+                    runs[index] = replace(row, status="Skipped")
+        elif job_status == "failed":
+            failed_seen = any(row.status == "Failed" for row in runs)
+            for index, row in enumerate(runs):
+                if row.status == "Running":
+                    runs[index] = replace(row, status="Failed")
+                    failed_seen = True
+                elif row.status == "Pending":
+                    if not failed_seen:
+                        changes = {"status": "Failed", "error": "Training failed"}
+                        if latest_failed_event.get("traceback"):
+                            changes["error_traceback"] = str(
+                                latest_failed_event.get("traceback")
+                            )
+                        runs[index] = replace(row, **changes)
+                        failed_seen = True
+                    else:
+                        runs[index] = replace(row, status="Skipped")
+        elif job_status == "completed":
+            for index, row in enumerate(runs):
+                if row.status == "Running":
+                    runs[index] = replace(
+                        row,
+                        status="Completed",
+                        current_epoch=row.total_epochs,
+                    )
+
+        return replace(plan, runs=runs, summary=_summarize(runs))
+
+
+__all__ = ["RunPlanProgressProjector"]
