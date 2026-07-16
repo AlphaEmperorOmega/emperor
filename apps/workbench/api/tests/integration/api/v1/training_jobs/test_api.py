@@ -1,0 +1,997 @@
+from __future__ import annotations
+
+import asyncio
+import os
+import tempfile
+import unittest
+import uuid
+from pathlib import Path
+
+os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
+
+
+from emperor_workbench.settings import WorkbenchApiSettings
+from tests.support import lifespan_client
+from tests.support.training_jobs import (
+    FakeProcess,
+    FakeRunner,
+    TrainingJobServiceHarness,
+    create_app_with_training_service,
+)
+
+EXPECTED_TRAINING_JOB_RESPONSE_FIELDS = (
+    "id",
+    "status",
+    "modelType",
+    "model",
+    "preset",
+    "presets",
+    "experimentTask",
+    "datasets",
+    "overrides",
+    "search",
+    "plannedRunCount",
+    "runPlan",
+    "monitors",
+    "logFolder",
+    "createdAt",
+    "updatedAt",
+    "exitCode",
+    "pid",
+    "cancellationMode",
+    "currentPreset",
+    "currentDataset",
+    "epoch",
+    "step",
+    "metrics",
+    "logDir",
+    "events",
+    "eventCount",
+    "eventCounts",
+    "eventsTruncated",
+    "clusterGrowth",
+    "logTail",
+    "logTailTruncated",
+    "resultLinks",
+)
+
+EXPECTED_TRAINING_RUN_PLAN_RESPONSE_FIELDS = (
+    "modelType",
+    "model",
+    "preset",
+    "presets",
+    "experimentTask",
+    "datasets",
+    "overrides",
+    "search",
+    "logFolder",
+    "isRandomSearch",
+    "runs",
+    "summary",
+    "snapshotRevisions",
+)
+
+EXPECTED_TRAINING_RUN_RESPONSE_FIELDS = (
+    "id",
+    "index",
+    "status",
+    "preset",
+    "snapshotId",
+    "snapshotName",
+    "dataset",
+    "experimentTask",
+    "changes",
+    "overrides",
+    "command",
+    "commandArgv",
+    "commands",
+    "totalEpochs",
+    "currentEpoch",
+    "metrics",
+    "logDir",
+    "error",
+    "errorTraceback",
+)
+
+
+def _submitted_run_plan_payload(plan: dict[str, object]) -> dict[str, object]:
+    return {
+        "runs": [
+            {
+                key: row[key]
+                for key in (
+                    "id",
+                    "preset",
+                    "snapshotId",
+                    "snapshotName",
+                    "dataset",
+                    "overrides",
+                )
+                if key in row
+            }
+            for row in plan.get("runs", [])
+            if isinstance(row, dict)
+        ],
+        "snapshotRevisions": plan.get("snapshotRevisions", []),
+    }
+
+
+class TrainingApiLifecycleTests(unittest.TestCase):
+    def _create_test_app(
+        self,
+        root: Path,
+        *,
+        process: FakeProcess | None = None,
+    ):
+        logs_root = root / "logs"
+        manager = TrainingJobServiceHarness(
+            root=root / "jobs",
+            logs_root=logs_root,
+            runner=FakeRunner(process),
+        )
+        app = create_app_with_training_service(
+            WorkbenchApiSettings(
+                logs_root=str(logs_root),
+                snapshots_root=str(root / "snapshots"),
+                allow_unsafe_local_mutations=True,
+            ),
+            manager,
+        )
+        return app, manager
+
+    def test_run_plan_resolves_snapshot_ids_and_returns_semantic_revisions(
+        self,
+    ) -> None:
+        import httpx
+
+        with tempfile.TemporaryDirectory() as tmp:
+            app, _manager = self._create_test_app(Path(tmp))
+
+            async def call_api() -> tuple[httpx.Response, httpx.Response]:
+                async with lifespan_client(
+                    app,
+                    base_url="http://localhost",
+                    headers={"X-Workbench-Mutation": "true"},
+                ) as client:
+                    snapshot = await client.post(
+                        "/config-snapshots",
+                        headers={"Idempotency-Key": uuid.uuid4().hex},
+                        json={
+                            "modelType": "linears",
+                            "model": "linear",
+                            "preset": "baseline",
+                            "name": "wide",
+                            "overrides": {
+                                "HIDDEN_DIM": "128",
+                                "NUM_EPOCHS": "7",
+                            },
+                        },
+                    )
+                    plan = await client.post(
+                        "/training/run-plan",
+                        json={
+                            "modelType": "linears",
+                            "model": "linear",
+                            "preset": "baseline",
+                            "presets": [],
+                            "datasets": ["Mnist"],
+                            "overrides": {},
+                            "logFolder": "snapshot_api",
+                            "snapshotIds": [snapshot.json().get("id")],
+                        },
+                    )
+                    return snapshot, plan
+
+            snapshot, plan = asyncio.run(call_api())
+
+        self.assertEqual(snapshot.status_code, 200, snapshot.text)
+        self.assertEqual(plan.status_code, 200, plan.text)
+        payload = plan.json()
+        self.assertEqual(len(payload["runs"]), 1)
+        self.assertEqual(payload["runs"][0]["snapshotId"], snapshot.json()["id"])
+        self.assertEqual(payload["runs"][0]["snapshotName"], "wide")
+        self.assertEqual(payload["runs"][0]["totalEpochs"], 7)
+        self.assertEqual(payload["snapshotRevisions"][0]["id"], snapshot.json()["id"])
+
+    def test_training_run_plan_rejects_nested_override_object_at_api_boundary(
+        self,
+    ) -> None:
+        import httpx
+
+        with tempfile.TemporaryDirectory() as tmp:
+            app, _manager = self._create_test_app(Path(tmp))
+
+            async def call_api() -> httpx.Response:
+                async with lifespan_client(
+                    app,
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
+                ) as client:
+                    return await client.post(
+                        "/training/run-plan",
+                        json={
+                            "modelType": "linears",
+                            "model": "linear",
+                            "preset": "baseline",
+                            "datasets": ["Mnist"],
+                            "overrides": {"scheduler": {"name": "cosine"}},
+                            "logFolder": "api_schema",
+                        },
+                    )
+
+            response = asyncio.run(call_api())
+
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("overrides", response.text)
+
+    def test_training_run_plan_accepts_and_validates_monitors(self) -> None:
+        import httpx
+
+        with tempfile.TemporaryDirectory() as tmp:
+            app, _manager = self._create_test_app(Path(tmp))
+
+            async def call_api() -> tuple[httpx.Response, httpx.Response]:
+                async with lifespan_client(
+                    app,
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
+                ) as client:
+                    accepted = await client.post(
+                        "/training/run-plan",
+                        json={
+                            "modelType": "linears",
+                            "model": "linear",
+                            "preset": "baseline",
+                            "datasets": ["Mnist"],
+                            "overrides": {},
+                            "logFolder": "monitor_api",
+                            "monitors": ["linear"],
+                        },
+                    )
+                    rejected = await client.post(
+                        "/training/run-plan",
+                        json={
+                            "modelType": "linears",
+                            "model": "linear",
+                            "preset": "baseline",
+                            "datasets": ["Mnist"],
+                            "overrides": {},
+                            "logFolder": "monitor_api",
+                            "monitors": ["missing"],
+                        },
+                    )
+                    return accepted, rejected
+
+            accepted, rejected = asyncio.run(call_api())
+
+        self.assertEqual(accepted.status_code, 200, accepted.text)
+        self.assertIn(
+            "--monitors linear",
+            accepted.json()["runs"][0]["command"],
+        )
+        self.assertEqual(rejected.status_code, 400)
+        self.assertIn("Unknown monitor option", rejected.text)
+
+    def test_training_run_plan_accepts_all_linear_adaptive_presets(self) -> None:
+        import httpx
+        from models.linears.linear_adaptive.presets import ExperimentPreset
+
+        presets = ExperimentPreset.cli_names()
+        self.assertGreaterEqual(len(presets), 70)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            app, _manager = self._create_test_app(Path(tmp))
+
+            async def call_api() -> httpx.Response:
+                async with lifespan_client(
+                    app,
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
+                ) as client:
+                    return await client.post(
+                        "/training/run-plan",
+                        json={
+                            "modelType": "linears",
+                            "model": "linear_adaptive",
+                            "preset": "baseline",
+                            "presets": presets,
+                            "datasets": ["Mnist"],
+                            "overrides": {},
+                            "logFolder": "all_adaptive_presets",
+                        },
+                    )
+
+            response = asyncio.run(call_api())
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(payload["model"], "linear_adaptive")
+        self.assertEqual(payload["presets"], presets)
+        self.assertEqual(payload["summary"]["totalRuns"], len(presets))
+        self.assertEqual(len(payload["runs"]), len(presets))
+
+    def test_training_run_plan_rejects_overlarge_search_axis(self) -> None:
+        import httpx
+
+        with tempfile.TemporaryDirectory() as tmp:
+            app, _manager = self._create_test_app(Path(tmp))
+
+            async def call_api() -> httpx.Response:
+                async with lifespan_client(
+                    app,
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
+                ) as client:
+                    return await client.post(
+                        "/training/run-plan",
+                        json={
+                            "modelType": "linears",
+                            "model": "linear",
+                            "preset": "baseline",
+                            "datasets": ["Mnist"],
+                            "overrides": {},
+                            "logFolder": "search_limit",
+                            "search": {
+                                "mode": "grid",
+                                "values": {"hidden_dim": [128 for _ in range(51)]},
+                            },
+                        },
+                    )
+
+            response = asyncio.run(call_api())
+
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("at most 50 items", response.text)
+
+    def test_training_run_plan_rejects_overlarge_grid_plan(self) -> None:
+        import httpx
+
+        with tempfile.TemporaryDirectory() as tmp:
+            app, _manager = self._create_test_app(Path(tmp))
+
+            async def call_api() -> httpx.Response:
+                async with lifespan_client(
+                    app,
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
+                ) as client:
+                    return await client.post(
+                        "/training/run-plan",
+                        json={
+                            "modelType": "linears",
+                            "model": "linear",
+                            "preset": "baseline",
+                            "datasets": ["Mnist"],
+                            "overrides": {},
+                            "logFolder": "search_limit",
+                            "search": {
+                                "mode": "grid",
+                                "values": {
+                                    "learning_rate": [0.0001, 0.001, 0.01],
+                                    "hidden_dim": [16, 32, 64, 128, 256, 512],
+                                    "stack_num_layers": [2, 4, 8, 16, 32],
+                                    "stack_dropout_probability": [
+                                        0.0,
+                                        0.1,
+                                        0.2,
+                                        0.3,
+                                        0.4,
+                                        0.5,
+                                    ],
+                                    "stack_layer_norm_position": [
+                                        "DISABLED",
+                                        "DEFAULT",
+                                        "BEFORE",
+                                        "AFTER",
+                                    ],
+                                },
+                            },
+                        },
+                    )
+
+            response = asyncio.run(call_api())
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("planned runs exceeds 2000", response.text)
+
+    def test_training_run_plan_deduplicates_search_values(self) -> None:
+        import httpx
+
+        with tempfile.TemporaryDirectory() as tmp:
+            app, _manager = self._create_test_app(Path(tmp))
+
+            async def call_api() -> httpx.Response:
+                async with lifespan_client(
+                    app,
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
+                ) as client:
+                    return await client.post(
+                        "/training/run-plan",
+                        json={
+                            "modelType": "linears",
+                            "model": "linear",
+                            "preset": "baseline",
+                            "datasets": ["Mnist"],
+                            "overrides": {},
+                            "logFolder": "search_limit",
+                            "search": {
+                                "mode": "grid",
+                                "values": {"hidden_dim": [128, 128, 128]},
+                            },
+                        },
+                    )
+
+            response = asyncio.run(call_api())
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["summary"]["totalRuns"], 1)
+        self.assertEqual(response.json()["search"]["values"]["HIDDEN_DIM"], [128])
+
+    def test_training_random_search_samples_without_rejecting_large_grid(
+        self,
+    ) -> None:
+        import httpx
+
+        with tempfile.TemporaryDirectory() as tmp:
+            app, _manager = self._create_test_app(Path(tmp))
+
+            async def call_api() -> httpx.Response:
+                async with lifespan_client(
+                    app,
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
+                ) as client:
+                    return await client.post(
+                        "/training/run-plan",
+                        json={
+                            "modelType": "linears",
+                            "model": "linear",
+                            "preset": "baseline",
+                            "datasets": ["Mnist"],
+                            "overrides": {},
+                            "logFolder": "search_limit",
+                            "search": {
+                                "mode": "random",
+                                "randomSamples": 3,
+                                "values": {
+                                    "learning_rate": [0.0001, 0.001, 0.01],
+                                    "hidden_dim": [16, 32, 64, 128, 256, 512],
+                                    "stack_num_layers": [2, 4, 8, 16, 32],
+                                    "stack_dropout_probability": [
+                                        0.0,
+                                        0.1,
+                                        0.2,
+                                        0.3,
+                                        0.4,
+                                        0.5,
+                                    ],
+                                    "stack_layer_norm_position": [
+                                        "DISABLED",
+                                        "DEFAULT",
+                                        "BEFORE",
+                                        "AFTER",
+                                    ],
+                                },
+                            },
+                        },
+                    )
+
+            response = asyncio.run(call_api())
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["summary"]["totalRuns"], 3)
+
+    def test_training_run_plan_rejects_overlarge_aggregate_plan(
+        self,
+    ) -> None:
+        import httpx
+
+        with tempfile.TemporaryDirectory() as tmp:
+            app, _manager = self._create_test_app(Path(tmp))
+
+            async def call_api() -> httpx.Response:
+                async with lifespan_client(
+                    app,
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
+                ) as client:
+                    return await client.post(
+                        "/training/run-plan",
+                        json={
+                            "modelType": "linears",
+                            "model": "linear",
+                            "preset": "baseline",
+                            "presets": ["baseline", "gating"],
+                            "datasets": ["Mnist", "Cifar10"],
+                            "overrides": {},
+                            "logFolder": "search_limit",
+                            "search": {
+                                "mode": "random",
+                                "randomSamples": 1000,
+                                "values": {
+                                    "learning_rate": [0.0001, 0.001, 0.01],
+                                    "hidden_dim": [16, 32, 64, 128, 256, 512],
+                                    "stack_num_layers": [2, 4, 8, 16, 32],
+                                    "stack_dropout_probability": [
+                                        0.0,
+                                        0.1,
+                                        0.2,
+                                        0.3,
+                                        0.4,
+                                        0.5,
+                                    ],
+                                    "stack_layer_norm_position": [
+                                        "DISABLED",
+                                        "DEFAULT",
+                                        "BEFORE",
+                                        "AFTER",
+                                    ],
+                                },
+                            },
+                        },
+                    )
+
+            response = asyncio.run(call_api())
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("4000 planned runs exceeds 2000", response.text)
+
+    def test_training_create_and_run_plan_responses_preserve_public_shape(self) -> None:
+        import httpx
+
+        with tempfile.TemporaryDirectory() as tmp:
+            app, _manager = self._create_test_app(Path(tmp))
+
+            async def call_api() -> tuple[httpx.Response, httpx.Response]:
+                async with lifespan_client(
+                    app,
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
+                ) as client:
+                    run_plan_response = await client.post(
+                        "/training/run-plan",
+                        json={
+                            "modelType": "linears",
+                            "model": "linear",
+                            "preset": "baseline",
+                            "presets": ["baseline"],
+                            "datasets": ["Mnist"],
+                            "overrides": {"hidden_dim": "128"},
+                            "logFolder": "api_schema",
+                            "search": None,
+                        },
+                    )
+                    create_response = await client.post(
+                        "/training/jobs",
+                        json={
+                            "modelType": "linears",
+                            "model": "linear",
+                            "preset": "baseline",
+                            "presets": ["baseline"],
+                            "datasets": ["Mnist"],
+                            "overrides": {"hidden_dim": "128"},
+                            "logFolder": "api_schema",
+                            "monitors": ["linear"],
+                            "search": None,
+                            "runPlan": _submitted_run_plan_payload(
+                                run_plan_response.json()
+                            ),
+                        },
+                    )
+                    return run_plan_response, create_response
+
+            run_plan_response, create_response = asyncio.run(call_api())
+
+        self.assertEqual(run_plan_response.status_code, 200, run_plan_response.text)
+        run_plan_payload = run_plan_response.json()
+        self.assertEqual(
+            tuple(run_plan_payload),
+            EXPECTED_TRAINING_RUN_PLAN_RESPONSE_FIELDS,
+        )
+        self.assertEqual(run_plan_payload["modelType"], "linears")
+        self.assertEqual(run_plan_payload["model"], "linear")
+        self.assertEqual(run_plan_payload["preset"], "baseline")
+        self.assertEqual(run_plan_payload["presets"], ["baseline"])
+        self.assertEqual(run_plan_payload["datasets"], ["Mnist"])
+        self.assertEqual(run_plan_payload["logFolder"], "api_schema")
+        self.assertEqual(len(run_plan_payload["runs"]), 1)
+        self.assertEqual(
+            tuple(run_plan_payload["runs"][0]),
+            EXPECTED_TRAINING_RUN_RESPONSE_FIELDS,
+        )
+
+        self.assertEqual(create_response.status_code, 200, create_response.text)
+        create_payload = create_response.json()
+        self.assertEqual(tuple(create_payload), EXPECTED_TRAINING_JOB_RESPONSE_FIELDS)
+        self.assertEqual(create_payload["status"], "running")
+        self.assertEqual(create_payload["modelType"], "linears")
+        self.assertEqual(create_payload["model"], "linear")
+        self.assertEqual(create_payload["preset"], "baseline")
+        self.assertEqual(create_payload["presets"], ["baseline"])
+        self.assertEqual(create_payload["datasets"], ["Mnist"])
+        self.assertEqual(create_payload["monitors"], ["linear"])
+        self.assertEqual(create_payload["logFolder"], "api_schema")
+        self.assertEqual(create_payload["plannedRunCount"], 1)
+        self.assertEqual(tuple(create_payload["runPlan"]), tuple(run_plan_payload))
+        self.assertEqual(create_payload["events"][-1]["type"], "job_started")
+        self.assertEqual(create_payload["resultLinks"], [])
+        for internal_key in ("command", "root", "process"):
+            self.assertNotIn(internal_key, create_payload)
+
+    def test_training_job_rejects_duplicate_submitted_run_ids(self) -> None:
+        import httpx
+
+        with tempfile.TemporaryDirectory() as tmp:
+            app, manager = self._create_test_app(Path(tmp))
+
+            async def call_api() -> httpx.Response:
+                async with lifespan_client(
+                    app,
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
+                ) as client:
+                    run_plan_response = await client.post(
+                        "/training/run-plan",
+                        json={
+                            "modelType": "linears",
+                            "model": "linear",
+                            "preset": "baseline",
+                            "datasets": ["Mnist"],
+                            "overrides": {},
+                            "logFolder": "duplicate_ids",
+                        },
+                    )
+                    run_plan = run_plan_response.json()
+                    duplicate = dict(run_plan["runs"][0])
+                    duplicate["index"] = 2
+                    run_plan["runs"].append(duplicate)
+                    submitted_run_plan = _submitted_run_plan_payload(run_plan)
+                    return await client.post(
+                        "/training/jobs",
+                        json={
+                            "modelType": "linears",
+                            "model": "linear",
+                            "preset": "baseline",
+                            "datasets": ["Mnist"],
+                            "overrides": {},
+                            "logFolder": "duplicate_ids",
+                            "monitors": [],
+                            "runPlan": submitted_run_plan,
+                        },
+                    )
+
+            response = asyncio.run(call_api())
+
+        self.assertEqual(response.status_code, 400, response.text)
+        self.assertEqual(
+            response.json(),
+            {"detail": "Run plan contains duplicate run id 'run-0001'."},
+        )
+        self.assertEqual(manager.runner.commands, [])
+
+    def test_training_job_events_endpoint_paginates_progress_history(self) -> None:
+        import httpx
+
+        with tempfile.TemporaryDirectory() as tmp:
+            app, manager = self._create_test_app(Path(tmp))
+
+            async def call_api() -> tuple[httpx.Response, httpx.Response]:
+                async with lifespan_client(
+                    app,
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
+                ) as client:
+                    create_response = await client.post(
+                        "/training/jobs",
+                        json={
+                            "modelType": "linears",
+                            "model": "linear",
+                            "preset": "baseline",
+                            "datasets": ["Mnist"],
+                            "overrides": {},
+                            "logFolder": "history_api",
+                            "monitors": [],
+                        },
+                    )
+                    job_id = create_response.json()["id"]
+                    for step in range(5):
+                        manager.append_progress_event(
+                            job_id,
+                            {
+                                "type": "step",
+                                "status": "running",
+                                "dataset": "Mnist",
+                                "preset": "baseline",
+                                "runIndex": 1,
+                                "step": step,
+                            },
+                        )
+                    events_response = await client.get(
+                        f"/training/jobs/{job_id}/events?offset=2&limit=3"
+                    )
+                    return create_response, events_response
+
+            create_response, events_response = asyncio.run(call_api())
+
+        self.assertEqual(create_response.status_code, 200, create_response.text)
+        self.assertEqual(events_response.status_code, 200, events_response.text)
+        payload = events_response.json()
+        self.assertEqual(
+            set(payload),
+            {"jobId", "offset", "limit", "totalCount", "nextOffset", "events"},
+        )
+        self.assertEqual(payload["offset"], 2)
+        self.assertEqual(payload["limit"], 3)
+        self.assertEqual(payload["totalCount"], 6)
+        self.assertEqual(payload["nextOffset"], 5)
+        self.assertEqual([event["step"] for event in payload["events"]], [1, 2, 3])
+
+    def test_training_run_plan_rejects_path_like_dataset_input(self) -> None:
+        import httpx
+
+        with tempfile.TemporaryDirectory() as tmp:
+            app, _manager = self._create_test_app(Path(tmp))
+
+            async def call_api() -> httpx.Response:
+                async with lifespan_client(
+                    app,
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
+                ) as client:
+                    return await client.post(
+                        "/training/run-plan",
+                        json={
+                            "modelType": "linears",
+                            "model": "linear",
+                            "preset": "baseline",
+                            "datasets": ["./Mnist"],
+                            "overrides": {},
+                            "logFolder": "path_like_dataset",
+                            "search": None,
+                        },
+                    )
+
+            response = asyncio.run(call_api())
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("./Mnist", response.json()["detail"])
+        self.assertIn("filesystem path", response.json()["detail"])
+        self.assertIn("server-known dataset name", response.json()["detail"])
+
+    def test_training_job_rejects_path_like_dataset_input_before_side_effects(
+        self,
+    ) -> None:
+        import httpx
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            app, manager = self._create_test_app(root)
+
+            async def call_api() -> httpx.Response:
+                async with lifespan_client(
+                    app,
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
+                ) as client:
+                    return await client.post(
+                        "/training/jobs",
+                        json={
+                            "modelType": "linears",
+                            "model": "linear",
+                            "preset": "baseline",
+                            "datasets": ["./Mnist"],
+                            "overrides": {},
+                            "logFolder": "path_like_dataset",
+                            "monitors": [],
+                        },
+                    )
+
+            response = asyncio.run(call_api())
+
+            self.assertEqual(manager.active_job_payloads(), [])
+            self.assertEqual(list((root / "jobs").iterdir()), [])
+            self.assertFalse((root / "logs" / "path_like_dataset").exists())
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("./Mnist", response.json()["detail"])
+        self.assertIn("filesystem path", response.json()["detail"])
+        self.assertIn("server-known dataset name", response.json()["detail"])
+
+    def test_training_cancel_endpoint_preserves_lifecycle_behavior(self) -> None:
+        import httpx
+
+        with tempfile.TemporaryDirectory() as tmp:
+            process = FakeProcess()
+            app, _manager = self._create_test_app(Path(tmp), process=process)
+
+            async def call_api() -> tuple[httpx.Response, httpx.Response]:
+                async with lifespan_client(
+                    app,
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
+                ) as client:
+                    create_response = await client.post(
+                        "/training/jobs",
+                        json={
+                            "modelType": "linears",
+                            "model": "linear",
+                            "preset": "baseline",
+                            "datasets": ["Mnist"],
+                            "overrides": {},
+                            "logFolder": "api_cancel",
+                            "monitors": [],
+                        },
+                    )
+                    cancel_response = await client.post(
+                        f"/training/jobs/{create_response.json()['id']}/cancel"
+                    )
+                    return create_response, cancel_response
+
+            create_response, cancel_response = asyncio.run(call_api())
+
+        self.assertEqual(create_response.status_code, 200, create_response.text)
+        self.assertEqual(cancel_response.status_code, 200, cancel_response.text)
+        job_id = create_response.json()["id"]
+        payload = cancel_response.json()
+        self.assertEqual(payload["id"], job_id)
+        self.assertEqual(payload["status"], "cancelled")
+        self.assertTrue(process.terminated)
+        self.assertEqual(payload["events"][-1]["type"], "cancelled")
+        self.assertEqual(payload["events"][-1]["status"], "cancelled")
+        self.assertEqual(payload["events"][-1]["jobId"], job_id)
+        self.assertEqual(
+            [run["status"] for run in payload["runPlan"]["runs"]],
+            ["Skipped"],
+        )
+        self.assertEqual(payload["runPlan"]["summary"]["pendingRuns"], 0)
+        self.assertEqual(payload["runPlan"]["summary"]["skippedRuns"], 1)
+
+    def test_unknown_training_job_ids_remain_inspector_error_http_400(self) -> None:
+        import httpx
+
+        with tempfile.TemporaryDirectory() as tmp:
+            app, _manager = self._create_test_app(Path(tmp))
+
+            async def call_api() -> tuple[
+                httpx.Response,
+                httpx.Response,
+                httpx.Response,
+            ]:
+                async with lifespan_client(
+                    app,
+                    base_url="http://localhost",
+                    headers={
+                        "X-Workbench-Mutation": "true",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
+                ) as client:
+                    get_response = await client.get("/training/jobs/missing")
+                    cancel_response = await client.post("/training/jobs/missing/cancel")
+                    prefixed_response = await client.get("/v1/training/jobs/missing")
+                    return get_response, cancel_response, prefixed_response
+
+            get_response, cancel_response, prefixed_response = asyncio.run(call_api())
+
+        for response in (get_response, cancel_response):
+            with self.subTest(path=str(response.request.url)):
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(
+                    response.json(),
+                    {"detail": "Unknown training job 'missing'."},
+                )
+        self.assertEqual(prefixed_response.status_code, 404)
+
+    def test_reconcile_unknown_job_is_bearer_protected_and_audited(self) -> None:
+        import httpx
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            logs_root = root / "logs"
+            original_manager = TrainingJobServiceHarness(
+                root=root / "jobs",
+                logs_root=logs_root,
+                runner=FakeRunner(FakeProcess()),
+            )
+            created = original_manager.create_job_payload(
+                model="linears/linear",
+                preset="baseline",
+                datasets=["Mnist"],
+                overrides={},
+                log_folder="reconcile_api",
+                monitors=[],
+            )
+            job_id = str(created["id"])
+            manager = TrainingJobServiceHarness(
+                root=root / "jobs",
+                logs_root=logs_root,
+                runner=FakeRunner(),
+            )
+            self.assertEqual(manager.get_job_payload(job_id)["status"], "unknown")
+            app = create_app_with_training_service(
+                WorkbenchApiSettings(
+                    logs_root=str(logs_root),
+                    allow_unsafe_local_mutations=True,
+                    auth_mode="bearer",
+                    token="operator-token",
+                ),
+                manager,
+            )
+
+            async def call_api() -> tuple[httpx.Response, httpx.Response]:
+                headers = {
+                    "X-Workbench-Mutation": "true",
+                    "Idempotency-Key": uuid.uuid4().hex,
+                }
+                async with lifespan_client(
+                    app,
+                    base_url="http://localhost",
+                    headers=headers,
+                ) as client:
+                    missing_auth = await client.post(
+                        f"/training/jobs/{job_id}/reconcile",
+                        json={"action": "mark-failed", "reason": "worker absent"},
+                    )
+                    accepted = await client.post(
+                        f"/training/jobs/{job_id}/reconcile",
+                        headers={"Authorization": "Bearer operator-token"},
+                        json={"action": "mark-failed", "reason": "worker absent"},
+                    )
+                    return missing_auth, accepted
+
+            missing_auth, accepted = asyncio.run(call_api())
+
+        self.assertEqual(missing_auth.status_code, 401)
+        self.assertEqual(accepted.status_code, 200, accepted.text)
+        self.assertEqual(accepted.json()["status"], "failed")
+        self.assertIsNone(accepted.json()["exitCode"])
+        self.assertEqual(
+            accepted.json()["events"][-1]["type"],
+            "operator_reconciled_failed",
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
