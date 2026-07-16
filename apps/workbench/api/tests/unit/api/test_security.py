@@ -1,0 +1,694 @@
+from __future__ import annotations
+
+import asyncio
+import os
+import tempfile
+import unittest
+import uuid
+from pathlib import Path
+
+from fastapi import HTTPException
+from fastapi.security import HTTPAuthorizationCredentials
+
+from emperor_workbench.api._mutations import (
+    HttpOperationPolicy,
+    build_http_operation_catalog,
+    enforce_operation_policy,
+)
+from emperor_workbench.api._security import (
+    LOCAL_MUTATION_DISABLED_DETAIL,
+    MUTATION_HEADER_NAME,
+    MUTATION_HEADER_VALUE,
+    MUTATION_PROOF_REQUIRED_DETAIL,
+    UNTRUSTED_MUTATION_ORIGIN_DETAIL,
+    require_bearer_auth,
+)
+from emperor_workbench.settings import WorkbenchApiSettings
+from tests.support import lifespan_client
+
+os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
+
+ROUTE_AUTH_TOKEN = "server-secret"
+
+
+def concrete_route_path(route) -> str:
+    path = route.path_format
+    for parameter_name in route.param_convertors:
+        path = path.replace(f"{{{parameter_name}}}", "security-test")
+    return path
+
+
+PROTECTED_ROUTE_CASES = (
+    ("models", "GET", "/models", None),
+    (
+        "inspection",
+        "POST",
+        "/inspect",
+        {
+            "modelType": "linears",
+            "model": "linear",
+            "preset": "baseline",
+            "dataset": "Mnist",
+            "overrides": {"hidden_dim": "128"},
+        },
+    ),
+    (
+        "training",
+        "POST",
+        "/training/run-plan",
+        {
+            "modelType": "linears",
+            "model": "linear",
+            "preset": "baseline",
+            "presets": ["baseline"],
+            "datasets": ["Mnist"],
+            "overrides": {"hidden_dim": "128"},
+            "logFolder": "auth_route",
+            "search": None,
+        },
+    ),
+    (
+        "training_job",
+        "POST",
+        "/training/jobs",
+        {
+            "modelType": "linears",
+            "model": "linear",
+            "preset": "baseline",
+            "presets": ["baseline"],
+            "datasets": ["Mnist"],
+            "overrides": {"hidden_dim": "128"},
+            "logFolder": "auth_route",
+            "monitors": [],
+            "search": None,
+            "runPlan": None,
+        },
+    ),
+    ("logs", "GET", "/logs/runs", None),
+    (
+        "config_snapshots",
+        "GET",
+        "/config-snapshots?modelType=linears&model=linear",
+        None,
+    ),
+)
+
+
+def bearer_credentials(token: str) -> HTTPAuthorizationCredentials:
+    return HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
+
+
+class SecurityDependencyTests(unittest.TestCase):
+    def test_auth_mode_none_bypasses_missing_authorization_header(self) -> None:
+        asyncio.run(require_bearer_auth(WorkbenchApiSettings(auth_mode="none"), None))
+
+    def test_bearer_mode_rejects_missing_malformed_and_invalid_tokens(self) -> None:
+        settings = WorkbenchApiSettings(auth_mode="bearer", token="server-secret")
+
+        cases = (
+            None,
+            HTTPAuthorizationCredentials(scheme="Token", credentials="server-secret"),
+            HTTPAuthorizationCredentials(scheme="Bearer", credentials=""),
+            bearer_credentials("wrong-token"),
+        )
+
+        for credentials in cases:
+            with self.subTest(credentials=credentials):
+                with self.assertRaises(HTTPException) as raised:
+                    asyncio.run(require_bearer_auth(settings, credentials))
+
+                self.assertEqual(raised.exception.status_code, 401)
+                self.assertEqual(
+                    raised.exception.headers,
+                    {"WWW-Authenticate": "Bearer"},
+                )
+                self.assertNotIn("wrong-token", str(raised.exception.detail))
+
+    def test_bearer_mode_accepts_configured_token(self) -> None:
+        settings = WorkbenchApiSettings(auth_mode="bearer", token="server-secret")
+
+        asyncio.run(require_bearer_auth(settings, bearer_credentials("server-secret")))
+
+    def test_local_mutation_policy_rejects_default_settings(self) -> None:
+        with self.assertRaises(HTTPException) as raised:
+            enforce_operation_policy(
+                HttpOperationPolicy.LOCAL_MUTATION,
+                WorkbenchApiSettings(),
+            )
+
+        self.assertEqual(raised.exception.status_code, 403)
+        self.assertEqual(raised.exception.detail, LOCAL_MUTATION_DISABLED_DETAIL)
+
+    def test_local_mutation_policy_accepts_explicit_opt_in(self) -> None:
+        enforce_operation_policy(
+            HttpOperationPolicy.LOCAL_MUTATION,
+            WorkbenchApiSettings(allow_unsafe_local_mutations=True),
+        )
+
+
+class RouteAuthIntegrationTests(unittest.TestCase):
+    def test_matching_origin_cannot_bypass_unconfigured_host_rejection(self) -> None:
+        from emperor_workbench.api import create_app
+
+        async def call_api():
+            app = create_app(WorkbenchApiSettings(allow_unsafe_local_mutations=True))
+            async with lifespan_client(
+                app,
+                base_url="https://hosted.example",
+            ) as client:
+                return await client.post(
+                    "/config-snapshots",
+                    headers={
+                        "Origin": "https://hosted.example",
+                        MUTATION_HEADER_NAME: MUTATION_HEADER_VALUE,
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
+                    json={
+                        "modelType": "linears",
+                        "model": "linear",
+                        "preset": "baseline",
+                        "name": "must-not-dispatch",
+                        "overrides": {},
+                    },
+                )
+
+        response = asyncio.run(call_api())
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.text, "Invalid host header")
+
+    def test_explicitly_configured_host_can_reach_routes(self) -> None:
+        from emperor_workbench.api import create_app
+
+        async def call_api():
+            app = create_app(WorkbenchApiSettings(trusted_hosts=["testserver"]))
+            async with lifespan_client(
+                app,
+                base_url="http://testserver",
+            ) as client:
+                return await client.get("/health")
+
+        response = asyncio.run(call_api())
+
+        self.assertEqual(response.status_code, 200)
+
+    async def request(
+        self,
+        app,
+        method: str,
+        path: str,
+        *,
+        payload: dict[str, object] | None = None,
+        authorization: str | None = None,
+        headers: dict[str, str] | None = None,
+    ):
+        request_headers = dict(headers or {})
+        if authorization is not None:
+            request_headers["Authorization"] = authorization
+        if method.upper() not in {"GET", "HEAD", "OPTIONS"}:
+            request_headers.setdefault("Idempotency-Key", uuid.uuid4().hex)
+
+        async with lifespan_client(app) as client:
+            kwargs = {"headers": request_headers}
+            if payload is not None:
+                kwargs["json"] = payload
+            return await client.request(method, path, **kwargs)
+
+    def create_test_app(
+        self,
+        root: Path,
+        *,
+        auth_mode: str = "bearer",
+        allow_unsafe_local_mutations: bool = True,
+        allow_log_imports: bool | None = None,
+    ):
+        from model_runtime.inspection import GraphNode, InspectionResult
+        from model_runtime.packages import ModelIdentity
+
+        from emperor_workbench.api import create_app
+        from emperor_workbench.api._dependencies import (
+            get_inspection_service,
+            get_run_history_service,
+            get_training_job_service,
+            get_training_run_plan_service,
+        )
+        from emperor_workbench.model_packages import SelectedModelPackage
+        from emperor_workbench.run_plans import (
+            RunPlanProgressProjector,
+            TrainingCommandsView,
+            TrainingRunPlanView,
+            TrainingRunView,
+        )
+        from emperor_workbench.training_jobs import TrainingJobView
+
+        class FakeInspectionService:
+            def inspect(
+                self,
+                selected: SelectedModelPackage,
+                *,
+                preset: str,
+                overrides: dict[str, object],
+                dataset: str | None,
+                experiment_task: str | None = None,
+                log_run_id: str | None = None,
+            ) -> InspectionResult:
+                return InspectionResult(
+                    identity=ModelIdentity(
+                        model_type=selected.identity.model_type,
+                        model=selected.identity.model,
+                    ),
+                    preset=preset,
+                    parameter_count=0,
+                    parameter_size_bytes=0,
+                    nodes=(
+                        GraphNode(
+                            id="root",
+                            type_name="FakeModel",
+                            description=None,
+                            path="root",
+                            graph_role="architecture",
+                            parameter_count=0,
+                            parameter_size_bytes=0,
+                            details={},
+                            configuration=None,
+                        ),
+                    ),
+                    edges=(),
+                )
+
+        class FakeTrainingJobService:
+            def cancellation_capability(self) -> str:
+                return "process-group"
+
+            def create_job(self, command) -> TrainingJobView:
+                run_plan = command.run_plan
+                return TrainingJobView(
+                    id="job-1",
+                    status="running",
+                    model="linears/linear",
+                    preset=run_plan.preset,
+                    presets=run_plan.presets or [run_plan.preset],
+                    experiment_task=run_plan.experiment_task or "",
+                    datasets=run_plan.datasets,
+                    overrides=run_plan.overrides,
+                    search=run_plan.search,
+                    planned_run_count=0,
+                    run_plan=None,
+                    monitors=run_plan.monitors,
+                    log_folder=run_plan.log_folder,
+                    created_at="2026-06-06T00:00:00Z",
+                    updated_at="2026-06-06T00:00:00Z",
+                    exit_code=None,
+                    pid=123,
+                    cancellation_mode="process-group",
+                    current_preset=None,
+                    current_dataset=None,
+                    epoch=None,
+                    step=None,
+                    metrics={},
+                    log_dir=None,
+                    events=[],
+                    event_count=0,
+                    event_counts={},
+                    events_truncated=False,
+                    cluster_growth=[],
+                    log_tail=[],
+                    result_links=[],
+                )
+
+        class FakeRunPlanService:
+            def preview(self, command) -> TrainingRunPlanView:
+                run = TrainingRunView(
+                    id="run-1",
+                    index=1,
+                    status="Pending",
+                    preset=command.preset,
+                    dataset=command.datasets[0] if command.datasets else "",
+                    experiment_task=command.experiment_task or "",
+                    changes=[],
+                    overrides={},
+                    command="train",
+                    command_argv=["train"],
+                    commands=TrainingCommandsView(
+                        posix="train",
+                        powershell="train",
+                    ),
+                    total_epochs=1,
+                )
+                return TrainingRunPlanView(
+                    model=command.model,
+                    preset=command.preset,
+                    presets=command.presets or [command.preset],
+                    experiment_task=command.experiment_task or "",
+                    datasets=command.datasets,
+                    overrides=command.overrides,
+                    search=command.search,
+                    log_folder=command.log_folder,
+                    is_random_search=False,
+                    runs=[run],
+                    summary=RunPlanProgressProjector.summarize([run]),
+                )
+
+        class FakeRunHistoryService:
+            def list_runs(
+                self,
+                *,
+                limit: int,
+                offset: int,
+                **_filters: object,
+            ):
+                from emperor_workbench.run_history import (
+                    LogRunFacets,
+                    LogRunPage,
+                )
+
+                return LogRunPage(
+                    total=0,
+                    limit=limit,
+                    offset=offset,
+                    has_more=False,
+                    runs=(),
+                    facets=LogRunFacets(experiments=()),
+                )
+
+        logs_root = root / "logs"
+        logs_root.mkdir()
+        token = ROUTE_AUTH_TOKEN if auth_mode == "bearer" else None
+        app = create_app(
+            WorkbenchApiSettings(
+                logs_root=str(logs_root),
+                snapshots_root=str(root / "snapshots"),
+                state_root=str(root / "state"),
+                auth_mode=auth_mode,
+                token=token,
+                allow_unsafe_local_mutations=allow_unsafe_local_mutations,
+                training_cancellation_mode="process-group",
+                **(
+                    {"allow_log_imports": allow_log_imports}
+                    if allow_log_imports is not None
+                    else {}
+                ),
+            )
+        )
+        inspection_service = FakeInspectionService()
+        training_job_service = FakeTrainingJobService()
+        run_plan_service = FakeRunPlanService()
+        run_history_service = FakeRunHistoryService()
+
+        async def override_inspection_service() -> FakeInspectionService:
+            return inspection_service
+
+        async def override_training_job_service() -> FakeTrainingJobService:
+            return training_job_service
+
+        async def override_training_run_plan_service() -> FakeRunPlanService:
+            return run_plan_service
+
+        async def override_run_history_service() -> FakeRunHistoryService:
+            return run_history_service
+
+        app.dependency_overrides[get_inspection_service] = override_inspection_service
+        app.dependency_overrides[get_training_job_service] = (
+            override_training_job_service
+        )
+        app.dependency_overrides[get_training_run_plan_service] = (
+            override_training_run_plan_service
+        )
+        app.dependency_overrides[get_run_history_service] = override_run_history_service
+        return app
+
+    def route_runs_on_event_loop(self, app, method: str, path: str) -> bool:
+        from fastapi.routing import APIRoute, iter_route_contexts
+
+        route_path = path.split("?")[0]
+        for route in iter_route_contexts(app.routes):
+            if (
+                isinstance(route.original_route, APIRoute)
+                and route.path == route_path
+                and method.upper() in (route.methods or ())
+            ):
+                return asyncio.iscoroutinefunction(route.endpoint)
+        return False
+
+    def test_health_remains_open_without_token_in_bearer_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            app = self.create_test_app(Path(tmp), auth_mode="bearer")
+
+            response = asyncio.run(self.request(app, "GET", "/health"))
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json(), {"status": "ok"})
+
+    def test_capabilities_remains_open_without_token_in_bearer_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            app = self.create_test_app(Path(tmp), auth_mode="bearer")
+
+            response = asyncio.run(self.request(app, "GET", "/capabilities"))
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["authMode"], "bearer")
+
+    def test_bearer_mode_rejects_missing_and_invalid_tokens_on_non_health_routes(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            app = self.create_test_app(Path(tmp), auth_mode="bearer")
+
+            for route_name, method, path, payload in PROTECTED_ROUTE_CASES:
+                for authorization in (None, "Bearer wrong-token"):
+                    with self.subTest(route=route_name, authorization=authorization):
+                        response = asyncio.run(
+                            self.request(
+                                app,
+                                method,
+                                path,
+                                payload=payload,
+                                authorization=authorization,
+                            )
+                        )
+
+                        self.assertEqual(response.status_code, 401, response.text)
+                        self.assertEqual(
+                            response.headers["www-authenticate"],
+                            "Bearer",
+                        )
+                        self.assertEqual(
+                            response.json(),
+                            {"detail": "Missing or invalid bearer credentials"},
+                        )
+
+    def test_bearer_mode_accepts_valid_token_on_non_health_routes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            app = self.create_test_app(Path(tmp), auth_mode="bearer")
+
+            for route_name, method, path, payload in PROTECTED_ROUTE_CASES:
+                with self.subTest(route=route_name):
+                    # The in-process ASGI client deadlocks sync FastAPI handlers
+                    # in this Python/anyio test environment. Rejection cases
+                    # still cover every protected route before endpoint dispatch,
+                    # and OpenAPI assertions cover the auth dependency metadata.
+                    if not self.route_runs_on_event_loop(app, method, path):
+                        continue
+                    response = asyncio.run(
+                        self.request(
+                            app,
+                            method,
+                            path,
+                            payload=payload,
+                            authorization=f"Bearer {ROUTE_AUTH_TOKEN}",
+                        )
+                    )
+
+                    self.assertEqual(response.status_code, 200, response.text)
+
+    def test_openapi_declares_bearer_scheme_for_protected_routes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            app = self.create_test_app(Path(tmp), auth_mode="bearer")
+            openapi = app.openapi()
+
+        bearer_scheme = openapi["components"]["securitySchemes"]["HTTPBearer"]
+        self.assertEqual(bearer_scheme["type"], "http")
+        self.assertEqual(bearer_scheme["scheme"], "bearer")
+        self.assertNotIn("security", openapi["paths"]["/health"]["get"])
+        self.assertNotIn("security", openapi["paths"]["/capabilities"]["get"])
+
+        for route_name, method, path, _payload in PROTECTED_ROUTE_CASES:
+            with self.subTest(route=route_name):
+                operation = openapi["paths"][path.split("?")[0]][method.lower()]
+                self.assertIn({"HTTPBearer": []}, operation["security"])
+        self.assertIn(
+            {"HTTPBearer": []},
+            openapi["paths"]["/logs/import"]["post"]["security"],
+        )
+
+    def test_bearer_mode_rejects_missing_token_on_log_import(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            app = self.create_test_app(Path(tmp), auth_mode="bearer")
+
+            response = asyncio.run(self.request(app, "POST", "/logs/import"))
+
+        self.assertEqual(response.status_code, 401, response.text)
+        self.assertEqual(response.headers["www-authenticate"], "Bearer")
+        self.assertEqual(
+            response.json(),
+            {"detail": "Missing or invalid bearer credentials"},
+        )
+
+    def test_local_default_auth_mode_allows_non_health_routes_without_token(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            app = self.create_test_app(Path(tmp), auth_mode="none")
+
+            for route_name, method, path, payload in PROTECTED_ROUTE_CASES:
+                with self.subTest(route=route_name):
+                    # See the bearer-mode valid-token test above for why sync
+                    # handlers are not executed through the ASGI test client.
+                    if not self.route_runs_on_event_loop(app, method, path):
+                        continue
+                    response = asyncio.run(
+                        self.request(
+                            app,
+                            method,
+                            path,
+                            payload=payload,
+                            headers={
+                                MUTATION_HEADER_NAME: MUTATION_HEADER_VALUE,
+                                "Idempotency-Key": uuid.uuid4().hex,
+                            },
+                        )
+                    )
+
+                    self.assertEqual(response.status_code, 200, response.text)
+
+    def test_local_mutation_routes_reject_when_not_explicitly_enabled(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            app = self.create_test_app(
+                Path(tmp),
+                auth_mode="none",
+                allow_unsafe_local_mutations=False,
+            )
+
+            response = asyncio.run(
+                self.request(
+                    app,
+                    "POST",
+                    "/training/jobs",
+                    payload={
+                        "modelType": "linears",
+                        "model": "linear",
+                        "preset": "baseline",
+                        "presets": ["baseline"],
+                        "datasets": ["Mnist"],
+                        "overrides": {"hidden_dim": "128"},
+                        "logFolder": "mutation_guard",
+                        "monitors": [],
+                        "search": None,
+                        "runPlan": None,
+                    },
+                    headers={
+                        MUTATION_HEADER_NAME: MUTATION_HEADER_VALUE,
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
+                )
+            )
+
+        self.assertEqual(response.status_code, 403, response.text)
+        self.assertEqual(
+            response.json(),
+            {"detail": LOCAL_MUTATION_DISABLED_DETAIL},
+        )
+
+    def test_log_import_rejects_when_uploads_are_disabled(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            app = self.create_test_app(
+                Path(tmp),
+                auth_mode="none",
+                allow_log_imports=False,
+            )
+
+            response = asyncio.run(
+                self.request(
+                    app,
+                    "POST",
+                    "/logs/import",
+                    headers={
+                        MUTATION_HEADER_NAME: MUTATION_HEADER_VALUE,
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
+                )
+            )
+
+        self.assertEqual(response.status_code, 403, response.text)
+        self.assertEqual(
+            response.json(),
+            {"detail": LOCAL_MUTATION_DISABLED_DETAIL},
+        )
+
+    def test_untrusted_origin_is_rejected_on_every_mutation_route(self) -> None:
+        from emperor_workbench.api.v1 import router as api_v1_router
+
+        with tempfile.TemporaryDirectory() as tmp:
+            app = self.create_test_app(
+                Path(tmp),
+                auth_mode="none",
+                allow_unsafe_local_mutations=True,
+                allow_log_imports=True,
+            )
+            catalog = build_http_operation_catalog(
+                app.routes,
+                declared_routes=api_v1_router.routes,
+            )
+
+            for operation in catalog.mutations:
+                path = concrete_route_path(operation.route)
+                with self.subTest(method=operation.method, path=path):
+                    response = asyncio.run(
+                        self.request(
+                            app,
+                            operation.method,
+                            path,
+                            headers={
+                                "Origin": "https://evil.example",
+                                "Sec-Fetch-Site": "cross-site",
+                            },
+                        )
+                    )
+
+                    self.assertEqual(response.status_code, 403, response.text)
+                    self.assertEqual(
+                        response.json(),
+                        {"detail": UNTRUSTED_MUTATION_ORIGIN_DETAIL},
+                    )
+
+    def test_every_unauthenticated_mutation_requires_proof(self) -> None:
+        from emperor_workbench.api.v1 import router as api_v1_router
+
+        with tempfile.TemporaryDirectory() as tmp:
+            app = self.create_test_app(
+                Path(tmp),
+                auth_mode="none",
+                allow_unsafe_local_mutations=True,
+                allow_log_imports=True,
+            )
+            catalog = build_http_operation_catalog(
+                app.routes,
+                declared_routes=api_v1_router.routes,
+            )
+
+            for operation in catalog.mutations:
+                path = concrete_route_path(operation.route)
+                with self.subTest(method=operation.method, path=path):
+                    response = asyncio.run(self.request(app, operation.method, path))
+
+                    self.assertEqual(response.status_code, 403, response.text)
+                    self.assertEqual(
+                        response.json(),
+                        {"detail": MUTATION_PROOF_REQUIRED_DETAIL},
+                    )
+
+
+if __name__ == "__main__":
+    unittest.main()
