@@ -312,8 +312,11 @@ def run_model_command(
     if "--print-model" in arguments:
         from models.inspection_cli import run_inspection
 
+        inspection_arguments = [
+            argument for argument in arguments if argument != "--print-model"
+        ]
         return run_inspection(
-            ["--model-type", model_type, "--model", model, *arguments]
+            ["--model-type", model_type, "--model", model, *inspection_arguments]
         )
     model_id = model_id_from_parts(model_type, model)
     module = module_path_for_model_id(model_id) if model_id else None

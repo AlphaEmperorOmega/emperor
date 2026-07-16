@@ -1,7 +1,9 @@
+import json
 import os
 import shlex
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -332,13 +334,17 @@ class TestExperimentShellCatalogCli(unittest.TestCase):
         command = "source experiment.sh"
         if args:
             command = f"{command} {shlex.join(args)}"
-        return subprocess.run(
-            ["bash", "-lc", command],
-            cwd=REPO_ROOT,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        with tempfile.TemporaryDirectory() as matplotlib_config_dir:
+            environment = os.environ.copy()
+            environment["MPLCONFIGDIR"] = matplotlib_config_dir
+            return subprocess.run(
+                ["bash", "-lc", command],
+                cwd=REPO_ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+                env=environment,
+            )
 
     def run_model_command_with_python_stub(self, *args):
         command = "\n".join(
@@ -699,6 +705,28 @@ class TestExperimentShellCatalogCli(unittest.TestCase):
                 ),
             ],
         )
+
+    def test_print_model_inspects_selected_model_package(self):
+        completed = self.run_experiment(
+            "--model-type",
+            "linears",
+            "--model",
+            "linear",
+            "--preset",
+            "baseline",
+            "--print-model",
+            "--format",
+            "json",
+        )
+
+        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(completed.stderr, "")
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["modelType"], "linears")
+        self.assertEqual(payload["model"], "linear")
+        self.assertEqual(payload["preset"], "baseline")
+        self.assertGreater(payload["parameterCount"], 0)
+        self.assertTrue(payload["nodes"])
 
     def test_training_command_forwards_monitor_names_to_model_module(self):
         completed = self.run_model_command_with_python_stub(
