@@ -1,0 +1,466 @@
+schema_version = 1
+migration_complete = true
+
+public_interfaces = [
+  "emperor_workbench.api",
+  "emperor_workbench.api.v1",
+  "emperor_workbench.api.v1.model_packages",
+  "emperor_workbench.api.v1.config_snapshots",
+  "emperor_workbench.api.v1.inspection",
+  "emperor_workbench.api.v1.run_plans",
+  "emperor_workbench.api.v1.training_jobs",
+  "emperor_workbench.api.v1.run_history",
+  "emperor_workbench.cli",
+  "emperor_workbench.settings",
+  "emperor_workbench.failures",
+  "emperor_workbench.project_adapter",
+  "emperor_workbench.model_packages",
+  "emperor_workbench.config_snapshots",
+  "emperor_workbench.inspection",
+  "emperor_workbench.run_plans",
+  "emperor_workbench.training_jobs",
+  "emperor_workbench.log_experiments",
+  "emperor_workbench.run_history",
+  "emperor_workbench.tensorboard",
+  "emperor_workbench.filesystem",
+]
+
+pending_interfaces = []
+
+process_interfaces = [
+  "emperor_workbench.inspection.worker",
+  "emperor_workbench.training_jobs.worker",
+  "emperor_workbench.training_jobs.cgroup_worker",
+]
+
+pending_process_interfaces = []
+
+legacy_public_modules = []
+
+legacy_obsolete_paths = []
+
+legacy_lazy_interfaces = []
+legacy_compatibility_marker_modules = []
+legacy_missing_all_interfaces = []
+
+legacy_cross_owner_private_imports = []
+legacy_disallowed_dependencies = []
+legacy_dependency_cycles = []
+
+legacy_framework_imports_outside_api = []
+legacy_http_contract_modules_outside_api = []
+legacy_app_state_violations = []
+
+[protected_interfaces."emperor_workbench.api"]
+exports = ["app", "create_app"]
+
+[protected_interfaces."emperor_workbench.api.v1"]
+exports = [
+  "INTERNAL_API_VERSION_NAMESPACE",
+  "PUBLIC_API_PREFIX",
+  "router",
+]
+
+[protected_interfaces."emperor_workbench.cli"]
+exports = ["main"]
+
+[protected_interfaces."emperor_workbench.failures"]
+exports = ["DomainFailure", "FailureKind"]
+
+[protected_interfaces."emperor_workbench.settings"]
+exports = [
+  "DEFAULT_SNAPSHOTS_ROOT",
+  "DEFAULT_STATE_ROOT",
+  "DEFAULT_WORKBENCH_ROOT",
+  "DEFAULT_TRUSTED_HOSTS",
+  "LOCAL_FRONTEND_ORIGINS",
+  "WorkbenchApiSettings",
+  "get_workbench_api_settings",
+]
+
+[protected_interfaces."emperor_workbench.filesystem"]
+exports = [
+  "PersistentJsonCatalog",
+  "apply_owner_only_permissions",
+  "read_json_object",
+  "reject_link_like",
+  "require_safe_name",
+  "resolve_root",
+  "resolve_under_root",
+  "safe_child_path",
+  "windows_regular_file_descriptor",
+  "write_json_atomic",
+]
+
+[protected_interfaces."emperor_workbench.log_experiments"]
+exports = [
+  "DEFAULT_LOG_EXPERIMENT_MUTATION_TIMEOUT_SECONDS",
+  "LOG_EXPERIMENT_MUTATION_TIMEOUT_MESSAGE",
+  "LOG_EXPERIMENT_NAME_RE",
+  "LogExperimentMutationCoordinator",
+  "LogExperimentFailure",
+  "is_valid_log_experiment_name",
+  "validate_log_experiment_name",
+]
+
+[protected_interfaces."emperor_workbench.project_adapter"]
+exports = [
+  "DatasetReference",
+  "ModelPackageReference",
+  "MonitorReference",
+  "PROJECT_ADAPTER_COMMAND_ENV",
+  "PresetReference",
+  "ProjectAdapterClient",
+  "ProjectAdapterFailure",
+]
+
+[protected_interfaces."emperor_workbench.model_packages"]
+exports = [
+  "ModelDataset",
+  "ModelDatasetGroup",
+  "ModelMetadata",
+  "ModelMonitor",
+  "ModelPackageCatalog",
+  "ModelPackageFailure",
+  "ModelPackageIdentity",
+  "ModelPreset",
+  "SelectedModelPackage",
+  "normalize_preset_token",
+]
+
+[protected_interfaces."emperor_workbench.config_snapshots"]
+exports = [
+  "ConfigSnapshotDeletion",
+  "ConfigSnapshotFailure",
+  "ConfigSnapshotRecord",
+  "ConfigSnapshotService",
+]
+
+[protected_interfaces."emperor_workbench.api.v1.config_snapshots"]
+exports = [
+  "ConfigSnapshotCreateRequest",
+  "ConfigSnapshotLibraryResponse",
+  "ConfigSnapshotResponse",
+  "ConfigSnapshotsResponse",
+  "ConfigSnapshotUpdateRequest",
+  "router",
+]
+
+[protected_interfaces."emperor_workbench.inspection"]
+exports = [
+  "InProcessInspectionExecutor",
+  "InspectionExecutor",
+  "InspectionFailure",
+  "InspectionService",
+  "InspectionWorkerLimits",
+  "SubprocessInspectionExecutor",
+]
+
+[protected_interfaces."emperor_workbench.api.v1.inspection"]
+exports = [
+  "GraphConfigFieldResponse",
+  "GraphConfigResponse",
+  "GraphEdgeResponse",
+  "GraphNodeResponse",
+  "InspectRequest",
+  "InspectResponse",
+  "router",
+]
+
+[protected_interfaces."emperor_workbench.run_plans"]
+exports = [
+  "MAX_TRAINING_DATASETS",
+  "MAX_TRAINING_MONITORS",
+  "MAX_TRAINING_PLANNED_RUNS",
+  "MAX_TRAINING_SEARCH_AXES",
+  "MAX_TRAINING_SEARCH_AXIS_VALUES",
+  "ConfigSnapshotRevision",
+  "CreateTrainingRunPlanCommand",
+  "MaterializeTrainingRunPlanCommand",
+  "MaterializedTrainingRunPlan",
+  "RunPlanFailure",
+  "RunPlanPersistenceCodec",
+  "RunPlanProgressProjector",
+  "RunPlanService",
+  "RunPlanWorkerAcceptance",
+  "SubmittedTrainingRun",
+  "SubmittedTrainingRunPlan",
+  "TrainingCommandsView",
+  "TrainingRunChangeView",
+  "TrainingRunPlanSummaryView",
+  "TrainingRunPlanView",
+  "TrainingRunView",
+  "TrainingSearch",
+  "TrainingWorkerPlanContext",
+]
+
+[protected_interfaces."emperor_workbench.api.v1.run_plans"]
+exports = [
+  "ConfigSnapshotRevisionResponse",
+  "SubmittedTrainingRunPlanRequest",
+  "SubmittedTrainingRunRequest",
+  "TrainingCommandsResponse",
+  "TrainingRunChangeResponse",
+  "TrainingRunPlanCreateRequest",
+  "TrainingRunPlanResponse",
+  "TrainingRunPlanSummaryResponse",
+  "TrainingRunResponse",
+  "TrainingSearchRequest",
+  "TrainingSearchResponse",
+  "router",
+]
+
+[protected_interfaces."emperor_workbench.training_jobs"]
+exports = [
+  "ActiveTrainingJob",
+  "CreateTrainingJobCommand",
+  "TrainingCancellationCapability",
+  "TrainingCancellationMode",
+  "TrainingJobFailure",
+  "TrainingJobService",
+  "TrainingJobStatus",
+  "TrainingJobView",
+  "TrainingProgressEventsPage",
+  "TrainingResourceLimits",
+  "TrainingResultLinkView",
+]
+
+[protected_interfaces."emperor_workbench.api.v1.training_jobs"]
+exports = [
+  "TrainingJobCreateRequest",
+  "TrainingJobReconcileRequest",
+  "TrainingJobResponse",
+  "TrainingProgressEventsResponse",
+  "router",
+]
+
+[protected_interfaces."emperor_workbench.run_history"]
+exports = [
+  "ActiveLogWriter",
+  "ActiveLogWriterSource",
+  "ActiveLogRunDeleteBlocker",
+  "HistoricalCheckpointCandidate",
+  "HistoricalInspectionContext",
+  "HistoricalInspectionSource",
+  "KnownModelPackageIdentityResolver",
+  "LogArchiveImportResult",
+  "LogCheckpoint",
+  "LogExperiment",
+  "LogExperimentDeleteResult",
+  "LogExperimentPage",
+  "LogImageSummary",
+  "LogMedia",
+  "LogRun",
+  "LogRunArtifact",
+  "LogRunArtifacts",
+  "LogRunDeleteCandidate",
+  "LogRunDeleteFilters",
+  "LogRunDeletePlan",
+  "LogRunDeleteResult",
+  "LogRunExperimentFacets",
+  "LogRunFacetValue",
+  "LogRunFacets",
+  "LogRunModelFacet",
+  "LogRunPage",
+  "LogRunTags",
+  "LogScalarPoint",
+  "LogScalarSeries",
+  "LogTextSummary",
+  "RunHistoryFailure",
+  "RunHistoryService",
+]
+
+[protected_interfaces."emperor_workbench.api.v1.run_history"]
+exports = [
+  "LogArchiveImportResponse",
+  "LogCheckpointResponse",
+  "LogCheckpointsRequest",
+  "LogCheckpointsResponse",
+  "LogExperimentDeleteResponse",
+  "LogExperimentResponse",
+  "LogExperimentsResponse",
+  "LogImageSummaryResponse",
+  "LogMediaRequest",
+  "LogMediaResponse",
+  "LogParameterStatusRequest",
+  "LogParameterStatusResponse",
+  "LogPresetDeleteRequest",
+  "LogRunArtifactResponse",
+  "LogRunArtifactsResponse",
+  "LogRunDeleteAffectedValuesResponse",
+  "LogRunDeleteBlockerResponse",
+  "LogRunDeleteCandidateResponse",
+  "LogRunDeleteCountsResponse",
+  "LogRunDeleteFiltersRequest",
+  "LogRunDeletePlanResponse",
+  "LogRunDeleteResponse",
+  "LogRunExperimentFacetsResponse",
+  "LogRunFacetsResponse",
+  "LogRunFacetValueResponse",
+  "LogRunModelFacetResponse",
+  "LogRunModelFilterRequest",
+  "LogRunResponse",
+  "LogRunsResponse",
+  "LogRunTagsResponse",
+  "LogScalarSeriesResponse",
+  "LogScalarsRequest",
+  "LogScalarsResponse",
+  "LogTagsRequest",
+  "LogTagsResponse",
+  "LogTextSummaryResponse",
+  "MonitorDataResponse",
+  "router",
+]
+
+[protected_interfaces."emperor_workbench.api.v1.model_packages"]
+exports = [
+  "ConfigFieldResponse",
+  "ConfigSchemaResponse",
+  "DatasetGroupResponse",
+  "DatasetResponse",
+  "DatasetsResponse",
+  "ModelIdentityResponse",
+  "ModelsResponse",
+  "MonitorOptionResponse",
+  "MonitorsResponse",
+  "PresetResponse",
+  "PresetsResponse",
+  "SearchAxisResponse",
+  "SearchSpaceResponse",
+  "router",
+]
+
+[protected_interfaces."emperor_workbench.tensorboard"]
+exports = [
+  "DEFAULT_SCALAR_POINT_LIMIT",
+  "TENSORBOARD_TAG_SIZE_GUIDANCE",
+  "EventFileIndex",
+  "Histogram",
+  "HistogramBucket",
+  "ImageSummary",
+  "MonitorData",
+  "ParameterActivityStatus",
+  "ParameterChannelStatus",
+  "ParameterNodeStatus",
+  "ParameterStatus",
+  "ScalarPoint",
+  "ScalarSeries",
+  "ScalarTail",
+  "TagCatalog",
+  "TensorBoardEventCache",
+  "TensorBoardMonitorReader",
+  "TensorBoardParameterStatusReader",
+  "TextSummary",
+  "event_file_index",
+  "exact_scalar_tails",
+  "image_summary",
+  "text_summary",
+]
+
+[legacy_interface_exports]
+
+[[owners]]
+name = "api"
+prefixes = ["emperor_workbench.api"]
+
+[[owners]]
+name = "cli"
+prefixes = ["emperor_workbench.__main__", "emperor_workbench.cli"]
+
+[[owners]]
+name = "settings"
+prefixes = ["emperor_workbench.settings"]
+
+[[owners]]
+name = "failures"
+prefixes = ["emperor_workbench.failures"]
+
+[[owners]]
+name = "filesystem"
+prefixes = ["emperor_workbench.filesystem"]
+
+[[owners]]
+name = "project_adapter"
+prefixes = ["emperor_workbench.project_adapter"]
+
+[[owners]]
+name = "model_packages"
+prefixes = ["emperor_workbench.model_packages"]
+
+[[owners]]
+name = "config_snapshots"
+prefixes = ["emperor_workbench.config_snapshots"]
+
+[[owners]]
+name = "inspection"
+prefixes = ["emperor_workbench.inspection"]
+
+[[owners]]
+name = "run_plans"
+prefixes = ["emperor_workbench.run_plans"]
+
+[[owners]]
+name = "training_jobs"
+prefixes = ["emperor_workbench.training_jobs"]
+
+[[owners]]
+name = "log_experiments"
+prefixes = ["emperor_workbench.log_experiments"]
+
+[[owners]]
+name = "run_history"
+prefixes = ["emperor_workbench.run_history"]
+
+[[owners]]
+name = "tensorboard"
+prefixes = ["emperor_workbench.tensorboard"]
+
+[allowed_dependencies]
+api = [
+  "settings",
+  "failures",
+  "filesystem",
+  "project_adapter",
+  "model_packages",
+  "config_snapshots",
+  "inspection",
+  "run_plans",
+  "training_jobs",
+  "log_experiments",
+  "run_history",
+  "tensorboard",
+]
+cli = ["api", "settings"]
+settings = []
+failures = []
+filesystem = ["failures"]
+project_adapter = ["failures"]
+model_packages = ["project_adapter", "failures"]
+config_snapshots = ["model_packages", "filesystem", "failures"]
+inspection = [
+  "model_packages",
+  "project_adapter",
+  "run_history",
+  "failures",
+]
+run_plans = [
+  "model_packages",
+  "project_adapter",
+  "config_snapshots",
+  "failures",
+]
+training_jobs = [
+  "run_plans",
+  "log_experiments",
+  "tensorboard",
+  "filesystem",
+  "failures",
+]
+log_experiments = ["failures"]
+run_history = [
+  "log_experiments",
+  "tensorboard",
+  "filesystem",
+  "failures",
+]
+tensorboard = ["filesystem", "failures"]
