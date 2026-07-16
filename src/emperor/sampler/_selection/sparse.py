@@ -1,0 +1,56 @@
+from typing import TYPE_CHECKING
+
+import torch
+from torch import Tensor
+
+from emperor.sampler._config import SamplerConfig
+from emperor.sampler._selection.base import SamplerBase
+from emperor.sampler._selection.validation import SamplerSparseValidator
+
+if TYPE_CHECKING:
+    from emperor.config import ModelConfig
+
+
+class SamplerSparse(SamplerBase):
+    VALIDATOR = SamplerSparseValidator
+
+    def __init__(
+        self,
+        cfg: "SamplerConfig | ModelConfig",
+        overrides: "SamplerConfig | None" = None,
+    ) -> None:
+        super().__init__(cfg, overrides)
+
+    def _sample_probabilities_and_indices(
+        self, probabilities: Tensor
+    ) -> tuple[Tensor, Tensor | None]:
+        probability, indices = torch.max(probabilities, dim=1)
+        return probability, indices
+
+    def _compute_loss(
+        self,
+        logits: Tensor,
+        full_probabilities: Tensor,
+        sampled_probabilities: Tensor,
+        indices: Tensor,
+        skip_mask: Tensor | None = None,
+    ) -> Tensor:
+        gates = self.__prepare_loss_gates(sampled_probabilities, indices)
+        logits = logits.reshape(-1, self.num_experts)
+        full_probabilities = full_probabilities.reshape(-1, self.num_experts)
+
+        self.auxiliary_loss_model.update_accumulated_statistics(
+            logits, full_probabilities, gates
+        )
+        return self.auxiliary_loss_model.get_auxiliary_loss_and_clear()
+
+    def __prepare_loss_gates(
+        self, sampled_probabilities: Tensor, indices: Tensor
+    ) -> Tensor:
+        sampled_probabilities = sampled_probabilities.view(-1, self.top_k)
+        indices = indices.view(-1, self.top_k)
+        input_dim = sampled_probabilities.shape[0]
+        gates_buffer = sampled_probabilities.new_zeros(input_dim, self.num_experts)
+        gates = gates_buffer.scatter(1, indices, sampled_probabilities)
+
+        return gates
