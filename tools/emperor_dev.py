@@ -369,6 +369,25 @@ def _venv_version(python: Path) -> tuple[int, int] | None:
         return None
 
 
+def _venv_recreation_reason(
+    *,
+    marker: dict[str, Any] | None,
+    profile: str,
+    platform_key: str,
+    signature: str,
+    version: tuple[int, int] | None,
+) -> str | None:
+    if version is not None and version != SUPPORTED_PYTHON:
+        return f"Python {version[0]}.{version[1]} is not 3.13"
+    if marker is None:
+        return None
+    if marker.get("profile") != profile or marker.get("platform") != platform_key:
+        return "the selected platform/profile changed"
+    if marker.get("signature") != signature:
+        return "the verified setup inputs changed"
+    return None
+
+
 def _remove_owned_venv(reason: str) -> None:
     if not VENV_ROOT.exists():
         return
@@ -605,13 +624,15 @@ def setup(profile: str = "cpu") -> int:
     python = venv_python(os_name=spec.os_name)
     marker = _read_json(SETUP_MARKER)
     version = _venv_version(python)
-    if version is not None and version != SUPPORTED_PYTHON:
-        _remove_owned_venv(f"Python {version[0]}.{version[1]} is not 3.13")
-        marker = None
-    elif marker and (
-        marker.get("profile") != profile or marker.get("platform") != spec.key
-    ):
-        _remove_owned_venv("the selected platform/profile changed")
+    recreation_reason = _venv_recreation_reason(
+        marker=marker,
+        profile=profile,
+        platform_key=spec.key,
+        signature=signature,
+        version=version,
+    )
+    if recreation_reason is not None:
+        _remove_owned_venv(recreation_reason)
         marker = None
     if not python.is_file():
         print(f"Creating Python 3.13 virtual environment at {VENV_ROOT}...")

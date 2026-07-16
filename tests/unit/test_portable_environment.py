@@ -276,6 +276,33 @@ class PortableEnvironmentProfileTests(unittest.TestCase):
         self.assertNotEqual(baseline, changed_index)
         self.assertNotEqual(baseline, changed_validation)
 
+    def test_setup_recreates_owned_venv_when_verified_inputs_change(self) -> None:
+        marker = {
+            "platform": self.linux.key,
+            "profile": "cpu",
+            "signature": "current",
+        }
+
+        self.assertIsNone(
+            emperor_dev._venv_recreation_reason(
+                marker=marker,
+                profile="cpu",
+                platform_key=self.linux.key,
+                signature="current",
+                version=emperor_dev.SUPPORTED_PYTHON,
+            )
+        )
+        self.assertEqual(
+            emperor_dev._venv_recreation_reason(
+                marker=marker,
+                profile="cpu",
+                platform_key=self.linux.key,
+                signature="changed",
+                version=emperor_dev.SUPPORTED_PYTHON,
+            ),
+            "the verified setup inputs changed",
+        )
+
     def test_cuda_legacy_lock_is_standalone_sorted_and_cu126_only(self) -> None:
         base_path = PROJECT_ROOT / "constraints" / "python-3.13-linux-x86_64.txt"
         legacy_path = (
