@@ -1,0 +1,357 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { GraphNode, InspectResponse } from "@/lib/api/inspection";
+import {
+  type GraphDetailMode,
+  type GraphNavigation,
+  type GraphParameterActivity,
+  type GraphScope,
+  ancestorNodeIds,
+  decorateGraphSelection,
+  deriveGraphDisplayModel,
+  expandableSubtreeNodeIds,
+  projectGraphDisplay,
+} from "@/lib/graph";
+import { createLazyValue } from "@/lib/lazy-value";
+
+// The dagre-backed layout is loaded only after graph data exists. Keeping the
+// promise at module scope deduplicates imports when graph state changes while
+// the layout chunk is in flight.
+type LayoutGraphFn = typeof import("@/lib/graph/layout").layoutGraph;
+const EMPTY_GRAPH_LAYOUT: ReturnType<LayoutGraphFn> = { nodes: [], edges: [] };
+const loadLayoutGraph = createLazyValue(() =>
+  import("@/lib/graph/layout").then((module) => module.layoutGraph),
+);
+
+type GraphViewStateOptions = {
+  canOpenMonitor?: (node: GraphNode) => boolean;
+  onOpenMonitor?: (node: GraphNode) => void;
+  resolveMonitorTarget?: (node: GraphNode) => GraphNode | undefined;
+  resolveParameterActivityTarget?: (node: GraphNode) => GraphNode | undefined;
+  parameterActivityByNodePath?: Map<string, GraphParameterActivity>;
+  inspectionTransition?: {
+    revision: number;
+    cause: "target-changed" | "inspection-refreshed";
+  };
+};
+
+function expandGraphAncestors(
+  current: Set<string>,
+  nodeId: string,
+  navigation: GraphNavigation,
+) {
+  const ancestors = ancestorNodeIds(nodeId, navigation);
+  if (ancestors.length === 0) {
+    return current;
+  }
+
+  let changed = false;
+  const next = new Set(current);
+  for (const ancestorId of ancestors) {
+    if (!next.has(ancestorId)) {
+      next.add(ancestorId);
+      changed = true;
+    }
+  }
+  return changed ? next : current;
+}
+
+export function useGraphViewState(
+  graph: InspectResponse | undefined,
+  options: GraphViewStateOptions = {},
+) {
+  const {
+    canOpenMonitor,
+    onOpenMonitor,
+    resolveMonitorTarget,
+    resolveParameterActivityTarget,
+    parameterActivityByNodePath,
+    inspectionTransition,
+  } = options;
+  const [graphDetailMode, setGraphDetailMode] = useState<GraphDetailMode>("basic");
+  const [graphScope, setGraphScope] = useState<GraphScope>("opened");
+  const [expandedGraphNodeIds, setExpandedGraphNodeIds] = useState<Set<string>>(new Set());
+  const [expandedDetailNodeIds, setExpandedDetailNodeIds] = useState<Set<string>>(new Set());
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [cluster3dNodeId, setCluster3dNodeId] = useState<string | null>(null);
+
+  const graphDisplayModel = useMemo(
+    () => deriveGraphDisplayModel(graph, graphDetailMode),
+    [graph, graphDetailMode],
+  );
+  const {
+    fullNavigation: fullGraphNavigation,
+    fullNodeIds,
+    fullClusterNodeIds,
+    detailGraph: graphForDetail,
+    detailNavigation: graphNavigation,
+    detailNodeIds,
+  } = graphDisplayModel;
+
+  const activateGraphNode = useCallback((nodeId: string) => {
+    setSelectedNodeId(nodeId);
+    if (graphScope !== "opened") {
+      return;
+    }
+    if (graphNavigation.rootIds.has(nodeId)) {
+      return;
+    }
+    if ((graphNavigation.childrenById.get(nodeId)?.length ?? 0) === 0) {
+      return;
+    }
+    setExpandedGraphNodeIds((current) => {
+      const next = new Set(current);
+      if (next.has(nodeId)) {
+        next.delete(nodeId);
+      } else {
+        next.add(nodeId);
+      }
+      return next;
+    });
+  }, [graphNavigation, graphScope]);
+
+  const toggleGraphNodeExpansion = useCallback((nodeId: string) => {
+    if (graphScope !== "opened") {
+      return;
+    }
+    if (graphNavigation.rootIds.has(nodeId)) {
+      return;
+    }
+    if ((graphNavigation.childrenById.get(nodeId)?.length ?? 0) === 0) {
+      return;
+    }
+    setExpandedGraphNodeIds((current) => {
+      const next = new Set(current);
+      if (next.has(nodeId)) {
+        for (const subtreeNodeId of expandableSubtreeNodeIds(nodeId, graphNavigation)) {
+          next.delete(subtreeNodeId);
+        }
+      } else {
+        for (const subtreeNodeId of expandableSubtreeNodeIds(nodeId, graphNavigation)) {
+          next.add(subtreeNodeId);
+        }
+      }
+      return next;
+    });
+  }, [graphNavigation, graphScope]);
+
+  const toggleNodeDetails = useCallback((nodeId: string) => {
+    setExpandedDetailNodeIds((current) => {
+      const next = new Set(current);
+      if (next.has(nodeId)) {
+        next.delete(nodeId);
+      } else {
+        next.add(nodeId);
+      }
+      return next;
+    });
+  }, []);
+
+  const monitorTargetForNode = useCallback((node: GraphNode) => {
+    return resolveMonitorTarget ? resolveMonitorTarget(node) : node;
+  }, [resolveMonitorTarget]);
+
+  const parameterActivityTargetForNode = useCallback((node: GraphNode) => {
+    return resolveParameterActivityTarget
+      ? resolveParameterActivityTarget(node)
+      : monitorTargetForNode(node);
+  }, [monitorTargetForNode, resolveParameterActivityTarget]);
+
+  const canOpenGraphNodeMonitor = useCallback((node: GraphNode) => {
+    const monitorTarget = monitorTargetForNode(node);
+    return Boolean(monitorTarget && canOpenMonitor?.(monitorTarget));
+  }, [canOpenMonitor, monitorTargetForNode]);
+
+  const openGraphNodeMonitor = useCallback((node: GraphNode) => {
+    const monitorTarget = monitorTargetForNode(node);
+    if (!monitorTarget) {
+      return;
+    }
+    setSelectedNodeId(node.id);
+    onOpenMonitor?.(monitorTarget);
+  }, [monitorTargetForNode, onOpenMonitor]);
+
+  const parameterActivityForNode = useCallback((node: GraphNode) => {
+    const monitorTarget = parameterActivityTargetForNode(node);
+    return monitorTarget
+      ? parameterActivityByNodePath?.get(monitorTarget.path)
+      : undefined;
+  }, [parameterActivityByNodePath, parameterActivityTargetForNode]);
+
+  const revealGraphNode = useCallback((nodeId: string) => {
+    if (!detailNodeIds.has(nodeId)) {
+      return;
+    }
+
+    setSelectedNodeId(nodeId);
+    setExpandedGraphNodeIds((current) =>
+      expandGraphAncestors(current, nodeId, graphNavigation),
+    );
+  }, [detailNodeIds, graphNavigation]);
+
+  const revealGraphNodeInFull = useCallback((nodeId: string) => {
+    if (!fullNodeIds.has(nodeId)) {
+      return;
+    }
+
+    setGraphDetailMode("full");
+    setSelectedNodeId(nodeId);
+    setExpandedGraphNodeIds((current) =>
+      expandGraphAncestors(current, nodeId, fullGraphNavigation),
+    );
+  }, [fullGraphNavigation, fullNodeIds]);
+
+  const openCluster3d = useCallback((nodeId?: string) => {
+    const nextNodeId = nodeId ?? selectedNodeId;
+    if (!nextNodeId || !fullClusterNodeIds.has(nextNodeId)) {
+      return;
+    }
+    setSelectedNodeId(nextNodeId);
+    setCluster3dNodeId(nextNodeId);
+  }, [fullClusterNodeIds, selectedNodeId]);
+
+  const closeCluster3d = useCallback(() => {
+    setCluster3dNodeId(null);
+  }, []);
+
+  const graphDisplay = useMemo(
+    () =>
+      projectGraphDisplay(graphDisplayModel, {
+        graphScope,
+        expandedGraphNodeIds,
+        expandedDetailNodeIds,
+        canOpenMonitor: canOpenMonitor ? canOpenGraphNodeMonitor : undefined,
+        parameterActivityForNode,
+        onActivateNode: activateGraphNode,
+        onToggleExpansion: toggleGraphNodeExpansion,
+        onOpenMonitor: onOpenMonitor ? openGraphNodeMonitor : undefined,
+        onToggleDetails: toggleNodeDetails,
+      }),
+    [
+      activateGraphNode,
+      canOpenGraphNodeMonitor,
+      canOpenMonitor,
+      expandedDetailNodeIds,
+      expandedGraphNodeIds,
+      graphDisplayModel,
+      graphScope,
+      onOpenMonitor,
+      openGraphNodeMonitor,
+      parameterActivityForNode,
+      toggleGraphNodeExpansion,
+      toggleNodeDetails,
+    ],
+  );
+  const graphForDisplay = graphDisplay.graph;
+  const effectiveSelectedNodeId =
+    selectedNodeId &&
+    graphForDisplay?.nodes.some((node) => node.id === selectedNodeId)
+      ? selectedNodeId
+      : null;
+  const effectiveCluster3dNodeId =
+    cluster3dNodeId &&
+    effectiveSelectedNodeId &&
+    fullClusterNodeIds.has(cluster3dNodeId) &&
+    (effectiveSelectedNodeId === cluster3dNodeId ||
+      ancestorNodeIds(
+        effectiveSelectedNodeId,
+        fullGraphNavigation,
+      ).includes(cluster3dNodeId))
+      ? cluster3dNodeId
+      : null;
+
+  const [layoutGraph, setLayoutGraph] = useState<LayoutGraphFn | null>(null);
+  const hasGraphToLayout = graphDisplay.cards.length > 0;
+  useEffect(() => {
+    if (!hasGraphToLayout || layoutGraph) {
+      return;
+    }
+    let active = true;
+    void loadLayoutGraph().then((loadedLayoutGraph) => {
+      if (active) {
+        setLayoutGraph(() => loadedLayoutGraph);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [hasGraphToLayout, layoutGraph]);
+
+  // Structural layout pass: runs the dagre layout. Deliberately excludes
+  // selectedNodeId so that selecting a node does NOT trigger a relayout. The
+  // per-node handlers are useCallback-stable (keyed on navigation/scope), so
+  // keeping them here does not couple layout to selection.
+  const baseLayout = useMemo(() => {
+    if (!layoutGraph) {
+      return EMPTY_GRAPH_LAYOUT;
+    }
+    return layoutGraph(graphDisplay);
+  }, [graphDisplay, layoutGraph]);
+
+  const edges = baseLayout.edges;
+
+  // Cheap decoration pass: apply the `selected` flag without relayout. Only the
+  // node whose selection changed gets a new object; all others keep their
+  // reference so React Flow and the memoized node view skip re-rendering them.
+  const nodes = useMemo(
+    () => decorateGraphSelection(baseLayout.nodes, effectiveSelectedNodeId),
+    [baseLayout, effectiveSelectedNodeId],
+  );
+
+  const selectedNode = useMemo(
+    () =>
+      graphForDisplay?.nodes.find(
+        (node) => node.id === effectiveSelectedNodeId,
+      ) ??
+      graphForDisplay?.nodes[0],
+    [effectiveSelectedNodeId, graphForDisplay],
+  );
+
+  const collapseGraphNodes = useCallback(() => {
+    setExpandedGraphNodeIds(new Set());
+    setSelectedNodeId(null);
+    setCluster3dNodeId(null);
+  }, []);
+
+  const resetGraphExpansion = useCallback(() => {
+    setExpandedGraphNodeIds(new Set());
+    setExpandedDetailNodeIds(new Set());
+  }, []);
+
+  const resetGraphSelectionAndExpansion = useCallback(() => {
+    setSelectedNodeId(null);
+    setCluster3dNodeId(null);
+    resetGraphExpansion();
+  }, [resetGraphExpansion]);
+  const appliedInspectionTransitionRevisionRef = useRef(
+    inspectionTransition?.revision ?? 0,
+  );
+  useEffect(() => {
+    const revision = inspectionTransition?.revision ?? 0;
+    if (revision === appliedInspectionTransitionRevisionRef.current) {
+      return;
+    }
+    appliedInspectionTransitionRevisionRef.current = revision;
+    resetGraphSelectionAndExpansion();
+  }, [inspectionTransition, resetGraphSelectionAndExpansion]);
+
+  return {
+    graphDetailMode,
+    setGraphDetailMode,
+    graphScope,
+    setGraphScope,
+    expandedGraphNodeIds,
+    selectedNodeId: effectiveSelectedNodeId,
+    setSelectedNodeId: setSelectedNodeId as (nodeId: string | null) => void,
+    cluster3dNodeId: effectiveCluster3dNodeId,
+    openCluster3d,
+    closeCluster3d,
+    graphForDetail,
+    nodes,
+    edges,
+    selectedNode: selectedNode as GraphNode | undefined,
+    revealGraphNode,
+    revealGraphNodeInFull,
+    collapseGraphNodes,
+    clearForConnectionChange: resetGraphSelectionAndExpansion,
+  };
+}

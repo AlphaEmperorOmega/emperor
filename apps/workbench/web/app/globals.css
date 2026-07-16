@@ -1,0 +1,389 @@
+@import "@xyflow/react/dist/style.css";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  background: var(--color-bg);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+html {
+  color-scheme: dark;
+  background: var(--color-bg);
+}
+
+body {
+  position: relative;
+  color: var(--color-ink);
+  background:
+    var(--gradient-body),
+    var(--color-bg);
+  font-family: var(--font-sans), var(--font-fallback-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  -webkit-tap-highlight-color: var(--color-accent-soft);
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: var(--gradient-ambient);
+  background-size: 48px 48px, 48px 48px, auto;
+  -webkit-mask-image: linear-gradient(to bottom, black, transparent 68%);
+  mask-image: linear-gradient(to bottom, black, transparent 68%);
+}
+
+body > * {
+  position: relative;
+  z-index: 1;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  touch-action: manipulation;
+}
+
+button,
+[role="button"],
+a {
+  -webkit-tap-highlight-color: var(--color-accent-soft);
+}
+
+select,
+input,
+textarea {
+  color-scheme: dark;
+}
+
+select option {
+  color: var(--color-ink);
+  background-color: var(--color-panel);
+}
+
+::selection {
+  color: var(--color-white);
+  background: var(--color-focus);
+}
+
+[data-numeric],
+.tabular-nums {
+  font-variant-numeric: tabular-nums slashed-zero;
+}
+
+:where(h1, h2, h3, h4, h5, h6) {
+  scroll-margin-top: 5rem;
+  text-wrap: balance;
+}
+
+:where(p) {
+  text-wrap: pretty;
+}
+
+/* Typography roles intentionally avoid Tailwind's text-* namespace so the
+   runtime class merger cannot confuse font-size aliases with color tokens. */
+.type-meta {
+  font-size: var(--type-meta-size);
+  line-height: var(--type-meta-leading);
+  letter-spacing: var(--type-meta-tracking);
+}
+
+.type-label {
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-leading);
+  letter-spacing: var(--type-label-tracking);
+}
+
+.type-body {
+  font-size: var(--type-body-size);
+  line-height: var(--type-body-leading);
+  letter-spacing: var(--type-body-tracking);
+}
+
+.type-title {
+  font-size: var(--type-title-size);
+  line-height: var(--type-title-leading);
+  letter-spacing: var(--type-title-tracking);
+}
+
+.type-display {
+  font-size: var(--type-display-size);
+  line-height: var(--type-display-leading);
+  letter-spacing: var(--type-display-tracking);
+}
+
+.type-micro {
+  font-size: var(--type-micro-size);
+  line-height: var(--type-micro-leading);
+  letter-spacing: var(--type-micro-tracking);
+}
+
+.type-caption {
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-leading);
+  letter-spacing: var(--type-caption-tracking);
+}
+
+.type-compact {
+  font-size: var(--type-compact-size);
+  line-height: var(--type-compact-leading);
+  letter-spacing: var(--type-compact-tracking);
+}
+
+.type-heading {
+  font-size: var(--type-heading-size);
+  line-height: var(--type-heading-leading);
+  letter-spacing: var(--type-heading-tracking);
+}
+
+.safe-dialog-inset {
+  padding-top: env(safe-area-inset-top);
+  padding-right: env(safe-area-inset-right);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+}
+
+@media (max-width: 639px) {
+  .dialog-shell-panel {
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    overflow-x: hidden;
+    overflow-y: auto;
+    border-radius: 0;
+  }
+}
+
+@media (min-width: 640px) {
+  .safe-dialog-inset {
+    --dialog-gutter: var(--space-shell-wide);
+    padding-top: max(var(--dialog-gutter), env(safe-area-inset-top));
+    padding-right: max(var(--dialog-gutter), env(safe-area-inset-right));
+    padding-bottom: max(var(--dialog-gutter), env(safe-area-inset-bottom));
+    padding-left: max(var(--dialog-gutter), env(safe-area-inset-left));
+  }
+}
+
+.safe-header-inset {
+  --header-gutter: var(--space-compact);
+  padding-right: max(var(--header-gutter), env(safe-area-inset-right));
+  padding-left: max(var(--header-gutter), env(safe-area-inset-left));
+}
+
+@media (min-width: 640px) {
+  .safe-header-inset {
+    --header-gutter: var(--space-region);
+  }
+}
+
+@media (min-width: 1024px) {
+  .safe-header-inset {
+    --header-gutter: var(--space-shell);
+  }
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-faint);
+  background-clip: padding-box;
+  border: var(--border-hairline) solid transparent;
+  border-radius: var(--radius-round);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-line-hover);
+  background-clip: padding-box;
+}
+
+.edge {
+  position: relative;
+  isolation: isolate;
+  background:
+    var(--gradient-panel-sheen),
+    var(--color-panel-2);
+  border: var(--border-hairline) solid var(--color-line);
+  border-radius: var(--radius-card);
+  box-shadow: var(--elevation-panel);
+}
+
+.edge::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: 2;
+  padding: 0;
+  border-radius: inherit;
+  border: 1px solid transparent;
+  background: none;
+  pointer-events: none;
+}
+
+.full-config-dialog-shell::before {
+  z-index: 20;
+}
+
+.full-config-dialog-chrome {
+  position: relative;
+  background: var(--gradient-dialog-chrome);
+  box-shadow: var(--elevation-control);
+}
+
+.full-config-dialog-header::after,
+.full-config-dialog-footer::before {
+  content: "";
+  position: absolute;
+  right: 1px;
+  left: 1px;
+  height: 1px;
+  pointer-events: none;
+  background: var(--color-line);
+}
+
+.full-config-dialog-header::after {
+  bottom: 0;
+}
+
+.full-config-dialog-footer::before {
+  top: 0;
+}
+
+.full-config-dialog-body {
+  background: var(--gradient-dialog-body);
+}
+
+.edge-sel {
+  background: var(--gradient-selected);
+  border-color: var(--color-accent-line);
+  box-shadow: var(--elevation-node);
+}
+
+.edge-sel::before {
+  border-color: var(--color-accent-edge);
+}
+
+.gradient-text {
+  background: var(--gradient-primary);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.react-flow {
+  background:
+    var(--gradient-graph),
+    radial-gradient(var(--color-graph-grid) 1px, transparent 1px);
+  background-color: transparent;
+  background-size: auto, 24px 24px;
+}
+
+.react-flow__background {
+  display: none;
+}
+
+.react-flow__pane {
+  cursor: grab;
+}
+
+.react-flow__pane:active {
+  cursor: grabbing;
+}
+
+.react-flow__handle {
+  width: 9px;
+  height: 9px;
+  border: var(--border-strong) solid var(--color-flow-handle);
+  background: var(--color-flow-handle-fill);
+}
+
+.react-flow__edge-path {
+  stroke-linecap: round;
+}
+
+.react-flow__controls {
+  position: absolute;
+  overflow: hidden;
+  border: var(--border-hairline) solid var(--color-line);
+  border-radius: var(--radius-control);
+  background:
+    var(--gradient-panel-sheen),
+    var(--color-panel);
+  box-shadow: var(--elevation-panel);
+}
+
+.react-flow__controls::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  padding: 0;
+  border-radius: inherit;
+  background: none;
+  pointer-events: none;
+}
+
+.react-flow__controls-button {
+  width: var(--control-default);
+  height: var(--control-default);
+  border: 0;
+  border-bottom: var(--border-hairline) solid var(--color-line-soft);
+  background: transparent;
+  color: var(--color-ink-dim);
+  transition:
+    background-color var(--motion-duration) var(--motion-ease-out),
+    color var(--motion-duration) var(--motion-ease-out);
+}
+
+.react-flow__controls-button:hover {
+  background: var(--color-control-hover);
+  color: var(--color-white);
+}
+
+.react-flow__controls-button svg {
+  fill: currentColor;
+}
+
+.react-flow__attribution {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .react-flow__controls-button {
+    width: var(--control-touch);
+    height: var(--control-touch);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
