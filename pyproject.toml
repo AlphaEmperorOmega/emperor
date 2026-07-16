@@ -16,19 +16,16 @@ dependencies = [
   "torchvision",
   "torchtext",
   "torchmetrics",
-  "transformers",
   "datasets",
   "matplotlib",
   "ipython",
   "tensorboard",
-  "setuptools",
-  "pandas",
-  "ipykernel",
   "numpy",
   "lightning",
-  "torchinfo",
   "gymnasium",
   "filelock>=3.18,<4",
+  "Pillow",
+  "tokenizers",
 ]
 
 [project.scripts]
@@ -37,8 +34,10 @@ emperor-project-adapter = "models.adapter_cli:main"
 
 [project.optional-dependencies]
 dev = [
+  "build>=1.2,<2",
   "coverage[toml]>=7.15,<8",
   "mutmut>=3.6,<4",
+  "psutil>=7,<8",
   "ruff>=0.8,<0.14",
 ]
 
