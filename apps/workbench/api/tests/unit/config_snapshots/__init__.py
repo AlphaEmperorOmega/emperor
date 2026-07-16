@@ -1,0 +1,1 @@
+"""Config Snapshot owner tests."""
