@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 import torch
+import torch.nn.functional as F
 
 from emperor.augmentations.adaptive_parameters import (
     BankExpansionFactorOptions,
@@ -304,6 +305,59 @@ class AdaptiveParameterWeightMutationContractTests(unittest.TestCase):
                 base.unsqueeze(0) + hyper_update,
             )
         )
+
+    def test_normalization_defaults_and_every_numeric_transform_are_exact(
+        self,
+    ) -> None:
+        model = SingleModelDynamicWeight(single_config()).double()
+        self.assertEqual(model.scale.item(), 1.0)
+        self.assertEqual(model.clamp_limit.item(), 1.0)
+        with torch.no_grad():
+            model.scale.fill_(1.5)
+            model.clamp_limit.fill_(2.0)
+        vectors = torch.tensor(
+            [
+                [[1.0e-8, 2.0e-8, -3.0e-8], [3.0, -4.0, 1.0]],
+                [[-2.0, 0.5, 4.0], [1.0e-9, -4.0e-9, 2.0e-9]],
+            ],
+            dtype=torch.float64,
+        )
+        cases = (
+            (
+                WeightNormalizationOptions.CLAMP,
+                vectors.clamp(-2.0, 2.0),
+            ),
+            (
+                WeightNormalizationOptions.L2_SCALE,
+                F.normalize(vectors, dim=-1) * 1.5,
+            ),
+            (
+                WeightNormalizationOptions.SOFT_CLAMP,
+                2.0 * torch.tanh(vectors / 2.0),
+            ),
+            (
+                WeightNormalizationOptions.RMS,
+                vectors
+                / (vectors.pow(2).mean(dim=-1, keepdim=True).sqrt() + 1.0e-8)
+                * 1.5,
+            ),
+            (
+                WeightNormalizationOptions.SIGMOID_SCALE,
+                (torch.sigmoid(vectors) * 2.0 - 1.0) * 1.5,
+            ),
+            (
+                WeightNormalizationOptions.DISABLED,
+                vectors,
+            ),
+        )
+
+        for option, expected in cases:
+            with self.subTest(option=option):
+                model.normalization_option = option
+                actual = model._apply_normalization_transform(vectors)
+                self.assertTrue(
+                    torch.allclose(actual, expected, atol=1e-15, rtol=1e-12)
+                )
 
 if __name__ == "__main__":
     unittest.main()
