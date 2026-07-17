@@ -333,5 +333,51 @@ class AdaptiveParameterBehavioralContractTests(unittest.TestCase):
                 else:
                     self.assertEqual(restored_value[key], value)
 
+    def test_adaptive_linear_rejects_non_matrix_input_with_exact_error(self):
+        model = AdaptiveLinearLayer(adaptive_linear_config())
+        inputs = torch.ones(2, 3, 2)
+
+        with self.assertRaises(ValueError) as raised:
+            model(inputs)
+
+        self.assertEqual(
+            str(raised.exception),
+            "Input must be a 2D matrix (batch, input_dim), got 3D tensor with "
+            "shape torch.Size([2, 3, 2])",
+        )
+
+    def test_augmentation_rejects_three_dimensional_bias_parameters(self):
+        augmentation = AdaptiveParameterAugmentation(
+            AdaptiveParameterAugmentationConfig(input_dim=2, output_dim=3)
+        )
+
+        with self.assertRaises(ValueError) as raised:
+            augmentation(
+                lambda weights, bias, inputs: inputs @ weights + bias,
+                torch.ones(2, 3),
+                torch.ones(1, 1, 3),
+                torch.ones(1, 2),
+            )
+
+        self.assertEqual(
+            str(raised.exception),
+            "bias_params must be a 1D tensor (output_dim) or a 2D tensor "
+            "(batch_size, output_dim), received a 3D tensor with shape "
+            "(1, 1, 3).",
+        )
+
+    def test_layer_without_base_bias_rejects_dynamic_bias_configuration(self):
+        config = adaptive_linear_config(bias_flag=False, adaptive_bias=True)
+
+        with self.assertRaises(ValueError) as raised:
+            AdaptiveLinearLayer(config)
+
+        self.assertEqual(
+            str(raised.exception),
+            "bias_flag is False but adaptive_augmentation_config.bias_config "
+            "is set; cannot apply a dynamic bias to a layer without bias.",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
