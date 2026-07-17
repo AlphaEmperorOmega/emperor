@@ -22,7 +22,7 @@ class DynamicDiagonalConfig(ConfigBase):
 @dataclass
 class StandardDynamicDiagonalConfig(DynamicDiagonalConfig):
     def _registry_owner(self) -> type:
-        from emperor.augmentations.adaptive_parameters._diagonals.standard import (
+        from emperor.augmentations.adaptive_parameters._diagonals.variants.standard import (
             StandardDynamicDiagonal,
         )
 
@@ -32,7 +32,7 @@ class StandardDynamicDiagonalConfig(DynamicDiagonalConfig):
 @dataclass
 class AntiDynamicDiagonalConfig(DynamicDiagonalConfig):
     def _registry_owner(self) -> type:
-        from emperor.augmentations.adaptive_parameters._diagonals.anti import (
+        from emperor.augmentations.adaptive_parameters._diagonals.variants.anti import (
             AntiDynamicDiagonal,
         )
 
@@ -42,7 +42,7 @@ class AntiDynamicDiagonalConfig(DynamicDiagonalConfig):
 @dataclass
 class CombinedDynamicDiagonalConfig(DynamicDiagonalConfig):
     def _registry_owner(self) -> type:
-        from emperor.augmentations.adaptive_parameters._diagonals.combined import (
+        from emperor.augmentations.adaptive_parameters._diagonals.variants.combined import (
             CombinedDynamicDiagonal,
         )
 

@@ -1,13 +1,19 @@
 import unittest
 
-from emperor.augmentations.adaptive_parameters.core._validator import (
+from emperor.augmentations.adaptive_parameters import DynamicDiagonalConfig
+from emperor.augmentations.adaptive_parameters._diagonals.base import (
+    DynamicDiagonalAbstract,
+)
+from emperor.augmentations.adaptive_parameters._diagonals.validation import (
     DynamicDiagonalValidator,
 )
-from emperor.augmentations.adaptive_parameters.core.diagonal import (
+from emperor.augmentations.adaptive_parameters._diagonals.variants.anti import (
     AntiDynamicDiagonal,
+)
+from emperor.augmentations.adaptive_parameters._diagonals.variants.combined import (
     CombinedDynamicDiagonal,
-    DynamicDiagonalAbstract,
-    DynamicDiagonalConfig,
+)
+from emperor.augmentations.adaptive_parameters._diagonals.variants.standard import (
     StandardDynamicDiagonal,
 )
 

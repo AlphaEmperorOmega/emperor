@@ -1,0 +1,1 @@
+"""Private dynamic-diagonal variants."""
