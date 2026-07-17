@@ -329,6 +329,162 @@ class AdaptiveParameterValidationMutationContractTests(unittest.TestCase):
             ),
         )
 
+    def test_each_sub_config_type_and_missing_model_error_is_exact(self) -> None:
+        model = AdaptiveParameterAugmentation(
+            AdaptiveParameterAugmentationConfig(input_dim=2, output_dim=3)
+        )
+        wrong_config = LinearLayerConfig(
+            input_dim=2,
+            output_dim=3,
+            bias_flag=True,
+        )
+        expected_types = (
+            ("weight_config", "DynamicWeightConfig"),
+            ("diagonal_config", "DynamicDiagonalConfig"),
+            ("bias_config", "DynamicBiasConfig"),
+            ("mask_config", "AxisMaskConfig"),
+        )
+        for field_name, expected_type in expected_types:
+            with self.subTest(field_name=field_name, failure="type"):
+                setattr(model, field_name, wrong_config)
+                self.assert_exact_error(
+                    TypeError,
+                    f"{field_name} must be a {expected_type} instance, got "
+                    "LinearLayerConfig.",
+                    lambda: (
+                        AdaptiveParameterAugmentationValidator._validate_sub_configs(
+                            model
+                        )
+                    ),
+                )
+                setattr(model, field_name, None)
+
+        invalid_nested_model = SingleModelDynamicWeightConfig(
+            input_dim=2,
+            output_dim=2,
+            generator_depth=DynamicDepthOptions.DEPTH_OF_ONE,
+            decay_schedule=WeightDecayScheduleOptions.DISABLED,
+            decay_rate=0.0,
+            decay_warmup_batches=0,
+            model_config=wrong_config,
+            normalization_option=WeightNormalizationOptions.DISABLED,
+            normalization_position_option=(WeightNormalizationPositionOptions.DISABLED),
+        )
+        self.assert_exact_error(
+            TypeError,
+            "weight_config.model_config must be a LayerStackConfig when provided, "
+            "got LinearLayerConfig.",
+            lambda: AdaptiveParameterAugmentation(
+                AdaptiveParameterAugmentationConfig(
+                    input_dim=2,
+                    output_dim=2,
+                    weight_config=invalid_nested_model,
+                )
+            ),
+        )
+
+        missing_model_configs = (
+            ("weight_config", SingleModelDynamicWeightConfig()),
+            ("diagonal_config", StandardDynamicDiagonalConfig()),
+            ("bias_config", AdditiveDynamicBiasConfig()),
+            ("mask_config", PerAxisScoreMaskConfig()),
+        )
+        for field_name, sub_config in missing_model_configs:
+            with self.subTest(field_name=field_name, failure="missing model"):
+                config = AdaptiveParameterAugmentationConfig(
+                    input_dim=2,
+                    output_dim=3,
+                    **{field_name: sub_config},
+                )
+                self.assert_exact_error(
+                    ValueError,
+                    f"{type(sub_config).__name__} requires a model_config but none "
+                    "was provided on the sub-config or the parent "
+                    "AdaptiveParameterAugmentationConfig.",
+                    lambda config=config: AdaptiveParameterAugmentation(config),
+                )
+
+    def test_decay_validation_reports_exact_rate_and_warmup_contracts(self) -> None:
+        cases = (
+            (
+                WeightDecayScheduleOptions.EXPONENTIAL,
+                None,
+                0,
+                "decay_rate is required for AdditiveDynamicBiasConfig, received None",
+            ),
+            (
+                WeightDecayScheduleOptions.EXPONENTIAL,
+                0.0,
+                0,
+                "decay_rate must be greater than 0.0 when decay_schedule is "
+                "EXPONENTIAL, received 0.0.",
+            ),
+            (
+                WeightDecayScheduleOptions.LINEAR,
+                1.0,
+                0,
+                "decay_rate must be less than 1.0 for LINEAR, received 1.0.",
+            ),
+            (
+                WeightDecayScheduleOptions.MULTIPLICATIVE,
+                1.0,
+                0,
+                "decay_rate must be less than 1.0 for MULTIPLICATIVE, received 1.0.",
+            ),
+            (
+                WeightDecayScheduleOptions.EXPONENTIAL,
+                0.1,
+                -1,
+                "decay_warmup_batches must be >= 0, received -1.",
+            ),
+        )
+        for schedule, rate, warmup, message in cases:
+            with self.subTest(schedule=schedule, rate=rate, warmup=warmup):
+                config = AdditiveDynamicBiasConfig(
+                    input_dim=2,
+                    output_dim=3,
+                    decay_schedule=schedule,
+                    decay_rate=rate,
+                    decay_warmup_batches=warmup,
+                    model_config=linear_stack_config(),
+                )
+                self.assert_exact_error(ValueError, message, config.build)
+
+        config = AdditiveDynamicBiasConfig(
+            input_dim=2,
+            output_dim=3,
+            decay_schedule=WeightDecayScheduleOptions.EXPONENTIAL,
+            decay_rate=None,
+            decay_warmup_batches=0,
+            model_config=linear_stack_config(),
+        )
+        self.assert_exact_error(
+            ValueError,
+            "decay_rate must be greater than 0.0 when decay_schedule is "
+            "EXPONENTIAL, received None.",
+            lambda: AdaptiveGeneratorValidatorBase.validate_decay_parameters(config),
+        )
+
+        weight_config = SingleModelDynamicWeightConfig(
+            input_dim=2,
+            output_dim=2,
+            generator_depth=DynamicDepthOptions.DEPTH_OF_ONE,
+            decay_schedule=WeightDecayScheduleOptions.EXPONENTIAL,
+            decay_rate=-0.1,
+            decay_warmup_batches=0,
+            model_config=linear_stack_config(2, 2),
+            normalization_option=WeightNormalizationOptions.L2_SCALE,
+            normalization_position_option=(
+                WeightNormalizationPositionOptions.BEFORE_OUTER_PRODUCT
+            ),
+        )
+        self.assert_exact_error(
+            ValueError,
+            "decay_rate must be greater than 0.0 when decay_schedule is "
+            "EXPONENTIAL, received -0.1.",
+            weight_config.build,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
