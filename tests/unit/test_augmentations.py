@@ -1,65 +1,100 @@
-from emperor.base.layer.residual import ResidualConnectionOptions
-import torch
 import unittest
+
+import torch
 import torch.nn as nn
 
 import emperor.augmentations as augmentations
 import emperor.augmentations.adaptive_parameters as adaptive_parameters
-import emperor.augmentations.adaptive_parameters.core as adaptive_parameter_core
-from emperor.base.utils import Module
-from emperor.base.layer.config import LayerConfig, LayerStackConfig
-from emperor.base.options import (
-    ActivationOptions,
-    LastLayerBiasOptions,
-    LayerNormPositionOptions,
-)
-from emperor.linears.core.config import LinearLayerConfig
 from emperor.augmentations.adaptive_parameters import (
-    AdaptiveParameterAugmentation,
     AdaptiveParameterAugmentationConfig,
+    AdditiveDynamicBiasConfig,
+    AffineTransformDynamicBiasConfig,
+    AntiDynamicDiagonalConfig,
+    AxisMaskConfig,
     BankExpansionFactorOptions,
-    DynamicDepthOptions,
-    MaskDimensionOptions,
-    WeightDecayScheduleOptions,
-    WeightNormalizationOptions,
-    WeightNormalizationPositionOptions,
-)
-from emperor.augmentations.adaptive_parameters.core.weight import (
-    DynamicWeightConfig,
-    DynamicWeightAbstract,
+    CombinedDynamicDiagonalConfig,
+    DiagonalAxisMaskConfig,
     DualModelDynamicWeightConfig,
+    DynamicBiasConfig,
+    DynamicDepthOptions,
+    DynamicDiagonalConfig,
+    DynamicWeightConfig,
+    GeneratorDynamicBiasConfig,
     HypernetworkDynamicWeightConfig,
     LayeredWeightedBankDynamicWeightConfig,
     LowRankDynamicWeightConfig,
-    SingleModelDynamicWeightConfig,
-    SoftWeightedBankDynamicWeightConfig,
-)
-from emperor.augmentations.adaptive_parameters.core.diagonal import (
-    AntiDynamicDiagonalConfig,
-    CombinedDynamicDiagonalConfig,
-    DynamicDiagonalConfig,
-    DynamicDiagonalAbstract,
-    StandardDynamicDiagonalConfig,
-)
-from emperor.augmentations.adaptive_parameters.core.bias import (
-    AdditiveDynamicBiasConfig,
-    AffineTransformDynamicBiasConfig,
-    DynamicBiasConfig,
-    DynamicBiasAbstract,
-    GeneratorDynamicBiasConfig,
+    MaskDimensionOptions,
     MultiplicativeDynamicBiasConfig,
-    SigmoidGatedDynamicBiasConfig,
-    TanhGatedDynamicBiasConfig,
-    WeightedBankDynamicBiasConfig,
-)
-from emperor.augmentations.adaptive_parameters.core.mask import (
-    AxisMaskConfig,
-    AxisMaskAbstract,
-    DiagonalAxisMaskConfig,
     OuterProductMaskConfig,
     PerAxisScoreMaskConfig,
+    SigmoidGatedDynamicBiasConfig,
+    SingleModelDynamicWeightConfig,
+    SoftWeightedBankDynamicWeightConfig,
+    StandardDynamicDiagonalConfig,
+    TanhGatedDynamicBiasConfig,
     TopSliceAxisMaskConfig,
+    WeightDecayScheduleOptions,
+    WeightedBankDynamicBiasConfig,
     WeightInformedScoreAxisMaskConfig,
+    WeightNormalizationOptions,
+    WeightNormalizationPositionOptions,
+)
+from emperor.augmentations.adaptive_parameters._augmentation import (
+    AdaptiveParameterAugmentation,
+)
+from emperor.augmentations.adaptive_parameters._biases.base import DynamicBiasAbstract
+from emperor.augmentations.adaptive_parameters._diagonals.base import (
+    DynamicDiagonalAbstract,
+)
+from emperor.augmentations.adaptive_parameters._masks.base import AxisMaskAbstract
+from emperor.augmentations.adaptive_parameters._weights.base import (
+    DynamicWeightAbstract,
+)
+from emperor.layers import (
+    ActivationOptions,
+    LastLayerBiasOptions,
+    LayerConfig,
+    LayerNormPositionOptions,
+    LayerStackConfig,
+    ResidualConnectionOptions,
+)
+from emperor.linears import LinearLayerConfig
+from emperor.nn import Module
+
+ADAPTIVE_PARAMETER_PUBLIC_EXPORTS = (
+    "AdaptiveParameterAugmentationConfig",
+    "AdaptiveLinearLayerConfig",
+    "DynamicWeightConfig",
+    "SingleModelDynamicWeightConfig",
+    "DualModelDynamicWeightConfig",
+    "LowRankDynamicWeightConfig",
+    "HypernetworkDynamicWeightConfig",
+    "LayeredWeightedBankDynamicWeightConfig",
+    "SoftWeightedBankDynamicWeightConfig",
+    "DynamicBiasConfig",
+    "AffineTransformDynamicBiasConfig",
+    "AdditiveDynamicBiasConfig",
+    "MultiplicativeDynamicBiasConfig",
+    "SigmoidGatedDynamicBiasConfig",
+    "TanhGatedDynamicBiasConfig",
+    "GeneratorDynamicBiasConfig",
+    "WeightedBankDynamicBiasConfig",
+    "DynamicDiagonalConfig",
+    "StandardDynamicDiagonalConfig",
+    "AntiDynamicDiagonalConfig",
+    "CombinedDynamicDiagonalConfig",
+    "AxisMaskConfig",
+    "WeightInformedScoreAxisMaskConfig",
+    "PerAxisScoreMaskConfig",
+    "TopSliceAxisMaskConfig",
+    "OuterProductMaskConfig",
+    "DiagonalAxisMaskConfig",
+    "BankExpansionFactorOptions",
+    "DynamicDepthOptions",
+    "MaskDimensionOptions",
+    "WeightDecayScheduleOptions",
+    "WeightNormalizationOptions",
+    "WeightNormalizationPositionOptions",
 )
 
 
@@ -345,12 +380,28 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
         return weight_params, bias_params
 
     def test_public_exports_resolve(self):
-        self.assertEqual(set(augmentations.__all__), set(adaptive_parameters.__all__))
+        self.assertEqual(augmentations.__all__, ("adaptive_parameters",))
+        self.assertIs(augmentations.adaptive_parameters, adaptive_parameters)
+        self.assertFalse(hasattr(augmentations, "AdaptiveParameterAugmentation"))
+        self.assertEqual(
+            adaptive_parameters.__all__,
+            ADAPTIVE_PARAMETER_PUBLIC_EXPORTS,
+        )
 
-        for module in (augmentations, adaptive_parameters, adaptive_parameter_core):
-            with self.subTest(module=module.__name__):
-                for name in module.__all__:
-                    self.assertTrue(hasattr(module, name), name)
+        for name in ADAPTIVE_PARAMETER_PUBLIC_EXPORTS:
+            with self.subTest(name=name):
+                self.assertTrue(hasattr(adaptive_parameters, name), name)
+
+    def test_root_configs_share_package_config_module(self):
+        expected_module = "emperor.augmentations.adaptive_parameters._config"
+        self.assertEqual(
+            AdaptiveParameterAugmentationConfig.__module__,
+            expected_module,
+        )
+        self.assertEqual(
+            adaptive_parameters.AdaptiveLinearLayerConfig.__module__,
+            expected_module,
+        )
 
     def test_init_all_disabled(self):
         cfg = self.preset()
