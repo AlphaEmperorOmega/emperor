@@ -432,6 +432,41 @@ class TestWeightBankUtilizationMonitorCallback(unittest.TestCase):
                     expected_entropy,
                 )
 
+    def test_distribution_summary_ignores_non_bank_modules(self):
+        self.assertIsNone(
+            _WeightBankDiagnostics.summarize(
+                nn.Identity(),
+                torch.ones(2, 3),
+            )
+        )
+
+    def test_capture_hook_ignores_output_without_tensor_hidden_state(self):
+        callback = WeightBankUtilizationMonitorCallback()
+        hook = callback._WeightBankUtilizationMonitorCallback__make_bank_logits_capture_hook(
+            "unknown"
+        )
+
+        hook(nn.Identity(), (), object())
+
+        self.assertEqual(callback._last_bank_logits, {})
+
+    def test_batch_end_ignores_unrecognized_registered_bank_module(self):
+        callback = WeightBankUtilizationMonitorCallback(log_every_n_steps=1)
+        module = self.build_module(nn.Identity())
+        callback._bank_modules.append(("unknown", nn.Identity()))
+        callback._last_bank_logits["unknown"] = torch.ones(2, 3)
+
+        callback.on_train_batch_end(
+            trainer=None,
+            pl_module=module,
+            outputs=None,
+            batch=None,
+            batch_idx=0,
+        )
+
+        self.assertEqual(module.logged_scalars, [])
+        self.assertEqual(callback._last_bank_logits, {})
+
     def test_per_slot_scalars_logged_when_enabled(self):
         bank = self.build_soft_weighted_bank_weight(
             bank_expansion_factor=BankExpansionFactorOptions.FACTOR_OF_THREE
@@ -542,6 +577,24 @@ class TestWeightBankUtilizationMonitorCallback(unittest.TestCase):
         self.assertEqual(callback._bank_modules, [])
         self.assertEqual(callback._utilization_history, {})
         self.assertEqual(set(callback._last_bank_logits), {"sentinel"})
+
+    def test_on_exception_removes_hooks_and_clears_all_state(self):
+        bank = self.build_soft_weighted_bank_weight()
+        module = self.build_module(bank)
+        callback = self.primed_callback(module)
+        self.feed_bank(bank)
+        self.assertTrue(callback._last_bank_logits)
+
+        callback.on_exception(
+            trainer=None,
+            pl_module=module,
+            exception=RuntimeError("deliberate failure"),
+        )
+
+        self.assertEqual(callback._hooks, [])
+        self.assertEqual(callback._bank_modules, [])
+        self.assertEqual(callback._utilization_history, {})
+        self.assertEqual(callback._last_bank_logits, {})
 
 
 if __name__ == "__main__":
