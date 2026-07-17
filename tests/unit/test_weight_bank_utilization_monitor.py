@@ -1,35 +1,40 @@
 import unittest
 
 import torch
+from torch import nn
+
 from emperor.augmentations.adaptive_parameters import (
     BankExpansionFactorOptions,
     DynamicDepthOptions,
+    LayeredWeightedBankDynamicWeightConfig,
+    SoftWeightedBankDynamicWeightConfig,
     WeightDecayScheduleOptions,
-)
-from emperor.augmentations.adaptive_parameters.core.bank_monitor import (
-    WeightBankUtilizationMonitorCallback,
-    _WeightBankDiagnostics,
-)
-from emperor.augmentations.adaptive_parameters.core.bias import (
-    WeightedBankDynamicBias,
     WeightedBankDynamicBiasConfig,
 )
-from emperor.augmentations.adaptive_parameters.core.weight import (
-    LayeredWeightedBankDynamicWeight,
-    LayeredWeightedBankDynamicWeightConfig,
-    SoftWeightedBankDynamicWeight,
-    SoftWeightedBankDynamicWeightConfig,
+from emperor.augmentations.adaptive_parameters._biases.variants.weighted_bank import (
+    WeightedBankDynamicBias,
 )
-from emperor.base.layer.config import LayerConfig, LayerStackConfig
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import (
+from emperor.augmentations.adaptive_parameters._monitoring.weight_banks import (
+    _WeightBankDiagnostics,
+)
+from emperor.augmentations.adaptive_parameters._weights.variants.layered_weighted_bank import (
+    LayeredWeightedBankDynamicWeight,
+)
+from emperor.augmentations.adaptive_parameters._weights.variants.soft_weighted_bank import (
+    SoftWeightedBankDynamicWeight,
+)
+from emperor.augmentations.adaptive_parameters.monitoring import (
+    WeightBankUtilizationMonitorCallback,
+)
+from emperor.layers import (
     ActivationOptions,
     LastLayerBiasOptions,
+    LayerConfig,
     LayerNormPositionOptions,
+    LayerStackConfig,
+    ResidualConnectionOptions,
 )
-from emperor.linears.core.config import LinearLayerConfig
-from torch import nn
-
+from emperor.linears import LinearLayerConfig
 from support.monitor import orchestration_calls
 
 

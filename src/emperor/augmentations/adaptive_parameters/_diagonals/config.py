@@ -1,14 +1,17 @@
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from emperor.config import ConfigBase, optional_field
-from emperor.layers import LayerStackConfig
+
+if TYPE_CHECKING:
+    from emperor.layers import LayerStackConfig
 
 
 @dataclass
 class DynamicDiagonalConfig(ConfigBase):
     input_dim: int | None = optional_field("Input feature dimension.")
     output_dim: int | None = optional_field("Output feature dimension.")
-    model_config: LayerStackConfig | None = optional_field(
+    model_config: "LayerStackConfig | None" = optional_field(
         "Internal generator network config."
     )
 
