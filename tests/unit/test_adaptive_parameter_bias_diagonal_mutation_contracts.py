@@ -5,6 +5,8 @@ import unittest
 import torch
 
 from emperor.augmentations.adaptive_parameters import (
+    AdaptiveLinearLayerConfig,
+    AdaptiveParameterAugmentationConfig,
     AdditiveDynamicBiasConfig,
     AffineTransformDynamicBiasConfig,
     AntiDynamicDiagonalConfig,
@@ -45,6 +47,9 @@ from emperor.augmentations.adaptive_parameters._diagonals.variants.combined impo
 )
 from emperor.augmentations.adaptive_parameters._diagonals.variants.standard import (
     StandardDynamicDiagonal,
+)
+from emperor.augmentations.adaptive_parameters._linear_adapter import (
+    AdaptiveLinearLayer,
 )
 from emperor.layers import (
     ActivationOptions,
@@ -363,3 +368,24 @@ class AdaptiveParameterBiasDiagonalMutationContractTests(unittest.TestCase):
             ]
         )
         self.assertTrue(torch.equal(anti(anti_base, anti_logits), expected_anti))
+
+    def test_adaptive_linear_constructor_applies_explicit_overrides(self) -> None:
+        model = AdaptiveLinearLayer(
+            AdaptiveLinearLayerConfig(
+                input_dim=2,
+                output_dim=3,
+                bias_flag=True,
+                adaptive_augmentation_config=(
+                    AdaptiveParameterAugmentationConfig()
+                ),
+            ),
+            AdaptiveLinearLayerConfig(
+                input_dim=4,
+                output_dim=5,
+                bias_flag=False,
+            ),
+        )
+
+        self.assertEqual((model.input_dim, model.output_dim), (4, 5))
+        self.assertEqual(tuple(model.weight_params.shape), (4, 5))
+        self.assertIsNone(model.bias_params)
