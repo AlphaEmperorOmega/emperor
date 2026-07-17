@@ -544,6 +544,64 @@ class AdaptiveParameterValidationMutationContractTests(unittest.TestCase):
             lambda: DynamicBiasValidator.ensure_parameters_exist(None),
         )
 
+    def test_mask_validation_boundaries_have_exact_errors(self) -> None:
+        base = {
+            "input_dim": 2,
+            "output_dim": 3,
+            "mask_threshold": 0.5,
+            "mask_surrogate_scale": 5.0,
+            "mask_floor": 0.0,
+            "mask_dimension_option": MaskDimensionOptions.ROW,
+            "model_config": linear_stack_config(),
+        }
+        cases = (
+            (
+                {"mask_threshold": -0.1},
+                "mask_threshold must be between 0.0 and 1.0 inclusive, received -0.1.",
+            ),
+            (
+                {"mask_threshold": 1.1},
+                "mask_threshold must be between 0.0 and 1.0 inclusive, received 1.1.",
+            ),
+            (
+                {"mask_surrogate_scale": -0.1},
+                "mask_surrogate_scale must be greater than or equal to 0.0, "
+                "received -0.1.",
+            ),
+            (
+                {"mask_floor": -0.1},
+                "mask_floor must be between 0.0 inclusive and 1.0 exclusive, "
+                "received -0.1.",
+            ),
+            (
+                {"mask_floor": 1.0},
+                "mask_floor must be between 0.0 inclusive and 1.0 exclusive, "
+                "received 1.0.",
+            ),
+        )
+        for overrides, message in cases:
+            with self.subTest(overrides=overrides):
+                config = PerAxisScoreMaskConfig(**(base | overrides))
+                self.assert_exact_error(ValueError, message, config.build)
+
+        inclusive_threshold = PerAxisScoreMaskConfig(
+            **(base | {"mask_threshold": 1.0})
+        ).build()
+        self.assertEqual(inclusive_threshold.mask_threshold, 1.0)
+
+        for width in (0.0, -0.1):
+            with self.subTest(mask_transition_width=width):
+                config = TopSliceAxisMaskConfig(
+                    **base,
+                    mask_transition_width=width,
+                )
+                self.assert_exact_error(
+                    ValueError,
+                    "mask_transition_width must be greater than 0.0, "
+                    f"received {width!r}.",
+                    config.build,
+                )
+
 
 if __name__ == "__main__":
     unittest.main()
