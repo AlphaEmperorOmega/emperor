@@ -1,18 +1,29 @@
 import unittest
 
 import torch
-from emperor.augmentations.adaptive_parameters.core._validator import (
+
+from emperor.augmentations.adaptive_parameters import DynamicBiasConfig
+from emperor.augmentations.adaptive_parameters._biases.base import DynamicBiasAbstract
+from emperor.augmentations.adaptive_parameters._biases.validation import (
     DynamicBiasValidator,
 )
-from emperor.augmentations.adaptive_parameters.core.bias import (
+from emperor.augmentations.adaptive_parameters._biases.variants.additive import (
     AdditiveDynamicBias,
+)
+from emperor.augmentations.adaptive_parameters._biases.variants.affine import (
     AffineTransformDynamicBias,
-    DynamicBiasAbstract,
-    DynamicBiasConfig,
-    GeneratorDynamicBias,
-    MultiplicativeDynamicBias,
+)
+from emperor.augmentations.adaptive_parameters._biases.variants.gated import (
     SigmoidGatedDynamicBias,
     TanhGatedDynamicBias,
+)
+from emperor.augmentations.adaptive_parameters._biases.variants.generator import (
+    GeneratorDynamicBias,
+)
+from emperor.augmentations.adaptive_parameters._biases.variants.multiplicative import (
+    MultiplicativeDynamicBias,
+)
+from emperor.augmentations.adaptive_parameters._biases.variants.weighted_bank import (
     WeightedBankDynamicBias,
 )
 

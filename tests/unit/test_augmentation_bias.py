@@ -1,39 +1,49 @@
-from emperor.base.layer.residual import ResidualConnectionOptions
 import unittest
 
 import torch
 import torch.nn as nn
 
-from emperor.base.options import (
-    ActivationOptions,
-    LastLayerBiasOptions,
-    LayerNormPositionOptions,
-)
-from emperor.base.layer import Layer, LayerConfig, LayerStackConfig
-from emperor.base.layer.state import LayerState
-from emperor.linears.core.config import LinearLayerConfig
 from emperor.augmentations.adaptive_parameters import (
-    BankExpansionFactorOptions,
-    WeightDecayScheduleOptions,
-)
-from emperor.augmentations.adaptive_parameters.core.bias import (
-    AdditiveDynamicBias,
     AdditiveDynamicBiasConfig,
-    AffineTransformDynamicBias,
     AffineTransformDynamicBiasConfig,
-    DynamicBiasAbstract,
+    BankExpansionFactorOptions,
     DynamicBiasConfig,
-    GeneratorDynamicBias,
     GeneratorDynamicBiasConfig,
-    MultiplicativeDynamicBias,
     MultiplicativeDynamicBiasConfig,
-    SigmoidGatedDynamicBias,
     SigmoidGatedDynamicBiasConfig,
-    TanhGatedDynamicBias,
     TanhGatedDynamicBiasConfig,
-    WeightedBankDynamicBias,
+    WeightDecayScheduleOptions,
     WeightedBankDynamicBiasConfig,
 )
+from emperor.augmentations.adaptive_parameters._biases.variants.additive import (
+    AdditiveDynamicBias,
+)
+from emperor.augmentations.adaptive_parameters._biases.variants.affine import (
+    AffineTransformDynamicBias,
+)
+from emperor.augmentations.adaptive_parameters._biases.variants.gated import (
+    SigmoidGatedDynamicBias,
+    TanhGatedDynamicBias,
+)
+from emperor.augmentations.adaptive_parameters._biases.variants.generator import (
+    GeneratorDynamicBias,
+)
+from emperor.augmentations.adaptive_parameters._biases.variants.multiplicative import (
+    MultiplicativeDynamicBias,
+)
+from emperor.augmentations.adaptive_parameters._biases.variants.weighted_bank import (
+    WeightedBankDynamicBias,
+)
+from emperor.layers import (
+    ActivationOptions,
+    LastLayerBiasOptions,
+    LayerConfig,
+    LayerNormPositionOptions,
+    LayerStackConfig,
+    LayerState,
+    ResidualConnectionOptions,
+)
+from emperor.linears import LinearLayerConfig
 
 
 class ConstantGenerator(nn.Module):

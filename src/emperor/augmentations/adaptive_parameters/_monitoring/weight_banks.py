@@ -53,7 +53,7 @@ class _WeightBankDiagnostics:
         bank_module: Module,
         bank_logits: Tensor,
     ) -> _BankDistributionSummary | None:
-        from emperor.augmentations.adaptive_parameters._biases.weighted_bank import (
+        from emperor.augmentations.adaptive_parameters._biases.variants.weighted_bank import (
             WeightedBankDynamicBias,
         )
 
@@ -207,7 +207,7 @@ class WeightBankUtilizationMonitorCallback(Callback):
 
     @staticmethod
     def __is_weighted_bank_module(module: Module) -> bool:
-        from emperor.augmentations.adaptive_parameters._biases.weighted_bank import (
+        from emperor.augmentations.adaptive_parameters._biases.variants.weighted_bank import (
             WeightedBankDynamicBias,
         )
 
