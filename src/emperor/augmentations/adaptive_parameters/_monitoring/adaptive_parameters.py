@@ -445,14 +445,14 @@ class AdaptiveParameterMonitorCallback(Callback):
 
     @staticmethod
     def __uses_multiplicative_bias_scale(option: Module) -> bool:
-        from emperor.augmentations.adaptive_parameters._biases.affine import (
+        from emperor.augmentations.adaptive_parameters._biases.variants.affine import (
             AffineTransformDynamicBias,
         )
-        from emperor.augmentations.adaptive_parameters._biases.gated import (
+        from emperor.augmentations.adaptive_parameters._biases.variants.gated import (
             SigmoidGatedDynamicBias,
             TanhGatedDynamicBias,
         )
-        from emperor.augmentations.adaptive_parameters._biases.multiplicative import (
+        from emperor.augmentations.adaptive_parameters._biases.variants.multiplicative import (
             MultiplicativeDynamicBias,
         )
 

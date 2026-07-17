@@ -33,7 +33,7 @@ class DynamicBiasConfig(ConfigBase):
 @dataclass
 class AffineTransformDynamicBiasConfig(DynamicBiasConfig):
     def _registry_owner(self) -> type:
-        from emperor.augmentations.adaptive_parameters._biases.affine import (
+        from emperor.augmentations.adaptive_parameters._biases.variants.affine import (
             AffineTransformDynamicBias,
         )
 
@@ -43,7 +43,7 @@ class AffineTransformDynamicBiasConfig(DynamicBiasConfig):
 @dataclass
 class AdditiveDynamicBiasConfig(DynamicBiasConfig):
     def _registry_owner(self) -> type:
-        from emperor.augmentations.adaptive_parameters._biases.additive import (
+        from emperor.augmentations.adaptive_parameters._biases.variants.additive import (
             AdditiveDynamicBias,
         )
 
@@ -53,7 +53,7 @@ class AdditiveDynamicBiasConfig(DynamicBiasConfig):
 @dataclass
 class MultiplicativeDynamicBiasConfig(DynamicBiasConfig):
     def _registry_owner(self) -> type:
-        from emperor.augmentations.adaptive_parameters._biases.multiplicative import (
+        from emperor.augmentations.adaptive_parameters._biases.variants.multiplicative import (
             MultiplicativeDynamicBias,
         )
 
@@ -63,7 +63,7 @@ class MultiplicativeDynamicBiasConfig(DynamicBiasConfig):
 @dataclass
 class SigmoidGatedDynamicBiasConfig(DynamicBiasConfig):
     def _registry_owner(self) -> type:
-        from emperor.augmentations.adaptive_parameters._biases.gated import (
+        from emperor.augmentations.adaptive_parameters._biases.variants.gated import (
             SigmoidGatedDynamicBias,
         )
 
@@ -73,7 +73,7 @@ class SigmoidGatedDynamicBiasConfig(DynamicBiasConfig):
 @dataclass
 class TanhGatedDynamicBiasConfig(DynamicBiasConfig):
     def _registry_owner(self) -> type:
-        from emperor.augmentations.adaptive_parameters._biases.gated import (
+        from emperor.augmentations.adaptive_parameters._biases.variants.gated import (
             TanhGatedDynamicBias,
         )
 
@@ -83,7 +83,7 @@ class TanhGatedDynamicBiasConfig(DynamicBiasConfig):
 @dataclass
 class GeneratorDynamicBiasConfig(DynamicBiasConfig):
     def _registry_owner(self) -> type:
-        from emperor.augmentations.adaptive_parameters._biases.generator import (
+        from emperor.augmentations.adaptive_parameters._biases.variants.generator import (
             GeneratorDynamicBias,
         )
 
@@ -97,7 +97,7 @@ class WeightedBankDynamicBiasConfig(DynamicBiasConfig):
     )
 
     def _registry_owner(self) -> type:
-        from emperor.augmentations.adaptive_parameters._biases.weighted_bank import (
+        from emperor.augmentations.adaptive_parameters._biases.variants.weighted_bank import (
             WeightedBankDynamicBias,
         )
 
