@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from emperor.attention._runtime import (
         QKV,
         AttentionMasks,
-        AttentionRuntimeShape,
+        AttentionRuntimeLayout,
     )
 
 
@@ -27,41 +27,41 @@ class ZeroAttention:
         self,
         qkv: "QKV",
         masks: "AttentionMasks",
-        runtime_shape: "AttentionRuntimeShape | None" = None,
-    ) -> tuple["QKV", "AttentionMasks", "AttentionRuntimeShape | None"]:
+        runtime_layout: "AttentionRuntimeLayout | None" = None,
+    ) -> tuple["QKV", "AttentionMasks", "AttentionRuntimeLayout | None"]:
         if not self.zero_attention_flag:
-            return qkv, masks, runtime_shape
+            return qkv, masks, runtime_layout
 
-        updated_qkv = self.__append_zero_attention_to_key_value(qkv, runtime_shape)
+        updated_qkv = self.__append_zero_attention_to_key_value(qkv, runtime_layout)
         updated_masks = self.__pad_masks_for_zero_attention(masks)
-        updated_runtime_shape = self.__extend_runtime_shape(runtime_shape)
-        return updated_qkv, updated_masks, updated_runtime_shape
+        updated_runtime_layout = self.__extend_runtime_layout(runtime_layout)
+        return updated_qkv, updated_masks, updated_runtime_layout
 
     def __append_zero_attention_to_key_value(
         self,
         qkv: "QKV",
-        runtime_shape: "AttentionRuntimeShape | None",
+        runtime_layout: "AttentionRuntimeLayout | None",
     ) -> "QKV":
-        padded_key = self.__concatenate_zeros_tensor(qkv.key, runtime_shape)
-        padded_value = self.__concatenate_zeros_tensor(qkv.value, runtime_shape)
+        padded_key = self.__concatenate_zeros_tensor(qkv.key, runtime_layout)
+        padded_value = self.__concatenate_zeros_tensor(qkv.value, runtime_layout)
         updated_qkv = replace(qkv, key=padded_key, value=padded_value)
         return updated_qkv
 
     def __concatenate_zeros_tensor(
         self,
         tensor: Tensor,
-        runtime_shape: "AttentionRuntimeShape | None" = None,
+        runtime_layout: "AttentionRuntimeLayout | None" = None,
     ) -> Tensor:
         head_dim = tensor.size(-1)
-        zero_attention_shape = (self._get_branch_count(runtime_shape), 1, head_dim)
+        zero_attention_shape = (self._get_branch_count(runtime_layout), 1, head_dim)
         zeros_tensor = tensor.new_zeros(zero_attention_shape)
         return torch.cat([tensor, zeros_tensor], dim=1)
 
     def _get_branch_count(
-        self, runtime_shape: "AttentionRuntimeShape | None" = None
+        self, runtime_layout: "AttentionRuntimeLayout | None" = None
     ) -> int:
         batch_size = (
-            runtime_shape.batch_size if runtime_shape is not None else self.batch_size
+            runtime_layout.batch_size if runtime_layout is not None else self.batch_size
         )
         return batch_size * self.num_heads
 
@@ -84,9 +84,9 @@ class ZeroAttention:
         return F.pad(mask, zero_attention_padding)
 
     @staticmethod
-    def __extend_runtime_shape(
-        runtime_shape: "AttentionRuntimeShape | None",
-    ) -> "AttentionRuntimeShape | None":
-        if runtime_shape is None:
+    def __extend_runtime_layout(
+        runtime_layout: "AttentionRuntimeLayout | None",
+    ) -> "AttentionRuntimeLayout | None":
+        if runtime_layout is None:
             return None
-        return runtime_shape.with_source_extension()
+        return runtime_layout.with_source_extension()

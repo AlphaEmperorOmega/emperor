@@ -7,50 +7,55 @@ import torch.nn.functional as F
 from torch import Tensor
 
 from emperor.attention._ops.processing import ProcessorBase
+from emperor.attention._runtime import QKV
 
 if TYPE_CHECKING:
-    from emperor.attention._runtime import QKV, AttentionRuntimeShape
+    from emperor.attention._runtime import AttentionRuntimeLayout
 
 
 class SelfAttentionProcessor(ProcessorBase):
     def compute_attention(
         self,
-        qkv: "QKV",
+        qkv: QKV,
         merged_attention_mask: Tensor | None = None,
-        runtime_shape: "AttentionRuntimeShape | None" = None,
+        runtime_layout: "AttentionRuntimeLayout | None" = None,
     ) -> tuple[Tensor, Tensor | None]:
-        weights = self.__compute_masked_attention_weights(
-            qkv.query,
-            qkv.key,
-            merged_attention_mask,
-            runtime_shape,
+        attention_weights = self.__compute_masked_attention_weights(
+            qkv, merged_attention_mask, runtime_layout
         )
-        weighted_value = self.__compute_weighted_values(
-            weights,
-            qkv.value,
-            runtime_shape,
+        weighted_values = self.__compute_weighted_values(
+            qkv, attention_weights, runtime_layout
         )
-        output = self._compute_attention_output(weighted_value, runtime_shape)
-        weights = self.__format_attention_weights(weights, runtime_shape)
+        attention_output = self._compute_attention_output(
+            weighted_values, runtime_layout
+        )
+        attention_weights = self.__format_attention_weights(
+            attention_weights, runtime_layout
+        )
 
-        return output, weights
+        return attention_output, attention_weights
 
     def __compute_masked_attention_weights(
         self,
-        query: Tensor,
-        key: Tensor,
-        attention_mask: Tensor | None,
-        runtime_shape: "AttentionRuntimeShape | None" = None,
+        qkv: QKV,
+        merged_attention_mask: Tensor | None,
+        runtime_layout: "AttentionRuntimeLayout | None" = None,
     ) -> Tensor:
-        scaled_query = self.__scale_query(query)
-        raw_weights = self.__compute_raw_masked_attention_weights(
-            scaled_query, key, attention_mask, runtime_shape
+        scaled_query = self.__scale_query(qkv.query)
+        scaled_qkv = QKV(query=scaled_query, key=qkv.key, value=qkv.value)
+        raw_attention_weights = self.__compute_raw_masked_attention_weights(
+            scaled_qkv, merged_attention_mask, runtime_layout
         )
-        weights = F.softmax(raw_weights, dim=-1)
+        fully_masked_rows = torch.isneginf(raw_attention_weights).all(
+            dim=-1, keepdim=True
+        )
+        safe_raw_attention_weights = raw_attention_weights.masked_fill(
+            fully_masked_rows, 0.0
+        )
+        attention_weights = F.softmax(safe_raw_attention_weights, dim=-1)
+        attention_weights = attention_weights.masked_fill(fully_masked_rows, 0.0)
         return F.dropout(
-            weights,
-            p=self.dropout_probability,
-            training=self.training,
+            attention_weights, p=self.dropout_probability, training=self.training
         )
 
     def __scale_query(self, query: Tensor) -> Tensor:
@@ -59,76 +64,94 @@ class SelfAttentionProcessor(ProcessorBase):
 
     def __compute_raw_masked_attention_weights(
         self,
-        query: Tensor,
-        key: Tensor,
-        attention_mask: Tensor | None = None,
-        runtime_shape: "AttentionRuntimeShape | None" = None,
+        qkv: QKV,
+        merged_attention_mask: Tensor | None = None,
+        runtime_layout: "AttentionRuntimeLayout | None" = None,
     ) -> Tensor:
-        key = key.transpose(-2, -1)
-        weights = torch.bmm(query, key)
-        weights = self.__maybe_add_relative_positional_embedding(
-            query, weights, runtime_shape
+        transposed_key = qkv.key.transpose(-2, -1)
+        attention_weights = torch.bmm(qkv.query, transposed_key)
+        attention_weights = self.__add_relative_position_logits_if_available(
+            qkv,
+            attention_weights,
+            runtime_layout,
         )
-        weights = self.__maybe_add_attention_mask(weights, attention_mask)
-        return weights
-
-    def __maybe_add_relative_positional_embedding(
-        self,
-        query: Tensor,
-        attention_weights: Tensor,
-        runtime_shape: "AttentionRuntimeShape | None" = None,
-    ) -> Tensor:
-        positional_embedding = self._compute_relative_position_logits(
-            query,
-            attention_weights.size(-1),
-            runtime_shape,
-            query_is_scaled=True,
+        attention_weights = self.__add_attention_mask_if_available(
+            attention_weights,
+            merged_attention_mask,
         )
-        if positional_embedding is not None:
-            return positional_embedding + attention_weights
         return attention_weights
 
-    def __maybe_add_attention_mask(
-        self, weights: Tensor, attention_mask: Tensor | None = None
+    def __add_relative_position_logits_if_available(
+        self,
+        qkv: QKV,
+        attention_weights: Tensor,
+        runtime_layout: "AttentionRuntimeLayout | None" = None,
     ) -> Tensor:
-        if attention_mask is not None:
-            return weights + attention_mask
-        return weights
+        relative_position_logits = self.__compute_relative_position_logits_for_qkv(
+            qkv,
+            runtime_layout,
+        )
+        if relative_position_logits is not None:
+            return relative_position_logits + attention_weights
+        return attention_weights
+
+    def __compute_relative_position_logits_for_qkv(
+        self,
+        qkv: QKV,
+        runtime_layout: "AttentionRuntimeLayout | None" = None,
+    ) -> Tensor | None:
+        source_sequence_dimension = qkv.key.dim() - 2
+        source_sequence_length = qkv.key.size(source_sequence_dimension)
+        return self._compute_relative_position_logits(
+            qkv.query,
+            source_sequence_length,
+            runtime_layout,
+            query_is_scaled=True,
+        )
+
+    def __add_attention_mask_if_available(
+        self,
+        attention_weights: Tensor,
+        merged_attention_mask: Tensor | None = None,
+    ) -> Tensor:
+        if merged_attention_mask is not None:
+            return attention_weights + merged_attention_mask
+        return attention_weights
 
     def __compute_weighted_values(
         self,
+        qkv: QKV,
         attention_weights: Tensor,
-        values: Tensor,
-        runtime_shape: "AttentionRuntimeShape | None" = None,
+        runtime_layout: "AttentionRuntimeLayout | None" = None,
     ) -> Tensor:
-        weighted_values = torch.bmm(attention_weights, values)
-        values = weighted_values.transpose(0, 1)
-        values = values.contiguous()
-        target_sequence_length = values.size(0)
-        batch_size = (
-            runtime_shape.batch_size if runtime_shape is not None else self.batch_size
-        )
-        return values.view(
+        weighted_values = torch.bmm(attention_weights, qkv.value)
+        weighted_values = weighted_values.transpose(0, 1)
+        weighted_values = weighted_values.contiguous()
+        target_sequence_length = weighted_values.size(0)
+        batch_size = self.__resolve_batch_size(runtime_layout)
+        return weighted_values.view(
             target_sequence_length * batch_size,
             self.value_projection_dim,
         )
 
+    def __resolve_batch_size(
+        self,
+        runtime_layout: "AttentionRuntimeLayout | None",
+    ) -> int:
+        if runtime_layout is not None:
+            return runtime_layout.batch_size
+        return self.batch_size
+
     def __format_attention_weights(
         self,
         attention_weights: Tensor,
-        runtime_shape: "AttentionRuntimeShape | None",
+        runtime_layout: "AttentionRuntimeLayout | None",
     ) -> Tensor | None:
         if not self.return_attention_weights_flag:
             return None
 
-        batch_size = (
-            runtime_shape.batch_size if runtime_shape is not None else self.batch_size
-        )
-        target_sequence_length = (
-            runtime_shape.target_sequence_length
-            if runtime_shape is not None
-            else self.target_sequence_length
-        )
+        batch_size = self.__resolve_batch_size(runtime_layout)
+        target_sequence_length = self.__resolve_target_sequence_length(runtime_layout)
         source_sequence_length = attention_weights.size(-1)
         attention_weights_shape = (
             batch_size,
@@ -139,33 +162,19 @@ class SelfAttentionProcessor(ProcessorBase):
         attention_weights = attention_weights.view(attention_weights_shape)
         attention_weights = self.__maybe_average_attention_weights(attention_weights)
 
-        if runtime_shape is not None and not runtime_shape.input_was_batched:
+        if runtime_layout is not None and not runtime_layout.input_was_batched:
             return attention_weights.squeeze(0)
         return attention_weights
+
+    def __resolve_target_sequence_length(
+        self,
+        runtime_layout: "AttentionRuntimeLayout | None",
+    ) -> int:
+        if runtime_layout is not None:
+            return runtime_layout.target_sequence_length
+        return self.target_sequence_length
 
     def __maybe_average_attention_weights(self, attention_weights: Tensor) -> Tensor:
         if self.average_attention_weights_flag:
             return attention_weights.mean(dim=1)
         return attention_weights
-
-    def __ensure_correct_shape_output(
-        self,
-        attention_output: Tensor,
-        attention_weights: Tensor,
-    ) -> tuple[Tensor, Tensor | None]:
-        if not self.return_attention_weights_flag:
-            return attention_output, None
-        formatted_weights = self.__format_attention_weights(
-            attention_weights,
-            None,
-        )
-        return self.__handle_batched_input(attention_output, formatted_weights)
-
-    def __handle_batched_input(
-        self,
-        attention_output: Tensor,
-        attention_weights: Tensor,
-    ) -> tuple[Tensor, Tensor]:
-        if attention_output.dim() == 3 and attention_output.size(1) == 1:
-            return attention_output.squeeze(1), attention_weights.squeeze(0)
-        return attention_output, attention_weights

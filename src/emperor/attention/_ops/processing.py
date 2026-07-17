@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from emperor.attention._config import MultiHeadAttentionConfig
     from emperor.attention._ops.projection import ProjectorBase
     from emperor.attention._ops.reshaping import ReshaperBase
-    from emperor.attention._runtime import QKV, AttentionRuntimeShape
+    from emperor.attention._runtime import QKV, AttentionRuntimeLayout
 
 
 class ProcessorBase(Module):
@@ -50,16 +50,16 @@ class ProcessorBase(Module):
             self.__maybe_initialize_relative_positional_embedding()
         )
 
-    def __maybe_initialize_relative_positional_embedding(self):
-        if self.cfg.relative_positional_embedding_config is not None:
-            return self.cfg.relative_positional_embedding_config.build()
-        return None
-
     def __resolve_qkv_head_dim(self) -> tuple[int, int]:
         return (
             self.query_key_projection_dim // self.num_heads,
             self.value_projection_dim // self.num_heads,
         )
+
+    def __maybe_initialize_relative_positional_embedding(self):
+        if self.cfg.relative_positional_embedding_config is not None:
+            return self.cfg.relative_positional_embedding_config.build()
+        return None
 
     def _is_single_batch(self, attention_output: Tensor) -> bool:
         return attention_output.size(0) == 1
@@ -68,20 +68,20 @@ class ProcessorBase(Module):
         self,
         query: Tensor,
         source_sequence_length: int,
-        runtime_shape: "AttentionRuntimeShape | None" = None,
+        runtime_layout: "AttentionRuntimeLayout | None" = None,
         *,
         query_is_scaled: bool = False,
     ) -> Tensor | None:
         if self.relative_positional_embedding is None:
             return None
         real_source_sequence_length = (
-            runtime_shape.real_source_sequence_length
-            if runtime_shape is not None
+            runtime_layout.real_source_sequence_length
+            if runtime_layout is not None
             else source_sequence_length
         )
         scaled_query = query if query_is_scaled else query * query.size(-1) ** -0.5
         prepared_query, restore_shape = self.__prepare_relative_position_query(
-            scaled_query, real_source_sequence_length, runtime_shape
+            scaled_query, real_source_sequence_length, runtime_layout
         )
         logits = self.relative_positional_embedding(
             prepared_query,
@@ -95,14 +95,15 @@ class ProcessorBase(Module):
         self,
         query: Tensor,
         real_source_sequence_length: int,
-        runtime_shape: "AttentionRuntimeShape | None",
+        runtime_layout: "AttentionRuntimeLayout | None",
     ) -> tuple[Tensor, tuple[int, ...] | None]:
         self.VALIDATOR.validate_standard_relative_position_query_shape(
             query, self.num_heads
         )
-        if query.dim() == 3:
+        uses_flattened_batch_head_layout = query.dim() == 3
+        if uses_flattened_batch_head_layout:
             return self.__reshape_flattened_head_query(
-                query, real_source_sequence_length, runtime_shape
+                query, real_source_sequence_length, runtime_layout
             )
         return query, None
 
@@ -110,10 +111,10 @@ class ProcessorBase(Module):
         self,
         query: Tensor,
         real_source_sequence_length: int,
-        runtime_shape: "AttentionRuntimeShape | None",
+        runtime_layout: "AttentionRuntimeLayout | None",
     ) -> tuple[Tensor, tuple[int, ...]]:
         batch_size = (
-            runtime_shape.batch_size if runtime_shape is not None else self.batch_size
+            runtime_layout.batch_size if runtime_layout is not None else self.batch_size
         )
         target_sequence_length = query.size(-2)
         branch_count = query.size(0)
@@ -152,16 +153,16 @@ class ProcessorBase(Module):
     def _compute_attention_output(
         self,
         weighted_values: Tensor,
-        runtime_shape: "AttentionRuntimeShape | None" = None,
+        runtime_layout: "AttentionRuntimeLayout | None" = None,
     ) -> Tensor:
         attention_output = self.projector.compute_output_projection(weighted_values)
         embedding_dim = self.embedding_dim
         batch_size = (
-            runtime_shape.batch_size if runtime_shape is not None else self.batch_size
+            runtime_layout.batch_size if runtime_layout is not None else self.batch_size
         )
         target_sequence_length = (
-            runtime_shape.target_sequence_length
-            if runtime_shape is not None
+            runtime_layout.target_sequence_length
+            if runtime_layout is not None
             else attention_output.size(0) // batch_size
         )
         return attention_output.view(target_sequence_length, batch_size, embedding_dim)
@@ -170,6 +171,6 @@ class ProcessorBase(Module):
         self,
         qkv: "QKV",
         merged_attention_mask: Tensor | None = None,
-        runtime_shape: "AttentionRuntimeShape | None" = None,
+        runtime_layout: "AttentionRuntimeLayout | None" = None,
     ) -> tuple[Tensor, Tensor | None]:
         raise NotImplementedError("compute_attention must be implemented by subclass.")

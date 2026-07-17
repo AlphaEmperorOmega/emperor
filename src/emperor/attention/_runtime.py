@@ -21,7 +21,7 @@ class AttentionMasks:
 
 
 @dataclass(frozen=True)
-class AttentionRuntimeShape:
+class AttentionRuntimeLayout:
     batch_size: int
     target_sequence_length: int
     source_sequence_length: int
@@ -32,7 +32,7 @@ class AttentionRuntimeShape:
     def branch_count(self, num_heads: int) -> int:
         return self.batch_size * num_heads
 
-    def with_source_extension(self, count: int = 1) -> AttentionRuntimeShape:
+    def with_source_extension(self, count: int = 1) -> AttentionRuntimeLayout:
         return replace(
             self,
             source_sequence_length=self.source_sequence_length + count,
@@ -45,7 +45,7 @@ class AttentionRuntimeShape:
 
 
 __all__ = [
-    "AttentionRuntimeShape",
+    "AttentionRuntimeLayout",
     "AttentionMasks",
     "QKV",
 ]

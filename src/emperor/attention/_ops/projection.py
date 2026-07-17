@@ -62,7 +62,8 @@ class ProjectorBase(Module):
         return state.hidden
 
     def compute_output_projection(self, weighted_values: Tensor) -> Tensor:
-        if weighted_values.dim() == 3:
+        uses_unflattened_sequence_batch_layout = weighted_values.dim() == 3
+        if uses_unflattened_sequence_batch_layout:
             return self._compute_projection(weighted_values, self.output_model)
         return self._forward_accumulating_loss(self.output_model, weighted_values)
 

@@ -12,7 +12,7 @@ from emperor.attention._validation import AttentionValidatorBase
 
 if TYPE_CHECKING:
     from emperor.attention._config import MultiHeadAttentionConfig
-    from emperor.attention._runtime import AttentionMasks, AttentionRuntimeShape
+    from emperor.attention._runtime import AttentionMasks, AttentionRuntimeLayout
 
 
 class Mask:
@@ -24,53 +24,67 @@ class Mask:
         self.target_dtype = self.cfg.target_dtype
         self.causal_attention_mask_flag = self.cfg.causal_attention_mask_flag
         self.return_attention_weights_flag = self.cfg.return_attention_weights_flag
+        self.query_dtype: torch.dtype | None = None
+        self.query_device: torch.device | None = None
 
     def prepare_attention_masks(
         self,
         query: Tensor,
         masks: AttentionMasks,
-        runtime_shape: AttentionRuntimeShape,
+        runtime_layout: AttentionRuntimeLayout,
     ) -> AttentionMasks:
+        self.__set_runtime_query_properties(query)
         attention_mask = self.__resolve_causal_attention_mask(
-            query, masks.attention_mask, runtime_shape
+            masks.attention_mask, runtime_layout
         )
         if attention_mask is not masks.attention_mask:
             masks = replace(masks, attention_mask=attention_mask)
-        return self.__process_attention_masks(masks, runtime_shape)
+        prepared_masks = self.__process_attention_masks(masks, runtime_layout)
+        self.__clear_runtime_query_properties()
+        return prepared_masks
+
+    def __set_runtime_query_properties(self, query: Tensor) -> None:
+        self.query_dtype = query.dtype
+        self.query_device = query.device
+
+    def __clear_runtime_query_properties(self) -> None:
+        self.query_dtype = None
+        self.query_device = None
 
     def __resolve_causal_attention_mask(
         self,
-        query: Tensor,
         attention_mask: Tensor | None,
-        runtime_shape: AttentionRuntimeShape,
+        runtime_layout: AttentionRuntimeLayout,
     ) -> Tensor | None:
         if attention_mask is not None:
             return attention_mask
         if not self.causal_attention_mask_flag:
             return None
-        target_length = runtime_shape.target_sequence_length
-        source_length = runtime_shape.source_sequence_length
-        return self.__generate_causal_mask(query.device, target_length, source_length)
+        target_length = runtime_layout.target_sequence_length
+        source_length = runtime_layout.source_sequence_length
+        return self.__generate_causal_mask(target_length, source_length)
 
     def __generate_causal_mask(
         self,
-        device: torch.device,
         target_length: int,
         source_length: int,
     ) -> Tensor:
         causal_mask_shape = (target_length, source_length)
         negative_infinity_tensor = torch.full(
-            causal_mask_shape, -torch.inf, dtype=self.target_dtype, device=device
+            causal_mask_shape,
+            -torch.inf,
+            dtype=self.query_dtype,
+            device=self.query_device,
         )
         return torch.triu(negative_infinity_tensor, diagonal=1)
 
     def __process_attention_masks(
         self,
         masks: AttentionMasks,
-        runtime_shape: AttentionRuntimeShape,
+        runtime_layout: AttentionRuntimeLayout,
     ) -> AttentionMasks:
         self._validate_mask_shapes(
-            masks.key_padding_mask, masks.attention_mask, runtime_shape
+            masks.key_padding_mask, masks.attention_mask, runtime_layout
         )
         key_padding_mask = self.__canonical_mask(
             masks.key_padding_mask, "key_padding_mask"
@@ -87,12 +101,12 @@ class Mask:
         self,
         key_padding_mask: Tensor | None,
         attention_mask: Tensor | None,
-        runtime_shape: AttentionRuntimeShape,
+        runtime_layout: AttentionRuntimeLayout,
     ) -> None:
-        batch_size = runtime_shape.batch_size
-        target_length = runtime_shape.target_sequence_length
-        source_length = runtime_shape.source_sequence_length
-        standard_branch_count = runtime_shape.branch_count(self.num_heads)
+        batch_size = runtime_layout.batch_size
+        target_length = runtime_layout.target_sequence_length
+        source_length = runtime_layout.source_sequence_length
+        standard_branch_count = runtime_layout.branch_count(self.num_heads)
         expected_key_padding_shape = (batch_size, source_length)
         expected_attention_sequence_shape = (target_length, source_length)
         self.VALIDATOR.validate_mask_shapes(
@@ -111,10 +125,11 @@ class Mask:
         if mask is None:
             return None
         self.VALIDATOR.validate_mask_is_float_or_bool(mask, mask_name)
-        if not torch.is_floating_point(mask):
-            placeholder = torch.zeros_like(mask, dtype=self.target_dtype)
-            mask = placeholder.masked_fill_(mask, -torch.inf)
-        return mask
+        if torch.is_floating_point(mask):
+            return mask.to(dtype=self.query_dtype, device=self.query_device)
+        boolean_mask = mask.to(device=self.query_device)
+        placeholder = torch.zeros_like(boolean_mask, dtype=self.query_dtype)
+        return placeholder.masked_fill_(boolean_mask, -torch.inf)
 
     def __validate_attention_mask(
         self,
@@ -140,10 +155,10 @@ class Mask:
         self,
         key: Tensor,
         masks: AttentionMasks,
-        runtime_shape: AttentionRuntimeShape,
+        runtime_layout: AttentionRuntimeLayout,
     ) -> Tensor | None:
         key_padding_mask = self.__expand_key_padding_mask_across_heads(
-            key, masks.key_padding_mask, runtime_shape
+            key, masks.key_padding_mask, runtime_layout
         )
         return self.__combine_padding_and_attention_masks(
             key_padding_mask, masks.attention_mask
@@ -153,11 +168,11 @@ class Mask:
         self,
         key: Tensor,
         key_padding_mask: Tensor | None,
-        runtime_shape: AttentionRuntimeShape,
+        runtime_layout: AttentionRuntimeLayout,
     ) -> Tensor | None:
         if key_padding_mask is None:
             return None
-        batch_size = runtime_shape.batch_size
+        batch_size = runtime_layout.batch_size
         source_sequence_length = key.size(1)
         repeated_key_padding_mask = key_padding_mask.repeat_interleave(
             self.num_heads, dim=0

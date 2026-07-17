@@ -171,7 +171,16 @@ class _AttentionDiagnostics:
                     attention_scores = attention_scores + detached_mask.float()
             except RuntimeError:
                 return None
-        return F.softmax(attention_scores, dim=-1)
+        fully_masked_rows = torch.isneginf(attention_scores).all(
+            dim=-1,
+            keepdim=True,
+        )
+        safe_attention_scores = attention_scores.masked_fill(
+            fully_masked_rows,
+            0.0,
+        )
+        weights = F.softmax(safe_attention_scores, dim=-1)
+        return weights.masked_fill(fully_masked_rows, 0.0)
 
     def per_head_statistics(
         self,

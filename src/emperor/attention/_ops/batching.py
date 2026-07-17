@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from torch import Tensor
 
-from emperor.attention._runtime import QKV, AttentionMasks, AttentionRuntimeShape
+from emperor.attention._runtime import QKV, AttentionMasks, AttentionRuntimeLayout
 
 if TYPE_CHECKING:
     from emperor.attention._config import MultiHeadAttentionConfig
@@ -24,7 +24,7 @@ class BatchDimensionManager:
         qkv: QKV,
         masks: AttentionMasks,
         static_keys: Tensor | None = None,
-    ) -> tuple[QKV, AttentionMasks, AttentionRuntimeShape]:
+    ) -> tuple[QKV, AttentionMasks, AttentionRuntimeLayout]:
         input_was_batched = qkv.query.dim() == 3
         input_was_batch_first = self.__input_is_batch_first(qkv.query)
         qkv = self.__maybe_transpose_batch_first_qkv(qkv, input_was_batch_first)
@@ -35,23 +35,25 @@ class BatchDimensionManager:
         source_sequence_length = self.__resolve_source_sequence_length(
             qkv.key, static_keys
         )
-        runtime_shape = AttentionRuntimeShape(
+        runtime_layout = AttentionRuntimeLayout(
             batch_size=qkv.query.size(1),
             target_sequence_length=qkv.query.size(0),
             source_sequence_length=source_sequence_length,
             input_was_batched=input_was_batched,
             input_was_batch_first=input_was_batch_first,
         )
-        return qkv, masks, runtime_shape
+        return qkv, masks, runtime_layout
 
     def __input_is_batch_first(self, query: Tensor) -> bool:
-        if query.dim() != 3:
+        query_has_no_explicit_batch_dimension = query.dim() != 3
+        if query_has_no_explicit_batch_dimension:
             return False
         if self.batch_first_flag is not None:
             return self.batch_first_flag
         # Historical behavior inferred layout by asking whether dimension 1 was the
         # configured batch size. Explicit flags avoid this ambiguity for new models.
-        return query.size(1) != self.batch_size
+        legacy_layout_is_inferred_as_batch_first = query.size(1) != self.batch_size
+        return legacy_layout_is_inferred_as_batch_first
 
     def __maybe_transpose_batch_first_qkv(
         self,
@@ -123,10 +125,14 @@ class BatchDimensionManager:
     def restore_output_layout(
         self,
         attention_output: Tensor,
-        runtime_shape: AttentionRuntimeShape,
+        runtime_layout: AttentionRuntimeLayout,
     ) -> Tensor:
-        if not runtime_shape.input_was_batched:
-            return attention_output.squeeze(1)
-        if runtime_shape.input_was_batch_first:
-            return attention_output.transpose(0, 1)
+        if not runtime_layout.input_was_batched:
+            attention_output_without_synthetic_batch_dimension = (
+                attention_output.squeeze(1)
+            )
+            return attention_output_without_synthetic_batch_dimension
+        if runtime_layout.input_was_batch_first:
+            attention_output_in_batch_first_layout = attention_output.transpose(0, 1)
+            return attention_output_in_batch_first_layout
         return attention_output

@@ -24,12 +24,7 @@ class IndependentProjector(ProjectorBase):
         self,
         qkv: "QKV",
     ) -> "QKV":
-        query_projections = self._compute_projection(qkv.query, self.query_model)
-        key_projections = self._compute_projection(qkv.key, self.key_model)
-        value_projections = self._compute_projection(qkv.value, self.value_model)
-        return replace(
-            qkv,
-            query=query_projections,
-            key=key_projections,
-            value=value_projections,
-        )
+        q_projection = self._compute_projection(qkv.query, self.query_model)
+        k_projection = self._compute_projection(qkv.key, self.key_model)
+        v_projection = self._compute_projection(qkv.value, self.value_model)
+        return replace(qkv, query=q_projection, key=k_projection, value=v_projection)
