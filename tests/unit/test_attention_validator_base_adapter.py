@@ -2,16 +2,16 @@ import unittest
 from types import SimpleNamespace
 
 import torch
-from emperor.attention.core._validator import AttentionValidatorBase
-from emperor.attention.core.handlers.bias import KeyValueBias
-from emperor.attention.core.handlers.mask import Mask
-from emperor.attention.core.handlers.processor import ProcessorBase
-from emperor.attention.core.handlers.reshaper import (
+
+from emperor.attention._ops.bias import KeyValueBias
+from emperor.attention._ops.masking import Mask
+from emperor.attention._ops.processing import ProcessorBase
+from emperor.attention._ops.reshaping import (
     AttentionReshaper,
     ReshaperBase,
 )
-from emperor.attention.core.runtime import QKV, AttentionMasks, AttentionRuntimeShape
-
+from emperor.attention._runtime import QKV, AttentionMasks, AttentionRuntimeLayout
+from emperor.attention._validation import AttentionValidatorBase
 from support.attention import build_attention_config
 
 
@@ -38,11 +38,11 @@ class TestAttentionValidatorBaseAdapter(unittest.TestCase):
                 model,
                 static_tensor,
                 tensor_name,
-                runtime_shape=None,
+                runtime_layout=None,
             ):
-                validated_tensors.append((static_tensor, tensor_name, runtime_shape))
+                validated_tensors.append((static_tensor, tensor_name, runtime_layout))
 
-        runtime_shape = object()
+        runtime_layout = object()
         model = SimpleNamespace()
         static_keys = object()
         static_values = object()
@@ -51,14 +51,14 @@ class TestAttentionValidatorBaseAdapter(unittest.TestCase):
             model,
             static_keys,
             static_values,
-            runtime_shape,
+            runtime_layout,
         )
 
         self.assertEqual(
             validated_tensors,
             [
-                (static_keys, "static_keys", runtime_shape),
-                (static_values, "static_values", runtime_shape),
+                (static_keys, "static_keys", runtime_layout),
+                (static_values, "static_values", runtime_layout),
             ],
         )
 
@@ -80,7 +80,7 @@ class TestAttentionValidatorBaseAdapter(unittest.TestCase):
         )
         model = RejectingMask(cfg)
         query = torch.zeros(2, 1, 2)
-        runtime_shape = AttentionRuntimeShape(
+        runtime_layout = AttentionRuntimeLayout(
             batch_size=1,
             target_sequence_length=2,
             source_sequence_length=2,
@@ -90,7 +90,7 @@ class TestAttentionValidatorBaseAdapter(unittest.TestCase):
             RuntimeError,
             "substituted mask-shape validator was called",
         ):
-            model.prepare_attention_masks(query, AttentionMasks(), runtime_shape)
+            model.prepare_attention_masks(query, AttentionMasks(), runtime_layout)
 
     def test_key_value_bias_dispatches_through_substituted_validator(self):
         class RejectingValidator(AttentionValidatorBase):

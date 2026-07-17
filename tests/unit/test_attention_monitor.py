@@ -2,25 +2,28 @@ import unittest
 from types import SimpleNamespace
 
 import torch
-from emperor.attention.core.monitor import (
-    AttentionMonitorCallback,
-    _AttentionDiagnosticMetrics,
-    _AttentionDiagnostics,
+
+from emperor.attention import (
+    IndependentAttentionConfig,
+    SelfAttentionConfig,
+)
+from emperor.attention._monitoring.callback import (
     _AttentionDiagnosticsTracker,
     _AttentionDiagnosticsTrackerManager,
+    _AttentionTrackingContext,
+)
+from emperor.attention._monitoring.diagnostics import (
+    _AttentionDiagnosticMetrics,
+    _AttentionDiagnostics,
     _AttentionMonitorAdapter,
     _AttentionObservation,
     _resolve_attention_monitor_adapter,
 )
-from emperor.attention.core.runtime import QKV
-from emperor.attention.core.variants.independent_attention.config import (
-    IndependentAttentionConfig,
-)
-from emperor.attention.core.variants.mixture_of_attention_heads.monitor import (
+from emperor.attention._runtime import QKV
+from emperor.attention._variants.mixture.monitoring import (
     _MixtureOfAttentionHeadsMonitorAdapter,
 )
-from emperor.attention.core.variants.self_attention.config import SelfAttentionConfig
-
+from emperor.attention.monitoring import AttentionMonitorCallback
 from support.attention import build_attention_config
 from support.monitor import (
     CaptureLightningModule,
@@ -72,6 +75,73 @@ class InstrumentedAttention(torch.nn.Module):
         if self.private_method_name is not None:
             getattr(self.processor, self.private_method_name)(scale=2.0)
         return output, self.returned_weights, torch.tensor(3.0, requires_grad=True)
+
+
+class ProcessorOnlyAttention(torch.nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.processor = SimpleNamespace(
+            compute_attention=lambda *, qkv, merged_attention_mask=None: qkv.value
+        )
+
+    def forward(
+        self,
+        qkv: QKV,
+        attention_mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        return self.processor.compute_attention(
+            qkv=qkv,
+            merged_attention_mask=attention_mask,
+        )
+
+
+class PositionalProcessorAttention(torch.nn.Module):
+    def __init__(self, *, include_mask: bool) -> None:
+        super().__init__()
+        self.include_mask = include_mask
+        self.processor = SimpleNamespace(
+            compute_attention=lambda qkv, merged_attention_mask=None: qkv.value
+        )
+
+    def forward(
+        self,
+        qkv: QKV,
+        attention_mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        if self.include_mask:
+            return self.processor.compute_attention(qkv, attention_mask)
+        return self.processor.compute_attention(qkv)
+
+
+class OrderedExactWeightMonitorAdapter(_AttentionMonitorAdapter):
+    @property
+    def exact_weight_method_names(self) -> tuple[str, ...]:
+        return (
+            "_MissingProcessor__compute_masked_attention_weights",
+            "_CaptureProcessor__compute_masked_attention_weights",
+        )
+
+
+def diagnostic_metrics(
+    *,
+    auxiliary_loss: torch.Tensor | None = None,
+    per_head_entropy: torch.Tensor | None = None,
+    per_head_max_probability: torch.Tensor | None = None,
+    weight_source: str | None = None,
+) -> _AttentionDiagnosticMetrics:
+    return _AttentionDiagnosticMetrics(
+        query_norm_mean=None,
+        key_norm_mean=None,
+        value_norm_mean=None,
+        output_norm=None,
+        auxiliary_loss=auxiliary_loss,
+        configured_dropout_probability=torch.tensor(0.0),
+        mask_coverage=torch.tensor(0.0),
+        per_head_entropy=per_head_entropy,
+        per_head_max_probability=per_head_max_probability,
+        weight_source=weight_source,
+        dropout_zero_fraction=None,
+    )
 
 
 class TestAttentionObservationAndTracker(unittest.TestCase):
@@ -160,6 +230,47 @@ class TestAttentionObservationAndTracker(unittest.TestCase):
 
         self.assertEqual(tracker.latest_observation, _AttentionObservation())
 
+    def test_tuple_outputs_are_parsed_only_at_positions_that_exist(self):
+        output = torch.tensor([1.0], requires_grad=True)
+        returned_weights = torch.tensor([[[0.25, 0.75]]], requires_grad=True)
+        cases = (
+            ((), None, None),
+            ((output,), output, None),
+            ((output, returned_weights), output, returned_weights),
+        )
+
+        for forward_output, expected_output, expected_weights in cases:
+            with self.subTest(tuple_length=len(forward_output)):
+                tracker = _AttentionDiagnosticsTracker("attention")
+
+                tracker.record_forward_output(forward_output)
+
+                observation = tracker.latest_observation
+                if expected_output is None:
+                    self.assertIsNone(observation.restored_output)
+                else:
+                    self.assertEqual(
+                        observation.restored_output.data_ptr(),
+                        expected_output.data_ptr(),
+                    )
+                if expected_weights is None:
+                    self.assertIsNone(observation.exact_attention_weights)
+                else:
+                    self.assertEqual(
+                        observation.exact_attention_weights.data_ptr(),
+                        expected_weights.data_ptr(),
+                    )
+                self.assertIsNone(observation.auxiliary_loss)
+
+    def test_invalid_projected_qkv_and_exact_weights_are_ignored(self):
+        tracker = _AttentionDiagnosticsTracker("attention")
+
+        tracker.record_projected_qkv(object())
+        tracker.record_exact_attention_weights(object())
+
+        self.assertIsNone(tracker.latest_observation.projected_qkv)
+        self.assertIsNone(tracker.latest_observation.exact_attention_weights)
+
 
 class TestAttentionDiagnostics(unittest.TestCase):
     def diagnostics(self) -> _AttentionDiagnostics:
@@ -179,6 +290,68 @@ class TestAttentionDiagnostics(unittest.TestCase):
         )
 
         torch.testing.assert_close(weights, torch.tensor([[[1.0, 0.0]]]))
+
+    def test_fully_masked_approximation_rows_are_exact_zero_and_finite(self):
+        query = torch.tensor([[[1.0], [2.0]]])
+        key = torch.tensor([[[1.0], [2.0], [3.0]]])
+        boolean_mask = torch.tensor(
+            [
+                [True, True, True],
+                [False, True, False],
+            ]
+        )
+        additive_mask = torch.zeros_like(boolean_mask, dtype=torch.float32).masked_fill(
+            boolean_mask,
+            -torch.inf,
+        )
+        selected_probabilities = torch.softmax(torch.tensor([2.0, 6.0]), dim=0)
+        expected_weights = torch.tensor(
+            [
+                [
+                    [0.0, 0.0, 0.0],
+                    [
+                        selected_probabilities[0],
+                        0.0,
+                        selected_probabilities[1],
+                    ],
+                ]
+            ]
+        )
+        expected_entropy = (
+            -(selected_probabilities * selected_probabilities.log()).sum() / 2
+        )
+        expected_maximum = selected_probabilities.max() / 2
+
+        for attention_mask in (boolean_mask, additive_mask):
+            with self.subTest(mask_dtype=attention_mask.dtype):
+                diagnostics = self.diagnostics()
+                processor_qkv = self.qkv(query, key)
+
+                weights = diagnostics.approximate_attention_weights(
+                    processor_qkv,
+                    attention_mask,
+                )
+                metrics = diagnostics.calculate(
+                    _AttentionObservation(
+                        processor_qkv=processor_qkv,
+                        merged_attention_mask=attention_mask,
+                    ),
+                    num_heads=1,
+                    configured_dropout_probability=0.0,
+                )
+
+                self.assertTrue(torch.isfinite(weights).all())
+                torch.testing.assert_close(weights, expected_weights)
+                self.assertTrue(torch.isfinite(metrics.per_head_entropy).all())
+                self.assertTrue(torch.isfinite(metrics.per_head_max_probability).all())
+                torch.testing.assert_close(
+                    metrics.per_head_entropy,
+                    expected_entropy.unsqueeze(0),
+                )
+                torch.testing.assert_close(
+                    metrics.per_head_max_probability,
+                    expected_maximum.unsqueeze(0),
+                )
 
     def test_scaled_dot_product_approximation_matches_manual_equation(self):
         query = torch.arange(24, dtype=torch.float32).view(2, 3, 4) / 10
@@ -290,9 +463,9 @@ class TestAttentionDiagnostics(unittest.TestCase):
         self.assertIs(type(adapter), _AttentionMonitorAdapter)
 
     def test_diagnostics_use_the_selected_mixture_adapter(self):
-        weights = torch.tensor(
-            [0.25, 0.75, 0.5, 0.5, 0.1, 0.9, 0.8, 0.2]
-        ).view(1, 2, 2, 1, 2)
+        weights = torch.tensor([0.25, 0.75, 0.5, 0.5, 0.1, 0.9, 0.8, 0.2]).view(
+            1, 2, 2, 1, 2
+        )
 
         metrics = self.diagnostics().calculate(
             _AttentionObservation(exact_attention_weights=weights),
@@ -421,6 +594,26 @@ class TestAttentionDiagnostics(unittest.TestCase):
         self.assertIsNone(metrics.per_head_entropy)
         self.assertIsNone(metrics.per_head_max_probability)
         torch.testing.assert_close(metrics.dropout_zero_fraction, torch.tensor(0.0))
+
+    def test_missing_processor_and_weights_produce_no_weight_metrics(self):
+        diagnostics = self.diagnostics()
+
+        self.assertIsNone(diagnostics.approximate_attention_weights(None, None))
+        self.assertEqual(
+            diagnostics.per_head_statistics(None, num_heads=2),
+            (None, None),
+        )
+
+        metrics = diagnostics.calculate(
+            _AttentionObservation(),
+            num_heads=2,
+            configured_dropout_probability=0.0,
+        )
+
+        self.assertIsNone(metrics.weight_source)
+        self.assertIsNone(metrics.per_head_entropy)
+        self.assertIsNone(metrics.per_head_max_probability)
+        self.assertIsNone(metrics.dropout_zero_fraction)
 
 
 class TestAttentionDiagnosticsTrackerManager(unittest.TestCase):
@@ -592,11 +785,109 @@ class TestAttentionDiagnosticsTrackerManager(unittest.TestCase):
                 (name, module, observation)
             ),
         )
+        manager.tracker_for(attention).record_exact_attention_weights(
+            torch.ones(1, 1, 1)
+        )
         attention(output)
 
         self.assertEqual(manager.hook_count, 1)
         self.assertEqual(manager.replacement_count, 0)
         self.assertFalse(observations[0][2].restored_output.requires_grad)
+        self.assertIsNone(observations[0][2].exact_attention_weights)
+        manager.detach()
+
+    def test_processor_capture_distinguishes_one_and_two_positional_arguments(self):
+        attention_mask = torch.tensor([[0.0, -2.0], [1.0, 0.0]])
+        cases = (
+            (False, None),
+            (True, attention_mask),
+        )
+
+        for include_mask, expected_mask in cases:
+            with self.subTest(include_mask=include_mask):
+                attention = PositionalProcessorAttention(
+                    include_mask=include_mask,
+                )
+                observations = []
+                manager = _AttentionDiagnosticsTrackerManager()
+
+                def record_observation(
+                    _name,
+                    _module,
+                    observation,
+                    records=observations,
+                ):
+                    records.append(observation)
+
+                manager.attach(
+                    "attention",
+                    attention,
+                    lambda: True,
+                    record_observation,
+                )
+
+                attention(self.qkv(), attention_mask)
+
+                self.assertEqual(len(observations), 1)
+                observation = observations[0]
+                torch.testing.assert_close(
+                    observation.processor_qkv.query,
+                    self.qkv().query,
+                )
+                if expected_mask is None:
+                    self.assertIsNone(observation.merged_attention_mask)
+                else:
+                    torch.testing.assert_close(
+                        observation.merged_attention_mask,
+                        expected_mask,
+                    )
+                manager.detach()
+
+    def test_exact_weight_attachment_continues_after_an_absent_adapter_method(self):
+        method_name = "_CaptureProcessor__compute_masked_attention_weights"
+        private_weights = torch.tensor([[[0.2, 0.8]]])
+        attention = InstrumentedAttention(
+            private_method_name=method_name,
+            private_weights=private_weights,
+            returned_weights=None,
+            monitor_adapter=OrderedExactWeightMonitorAdapter(),
+        )
+        observations = []
+        manager = _AttentionDiagnosticsTrackerManager()
+        manager.attach(
+            "attention",
+            attention,
+            lambda: True,
+            lambda name, module, observation: observations.append(observation),
+        )
+
+        attention(self.qkv())
+
+        torch.testing.assert_close(
+            observations[0].exact_attention_weights,
+            private_weights * 2.0,
+        )
+        manager.detach()
+
+    def test_processor_starts_observation_when_projector_is_absent(self):
+        attention = ProcessorOnlyAttention()
+        observations = []
+        manager = _AttentionDiagnosticsTrackerManager()
+        manager.attach(
+            "attention",
+            attention,
+            lambda: True,
+            lambda name, module, observation: observations.append(observation),
+        )
+        tracker = manager.tracker_for(attention)
+        tracker.record_exact_attention_weights(torch.ones(1, 1, 1))
+
+        attention(self.qkv())
+
+        self.assertEqual(len(observations), 1)
+        self.assertIsNotNone(observations[0].processor_qkv)
+        self.assertIsNone(observations[0].projected_qkv)
+        self.assertIsNone(observations[0].exact_attention_weights)
         manager.detach()
 
 
@@ -629,6 +920,53 @@ class TestAttentionMonitorCallback(unittest.TestCase):
                 "__track_dropout_zero_fraction",
             ),
         )
+
+    def test_max_probability_visual_emission_uses_exact_arguments(self):
+        callback = AttentionMonitorCallback()
+        entropy_history = object()
+        maximum_history = object()
+        callback._entropy_history["attn"] = entropy_history
+        callback._max_probability_history["attn"] = maximum_history
+        calls = []
+        callback._emission_policy = SimpleNamespace(
+            emit_histogram=lambda *args: calls.append(("histogram", args)),
+            emit_history_heatmap=lambda *args: calls.append(("heatmap", args)),
+        )
+        experiment = object()
+        maximum = torch.tensor([0.8, 0.6])
+        context = _AttentionTrackingContext(
+            pl_module=CaptureLightningModule(),
+            module_name="attn",
+            metric_prefix="attn/attention",
+            metrics=diagnostic_metrics(
+                per_head_entropy=torch.tensor([0.2, 0.4]),
+                per_head_max_probability=maximum,
+                weight_source="exact",
+            ),
+            experiment=experiment,
+            global_step=7,
+        )
+
+        callback._AttentionMonitorCallback__track_max_probability_histogram(context)
+        callback._AttentionMonitorCallback__track_max_probability_heatmap(context)
+
+        self.assertEqual([kind for kind, _args in calls], ["histogram", "heatmap"])
+        histogram_args = calls[0][1]
+        self.assertIs(histogram_args[0], experiment)
+        self.assertEqual(
+            histogram_args[1],
+            "attn/attention/histogram/max_probability_by_head",
+        )
+        self.assertIs(histogram_args[2], maximum)
+        self.assertEqual(histogram_args[3], 7)
+        heatmap_args = calls[1][1]
+        self.assertIs(heatmap_args[0], experiment)
+        self.assertEqual(
+            heatmap_args[1],
+            "attn/attention/heatmap/max_probability_by_head",
+        )
+        self.assertIs(heatmap_args[2], maximum_history)
+        self.assertEqual(heatmap_args[3], 7)
 
     def attention(
         self,
@@ -671,6 +1009,15 @@ class TestAttentionMonitorCallback(unittest.TestCase):
         self.assertEqual(callback.log_every_n_steps, 100)
         self.assertEqual(callback.history_size, 128)
         self.assertIs(callback.log_per_head_scalars, False)
+
+    def test_missing_global_step_samples_at_step_zero(self):
+        callback = AttentionMonitorCallback(log_every_n_steps=2)
+
+        should_sample = callback._AttentionMonitorCallback__should_sample(
+            SimpleNamespace()
+        )
+
+        self.assertIs(should_sample, True)
 
     def test_discovers_only_attention_modules(self):
         module = CaptureLightningModule(
@@ -824,6 +1171,9 @@ class TestAttentionMonitorCallback(unittest.TestCase):
 
         experiment = module.logger.experiment
         histogram_tags = {tag for tag, _, _ in experiment.histograms}
+        histogram_records = {
+            tag: (values, step) for tag, values, step in experiment.histograms
+        }
         image_records = {
             tag: (image, step, formats)
             for tag, image, step, formats in experiment.images
@@ -832,12 +1182,26 @@ class TestAttentionMonitorCallback(unittest.TestCase):
             "attn/attention/histogram/entropy_by_head",
             histogram_tags,
         )
+        maximum_histogram, maximum_histogram_step = histogram_records[
+            "attn/attention/histogram/max_probability_by_head"
+        ]
+        torch.testing.assert_close(
+            maximum_histogram,
+            callback._max_probability_history["attn"].tensors[-1],
+        )
+        self.assertEqual(maximum_histogram_step, 7)
         image, step, dataformats = image_records[
             "attn/attention/heatmap/entropy_by_head"
         ]
         self.assertEqual(step, 7)
         self.assertEqual(dataformats, "CHW")
         self.assertEqual(image.dim(), 3)
+        maximum_image, maximum_step, maximum_formats = image_records[
+            "attn/attention/heatmap/max_probability_by_head"
+        ]
+        self.assertEqual(maximum_step, 7)
+        self.assertEqual(maximum_formats, "CHW")
+        self.assertEqual(maximum_image.dim(), 3)
         callback.on_fit_end(TrainerStub(), module)
 
     def test_missing_experiment_does_not_suppress_scalar_metrics(self):
@@ -850,6 +1214,260 @@ class TestAttentionMonitorCallback(unittest.TestCase):
 
         self.assertIn("attn/attention/entropy_mean", module.logged_tags)
         callback.on_fit_end(TrainerStub(), module)
+
+    def test_optional_metrics_are_logged_only_when_present(self):
+        callback = AttentionMonitorCallback()
+        module = CaptureLightningModule()
+        present_metrics = _AttentionDiagnosticMetrics(
+            query_norm_mean=torch.tensor(1.0),
+            key_norm_mean=torch.tensor(2.0),
+            value_norm_mean=torch.tensor(3.0),
+            output_norm=torch.tensor(4.0),
+            auxiliary_loss=torch.tensor(5.0),
+            configured_dropout_probability=torch.tensor(0.1),
+            mask_coverage=torch.tensor(0.2),
+            per_head_entropy=torch.tensor([0.3, 0.4]),
+            per_head_max_probability=torch.tensor([0.7, 0.6]),
+            weight_source="approximate",
+            dropout_zero_fraction=torch.tensor(0.5),
+        )
+        present_context = _AttentionTrackingContext(
+            pl_module=module,
+            module_name="attn",
+            metric_prefix="attn/attention",
+            metrics=present_metrics,
+            experiment=None,
+            global_step=0,
+        )
+
+        callback._AttentionMonitorCallback__track_attention_observation(present_context)
+
+        expected_optional_tags = {
+            "attn/attention/q_norm_mean",
+            "attn/attention/k_norm_mean",
+            "attn/attention/v_norm_mean",
+            "attn/attention/output_norm",
+            "attn/attention/auxiliary_loss",
+            "attn/attention/approximate_entropy_mean",
+            "attn/attention/approximate_max_probability_mean",
+            "attn/attention/approximate_dead_head_fraction",
+            "attn/attention/dropout_zero_fraction",
+        }
+        self.assertTrue(expected_optional_tags.issubset(set(module.logged_tags)))
+        torch.testing.assert_close(
+            module.logged_value("attn/attention/auxiliary_loss"),
+            torch.tensor(5.0),
+        )
+
+        module.logged.clear()
+        absent_metrics = _AttentionDiagnosticMetrics(
+            query_norm_mean=None,
+            key_norm_mean=None,
+            value_norm_mean=None,
+            output_norm=None,
+            auxiliary_loss=None,
+            configured_dropout_probability=torch.tensor(0.1),
+            mask_coverage=torch.tensor(0.0),
+            per_head_entropy=None,
+            per_head_max_probability=None,
+            weight_source=None,
+            dropout_zero_fraction=None,
+        )
+        absent_context = _AttentionTrackingContext(
+            pl_module=module,
+            module_name="attn",
+            metric_prefix="attn/attention",
+            metrics=absent_metrics,
+            experiment=None,
+            global_step=0,
+        )
+
+        callback._AttentionMonitorCallback__track_attention_observation(absent_context)
+
+        self.assertEqual(
+            set(module.logged_tags),
+            {
+                "attn/attention/configured_dropout_probability",
+                "attn/attention/mask_coverage",
+            },
+        )
+
+    def test_per_head_scalar_gate_and_values_are_exact(self):
+        entropy = torch.tensor([0.125, 0.5])
+        maximum = torch.tensor([0.8, 0.6])
+        metrics = diagnostic_metrics(
+            per_head_entropy=entropy,
+            per_head_max_probability=maximum,
+            weight_source="exact",
+        )
+
+        disabled_module = CaptureLightningModule()
+        disabled_context = _AttentionTrackingContext(
+            pl_module=disabled_module,
+            module_name="attn",
+            metric_prefix="attn/attention",
+            metrics=metrics,
+            experiment=None,
+            global_step=0,
+        )
+        disabled_callback = AttentionMonitorCallback(
+            log_per_head_scalars=False,
+        )
+        disabled_callback._AttentionMonitorCallback__track_per_head_entropy(
+            disabled_context
+        )
+        disabled_callback._AttentionMonitorCallback__track_per_head_max_probability(
+            disabled_context
+        )
+        self.assertEqual(disabled_module.logged, [])
+
+        enabled_module = CaptureLightningModule()
+        enabled_context = _AttentionTrackingContext(
+            pl_module=enabled_module,
+            module_name="attn",
+            metric_prefix="attn/attention",
+            metrics=metrics,
+            experiment=None,
+            global_step=0,
+        )
+        enabled_callback = AttentionMonitorCallback(
+            log_per_head_scalars=True,
+        )
+        enabled_callback._AttentionMonitorCallback__track_per_head_entropy(
+            enabled_context
+        )
+        enabled_callback._AttentionMonitorCallback__track_per_head_max_probability(
+            enabled_context
+        )
+
+        torch.testing.assert_close(
+            enabled_module.logged_value("attn/attention/head_0/entropy"),
+            entropy[0],
+        )
+        torch.testing.assert_close(
+            enabled_module.logged_value("attn/attention/head_1/entropy"),
+            entropy[1],
+        )
+        torch.testing.assert_close(
+            enabled_module.logged_value("attn/attention/head_0/max_probability"),
+            maximum[0],
+        )
+        torch.testing.assert_close(
+            enabled_module.logged_value("attn/attention/head_1/max_probability"),
+            maximum[1],
+        )
+
+    def test_dead_head_threshold_is_inclusive(self):
+        callback = AttentionMonitorCallback()
+        module = CaptureLightningModule()
+        metrics = diagnostic_metrics(
+            per_head_entropy=torch.tensor(
+                [
+                    callback.DEAD_HEAD_ENTROPY_FLOOR,
+                    callback.DEAD_HEAD_ENTROPY_FLOOR * 2,
+                ]
+            ),
+            per_head_max_probability=torch.tensor([1.0, 0.5]),
+            weight_source="exact",
+        )
+        context = _AttentionTrackingContext(
+            pl_module=module,
+            module_name="attn",
+            metric_prefix="attn/attention",
+            metrics=metrics,
+            experiment=None,
+            global_step=0,
+        )
+
+        callback._AttentionMonitorCallback__track_dead_head_fraction(context)
+
+        torch.testing.assert_close(
+            module.logged_value("attn/attention/dead_head_fraction"),
+            torch.tensor(0.5),
+        )
+
+    def test_exact_weight_history_requires_every_capability(self):
+        entropy = torch.tensor([0.2, 0.3])
+        maximum = torch.tensor([0.8, 0.7])
+        cases = (
+            ("all", "exact", entropy, maximum, True, True, True),
+            ("no_histories", "exact", entropy, maximum, False, False, False),
+            ("entropy_history_only", "exact", entropy, maximum, True, False, False),
+            ("missing_maximum", "exact", entropy, None, True, True, False),
+            ("approximate", "approximate", entropy, maximum, True, True, False),
+        )
+
+        for (
+            case_name,
+            weight_source,
+            per_head_entropy,
+            per_head_maximum,
+            has_entropy_history,
+            has_maximum_history,
+            expected,
+        ) in cases:
+            with self.subTest(case_name=case_name):
+                callback = AttentionMonitorCallback()
+                if has_entropy_history:
+                    callback._entropy_history["attn"] = object()
+                if has_maximum_history:
+                    callback._max_probability_history["attn"] = object()
+                context = _AttentionTrackingContext(
+                    pl_module=CaptureLightningModule(),
+                    module_name="attn",
+                    metric_prefix="attn/attention",
+                    metrics=diagnostic_metrics(
+                        per_head_entropy=per_head_entropy,
+                        per_head_max_probability=per_head_maximum,
+                        weight_source=weight_source,
+                    ),
+                    experiment=None,
+                    global_step=0,
+                )
+
+                can_track = AttentionMonitorCallback._AttentionMonitorCallback__can_track_exact_weight_history
+                actual = can_track(callback, context)
+
+                self.assertIs(actual, expected)
+
+    def test_exact_weight_visual_requires_experiment_and_history_capability(self):
+        callback = AttentionMonitorCallback()
+        callback._entropy_history["attn"] = object()
+        callback._max_probability_history["attn"] = object()
+        valid_metrics = diagnostic_metrics(
+            per_head_entropy=torch.tensor([0.2]),
+            per_head_max_probability=torch.tensor([0.8]),
+            weight_source="exact",
+        )
+        invalid_metrics = diagnostic_metrics(
+            per_head_entropy=torch.tensor([0.2]),
+            per_head_max_probability=torch.tensor([0.8]),
+            weight_source="approximate",
+        )
+        cases = (
+            (None, valid_metrics, False),
+            (object(), invalid_metrics, False),
+            (object(), valid_metrics, True),
+        )
+
+        for experiment, metrics, expected in cases:
+            with self.subTest(
+                has_experiment=experiment is not None,
+                weight_source=metrics.weight_source,
+            ):
+                context = _AttentionTrackingContext(
+                    pl_module=CaptureLightningModule(),
+                    module_name="attn",
+                    metric_prefix="attn/attention",
+                    metrics=metrics,
+                    experiment=experiment,
+                    global_step=0,
+                )
+
+                can_emit = AttentionMonitorCallback._AttentionMonitorCallback__can_emit_exact_weight_visual
+                actual = can_emit(callback, context)
+
+                self.assertIs(actual, expected)
 
     def test_fit_end_restores_methods_and_clears_monitor_state(self):
         attention = self.attention()

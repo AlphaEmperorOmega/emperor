@@ -1,8 +1,7 @@
 import unittest
 
-from emperor.attention.core._validator import MultiHeadAttentionValidator
-from emperor.attention.core.layers import MultiHeadAttentionAbstract
-
+from emperor.attention._base import MultiHeadAttentionAbstract
+from emperor.attention._validation import MultiHeadAttentionValidator
 from support.attention import build_attention_config
 
 

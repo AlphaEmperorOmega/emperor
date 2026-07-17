@@ -1,13 +1,13 @@
 import unittest
 
 import torch
+
 from emperor.attention import SelfAttentionConfig
-from emperor.attention.core.runtime import QKV, AttentionMasks
-from emperor.attention.core.variants.self_attention.layer import SelfAttention
-from emperor.attention.core.variants.self_attention.validator import (
+from emperor.attention._runtime import QKV, AttentionMasks
+from emperor.attention._variants.self_attention.layer import SelfAttention
+from emperor.attention._variants.self_attention.validation import (
     SelfAttentionValidator,
 )
-
 from support.attention import build_attention_config
 
 

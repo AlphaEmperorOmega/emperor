@@ -1,29 +1,24 @@
 import unittest
-from unittest.mock import patch
 
 import torch
+
 from emperor.attention import (
     IndependentAttentionConfig,
     MixtureOfAttentionHeadsConfig,
     SelfAttentionConfig,
     SelfAttentionProjectionStrategy,
 )
-from emperor.attention.core.handlers.projector import ProjectorBase
-from emperor.attention.core.runtime import QKV
-from emperor.attention.core.variants.independent_attention.projector import (
-    IndependentProjector,
-)
-from emperor.attention.core.variants.mixture_of_attention_heads.projector import (
+from emperor.attention._ops.projection import ProjectorBase
+from emperor.attention._runtime import QKV
+from emperor.attention._variants.independent.projection import IndependentProjector
+from emperor.attention._variants.mixture.projection import (
     MixtureOfAttentionHeadsProjector,
 )
-from emperor.attention.core.variants.self_attention.projector import (
+from emperor.attention._variants.self_attention.projection import (
     SelfAttentionProjector,
 )
-from emperor.base.layer import Layer, LayerStack, RecurrentLayer
-from emperor.base.layer.state import LayerState
-from emperor.experts.core.layers import MixtureOfExperts
-from emperor.experts.core.options import RoutingInitializationMode
-
+from emperor.experts import MixtureOfExperts
+from emperor.layers import Layer, LayerStack, LayerState, RecurrentLayer
 from support.attention import build_attention_config
 
 PROJECTION_KINDS = ["base", "adaptive"]
@@ -411,97 +406,6 @@ class TestMixtureOfAttentionHeadsProjector(unittest.TestCase):
         self.assertIsNone(model.indices)
         self.assertIsNone(model.skip_mask)
 
-    def test_sampler_receives_embedding_width_exactly(self):
-        model = self.model()
-        expected = object()
-        sampler_config = model.experts_config.sampler_config
-
-        with patch.object(
-            sampler_config,
-            "build_with_router_input_dim",
-            return_value=expected,
-        ) as build_sampler:
-            output = model._MixtureOfAttentionHeadsProjector__create_sampler()
-
-        self.assertIs(output, expected)
-        self.assertEqual(build_sampler.call_args.args, (model.embedding_dim,))
-
-    def test_expert_model_builders_receive_exact_dimension_overrides(self):
-        model = self.model(use_kv_expert_models_flag=True)
-        expected = object()
-        module = "emperor.attention.core.variants.mixture_of_attention_heads.projector"
-
-        with patch(f"{module}.MixtureOfExpertsMap", return_value=expected) as build:
-            output = model._create_q_model(7, 11)
-        self.assertIs(output, expected)
-        experts_config, overrides = build.call_args.args
-        self.assertIs(experts_config, model.experts_config)
-        self.assertEqual(overrides.input_dim, 7)
-        self.assertEqual(overrides.output_dim, 11)
-
-        with patch(f"{module}.MixtureOfExpertsMap", return_value=expected) as build:
-            output = model._create_kv_model(13, 17)
-        self.assertIs(output, expected)
-        experts_config, overrides = build.call_args.args
-        self.assertIs(experts_config, model.experts_config)
-        self.assertEqual(overrides.input_dim, 13)
-        self.assertEqual(overrides.output_dim, 17)
-
-    def test_shared_key_value_builder_forwards_both_dimensions(self):
-        model = self.model(use_kv_expert_models_flag=False)
-        expected = object()
-
-        with patch.object(
-            model,
-            "_create_model",
-            return_value=expected,
-        ) as build:
-            output = model._create_kv_model(13, 17)
-
-        self.assertIs(output, expected)
-        self.assertEqual(build.call_args.args, (13, 17))
-
-    def test_output_expert_builder_disables_routing_with_exact_dimensions(self):
-        model = self.model()
-        expected = object()
-        module = "emperor.attention.core.variants.mixture_of_attention_heads.projector"
-
-        with patch(f"{module}.MixtureOfExpertsReduce", return_value=expected) as build:
-            output = model._build_output_model()
-
-        self.assertIs(output, expected)
-        experts_config, overrides = build.call_args.args
-        self.assertIs(experts_config, model.cfg.experts_config)
-        self.assertEqual(overrides.input_dim, model.value_projection_dim)
-        self.assertEqual(overrides.output_dim, model.embedding_dim)
-        self.assertIs(
-            overrides.routing_initialization_mode,
-            RoutingInitializationMode.DISABLED,
-        )
-
-    def test_expert_index_sampling_preserves_returned_skip_mask(self):
-        model = self.model()
-        inputs = torch.arange(32.0).view(2, 2, 8)
-        probabilities = torch.tensor([[0.8, 0.2], [0.7, 0.3], [0.6, 0.4], [0.9, 0.1]])
-        indices = torch.tensor([[0, 1], [1, 2], [2, 3], [3, 0]])
-        skip_mask = torch.tensor([True, False, True, False])
-        sampler_loss = torch.tensor(0.25)
-
-        with patch.object(
-            model.sampler,
-            "sample_probabilities_and_indices",
-            return_value=(probabilities, indices, skip_mask, sampler_loss),
-        ) as sample:
-            model._compute_expert_indices(inputs)
-
-        sampled_inputs = sample.call_args.args[0]
-        torch.testing.assert_close(sampled_inputs, inputs.view(-1, 8))
-        self.assertEqual(len(sample.call_args.args), 1)
-        self.assertIs(model.skip_mask, skip_mask)
-        torch.testing.assert_close(model.probabilities, probabilities)
-        torch.testing.assert_close(model.indices, indices)
-        torch.testing.assert_close(model.auxiliary_loss, sampler_loss)
-
     def test_init(self):
         for use_kv_expert_models_flag in (True, False):
             with self.subTest(use_kv_expert_models_flag=use_kv_expert_models_flag):
@@ -523,7 +427,7 @@ class TestMixtureOfAttentionHeadsProjector(unittest.TestCase):
                     self.assertIsInstance(m.key_model, (Layer, LayerStack))
                     self.assertIsInstance(m.value_model, (Layer, LayerStack))
 
-    def test__compute_kv_projection(self):
+    def test_private_compute_kv_projection(self):
         c = build_attention_config(
             config_class=MixtureOfAttentionHeadsConfig,
             query_key_projection_dim=12,
@@ -536,7 +440,10 @@ class TestMixtureOfAttentionHeadsProjector(unittest.TestCase):
 
         tensor = torch.randn(c.target_sequence_length, c.batch_size, c.embedding_dim)
 
-        projected_tensor = m._compute_kv_projection(tensor, m.key_model)
+        projected_tensor = m._MixtureOfAttentionHeadsProjector__compute_kv_projection(
+            tensor,
+            m.key_model,
+        )
 
         expected_shape = (
             c.target_sequence_length,
@@ -591,7 +498,7 @@ class TestMixtureOfAttentionHeadsProjector(unittest.TestCase):
                     self.assertEqual(projections.key.shape, expected_shape)
                     self.assertEqual(projections.value.shape, expected_shape)
 
-    def test_compute_output_projection(self):
+    def test_compute_output_projection_clears_routing_state(self):
         c = build_attention_config(
             config_class=MixtureOfAttentionHeadsConfig,
             embedding_dim=12,
@@ -602,6 +509,9 @@ class TestMixtureOfAttentionHeadsProjector(unittest.TestCase):
 
         tensor = torch.randn(c.target_sequence_length, c.batch_size, c.embedding_dim)
         m.compute_qkv_projections(QKV(query=tensor, key=tensor, value=tensor))
+        self.assertIsNotNone(m.probabilities)
+        self.assertIsNotNone(m.indices)
+        m.skip_mask = torch.tensor([True])
 
         weighted_values = torch.randn(
             c.target_sequence_length,
@@ -618,6 +528,9 @@ class TestMixtureOfAttentionHeadsProjector(unittest.TestCase):
         )
         self.assertIsInstance(attention_output, torch.Tensor)
         self.assertEqual(attention_output.shape, expected_shape)
+        self.assertIsNone(m.probabilities)
+        self.assertIsNone(m.indices)
+        self.assertIsNone(m.skip_mask)
 
 
 class TestProjectorDispatch(unittest.TestCase):

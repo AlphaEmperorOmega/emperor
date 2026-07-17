@@ -2,10 +2,10 @@ import unittest
 from dataclasses import asdict
 
 import torch
-from emperor.attention.core.config import MultiHeadAttentionConfig
-from emperor.attention.core.handlers.batch import BatchDimensionManager
-from emperor.attention.core.runtime import QKV, AttentionMasks
 
+from emperor.attention import MultiHeadAttentionConfig
+from emperor.attention._ops.batching import BatchDimensionManager
+from emperor.attention._runtime import QKV, AttentionMasks
 from support.attention import build_attention_config
 
 
@@ -51,15 +51,15 @@ class TestConvertInputsToInternalLayout(TestBatchDimensionManager):
         qkv = QKV(query=query, key=key, value=value)
         masks = AttentionMasks()
 
-        output_qkv, output_masks, runtime_shape = (
+        output_qkv, output_masks, runtime_layout = (
             self.model.convert_inputs_to_internal_layout(qkv, masks)
         )
 
         self.assertIs(output_qkv, qkv)
         self.assertIs(output_masks, masks)
-        self.assertEqual(runtime_shape.batch_size, 3)
-        self.assertEqual(runtime_shape.target_sequence_length, 5)
-        self.assertEqual(runtime_shape.source_sequence_length, 7)
+        self.assertEqual(runtime_layout.batch_size, 3)
+        self.assertEqual(runtime_layout.target_sequence_length, 5)
+        self.assertEqual(runtime_layout.source_sequence_length, 7)
 
     def test_static_keys_define_runtime_source_sequence_length(self):
         self.rebuild_presets(MultiHeadAttentionConfig(batch_first_flag=False))
@@ -68,21 +68,21 @@ class TestConvertInputsToInternalLayout(TestBatchDimensionManager):
         value = torch.randn(7, 3, 12)
         static_keys = torch.randn(6, 4, 2)
 
-        output_qkv, _, runtime_shape = self.model.convert_inputs_to_internal_layout(
+        output_qkv, _, runtime_layout = self.model.convert_inputs_to_internal_layout(
             QKV(query=query, key=key, value=value),
             AttentionMasks(),
             static_keys=static_keys,
         )
 
         self.assertIs(output_qkv.key, key)
-        self.assertEqual(runtime_shape.source_sequence_length, 4)
+        self.assertEqual(runtime_layout.source_sequence_length, 4)
 
     def test_distinct_unbatched_qkv_without_masks_are_all_expanded(self):
         query = torch.randn(self.target_sequence_length, self.embedding_dim)
         key = torch.randn(self.source_sequence_length, self.embedding_dim)
         value = torch.randn(self.source_sequence_length, self.embedding_dim)
 
-        output_qkv, output_masks, runtime_shape = (
+        output_qkv, output_masks, runtime_layout = (
             self.model.convert_inputs_to_internal_layout(
                 QKV(query=query, key=key, value=value),
                 AttentionMasks(),
@@ -93,7 +93,7 @@ class TestConvertInputsToInternalLayout(TestBatchDimensionManager):
         self.assertEqual(output_qkv.key.shape, (8, 1, 12))
         self.assertEqual(output_qkv.value.shape, (8, 1, 12))
         self.assertIsNone(output_masks.key_padding_mask)
-        self.assertFalse(runtime_shape.input_was_batched)
+        self.assertFalse(runtime_layout.input_was_batched)
 
     def test_shared_qkv_input_tensors_preserve_identity(self):
         self.rebuild_presets(MultiHeadAttentionConfig(batch_first_flag=True))
@@ -104,7 +104,7 @@ class TestConvertInputsToInternalLayout(TestBatchDimensionManager):
         )
         input_qkv = QKV(query=query, key=query, value=query)
         input_masks = AttentionMasks()
-        output_qkv, output_masks, runtime_shape = (
+        output_qkv, output_masks, runtime_layout = (
             self.model.convert_inputs_to_internal_layout(
                 input_qkv,
                 input_masks,
@@ -124,7 +124,7 @@ class TestConvertInputsToInternalLayout(TestBatchDimensionManager):
         self.assertIs(output_qkv.query, output_qkv.key)
         self.assertIs(output_qkv.key, output_qkv.value)
         torch.testing.assert_close(output_qkv.query, query.transpose(0, 1))
-        self.assertTrue(runtime_shape.input_was_batch_first)
+        self.assertTrue(runtime_layout.input_was_batch_first)
 
     def test_shared_key_value_input_tensors_preserve_identity(self):
         self.rebuild_presets(MultiHeadAttentionConfig(batch_first_flag=True))
@@ -141,7 +141,7 @@ class TestConvertInputsToInternalLayout(TestBatchDimensionManager):
 
         input_qkv = QKV(query=query, key=key, value=key)
         input_masks = AttentionMasks()
-        output_qkv, output_masks, runtime_shape = (
+        output_qkv, output_masks, runtime_layout = (
             self.model.convert_inputs_to_internal_layout(
                 input_qkv,
                 input_masks,
@@ -167,7 +167,7 @@ class TestConvertInputsToInternalLayout(TestBatchDimensionManager):
         self.assertIs(output_qkv.key, output_qkv.value)
         torch.testing.assert_close(output_qkv.query, query.transpose(0, 1))
         torch.testing.assert_close(output_qkv.key, key.transpose(0, 1))
-        self.assertTrue(runtime_shape.input_was_batch_first)
+        self.assertTrue(runtime_layout.input_was_batch_first)
 
     def test_distinct_batch_first_qkv_are_all_transposed(self):
         self.rebuild_presets(MultiHeadAttentionConfig(batch_first_flag=True))
@@ -175,11 +175,9 @@ class TestConvertInputsToInternalLayout(TestBatchDimensionManager):
         key = torch.randn(self.batch_size, 7, self.embedding_dim)
         value = torch.randn(self.batch_size, 7, self.embedding_dim)
 
-        output_qkv, _, runtime_shape = (
-            self.model.convert_inputs_to_internal_layout(
-                QKV(query=query, key=key, value=value),
-                AttentionMasks(),
-            )
+        output_qkv, _, runtime_layout = self.model.convert_inputs_to_internal_layout(
+            QKV(query=query, key=key, value=value),
+            AttentionMasks(),
         )
 
         self.assertEqual(output_qkv.query.shape, (5, self.batch_size, 12))
@@ -188,9 +186,9 @@ class TestConvertInputsToInternalLayout(TestBatchDimensionManager):
         torch.testing.assert_close(output_qkv.query, query.transpose(0, 1))
         torch.testing.assert_close(output_qkv.key, key.transpose(0, 1))
         torch.testing.assert_close(output_qkv.value, value.transpose(0, 1))
-        self.assertEqual(runtime_shape.target_sequence_length, 5)
-        self.assertEqual(runtime_shape.source_sequence_length, 7)
-        self.assertTrue(runtime_shape.input_was_batch_first)
+        self.assertEqual(runtime_layout.target_sequence_length, 5)
+        self.assertEqual(runtime_layout.source_sequence_length, 7)
+        self.assertTrue(runtime_layout.input_was_batch_first)
 
     def test_unbatched_padding_mask_gains_batch_dimension(self):
         query = torch.randn(self.target_sequence_length, self.embedding_dim)
@@ -208,7 +206,7 @@ class TestConvertInputsToInternalLayout(TestBatchDimensionManager):
             dtype=torch.bool,
         )
 
-        output_qkv, output_masks, runtime_shape = (
+        output_qkv, output_masks, runtime_layout = (
             self.model.convert_inputs_to_internal_layout(
                 QKV(query=query, key=key, value=value),
                 AttentionMasks(
@@ -222,7 +220,7 @@ class TestConvertInputsToInternalLayout(TestBatchDimensionManager):
         self.assertIs(output_qkv.key, output_qkv.value)
         self.assertEqual(output_masks.key_padding_mask.shape, (1, 8))
         self.assertIs(output_masks.attention_mask, attention_mask)
-        self.assertFalse(runtime_shape.input_was_batched)
+        self.assertFalse(runtime_layout.input_was_batched)
 
     def test_every_shared_tensor_pair_preserves_identity_when_unsqueezed(self):
         first = torch.randn(8, 12)
@@ -274,12 +272,12 @@ class TestRestoreOutputLayout(TestBatchDimensionManager):
     def test_sequence_first_output_is_returned_unchanged(self):
         self.rebuild_presets(MultiHeadAttentionConfig(batch_first_flag=False))
         query = torch.arange(5 * 3 * 12, dtype=torch.float32).view(5, 3, 12)
-        qkv, _, runtime_shape = self.model.convert_inputs_to_internal_layout(
+        qkv, _, runtime_layout = self.model.convert_inputs_to_internal_layout(
             QKV(query=query, key=query, value=query),
             AttentionMasks(),
         )
 
-        restored = self.model.restore_output_layout(qkv.query, runtime_shape)
+        restored = self.model.restore_output_layout(qkv.query, runtime_layout)
 
         self.assertIs(restored, qkv.query)
 
@@ -289,12 +287,12 @@ class TestRestoreOutputLayout(TestBatchDimensionManager):
             self.batch_size * 5 * self.embedding_dim,
             dtype=torch.float32,
         ).view(self.batch_size, 5, self.embedding_dim)
-        qkv, _, runtime_shape = self.model.convert_inputs_to_internal_layout(
+        qkv, _, runtime_layout = self.model.convert_inputs_to_internal_layout(
             QKV(query=query, key=query, value=query),
             AttentionMasks(),
         )
 
-        restored = self.model.restore_output_layout(qkv.query, runtime_shape)
+        restored = self.model.restore_output_layout(qkv.query, runtime_layout)
 
         self.assertEqual(restored.shape, query.shape)
         torch.testing.assert_close(restored, query)
@@ -303,12 +301,12 @@ class TestRestoreOutputLayout(TestBatchDimensionManager):
         query = torch.arange(5 * self.embedding_dim, dtype=torch.float32).view(
             5, self.embedding_dim
         )
-        qkv, _, runtime_shape = self.model.convert_inputs_to_internal_layout(
+        qkv, _, runtime_layout = self.model.convert_inputs_to_internal_layout(
             QKV(query=query, key=query, value=query),
             AttentionMasks(),
         )
 
-        restored = self.model.restore_output_layout(qkv.query, runtime_shape)
+        restored = self.model.restore_output_layout(qkv.query, runtime_layout)
 
         self.assertEqual(restored.shape, query.shape)
         torch.testing.assert_close(restored, query)

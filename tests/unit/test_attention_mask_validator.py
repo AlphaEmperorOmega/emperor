@@ -2,9 +2,9 @@ import unittest
 from dataclasses import asdict
 
 import torch
-from emperor.attention.core._validator import AttentionValidatorBase
-from emperor.attention.core.config import MultiHeadAttentionConfig
 
+from emperor.attention import MultiHeadAttentionConfig
+from emperor.attention._validation import AttentionValidatorBase
 from support.attention import build_attention_config
 
 

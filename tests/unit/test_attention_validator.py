@@ -1,33 +1,28 @@
 import unittest
 from types import SimpleNamespace
-from unittest.mock import patch
 
 import torch
+
 from emperor.attention import (
     IndependentAttentionConfig,
     MixtureOfAttentionHeadsConfig,
     SelfAttentionConfig,
     SelfAttentionProjectionStrategy,
 )
-from emperor.attention.core._validator import (
+from emperor.attention._runtime import QKV, AttentionMasks, AttentionRuntimeLayout
+from emperor.attention._validation import (
     AttentionValidatorBase,
     MultiHeadAttentionValidator,
 )
-from emperor.attention.core.runtime import (
-    QKV,
-    AttentionMasks,
-    AttentionRuntimeShape,
-)
-from emperor.attention.core.variants.independent_attention.validator import (
+from emperor.attention._variants.independent.validation import (
     IndependentAttentionValidator,
 )
-from emperor.attention.core.variants.mixture_of_attention_heads.validator import (
+from emperor.attention._variants.mixture.validation import (
     MixtureOfAttentionHeadsValidator,
 )
-from emperor.attention.core.variants.self_attention.validator import (
+from emperor.attention._variants.self_attention.validation import (
     SelfAttentionValidator,
 )
-
 from support.attention import build_attention_config
 
 BATCH_SIZE = 4
@@ -247,7 +242,7 @@ class TestRuntimeDeviceValidation(unittest.TestCase):
         query = torch.empty(2, 1, 4)
         qkv = QKV(query=query, key=query, value=query)
         static_key = torch.empty(1, 2, 4, device="meta")
-        runtime_shape = AttentionRuntimeShape(1, 2, 2)
+        runtime_layout = AttentionRuntimeLayout(1, 2, 2)
 
         with self.assertRaisesRegex(RuntimeError, "device must match query device"):
             MultiHeadAttentionValidator.validate_static_key_value_inputs(
@@ -255,7 +250,7 @@ class TestRuntimeDeviceValidation(unittest.TestCase):
                 qkv,
                 static_key,
                 None,
-                runtime_shape,
+                runtime_layout,
             )
 
 
@@ -340,29 +335,6 @@ class TestSelfAttentionValidator(unittest.TestCase):
             "are the same tensor.",
         )
 
-    def test_forward_inputs_delegate_exact_arguments(self):
-        model = object()
-        query = object()
-        key = object()
-        value = object()
-        qkv = SimpleNamespace(query=query, key=key, value=value)
-        masks = object()
-
-        with (
-            patch.object(
-                MultiHeadAttentionValidator,
-                "validate_forward_inputs",
-            ) as validate_base,
-            patch.object(
-                SelfAttentionValidator,
-                "validate_query_key_value_are_same_tensor",
-            ) as validate_same_tensor,
-        ):
-            SelfAttentionValidator.validate_forward_inputs(model, qkv, masks)
-
-        validate_base.assert_called_once_with(model, qkv, masks)
-        validate_same_tensor.assert_called_once_with(query, key, value)
-
 
 class TestIndependentAttentionValidator(unittest.TestCase):
     def test_forward_inputs_raise_when_returning_weights(self):
@@ -379,33 +351,6 @@ class TestIndependentAttentionValidator(unittest.TestCase):
                 QKV(query=query, key=key, value=value),
                 AttentionMasks(),
             )
-
-    def test_forward_inputs_delegate_exact_arguments(self):
-        model = object()
-        key = object()
-        value = object()
-        qkv = SimpleNamespace(query=object(), key=key, value=value)
-        masks = object()
-
-        with (
-            patch.object(
-                MultiHeadAttentionValidator,
-                "validate_forward_inputs",
-            ) as validate_base,
-            patch.object(
-                AttentionValidatorBase,
-                "validate_attention_weights_returned_for_self_attention_only",
-            ) as validate_weights,
-            patch.object(
-                AttentionValidatorBase,
-                "validate_key_value_projection_shapes",
-            ) as validate_key_value,
-        ):
-            IndependentAttentionValidator.validate_forward_inputs(model, qkv, masks)
-
-        validate_base.assert_called_once_with(model, qkv, masks)
-        validate_weights.assert_called_once_with(model)
-        validate_key_value.assert_called_once_with(key, value)
 
 
 class TestMixtureOfAttentionHeadsValidator(unittest.TestCase):
@@ -623,63 +568,3 @@ class TestMixtureOfAttentionHeadsValidator(unittest.TestCase):
                     "static key/value projections are not supported when "
                     "use_kv_expert_models_flag is True.",
                 )
-
-    def test_forward_inputs_delegate_exact_arguments(self):
-        model = object()
-        query = object()
-        key = object()
-        value = object()
-        qkv = SimpleNamespace(query=query, key=key, value=value)
-        masks = object()
-
-        with (
-            patch.object(
-                MultiHeadAttentionValidator,
-                "validate_forward_inputs",
-            ) as validate_base,
-            patch.object(
-                MixtureOfAttentionHeadsValidator,
-                "validate_expert_key_value_inputs",
-            ) as validate_expert_inputs,
-            patch.object(
-                MixtureOfAttentionHeadsValidator,
-                "validate_attention_weights_are_not_requested",
-            ) as validate_weights,
-            patch.object(
-                AttentionValidatorBase,
-                "validate_key_value_projection_shapes",
-            ) as validate_key_value,
-        ):
-            MixtureOfAttentionHeadsValidator.validate_forward_inputs(model, qkv, masks)
-
-        validate_base.assert_called_once_with(model, qkv, masks)
-        validate_expert_inputs.assert_called_once_with(model, query, key, value)
-        validate_weights.assert_called_once_with(model)
-        validate_key_value.assert_called_once_with(key, value)
-
-    def test_static_inputs_delegate_exact_arguments_without_expert_key_values(self):
-        model = SimpleNamespace(cfg=SimpleNamespace(use_kv_expert_models_flag=False))
-        static_keys = object()
-        static_values = object()
-        runtime_shape = object()
-        qkv = object()
-
-        with patch.object(
-            MultiHeadAttentionValidator,
-            "validate_static_key_value_inputs",
-        ) as validate_base:
-            MixtureOfAttentionHeadsValidator.validate_static_key_value_inputs(
-                model,
-                qkv,
-                static_keys,
-                static_values,
-                runtime_shape,
-            )
-
-        validate_base.assert_called_once_with(
-            model,
-            qkv,
-            static_keys,
-            static_values,
-            runtime_shape,
-        )

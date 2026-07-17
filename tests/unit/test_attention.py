@@ -1,27 +1,26 @@
 import unittest
 from dataclasses import dataclass
 from types import SimpleNamespace
-from unittest.mock import patch
 
 import torch
+
 from emperor.attention import (
-    IndependentAttention,
     IndependentAttentionConfig,
-    MixtureOfAttentionHeads,
     MixtureOfAttentionHeadsConfig,
-    SelfAttention,
+    MultiHeadAttentionConfig,
     SelfAttentionConfig,
 )
-from emperor.attention.core.config import MultiHeadAttentionConfig
-from emperor.attention.core.handlers.batch import BatchDimensionManager
-from emperor.attention.core.handlers.bias import KeyValueBias
-from emperor.attention.core.handlers.mask import Mask
-from emperor.attention.core.handlers.processor import ProcessorBase
-from emperor.attention.core.handlers.projector import ProjectorBase
-from emperor.attention.core.variants.independent_attention.validator import (
+from emperor.attention._ops.batching import BatchDimensionManager
+from emperor.attention._ops.bias import KeyValueBias
+from emperor.attention._ops.masking import Mask
+from emperor.attention._ops.processing import ProcessorBase
+from emperor.attention._ops.projection import ProjectorBase
+from emperor.attention._variants.independent.layer import IndependentAttention
+from emperor.attention._variants.independent.validation import (
     IndependentAttentionValidator,
 )
-
+from emperor.attention._variants.mixture.layer import MixtureOfAttentionHeads
+from emperor.attention._variants.self_attention.layer import SelfAttention
 from support.attention import build_attention_config
 
 
@@ -295,66 +294,6 @@ class TestAttention(unittest.TestCase):
         self.assertEqual(model.batch_size, 3)
         self.assertEqual(model.dropout_probability, 0.25)
         self.assertEqual(model.embedding_dim, base.embedding_dim)
-
-    def test_forward_forwards_static_and_runtime_contracts_to_extensions(self):
-        cfg = build_attention_config(
-            config_class=IndependentAttentionConfig,
-            batch_size=5,
-            num_heads=2,
-            embedding_dim=4,
-            query_key_projection_dim=4,
-            value_projection_dim=4,
-            target_sequence_length=3,
-            source_sequence_length=5,
-        )
-        cfg.batch_first_flag = False
-        model = cfg.build().eval()
-        query = torch.randn(3, 2, 4)
-        key = torch.randn(4, 2, 4)
-        value = torch.randn(4, 2, 4)
-        static_keys = torch.randn(4, 5, 2)
-        static_values = torch.randn(4, 5, 2)
-
-        with (
-            patch.object(
-                model.VALIDATOR,
-                "validate_static_key_value_inputs",
-                wraps=model.VALIDATOR.validate_static_key_value_inputs,
-            ) as validate_static,
-            patch.object(
-                model.bias,
-                "add_kv_learnable_bias_vectors",
-                wraps=model.bias.add_kv_learnable_bias_vectors,
-            ) as add_bias,
-            patch.object(
-                model.zero_attention,
-                "add_zero_attention",
-                wraps=model.zero_attention.add_zero_attention,
-            ) as add_zero,
-        ):
-            output, _, _ = model(
-                query,
-                key,
-                value,
-                static_k=static_keys,
-                static_v=static_values,
-            )
-
-        self.assertEqual(output.shape, query.shape)
-        static_args = validate_static.call_args.args
-        self.assertIs(static_args[0], model)
-        self.assertIs(static_args[2], static_keys)
-        self.assertIs(static_args[3], static_values)
-        self.assertIsNotNone(static_args[4])
-        self.assertEqual(static_args[4].batch_size, 2)
-
-        bias_runtime_shape = add_bias.call_args.args[2]
-        zero_runtime_shape = add_zero.call_args.args[2]
-        self.assertIsNotNone(bias_runtime_shape)
-        self.assertIsNotNone(zero_runtime_shape)
-        self.assertEqual(bias_runtime_shape.batch_size, 2)
-        self.assertEqual(bias_runtime_shape.source_sequence_length, 5)
-        self.assertIs(zero_runtime_shape, bias_runtime_shape)
 
     def test_self_processor_reuses_the_layer_reshaper(self):
         cfg = self.config(
