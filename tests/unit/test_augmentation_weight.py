@@ -1,42 +1,54 @@
-from emperor.base.layer.residual import ResidualConnectionOptions
-import torch
-import torch.nn.functional as F
 import unittest
 
-from emperor.base.utils import Module
-from emperor.base.layer.config import LayerConfig, LayerStackConfig
-from emperor.base.options import (
-    ActivationOptions,
-    LastLayerBiasOptions,
-    LayerNormPositionOptions,
-)
-from emperor.linears.core.config import LinearLayerConfig
+import torch
+import torch.nn.functional as F
+
 from emperor.augmentations.adaptive_parameters import (
     BankExpansionFactorOptions,
+    DualModelDynamicWeightConfig,
     DynamicDepthOptions,
+    DynamicWeightConfig,
+    HypernetworkDynamicWeightConfig,
+    LayeredWeightedBankDynamicWeightConfig,
+    LowRankDynamicWeightConfig,
+    SingleModelDynamicWeightConfig,
+    SoftWeightedBankDynamicWeightConfig,
     WeightDecayScheduleOptions,
     WeightNormalizationOptions,
     WeightNormalizationPositionOptions,
 )
-from emperor.augmentations.adaptive_parameters.core.weight.depth_mapper import (
+from emperor.augmentations.adaptive_parameters._weights.depth_mapping import (
     DepthMappingHandlerConfig,
     DepthMappingLayerStack,
 )
-from emperor.augmentations.adaptive_parameters.core.weight import (
+from emperor.augmentations.adaptive_parameters._weights.variants.dual_model import (
     DualModelDynamicWeight,
-    HypernetworkDynamicWeight,
-    LayeredWeightedBankDynamicWeight,
-    LowRankDynamicWeight,
-    SingleModelDynamicWeight,
-    SoftWeightedBankDynamicWeight,
-    DynamicWeightConfig,
-    SingleModelDynamicWeightConfig,
-    DualModelDynamicWeightConfig,
-    LowRankDynamicWeightConfig,
-    HypernetworkDynamicWeightConfig,
-    LayeredWeightedBankDynamicWeightConfig,
-    SoftWeightedBankDynamicWeightConfig,
 )
+from emperor.augmentations.adaptive_parameters._weights.variants.hypernetwork import (
+    HypernetworkDynamicWeight,
+)
+from emperor.augmentations.adaptive_parameters._weights.variants.layered_weighted_bank import (
+    LayeredWeightedBankDynamicWeight,
+)
+from emperor.augmentations.adaptive_parameters._weights.variants.low_rank import (
+    LowRankDynamicWeight,
+)
+from emperor.augmentations.adaptive_parameters._weights.variants.single_model import (
+    SingleModelDynamicWeight,
+)
+from emperor.augmentations.adaptive_parameters._weights.variants.soft_weighted_bank import (
+    SoftWeightedBankDynamicWeight,
+)
+from emperor.layers import (
+    ActivationOptions,
+    LastLayerBiasOptions,
+    LayerConfig,
+    LayerNormPositionOptions,
+    LayerStackConfig,
+    ResidualConnectionOptions,
+)
+from emperor.linears import LinearLayerConfig
+from emperor.nn import Module
 
 
 class TestWeightHandlerForward(unittest.TestCase):
