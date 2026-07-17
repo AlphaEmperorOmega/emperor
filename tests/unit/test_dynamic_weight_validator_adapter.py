@@ -1,16 +1,28 @@
 import unittest
 
-from emperor.augmentations.adaptive_parameters.core._validator import (
+from emperor.augmentations.adaptive_parameters import DynamicWeightConfig
+from emperor.augmentations.adaptive_parameters._weights.base import (
+    DynamicWeightAbstract,
+)
+from emperor.augmentations.adaptive_parameters._weights.validation import (
     DynamicWeightValidator,
 )
-from emperor.augmentations.adaptive_parameters.core.weight import (
+from emperor.augmentations.adaptive_parameters._weights.variants.dual_model import (
     DualModelDynamicWeight,
-    DynamicWeightAbstract,
-    DynamicWeightConfig,
+)
+from emperor.augmentations.adaptive_parameters._weights.variants.hypernetwork import (
     HypernetworkDynamicWeight,
+)
+from emperor.augmentations.adaptive_parameters._weights.variants.layered_weighted_bank import (
     LayeredWeightedBankDynamicWeight,
+)
+from emperor.augmentations.adaptive_parameters._weights.variants.low_rank import (
     LowRankDynamicWeight,
+)
+from emperor.augmentations.adaptive_parameters._weights.variants.single_model import (
     SingleModelDynamicWeight,
+)
+from emperor.augmentations.adaptive_parameters._weights.variants.soft_weighted_bank import (
     SoftWeightedBankDynamicWeight,
 )
 

@@ -46,7 +46,7 @@ class SingleModelDynamicWeightConfig(DynamicWeightConfig):
     )
 
     def _registry_owner(self) -> type:
-        from emperor.augmentations.adaptive_parameters._weights.single_model import (
+        from emperor.augmentations.adaptive_parameters._weights.variants.single_model import (
             SingleModelDynamicWeight,
         )
 
@@ -63,7 +63,7 @@ class DualModelDynamicWeightConfig(DynamicWeightConfig):
     )
 
     def _registry_owner(self) -> type:
-        from emperor.augmentations.adaptive_parameters._weights.dual_model import (
+        from emperor.augmentations.adaptive_parameters._weights.variants.dual_model import (
             DualModelDynamicWeight,
         )
 
@@ -77,7 +77,7 @@ class LowRankDynamicWeightConfig(DynamicWeightConfig):
     )
 
     def _registry_owner(self) -> type:
-        from emperor.augmentations.adaptive_parameters._weights.low_rank import (
+        from emperor.augmentations.adaptive_parameters._weights.variants.low_rank import (
             LowRankDynamicWeight,
         )
 
@@ -91,7 +91,7 @@ class HypernetworkDynamicWeightConfig(DynamicWeightConfig):
     )
 
     def _registry_owner(self) -> type:
-        from emperor.augmentations.adaptive_parameters._weights.hypernetwork import (
+        from emperor.augmentations.adaptive_parameters._weights.variants.hypernetwork import (
             HypernetworkDynamicWeight,
         )
 
@@ -105,7 +105,7 @@ class LayeredWeightedBankDynamicWeightConfig(DynamicWeightConfig):
     )
 
     def _registry_owner(self) -> type:
-        from .layered_weighted_bank import (
+        from .variants.layered_weighted_bank import (
             LayeredWeightedBankDynamicWeight,
         )
 
@@ -119,7 +119,7 @@ class SoftWeightedBankDynamicWeightConfig(DynamicWeightConfig):
     )
 
     def _registry_owner(self) -> type:
-        from .soft_weighted_bank import (
+        from .variants.soft_weighted_bank import (
             SoftWeightedBankDynamicWeight,
         )
 

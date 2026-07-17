@@ -57,10 +57,10 @@ class _WeightBankDiagnostics:
             WeightedBankDynamicBias,
         )
 
-        from .._weights.layered_weighted_bank import (
+        from .._weights.variants.layered_weighted_bank import (
             LayeredWeightedBankDynamicWeight,
         )
-        from .._weights.soft_weighted_bank import (
+        from .._weights.variants.soft_weighted_bank import (
             SoftWeightedBankDynamicWeight,
         )
 
@@ -211,10 +211,10 @@ class WeightBankUtilizationMonitorCallback(Callback):
             WeightedBankDynamicBias,
         )
 
-        from .._weights.layered_weighted_bank import (
+        from .._weights.variants.layered_weighted_bank import (
             LayeredWeightedBankDynamicWeight,
         )
-        from .._weights.soft_weighted_bank import (
+        from .._weights.variants.soft_weighted_bank import (
             SoftWeightedBankDynamicWeight,
         )
 
