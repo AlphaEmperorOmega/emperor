@@ -1,15 +1,15 @@
 from torch import Tensor
 
-from emperor.augmentations.adaptive_parameters._diagonals.anti import (
-    AntiDynamicDiagonal,
-)
 from emperor.augmentations.adaptive_parameters._diagonals.base import (
     DynamicDiagonalAbstract,
 )
 from emperor.augmentations.adaptive_parameters._diagonals.config import (
     CombinedDynamicDiagonalConfig,
 )
-from emperor.augmentations.adaptive_parameters._diagonals.standard import (
+from emperor.augmentations.adaptive_parameters._diagonals.variants.anti import (
+    AntiDynamicDiagonal,
+)
+from emperor.augmentations.adaptive_parameters._diagonals.variants.standard import (
     StandardDynamicDiagonal,
 )
 

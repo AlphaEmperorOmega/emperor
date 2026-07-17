@@ -1,27 +1,37 @@
-from emperor.base.layer.residual import ResidualConnectionOptions
 import unittest
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from emperor.base.options import (
-    ActivationOptions,
-    LastLayerBiasOptions,
-    LayerNormPositionOptions,
-)
-from emperor.base.layer import LayerConfig, LayerStack, LayerStackConfig
-from emperor.linears.core.config import LinearLayerConfig
-from emperor.augmentations.adaptive_parameters.core.diagonal import (
-    AntiDynamicDiagonal,
+from emperor.augmentations.adaptive_parameters import (
     AntiDynamicDiagonalConfig,
-    CombinedDynamicDiagonal,
     CombinedDynamicDiagonalConfig,
-    DynamicDiagonalAbstract,
     DynamicDiagonalConfig,
-    StandardDynamicDiagonal,
     StandardDynamicDiagonalConfig,
 )
+from emperor.augmentations.adaptive_parameters._diagonals.base import (
+    DynamicDiagonalAbstract,
+)
+from emperor.augmentations.adaptive_parameters._diagonals.variants.anti import (
+    AntiDynamicDiagonal,
+)
+from emperor.augmentations.adaptive_parameters._diagonals.variants.combined import (
+    CombinedDynamicDiagonal,
+)
+from emperor.augmentations.adaptive_parameters._diagonals.variants.standard import (
+    StandardDynamicDiagonal,
+)
+from emperor.layers import (
+    ActivationOptions,
+    LastLayerBiasOptions,
+    LayerConfig,
+    LayerNormPositionOptions,
+    LayerStack,
+    LayerStackConfig,
+    ResidualConnectionOptions,
+)
+from emperor.linears import LinearLayerConfig
 
 
 class TestDynamicDiagonalHandlers(unittest.TestCase):
