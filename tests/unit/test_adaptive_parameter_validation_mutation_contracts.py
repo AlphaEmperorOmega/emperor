@@ -485,6 +485,65 @@ class AdaptiveParameterValidationMutationContractTests(unittest.TestCase):
             weight_config.build,
         )
 
+    def test_bank_factor_and_required_bias_errors_are_exact(self) -> None:
+        for factor, message in (
+            (
+                None,
+                "WeightedBankDynamicBias requires bank_expansion_factor to be a "
+                "BankExpansionFactorOptions value, received None.",
+            ),
+            (
+                BankExpansionFactorOptions.DISABLED,
+                "WeightedBankDynamicBias requires bank_expansion_factor > 0, "
+                "received BankExpansionFactorOptions.DISABLED. Use FACTOR_OF_ONE, "
+                "FACTOR_OF_TWO, FACTOR_OF_THREE, or FACTOR_OF_FOUR.",
+            ),
+        ):
+            with self.subTest(owner="bias", factor=factor):
+                config = WeightedBankDynamicBiasConfig(
+                    input_dim=2,
+                    output_dim=3,
+                    decay_schedule=WeightDecayScheduleOptions.DISABLED,
+                    decay_rate=0.0,
+                    decay_warmup_batches=0,
+                    model_config=linear_stack_config(),
+                    bank_expansion_factor=factor,
+                )
+                self.assert_exact_error(ValueError, message, config.build)
+
+        for factor, message in (
+            (
+                None,
+                "LayeredWeightedBankDynamicWeight requires bank_expansion_factor "
+                "to be a BankExpansionFactorOptions value, received None.",
+            ),
+            (
+                BankExpansionFactorOptions.DISABLED,
+                "LayeredWeightedBankDynamicWeight requires bank_expansion_factor "
+                "> 0, received BankExpansionFactorOptions.DISABLED. Use "
+                "FACTOR_OF_ONE, FACTOR_OF_TWO, FACTOR_OF_THREE, or FACTOR_OF_FOUR.",
+            ),
+        ):
+            with self.subTest(owner="weight", factor=factor):
+                config = LayeredWeightedBankDynamicWeightConfig(
+                    input_dim=2,
+                    output_dim=3,
+                    generator_depth=DynamicDepthOptions.DEPTH_OF_ONE,
+                    decay_schedule=WeightDecayScheduleOptions.DISABLED,
+                    decay_rate=0.0,
+                    decay_warmup_batches=0,
+                    model_config=linear_stack_config(),
+                    bank_expansion_factor=factor,
+                )
+                self.assert_exact_error(ValueError, message, config.build)
+
+        self.assert_exact_error(
+            ValueError,
+            "bias_params must not be None. Provide a valid bias tensor for this "
+            "dynamic bias strategy.",
+            lambda: DynamicBiasValidator.ensure_parameters_exist(None),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
