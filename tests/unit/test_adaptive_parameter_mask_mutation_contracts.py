@@ -8,12 +8,16 @@ from emperor.augmentations.adaptive_parameters import (
     MaskDimensionOptions,
     OuterProductMaskConfig,
     PerAxisScoreMaskConfig,
+    TopSliceAxisMaskConfig,
 )
 from emperor.augmentations.adaptive_parameters._masks.variants.outer_product import (
     OuterProductMask,
 )
 from emperor.augmentations.adaptive_parameters._masks.variants.per_axis import (
     PerAxisScoreMask,
+)
+from emperor.augmentations.adaptive_parameters._masks.variants.top_slice import (
+    TopSliceAxisMask,
 )
 from emperor.layers import (
     ActivationOptions,
@@ -171,6 +175,71 @@ class AdaptiveParameterMaskMutationContractTests(unittest.TestCase):
         )
         expected = weights.unsqueeze(0) * (scores >= 0.5).float() * scores
         self.assertTrue(torch.allclose(actual, expected, atol=1e-6, rtol=0.0))
+
+    def test_top_slice_width_two_tracks_each_sample_boundary_exactly(self) -> None:
+        model = TopSliceAxisMask(
+            TopSliceAxisMaskConfig(
+                input_dim=4,
+                output_dim=3,
+                mask_threshold=0.5,
+                mask_surrogate_scale=0.0,
+                mask_floor=0.0,
+                mask_dimension_option=MaskDimensionOptions.ROW,
+                mask_transition_width=2.0,
+                model_config=linear_stack_config(9, 7),
+            )
+        )
+        assign_linear(model.model, torch.eye(4), torch.zeros(4))
+        scores = torch.tensor(
+            [
+                [0.9, 0.8, 0.2, 0.1],
+                [0.9, 0.2, 0.8, 0.7],
+            ]
+        )
+        logits = torch.logit(scores)
+        weights = torch.arange(1, 13, dtype=torch.float32).reshape(4, 3)
+
+        actual = model(weights, logits)
+
+        transition_scores = torch.tensor(
+            [
+                [1.0, 1.0, 0.5, 0.0],
+                [1.0, 0.5, 0.0, 0.0],
+            ]
+        )
+        hard = (transition_scores >= 0.5).float()
+        expected = weights.unsqueeze(0) * (hard * scores).unsqueeze(-1)
+        self.assertTrue(torch.allclose(actual, expected, atol=1e-6, rtol=0.0))
+        self.assertFalse(torch.equal(actual[0], actual[1]))
+
+    def test_top_slice_positions_stay_on_the_input_device(self) -> None:
+        model = TopSliceAxisMask(
+            TopSliceAxisMaskConfig(
+                input_dim=4,
+                output_dim=3,
+                mask_threshold=0.5,
+                mask_surrogate_scale=0.0,
+                mask_floor=0.0,
+                mask_dimension_option=MaskDimensionOptions.ROW,
+                mask_transition_width=2.0,
+                model_config=linear_stack_config(4, 4),
+            )
+        ).double()
+        scores = torch.tensor(
+            [[0.9, 0.8, 0.2, 0.1], [0.9, 0.2, 0.8, 0.7]],
+            dtype=torch.float64,
+        )
+        expected = torch.tensor(
+            [[1.0, 1.0, 0.5, 0.0], [1.0, 0.5, 0.0, 0.0]],
+            dtype=torch.float64,
+        )
+
+        with torch.device("meta"):
+            actual = model._TopSliceAxisMask__compute_transition_scores(scores)
+
+        self.assertEqual(actual.device, scores.device)
+        self.assertEqual(actual.dtype, scores.dtype)
+        self.assertTrue(torch.equal(actual, expected))
 
 if __name__ == "__main__":
     unittest.main()
