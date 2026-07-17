@@ -7,10 +7,13 @@ import torch
 from emperor.augmentations.adaptive_parameters import (
     AdditiveDynamicBiasConfig,
     AffineTransformDynamicBiasConfig,
+    AntiDynamicDiagonalConfig,
     BankExpansionFactorOptions,
+    CombinedDynamicDiagonalConfig,
     GeneratorDynamicBiasConfig,
     MultiplicativeDynamicBiasConfig,
     SigmoidGatedDynamicBiasConfig,
+    StandardDynamicDiagonalConfig,
     TanhGatedDynamicBiasConfig,
     WeightDecayScheduleOptions,
     WeightedBankDynamicBiasConfig,
@@ -33,6 +36,15 @@ from emperor.augmentations.adaptive_parameters._biases.variants.multiplicative i
 )
 from emperor.augmentations.adaptive_parameters._biases.variants.weighted_bank import (
     WeightedBankDynamicBias,
+)
+from emperor.augmentations.adaptive_parameters._diagonals.variants.anti import (
+    AntiDynamicDiagonal,
+)
+from emperor.augmentations.adaptive_parameters._diagonals.variants.combined import (
+    CombinedDynamicDiagonal,
+)
+from emperor.augmentations.adaptive_parameters._diagonals.variants.standard import (
+    StandardDynamicDiagonal,
 )
 from emperor.layers import (
     ActivationOptions,
@@ -278,3 +290,76 @@ class AdaptiveParameterBiasDiagonalMutationContractTests(unittest.TestCase):
             r"^Unsupported decay_schedule value: 'invalid'\.$",
         ):
             model(torch.ones(3), torch.ones(1, 2))
+
+    def test_diagonal_leaves_apply_overrides_and_generator_dimensions(self) -> None:
+        cases = (
+            (StandardDynamicDiagonal, StandardDynamicDiagonalConfig),
+            (AntiDynamicDiagonal, AntiDynamicDiagonalConfig),
+            (CombinedDynamicDiagonal, CombinedDynamicDiagonalConfig),
+        )
+        for model_type, config_type in cases:
+            with self.subTest(model_type=model_type.__name__):
+                model = model_type(
+                    config_type(
+                        input_dim=2,
+                        output_dim=3,
+                        model_config=linear_stack_config(7, 11),
+                    ),
+                    config_type(input_dim=4, output_dim=3),
+                )
+                self.assertEqual((model.input_dim, model.output_dim), (4, 3))
+                self.assertEqual(model.padding_shape, (0, 0, 0, 1))
+                generator = (
+                    model.diagonal_model.model
+                    if isinstance(model, CombinedDynamicDiagonal)
+                    else model.model
+                )
+                self.assertEqual(generator_dimensions(generator), (4, 3))
+
+    def test_standard_and_anti_diagonals_have_exact_rectangular_geometry(
+        self,
+    ) -> None:
+        standard = StandardDynamicDiagonal(
+            StandardDynamicDiagonalConfig(
+                input_dim=2,
+                output_dim=3,
+                model_config=linear_stack_config(5, 7),
+            )
+        )
+        assign_generator(standard.model, torch.eye(2), torch.zeros(2))
+        standard_logits = torch.tensor([[1.0, 2.0], [-1.0, 0.5]])
+        standard_base = torch.tensor([[10.0, 20.0, 30.0], [40.0, 50.0, 60.0]])
+        expected_standard = standard_base + torch.tensor(
+            [
+                [[1.0, 0.0, 0.0], [0.0, 2.0, 0.0]],
+                [[-1.0, 0.0, 0.0], [0.0, 0.5, 0.0]],
+            ]
+        )
+        self.assertTrue(
+            torch.equal(
+                standard(standard_base, standard_logits),
+                expected_standard,
+            )
+        )
+
+        anti = AntiDynamicDiagonal(
+            AntiDynamicDiagonalConfig(
+                input_dim=3,
+                output_dim=2,
+                model_config=linear_stack_config(5, 7),
+            )
+        )
+        assign_generator(
+            anti.model,
+            torch.tensor([[1.0, 0.0], [0.0, 1.0], [0.0, 0.0]]),
+            torch.zeros(2),
+        )
+        anti_logits = torch.tensor([[1.0, 2.0, 3.0], [-1.0, 0.5, 4.0]])
+        anti_base = torch.tensor([[10.0, 20.0], [30.0, 40.0], [50.0, 60.0]])
+        expected_anti = anti_base + torch.tensor(
+            [
+                [[0.0, 1.0], [2.0, 0.0], [0.0, 0.0]],
+                [[0.0, -1.0], [0.5, 0.0], [0.0, 0.0]],
+            ]
+        )
+        self.assertTrue(torch.equal(anti(anti_base, anti_logits), expected_anti))
