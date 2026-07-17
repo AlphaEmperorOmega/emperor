@@ -52,9 +52,7 @@ class AdaptiveLinearLayer(LinearAbstract):
         self.VALIDATOR.validate_input_is_2d(X)
         if not self.has_adaptive_augmentation:
             return self._compute_affine_transformation_callback(
-                self.weight_params,
-                self.bias_params,
-                X,
+                self.weight_params, self.bias_params, X
             )
         return self.adaptive_behaviour(
             self._compute_affine_transformation_callback,
@@ -64,27 +62,18 @@ class AdaptiveLinearLayer(LinearAbstract):
         )
 
     def _compute_affine_transformation_callback(
-        self,
-        weights: Tensor,
-        bias: Tensor | None,
-        X: Tensor,
+        self, weights: Tensor, bias: Tensor | None, X: Tensor
     ) -> Tensor:
         output = self.__compute_linear_transformation(X, weights)
         return self.__add_bias_parameters(output, bias)
 
-    def __compute_linear_transformation(
-        self,
-        X: Tensor,
-        weights: Tensor,
-    ) -> Tensor:
+    def __compute_linear_transformation(self, X: Tensor, weights: Tensor) -> Tensor:
         if weights.dim() == 3:
             return torch.einsum("ij,ijk->ik", X, weights)
         return torch.matmul(X, weights)
 
     def __add_bias_parameters(
-        self,
-        X: Tensor,
-        bias_params: Tensor | None = None,
+        self, X: Tensor, bias_params: Tensor | None = None
     ) -> Tensor:
         if bias_params is not None:
             return X + bias_params
