@@ -1,11 +1,14 @@
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from emperor.augmentations.adaptive_parameters._options import (
     BankExpansionFactorOptions,
     WeightDecayScheduleOptions,
 )
 from emperor.config import ConfigBase, optional_field
-from emperor.layers import LayerStackConfig
+
+if TYPE_CHECKING:
+    from emperor.layers import LayerStackConfig
 
 
 @dataclass
@@ -19,7 +22,7 @@ class DynamicBiasConfig(ConfigBase):
     decay_warmup_batches: int | None = optional_field(
         "Warmup batches before bias decay starts."
     )
-    model_config: LayerStackConfig | None = optional_field(
+    model_config: "LayerStackConfig | None" = optional_field(
         "Internal generator network config."
     )
 

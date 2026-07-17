@@ -1,8 +1,11 @@
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from emperor.augmentations.adaptive_parameters._options import MaskDimensionOptions
 from emperor.config import ConfigBase, optional_field
-from emperor.layers import LayerStackConfig
+
+if TYPE_CHECKING:
+    from emperor.layers import LayerStackConfig
 
 
 @dataclass
@@ -16,7 +19,7 @@ class AxisMaskConfig(ConfigBase):
         "Training-time mask surrogate scale. Use 0.0 to disable."
     )
     mask_floor: float | None = optional_field("Minimum value for dropped mask regions.")
-    model_config: LayerStackConfig | None = optional_field(
+    model_config: "LayerStackConfig | None" = optional_field(
         "Internal generator network config."
     )
 

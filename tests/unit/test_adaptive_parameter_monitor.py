@@ -1,36 +1,38 @@
 import unittest
 
 import torch
+from torch import nn
+
 from emperor.augmentations.adaptive_parameters import (
-    AdaptiveParameterAugmentation,
     AdaptiveParameterAugmentationConfig,
-    AdaptiveParameterMonitorCallback,
+    AdditiveDynamicBiasConfig,
+    DualModelDynamicWeightConfig,
     DynamicDepthOptions,
     MaskDimensionOptions,
+    MultiplicativeDynamicBiasConfig,
+    PerAxisScoreMaskConfig,
     WeightDecayScheduleOptions,
     WeightNormalizationOptions,
     WeightNormalizationPositionOptions,
 )
-from emperor.augmentations.adaptive_parameters.core.bias import (
-    AdditiveDynamicBiasConfig,
+from emperor.augmentations.adaptive_parameters._augmentation import (
+    AdaptiveParameterAugmentation,
+)
+from emperor.augmentations.adaptive_parameters._biases.variants.multiplicative import (
     MultiplicativeDynamicBias,
 )
-from emperor.augmentations.adaptive_parameters.core.mask import (
-    PerAxisScoreMaskConfig,
+from emperor.augmentations.adaptive_parameters.monitoring import (
+    AdaptiveParameterMonitorCallback,
 )
-from emperor.augmentations.adaptive_parameters.core.weight import (
-    DualModelDynamicWeightConfig,
-)
-from emperor.base.layer.config import LayerConfig, LayerStackConfig
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import (
+from emperor.layers import (
     ActivationOptions,
     LastLayerBiasOptions,
+    LayerConfig,
     LayerNormPositionOptions,
+    LayerStackConfig,
+    ResidualConnectionOptions,
 )
-from emperor.linears.core.config import LinearLayerConfig
-from torch import nn
-
+from emperor.linears import LinearLayerConfig
 from support.monitor import orchestration_calls
 
 
