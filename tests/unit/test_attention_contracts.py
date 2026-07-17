@@ -4,94 +4,22 @@ import pkgutil
 import unittest
 
 import torch
-from emperor.attention.core.handlers.reshaper import ReshaperBase
-from emperor.attention.core.layers import MultiHeadAttentionAbstract
-from emperor.attention.core.runtime import QKV, AttentionRuntimeShape
-from emperor.attention.core.state import AttentionLayerState
 
+from emperor.attention import AttentionLayerState
+from emperor.attention._base import MultiHeadAttentionAbstract
+from emperor.attention._ops.reshaping import ReshaperBase
+from emperor.attention._runtime import QKV, AttentionRuntimeLayout
 from support.attention import build_attention_config
 from support.attention_contract_manifest import ATTENTION_CONTRACT_MANIFEST
 
-EXPECTED_EXPORTS = {
-    "emperor.attention": (
-        "MultiHeadAttentionConfig",
-        "SelfAttentionConfig",
-        "SelfAttentionProjectionStrategy",
-        "IndependentAttentionConfig",
-        "MixtureOfAttentionHeadsConfig",
-        "MultiHeadAttentionAbstract",
-        "AttentionMonitorCallback",
-        "AttentionLayerState",
-        "AttentionRuntimeShape",
-        "SelfAttention",
-        "IndependentAttention",
-        "MixtureOfAttentionHeads",
-    ),
-    "emperor.attention.core": (
-        "MultiHeadAttentionConfig",
-        "MultiHeadAttentionAbstract",
-        "AttentionMonitorCallback",
-        "AttentionLayerState",
-        "AttentionRuntimeShape",
-        "AttentionValidatorBase",
-        "MultiHeadAttentionValidator",
-        "SelfAttentionConfig",
-        "SelfAttentionProjectionStrategy",
-        "IndependentAttentionConfig",
-        "MixtureOfAttentionHeadsConfig",
-        "SelfAttention",
-        "IndependentAttention",
-        "MixtureOfAttentionHeads",
-    ),
-    "emperor.attention.core.variants": (
-        "SelfAttention",
-        "SelfAttentionConfig",
-        "SelfAttentionProjectionStrategy",
-        "SelfAttentionProcessor",
-        "SelfAttentionProjector",
-        "SelfAttentionValidator",
-        "IndependentAttention",
-        "IndependentAttentionConfig",
-        "IndependentProcessor",
-        "IndependentProjector",
-        "IndependentAttentionValidator",
-        "MixtureOfAttentionHeads",
-        "MixtureOfAttentionHeadsConfig",
-        "MixtureOfAttentionHeadsKeyValueBias",
-        "MixtureOfAttentionHeadsMask",
-        "MixtureOfAttentionHeadsProcessor",
-        "MixtureOfAttentionHeadsProjector",
-        "MixtureOfAttentionHeadsReshaper",
-        "MixtureOfAttentionHeadsValidator",
-        "MixtureOfAttentionHeadsZeroAttention",
-    ),
-    "emperor.attention.core.variants.independent_attention": (
-        "IndependentAttentionConfig",
-        "IndependentAttention",
-        "IndependentProcessor",
-        "IndependentProjector",
-        "IndependentAttentionValidator",
-    ),
-    "emperor.attention.core.variants.mixture_of_attention_heads": (
-        "MixtureOfAttentionHeadsConfig",
-        "MixtureOfAttentionHeadsKeyValueBias",
-        "MixtureOfAttentionHeads",
-        "MixtureOfAttentionHeadsMask",
-        "MixtureOfAttentionHeadsProcessor",
-        "MixtureOfAttentionHeadsProjector",
-        "MixtureOfAttentionHeadsReshaper",
-        "MixtureOfAttentionHeadsValidator",
-        "MixtureOfAttentionHeadsZeroAttention",
-    ),
-    "emperor.attention.core.variants.self_attention": (
-        "SelfAttentionConfig",
-        "SelfAttentionProjectionStrategy",
-        "SelfAttention",
-        "SelfAttentionProcessor",
-        "SelfAttentionProjector",
-        "SelfAttentionValidator",
-    ),
-}
+EXPECTED_EXPORTS = (
+    "MultiHeadAttentionConfig",
+    "SelfAttentionConfig",
+    "SelfAttentionProjectionStrategy",
+    "IndependentAttentionConfig",
+    "MixtureOfAttentionHeadsConfig",
+    "AttentionLayerState",
+)
 
 
 def discover_attention_modules():
@@ -138,39 +66,51 @@ class TestAttentionContractManifest(unittest.TestCase):
 
 
 class TestAttentionExports(unittest.TestCase):
-    def test_public_packages_have_exact_exports_and_reexport_identity(self):
-        for module_name, expected_exports in EXPECTED_EXPORTS.items():
+    def test_root_package_has_exact_exports_and_reexport_identity(self):
+        module = importlib.import_module("emperor.attention")
+
+        self.assertTupleEqual(tuple(module.__all__), EXPECTED_EXPORTS)
+        for name in EXPECTED_EXPORTS:
+            exported = getattr(module, name)
+            defining_module = importlib.import_module(exported.__module__)
+            self.assertIs(exported, getattr(defining_module, name))
+
+    def test_monitoring_package_has_exact_export_and_reexport_identity(self):
+        module = importlib.import_module("emperor.attention.monitoring")
+
+        self.assertTupleEqual(module.__all__, ("AttentionMonitorCallback",))
+        exported = module.AttentionMonitorCallback
+        defining_module = importlib.import_module(exported.__module__)
+        self.assertIs(exported, defining_module.AttentionMonitorCallback)
+
+    def test_runtime_implementation_remains_intentionally_private(self):
+        module = importlib.import_module("emperor.attention")
+
+        for name in (
+            "AttentionMasks",
+            "AttentionMonitorCallback",
+            "AttentionRuntimeLayout",
+            "IndependentAttention",
+            "MixtureOfAttentionHeads",
+            "MultiHeadAttentionAbstract",
+            "QKV",
+            "SelfAttention",
+        ):
+            with self.subTest(name=name):
+                self.assertFalse(hasattr(module, name))
+
+    def test_private_namespace_packages_have_no_interface(self):
+        for module_name in (
+            "emperor.attention._monitoring",
+            "emperor.attention._ops",
+            "emperor.attention._variants",
+            "emperor.attention._variants.independent",
+            "emperor.attention._variants.mixture",
+            "emperor.attention._variants.self_attention",
+        ):
             with self.subTest(module=module_name):
                 module = importlib.import_module(module_name)
-                self.assertTupleEqual(tuple(module.__all__), expected_exports)
-                for name in expected_exports:
-                    exported = getattr(module, name)
-                    defining_module = importlib.import_module(exported.__module__)
-                    self.assertIs(exported, getattr(defining_module, name))
-
-    def test_runtime_value_objects_remain_intentionally_private(self):
-        for module_name in ("emperor.attention", "emperor.attention.core"):
-            with self.subTest(module=module_name):
-                module = importlib.import_module(module_name)
-                self.assertFalse(hasattr(module, "QKV"))
-                self.assertFalse(hasattr(module, "AttentionMasks"))
-
-    def test_handlers_package_has_no_public_namespace(self):
-        module = importlib.import_module("emperor.attention.core.handlers")
-
-        self.assertFalse(hasattr(module, "__all__"))
-        self.assertSetEqual(
-            {name for name in vars(module) if not name.startswith("_")},
-            {
-                "batch",
-                "bias",
-                "mask",
-                "processor",
-                "projector",
-                "reshaper",
-                "zero_attention",
-            },
-        )
+                self.assertFalse(hasattr(module, "__all__"))
 
 
 class TestAttentionBaseContracts(unittest.TestCase):
@@ -204,8 +144,8 @@ class TestAttentionBaseContracts(unittest.TestCase):
             "_build_attention_components must be implemented by subclass.",
         )
 
-    def test_runtime_shape_helpers_preserve_real_source_topology(self):
-        shape = AttentionRuntimeShape(
+    def test_runtime_layout_helpers_preserve_real_source_topology(self):
+        shape = AttentionRuntimeLayout(
             batch_size=2,
             target_sequence_length=3,
             source_sequence_length=5,

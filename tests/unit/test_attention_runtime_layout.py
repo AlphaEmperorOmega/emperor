@@ -2,6 +2,7 @@ import unittest
 from dataclasses import replace
 
 import torch
+
 from models.transformer.expert_linear.config_builder import (
     TransformerExpertLinearConfigBuilder,
 )
@@ -14,7 +15,7 @@ from models.transformer.linear_adaptive.config_builder import (
 )
 
 
-class TestAttentionRuntimeShape(unittest.TestCase):
+class TestAttentionRuntimeLayout(unittest.TestCase):
     def builder_cases(self):
         return (
             TransformerLinearConfigBuilder,
@@ -190,7 +191,7 @@ class TestAttentionRuntimeShape(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     model(query, encoder_output, encoder_output)
 
-    def test_gradients_flow_with_runtime_shapes(self):
+    def test_gradients_flow_with_runtime_layouts(self):
         for builder_type in self.builder_cases():
             _, decoder_config, cross_config = self.attention_configs(builder_type)
             for name, config, cross_attention in (

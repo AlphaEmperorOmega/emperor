@@ -1,9 +1,9 @@
 import unittest
 
 import torch
-from emperor.attention.core.handlers.bias import KeyValueBias
-from emperor.attention.core.runtime import QKV, AttentionMasks, AttentionRuntimeShape
 
+from emperor.attention._ops.bias import KeyValueBias
+from emperor.attention._runtime import QKV, AttentionMasks, AttentionRuntimeLayout
 from support.attention import build_attention_config
 
 
@@ -44,12 +44,12 @@ class TestKeyValueBias(unittest.TestCase):
         with torch.no_grad():
             model.key_bias_vector.copy_(torch.arange(4).view(1, 1, 4))
             model.value_bias_vector.copy_(torch.arange(10, 16).view(1, 1, 6))
-        runtime_shape = AttentionRuntimeShape(
+        runtime_layout = AttentionRuntimeLayout(
             batch_size=2,
             target_sequence_length=3,
             source_sequence_length=5,
         )
-        expected_branch_count = runtime_shape.batch_size * cfg.num_heads
+        expected_branch_count = runtime_layout.batch_size * cfg.num_heads
 
         for branch_count in (expected_branch_count * 2, expected_branch_count * 3):
             with self.subTest(branch_count=branch_count):
@@ -60,7 +60,7 @@ class TestKeyValueBias(unittest.TestCase):
                     model.add_kv_learnable_bias_vectors(
                         QKV(query=projection, key=projection, value=value),
                         AttentionMasks(),
-                        runtime_shape,
+                        runtime_layout,
                     )
 
                 self.assertEqual(
@@ -83,36 +83,36 @@ class TestKeyValueBias(unittest.TestCase):
         with torch.no_grad():
             model.key_bias_vector.copy_(torch.arange(4).view(1, 1, 4))
             model.value_bias_vector.copy_(torch.arange(10, 16).view(1, 1, 6))
-        runtime_shape = AttentionRuntimeShape(
+        runtime_layout = AttentionRuntimeLayout(
             batch_size=2,
             target_sequence_length=3,
             source_sequence_length=5,
         )
-        branch_count = runtime_shape.batch_size * cfg.num_heads
+        branch_count = runtime_layout.batch_size * cfg.num_heads
         qkv = QKV(
             query=torch.zeros(branch_count, 3, 2),
             key=torch.zeros(branch_count, 5, 2),
             value=torch.zeros(branch_count, 5, 3),
         )
 
-        output, _, output_runtime_shape = model.add_kv_learnable_bias_vectors(
+        output, _, output_runtime_layout = model.add_kv_learnable_bias_vectors(
             qkv,
             AttentionMasks(),
-            runtime_shape,
+            runtime_layout,
         )
 
         expected_key = torch.tensor([[0.0, 1.0], [2.0, 3.0]]).repeat(
-            runtime_shape.batch_size,
+            runtime_layout.batch_size,
             1,
         )
         expected_value = torch.tensor([[10.0, 11.0, 12.0], [13.0, 14.0, 15.0]]).repeat(
-            runtime_shape.batch_size, 1
+            runtime_layout.batch_size, 1
         )
         torch.testing.assert_close(output.key[:, -1], expected_key)
         torch.testing.assert_close(output.value[:, -1], expected_value)
-        self.assertEqual(output_runtime_shape.source_sequence_length, 6)
-        self.assertEqual(output_runtime_shape.source_extension_count, 1)
-        self.assertEqual(runtime_shape.source_sequence_length, 5)
+        self.assertEqual(output_runtime_layout.source_sequence_length, 6)
+        self.assertEqual(output_runtime_layout.source_extension_count, 1)
+        self.assertEqual(runtime_layout.source_sequence_length, 5)
 
     def test_init(self):
         bias_options = [True, False]
@@ -179,23 +179,23 @@ class TestKeyValueBias(unittest.TestCase):
                     value=value_projections,
                 )
                 masks = AttentionMasks()
-                runtime_shape = AttentionRuntimeShape(
+                runtime_layout = AttentionRuntimeLayout(
                     batch_size=batch_size,
                     target_sequence_length=source_seq_len,
                     source_sequence_length=source_seq_len,
                 )
 
-                output_qkv, output_masks, output_runtime_shape = (
+                output_qkv, output_masks, output_runtime_layout = (
                     m.add_kv_learnable_bias_vectors(
                         qkv,
                         masks,
-                        runtime_shape,
+                        runtime_layout,
                     )
                 )
 
                 self.assertIs(output_qkv, qkv)
                 self.assertIs(output_masks, masks)
-                self.assertIs(output_runtime_shape, runtime_shape)
+                self.assertIs(output_runtime_layout, runtime_layout)
                 self.assertIs(output_qkv.query, query)
 
     def test_forward_no_bias_with_masks(self):
@@ -240,13 +240,13 @@ class TestKeyValueBias(unittest.TestCase):
                     attention_mask=attention_mask,
                 )
 
-                output_qkv, output_masks, output_runtime_shape = (
+                output_qkv, output_masks, output_runtime_layout = (
                     m.add_kv_learnable_bias_vectors(qkv, masks)
                 )
 
                 self.assertIs(output_qkv, qkv)
                 self.assertIs(output_masks, masks)
-                self.assertIsNone(output_runtime_shape)
+                self.assertIsNone(output_runtime_layout)
 
     def test_forward_with_bias_no_masks(self):
         batch_size = 4

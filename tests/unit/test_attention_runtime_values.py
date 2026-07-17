@@ -2,7 +2,8 @@ import unittest
 from dataclasses import FrozenInstanceError, replace
 
 import torch
-from emperor.attention.core.runtime import QKV, AttentionMasks
+
+from emperor.attention._runtime import QKV, AttentionMasks
 
 
 class TestQKV(unittest.TestCase):

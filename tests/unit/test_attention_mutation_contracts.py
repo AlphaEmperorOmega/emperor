@@ -1,32 +1,22 @@
 import unittest
 from types import SimpleNamespace
-from unittest.mock import patch
 
 import torch
-from emperor.attention import MixtureOfAttentionHeadsConfig, SelfAttentionConfig
-from emperor.attention.core._validator import (
+
+from emperor.attention import (
+    MixtureOfAttentionHeadsConfig,
+    SelfAttentionConfig,
+)
+from emperor.attention._ops.reshaping import AttentionReshaper
+from emperor.attention._runtime import QKV, AttentionRuntimeLayout
+from emperor.attention._validation import (
     AttentionValidatorBase,
     MultiHeadAttentionValidator,
 )
-from emperor.attention.core.handlers.reshaper import AttentionReshaper
-from emperor.attention.core.runtime import QKV, AttentionRuntimeShape
-from emperor.attention.core.variants.mixture_of_attention_heads.reshaper import (
-    MixtureOfAttentionHeadsReshaper,
+from emperor.attention._variants.mixture.zero_attention import (
+    MixtureOfAttentionHeadsZeroAttention,
 )
-
 from support.attention import build_attention_config
-
-
-def assert_positional_call_identity(test_case, mock, *expected_arguments):
-    mock.assert_called_once()
-    test_case.assertEqual(mock.call_args.kwargs, {})
-    test_case.assertEqual(len(mock.call_args.args), len(expected_arguments))
-    for actual, expected in zip(
-        mock.call_args.args,
-        expected_arguments,
-        strict=True,
-    ):
-        test_case.assertIs(actual, expected)
 
 
 class ExactErrorMixin:
@@ -37,6 +27,18 @@ class ExactErrorMixin:
 
 
 class TestAttentionValidatorMutationContracts(ExactErrorMixin, unittest.TestCase):
+    def test_relative_position_head_shape_error_reports_actual_head_axis(self):
+        query = torch.empty(2, 3, 4, 5)
+
+        self.assert_exact_error(
+            RuntimeError,
+            "relative-position rank-4 query head dimension must equal "
+            "num_heads (2), got 3.",
+            AttentionValidatorBase.validate_standard_relative_position_query_shape,
+            query,
+            2,
+        )
+
     def test_head_divisibility_reports_each_effective_width_exactly(self):
         cases = (
             (
@@ -154,7 +156,7 @@ class TestAttentionValidatorMutationContracts(ExactErrorMixin, unittest.TestCase
             query_key_projection_dim=6,
             value_projection_dim=8,
         )
-        runtime_shape = AttentionRuntimeShape(2, 1, 5)
+        runtime_layout = AttentionRuntimeLayout(2, 1, 5)
         static_keys = torch.empty(4, 5, 3)
         static_values = torch.empty(4, 5, 4)
 
@@ -163,7 +165,7 @@ class TestAttentionValidatorMutationContracts(ExactErrorMixin, unittest.TestCase
                 model,
                 static_keys,
                 static_values,
-                runtime_shape,
+                runtime_layout,
             )
         )
 
@@ -199,7 +201,7 @@ class TestAttentionValidatorMutationContracts(ExactErrorMixin, unittest.TestCase
                     model,
                     tensor,
                     name,
-                    runtime_shape,
+                    runtime_layout,
                 )
 
     def test_mask_relationship_and_required_causal_errors_are_stable(self):
@@ -233,34 +235,28 @@ class TestAttentionValidatorMutationContracts(ExactErrorMixin, unittest.TestCase
         )
 
 
+class TestAttentionOperationMutationContracts(unittest.TestCase):
+    def test_mixture_zero_attention_uses_runtime_and_configured_batch_sizes(self):
+        cfg = build_attention_config(
+            config_class=MixtureOfAttentionHeadsConfig,
+            batch_size=7,
+            num_heads=2,
+            experts_top_k=3,
+            use_kv_expert_models_flag=True,
+        )
+        model = MixtureOfAttentionHeadsZeroAttention(cfg)
+
+        self.assertEqual(
+            model._get_branch_count(AttentionRuntimeLayout(2, 3, 5)),
+            12,
+        )
+        self.assertEqual(model._get_branch_count(), 42)
+
+
 class TestMultiHeadAttentionValidatorMutationContracts(
     ExactErrorMixin,
     unittest.TestCase,
 ):
-    def test_validate_forwards_every_dimension_by_name(self):
-        model = build_attention_config(
-            SelfAttentionConfig,
-            batch_size=2,
-            num_heads=2,
-            embedding_dim=4,
-            target_sequence_length=3,
-            source_sequence_length=3,
-        ).build()
-
-        with patch.object(
-            MultiHeadAttentionValidator,
-            "validate_dimensions",
-        ) as validate_dimensions:
-            MultiHeadAttentionValidator.validate(model)
-
-        validate_dimensions.assert_called_once_with(
-            batch_size=2,
-            num_heads=2,
-            embedding_dim=4,
-            target_sequence_length=3,
-            source_sequence_length=3,
-        )
-
     def test_scalar_configuration_errors_are_exact(self):
         model = SimpleNamespace(
             batch_size=2.0,
@@ -309,58 +305,48 @@ class TestMultiHeadAttentionValidatorMutationContracts(
                 self.assert_exact_error(error_type, message, callable_, *args)
         self.assertIsNone(MultiHeadAttentionValidator.validate_dropout_probability(1.0))
 
-    def test_forward_and_static_validators_forward_every_runtime_value(self):
-        query = torch.empty(2, 1, 4)
-        key = torch.empty(3, 1, 4)
-        value = torch.empty(3, 1, 4)
-        key_padding_mask = torch.zeros(1, 3, dtype=torch.bool)
-        attention_mask = torch.zeros(2, 3, dtype=torch.bool)
-        qkv = QKV(query=query, key=key, value=value)
-        masks = SimpleNamespace(
-            key_padding_mask=key_padding_mask,
-            attention_mask=attention_mask,
+    def test_static_input_validator_checks_each_projection_shape(self):
+        cfg = build_attention_config(
+            batch_size=7,
+            num_heads=2,
+            embedding_dim=12,
+            query_key_projection_dim=8,
+            value_projection_dim=6,
         )
-        model = object()
-        runtime_shape = AttentionRuntimeShape(1, 2, 3)
-        static_keys = torch.empty(1, 3, 4)
-        static_values = torch.empty(1, 3, 5)
-
-        with patch.object(
-            AttentionValidatorBase,
-            "validate_input_shapes",
-        ) as validate_input_shapes:
-            MultiHeadAttentionValidator.validate_forward_inputs(model, qkv, masks)
-        assert_positional_call_identity(
-            self,
-            validate_input_shapes,
-            query,
-            key,
-            value,
-            key_padding_mask,
-            attention_mask,
+        model = cfg.build()
+        runtime_layout = AttentionRuntimeLayout(2, 3, 5)
+        qkv = QKV(
+            query=torch.empty(3, 2, 12),
+            key=torch.empty(5, 2, 12),
+            value=torch.empty(5, 2, 12),
+        )
+        cases = (
+            (
+                torch.empty(5, 5, 4),
+                None,
+                "expecting static_keys.size(0) of 4, but got 5.",
+            ),
+            (
+                None,
+                torch.empty(4, 5, 4),
+                "expecting static_values.size(2) of 3, but got 4.",
+            ),
         )
 
-        with patch.object(
-            AttentionValidatorBase,
-            "validate_static_projection_shapes",
-        ) as validate_static_projection_shapes:
-            MultiHeadAttentionValidator.validate_static_key_value_inputs(
-                model,
-                qkv,
-                static_keys,
-                static_values,
-                runtime_shape,
-            )
-        assert_positional_call_identity(
-            self,
-            validate_static_projection_shapes,
-            model,
-            static_keys,
-            static_values,
-            runtime_shape,
-        )
+        for static_keys, static_values, message in cases:
+            with self.subTest(message=message):
+                self.assert_exact_error(
+                    RuntimeError,
+                    message,
+                    MultiHeadAttentionValidator.validate_static_key_value_inputs,
+                    model,
+                    qkv,
+                    static_keys,
+                    static_values,
+                    runtime_layout,
+                )
 
-    def test_attention_reshaper_forwards_static_contract_arguments_exactly(self):
+    def test_attention_reshaper_validates_each_static_projection_shape(self):
         cfg = build_attention_config(
             batch_size=7,
             num_heads=2,
@@ -369,33 +355,65 @@ class TestMultiHeadAttentionValidatorMutationContracts(
             value_projection_dim=6,
         )
         reshaper = AttentionReshaper(cfg)
-        runtime_shape = AttentionRuntimeShape(2, 3, 5)
+        runtime_layout = AttentionRuntimeLayout(2, 3, 5)
         qkv = QKV(
             query=torch.arange(48.0).view(3, 2, 8),
             key=torch.arange(80.0).view(5, 2, 8),
             value=torch.arange(60.0).view(5, 2, 6),
         )
-        static_keys = torch.randn(4, 7, 4)
-        static_values = torch.randn(4, 7, 3)
+        cases = (
+            (
+                torch.empty(5, 5, 4),
+                None,
+                "expecting static_keys.size(0) of 4, but got 5.",
+            ),
+            (
+                None,
+                torch.empty(4, 5, 4),
+                "expecting static_values.size(2) of 3, but got 4.",
+            ),
+        )
 
-        with patch.object(
-            AttentionValidatorBase,
-            "validate_static_projection_shapes",
-        ) as validate_static:
-            output = reshaper.reshape_qkv_for_attention(
-                qkv,
-                static_keys,
-                static_values,
-                runtime_shape,
-            )
+        for static_keys, static_values, message in cases:
+            with self.subTest(message=message):
+                self.assert_exact_error(
+                    RuntimeError,
+                    message,
+                    reshaper.reshape_qkv_for_attention,
+                    qkv,
+                    static_keys,
+                    static_values,
+                    runtime_layout,
+                )
 
-        assert_positional_call_identity(
-            self,
-            validate_static,
-            reshaper,
+    def test_attention_reshaper_uses_runtime_sized_static_projections(self):
+        cfg = build_attention_config(
+            batch_size=7,
+            num_heads=2,
+            embedding_dim=12,
+            query_key_projection_dim=8,
+            value_projection_dim=6,
+        )
+        reshaper = AttentionReshaper(cfg)
+        runtime_layout = AttentionRuntimeLayout(2, 3, 5)
+        query = torch.arange(48.0).view(3, 2, 8)
+        static_keys = torch.arange(80.0).view(4, 5, 4)
+        static_values = torch.arange(60.0).view(4, 5, 3)
+
+        output = reshaper.reshape_qkv_for_attention(
+            QKV(
+                query=query,
+                key=torch.full((5, 2, 8), -1.0),
+                value=torch.full((5, 2, 6), -2.0),
+            ),
             static_keys,
             static_values,
-            runtime_shape,
+            runtime_layout,
+        )
+
+        torch.testing.assert_close(
+            output.query,
+            query.view(3, 4, 4).transpose(0, 1),
         )
         self.assertIs(output.key, static_keys)
         self.assertIs(output.value, static_values)
@@ -409,14 +427,14 @@ class TestMultiHeadAttentionValidatorMutationContracts(
             value_projection_dim=6,
         )
         reshaper = AttentionReshaper(cfg)
-        runtime_shape = AttentionRuntimeShape(2, 3, 5)
+        runtime_layout = AttentionRuntimeLayout(2, 3, 5)
         query = torch.arange(48.0).view(3, 2, 8)
         key = torch.arange(80.0).view(5, 2, 8)
         value = torch.arange(60.0).view(5, 2, 6)
 
         output = reshaper.reshape_qkv_for_attention(
             QKV(query=query, key=key, value=value),
-            runtime_shape=runtime_shape,
+            runtime_layout=runtime_layout,
         )
 
         torch.testing.assert_close(
@@ -431,54 +449,6 @@ class TestMultiHeadAttentionValidatorMutationContracts(
             output.value,
             value.view(5, 4, 3).transpose(0, 1),
         )
-
-    def test_mixture_reshaper_forwards_static_contract_arguments_exactly(self):
-        cfg = build_attention_config(
-            config_class=MixtureOfAttentionHeadsConfig,
-            batch_size=7,
-            num_heads=2,
-            embedding_dim=8,
-            query_key_projection_dim=8,
-            value_projection_dim=6,
-            experts_top_k=3,
-            use_kv_expert_models_flag=False,
-        )
-        reshaper = MixtureOfAttentionHeadsReshaper(cfg)
-        runtime_shape = AttentionRuntimeShape(2, 3, 5)
-        query = torch.arange(144.0).view(3, 2, 3, 8)
-        qkv = QKV(
-            query=query,
-            key=torch.arange(80.0).view(5, 2, 8),
-            value=torch.arange(60.0).view(5, 2, 6),
-        )
-        static_keys = torch.randn(4, 7, 4)
-        static_values = torch.randn(4, 7, 3)
-
-        with patch.object(
-            AttentionValidatorBase,
-            "validate_static_projection_shapes",
-        ) as validate_static:
-            output = reshaper.reshape_qkv_for_attention(
-                qkv,
-                static_keys,
-                static_values,
-                runtime_shape,
-            )
-
-        assert_positional_call_identity(
-            self,
-            validate_static,
-            reshaper,
-            static_keys,
-            static_values,
-            runtime_shape,
-        )
-        torch.testing.assert_close(
-            output.query,
-            query.view(3, 12, 4).transpose(0, 1),
-        )
-        self.assertIs(output.key, static_keys)
-        self.assertIs(output.value, static_values)
 
     def test_relative_head_count_error_is_exact(self):
         relative_config = SimpleNamespace(num_heads=3, embedding_dim=4)
@@ -536,26 +506,26 @@ class TestMultiHeadAttentionValidatorMutationContracts(
         )
         cases = (
             (
-                AttentionRuntimeShape(3, 3, 4),
+                AttentionRuntimeLayout(3, 3, 4),
                 "Runtime batch_size (3) exceeds configured maximum (2).",
             ),
             (
-                AttentionRuntimeShape(2, 4, 4),
+                AttentionRuntimeLayout(2, 4, 4),
                 "Runtime target_sequence_length (4) exceeds configured maximum (3).",
             ),
             (
-                AttentionRuntimeShape(2, 3, 5),
+                AttentionRuntimeLayout(2, 3, 5),
                 "Runtime source_sequence_length (5) exceeds configured maximum (4).",
             ),
         )
-        for runtime_shape, message in cases:
+        for runtime_layout, message in cases:
             with self.subTest(message=message):
                 self.assert_exact_error(
                     ValueError,
                     message,
-                    MultiHeadAttentionValidator.validate_runtime_shape,
+                    MultiHeadAttentionValidator.validate_runtime_layout,
                     model,
-                    runtime_shape,
+                    runtime_layout,
                 )
 
     def test_runtime_tensor_contract_distinguishes_each_source(self):
@@ -638,7 +608,7 @@ class TestMultiHeadAttentionValidatorMutationContracts(
             query_key_projection_dim=4,
             value_projection_dim=4,
         )
-        runtime_shape = AttentionRuntimeShape(1, 2, 3)
+        runtime_layout = AttentionRuntimeLayout(1, 2, 3)
         self.assert_exact_error(
             RuntimeError,
             "static_values dtype must match query dtype, got torch.float64 and "
@@ -648,7 +618,7 @@ class TestMultiHeadAttentionValidatorMutationContracts(
             qkv,
             None,
             torch.empty(1, 3, 4, dtype=torch.float64),
-            runtime_shape,
+            runtime_layout,
         )
         self.assert_exact_error(
             RuntimeError,
@@ -658,7 +628,7 @@ class TestMultiHeadAttentionValidatorMutationContracts(
             qkv,
             torch.empty(1, 3, 4, device="meta"),
             None,
-            runtime_shape,
+            runtime_layout,
         )
         self.assert_exact_error(
             RuntimeError,
@@ -669,7 +639,7 @@ class TestMultiHeadAttentionValidatorMutationContracts(
             qkv,
             torch.empty(1, 2, 4),
             torch.empty(1, 4, 4),
-            runtime_shape,
+            runtime_layout,
         )
 
     def test_static_input_validation_is_read_only(self):
@@ -686,7 +656,7 @@ class TestMultiHeadAttentionValidatorMutationContracts(
         )
         static_keys = torch.randn(1, 3, 4)
         static_values = torch.randn(1, 3, 4)
-        runtime_shape = AttentionRuntimeShape(1, 2, 3)
+        runtime_layout = AttentionRuntimeLayout(1, 2, 3)
         original_tensors = (
             qkv.query.clone(),
             qkv.key.clone(),
@@ -700,11 +670,11 @@ class TestMultiHeadAttentionValidatorMutationContracts(
             qkv,
             static_keys,
             static_values,
-            runtime_shape,
+            runtime_layout,
         )
 
         self.assertIsNone(result)
-        self.assertEqual(runtime_shape.source_sequence_length, 3)
+        self.assertEqual(runtime_layout.source_sequence_length, 3)
         for actual, expected in zip(
             (qkv.query, qkv.key, qkv.value, static_keys, static_values),
             original_tensors,

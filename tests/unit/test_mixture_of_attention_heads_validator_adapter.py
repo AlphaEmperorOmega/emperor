@@ -1,18 +1,16 @@
 import unittest
 
 import torch
+
 from emperor.attention import MixtureOfAttentionHeadsConfig
-from emperor.attention.core.runtime import QKV, AttentionMasks
-from emperor.attention.core.variants.mixture_of_attention_heads.layer import (
-    MixtureOfAttentionHeads,
-)
-from emperor.attention.core.variants.mixture_of_attention_heads.processor import (
+from emperor.attention._runtime import QKV, AttentionMasks
+from emperor.attention._variants.mixture.layer import MixtureOfAttentionHeads
+from emperor.attention._variants.mixture.processing import (
     MixtureOfAttentionHeadsProcessor,
 )
-from emperor.attention.core.variants.mixture_of_attention_heads.validator import (
+from emperor.attention._variants.mixture.validation import (
     MixtureOfAttentionHeadsValidator,
 )
-
 from support.attention import build_attention_config
 
 
@@ -40,9 +38,7 @@ class TestMixtureOfAttentionHeadsValidatorAdapter(unittest.TestCase):
             RuntimeError,
             "substituted construction validator was called",
         ):
-            TrackingAttention(
-                build_attention_config(MixtureOfAttentionHeadsConfig)
-            )
+            TrackingAttention(build_attention_config(MixtureOfAttentionHeadsConfig))
 
     def test_runtime_orchestration_dispatches_through_subclass(self):
         class RejectingValidator(MixtureOfAttentionHeadsValidator):

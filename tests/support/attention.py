@@ -1,35 +1,34 @@
-from emperor.attention.core.config import MultiHeadAttentionConfig
-from emperor.attention.core.variants.independent_attention.config import (
+from emperor.attention import (
     IndependentAttentionConfig,
-)
-from emperor.attention.core.variants.mixture_of_attention_heads.config import (
     MixtureOfAttentionHeadsConfig,
-)
-from emperor.attention.core.variants.self_attention.config import (
+    MultiHeadAttentionConfig,
     SelfAttentionConfig,
     SelfAttentionProjectionStrategy,
 )
 from emperor.augmentations.adaptive_parameters import (
+    AdaptiveLinearLayerConfig,
     AdaptiveParameterAugmentationConfig,
 )
-from emperor.base.layer import LayerConfig, LayerStackConfig, RecurrentLayerConfig
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import (
-    ActivationOptions,
-    LastLayerBiasOptions,
-    LayerNormPositionOptions,
-)
-from emperor.embedding.relative.core.config import (
+from emperor.embedding.relative import (
     DynamicPositionalBiasConfig,
     RelativePositionalEmbeddingConfig,
 )
-from emperor.experts.core.config import MixtureOfExpertsConfig
-from emperor.experts.core.options import (
+from emperor.experts import (
     ExpertWeightingPositionOptions,
+    MixtureOfExpertsConfig,
     RoutingInitializationMode,
 )
-from emperor.linears.core.config import AdaptiveLinearLayerConfig, LinearLayerConfig
-from emperor.sampler.core.config import RouterConfig, SamplerConfig
+from emperor.layers import (
+    ActivationOptions,
+    LastLayerBiasOptions,
+    LayerConfig,
+    LayerNormPositionOptions,
+    LayerStackConfig,
+    RecurrentLayerConfig,
+    ResidualConnectionOptions,
+)
+from emperor.linears import LinearLayerConfig
+from emperor.sampler import RouterConfig, SamplerConfig
 
 #: The leaf config classes a test can build, in declaration order. Tests that
 #: previously iterated ``for attention_option in AttentionOptions`` iterate this
@@ -218,8 +217,10 @@ def make_mixture_of_experts_model_config(
     """MixtureOfExpertsModelConfig for use as a feed-forward stack_config. Wraps a
     MixtureOfExpertsConfig leaf (via make_experts_config) in a MixtureOfExpertsLayer
     stack, mirroring test_experts' model_preset without a test-to-test dependency."""
-    from emperor.experts.config import MixtureOfExpertsModelConfig
-    from emperor.experts.core.config import MixtureOfExpertsLayerConfig
+    from emperor.experts import (
+        MixtureOfExpertsLayerConfig,
+        MixtureOfExpertsModelConfig,
+    )
 
     leaf_config = make_experts_config(
         input_dim=input_dim,
