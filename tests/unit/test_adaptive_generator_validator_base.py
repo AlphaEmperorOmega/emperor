@@ -1,10 +1,12 @@
 import unittest
 
 import torch
-from emperor.augmentations.adaptive_parameters.core._validator import (
+from torch import nn
+
+from emperor.augmentations.adaptive_parameters._validation import (
     AdaptiveGeneratorValidatorBase,
 )
-from emperor.base.layer.layer import Layer
+from emperor.layers import Layer
 
 
 class TestAdaptiveGeneratorValidatorBase(unittest.TestCase):
@@ -45,6 +47,28 @@ class TestAdaptiveGeneratorValidatorBase(unittest.TestCase):
             r"Sequential, or LayerStack, received object",
         ):
             AdaptiveGeneratorValidatorBase.validate_generator_model(object())
+
+    def test_generator_sequence_rejects_items_that_are_not_layers(self):
+        sequence = nn.Sequential(nn.Identity())
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "^Expected each generator sequence item to be a Layer, "
+            "received Identity\\.$",
+        ):
+            AdaptiveGeneratorValidatorBase.validate_generator_model(sequence)
+
+    def test_generator_layer_rejects_non_linear_inner_model(self):
+        layer = Layer.__new__(Layer)
+        nn.Module.__init__(layer)
+        layer.model = nn.Identity()
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "^Expected each generator Layer to wrap a LinearLayer, "
+            "received Identity\\.$",
+        ):
+            AdaptiveGeneratorValidatorBase.validate_generator_model(layer)
 
 
 if __name__ == "__main__":
