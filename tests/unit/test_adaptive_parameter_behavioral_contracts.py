@@ -5,6 +5,8 @@ import unittest
 
 import torch
 
+import emperor.augmentations as augmentations
+import emperor.augmentations.adaptive_parameters as adaptive_parameters
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveLinearLayerConfig,
     AdaptiveParameterAugmentationConfig,
@@ -103,6 +105,14 @@ def set_exact_adaptive_linear_parameters(model: AdaptiveLinearLayer) -> None:
 
 
 class AdaptiveParameterBehavioralContractTests(unittest.TestCase):
+    def test_interfaces_use_explicit_exports_without_dynamic_shortcuts(self):
+        self.assertIs(augmentations.adaptive_parameters, adaptive_parameters)
+        self.assertFalse(hasattr(augmentations, "__getattr__"))
+        self.assertFalse(hasattr(adaptive_parameters, "__getattr__"))
+        self.assertFalse(hasattr(adaptive_parameters, "_LAZY_EXPORTS"))
+        self.assertFalse(hasattr(adaptive_parameters, "AdaptiveLinearLayer"))
+        self.assertFalse(hasattr(adaptive_parameters, "AdaptiveParameterAugmentation"))
+
     def test_model_only_adjustment_path_executes_a_real_emperor_linear_layer(self):
         augmentation = AdaptiveParameterAugmentation(
             AdaptiveParameterAugmentationConfig(input_dim=2, output_dim=2)
