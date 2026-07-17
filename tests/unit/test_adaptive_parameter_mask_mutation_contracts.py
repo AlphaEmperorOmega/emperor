@@ -5,10 +5,14 @@ import unittest
 import torch
 
 from emperor.augmentations.adaptive_parameters import (
+    DiagonalAxisMaskConfig,
     MaskDimensionOptions,
     OuterProductMaskConfig,
     PerAxisScoreMaskConfig,
     TopSliceAxisMaskConfig,
+)
+from emperor.augmentations.adaptive_parameters._masks.variants.diagonal import (
+    DiagonalAxisMask,
 )
 from emperor.augmentations.adaptive_parameters._masks.variants.outer_product import (
     OuterProductMask,
@@ -240,6 +244,48 @@ class AdaptiveParameterMaskMutationContractTests(unittest.TestCase):
         self.assertEqual(actual.device, scores.device)
         self.assertEqual(actual.dtype, scores.dtype)
         self.assertTrue(torch.equal(actual, expected))
+
+    def test_diagonal_geometry_preserves_tensor_device_dtype_and_batch(self) -> None:
+        model = DiagonalAxisMask(
+            DiagonalAxisMaskConfig(
+                input_dim=3,
+                output_dim=4,
+                mask_threshold=0.5,
+                mask_surrogate_scale=0.0,
+                mask_floor=0.0,
+                mask_transition_width=None,
+                model_config=linear_stack_config(3, 1),
+            )
+        ).double()
+        weights = torch.ones(3, 4, dtype=torch.float64)
+        keep_fraction = torch.tensor([[0.25], [0.75]], dtype=torch.float64)
+        expected = torch.tensor(
+            [
+                [
+                    [0.875, 0.375, 0.0, 0.0],
+                    [0.375, 0.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0, 0.0],
+                ],
+                [
+                    [1.0, 1.0, 1.0, 1.0],
+                    [1.0, 1.0, 1.0, 0.625],
+                    [1.0, 1.0, 0.625, 0.125],
+                ],
+            ],
+            dtype=torch.float64,
+        )
+
+        with torch.device("meta"):
+            actual = model._DiagonalAxisMask__compute_diagonal_scores(
+                weights,
+                keep_fraction,
+            )
+
+        self.assertEqual(actual.device, weights.device)
+        self.assertEqual(actual.dtype, keep_fraction.dtype)
+        self.assertTrue(torch.equal(actual, expected))
+        self.assertFalse(torch.equal(actual[0], actual[1]))
+
 
 if __name__ == "__main__":
     unittest.main()
