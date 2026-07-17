@@ -332,6 +332,51 @@ class TestAdaptiveParameterMonitorCallback(unittest.TestCase):
 
         self.assertEqual(module.logged_scalars, [])
 
+    def test_forward_hook_ignores_non_tensor_output(self):
+        module = FakeLightningModule(self.build_adaptive())
+        callback = AdaptiveParameterMonitorCallback(log_every_n_steps=1)
+        hook = callback._AdaptiveParameterMonitorCallback__make_forward_hook(
+            "adaptive",
+            "weight",
+            module,
+        )
+
+        hook(nn.Identity(), (torch.ones(2, 3),), object())
+
+        self.assertEqual(module.logged_scalars, [])
+
+    def test_forward_hook_without_tensor_base_logs_only_output_metrics(self):
+        module = FakeLightningModule(self.build_adaptive())
+        callback = AdaptiveParameterMonitorCallback(log_every_n_steps=1)
+        hook = callback._AdaptiveParameterMonitorCallback__make_forward_hook(
+            "adaptive",
+            "weight",
+            module,
+        )
+
+        hook(
+            nn.Identity(),
+            (),
+            torch.tensor(
+                [
+                    [1.0, -2.0],
+                    [3.0, 4.0],
+                ]
+            ),
+        )
+
+        names = self.scalar_names(module)
+        self.assertIn("adaptive/weight/batch/output_mean", names)
+        for suffix in (
+            "base_mean",
+            "base_var",
+            "delta_mean",
+            "delta_var",
+            "delta_l2_norm",
+            "relative_delta_norm",
+        ):
+            self.assertNotIn(f"adaptive/weight/batch/{suffix}", names)
+
     def test_common_stats_are_logged_for_all_option_slots(self):
         adaptive = self.build_adaptive(
             weight_model=AdditiveOption(),
@@ -433,6 +478,42 @@ class TestAdaptiveParameterMonitorCallback(unittest.TestCase):
             torch.tensor(0.0),
         )
 
+    def test_effective_scale_skips_real_multiplicative_bias_with_zero_base(self):
+        adaptive = AdaptiveParameterAugmentation(
+            AdaptiveParameterAugmentationConfig(
+                input_dim=2,
+                output_dim=3,
+                bias_config=MultiplicativeDynamicBiasConfig(
+                    input_dim=2,
+                    output_dim=3,
+                    decay_schedule=WeightDecayScheduleOptions.DISABLED,
+                    decay_rate=0.0,
+                    decay_warmup_batches=0,
+                    model_config=self.layer_stack_config(
+                        input_dim=2,
+                        output_dim=3,
+                    ),
+                ),
+            )
+        )
+        module = FakeLightningModule(adaptive)
+        self.primed_callback(module, log_every_n_steps=1)
+        weights = torch.arange(1, 7, dtype=torch.float32).view(2, 3)
+        bias = torch.tensor([0.0, 2.0, 3.0])
+        inputs = torch.ones(4, 2)
+
+        adaptive(
+            lambda adjusted_weight, adjusted_bias, batch: adjusted_weight,
+            weights,
+            bias,
+            inputs,
+        )
+
+        names = self.scalar_names(module)
+        self.assertIn("adaptive/bias/batch/output_mean", names)
+        self.assertNotIn("adaptive/bias/batch/effective_scale_mean", names)
+        self.assertNotIn("adaptive/bias/batch/effective_scale_var", names)
+
     def test_mask_stats_are_logged_from_input_and_output_weights(self):
         adaptive = self.build_adaptive(mask_model=MaskOption())
         module = FakeLightningModule(adaptive)
@@ -476,6 +557,21 @@ class TestAdaptiveParameterMonitorCallback(unittest.TestCase):
         callback = self.primed_callback(module, log_every_n_steps=1)
 
         callback.on_fit_end(trainer=None, pl_module=module)
+        self.feed_adaptive(adaptive)
+
+        self.assertEqual(module.logged_scalars, [])
+        self.assertEqual(callback._hooks, [])
+
+    def test_on_exception_removes_hooks_and_clears_state(self):
+        adaptive = self.build_adaptive(weight_model=AdditiveOption())
+        module = FakeLightningModule(adaptive)
+        callback = self.primed_callback(module, log_every_n_steps=1)
+
+        callback.on_exception(
+            trainer=None,
+            pl_module=module,
+            exception=RuntimeError("deliberate failure"),
+        )
         self.feed_adaptive(adaptive)
 
         self.assertEqual(module.logged_scalars, [])
