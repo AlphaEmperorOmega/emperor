@@ -1,13 +1,23 @@
 import unittest
 
-from emperor.augmentations.adaptive_parameters.core._validator import AxisMaskValidator
-from emperor.augmentations.adaptive_parameters.core.mask import (
-    AxisMaskAbstract,
-    AxisMaskConfig,
+from emperor.augmentations.adaptive_parameters import AxisMaskConfig
+from emperor.augmentations.adaptive_parameters._masks.base import AxisMaskAbstract
+from emperor.augmentations.adaptive_parameters._masks.validation import (
+    AxisMaskValidator,
+)
+from emperor.augmentations.adaptive_parameters._masks.variants.diagonal import (
     DiagonalAxisMask,
+)
+from emperor.augmentations.adaptive_parameters._masks.variants.outer_product import (
     OuterProductMask,
+)
+from emperor.augmentations.adaptive_parameters._masks.variants.per_axis import (
     PerAxisScoreMask,
+)
+from emperor.augmentations.adaptive_parameters._masks.variants.top_slice import (
     TopSliceAxisMask,
+)
+from emperor.augmentations.adaptive_parameters._masks.variants.weight_informed import (
     WeightInformedScoreAxisMask,
 )
 
