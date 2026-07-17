@@ -8,7 +8,7 @@ from torch import Tensor
 from emperor.attention._ops.processing import ProcessorBase
 
 if TYPE_CHECKING:
-    from emperor.attention._runtime import QKV, AttentionRuntimeShape
+    from emperor.attention._runtime import QKV, AttentionRuntimeLayout
 
 
 class IndependentProcessor(ProcessorBase):
@@ -16,104 +16,143 @@ class IndependentProcessor(ProcessorBase):
         self,
         qkv: "QKV",
         merged_attention_mask: Tensor | None = None,
-        runtime_shape: "AttentionRuntimeShape | None" = None,
+        runtime_layout: "AttentionRuntimeLayout | None" = None,
     ) -> tuple[Tensor, Tensor | None]:
-        merged_attention_mask = self.__prepare_attention_mask(
-            merged_attention_mask,
-            runtime_shape,
-        )
-        qkv = self.reshaper.reshape_before_attention(qkv, runtime_shape)
-        relative_logits = self._compute_relative_position_logits(
-            qkv.query,
-            qkv.key.size(qkv.key.dim() - 2),
-            runtime_shape,
-        )
-        if relative_logits is not None:
-            if merged_attention_mask is None:
-                merged_attention_mask = relative_logits
-            else:
-                merged_attention_mask = merged_attention_mask + relative_logits
+        qkv = self.reshaper.reshape_before_attention(qkv, runtime_layout)
         weighted_values = self.__compute_weighted_values(
+            qkv, merged_attention_mask, runtime_layout
+        )
+        attention_output = self._compute_attention_output(
+            weighted_values, runtime_layout
+        )
+        return attention_output, None
+
+    def __compute_weighted_values(
+        self,
+        qkv: "QKV",
+        merged_attention_mask: Tensor | None,
+        runtime_layout: "AttentionRuntimeLayout | None" = None,
+    ) -> Tensor:
+        effective_attention_mask = self.__prepare_effective_attention_mask(
+            qkv,
+            merged_attention_mask,
+            runtime_layout,
+        )
+        dropout_probability = self.dropout_probability if self.training else 0.0
+        weighted_values = F.scaled_dot_product_attention(
             qkv.query,
             qkv.key,
             qkv.value,
+            effective_attention_mask,
+            dropout_probability,
+        )
+
+        weighted_values = weighted_values.permute(2, 0, 1, 3)
+        weighted_values = weighted_values.contiguous()
+        batch_size = self.__resolve_batch_size(runtime_layout)
+        target_sequence_length = self.__resolve_target_sequence_length(runtime_layout)
+        return weighted_values.view(
+            batch_size * target_sequence_length,
+            self.value_projection_dim,
+        )
+
+    def __prepare_effective_attention_mask(
+        self,
+        qkv: "QKV",
+        merged_attention_mask: Tensor | None,
+        runtime_layout: "AttentionRuntimeLayout | None",
+    ) -> Tensor | None:
+        effective_attention_mask = self.__prepare_attention_mask(
             merged_attention_mask,
-            runtime_shape,
+            runtime_layout,
         )
-        attention_output = self._compute_attention_output(
-            weighted_values,
-            runtime_shape,
+        relative_position_logits = self.__compute_relative_position_logits_for_qkv(
+            qkv,
+            runtime_layout,
         )
-        return attention_output, None
+        if relative_position_logits is None:
+            return effective_attention_mask
+        if effective_attention_mask is None:
+            return relative_position_logits
+        return effective_attention_mask + relative_position_logits
 
     def __prepare_attention_mask(
         self,
         attention_mask: Tensor | None = None,
-        runtime_shape: "AttentionRuntimeShape | None" = None,
+        runtime_layout: "AttentionRuntimeLayout | None" = None,
     ) -> Tensor | None:
         if attention_mask is None:
             return None
         if attention_mask.dim() == 2:
             return attention_mask
-        batch_size = (
-            runtime_shape.batch_size if runtime_shape is not None else self.batch_size
-        )
-        target_sequence_length = (
-            runtime_shape.target_sequence_length
-            if runtime_shape is not None
-            else self.target_sequence_length
-        )
         is_mask_single_batch = attention_mask.size(0) == 1
         is_mask_batched = attention_mask.dim() == 3
-        source_sequence_length = attention_mask.size(-1)
         if is_mask_single_batch and is_mask_batched:
-            return attention_mask.reshape(
-                1,
-                1,
-                attention_mask.size(-2),
-                source_sequence_length,
-            )
+            return self.__reshape_mask_for_batch_head_broadcasting(attention_mask)
         if attention_mask.size(1) == 1:
-            return attention_mask.reshape(
-                batch_size,
-                self.num_heads,
-                1,
-                source_sequence_length,
+            return self.__reshape_mask_for_target_sequence_broadcasting(
+                attention_mask, runtime_layout
             )
-        return attention_mask.view(
-            batch_size,
-            self.num_heads,
-            target_sequence_length,
-            source_sequence_length,
+        return self.__reshape_mask_to_batch_head_target_source_layout(
+            attention_mask, runtime_layout
         )
 
-    def __compute_weighted_values(
+    def __reshape_mask_for_batch_head_broadcasting(
         self,
-        query: Tensor,
-        key: Tensor,
-        value: Tensor,
-        attention_mask: Tensor | None,
-        runtime_shape: "AttentionRuntimeShape | None" = None,
+        attention_mask: Tensor,
     ) -> Tensor:
-        weighted_values = F.scaled_dot_product_attention(
-            query,
-            key,
-            value,
-            attention_mask,
-            self.dropout_probability if self.training else 0.0,
+        target_sequence_length = attention_mask.size(-2)
+        source_sequence_length = attention_mask.size(-1)
+        return attention_mask.reshape(
+            1, 1, target_sequence_length, source_sequence_length
         )
 
-        weighted_values = weighted_values.permute(2, 0, 1, 3)
-        weighted_values = weighted_values.contiguous()
-        batch_size = (
-            runtime_shape.batch_size if runtime_shape is not None else self.batch_size
+    def __reshape_mask_for_target_sequence_broadcasting(
+        self,
+        attention_mask: Tensor,
+        runtime_layout: "AttentionRuntimeLayout | None",
+    ) -> Tensor:
+        batch_size = self.__resolve_batch_size(runtime_layout)
+        source_sequence_length = attention_mask.size(-1)
+        return attention_mask.reshape(
+            batch_size, self.num_heads, 1, source_sequence_length
         )
-        target_sequence_length = (
-            runtime_shape.target_sequence_length
-            if runtime_shape is not None
-            else self.target_sequence_length
+
+    def __reshape_mask_to_batch_head_target_source_layout(
+        self,
+        attention_mask: Tensor,
+        runtime_layout: "AttentionRuntimeLayout | None",
+    ) -> Tensor:
+        batch_size = self.__resolve_batch_size(runtime_layout)
+        target_sequence_length = self.__resolve_target_sequence_length(runtime_layout)
+        source_sequence_length = attention_mask.size(-1)
+        return attention_mask.view(
+            batch_size, self.num_heads, target_sequence_length, source_sequence_length
         )
-        return weighted_values.view(
-            batch_size * target_sequence_length,
-            self.value_projection_dim,
+
+    def __compute_relative_position_logits_for_qkv(
+        self,
+        qkv: "QKV",
+        runtime_layout: "AttentionRuntimeLayout | None" = None,
+    ) -> Tensor | None:
+        source_sequence_dimension = qkv.key.dim() - 2
+        source_sequence_length = qkv.key.size(source_sequence_dimension)
+        return self._compute_relative_position_logits(
+            qkv.query, source_sequence_length, runtime_layout
         )
+
+    def __resolve_batch_size(
+        self,
+        runtime_layout: "AttentionRuntimeLayout | None",
+    ) -> int:
+        if runtime_layout is not None:
+            return runtime_layout.batch_size
+        return self.batch_size
+
+    def __resolve_target_sequence_length(
+        self,
+        runtime_layout: "AttentionRuntimeLayout | None",
+    ) -> int:
+        if runtime_layout is not None:
+            return runtime_layout.target_sequence_length
+        return self.target_sequence_length

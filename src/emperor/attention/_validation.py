@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from emperor.attention._runtime import (
         QKV,
         AttentionMasks,
-        AttentionRuntimeShape,
+        AttentionRuntimeLayout,
     )
 
 
@@ -141,13 +141,13 @@ class AttentionValidatorBase:
         model: "MultiHeadAttentionAbstract",
         static_keys: Tensor | None = None,
         static_values: Tensor | None = None,
-        runtime_shape: "AttentionRuntimeShape | None" = None,
+        runtime_layout: "AttentionRuntimeLayout | None" = None,
     ) -> None:
         cls._validate_static_projection_shape(
-            model, static_keys, "static_keys", runtime_shape
+            model, static_keys, "static_keys", runtime_layout
         )
         cls._validate_static_projection_shape(
-            model, static_values, "static_values", runtime_shape
+            model, static_values, "static_values", runtime_layout
         )
 
     @staticmethod
@@ -155,7 +155,7 @@ class AttentionValidatorBase:
         model: "MultiHeadAttentionAbstract",
         static_tensor: Tensor | None,
         tensor_name: str,
-        runtime_shape: "AttentionRuntimeShape | None" = None,
+        runtime_layout: "AttentionRuntimeLayout | None" = None,
     ) -> None:
         if static_tensor is None:
             return
@@ -166,7 +166,9 @@ class AttentionValidatorBase:
                 f"rank {static_tensor.dim()}."
             )
         batch_size = (
-            runtime_shape.batch_size if runtime_shape is not None else model.batch_size
+            runtime_layout.batch_size
+            if runtime_layout is not None
+            else model.batch_size
         )
         expected_first_dim = batch_size * model.num_heads
         if static_tensor.size(0) != expected_first_dim:
@@ -441,21 +443,21 @@ class MultiHeadAttentionValidator(AttentionValidatorBase, ValidatorBase):
         )
 
     @staticmethod
-    def validate_runtime_shape(
+    def validate_runtime_layout(
         model: "MultiHeadAttentionAbstract",
-        runtime_shape: "AttentionRuntimeShape",
+        runtime_layout: "AttentionRuntimeLayout",
     ) -> None:
         configured_and_actual = (
-            ("batch_size", model.batch_size, runtime_shape.batch_size),
+            ("batch_size", model.batch_size, runtime_layout.batch_size),
             (
                 "target_sequence_length",
                 model.target_sequence_length,
-                runtime_shape.target_sequence_length,
+                runtime_layout.target_sequence_length,
             ),
             (
                 "source_sequence_length",
                 model.source_sequence_length,
-                runtime_shape.source_sequence_length,
+                runtime_layout.source_sequence_length,
             ),
         )
         for name, configured_maximum, actual in configured_and_actual:
@@ -480,6 +482,8 @@ class MultiHeadAttentionValidator(AttentionValidatorBase, ValidatorBase):
                 "query, key, and value batch sizes must match, got "
                 f"{batch_sizes[0]}, {batch_sizes[1]}, and {batch_sizes[2]}."
             )
+        if batch_sizes[0] <= 0:
+            raise RuntimeError("runtime batch size must be greater than 0.")
         for name, tensor in (
             ("query", qkv.query),
             ("key", qkv.key),
@@ -515,13 +519,13 @@ class MultiHeadAttentionValidator(AttentionValidatorBase, ValidatorBase):
         qkv: "QKV",
         static_keys: Tensor | None,
         static_values: Tensor | None,
-        runtime_shape: "AttentionRuntimeShape | None" = None,
+        runtime_layout: "AttentionRuntimeLayout | None" = None,
     ) -> None:
         cls.validate_static_projection_shapes(
             model,
             static_keys,
             static_values,
-            runtime_shape,
+            runtime_layout,
         )
         for name, tensor in (
             ("static_keys", static_keys),

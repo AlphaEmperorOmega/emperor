@@ -10,7 +10,7 @@ from emperor.attention._variants.mixture.validation import (
 )
 
 if TYPE_CHECKING:
-    from emperor.attention._runtime import AttentionMasks, AttentionRuntimeShape
+    from emperor.attention._runtime import AttentionMasks, AttentionRuntimeLayout
     from emperor.attention._variants.mixture.config import (
         MixtureOfAttentionHeadsConfig,
     )
@@ -27,21 +27,21 @@ class MixtureOfAttentionHeadsMask(Mask):
         self,
         key_padding_mask: Tensor | None,
         attention_mask: Tensor | None,
-        runtime_shape: "AttentionRuntimeShape",
+        runtime_layout: "AttentionRuntimeLayout",
     ) -> None:
-        batch_size = runtime_shape.batch_size
-        standard_branch_count = runtime_shape.branch_count(self.num_heads)
+        batch_size = runtime_layout.batch_size
+        standard_branch_count = runtime_layout.branch_count(self.num_heads)
         expert_branch_count = standard_branch_count * self.top_k
         self.VALIDATOR.validate_mixture_mask_shapes(
             key_padding_mask,
             attention_mask,
             expected_key_padding_shape=(
                 batch_size,
-                runtime_shape.source_sequence_length,
+                runtime_layout.source_sequence_length,
             ),
             expected_attention_sequence_shape=(
-                runtime_shape.target_sequence_length,
-                runtime_shape.source_sequence_length,
+                runtime_layout.target_sequence_length,
+                runtime_layout.source_sequence_length,
             ),
             standard_branch_count=standard_branch_count,
             expert_branch_count=expert_branch_count,
@@ -51,10 +51,10 @@ class MixtureOfAttentionHeadsMask(Mask):
         self,
         key: Tensor,
         masks: "AttentionMasks",
-        runtime_shape: "AttentionRuntimeShape",
+        runtime_layout: "AttentionRuntimeLayout",
     ) -> Tensor | None:
-        batch_size = runtime_shape.batch_size
-        target_sequence_length = runtime_shape.target_sequence_length
+        batch_size = runtime_layout.batch_size
+        target_sequence_length = runtime_layout.target_sequence_length
         source_sequence_length = key.size(-2)
         attention_mask = self.__normalize_attention_mask(
             masks.attention_mask,

@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from emperor.attention._runtime import (
         QKV,
         AttentionMasks,
-        AttentionRuntimeShape,
+        AttentionRuntimeLayout,
     )
 
 
@@ -231,7 +231,7 @@ class MixtureOfAttentionHeadsValidator(MultiHeadAttentionValidator):
         qkv: "QKV",
         static_keys: Tensor | None,
         static_values: Tensor | None,
-        runtime_shape: "AttentionRuntimeShape | None" = None,
+        runtime_layout: "AttentionRuntimeLayout | None" = None,
     ) -> None:
         if model.cfg.use_kv_expert_models_flag:
             if static_keys is not None or static_values is not None:
@@ -245,5 +245,5 @@ class MixtureOfAttentionHeadsValidator(MultiHeadAttentionValidator):
             qkv,
             static_keys,
             static_values,
-            runtime_shape,
+            runtime_layout,
         )

@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from emperor.attention._runtime import (
         QKV,
         AttentionMasks,
-        AttentionRuntimeShape,
+        AttentionRuntimeLayout,
     )
 
 
@@ -52,25 +52,25 @@ class KeyValueBias(Module):
         self,
         qkv: "QKV",
         masks: "AttentionMasks",
-        runtime_shape: "AttentionRuntimeShape | None" = None,
-    ) -> tuple["QKV", "AttentionMasks", "AttentionRuntimeShape | None"]:
+        runtime_layout: "AttentionRuntimeLayout | None" = None,
+    ) -> tuple["QKV", "AttentionMasks", "AttentionRuntimeLayout | None"]:
         if not self.add_key_value_bias_flag:
-            return qkv, masks, runtime_shape
-        updated_qkv = self.__append_bias_vectors(qkv, runtime_shape)
+            return qkv, masks, runtime_layout
+        updated_qkv = self.__append_bias_vectors(qkv, runtime_layout)
         updated_masks = self.__pad_masks_for_bias_vector(masks)
-        updated_runtime_shape = self.__extend_runtime_shape(runtime_shape)
-        return updated_qkv, updated_masks, updated_runtime_shape
+        updated_runtime_layout = self.__extend_runtime_layout(runtime_layout)
+        return updated_qkv, updated_masks, updated_runtime_layout
 
     def __append_bias_vectors(
         self,
         qkv: "QKV",
-        runtime_shape: "AttentionRuntimeShape | None",
+        runtime_layout: "AttentionRuntimeLayout | None",
     ) -> "QKV":
         key_with_bias_vector = self.__append_bias_vector(
-            self.key_bias_vector, qkv.key, runtime_shape
+            self.key_bias_vector, qkv.key, runtime_layout
         )
         value_with_bias_vector = self.__append_bias_vector(
-            self.value_bias_vector, qkv.value, runtime_shape
+            self.value_bias_vector, qkv.value, runtime_layout
         )
         updated_qkv = replace(
             qkv, key=key_with_bias_vector, value=value_with_bias_vector
@@ -81,9 +81,11 @@ class KeyValueBias(Module):
         self,
         bias_vector: Tensor,
         projection: Tensor,
-        runtime_shape: "AttentionRuntimeShape | None",
+        runtime_layout: "AttentionRuntimeLayout | None",
     ) -> Tensor:
-        expanded_bias = self._expand_bias_vector(bias_vector, projection, runtime_shape)
+        expanded_bias = self._expand_bias_vector(
+            bias_vector, projection, runtime_layout
+        )
         projection_with_bias_vector = torch.cat([projection, expanded_bias], dim=1)
         return projection_with_bias_vector
 
@@ -91,14 +93,13 @@ class KeyValueBias(Module):
         self,
         bias_vector: Tensor,
         projection: Tensor,
-        runtime_shape: "AttentionRuntimeShape | None" = None,
+        runtime_layout: "AttentionRuntimeLayout | None" = None,
     ) -> Tensor:
-        batch_size = self.__resolve_batch_size(runtime_shape)
+        batch_size = self.__resolve_batch_size(runtime_layout)
         branch_count = projection.size(0)
         expected_branch_count = batch_size * self.num_heads
         self.VALIDATOR.validate_attention_ready_projection_branch_count(
-            branch_count,
-            expected_branch_count,
+            branch_count, expected_branch_count
         )
         head_dim = projection.size(-1)
         bias_by_head = bias_vector.reshape(self.num_heads, head_dim)
@@ -107,10 +108,10 @@ class KeyValueBias(Module):
 
     def __resolve_batch_size(
         self,
-        runtime_shape: "AttentionRuntimeShape | None",
+        runtime_layout: "AttentionRuntimeLayout | None",
     ) -> int:
-        if runtime_shape is not None:
-            return runtime_shape.batch_size
+        if runtime_layout is not None:
+            return runtime_layout.batch_size
         return self.batch_size
 
     def __pad_masks_for_bias_vector(self, masks: "AttentionMasks") -> "AttentionMasks":
@@ -130,9 +131,9 @@ class KeyValueBias(Module):
         return F.pad(mask, (0, 1))
 
     @staticmethod
-    def __extend_runtime_shape(
-        runtime_shape: "AttentionRuntimeShape | None",
-    ) -> "AttentionRuntimeShape | None":
-        if runtime_shape is not None:
-            return runtime_shape.with_source_extension()
+    def __extend_runtime_layout(
+        runtime_layout: "AttentionRuntimeLayout | None",
+    ) -> "AttentionRuntimeLayout | None":
+        if runtime_layout is not None:
+            return runtime_layout.with_source_extension()
         return None

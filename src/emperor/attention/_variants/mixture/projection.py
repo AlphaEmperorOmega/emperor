@@ -32,12 +32,17 @@ class MixtureOfAttentionHeadsProjector(ProjectorBase):
         qk_dims = (self.embedding_dim, self.query_key_projection_dim)
         v_dims = (self.embedding_dim, self.value_projection_dim)
 
-        self.query_model = self._create_q_model(*qk_dims)
-        self.key_model = self._create_kv_model(*qk_dims)
-        self.value_model = self._create_kv_model(*v_dims)
+        self.query_model = self.__create_q_model(*qk_dims)
+        self.key_model = self.__create_kv_model(*qk_dims)
+        self.value_model = self.__create_kv_model(*v_dims)
         self.top_k = self.query_model.get_top_k()
         self.sampler = self.__create_sampler()
 
+        self.probabilities = None
+        self.indices = None
+        self.skip_mask = None
+
+    def clear_routing_state(self) -> None:
         self.probabilities = None
         self.indices = None
         self.skip_mask = None
@@ -46,11 +51,11 @@ class MixtureOfAttentionHeadsProjector(ProjectorBase):
         sampler_config = self.experts_config.sampler_config
         return sampler_config.build_with_router_input_dim(self.embedding_dim)
 
-    def _create_q_model(self, input_dim: int, output_dim: int) -> MixtureOfExperts:
+    def __create_q_model(self, input_dim: int, output_dim: int) -> MixtureOfExperts:
         overrides = MixtureOfExpertsConfig(input_dim=input_dim, output_dim=output_dim)
         return MixtureOfExpertsMap(self.experts_config, overrides)
 
-    def _create_kv_model(self, input_dim: int, output_dim: int):
+    def __create_kv_model(self, input_dim: int, output_dim: int):
         if self.use_kv_expert_models_flag:
             overrides = MixtureOfExpertsConfig(
                 input_dim=input_dim, output_dim=output_dim
@@ -70,18 +75,18 @@ class MixtureOfAttentionHeadsProjector(ProjectorBase):
         self,
         qkv: "QKV",
     ) -> "QKV":
-        self._compute_expert_indices(qkv.query)
-        query_projections = self._compute_q_projection(qkv.query, self.query_model)
-        key_projections = self._compute_kv_projection(qkv.key, self.key_model)
-        value_projections = self._compute_kv_projection(qkv.value, self.value_model)
+        self.__compute_expert_indices(qkv.query)
+        q_projection = self.__compute_q_projection(qkv.query, self.query_model)
+        k_projection = self.__compute_kv_projection(qkv.key, self.key_model)
+        v_projection = self.__compute_kv_projection(qkv.value, self.value_model)
         return replace(
             qkv,
-            query=query_projections,
-            key=key_projections,
-            value=value_projections,
+            query=q_projection,
+            key=k_projection,
+            value=v_projection,
         )
 
-    def _compute_expert_indices(self, X: Tensor) -> None:
+    def __compute_expert_indices(self, X: Tensor) -> None:
         embedding_dim = X.size(-1)
         if not X.is_contiguous():
             X = X.contiguous()
@@ -98,12 +103,12 @@ class MixtureOfAttentionHeadsProjector(ProjectorBase):
         self.skip_mask = skip_mask
         self._accumulate_auxiliary_loss(sampler_loss)
 
-    def _compute_q_projection(self, X: Tensor, model: MixtureOfExperts) -> Tensor:
+    def __compute_q_projection(self, X: Tensor, model: MixtureOfExperts) -> Tensor:
         sequence_length, batch_size, _ = X.shape
         projection = self._compute_projection(X, model)
         return projection.view(sequence_length, batch_size, self.top_k, -1)
 
-    def _compute_kv_projection(
+    def __compute_kv_projection(
         self,
         X: Tensor,
         model: "LinearAbstract | MixtureOfExperts",
@@ -131,4 +136,6 @@ class MixtureOfAttentionHeadsProjector(ProjectorBase):
         return projection
 
     def compute_output_projection(self, weighted_values: Tensor) -> Tensor:
-        return self._compute_projection(weighted_values, self.output_model)
+        output_projection = self._compute_projection(weighted_values, self.output_model)
+        self.clear_routing_state()
+        return output_projection
