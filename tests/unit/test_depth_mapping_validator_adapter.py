@@ -1,13 +1,14 @@
 import unittest
 
 import torch
-from emperor.augmentations.adaptive_parameters.core._validator import (
-    DepthMappingValidator,
-)
-from emperor.augmentations.adaptive_parameters.core.weight.depth_mapper import (
+
+from emperor.augmentations.adaptive_parameters._weights.depth_mapping import (
     DepthMappingLayer,
     DepthMappingLayerConfig,
     DepthMappingLayerStack,
+)
+from emperor.augmentations.adaptive_parameters._weights.validation import (
+    DepthMappingValidator,
 )
 
 

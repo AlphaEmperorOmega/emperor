@@ -1,14 +1,15 @@
 import unittest
 
 import torch
-from emperor.augmentations.adaptive_parameters.config import (
+
+from emperor.augmentations.adaptive_parameters import (
     AdaptiveParameterAugmentationConfig,
 )
-from emperor.augmentations.adaptive_parameters.core._validator import (
-    AdaptiveParameterAugmentationValidator,
-)
-from emperor.augmentations.adaptive_parameters.model import (
+from emperor.augmentations.adaptive_parameters._augmentation import (
     AdaptiveParameterAugmentation,
+)
+from emperor.augmentations.adaptive_parameters._validation import (
+    AdaptiveParameterAugmentationValidator,
 )
 
 

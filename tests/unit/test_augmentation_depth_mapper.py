@@ -2,29 +2,30 @@ import unittest
 from dataclasses import fields
 
 import torch
+
 from emperor.augmentations.adaptive_parameters import DynamicDepthOptions
-from emperor.augmentations.adaptive_parameters.core._validator import (
-    DepthMappingValidator,
-)
-from emperor.augmentations.adaptive_parameters.core.weight.depth_mapper import (
+from emperor.augmentations.adaptive_parameters._weights.depth_mapping import (
     DepthMappingHandlerConfig,
     DepthMappingLayer,
     DepthMappingLayerConfig,
     DepthMappingLayerStack,
 )
-from emperor.base.layer.config import LayerConfig, LayerStackConfig
-from emperor.base.layer.gate import GateConfig, LayerGateOptions
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import (
-    ActivationOptions,
-    LastLayerBiasOptions,
-    LayerNormPositionOptions,
+from emperor.augmentations.adaptive_parameters._weights.validation import (
+    DepthMappingValidator,
 )
-from emperor.halting.config import StickBreakingConfig
-from emperor.halting.options import HaltingHiddenStateModeOptions
-from emperor.linears.core.config import LinearLayerConfig
-from emperor.memory.config import GatedResidualDynamicMemoryConfig
-from emperor.memory.options import MemoryPositionOptions
+from emperor.halting import HaltingHiddenStateModeOptions, StickBreakingConfig
+from emperor.layers import (
+    ActivationOptions,
+    GateConfig,
+    LastLayerBiasOptions,
+    LayerConfig,
+    LayerGateOptions,
+    LayerNormPositionOptions,
+    LayerStackConfig,
+    ResidualConnectionOptions,
+)
+from emperor.linears import LinearLayerConfig
+from emperor.memory import GatedResidualDynamicMemoryConfig, MemoryPositionOptions
 
 
 class TestDepthMappingAugmentation(unittest.TestCase):
@@ -520,7 +521,7 @@ class TestDepthMappingLayerStack(unittest.TestCase):
             DepthMappingLayerStack(cfg)
 
     def test_invalid_layer_model_config_type_raises_error(self):
-        from emperor.base.utils import ConfigBase
+        from emperor.config import ConfigBase
 
         cfg = self.preset(generator_depth=DynamicDepthOptions.DEPTH_OF_TWO)
         cfg.model_config.layer_config.layer_model_config = ConfigBase()
