@@ -1,32 +1,45 @@
-from emperor.base.layer.residual import ResidualConnectionOptions
 import unittest
 
 import torch
 import torch.nn as nn
 
-from emperor.base.options import (
-    ActivationOptions,
-    LastLayerBiasOptions,
-    LayerNormPositionOptions,
-)
-from emperor.base.layer import Layer, LayerConfig, LayerStackConfig
-from emperor.base.layer.state import LayerState
-from emperor.linears.core.config import LinearLayerConfig
-from emperor.augmentations.adaptive_parameters import MaskDimensionOptions
-from emperor.augmentations.adaptive_parameters.core.mask import (
-    AxisMaskAbstract,
+import emperor.augmentations.adaptive_parameters._options as options
+from emperor.augmentations.adaptive_parameters import (
     AxisMaskConfig,
-    DiagonalAxisMask,
     DiagonalAxisMaskConfig,
-    OuterProductMask,
+    MaskDimensionOptions,
     OuterProductMaskConfig,
-    PerAxisScoreMask,
     PerAxisScoreMaskConfig,
-    TopSliceAxisMask,
     TopSliceAxisMaskConfig,
-    WeightInformedScoreAxisMask,
     WeightInformedScoreAxisMaskConfig,
 )
+from emperor.augmentations.adaptive_parameters._masks.base import AxisMaskAbstract
+from emperor.augmentations.adaptive_parameters._masks.variants.diagonal import (
+    DiagonalAxisMask,
+)
+from emperor.augmentations.adaptive_parameters._masks.variants.outer_product import (
+    OuterProductMask,
+)
+from emperor.augmentations.adaptive_parameters._masks.variants.per_axis import (
+    PerAxisScoreMask,
+)
+from emperor.augmentations.adaptive_parameters._masks.variants.top_slice import (
+    TopSliceAxisMask,
+)
+from emperor.augmentations.adaptive_parameters._masks.variants.weight_informed import (
+    WeightInformedScoreAxisMask,
+)
+from emperor.layers import (
+    ActivationOptions,
+    LastLayerBiasOptions,
+    Layer,
+    LayerConfig,
+    LayerNormPositionOptions,
+    LayerStackConfig,
+    LayerState,
+    ResidualConnectionOptions,
+)
+from emperor.linears import LinearLayerConfig
 
 
 class ConstantGenerator(nn.Module):
@@ -1612,7 +1625,6 @@ class TestAxisMaskHandlers(unittest.TestCase):
                 self.assertIsInstance(model, AxisMaskAbstract)
 
     def test_obsolete_enums_removed(self):
-        from emperor.augmentations.adaptive_parameters import options
         for name in (
             "DynamicDiagonalOptions",
             "DynamicBiasOptions",

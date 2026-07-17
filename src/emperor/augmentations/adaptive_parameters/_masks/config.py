@@ -34,7 +34,7 @@ class WeightInformedScoreAxisMaskConfig(AxisMaskConfig):
     )
 
     def _registry_owner(self) -> type:
-        from emperor.augmentations.adaptive_parameters._masks.weight_informed import (
+        from emperor.augmentations.adaptive_parameters._masks.variants.weight_informed import (
             WeightInformedScoreAxisMask,
         )
 
@@ -48,7 +48,7 @@ class PerAxisScoreMaskConfig(AxisMaskConfig):
     )
 
     def _registry_owner(self) -> type:
-        from emperor.augmentations.adaptive_parameters._masks.per_axis import (
+        from emperor.augmentations.adaptive_parameters._masks.variants.per_axis import (
             PerAxisScoreMask,
         )
 
@@ -65,7 +65,7 @@ class TopSliceAxisMaskConfig(AxisMaskConfig):
     )
 
     def _registry_owner(self) -> type:
-        from emperor.augmentations.adaptive_parameters._masks.top_slice import (
+        from emperor.augmentations.adaptive_parameters._masks.variants.top_slice import (
             TopSliceAxisMask,
         )
 
@@ -75,7 +75,7 @@ class TopSliceAxisMaskConfig(AxisMaskConfig):
 @dataclass
 class OuterProductMaskConfig(AxisMaskConfig):
     def _registry_owner(self) -> type:
-        from emperor.augmentations.adaptive_parameters._masks.outer_product import (
+        from emperor.augmentations.adaptive_parameters._masks.variants.outer_product import (
             OuterProductMask,
         )
 
@@ -89,7 +89,7 @@ class DiagonalAxisMaskConfig(AxisMaskConfig):
     )
 
     def _registry_owner(self) -> type:
-        from emperor.augmentations.adaptive_parameters._masks.diagonal import (
+        from emperor.augmentations.adaptive_parameters._masks.variants.diagonal import (
             DiagonalAxisMask,
         )
 
