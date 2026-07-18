@@ -10,8 +10,8 @@ if TYPE_CHECKING:
         LinearPatchEmbeddingConfig,
         PatchConfig,
     )
-    from emperor.patch._convolutional import PatchEmbeddingConv
-    from emperor.patch._linear import PatchEmbeddingLinear
+    from emperor.patch._variants.convolutional import PatchEmbeddingConv
+    from emperor.patch._variants.linear import PatchEmbeddingLinear
 
 __all__ = (
     "PatchConfig",
@@ -33,9 +33,12 @@ _LAZY_EXPORTS = {
         "ConvPatchEmbeddingConfig",
     ),
     "PatchBase": ("emperor.patch._base", "PatchBase"),
-    "PatchEmbeddingLinear": ("emperor.patch._linear", "PatchEmbeddingLinear"),
+    "PatchEmbeddingLinear": (
+        "emperor.patch._variants.linear",
+        "PatchEmbeddingLinear",
+    ),
     "PatchEmbeddingConv": (
-        "emperor.patch._convolutional",
+        "emperor.patch._variants.convolutional",
         "PatchEmbeddingConv",
     ),
 }

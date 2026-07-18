@@ -32,7 +32,7 @@ class LinearPatchEmbeddingConfig(PatchConfig):
     )
 
     def _registry_owner(self) -> type:
-        from emperor.patch._linear import PatchEmbeddingLinear
+        from emperor.patch._variants.linear import PatchEmbeddingLinear
 
         return PatchEmbeddingLinear
 
@@ -46,6 +46,6 @@ class ConvPatchEmbeddingConfig(PatchConfig):
     )
 
     def _registry_owner(self) -> type:
-        from emperor.patch._convolutional import PatchEmbeddingConv
+        from emperor.patch._variants.convolutional import PatchEmbeddingConv
 
         return PatchEmbeddingConv
