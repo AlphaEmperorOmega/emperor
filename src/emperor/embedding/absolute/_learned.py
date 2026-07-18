@@ -21,12 +21,12 @@ class LearnedPositionalEmbedding(AbsolutePositionalEmbeddingBase):
     ):
         super().__init__(cfg, overrides)
         self.num_embeddings = self._get_num_embeddings()
-        self.embedding_model = self._initialize_embedding_model()
+        self.embedding_model = self.__initialize_embedding_model()
 
     def _get_num_embeddings(self) -> int:
         return self.num_embeddings
 
-    def _initialize_embedding_model(self) -> nn.Embedding:
+    def __initialize_embedding_model(self) -> nn.Embedding:
         embeddings = nn.Embedding(
             self.num_embeddings,
             self.embedding_dim,
