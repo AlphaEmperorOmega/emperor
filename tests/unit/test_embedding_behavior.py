@@ -6,7 +6,10 @@ import sys
 import unittest
 
 import torch
-from emperor.embedding.absolute import TextLearnedPositionalEmbeddingConfig
+from emperor.embedding.absolute import (
+    ImageLearnedPositionalEmbeddingConfig,
+    TextLearnedPositionalEmbeddingConfig,
+)
 
 
 def text_learned_config(**overrides: object) -> TextLearnedPositionalEmbeddingConfig:
@@ -57,6 +60,75 @@ class LearnedEmbeddingBehaviorTests(unittest.TestCase):
         self.assertEqual(meta_positions.device.type, "meta")
         self.assertEqual(meta_positions.dtype, torch.long)
         self.assertEqual(meta_positions.shape, meta_tokens.shape)
+
+    def test_image_learned_padding_row_stays_zero_after_optimizer_step(
+        self,
+    ) -> None:
+        model = ImageLearnedPositionalEmbeddingConfig(
+            num_embeddings=2,
+            embedding_dim=2,
+            init_size=2,
+            padding_idx=0,
+            auto_expand_flag=False,
+            class_token_flag=True,
+        ).build()
+        initial_weights = torch.tensor([[0.0, 0.0], [1.0, 2.0], [3.0, 4.0]])
+        with torch.no_grad():
+            model.embedding_model.weight.copy_(initial_weights)
+        patches = torch.zeros(2, 3, 2, requires_grad=True)
+
+        output = model(patches)
+        output.sum().backward()
+
+        torch.testing.assert_close(
+            output,
+            initial_weights.unsqueeze(0).expand(2, -1, -1),
+            rtol=0,
+            atol=0,
+        )
+        gradient = model.embedding_model.weight.grad
+        assert gradient is not None
+        torch.testing.assert_close(
+            gradient,
+            torch.tensor([[0.0, 0.0], [2.0, 2.0], [2.0, 2.0]]),
+            rtol=0,
+            atol=0,
+        )
+        optimizer = torch.optim.SGD(model.parameters(), lr=0.25)
+        optimizer.step()
+        torch.testing.assert_close(
+            model.embedding_model.weight,
+            torch.tensor([[0.0, 0.0], [0.5, 1.5], [2.5, 3.5]]),
+            rtol=0,
+            atol=0,
+        )
+
+    def test_image_learned_indices_follow_input_not_global_default_device(
+        self,
+    ) -> None:
+        model = ImageLearnedPositionalEmbeddingConfig(
+            num_embeddings=2,
+            embedding_dim=2,
+            init_size=2,
+            padding_idx=None,
+            auto_expand_flag=False,
+            class_token_flag=True,
+        ).build()
+        weights = torch.tensor([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
+        with torch.no_grad():
+            model.embedding_model.weight.copy_(weights)
+        patches = torch.zeros(2, 3, 2)
+
+        with torch.device("meta"):
+            output = model(patches)
+
+        self.assertEqual(output.device.type, "cpu")
+        torch.testing.assert_close(
+            output,
+            weights.unsqueeze(0).expand(2, -1, -1),
+            rtol=0,
+            atol=0,
+        )
 
 
 class EmbeddingInterfaceBehaviorTests(unittest.TestCase):

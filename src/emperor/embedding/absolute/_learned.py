@@ -108,4 +108,8 @@ class ImageLearnedPositionalEmbedding(LearnedPositionalEmbedding):
             num_embeddings=self.embedding_model.num_embeddings,
             embedding_dim=self.embedding_dim,
         )
-        return self.embedding_model.weight + patch_embeddings
+        position_indices = torch.arange(
+            self.embedding_model.num_embeddings,
+            device=patch_embeddings.device,
+        )
+        return self.embedding_model(position_indices) + patch_embeddings
