@@ -641,9 +641,12 @@ export function groupConfigFieldsBySectionPath(fields: ConfigField[]): ConfigSec
     children: DraftSection[];
   };
 
-  const roots: DraftSection[] = [];
+  const rootSections: DraftSection[] = [];
 
-  function childFor(parent: DraftSection[] | DraftSection, title: string) {
+  function getOrCreateChildSection(
+    parent: DraftSection[] | DraftSection,
+    title: string,
+  ) {
     const children = Array.isArray(parent) ? parent : parent.children;
     let child = children.find((candidate) => candidate.title === title);
     if (!child) {
@@ -664,24 +667,27 @@ export function groupConfigFieldsBySectionPath(fields: ConfigField[]): ConfigSec
         }
       : normalizedField;
     const sectionPath = normalizedFieldSectionPath(field);
-    let node = childFor(roots, sectionPath[0]!);
+    let currentSection = getOrCreateChildSection(
+      rootSections,
+      sectionPath[0]!,
+    );
     for (const sectionTitle of sectionPath.slice(1)) {
-      node = childFor(node, sectionTitle);
+      currentSection = getOrCreateChildSection(currentSection, sectionTitle);
     }
-    node.fields.push(field);
+    currentSection.fields.push(field);
   }
 
-  function finalize(section: DraftSection): ConfigSection {
+  function finalizeSection(section: DraftSection): ConfigSection {
     return {
       title: section.title,
       fields: section.fields,
       ...(section.children.length > 0
-        ? { children: section.children.map(finalize) }
+        ? { children: section.children.map(finalizeSection) }
         : {}),
     };
   }
 
-  return roots.map(finalize);
+  return rootSections.map(finalizeSection);
 }
 
 export function fieldValue(field: ConfigField, overrides: OverrideValues) {
@@ -936,7 +942,10 @@ export function disabledConfigFieldReasons(
 ) {
   const disabledReasons = new Map<string, string>();
 
-  function collect(section: ConfigSection, inheritedReason?: string) {
+  function collectDisabledReasons(
+    section: ConfigSection,
+    inheritedReason?: string,
+  ) {
     const state = controlledSectionState(section, overrides);
     const ownDisabledReason =
       !state.isEnabled && state.disabledReason ? state.disabledReason : undefined;
@@ -977,7 +986,7 @@ export function disabledConfigFieldReasons(
     }
 
     for (const child of section.children ?? []) {
-      collect(
+      collectDisabledReasons(
         child,
         inheritedReason ??
           (shouldPropagateOwnDisabledReason ? ownDisabledReason : undefined),
@@ -986,7 +995,7 @@ export function disabledConfigFieldReasons(
   }
 
   for (const section of deriveNestedConfigSections(sections)) {
-    collect(section);
+    collectDisabledReasons(section);
   }
 
   return disabledReasons;
@@ -1004,7 +1013,7 @@ export function flattenConfigSearchOptions(
   sections: ConfigSection[],
 ) {
   const options: ConfigSearchOption[] = [];
-  function collect(section: ConfigSection) {
+  function collectSectionOptions(section: ConfigSection) {
     for (const field of section.fields) {
       options.push({
         sectionTitle: section.title,
@@ -1017,11 +1026,11 @@ export function flattenConfigSearchOptions(
       });
     }
     for (const child of section.children ?? []) {
-      collect(child);
+      collectSectionOptions(child);
     }
   }
   for (const section of sections) {
-    collect(section);
+    collectSectionOptions(section);
   }
   return options;
 }
