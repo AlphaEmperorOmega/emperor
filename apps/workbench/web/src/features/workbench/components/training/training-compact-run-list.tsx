@@ -35,17 +35,19 @@ function epochText(run: TrainingRun) {
 }
 
 function visibleRuns(runs: TrainingRun[]) {
-  const keep = new Set(runs.slice(0, COMPACT_RUN_LIMIT).map((run) => run.id));
+  const visibleRunIds = new Set(
+    runs.slice(0, COMPACT_RUN_LIMIT).map((run) => run.id),
+  );
   for (const run of runs) {
     if (
       run.status === "Running" ||
       run.status === "Failed" ||
       run.status === "Cancelled"
     ) {
-      keep.add(run.id);
+      visibleRunIds.add(run.id);
     }
   }
-  return runs.filter((run) => keep.has(run.id));
+  return runs.filter((run) => visibleRunIds.has(run.id));
 }
 
 function runnableTrainingCommands(
@@ -216,7 +218,7 @@ function RunActions({
   onExcludeSnapshot?: (snapshotId: string) => void;
   run: TrainingRun;
 }) {
-  const fullError = run.errorTraceback || run.error;
+  const fullErrorText = run.errorTraceback || run.error;
   const draftRemoval = getTrainingRunDraftRemoval({
     run,
     canManageDraftRuns,
@@ -238,7 +240,7 @@ function RunActions({
           }}
         />
       )}
-      {fullError && (
+      {fullErrorText && (
         <IconButton
           label={`Full error for run ${run.index}`}
           icon={<AlertTriangle className="h-3.5 w-3.5" aria-hidden />}

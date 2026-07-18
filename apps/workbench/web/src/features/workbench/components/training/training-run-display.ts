@@ -17,7 +17,7 @@ type StatusMeta = {
   tooltip: string;
 };
 
-const terminalJobStatuses = new Set(["completed", "failed", "cancelled"]);
+const TERMINAL_JOB_STATUSES = new Set(["completed", "failed", "cancelled"]);
 
 export const trainingRunStatusMeta: Record<TrainingRun["status"], StatusMeta> = {
   Pending: {
@@ -54,7 +54,7 @@ export const trainingRunStatusMeta: Record<TrainingRun["status"], StatusMeta> = 
 };
 
 export function isTerminalTrainingJob(job?: Pick<TrainingJob, "status">) {
-  return Boolean(job && terminalJobStatuses.has(job.status));
+  return Boolean(job && TERMINAL_JOB_STATUSES.has(job.status));
 }
 
 export function selectTrainingRunForDisplay({
