@@ -34,12 +34,15 @@ class PatchBase(Module):
         self.dropout = nn.Dropout(self.dropout_probability)
 
     def _create_class_token(self, shape: tuple | None = None) -> Parameter:
-        if shape is None:
-            shape = (1, 1, self.embedding_dim)
-        class_token_init = torch.randn(shape)
-        return Parameter(class_token_init)
+        class_token_shape = shape
+        if class_token_shape is None:
+            class_token_shape = (1, 1, self.embedding_dim)
+        initial_class_token_values = torch.randn(class_token_shape)
+        class_token = Parameter(initial_class_token_values)
+        return class_token
 
     def _concatenate_class_token(self, X: Tensor) -> Tensor:
         batch_size = X.size(0)
-        class_token = self.class_token.expand(batch_size, -1, -1)
-        return torch.cat([class_token, X], dim=1)
+        expanded_class_tokens = self.class_token.expand(batch_size, -1, -1)
+        patches_with_class_token = torch.cat([expanded_class_tokens, X], dim=1)
+        return patches_with_class_token
