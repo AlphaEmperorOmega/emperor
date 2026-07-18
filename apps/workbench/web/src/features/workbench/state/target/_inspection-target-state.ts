@@ -151,12 +151,12 @@ function sameHistoricalRun(
   );
 }
 
-function changed(
+function withTargetChange(
   current: InspectionTargetLifecycleState,
-  next: Omit<InspectionTargetLifecycleState, "transition">,
+  nextState: Omit<InspectionTargetLifecycleState, "transition">,
 ): InspectionTargetLifecycleState {
   return {
-    ...next,
+    ...nextState,
     transition: {
       revision: current.transition.revision + 1,
       cause: "target-changed",
@@ -211,7 +211,7 @@ export function inspectionTargetLifecycleReducer(
   event: InspectionTargetLifecycleEvent,
 ): InspectionTargetLifecycleState {
   if (event.type === "browser-target-restored") {
-    return changed(current, {
+    return withTargetChange(current, {
       ...current,
       modelPackage: event.modelPackage,
       selectedPreset: event.preset,
@@ -269,7 +269,7 @@ export function inspectionTargetLifecycleReducer(
     if (sameModelPackage(current.modelPackage, event.modelPackage)) {
       return settleRestoration(current);
     }
-    return changed(current, {
+    return withTargetChange(current, {
       ...current,
       modelPackage: event.modelPackage,
       selectedPreset: "",
@@ -289,7 +289,7 @@ export function inspectionTargetLifecycleReducer(
       current.target.kind === "preset"
         ? ({ kind: "preset", preset: event.preset } as const)
         : current.target;
-    return changed(current, {
+    return withTargetChange(current, {
       ...current,
       selectedPreset: event.preset,
       target,
@@ -309,7 +309,7 @@ export function inspectionTargetLifecycleReducer(
     ) {
       return settleRestoration(current);
     }
-    return changed(current, {
+    return withTargetChange(current, {
       ...current,
       selectedPreset: event.preset,
       target: nextTarget,
@@ -331,7 +331,7 @@ export function inspectionTargetLifecycleReducer(
     ) {
       return settleRestoration(current);
     }
-    return changed(current, {
+    return withTargetChange(current, {
       ...current,
       selectedPreset: event.preset,
       target: {
@@ -364,7 +364,7 @@ export function inspectionTargetLifecycleReducer(
     ) {
       return settleRestoration(current);
     }
-    return changed(current, {
+    return withTargetChange(current, {
       ...current,
       selectedPreset: nextPreset,
       target: { kind: "historical-run", run: event.run },
@@ -382,21 +382,24 @@ export function inspectionTargetLifecycleReducer(
     ) {
       return settleRestoration(current);
     }
-    const next: Omit<InspectionTargetLifecycleState, "transition"> = {
+    const nextState: Omit<InspectionTargetLifecycleState, "transition"> = {
       ...current,
       experimentTask: event.experimentTask,
       datasets: [...event.datasets],
       restoration: { phase: "settled", requestedSnapshotId: "" },
     };
     return current.target.kind === "historical-run"
-      ? { ...next, transition: current.transition }
-      : changed(current, next);
+      ? { ...nextState, transition: current.transition }
+      : withTargetChange(current, nextState);
   }
   if (event.type === "datasets-selected") {
     if (sameValues(current.datasets, event.datasets)) {
       return current;
     }
-    return changed(current, { ...current, datasets: [...event.datasets] });
+    return withTargetChange(current, {
+      ...current,
+      datasets: [...event.datasets],
+    });
   }
   if (event.type === "runtime-defaults-edited") {
     const exitsCompleteTarget = current.target.kind !== "preset";
@@ -413,7 +416,7 @@ export function inspectionTargetLifecycleReducer(
     ) {
       return settleRestoration(current);
     }
-    return changed(current, {
+    return withTargetChange(current, {
       ...current,
       target: { kind: "preset", preset: current.selectedPreset },
       browserMode: "preset",
@@ -431,7 +434,7 @@ export function inspectionTargetLifecycleReducer(
     ) {
       return settleRestoration(current);
     }
-    return changed(current, {
+    return withTargetChange(current, {
       ...current,
       target: { kind: "preset", preset: current.selectedPreset },
       browserMode: "preset",
@@ -517,7 +520,7 @@ export function inspectionTargetLifecycleReducer(
     ) {
       return current;
     }
-    return changed(current, {
+    return withTargetChange(current, {
       ...current,
       selectedPreset: event.preset,
       target: {
@@ -533,7 +536,7 @@ export function inspectionTargetLifecycleReducer(
     });
   }
   if (event.type === "restoration-snapshot-resolved") {
-    return changed(current, {
+    return withTargetChange(current, {
       ...current,
       selectedPreset: event.preset,
       target: {
@@ -549,7 +552,7 @@ export function inspectionTargetLifecycleReducer(
       restoration: { phase: "settled", requestedSnapshotId: "" },
     });
   }
-  return changed(current, {
+  return withTargetChange(current, {
     ...current,
     target: { kind: "preset", preset: current.selectedPreset },
     browserMode: "preset",
