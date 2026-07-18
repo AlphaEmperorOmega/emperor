@@ -95,6 +95,8 @@ class AbsolutePositionalEmbeddingValidator(ValidatorBase):
             raise TypeError(
                 f"positions must use torch.int32 or torch.int64, got {positions.dtype}"
             )
+        if positions.numel() == 0:
+            return
         minimum = int(positions.min().item())
         maximum = int(positions.max().item())
         if minimum < 0 or maximum >= num_embeddings:
