@@ -1113,7 +1113,7 @@ export function useLogsChartViewModel(state: LogsChartsInput) {
   const checkpoints = checkpointQuery.data?.checkpoints;
 
   const seriesByTag = useMemo(
-    () => groupLogScalarSeriesByTag(scalarSeries ?? []),
+    () => groupLogScalarSeriesByTag(scalarSeries),
     [scalarSeries],
   );
   const trainValidationSeriesByTag = useMemo(
