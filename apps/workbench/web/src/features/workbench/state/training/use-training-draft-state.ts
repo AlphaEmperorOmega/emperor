@@ -333,10 +333,10 @@ export function useTrainingDraftState({
 
   const togglePreset = useCallback(
     (preset: string) => {
-      const next = selectedPresets.includes(preset)
+      const nextPresets = selectedPresets.includes(preset)
         ? selectedPresets.filter((item) => item !== preset)
         : [...selectedPresets, preset];
-      setPresetSelection(next);
+      setPresetSelection(nextPresets);
     },
     [selectedPresets, setPresetSelection],
   );
@@ -349,9 +349,9 @@ export function useTrainingDraftState({
       if (!selectedPresets.includes(preset)) {
         return;
       }
-      const next = selectedPresets.filter((item) => item !== preset);
-      setAllowEmptyPresetDraft(next.length === 0);
-      setSelectedPresets(next);
+      const nextPresets = selectedPresets.filter((item) => item !== preset);
+      setAllowEmptyPresetDraft(nextPresets.length === 0);
+      setSelectedPresets(nextPresets);
     },
     [presetNames, selectedPresets],
   );
@@ -481,11 +481,11 @@ export function useTrainingDraftState({
 
   const toggleDataset = useCallback(
     (dataset: string) => {
-      const next = selectedDatasets.includes(dataset)
+      const nextDatasets = selectedDatasets.includes(dataset)
         ? selectedDatasets.filter((item) => item !== dataset)
         : [...selectedDatasets, dataset];
       setSelectedDatasets(
-        normalizeSelection(next, datasetNames, selectedDatasets),
+        normalizeSelection(nextDatasets, datasetNames, selectedDatasets),
       );
     },
     [datasetNames, selectedDatasets],
