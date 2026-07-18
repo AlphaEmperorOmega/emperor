@@ -157,14 +157,14 @@ export function historicalExperimentRunOptions(
   runs: LogRun[],
   getRunEligibility: (run: LogRun) => MonitorEligibility = runMonitorEligibility,
 ): HistoricalRunOption[] {
-  return groupModelLogRunsByExperiment(runs).map((group) => ({
-    ...historicalRunOption(
+  return groupModelLogRunsByExperiment(runs).map((group) =>
+    historicalRunOption(
       group.experiment,
       group.runs.length,
       group.runs,
       getRunEligibility,
     ),
-  }));
+  );
 }
 
 export function historicalDatasetOptions(
