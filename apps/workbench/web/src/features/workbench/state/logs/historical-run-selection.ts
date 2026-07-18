@@ -136,10 +136,9 @@ export function deriveDatasetSelectionState(
     selectedHistoricalDatasetFilter,
     input.selectedHistoricalPreset,
   );
-  const selectedModelLogRun = input.selectedLogRunId
+  const selectedLogRun = input.selectedLogRunId
     ? modelLogRuns.find((run) => run.id === input.selectedLogRunId)
     : undefined;
-  const selectedLogRun = selectedModelLogRun;
   const selectedLogRunMonitorEligibility = selectedLogRun
     ? getMonitorEligibility(selectedLogRun)
     : undefined;
