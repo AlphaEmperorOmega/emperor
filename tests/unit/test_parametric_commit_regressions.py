@@ -57,6 +57,37 @@ class ParametricCommitRegressionTests(unittest.TestCase):
         torch.testing.assert_close(generated_weights, expected_weights)
         torch.testing.assert_close(output, inputs @ expected_weights)
 
+    def test_explicit_full_top_k_matrix_routes_stay_sample_local(self) -> None:
+        mixture = MatrixWeightsMixtureConfig(
+            input_dim=2,
+            output_dim=2,
+            top_k=2,
+            num_experts=2,
+            weighted_parameters_flag=True,
+            clip_parameter_option=ClipParameterOptions.DISABLED,
+            clip_range=1.0,
+        ).build()
+        parameter_bank = torch.tensor(
+            [
+                [[1.0, 0.0], [0.0, 1.0]],
+                [[2.0, -1.0], [3.0, 0.5]],
+            ]
+        )
+        with torch.no_grad():
+            mixture.parameter_bank.copy_(parameter_bank)
+        probabilities = torch.tensor([[0.75, 0.25], [0.1, 0.9]])
+        indices = torch.tensor([[0, 1], [1, 0]])
+
+        output = mixture.compute_mixture(probabilities, indices)
+
+        expected = torch.stack(
+            (
+                0.75 * parameter_bank[0] + 0.25 * parameter_bank[1],
+                0.1 * parameter_bank[1] + 0.9 * parameter_bank[0],
+            )
+        )
+        torch.testing.assert_close(output, expected)
+
 
 if __name__ == "__main__":
     unittest.main()

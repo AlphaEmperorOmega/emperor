@@ -66,7 +66,7 @@ class MatrixMixtureBase(AdaptiveMixtureBase):
         probs: Tensor,
     ) -> Tensor:
         probs = probs.reshape(self.probability_shape)
-        if self.top_k == self.num_experts:
+        if selected_parameters is self.parameter_bank:
             selected_parameters = selected_parameters.unsqueeze(dim=0)
         return selected_parameters * probs
 
