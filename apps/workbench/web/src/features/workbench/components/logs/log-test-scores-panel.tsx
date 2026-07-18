@@ -108,12 +108,14 @@ export function LogTestScoresPanel({
   );
   const splitLeaderboards = useMemo(
     () =>
-      splitTestLeaderboardsByExperiment({
-        metrics: visibleMetrics,
-        runsById,
-        runOrder,
-      }),
-    [visibleMetrics, runsById, runOrder],
+      splitByExperiment
+        ? splitTestLeaderboardsByExperiment({
+            metrics: visibleMetrics,
+            runsById,
+            runOrder,
+          })
+        : [],
+    [runOrder, runsById, splitByExperiment, visibleMetrics],
   );
   const hiddenMetricCount = Math.max(0, metrics.length - visibleMetrics.length);
 
