@@ -2,11 +2,13 @@ import unittest
 from types import SimpleNamespace
 
 import torch
+from emperor.experts import MixtureOfExpertsConfig, RoutingInitializationMode
 from emperor.parametric import (
     AdaptiveRouterOptions,
     ClipParameterOptions,
     GeneratorBiasMixture,
     GeneratorWeightsMixture,
+    GeneratorWeightsMixtureConfig,
     MatrixWeightsMixtureConfig,
     ParametricLayer,
     ParametricLayerHandler,
@@ -298,6 +300,57 @@ class ParametricCommitRegressionTests(unittest.TestCase):
             sampler_config=SimpleNamespace(num_experts=2, noisy_topk_flag=False),
         )
         ParametricLayerValidator._validate_router_matches_sampler(matching_model)
+
+    def test_generator_routing_ownership_is_enforced(self) -> None:
+        invalid_type = SimpleNamespace(
+            weight_mixture_config=GeneratorWeightsMixtureConfig(
+                weighted_parameters_flag=False,
+                generator_config=object(),
+            ),
+            bias_mixture_config=None,
+            routing_initialization_mode=AdaptiveRouterOptions.INDEPENDENT_ROUTER,
+        )
+        with self.assertRaisesRegex(
+            TypeError,
+            "^generator_config must be a MixtureOfExpertsConfig for generator "
+            "mixtures, got object\\.$",
+        ):
+            ParametricLayerValidator._validate_generator_routing(invalid_type)
+
+        layer_owned_generator = MixtureOfExpertsConfig(
+            routing_initialization_mode=RoutingInitializationMode.LAYER
+        )
+        independently_weighted = SimpleNamespace(
+            weight_mixture_config=GeneratorWeightsMixtureConfig(
+                weighted_parameters_flag=True,
+                generator_config=layer_owned_generator,
+            ),
+            bias_mixture_config=None,
+            routing_initialization_mode=AdaptiveRouterOptions.INDEPENDENT_ROUTER,
+        )
+        with self.assertRaisesRegex(
+            ValueError,
+            "^GeneratorWeightsMixtureConfig with weighted_parameters_flag=True "
+            "requires SHARED_ROUTER routing\\.$",
+        ):
+            ParametricLayerValidator._validate_generator_routing(
+                independently_weighted
+            )
+
+        shared_layer_owned = SimpleNamespace(
+            weight_mixture_config=GeneratorWeightsMixtureConfig(
+                weighted_parameters_flag=False,
+                generator_config=layer_owned_generator,
+            ),
+            bias_mixture_config=None,
+            routing_initialization_mode=AdaptiveRouterOptions.SHARED_ROUTER,
+        )
+        with self.assertRaisesRegex(
+            ValueError,
+            "^weight_mixture_config.generator_config.routing_initialization_mode "
+            "must use external routing when ParametricLayer uses SHARED_ROUTER",
+        ):
+            ParametricLayerValidator._validate_generator_routing(shared_layer_owned)
 
 
 if __name__ == "__main__":

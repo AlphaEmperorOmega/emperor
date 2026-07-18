@@ -47,6 +47,7 @@ class ParametricLayerValidator(ValidatorBase):
         cls._validate_router_matches_sampler(model)
         cls._validate_vector_shared_router(model)
         cls._validate_adaptive_augmentation_config(model)
+        cls._validate_generator_routing(model)
 
     @staticmethod
     def validate_forward_inputs(input_batch: Tensor, expected_input_dim: int) -> None:
@@ -212,6 +213,72 @@ class ParametricLayerValidator(ValidatorBase):
                 "adaptive_augmentation_config.bias_config can only be used when "
                 "bias_mixture_config is None."
             )
+
+    @staticmethod
+    def _validate_generator_routing(model: "ParametricLayer") -> None:
+        from emperor.experts import MixtureOfExpertsConfig, RoutingInitializationMode
+
+        generator_mixtures = (
+            ("weight_mixture_config", model.weight_mixture_config),
+            ("bias_mixture_config", model.bias_mixture_config),
+        )
+        for field_name, mixture_config in generator_mixtures:
+            if not isinstance(
+                mixture_config,
+                (GeneratorWeightsMixtureConfig, GeneratorBiasMixtureConfig),
+            ):
+                continue
+            generator_config = mixture_config.generator_config
+            if not isinstance(generator_config, MixtureOfExpertsConfig):
+                raise TypeError(
+                    "generator_config must be a MixtureOfExpertsConfig for "
+                    "generator mixtures, "
+                    f"got {type(generator_config).__name__}."
+                )
+            nested_mode = generator_config.routing_initialization_mode
+            if not isinstance(nested_mode, RoutingInitializationMode):
+                raise TypeError(
+                    f"{field_name}.generator_config.routing_initialization_mode "
+                    "must be a RoutingInitializationMode value, "
+                    f"got {type(nested_mode).__name__}."
+                )
+
+            if (
+                model.routing_initialization_mode
+                == AdaptiveRouterOptions.INDEPENDENT_ROUTER
+            ):
+                if (
+                    isinstance(mixture_config, GeneratorWeightsMixtureConfig)
+                    and mixture_config.weighted_parameters_flag is True
+                ):
+                    raise ValueError(
+                        "GeneratorWeightsMixtureConfig with "
+                        "weighted_parameters_flag=True requires SHARED_ROUTER "
+                        "routing."
+                    )
+                if nested_mode != RoutingInitializationMode.LAYER:
+                    raise ValueError(
+                        f"{field_name}.generator_config."
+                        "routing_initialization_mode must be "
+                        "RoutingInitializationMode.LAYER when ParametricLayer uses "
+                        "INDEPENDENT_ROUTER, "
+                        f"received {nested_mode}."
+                    )
+                continue
+
+            generator_forces_external_routing = (
+                isinstance(mixture_config, GeneratorWeightsMixtureConfig)
+                and mixture_config.weighted_parameters_flag is True
+            )
+            if (
+                not generator_forces_external_routing
+                and nested_mode == RoutingInitializationMode.LAYER
+            ):
+                raise ValueError(
+                    f"{field_name}.generator_config.routing_initialization_mode "
+                    "must use external routing when ParametricLayer uses "
+                    f"SHARED_ROUTER, received {nested_mode}."
+                )
 
 
 class ParametricHandlerValidator(ValidatorBase):
