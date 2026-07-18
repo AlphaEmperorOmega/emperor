@@ -83,8 +83,12 @@ class _ParametricDiagnostics:
         return (values.abs() >= float(clip_range)).float().mean()
 
     @staticmethod
-    def router_entropy(probabilities: Tensor) -> Tensor:
-        values = probabilities.reshape(-1, probabilities.shape[-1]).float()
+    def router_entropy(
+        probabilities: Tensor,
+        top_k: int | None = None,
+    ) -> Tensor:
+        route_probability_count = 1 if top_k == 1 else probabilities.shape[-1]
+        values = probabilities.reshape(-1, route_probability_count).float()
         normalized_values = values / values.sum(
             dim=-1,
             keepdim=True,
@@ -558,10 +562,15 @@ class ParametricLayerMonitorCallback(Callback):
         sample = context.observation.sample_for(slot)
         if sample is None or sample.probabilities is None:
             return
+        parameter_mixture = ParametricLayerMonitorCallback.__parameter_mixture(
+            context.parametric_layer,
+            slot,
+        )
         context.pl_module.log(
             f"{context.module_name}/router/{slot}_entropy",
             _ParametricDiagnostics.router_entropy(
-                sample.probabilities.detach().float()
+                sample.probabilities.detach().float(),
+                top_k=getattr(parameter_mixture, "top_k", None),
             ),
         )
 

@@ -12,8 +12,10 @@ from emperor.parametric import (
     MatrixWeightsMixtureConfig,
     ParametricLayer,
     ParametricLayerHandler,
+    ParametricLayerMonitorCallback,
     VectorWeightsMixtureConfig,
 )
+from emperor.parametric._monitoring import _ParametricDiagnostics
 from emperor.parametric._validation import ParametricLayerValidator
 from torch import nn
 
@@ -351,6 +353,53 @@ class ParametricCommitRegressionTests(unittest.TestCase):
             "must use external routing when ParametricLayer uses SHARED_ROUTER",
         ):
             ParametricLayerValidator._validate_generator_routing(shared_layer_owned)
+
+    def test_top_one_router_entropy_is_zero_per_routing_unit(self) -> None:
+        matrix_probabilities = torch.tensor([0.9, 0.2, 0.4])
+        vector_probabilities = torch.tensor(
+            [[0.9, 0.2, 0.4], [0.1, 0.8, 0.3]]
+        )
+
+        torch.testing.assert_close(
+            _ParametricDiagnostics.router_entropy(
+                matrix_probabilities,
+                top_k=1,
+            ),
+            torch.tensor(0.0),
+        )
+        torch.testing.assert_close(
+            _ParametricDiagnostics.router_entropy(
+                vector_probabilities,
+                top_k=1,
+            ),
+            torch.tensor(0.0),
+        )
+
+        logged_metrics: dict[str, torch.Tensor] = {}
+        context = SimpleNamespace(
+            observation=SimpleNamespace(
+                sample_for=lambda _slot: SimpleNamespace(
+                    probabilities=vector_probabilities
+                )
+            ),
+            parametric_layer=SimpleNamespace(
+                weight_mixture_model=SimpleNamespace(top_k=1)
+            ),
+            pl_module=SimpleNamespace(
+                log=lambda name, value: logged_metrics.__setitem__(name, value)
+            ),
+            module_name="parametric",
+        )
+
+        ParametricLayerMonitorCallback._ParametricLayerMonitorCallback__track_router_entropy(
+            context,
+            "weight",
+        )
+
+        torch.testing.assert_close(
+            logged_metrics["parametric/router/weight_entropy"],
+            torch.tensor(0.0),
+        )
 
 
 if __name__ == "__main__":
