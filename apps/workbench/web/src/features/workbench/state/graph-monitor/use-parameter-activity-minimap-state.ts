@@ -31,6 +31,45 @@ type ParameterActivityMinimapStateInput = {
   protectedReadsEnabled?: boolean;
 };
 
+function parameterActivityMinimapDisabledReason({
+  shouldRenderButton,
+  selectedRunSource,
+  monitorEligibility,
+  hasQueryError,
+  isPathMismatch,
+  parameterNodeCount,
+}: {
+  shouldRenderButton: boolean;
+  selectedRunSource: MonitorChartsSource | undefined;
+  monitorEligibility: MonitorEligibility | undefined;
+  hasQueryError: boolean;
+  isPathMismatch: boolean;
+  parameterNodeCount: number;
+}) {
+  if (!shouldRenderButton) {
+    return undefined;
+  }
+  if (!selectedRunSource) {
+    return "Selected Training Run is not ready";
+  }
+  if (monitorEligibility === "checking") {
+    return "Checking monitor data for this Training Run";
+  }
+  if (monitorEligibility === "ineligible") {
+    return "No monitor data for this Training Run";
+  }
+  if (hasQueryError) {
+    return "Could not load parameter activity for this Training Run";
+  }
+  if (isPathMismatch) {
+    return "Monitor paths do not match this graph";
+  }
+  if (parameterNodeCount === 0) {
+    return "No parameter-bearing components found";
+  }
+  return undefined;
+}
+
 export function useParameterActivityMinimapState({
   graph,
   selectedTargetMode,
@@ -71,21 +110,14 @@ export function useParameterActivityMinimapState({
       }).parameterNodeCount,
     [activityByNodePath, graph],
   );
-  const disabledReason = !shouldRenderButton
-    ? undefined
-    : !selectedRunSource
-      ? "Selected Training Run is not ready"
-      : selectedLogRunMonitorEligibility === "checking"
-        ? "Checking monitor data for this Training Run"
-        : selectedLogRunMonitorEligibility === "ineligible"
-          ? "No monitor data for this Training Run"
-          : parameterActivity.isError
-            ? "Could not load parameter activity for this Training Run"
-            : isPathMismatch
-              ? "Monitor paths do not match this graph"
-              : parameterNodeCount === 0
-                ? "No parameter-bearing components found"
-                : undefined;
+  const disabledReason = parameterActivityMinimapDisabledReason({
+    shouldRenderButton,
+    selectedRunSource,
+    monitorEligibility: selectedLogRunMonitorEligibility,
+    hasQueryError: parameterActivity.isError,
+    isPathMismatch,
+    parameterNodeCount,
+  });
 
   return {
     shouldRenderButton,
