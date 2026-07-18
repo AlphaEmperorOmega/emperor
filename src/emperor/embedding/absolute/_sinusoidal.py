@@ -27,8 +27,11 @@ class SinusoidalPositionalEmbedding(AbsolutePositionalEmbeddingBase):
     def _get_padding_idx(self) -> int:
         return self.padding_idx or 0
 
+    def _get_position_start(self) -> int:
+        return self.position_offset + int(self.padding_idx is not None)
+
     def _get_init_size(self) -> int:
-        return self.num_embeddings + self.position_offset + 1
+        return self.num_embeddings + self._get_position_start()
 
     def _register_positional_embedding_tensor(self):
         embeddings = self._get_embedding(self.init_size)
@@ -102,7 +105,7 @@ class TextSinusoidalPositionalEmbedding(SinusoidalPositionalEmbedding):
         _, sequence_length = input_tokens.size()
         if incremental_state is not None and timestep is not None:
             sequence_length = int(timestep.flatten()[0].item()) + 1
-        max_positions = self.position_offset + 1 + sequence_length
+        max_positions = self._get_position_start() + sequence_length
         if self.auto_expand_flag and max_positions > self.weights.size(0):
             self.weights = self._get_embedding(max_positions).to(
                 device=self.weights.device,

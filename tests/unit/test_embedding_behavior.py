@@ -9,6 +9,7 @@ import torch
 from emperor.embedding.absolute import (
     ImageLearnedPositionalEmbeddingConfig,
     TextLearnedPositionalEmbeddingConfig,
+    TextSinusoidalPositionalEmbeddingConfig,
 )
 
 
@@ -126,6 +127,49 @@ class LearnedEmbeddingBehaviorTests(unittest.TestCase):
         torch.testing.assert_close(
             output,
             weights.unsqueeze(0).expand(2, -1, -1),
+            rtol=0,
+            atol=0,
+        )
+
+
+class SinusoidalEmbeddingBehaviorTests(unittest.TestCase):
+    def test_text_table_sizes_follow_none_and_nonzero_padding_contracts(
+        self,
+    ) -> None:
+        no_padding = TextSinusoidalPositionalEmbeddingConfig(
+            num_embeddings=4,
+            embedding_dim=4,
+            init_size=4,
+            padding_idx=None,
+            auto_expand_flag=False,
+        ).build()
+        nonzero_padding = TextSinusoidalPositionalEmbeddingConfig(
+            num_embeddings=4,
+            embedding_dim=4,
+            init_size=4,
+            padding_idx=2,
+            auto_expand_flag=False,
+        ).build()
+
+        self.assertEqual(
+            (
+                no_padding.position_offset,
+                no_padding.init_size,
+                no_padding.weights.shape,
+            ),
+            (0, 4, torch.Size((4, 4))),
+        )
+        self.assertEqual(
+            (
+                nonzero_padding.position_offset,
+                nonzero_padding.init_size,
+                nonzero_padding.weights.shape,
+            ),
+            (2, 7, torch.Size((7, 4))),
+        )
+        torch.testing.assert_close(
+            nonzero_padding.weights[2],
+            torch.zeros(4),
             rtol=0,
             atol=0,
         )
